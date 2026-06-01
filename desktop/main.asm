@@ -36,11 +36,22 @@ PXMAX           equ   639-ARM
 PYMIN           equ   ARM
 PYMAX           equ   399-ARM
 
-; --- Icon (graphics coords; ICON_Y0 is the lower edge) -------------------
-ICON_X0         equ   80
-ICON_X1         equ   160
-ICON_Y0         equ   200
-ICON_Y1         equ   280
+; --- Icon (graphics coords; icon_x,icon_y is the lower-left corner) -------
+; The icon is draggable, so its position lives in icon_x/icon_y at runtime.
+; Drag bounds keep it on the plain backdrop (below the text rows) so erasing
+; the old position by filling with the backdrop pen stays correct.
+ICON_W          equ   80           ; width  (40 px in Mode 1)
+ICON_H          equ   80           ; height (40 px)
+ICON_X_INIT     equ   80
+ICON_Y_INIT     equ   140
+IXMIN           equ   4
+IXMAX           equ   639-ICON_W-4
+IYMIN           equ   4
+; Keep the icon's top edge below the text. Text fills rows 0-1 (pixel lines
+; 0-15); graphics y maps to line 199 - y/2, so the top (icon_y+ICON_H) must be
+; <= 366 to stay at line 16 or below.
+IYMAX           equ   366-ICON_H
+PEN_DESKTOP     equ   0            ; backdrop (used to erase the icon)
 PEN_BODY        equ   1            ; white icon body
 PEN_BORDER      equ   2            ; black border when idle
 PEN_SELECT      equ   3            ; accent border when selected
@@ -52,7 +63,7 @@ desktop_start
                 call  set_palette
                 call  draw_title_bar
                 call  draw_help
-                call  draw_icon              ; before the cursor, so it saves
+                call  draw_icon_shape        ; before the cursor, so it saves
                 call  cursor_show            ;   the icon pixels underneath
 
 ; --- Main loop -----------------------------------------------------------
@@ -108,14 +119,25 @@ ml_yc
                 call  clamp_hi
 
                 pop   de                     ; DE = target x, HL = target y
-                call  cursor_move_to
+                ld    (tgt_x),de
+                ld    (tgt_y),hl
 
-                call  handle_click
+                ld    a,(dragging)
+                or    a
+                jr    nz,ml_drag
+                ld    de,(tgt_x)             ; not dragging: just move the cursor
+                ld    hl,(tgt_y)
+                call  cursor_move_to
+                jr    ml_fire
+ml_drag
+                call  drag_frame             ; dragging: move icon + cursor together
+ml_fire
+                call  handle_fire
 
                 ld    a,(in_quit)
                 or    a
                 jr    nz,quit
-                jr    mainloop
+                jp    mainloop
 
 quit
                 ld    a,1                     ; tidy the screen on the way out
@@ -143,50 +165,222 @@ us_store
                 ret
 
 ; ---------------------------------------------------------------------------
-; handle_click: on the frame fire/select first goes down (a rising edge), if
-; the pointer is over the icon, toggle its selection and redraw its border.
-handle_click
+; handle_fire: edge-detect the fire/select button.
+;   - rising edge over the icon  -> start dragging (and select it)
+;   - rising edge over empty space -> deselect any selection
+;   - falling edge -> stop dragging
+; The frame-by-frame icon follow is done in drag_frame, not here.
+handle_fire
                 ld    a,(in_fire)
                 ld    b,a                     ; fire now
                 ld    a,(last_fire)
                 ld    c,a                     ; fire previous frame
                 ld    a,b
                 ld    (last_fire),a           ; remember for next frame
+
                 or    a
-                ret   z                       ; not held -> no click
+                jr    nz,hf_down              ; held now?
+                ; released: drop the icon if we were dragging
+                ld    a,(dragging)
+                or    a
+                ret   z
+                jp    drop_icon
+hf_down
                 ld    a,c
                 or    a
-                ret   nz                      ; already held -> not an edge
+                ret   nz                      ; already held -> not a new press
 
                 call  hit_test                ; carry set if pointer over icon
-                ret   nc
-
-                ld    a,(icon_selected)       ; toggle selection
-                xor   1
+                jr    c,hf_grab
+                ; pressed on empty space -> deselect if needed
+                ld    a,(icon_selected)
+                or    a
+                ret   z
+                xor   a
                 ld    (icon_selected),a
+                jp    redraw_border
+hf_grab
+                jp    grab_icon
 
-                call  cursor_erase            ; lift the cursor, redraw, replace
+; redraw_border: lift the cursor, redraw the icon border, put the cursor back.
+redraw_border
+                call  cursor_erase
                 call  draw_icon_border
                 call  cursor_draw
                 ret
 
-; hit_test: carry set if the pointer (cursor_x,cursor_y) is over the icon body,
-; carry clear otherwise.
-hit_test
-                ld    hl,(cursor_x)
-                ld    de,ICON_X0
-                call  cmp_hl_de
-                jr    c,ht_out                ; x < X0
-                ld    de,ICON_X1+1
-                call  cmp_hl_de
-                jr    nc,ht_out               ; x > X1  (not < X1+1)
+; ---------------------------------------------------------------------------
+; grab_icon: begin a drag. Erase the filled icon (it becomes "transparent")
+; and replace it with a lightweight outline that the pointer drags around.
+grab_icon
+                ld    a,1
+                ld    (dragging),a
+                ld    a,1
+                ld    (icon_selected),a
+                ld    hl,(cursor_x)           ; grab offset = cursor - icon corner
+                ld    de,(icon_x)
+                or    a
+                sbc   hl,de
+                ld    (grab_dx),hl
                 ld    hl,(cursor_y)
-                ld    de,ICON_Y0
+                ld    de,(icon_y)
+                or    a
+                sbc   hl,de
+                ld    (grab_dy),hl
+                ld    hl,(icon_x)            ; outline starts where the icon is
+                ld    (drag_x),hl
+                ld    hl,(icon_y)
+                ld    (drag_y),hl
+
+                call  cursor_erase
+                call  erase_icon              ; remove the filled icon
+                call  draw_outline            ; show the drag outline
+                call  cursor_draw
+                ret
+
+; drop_icon: end a drag. Erase the outline and stamp the filled icon at the
+; outline's final position.
+drop_icon
+                xor   a
+                ld    (dragging),a
+                call  cursor_erase
+                call  erase_outline
+                ld    hl,(drag_x)            ; commit the new icon position
+                ld    (icon_x),hl
+                ld    hl,(drag_y)
+                ld    (icon_y),hl
+                call  draw_icon_shape
+                call  cursor_draw
+                ret
+
+; ---------------------------------------------------------------------------
+; drag_frame: move the outline to follow the pointer (target - grab offset)
+; and the cursor to its target, recompositing only if something moved.
+drag_frame
+                ld    hl,(tgt_x)             ; new outline x = tgt_x - grab_dx
+                ld    de,(grab_dx)
+                or    a
+                sbc   hl,de
+                jr    nc,df_xok
+                ld    hl,0                    ; floor underflow
+df_xok
+                ld    de,IXMIN
+                call  clamp_lo
+                ld    de,IXMAX
+                call  clamp_hi
+                ld    (nicon_x),hl
+
+                ld    hl,(tgt_y)             ; new outline y = tgt_y - grab_dy
+                ld    de,(grab_dy)
+                or    a
+                sbc   hl,de
+                jr    nc,df_yok
+                ld    hl,0
+df_yok
+                ld    de,IYMIN
+                call  clamp_lo
+                ld    de,IYMAX
+                call  clamp_hi
+                ld    (nicon_y),hl
+
+                ld    hl,(tgt_x)             ; anything moved? (cursor or outline)
+                ld    de,(cursor_x)
+                or    a
+                sbc   hl,de
+                jr    nz,df_go
+                ld    hl,(tgt_y)
+                ld    de,(cursor_y)
+                or    a
+                sbc   hl,de
+                jr    nz,df_go
+                ld    hl,(nicon_x)
+                ld    de,(drag_x)
+                or    a
+                sbc   hl,de
+                jr    nz,df_go
+                ld    hl,(nicon_y)
+                ld    de,(drag_y)
+                or    a
+                sbc   hl,de
+                ret   z                       ; nothing moved -> leave it be
+df_go
+                call  cursor_erase            ; lift cursor from old position
+                call  erase_outline           ; erase outline at the old spot
+                ld    hl,(nicon_x)            ; commit new outline position
+                ld    (drag_x),hl
+                ld    hl,(nicon_y)
+                ld    (drag_y),hl
+                call  draw_outline            ; draw outline at the new spot
+                ld    hl,(tgt_x)             ; move cursor to its target
+                ld    (cursor_x),hl
+                ld    hl,(tgt_y)
+                ld    (cursor_y),hl
+                call  cursor_draw             ; save under new spot + draw cursor
+                ret
+
+; erase_icon: fill the icon's current rectangle with the backdrop pen.
+erase_icon
+                call  set_icon_rect
+                ld    a,PEN_DESKTOP
+                call  fill_rect
+                ret
+
+; draw_outline: box outline at the drag position, in the accent pen.
+draw_outline
+                call  set_drag_rect
+                ld    a,PEN_SELECT
+                call  draw_box
+                ret
+
+; erase_outline: redraw the outline box in the backdrop pen (safe because the
+; drag area is clamped to the plain backdrop).
+erase_outline
+                call  set_drag_rect
+                ld    a,PEN_DESKTOP
+                call  draw_box
+                ret
+
+; Load the outline's current bounds into the shared rectangle parameters.
+set_drag_rect
+                ld    hl,(drag_x)
+                ld    (rx0),hl
+                ld    hl,(drag_y)
+                ld    (ry0),hl
+                ld    hl,(drag_x)
+                ld    de,ICON_W
+                add   hl,de
+                ld    (rx1),hl
+                ld    hl,(drag_y)
+                ld    de,ICON_H
+                add   hl,de
+                ld    (ry1),hl
+                ret
+
+; hit_test: carry set if the pointer (cursor_x,cursor_y) is over the icon,
+; carry clear otherwise. Bounds come from the runtime icon position.
+hit_test
+                ld    hl,(cursor_x)          ; x >= icon_x ?
+                ld    de,(icon_x)
                 call  cmp_hl_de
-                jr    c,ht_out                ; y < Y0
-                ld    de,ICON_Y1+1
+                jr    c,ht_out
+                ld    hl,(icon_x)            ; x <= icon_x + ICON_W ?
+                ld    de,ICON_W+1
+                add   hl,de
+                ex    de,hl                   ; DE = icon_x + ICON_W + 1
+                ld    hl,(cursor_x)
                 call  cmp_hl_de
-                jr    nc,ht_out               ; y > Y1
+                jr    nc,ht_out
+                ld    hl,(cursor_y)          ; y >= icon_y ?
+                ld    de,(icon_y)
+                call  cmp_hl_de
+                jr    c,ht_out
+                ld    hl,(icon_y)            ; y <= icon_y + ICON_H ?
+                ld    de,ICON_H+1
+                add   hl,de
+                ex    de,hl                   ; DE = icon_y + ICON_H + 1
+                ld    hl,(cursor_y)
+                call  cmp_hl_de
+                jr    nc,ht_out
                 scf                            ; inside on both axes
                 ret
 ht_out
@@ -194,18 +388,12 @@ ht_out
                 ret
 
 ; ---------------------------------------------------------------------------
-; draw_icon: paint the icon body, border and label (once, at startup).
-draw_icon
+; draw_icon_shape: paint the icon body and border at its current position.
+draw_icon_shape
                 call  set_icon_rect
                 ld    a,PEN_BODY
                 call  fill_rect
                 call  draw_icon_border
-                ld    a,1                     ; white label text
-                call  TXT_SET_PEN
-                ld    a,0                     ; on the blue backdrop
-                call  TXT_SET_PAPER
-                ld    hl,icon_label
-                call  print_str
                 ret
 
 ; draw_icon_border: outline the icon, accent pen if selected else border pen.
@@ -220,15 +408,19 @@ dib_draw
                 call  draw_box
                 ret
 
-; Load the icon bounds into the shared rectangle parameters.
+; Load the icon's current bounds into the shared rectangle parameters.
 set_icon_rect
-                ld    hl,ICON_X0
+                ld    hl,(icon_x)
                 ld    (rx0),hl
-                ld    hl,ICON_Y0
+                ld    hl,(icon_y)
                 ld    (ry0),hl
-                ld    hl,ICON_X1
+                ld    hl,(icon_x)
+                ld    de,ICON_W
+                add   hl,de
                 ld    (rx1),hl
-                ld    hl,ICON_Y1
+                ld    hl,(icon_y)
+                ld    de,ICON_H
+                add   hl,de
                 ld    (ry1),hl
                 ret
 
@@ -287,15 +479,25 @@ print_str
 
 ; --- Desktop data --------------------------------------------------------
 title_text      db    " GEOBENCH                               ",0
-help_text       db    13,10,"  Move: arrows or joystick",13,10
-                db    "  Fire / Space: select   ESC: quit",0
+; Help on row 1, placed with the locate control (31, column, row; 1-based) so
+; its position is independent of where the title left the cursor.
+help_text       db    31,1,2,"  Hold Fire/Space to drag   ESC: quit",0
 
-; Icon label, positioned with the locate control (31, column, row; 1-based).
-icon_label      db    31,7,14,"Disk",0
-
+; --- Mutable state -------------------------------------------------------
 spd             db    SPD_MIN
 icon_selected   db    0
 last_fire       db    0
+dragging        db    0
+icon_x          dw    ICON_X_INIT
+icon_y          dw    ICON_Y_INIT
+drag_x          dw    0
+drag_y          dw    0
+grab_dx         dw    0
+grab_dy         dw    0
+nicon_x         dw    0
+nicon_y         dw    0
+tgt_x           dw    0
+tgt_y           dw    0
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"
