@@ -18,6 +18,8 @@ geobench
                 include "../lib/input.asm"
                 include "../lib/graphics.asm"
                 include "../lib/screen.asm"
+                include "../lib/cursor_arrow.asm"
+                include "../lib/cursor.asm"
                 include "../lib/icon_floppy.asm"
                 include "../lib/icon_clock.asm"
                 include "../lib/icon_trash.asm"
@@ -32,13 +34,13 @@ INK_ACCENT      equ   6           ; bright red  -> pen 3 (accents)
 ; The pointer accelerates while a direction is held: it starts at SPD_MIN for
 ; precise taps and ramps by SPD_INC each frame up to SPD_MAX, resetting to
 ; SPD_MIN whenever no direction is held.
-SPD_MIN         equ   4           ; step on the first frame of a press
+SPD_MIN         equ   2           ; step on the first frame of a press
 SPD_INC         equ   2           ; added each held frame
-SPD_MAX         equ   24          ; top speed (12 px/frame in Mode 1)
-PXMIN           equ   ARM
-PXMAX           equ   639-ARM
-PYMIN           equ   ARM
-PYMAX           equ   399-ARM
+SPD_MAX         equ   16          ; top speed (8 px/frame in Mode 1)
+PXMIN           equ   0            ; the bitmap cursor clamps its own sprite,
+PXMAX           equ   639          ; so the hotspot may range the full screen
+PYMIN           equ   0
+PYMAX           equ   399
 
 ; --- Icons ---------------------------------------------------------------
 ; Icons live in a table of parallel arrays (icon_xs/icon_ys/icon_shapes).
