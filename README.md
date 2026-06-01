@@ -21,6 +21,17 @@ bars and gadgets, a trashcan, an arrow pointer.
 
 We're a long way from this, but it's the north star.
 
+### Where it is now
+
+This is the current GEOBENCH desktop running on the Amstrad CPC (1984 emulator):
+a Mode 1 backdrop with a title bar and draggable multicolour bitmap icons
+(Disk, Clock, Trash) with labels, driven by a keyboard/joystick pointer.
+
+![Current status](initial.png)
+
+> The initial status — a long way to go, but the foundations (fast bitmap
+> blitting, icons, drag-and-drop) are in place.
+
 ## What is this?
 
 The Amstrad CPC shipped with Locomotive BASIC and AMSDOS: a perfectly capable
