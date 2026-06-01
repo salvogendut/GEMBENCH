@@ -1,0 +1,18 @@
+# Build artifacts
+*.bin
+*.BIN
+bin/
+
+# CPC disk images
+*.dsk
+*.DSK
+
+# Assembler / build intermediates
+*.o
+*.lst
+*.sym
+*.map
+
+# Editor / OS cruft
+*~
+.DS_Store
