@@ -94,6 +94,80 @@ bl_loop
                 ret
 
 ; ---------------------------------------------------------------------------
+; save_block / restore_block: copy a sb_w x sb_h byte rectangle at (sb_x, sb_y)
+; between the screen and a RAM buffer (sb_buf) - the basis for cursor/sprite
+; save-under.
+;
+; READING screen RAM is shadowed by the upper ROM at #C000, so save_block pages
+; the upper ROM out around the reads (DI + Gate Array ROM/mode register: #89 =
+; mode 1, upper ROM off; #81 = mode 1, upper ROM on). WRITING always reaches
+; RAM, so restore_block needs none of that.
+
+save_block
+                di
+                ld    bc,#7F89               ; upper ROM off (mode 1)
+                out   (c),c
+                ld    a,(sb_h)
+                ld    (sb_rows),a
+                ld    a,(sb_y)
+                ld    (sb_cy),a
+                ld    hl,(sb_buf)
+                ld    (sb_ptr),hl
+sv_loop
+                ld    a,(sb_x)
+                ld    d,a
+                ld    a,(sb_cy)
+                ld    e,a
+                call  scr_addr               ; HL = screen (source)
+                ld    de,(sb_ptr)            ; DE = buffer (dest)
+                ld    a,(sb_w)
+                ld    c,a
+                ld    b,0
+                ldir
+                ld    (sb_ptr),de
+                ld    a,(sb_cy)
+                inc   a
+                ld    (sb_cy),a
+                ld    a,(sb_rows)
+                dec   a
+                ld    (sb_rows),a
+                jr    nz,sv_loop
+                ld    bc,#7F81               ; upper ROM back on
+                out   (c),c
+                ei
+                ret
+
+restore_block
+                ld    a,(sb_h)
+                ld    (sb_rows),a
+                ld    a,(sb_y)
+                ld    (sb_cy),a
+                ld    hl,(sb_buf)
+                ld    (sb_ptr),hl
+rs_loop2
+                ld    a,(sb_x)
+                ld    d,a
+                ld    a,(sb_cy)
+                ld    e,a
+                call  scr_addr               ; HL = screen (dest)
+                ld    d,h
+                ld    e,l                     ; DE = screen
+                ld    hl,(sb_ptr)            ; HL = buffer (source)
+                ld    a,(sb_w)
+                ld    c,a
+                ld    b,0
+                ldir
+                ld    (sb_ptr),hl
+                ld    a,(sb_cy)
+                inc   a
+                ld    (sb_cy),a
+                ld    a,(sb_rows)
+                dec   a
+                ld    (sb_rows),a
+                jr    nz,rs_loop2
+                ret
+
+; ---------------------------------------------------------------------------
 ; (y >> 3) * 80 for char rows 0..24.
 row80
                 dw    0,80,160,240,320,400,480,560,640,720,800,880,960
@@ -107,3 +181,13 @@ bm_w            db    0            ; width in bytes
 bm_h            db    0            ; height in rows
 bl_rows         db    0
 bl_y            db    0
+
+; --- save_block / restore_block parameters / scratch ---------------------
+sb_x            db    0            ; rectangle x in bytes
+sb_y            db    0            ; rectangle y
+sb_w            db    0            ; width in bytes
+sb_h            db    0            ; height in rows
+sb_buf          dw    0            ; RAM buffer pointer
+sb_rows         db    0
+sb_cy           db    0
+sb_ptr          dw    0
