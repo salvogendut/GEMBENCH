@@ -17,6 +17,8 @@ geobench
 ; --- Library modules (assembled in) --------------------------------------
                 include "../lib/input.asm"
                 include "../lib/graphics.asm"
+                include "../lib/screen.asm"
+                include "../lib/icon_floppy.asm"
 
 ; --- Palette (firmware ink numbers 0..26) --------------------------------
 INK_DESKTOP     equ   1           ; blue        -> pen 0 (paper / backdrop)
@@ -51,6 +53,7 @@ LABEL_BAND      equ   16           ; bottom band reserved for the label (8 px)
 SHAPE_INSET     equ   8            ; shape inset from the box sides (4 px)
 SHAPE_SQUARE    equ   0
 SHAPE_CIRCLE    equ   1
+SHAPE_FLOPPY    equ   2            ; blitted floppy bitmap
 NO_ICON         equ   255
 IXMIN           equ   FRAME_G
 IXMAX           equ   639-ICON_W-FRAME_G
@@ -472,8 +475,10 @@ dai_loop
 ; Safe for the per-frame repair path (no text VDU).
 draw_body
                 ld    a,(wshape)
-                or    a
-                jr    nz,db_circle
+                cp    SHAPE_CIRCLE
+                jr    z,db_circle
+                cp    SHAPE_FLOPPY
+                jr    z,db_floppy
                 call  set_shape_rect          ; square: white fill + black box
                 ld    a,PEN_BODY
                 call  fill_rect
@@ -492,6 +497,32 @@ db_circle
                 ld    (cir_cy),hl
                 ld    a,PEN_BODY
                 call  fill_circle
+                ret
+db_floppy
+                ld    hl,(wx)                 ; bm_x = (wx + SHAPE_INSET) / 8 bytes
+                ld    de,SHAPE_INSET
+                add   hl,de
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    a,l
+                ld    (bm_x),a
+                ld    hl,(wy)                 ; bm_y = 159 - wy/2  (shape top line)
+                srl   h
+                rr    l
+                ld    a,159
+                sub   l
+                ld    (bm_y),a
+                ld    hl,icon_floppy
+                ld    (bm_src),hl
+                ld    a,icon_floppy_w
+                ld    (bm_w),a
+                ld    a,icon_floppy_h
+                ld    (bm_h),a
+                call  blit_bitmap
                 ret
 
 ; draw_icon_full: body + label. Used only on events (startup, drop), never on
@@ -843,7 +874,7 @@ dr_y1           dw    0
 ; --- Icon table (parallel arrays; positions on the 16-unit grid) ---------
 icon_xs         dw    80, 256
 icon_ys         dw    144, 144
-icon_shapes     db    SHAPE_SQUARE, SHAPE_CIRCLE
+icon_shapes     db    SHAPE_FLOPPY, SHAPE_CIRCLE
 icon_labels     dw    label_disk, label_clock
 label_disk      db    "Disk",0
 label_clock     db    "Clock",0

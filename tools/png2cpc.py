@@ -21,7 +21,11 @@ Output is a RASM-includable .asm file: a label, <label>_w (width in BYTES),
 <label>_h (height in rows), and the row-major encoded bytes.
 
 Usage:
-    tools/png2cpc.py <in.png> <out.asm> <label>
+    tools/png2cpc.py <in.png> <out.asm> <label> [WxH]
+
+If WxH is given the image is resized (Lanczos) to that size first, so a large
+source art file can be reduced to icon size in one step. Width must end up a
+multiple of 4.
 """
 import sys
 from PIL import Image
@@ -60,12 +64,15 @@ def encode_byte(pens4):
 
 
 def main():
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 5):
         print(__doc__)
         sys.exit(2)
     in_png, out_asm, label = sys.argv[1], sys.argv[2], sys.argv[3]
 
     img = Image.open(in_png).convert("RGB")
+    if len(sys.argv) == 5:
+        tw, th = (int(v) for v in sys.argv[4].lower().split("x"))
+        img = img.resize((tw, th), Image.LANCZOS)
     w, h = img.size
     if w % 4 != 0:
         print(f"error: width {w} is not a multiple of 4 (4 pixels per byte)")
