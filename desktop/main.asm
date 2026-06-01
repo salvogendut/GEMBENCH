@@ -37,9 +37,9 @@ INK_ACCENT      equ   6           ; bright red  -> pen 3 (accents)
 ; The pointer accelerates while a direction is held: it starts at SPD_MIN for
 ; precise taps and ramps by SPD_INC each frame up to SPD_MAX, resetting to
 ; SPD_MIN whenever no direction is held.
-SPD_MIN         equ   2           ; step on the first frame of a press
+SPD_MIN         equ   1           ; step on the first frame (sub-pixel: fine)
 SPD_INC         equ   1           ; added each held frame (gentle ramp = precise)
-SPD_MAX         equ   10          ; top speed (5 px/frame in Mode 1)
+SPD_MAX         equ   8           ; top speed (4 px/frame in Mode 1)
 PXMIN           equ   0            ; the bitmap cursor clamps its own sprite,
 PXMAX           equ   639          ; so the hotspot may range the full screen
 PYMIN           equ   0
@@ -146,12 +146,18 @@ ml_yc
                 ld    a,(dragging)
                 or    a
                 jr    nz,ml_drag
+                ld    a,(win_dragging)
+                or    a
+                jr    nz,ml_windrag
                 ld    de,(tgt_x)             ; not dragging: just move the cursor
                 ld    hl,(tgt_y)
                 call  cursor_move_to
                 jr    ml_fire
 ml_drag
-                call  drag_frame             ; dragging: move icon + cursor together
+                call  drag_frame             ; dragging an icon
+                jr    ml_fire
+ml_windrag
+                call  win_drag_frame         ; dragging a window
 ml_fire
                 call  handle_fire
 
@@ -174,9 +180,10 @@ update_speed
                 jr    z,us_reset             ; nothing held -> back to base speed
                 ld    a,(spd)
                 add   a,SPD_INC
-                cp    SPD_MAX
+                ld    hl,maxspd             ; cap at the current max (boosted in
+                cp    (hl)                    ; a window drag)
                 jr    c,us_store
-                ld    a,SPD_MAX
+                ld    a,(maxspd)
                 jr    us_store
 us_reset
                 ld    a,SPD_MIN
@@ -200,23 +207,32 @@ handle_fire
 
                 or    a
                 jr    nz,hf_down              ; held now?
-                ld    a,(dragging)            ; released: drop if we were dragging
+                ld    a,(dragging)            ; released: drop the dragged icon
+                or    a
+                jp    nz,drop_drag
+                ld    a,(win_dragging)        ; or finish a window drag
                 or    a
                 ret   z
-                jp    drop_drag
+                xor   a
+                ld    (win_dragging),a
+                jp    win_drop
 hf_down
                 ld    a,c
                 or    a
                 ret   nz                      ; already held -> not a fresh press
 
-                ld    a,(win_open)            ; window's close gadget clicked?
+                ld    a,(win_open)            ; window interactions (it's on top)
                 or    a
                 jr    z,hf_icons
                 call  close_hit
-                jr    nc,hf_icons
-                call  cursor_erase            ; close it (reveal the desktop)
+                jr    nc,hf_titlecheck
+                call  cursor_erase            ; close gadget -> close the window
                 call  window_close
                 jp    cursor_draw
+hf_titlecheck
+                call  title_hit               ; title bar -> start dragging it
+                jr    nc,hf_icons
+                jp    win_grab
 hf_icons
                 call  hit_test_icons          ; A = icon index, carry if hit
                 jr    c,hf_grab
@@ -520,8 +536,8 @@ draw_body
                 call  blit_bitmap
                 ret
 
-; draw_icon_full: body + label. Used only on events (startup, drop), never on
-; the per-frame drag path.
+; draw_icon_full: body + label. Used at startup, on drop, and by repair_others
+; (bitmap text is safe on the per-frame path).
 draw_icon_full
                 call  draw_body
                 ld    a,1                     ; white label
@@ -663,7 +679,7 @@ rep_chk
                 call  load_icon
                 call  rects_overlap
                 jr    nc,rep_next
-                call  draw_body
+                call  draw_icon_full          ; body + label (bitmap text, safe)
 rep_next
                 ld    a,(ro_i)
                 inc   a
@@ -792,16 +808,16 @@ set_palette
 
 ; Full-width white title bar on the top 8 lines: black bitmap text on white.
 draw_title_bar
-                ld    hl,0                    ; white bar across the top 8 lines
-                ld    (rx0),hl
-                ld    hl,384                  ; graphics y 384..398 = screen lines 0..7
-                ld    (ry0),hl
-                ld    hl,639
-                ld    (rx1),hl
-                ld    hl,398
-                ld    (ry1),hl
-                ld    a,1
-                call  fill_rect
+                xor   a                       ; white bar (fast direct fill)
+                ld    (fb_x),a
+                ld    (fb_y),a
+                ld    a,80
+                ld    (fb_w),a
+                ld    a,8
+                ld    (fb_h),a
+                ld    a,#F0                   ; white
+                ld    (fb_val),a
+                call  fill_block
                 ld    b,2                     ; black on white
                 ld    c,1
                 call  set_text_pens
@@ -839,14 +855,202 @@ open_demo_window
                 jp    window_open
 demo_title      db    "Workbench",0
 
+; ---------------------------------------------------------------------------
+; win_grab: begin dragging. The window goes transparent (its filled body is
+; restored to the desktop) and a red outline takes its place.
+win_grab
+                ld    a,1
+                ld    (win_dragging),a
+                ld    a,20                   ; faster cursor while dragging a window
+                ld    (maxspd),a
+                call  cursor_to_screen
+                ld    a,(ch_xb)              ; cursor offset into the window
+                ld    hl,wnd_x
+                sub   (hl)
+                ld    (win_grab_dx),a
+                ld    a,(ch_ln)
+                ld    hl,wnd_y
+                sub   (hl)
+                ld    (win_grab_dy),a
+                ld    a,(wnd_x)             ; outline starts at the window position
+                ld    (wo_x),a
+                ld    a,(wnd_y)
+                ld    (wo_y),a
+                call  cursor_erase
+                call  window_close            ; window -> transparent
+                ld    a,PEN_SELECT            ; red outline
+                call  draw_wo
+                jp    cursor_draw
+
+; win_drag_frame: move the red outline to follow the pointer.
+win_drag_frame
+                ld    hl,(tgt_x)             ; new pos = cursor(screen) - grab offset
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    a,l
+                ld    hl,win_grab_dx
+                sub   (hl)
+                jr    nc,wdf_xok             ; floor underflow to 0
+                xor   a
+wdf_xok
+                ld    (wnd_nx),a
+                ld    hl,(tgt_y)
+                srl   h
+                rr    l
+                ld    a,199
+                sub   l
+                ld    hl,win_grab_dy
+                sub   (hl)
+                jr    nc,wdf_yok             ; floor underflow to 0
+                xor   a
+wdf_yok
+                ld    (wnd_ny),a
+                call  clamp_win_pos
+
+                ld    a,(wnd_nx)             ; outline moved?
+                ld    hl,wo_x
+                cp    (hl)
+                jr    nz,wdf_move
+                ld    a,(wnd_ny)
+                ld    hl,wo_y
+                cp    (hl)
+                jr    nz,wdf_move
+                ld    de,(tgt_x)
+                ld    hl,(tgt_y)
+                jp    cursor_move_to
+wdf_move
+                call  cursor_erase
+                ld    a,PEN_DESKTOP           ; erase the old outline + repair icons
+                call  draw_wo
+                call  repair_others
+                ld    a,(wo_y)               ; restore chrome only if it was up top
+                cp    17
+                jr    nc,wdf_nochrome
+                call  redraw_chrome
+wdf_nochrome
+                ld    a,(wnd_nx)
+                ld    (wo_x),a
+                ld    a,(wnd_ny)
+                ld    (wo_y),a
+                ld    a,PEN_SELECT            ; draw the outline at the new position
+                call  draw_wo
+                ld    hl,(tgt_x)
+                ld    (cursor_x),hl
+                ld    hl,(tgt_y)
+                ld    (cursor_y),hl
+                jp    cursor_draw
+
+; win_drop: erase the outline and stamp the filled window at the final position.
+win_drop
+                ld    a,SPD_MAX              ; restore the precise cursor speed
+                ld    (maxspd),a
+                call  cursor_erase
+                ld    a,PEN_DESKTOP
+                call  draw_wo
+                call  repair_others
+                call  redraw_chrome
+                ld    a,(wo_x)
+                ld    (wnd_x),a
+                ld    a,(wo_y)
+                ld    (wnd_y),a
+                call  window_open
+                jp    cursor_draw
+
+; redraw_chrome: repaint the desktop title bar and help line (restores text the
+; window outline may have nicked).
+redraw_chrome
+                call  draw_title_bar
+                jp    draw_help
+
+; draw_wo: A = pen. Draw the drag outline box at (wo_x,wo_y), window-sized.
+draw_wo
+                push  af
+                call  set_wo_rect
+                pop   af
+                call  draw_box
+                ret
+
+; set_wo_rect: graphics-coord rectangle (rx0..ry1) for the outline at wo_x,wo_y.
+set_wo_rect
+                ld    a,(wo_x)              ; rx0 = wo_x * 8
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                ld    (rx0),hl
+                ld    a,(wo_x)              ; rx1 = (wo_x + wnd_w) * 8
+                ld    hl,wnd_w
+                add   a,(hl)
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                ld    (rx1),hl
+                ld    a,200                 ; ry0 = (200 - wo_y - wnd_h) * 2
+                ld    hl,wo_y               ; (bottom edge = window's last row)
+                sub   (hl)
+                ld    hl,wnd_h
+                sub   (hl)
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                ld    (ry0),hl
+                ld    a,199                 ; ry1 = (199 - wo_y) * 2
+                ld    hl,wo_y
+                sub   (hl)
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                ld    (ry1),hl
+                ret
+
+; clamp_win_pos: clamp wnd_nx to <= 80-wnd_w and wnd_ny to <= 200-wnd_h.
+; (Underflow to 0 is handled by the caller.)
+clamp_win_pos
+                ld    a,80
+                ld    hl,wnd_w
+                sub   (hl)
+                ld    b,a                     ; B = 80 - wnd_w (max x)
+                ld    a,(wnd_nx)
+                cp    b
+                jr    c,cwp_xok
+                ld    a,b
+                ld    (wnd_nx),a
+cwp_xok
+                ld    a,200
+                ld    hl,wnd_h
+                sub   (hl)
+                ld    b,a                     ; B = 200 - wnd_h (max y)
+                ld    a,(wnd_ny)
+                cp    b
+                jr    c,cwp_yok
+                ld    a,b
+                ld    (wnd_ny),a
+cwp_yok
+                ret
+
 ; --- Desktop data --------------------------------------------------------
 title_text      db    "GEOBENCH",0
 help_text       db    "Hold Fire/Space to drag   ESC: quit",0
 
 ; --- Mutable state -------------------------------------------------------
 spd             db    SPD_MIN
+maxspd         db    SPD_MAX      ; current top speed (raised while window-dragging)
 last_fire       db    0
 dragging        db    0
+win_dragging    db    0            ; dragging the window by its title bar
+win_grab_dx     db    0            ; cursor offset into the window at grab
+win_grab_dy     db    0
+wnd_nx          db    0            ; proposed new window position
+wnd_ny          db    0
+wo_x            db    0            ; drag outline position
+wo_y            db    0
 sel_icon        db    NO_ICON      ; selected icon index, or NO_ICON
 drag_idx        db    NO_ICON      ; icon currently being dragged
 li_idx          db    0            ; load_icon scratch

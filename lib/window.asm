@@ -137,9 +137,8 @@ win_set_sb
                 ld    (sb_buf),hl
                 ret
 
-; close_hit: carry set if the cursor (cursor_x,cursor_y) is over the close
-; gadget area - the left two byte columns of the title bar.
-close_hit
+; cursor_to_screen: ch_xb = cursor byte column, ch_ln = cursor line.
+cursor_to_screen
                 ld    hl,(cursor_x)          ; cur xbyte = cursor_x >> 3
                 srl   h
                 rr    l
@@ -155,7 +154,40 @@ close_hit
                 ld    a,199
                 sub   l
                 ld    (ch_ln),a
+                ret
 
+; title_hit: carry set if the cursor is anywhere on the title bar.
+title_hit
+                call  cursor_to_screen
+                ld    hl,wnd_x               ; xbyte in [wnd_x, wnd_x+wnd_w) ?
+                ld    a,(ch_xb)
+                cp    (hl)
+                jr    c,ch_no
+                ld    a,(hl)
+                ld    b,a
+                ld    a,(wnd_w)
+                add   a,b
+                ld    b,a
+                ld    a,(ch_xb)
+                cp    b
+                jr    nc,ch_no
+                ld    hl,wnd_y               ; line in [wnd_y, wnd_y+WND_TITLE_H) ?
+                ld    a,(ch_ln)
+                cp    (hl)
+                jr    c,ch_no
+                ld    a,(hl)
+                add   a,WND_TITLE_H
+                ld    b,a
+                ld    a,(ch_ln)
+                cp    b
+                jr    nc,ch_no
+                scf
+                ret
+
+; close_hit: carry set if the cursor is over the close gadget area - the left
+; three byte columns of the title bar.
+close_hit
+                call  cursor_to_screen
                 ld    hl,wnd_x               ; xbyte in [wnd_x, wnd_x+3) ?
                 ld    a,(ch_xb)
                 cp    (hl)
