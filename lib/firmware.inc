@@ -16,6 +16,8 @@ TXT_SET_PAPER   equ   #BB96       ; A = pen
 
 ; --- Graphics VDU --------------------------------------------------------
 GRA_SET_PEN     equ   #BBDE       ; A = pen
+GRA_MOVE_ABS    equ   #BBC0       ; DE = x, HL = y  (move graphics cursor)
+GRA_LINE_ABS    equ   #BBF6       ; DE = x, HL = y  (line to, in current pen)
 GRA_PLOT_ABS    equ   #BBEA       ; DE = x, HL = y  (plot in current pen)
 GRA_TEST_ABS    equ   #BBF0       ; DE = x, HL = y  -> A = pen at that point
 

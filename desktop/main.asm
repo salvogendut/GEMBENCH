@@ -36,6 +36,15 @@ PXMAX           equ   639-ARM
 PYMIN           equ   ARM
 PYMAX           equ   399-ARM
 
+; --- Icon (graphics coords; ICON_Y0 is the lower edge) -------------------
+ICON_X0         equ   80
+ICON_X1         equ   160
+ICON_Y0         equ   200
+ICON_Y1         equ   280
+PEN_BODY        equ   1            ; white icon body
+PEN_BORDER      equ   2            ; black border when idle
+PEN_SELECT      equ   3            ; accent border when selected
+
 ; ---------------------------------------------------------------------------
 desktop_start
                 ld    a,1
@@ -43,7 +52,8 @@ desktop_start
                 call  set_palette
                 call  draw_title_bar
                 call  draw_help
-                call  cursor_show
+                call  draw_icon              ; before the cursor, so it saves
+                call  cursor_show            ;   the icon pixels underneath
 
 ; --- Main loop -----------------------------------------------------------
 mainloop
@@ -61,6 +71,8 @@ mainloop
                 ld    d,0
                 or    a
                 sbc   hl,de
+                jr    nc,ml_xr               ; floor underflow to 0
+                ld    hl,0
 ml_xr
                 bit   3,b                    ; DIR_RIGHT
                 jr    z,ml_xc
@@ -87,6 +99,8 @@ ml_yd
                 ld    d,0
                 or    a
                 sbc   hl,de
+                jr    nc,ml_yc               ; floor underflow to 0
+                ld    hl,0
 ml_yc
                 ld    de,PYMIN
                 call  clamp_lo
@@ -95,6 +109,8 @@ ml_yc
 
                 pop   de                     ; DE = target x, HL = target y
                 call  cursor_move_to
+
+                call  handle_click
 
                 ld    a,(in_quit)
                 or    a
@@ -124,6 +140,96 @@ us_reset
 us_store
                 ld    (spd),a
                 ld    c,a
+                ret
+
+; ---------------------------------------------------------------------------
+; handle_click: on the frame fire/select first goes down (a rising edge), if
+; the pointer is over the icon, toggle its selection and redraw its border.
+handle_click
+                ld    a,(in_fire)
+                ld    b,a                     ; fire now
+                ld    a,(last_fire)
+                ld    c,a                     ; fire previous frame
+                ld    a,b
+                ld    (last_fire),a           ; remember for next frame
+                or    a
+                ret   z                       ; not held -> no click
+                ld    a,c
+                or    a
+                ret   nz                      ; already held -> not an edge
+
+                call  hit_test                ; carry set if pointer over icon
+                ret   nc
+
+                ld    a,(icon_selected)       ; toggle selection
+                xor   1
+                ld    (icon_selected),a
+
+                call  cursor_erase            ; lift the cursor, redraw, replace
+                call  draw_icon_border
+                call  cursor_draw
+                ret
+
+; hit_test: carry set if the pointer (cursor_x,cursor_y) is over the icon body,
+; carry clear otherwise.
+hit_test
+                ld    hl,(cursor_x)
+                ld    de,ICON_X0
+                call  cmp_hl_de
+                jr    c,ht_out                ; x < X0
+                ld    de,ICON_X1+1
+                call  cmp_hl_de
+                jr    nc,ht_out               ; x > X1  (not < X1+1)
+                ld    hl,(cursor_y)
+                ld    de,ICON_Y0
+                call  cmp_hl_de
+                jr    c,ht_out                ; y < Y0
+                ld    de,ICON_Y1+1
+                call  cmp_hl_de
+                jr    nc,ht_out               ; y > Y1
+                scf                            ; inside on both axes
+                ret
+ht_out
+                or    a                        ; clear carry
+                ret
+
+; ---------------------------------------------------------------------------
+; draw_icon: paint the icon body, border and label (once, at startup).
+draw_icon
+                call  set_icon_rect
+                ld    a,PEN_BODY
+                call  fill_rect
+                call  draw_icon_border
+                ld    a,1                     ; white label text
+                call  TXT_SET_PEN
+                ld    a,0                     ; on the blue backdrop
+                call  TXT_SET_PAPER
+                ld    hl,icon_label
+                call  print_str
+                ret
+
+; draw_icon_border: outline the icon, accent pen if selected else border pen.
+draw_icon_border
+                call  set_icon_rect
+                ld    a,(icon_selected)
+                or    a
+                ld    a,PEN_BORDER
+                jr    z,dib_draw
+                ld    a,PEN_SELECT
+dib_draw
+                call  draw_box
+                ret
+
+; Load the icon bounds into the shared rectangle parameters.
+set_icon_rect
+                ld    hl,ICON_X0
+                ld    (rx0),hl
+                ld    hl,ICON_Y0
+                ld    (ry0),hl
+                ld    hl,ICON_X1
+                ld    (rx1),hl
+                ld    hl,ICON_Y1
+                ld    (ry1),hl
                 ret
 
 ; ---------------------------------------------------------------------------
@@ -181,9 +287,15 @@ print_str
 
 ; --- Desktop data --------------------------------------------------------
 title_text      db    " GEOBENCH                               ",0
-help_text       db    13,10,"  Move: arrows or joystick   ESC: quit",0
+help_text       db    13,10,"  Move: arrows or joystick",13,10
+                db    "  Fire / Space: select   ESC: quit",0
+
+; Icon label, positioned with the locate control (31, column, row; 1-based).
+icon_label      db    31,7,14,"Disk",0
 
 spd             db    SPD_MIN
+icon_selected   db    0
+last_fire       db    0
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"

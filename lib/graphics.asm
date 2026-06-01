@@ -181,6 +181,64 @@ ch_set          ld    h,d
                 ld    l,e
                 ret
 
+; Carry set iff HL < DE (unsigned 16-bit). HL and DE are preserved.
+cmp_hl_de
+                ld    a,h
+                cp    d
+                ret   c                     ; h < d  -> HL < DE
+                ret   nz                    ; h > d  -> HL > DE (carry clear)
+                ld    a,l
+                cp    e                      ; compare low bytes
+                ret
+
+; ---------------------------------------------------------------------------
+; Rectangle primitives. The rectangle is passed in rx0,ry0 (one corner) and
+; rx1,ry1 (the opposite corner), with ry0 <= ry1. Pen is in A.
+
+; draw_box: outline the rectangle.
+draw_box
+                call  GRA_SET_PEN
+                ld    de,(rx0)
+                ld    hl,(ry0)
+                call  GRA_MOVE_ABS
+                ld    de,(rx1)
+                ld    hl,(ry0)
+                call  GRA_LINE_ABS
+                ld    de,(rx1)
+                ld    hl,(ry1)
+                call  GRA_LINE_ABS
+                ld    de,(rx0)
+                ld    hl,(ry1)
+                call  GRA_LINE_ABS
+                ld    de,(rx0)
+                ld    hl,(ry0)
+                call  GRA_LINE_ABS
+                ret
+
+; fill_rect: solid fill by drawing one horizontal line per screen row
+; (graphics y steps by 2 in Mode 1).
+fill_rect
+                call  GRA_SET_PEN
+                ld    hl,(ry0)
+                ld    (fr_y),hl
+fr_loop
+                ld    de,(rx0)
+                ld    hl,(fr_y)
+                call  GRA_MOVE_ABS
+                ld    de,(rx1)
+                ld    hl,(fr_y)
+                call  GRA_LINE_ABS
+                ld    hl,(fr_y)
+                inc   hl
+                inc   hl
+                ld    (fr_y),hl
+                ld    hl,(ry1)             ; continue while ry1 >= fr_y
+                ld    de,(fr_y)
+                or    a
+                sbc   hl,de
+                jr    nc,fr_loop
+                ret
+
 ; ---------------------------------------------------------------------------
 ; Pointer shape: a cross of NPTS dots as signed (dx,dy) offsets, one graphics
 ; pixel apart (2 units = 1 pixel in Mode 1).
@@ -199,3 +257,10 @@ cnt             db    0
 last_pen        db    255
 tmp_x           dw    0
 saved           defs  NPTS
+
+; Rectangle parameters (inputs to draw_box / fill_rect) + fill scanline.
+rx0             dw    0
+ry0             dw    0
+rx1             dw    0
+ry1             dw    0
+fr_y            dw    0
