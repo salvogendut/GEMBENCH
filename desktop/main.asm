@@ -44,13 +44,19 @@ PYMAX           equ   399-ARM
 NUM_ICONS       equ   2
 ICON_W          equ   80           ; bounding box width  (40 px in Mode 1)
 ICON_H          equ   80           ; height (40 px)
-FRAME_G         equ   6            ; selection/drag frame margin (3 px outside)
+FRAME_G         equ   4            ; selection/drag frame margin (2 px outside)
+; The box holds a smaller shape in its top portion and a 1-row label band at
+; its bottom (8 px). The label therefore sits inside the box/outline.
+LABEL_BAND      equ   16           ; bottom band reserved for the label (8 px)
+SHAPE_INSET     equ   8            ; shape inset from the box sides (4 px)
 SHAPE_SQUARE    equ   0
 SHAPE_CIRCLE    equ   1
 NO_ICON         equ   255
 IXMIN           equ   FRAME_G
 IXMAX           equ   639-ICON_W-FRAME_G
-IYMIN           equ   FRAME_G
+; Lower bound keeps the label (the box's bottom text row) on screen: at wy=16
+; it lands on row 24, clear of the last row, so printing it never scrolls.
+IYMIN           equ   16
 ; Keep the frame's top edge below the text (rows 0-1 = pixel lines 0-15).
 ; graphics y maps to line 199 - y/2, so frame top (y+ICON_H+FRAME_G) <= 366.
 IYMAX           equ   366-ICON_H-FRAME_G
@@ -63,6 +69,8 @@ PEN_SELECT      equ   3            ; accent selection / drag frame
 desktop_start
                 ld    a,1
                 call  SCR_SET_MODE           ; Mode 1, 320x200, 4 pens. Clears.
+                call  TXT_CUR_DISABLE        ; no blinking text cursor blob
+                call  TXT_CUR_OFF
                 call  set_palette
                 call  draw_title_bar
                 call  draw_help
@@ -249,7 +257,7 @@ start_drag
                 ld    (grab_dy),hl
 
                 call  cursor_erase
-                call  erase_body              ; icon becomes transparent
+                call  erase_body              ; clears the whole box (shape+label)
                 ld    a,PEN_DESKTOP           ; clear any old static frame
                 call  draw_frame
                 call  repair_others           ; restore icons under the cleared area
@@ -262,22 +270,58 @@ start_drag
                 call  cursor_draw
                 ret
 
-; drop_drag: stamp the icon body at the drag frame's final position. The accent
-; frame stays put as the selection indicator.
+; drop_drag: erase the drag frame, then stamp the icon and a selection frame at
+; the snapped final position.
 drop_drag
-                xor   a
-                ld    (dragging),a
-                ld    hl,(drag_x)
+                call  cursor_erase
+                ld    hl,(drag_x)            ; erase the drag frame where it is
                 ld    (wx),hl
                 ld    hl,(drag_y)
+                ld    (wy),hl
+                ld    a,PEN_DESKTOP
+                call  draw_frame
+                call  repair_others           ; (still dragging -> skips this icon)
+                xor   a
+                ld    (dragging),a
+
+                ld    hl,(drag_x)            ; snap the dropped position to the grid
+                call  snap16
+                ld    de,IXMIN
+                call  clamp_lo
+                ld    de,IXMAX
+                call  clamp_hi
+                ld    (wx),hl
+                ld    hl,(drag_y)
+                call  snap16
+                ld    de,IYMIN
+                call  clamp_lo
+                ld    de,IYMAX
+                call  clamp_hi
                 ld    (wy),hl
                 ld    a,(drag_idx)
                 call  store_icon_xy           ; commit new position
                 ld    a,(drag_idx)
-                call  load_icon               ; refresh wx,wy,wshape for this icon
-                call  cursor_erase
-                call  draw_body
+                call  load_icon               ; refresh wx,wy,wshape,wlabel
+                call  draw_icon_full          ; draw icon at the snapped position
+                ld    a,PEN_SELECT            ; selection frame around it
+                call  draw_frame
+                call  redraw_all_labels       ; repair any labels nicked during drag
                 call  cursor_draw
+                ret
+
+; redraw_all_labels: reprint every icon's label. Used on drop to restore labels
+; that the per-frame shape-only repair left nicked (keeps text off the drag path).
+redraw_all_labels
+                xor   a
+ral_loop
+                push  af
+                call  load_icon
+                ld    a,1
+                call  draw_label
+                pop   af
+                inc   a
+                cp    NUM_ICONS
+                jr    c,ral_loop
                 ret
 
 ; ---------------------------------------------------------------------------
@@ -380,6 +424,16 @@ load_icon
                 add   hl,de
                 ld    a,(hl)
                 ld    (wshape),a
+                ld    a,(li_idx)             ; label pointer (word array)
+                add   a,a
+                ld    e,a
+                ld    d,0
+                ld    hl,icon_labels
+                add   hl,de
+                ld    c,(hl)
+                inc   hl
+                ld    b,(hl)
+                ld    (wlabel),bc
                 ret
 
 ; store_icon_xy: A = index <- wx,wy.
@@ -407,36 +461,99 @@ draw_all_icons
 dai_loop
                 push  af
                 call  load_icon
-                call  draw_body
+                call  draw_icon_full
                 pop   af
                 inc   a
                 cp    NUM_ICONS
                 jr    c,dai_loop
                 ret
 
-; draw_body: draw the icon at wx,wy according to wshape.
+; draw_body: draw just the icon shape (in the box's top region, no label).
+; Safe for the per-frame repair path (no text VDU).
 draw_body
                 ld    a,(wshape)
                 or    a
                 jr    nz,db_circle
-                call  set_body_rect           ; square: white fill + black box
+                call  set_shape_rect          ; square: white fill + black box
                 ld    a,PEN_BODY
                 call  fill_rect
-                call  set_body_rect
+                call  set_shape_rect
                 ld    a,PEN_BORDER
                 call  draw_box
                 ret
 db_circle
-                ld    hl,(wx)                 ; circle: centre = wx+W/2, wy+H/2
+                ld    hl,(wx)                 ; circle: centre x = wx + W/2
                 ld    de,ICON_W/2
                 add   hl,de
                 ld    (cir_cx),hl
-                ld    hl,(wy)
-                ld    de,ICON_H/2
+                ld    hl,(wy)                 ; centre y = wy + LABEL_BAND + shapeH/2
+                ld    de,LABEL_BAND+(ICON_H-LABEL_BAND)/2
                 add   hl,de
                 ld    (cir_cy),hl
                 ld    a,PEN_BODY
                 call  fill_circle
+                ret
+
+; draw_icon_full: body + label. Used only on events (startup, drop), never on
+; the per-frame drag path.
+draw_icon_full
+                call  draw_body
+                ld    a,1                     ; white label
+                call  draw_label
+                ret
+
+; draw_label: A = text pen (PEN_DESKTOP erases). Print the current icon's label
+; (wlabel) centred just below the icon at wx,wy, on the backdrop.
+draw_label
+                push  af
+                ld    hl,(wlabel)            ; label length -> B
+                ld    b,0
+dl_len
+                ld    a,(hl)
+                or    a
+                jr    z,dl_pos
+                inc   hl
+                inc   b
+                jr    dl_len
+dl_pos
+                ld    hl,(wx)                ; centre column = (wx + ICON_W/2)/16
+                ld    de,ICON_W/2
+                add   hl,de
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    a,l                    ; centre column (0-based)
+                ld    c,a
+                ld    a,b                    ; minus half the label length
+                srl   a
+                ld    b,a
+                ld    a,c
+                sub   b
+                inc   a                       ; locate column is 1-based
+                ld    (lcmd+1),a
+                ld    hl,(wy)                ; row = ((199 - wy/2) / 8) + 1
+                srl   h                       ; (the box's bottom text row)
+                rr    l
+                ld    a,199
+                sub   l
+                srl   a
+                srl   a
+                srl   a
+                add   a,1
+                ld    (lcmd+2),a
+                pop   af
+                call  TXT_SET_PEN
+                ld    a,PEN_DESKTOP
+                call  TXT_SET_PAPER
+                ld    hl,lcmd                ; locate (31,col,row)
+                call  print_str
+                ld    hl,(wlabel)            ; then the label text
+                call  print_str
                 ret
 
 ; erase_body: fill the icon's bounding box with the backdrop pen.
@@ -544,6 +661,15 @@ rep_next
                 jr    c,rep_loop
                 ret
 
+; snap16: round HL to the nearest multiple of 16 (8 px in Mode 1).
+snap16
+                ld    de,8
+                add   hl,de
+                ld    a,l
+                and   #F0
+                ld    l,a
+                ret
+
 ; rects_overlap: carry set if the icon box at wx,wy overlaps the saved dirty
 ; rectangle dr_x0..dr_y1.
 rects_overlap
@@ -573,7 +699,9 @@ ro_none
                 or    a
                 ret
 
-; set_body_rect / set_frame_rect: rectangle params from wx,wy.
+; set_body_rect / set_shape_rect / set_frame_rect: rectangle params from wx,wy.
+; body  = the full box (erase, hit-test, frame base)
+; shape = the smaller shape region in the box's top portion
 set_body_rect
                 ld    hl,(wx)
                 ld    (rx0),hl
@@ -581,6 +709,24 @@ set_body_rect
                 ld    (ry0),hl
                 ld    hl,(wx)
                 ld    de,ICON_W
+                add   hl,de
+                ld    (rx1),hl
+                ld    hl,(wy)
+                ld    de,ICON_H
+                add   hl,de
+                ld    (ry1),hl
+                ret
+set_shape_rect
+                ld    hl,(wx)
+                ld    de,SHAPE_INSET
+                add   hl,de
+                ld    (rx0),hl
+                ld    hl,(wy)
+                ld    de,LABEL_BAND
+                add   hl,de
+                ld    (ry0),hl
+                ld    hl,(wx)
+                ld    de,ICON_W-SHAPE_INSET
                 add   hl,de
                 ld    (rx1),hl
                 ld    hl,(wy)
@@ -676,8 +822,10 @@ sel_icon        db    NO_ICON      ; selected icon index, or NO_ICON
 drag_idx        db    NO_ICON      ; icon currently being dragged
 li_idx          db    0            ; load_icon scratch
 wshape          db    0            ; working icon shape
+wlabel          dw    0            ; working icon label pointer
 wx              dw    0            ; working icon position
 wy              dw    0
+lcmd            db    31,0,0,0     ; locate control buffer (31, col, row, 0)
 drag_x          dw    0
 drag_y          dw    0
 grab_dx         dw    0
@@ -692,10 +840,13 @@ dr_y0           dw    0
 dr_x1           dw    0
 dr_y1           dw    0
 
-; --- Icon table (parallel arrays) ----------------------------------------
-icon_xs         dw    80, 260
-icon_ys         dw    140, 140
+; --- Icon table (parallel arrays; positions on the 16-unit grid) ---------
+icon_xs         dw    80, 256
+icon_ys         dw    144, 144
 icon_shapes     db    SHAPE_SQUARE, SHAPE_CIRCLE
+icon_labels     dw    label_disk, label_clock
+label_disk      db    "Disk",0
+label_clock     db    "Clock",0
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"

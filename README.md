@@ -16,6 +16,9 @@ bars and gadgets, a trashcan, an arrow pointer.
 
 ![Visual target](goal.png)
 
+> Image: a screenshot from The 8-Bit Guy's video on the **C128 "Alternate
+> Universe"** — used here purely as a visual reference for the look we're after.
+
 We're a long way from this, but it's the north star.
 
 ## What is this?

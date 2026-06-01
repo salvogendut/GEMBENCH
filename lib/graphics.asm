@@ -240,7 +240,7 @@ fr_loop
                 ret
 
 ; ---------------------------------------------------------------------------
-; fill_circle: solid circle of radius 20 px centred at (cir_cx,cir_cy), pen A.
+; fill_circle: solid circle of radius 16 px centred at (cir_cx,cir_cy), pen A.
 ; For each pixel row k away from the centre, circle_half[k] gives the half-width
 ; in pixels; we draw a horizontal line above and below the centre. Coordinates
 ; are graphics units, so pixel counts are doubled (2 units = 1 px in Mode 1).
@@ -288,7 +288,7 @@ fc_next
                 ld    a,(fc_k)
                 inc   a
                 ld    (fc_k),a
-                cp    21                      ; rows k = 0..20
+                cp    17                      ; rows k = 0..16
                 jr    c,fc_loop
                 ret
 
@@ -303,10 +303,10 @@ fc_hline
                 call  GRA_LINE_ABS
                 ret
 
-; Half-width in pixels for rows 0..20 of a radius-20 circle (round(sqrt(400-k^2))).
+; Half-width in pixels for rows 0..16 of a radius-16 circle (round(sqrt(256-k^2))).
 circle_half
-                db    20,20,20,20,20,19,19,19,18,18,17
-                db    17,16,15,14,13,12,11,9,6,0
+                db    16,16,16,16,15,15,15,14,14,13
+                db    12,12,11,9,8,6,0
 
 ; ---------------------------------------------------------------------------
 ; Pointer shape: a cross of NPTS dots as signed (dx,dy) offsets, one graphics

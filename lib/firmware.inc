@@ -11,6 +11,8 @@ SCR_SET_INK     equ   #BC32       ; A = pen, B,C = hardware ink
 
 ; --- Text VDU ------------------------------------------------------------
 TXT_OUTPUT      equ   #BB5A       ; A = char (interprets control codes)
+TXT_CUR_OFF     equ   #BB7E       ; remove the cursor blob
+TXT_CUR_DISABLE equ   #BB84       ; disable the cursor blob entirely
 TXT_SET_PEN     equ   #BB90       ; A = pen
 TXT_SET_PAPER   equ   #BB96       ; A = pen
 
