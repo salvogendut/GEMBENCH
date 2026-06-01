@@ -19,6 +19,8 @@ geobench
                 include "../lib/graphics.asm"
                 include "../lib/screen.asm"
                 include "../lib/icon_floppy.asm"
+                include "../lib/icon_clock.asm"
+                include "../lib/icon_trash.asm"
 
 ; --- Palette (firmware ink numbers 0..26) --------------------------------
 INK_DESKTOP     equ   1           ; blue        -> pen 0 (paper / backdrop)
@@ -43,17 +45,16 @@ PYMAX           equ   399-ARM
 ; icon_x,icon_y is the lower-left of the WxH bounding box. Selection and the
 ; drag outline are a square frame FRAME_G units OUTSIDE the box, drawn in the
 ; plain backdrop margin so erasing them with the backdrop pen stays safe.
-NUM_ICONS       equ   2
+NUM_ICONS       equ   3
 ICON_W          equ   80           ; bounding box width  (40 px in Mode 1)
 ICON_H          equ   80           ; height (40 px)
 FRAME_G         equ   4            ; selection/drag frame margin (2 px outside)
 ; The box holds a smaller shape in its top portion and a 1-row label band at
 ; its bottom (8 px). The label therefore sits inside the box/outline.
 LABEL_BAND      equ   16           ; bottom band reserved for the label (8 px)
-SHAPE_INSET     equ   8            ; shape inset from the box sides (4 px)
-SHAPE_SQUARE    equ   0
-SHAPE_CIRCLE    equ   1
-SHAPE_FLOPPY    equ   2            ; blitted floppy bitmap
+SHAPE_INSET     equ   8            ; icon bitmap inset from the box sides (4 px)
+BMP_W           equ   8            ; icon bitmaps are 8 bytes (32 px) ...
+BMP_H           equ   32           ; ... by 32 rows
 NO_ICON         equ   255
 IXMIN           equ   FRAME_G
 IXMAX           equ   639-ICON_W-FRAME_G
@@ -420,13 +421,16 @@ load_icon
                 inc   hl
                 ld    b,(hl)
                 ld    (wy),bc
-                ld    a,(li_idx)
+                ld    a,(li_idx)             ; bitmap pointer (word array)
+                add   a,a
                 ld    e,a
                 ld    d,0
-                ld    hl,icon_shapes
+                ld    hl,icon_bmps
                 add   hl,de
-                ld    a,(hl)
-                ld    (wshape),a
+                ld    c,(hl)
+                inc   hl
+                ld    b,(hl)
+                ld    (wbmp),bc
                 ld    a,(li_idx)             ; label pointer (word array)
                 add   a,a
                 ld    e,a
@@ -473,32 +477,8 @@ dai_loop
 
 ; draw_body: draw just the icon shape (in the box's top region, no label).
 ; Safe for the per-frame repair path (no text VDU).
+; draw_body: blit the icon's bitmap (wbmp) into the box's shape region.
 draw_body
-                ld    a,(wshape)
-                cp    SHAPE_CIRCLE
-                jr    z,db_circle
-                cp    SHAPE_FLOPPY
-                jr    z,db_floppy
-                call  set_shape_rect          ; square: white fill + black box
-                ld    a,PEN_BODY
-                call  fill_rect
-                call  set_shape_rect
-                ld    a,PEN_BORDER
-                call  draw_box
-                ret
-db_circle
-                ld    hl,(wx)                 ; circle: centre x = wx + W/2
-                ld    de,ICON_W/2
-                add   hl,de
-                ld    (cir_cx),hl
-                ld    hl,(wy)                 ; centre y = wy + LABEL_BAND + shapeH/2
-                ld    de,LABEL_BAND+(ICON_H-LABEL_BAND)/2
-                add   hl,de
-                ld    (cir_cy),hl
-                ld    a,PEN_BODY
-                call  fill_circle
-                ret
-db_floppy
                 ld    hl,(wx)                 ; bm_x = (wx + SHAPE_INSET) / 8 bytes
                 ld    de,SHAPE_INSET
                 add   hl,de
@@ -516,11 +496,11 @@ db_floppy
                 ld    a,159
                 sub   l
                 ld    (bm_y),a
-                ld    hl,icon_floppy
+                ld    hl,(wbmp)
                 ld    (bm_src),hl
-                ld    a,icon_floppy_w
+                ld    a,BMP_W
                 ld    (bm_w),a
-                ld    a,icon_floppy_h
+                ld    a,BMP_H
                 ld    (bm_h),a
                 call  blit_bitmap
                 ret
@@ -852,7 +832,7 @@ dragging        db    0
 sel_icon        db    NO_ICON      ; selected icon index, or NO_ICON
 drag_idx        db    NO_ICON      ; icon currently being dragged
 li_idx          db    0            ; load_icon scratch
-wshape          db    0            ; working icon shape
+wbmp            dw    0            ; working icon bitmap pointer
 wlabel          dw    0            ; working icon label pointer
 wx              dw    0            ; working icon position
 wy              dw    0
@@ -872,12 +852,13 @@ dr_x1           dw    0
 dr_y1           dw    0
 
 ; --- Icon table (parallel arrays; positions on the 16-unit grid) ---------
-icon_xs         dw    80, 256
-icon_ys         dw    144, 144
-icon_shapes     db    SHAPE_FLOPPY, SHAPE_CIRCLE
-icon_labels     dw    label_disk, label_clock
+icon_xs         dw    80, 256, 432
+icon_ys         dw    144, 144, 144
+icon_bmps       dw    icon_floppy, icon_clock, icon_trash
+icon_labels     dw    label_disk, label_clock, label_trash
 label_disk      db    "Disk",0
 label_clock     db    "Clock",0
+label_trash     db    "Trash",0
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"
