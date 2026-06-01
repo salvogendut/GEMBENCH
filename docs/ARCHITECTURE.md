@@ -60,6 +60,55 @@ hands them at launch. Categories of call (to be specified):
 Keeping this an explicit, versioned gate is what lets third parties write apps
 without linking against private kernel internals.
 
+## Launching legacy AMSDOS software
+
+GEOBENCH sits *on top of* AMSDOS/UniDOS, so the desktop should be able to launch
+the CPC's existing catalogue — `.BIN` binaries and `.BAS` programs — from an
+icon (see the README's "Running existing AMSDOS software"). The user picks
+**fullscreen** or **windowed**; these are very different problems.
+
+### Fullscreen (the tractable case)
+
+The safe, always-works path. Most CPC software assumes it **owns the machine**:
+full memory, its own video mode, direct hardware access. So GEOBENCH steps
+aside rather than trying to contain it:
+
+1. The desktop **parks its state** — ideally persisting enough to disk/spare
+   bank to fully reconstruct itself, since the launched program may clobber all
+   of RAM and the video mode.
+2. Control transfers to the program via the normal firmware path (`RUN"PROG"`
+   for BASIC; RSX / CAS / AMSDOS load-and-execute for `.BIN`).
+3. The program runs as if GEOBENCH weren't there.
+4. **Return is the hard part of even this case:** most CPC programs exit by
+   reset or by returning to BASIC, not by calling back into us. Likely options:
+   require a reset-and-reload of the desktop, install a return hook where the
+   firmware allows it, or simply accept "exit = reboot to desktop." To be
+   decided.
+
+### Windowed (the research problem)
+
+Genuinely running an *uncooperative* legacy program inside a desktop window is
+the hard, best-effort case and **will not work for every title**. The only
+realistic mechanism on real hardware is to **intercept the program's firmware
+output** (TXT/GRA VDU calls) and redirect it into a window region instead of the
+real screen — which only works for programs that:
+
+- go through the **firmware** for text/graphics rather than writing the
+  framebuffer directly,
+- **don't switch video mode** out from under the desktop,
+- **don't claim memory** the desktop needs (including the firmware workspace /
+  screen RAM the desktop is using),
+- **don't take over interrupts** or otherwise assume exclusive control.
+
+That basically limits windowed mode to well-behaved BASIC programs and
+firmware-only software. Anything that bangs the hardware (most games, most demos)
+cannot be contained and must fall back to fullscreen. The desktop should
+**detect or heuristically guess** when windowing is unsafe and fall back to (or
+warn and offer) fullscreen.
+
+Native GEOBENCH apps sidestep all of this by cooperating with the windowing
+layer from the start — the above is purely about coaxing *legacy* binaries in.
+
 ## Hardware notes
 
 - **Video:** Mode 1 (320×200, 4 colours) is the planned default desktop surface
@@ -76,5 +125,10 @@ without linking against private kernel internals.
 - Icon / resource file format on disk.
 - How much of the desktop is "just an app" vs privileged.
 - Minimum viable target: commit to 128K, or keep 64K alive?
+- Launching legacy software: how does the desktop **survive a fullscreen
+  takeover and reload itself** on return (reset-and-reload vs return hook)?
+- Windowed legacy mode: is **firmware output interception** worth building, and
+  how does the desktop **decide a program is safe to window** vs force
+  fullscreen?
 
 These get answered as the kernel and graphics library take shape.
