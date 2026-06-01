@@ -21,6 +21,7 @@ GRA_TEST_ABS    equ   #BBF0       ; DE = x, HL = y  -> A = pen at that point
 
 ; --- Keyboard ------------------------------------------------------------
 KM_TEST_KEY     equ   #BB1E       ; A = key number; exit NZ if pressed
+KM_GET_JOYSTICK equ   #BB24       ; A = joystick 0 state, H = joystick 1
 
 ; --- Machine pack --------------------------------------------------------
 MC_WAIT_FLYBACK equ   #BD19       ; wait for frame flyback

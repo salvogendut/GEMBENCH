@@ -151,7 +151,7 @@ print_str
 
 ; --- Desktop data --------------------------------------------------------
 title_text      db    " GEOBENCH                               ",0
-help_text       db    13,10,"  Arrows: move pointer    ESC: quit",0
+help_text       db    13,10,"  Move: arrows or joystick   ESC: quit",0
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"
