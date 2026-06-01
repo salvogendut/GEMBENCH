@@ -17,7 +17,7 @@ C_BLACK         equ   #0F
 C_RED           equ   #FF
 
 draw_window
-                ld    a,(wnd_x)              ; content: fill the whole box white
+                ld    a,(wnd_x)              ; content: fill the whole box
                 ld    (fb_x),a
                 ld    a,(wnd_y)
                 ld    (fb_y),a
@@ -25,7 +25,7 @@ draw_window
                 ld    (fb_w),a
                 ld    a,(wnd_h)
                 ld    (fb_h),a
-                ld    a,C_WHITE
+                ld    a,(wnd_content)
                 ld    (fb_val),a
                 call  fill_block
 
@@ -220,7 +220,8 @@ wnd_y           db    0
 wnd_w           db    0
 wnd_h           db    0
 wnd_title       dw    0
+wnd_content     db    #F0          ; content fill byte (#F0 white by default)
 win_open        db    0
 ch_xb           db    0
 ch_ln           db    0
-win_buf         defs  44*84        ; save-under buffer (>= demo window size)
+win_buf         defs  6400         ; save-under buffer (>= wnd_w*wnd_h, any window)

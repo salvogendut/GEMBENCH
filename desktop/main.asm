@@ -26,6 +26,10 @@ geobench
                 include "../lib/icon_floppy.asm"
                 include "../lib/icon_clock.asm"
                 include "../lib/icon_trash.asm"
+                include "../lib/icon_basic.asm"
+                include "../lib/icon_binary.asm"
+                include "../lib/icon_picture.asm"
+                include "../lib/icon_text.asm"
 
 ; --- Palette (firmware ink numbers 0..26) --------------------------------
 INK_DESKTOP     equ   1           ; blue        -> pen 0 (paper / backdrop)
@@ -40,6 +44,7 @@ INK_ACCENT      equ   6           ; bright red  -> pen 3 (accents)
 SPD_MIN         equ   1           ; step on the first frame (sub-pixel: fine)
 SPD_INC         equ   1           ; added each held frame (gentle ramp = precise)
 SPD_MAX         equ   8           ; top speed (4 px/frame in Mode 1)
+DCLICK_FRAMES   equ   25          ; double-click window (frames)
 PXMIN           equ   0            ; the bitmap cursor clamps its own sprite,
 PXMAX           equ   639          ; so the hotspot may range the full screen
 PYMIN           equ   0
@@ -84,7 +89,6 @@ desktop_start
                 call  draw_title_bar
                 call  draw_help
                 call  draw_all_icons
-                call  open_demo_window       ; a sample window over the desktop
                 call  cursor_show            ; cursor last, so it stays on top
 
 ; --- Main loop -----------------------------------------------------------
@@ -92,6 +96,12 @@ mainloop
                 call  MC_WAIT_FLYBACK        ; pace at 50 Hz, redraw in vblank
                 call  input_poll             ; -> in_dirs, in_quit
 
+                ld    a,(dclick_timer)       ; count down the double-click window
+                or    a
+                jr    z,ml_nodc
+                dec   a
+                ld    (dclick_timer),a
+ml_nodc
                 ld    a,(in_dirs)            ; keep the direction mask in B
                 ld    b,a
                 call  update_speed           ; -> C = this frame's step
@@ -238,8 +248,24 @@ hf_icons
                 jr    c,hf_grab
                 jp    deselect_current        ; pressed empty space
 hf_grab
+                ld    b,a                     ; icon index under the pointer
+                ld    a,(dclick_timer)        ; second click on the same icon soon
+                or    a                        ; after the first = double-click
+                jr    z,hf_firstclick
+                ld    a,(dclick_idx)
+                cp    b
+                jr    nz,hf_firstclick
+                ld    a,b                     ; only the floppy (icon 0) opens a window
+                or    a
+                jr    nz,hf_firstclick
+                jp    open_floppy_window
+hf_firstclick
+                ld    a,b                     ; remember this click for double-click
+                ld    (dclick_idx),a
+                ld    a,DCLICK_FRAMES
+                ld    (dclick_timer),a
+                ld    a,b
                 ld    (drag_idx),a            ; the icon under the pointer
-                ld    b,a
                 ld    a,(sel_icon)            ; a different icon selected? clear it
                 cp    NO_ICON
                 jr    z,hf_sel
@@ -840,20 +866,144 @@ draw_help
                 ld    hl,help_text
                 jp    draw_text
 
-; open_demo_window: a sample window over the desktop (windows milestone WIP).
-open_demo_window
-                ld    a,8
+; open_floppy_window: open the "Disk" window and draw the floppy's files inside.
+; (Demo content for now - real AMSDOS catalogue reading is a later milestone.)
+open_floppy_window
+                ld    a,(win_open)            ; already open? leave it
+                or    a
+                ret   nz
+                call  deselect_current        ; clear the icon's selection frame
+                ld    a,(win_placed)         ; first open: initial position;
+                or    a                        ; later: reopen where it was left
+                jr    nz,ofw_placed
+                ld    a,4
                 ld    (wnd_x),a
-                ld    a,52
+                ld    a,26
                 ld    (wnd_y),a
-                ld    a,44
+                ld    a,1
+                ld    (win_placed),a
+ofw_placed
+                ld    a,52
                 ld    (wnd_w),a
-                ld    a,84
+                ld    a,112
                 ld    (wnd_h),a
-                ld    hl,demo_title
+                ld    a,#F0                   ; white (the pattern overwrites it)
+                ld    (wnd_content),a
+                ld    hl,disk_title
                 ld    (wnd_title),hl
-                jp    window_open
-demo_title      db    "Workbench",0
+                call  cursor_erase
+                call  window_open
+                call  draw_floppy_content
+                jp    cursor_draw
+disk_title      db    "Disk",0
+
+; draw_floppy_content: the window's interior - a checkerboard plus the file
+; icons. Redrawn after every window_open (open and on drop).
+draw_floppy_content
+                ld    a,(wnd_x)              ; checkerboard the content area
+                inc   a
+                ld    (fb_x),a
+                ld    a,(wnd_y)
+                add   a,14                    ; below the title bar
+                ld    (fb_y),a
+                ld    a,(wnd_w)
+                sub   2
+                ld    (fb_w),a
+                ld    a,(wnd_h)
+                sub   15
+                ld    (fb_h),a
+                call  fill_pattern
+                jp    draw_disk_contents
+
+; draw_disk_contents: blit the four file icons in a 2x2 grid inside the window,
+; each with a centred label below it.
+draw_disk_contents
+                xor   a
+                ld    (df_i),a
+ddc_loop
+                ld    a,(df_i)               ; cell offsets from disk_pos[i]
+                add   a,a
+                ld    e,a
+                ld    d,0
+                ld    hl,disk_pos
+                add   hl,de
+                ld    a,(wnd_x)             ; icon xbyte = wnd_x + dx
+                add   a,(hl)
+                ld    (df_xb),a
+                inc   hl
+                ld    a,(wnd_y)             ; icon line = wnd_y + dy
+                add   a,(hl)
+                ld    (df_yb),a
+
+                ld    a,(df_i)               ; bitmap pointer for this file
+                add   a,a
+                ld    e,a
+                ld    d,0
+                ld    hl,disk_bmps
+                add   hl,de
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a
+                ld    (bm_src),hl
+                ld    a,(df_xb)
+                ld    (bm_x),a
+                ld    a,(df_yb)
+                ld    (bm_y),a
+                ld    a,8
+                ld    (bm_w),a
+                ld    a,32
+                ld    (bm_h),a
+                call  blit_bitmap
+
+                ld    a,(df_i)               ; label pointer
+                add   a,a
+                ld    e,a
+                ld    d,0
+                ld    hl,disk_labels
+                add   hl,de
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a
+                ld    (df_lbl),hl
+                ld    b,0                     ; label length -> B
+ddc_len
+                ld    a,(hl)
+                or    a
+                jr    z,ddc_pos
+                inc   hl
+                inc   b
+                jr    ddc_len
+ddc_pos
+                ld    a,(df_xb)              ; tc_x = icon centre (xb+4) - len
+                add   a,4
+                sub   b
+                ld    (tc_x),a
+                ld    a,(df_yb)             ; tc_y = icon line + 34
+                add   a,34
+                ld    (tc_y),a
+                ld    b,1                     ; white text on blue label cells
+                ld    c,0
+                call  set_text_pens
+                ld    hl,(df_lbl)
+                call  draw_text
+
+                ld    a,(df_i)
+                inc   a
+                ld    (df_i),a
+                cp    4
+                jp    c,ddc_loop
+                ret
+
+; 2x2 cell offsets (dx byte, dy line) from the window's top-left.
+disk_pos        db    6,20, 30,20, 6,64, 30,64
+disk_bmps       dw    icon_basic, icon_binary, icon_picture, icon_text
+disk_labels     dw    lbl_basic, lbl_binary, lbl_picture, lbl_text
+lbl_basic       db    "Basic",0
+lbl_binary      db    "Binary",0
+lbl_picture     db    "Photo",0
+lbl_text        db    "Notes",0
 
 ; ---------------------------------------------------------------------------
 ; win_grab: begin dragging. The window goes transparent (its filled body is
@@ -958,6 +1108,7 @@ win_drop
                 ld    a,(wo_y)
                 ld    (wnd_y),a
                 call  window_open
+                call  draw_floppy_content      ; restore the window's interior
                 jp    cursor_draw
 
 ; redraw_chrome: repaint the desktop title bar and help line (restores text the
@@ -1051,6 +1202,13 @@ wnd_nx          db    0            ; proposed new window position
 wnd_ny          db    0
 wo_x            db    0            ; drag outline position
 wo_y            db    0
+dclick_timer    db    0            ; frames left to register a double-click
+dclick_idx      db    0            ; icon index of the first click
+win_placed      db    0            ; 0 until the window's first open (initial pos)
+df_i            db    0            ; draw_disk_contents loop index
+df_xb           db    0            ; current file-icon x byte
+df_yb           db    0            ; current file-icon y line
+df_lbl          dw    0            ; current file-icon label pointer
 sel_icon        db    NO_ICON      ; selected icon index, or NO_ICON
 drag_idx        db    NO_ICON      ; icon currently being dragged
 li_idx          db    0            ; load_icon scratch
