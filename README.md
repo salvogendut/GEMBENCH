@@ -93,17 +93,26 @@ A core part of the "layer on top of DOS, don't replace it" philosophy:
 - **BASIC programs (`.BAS`)** — launched via the BASIC ROM, equivalent to
   `RUN"PROG"`.
 
-Caveats this raises (to be worked out in the architecture):
+When launching, the user chooses how the program runs:
 
-- Most CPC software assumes it **owns the whole machine** — full memory, its own
-  video mode, direct hardware access. Launching such a program effectively means
-  GEOBENCH **steps aside**: the desktop tears down (or parks) its own state, runs
-  the program, and the user returns to the desktop afterwards (likely on program
-  exit / reset). This is "launch and hand over the machine," not "run in a
-  window."
-- A future, friendlier class of **GEOBENCH-native apps** (see the application
-  API) *can* cooperate and run inside the desktop — but legacy `.BIN`/`.BAS`
-  software is treated as a full-screen takeover.
+- **Fullscreen** — the program takes over the whole machine. This is the safe,
+  always-works mode: most CPC software assumes it **owns the machine** (full
+  memory, its own video mode, direct hardware access), so GEOBENCH **steps
+  aside** — it parks (or tears down) its own state, hands the program the
+  machine, and the user returns to the desktop afterwards (on program exit /
+  reset). "Launch and hand over the machine."
+- **Windowed** — where feasible, run the program's output inside a desktop
+  window so it coexists with the rest of the desktop. This is the harder,
+  best-effort mode and won't work for every title: programs that bang the
+  hardware directly, switch video mode, or claim memory GEOBENCH needs can't be
+  contained. Realistic candidates are well-behaved BASIC programs and software
+  that confines itself to the firmware. The desktop should fall back to (or warn
+  about) fullscreen when a program can't be safely windowed.
+
+A future, friendlier class of **GEOBENCH-native apps** (see the application API)
+is designed to cooperate and always run inside the desktop — the windowed/
+fullscreen choice above is specifically about coaxing *legacy* `.BIN`/`.BAS`
+software into the environment.
 
 ## Non-goals (for now)
 
