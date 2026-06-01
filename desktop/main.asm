@@ -22,6 +22,7 @@ geobench
                 include "../lib/cursor.asm"
                 include "../lib/font.asm"
                 include "../lib/text.asm"
+                include "../lib/window.asm"
                 include "../lib/icon_floppy.asm"
                 include "../lib/icon_clock.asm"
                 include "../lib/icon_trash.asm"
@@ -82,8 +83,9 @@ desktop_start
                 call  set_palette
                 call  draw_title_bar
                 call  draw_help
-                call  draw_all_icons         ; before the cursor, so it saves
-                call  cursor_show            ;   the icon pixels underneath
+                call  draw_all_icons
+                call  draw_demo_window       ; a sample window over the desktop
+                call  cursor_show            ; cursor last, so it stays on top
 
 ; --- Main loop -----------------------------------------------------------
 mainloop
@@ -812,6 +814,21 @@ draw_help
                 ld    (tc_y),a
                 ld    hl,help_text
                 jp    draw_text
+
+; draw_demo_window: a sample window over the desktop (windows milestone WIP).
+draw_demo_window
+                ld    a,8
+                ld    (wnd_x),a
+                ld    a,52
+                ld    (wnd_y),a
+                ld    a,44
+                ld    (wnd_w),a
+                ld    a,84
+                ld    (wnd_h),a
+                ld    hl,demo_title
+                ld    (wnd_title),hl
+                jp    draw_window
+demo_title      db    "Workbench",0
 
 ; --- Desktop data --------------------------------------------------------
 title_text      db    "GEOBENCH",0
