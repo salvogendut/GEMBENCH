@@ -76,6 +76,34 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
 - A **mouse/input layer** with a software pointer.
 - A small set of **bundled applications** to prove the platform is real.
 - A documented **application API** so third parties can write GEOBENCH apps.
+- **Launching existing software.** Because GEOBENCH sits on top of AMSDOS/UniDOS
+  rather than replacing it, the desktop should be able to run the CPC's existing
+  catalogue — pick a `.BIN` binary or a BASIC `.BAS` program from an icon and
+  launch it, the same way you would `RUN"PROG"` from the BASIC prompt today. This
+  makes the existing disk library immediately useful from the desktop instead of
+  requiring everything to be rewritten as a native GEOBENCH app.
+
+## Running existing AMSDOS software
+
+A core part of the "layer on top of DOS, don't replace it" philosophy:
+
+- **AMSDOS binaries (`.BIN`)** — the desktop hands the file off to the firmware
+  loader (RSX/`|`-style or direct CAS/AMSDOS calls) and transfers control, just
+  as typing `RUN"GAME.BIN"` would.
+- **BASIC programs (`.BAS`)** — launched via the BASIC ROM, equivalent to
+  `RUN"PROG"`.
+
+Caveats this raises (to be worked out in the architecture):
+
+- Most CPC software assumes it **owns the whole machine** — full memory, its own
+  video mode, direct hardware access. Launching such a program effectively means
+  GEOBENCH **steps aside**: the desktop tears down (or parks) its own state, runs
+  the program, and the user returns to the desktop afterwards (likely on program
+  exit / reset). This is "launch and hand over the machine," not "run in a
+  window."
+- A future, friendlier class of **GEOBENCH-native apps** (see the application
+  API) *can* cooperate and run inside the desktop — but legacy `.BIN`/`.BAS`
+  software is treated as a full-screen takeover.
 
 ## Non-goals (for now)
 
