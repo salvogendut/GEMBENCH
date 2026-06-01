@@ -1,0 +1,105 @@
+# GEOBENCH
+
+A graphical desktop environment for the **Amstrad CPC** — a hybrid clone that
+borrows the best ideas from **Commodore GEOS** (C64/C128) and the **Amiga
+Workbench**, reimagined for 8-bit Z80 hardware.
+
+> **Status:** early concept / design sketch. Nothing here is built yet — this
+> README is the north star.
+
+## What is this?
+
+The Amstrad CPC shipped with Locomotive BASIC and AMSDOS: a perfectly capable
+8-bit machine that never got a first-class graphical operating environment the
+way the C64 did with GEOS or the Amiga did with Workbench/Intuition.
+
+GEOBENCH aims to fill that gap. The goal is a mouse-and-icon desktop that feels
+familiar to anyone who used a 16-bit Amiga, but runs within the constraints of
+a 64K–128K CPC.
+
+### Why "GEOBENCH"?
+
+**GEO**S + Work**BENCH**. Two of the most influential desktop metaphors of the
+8/16-bit era, fused into one name.
+
+## Design inspirations
+
+We deliberately cherry-pick from both ancestors rather than cloning either one.
+
+### From Commodore GEOS
+
+- **It runs on tiny hardware.** GEOS proved a real WIMP desktop is possible on a
+  1 MHz 8-bit CPU with 64K of RAM. That is the existence proof GEOBENCH stands on.
+- **Proportional bitmap fonts** and a consistent system look.
+- **A disk-based application model** — load apps from disk on demand, keep the
+  resident kernel small.
+- **Bundled productivity apps** in the spirit of geoWrite / geoPaint.
+
+### From Amiga Workbench
+
+- **The desktop metaphor proper:** draggable icons, windows, drawers (folders),
+  and a trashcan.
+- **Screens and windows** as the core UI primitives.
+- **A clean, layered look** that treats the desktop as a workspace, not a menu.
+- **Tools and drawers** the user can arrange spatially.
+
+## Target hardware
+
+- **Amstrad CPC** (464 / 664 / 6128, and CPC+).
+- 128K RAM strongly preferred; 64K as a stretch/minimal target.
+- Standard CPC graphics modes (Mode 1 for the desktop is the likely default —
+  320×200, 4 colours — balancing resolution against memory).
+- Mouse support (e.g. AMX mouse / compatible) with keyboard fallback.
+- Floppy / disk-based; networking via Net4CPC (W5100S) is a possible future
+  extension — see the related `n4c-nettools` project.
+
+## Goals
+
+- A resident **kernel** small enough to leave usable RAM for applications.
+- A **desktop shell**: icons, windows, drawers, drag-and-drop, menus.
+- A **graphics + windowing layer** abstracting the CPC's video hardware.
+- A **mouse/input layer** with a software pointer.
+- A small set of **bundled applications** to prove the platform is real.
+- A documented **application API** so third parties can write GEOBENCH apps.
+
+## Non-goals (for now)
+
+- Multitasking / preemptive scheduling (the Amiga's killer feature, but a heavy
+  lift on a Z80 — cooperative or single-app-at-a-time is the realistic start).
+- Hard compatibility with actual GEOS or Workbench binaries. GEOBENCH is
+  *inspired by* them, not a binary-compatible reimplementation.
+- 100% feature parity with either ancestor.
+
+## Tech notes
+
+- **CPU:** Zilog Z80.
+- **Language:** Z80 assembly (assembler TBD — RASM is used in sibling projects).
+- **Constraints:** every byte and every cycle counts. The architecture has to
+  respect a ~4 MHz CPU and a banked 128K memory map.
+
+## Project layout (planned)
+
+```
+geobench/
+├── README.md          # this file
+├── docs/              # design docs, architecture, UI mockups
+├── kernel/            # resident OS kernel
+├── desktop/           # the Workbench-style shell
+├── lib/               # graphics, window, input, font libraries
+├── apps/              # bundled applications
+└── tools/             # host-side build/asset tooling
+```
+
+(Directories will appear as the corresponding pieces get built.)
+
+## Roadmap (rough)
+
+1. **Boot + bare desktop** — clear screen, draw a desktop, show a mouse pointer.
+2. **Windowing** — open/close/move windows.
+3. **Icons + drawers** — represent files and folders, drag them around.
+4. **Menus + a file manager** — make the desktop actually do something.
+5. **App API + first bundled app** — prove an application can run on top.
+
+## License
+
+TBD.
