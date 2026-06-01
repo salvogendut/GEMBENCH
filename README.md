@@ -4,8 +4,19 @@ A graphical desktop environment for the **Amstrad CPC** — a hybrid clone that
 borrows the best ideas from **Commodore GEOS** (C64/C128) and the **Amiga
 Workbench**, reimagined for 8-bit Z80 hardware.
 
-> **Status:** early concept / design sketch. Nothing here is built yet — this
-> README is the north star.
+> **Status:** early but running. The desktop boots in Mode 1 and has a
+> save-under mouse pointer (keyboard + joystick), plus draggable icons
+> (Workbench-style outline drag). See `desktop/` and `lib/`.
+
+## Visual target
+
+The long-term look we're aiming for — an Amiga Workbench-style desktop as it
+might have existed on the CPC: labelled drawer/app icons, windows with title
+bars and gadgets, a trashcan, an arrow pointer.
+
+![Visual target](goal.png)
+
+We're a long way from this, but it's the north star.
 
 ## What is this?
 
