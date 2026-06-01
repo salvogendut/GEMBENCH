@@ -20,6 +20,8 @@ geobench
                 include "../lib/screen.asm"
                 include "../lib/cursor_arrow.asm"
                 include "../lib/cursor.asm"
+                include "../lib/font.asm"
+                include "../lib/text.asm"
                 include "../lib/icon_floppy.asm"
                 include "../lib/icon_clock.asm"
                 include "../lib/icon_trash.asm"
@@ -515,8 +517,8 @@ draw_icon_full
                 call  draw_label
                 ret
 
-; draw_label: A = text pen (PEN_DESKTOP erases). Print the current icon's label
-; (wlabel) centred just below the icon at wx,wy, on the backdrop.
+; draw_label: A = text pen. Draw the current icon's label (wlabel) centred in
+; the box's bottom band, using the bitmap font on the backdrop.
 draw_label
                 push  af
                 ld    hl,(wlabel)            ; label length -> B
@@ -529,45 +531,30 @@ dl_len
                 inc   b
                 jr    dl_len
 dl_pos
-                ld    hl,(wx)                ; centre column = (wx + ICON_W/2)/16
-                ld    de,ICON_W/2
-                add   hl,de
+                ld    hl,(wx)                ; tc_x = (wx + ICON_W/2)/8 - len
+                ld    de,ICON_W/2            ; (each char is 2 bytes, so half the
+                add   hl,de                  ;  pixel width in bytes = len)
                 srl   h
                 rr    l
                 srl   h
                 rr    l
                 srl   h
                 rr    l
-                srl   h
-                rr    l
-                ld    a,l                    ; centre column (0-based)
-                ld    c,a
-                ld    a,b                    ; minus half the label length
-                srl   a
-                ld    b,a
-                ld    a,c
+                ld    a,l
                 sub   b
-                inc   a                       ; locate column is 1-based
-                ld    (lcmd+1),a
-                ld    hl,(wy)                ; row = ((199 - wy/2) / 8) + 1
-                srl   h                       ; (the box's bottom text row)
+                ld    (tc_x),a
+                ld    hl,(wy)                ; tc_y = 192 - wy/2 (box bottom 8px)
+                srl   h
                 rr    l
-                ld    a,199
+                ld    a,192
                 sub   l
-                srl   a
-                srl   a
-                srl   a
-                add   a,1
-                ld    (lcmd+2),a
-                pop   af
-                call  TXT_SET_PEN
-                ld    a,PEN_DESKTOP
-                call  TXT_SET_PAPER
-                ld    hl,lcmd                ; locate (31,col,row)
-                call  print_str
-                ld    hl,(wlabel)            ; then the label text
-                call  print_str
-                ret
+                ld    (tc_y),a
+                pop   af                      ; pen
+                ld    b,a
+                ld    c,PEN_DESKTOP
+                call  set_text_pens
+                ld    hl,(wlabel)
+                jp    draw_text
 
 ; erase_body: fill the icon's bounding box with the backdrop pen.
 erase_body
@@ -792,40 +779,43 @@ set_palette
                 call  SCR_SET_BORDER
                 ret
 
-; Full-width white title bar on row 0: black text on white paper.
+; Full-width white title bar on the top 8 lines: black bitmap text on white.
 draw_title_bar
-                ld    a,2
-                call  TXT_SET_PEN
+                ld    hl,0                    ; white bar across the top 8 lines
+                ld    (rx0),hl
+                ld    hl,384                  ; graphics y 384..398 = screen lines 0..7
+                ld    (ry0),hl
+                ld    hl,639
+                ld    (rx1),hl
+                ld    hl,398
+                ld    (ry1),hl
                 ld    a,1
-                call  TXT_SET_PAPER
+                call  fill_rect
+                ld    b,2                     ; black on white
+                ld    c,1
+                call  set_text_pens
+                ld    a,1
+                ld    (tc_x),a
+                xor   a
+                ld    (tc_y),a
                 ld    hl,title_text
-                call  print_str
-                ret
+                jp    draw_text
 
-; Help line below the bar, white text on the blue backdrop.
+; Help line on screen line 9, white bitmap text on the blue backdrop.
 draw_help
+                ld    b,1                     ; white on blue
+                ld    c,0
+                call  set_text_pens
                 ld    a,1
-                call  TXT_SET_PEN
-                ld    a,0
-                call  TXT_SET_PAPER
+                ld    (tc_x),a
+                ld    a,9
+                ld    (tc_y),a
                 ld    hl,help_text
-                call  print_str
-                ret
-
-; Print a zero-terminated string via TXT_OUTPUT (interprets CR/LF).
-print_str
-                ld    a,(hl)
-                or    a
-                ret   z
-                call  TXT_OUTPUT
-                inc   hl
-                jr    print_str
+                jp    draw_text
 
 ; --- Desktop data --------------------------------------------------------
-title_text      db    " GEOBENCH                               ",0
-; Help on row 1, placed with the locate control (31, column, row; 1-based) so
-; its position is independent of where the title left the cursor.
-help_text       db    31,1,2,"  Hold Fire/Space to drag   ESC: quit",0
+title_text      db    "GEOBENCH",0
+help_text       db    "Hold Fire/Space to drag   ESC: quit",0
 
 ; --- Mutable state -------------------------------------------------------
 spd             db    SPD_MIN
@@ -838,7 +828,6 @@ wbmp            dw    0            ; working icon bitmap pointer
 wlabel          dw    0            ; working icon label pointer
 wx              dw    0            ; working icon position
 wy              dw    0
-lcmd            db    31,0,0,0     ; locate control buffer (31, col, row, 0)
 drag_x          dw    0
 drag_y          dw    0
 grab_dx         dw    0
