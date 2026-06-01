@@ -64,7 +64,10 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
 - 128K RAM strongly preferred; 64K as a stretch/minimal target.
 - Standard CPC graphics modes (Mode 1 for the desktop is the likely default —
   320×200, 4 colours — balancing resolution against memory).
-- Mouse support (e.g. AMX mouse / compatible) with keyboard fallback.
+- **AMX-style mouse read via the joystick port** as the default pointing device,
+  with keyboard fallback. This needs no expansion hardware, so the desktop runs
+  on a bare CPC. The input layer stays abstract so a **SYMBiFACE II / Cyboard
+  PS/2 mouse** can be added later for machines that have the board.
 - Floppy / disk-based; networking via Net4CPC (W5100S) is a possible future
   extension — see the related `n4c-nettools` project.
 
