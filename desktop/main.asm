@@ -38,8 +38,8 @@ INK_ACCENT      equ   6           ; bright red  -> pen 3 (accents)
 ; precise taps and ramps by SPD_INC each frame up to SPD_MAX, resetting to
 ; SPD_MIN whenever no direction is held.
 SPD_MIN         equ   2           ; step on the first frame of a press
-SPD_INC         equ   2           ; added each held frame
-SPD_MAX         equ   16          ; top speed (8 px/frame in Mode 1)
+SPD_INC         equ   1           ; added each held frame (gentle ramp = precise)
+SPD_MAX         equ   10          ; top speed (5 px/frame in Mode 1)
 PXMIN           equ   0            ; the bitmap cursor clamps its own sprite,
 PXMAX           equ   639          ; so the hotspot may range the full screen
 PYMIN           equ   0
@@ -84,7 +84,7 @@ desktop_start
                 call  draw_title_bar
                 call  draw_help
                 call  draw_all_icons
-                call  draw_demo_window       ; a sample window over the desktop
+                call  open_demo_window       ; a sample window over the desktop
                 call  cursor_show            ; cursor last, so it stays on top
 
 ; --- Main loop -----------------------------------------------------------
@@ -209,6 +209,15 @@ hf_down
                 or    a
                 ret   nz                      ; already held -> not a fresh press
 
+                ld    a,(win_open)            ; window's close gadget clicked?
+                or    a
+                jr    z,hf_icons
+                call  close_hit
+                jr    nc,hf_icons
+                call  cursor_erase            ; close it (reveal the desktop)
+                call  window_close
+                jp    cursor_draw
+hf_icons
                 call  hit_test_icons          ; A = icon index, carry if hit
                 jr    c,hf_grab
                 jp    deselect_current        ; pressed empty space
@@ -815,8 +824,8 @@ draw_help
                 ld    hl,help_text
                 jp    draw_text
 
-; draw_demo_window: a sample window over the desktop (windows milestone WIP).
-draw_demo_window
+; open_demo_window: a sample window over the desktop (windows milestone WIP).
+open_demo_window
                 ld    a,8
                 ld    (wnd_x),a
                 ld    a,52
@@ -827,7 +836,7 @@ draw_demo_window
                 ld    (wnd_h),a
                 ld    hl,demo_title
                 ld    (wnd_title),hl
-                jp    draw_window
+                jp    window_open
 demo_title      db    "Workbench",0
 
 ; --- Desktop data --------------------------------------------------------
