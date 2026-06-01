@@ -22,6 +22,21 @@ a 64K–128K CPC.
 **GEO**S + Work**BENCH**. Two of the most influential desktop metaphors of the
 8/16-bit era, fused into one name.
 
+### What about SymbOS?
+
+To be clear up front: a genuine first-class, multitasking, windowed operating
+system **already exists** for the Amstrad CPC — [**SymbOS**](https://www.symbos.de).
+It is a remarkable engineering achievement, with preemptive multitasking, a full
+window manager, and its own application ecosystem.
+
+GEOBENCH is **not** an attempt to copy, compete with, or reimplement SymbOS.
+SymbOS is its own complete OS and is far more ambitious (and complex) than what
+this project sets out to do. Instead, GEOBENCH is a much humbler thing: a
+**graphical desktop layer that sits on top of an existing disk operating system**
+— standard **AMSDOS**, or a more capable DOS such as **UniDOS**. It keeps the
+familiar DOS underneath and adds a GEOS/Workbench-style face on top, rather than
+replacing the whole system. Smaller scope, smaller footprint, different goal.
+
 ## Design inspirations
 
 We deliberately cherry-pick from both ancestors rather than cloning either one.
