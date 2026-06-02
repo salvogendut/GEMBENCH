@@ -30,6 +30,7 @@ geobench
                 include "../lib/icon_binary.asm"
                 include "../lib/icon_picture.asm"
                 include "../lib/icon_text.asm"
+                include "../lib/icon_ide.asm"
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
@@ -47,7 +48,7 @@ INK_ACCENT      equ   6           ; bright red  -> pen 3 (accents)
 SPD_MIN         equ   1           ; step on the first frame (sub-pixel: fine)
 SPD_INC         equ   1           ; added each held frame (gentle ramp = precise)
 SPD_MAX         equ   8           ; top speed (4 px/frame in Mode 1)
-DCLICK_FRAMES   equ   25          ; double-click window (frames)
+DCLICK_FRAMES   equ   50          ; double-click window (frames; ~1s, forgiving for joystick)
 PXMIN           equ   0            ; the bitmap cursor clamps its own sprite,
 PXMAX           equ   639          ; so the hotspot may range the full screen
 PYMIN           equ   0
@@ -58,7 +59,7 @@ PYMAX           equ   399
 ; icon_x,icon_y is the lower-left of the WxH bounding box. Selection and the
 ; drag outline are a square frame FRAME_G units OUTSIDE the box, drawn in the
 ; plain backdrop margin so erasing them with the backdrop pen stays safe.
-NUM_ICONS       equ   3
+NUM_ICONS       equ   4            ; max icon slots (drive icons + system icons)
 ICON_W          equ   80           ; bounding box width  (40 px in Mode 1)
 ICON_H          equ   80           ; height (40 px)
 FRAME_G         equ   4            ; selection/drag frame margin (2 px outside)
@@ -86,7 +87,12 @@ PEN_SELECT      equ   3            ; accent selection / drag frame
 desktop_start
                 ld    a,1
                 call  SCR_SET_MODE           ; Mode 1, 320x200, 4 pens. Clears.
-                call  fs_init                ; pick storage backend (IDE? else floppy)
+                call  fs_init                ; pick default backend (IDE? else floppy)
+                call  fs_ide_present         ; IDE present -> also show its drive icon
+                jr    nc,ds_noide
+                ld    a,4
+                ld    (n_icons),a
+ds_noide
                 call  TXT_CUR_DISABLE        ; no blinking text cursor blob
                 call  TXT_CUR_OFF
                 call  set_palette
@@ -274,10 +280,19 @@ hf_grab
                 ld    a,(dclick_idx)
                 cp    b
                 jr    nz,hf_firstclick
-                ld    a,b                     ; only the floppy (icon 0) opens a window
-                or    a
-                jr    nz,hf_firstclick
-                jp    open_floppy_window
+                ld    de,icon_first          ; drive icons carry a backend; others 0
+                call  icon_word               ; B = idx -> HL = icon_first[idx]
+                ld    a,h
+                or    l
+                jr    z,hf_firstclick         ; not a drive (Clock/Trash) -> ignore
+                ld    (fs_p_first),hl          ; bind this drive's backend, then open
+                ld    de,icon_next
+                call  icon_word
+                ld    (fs_p_next),hl
+                ld    de,icon_titles
+                call  icon_word
+                ld    (wnd_title),hl
+                jp    open_disk_window
 hf_firstclick
                 ld    a,b                     ; remember this click for double-click
                 ld    (dclick_idx),a
@@ -400,7 +415,8 @@ ral_loop
                 call  draw_label
                 pop   af
                 inc   a
-                cp    NUM_ICONS
+                ld    hl,n_icons             ; loop bound = active icon count
+                cp    (hl)
                 jr    c,ral_loop
                 ret
 
@@ -547,7 +563,8 @@ dai_loop
                 call  draw_icon_full
                 pop   af
                 inc   a
-                cp    NUM_ICONS
+                ld    hl,n_icons             ; loop bound = active icon count
+                cp    (hl)
                 jr    c,dai_loop
                 ret
 
@@ -684,7 +701,8 @@ hti_loop
                 jr    c,hti_found
                 pop   af
                 inc   a
-                cp    NUM_ICONS
+                ld    hl,n_icons             ; loop bound = active icon count
+                cp    (hl)
                 jr    c,hti_loop
                 ld    a,NO_ICON
                 or    a                        ; clear carry
@@ -729,7 +747,8 @@ rep_next
                 ld    a,(ro_i)
                 inc   a
                 ld    (ro_i),a
-                cp    NUM_ICONS
+                ld    hl,n_icons             ; loop bound = active icon count
+                cp    (hl)
                 jr    c,rep_loop
                 ret
 
@@ -885,9 +904,24 @@ draw_help
                 ld    hl,help_text
                 jp    draw_text
 
-; open_floppy_window: open the "Disk" window, read the volume directory via the
-; storage backend and show its files as a scrolling list.
-open_floppy_window
+; icon_word: read a word from a parallel icon array. DE = array base, B = icon
+; index -> HL = array[B]. Preserves B/C; clobbers A, DE, HL.
+icon_word
+                ld    a,b
+                add   a,a                     ; idx * 2 (index < NUM_ICONS)
+                ld    l,a
+                ld    h,0
+                add   hl,de                   ; HL -> array[idx]
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a
+                ret
+
+; open_disk_window: open the Disk window on the currently-bound backend
+; (fs_p_first/next and wnd_title set by the caller), read the directory and show
+; its files as a scrolling list.
+open_disk_window
                 ld    a,(win_open)            ; already open? leave it
                 or    a
                 ret   nz
@@ -908,8 +942,6 @@ ofw_placed
                 ld    (wnd_h),a
                 ld    a,#F0                   ; white (the pattern overwrites it)
                 ld    (wnd_content),a
-                ld    hl,disk_title
-                ld    (wnd_title),hl
                 call  cursor_erase
                 call  window_open
                 call  fs_load_dir            ; read the real directory off disc
@@ -1414,13 +1446,21 @@ dr_x1           dw    0
 dr_y1           dw    0
 
 ; --- Icon table (parallel arrays; positions on the 16-unit grid) ---------
-icon_xs         dw    8, 524, 524       ; Disk (top-left), Clock (top-right), Trash (bottom-right)
-icon_ys         dw    258, 258, 16
-icon_bmps       dw    icon_floppy, icon_clock, icon_trash
-icon_labels     dw    label_disk, label_clock, label_trash
+; Order: Floppy, Clock, Trash, IDE. The optional IDE drive is LAST so n_icons
+; (3 or 4) toggles it without reordering. Drive icons carry a backend
+; (icon_first/next != 0) and a window title; system icons leave those 0.
+icon_xs         dw    8,   524, 524, 8     ; Floppy(top-left) Clock(top-right) Trash(bot-right) IDE(left, below floppy)
+icon_ys         dw    258, 258, 16,  150
+icon_bmps       dw    icon_floppy, icon_clock, icon_trash, icon_ide
+icon_labels     dw    label_disk,  label_clock, label_trash, label_ide
+icon_first      dw    fsam_dir_first, 0, 0, fside_dir_first
+icon_next       dw    fsam_dir_next,  0, 0, fside_dir_next
+icon_titles     dw    disk_title,  0, 0, label_ide
 label_disk      db    "Disk",0
 label_clock     db    "Clock",0
 label_trash     db    "Trash",0
+label_ide       db    "IDE",0
+n_icons         db    3            ; active icons (4 when an IDE is detected)
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"
