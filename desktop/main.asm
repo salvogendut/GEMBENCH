@@ -31,6 +31,7 @@ geobench
                 include "../lib/icon_picture.asm"
                 include "../lib/icon_text.asm"
                 include "../lib/icon_ide.asm"
+                include "../lib/icon_geobench.asm"
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
@@ -87,6 +88,21 @@ PEN_SELECT      equ   3            ; accent selection / drag frame
 desktop_start
                 ld    a,1
                 call  SCR_SET_MODE           ; Mode 1, 320x200, 4 pens. Clears.
+                di                           ; probe RAM (pages &4000; IRQs off)
+                call  mem_detect             ; A = number of 64K expansion banks
+                ei
+                ld    l,a                    ; total KB = 64 + banks*64
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl                   ; banks * 64
+                ld    de,64
+                add   hl,de                   ; + base 64K
+                call  fmt_mem                 ; -> mem_str "<KB>K"
+                call  clock_init             ; RTC? else software clock -> time_str
                 call  fs_init                ; pick default backend (IDE? else floppy)
                 call  build_desktop_icons    ; probe drives -> live icon table
                 call  TXT_CUR_DISABLE        ; no blinking text cursor blob
@@ -191,6 +207,7 @@ ml_windrag
                 call  win_drag_frame         ; dragging a window
 ml_fire
                 call  handle_fire
+                call  update_clock           ; tick the top-bar clock
 
                 ld    a,(in_quit)
                 or    a
@@ -888,11 +905,271 @@ draw_title_bar
                 ld    b,2                     ; black on white
                 ld    c,1
                 call  set_text_pens
-                ld    a,1
+                ld    a,1                     ; total RAM on the left
                 ld    (tc_x),a
                 xor   a
                 ld    (tc_y),a
-                ld    hl,title_text
+                ld    hl,mem_str
+                call  draw_text
+                jp    draw_clock              ; time on the right
+
+; fmt_mem: HL = total KB -> mem_str as "<decimal>K" (leading zeros suppressed).
+fmt_mem
+                ld    ix,mem_str
+                xor   a
+                ld    (fm_lead),a
+                ld    de,10000
+                call  fm_digit
+                ld    de,1000
+                call  fm_digit
+                ld    de,100
+                call  fm_digit
+                ld    de,10
+                call  fm_digit
+                ld    a,l                     ; units digit (always shown)
+                add   a,'0'
+                ld    (ix+0),a
+                ld    (ix+1),'K'
+                ld    (ix+2),0
+                ret
+fm_digit                                       ; HL/DE -> digit in A, HL=remainder
+                ld    a,#FF
+fmd_loop
+                inc   a
+                or    a                        ; clear carry
+                sbc   hl,de
+                jr    nc,fmd_loop
+                add   hl,de                    ; undo the overshoot
+                or    a
+                jr    nz,fmd_emit
+                ld    a,(fm_lead)              ; leading zero -> skip
+                or    a
+                ret   z
+                xor   a
+fmd_emit
+                ld    b,a
+                ld    a,1
+                ld    (fm_lead),a
+                ld    a,b
+                add   a,'0'
+                ld    (ix+0),a
+                inc   ix
+                ret
+
+; ===========================================================================
+; Clock (top-bar, right side). Uses the Dallas RTC (&FD14 addr / &FD15 data)
+; if one is present, otherwise a software clock counting 50Hz frames from boot.
+; ===========================================================================
+
+CLK_COL         equ   68           ; byte column of "HH:MM" (right of the 80-byte bar)
+TICKS_PER_SEC   equ   50
+
+; Dallas RTC on the SymbiFace II / Cyboard: &FD15 = address, &FD14 = data.
+RTC_ADDR        equ   #FD15
+RTC_DATA        equ   #FD14
+
+; clock_init: detect the RTC, zero the software clock, prime the display string.
+clock_init
+                xor   a
+                ld    (sw_sec),a
+                ld    (sw_min),a
+                ld    (sw_hour),a
+                ld    (clk_frames),a
+                call  rtc_detect
+                call  read_time              ; -> time_str
+                ld    hl,time_str            ; clk_shown = time_str
+                ld    de,clk_shown
+                ld    bc,6
+                ldir
+                ret
+
+; rtc_detect: write/read-back NVRAM reg 0x0E twice. have_rtc = 1 if present.
+rtc_detect
+                ld    e,#5A
+                call  rtc_nvram_rw            ; write 5A, read back -> A
+                cp    #5A
+                jr    nz,rd_none
+                ld    e,#A5
+                call  rtc_nvram_rw            ; confirm with a second value
+                cp    #A5
+                jr    nz,rd_none
+                ld    a,1
+                ld    (have_rtc),a
+                ret
+rd_none
+                xor   a
+                ld    (have_rtc),a
+                ret
+
+; rtc_nvram_rw: E = value to write to NVRAM reg 0x0E -> A = value read back.
+rtc_nvram_rw
+                ld    a,#0E
+                ld    bc,RTC_ADDR
+                out   (c),a                   ; select reg 0x0E
+                ld    bc,RTC_DATA
+                out   (c),e                   ; write the value
+                ld    a,#0E
+                ld    bc,RTC_ADDR
+                out   (c),a                   ; reselect 0x0E
+                ld    bc,RTC_DATA
+                in    a,(c)                   ; read it back
+                ret
+
+; read_rtc_reg: A = register -> A = value.
+read_rtc_reg
+                ld    bc,RTC_ADDR
+                out   (c),a
+                ld    bc,RTC_DATA
+                in    a,(c)
+                ret
+
+; read_time: fill time_str with "HH:MM" from the RTC or the software clock.
+read_time
+                ld    a,(have_rtc)
+                or    a
+                jr    z,rt_soft
+                ld    a,#04
+                call  read_rtc_reg            ; hours (BCD)
+                ld    (rt_h),a
+                ld    a,#02
+                call  read_rtc_reg            ; minutes (BCD)
+                ld    (rt_m),a
+                jr    rt_fmt
+rt_soft
+                ld    a,(sw_hour)
+                call  bin_to_bcd
+                ld    (rt_h),a
+                ld    a,(sw_min)
+                call  bin_to_bcd
+                ld    (rt_m),a
+rt_fmt
+                ld    de,time_str
+                ld    a,(rt_h)
+                call  put_bcd2
+                ld    a,':'
+                ld    (de),a
+                inc   de
+                ld    a,(rt_m)
+                call  put_bcd2
+                xor   a
+                ld    (de),a
+                ret
+
+; put_bcd2: A = BCD byte -> two ASCII digits at (DE), DE advanced.
+put_bcd2
+                push  af
+                rrca
+                rrca
+                rrca
+                rrca
+                and   #0F
+                add   a,'0'
+                ld    (de),a
+                inc   de
+                pop   af
+                and   #0F
+                add   a,'0'
+                ld    (de),a
+                inc   de
+                ret
+
+; bin_to_bcd: A (0..99) -> packed BCD.
+bin_to_bcd
+                ld    b,#FF
+btb_loop
+                inc   b
+                sub   10
+                jr    nc,btb_loop
+                add   a,10                    ; A = units, B = tens
+                ld    c,a
+                ld    a,b
+                rlca
+                rlca
+                rlca
+                rlca
+                or    c
+                ret
+
+; sw_tick: advance the software clock by one second.
+sw_tick
+                ld    a,(sw_sec)
+                inc   a
+                cp    60
+                jr    c,swt_sec
+                xor   a
+                ld    (sw_sec),a
+                ld    a,(sw_min)
+                inc   a
+                cp    60
+                jr    c,swt_min
+                xor   a
+                ld    (sw_min),a
+                ld    a,(sw_hour)
+                inc   a
+                cp    24
+                jr    c,swt_hour
+                xor   a
+swt_hour
+                ld    (sw_hour),a
+                ret
+swt_min
+                ld    (sw_min),a
+                ret
+swt_sec
+                ld    (sw_sec),a
+                ret
+
+; update_clock: once per frame. Every 50 frames = 1s, refresh the time; redraw
+; the top-bar clock only when "HH:MM" actually changes.
+update_clock
+                ld    a,(clk_frames)
+                inc   a
+                cp    TICKS_PER_SEC
+                jr    c,uc_save
+                xor   a
+                ld    (clk_frames),a
+                ld    a,(have_rtc)            ; software clock advances itself
+                or    a
+                call  z,sw_tick
+                call  read_time              ; -> time_str
+                call  clk_changed            ; differs from clk_shown?
+                ret   z
+                ld    hl,time_str            ; remember + redraw
+                ld    de,clk_shown
+                ld    bc,6
+                ldir
+                call  cursor_erase
+                call  draw_clock
+                jp    cursor_draw
+uc_save
+                ld    (clk_frames),a
+                ret
+
+; clk_changed: Z if time_str == clk_shown (5 chars), NZ if different.
+clk_changed
+                ld    hl,time_str
+                ld    de,clk_shown
+                ld    b,5
+ckc_loop
+                ld    a,(de)
+                cp    (hl)
+                ret   nz                      ; differ -> NZ
+                inc   hl
+                inc   de
+                djnz  ckc_loop
+                xor   a                        ; equal -> Z
+                ret
+
+; draw_clock: draw time_str at the top-right of the (white) title bar.
+draw_clock
+                ld    b,2                     ; black on white
+                ld    c,1
+                call  set_text_pens
+                ld    a,CLK_COL
+                ld    (tc_x),a
+                xor   a
+                ld    (tc_y),a
+                ld    hl,time_str
                 jp    draw_text
 
 ; Help line on screen line 9, white bitmap text on the blue backdrop.
@@ -1244,6 +1521,9 @@ ddl_loop
 
 ; ext_to_icon: HL -> the file-type icon for fs_ent_name's 3-char extension.
 ext_to_icon
+                ld    hl,name_geobench        ; GEOBENCH program -> its own icon
+                call  cmp_name8
+                jr    z,eti_geo
                 ld    hl,ext_bas
                 call  cmp_ext
                 jr    z,eti_bas
@@ -1266,6 +1546,23 @@ eti_scr         ld    hl,icon_picture
                 ret
 eti_txt         ld    hl,icon_text
                 ret
+eti_geo         ld    hl,icon_geobench
+                ret
+
+; cmp_name8: Z if the 8-char name template at HL equals fs_ent_name (8.3 name).
+cmp_name8
+                ld    de,fs_ent_name
+                ld    b,8
+cn8_loop
+                ld    a,(de)
+                cp    (hl)
+                ret   nz
+                inc   hl
+                inc   de
+                djnz  cn8_loop
+                xor   a                        ; all matched -> Z
+                ret
+name_geobench   db    "GEOBENCH"
 
 ; cmp_ext: compare the 3-char template at HL with fs_ent_name+8. Z if equal.
 cmp_ext
@@ -1513,7 +1810,17 @@ cwp_yok
                 ret
 
 ; --- Desktop data --------------------------------------------------------
-title_text      db    "GEOBENCH",0
+mem_str         defs  8            ; total-RAM string for the top bar ("128K")
+fm_lead         db    0            ; fmt_mem leading-zero flag
+have_rtc        db    0            ; 1 = Dallas RTC present, 0 = software clock
+sw_sec          db    0            ; software clock (binary)
+sw_min          db    0
+sw_hour         db    0
+clk_frames      db    0            ; 50Hz frame counter -> seconds
+rt_h            db    0            ; current hours/minutes (BCD) for formatting
+rt_m            db    0
+time_str        defs  6            ; "HH:MM" + NUL
+clk_shown       defs  6            ; last "HH:MM" drawn (redraw only on change)
 help_text       db    "Hold Fire/Space to drag   ESC: quit",0
 
 ; --- Mutable state -------------------------------------------------------
@@ -1592,6 +1899,114 @@ label_dskb      db    "Disk B",0
 label_ide       db    "IDE",0
 label_clock     db    "Clock",0
 label_trash     db    "Trash",0
+
+; ---------------------------------------------------------------------------
+; mem_detect: count present 64K expansion banks (adapted from
+; llopis/amstrad-diagnostics). The gate-array RAM-config port (&7Fxx) value
+; &C4+bank*8 pages a 64K bank's block 0 into &4000-&7FFF; we mark each bank's
+; &4000 and count the ones that keep their mark. Returns A = bank count.
+;
+; MUST be located above &8000: paging swaps &4000-&7FFF (where the rest of
+; GEOBENCH runs), but RAM block 2 (&8000-&BFFF, this code + the stack) is left
+; alone by configs &C4..&C7. Only &4000-&4001 is touched, saved and restored.
+; Call with interrupts disabled.
+mem_detect
+                ld    hl,(#4000)             ; save main &4000-&4001
+                ld    (md_save),hl
+
+                ld    d,0                     ; clear every bank's marker to 0
+md_clear
+                ld    e,0
+                call  md_port
+                ld    bc,#7F00
+                out   (c),l
+                xor   a
+                ld    (#4000),a
+                ld    (#4001),a
+                inc   d
+                ld    a,d
+                cp    8
+                jr    nz,md_clear
+
+                ld    bc,#7FC0               ; main marker = &FFFF (normal config)
+                out   (c),c
+                ld    a,#FF
+                ld    (#4000),a
+                ld    (#4001),a
+
+                xor   a
+                ld    (md_count),a
+                ld    a,#FF
+                ld    (md_last),a
+                ld    (md_last+1),a
+
+                ld    d,0
+md_detect
+                ld    e,0
+                call  md_port
+                ld    bc,#7F00
+                out   (c),l
+                call  md_valid               ; NZ = present, Z = absent/mirror
+                jr    z,md_next
+                ld    hl,md_count
+                inc   (hl)
+                call  md_update
+md_next
+                inc   d
+                ld    a,d
+                cp    8
+                jr    nz,md_detect
+
+                ld    bc,#7FC0               ; restore normal config + &4000
+                out   (c),c
+                ld    hl,(md_save)
+                ld    (#4000),hl
+                ld    a,(md_count)
+                ret
+
+md_port                                       ; D=bank E=block -> L = port value
+                ld    a,d
+                add   a,a
+                add   a,a
+                add   a,a                     ; bank*8
+                or    #C4
+                or    e
+                ld    l,a
+                ret
+
+md_valid                                      ; read marker; NZ=present, Z=absent
+                ld    a,(#4000)
+                cp    #FF
+                jr    z,md_invalid
+                ld    e,a
+                ld    a,(md_last)
+                cp    e
+                jr    z,md_invalid
+                ld    a,(#4001)
+                cp    #FF
+                jr    z,md_invalid
+                ld    e,a
+                ld    a,(md_last+1)
+                cp    e
+                jr    z,md_invalid
+                ld    a,1
+                or    a
+                ret
+md_invalid
+                xor   a
+                ret
+
+md_update                                      ; mark counted bank, remember it
+                ld    a,#FF
+                ld    (#4000),a
+                ld    (#4001),a
+                ld    (md_last),a
+                ld    (md_last+1),a
+                ret
+
+md_save         dw    0
+md_count        db    0
+md_last         dw    0
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"
