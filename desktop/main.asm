@@ -30,6 +30,7 @@ geobench
                 include "../lib/icon_binary.asm"
                 include "../lib/icon_picture.asm"
                 include "../lib/icon_text.asm"
+                include "../lib/fs_ide_fat.asm"
 
 ; --- Palette (firmware ink numbers 0..26) --------------------------------
 INK_DESKTOP     equ   1           ; blue        -> pen 0 (paper / backdrop)
@@ -915,9 +916,13 @@ draw_floppy_content
                 call  fill_pattern
                 jp    draw_disk_contents
 
-; draw_disk_contents: blit the four file icons in a 2x2 grid inside the window,
-; each with a centred label below it.
+; draw_disk_contents: enumerate the real directory via the storage backend and
+; blit each file's type icon (chosen by extension) in a 2x2 grid, with the file
+; name centred below it. Shows the first NUM_DISK_CELLS entries.
+NUM_DISK_CELLS  equ   4
 draw_disk_contents
+                call  fs_dir_first
+                jp    nc,ddc_done             ; empty directory
                 xor   a
                 ld    (df_i),a
 ddc_loop
@@ -935,16 +940,7 @@ ddc_loop
                 add   a,(hl)
                 ld    (df_yb),a
 
-                ld    a,(df_i)               ; bitmap pointer for this file
-                add   a,a
-                ld    e,a
-                ld    d,0
-                ld    hl,disk_bmps
-                add   hl,de
-                ld    a,(hl)
-                inc   hl
-                ld    h,(hl)
-                ld    l,a
+                call  ext_to_icon            ; HL = icon for this file's type
                 ld    (bm_src),hl
                 ld    a,(df_xb)
                 ld    (bm_x),a
@@ -956,26 +952,7 @@ ddc_loop
                 ld    (bm_h),a
                 call  blit_bitmap
 
-                ld    a,(df_i)               ; label pointer
-                add   a,a
-                ld    e,a
-                ld    d,0
-                ld    hl,disk_labels
-                add   hl,de
-                ld    a,(hl)
-                inc   hl
-                ld    h,(hl)
-                ld    l,a
-                ld    (df_lbl),hl
-                ld    b,0                     ; label length -> B
-ddc_len
-                ld    a,(hl)
-                or    a
-                jr    z,ddc_pos
-                inc   hl
-                inc   b
-                jr    ddc_len
-ddc_pos
+                call  build_label            ; df_label = trimmed name, B = len
                 ld    a,(df_xb)              ; tc_x = icon centre (xb+4) - len
                 add   a,4
                 sub   b
@@ -986,24 +963,90 @@ ddc_pos
                 ld    b,1                     ; white text on blue label cells
                 ld    c,0
                 call  set_text_pens
-                ld    hl,(df_lbl)
+                ld    hl,df_label
                 call  draw_text
 
                 ld    a,(df_i)
                 inc   a
                 ld    (df_i),a
-                cp    4
-                jp    c,ddc_loop
+                cp    NUM_DISK_CELLS
+                jp    nc,ddc_done             ; grid full
+                call  fs_dir_next
+                jp    c,ddc_loop              ; more files -> next cell
+ddc_done
+                ret
+
+; ext_to_icon: HL -> the file-type icon for fs_ent_name's 3-char extension.
+ext_to_icon
+                ld    hl,ext_bas
+                call  cmp_ext
+                jr    z,eti_bas
+                ld    hl,ext_bin
+                call  cmp_ext
+                jr    z,eti_bin
+                ld    hl,ext_scr
+                call  cmp_ext
+                jr    z,eti_scr
+                ld    hl,ext_txt
+                call  cmp_ext
+                jr    z,eti_txt
+                ld    hl,icon_binary         ; default: generic binary
+                ret
+eti_bas         ld    hl,icon_basic
+                ret
+eti_bin         ld    hl,icon_binary
+                ret
+eti_scr         ld    hl,icon_picture
+                ret
+eti_txt         ld    hl,icon_text
+                ret
+
+; cmp_ext: compare the 3-char template at HL with fs_ent_name+8. Z if equal.
+cmp_ext
+                ld    de,fs_ent_name+8
+                ld    a,(de)
+                cp    (hl)
+                ret   nz
+                inc   hl
+                inc   de
+                ld    a,(de)
+                cp    (hl)
+                ret   nz
+                inc   hl
+                inc   de
+                ld    a,(de)
+                cp    (hl)
+                ret
+
+; build_label: copy fs_ent_name (8 chars) into df_label, dropping pad spaces,
+; null-terminate, and return the character count in B.
+build_label
+                ld    hl,fs_ent_name
+                ld    de,df_label
+                ld    b,8
+                ld    c,0
+blab_loop
+                ld    a,(hl)
+                cp    ' '
+                jr    z,blab_skip
+                ld    (de),a
+                inc   de
+                inc   c
+blab_skip
+                inc   hl
+                djnz  blab_loop
+                xor   a
+                ld    (de),a                  ; null-terminate
+                ld    b,c                     ; B = displayed length
                 ret
 
 ; 2x2 cell offsets (dx byte, dy line) from the window's top-left.
 disk_pos        db    6,20, 30,20, 6,64, 30,64
-disk_bmps       dw    icon_basic, icon_binary, icon_picture, icon_text
-disk_labels     dw    lbl_basic, lbl_binary, lbl_picture, lbl_text
-lbl_basic       db    "Basic",0
-lbl_binary      db    "Binary",0
-lbl_picture     db    "Photo",0
-lbl_text        db    "Notes",0
+ext_bas         db    "BAS"
+ext_bin         db    "BIN"
+ext_scr         db    "SCR"
+ext_txt         db    "TXT"
+df_label        defs  9
 
 ; ---------------------------------------------------------------------------
 ; win_grab: begin dragging. The window goes transparent (its filled body is
@@ -1208,7 +1251,6 @@ win_placed      db    0            ; 0 until the window's first open (initial po
 df_i            db    0            ; draw_disk_contents loop index
 df_xb           db    0            ; current file-icon x byte
 df_yb           db    0            ; current file-icon y line
-df_lbl          dw    0            ; current file-icon label pointer
 sel_icon        db    NO_ICON      ; selected icon index, or NO_ICON
 drag_idx        db    NO_ICON      ; icon currently being dragged
 li_idx          db    0            ; load_icon scratch
@@ -1241,3 +1283,4 @@ label_trash     db    "Trash",0
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"
+                save  "build/GEOBENCH.RAW",geobench,end-geobench

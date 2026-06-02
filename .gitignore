@@ -1,7 +1,9 @@
 # Build artifacts
 *.bin
 *.BIN
+*.RAW
 bin/
+build/
 
 # CPC disk images
 *.dsk
