@@ -82,3 +82,4 @@ fs_ent_attr     defb  0
 fs_ent_size     defs  4
 fs_req_name     defs  11           ; fs_load_file: 8.3 name to load
 fs_load_dst     defw  0            ; fs_load_file: destination buffer
+fs_load_max     defw  #FFFF        ; fs_load_file: max bytes to read (buffer guard)

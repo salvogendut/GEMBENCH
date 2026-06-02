@@ -24,24 +24,31 @@ geobench
                 include "../lib/text.asm"
                 include "../lib/window.asm"
 ; --- Icon set ------------------------------------------------------------
-; The active icons live contiguously in slot order under icon_set, so each
-; icon's label (icon_floppy, icon_binary, ...) is also its slot address. At
-; startup icon_load overwrites this buffer with <ICONS>.IST from disk (or these
-; compiled-in defaults are kept if there's no set file). The .IST is just the
-; raw icons in this same slot order. Each icon is 256 bytes (8 x 32).
-icon_set
-                include "../lib/icon_floppy.asm"     ; slot 0
-                include "../lib/icon_ide.asm"        ; slot 1
-                include "../lib/icon_clock.asm"      ; slot 2
-                include "../lib/icon_trash.asm"      ; slot 3
-                include "../lib/icon_geobench.asm"   ; slot 4
-                include "../lib/icon_basic.asm"      ; slot 5
-                include "../lib/icon_binary.asm"     ; slot 6
-                include "../lib/icon_picture.asm"    ; slot 7
-                include "../lib/icon_text.asm"       ; slot 8
-icon_set_end
-                defs  256                     ; slack so a whole-sector load fits
-ICONSET_BYTES   equ   icon_set_end - icon_set  ; 9 * 256 = 2304
+; The active icons live in the icon_set RAM buffer; each icon label is its slot
+; address there. At startup icon_load validates <ICONS>.IST and copies its icons
+; into icon_set, else keeps the compiled-in default set (icon_rom). The .IST has
+; a 16-byte header (GBIS magic, version, count, width, height) then the icons.
+ICON_SLOT       equ   256          ; bytes per icon (8 bytes x 32 rows, Mode 1)
+ICON_NSLOT      equ   9
+IST_HDR         equ   16           ; .IST header size
+ICONSET_BYTES   equ   ICON_NSLOT*ICON_SLOT      ; 2304
+IST_SIZE        equ   IST_HDR + ICONSET_BYTES   ; 2320
+ICON_LOAD_MAX   equ   2560         ; cap on a set's on-disk size (floppy adds an
+                                   ; AMSDOS header); also bounds the load buffer
+
+icon_rom_data   incbin "../build/DEFAULT.IST"  ; compiled-in default set (header + icons)
+icon_rom        equ   icon_rom_data + IST_HDR  ; its raw icons (the fallback)
+
+icon_set        defs  ICON_LOAD_MAX+128        ; active icons (RAM); icon_load fills it
+icon_floppy     equ   icon_set + 0*ICON_SLOT
+icon_ide        equ   icon_set + 1*ICON_SLOT
+icon_clock      equ   icon_set + 2*ICON_SLOT
+icon_trash      equ   icon_set + 3*ICON_SLOT
+icon_geobench   equ   icon_set + 4*ICON_SLOT
+icon_basic      equ   icon_set + 5*ICON_SLOT
+icon_binary     equ   icon_set + 6*ICON_SLOT
+icon_picture    equ   icon_set + 7*ICON_SLOT
+icon_text       equ   icon_set + 8*ICON_SLOT
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
@@ -1215,6 +1222,13 @@ icon_word
 ; over icon_set. If the file is absent (or no storage), the compiled-in default
 ; icons are kept. Call after cfg_load, before drawing icons.
 icon_load
+                ld    hl,ICON_LOAD_MAX        ; never load more than the buffer holds
+                ld    (fs_load_max),hl
+                ld    hl,icon_rom            ; default: the compiled-in icons
+                ld    de,icon_set
+                ld    bc,ICONSET_BYTES
+                ldir
+
                 ld    hl,cfg_icons           ; fs_req_name = cfg_icons.IST (8.3)
                 ld    de,fs_req_name
                 ld    b,8
@@ -1244,7 +1258,48 @@ il_ext
                 ld    (de),a
                 ld    hl,icon_set
                 ld    (fs_load_dst),hl
-                jp    fs_load_file            ; NC -> keep compiled-in defaults
+                call  fs_load_file
+                jr    nc,il_keepdef          ; missing / too big -> keep default
+
+                ld    a,(icon_set+0)         ; validate header: magic "GBIS"
+                cp    'G'
+                jr    nz,il_restore
+                ld    a,(icon_set+1)
+                cp    'B'
+                jr    nz,il_restore
+                ld    a,(icon_set+2)
+                cp    'I'
+                jr    nz,il_restore
+                ld    a,(icon_set+3)
+                cp    'S'
+                jr    nz,il_restore
+                ld    a,(icon_set+5)         ; count
+                cp    ICON_NSLOT
+                jr    nz,il_restore
+                ld    a,(icon_set+6)         ; width (bytes)
+                cp    8
+                jr    nz,il_restore
+                ld    a,(icon_set+7)         ; height (rows)
+                cp    32
+                jr    nz,il_restore
+                ld    hl,(fs_ent_size)       ; size
+                ld    de,IST_SIZE
+                or    a
+                sbc   hl,de
+                jr    nz,il_restore
+
+                ld    hl,icon_set+IST_HDR    ; valid -> drop the header
+                ld    de,icon_set
+                ld    bc,ICONSET_BYTES
+                ldir
+                ret
+il_restore
+                ld    hl,icon_rom            ; bad set -> restore the default icons
+                ld    de,icon_set
+                ld    bc,ICONSET_BYTES
+                ldir
+il_keepdef
+                ret
 
 ; build_desktop_icons: probe storage and fill the live icon arrays from
 ; cand_tbl. Present drives stack down the left column (y from 258, step -108);
@@ -2066,7 +2121,5 @@ end
 ; before assembling -- tools/build.sh does that.
 cfg_file        incbin "../GEOBENCH.CFG.example"
 cfg_file_end
-ist_file        incbin "../build/DEFAULT.IST"
-ist_file_end
                 save  "GEOBENCH.CFG",cfg_file,cfg_file_end-cfg_file,DSK,"build/geobench.dsk"
-                save  "DEFAULT.IST",ist_file,ist_file_end-ist_file,DSK,"build/geobench.dsk"
+                save  "DEFAULT.IST",icon_rom_data,IST_SIZE,DSK,"build/geobench.dsk"
