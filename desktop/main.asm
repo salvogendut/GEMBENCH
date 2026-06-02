@@ -87,6 +87,20 @@ PEN_SELECT      equ   3            ; accent selection / drag frame
 desktop_start
                 ld    a,1
                 call  SCR_SET_MODE           ; Mode 1, 320x200, 4 pens. Clears.
+                di                           ; probe RAM (pages &4000; IRQs off)
+                call  mem_detect             ; A = number of 64K expansion banks
+                ei
+                ld    l,a                    ; total KB = 64 + banks*64
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl                   ; banks * 64
+                ld    de,64
+                add   hl,de                   ; + base 64K
+                call  fmt_mem                 ; -> mem_str "<KB>K"
                 call  fs_init                ; pick default backend (IDE? else floppy)
                 call  build_desktop_icons    ; probe drives -> live icon table
                 call  TXT_CUR_DISABLE        ; no blinking text cursor blob
@@ -888,12 +902,55 @@ draw_title_bar
                 ld    b,2                     ; black on white
                 ld    c,1
                 call  set_text_pens
-                ld    a,1
+                ld    a,1                     ; total RAM on the left
                 ld    (tc_x),a
                 xor   a
                 ld    (tc_y),a
-                ld    hl,title_text
+                ld    hl,mem_str
                 jp    draw_text
+
+; fmt_mem: HL = total KB -> mem_str as "<decimal>K" (leading zeros suppressed).
+fmt_mem
+                ld    ix,mem_str
+                xor   a
+                ld    (fm_lead),a
+                ld    de,10000
+                call  fm_digit
+                ld    de,1000
+                call  fm_digit
+                ld    de,100
+                call  fm_digit
+                ld    de,10
+                call  fm_digit
+                ld    a,l                     ; units digit (always shown)
+                add   a,'0'
+                ld    (ix+0),a
+                ld    (ix+1),'K'
+                ld    (ix+2),0
+                ret
+fm_digit                                       ; HL/DE -> digit in A, HL=remainder
+                ld    a,#FF
+fmd_loop
+                inc   a
+                or    a                        ; clear carry
+                sbc   hl,de
+                jr    nc,fmd_loop
+                add   hl,de                    ; undo the overshoot
+                or    a
+                jr    nz,fmd_emit
+                ld    a,(fm_lead)              ; leading zero -> skip
+                or    a
+                ret   z
+                xor   a
+fmd_emit
+                ld    b,a
+                ld    a,1
+                ld    (fm_lead),a
+                ld    a,b
+                add   a,'0'
+                ld    (ix+0),a
+                inc   ix
+                ret
 
 ; Help line on screen line 9, white bitmap text on the blue backdrop.
 draw_help
@@ -1513,7 +1570,8 @@ cwp_yok
                 ret
 
 ; --- Desktop data --------------------------------------------------------
-title_text      db    "GEOBENCH",0
+mem_str         defs  8            ; total-RAM string for the top bar ("128K")
+fm_lead         db    0            ; fmt_mem leading-zero flag
 help_text       db    "Hold Fire/Space to drag   ESC: quit",0
 
 ; --- Mutable state -------------------------------------------------------
@@ -1592,6 +1650,114 @@ label_dskb      db    "Disk B",0
 label_ide       db    "IDE",0
 label_clock     db    "Clock",0
 label_trash     db    "Trash",0
+
+; ---------------------------------------------------------------------------
+; mem_detect: count present 64K expansion banks (adapted from
+; llopis/amstrad-diagnostics). The gate-array RAM-config port (&7Fxx) value
+; &C4+bank*8 pages a 64K bank's block 0 into &4000-&7FFF; we mark each bank's
+; &4000 and count the ones that keep their mark. Returns A = bank count.
+;
+; MUST be located above &8000: paging swaps &4000-&7FFF (where the rest of
+; GEOBENCH runs), but RAM block 2 (&8000-&BFFF, this code + the stack) is left
+; alone by configs &C4..&C7. Only &4000-&4001 is touched, saved and restored.
+; Call with interrupts disabled.
+mem_detect
+                ld    hl,(#4000)             ; save main &4000-&4001
+                ld    (md_save),hl
+
+                ld    d,0                     ; clear every bank's marker to 0
+md_clear
+                ld    e,0
+                call  md_port
+                ld    bc,#7F00
+                out   (c),l
+                xor   a
+                ld    (#4000),a
+                ld    (#4001),a
+                inc   d
+                ld    a,d
+                cp    8
+                jr    nz,md_clear
+
+                ld    bc,#7FC0               ; main marker = &FFFF (normal config)
+                out   (c),c
+                ld    a,#FF
+                ld    (#4000),a
+                ld    (#4001),a
+
+                xor   a
+                ld    (md_count),a
+                ld    a,#FF
+                ld    (md_last),a
+                ld    (md_last+1),a
+
+                ld    d,0
+md_detect
+                ld    e,0
+                call  md_port
+                ld    bc,#7F00
+                out   (c),l
+                call  md_valid               ; NZ = present, Z = absent/mirror
+                jr    z,md_next
+                ld    hl,md_count
+                inc   (hl)
+                call  md_update
+md_next
+                inc   d
+                ld    a,d
+                cp    8
+                jr    nz,md_detect
+
+                ld    bc,#7FC0               ; restore normal config + &4000
+                out   (c),c
+                ld    hl,(md_save)
+                ld    (#4000),hl
+                ld    a,(md_count)
+                ret
+
+md_port                                       ; D=bank E=block -> L = port value
+                ld    a,d
+                add   a,a
+                add   a,a
+                add   a,a                     ; bank*8
+                or    #C4
+                or    e
+                ld    l,a
+                ret
+
+md_valid                                      ; read marker; NZ=present, Z=absent
+                ld    a,(#4000)
+                cp    #FF
+                jr    z,md_invalid
+                ld    e,a
+                ld    a,(md_last)
+                cp    e
+                jr    z,md_invalid
+                ld    a,(#4001)
+                cp    #FF
+                jr    z,md_invalid
+                ld    e,a
+                ld    a,(md_last+1)
+                cp    e
+                jr    z,md_invalid
+                ld    a,1
+                or    a
+                ret
+md_invalid
+                xor   a
+                ret
+
+md_update                                      ; mark counted bank, remember it
+                ld    a,#FF
+                ld    (#4000),a
+                ld    (#4001),a
+                ld    (md_last),a
+                ld    (md_last+1),a
+                ret
+
+md_save         dw    0
+md_count        db    0
+md_last         dw    0
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"
