@@ -345,7 +345,218 @@ fsam_present
                 scf
                 ret
 
+; ---------------------------------------------------------------------------
+; fsam_load_file: load fs_req_name (8.3) from the floppy into (fs_load_dst).
+; Single extent (Ex=0, <=16KB) only; strips a 128-byte AMSDOS header if present.
+; CF set = loaded (fs_ent_size = byte size), NC = not found.
+;
+; AMSDOS DATA format: 1KB allocation blocks = 2 sectors. Block B's two 512-byte
+; sectors are logical sectors L = B*2 and B*2+1; L -> track = L/9, physical
+; sector = &C1 + (L mod 9).
+fsam_load_file
+                call  fsam_motor_on                  ; spin up + recalibrate
+                call  fsam_read_dir                  ; directory -> fsam_buf
+
+                ld    ix,fsam_buf                    ; find Ex=0 entry by name
+                ld    b,64
+fslf_scan
+                ld    a,(ix+0)
+                cp    #E5
+                jr    z,fslf_next
+                ld    a,(ix+12)                      ; first extent only
+                or    a
+                jr    nz,fslf_next
+                call  fsam_namematch
+                jr    z,fslf_found
+fslf_next
+                push  bc
+                ld    de,32
+                add   ix,de
+                pop   bc
+                djnz  fslf_scan
+                call  fsam_motor_off
+                or    a                               ; not found
+                ret
+
+fslf_found
+                push  ix                              ; copy 16 block numbers out
+                pop   hl
+                ld    de,16
+                add   hl,de
+                ld    de,fslf_blocks
+                ld    bc,16
+                ldir
+                ld    a,(ix+15)                      ; Rc records -> sectors = ceil(Rc/4)
+                add   a,3
+                rrca                                  ; /4 (Rc<=128 so bit7 clear after +3)
+                rrca
+                and   #3F
+                ld    (fslf_secs),a
+                ld    a,(ix+15)                      ; remember Rc for the no-header size
+                ld    (fslf_rc),a
+
+                ld    hl,(fs_load_dst)
+                ld    (fsam_dst),hl                  ; fsam_read_sector advances this
+                xor   a
+                ld    (fslf_si),a
+                ld    a,#FF
+                ld    (fslf_curtrk),a                ; force a seek on the first sector
+fslf_rd
+                ld    a,(fslf_secs)
+                or    a
+                jr    z,fslf_done
+                dec   a
+                ld    (fslf_secs),a
+
+                ld    a,(fslf_si)                    ; block index = si / 2
+                srl   a
+                ld    e,a
+                ld    d,0
+                ld    hl,fslf_blocks
+                add   hl,de
+                ld    l,(hl)                          ; L = block*2 + (si & 1)
+                ld    h,0
+                add   hl,hl
+                ld    a,(fslf_si)
+                and   1
+                or    l
+                ld    l,a
+                call  fsam_div9                       ; HL/9 -> B=track, A=remainder
+                ld    c,a                             ; remainder
+                ld    a,b                             ; track changed? seek
+                ld    e,a                             ; keep track in E
+                ld    a,(fslf_curtrk)
+                cp    e
+                jr    z,fslf_noseek
+                ld    a,e
+                ld    (fslf_curtrk),a
+                push  bc
+                ld    a,e
+                call  fsam_seek
+                pop   bc
+fslf_noseek
+                ld    a,(fslf_curtrk)
+                ld    d,a                             ; D = track
+                ld    a,#C1
+                add   a,c
+                ld    e,a                             ; E = physical sector
+                call  fsam_read_sector
+
+                ld    a,(fslf_si)
+                inc   a
+                ld    (fslf_si),a
+                jr    fslf_rd
+fslf_done
+                call  fsam_motor_off
+                ; --- strip a 128-byte AMSDOS header if the checksum matches ---
+                ld    hl,(fs_load_dst)
+                ld    de,0                            ; sum of bytes [0..66]
+                ld    b,67
+fslf_sum
+                ld    a,(hl)
+                add   a,e
+                ld    e,a
+                jr    nc,fslf_nc
+                inc   d
+fslf_nc
+                inc   hl
+                djnz  fslf_sum
+                ld    hl,(fs_load_dst)               ; compare to word at [67]
+                ld    bc,67
+                add   hl,bc
+                ld    a,(hl)
+                cp    e
+                jr    nz,fslf_nohdr
+                inc   hl
+                ld    a,(hl)
+                cp    d
+                jr    nz,fslf_nohdr
+                ld    hl,(fs_load_dst)               ; header: length = word @ [24]
+                ld    bc,24
+                add   hl,bc
+                ld    c,(hl)
+                inc   hl
+                ld    b,(hl)
+                ld    (fs_ent_size),bc
+                ld    hl,0
+                ld    (fs_ent_size+2),hl
+                ld    hl,(fs_load_dst)               ; shift content down past header
+                ld    de,128
+                add   hl,de
+                ld    de,(fs_load_dst)
+                ld    bc,(fs_ent_size)
+                ld    a,b
+                or    c
+                jr    z,fslf_ok                       ; zero-length -> nothing to move
+                ldir
+                jr    fslf_ok
+fslf_nohdr
+                ld    a,(fslf_rc)                    ; no header: size = Rc * 128
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl                           ; *128
+                ld    (fs_ent_size),hl
+                ld    hl,0
+                ld    (fs_ent_size+2),hl
+fslf_ok
+                scf
+                ret
+
+; fsam_namematch: IX = dir entry; Z if its 8.3 name == fs_req_name (11 bytes).
+fsam_namematch
+                push  ix
+                pop   hl
+                inc   hl                              ; entry name starts at +1
+                ld    de,fs_req_name
+                ld    b,11
+fnm_loop
+                ld    a,(hl)
+                and   #7F                             ; drop attribute bits
+                ld    c,a
+                ld    a,(de)
+                cp    c
+                jr    nz,fnm_no
+                inc   hl
+                inc   de
+                djnz  fnm_loop
+                xor   a
+                ret
+fnm_no
+                or    1
+                ret
+
+; fsam_div9: HL / 9 -> B = quotient, A = remainder (0..8). Clobbers DE.
+fsam_div9
+                ld    b,0
+fd9_loop
+                ld    a,h
+                or    a
+                jr    nz,fd9_sub
+                ld    a,l
+                cp    9
+                jr    c,fd9_done
+fd9_sub
+                or    a
+                ld    de,9
+                sbc   hl,de
+                inc   b
+                jr    fd9_loop
+fd9_done
+                ld    a,l
+                ret
+
 ; --- state ---------------------------------------------------------------
+fslf_blocks     defs  16           ; allocation block numbers of the found extent
+fslf_secs       defb  0            ; sectors left to read
+fslf_si         defb  0            ; sector index within the file
+fslf_rc         defb  0            ; record count (for the no-header size)
+fslf_curtrk     defb  0            ; track the head is currently on
 fsam_unit       defb  0            ; selected drive: 0 = A, 1 = B
 fsam_base       defb  #C1
 fsam_track      defb  0

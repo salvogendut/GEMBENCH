@@ -20,8 +20,14 @@ IMG="${GEOBENCH_IMG:-$HOME/Downloads/GEOBENCH.IMG}"
 [ -f "$IMG" ] || { echo "IDE image not found: $IMG" >&2; exit 1; }
 
 mkdir -p build
-"$RASM" desktop/main.asm -eo                  # -> build/GEOBENCH.RAW + .dsk
+bash tools/build.sh                           # packs DEFAULT.IST, -> .dsk + RAW
 python3 tools/amsdos_header.py build/GEOBENCH.RAW build/GEOBENCH.BIN GEOBENCH BIN 0x4000
 
 MTOOLS_SKIP_CHECK=1 mcopy -o -i "$IMG" build/GEOBENCH.BIN ::/
-echo "Deployed GEOBENCH.BIN -> $IMG"
+MTOOLS_SKIP_CHECK=1 mcopy -o -i "$IMG" build/DEFAULT.IST ::/
+# Seed GEOBENCH.CFG only if the image doesn't already have one (user-editable).
+if ! MTOOLS_SKIP_CHECK=1 mdir -i "$IMG" ::GEOBENCH.CFG >/dev/null 2>&1; then
+    MTOOLS_SKIP_CHECK=1 mcopy -i "$IMG" GEOBENCH.CFG.example ::/GEOBENCH.CFG
+    echo "Seeded GEOBENCH.CFG"
+fi
+echo "Deployed GEOBENCH.BIN + DEFAULT.IST -> $IMG"

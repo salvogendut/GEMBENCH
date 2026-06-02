@@ -32,7 +32,7 @@ fsi_floppy
                 ld    (fs_p_first),hl
                 ld    hl,fsam_dir_next
                 ld    (fs_p_next),hl
-                ld    hl,fs_load_none         ; floppy file-read: TODO
+                ld    hl,fsam_load_file
                 ld    (fs_p_load),hl
                 ret
 
