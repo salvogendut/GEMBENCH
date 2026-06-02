@@ -24,21 +24,32 @@ fs_init
                 ld    (fs_p_first),hl
                 ld    hl,fside_dir_next
                 ld    (fs_p_next),hl
+                ld    hl,fside_load_file
+                ld    (fs_p_load),hl
                 ret
 fsi_floppy
                 ld    hl,fsam_dir_first
                 ld    (fs_p_first),hl
                 ld    hl,fsam_dir_next
                 ld    (fs_p_next),hl
+                ld    hl,fs_load_none         ; floppy file-read: TODO
+                ld    (fs_p_load),hl
                 ret
 
-; fs_dir_first / fs_dir_next: route to the selected backend.
+; fs_dir_first / fs_dir_next / fs_load_file: route to the selected backend.
 fs_dir_first
                 ld    hl,(fs_p_first)
                 jp    (hl)
 fs_dir_next
                 ld    hl,(fs_p_next)
                 jp    (hl)
+; fs_load_file: load file (fs_req_name) into (fs_load_dst). CF set = loaded.
+fs_load_file
+                ld    hl,(fs_p_load)
+                jp    (hl)
+fs_load_none
+                or    a                        ; not implemented -> NC
+                ret
 
 ; fs_ide_present: ATA register read-back test on the IDE LBA-low port. A real
 ; controller latches the value; an unconnected expansion bus does not. CF set =
@@ -65,6 +76,9 @@ fsip_absent
 ; --- state / shared per-entry output -------------------------------------
 fs_p_first      defw  fside_dir_first   ; default IDE; fs_init rewrites on detect
 fs_p_next       defw  fside_dir_next
+fs_p_load       defw  fside_load_file
 fs_ent_name     defs  11
 fs_ent_attr     defb  0
 fs_ent_size     defs  4
+fs_req_name     defs  11           ; fs_load_file: 8.3 name to load
+fs_load_dst     defw  0            ; fs_load_file: destination buffer
