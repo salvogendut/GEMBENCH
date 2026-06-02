@@ -20,15 +20,8 @@ IMG="${GEOBENCH_IMG:-$HOME/Downloads/GEOBENCH.IMG}"
 [ -f "$IMG" ] || { echo "IDE image not found: $IMG" >&2; exit 1; }
 
 mkdir -p build
-"$RASM" desktop/main.asm -eo                  # -> build/GEOBENCH.RAW + .dsk
+bash tools/build.sh                           # packs DEFAULT.IST, -> .dsk + RAW
 python3 tools/amsdos_header.py build/GEOBENCH.RAW build/GEOBENCH.BIN GEOBENCH BIN 0x4000
-
-# Default icon set (DEFAULT.IST), packed from the icons in the desktop's slot
-# order. Keep this list in sync with icon_set in desktop/main.asm.
-python3 tools/packicons.py build/DEFAULT.IST \
-    lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
-    lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
-    lib/icon_picture.asm lib/icon_text.asm
 
 MTOOLS_SKIP_CHECK=1 mcopy -o -i "$IMG" build/GEOBENCH.BIN ::/
 MTOOLS_SKIP_CHECK=1 mcopy -o -i "$IMG" build/DEFAULT.IST ::/

@@ -2059,3 +2059,14 @@ md_last         dw    0
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"
                 save  "build/GEOBENCH.RAW",geobench,end-geobench
+
+; Put the config and default icon set on the floppy too, so a floppy-only
+; machine loads them just like the IDE build (fsam_load_file strips the AMSDOS
+; header RASM adds). build/DEFAULT.IST must be packed (tools/packicons.py)
+; before assembling -- tools/build.sh does that.
+cfg_file        incbin "../GEOBENCH.CFG.example"
+cfg_file_end
+ist_file        incbin "../build/DEFAULT.IST"
+ist_file_end
+                save  "GEOBENCH.CFG",cfg_file,cfg_file_end-cfg_file,DSK,"build/geobench.dsk"
+                save  "DEFAULT.IST",ist_file,ist_file_end-ist_file,DSK,"build/geobench.dsk"
