@@ -31,6 +31,7 @@ geobench
                 include "../lib/icon_picture.asm"
                 include "../lib/icon_text.asm"
                 include "../lib/icon_ide.asm"
+                include "../lib/icon_geobench.asm"
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
@@ -1520,6 +1521,9 @@ ddl_loop
 
 ; ext_to_icon: HL -> the file-type icon for fs_ent_name's 3-char extension.
 ext_to_icon
+                ld    hl,name_geobench        ; GEOBENCH program -> its own icon
+                call  cmp_name8
+                jr    z,eti_geo
                 ld    hl,ext_bas
                 call  cmp_ext
                 jr    z,eti_bas
@@ -1542,6 +1546,23 @@ eti_scr         ld    hl,icon_picture
                 ret
 eti_txt         ld    hl,icon_text
                 ret
+eti_geo         ld    hl,icon_geobench
+                ret
+
+; cmp_name8: Z if the 8-char name template at HL equals fs_ent_name (8.3 name).
+cmp_name8
+                ld    de,fs_ent_name
+                ld    b,8
+cn8_loop
+                ld    a,(de)
+                cp    (hl)
+                ret   nz
+                inc   hl
+                inc   de
+                djnz  cn8_loop
+                xor   a                        ; all matched -> Z
+                ret
+name_geobench   db    "GEOBENCH"
 
 ; cmp_ext: compare the 3-char template at HL with fs_ent_name+8. Z if equal.
 cmp_ext
