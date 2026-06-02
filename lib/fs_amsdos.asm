@@ -374,11 +374,27 @@ fslf_next
                 add   ix,de
                 pop   bc
                 djnz  fslf_scan
+fslf_toobig
                 call  fsam_motor_off
-                or    a                               ; not found
+                or    a                               ; not found / too big
                 ret
 
 fslf_found
+                ld    a,(ix+15)                      ; on-disk bytes = Rc*128 > buffer?
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl                           ; Rc * 128
+                ld    de,(fs_load_max)
+                ex    de,hl
+                or    a
+                sbc   hl,de                           ; max - Rc*128
+                jr    c,fslf_toobig                   ; Rc*128 > max -> refuse
                 push  ix                              ; copy 16 block numbers out
                 pop   hl
                 ld    de,16

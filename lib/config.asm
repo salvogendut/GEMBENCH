@@ -24,6 +24,8 @@ cfg_load
                 ld    de,fs_req_name
                 ld    bc,11
                 ldir
+                ld    hl,CFG_BUF_SZ          ; don't overrun cfg_buf
+                ld    (fs_load_max),hl
                 ld    hl,cfg_buf
                 ld    (fs_load_dst),hl
                 call  fs_load_file

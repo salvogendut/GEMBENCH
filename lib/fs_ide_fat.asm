@@ -180,9 +180,15 @@ flf_find
                 call  fside_dir_next
                 jr    flf_find
 flf_notfound
+flf_toobig
                 or    a
                 ret
 flf_found                                      ; fs_ent_clus + fs_ent_size set
+                ld    hl,(fs_load_max)        ; size > caller's buffer? refuse
+                ld    de,(fs_ent_size)
+                or    a
+                sbc   hl,de
+                jr    c,flf_toobig
                 ld    hl,(fs_ent_size)        ; sectors = ceil(size/512)
                 ld    de,511
                 add   hl,de
