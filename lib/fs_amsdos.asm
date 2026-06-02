@@ -183,7 +183,7 @@ fmo_spin
                 jr    nz,fmo_spin
                 ld    a,#07                         ; RECALIBRATE
                 call  fsam_send
-                ld    a,0
+                ld    a,(fsam_unit)                  ; drive 0/1
                 call  fsam_send
                 jp    fsam_wait_seek
 
@@ -198,7 +198,7 @@ fsam_seek
                 ld    d,a
                 ld    a,#0F                         ; SEEK
                 call  fsam_send
-                ld    a,0                            ; (head<<2)|drive
+                ld    a,(fsam_unit)                  ; (head<<2)|drive
                 call  fsam_send
                 ld    a,d
                 call  fsam_send
@@ -226,7 +226,7 @@ fws_done
 fsam_read_id
                 ld    a,#4A
                 call  fsam_send
-                ld    a,0
+                ld    a,(fsam_unit)
                 call  fsam_send
                 call  fsam_recv                      ; ST0
                 call  fsam_recv                      ; ST1
@@ -244,7 +244,7 @@ fsam_read_sector
                 push  de                             ; keep caller's track/sector id
                 ld    a,#46                          ; READ DATA, MFM
                 call  fsam_send
-                ld    a,0
+                ld    a,(fsam_unit)
                 call  fsam_send                      ; (head<<2)|drive
                 ld    a,d
                 call  fsam_send                      ; C = track
@@ -320,7 +320,33 @@ frcv_wait
                 in    a,(c)
                 ret
 
+; ---------------------------------------------------------------------------
+; fsam_present: is there a readable disk in drive (fsam_unit)? Spins the motor,
+; recalibrates and tries a READ ID; a normal result (ST0 IC bits 7-6 == 00)
+; means a disk is in the drive. CF set = present.
+fsam_present
+                call  fsam_motor_on                  ; motor + recalibrate the unit
+                ld    a,#4A                          ; READ ID
+                call  fsam_send
+                ld    a,(fsam_unit)
+                call  fsam_send
+                call  fsam_recv                      ; ST0
+                push  af                              ; save it (motor_off clobbers BC)
+                call  fsam_recv                      ; ST1
+                call  fsam_recv                      ; ST2
+                call  fsam_recv                      ; C
+                call  fsam_recv                      ; H
+                call  fsam_recv                      ; R
+                call  fsam_recv                      ; N
+                call  fsam_motor_off
+                pop   af                             ; ST0 IC bits 7-6 == 00 => OK
+                and   #C0
+                ret   nz                             ; abnormal -> CF clear (absent)
+                scf
+                ret
+
 ; --- state ---------------------------------------------------------------
+fsam_unit       defb  0            ; selected drive: 0 = A, 1 = B
 fsam_base       defb  #C1
 fsam_track      defb  0
 fsam_idx        defb  0

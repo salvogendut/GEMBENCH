@@ -59,7 +59,7 @@ PYMAX           equ   399
 ; icon_x,icon_y is the lower-left of the WxH bounding box. Selection and the
 ; drag outline are a square frame FRAME_G units OUTSIDE the box, drawn in the
 ; plain backdrop margin so erasing them with the backdrop pen stays safe.
-NUM_ICONS       equ   4            ; max icon slots (drive icons + system icons)
+NUM_ICONS       equ   5            ; max icon slots (Floppy A/B + IDE + Clock + Trash)
 ICON_W          equ   80           ; bounding box width  (40 px in Mode 1)
 ICON_H          equ   80           ; height (40 px)
 FRAME_G         equ   4            ; selection/drag frame margin (2 px outside)
@@ -88,11 +88,7 @@ desktop_start
                 ld    a,1
                 call  SCR_SET_MODE           ; Mode 1, 320x200, 4 pens. Clears.
                 call  fs_init                ; pick default backend (IDE? else floppy)
-                call  fs_ide_present         ; IDE present -> also show its drive icon
-                jr    nc,ds_noide
-                ld    a,4
-                ld    (n_icons),a
-ds_noide
+                call  build_desktop_icons    ; probe drives -> live icon table
                 call  TXT_CUR_DISABLE        ; no blinking text cursor blob
                 call  TXT_CUR_OFF
                 call  set_palette
@@ -289,9 +285,16 @@ hf_grab
                 ld    de,icon_next
                 call  icon_word
                 ld    (fs_p_next),hl
-                ld    de,icon_titles
+                ld    de,icon_labels          ; window title = the icon's label
                 call  icon_word
                 ld    (wnd_title),hl
+                ld    a,b                      ; floppy drive unit (IDE ignores it)
+                ld    l,a
+                ld    h,0
+                ld    de,icon_unit
+                add   hl,de
+                ld    a,(hl)
+                ld    (fsam_unit),a
                 jp    open_disk_window
 hf_firstclick
                 ld    a,b                     ; remember this click for double-click
@@ -918,6 +921,114 @@ icon_word
                 ld    l,a
                 ret
 
+; build_desktop_icons: probe storage and fill the live icon arrays from
+; cand_tbl. Present drives stack down the left column (y from 258, step -108);
+; Clock/Trash keep their fixed candidate positions. Sets n_icons.
+build_desktop_icons
+                xor   a
+                ld    (n_icons),a
+                ld    hl,258                 ; top of the left-hand drive column
+                ld    (bdi_lefty),hl
+                ld    ix,cand_tbl
+                ld    b,CAND_COUNT
+bdi_loop
+                push  bc
+                ld    a,(ix+13)              ; kind: 0 always, 1 floppy, 2 IDE
+                or    a
+                jr    z,bdi_add
+                cp    2
+                jr    z,bdi_ide
+                ld    a,(ix+12)             ; floppy: probe drive 'unit' for a disk
+                ld    (fsam_unit),a
+                call  fsam_present
+                jr    nc,bdi_skip
+                jr    bdi_add
+bdi_ide
+                call  fs_ide_present
+                jr    nc,bdi_skip
+bdi_add
+                call  add_live_icon
+bdi_skip
+                pop   bc
+                ld    de,CAND_SIZE
+                add   ix,de
+                djnz  bdi_loop
+                ret
+
+; add_live_icon: append candidate (IX) to the live arrays at slot n_icons. A
+; drive (icon_first != 0) lands in the left column; others use their own x,y.
+add_live_icon
+                ld    a,(ix+8)              ; drive? (first != 0)
+                or    (ix+9)
+                jr    z,ali_sys
+                ld    de,icon_xs            ; drive: left column
+                ld    hl,8
+                call  bdi_store_w
+                ld    de,icon_ys
+                ld    hl,(bdi_lefty)
+                call  bdi_store_w
+                ld    hl,(bdi_lefty)        ; step the column down for the next
+                ld    de,108
+                or    a
+                sbc   hl,de
+                ld    (bdi_lefty),hl
+                jr    ali_rest
+ali_sys
+                ld    de,icon_xs           ; system icon: fixed candidate position
+                ld    l,(ix+0)
+                ld    h,(ix+1)
+                call  bdi_store_w
+                ld    de,icon_ys
+                ld    l,(ix+2)
+                ld    h,(ix+3)
+                call  bdi_store_w
+ali_rest
+                ld    de,icon_bmps
+                ld    l,(ix+4)
+                ld    h,(ix+5)
+                call  bdi_store_w
+                ld    de,icon_labels
+                ld    l,(ix+6)
+                ld    h,(ix+7)
+                call  bdi_store_w
+                ld    de,icon_first
+                ld    l,(ix+8)
+                ld    h,(ix+9)
+                call  bdi_store_w
+                ld    de,icon_next
+                ld    l,(ix+10)
+                ld    h,(ix+11)
+                call  bdi_store_w
+                ld    a,(ix+12)            ; unit (byte array)
+                ld    de,icon_unit
+                call  bdi_store_b
+                ld    a,(n_icons)          ; commit the slot
+                inc   a
+                ld    (n_icons),a
+                ret
+
+; bdi_store_w: store HL into (DE)[n_icons] (word array). Clobbers A,BC,DE,HL.
+bdi_store_w
+                ld    a,(n_icons)
+                add   a,a
+                ld    c,a
+                ld    b,0
+                ex    de,hl                  ; HL = array base, DE = value
+                add   hl,bc
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d
+                ret
+; bdi_store_b: store A into (DE)[n_icons] (byte array). Clobbers BC,HL.
+bdi_store_b
+                ld    c,a
+                ld    a,(n_icons)
+                ld    l,a
+                ld    h,0
+                add   hl,de
+                ld    (hl),c
+                ret
+
 ; open_disk_window: open the Disk window on the currently-bound backend
 ; (fs_p_first/next and wnd_title set by the caller), read the directory and show
 ; its files as a scrolling list.
@@ -949,7 +1060,6 @@ ofw_placed
                 ld    (disk_scroll),a
                 call  draw_floppy_content
                 jp    cursor_draw
-disk_title      db    "Disk",0
 
 ; draw_floppy_content: checkerboard the interior, then draw the file list.
 ; Redrawn after every window_open (open and on drop).
@@ -1445,22 +1555,43 @@ dr_y0           dw    0
 dr_x1           dw    0
 dr_y1           dw    0
 
-; --- Icon table (parallel arrays; positions on the 16-unit grid) ---------
-; Order: Floppy, Clock, Trash, IDE. The optional IDE drive is LAST so n_icons
-; (3 or 4) toggles it without reordering. Drive icons carry a backend
-; (icon_first/next != 0) and a window title; system icons leave those 0.
-icon_xs         dw    8,   524, 524, 8     ; Floppy(top-left) Clock(top-right) Trash(bot-right) IDE(left, below floppy)
-icon_ys         dw    258, 258, 16,  150
-icon_bmps       dw    icon_floppy, icon_clock, icon_trash, icon_ide
-icon_labels     dw    label_disk,  label_clock, label_trash, label_ide
-icon_first      dw    fsam_dir_first, 0, 0, fside_dir_first
-icon_next       dw    fsam_dir_next,  0, 0, fside_dir_next
-icon_titles     dw    disk_title,  0, 0, label_ide
-label_disk      db    "Disk",0
+; --- Live icon table (parallel arrays, built at startup by ---------------
+; build_desktop_icons from cand_tbl). Only drives that actually have a disk get
+; a slot, so the row reflects the real hardware. Drive icons carry a backend
+; (icon_first/next != 0) + a unit; system icons leave those 0.
+n_icons         db    0            ; active icon count (set by build_desktop_icons)
+icon_xs         defs  NUM_ICONS*2
+icon_ys         defs  NUM_ICONS*2
+icon_bmps       defs  NUM_ICONS*2
+icon_labels     defs  NUM_ICONS*2
+icon_first      defs  NUM_ICONS*2  ; backend fs_dir_first (0 = system icon)
+icon_next       defs  NUM_ICONS*2
+icon_unit       defs  NUM_ICONS    ; floppy drive unit (0 = A, 1 = B)
+bdi_lefty       dw    0            ; next free y in the left-hand drive column
+
+; --- Candidate icons (static source; build_desktop_icons filters by presence)
+; record: x(w) y(w) bmp(w) label(w) first(w) next(w) unit(b) kind(b)
+; kind 0 = always; 1 = floppy (probe drive 'unit' for a disk); 2 = IDE (probe).
+; Drives use placeholder x,y (overridden to the left column); the order here is
+; the priority order in that column.
+CAND_SIZE       equ   14
+cand_tbl
+                dw    0, 0, icon_floppy, label_dska, fsam_dir_first,  fsam_dir_next
+                db    0, 1
+                dw    0, 0, icon_floppy, label_dskb, fsam_dir_first,  fsam_dir_next
+                db    1, 1
+                dw    0, 0, icon_ide,    label_ide,  fside_dir_first, fside_dir_next
+                db    0, 2
+                dw    524, 258, icon_clock, label_clock, 0, 0
+                db    0, 0
+                dw    524, 16,  icon_trash, label_trash, 0, 0
+                db    0, 0
+CAND_COUNT      equ   5
+label_dska      db    "Disk A",0
+label_dskb      db    "Disk B",0
+label_ide       db    "IDE",0
 label_clock     db    "Clock",0
 label_trash     db    "Trash",0
-label_ide       db    "IDE",0
-n_icons         db    3            ; active icons (4 when an IDE is detected)
 
 end
                 save  "GEOBENCH.BIN",geobench,end-geobench,DSK,"build/geobench.dsk"
