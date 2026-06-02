@@ -1414,8 +1414,8 @@ dr_x1           dw    0
 dr_y1           dw    0
 
 ; --- Icon table (parallel arrays; positions on the 16-unit grid) ---------
-icon_xs         dw    80, 256, 432
-icon_ys         dw    144, 144, 144
+icon_xs         dw    8, 524, 524       ; Disk (top-left), Clock (top-right), Trash (bottom-right)
+icon_ys         dw    258, 258, 16
 icon_bmps       dw    icon_floppy, icon_clock, icon_trash
 icon_labels     dw    label_disk, label_clock, label_trash
 label_disk      db    "Disk",0
