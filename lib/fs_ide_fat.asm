@@ -1,16 +1,13 @@
 ; ---------------------------------------------------------------------------
 ; lib/fs_ide_fat.asm - storage backend: FAT16 over the SYMBiFACE II / Cyboard
 ; IDE interface. Reads the root directory straight off the IDE controller, with
-; no AMSDOS/UniDOS involvement.
+; no AMSDOS/UniDOS involvement. Selected by lib/fs.asm when an IDE is present.
 ;
-; Backend-agnostic interface (a floppy/AMSDOS backend would expose the same
-; names so the desktop never knows which storage it is talking to):
-;   fs_dir_first -> CF set = first entry ready in fs_ent_*, NC = directory empty
-;   fs_dir_next  -> CF set = next entry ready,              NC = end of directory
-; Per-entry fields filled by each call:
-;   fs_ent_name  11 bytes  (8.3, space padded, exactly as stored on disc)
-;   fs_ent_attr   1 byte   (FAT attribute byte)
-;   fs_ent_size   4 bytes  (little-endian file size)
+; Backend entry points (the floppy backend exposes the matching fsam_* names so
+; the dispatcher in lib/fs.asm can route to either):
+;   fside_dir_first -> CF set = first entry ready in fs_ent_*, NC = empty
+;   fside_dir_next  -> CF set = next entry ready,              NC = end of dir
+; Per-entry output fields fs_ent_name/attr/size live in lib/fs.asm (shared).
 ;
 ; IDE port map (from 1984 src/ide.c; port = &FD00 | reg):
 ;   &FD0A scnt  &FD0B lbaL  &FD0C lbaM  &FD0D lbaH  &FD0E dev  &FD0F cmd/status
@@ -27,9 +24,9 @@ FS_IDE_STAT     equ   #FD0F
 FS_IDE_DATA     equ   #FD08
 
 ; ---------------------------------------------------------------------------
-; fs_dir_first: mount the volume (read BPB, locate the root directory) and
+; fside_dir_first: mount the volume (read BPB, locate the root directory) and
 ; return the first valid entry.
-fs_dir_first
+fside_dir_first
                 ld    hl,0                    ; BPB lives at LBA 0
                 call  fs_read_sector
 
@@ -68,8 +65,8 @@ ffr_secok
                 jp    fdn_loop                 ; scan for the first valid entry
 
 ; ---------------------------------------------------------------------------
-; fs_dir_next: scan forward (across sectors) for the next valid 8.3 entry.
-fs_dir_next
+; fside_dir_next: scan forward (across sectors) for the next valid 8.3 entry.
+fside_dir_next
 fdn_loop
                 ld    a,(fs_ent_idx)
                 cp    16                       ; 16 entries per 512-byte sector
@@ -191,12 +188,9 @@ frs_read
                 jr    nz,frs_read
                 ret
 
-; --- state / output ------------------------------------------------------
+; --- state (per-entry output fields fs_ent_* live in lib/fs.asm) ----------
 fs_root_lba     defw  0
 fs_root_secs    defb  0
 fs_cur_sec      defb  0
 fs_ent_idx      defb  0
-fs_ent_name     defs  11
-fs_ent_attr     defb  0
-fs_ent_size     defs  4
 fs_secbuf       defs  512

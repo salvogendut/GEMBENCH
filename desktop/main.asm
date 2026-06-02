@@ -30,7 +30,9 @@ geobench
                 include "../lib/icon_binary.asm"
                 include "../lib/icon_picture.asm"
                 include "../lib/icon_text.asm"
+                include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
+                include "../lib/fs_amsdos.asm"
 
 ; --- Palette (firmware ink numbers 0..26) --------------------------------
 INK_DESKTOP     equ   1           ; blue        -> pen 0 (paper / backdrop)
@@ -84,6 +86,7 @@ PEN_SELECT      equ   3            ; accent selection / drag frame
 desktop_start
                 ld    a,1
                 call  SCR_SET_MODE           ; Mode 1, 320x200, 4 pens. Clears.
+                call  fs_init                ; pick storage backend (IDE? else floppy)
                 call  TXT_CUR_DISABLE        ; no blinking text cursor blob
                 call  TXT_CUR_OFF
                 call  set_palette
