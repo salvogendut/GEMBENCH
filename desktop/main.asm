@@ -103,8 +103,23 @@ mainloop
                 dec   a
                 ld    (dclick_timer),a
 ml_nodc
-                ld    a,(in_dirs)            ; keep the direction mask in B
+                ld    a,(in_dirs)            ; effective movement directions -> B
                 ld    b,a
+                ld    a,(win_open)          ; with a window open (not dragging) the
+                or    a                       ; keyboard up/down scroll its list, so
+                jr    z,ml_dirs              ; the pointer takes vertical only from
+                ld    a,(win_dragging)      ; the joystick/mouse
+                or    a
+                jr    nz,ml_dirs
+                call  handle_scroll          ; keyboard up/down -> list scroll
+                ld    a,(in_dirs)
+                and   #0C                     ; keep left/right
+                ld    c,a
+                ld    a,(in_joy_dirs)        ; vertical from joystick/mouse only
+                and   #03
+                or    c
+                ld    b,a
+ml_dirs
                 call  update_speed           ; -> C = this frame's step
 
                 ld    hl,(cursor_x)          ; target x
@@ -867,8 +882,8 @@ draw_help
                 ld    hl,help_text
                 jp    draw_text
 
-; open_floppy_window: open the "Disk" window and draw the floppy's files inside.
-; (Demo content for now - real AMSDOS catalogue reading is a later milestone.)
+; open_floppy_window: open the "Disk" window, read the volume directory via the
+; storage backend and show its files as a scrolling list.
 open_floppy_window
                 ld    a,(win_open)            ; already open? leave it
                 or    a
@@ -894,12 +909,15 @@ ofw_placed
                 ld    (wnd_title),hl
                 call  cursor_erase
                 call  window_open
+                call  fs_load_dir            ; read the real directory off disc
+                xor   a
+                ld    (disk_scroll),a
                 call  draw_floppy_content
                 jp    cursor_draw
 disk_title      db    "Disk",0
 
-; draw_floppy_content: the window's interior - a checkerboard plus the file
-; icons. Redrawn after every window_open (open and on drop).
+; draw_floppy_content: checkerboard the interior, then draw the file list.
+; Redrawn after every window_open (open and on drop).
 draw_floppy_content
                 ld    a,(wnd_x)              ; checkerboard the content area
                 inc   a
@@ -913,54 +931,160 @@ draw_floppy_content
                 ld    a,(wnd_h)
                 sub   15
                 ld    (fb_h),a
-                call  fill_pattern
-                jp    draw_disk_contents
+                ld    a,#00                   ; solid blue interior (pen 0)
+                ld    (fb_val),a
+                call  fill_block
+                jp    draw_disk_list
 
-; draw_disk_contents: enumerate the real directory via the storage backend and
-; blit each file's type icon (chosen by extension) in a 2x2 grid, with the file
-; name centred below it. Shows the first NUM_DISK_CELLS entries.
-NUM_DISK_CELLS  equ   4
-draw_disk_contents
+; redraw_list: repaint just the interior (after a scroll), keeping the cursor.
+redraw_list
+                call  cursor_erase
+                call  draw_floppy_content
+                jp    cursor_draw
+
+; handle_scroll: keyboard up/down scroll the list by one entry, rate-limited so
+; a held key steps smoothly. Clamps to [0, count-DISK_VISIBLE].
+SCROLL_DELAY    equ   6
+handle_scroll
+                ld    a,(scroll_timer)
+                or    a
+                jr    z,hsc_ready
+                dec   a
+                ld    (scroll_timer),a
+                ret
+hsc_ready
+                ld    a,(in_kbd_dirs)
+                bit   0,a                       ; DIR_UP
+                jr    nz,hsc_up
+                bit   1,a                       ; DIR_DOWN
+                jr    nz,hsc_down
+                ret
+hsc_up
+                ld    a,(disk_scroll)
+                or    a
+                ret   z                         ; already at the top
+                dec   a
+                ld    (disk_scroll),a
+                jr    hsc_apply
+hsc_down
+                ld    a,(disk_count)
+                cp    DISK_VISIBLE+1
+                ret   c                         ; everything already fits
+                sub   DISK_VISIBLE              ; A = max scroll offset
+                ld    b,a
+                ld    a,(disk_scroll)
+                cp    b
+                ret   nc                        ; already at the bottom
+                inc   a
+                ld    (disk_scroll),a
+hsc_apply
+                ld    a,SCROLL_DELAY
+                ld    (scroll_timer),a
+                jp    redraw_list
+
+; --- File list -----------------------------------------------------------
+MAX_ENTRIES     equ   64           ; directory entries kept in RAM
+DISK_VISIBLE    equ   5            ; list rows shown at once
+DISK_ROW_TOP    equ   16           ; first row, lines below the window top
+DISK_ROW_H      equ   18           ; row pitch (16px icon + 2px gap)
+
+; fs_load_dir: enumerate the backend directory into disk_entries[] (11-byte
+; name + 1 attr per entry) and record disk_count.
+fs_load_dir
+                ld    hl,disk_entries
+                ld    (fld_dst),hl
+                xor   a                         ; count kept in memory: fs_dir_next
+                ld    (disk_count),a            ; clobbers BC, so C can't hold it
                 call  fs_dir_first
-                jp    nc,ddc_done             ; empty directory
+                jr    nc,fld_done
+fld_loop
+                ld    de,(fld_dst)
+                ld    hl,fs_ent_name
+                ld    bc,11
+                ldir
+                ld    a,(fs_ent_attr)
+                ld    (de),a
+                inc   de
+                ld    (fld_dst),de
+                ld    a,(disk_count)
+                inc   a
+                ld    (disk_count),a
+                cp    MAX_ENTRIES
+                jr    nc,fld_done
+                call  fs_dir_next
+                jr    c,fld_loop
+fld_done
+                ret
+
+; draw_disk_list: draw the DISK_VISIBLE rows starting at disk_scroll, each as a
+; half-height type icon plus the file name.
+draw_disk_list
                 xor   a
                 ld    (df_i),a
-ddc_loop
-                ld    a,(df_i)               ; cell offsets from disk_pos[i]
-                add   a,a
-                ld    e,a
-                ld    d,0
-                ld    hl,disk_pos
+ddl_loop
+                ld    a,(disk_scroll)         ; entry index = disk_scroll + row
+                ld    b,a
+                ld    a,(df_i)
+                add   a,b
+                ld    c,a
+                ld    a,(disk_count)
+                cp    c
+                ret   z                        ; ran past the last entry
+                ret   c
+
+                ld    a,c                      ; entry ptr = disk_entries + idx*12
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                ld    d,h
+                ld    e,l                       ; DE = idx*4
+                add   hl,hl                      ; HL = idx*8
+                add   hl,de                      ; HL = idx*12
+                ld    de,disk_entries
                 add   hl,de
-                ld    a,(wnd_x)             ; icon xbyte = wnd_x + dx
-                add   a,(hl)
-                ld    (df_xb),a
-                inc   hl
-                ld    a,(wnd_y)             ; icon line = wnd_y + dy
-                add   a,(hl)
+                ld    de,fs_ent_name           ; stage into the entry fields
+                push  bc
+                ld    bc,12
+                ldir
+                pop   bc
+
+                ld    a,(df_i)                  ; row y = wnd_y + ROW_TOP + i*18
+                add   a,a                       ; i*2
+                ld    b,a
+                add   a,a                       ; i*4
+                add   a,a                       ; i*8
+                add   a,a                       ; i*16
+                add   a,b                       ; i*16 + i*2 = i*18
+                ld    b,a
+                ld    a,(wnd_y)
+                add   a,DISK_ROW_TOP
+                add   a,b
                 ld    (df_yb),a
 
-                call  ext_to_icon            ; HL = icon for this file's type
+                call  ext_to_icon              ; icon, half height: skip blank rows
+                ld    de,64
+                add   hl,de
                 ld    (bm_src),hl
-                ld    a,(df_xb)
+                ld    a,(wnd_x)
+                add   a,2
                 ld    (bm_x),a
                 ld    a,(df_yb)
                 ld    (bm_y),a
                 ld    a,8
                 ld    (bm_w),a
-                ld    a,32
+                ld    a,16
                 ld    (bm_h),a
                 call  blit_bitmap
 
-                call  build_label            ; df_label = trimmed name, B = len
-                ld    a,(df_xb)              ; tc_x = icon centre (xb+4) - len
-                add   a,4
-                sub   b
+                call  build_label              ; df_label = "NAME.EXT"
+                ld    a,(wnd_x)
+                add   a,11
                 ld    (tc_x),a
-                ld    a,(df_yb)             ; tc_y = icon line + 34
-                add   a,34
+                ld    a,(df_yb)
+                add   a,4
                 ld    (tc_y),a
-                ld    b,1                     ; white text on blue label cells
+                ld    b,1                       ; white text on blue
                 ld    c,0
                 call  set_text_pens
                 ld    hl,df_label
@@ -969,11 +1093,8 @@ ddc_loop
                 ld    a,(df_i)
                 inc   a
                 ld    (df_i),a
-                cp    NUM_DISK_CELLS
-                jp    nc,ddc_done             ; grid full
-                call  fs_dir_next
-                jp    c,ddc_loop              ; more files -> next cell
-ddc_done
+                cp    DISK_VISIBLE
+                jp    c,ddl_loop
                 ret
 
 ; ext_to_icon: HL -> the file-type icon for fs_ent_name's 3-char extension.
@@ -1018,35 +1139,52 @@ cmp_ext
                 cp    (hl)
                 ret
 
-; build_label: copy fs_ent_name (8 chars) into df_label, dropping pad spaces,
-; null-terminate, and return the character count in B.
+; build_label: render fs_ent_name into df_label as "NAME.EXT" (trailing pad
+; spaces dropped, the ".EXT" omitted when the extension is blank), null-term.
 build_label
-                ld    hl,fs_ent_name
                 ld    de,df_label
+                ld    hl,fs_ent_name
                 ld    b,8
-                ld    c,0
-blab_loop
+blab_name
                 ld    a,(hl)
                 cp    ' '
-                jr    z,blab_skip
+                jr    z,blab_ext
                 ld    (de),a
                 inc   de
-                inc   c
-blab_skip
                 inc   hl
-                djnz  blab_loop
+                djnz  blab_name
+blab_ext
+                ld    hl,fs_ent_name+8
+                ld    a,(hl)
+                cp    ' '
+                jr    z,blab_end              ; no extension
+                ld    a,'.'
+                ld    (de),a
+                inc   de
+                ld    b,3
+blab_xloop
+                ld    a,(hl)
+                cp    ' '
+                jr    z,blab_end
+                ld    (de),a
+                inc   de
+                inc   hl
+                djnz  blab_xloop
+blab_end
                 xor   a
-                ld    (de),a                  ; null-terminate
-                ld    b,c                     ; B = displayed length
+                ld    (de),a
                 ret
 
-; 2x2 cell offsets (dx byte, dy line) from the window's top-left.
-disk_pos        db    6,20, 30,20, 6,64, 30,64
 ext_bas         db    "BAS"
 ext_bin         db    "BIN"
 ext_scr         db    "SCR"
 ext_txt         db    "TXT"
-df_label        defs  9
+df_label        defs  13
+fld_dst         dw    0            ; fs_load_dir write pointer
+disk_count      db    0            ; entries read into disk_entries
+disk_scroll     db    0            ; index of the top visible row
+scroll_timer    db    0            ; frames until the next held-key scroll step
+disk_entries    defs  MAX_ENTRIES*12
 
 ; ---------------------------------------------------------------------------
 ; win_grab: begin dragging. The window goes transparent (its filled body is
