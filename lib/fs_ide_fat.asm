@@ -57,6 +57,17 @@ ffr_mul
 ffr_secok
                 ld    (fs_root_secs),a
 
+                ld    a,(fs_secbuf+#0D)       ; geometry for file reads (BPB still
+                ld    (fs_spc),a               ; in secbuf): sectors per cluster,
+                ld    hl,(fs_secbuf+#0E)      ; FAT start (= reserved),
+                ld    (fs_fat_lba),hl
+                ld    hl,(fs_root_lba)        ; data start = root_lba + root_secs
+                ld    a,(fs_root_secs)
+                ld    e,a
+                ld    d,0
+                add   hl,de
+                ld    (fs_data_lba),hl
+
                 xor   a
                 ld    (fs_cur_sec),a
                 ld    (fs_ent_idx),a
@@ -132,6 +143,15 @@ fdn_have
                 ld    bc,4
                 ldir
                 pop   hl
+                push  hl                       ; start cluster (word @ 0x1A)
+                ld    de,#1A
+                add   hl,de
+                ld    a,(hl)
+                ld    (fs_ent_clus),a
+                inc   hl
+                ld    a,(hl)
+                ld    (fs_ent_clus+1),a
+                pop   hl
 
                 ld    a,(fs_ent_idx)
                 inc   a
@@ -145,6 +165,125 @@ fdn_skip
                 jp    fdn_loop
 fdn_end
                 or    a                         ; CF clear = end of directory
+                ret
+
+; ---------------------------------------------------------------------------
+; fside_load_file: load the file named in fs_req_name (11-byte 8.3) into the
+; buffer at (fs_load_dst). CF set = loaded (fs_ent_size = byte size), NC = not
+; found. Follows the FAT16 cluster chain. 16-bit LBA (files in the first 32MB).
+fside_load_file
+                call  fside_dir_first         ; also sets fs_spc/fat_lba/data_lba
+flf_find
+                jr    nc,flf_notfound         ; end of directory
+                call  flf_cmpname             ; fs_ent_name == fs_req_name?
+                jr    z,flf_found
+                call  fside_dir_next
+                jr    flf_find
+flf_notfound
+                or    a
+                ret
+flf_found                                      ; fs_ent_clus + fs_ent_size set
+                ld    hl,(fs_ent_size)        ; sectors = ceil(size/512)
+                ld    de,511
+                add   hl,de
+                ld    b,9
+flf_sh          srl   h
+                rr    l
+                djnz  flf_sh
+                ld    (flf_secs),hl
+                ld    hl,(fs_ent_clus)
+                ld    (flf_clus),hl
+                xor   a
+                ld    (flf_sic),a
+flf_loop
+                ld    hl,(flf_secs)
+                ld    a,h
+                or    l
+                jr    z,flf_done
+                ld    hl,(flf_clus)           ; LBA = data_lba+(clus-2)*spc+sic
+                dec   hl
+                dec   hl
+                call  flf_mul_spc
+                ld    de,(fs_data_lba)
+                add   hl,de
+                ld    a,(flf_sic)
+                ld    e,a
+                ld    d,0
+                add   hl,de
+                call  fs_read_sector
+                ld    hl,fs_secbuf            ; copy sector to dst
+                ld    de,(fs_load_dst)
+                ld    bc,512
+                ldir
+                ld    (fs_load_dst),de
+                ld    hl,(flf_secs)
+                dec   hl
+                ld    (flf_secs),hl
+                ld    a,(flf_sic)             ; advance sector-in-cluster
+                inc   a
+                ld    b,a
+                ld    a,(fs_spc)
+                cp    b
+                jr    nz,flf_keepsic
+                call  flf_fat_next            ; cluster boundary -> next cluster
+                xor   a
+                ld    (flf_sic),a
+                jr    flf_loop
+flf_keepsic
+                ld    a,b
+                ld    (flf_sic),a
+                jr    flf_loop
+flf_done
+                scf
+                ret
+
+flf_cmpname                                    ; fs_ent_name == fs_req_name? Z if so
+                ld    hl,fs_ent_name
+                ld    de,fs_req_name
+                ld    b,11
+flf_cn
+                ld    a,(de)
+                cp    (hl)
+                ret   nz
+                inc   hl
+                inc   de
+                djnz  flf_cn
+                xor   a
+                ret
+
+flf_mul_spc                                    ; HL *= fs_spc (power of 2)
+                ld    a,(fs_spc)
+                ld    b,0
+flf_log         srl   a
+                jr    z,flf_doshift
+                inc   b
+                jr    flf_log
+flf_doshift     inc   b
+flf_dec         dec   b
+                ret   z
+                add   hl,hl
+                jr    flf_dec
+
+flf_fat_next                                   ; flf_clus -> next cluster (FAT16)
+                ld    hl,(flf_clus)
+                ld    a,h                       ; fat_sector = fat_lba + clus/256
+                ld    l,a
+                ld    h,0
+                ld    de,(fs_fat_lba)
+                add   hl,de
+                call  fs_read_sector
+                ld    a,(flf_clus)             ; within = (clus & 255) * 2
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                ld    de,fs_secbuf
+                add   hl,de
+                ld    a,(hl)
+                ld    e,a
+                inc   hl
+                ld    a,(hl)
+                ld    d,a
+                ld    (flf_clus),de
                 ret
 
 ; ---------------------------------------------------------------------------
@@ -193,4 +332,11 @@ fs_root_lba     defw  0
 fs_root_secs    defb  0
 fs_cur_sec      defb  0
 fs_ent_idx      defb  0
+fs_ent_clus     defw  0            ; current entry's start cluster
+fs_spc          defb  0            ; sectors per cluster (file-read geometry)
+fs_fat_lba      defw  0            ; FAT start LBA
+fs_data_lba     defw  0            ; data region start LBA
+flf_secs        defw  0            ; load: sectors remaining
+flf_clus        defw  0            ; load: current cluster
+flf_sic         defb  0            ; load: sector within the cluster
 fs_secbuf       defs  512

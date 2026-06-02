@@ -35,6 +35,7 @@ geobench
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
+                include "../lib/config.asm"
 
 ; --- Palette (firmware ink numbers 0..26) --------------------------------
 INK_DESKTOP     equ   1           ; blue        -> pen 0 (paper / backdrop)
@@ -104,6 +105,7 @@ desktop_start
                 call  fmt_mem                 ; -> mem_str "<KB>K"
                 call  clock_init             ; RTC? else software clock -> time_str
                 call  fs_init                ; pick default backend (IDE? else floppy)
+                call  cfg_load               ; read GEOBENCH.CFG -> cfg_* settings
                 call  build_desktop_icons    ; probe drives -> live icon table
                 call  TXT_CUR_DISABLE        ; no blinking text cursor blob
                 call  TXT_CUR_OFF
