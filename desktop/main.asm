@@ -101,6 +101,7 @@ desktop_start
                 ld    de,64
                 add   hl,de                   ; + base 64K
                 call  fmt_mem                 ; -> mem_str "<KB>K"
+                call  clock_init             ; RTC? else software clock -> time_str
                 call  fs_init                ; pick default backend (IDE? else floppy)
                 call  build_desktop_icons    ; probe drives -> live icon table
                 call  TXT_CUR_DISABLE        ; no blinking text cursor blob
@@ -205,6 +206,7 @@ ml_windrag
                 call  win_drag_frame         ; dragging a window
 ml_fire
                 call  handle_fire
+                call  update_clock           ; tick the top-bar clock
 
                 ld    a,(in_quit)
                 or    a
@@ -907,7 +909,8 @@ draw_title_bar
                 xor   a
                 ld    (tc_y),a
                 ld    hl,mem_str
-                jp    draw_text
+                call  draw_text
+                jp    draw_clock              ; time on the right
 
 ; fmt_mem: HL = total KB -> mem_str as "<decimal>K" (leading zeros suppressed).
 fmt_mem
@@ -951,6 +954,222 @@ fmd_emit
                 ld    (ix+0),a
                 inc   ix
                 ret
+
+; ===========================================================================
+; Clock (top-bar, right side). Uses the Dallas RTC (&FD14 addr / &FD15 data)
+; if one is present, otherwise a software clock counting 50Hz frames from boot.
+; ===========================================================================
+
+CLK_COL         equ   68           ; byte column of "HH:MM" (right of the 80-byte bar)
+TICKS_PER_SEC   equ   50
+
+; Dallas RTC on the SymbiFace II / Cyboard: &FD15 = address, &FD14 = data.
+RTC_ADDR        equ   #FD15
+RTC_DATA        equ   #FD14
+
+; clock_init: detect the RTC, zero the software clock, prime the display string.
+clock_init
+                xor   a
+                ld    (sw_sec),a
+                ld    (sw_min),a
+                ld    (sw_hour),a
+                ld    (clk_frames),a
+                call  rtc_detect
+                call  read_time              ; -> time_str
+                ld    hl,time_str            ; clk_shown = time_str
+                ld    de,clk_shown
+                ld    bc,6
+                ldir
+                ret
+
+; rtc_detect: write/read-back NVRAM reg 0x0E twice. have_rtc = 1 if present.
+rtc_detect
+                ld    e,#5A
+                call  rtc_nvram_rw            ; write 5A, read back -> A
+                cp    #5A
+                jr    nz,rd_none
+                ld    e,#A5
+                call  rtc_nvram_rw            ; confirm with a second value
+                cp    #A5
+                jr    nz,rd_none
+                ld    a,1
+                ld    (have_rtc),a
+                ret
+rd_none
+                xor   a
+                ld    (have_rtc),a
+                ret
+
+; rtc_nvram_rw: E = value to write to NVRAM reg 0x0E -> A = value read back.
+rtc_nvram_rw
+                ld    a,#0E
+                ld    bc,RTC_ADDR
+                out   (c),a                   ; select reg 0x0E
+                ld    bc,RTC_DATA
+                out   (c),e                   ; write the value
+                ld    a,#0E
+                ld    bc,RTC_ADDR
+                out   (c),a                   ; reselect 0x0E
+                ld    bc,RTC_DATA
+                in    a,(c)                   ; read it back
+                ret
+
+; read_rtc_reg: A = register -> A = value.
+read_rtc_reg
+                ld    bc,RTC_ADDR
+                out   (c),a
+                ld    bc,RTC_DATA
+                in    a,(c)
+                ret
+
+; read_time: fill time_str with "HH:MM" from the RTC or the software clock.
+read_time
+                ld    a,(have_rtc)
+                or    a
+                jr    z,rt_soft
+                ld    a,#04
+                call  read_rtc_reg            ; hours (BCD)
+                ld    (rt_h),a
+                ld    a,#02
+                call  read_rtc_reg            ; minutes (BCD)
+                ld    (rt_m),a
+                jr    rt_fmt
+rt_soft
+                ld    a,(sw_hour)
+                call  bin_to_bcd
+                ld    (rt_h),a
+                ld    a,(sw_min)
+                call  bin_to_bcd
+                ld    (rt_m),a
+rt_fmt
+                ld    de,time_str
+                ld    a,(rt_h)
+                call  put_bcd2
+                ld    a,':'
+                ld    (de),a
+                inc   de
+                ld    a,(rt_m)
+                call  put_bcd2
+                xor   a
+                ld    (de),a
+                ret
+
+; put_bcd2: A = BCD byte -> two ASCII digits at (DE), DE advanced.
+put_bcd2
+                push  af
+                rrca
+                rrca
+                rrca
+                rrca
+                and   #0F
+                add   a,'0'
+                ld    (de),a
+                inc   de
+                pop   af
+                and   #0F
+                add   a,'0'
+                ld    (de),a
+                inc   de
+                ret
+
+; bin_to_bcd: A (0..99) -> packed BCD.
+bin_to_bcd
+                ld    b,#FF
+btb_loop
+                inc   b
+                sub   10
+                jr    nc,btb_loop
+                add   a,10                    ; A = units, B = tens
+                ld    c,a
+                ld    a,b
+                rlca
+                rlca
+                rlca
+                rlca
+                or    c
+                ret
+
+; sw_tick: advance the software clock by one second.
+sw_tick
+                ld    a,(sw_sec)
+                inc   a
+                cp    60
+                jr    c,swt_sec
+                xor   a
+                ld    (sw_sec),a
+                ld    a,(sw_min)
+                inc   a
+                cp    60
+                jr    c,swt_min
+                xor   a
+                ld    (sw_min),a
+                ld    a,(sw_hour)
+                inc   a
+                cp    24
+                jr    c,swt_hour
+                xor   a
+swt_hour
+                ld    (sw_hour),a
+                ret
+swt_min
+                ld    (sw_min),a
+                ret
+swt_sec
+                ld    (sw_sec),a
+                ret
+
+; update_clock: once per frame. Every 50 frames = 1s, refresh the time; redraw
+; the top-bar clock only when "HH:MM" actually changes.
+update_clock
+                ld    a,(clk_frames)
+                inc   a
+                cp    TICKS_PER_SEC
+                jr    c,uc_save
+                xor   a
+                ld    (clk_frames),a
+                ld    a,(have_rtc)            ; software clock advances itself
+                or    a
+                call  z,sw_tick
+                call  read_time              ; -> time_str
+                call  clk_changed            ; differs from clk_shown?
+                ret   z
+                ld    hl,time_str            ; remember + redraw
+                ld    de,clk_shown
+                ld    bc,6
+                ldir
+                call  cursor_erase
+                call  draw_clock
+                jp    cursor_draw
+uc_save
+                ld    (clk_frames),a
+                ret
+
+; clk_changed: Z if time_str == clk_shown (5 chars), NZ if different.
+clk_changed
+                ld    hl,time_str
+                ld    de,clk_shown
+                ld    b,5
+ckc_loop
+                ld    a,(de)
+                cp    (hl)
+                ret   nz                      ; differ -> NZ
+                inc   hl
+                inc   de
+                djnz  ckc_loop
+                xor   a                        ; equal -> Z
+                ret
+
+; draw_clock: draw time_str at the top-right of the (white) title bar.
+draw_clock
+                ld    b,2                     ; black on white
+                ld    c,1
+                call  set_text_pens
+                ld    a,CLK_COL
+                ld    (tc_x),a
+                xor   a
+                ld    (tc_y),a
+                ld    hl,time_str
+                jp    draw_text
 
 ; Help line on screen line 9, white bitmap text on the blue backdrop.
 draw_help
@@ -1572,6 +1791,15 @@ cwp_yok
 ; --- Desktop data --------------------------------------------------------
 mem_str         defs  8            ; total-RAM string for the top bar ("128K")
 fm_lead         db    0            ; fmt_mem leading-zero flag
+have_rtc        db    0            ; 1 = Dallas RTC present, 0 = software clock
+sw_sec          db    0            ; software clock (binary)
+sw_min          db    0
+sw_hour         db    0
+clk_frames      db    0            ; 50Hz frame counter -> seconds
+rt_h            db    0            ; current hours/minutes (BCD) for formatting
+rt_m            db    0
+time_str        defs  6            ; "HH:MM" + NUL
+clk_shown       defs  6            ; last "HH:MM" drawn (redraw only on change)
 help_text       db    "Hold Fire/Space to drag   ESC: quit",0
 
 ; --- Mutable state -------------------------------------------------------
