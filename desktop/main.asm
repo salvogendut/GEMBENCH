@@ -23,15 +23,25 @@ geobench
                 include "../lib/font.asm"
                 include "../lib/text.asm"
                 include "../lib/window.asm"
-                include "../lib/icon_floppy.asm"
-                include "../lib/icon_clock.asm"
-                include "../lib/icon_trash.asm"
-                include "../lib/icon_basic.asm"
-                include "../lib/icon_binary.asm"
-                include "../lib/icon_picture.asm"
-                include "../lib/icon_text.asm"
-                include "../lib/icon_ide.asm"
-                include "../lib/icon_geobench.asm"
+; --- Icon set ------------------------------------------------------------
+; The active icons live contiguously in slot order under icon_set, so each
+; icon's label (icon_floppy, icon_binary, ...) is also its slot address. At
+; startup icon_load overwrites this buffer with <ICONS>.IST from disk (or these
+; compiled-in defaults are kept if there's no set file). The .IST is just the
+; raw icons in this same slot order. Each icon is 256 bytes (8 x 32).
+icon_set
+                include "../lib/icon_floppy.asm"     ; slot 0
+                include "../lib/icon_ide.asm"        ; slot 1
+                include "../lib/icon_clock.asm"      ; slot 2
+                include "../lib/icon_trash.asm"      ; slot 3
+                include "../lib/icon_geobench.asm"   ; slot 4
+                include "../lib/icon_basic.asm"      ; slot 5
+                include "../lib/icon_binary.asm"     ; slot 6
+                include "../lib/icon_picture.asm"    ; slot 7
+                include "../lib/icon_text.asm"       ; slot 8
+icon_set_end
+                defs  256                     ; slack so a whole-sector load fits
+ICONSET_BYTES   equ   icon_set_end - icon_set  ; 9 * 256 = 2304
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
@@ -106,6 +116,7 @@ desktop_start
                 call  clock_init             ; RTC? else software clock -> time_str
                 call  fs_init                ; pick default backend (IDE? else floppy)
                 call  cfg_load               ; read GEOBENCH.CFG -> cfg_* settings
+                call  icon_load              ; load <ICONS>.IST over icon_set
                 call  build_desktop_icons    ; probe drives -> live icon table
                 call  TXT_CUR_DISABLE        ; no blinking text cursor blob
                 call  TXT_CUR_OFF
@@ -1199,6 +1210,41 @@ icon_word
                 ld    h,(hl)
                 ld    l,a
                 ret
+
+; icon_load: load the icon set named by cfg_icons (e.g. "DEFAULT" -> DEFAULT.IST)
+; over icon_set. If the file is absent (or no storage), the compiled-in default
+; icons are kept. Call after cfg_load, before drawing icons.
+icon_load
+                ld    hl,cfg_icons           ; fs_req_name = cfg_icons.IST (8.3)
+                ld    de,fs_req_name
+                ld    b,8
+il_name
+                ld    a,(hl)
+                or    a
+                jr    z,il_pad               ; cfg_icons ended -> space-pad
+                ld    (de),a
+                inc   hl
+                inc   de
+                djnz  il_name
+                jr    il_ext
+il_pad
+                ld    a,' '
+il_padloop
+                ld    (de),a
+                inc   de
+                djnz  il_padloop
+il_ext
+                ld    a,'I'
+                ld    (de),a
+                inc   de
+                ld    a,'S'
+                ld    (de),a
+                inc   de
+                ld    a,'T'
+                ld    (de),a
+                ld    hl,icon_set
+                ld    (fs_load_dst),hl
+                jp    fs_load_file            ; NC -> keep compiled-in defaults
 
 ; build_desktop_icons: probe storage and fill the live icon arrays from
 ; cand_tbl. Present drives stack down the left column (y from 258, step -108);

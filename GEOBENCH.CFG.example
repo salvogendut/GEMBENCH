@@ -1,0 +1,3 @@
+# GEOBENCH configuration
+# ICONS: name of the icon set to load (<name>.IST); default DEFAULT
+ICONS=DEFAULT

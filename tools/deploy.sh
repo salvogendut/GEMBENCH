@@ -23,5 +23,18 @@ mkdir -p build
 "$RASM" desktop/main.asm -eo                  # -> build/GEOBENCH.RAW + .dsk
 python3 tools/amsdos_header.py build/GEOBENCH.RAW build/GEOBENCH.BIN GEOBENCH BIN 0x4000
 
+# Default icon set (DEFAULT.IST), packed from the icons in the desktop's slot
+# order. Keep this list in sync with icon_set in desktop/main.asm.
+python3 tools/packicons.py build/DEFAULT.IST \
+    lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
+    lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
+    lib/icon_picture.asm lib/icon_text.asm
+
 MTOOLS_SKIP_CHECK=1 mcopy -o -i "$IMG" build/GEOBENCH.BIN ::/
-echo "Deployed GEOBENCH.BIN -> $IMG"
+MTOOLS_SKIP_CHECK=1 mcopy -o -i "$IMG" build/DEFAULT.IST ::/
+# Seed GEOBENCH.CFG only if the image doesn't already have one (user-editable).
+if ! MTOOLS_SKIP_CHECK=1 mdir -i "$IMG" ::GEOBENCH.CFG >/dev/null 2>&1; then
+    MTOOLS_SKIP_CHECK=1 mcopy -i "$IMG" GEOBENCH.CFG.example ::/GEOBENCH.CFG
+    echo "Seeded GEOBENCH.CFG"
+fi
+echo "Deployed GEOBENCH.BIN + DEFAULT.IST -> $IMG"
