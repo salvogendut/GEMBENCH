@@ -40,10 +40,17 @@ JOY_FIRE1       equ   5           ; bit 5
 input_poll
                 xor   a
                 ld    (in_dirs),a
+                ld    (in_kbd_dirs),a
+                ld    (in_joy_dirs),a
                 ld    (in_fire),a
                 ld    (in_quit),a
-                call  read_keyboard
-                call  read_joystick
+                call  read_keyboard          ; -> in_kbd_dirs
+                call  read_joystick          ; -> in_joy_dirs
+                ld    a,(in_kbd_dirs)        ; in_dirs = keyboard OR joystick
+                ld    b,a
+                ld    a,(in_joy_dirs)
+                or    b
+                ld    (in_dirs),a
                 ret
 
 ; ---------------------------------------------------------------------------
@@ -52,30 +59,30 @@ read_keyboard
                 ld    a,KEY_UP
                 call  KM_TEST_KEY
                 jr    z,rk_down
-                ld    a,(in_dirs)
+                ld    a,(in_kbd_dirs)
                 or    DIR_UP
-                ld    (in_dirs),a
+                ld    (in_kbd_dirs),a
 rk_down
                 ld    a,KEY_DOWN
                 call  KM_TEST_KEY
                 jr    z,rk_left
-                ld    a,(in_dirs)
+                ld    a,(in_kbd_dirs)
                 or    DIR_DOWN
-                ld    (in_dirs),a
+                ld    (in_kbd_dirs),a
 rk_left
                 ld    a,KEY_LEFT
                 call  KM_TEST_KEY
                 jr    z,rk_right
-                ld    a,(in_dirs)
+                ld    a,(in_kbd_dirs)
                 or    DIR_LEFT
-                ld    (in_dirs),a
+                ld    (in_kbd_dirs),a
 rk_right
                 ld    a,KEY_RIGHT
                 call  KM_TEST_KEY
                 jr    z,rk_fire
-                ld    a,(in_dirs)
+                ld    a,(in_kbd_dirs)
                 or    DIR_RIGHT
-                ld    (in_dirs),a
+                ld    (in_kbd_dirs),a
 rk_fire
                 ld    a,KEY_SPACE
                 call  KM_TEST_KEY
@@ -99,9 +106,9 @@ read_joystick
 
                 and   #0F                   ; bits 0..3 == DIR_* directions
                 ld    b,a
-                ld    a,(in_dirs)
+                ld    a,(in_joy_dirs)
                 or    b
-                ld    (in_dirs),a
+                ld    (in_joy_dirs),a
 
                 bit   JOY_FIRE1,c
                 jr    z,rj_fire2
@@ -115,6 +122,8 @@ rj_fire2
                 ret
 
 ; --- State ---------------------------------------------------------------
-in_dirs         db    0
+in_dirs         db    0            ; keyboard OR joystick directions (DIR_*)
+in_kbd_dirs     db    0            ; keyboard-only directions (window list scroll)
+in_joy_dirs     db    0            ; joystick/mouse-only directions
 in_fire         db    0
 in_quit         db    0

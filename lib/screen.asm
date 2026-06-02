@@ -94,6 +94,73 @@ bl_loop
                 ret
 
 ; ---------------------------------------------------------------------------
+; fill_block: fill an fb_w x fb_h byte rectangle at (fb_x, fb_y) with fb_val.
+; (fb_val is a Mode 1 byte: #00 blue, #F0 white, #0F black, #FF red.)
+fill_block
+                ld    a,(fb_h)
+                ld    (fb_rows),a
+                ld    a,(fb_y)
+                ld    (fb_cy),a
+fbk_loop
+                ld    a,(fb_x)
+                ld    d,a
+                ld    a,(fb_cy)
+                ld    e,a
+                call  scr_addr
+                ld    a,(fb_w)
+                ld    b,a
+                ld    a,(fb_val)
+                ld    c,a
+fbk_row
+                ld    (hl),c
+                inc   hl
+                djnz  fbk_row
+                ld    a,(fb_cy)
+                inc   a
+                ld    (fb_cy),a
+                ld    a,(fb_rows)
+                dec   a
+                ld    (fb_rows),a
+                jr    nz,fbk_loop
+                ret
+
+; ---------------------------------------------------------------------------
+; fill_pattern: like fill_block but alternates fp_even / fp_odd by line, for a
+; two-tone dither (e.g. #50 / #A0 = a blue/white checkerboard in Mode 1).
+fill_pattern
+                ld    a,(fb_h)
+                ld    (fb_rows),a
+                ld    a,(fb_y)
+                ld    (fb_cy),a
+fp_loop
+                ld    a,(fb_x)
+                ld    d,a
+                ld    a,(fb_cy)
+                ld    e,a
+                call  scr_addr
+                ld    a,(fb_cy)             ; even or odd line?
+                rrca
+                ld    a,(fp_even)
+                jr    nc,fp_pick
+                ld    a,(fp_odd)
+fp_pick
+                ld    c,a
+                ld    a,(fb_w)
+                ld    b,a
+fp_row
+                ld    (hl),c
+                inc   hl
+                djnz  fp_row
+                ld    a,(fb_cy)
+                inc   a
+                ld    (fb_cy),a
+                ld    a,(fb_rows)
+                dec   a
+                ld    (fb_rows),a
+                jr    nz,fp_loop
+                ret
+
+; ---------------------------------------------------------------------------
 ; save_block / restore_block: copy a sb_w x sb_h byte rectangle at (sb_x, sb_y)
 ; between the screen and a RAM buffer (sb_buf) - the basis for cursor/sprite
 ; save-under.
@@ -181,6 +248,17 @@ bm_w            db    0            ; width in bytes
 bm_h            db    0            ; height in rows
 bl_rows         db    0
 bl_y            db    0
+
+; --- fill_block parameters / scratch -------------------------------------
+fb_x            db    0            ; x in bytes
+fb_y            db    0            ; y line
+fb_w            db    0            ; width in bytes
+fb_h            db    0            ; height in rows
+fb_val          db    0            ; Mode 1 fill byte
+fb_rows         db    0
+fb_cy           db    0
+fp_even         db    #50          ; pattern byte on even lines
+fp_odd          db    #A0          ; pattern byte on odd lines
 
 ; --- save_block / restore_block parameters / scratch ---------------------
 sb_x            db    0            ; rectangle x in bytes
