@@ -19,7 +19,7 @@ Directory (count * 4 bytes), one entry per slot in the desktop's order:
 
 Then the icon bitmaps (each width*height bytes), in slot order.
 
-Slot order (must match desktop/main.asm): floppy ide clock trash geobench
+Slot order (must match kernel/gbkern.asm): floppy ide clock trash geobench
 basic binary picture text.
 
 Usage:

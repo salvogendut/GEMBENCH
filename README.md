@@ -4,9 +4,12 @@ A graphical desktop environment for the **Amstrad CPC** — a hybrid clone that
 borrows the best ideas from **Commodore GEOS** (C64/C128) and the **Amiga
 Workbench**, reimagined for 8-bit Z80 hardware.
 
-> **Status:** early but running. The desktop boots in Mode 1 and has a
-> save-under mouse pointer (keyboard + joystick), plus draggable icons
-> (Workbench-style outline drag). See `desktop/` and `lib/`.
+> **Status:** running as a **banked multi-app micro-OS** (128K+). A resident
+> kernel (`kernel/`) exposes a jump-table API; separate-binary apps (`apps/` —
+> desktop, file manager, viewer) run co-resident in expansion-bank pages and
+> talk to the kernel. Double-click a drive to open the file manager, double-click
+> a file to open it in its app. Build with `tools/build_kernel.sh`. See
+> `kernel/`, `apps/` and `lib/`.
 
 ## Visual target
 
@@ -163,11 +166,11 @@ software into the environment.
 geobench/
 ├── README.md          # this file
 ├── docs/              # design docs, architecture, UI mockups
-├── kernel/            # resident OS kernel
-├── desktop/           # the Workbench-style shell
-├── lib/               # graphics, window, input, font libraries
-├── apps/              # bundled applications
-└── tools/             # host-side build/asset tooling
+├── kernel/            # resident OS kernel (gbkern.asm) + service API
+├── lib/               # screen, text/font, input, cursor, fs, banking libraries
+├── apps/              # separate-binary apps (desktop, filemgr, viewer, ...)
+├── tests/             # standalone hardware/feature test programs
+└── tools/             # host-side build/asset tooling (build_kernel.sh, ...)
 ```
 
 (Directories will appear as the corresponding pieces get built.)
