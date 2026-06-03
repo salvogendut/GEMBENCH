@@ -19,15 +19,15 @@ TRASH_Y         equ   150
                 org   APP_BASE
 dt_entry
 dt_redraw
-                ld    b,0                     ; backdrop (whole screen, pen 0)
-                ld    c,0
+                ld    b,0                     ; backdrop (below the kernel's top bar)
+                ld    c,8
                 ld    d,80
-                ld    e,200
+                ld    e,192
                 xor   a
                 call  GB_FILL
 
                 ld    b,1                     ; help line
-                ld    c,4
+                ld    c,10
                 ld    d,1
                 ld    e,0
                 ld    hl,help_msg

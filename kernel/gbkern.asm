@@ -45,8 +45,24 @@ kernel_main
                 call  TXT_CUR_OFF
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
+                di                            ; probe RAM BEFORE PAGE_DATA is filled
+                call  mem_detect             ; (it pokes every bank's #4000)
+                ei
+                ld    l,a                     ; total KB = 64 + banks*64
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                ld    de,64
+                add   hl,de
+                call  fmt_mem                ; -> mem_str
                 call  font_init              ; load the font into PAGE_DATA
                 call  icon_init              ; load the icon set into PAGE_DATA
+                call  clock_init             ; RTC or software clock -> time_str
+                call  draw_topbar            ; the kernel owns the top bar
                 ld    hl,name_desktop        ; the desktop is the first app
                 call  launch_app             ; run DESKTOP in PAGE_APP0
                 ld    a,2                     ; desktop quit (ESC) -> back to BASIC
@@ -93,6 +109,7 @@ k_poll
                 call  input_poll             ; in_dirs / in_fire / in_quit
                 call  poll_move              ; -> DE = new x, HL = new y (clamped)
                 call  MC_WAIT_FLYBACK        ; pace to 50 Hz; do the move in the blank
+                call  clock_tick             ; keep the top-bar clock live
                 call  cursor_move_to         ; erases+redraws ONLY if the position
                                              ; actually changed (re-drawing in place,
                                              ; e.g. holding a key into the edge clamp,
@@ -779,6 +796,388 @@ k_fill
                 ld    (fb_val),a
                 jp    fill_block
 kf_pen          db    0
+
+; ===========================================================================
+; Top bar (kernel-owned): total RAM (left) + clock (right) on lines 0-7. The
+; kernel keeps the clock ticking via clock_tick in k_poll, so it stays live
+; whatever app is focused. Apps must keep clear of the top 8 lines.
+; ===========================================================================
+CLK_COL         equ   68
+TICKS_PER_SEC   equ   50
+RTC_ADDR        equ   #FD15        ; Dallas RTC on SymbiFace II / Cyboard
+RTC_DATA        equ   #FD14
+
+draw_topbar
+                xor   a                        ; white strip across the top
+                ld    (fb_x),a
+                ld    (fb_y),a
+                ld    a,80
+                ld    (fb_w),a
+                ld    a,8
+                ld    (fb_h),a
+                ld    a,#F0
+                ld    (fb_val),a
+                call  fill_block
+                ld    a,(bank_cur)
+                ld    (tb_save),a
+                ld    a,PAGE_DATA            ; text needs the font page
+                call  bank_set
+                ld    b,2                     ; black on white
+                ld    c,1
+                call  set_text_pens
+                ld    a,1
+                ld    (tc_x),a
+                xor   a
+                ld    (tc_y),a
+                ld    hl,mem_str
+                call  draw_text
+                ld    a,CLK_COL
+                ld    (tc_x),a
+                xor   a
+                ld    (tc_y),a
+                ld    hl,time_str
+                call  draw_text
+                ld    a,(tb_save)
+                jp    bank_set
+draw_clock
+                ld    a,(bank_cur)
+                ld    (tb_save),a
+                ld    a,PAGE_DATA
+                call  bank_set
+                ld    b,2
+                ld    c,1
+                call  set_text_pens
+                ld    a,CLK_COL
+                ld    (tc_x),a
+                xor   a
+                ld    (tc_y),a
+                ld    hl,time_str
+                call  draw_text
+                ld    a,(tb_save)
+                jp    bank_set
+tb_save         db    0
+
+; clock_tick: once per frame from k_poll. Every 50 frames refresh the time and,
+; if "HH:MM" changed, redraw the clock (with the pointer lifted).
+clock_tick
+                ld    a,(clk_frames)
+                inc   a
+                cp    TICKS_PER_SEC
+                jr    c,ct_keep
+                xor   a
+                ld    (clk_frames),a
+                ld    a,(have_rtc)
+                or    a
+                call  z,sw_tick
+                call  read_time
+                call  clk_changed
+                ret   z
+                ld    hl,time_str
+                ld    de,clk_shown
+                ld    bc,6
+                ldir
+                call  cursor_erase
+                call  draw_clock
+                jp    cursor_draw
+ct_keep
+                ld    (clk_frames),a
+                ret
+
+clock_init
+                xor   a
+                ld    (sw_sec),a
+                ld    (sw_min),a
+                ld    (sw_hour),a
+                ld    (clk_frames),a
+                call  rtc_detect
+                call  read_time
+                ld    hl,time_str
+                ld    de,clk_shown
+                ld    bc,6
+                ldir
+                ret
+rtc_detect
+                ld    e,#5A
+                call  rtc_nvram_rw
+                cp    #5A
+                jr    nz,rd_none
+                ld    e,#A5
+                call  rtc_nvram_rw
+                cp    #A5
+                jr    nz,rd_none
+                ld    a,1
+                ld    (have_rtc),a
+                ret
+rd_none
+                xor   a
+                ld    (have_rtc),a
+                ret
+rtc_nvram_rw                                   ; E = value -> A = read-back of NVRAM 0x0E
+                ld    a,#0E
+                ld    bc,RTC_ADDR
+                out   (c),a
+                ld    bc,RTC_DATA
+                out   (c),e
+                ld    a,#0E
+                ld    bc,RTC_ADDR
+                out   (c),a
+                ld    bc,RTC_DATA
+                in    a,(c)
+                ret
+read_rtc_reg                                   ; A = reg -> A = value
+                ld    bc,RTC_ADDR
+                out   (c),a
+                ld    bc,RTC_DATA
+                in    a,(c)
+                ret
+read_time                                      ; -> time_str "HH:MM"
+                ld    a,(have_rtc)
+                or    a
+                jr    z,rt_soft
+                ld    a,#04
+                call  read_rtc_reg
+                ld    (rt_h),a
+                ld    a,#02
+                call  read_rtc_reg
+                ld    (rt_m),a
+                jr    rt_fmt
+rt_soft
+                ld    a,(sw_hour)
+                call  bin_to_bcd
+                ld    (rt_h),a
+                ld    a,(sw_min)
+                call  bin_to_bcd
+                ld    (rt_m),a
+rt_fmt
+                ld    de,time_str
+                ld    a,(rt_h)
+                call  put_bcd2
+                ld    a,':'
+                ld    (de),a
+                inc   de
+                ld    a,(rt_m)
+                call  put_bcd2
+                xor   a
+                ld    (de),a
+                ret
+put_bcd2                                        ; A = BCD -> two digits at (DE)
+                push  af
+                rrca
+                rrca
+                rrca
+                rrca
+                and   #0F
+                add   a,'0'
+                ld    (de),a
+                inc   de
+                pop   af
+                and   #0F
+                add   a,'0'
+                ld    (de),a
+                inc   de
+                ret
+bin_to_bcd                                      ; A (0..99) -> packed BCD
+                ld    b,#FF
+btb_loop
+                inc   b
+                sub   10
+                jr    nc,btb_loop
+                add   a,10
+                ld    c,a
+                ld    a,b
+                rlca
+                rlca
+                rlca
+                rlca
+                or    c
+                ret
+sw_tick
+                ld    a,(sw_sec)
+                inc   a
+                cp    60
+                jr    c,swt_sec
+                xor   a
+                ld    (sw_sec),a
+                ld    a,(sw_min)
+                inc   a
+                cp    60
+                jr    c,swt_min
+                xor   a
+                ld    (sw_min),a
+                ld    a,(sw_hour)
+                inc   a
+                cp    24
+                jr    c,swt_hour
+                xor   a
+swt_hour
+                ld    (sw_hour),a
+                ret
+swt_min
+                ld    (sw_min),a
+                ret
+swt_sec
+                ld    (sw_sec),a
+                ret
+clk_changed                                     ; Z if time_str == clk_shown (5 chars)
+                ld    hl,time_str
+                ld    de,clk_shown
+                ld    b,5
+ckc_loop
+                ld    a,(de)
+                cp    (hl)
+                ret   nz
+                inc   hl
+                inc   de
+                djnz  ckc_loop
+                xor   a
+                ret
+
+; fmt_mem: HL = total KB -> mem_str as "<decimal>K".
+fmt_mem
+                ld    ix,mem_str
+                xor   a
+                ld    (fm_lead),a
+                ld    de,10000
+                call  fm_digit
+                ld    de,1000
+                call  fm_digit
+                ld    de,100
+                call  fm_digit
+                ld    de,10
+                call  fm_digit
+                ld    a,l
+                add   a,'0'
+                ld    (ix+0),a
+                ld    (ix+1),'K'
+                ld    (ix+2),0
+                ret
+fm_digit
+                ld    a,#FF
+fmd_loop
+                inc   a
+                or    a
+                sbc   hl,de
+                jr    nc,fmd_loop
+                add   hl,de
+                or    a
+                jr    nz,fmd_emit
+                ld    a,(fm_lead)
+                or    a
+                ret   z
+                xor   a
+fmd_emit
+                ld    b,a
+                ld    a,1
+                ld    (fm_lead),a
+                ld    a,b
+                add   a,'0'
+                ld    (ix+0),a
+                inc   ix
+                ret
+
+; mem_detect: count present 64K expansion banks (port &7F00 value &C4+bank*8
+; pages a bank's block 0 into #4000-#7FFF). MUST run resident and BEFORE
+; PAGE_DATA is populated (it pokes every bank's #4000). Returns A = bank count.
+mem_detect
+                ld    hl,(#4000)
+                ld    (md_save),hl
+                ld    d,0
+md_clear
+                ld    e,0
+                call  md_port
+                ld    bc,#7F00
+                out   (c),l
+                xor   a
+                ld    (#4000),a
+                ld    (#4001),a
+                inc   d
+                ld    a,d
+                cp    8
+                jr    nz,md_clear
+                ld    bc,#7FC0
+                out   (c),c
+                ld    a,#FF
+                ld    (#4000),a
+                ld    (#4001),a
+                xor   a
+                ld    (md_count),a
+                ld    a,#FF
+                ld    (md_last),a
+                ld    (md_last+1),a
+                ld    d,0
+md_detect
+                ld    e,0
+                call  md_port
+                ld    bc,#7F00
+                out   (c),l
+                call  md_valid
+                jr    z,md_next
+                ld    hl,md_count
+                inc   (hl)
+                call  md_update
+md_next
+                inc   d
+                ld    a,d
+                cp    8
+                jr    nz,md_detect
+                ld    bc,#7FC0
+                out   (c),c
+                ld    hl,(md_save)
+                ld    (#4000),hl
+                ld    a,(md_count)
+                ret
+md_port
+                ld    a,d
+                add   a,a
+                add   a,a
+                add   a,a
+                or    #C4
+                or    e
+                ld    l,a
+                ret
+md_valid
+                ld    a,(#4000)
+                cp    #FF
+                jr    z,md_invalid
+                ld    e,a
+                ld    a,(md_last)
+                cp    e
+                jr    z,md_invalid
+                ld    a,(#4001)
+                cp    #FF
+                jr    z,md_invalid
+                ld    e,a
+                ld    a,(md_last+1)
+                cp    e
+                jr    z,md_invalid
+                ld    a,1
+                or    a
+                ret
+md_invalid
+                xor   a
+                ret
+md_update
+                ld    a,#FF
+                ld    (#4000),a
+                ld    (#4001),a
+                ld    (md_last),a
+                ld    (md_last+1),a
+                ret
+
+mem_str         defs  8
+fm_lead         db    0
+time_str        defs  6
+clk_shown       defs  6
+sw_sec          db    0
+sw_min          db    0
+sw_hour         db    0
+clk_frames      db    0
+have_rtc        db    0
+rt_h            db    0
+rt_m            db    0
+md_save         dw    0
+md_count        db    0
+md_last         dw    0
 
                 include "../lib/screen.asm"
                 include "../lib/text.asm"
