@@ -50,6 +50,7 @@ kernel_main
                 call  SCR_SET_MODE           ; mode 1, screen cleared
                 call  TXT_CUR_DISABLE        ; no blinking firmware cursor blob
                 call  TXT_CUR_OFF
+                call  KM_DISARM_BREAK        ; ESC is ours, not a reset-to-BASIC key
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
