@@ -33,3 +33,8 @@ GB_PRINT        equ   GB_KERNEL+6  ; #8006  HL = 0-term string -> firmware text
 GB_QUIT         equ   GB_KERNEL+9  ; #8009  app -> return to the desktop
 GB_TEXT         equ   GB_KERNEL+12 ; #800C  6x8 font text: B=col C=line D=pen
                                    ;        E=paper HL=string (in the caller's page)
+GB_WINDOW       equ   GB_KERNEL+15 ; #800F  draw a window: B=x C=y D=w E=h
+                                   ;        HL=title (caller's page)
+GB_DIR1         equ   GB_KERNEL+18 ; #8012  first dir entry -> CF set, HL=name
+                                   ;        (resident, "NAME.EXT", 0-term); NC=empty
+GB_DIRN         equ   GB_KERNEL+21 ; #8015  next dir entry  -> CF set, HL=name; NC=end

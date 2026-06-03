@@ -24,7 +24,10 @@ TXT_OUTPUT      equ   #BB5A
                 jp    k_cls                  ; GB_CLS   #8003
                 jp    k_print                ; GB_PRINT #8006
                 jp    k_quit                 ; GB_QUIT  #8009
-                jp    gb_text_draw           ; GB_TEXT  #800C
+                jp    gb_text_draw           ; GB_TEXT   #800C
+                jp    gb_open_window         ; GB_WINDOW #800F
+                jp    gb_fs_dir_first        ; GB_DIR1   #8012
+                jp    gb_fs_dir_next         ; GB_DIRN   #8015
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -32,11 +35,7 @@ kernel_main
                 call  SCR_SET_MODE           ; mode 1, screen cleared
                 call  fs_init                ; pick storage backend (floppy here)
                 call  font_init              ; load the font into PAGE_DATA
-                ld    hl,msg_boot
-                call  k_print
                 call  app_launch             ; load HELLO.BIN into PAGE_APP0, run it
-                ld    hl,msg_back
-                call  k_print
 km_halt
                 jr    km_halt                 ; freeze on the result
 
@@ -93,6 +92,168 @@ gtd_cloop
                 ret
 gtd_scratch     defs  49
 gtd_save        db    0
+
+; --- gb_open_window: draw a window frame + title -------------------------
+; B = x (byte col), C = y (line), D = w (bytes), E = h (lines), HL = title.
+; The frame is plain fills (screen only); the title needs the font, so swap to
+; PAGE_DATA for it. No save-under: closing a window redraws the desktop.
+gb_open_window
+                ld    a,b
+                ld    (kw_x),a
+                ld    a,c
+                ld    (kw_y),a
+                ld    a,d
+                ld    (kw_w),a
+                ld    a,e
+                ld    (kw_h),a
+                ld    de,kw_title            ; copy title out of the caller's page
+                call  gtd_copy
+                call  kwin_frame             ; frame: fills to screen, no font
+                ld    a,(bank_cur)
+                ld    (kw_save),a
+                ld    a,PAGE_DATA            ; title needs the font page
+                call  bank_set
+                ld    b,1                     ; white on black title bar
+                ld    c,2
+                call  set_text_pens
+                ld    a,(kw_x)
+                add   a,4
+                ld    (tc_x),a
+                ld    a,(kw_y)
+                add   a,3
+                ld    (tc_y),a
+                ld    hl,kw_title
+                call  draw_text
+                ld    a,(kw_save)
+                jp    bank_set
+
+; kwin_frame: blue interior, black title bar + borders, white close gadget.
+kwin_frame
+                ld    a,(kw_x)               ; interior (blue)
+                ld    (fb_x),a
+                ld    a,(kw_y)
+                ld    (fb_y),a
+                ld    a,(kw_w)
+                ld    (fb_w),a
+                ld    a,(kw_h)
+                ld    (fb_h),a
+                xor   a
+                ld    (fb_val),a
+                call  fill_block
+                ld    a,(kw_x)               ; title bar (black, 14 high)
+                ld    (fb_x),a
+                ld    a,(kw_y)
+                ld    (fb_y),a
+                ld    a,(kw_w)
+                ld    (fb_w),a
+                ld    a,14
+                ld    (fb_h),a
+                ld    a,#0F
+                ld    (fb_val),a
+                call  fill_block
+                ld    a,(kw_x)               ; left border
+                ld    (fb_x),a
+                ld    a,1
+                ld    (fb_w),a
+                ld    a,(kw_h)
+                ld    (fb_h),a
+                call  fill_block             ; (fb_y/fb_val still set)
+                ld    a,(kw_x)               ; right border
+                ld    b,a
+                ld    a,(kw_w)
+                add   a,b
+                dec   a
+                ld    (fb_x),a
+                ld    a,1
+                ld    (fb_w),a
+                ld    a,(kw_h)
+                ld    (fb_h),a
+                call  fill_block
+                ld    a,(kw_x)               ; bottom border
+                ld    (fb_x),a
+                ld    a,(kw_y)
+                ld    b,a
+                ld    a,(kw_h)
+                add   a,b
+                dec   a
+                ld    (fb_y),a
+                ld    a,(kw_w)
+                ld    (fb_w),a
+                ld    a,1
+                ld    (fb_h),a
+                call  fill_block
+                ld    a,(kw_x)               ; close gadget (white)
+                inc   a
+                ld    (fb_x),a
+                ld    a,(kw_y)
+                add   a,2
+                ld    (fb_y),a
+                ld    a,2
+                ld    (fb_w),a
+                ld    a,10
+                ld    (fb_h),a
+                ld    a,#F0
+                ld    (fb_val),a
+                call  fill_block
+                ret
+kw_x            db    0
+kw_y            db    0
+kw_w            db    0
+kw_h            db    0
+kw_save         db    0
+kw_title        defs  24
+
+; --- directory enumeration services --------------------------------------
+; Return CF set with HL -> a resident "NAME.EXT" string (0-term) for the entry,
+; or NC at end of directory. fs_ent_* are resident, so no page swap is needed;
+; the floppy backend is di-safe and uses its own resident buffers.
+gb_fs_dir_first
+                call  fs_dir_first
+                jr    gdir_done
+gb_fs_dir_next
+                call  fs_dir_next
+gdir_done
+                ret   nc                       ; no/Last entry
+                call  fmt_entry              ; fs_ent_name -> dir_namebuf
+                ld    hl,dir_namebuf
+                scf
+                ret
+
+; fmt_entry: fs_ent_name (8.3, space padded) -> dir_namebuf as "NAME.EXT", 0.
+fmt_entry
+                ld    de,dir_namebuf
+                ld    hl,fs_ent_name
+                ld    b,8
+fe_name
+                ld    a,(hl)
+                cp    ' '
+                jr    z,fe_ext
+                ld    (de),a
+                inc   de
+                inc   hl
+                djnz  fe_name
+fe_ext
+                ld    hl,fs_ent_name+8
+                ld    a,(hl)
+                cp    ' '
+                jr    z,fe_end
+                ld    a,'.'
+                ld    (de),a
+                inc   de
+                ld    b,3
+fe_xl
+                ld    a,(hl)
+                cp    ' '
+                jr    z,fe_end
+                ld    (de),a
+                inc   de
+                inc   hl
+                djnz  fe_xl
+fe_end
+                xor   a
+                ld    (de),a
+                ret
+dir_namebuf     defs  14
 
 ; --- font in PAGE_DATA ----------------------------------------------------
 ; font_init: page PAGE_DATA in, load DEFAULT.FNT into it, cache the geometry.
