@@ -1,7 +1,9 @@
-# GEOBENCH Architecture (sketch)
+# GEOBENCH Architecture
 
-This is an early, deliberately-loose architecture sketch. It will firm up as the
-first pieces get built. Treat it as a shared mental model, not a spec.
+The core is built: a banked, resident kernel running separate-binary C apps. This
+doc is the deeper design rationale; the README's "How it works" is the quick
+summary. Some sections below (legacy launching, the plus, networking) are still
+forward-looking.
 
 ## Layer cake
 
@@ -9,30 +11,35 @@ GEOBENCH is organised as layers, lowest (closest to hardware) at the bottom:
 
 ```
 ┌─────────────────────────────────────────────┐
-│  apps/      bundled applications             │  ← load on demand from disk
+│  apps/     desktop · filemgr · viewer (C)    │  ← banked binaries, run on demand
 ├─────────────────────────────────────────────┤
-│  desktop/   Workbench-style shell            │  ← icons, windows, drawers, menus
+│  libgb     C bindings -> the kernel jump table│  ← lib/gb/ (gb.h + trampolines)
 ├─────────────────────────────────────────────┤
-│  lib/       graphics · window · input · font │  ← reusable, hardware-abstracting
-├─────────────────────────────────────────────┤
-│  kernel/    boot · memory · loader · API gate│  ← resident
+│  kernel/   boot · banking · screen · text ·   │  ← resident; Z80 asm
+│            input · cursor · fs · loader · API  │
 ├─────────────────────────────────────────────┤
 │  Amstrad CPC hardware  (Z80, CRTC, gate array, AMSDOS)│
 └─────────────────────────────────────────────┘
 ```
 
-Each layer only calls **down** through documented entry points. The desktop and
-apps never touch video or input hardware directly — they go through `lib/`.
+Each layer only calls **down** through documented entry points. Apps never touch
+video, storage or input hardware directly — they go through the kernel API
+(`lib/gbapp.inc`), reached from C via `libgb`. The desktop is itself an app; it's
+the first one booted and the one apps return to.
 
 ## Memory model
 
-- The **kernel is resident** and kept as small as possible.
-- `lib/` routines are resident too (they're needed by everything).
-- The **desktop** is resident-ish (it's the shell you return to).
-- **Apps are transient**: loaded into a kernel-allocated block, run, then freed.
-- On a 128K machine, the extra banks hold buffers, off-screen bitmaps, and
-  possibly a second app/data bank. The 64K target is a stretch goal with a much
-  tighter budget.
+128K+ only (the banked app model needs the expansion banks). The gate-array
+RAM-config port pages a 16K block into the `#4000–#7FFF` window:
+
+- The **kernel is resident** (in always-mapped RAM at `#8000+`), kept small. So
+  are the stack, the screen, and the firmware.
+- The kernel's **data buffers** (font, icon set, directory scratch) live in a
+  bank page (`PAGE_DATA`); a service swaps that page in, touches the buffer, and
+  restores the caller's page.
+- **Apps are loaded into bank pages** (`PAGE_APP0+`) at `#4000` and run there.
+  They nest: desktop -> filemgr -> viewer, each in its own page; the launcher
+  keeps the caller's page on the stack and restores it when the app quits.
 
 ## Execution model
 
@@ -48,17 +55,21 @@ Preemptive multitasking — the Amiga's signature — is explicitly *not* a v1 g
 
 ## The system API
 
-Applications reach system services through a single **call gate** the kernel
-hands them at launch. Categories of call (to be specified):
+Applications reach system services through a fixed **jump table** at `#8000` —
+each entry a 3-byte `jp`, so addresses stay stable as the kernel grows.
+`lib/gbapp.inc` is the authority; C apps call it through `libgb` (`lib/gb/`).
+What's there today:
 
-- **Graphics** — draw into a window's region.
-- **Windowing** — request / resize / close a window; handle redraw.
-- **Input** — read pointer and keyboard events.
-- **Files** — open / read / write / catalogue on disk (via AMSDOS).
-- **Memory** — allocate / free blocks.
+- **Drawing** — text (`gb_text`), filled rects (`gb_fill`), outlines
+  (`gb_frame`), icons (`gb_icon`/`gb_blite`), windows (`gb_window`).
+- **Input + cursor** — `gb_poll` (pointer position + click/quit/fire),
+  `gb_curshow`/`gb_curhide`.
+- **Files** — directory iteration (`gb_dir1`/`gb_dirn`), load a file
+  (`gb_fs_load`). Write is still to come.
+- **Apps** — launch by name (`gb_run`) or by file type (`gb_launch`).
 
-Keeping this an explicit, versioned gate is what lets third parties write apps
-without linking against private kernel internals.
+Keeping this an explicit, stable jump table is what lets apps be separate
+binaries — written in C — without linking against private kernel internals.
 
 ## Launching legacy AMSDOS software
 

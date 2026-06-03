@@ -4,12 +4,12 @@ A graphical desktop environment for the **Amstrad CPC** — a hybrid clone that
 borrows the best ideas from **Commodore GEOS** (C64/C128) and the **Amiga
 Workbench**, reimagined for 8-bit Z80 hardware.
 
-> **Status:** running as a **banked multi-app micro-OS** (128K+). A resident
-> kernel (`kernel/`) exposes a jump-table API; separate-binary apps (`apps/` —
-> desktop, file manager, viewer) run co-resident in expansion-bank pages and
-> talk to the kernel. Double-click a drive to open the file manager, double-click
-> a file to open it in its app. Build with `tools/build_kernel.sh`. See
-> `kernel/`, `apps/` and `lib/`.
+> **Status:** a working **banked multi-app micro-OS** for 128K+ CPCs. A resident
+> Z80 **kernel** owns the machine and exposes a fixed jump-table API; the
+> **apps are written in C** (SDCC) and run co-resident in expansion-bank pages,
+> reaching the kernel through a small `libgb`. The desktop, a scrolling file
+> manager, and a text viewer all work: double-click a drive to browse it,
+> double-click a file to open it in its app. Build with `tools/build_kernel.sh`.
 
 ## Visual target
 
@@ -26,14 +26,23 @@ We're a long way from this, but it's the north star.
 
 ### Where it is now
 
-This is the current GEOBENCH desktop running on the Amstrad CPC (1984 emulator):
-a Mode 1 backdrop with a title bar and draggable multicolour bitmap icons
-(Disk, Clock, Trash) with labels, driven by a keyboard/joystick pointer.
+The current GEOBENCH desktop running on the Amstrad CPC (1984 emulator): a Mode 1
+backdrop, a top bar showing total RAM and a clock, and draggable multicolour
+bitmap icons (Disk, Clock, Trash) driven by a keyboard/joystick pointer.
 
 ![Current status](initial.png)
 
-> The initial status — a long way to go, but the foundations (fast bitmap
-> blitting, icons, drag-and-drop) are in place.
+What works today:
+
+- **Desktop** — backdrop, top bar (RAM probe + clock), draggable labelled icons.
+- **File manager** — double-click the Disk icon to open a window listing the
+  drive; a type icon + name per file, a **scrolling** list, click to select,
+  double-click to open. Reaches every file regardless of how many.
+- **Text viewer** — double-click a `.TXT` (routed by a type→app table) to open it
+  in a window with word-wrapped text.
+- **Banked app model** — the desktop, file manager and viewer are separate
+  binaries, paged into expansion-bank slots and run co-resident with the kernel.
+- **Hybrid implementation** — the kernel is Z80 assembly; **every app is C**.
 
 ## What is this?
 
@@ -43,7 +52,7 @@ way the C64 did with GEOS or the Amiga did with Workbench/Intuition.
 
 GEOBENCH aims to fill that gap. The goal is a mouse-and-icon desktop that feels
 familiar to anyone who used a 16-bit Amiga, but runs within the constraints of
-a 64K–128K CPC.
+a 128K CPC.
 
 ### Why "GEOBENCH"?
 
@@ -64,6 +73,46 @@ this project sets out to do. Instead, GEOBENCH is a much humbler thing: a
 — standard **AMSDOS**, or a more capable DOS such as **UniDOS**. It keeps the
 familiar DOS underneath and adds a GEOS/Workbench-style face on top, rather than
 replacing the whole system. Smaller scope, smaller footprint, different goal.
+
+## How it works
+
+GEOBENCH borrows SymbOS's banked-app shape, scaled down:
+
+- **Banked memory model.** On a 128K+ machine the gate-array RAM-config port
+  pages a 16K block into the `#4000–#7FFF` window. The kernel, the stack, the
+  screen and the firmware stay in always-resident RAM; apps and the kernel's data
+  buffers (font, icons) live in bank pages and are swapped in as needed.
+- **Resident kernel (`kernel/`, Z80 asm).** Boots the machine (Mode 1, palette,
+  RAM probe, clock, top bar), owns the storage + screen + input + cursor, and
+  exposes a **fixed jump-table API** at `#8000` (`lib/gbapp.inc` documents every
+  entry). It loads app binaries off disk into bank pages and runs them there.
+- **Apps in C (`apps/`, SDCC).** Each app is a single `main.c` compiled to run at
+  `#4000` in a bank page. It reaches the kernel only through **`libgb`**
+  (`lib/gb/` — `gb.h` + asm trampolines that map the C calling convention onto the
+  jump table). The desktop launches the file manager and the viewer; an app
+  returns to its caller by `return`.
+- **Storage backends.** A small dispatcher (`lib/fs.asm`) picks AMSDOS-over-floppy
+  or FAT16-over-IDE at boot, so the same desktop runs on a plain floppy CPC or a
+  SYMBiFACE/Cyboard IDE-equipped one.
+
+## Building and running
+
+The kernel is assembled with **RASM**; the apps are compiled with **SDCC**
+(`sdcc`, `sdasz80`, `makebin` on `PATH`). One script builds everything into a
+disk image:
+
+```bash
+tools/build_kernel.sh           # apps (SDCC) + kernel (RASM) -> build/gbkern.dsk
+```
+
+Run it in an emulator (or on hardware):
+
+```bash
+1984 --memory=128 --disk-a=build/gbkern.dsk --autostart=GBKERN
+```
+
+`tools/build_capp.sh <app_dir> <out.RAW>` builds a single C app against `libgb`
+if you just want to iterate on one.
 
 ## Design inspirations
 
@@ -88,16 +137,14 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
 
 ## Target hardware
 
-- **Amstrad CPC** (464 / 664 / 6128, and CPC+).
-- 128K RAM strongly preferred; 64K as a stretch/minimal target.
-- Standard CPC graphics modes (Mode 1 for the desktop is the likely default —
-  320×200, 4 colours — balancing resolution against memory).
-- **AMX-style mouse read via the joystick port** as the default pointing device,
-  with keyboard fallback. This needs no expansion hardware, so the desktop runs
-  on a bare CPC. The input layer stays abstract so a **SYMBiFACE II / Cyboard
-  PS/2 mouse** can be added later for machines that have the board.
-- Floppy / disk-based; networking via Net4CPC (W5100S) is a possible future
-  extension — see the related `n4c-nettools` project.
+- **Amstrad CPC** (464 / 664 / 6128, and CPC+) with **128K+ RAM** (the banked app
+  model needs the expansion banks; 512K is typical and fine).
+- Mode 1 (320×200, 4 colours) for the desktop.
+- **Keyboard/joystick-driven software pointer** today; the input layer stays
+  abstract so an AMX-style joystick mouse or a **SYMBiFACE II / Cyboard PS/2
+  mouse** can be added for machines that have one.
+- Floppy or IDE (FAT16) storage. Networking via Net4CPC (W5100S) is a possible
+  future extension — see the related `n4c-nettools` project.
 
 ## Goals
 
@@ -106,82 +153,88 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
 - A **graphics + windowing layer** abstracting the CPC's video hardware.
 - A **mouse/input layer** with a software pointer.
 - A small set of **bundled applications** to prove the platform is real.
-- A documented **application API** so third parties can write GEOBENCH apps.
+- A documented **application API** (the `libgb` jump table) so third parties can
+  write GEOBENCH apps — in C.
 - **Launching existing software.** Because GEOBENCH sits on top of AMSDOS/UniDOS
   rather than replacing it, the desktop should be able to run the CPC's existing
-  catalogue — pick a `.BIN` binary or a BASIC `.BAS` program from an icon and
-  launch it, the same way you would `RUN"PROG"` from the BASIC prompt today. This
-  makes the existing disk library immediately useful from the desktop instead of
-  requiring everything to be rewritten as a native GEOBENCH app.
+  catalogue — pick a `.BIN` binary or a BASIC `.BAS` program and launch it, the
+  same way you would `RUN"PROG"` from BASIC today.
 
 ## Running existing AMSDOS software
 
-A core part of the "layer on top of DOS, don't replace it" philosophy:
+A core part of the "layer on top of DOS, don't replace it" philosophy (planned):
 
-- **AMSDOS binaries (`.BIN`)** — the desktop hands the file off to the firmware
-  loader (RSX/`|`-style or direct CAS/AMSDOS calls) and transfers control, just
-  as typing `RUN"GAME.BIN"` would.
+- **AMSDOS binaries (`.BIN`)** — hand the file off to the firmware loader and
+  transfer control, just as typing `RUN"GAME.BIN"` would.
 - **BASIC programs (`.BAS`)** — launched via the BASIC ROM, equivalent to
   `RUN"PROG"`.
 
 When launching, the user chooses how the program runs:
 
-- **Fullscreen** — the program takes over the whole machine. This is the safe,
-  always-works mode: most CPC software assumes it **owns the machine** (full
-  memory, its own video mode, direct hardware access), so GEOBENCH **steps
-  aside** — it parks (or tears down) its own state, hands the program the
-  machine, and the user returns to the desktop afterwards (on program exit /
-  reset). "Launch and hand over the machine."
-- **Windowed** — where feasible, run the program's output inside a desktop
-  window so it coexists with the rest of the desktop. This is the harder,
-  best-effort mode and won't work for every title: programs that bang the
-  hardware directly, switch video mode, or claim memory GEOBENCH needs can't be
-  contained. Realistic candidates are well-behaved BASIC programs and software
-  that confines itself to the firmware. The desktop should fall back to (or warn
-  about) fullscreen when a program can't be safely windowed.
+- **Fullscreen** — the program takes over the whole machine. The safe,
+  always-works mode: most CPC software assumes it **owns the machine**, so
+  GEOBENCH steps aside, hands over, and the user returns to the desktop on exit.
+- **Windowed** — where feasible, run a well-behaved program's output inside a
+  desktop window. The harder, best-effort mode; the desktop falls back to
+  fullscreen when a program can't be safely contained.
 
-A future, friendlier class of **GEOBENCH-native apps** (see the application API)
-is designed to cooperate and always run inside the desktop — the windowed/
-fullscreen choice above is specifically about coaxing *legacy* `.BIN`/`.BAS`
-software into the environment.
+GEOBENCH-native apps (the C apps above) always cooperate and run inside the
+desktop — the windowed/fullscreen choice is specifically about coaxing *legacy*
+`.BIN`/`.BAS` software into the environment.
 
 ## Non-goals (for now)
 
-- Multitasking / preemptive scheduling (the Amiga's killer feature, but a heavy
-  lift on a Z80 — cooperative or single-app-at-a-time is the realistic start).
+- Multitasking / preemptive scheduling (cooperative, single-app-at-a-time is the
+  realistic start on a Z80).
 - Hard compatibility with actual GEOS or Workbench binaries. GEOBENCH is
   *inspired by* them, not a binary-compatible reimplementation.
 - 100% feature parity with either ancestor.
 
 ## Tech notes
 
-- **CPU:** Zilog Z80.
-- **Language:** Z80 assembly (assembler TBD — RASM is used in sibling projects).
-- **Constraints:** every byte and every cycle counts. The architecture has to
-  respect a ~4 MHz CPU and a banked 128K memory map.
+- **CPU:** Zilog Z80 (~4 MHz), banked 128K+ memory map.
+- **Kernel:** Z80 assembly, assembled with **RASM**.
+- **Apps:** **C**, compiled with **SDCC**, linked against the shared `libgb`
+  (`lib/gb/`) and a small crt0 to run as a banked binary at `#4000`.
+- **Constraints:** every byte and cycle counts; apps share a 16K bank window.
 
-## Project layout (planned)
+## Project layout
 
 ```
 geobench/
-├── README.md          # this file
-├── docs/              # design docs, architecture, UI mockups
-├── kernel/            # resident OS kernel (gbkern.asm) + service API
-├── lib/               # screen, text/font, input, cursor, fs, banking libraries
-├── apps/              # separate-binary apps (desktop, filemgr, viewer, ...)
-├── tests/             # standalone hardware/feature test programs
-└── tools/             # host-side build/asset tooling (build_kernel.sh, ...)
+├── README.md
+├── kernel/            # resident OS kernel (gbkern.asm) + the jump-table API
+├── lib/               # kernel libraries: screen, text/font, input, cursor,
+│   │                  #   fs (AMSDOS + FAT16), banking, icon/cursor bitmaps
+│   ├── gbapp.inc      #   the app ABI (jump-table addresses, memory model)
+│   └── gb/            #   libgb: the shared C bindings (gb.h, gblib.s, crt0.s)
+├── apps/              # the C apps (each a single main.c)
+│   ├── desktop/       #   the boot shell: backdrop, icons, drag, launch
+│   ├── filemgr/       #   scrolling file manager
+│   ├── viewer/        #   text-file viewer
+│   └── chello/        #   "hello from C" demo (the original C-app spike)
+├── assets/            # icon/cursor source PNGs + sample files (WELCOME.TXT)
+├── docs/              # architecture, development, references
+└── tools/            # host-side build/asset tooling (build_kernel.sh, ...)
 ```
-
-(Directories will appear as the corresponding pieces get built.)
 
 ## Roadmap (rough)
 
-1. **Boot + bare desktop** — clear screen, draw a desktop, show a mouse pointer.
-2. **Windowing** — open/close/move windows.
-3. **Icons + drawers** — represent files and folders, drag them around.
-4. **Menus + a file manager** — make the desktop actually do something.
-5. **App API + first bundled app** — prove an application can run on top.
+Done:
+
+1. ✅ **Boot + desktop** — Mode 1 backdrop, top bar, software pointer.
+2. ✅ **Windowing + icons** — windows with title bars/gadgets, draggable icons.
+3. ✅ **File manager** — browse a drive, select, scroll, open by type.
+4. ✅ **Banked app model + app API** — separate-binary apps over a kernel API.
+5. ✅ **Apps in C** — the whole app layer moved from assembly to C over `libgb`.
+
+Next:
+
+- **More apps** — an editable notepad (needs a storage *write* layer), an icon
+  editor, settings.
+- **Menu bar** — File/Edit menus in the top bar, dispatched to the focused app.
+- **Launching legacy `.BIN`/`.BAS`** software (see above).
+- **Drawers/folders** and richer desktop arrangement.
 
 ## License
 
