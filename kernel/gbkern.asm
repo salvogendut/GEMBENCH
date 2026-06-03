@@ -39,6 +39,7 @@
                 jp    k_saverect             ; GB_SAVERECT    #8036
                 jp    k_restorerect          ; GB_RESTORERECT #8039
                 jp    k_xorframe             ; GB_XORFRAME    #803C
+                jp    k_fsload               ; GB_FSLOAD      #803F
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -737,6 +738,27 @@ k_getarg
                 ld    hl,launch_arg
                 ret
 
+; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a
+; caller buffer. HL = dst (in the caller's page, which stays mapped through the
+; FDC read - fsam_buf is resident, so no page swap), DE = max bytes. Returns
+; BC = byte count (0 = missing / too big), CF set on success.
+k_fsload
+                ld    (fs_load_dst),hl
+                ex    de,hl
+                ld    (fs_load_max),hl
+                ld    hl,launch_arg          ; load by the launched file's name
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                di
+                call  fs_load_file
+                ei
+                ld    bc,0
+                ret   nc                      ; not found / too big -> BC=0, NC
+                ld    bc,(fs_ent_size)        ; content length (header already stripped)
+                scf
+                ret
+
 ; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
 ; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.
 ; (Only VIEWER exists today, so most types fall through to it; add rows as new
@@ -1348,6 +1370,8 @@ font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAUL
 font_imgend
 icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
 icon_imgend
+wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
+wel_imgend
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.BIN",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
@@ -1355,4 +1379,5 @@ icon_imgend
                 save  "CHELLO.BIN",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
+                save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL

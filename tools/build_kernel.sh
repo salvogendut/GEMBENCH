@@ -20,7 +20,7 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_picture.asm lib/icon_text.asm            # icon set -> PAGE_DATA
 "$RASM" apps/desktop/desktop.asm -eo         # -> build/DESKTOP.RAW
 "$RASM" apps/filemgr/filemgr.asm -eo         # -> build/FILEMGR.RAW
-"$RASM" apps/viewer/viewer.asm -eo           # -> build/VIEWER.RAW
+tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
 tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
 "$RASM" kernel/gbkern.asm -eo                # incbins apps + font + icons -> .dsk
 echo "Built build/gbkern.dsk (GBKERN + DESKTOP + FILEMGR + VIEWER + CHELLO + assets)"
