@@ -148,6 +148,11 @@ gp_noclick
                 jr    z,gp_noquit
                 set   1,d
 gp_noquit
+                ld    a,(in_fire)            ; bit2 = fire currently held (for drag)
+                or    a
+                jr    z,gp_nohold
+                set   2,d
+gp_nohold
                 ld    a,(poll_byte)
                 ld    b,a
                 ld    a,(poll_line)
