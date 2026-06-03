@@ -15,6 +15,9 @@ build/
 *.sym
 *.map
 
+# Emulator screenshots (1984 F4 dumps)
+*.ppm
+
 # Editor / OS cruft
 *~
 .DS_Store
