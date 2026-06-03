@@ -24,10 +24,12 @@ APP_BASE        equ   #4000        ; the #4000-#7FFF paging window
 PAGE_DATA       equ   #C4          ; bank 0, block 0 -> kernel data buffers
 PAGE_APP0       equ   #C5          ; bank 0, block 1 -> application slot 0
 DATA_BUF        equ   #4000        ; base of the kernel data buffers (in PAGE_DATA)
+DATA_FONT       equ   DATA_BUF     ; font set lives at the start of PAGE_DATA
 
 GB_KERNEL       equ   #8000        ; resident kernel base (fixed, RUN entry)
 GB_INIT         equ   GB_KERNEL+0  ; #8000  kernel boot (kernel only)
 GB_CLS          equ   GB_KERNEL+3  ; #8003  clear screen / home cursor
-GB_PRINT        equ   GB_KERNEL+6  ; #8006  HL = 0-term string -> text output
+GB_PRINT        equ   GB_KERNEL+6  ; #8006  HL = 0-term string -> firmware text
 GB_QUIT         equ   GB_KERNEL+9  ; #8009  app -> return to the desktop
-GB_PDATA        equ   GB_KERNEL+12 ; #800C  demo: print the banked data buffer
+GB_TEXT         equ   GB_KERNEL+12 ; #800C  6x8 font text: B=col C=line D=pen
+                                   ;        E=paper HL=string (in the caller's page)

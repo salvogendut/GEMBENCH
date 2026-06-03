@@ -12,6 +12,7 @@ RASM="${RASM:-rasm}"
 
 mkdir -p build
 
-"$RASM" apps/hello/hello.asm -eo        # -> build/HELLO.RAW
-"$RASM" kernel/gbkern.asm -eo           # incbins HELLO.RAW -> build/gbkern.dsk
-echo "Built build/gbkern.dsk (GBKERN + embedded HELLO)"
+python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font, loaded into PAGE_DATA
+"$RASM" apps/hello/hello.asm -eo             # -> build/HELLO.RAW
+"$RASM" kernel/gbkern.asm -eo                # incbins HELLO.RAW + DEFAULT.FNT -> .dsk
+echo "Built build/gbkern.dsk (GBKERN + HELLO + DEFAULT.FNT)"

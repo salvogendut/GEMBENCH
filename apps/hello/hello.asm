@@ -10,10 +10,16 @@
                 org   APP_BASE
 app_entry
                 ld    hl,hello_msg
-                call  GB_PRINT               ; kernel API (resident, mapped)
-                call  GB_PDATA               ; kernel reads its banked buffer for us
+                call  GB_PRINT               ; firmware 8x8 line
+                ld    b,2                     ; byte col
+                ld    c,70                    ; pixel line
+                ld    d,1                     ; pen 1
+                ld    e,0                     ; paper 0
+                ld    hl,font_msg            ; drawn with the kernel's 6x8 font
+                call  GB_TEXT
                 ret                            ; back to the desktop kernel
 
 hello_msg       db    "HELLO FROM A BANKED APP!",13,10,0
+font_msg        db    "6x8 font drawn by the kernel service",0
 app_end
                 save  "build/HELLO.RAW",APP_BASE,app_end-APP_BASE
