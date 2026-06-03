@@ -25,6 +25,7 @@
         .globl  _gb_launch
         .globl  _gb_run
         .globl  _gb_fs_load
+        .globl  _gb_fs_save
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -168,4 +169,12 @@ _gb_fs_load:
         call    0x803F          ; GB_FSLOAD -> BC = byte count
         ld      d, b
         ld      e, c
+        ret
+
+;; unsigned char gb_fs_save(char *buf, unsigned int len);   buf=HL, len=DE -> 1/0
+_gb_fs_save:
+        call    0x8042          ; GB_FSSAVE -> CF = saved
+        ld      a, #0
+        ret     nc
+        inc     a
         ret

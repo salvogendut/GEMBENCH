@@ -26,6 +26,8 @@ fs_init
                 ld    (fs_p_next),hl
                 ld    hl,fside_load_file
                 ld    (fs_p_load),hl
+                ld    hl,fside_save_file
+                ld    (fs_p_save),hl
                 ret
 fsi_floppy
                 ld    hl,fsam_dir_first
@@ -34,6 +36,8 @@ fsi_floppy
                 ld    (fs_p_next),hl
                 ld    hl,fsam_load_file
                 ld    (fs_p_load),hl
+                ld    hl,fsam_save_file
+                ld    (fs_p_save),hl
                 ret
 
 ; fs_dir_first / fs_dir_next / fs_load_file: route to the selected backend.
@@ -46,6 +50,11 @@ fs_dir_next
 ; fs_load_file: load file (fs_req_name) into (fs_load_dst). CF set = loaded.
 fs_load_file
                 ld    hl,(fs_p_load)
+                jp    (hl)
+; fs_save_file: save fs_save_len bytes from (fs_save_src) to fs_req_name (must
+; exist; overwrite in place). CF set = saved, NC = failed.
+fs_save_file
+                ld    hl,(fs_p_save)
                 jp    (hl)
 fs_load_none
                 or    a                        ; not implemented -> NC
@@ -77,9 +86,12 @@ fsip_absent
 fs_p_first      defw  fside_dir_first   ; default IDE; fs_init rewrites on detect
 fs_p_next       defw  fside_dir_next
 fs_p_load       defw  fside_load_file
+fs_p_save       defw  fside_save_file
 fs_ent_name     defs  11
 fs_ent_attr     defb  0
 fs_ent_size     defs  4
-fs_req_name     defs  11           ; fs_load_file: 8.3 name to load
+fs_req_name     defs  11           ; fs_load_file/fs_save_file: 8.3 name
 fs_load_dst     defw  0            ; fs_load_file: destination buffer
 fs_load_max     defw  #FFFF        ; fs_load_file: max bytes to read (buffer guard)
+fs_save_src     defw  0            ; fs_save_file: source buffer
+fs_save_len     defw  0            ; fs_save_file: bytes to write

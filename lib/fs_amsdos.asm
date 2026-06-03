@@ -524,6 +524,284 @@ fslf_ok
                 scf
                 ret
 
+; ---------------------------------------------------------------------------
+; fsam_write_sector: D=track, E=sector id. Writes 512 bytes from (fsam_src) to
+; the sector and advances fsam_src. Mirrors fsam_read_sector with WRITE DATA.
+fsam_write_sector
+                push  de
+                ld    a,#45                          ; WRITE DATA, MFM
+                call  fsam_send
+                ld    a,(fsam_unit)
+                call  fsam_send                      ; (head<<2)|drive
+                ld    a,d
+                call  fsam_send                      ; C = track
+                ld    a,0
+                call  fsam_send                      ; H = head
+                ld    a,e
+                call  fsam_send                      ; R = sector
+                ld    a,2
+                call  fsam_send                      ; N = 2 (512)
+                ld    a,e
+                call  fsam_send                      ; EOT = R (single sector)
+                ld    a,#2A
+                call  fsam_send                      ; GPL
+                ld    a,#FF
+                call  fsam_send                      ; DTL
+                ld    hl,(fsam_src)
+                ld    de,512
+fwr_exec
+                ld    bc,FSAM_MSR
+                in    a,(c)
+                bit   7,a                            ; RQM?
+                jr    z,fwr_exec
+                bit   5,a                            ; still in execution phase?
+                jr    z,fwr_result
+                ld    a,(hl)
+                ld    bc,FSAM_DATA
+                out   (c),a
+                inc   hl
+                dec   de
+                ld    a,d
+                or    e
+                jr    nz,fwr_exec
+fwr_result
+                ld    (fsam_src),hl
+                ld    b,7                             ; drain the 7 result bytes
+fwr_res_loop
+                push  bc
+                call  fsam_recv
+                pop   bc
+                djnz  fwr_res_loop
+                pop   de
+                ret
+
+; ---------------------------------------------------------------------------
+; fsam_save_file: overwrite fs_req_name (must already exist, single extent) with
+; fs_save_len bytes from (fs_save_src). Writes a 128-byte AMSDOS header + the data
+; into the file's existing allocation blocks, updates the record count, and writes
+; the directory back. CF set = saved; NC = not found, or won't fit the current
+; allocation (no block allocation / file creation yet).
+fsam_save_file
+                call  fsam_motor_on
+                call  fsam_read_dir                  ; directory -> fsam_buf
+                ld    ix,fsam_buf                    ; find the Ex=0 entry by name
+                ld    b,64
+fsv_scan
+                ld    a,(ix+0)
+                cp    #E5
+                jr    z,fsv_next
+                ld    a,(ix+12)
+                or    a
+                jr    nz,fsv_next
+                call  fsam_namematch
+                jr    z,fsv_found
+fsv_next
+                push  bc
+                ld    de,32
+                add   ix,de
+                pop   bc
+                djnz  fsv_scan
+fsv_fail
+                call  fsam_motor_off
+                or    a                               ; NC
+                ret
+fsv_found
+                ld    hl,(fs_save_len)                ; total = 128 + len
+                ld    de,128
+                add   hl,de
+                ld    de,127                          ; Rc = ceil(total/128)
+                add   hl,de
+                ld    a,h
+                add   a,a
+                ld    d,a
+                ld    a,l
+                rlca
+                and   1
+                add   a,d
+                ld    (fsam_rc),a
+                push  ix                              ; capacity = (#blocks)*8 records
+                pop   hl
+                ld    de,16
+                add   hl,de                           ; HL = block list
+                ld    b,16
+                ld    c,0
+fsv_cnt
+                ld    a,(hl)
+                or    a
+                jr    z,fsv_cntsk
+                inc   c
+fsv_cntsk
+                inc   hl
+                djnz  fsv_cnt
+                ld    a,c
+                add   a,a
+                add   a,a
+                add   a,a                              ; blocks*8
+                ld    b,a
+                ld    a,(fsam_rc)
+                cp    b
+                jr    z,fsv_fits
+                jr    nc,fsv_fail                      ; Rc > capacity -> won't fit
+fsv_fits
+                ld    hl,fsam_wbuf                    ; build the 128-byte header
+                ld    de,fsam_wbuf+1
+                ld    bc,127
+                ld    (hl),0
+                ldir                                  ; zero 128 bytes
+                ld    hl,fs_req_name                  ; name -> [1..11]
+                ld    de,fsam_wbuf+1
+                ld    bc,11
+                ldir
+                ld    a,2
+                ld    (fsam_wbuf+18),a                ; type = binary
+                ld    hl,(fs_save_len)
+                ld    (fsam_wbuf+24),hl               ; logical length
+                ld    (fsam_wbuf+64),hl               ; real length (low 16)
+                ld    hl,fsam_wbuf                    ; checksum = sum [0..66]
+                ld    de,0
+                ld    b,67
+fsv_sum
+                ld    a,(hl)
+                add   a,e
+                ld    e,a
+                jr    nc,fsv_snc
+                inc   d
+fsv_snc
+                inc   hl
+                djnz  fsv_sum
+                ex    de,hl
+                ld    (fsam_wbuf+67),hl
+                ld    hl,(fs_save_src)                ; data stream
+                ld    (fsv_dptr),hl
+                ld    hl,(fs_save_len)
+                ld    (fsv_drem),hl
+                xor   a
+                ld    (fsv_si),a
+                ld    a,#FF
+                ld    (fsv_curtrk),a                  ; force a seek
+                ld    a,(fsam_rc)                     ; nsec = ceil(Rc/4)
+                add   a,3
+                rrca
+                rrca
+                and   #3F
+                ld    (fsv_nsec),a
+fsv_wr
+                ld    a,(fsv_nsec)
+                or    a
+                jr    z,fsv_dir
+                dec   a
+                ld    (fsv_nsec),a
+                ld    a,(fsv_si)                      ; assemble the sector
+                or    a
+                jr    nz,fsv_body
+                ld    hl,fsam_wbuf+128                ; sector 0: header + data
+                ld    bc,384
+                call  fsv_filldata
+                jr    fsv_emit
+fsv_body
+                ld    hl,fsam_wbuf
+                ld    bc,512
+                call  fsv_filldata
+fsv_emit
+                ld    a,(fsv_si)                      ; block = blocklist[si/2]
+                srl   a
+                ld    e,a
+                ld    d,0
+                push  ix
+                pop   hl
+                ld    bc,16
+                add   hl,bc
+                add   hl,de
+                ld    l,(hl)
+                ld    h,0
+                add   hl,hl                            ; block*2
+                ld    a,(fsv_si)
+                and   1
+                or    l
+                ld    l,a                              ; L = block*2 + (si&1)
+                call  fsam_div9                        ; HL/9 -> B=track, A=remainder
+                ld    c,a
+                ld    a,b
+                ld    e,a                              ; E = track
+                ld    a,(fsv_curtrk)
+                cp    e
+                jr    z,fsv_noseek
+                ld    a,e
+                ld    (fsv_curtrk),a
+                push  bc
+                ld    a,e
+                call  fsam_seek
+                pop   bc
+fsv_noseek
+                ld    a,(fsv_curtrk)
+                ld    d,a                              ; D = track
+                ld    a,#C1
+                add   a,c
+                ld    e,a                              ; E = physical sector
+                ld    hl,fsam_wbuf
+                ld    (fsam_src),hl
+                call  fsam_write_sector
+                ld    a,(fsv_si)
+                inc   a
+                ld    (fsv_si),a
+                jr    fsv_wr
+fsv_dir
+                ld    a,(fsam_rc)                     ; commit the new record count
+                ld    (ix+15),a
+                xor   a
+                ld    (ix+12),a                        ; Ex = 0 (single extent)
+                ld    a,(fsam_track)                  ; write the directory back
+                call  fsam_seek
+                ld    hl,fsam_buf
+                ld    (fsam_src),hl
+                ld    a,(fsam_base)
+                ld    e,a
+                ld    b,4
+fsv_dirloop
+                push  bc
+                ld    a,(fsam_track)
+                ld    d,a
+                call  fsam_write_sector
+                pop   bc
+                inc   e
+                djnz  fsv_dirloop
+                call  fsam_motor_off
+                scf
+                ret
+
+; fsv_filldata: HL=dest, BC=count. Copy min(count, fsv_drem) bytes from (fsv_dptr)
+; advancing it, then pad the rest with 0.
+fsv_filldata
+                ld    a,b
+                or    c
+                ret   z
+                push  hl
+                ld    hl,(fsv_drem)
+                ld    a,h
+                or    l
+                pop   hl
+                jr    z,fsv_fdpad
+                push  bc
+                ld    bc,(fsv_dptr)
+                ld    a,(bc)
+                inc   bc
+                ld    (fsv_dptr),bc
+                pop   bc
+                ld    (hl),a
+                inc   hl
+                push  hl
+                ld    hl,(fsv_drem)
+                dec   hl
+                ld    (fsv_drem),hl
+                pop   hl
+                dec   bc
+                jr    fsv_filldata
+fsv_fdpad
+                ld    (hl),0
+                inc   hl
+                dec   bc
+                jr    fsv_filldata
+
 ; fsam_namematch: IX = dir entry; Z if its 8.3 name == fs_req_name (11 bytes).
 fsam_namematch
                 push  ix
@@ -578,4 +856,12 @@ fsam_base       defb  #C1
 fsam_track      defb  0
 fsam_idx        defb  0
 fsam_dst        defw  0
+fsam_src        defw  0            ; fsam_write_sector source pointer
+fsam_rc         defb  0            ; save: record count being written
+fsv_nsec        defb  0            ; save: sectors left to write
+fsv_si          defb  0            ; save: sector index within the file
+fsv_curtrk      defb  0            ; save: track the head is on
+fsv_dptr        defw  0            ; save: pointer into the source data
+fsv_drem        defw  0            ; save: source bytes left
 fsam_buf        defs  2048
+fsam_wbuf       defs  512          ; save: one assembled 512-byte sector

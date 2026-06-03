@@ -40,6 +40,7 @@
                 jp    k_restorerect          ; GB_RESTORERECT #8039
                 jp    k_xorframe             ; GB_XORFRAME    #803C
                 jp    k_fsload               ; GB_FSLOAD      #803F
+                jp    k_fssave               ; GB_FSSAVE      #8042
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -758,6 +759,22 @@ k_fsload
                 ld    bc,(fs_ent_size)        ; content length (header already stripped)
                 scf
                 ret
+
+; k_fssave (GB_FSSAVE): save the file the app was opened with (launch_arg). HL =
+; src (caller's page, stays mapped), DE = byte count. Overwrites in place. CF set
+; on success.
+k_fssave
+                ld    (fs_save_src),hl
+                ex    de,hl
+                ld    (fs_save_len),hl
+                ld    hl,launch_arg          ; save by the launched file's name
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                di
+                call  fs_save_file
+                ei
+                ret                            ; CF = saved
 
 ; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
 ; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.

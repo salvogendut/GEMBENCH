@@ -35,4 +35,6 @@ void gb_launch(void);                 /* launch the current dir entry           
 void gb_run(const char *name);        /* run a named app, return when it quits    */
 unsigned int gb_fs_load(char *buf, unsigned int max);    /* load opened file ->   */
                                                          /* byte count            */
+unsigned char gb_fs_save(char *buf, unsigned int len);   /* save opened file ->   */
+                                                         /* 1 ok / 0 fail         */
 #endif /* GB_H */
