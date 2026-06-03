@@ -712,6 +712,8 @@ la_done
                 dec   (hl)
                 pop   af                       ; caller's page
                 call  bank_set
+                call  draw_topbar             ; the app may have wiped it (e.g. a C
+                                              ; app's gb_cls) - the bar is the kernel's
                 ei
                 ret
 launch_depth    db    0
@@ -1340,6 +1342,8 @@ app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMG
 app_imgend
 vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.BIN
 vwr_imgend
+chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.BIN
+chl_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
 font_imgend
 icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
@@ -1348,6 +1352,7 @@ icon_imgend
                 save  "DESKTOP.BIN",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
                 save  "VIEWER.BIN",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
+                save  "CHELLO.BIN",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL

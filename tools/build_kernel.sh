@@ -21,5 +21,6 @@ python3 tools/packicons.py build/DEFAULT.IST \
 "$RASM" apps/desktop/desktop.asm -eo         # -> build/DESKTOP.RAW
 "$RASM" apps/filemgr/filemgr.asm -eo         # -> build/FILEMGR.RAW
 "$RASM" apps/viewer/viewer.asm -eo           # -> build/VIEWER.RAW
+tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
 "$RASM" kernel/gbkern.asm -eo                # incbins apps + font + icons -> .dsk
-echo "Built build/gbkern.dsk (GBKERN + DESKTOP + FILEMGR + VIEWER + assets)"
+echo "Built build/gbkern.dsk (GBKERN + DESKTOP + FILEMGR + VIEWER + CHELLO + assets)"

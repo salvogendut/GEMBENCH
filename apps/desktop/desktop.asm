@@ -81,10 +81,16 @@ dl_click
                 ld    a,(click_icon)
                 cp    b
                 jr    nz,dl_first
-                ld    a,(click_icon)         ; double-click: only Disk (0) opens
-                or    a
-                jr    nz,dl_dcdone
+                ld    a,(click_icon)         ; double-click: Disk (0) -> file manager,
+                or    a                        ; Clock (1) -> the C-app spike
+                jr    nz,dl_dc_clock
                 ld    hl,name_filemgr
+                jr    dl_dc_run
+dl_dc_clock
+                cp    1
+                jr    nz,dl_dcdone
+                ld    hl,name_chello
+dl_dc_run
                 call  GB_RUN
                 call  dt_paint
                 jp    dt_reset
@@ -338,11 +344,12 @@ hi_next
                 ret
 
 ; --- data ----------------------------------------------------------------
-help_msg        db    "Hold fire to drag - double-click Disk",0
+help_msg        db    "Dbl-click: Disk=files, Clock=C demo",0
 lbl_disk        db    "Disk A",0
 lbl_clock       db    "Clock",0
 lbl_trash       db    "Trash",0
 name_filemgr    db    "FILEMGR BIN"
+name_chello     db    "CHELLO  BIN"
 
 ic_x            db    0,72,72       ; icon positions (byte col) - mutable (drag)
 ic_y            db    35,35,160     ; icon positions (line)
