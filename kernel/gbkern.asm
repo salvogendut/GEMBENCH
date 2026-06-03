@@ -41,8 +41,9 @@ kernel_main
                 call  font_init              ; load the font into PAGE_DATA
                 call  icon_init              ; load the icon set into PAGE_DATA
                 call  app_launch             ; load FILEMGR.BIN into PAGE_APP0, run it
-km_halt
-                jr    km_halt                 ; freeze on the result
+                ld    a,2                     ; app quit -> back to BASIC (mode 2,
+                call  SCR_SET_MODE           ; clears) until the desktop kernel exists
+                ret
 
 ; --- palette -------------------------------------------------------------
 INK_DESKTOP     equ   1            ; blue  -> pen 0 (paper / backdrop)
@@ -80,13 +81,14 @@ k_curshow
 ; fresh click (fire just pressed), bit1 = quit (ESC). Interrupts must be on so
 ; the firmware scans the keyboard.
 k_poll
-                call  MC_WAIT_FLYBACK        ; pace to 50 Hz; let the KM scan run
                 call  input_poll             ; in_dirs / in_fire / in_quit
                 call  poll_move              ; -> DE = new x, HL = new y (clamped)
+                call  MC_WAIT_FLYBACK        ; pace to 50 Hz; do the move in the blank
                 call  cursor_move_to         ; erases+redraws ONLY if the position
                                              ; actually changed (re-drawing in place,
                                              ; e.g. holding a key into the edge clamp,
-                                             ; corrupts the save-under)
+                                             ; corrupts the save-under). In the flyback
+                                             ; blank so the move isn't seen mid-frame.
                 ld    hl,(cursor_x)          ; cursor byte col = cursor_x / 8
                 srl   h
                 rr    l
