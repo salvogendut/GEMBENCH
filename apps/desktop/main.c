@@ -111,7 +111,8 @@ void main(void)
         mx = gb_mx();
         my = gb_my();
         if (dc_timer) dc_timer--;
-        if (flags & GB_QUIT) return;           /* ESC -> back to BASIC */
+        /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (you reboot
+           the CPC to leave); it only closes apps launched on top of it */
 
         held = flags & GB_FIRE;
         if (held_prev && !held && drag_active) {   /* fire released -> drop */

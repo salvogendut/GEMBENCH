@@ -168,6 +168,13 @@ fdn_end
                 ret
 
 ; ---------------------------------------------------------------------------
+; fside_save_file: not yet implemented for the IDE/FAT16 backend. NC = failed.
+; (The floppy/AMSDOS backend has the write path; FAT16 write is a follow-up.)
+fside_save_file
+                or    a
+                ret
+
+; ---------------------------------------------------------------------------
 ; fside_load_file: load the file named in fs_req_name (11-byte 8.3) into the
 ; buffer at (fs_load_dst). CF set = loaded (fs_ent_size = byte size), NC = not
 ; found. Follows the FAT16 cluster chain. 16-bit LBA (files in the first 32MB).

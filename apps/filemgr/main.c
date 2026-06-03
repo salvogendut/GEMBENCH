@@ -78,6 +78,7 @@ static void launch(unsigned char idx)
     char *p = gb_dir1();
     for (i = 0; i < idx && p; i++) p = gb_dirn();
     gb_launch();
+    gb_fill(0, 8, 80, 192, 0);   /* clear the launched app's window (no save-under) */
     nsel = 0;
     draw_list();
 }

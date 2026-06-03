@@ -24,6 +24,8 @@ GRA_PLOT_ABS    equ   #BBEA       ; DE = x, HL = y  (plot in current pen)
 GRA_TEST_ABS    equ   #BBF0       ; DE = x, HL = y  -> A = pen at that point
 
 ; --- Keyboard ------------------------------------------------------------
+KM_READ_CHAR    equ   #BB09       ; -> CF + A = char from the buffer, or NC = none
+KM_DISARM_BREAK equ   #BB48       ; disable the ESC->BREAK (reset) mechanism
 KM_TEST_KEY     equ   #BB1E       ; A = key number; exit NZ if pressed
 KM_GET_JOYSTICK equ   #BB24       ; A = joystick 0 state, H = joystick 1
 

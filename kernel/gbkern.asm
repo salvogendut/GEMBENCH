@@ -40,6 +40,9 @@
                 jp    k_restorerect          ; GB_RESTORERECT #8039
                 jp    k_xorframe             ; GB_XORFRAME    #803C
                 jp    k_fsload               ; GB_FSLOAD      #803F
+                jp    k_fssave               ; GB_FSSAVE      #8042
+                jp    k_getkey               ; GB_GETKEY      #8045
+                jp    k_vsync                ; GB_VSYNC       #8048
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -47,6 +50,11 @@ kernel_main
                 call  SCR_SET_MODE           ; mode 1, screen cleared
                 call  TXT_CUR_DISABLE        ; no blinking firmware cursor blob
                 call  TXT_CUR_OFF
+                call  KM_DISARM_BREAK        ; ESC is ours, not a reset-to-BASIC key:
+                ld    a,#C9                   ; disarm the break event AND patch the
+                ld    (#BDEE),a               ; KM TEST BREAK indirection to RET (that's
+                                              ; what actually resets on ESC; disarm alone
+                                              ; doesn't touch it)
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
@@ -170,36 +178,68 @@ poll_line       db    0
 ; clamped. Returns DE = new x, HL = new y. Does NOT write cursor_x/y - that is
 ; left to cursor_move_to, which only redraws when the position actually changes.
 poll_move
+                ld    a,(in_dirs)            ; acceleration: a held direction steps
+                or    a                       ; finely for the first few frames (so a
+                jr    nz,pm_held              ; tap nudges ~1px) then faster when held
+                ld    (pm_accel),a           ; nothing held -> reset the ramp
+                jr    pm_setstep
+pm_held
+                ld    a,(pm_accel)
+                inc   a
+                cp    40
+                jr    c,pm_accsave
+                ld    a,39                    ; cap the ramp counter
+pm_accsave
+                ld    (pm_accel),a
+pm_setstep
+                ld    a,(pm_accel)
+                cp    7
+                ld    a,2                     ; 2 units (~1px): precise
+                jr    c,pm_havestep
+                ld    a,12                    ; held a while -> 12 units (~6px): fast
+pm_havestep
+                ld    (pm_step),a
                 ld    a,(in_dirs)
                 ld    c,a
                 ld    hl,(cursor_x)
                 bit   2,c                     ; DIR_LEFT
                 jr    z,pm_right
-                ld    de,-12
-                add   hl,de
+                call  pm_sub
 pm_right
                 bit   3,c                     ; DIR_RIGHT
                 jr    z,pm_xclamp
-                ld    de,12
-                add   hl,de
+                call  pm_add
 pm_xclamp
                 call  clamp638
                 ld    (pm_newx),hl
                 ld    hl,(cursor_y)
                 bit   0,c                     ; DIR_UP -> +y (screen up)
                 jr    z,pm_down
-                ld    de,12
-                add   hl,de
+                call  pm_add
 pm_down
                 bit   1,c                     ; DIR_DOWN -> -y
                 jr    z,pm_yclamp
-                ld    de,-12
-                add   hl,de
+                call  pm_sub
 pm_yclamp
                 call  clamp398               ; HL = new y
                 ld    de,(pm_newx)           ; DE = new x
                 ret
+pm_add                                         ; HL += pm_step
+                ld    a,(pm_step)
+                ld    e,a
+                ld    d,0
+                add   hl,de
+                ret
+pm_sub                                         ; HL -= pm_step
+                ld    a,(pm_step)
+                ld    e,a
+                ld    d,0
+                or    a
+                sbc   hl,de
+                ret
 pm_newx         dw    0
+pm_step         db    0
+pm_accel        db    0
 clamp638
                 ld    de,638
                 jr    clamp_hl
@@ -716,6 +756,10 @@ la_done
                 call  draw_topbar             ; the app may have wiped it (e.g. a C
                                               ; app's gb_cls) - the bar is the kernel's
                 ei
+la_escwait                                     ; if the app quit on ESC, wait for the
+                ld    a,66                     ; key to be released before the parent
+                call  KM_TEST_KEY              ; runs - else the same press quits it too,
+                jr    nz,la_escwait            ; cascading all the way back to BASIC
                 ret
 launch_depth    db    0
 
@@ -759,6 +803,42 @@ k_fsload
                 scf
                 ret
 
+; k_fssave (GB_FSSAVE): save the file the app was opened with (launch_arg). HL =
+; src (caller's page, stays mapped), DE = byte count. Overwrites in place. CF set
+; on success.
+k_fssave
+                ld    (fs_save_src),hl
+                ex    de,hl
+                ld    (fs_save_len),hl
+                ld    hl,launch_arg          ; save by the launched file's name
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                di
+                call  fs_save_file
+                ei
+                ret                            ; CF = saved
+
+; k_getkey (GB_GETKEY): A = a typed character from the keyboard buffer, or 0 if
+; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
+k_getkey
+                call  KM_READ_CHAR           ; CF + A = char, or NC = none. (Apps frame
+                ret   c                       ; on IY now, so KM_READ_CHAR clobbering IX
+                xor   a                       ; is harmless - see build_capp.sh.)
+                ret
+
+; k_vsync (GB_VSYNC): wait for the frame flyback (50 Hz pace, no pointer/clock),
+; then report whether ESC is held -> A = 1 if so, 0 otherwise. Lets a keyboard app
+; quit reliably via the key matrix instead of a guessed ESC char code.
+k_vsync
+                call  MC_WAIT_FLYBACK
+                ld    a,66                   ; KEY_ESC
+                call  KM_TEST_KEY            ; NZ if held
+                ld    a,0
+                ret   z
+                inc   a
+                ret
+
 ; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
 ; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.
 ; (Only VIEWER exists today, so most types fall through to it; add rows as new
@@ -790,7 +870,7 @@ afe_default
                 ld    hl,name_viewer
                 ret
 app_table
-                db    "TXT","VIEWER  BIN"      ; .TXT -> VIEWER
+                db    "TXT","NOTEPAD BIN"      ; .TXT -> NOTEPAD (edit + save)
                 db    0                          ; end of table
 name_viewer     db    "VIEWER  BIN"
 launch_arg      defs  11
@@ -1364,6 +1444,8 @@ app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMG
 app_imgend
 vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.BIN
 vwr_imgend
+npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.BIN
+npd_imgend
 chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.BIN
 chl_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
@@ -1376,6 +1458,7 @@ wel_imgend
                 save  "DESKTOP.BIN",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
                 save  "VIEWER.BIN",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
+                save  "NOTEPAD.BIN",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "CHELLO.BIN",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"

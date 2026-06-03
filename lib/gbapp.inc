@@ -74,3 +74,15 @@ GB_FSLOAD       equ   GB_KERNEL+63 ; #803F  load the file this app was opened wi
                                    ;        (caller's page), DE=max bytes. -> BC =
                                    ;        byte count (0 = missing / too big), CF
                                    ;        set on success. AMSDOS header stripped.
+GB_FSSAVE       equ   GB_KERNEL+66 ; #8042  save the file this app was opened with:
+                                   ;        HL=src (caller's page), DE=byte count.
+                                   ;        Overwrites in place (the file must exist
+                                   ;        and the data must fit its current
+                                   ;        allocation). CF set = saved.
+GB_GETKEY       equ   GB_KERNEL+69 ; #8045  -> A = a typed character from the
+                                   ;        keyboard buffer, or 0 if none waiting.
+                                   ;        Non-blocking; IRQs must be on.
+GB_VSYNC        equ   GB_KERNEL+72 ; #8048  wait for the frame flyback (50 Hz pace,
+                                   ;        no pointer/clock) -> A = 1 if ESC is held
+                                   ;        else 0. For keyboard apps that drive
+                                   ;        their own loop instead of GB_POLL.
