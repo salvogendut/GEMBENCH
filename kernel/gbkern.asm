@@ -42,6 +42,7 @@
                 jp    k_fsload               ; GB_FSLOAD      #803F
                 jp    k_fssave               ; GB_FSSAVE      #8042
                 jp    k_getkey               ; GB_GETKEY      #8045
+                jp    MC_WAIT_FLYBACK        ; GB_VSYNC       #8048
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -172,36 +173,68 @@ poll_line       db    0
 ; clamped. Returns DE = new x, HL = new y. Does NOT write cursor_x/y - that is
 ; left to cursor_move_to, which only redraws when the position actually changes.
 poll_move
+                ld    a,(in_dirs)            ; acceleration: a held direction steps
+                or    a                       ; finely for the first few frames (so a
+                jr    nz,pm_held              ; tap nudges ~1px) then faster when held
+                ld    (pm_accel),a           ; nothing held -> reset the ramp
+                jr    pm_setstep
+pm_held
+                ld    a,(pm_accel)
+                inc   a
+                cp    40
+                jr    c,pm_accsave
+                ld    a,39                    ; cap the ramp counter
+pm_accsave
+                ld    (pm_accel),a
+pm_setstep
+                ld    a,(pm_accel)
+                cp    7
+                ld    a,2                     ; 2 units (~1px): precise
+                jr    c,pm_havestep
+                ld    a,12                    ; held a while -> 12 units (~6px): fast
+pm_havestep
+                ld    (pm_step),a
                 ld    a,(in_dirs)
                 ld    c,a
                 ld    hl,(cursor_x)
                 bit   2,c                     ; DIR_LEFT
                 jr    z,pm_right
-                ld    de,-12
-                add   hl,de
+                call  pm_sub
 pm_right
                 bit   3,c                     ; DIR_RIGHT
                 jr    z,pm_xclamp
-                ld    de,12
-                add   hl,de
+                call  pm_add
 pm_xclamp
                 call  clamp638
                 ld    (pm_newx),hl
                 ld    hl,(cursor_y)
                 bit   0,c                     ; DIR_UP -> +y (screen up)
                 jr    z,pm_down
-                ld    de,12
-                add   hl,de
+                call  pm_add
 pm_down
                 bit   1,c                     ; DIR_DOWN -> -y
                 jr    z,pm_yclamp
-                ld    de,-12
-                add   hl,de
+                call  pm_sub
 pm_yclamp
                 call  clamp398               ; HL = new y
                 ld    de,(pm_newx)           ; DE = new x
                 ret
+pm_add                                         ; HL += pm_step
+                ld    a,(pm_step)
+                ld    e,a
+                ld    d,0
+                add   hl,de
+                ret
+pm_sub                                         ; HL -= pm_step
+                ld    a,(pm_step)
+                ld    e,a
+                ld    d,0
+                or    a
+                sbc   hl,de
+                ret
 pm_newx         dw    0
+pm_step         db    0
+pm_accel        db    0
 clamp638
                 ld    de,638
                 jr    clamp_hl
