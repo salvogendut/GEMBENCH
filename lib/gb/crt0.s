@@ -1,13 +1,13 @@
-;; crt0.s - SDCC startup for a GEOBENCH banked C app.
+;; crt0.s - shared SDCC startup for a GEOBENCH banked C app.
 ;;
 ;; The kernel loads the app image at APP_BASE (#4000) and CALLs it there, with a
 ;; resident stack already set up. The entry runs SDCC's global initialisers
-;; (gsinit) and main(), then RETs to the launcher. Link this object FIRST so
-;; _start lands at #4000.
+;; (gsinit) and main(), then RETs to the launcher. Linked FIRST so _start lands
+;; at #4000.
 ;;
 ;; gsinit copies initialised globals from _INITIALIZER (in the loaded image) to
-;; _INITIALIZED (RAM) - needed by any app with mutable initialised data (e.g. the
-;; desktop's draggable icon-position arrays).
+;; _INITIALIZED (RAM); without it any mutable initialised data holds garbage
+;; (e.g. the desktop's draggable icon-position arrays).
         .module crt0
         .globl  _main
         .globl  l__INITIALIZER          ; linker-defined: length of _INITIALIZER
