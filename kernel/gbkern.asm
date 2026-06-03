@@ -186,9 +186,8 @@ ch_hi
 ; k_frame (GB_FRAME): draw a 1px rectangle outline. B=x C=y D=w E=h (screen
 ; byte/line), A=pen (0..3). Screen only (no banked buffer), so no page swap.
 k_frame
-                call  pen_to_byte            ; pen -> Mode 1 fill byte
-                ld    (gf_val),a
-                ld    a,b
+                ld    (gf_pen),a             ; save params FIRST: pen_to_byte below
+                ld    a,b                     ; clobbers E (height), so capture it now
                 ld    (gf_x),a
                 ld    a,c
                 ld    (gf_y),a
@@ -196,7 +195,9 @@ k_frame
                 ld    (gf_w),a
                 ld    a,e
                 ld    (gf_h),a
-                ld    a,(gf_val)
+                ld    a,(gf_pen)
+                call  pen_to_byte            ; pen -> Mode 1 fill byte
+                ld    (gf_val),a
                 ld    (fb_val),a
                 ld    a,(gf_x)               ; top edge
                 ld    (fb_x),a
@@ -247,6 +248,7 @@ gf_y            db    0
 gf_w            db    0
 gf_h            db    0
 gf_val          db    0
+gf_pen          db    0
 
 ; --- firmware text (kernel boot messages) --------------------------------
 k_cls
