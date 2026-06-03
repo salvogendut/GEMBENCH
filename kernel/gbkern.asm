@@ -81,10 +81,12 @@ k_curshow
 ; the firmware scans the keyboard.
 k_poll
                 call  MC_WAIT_FLYBACK        ; pace to 50 Hz; let the KM scan run
-                call  cursor_erase
                 call  input_poll             ; in_dirs / in_fire / in_quit
-                call  poll_move              ; move cursor_x/y by in_dirs
-                call  cursor_draw
+                call  poll_move              ; -> DE = new x, HL = new y (clamped)
+                call  cursor_move_to         ; erases+redraws ONLY if the position
+                                             ; actually changed (re-drawing in place,
+                                             ; e.g. holding a key into the edge clamp,
+                                             ; corrupts the save-under)
                 ld    hl,(cursor_x)          ; cursor byte col = cursor_x / 8
                 srl   h
                 rr    l
@@ -125,7 +127,9 @@ poll_lastfire   db    0
 poll_byte       db    0
 poll_line       db    0
 
-; poll_move: shift cursor_x/y by the held directions (in_dirs), clamped.
+; poll_move: compute the new cursor position from the held directions (in_dirs),
+; clamped. Returns DE = new x, HL = new y. Does NOT write cursor_x/y - that is
+; left to cursor_move_to, which only redraws when the position actually changes.
 poll_move
                 ld    a,(in_dirs)
                 ld    c,a
@@ -141,7 +145,7 @@ pm_right
                 add   hl,de
 pm_xclamp
                 call  clamp638
-                ld    (cursor_x),hl
+                ld    (pm_newx),hl
                 ld    hl,(cursor_y)
                 bit   0,c                     ; DIR_UP -> +y (screen up)
                 jr    z,pm_down
@@ -153,9 +157,10 @@ pm_down
                 ld    de,-12
                 add   hl,de
 pm_yclamp
-                call  clamp398
-                ld    (cursor_y),hl
+                call  clamp398               ; HL = new y
+                ld    de,(pm_newx)           ; DE = new x
                 ret
+pm_newx         dw    0
 clamp638
                 ld    de,638
                 jr    clamp_hl
