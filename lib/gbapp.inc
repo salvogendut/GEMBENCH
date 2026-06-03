@@ -69,3 +69,8 @@ GB_RESTORERECT  equ   GB_KERNEL+57 ; #8039  restore a screen rect from a buffer
 GB_XORFRAME     equ   GB_KERNEL+60 ; #803C  XOR a 1px rect outline into the screen
                                    ;        (rubber-band): B=x C=y D=w E=h. Draw
                                    ;        once to show, again to erase exactly.
+GB_FSLOAD       equ   GB_KERNEL+63 ; #803F  load the file this app was opened with
+                                   ;        (the launch arg) into a buffer: HL=dst
+                                   ;        (caller's page), DE=max bytes. -> BC =
+                                   ;        byte count (0 = missing / too big), CF
+                                   ;        set on success. AMSDOS header stripped.
