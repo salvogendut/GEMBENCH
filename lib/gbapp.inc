@@ -82,6 +82,7 @@ GB_FSSAVE       equ   GB_KERNEL+66 ; #8042  save the file this app was opened wi
 GB_GETKEY       equ   GB_KERNEL+69 ; #8045  -> A = a typed character from the
                                    ;        keyboard buffer, or 0 if none waiting.
                                    ;        Non-blocking; IRQs must be on.
-GB_VSYNC        equ   GB_KERNEL+72 ; #8048  wait for the frame flyback (50 Hz pace),
-                                   ;        without touching the pointer or clock -
-                                   ;        for keyboard apps that don't use GB_POLL.
+GB_VSYNC        equ   GB_KERNEL+72 ; #8048  wait for the frame flyback (50 Hz pace,
+                                   ;        no pointer/clock) -> A = 1 if ESC is held
+                                   ;        else 0. For keyboard apps that drive
+                                   ;        their own loop instead of GB_POLL.

@@ -42,7 +42,7 @@
                 jp    k_fsload               ; GB_FSLOAD      #803F
                 jp    k_fssave               ; GB_FSSAVE      #8042
                 jp    k_getkey               ; GB_GETKEY      #8045
-                jp    MC_WAIT_FLYBACK        ; GB_VSYNC       #8048
+                jp    k_vsync                ; GB_VSYNC       #8048
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -816,6 +816,18 @@ k_getkey
                 call  KM_READ_CHAR           ; CF + A = char, or NC = none
                 ret   c
                 xor   a
+                ret
+
+; k_vsync (GB_VSYNC): wait for the frame flyback (50 Hz pace, no pointer/clock),
+; then report whether ESC is held -> A = 1 if so, 0 otherwise. Lets a keyboard app
+; quit reliably via the key matrix instead of a guessed ESC char code.
+k_vsync
+                call  MC_WAIT_FLYBACK
+                ld    a,66                   ; KEY_ESC
+                call  KM_TEST_KEY            ; NZ if held
+                ld    a,0
+                ret   z
+                inc   a
                 ret
 
 ; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
