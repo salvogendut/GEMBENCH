@@ -1,61 +1,82 @@
 #!/usr/bin/env python3
 """packicons - pack CPC icon .asm files into a GEOBENCH icon set (.IST).
 
-A GEOBENCH icon set is a 16-byte header followed by the raw Mode 1 icons
-concatenated in the desktop's fixed slot order. The desktop validates the
-header, then loads the icons over its icon_set buffer.
+A set is a header, a per-icon directory, then the icon bitmaps. Each icon
+carries its own size, so a set can mix sizes (a big drive icon, small system
+icons, ...). The desktop reads each icon's size and lays out its box at draw
+time.
 
 Header (16 bytes):
     0-3   magic "GBIS"
-    4     version (1)
+    4     version (2)
     5     icon count
-    6     icon width in bytes (8 = 32 px)
-    7     icon height in rows (32)
-    8-15  reserved (0)
+    6-15  reserved (0)
 
-Slot order (must match desktop/main.asm icon_set):
-    floppy ide clock trash geobench basic binary picture text
+Directory (count * 4 bytes), one entry per slot in the desktop's order:
+    0-1   offset of the icon data from the start of the file (little-endian)
+    2     width in bytes (px = bytes*4, Mode 1)
+    3     height in rows
+
+Then the icon bitmaps (each width*height bytes), in slot order.
+
+Slot order (must match desktop/main.asm): floppy ide clock trash geobench
+basic binary picture text.
 
 Usage:
     tools/packicons.py <out.IST> <icon0.asm> <icon1.asm> ...
-Each .asm must be a png2cpc 32x32 icon (exactly 256 bytes of db data).
 """
-import sys, re
+import sys, re, struct
 
 MAGIC = b'GBIS'
-VERSION = 1
-ICON_W = 8       # bytes per row (32 px in Mode 1)
-ICON_H = 32      # rows
-ICON_BYTES = ICON_W * ICON_H   # 256
+VERSION = 2
+HDR = 16
 
-def asm_bytes(path):
+def parse_icon(path):
+    w = h = None
     data = bytearray()
     for line in open(path):
         s = line.strip()
+        m = re.match(r'\w+_w\s+equ\s+(\d+)', s)
+        if m: w = int(m.group(1))
+        m = re.match(r'\w+_h\s+equ\s+(\d+)', s)
+        if m: h = int(m.group(1))
         if s.startswith('db'):
-            data += bytes(int(h, 16) for h in re.findall(r'#([0-9A-Fa-f]{2})', s))
-    return bytes(data)
+            data += bytes(int(b, 16) for b in re.findall(r'#([0-9A-Fa-f]{2})', s))
+    if w is None or h is None:
+        sys.exit(f"{path}: missing _w/_h constants")
+    if len(data) != w * h:
+        sys.exit(f"{path}: {len(data)} bytes (expected {w}*{h}={w*h})")
+    return w, h, bytes(data)
 
 def main(argv):
     if len(argv) < 3:
         sys.exit("usage: packicons.py <out.IST> <icon.asm> ...")
     out, asms = argv[1], argv[2:]
+    icons = [parse_icon(a) for a in asms]
+    n = len(icons)
+
     header = bytearray(16)
     header[0:4] = MAGIC
     header[4] = VERSION
-    header[5] = len(asms)
-    header[6] = ICON_W
-    header[7] = ICON_H
-    data = bytearray(header)
-    for a in asms:
-        b = asm_bytes(a)
-        if len(b) != ICON_BYTES:
-            sys.exit(f"{a}: {len(b)} bytes (expected {ICON_BYTES})")
-        data += b
+    header[5] = n
+
+    directory = bytearray()
+    blob = bytearray()
+    off = HDR + n * 4                       # data starts after header + directory
+    sizes = []
+    for w, h, data in icons:
+        directory += struct.pack('<HBB', off, w, h)
+        blob += data
+        sizes.append((w, h))
+        off += len(data)
+
     with open(out, 'wb') as f:
-        f.write(data)
-    print(f"{out}: {len(asms)} icons, {len(data)} bytes "
-          f"(16 header + {len(asms)}x{ICON_BYTES})")
+        f.write(header)
+        f.write(directory)
+        f.write(blob)
+    total = HDR + len(directory) + len(blob)
+    szs = ' '.join(f'{w*4}x{h}' for w, h in sizes)
+    print(f"{out}: {n} icons [{szs}], {total} bytes")
 
 if __name__ == '__main__':
     main(sys.argv)
