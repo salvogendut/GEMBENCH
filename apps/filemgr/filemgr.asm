@@ -20,7 +20,8 @@ WYMAX           equ   200-WIN_H
 
                 org   APP_BASE
 fm_entry
-                call  fm_savereg             ; save the desktop behind the window
+                call  GB_CURHIDE             ; lift the desktop's pointer first so it
+                call  fm_savereg             ; isn't baked into the window save-under
                 call  fm_draw
 fm_reset
                 ld    a,NONE
