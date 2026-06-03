@@ -25,7 +25,11 @@ mkdir -p "$work"
 
 "$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
 "$SDAS" -o "$work/gblib.rel" "$GB/gblib.s"
-"$SDCC" -mz80 -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
+# --fomit-frame-pointer: frame on IY, not IX. The kernel/fs code uses IX as a
+# scratch (it never touches IY) and firmware calls preserve the caller's IY, so
+# this stops a kernel call from wrecking an app's frame pointer (which crashed
+# the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
+"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc 0x6000 \
     "$work/crt0.rel" "$work/main.rel" "$work/gblib.rel" -o "$work/app.ihx"
 "$MAKEBIN" -p "$work/app.ihx" "$work/app.bin"

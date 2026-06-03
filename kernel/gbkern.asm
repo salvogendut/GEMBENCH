@@ -822,11 +822,9 @@ k_fssave
 ; k_getkey (GB_GETKEY): A = a typed character from the keyboard buffer, or 0 if
 ; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
 k_getkey
-                push  ix                      ; KM_READ_CHAR clobbers IX - which is the
-                call  KM_READ_CHAR           ; C frame pointer, so a caller's stack frame
-                pop   ix                      ; (and its `ld sp,ix` epilogue) would be
-                ret   c                       ; wrecked -> crash to BASIC on return
-                xor   a
+                call  KM_READ_CHAR           ; CF + A = char, or NC = none. (Apps frame
+                ret   c                       ; on IY now, so KM_READ_CHAR clobbering IX
+                xor   a                       ; is harmless - see build_capp.sh.)
                 ret
 
 ; k_vsync (GB_VSYNC): wait for the frame flyback (50 Hz pace, no pointer/clock),
