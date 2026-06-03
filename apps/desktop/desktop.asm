@@ -344,8 +344,8 @@ lbl_clock       db    "Clock",0
 lbl_trash       db    "Trash",0
 name_filemgr    db    "FILEMGR BIN"
 
-ic_x            db    8,60,60       ; icon positions (byte col) - mutable (drag)
-ic_y            db    24,24,150     ; icon positions (line)
+ic_x            db    0,72,72       ; icon positions (byte col) - mutable (drag)
+ic_y            db    35,35,160     ; icon positions (line)
 ic_slot         db    0,2,3          ; IST slots: floppy, clock, trash
 ic_lbl          dw    lbl_disk,lbl_clock,lbl_trash
 
