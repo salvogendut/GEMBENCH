@@ -735,11 +735,39 @@ k_getarg
                 ld    hl,launch_arg
                 ret
 
-; app_for_ext: HL = the app for fs_ent_name's type. For now every type opens in
-; VIEWER; this is where a real extension table will branch.
+; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
+; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.
+; (Only VIEWER exists today, so most types fall through to it; add rows as new
+; apps land.)
 app_for_ext
+                ld    hl,app_table
+afe_loop
+                ld    a,(hl)                  ; 0 = end of table -> default app
+                or    a
+                jr    z,afe_default
+                push  hl                       ; compare the 3-char extension
+                ld    de,fs_ent_name+8
+                ld    b,3
+afe_cmp
+                ld    a,(de)
+                cp    (hl)
+                jr    nz,afe_miss
+                inc   hl
+                inc   de
+                djnz  afe_cmp
+                pop   de                       ; matched -> HL = the app name (after ext)
+                ret
+afe_miss
+                pop   hl                       ; skip this entry (3 ext + 11 name)
+                ld    de,14
+                add   hl,de
+                jr    afe_loop
+afe_default
                 ld    hl,name_viewer
                 ret
+app_table
+                db    "TXT","VIEWER  BIN"      ; .TXT -> VIEWER
+                db    0                          ; end of table
 name_viewer     db    "VIEWER  BIN"
 launch_arg      defs  11
 
