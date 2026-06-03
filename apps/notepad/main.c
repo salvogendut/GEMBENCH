@@ -36,7 +36,7 @@
 #define K_DEL     0x7F
 #define K_BS      0x08
 #define K_SAVE    0x13   /* Ctrl-S */
-#define K_ESC     0x1B
+#define K_QUIT    0x11   /* Ctrl-Q */
 
 static char buf[NP_MAX];
 static char line[WRAP + 2];
@@ -62,7 +62,7 @@ static void status_line(void)
     gb_text(TX_COL, WIN_Y + WIN_H - 11,
             status == 1 ? "saved" :
             status == 2 ? "SAVE FAILED - too big to fit" :
-                          "Ctrl-S=save  ESC=quit");
+                          "Ctrl-S=save  Ctrl-Q=quit");
 }
 
 static void cursor_at(unsigned char col, unsigned char row)
@@ -150,12 +150,12 @@ void main(void)
     draw();
 
     for (;;) {
-        if (gb_vsync()) return;        /* pace + reliable ESC via the key matrix */
+        gb_vsync();                    /* pace one frame (50 Hz) */
         edited = 0; need_full = 0;
         for (n = 32; n; n--) {
             c = gb_getkey();
             if (!c) break;
-            if (c == K_ESC) return;
+            if (c == K_QUIT) return;   /* Ctrl-Q -> quit (ESC is a no-op now) */
             if (c == K_SAVE) {
                 status = gb_fs_save(buf, len) ? 1 : 2;
                 if (status == 1) dirty = 0;

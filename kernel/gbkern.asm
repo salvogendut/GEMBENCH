@@ -50,7 +50,11 @@ kernel_main
                 call  SCR_SET_MODE           ; mode 1, screen cleared
                 call  TXT_CUR_DISABLE        ; no blinking firmware cursor blob
                 call  TXT_CUR_OFF
-                call  KM_DISARM_BREAK        ; ESC is ours, not a reset-to-BASIC key
+                call  KM_DISARM_BREAK        ; ESC is ours, not a reset-to-BASIC key:
+                ld    a,#C9                   ; disarm the break event AND patch the
+                ld    (#BDEE),a               ; KM TEST BREAK indirection to RET (that's
+                                              ; what actually resets on ESC; disarm alone
+                                              ; doesn't touch it)
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
@@ -818,9 +822,8 @@ k_fssave
 ; k_getkey (GB_GETKEY): A = a typed character from the keyboard buffer, or 0 if
 ; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
 k_getkey
-                call  KM_DISARM_BREAK        ; KM_READ_CHAR would otherwise let ESC
-                call  KM_READ_CHAR           ; trigger the firmware BREAK (reset to
-                ret   c                       ; BASIC); keep it disarmed every read
+                call  KM_READ_CHAR           ; CF + A = char, or NC = none
+                ret   c
                 xor   a
                 ret
 
