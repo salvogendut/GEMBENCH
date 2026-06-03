@@ -30,6 +30,7 @@
                 jp    k_curshow              ; GB_CURSHOW #801B
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
+                jp    cursor_erase           ; GB_CURHIDE #8024
 
 ; ---------------------------------------------------------------------------
 kernel_main

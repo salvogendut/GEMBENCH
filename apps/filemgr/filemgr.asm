@@ -103,6 +103,7 @@ ev_rdone
                 jr    z,ev_loop
                 ld    a,e
                 ld    (click_row),a
+                call  GB_CURHIDE             ; lift pointer before drawing under it
                 call  select_row             ; highlight it
 
                 ld    a,(dc_timer)           ; double-click = same row, timer live
@@ -116,13 +117,15 @@ ev_rdone
                 call  dispatch_row           ; second click -> open
                 xor   a
                 ld    (dc_timer),a
+ev_clickdone
+                call  GB_CURSHOW             ; pointer back on top, re-saving the frame
                 jp    ev_loop
 ev_firstclick
                 ld    a,(click_row)
                 ld    (dc_row),a
                 ld    a,DCLICK
                 ld    (dc_timer),a
-                jp    ev_loop
+                jr    ev_clickdone
 app_done
                 ret                            ; back to the desktop kernel
 
