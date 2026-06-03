@@ -31,7 +31,6 @@
 #define K_DEL     0x7F
 #define K_BS      0x08
 #define K_SAVE    0x13   /* Ctrl-S */
-#define K_ESC     0x1B
 
 static char buf[NP_MAX];
 static char line[WRAP + 2];
@@ -72,32 +71,33 @@ static void draw(void)
 
 void main(void)
 {
-    unsigned char k;
+    unsigned char flags, c, n, changed;
 
-    gb_curhide();                      /* a keyboard editor: no pointer */
+    gb_curhide();                      /* a keyboard editor: keep the pointer hidden */
     len = gb_fs_load(buf, NP_MAX);
     dirty = 0;
+    for (n = 64; n; n--)               /* discard keys buffered while navigating here */
+        if (!gb_getkey()) break;       /* (the desktop's fire-clicks land here as ' ') */
     draw();
 
     for (;;) {
-        k = gb_getkey();
-        if (!k) continue;
-        if (k == K_ESC) return;
-        if (k == K_SAVE) {
-            if (gb_fs_save(buf, len)) dirty = 0;
-            draw();
-            continue;
+        flags = gb_poll();             /* pace one frame; reliable ESC via the key matrix */
+        if (flags & GB_QUIT) return;
+        changed = 0;
+        for (n = 32; n; n--) {         /* drain a bounded burst of typed keys this frame */
+            c = gb_getkey();
+            if (!c) break;
+            if (c == K_SAVE) {
+                if (gb_fs_save(buf, len)) dirty = 0;
+            } else if (c == K_DEL || c == K_BS) {
+                if (len) { len--; dirty = 1; }
+            } else if (c == K_ENTER) {
+                if (len < NP_MAX) { buf[len++] = '\n'; dirty = 1; }
+            } else if (c >= 32 && c < 127) {
+                if (len < NP_MAX) { buf[len++] = (char)c; dirty = 1; }
+            }
+            changed = 1;
         }
-        if (k == K_DEL || k == K_BS) {
-            if (len) { len--; dirty = 1; draw(); }
-            continue;
-        }
-        if (k == K_ENTER) {
-            if (len < NP_MAX) { buf[len++] = '\n'; dirty = 1; draw(); }
-            continue;
-        }
-        if (k >= 32 && k < 127) {
-            if (len < NP_MAX) { buf[len++] = (char)k; dirty = 1; draw(); }
-        }
+        if (changed) draw();           /* at most one redraw per frame -> no flicker */
     }
 }
