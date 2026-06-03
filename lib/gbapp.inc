@@ -41,3 +41,7 @@ GB_DIR1         equ   GB_KERNEL+18 ; #8012  first dir entry -> CF set, HL=name
 GB_DIRN         equ   GB_KERNEL+21 ; #8015  next dir entry  -> CF set, HL=name; NC=end
 GB_BLITE        equ   GB_KERNEL+24 ; #8018  blit the current entry's type icon
                                    ;        (half height) at B=col C=line
+GB_CURSHOW      equ   GB_KERNEL+27 ; #801B  draw the pointer (after drawing UI)
+GB_POLL         equ   GB_KERNEL+30 ; #801E  frame-paced input poll -> B=cursor
+                                   ;        byte col, C=cursor line, D bit0=click
+                                   ;        edge, bit1=quit (ESC). IRQs must be on.

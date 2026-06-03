@@ -38,9 +38,27 @@ list_loop
                 add   a,18
                 ld    (cur_y),a
                 cp    164                      ; stop near the window bottom
-                jr    nc,app_done
+                jr    nc,list_done
                 call  GB_DIRN
                 jr    c,list_loop
+list_done
+                call  GB_CURSHOW             ; pointer on top, then poll for input
+ev_loop
+                call  GB_POLL                ; B=col, C=line, D=flags
+                bit   1,d                     ; quit (ESC)?
+                jr    nz,app_done
+                bit   0,d                     ; a fresh click?
+                jr    z,ev_loop
+                ld    a,b                     ; close gadget hit? (title bar, left)
+                cp    4
+                jr    c,ev_loop
+                cp    8
+                jr    nc,ev_loop
+                ld    a,c
+                cp    26
+                jr    c,ev_loop
+                cp    40
+                jr    nc,ev_loop
 app_done
                 ret                            ; back to the desktop kernel
 

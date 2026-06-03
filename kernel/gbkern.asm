@@ -13,10 +13,8 @@
 ;
 ; Build: tools/build_kernel.sh   Run: 1984 --memory=128 --disk-a=build/gbkern.dsk --autostart=GBKERN
 
-SCR_SET_MODE    equ   #BC0E
-TXT_OUTPUT      equ   #BB5A
-
                 include "../lib/gbapp.inc"
+                include "../lib/firmware.inc"
 
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
@@ -29,11 +27,15 @@ TXT_OUTPUT      equ   #BB5A
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012
                 jp    gb_fs_dir_next         ; GB_DIRN   #8015
                 jp    gb_blit_entry          ; GB_BLITE  #8018
+                jp    k_curshow              ; GB_CURSHOW #801B
+                jp    k_poll                 ; GB_POLL    #801E
 
 ; ---------------------------------------------------------------------------
 kernel_main
                 ld    a,1
                 call  SCR_SET_MODE           ; mode 1, screen cleared
+                call  TXT_CUR_DISABLE        ; no blinking firmware cursor blob
+                call  TXT_CUR_OFF
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
                 call  font_init              ; load the font into PAGE_DATA
@@ -43,8 +45,6 @@ km_halt
                 jr    km_halt                 ; freeze on the result
 
 ; --- palette -------------------------------------------------------------
-SCR_SET_INK     equ   #BC32
-SCR_SET_BORDER  equ   #BC38
 INK_DESKTOP     equ   1            ; blue  -> pen 0 (paper / backdrop)
 INK_LIGHT       equ   26           ; white -> pen 1 (text)
 INK_DARK        equ   0            ; black -> pen 2 (outlines / title bar)
@@ -69,6 +69,111 @@ set_palette
                 ld    b,INK_DESKTOP
                 ld    c,INK_DESKTOP
                 jp    SCR_SET_BORDER
+
+; --- input + cursor services ---------------------------------------------
+; k_curshow: draw the pointer (the app calls this once after drawing its UI).
+k_curshow
+                jp    cursor_show
+
+; k_poll: frame-paced input poll. Moves the cursor by the held directions and
+; redraws it; returns B = cursor byte col, C = cursor line, D flags: bit0 = a
+; fresh click (fire just pressed), bit1 = quit (ESC). Interrupts must be on so
+; the firmware scans the keyboard.
+k_poll
+                call  MC_WAIT_FLYBACK        ; pace to 50 Hz; let the KM scan run
+                call  cursor_erase
+                call  input_poll             ; in_dirs / in_fire / in_quit
+                call  poll_move              ; move cursor_x/y by in_dirs
+                call  cursor_draw
+                ld    hl,(cursor_x)          ; cursor byte col = cursor_x / 8
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    a,l
+                ld    (poll_byte),a
+                ld    hl,(cursor_y)          ; cursor line = 199 - cursor_y / 2
+                srl   h
+                rr    l
+                ld    a,199
+                sub   l
+                ld    (poll_line),a
+                ld    d,0
+                ld    a,(in_fire)            ; click edge = fire & !last_fire
+                ld    e,a
+                ld    a,(poll_lastfire)
+                cpl
+                and   e
+                jr    z,gp_noclick
+                set   0,d
+gp_noclick
+                ld    a,e
+                ld    (poll_lastfire),a
+                ld    a,(in_quit)
+                or    a
+                jr    z,gp_noquit
+                set   1,d
+gp_noquit
+                ld    a,(poll_byte)
+                ld    b,a
+                ld    a,(poll_line)
+                ld    c,a
+                ret
+poll_lastfire   db    0
+poll_byte       db    0
+poll_line       db    0
+
+; poll_move: shift cursor_x/y by the held directions (in_dirs), clamped.
+poll_move
+                ld    a,(in_dirs)
+                ld    c,a
+                ld    hl,(cursor_x)
+                bit   2,c                     ; DIR_LEFT
+                jr    z,pm_right
+                ld    de,-12
+                add   hl,de
+pm_right
+                bit   3,c                     ; DIR_RIGHT
+                jr    z,pm_xclamp
+                ld    de,12
+                add   hl,de
+pm_xclamp
+                call  clamp638
+                ld    (cursor_x),hl
+                ld    hl,(cursor_y)
+                bit   0,c                     ; DIR_UP -> +y (screen up)
+                jr    z,pm_down
+                ld    de,12
+                add   hl,de
+pm_down
+                bit   1,c                     ; DIR_DOWN -> -y
+                jr    z,pm_yclamp
+                ld    de,-12
+                add   hl,de
+pm_yclamp
+                call  clamp398
+                ld    (cursor_y),hl
+                ret
+clamp638
+                ld    de,638
+                jr    clamp_hl
+clamp398
+                ld    de,398
+clamp_hl                                       ; clamp HL to [0, DE]
+                bit   7,h                     ; negative -> 0
+                jr    z,ch_hi
+                ld    hl,0
+                ret
+ch_hi
+                push  hl
+                or    a
+                sbc   hl,de
+                pop   hl
+                ret   c                        ; HL < DE -> keep
+                ex    de,hl                    ; clamp to DE
+                ret
 
 ; --- firmware text (kernel boot messages) --------------------------------
 k_cls
@@ -477,7 +582,9 @@ app_launch
                 ld    (fs_load_dst),hl
                 call  fs_load_file
                 jr    nc,al_fail
-                call  APP_BASE               ; run the app from its page
+                ei                            ; app runs with interrupts on (the
+                call  APP_BASE               ; firmware keyboard scan needs them)
+                di
                 call  bank_normal
                 ei
                 ret
@@ -492,18 +599,23 @@ msg_fail        db    "APP LOAD FAILED",13,10,0
 
                 include "../lib/screen.asm"
                 include "../lib/text.asm"
+                include "../lib/cursor_arrow.asm"
+                include "../lib/cursor.asm"
+                include "../lib/input.asm"
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
-
+kern_end                                        ; GBKERN.BIN is CODE ONLY (must end
+                                                ; below HIMEM ~#A67B). The packaging
+                                                ; incbins live above it - never loaded
+                                                ; at runtime, only read by `save`.
 app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.BIN
 app_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
 font_imgend
 icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
 icon_imgend
-kern_end
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
