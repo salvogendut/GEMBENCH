@@ -818,8 +818,9 @@ k_fssave
 ; k_getkey (GB_GETKEY): A = a typed character from the keyboard buffer, or 0 if
 ; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
 k_getkey
-                call  KM_READ_CHAR           ; CF + A = char, or NC = none
-                ret   c
+                call  KM_DISARM_BREAK        ; KM_READ_CHAR would otherwise let ESC
+                call  KM_READ_CHAR           ; trigger the firmware BREAK (reset to
+                ret   c                       ; BASIC); keep it disarmed every read
                 xor   a
                 ret
 
