@@ -36,6 +36,9 @@
                 jp    k_run                  ; GB_RUN     #802D
                 jp    k_icon                 ; GB_ICON    #8030
                 jp    k_fill                 ; GB_FILL    #8033
+                jp    k_saverect             ; GB_SAVERECT    #8036
+                jp    k_restorerect          ; GB_RESTORERECT #8039
+                jp    k_xorframe             ; GB_XORFRAME    #803C
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -803,6 +806,110 @@ k_fill
                 ld    (fb_val),a
                 jp    fill_block
 kf_pen          db    0
+
+; k_saverect / k_restorerect (GB_SAVERECT / GB_RESTORERECT): save/restore a
+; screen rectangle to/from a caller buffer. B=x C=y D=w E=h HL=buffer (w*h
+; bytes). The buffer lives in the caller's page (mapped during the call); the
+; screen is resident, so no page swap is needed.
+k_saverect
+                call  set_sb
+                jp    save_block
+k_restorerect
+                call  set_sb
+                jp    restore_block
+set_sb
+                ld    a,b
+                ld    (sb_x),a
+                ld    a,c
+                ld    (sb_y),a
+                ld    a,d
+                ld    (sb_w),a
+                ld    a,e
+                ld    (sb_h),a
+                ld    (sb_buf),hl
+                ret
+
+; k_xorframe (GB_XORFRAME): XOR a 1px rectangle outline into the screen. B=x
+; C=y D=w E=h. Self-erasing rubber-band: call again at the same spot to undo.
+k_xorframe
+                ld    a,b
+                ld    (xf_x),a
+                ld    a,c
+                ld    (xf_y),a
+                ld    a,d
+                ld    (xf_w),a
+                ld    a,e
+                ld    (xf_h),a
+                ld    a,(xf_x)               ; top edge
+                ld    d,a
+                ld    a,(xf_y)
+                ld    e,a
+                ld    a,(xf_w)
+                ld    b,a
+                call  xf_hline
+                ld    a,(xf_x)               ; bottom edge (y+h-1)
+                ld    d,a
+                ld    a,(xf_y)
+                ld    b,a
+                ld    a,(xf_h)
+                add   a,b
+                dec   a
+                ld    e,a
+                ld    a,(xf_w)
+                ld    b,a
+                call  xf_hline
+                ld    a,(xf_x)               ; left edge
+                ld    d,a
+                ld    a,(xf_y)
+                ld    e,a
+                ld    a,(xf_h)
+                ld    b,a
+                call  xf_vline
+                ld    a,(xf_x)               ; right edge (x+w-1)
+                ld    b,a
+                ld    a,(xf_w)
+                add   a,b
+                dec   a
+                ld    d,a
+                ld    a,(xf_y)
+                ld    e,a
+                ld    a,(xf_h)
+                ld    b,a
+                jp    xf_vline
+xf_hline                                       ; D=x E=y B=count -> XOR a row of bytes
+                ld    a,b
+                ld    (xf_cnt),a
+                call  scr_addr
+                ld    a,(xf_cnt)
+                ld    b,a
+xfh_loop
+                ld    a,(hl)
+                xor   #FF
+                ld    (hl),a
+                inc   hl
+                djnz  xfh_loop
+                ret
+xf_vline                                       ; D=x E=y B=rows -> XOR a column
+                ld    a,b
+                ld    (xf_cnt),a
+xfv_loop
+                push  de
+                call  scr_addr
+                ld    a,(hl)
+                xor   #FF
+                ld    (hl),a
+                pop   de
+                inc   e
+                ld    a,(xf_cnt)
+                dec   a
+                ld    (xf_cnt),a
+                jr    nz,xfv_loop
+                ret
+xf_x            db    0
+xf_y            db    0
+xf_w            db    0
+xf_h            db    0
+xf_cnt          db    0
 
 ; ===========================================================================
 ; Top bar (kernel-owned): total RAM (left) + clock (right) on lines 0-7. The

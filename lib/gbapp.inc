@@ -63,3 +63,9 @@ GB_RUN          equ   GB_KERNEL+45 ; #802D  run a named app: HL = 8.3 app name;
                                    ;        runs in the next bank page, returns on quit
 GB_ICON         equ   GB_KERNEL+48 ; #8030  full icon blit: A=slot B=x C=y
 GB_FILL         equ   GB_KERNEL+51 ; #8033  filled rect: B=x C=y D=w E=h A=pen
+GB_SAVERECT     equ   GB_KERNEL+54 ; #8036  save a screen rect to a buffer:
+                                   ;        B=x C=y D=w E=h HL=buf (w*h bytes)
+GB_RESTORERECT  equ   GB_KERNEL+57 ; #8039  restore a screen rect from a buffer
+GB_XORFRAME     equ   GB_KERNEL+60 ; #803C  XOR a 1px rect outline into the screen
+                                   ;        (rubber-band): B=x C=y D=w E=h. Draw
+                                   ;        once to show, again to erase exactly.
