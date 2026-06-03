@@ -2,11 +2,14 @@
 ;
 ; Resident at GB_KERNEL (#8000), it owns the machine and the stack and never
 ; lives in the #4000-#7FFF window, so it can page apps in and out. It exposes a
-; fixed API jump table (see lib/gbapp.inc), loads the HELLO app into an
-; expansion bank, runs it there, and regains control when the app returns.
+; fixed API jump table (see lib/gbapp.inc), loads a real app binary off disk
+; STRAIGHT INTO an expansion bank, runs it there, and regains control when the
+; app returns.
 ;
-; This skeleton becomes the real desktop kernel later; for now it proves the
-; load/run/return cycle with on-screen evidence.
+; The fs layer (dispatcher + backends) is resident with the kernel, and its
+; sector/dir buffers live >= #8000, so a load can write into the #4000-#7FFF
+; window while a bank is paged in. The app is a separate file (HELLO.BIN) on the
+; same disk - not embedded in the kernel.
 ;
 ; Build: tools/build_kernel.sh   Run: 1984 --memory=128 --disk-a=build/gbkern.dsk --autostart=GBKERN
 
@@ -26,10 +29,10 @@ TXT_OUTPUT      equ   #BB5A
 kernel_main
                 ld    a,1
                 call  SCR_SET_MODE           ; mode 1, screen cleared
+                call  fs_init                ; pick storage backend (floppy here)
                 ld    hl,msg_boot
                 call  k_print
-                call  app_load               ; copy HELLO into bank 0
-                call  app_run                ; page it in, run it, restore
+                call  app_launch             ; load HELLO.BIN into a bank, run it
                 ld    hl,msg_back
                 call  k_print
 km_halt
@@ -49,41 +52,50 @@ k_print
 k_quit
                 ret                            ; (skeleton: app RETs anyway)
 
-; --- app loading / running -----------------------------------------------
-; app_load: page expansion bank 0 in and copy the embedded HELLO image to
-; APP_BASE, then restore normal RAM.
-app_load
+; --- app launch ----------------------------------------------------------
+; app_launch: page expansion bank 0 in, load the named app file directly into
+; the #4000-#7FFF window (fs code + buffers stay resident), then CALL it. The
+; app reaches the kernel API directly (resident). Restore normal RAM after.
+app_launch
                 di
                 xor   a                        ; bank 0
                 ld    c,0                       ; block 0
                 call  bank_page
-                ld    hl,hello_img             ; source: resident (>=#8000), mapped
-                ld    de,APP_BASE              ; dest: the bank window
-                ld    bc,hello_end-hello_img
+
+                ld    hl,app_name             ; fs_req_name = "HELLO   BIN"
+                ld    de,fs_req_name
+                ld    bc,11
                 ldir
+                ld    hl,#3F00               ; cap: app must fit the 16K window
+                ld    (fs_load_max),hl
+                ld    hl,APP_BASE             ; load straight into the bank
+                ld    (fs_load_dst),hl
+                call  fs_load_file
+                jr    nc,al_fail
+
+                call  APP_BASE               ; run the app from the bank
                 call  bank_normal
                 ei
                 ret
-
-; app_run: page bank 0 in and CALL the app; it runs from the bank and reaches
-; the kernel API directly (resident). Restore normal RAM when it returns.
-app_run
-                di
-                xor   a
-                ld    c,0
-                call  bank_page
-                call  APP_BASE
+al_fail
                 call  bank_normal
                 ei
-                ret
+                ld    hl,msg_fail
+                jp    k_print
 
+app_name        db    "HELLO   BIN"          ; 8.3, space-padded
 msg_boot        db    "GEOBENCH KERNEL (banked)",13,10,0
 msg_back        db    "BACK IN KERNEL - APP RETURNED",13,10,0
+msg_fail        db    "APP LOAD FAILED",13,10,0
 
-hello_img       incbin "../build/HELLO.RAW"     ; the app, built first
-hello_end
-
+                include "../lib/fs.asm"
+                include "../lib/fs_ide_fat.asm"
+                include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
+
+hello_img       incbin "../build/HELLO.RAW"     ; packaged onto the disk as HELLO.BIN
+hello_end
 kern_end
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
+                save  "HELLO.BIN",hello_img,hello_end-hello_img,DSK,"build/gbkern.dsk"
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
