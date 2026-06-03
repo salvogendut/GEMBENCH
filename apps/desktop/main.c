@@ -1,0 +1,145 @@
+/* desktop - the GEOBENCH desktop, in C (the last app to leave assembly).
+ *
+ * Boots into PAGE_APP0. Draws the backdrop (below the kernel's top bar) and the
+ * Disk / Clock / Trash icons, runs the pointer, lets you DRAG icons (hold fire,
+ * a red outline follows, release to drop), and opens an icon on double-click:
+ * Disk -> the file manager, Clock -> the C demo.
+ *
+ * A press over an icon both arms a double-click and starts a drag; releasing
+ * drops the icon at its new spot (no movement => it was just a click). The
+ * backdrop is a solid colour, so the drag outline erases by redrawing in the
+ * backdrop pen - no save-under needed. */
+#include "gb.h"
+
+#define N_ICONS 3
+#define IC_W    8             /* icon width  (byte cols) = 32 px */
+#define IC_H    32            /* icon height (lines)             */
+#define BOX_H   44            /* icon + label box (hit-test/lift) */
+#define XMAX    (80 - IC_W)   /* drag clamps */
+#define YMIN    9
+#define YMAX    (200 - BOX_H)
+#define DCLICK  40
+#define NONE    0xFF
+
+/* icon positions are mutable (drag updates them) */
+static unsigned char ic_x[N_ICONS] = { 0, 72, 72 };
+static unsigned char ic_y[N_ICONS] = { 35, 35, 160 };
+static const unsigned char ic_slot[N_ICONS] = { 0, 2, 3 };     /* IST slots */
+static const char *const ic_lbl[N_ICONS] = { "Disk A", "Clock", "Trash" };
+
+static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
+static unsigned char dc_timer, dc_idx, held_prev;
+
+static void draw_icon(unsigned char i)
+{
+    gb_icon(ic_slot[i], ic_x[i], ic_y[i]);
+    gb_text(ic_x[i], ic_y[i] + 34, ic_lbl[i]);
+}
+
+static void paint(void)
+{
+    unsigned char i;
+    gb_fill(0, 8, 80, 192, 0);                 /* backdrop, below the top bar */
+    gb_text(1, 10, "Dbl-click: Disk=files, Clock=C demo");
+    for (i = 0; i < N_ICONS; i++) draw_icon(i);
+    gb_curshow();
+}
+
+static unsigned char hit_icon(unsigned char mx, unsigned char my)
+{
+    unsigned char i;
+    for (i = 0; i < N_ICONS; i++)
+        if (mx >= ic_x[i] && mx < ic_x[i] + IC_W &&
+            my >= ic_y[i] && my < ic_y[i] + BOX_H)
+            return i;
+    return NONE;
+}
+
+/* dragstart: lift the icon (paint its box in the backdrop) and show a red
+   outline at its position; remember where in the icon we grabbed it. */
+static void dragstart(unsigned char idx, unsigned char mx, unsigned char my)
+{
+    drag_idx = idx;
+    out_x = ic_x[idx];
+    out_y = ic_y[idx];
+    grab_dx = mx - out_x;
+    grab_dy = my - out_y;
+    drag_active = 1;
+    gb_curhide();
+    gb_fill(out_x, out_y, IC_W + 2, BOX_H, 0); /* erase icon + label */
+    gb_frame(out_x, out_y, IC_W, IC_H, 3);     /* red outline */
+    gb_curshow();
+}
+
+static void dragmove(unsigned char mx, unsigned char my)
+{
+    unsigned char nx, ny;
+    nx = (mx >= grab_dx) ? (unsigned char)(mx - grab_dx) : 0;
+    if (nx > XMAX) nx = XMAX;
+    ny = (my >= grab_dy) ? (unsigned char)(my - grab_dy) : 0;
+    if (ny < YMIN) ny = YMIN;
+    if (ny > YMAX) ny = YMAX;
+    if (nx == out_x && ny == out_y) return;    /* nothing moved */
+    gb_curhide();
+    gb_frame(out_x, out_y, IC_W, IC_H, 0);     /* erase old outline */
+    out_x = nx;
+    out_y = ny;
+    gb_frame(out_x, out_y, IC_W, IC_H, 3);     /* draw new outline */
+    gb_curshow();
+}
+
+static void drop(void)
+{
+    ic_x[drag_idx] = out_x;                     /* commit the new position */
+    ic_y[drag_idx] = out_y;
+    drag_active = 0;
+    gb_curhide();
+    paint();
+}
+
+void main(void)
+{
+    unsigned char flags, mx, my, held, icon;
+
+    paint();
+    drag_active = 0;
+    dc_timer = 0;
+    held_prev = 0;
+
+    for (;;) {
+        flags = gb_poll();
+        mx = gb_mx();
+        my = gb_my();
+        if (dc_timer) dc_timer--;
+        if (flags & GB_QUIT) return;           /* ESC -> back to BASIC */
+
+        held = flags & GB_FIRE;
+        if (held_prev && !held && drag_active) {   /* fire released -> drop */
+            drop();
+            held_prev = 0;
+            continue;
+        }
+        held_prev = held;
+
+        if (drag_active) {                     /* follow the pointer */
+            dragmove(mx, my);
+            continue;
+        }
+
+        if (!(flags & GB_CLICK)) continue;     /* a fresh press? */
+        icon = hit_icon(mx, my);
+        if (icon == NONE) continue;
+
+        if (dc_timer && dc_idx == icon) {      /* second click -> open */
+            if (icon == 0)      gb_run("FILEMGR BIN");
+            else if (icon == 1) gb_run("CHELLO  BIN");
+            dc_timer = 0;
+            held_prev = 0;
+            paint();                           /* repaint after it returns */
+        } else {                               /* first click: arm + start drag */
+            dc_idx = icon;
+            dc_timer = DCLICK;
+            dragstart(icon, mx, my);
+        }
+    }
+}

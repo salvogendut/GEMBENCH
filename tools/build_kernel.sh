@@ -18,7 +18,7 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm            # icon set -> PAGE_DATA
-"$RASM" apps/desktop/desktop.asm -eo         # -> build/DESKTOP.RAW
+tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR (C/SDCC) -> build/FILEMGR.RAW
 tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
 tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
