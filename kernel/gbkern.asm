@@ -751,6 +751,10 @@ la_done
                 call  draw_topbar             ; the app may have wiped it (e.g. a C
                                               ; app's gb_cls) - the bar is the kernel's
                 ei
+la_escwait                                     ; if the app quit on ESC, wait for the
+                ld    a,66                     ; key to be released before the parent
+                call  KM_TEST_KEY              ; runs - else the same press quits it too,
+                jr    nz,la_escwait            ; cascading all the way back to BASIC
                 ret
 launch_depth    db    0
 
