@@ -29,6 +29,7 @@
                 jp    gb_blit_entry          ; GB_BLITE  #8018
                 jp    k_curshow              ; GB_CURSHOW #801B
                 jp    k_poll                 ; GB_POLL    #801E
+                jp    k_frame                ; GB_FRAME   #8021
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -181,6 +182,71 @@ ch_hi
                 ret   c                        ; HL < DE -> keep
                 ex    de,hl                    ; clamp to DE
                 ret
+
+; k_frame (GB_FRAME): draw a 1px rectangle outline. B=x C=y D=w E=h (screen
+; byte/line), A=pen (0..3). Screen only (no banked buffer), so no page swap.
+k_frame
+                call  pen_to_byte            ; pen -> Mode 1 fill byte
+                ld    (gf_val),a
+                ld    a,b
+                ld    (gf_x),a
+                ld    a,c
+                ld    (gf_y),a
+                ld    a,d
+                ld    (gf_w),a
+                ld    a,e
+                ld    (gf_h),a
+                ld    a,(gf_val)
+                ld    (fb_val),a
+                ld    a,(gf_x)               ; top edge
+                ld    (fb_x),a
+                ld    a,(gf_y)
+                ld    (fb_y),a
+                ld    a,(gf_w)
+                ld    (fb_w),a
+                ld    a,1
+                ld    (fb_h),a
+                call  fill_block
+                ld    a,(gf_x)               ; bottom edge (y + h - 1)
+                ld    (fb_x),a
+                ld    a,(gf_y)
+                ld    b,a
+                ld    a,(gf_h)
+                add   a,b
+                dec   a
+                ld    (fb_y),a
+                ld    a,(gf_w)
+                ld    (fb_w),a
+                ld    a,1
+                ld    (fb_h),a
+                call  fill_block
+                ld    a,(gf_x)               ; left edge
+                ld    (fb_x),a
+                ld    a,(gf_y)
+                ld    (fb_y),a
+                ld    a,1
+                ld    (fb_w),a
+                ld    a,(gf_h)
+                ld    (fb_h),a
+                call  fill_block
+                ld    a,(gf_x)               ; right edge (x + w - 1)
+                ld    b,a
+                ld    a,(gf_w)
+                add   a,b
+                dec   a
+                ld    (fb_x),a
+                ld    a,(gf_y)
+                ld    (fb_y),a
+                ld    a,1
+                ld    (fb_w),a
+                ld    a,(gf_h)
+                ld    (fb_h),a
+                jp    fill_block
+gf_x            db    0
+gf_y            db    0
+gf_w            db    0
+gf_h            db    0
+gf_val          db    0
 
 ; --- firmware text (kernel boot messages) --------------------------------
 k_cls

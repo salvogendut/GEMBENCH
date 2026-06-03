@@ -45,3 +45,5 @@ GB_CURSHOW      equ   GB_KERNEL+27 ; #801B  draw the pointer (after drawing UI)
 GB_POLL         equ   GB_KERNEL+30 ; #801E  frame-paced input poll -> B=cursor
                                    ;        byte col, C=cursor line, D bit0=click
                                    ;        edge, bit1=quit (ESC). IRQs must be on.
+GB_FRAME        equ   GB_KERNEL+33 ; #8021  rectangle outline: B=x C=y D=w E=h
+                                   ;        A=pen (0..3)
