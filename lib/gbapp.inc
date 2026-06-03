@@ -48,7 +48,8 @@ GB_BLITE        equ   GB_KERNEL+24 ; #8018  blit the current entry's type icon
 GB_CURSHOW      equ   GB_KERNEL+27 ; #801B  draw the pointer (after drawing UI)
 GB_POLL         equ   GB_KERNEL+30 ; #801E  frame-paced input poll -> B=cursor
                                    ;        byte col, C=cursor line, D bit0=click
-                                   ;        edge, bit1=quit (ESC). IRQs must be on.
+                                   ;        edge, bit1=quit (ESC), bit2=fire held.
+                                   ;        IRQs must be on.
 GB_FRAME        equ   GB_KERNEL+33 ; #8021  rectangle outline: B=x C=y D=w E=h
                                    ;        A=pen (0..3)
 GB_CURHIDE      equ   GB_KERNEL+36 ; #8024  lift the pointer (before drawing under

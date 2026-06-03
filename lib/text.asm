@@ -3,7 +3,7 @@
 ;
 ; Independent of the firmware text VDU, so text can sit at any byte column and
 ; any layout (windows, overscan). Glyphs come from a font set loaded at runtime
-; (see desktop/main.asm font_load); font_apply_header caches its geometry here.
+; (see kernel/gbkern.asm font_init); font_apply_header caches its geometry here.
 ;
 ; The font is fixed-width but the width need not be a whole Mode 1 byte (a 6 px
 ; glyph is 1.5 bytes), so each glyph row is blitted pixel-accurately: the glyph

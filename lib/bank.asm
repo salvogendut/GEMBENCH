@@ -17,7 +17,7 @@
 ; swap the running code out from under itself. Call with interrupts disabled if
 ; an ISR might also touch the window.
 ;
-; Matches the probe convention in desktop/main.asm (mem_detect / md_port).
+; Matches the probe convention in kernel/gbkern.asm (mem_detect / md_port).
 ; ---------------------------------------------------------------------------
 
 BANK_PORT       equ   #7F00

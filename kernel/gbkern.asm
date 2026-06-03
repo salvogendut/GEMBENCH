@@ -109,12 +109,14 @@ k_poll
                 call  input_poll             ; in_dirs / in_fire / in_quit
                 call  poll_move              ; -> DE = new x, HL = new y (clamped)
                 call  MC_WAIT_FLYBACK        ; pace to 50 Hz; do the move in the blank
-                call  clock_tick             ; keep the top-bar clock live
                 call  cursor_move_to         ; erases+redraws ONLY if the position
                                              ; actually changed (re-drawing in place,
                                              ; e.g. holding a key into the edge clamp,
                                              ; corrupts the save-under). In the flyback
                                              ; blank so the move isn't seen mid-frame.
+                                             ; MUST precede clock_tick: it consumes the
+                                             ; DE/HL target that clock_tick would clobber.
+                call  clock_tick             ; keep the top-bar clock live
                 ld    hl,(cursor_x)          ; cursor byte col = cursor_x / 8
                 srl   h
                 rr    l
@@ -146,6 +148,11 @@ gp_noclick
                 jr    z,gp_noquit
                 set   1,d
 gp_noquit
+                ld    a,(in_fire)            ; bit2 = fire currently held (for drag)
+                or    a
+                jr    z,gp_nohold
+                set   2,d
+gp_nohold
                 ld    a,(poll_byte)
                 ld    b,a
                 ld    a,(poll_line)
