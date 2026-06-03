@@ -79,3 +79,6 @@ GB_FSSAVE       equ   GB_KERNEL+66 ; #8042  save the file this app was opened wi
                                    ;        Overwrites in place (the file must exist
                                    ;        and the data must fit its current
                                    ;        allocation). CF set = saved.
+GB_GETKEY       equ   GB_KERNEL+69 ; #8045  -> A = a typed character from the
+                                   ;        keyboard buffer, or 0 if none waiting.
+                                   ;        Non-blocking; IRQs must be on.

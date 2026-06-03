@@ -37,4 +37,5 @@ unsigned int gb_fs_load(char *buf, unsigned int max);    /* load opened file -> 
                                                          /* byte count            */
 unsigned char gb_fs_save(char *buf, unsigned int len);   /* save opened file ->   */
                                                          /* 1 ok / 0 fail         */
+unsigned char gb_getkey(void);        /* typed char from the keyboard, 0 if none  */
 #endif /* GB_H */

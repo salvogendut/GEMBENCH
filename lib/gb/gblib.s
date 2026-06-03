@@ -26,6 +26,7 @@
         .globl  _gb_run
         .globl  _gb_fs_load
         .globl  _gb_fs_save
+        .globl  _gb_getkey
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -178,3 +179,7 @@ _gb_fs_save:
         ret     nc
         inc     a
         ret
+
+;; unsigned char gb_getkey(void);   -> typed char in A, or 0 if none
+_gb_getkey:
+        jp      0x8045          ; GB_GETKEY (returns the char in A)

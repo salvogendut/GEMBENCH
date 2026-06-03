@@ -41,6 +41,7 @@
                 jp    k_xorframe             ; GB_XORFRAME    #803C
                 jp    k_fsload               ; GB_FSLOAD      #803F
                 jp    k_fssave               ; GB_FSSAVE      #8042
+                jp    k_getkey               ; GB_GETKEY      #8045
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -776,6 +777,14 @@ k_fssave
                 ei
                 ret                            ; CF = saved
 
+; k_getkey (GB_GETKEY): A = a typed character from the keyboard buffer, or 0 if
+; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
+k_getkey
+                call  KM_READ_CHAR           ; CF + A = char, or NC = none
+                ret   c
+                xor   a
+                ret
+
 ; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
 ; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.
 ; (Only VIEWER exists today, so most types fall through to it; add rows as new
@@ -807,7 +816,7 @@ afe_default
                 ld    hl,name_viewer
                 ret
 app_table
-                db    "TXT","VIEWER  BIN"      ; .TXT -> VIEWER
+                db    "TXT","NOTEPAD BIN"      ; .TXT -> NOTEPAD (edit + save)
                 db    0                          ; end of table
 name_viewer     db    "VIEWER  BIN"
 launch_arg      defs  11
@@ -1381,6 +1390,8 @@ app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMG
 app_imgend
 vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.BIN
 vwr_imgend
+npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.BIN
+npd_imgend
 chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.BIN
 chl_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
@@ -1393,6 +1404,7 @@ wel_imgend
                 save  "DESKTOP.BIN",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
                 save  "VIEWER.BIN",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
+                save  "NOTEPAD.BIN",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "CHELLO.BIN",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
