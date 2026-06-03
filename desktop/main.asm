@@ -20,7 +20,6 @@ geobench
                 include "../lib/screen.asm"
                 include "../lib/cursor_arrow.asm"
                 include "../lib/cursor.asm"
-                include "../lib/font.asm"
                 include "../lib/text.asm"
                 include "../lib/window.asm"
 ; --- Icon set ------------------------------------------------------------
@@ -54,6 +53,27 @@ icon_basic      equ   5
 icon_binary     equ   6
 icon_picture    equ   7
 icon_text       equ   8
+
+; --- Font set ------------------------------------------------------------
+; A font set (.FNT) is a 16-byte header then fixed-width glyph bitmaps (one
+; byte per row, <= 8 px wide). It is loaded and selected like an icon set: the
+; FONT= key in GEOBENCH.CFG names it; font_load reads <FONT>.FNT, validates it,
+; and falls back to the compiled-in default. lib/text.asm reads the geometry
+; (first/last char, width, height) from the header and renders pixel-accurately
+; so a narrow font (the default is 6x8) blits at sub-byte positions; an 8x8 set
+; (CLASSIC.FNT) renders byte-aligned exactly like the old fixed font.
+;   Header(16): "GBFN"(0-3) version=1(4) first(5) last(6) width(7) height(8)
+;               bytes-per-row(9) reserved(10-15)
+;   Glyphs: (last-first+1) * height bytes, top `width` bits per row are pixels.
+FONT_HDR        equ   16
+FONT_NCH        equ   96           ; default ships chars 32..127
+FONTSET_SIZE    equ   FONT_HDR + FONT_NCH*8     ; compiled-in default .FNT = 784
+FONT_LOAD_MAX   equ   1024         ; cap on a font's on-disk size / load buffer
+
+font_rom_data   incbin "../build/DEFAULT.FNT"  ; compiled-in default font (6x8)
+
+font_set        defs  FONT_LOAD_MAX+128         ; active font (RAM)
+
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
@@ -121,6 +141,7 @@ desktop_start
                 call  fs_init                ; pick default backend (IDE? else floppy)
                 call  cfg_load               ; read GEOBENCH.CFG -> cfg_* settings
                 call  icon_load              ; load <ICONS>.IST over icon_set
+                call  font_load              ; load <FONT>.FNT over font_set
                 call  build_desktop_icons    ; probe drives -> live icon table
                 call  TXT_CUR_DISABLE        ; no blinking text cursor blob
                 call  TXT_CUR_OFF
@@ -666,10 +687,25 @@ dl_len
                 inc   hl
                 inc   b
                 jr    dl_len
-dl_pos
-                ld    hl,(wx)                ; tc_x = (wx + box_w/2)/8 - len, centred
-                ld    de,(box_wh)            ; on the box. Labels wider than a small
-                add   hl,de                  ; box would go negative, so clamp to 0.
+dl_pos                                         ; tc_x = (wx + box_w/2 - len*font_w)/8,
+                ld    c,b                     ; centred on the box (graphics units: 2
+                ld    hl,(wx)                ; per pixel). Subtract the half text width
+                ld    de,(box_wh)            ; in graphics (= len*font_w) before /8.
+                add   hl,de                  ; Labels wider than the box clamp to 0.
+                ld    a,(font_w)
+                ld    e,a
+                ld    d,0
+dl_subw
+                ld    a,c
+                or    a
+                jr    z,dl_div
+                or    a                       ; clear carry for sbc
+                sbc   hl,de
+                dec   c
+                jr    dl_subw
+dl_div
+                bit   7,h                     ; negative -> clamp to left edge
+                jr    nz,dl_zero
                 srl   h
                 rr    l
                 srl   h
@@ -677,9 +713,9 @@ dl_pos
                 srl   h
                 rr    l
                 ld    a,l
-                sub   b
-                jr    nc,dl_storex
-                xor   a                       ; label wider than the box -> left edge
+                jr    dl_storex
+dl_zero
+                xor   a
 dl_storex
                 ld    (tc_x),a
                 ld    hl,(wy)                ; tc_y = 192 - wy/2 (box bottom 8px)
@@ -1333,6 +1369,110 @@ il_default
                 ld    de,icon_set
                 ld    bc,ROMSET_SIZE
                 ldir
+                ret
+
+; font_load: load the font set named by cfg_font (e.g. "DEFAULT" -> DEFAULT.FNT)
+; into font_set, validating its header (magic, version, geometry). On any
+; failure the compiled-in default font is used. Either way font_apply_header
+; then caches the geometry for lib/text.asm. Call after cfg_load, before any
+; text is drawn.
+font_load
+                ld    hl,FONT_LOAD_MAX        ; never load more than the buffer holds
+                ld    (fs_load_max),hl
+
+                ld    hl,cfg_font            ; fs_req_name = cfg_font.FNT (8.3)
+                ld    de,fs_req_name
+                ld    b,8
+fl_name
+                ld    a,(hl)
+                or    a
+                jr    z,fl_pad               ; cfg_font ended -> space-pad
+                ld    (de),a
+                inc   hl
+                inc   de
+                djnz  fl_name
+                jr    fl_ext
+fl_pad
+                ld    a,' '
+fl_padloop
+                ld    (de),a
+                inc   de
+                djnz  fl_padloop
+fl_ext
+                ld    a,'F'
+                ld    (de),a
+                inc   de
+                ld    a,'N'
+                ld    (de),a
+                inc   de
+                ld    a,'T'
+                ld    (de),a
+                ld    hl,font_set
+                ld    (fs_load_dst),hl
+                call  fs_load_file
+                jr    nc,fl_default          ; missing / too big -> default
+
+                ld    a,(font_set+0)         ; magic "GBFN"
+                cp    'G'
+                jr    nz,fl_default
+                ld    a,(font_set+1)
+                cp    'B'
+                jr    nz,fl_default
+                ld    a,(font_set+2)
+                cp    'F'
+                jr    nz,fl_default
+                ld    a,(font_set+3)
+                cp    'N'
+                jr    nz,fl_default
+                ld    a,(font_set+4)         ; version == 1
+                cp    1
+                jr    nz,fl_default
+                ld    a,(font_set+9)         ; bytes per row == 1 (width <= 8)
+                cp    1
+                jr    nz,fl_default
+
+                ld    a,(font_set+7)         ; width 1..8 pixels
+                or    a
+                jr    z,fl_default
+                cp    9
+                jr    nc,fl_default
+                ld    a,(font_set+8)         ; height 1..16 rows
+                or    a
+                jr    z,fl_default
+                cp    17
+                jr    nc,fl_default
+
+                ld    a,(font_set+5)         ; first <= last
+                ld    b,a
+                ld    a,(font_set+6)
+                cp    b
+                jr    c,fl_default           ; last < first -> bad
+                sub   b
+                inc   a                        ; A = count = last - first + 1
+                ld    e,a                      ; size == 16 + count*height
+                ld    d,0
+                ld    a,(font_set+8)
+                ld    b,a
+                ld    hl,0
+fl_mul          add   hl,de
+                djnz  fl_mul
+                ld    de,FONT_HDR
+                add   hl,de
+                ex    de,hl
+                ld    hl,(fs_ent_size)
+                or    a
+                sbc   hl,de
+                jr    nz,fl_default
+                ld    hl,font_set            ; valid -> cache geometry
+                call  font_apply_header
+                ret
+fl_default
+                ld    hl,font_rom_data       ; bad/missing -> compiled-in default font
+                ld    de,font_set
+                ld    bc,FONTSET_SIZE
+                ldir
+                ld    hl,font_set
+                call  font_apply_header
                 ret
 
 ; icon_addr: A = slot index -> HL = its bitmap (icon_set + dir[slot].offset).
@@ -2321,3 +2461,4 @@ cfg_file        incbin "../GEOBENCH.CFG.example"
 cfg_file_end
                 save  "GEOBENCH.CFG",cfg_file,cfg_file_end-cfg_file,DSK,"build/geobench.dsk"
                 save  "DEFAULT.IST",icon_rom_data,ROMSET_SIZE,DSK,"build/geobench.dsk"
+                save  "DEFAULT.FNT",font_rom_data,FONTSET_SIZE,DSK,"build/geobench.dsk"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Assemble GEOBENCH into a bootable .dsk image.
 #
-# Output: build/geobench.dsk  (GEOBENCH.BIN + GEOBENCH.CFG + DEFAULT.IST) and
+# Output: build/geobench.dsk  (GEOBENCH.BIN + GEOBENCH.CFG + DEFAULT.IST +
+#         DEFAULT.FNT) and
 #         build/GEOBENCH.RAW. Run with:
 #   ../1984/1984 --disk-a=build/geobench.dsk --autostart=GEOBENCH
 #
@@ -20,6 +21,11 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm
+
+# Font sets: the default 6x8 (desktop/main.asm incbins build/DEFAULT.FNT) and
+# the classic 8x8 (FONT=CLASSIC in GEOBENCH.CFG), packed from the CPC ROM font.
+python3 tools/genfont.py build/DEFAULT.FNT
+python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm
 
 "$RASM" desktop/main.asm -eo          # -eo: overwrite the .dsk if it exists
 echo "Built build/geobench.dsk + build/GEOBENCH.RAW"

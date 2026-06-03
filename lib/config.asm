@@ -7,6 +7,7 @@
 ;
 ; Settings:
 ;   cfg_icons   icon-set name (default "DEFAULT")   <- key ICONS
+;   cfg_font    font-set name (default "DEFAULT")   <- key FONT
 ;
 ; Requires lib/fs.asm (fs_load_file, fs_req_name, fs_load_dst, fs_ent_size).
 ; ---------------------------------------------------------------------------
@@ -17,6 +18,10 @@ CFG_BUF_SZ      equ   512
 cfg_load
                 ld    hl,cfg_def_icons       ; default ICONS = "DEFAULT"
                 ld    de,cfg_icons
+                ld    bc,9
+                ldir
+                ld    hl,cfg_def_icons       ; default FONT = "DEFAULT" (same stem)
+                ld    de,cfg_font
                 ld    bc,9
                 ldir
 
@@ -53,9 +58,21 @@ cfgp_line
                 push  bc
                 ld    de,key_icons
                 call  cfg_keymatch
-                jr    nc,cfgp_nomatch
+                jr    nc,cfgp_tryfont
                 ld    de,cfg_icons            ; ICONS= matched
                 ld    a,8                      ; filename stem, max 8 chars
+                call  cfg_copyval
+                jr    cfgp_nomatch
+cfgp_tryfont
+                pop   bc                       ; restore line start for the next key
+                pop   hl
+                push  hl
+                push  bc
+                ld    de,key_font
+                call  cfg_keymatch
+                jr    nc,cfgp_nomatch
+                ld    de,cfg_font             ; FONT= matched
+                ld    a,8
                 call  cfg_copyval
 cfgp_nomatch
                 pop   bc
@@ -134,6 +151,8 @@ ccv_end
 ; --- data ----------------------------------------------------------------
 cfg_fname       db    "GEOBENCHCFG"      ; "GEOBENCH.CFG" (8.3)
 key_icons       db    "ICONS=",0
-cfg_def_icons   db    "DEFAULT",0,0      ; 9 bytes
+key_font        db    "FONT=",0
+cfg_def_icons   db    "DEFAULT",0,0      ; 9 bytes (default stem for ICONS + FONT)
 cfg_icons       defs  9                  ; parsed icon-set name (NUL-terminated)
+cfg_font        defs  9                  ; parsed font-set name (NUL-terminated)
 cfg_buf         defs  CFG_BUF_SZ
