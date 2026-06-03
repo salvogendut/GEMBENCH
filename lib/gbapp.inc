@@ -25,6 +25,7 @@ PAGE_DATA       equ   #C4          ; bank 0, block 0 -> kernel data buffers
 PAGE_APP0       equ   #C5          ; bank 0, block 1 -> application slot 0
 DATA_BUF        equ   #4000        ; base of the kernel data buffers (in PAGE_DATA)
 DATA_FONT       equ   DATA_BUF     ; font set lives at the start of PAGE_DATA
+DATA_ICONS      equ   #4400        ; icon set (.IST) follows the font in PAGE_DATA
 
 GB_KERNEL       equ   #8000        ; resident kernel base (fixed, RUN entry)
 GB_INIT         equ   GB_KERNEL+0  ; #8000  kernel boot (kernel only)
@@ -38,3 +39,5 @@ GB_WINDOW       equ   GB_KERNEL+15 ; #800F  draw a window: B=x C=y D=w E=h
 GB_DIR1         equ   GB_KERNEL+18 ; #8012  first dir entry -> CF set, HL=name
                                    ;        (resident, "NAME.EXT", 0-term); NC=empty
 GB_DIRN         equ   GB_KERNEL+21 ; #8015  next dir entry  -> CF set, HL=name; NC=end
+GB_BLITE        equ   GB_KERNEL+24 ; #8018  blit the current entry's type icon
+                                   ;        (half height) at B=col C=line

@@ -11,8 +11,13 @@ cd "$(dirname "$0")/.."          # repo root
 RASM="${RASM:-rasm}"
 
 mkdir -p build
+rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 
-python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font, loaded into PAGE_DATA
-"$RASM" apps/hello/hello.asm -eo             # -> build/HELLO.RAW
-"$RASM" kernel/gbkern.asm -eo                # incbins HELLO.RAW + DEFAULT.FNT -> .dsk
-echo "Built build/gbkern.dsk (GBKERN + HELLO + DEFAULT.FNT)"
+python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
+python3 tools/packicons.py build/DEFAULT.IST \
+    lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
+    lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
+    lib/icon_picture.asm lib/icon_text.asm            # icon set -> PAGE_DATA
+"$RASM" apps/filemgr/filemgr.asm -eo         # -> build/FILEMGR.RAW
+"$RASM" kernel/gbkern.asm -eo                # incbins app + font + icons -> .dsk
+echo "Built build/gbkern.dsk (GBKERN + FILEMGR + DEFAULT.FNT + DEFAULT.IST)"

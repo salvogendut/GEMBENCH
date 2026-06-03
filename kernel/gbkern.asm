@@ -28,16 +28,47 @@ TXT_OUTPUT      equ   #BB5A
                 jp    gb_open_window         ; GB_WINDOW #800F
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012
                 jp    gb_fs_dir_next         ; GB_DIRN   #8015
+                jp    gb_blit_entry          ; GB_BLITE  #8018
 
 ; ---------------------------------------------------------------------------
 kernel_main
                 ld    a,1
                 call  SCR_SET_MODE           ; mode 1, screen cleared
+                call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
                 call  font_init              ; load the font into PAGE_DATA
-                call  app_launch             ; load HELLO.BIN into PAGE_APP0, run it
+                call  icon_init              ; load the icon set into PAGE_DATA
+                call  app_launch             ; load FILEMGR.BIN into PAGE_APP0, run it
 km_halt
                 jr    km_halt                 ; freeze on the result
+
+; --- palette -------------------------------------------------------------
+SCR_SET_INK     equ   #BC32
+SCR_SET_BORDER  equ   #BC38
+INK_DESKTOP     equ   1            ; blue  -> pen 0 (paper / backdrop)
+INK_LIGHT       equ   26           ; white -> pen 1 (text)
+INK_DARK        equ   0            ; black -> pen 2 (outlines / title bar)
+INK_ACCENT      equ   6            ; red   -> pen 3 (accents)
+set_palette
+                ld    a,0
+                ld    b,INK_DESKTOP
+                ld    c,INK_DESKTOP
+                call  SCR_SET_INK
+                ld    a,1
+                ld    b,INK_LIGHT
+                ld    c,INK_LIGHT
+                call  SCR_SET_INK
+                ld    a,2
+                ld    b,INK_DARK
+                ld    c,INK_DARK
+                call  SCR_SET_INK
+                ld    a,3
+                ld    b,INK_ACCENT
+                ld    c,INK_ACCENT
+                call  SCR_SET_INK
+                ld    b,INK_DESKTOP
+                ld    c,INK_DESKTOP
+                jp    SCR_SET_BORDER
 
 ; --- firmware text (kernel boot messages) --------------------------------
 k_cls
@@ -233,6 +264,9 @@ fe_name
                 inc   hl
                 djnz  fe_name
 fe_ext
+                ld    a,(showext)            ; name-only by default; type from icon
+                or    a
+                jr    z,fe_end
                 ld    hl,fs_ent_name+8
                 ld    a,(hl)
                 cp    ' '
@@ -254,6 +288,138 @@ fe_end
                 ld    (de),a
                 ret
 dir_namebuf     defs  14
+showext         db    0            ; 0 = name only (default), 1 = NAME.EXT
+
+; --- gb_blit_entry: half-height type icon for the current entry ----------
+; B = byte col, C = line. Picks the icon by fs_ent_name's extension, reads the
+; bitmap + size from the .IST in PAGE_DATA, and blits its middle band.
+gb_blit_entry
+                ld    a,b
+                ld    (be_x),a
+                ld    a,c
+                ld    (be_y),a
+                call  ext_to_icon            ; A = slot (reads resident fs_ent_name)
+                ld    (be_slot),a
+                ld    a,(bank_cur)
+                ld    (be_save),a
+                ld    a,PAGE_DATA
+                call  bank_set
+                ld    a,(be_slot)
+                call  icon_geom              ; sets bm_src/bm_w/bm_h/bm_x/bm_y
+                call  blit_bitmap
+                ld    a,(be_save)
+                jp    bank_set
+be_x            db    0
+be_y            db    0
+be_slot         db    0
+be_save         db    0
+ig_w            db    0
+ig_h            db    0
+
+; icon_geom: A = slot -> from the .IST directory (DATA_ICONS) set up a
+; half-height blit (middle band) at (be_x, be_y). PAGE_DATA must be mapped.
+icon_geom
+                ld    l,a                     ; dir entry = DATA_ICONS+16 + slot*4
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                ld    de,DATA_ICONS+16
+                add   hl,de
+                ld    e,(hl)                  ; offset (word)
+                inc   hl
+                ld    d,(hl)
+                inc   hl
+                ld    a,(hl)                  ; width (bytes)
+                ld    (ig_w),a
+                inc   hl
+                ld    a,(hl)                  ; height (rows)
+                ld    (ig_h),a
+                ld    hl,DATA_ICONS          ; bitmap base = DATA_ICONS + offset
+                add   hl,de
+                ld    a,(ig_h)               ; + (h/4)*w  (skip the top quarter)
+                srl   a
+                srl   a
+                ld    b,a
+                ld    a,(ig_w)
+                ld    e,a
+                ld    d,0
+ig_skip
+                ld    a,b
+                or    a
+                jr    z,ig_done
+                add   hl,de
+                dec   b
+                jr    ig_skip
+ig_done
+                ld    (bm_src),hl
+                ld    a,(ig_w)
+                ld    (bm_w),a
+                ld    a,(ig_h)               ; half height
+                srl   a
+                ld    (bm_h),a
+                ld    a,(be_x)
+                ld    (bm_x),a
+                ld    a,(be_y)
+                ld    (bm_y),a
+                ret
+
+; ext_to_icon: A = icon slot for fs_ent_name (GEOBENCH/BAS/BIN/SCR/TXT -> their
+; icons, else generic binary). Slots match the desktop's icon set order.
+ext_to_icon
+                ld    hl,name_geobench
+                call  cmp_name8
+                jr    z,eti_geo
+                ld    hl,ext_bas
+                call  cmp_ext
+                jr    z,eti_bas
+                ld    hl,ext_scr
+                call  cmp_ext
+                jr    z,eti_scr
+                ld    hl,ext_txt
+                call  cmp_ext
+                jr    z,eti_txt
+                ld    a,6                      ; binary (default)
+                ret
+eti_bas         ld    a,5
+                ret
+eti_scr         ld    a,7
+                ret
+eti_txt         ld    a,8
+                ret
+eti_geo         ld    a,4
+                ret
+
+cmp_name8                                      ; Z if name_geobench == fs_ent_name[0..7]
+                ld    de,fs_ent_name
+                ld    b,8
+cn8
+                ld    a,(de)
+                cp    (hl)
+                ret   nz
+                inc   hl
+                inc   de
+                djnz  cn8
+                xor   a
+                ret
+cmp_ext                                        ; Z if (HL) 3-char ext == fs_ent_name+8
+                ld    de,fs_ent_name+8
+                ld    a,(de)
+                cp    (hl)
+                ret   nz
+                inc   hl
+                inc   de
+                ld    a,(de)
+                cp    (hl)
+                ret   nz
+                inc   hl
+                inc   de
+                ld    a,(de)
+                cp    (hl)
+                ret
+ext_bas         db    "BAS"
+ext_scr         db    "SCR"
+ext_txt         db    "TXT"
+name_geobench   db    "GEOBENCH"
 
 ; --- font in PAGE_DATA ----------------------------------------------------
 ; font_init: page PAGE_DATA in, load DEFAULT.FNT into it, cache the geometry.
@@ -276,6 +442,25 @@ font_init
                 ei
                 ret
 font_name       db    "DEFAULT FNT"          ; 8.3, space-padded
+
+; icon_init: load DEFAULT.IST into PAGE_DATA at DATA_ICONS.
+icon_init
+                di
+                ld    a,PAGE_DATA
+                call  bank_set
+                ld    hl,icon_name           ; fs_req_name = "DEFAULT IST"
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#0C00               ; .IST <= 3K
+                ld    (fs_load_max),hl
+                ld    hl,DATA_ICONS
+                ld    (fs_load_dst),hl
+                call  fs_load_file
+                call  bank_normal
+                ei
+                ret
+icon_name       db    "DEFAULT IST"          ; 8.3, space-padded
 
 ; --- app launch ----------------------------------------------------------
 app_launch
@@ -302,9 +487,7 @@ al_fail
                 ld    hl,msg_fail
                 jp    k_print
 
-app_name        db    "HELLO   BIN"          ; 8.3, space-padded
-msg_boot        db    "GEOBENCH KERNEL (banked)",13,10,0
-msg_back        db    "BACK IN KERNEL - APP RETURNED",13,10,0
+app_name        db    "FILEMGR BIN"          ; 8.3, space-padded
 msg_fail        db    "APP LOAD FAILED",13,10,0
 
                 include "../lib/screen.asm"
@@ -314,12 +497,15 @@ msg_fail        db    "APP LOAD FAILED",13,10,0
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
 
-hello_img       incbin "../build/HELLO.RAW"     ; packaged onto the disk as HELLO.BIN
-hello_end
-font_img        incbin "../build/DEFAULT.FNT"   ; packaged onto the disk as DEFAULT.FNT
-font_end
+app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.BIN
+app_imgend
+font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
+font_imgend
+icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
+icon_imgend
 kern_end
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
-                save  "HELLO.BIN",hello_img,hello_end-hello_img,DSK,"build/gbkern.dsk"
-                save  "DEFAULT.FNT",font_img,font_end-font_img,DSK,"build/gbkern.dsk"
+                save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
+                save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
+                save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
