@@ -24,31 +24,36 @@ geobench
                 include "../lib/text.asm"
                 include "../lib/window.asm"
 ; --- Icon set ------------------------------------------------------------
-; The active icons live in the icon_set RAM buffer; each icon label is its slot
-; address there. At startup icon_load validates <ICONS>.IST and copies its icons
-; into icon_set, else keeps the compiled-in default set (icon_rom). The .IST has
-; a 16-byte header (GBIS magic, version, count, width, height) then the icons.
-ICON_SLOT       equ   256          ; bytes per icon (8 bytes x 32 rows, Mode 1)
+; An icon set (.IST) is a 16-byte header, a per-icon directory, then the icon
+; bitmaps. Each icon carries its OWN size, so a set can mix sizes; the desktop
+; reads an icon's size and lays out its box (compute_geometry) at draw time.
+;   Header(16): "GBIS"(0-3) version=2(4) count(5) reserved(6-15)
+;   Directory(count*4): per slot -> offset(2, from file start) width(1) height(1)
+;   Bitmaps: each width*height bytes, in slot order.
+; Each icon label is a SLOT INDEX; icon_addr looks up its offset, set_geom_slot
+; its size. The whole .IST is loaded into icon_set as-is (no shifting). At
+; startup icon_load validates it, else copies the compiled-in default set.
 ICON_NSLOT      equ   9
-IST_HDR         equ   16           ; .IST header size
-ICONSET_BYTES   equ   ICON_NSLOT*ICON_SLOT      ; 2304
-IST_SIZE        equ   IST_HDR + ICONSET_BYTES   ; 2320
+IST_HDR         equ   16           ; header size
+IST_DIR         equ   ICON_NSLOT*4 ; per-icon directory (offset,w,h)
+IST_DATA        equ   IST_HDR + IST_DIR        ; bitmaps start here (52)
+ROM_ICON_SZ     equ   256          ; the default set is all 32x32 (8 x 32 bytes)
+ROMSET_SIZE     equ   IST_DATA + ICON_NSLOT*ROM_ICON_SZ   ; full default .IST = 2356
 ICON_LOAD_MAX   equ   2560         ; cap on a set's on-disk size (floppy adds an
                                    ; AMSDOS header); also bounds the load buffer
 
-icon_rom_data   incbin "../build/DEFAULT.IST"  ; compiled-in default set (header + icons)
-icon_rom        equ   icon_rom_data + IST_HDR  ; its raw icons (the fallback)
+icon_rom_data   incbin "../build/DEFAULT.IST"  ; compiled-in default set (full .IST)
 
-icon_set        defs  ICON_LOAD_MAX+128        ; active icons (RAM); icon_load fills it
-icon_floppy     equ   icon_set + 0*ICON_SLOT
-icon_ide        equ   icon_set + 1*ICON_SLOT
-icon_clock      equ   icon_set + 2*ICON_SLOT
-icon_trash      equ   icon_set + 3*ICON_SLOT
-icon_geobench   equ   icon_set + 4*ICON_SLOT
-icon_basic      equ   icon_set + 5*ICON_SLOT
-icon_binary     equ   icon_set + 6*ICON_SLOT
-icon_picture    equ   icon_set + 7*ICON_SLOT
-icon_text       equ   icon_set + 8*ICON_SLOT
+icon_set        defs  ICON_LOAD_MAX+128        ; active set (RAM); the loaded .IST
+icon_floppy     equ   0            ; icon labels are slot indices
+icon_ide        equ   1
+icon_clock      equ   2
+icon_trash      equ   3
+icon_geobench   equ   4
+icon_basic      equ   5
+icon_binary     equ   6
+icon_picture    equ   7
+icon_text       equ   8
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
@@ -78,25 +83,17 @@ PYMAX           equ   399
 ; icon_x,icon_y is the lower-left of the WxH bounding box. Selection and the
 ; drag outline are a square frame FRAME_G units OUTSIDE the box, drawn in the
 ; plain backdrop margin so erasing them with the backdrop pen stays safe.
+; The box, frame, hit-test and list rows are all derived at runtime from the
+; active icon size (compute_geometry / box_w, box_h, ixmax_v, ...); only the
+; margins below are constant. Largest icon is 8x32 bytes (the load buffer cap).
 NUM_ICONS       equ   5            ; max icon slots (Floppy A/B + IDE + Clock + Trash)
-ICON_W          equ   80           ; bounding box width  (40 px in Mode 1)
-ICON_H          equ   80           ; height (40 px)
 FRAME_G         equ   4            ; selection/drag frame margin (2 px outside)
-; The box holds a smaller shape in its top portion and a 1-row label band at
-; its bottom (8 px). The label therefore sits inside the box/outline.
 LABEL_BAND      equ   16           ; bottom band reserved for the label (8 px)
 SHAPE_INSET     equ   8            ; icon bitmap inset from the box sides (4 px)
-BMP_W           equ   8            ; icon bitmaps are 8 bytes (32 px) ...
-BMP_H           equ   32           ; ... by 32 rows
 NO_ICON         equ   255
 IXMIN           equ   FRAME_G
-IXMAX           equ   639-ICON_W-FRAME_G
-; Lower bound keeps the label (the box's bottom text row) on screen: at wy=16
-; it lands on row 24, clear of the last row, so printing it never scrolls.
+; Lower bound keeps the label (the box's bottom text row) on screen.
 IYMIN           equ   16
-; Keep the frame's top edge below the text (rows 0-1 = pixel lines 0-15).
-; graphics y maps to line 199 - y/2, so frame top (y+ICON_H+FRAME_G) <= 366.
-IYMAX           equ   366-ICON_H-FRAME_G
 PEN_DESKTOP     equ   0            ; backdrop (used to erase)
 PEN_BODY        equ   1            ; white icon body
 PEN_BORDER      equ   2            ; black square-icon border
@@ -408,6 +405,8 @@ start_drag
 ; drop_drag: erase the drag frame, then stamp the icon and a selection frame at
 ; the snapped final position.
 drop_drag
+                ld    a,(drag_idx)           ; frame/clamp use the dragged icon's size
+                call  set_geom_for
                 call  cursor_erase
                 ld    hl,(drag_x)            ; erase the drag frame where it is
                 ld    (wx),hl
@@ -416,6 +415,8 @@ drop_drag
                 ld    a,PEN_DESKTOP
                 call  draw_frame
                 call  repair_others           ; (still dragging -> skips this icon)
+                ld    a,(drag_idx)           ; repair_others changed geometry; restore
+                call  set_geom_for
                 xor   a
                 ld    (dragging),a
 
@@ -423,14 +424,14 @@ drop_drag
                 call  snap16
                 ld    de,IXMIN
                 call  clamp_lo
-                ld    de,IXMAX
+                ld    de,(ixmax_v)
                 call  clamp_hi
                 ld    (wx),hl
                 ld    hl,(drag_y)
                 call  snap16
                 ld    de,IYMIN
                 call  clamp_lo
-                ld    de,IYMAX
+                ld    de,(iymax_v)
                 call  clamp_hi
                 ld    (wy),hl
                 ld    a,(drag_idx)
@@ -464,6 +465,8 @@ ral_loop
 ; drag_frame: move the drag frame to follow the pointer (target - grab offset)
 ; and the cursor to its target, recompositing only if something moved.
 drag_frame
+                ld    a,(drag_idx)           ; clamp/frame use the dragged icon's size
+                call  set_geom_for
                 ld    hl,(tgt_x)             ; new frame x = tgt_x - grab_dx
                 ld    de,(grab_dx)
                 or    a
@@ -473,7 +476,7 @@ drag_frame
 df_xok
                 ld    de,IXMIN
                 call  clamp_lo
-                ld    de,IXMAX
+                ld    de,(ixmax_v)
                 call  clamp_hi
                 ld    (nicon_x),hl
 
@@ -486,7 +489,7 @@ df_xok
 df_yok
                 ld    de,IYMIN
                 call  clamp_lo
-                ld    de,IYMAX
+                ld    de,(iymax_v)
                 call  clamp_hi
                 ld    (nicon_y),hl
 
@@ -519,6 +522,8 @@ df_go
                 ld    a,PEN_DESKTOP
                 call  draw_frame
                 call  repair_others           ; restore any icon under the old frame
+                ld    a,(drag_idx)           ; repair_others changed geometry; restore
+                call  set_geom_for
                 ld    hl,(nicon_x)           ; advance the drag position
                 ld    (drag_x),hl
                 ld    (wx),hl                ; wx,wy = new drag position
@@ -553,16 +558,18 @@ load_icon
                 inc   hl
                 ld    b,(hl)
                 ld    (wy),bc
-                ld    a,(li_idx)             ; bitmap pointer (word array)
+                ld    a,(li_idx)             ; bitmap = slot index (word array)
                 add   a,a
                 ld    e,a
                 ld    d,0
                 ld    hl,icon_bmps
                 add   hl,de
-                ld    c,(hl)
-                inc   hl
-                ld    b,(hl)
-                ld    (wbmp),bc
+                ld    a,(hl)                  ; slot index
+                push  af
+                call  set_geom_slot          ; this icon's size + box geometry
+                pop   af
+                call  icon_addr               ; -> bitmap address
+                ld    (wbmp),hl
                 ld    a,(li_idx)             ; label pointer (word array)
                 add   a,a
                 ld    e,a
@@ -623,17 +630,17 @@ draw_body
                 rr    l
                 ld    a,l
                 ld    (bm_x),a
-                ld    hl,(wy)                 ; bm_y = 159 - wy/2  (shape top line)
+                ld    hl,(wy)                 ; bm_y = bm_y_base - wy/2  (icon top line)
                 srl   h
                 rr    l
-                ld    a,159
+                ld    a,(bm_y_base)
                 sub   l
                 ld    (bm_y),a
                 ld    hl,(wbmp)
                 ld    (bm_src),hl
-                ld    a,BMP_W
+                ld    a,(icon_w)
                 ld    (bm_w),a
-                ld    a,BMP_H
+                ld    a,(icon_h)
                 ld    (bm_h),a
                 call  blit_bitmap
                 ret
@@ -660,9 +667,9 @@ dl_len
                 inc   b
                 jr    dl_len
 dl_pos
-                ld    hl,(wx)                ; tc_x = (wx + ICON_W/2)/8 - len
-                ld    de,ICON_W/2            ; (each char is 2 bytes, so half the
-                add   hl,de                  ;  pixel width in bytes = len)
+                ld    hl,(wx)                ; tc_x = (wx + box_w/2)/8 - len, centred
+                ld    de,(box_wh)            ; on the box. Labels wider than a small
+                add   hl,de                  ; box would go negative, so clamp to 0.
                 srl   h
                 rr    l
                 srl   h
@@ -671,6 +678,9 @@ dl_pos
                 rr    l
                 ld    a,l
                 sub   b
+                jr    nc,dl_storex
+                xor   a                       ; label wider than the box -> left edge
+dl_storex
                 ld    (tc_x),a
                 ld    hl,(wy)                ; tc_y = 192 - wy/2 (box bottom 8px)
                 srl   h
@@ -707,7 +717,7 @@ point_in_body
                 call  cmp_hl_de
                 jr    c,pib_no
                 ld    hl,(wx)
-                ld    de,ICON_W+1
+                ld    de,(box_w1)
                 add   hl,de
                 ex    de,hl
                 ld    hl,(cursor_x)
@@ -718,7 +728,7 @@ point_in_body
                 call  cmp_hl_de
                 jr    c,pib_no
                 ld    hl,(wy)
-                ld    de,ICON_H+1
+                ld    de,(box_h1)
                 add   hl,de
                 ex    de,hl
                 ld    hl,(cursor_y)
@@ -809,7 +819,7 @@ rects_overlap
                 call  cmp_hl_de
                 jr    c,ro_none
                 ld    hl,(wx)                ; icon right < dirty left -> no
-                ld    de,ICON_W
+                ld    de,(box_w)
                 add   hl,de
                 ld    de,(dr_x0)
                 call  cmp_hl_de
@@ -819,7 +829,7 @@ rects_overlap
                 call  cmp_hl_de
                 jr    c,ro_none
                 ld    hl,(wy)
-                ld    de,ICON_H
+                ld    de,(box_h)
                 add   hl,de
                 ld    de,(dr_y0)
                 call  cmp_hl_de
@@ -839,11 +849,11 @@ set_body_rect
                 ld    hl,(wy)
                 ld    (ry0),hl
                 ld    hl,(wx)
-                ld    de,ICON_W
+                ld    de,(box_w)
                 add   hl,de
                 ld    (rx1),hl
                 ld    hl,(wy)
-                ld    de,ICON_H
+                ld    de,(box_h)
                 add   hl,de
                 ld    (ry1),hl
                 ret
@@ -857,11 +867,11 @@ set_shape_rect
                 add   hl,de
                 ld    (ry0),hl
                 ld    hl,(wx)
-                ld    de,ICON_W-SHAPE_INSET
+                ld    de,(box_wsi)
                 add   hl,de
                 ld    (rx1),hl
                 ld    hl,(wy)
-                ld    de,ICON_H
+                ld    de,(box_h)
                 add   hl,de
                 ld    (ry1),hl
                 ret
@@ -877,11 +887,11 @@ set_frame_rect
                 sbc   hl,de
                 ld    (ry0),hl
                 ld    hl,(wx)
-                ld    de,ICON_W+FRAME_G
+                ld    de,(box_wfg)
                 add   hl,de
                 ld    (rx1),hl
                 ld    hl,(wy)
-                ld    de,ICON_H+FRAME_G
+                ld    de,(box_hfg)
                 add   hl,de
                 ld    (ry1),hl
                 ret
@@ -1219,15 +1229,13 @@ icon_word
                 ret
 
 ; icon_load: load the icon set named by cfg_icons (e.g. "DEFAULT" -> DEFAULT.IST)
-; over icon_set. If the file is absent (or no storage), the compiled-in default
-; icons are kept. Call after cfg_load, before drawing icons.
+; into icon_set, validating its header (magic, count, size <= 8x32). On any
+; failure the compiled-in default set (icon_rom, 32x32) is used. Either way
+; compute_geometry then derives the whole layout from the active icon size. Call
+; after cfg_load, before drawing icons.
 icon_load
                 ld    hl,ICON_LOAD_MAX        ; never load more than the buffer holds
                 ld    (fs_load_max),hl
-                ld    hl,icon_rom            ; default: the compiled-in icons
-                ld    de,icon_set
-                ld    bc,ICONSET_BYTES
-                ldir
 
                 ld    hl,cfg_icons           ; fs_req_name = cfg_icons.IST (8.3)
                 ld    de,fs_req_name
@@ -1259,46 +1267,212 @@ il_ext
                 ld    hl,icon_set
                 ld    (fs_load_dst),hl
                 call  fs_load_file
-                jr    nc,il_keepdef          ; missing / too big -> keep default
+                jr    nc,il_default          ; missing / too big -> default
 
-                ld    a,(icon_set+0)         ; validate header: magic "GBIS"
+                ld    a,(icon_set+0)         ; magic "GBIS"
                 cp    'G'
-                jr    nz,il_restore
+                jr    nz,il_default
                 ld    a,(icon_set+1)
                 cp    'B'
-                jr    nz,il_restore
+                jr    nz,il_default
                 ld    a,(icon_set+2)
                 cp    'I'
-                jr    nz,il_restore
+                jr    nz,il_default
                 ld    a,(icon_set+3)
                 cp    'S'
-                jr    nz,il_restore
-                ld    a,(icon_set+5)         ; count
+                jr    nz,il_default
+                ld    a,(icon_set+4)         ; version == 2
+                cp    2
+                jr    nz,il_default
+                ld    a,(icon_set+5)         ; count == 9
                 cp    ICON_NSLOT
-                jr    nz,il_restore
-                ld    a,(icon_set+6)         ; width (bytes)
-                cp    8
-                jr    nz,il_restore
-                ld    a,(icon_set+7)         ; height (rows)
-                cp    32
-                jr    nz,il_restore
-                ld    hl,(fs_ent_size)       ; size
-                ld    de,IST_SIZE
+                jr    nz,il_default
+
+                ld    ix,icon_set+IST_HDR    ; walk the directory: each w<=8, h<=32,
+                ld    hl,0                    ; summing w*h for the size check
+                ld    (il_sum),hl
+                ld    a,ICON_NSLOT
+                ld    (il_cnt),a
+il_dloop
+                ld    a,(ix+2)               ; width 1..8 bytes
+                or    a
+                jp    z,il_default
+                cp    9
+                jp    nc,il_default
+                ld    c,a
+                ld    a,(ix+3)               ; height 1..32 rows
+                or    a
+                jp    z,il_default
+                cp    33
+                jp    nc,il_default
+                ld    b,a                     ; il_sum += w*h
+                ld    d,0
+                ld    e,c
+                ld    hl,(il_sum)
+il_mul          add   hl,de
+                djnz  il_mul
+                ld    (il_sum),hl
+                ld    de,4
+                add   ix,de
+                ld    a,(il_cnt)
+                dec   a
+                ld    (il_cnt),a
+                jr    nz,il_dloop
+
+                ld    hl,(il_sum)           ; size == IST_DATA + sum(w*h)
+                ld    de,IST_DATA
+                add   hl,de
+                ex    de,hl
+                ld    hl,(fs_ent_size)
                 or    a
                 sbc   hl,de
-                jr    nz,il_restore
-
-                ld    hl,icon_set+IST_HDR    ; valid -> drop the header
+                jp    nz,il_default
+                ret                          ; valid: icon_set holds the set
+il_default
+                ld    hl,icon_rom_data       ; bad/missing -> compiled-in default set
                 ld    de,icon_set
-                ld    bc,ICONSET_BYTES
+                ld    bc,ROMSET_SIZE
                 ldir
                 ret
-il_restore
-                ld    hl,icon_rom            ; bad set -> restore the default icons
-                ld    de,icon_set
-                ld    bc,ICONSET_BYTES
-                ldir
-il_keepdef
+
+; icon_addr: A = slot index -> HL = its bitmap (icon_set + dir[slot].offset).
+icon_addr
+                add   a,a
+                add   a,a                     ; slot * 4
+                ld    e,a
+                ld    d,0
+                ld    hl,icon_set+IST_HDR
+                add   hl,de                   ; -> directory entry
+                ld    a,(hl)                  ; offset (word)
+                ld    c,a
+                inc   hl
+                ld    b,(hl)
+                ld    hl,icon_set
+                add   hl,bc
+                ret
+
+; set_geom_slot: A = slot index -> set icon_w/icon_h from dir[slot] and derive
+; the box geometry. Call before drawing/measuring that icon.
+set_geom_slot
+                add   a,a
+                add   a,a                     ; slot * 4
+                ld    e,a
+                ld    d,0
+                ld    hl,icon_set+IST_HDR
+                add   hl,de
+                inc   hl
+                inc   hl                       ; -> width
+                ld    a,(hl)
+                ld    (icon_w),a
+                inc   hl
+                ld    a,(hl)                   ; -> height
+                ld    (icon_h),a
+                jp    compute_geometry
+
+; set_geom_for: A = icon index (live table) -> geometry of its slot's icon.
+set_geom_for
+                add   a,a
+                ld    e,a
+                ld    d,0
+                ld    hl,icon_bmps
+                add   hl,de
+                ld    a,(hl)                  ; slot index
+                jp    set_geom_slot
+
+; compute_geometry: from icon_w/icon_h derive icon_bytes and the box layout.
+; All values are in graphics units (8 per byte across, 2 per row down) except
+; bm_y_base/list_* which are in lines/rows.
+compute_geometry
+                ld    a,(icon_w)            ; icon_bytes = icon_w * icon_h
+                ld    e,a
+                ld    d,0
+                ld    a,(icon_h)
+                ld    b,a
+                ld    hl,0
+cg_bytes        add   hl,de
+                djnz  cg_bytes
+                ld    (icon_bytes),hl
+
+                ld    a,(icon_w)            ; box_w = icon_w*8 + 2*SHAPE_INSET
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                ld    de,2*SHAPE_INSET
+                add   hl,de
+                ld    (box_w),hl
+
+                ld    a,(icon_h)            ; box_h = icon_h*2 + LABEL_BAND
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                ld    de,LABEL_BAND
+                add   hl,de
+                ld    (box_h),hl
+
+                ld    hl,(box_w)            ; box_w1 = box_w + 1
+                inc   hl
+                ld    (box_w1),hl
+                ld    hl,(box_h)            ; box_h1 = box_h + 1
+                inc   hl
+                ld    (box_h1),hl
+                ld    hl,(box_w)            ; box_wsi = box_w - SHAPE_INSET
+                ld    de,SHAPE_INSET
+                or    a
+                sbc   hl,de
+                ld    (box_wsi),hl
+                ld    hl,(box_w)            ; box_wfg = box_w + FRAME_G
+                ld    de,FRAME_G
+                add   hl,de
+                ld    (box_wfg),hl
+                ld    hl,(box_h)            ; box_hfg = box_h + FRAME_G
+                ld    de,FRAME_G
+                add   hl,de
+                ld    (box_hfg),hl
+                ld    hl,(box_w)            ; box_wh = box_w / 2
+                srl   h
+                rr    l
+                ld    (box_wh),hl
+
+                ld    hl,(box_h)            ; bm_y_base = 199 - box_h/2
+                srl   h
+                rr    l
+                ld    a,199
+                sub   l
+                ld    (bm_y_base),a
+
+                ld    hl,639               ; ixmax_v = 639 - box_w - FRAME_G
+                ld    de,(box_w)
+                or    a
+                sbc   hl,de
+                ld    de,FRAME_G
+                or    a
+                sbc   hl,de
+                ld    (ixmax_v),hl
+                ld    hl,366               ; iymax_v = 366 - box_h - FRAME_G
+                ld    de,(box_h)
+                or    a
+                sbc   hl,de
+                ld    de,FRAME_G
+                or    a
+                sbc   hl,de
+                ld    (iymax_v),hl
+
+                ld    a,(icon_h)            ; list_bmh = icon_h / 2 (half-height row)
+                srl   a
+                ld    (list_bmh),a
+                ld    a,(icon_h)            ; list_off = (icon_h/4) * icon_w
+                srl   a
+                srl   a
+                ld    e,a
+                ld    d,0
+                ld    a,(icon_w)
+                ld    b,a
+                ld    hl,0
+cg_loff         add   hl,de
+                djnz  cg_loff
+                ld    (list_off),hl
                 ret
 
 ; build_desktop_icons: probe storage and fill the live icon arrays from
@@ -1587,8 +1761,13 @@ ddl_loop
                 add   a,b
                 ld    (df_yb),a
 
-                call  ext_to_icon              ; icon, half height: skip blank rows
-                ld    de,64
+                call  ext_to_icon              ; HL = slot index
+                ld    a,l
+                push  af
+                call  set_geom_slot          ; this icon's size (list_off/list_bmh)
+                pop   af
+                call  icon_addr               ; -> bitmap address
+                ld    de,(list_off)           ; middle rows (half height)
                 add   hl,de
                 ld    (bm_src),hl
                 ld    a,(wnd_x)
@@ -1596,9 +1775,9 @@ ddl_loop
                 ld    (bm_x),a
                 ld    a,(df_yb)
                 ld    (bm_y),a
-                ld    a,8
+                ld    a,(icon_w)
                 ld    (bm_w),a
-                ld    a,16
+                ld    a,(list_bmh)
                 ld    (bm_h),a
                 call  blit_bitmap
 
@@ -1947,6 +2126,25 @@ df_yb           db    0            ; current file-icon y line
 sel_icon        db    NO_ICON      ; selected icon index, or NO_ICON
 drag_idx        db    NO_ICON      ; icon currently being dragged
 li_idx          db    0            ; load_icon scratch
+il_sum          dw    0            ; icon_load: directory size sum
+il_cnt          db    0            ; icon_load: directory entries left
+; --- active icon size + derived box geometry (set by compute_geometry) ---
+icon_w          db    8            ; bytes per row (32x32 default)
+icon_h          db    32           ; rows
+icon_bytes      dw    256          ; icon_w * icon_h (slot stride)
+box_w           dw    80           ; bounding box (graphics): icon_w*8 + 2*INSET
+box_h           dw    80           ; icon_h*2 + LABEL_BAND
+box_w1          dw    81           ; box_w + 1 (hit-test)
+box_h1          dw    81
+box_wsi         dw    72           ; box_w - SHAPE_INSET (shape rect)
+box_wfg         dw    84           ; box_w + FRAME_G (frame rect)
+box_hfg         dw    84
+box_wh          dw    40           ; box_w / 2 (label centering)
+bm_y_base       db    159          ; 199 - box_h/2 (icon top line)
+ixmax_v         dw    555          ; 639 - box_w - FRAME_G (drag clamp)
+iymax_v         dw    282          ; 366 - box_h - FRAME_G
+list_off        dw    64           ; (icon_h/4)*icon_w (half-height list offset)
+list_bmh        db    16           ; icon_h/2 (half-height list rows)
 wbmp            dw    0            ; working icon bitmap pointer
 wlabel          dw    0            ; working icon label pointer
 wx              dw    0            ; working icon position
@@ -2122,4 +2320,4 @@ end
 cfg_file        incbin "../GEOBENCH.CFG.example"
 cfg_file_end
                 save  "GEOBENCH.CFG",cfg_file,cfg_file_end-cfg_file,DSK,"build/geobench.dsk"
-                save  "DEFAULT.IST",icon_rom_data,IST_SIZE,DSK,"build/geobench.dsk"
+                save  "DEFAULT.IST",icon_rom_data,ROMSET_SIZE,DSK,"build/geobench.dsk"
