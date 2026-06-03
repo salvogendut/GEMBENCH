@@ -9,7 +9,8 @@
                 include "../../lib/gbapp.inc"
 
 WIN_W           equ   56           ; window size
-WIN_H           equ   150
+WIN_H           equ   130          ; shorter than the screen so it can be dragged
+                                   ; around (still fits the directory list)
 ROW_OFF         equ   18           ; first row, below the title bar
 ROW_PITCH       equ   18
 DCLICK          equ   40
