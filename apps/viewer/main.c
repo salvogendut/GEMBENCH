@@ -10,7 +10,7 @@
  * skipped), so this doubles as a quick "peek" at anything on the disk. */
 #include "gb.h"
 
-#define VIEW_MAX  6144   /* must match the max in gb_fs_load (gblib.s)        */
+#define VIEW_MAX  6144   /* file buffer size; also the load cap passed to gb_fs_load */
 #define TX_COL    4      /* text start: byte column inside the window         */
 #define TX_Y0     26     /* first text line (pixels), below the title bar     */
 #define LINE_H    11     /* line pitch (pixels)                               */
@@ -54,7 +54,7 @@ void main(void)
     unsigned int n;
 
     gb_window(2, 14, 76, 180, "VIEWER");
-    n = gb_fs_load(filebuf);
+    n = gb_fs_load(filebuf, VIEW_MAX);
     if (n == 0)
         gb_text(TX_COL, TX_Y0, "(file is empty or could not be read)");
     else
