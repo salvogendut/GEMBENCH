@@ -31,6 +31,8 @@
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
                 jp    cursor_erase           ; GB_CURHIDE #8024
+                jp    k_launch               ; GB_LAUNCH  #8027
+                jp    k_getarg               ; GB_GETARG  #802A
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -673,6 +675,53 @@ al_fail
 app_name        db    "FILEMGR BIN"          ; 8.3, space-padded
 msg_fail        db    "APP LOAD FAILED",13,10,0
 
+; k_launch (GB_LAUNCH): open the current entry (fs_ent_name) with its app. Saves
+; the caller's page, captures the file name, loads the chosen app into PAGE_APP1,
+; runs it, then restores the caller's page. The launched app reads the file name
+; via GB_GETARG.
+k_launch
+                ld    a,(bank_cur)           ; remember the caller's page (FILEMGR)
+                ld    (kl_save),a
+                ld    hl,fs_ent_name         ; capture the file to open (fs_load_file
+                ld    de,launch_arg          ; below will overwrite fs_ent_name)
+                ld    bc,11
+                ldir
+                call  app_for_ext            ; fs_req_name = the app .BIN for the type
+                di
+                ld    a,PAGE_APP1            ; load + run the app in its own page
+                call  bank_set
+                ld    hl,#3F00
+                ld    (fs_load_max),hl
+                ld    hl,APP_BASE
+                ld    (fs_load_dst),hl
+                call  fs_load_file
+                jr    nc,kl_done             ; app missing -> just return
+                ei
+                call  APP_BASE
+                di
+kl_done
+                ld    a,(kl_save)            ; restore the caller's page
+                call  bank_set
+                ei
+                ret
+
+; k_getarg (GB_GETARG): HL = the launch arg (the 8.3 file name the app opened).
+k_getarg
+                ld    hl,launch_arg
+                ret
+
+; app_for_ext: choose the app for fs_ent_name's type -> fs_req_name. For now
+; every type opens in VIEWER; this is where a real extension table will branch.
+app_for_ext
+                ld    hl,name_viewer
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ret
+name_viewer     db    "VIEWER  BIN"
+launch_arg      defs  11
+kl_save         db    0
+
                 include "../lib/screen.asm"
                 include "../lib/text.asm"
                 include "../lib/cursor_arrow.asm"
@@ -688,12 +737,15 @@ kern_end                                        ; GBKERN.BIN is CODE ONLY (must 
                                                 ; at runtime, only read by `save`.
 app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.BIN
 app_imgend
+vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.BIN
+vwr_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
 font_imgend
 icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
 icon_imgend
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
+                save  "VIEWER.BIN",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL

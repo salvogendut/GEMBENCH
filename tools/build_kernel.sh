@@ -19,5 +19,6 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm            # icon set -> PAGE_DATA
 "$RASM" apps/filemgr/filemgr.asm -eo         # -> build/FILEMGR.RAW
-"$RASM" kernel/gbkern.asm -eo                # incbins app + font + icons -> .dsk
-echo "Built build/gbkern.dsk (GBKERN + FILEMGR + DEFAULT.FNT + DEFAULT.IST)"
+"$RASM" apps/viewer/viewer.asm -eo           # -> build/VIEWER.RAW
+"$RASM" kernel/gbkern.asm -eo                # incbins apps + font + icons -> .dsk
+echo "Built build/gbkern.dsk (GBKERN + FILEMGR + VIEWER + DEFAULT.FNT + DEFAULT.IST)"

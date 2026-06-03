@@ -3,62 +3,20 @@
 ; Opens a window via the kernel and lists the active drive's directory: a
 ; half-height type icon + the (name-only) filename per entry. The pointer +
 ; input come from the kernel (GB_CURSHOW/GB_POLL); a click selects a row (red
-; frame), a double-click "opens" it (stub: shows OPEN <name> at the foot of the
-; window - real app launch lands once the apps + write layer exist).
+; frame), a double-click LAUNCHES the entry's app (GB_LAUNCH) in another bank
+; page; when that app quits we redraw the list.
 
                 include "../../lib/gbapp.inc"
 
 ROW_Y0          equ   44           ; first row line (below the title bar)
 ROW_PITCH       equ   18           ; row pitch (16px icon band + 2px gap)
 ROW_MAXY        equ   150          ; stop adding rows past here
-STATUS_Y        equ   158          ; "OPEN <name>" status line
 DCLICK          equ   40           ; double-click window (frames ~0.8s)
 NONE            equ   #FF
 
                 org   APP_BASE
 app_entry
-                ld    b,4                     ; window at (4,26), 56x150
-                ld    c,26
-                ld    d,56
-                ld    e,150
-                ld    hl,win_title
-                call  GB_WINDOW
-
-                xor   a                        ; build the list, counting rows
-                ld    (n_entries),a
-                ld    a,ROW_Y0
-                ld    (row_y),a
-                call  GB_DIR1                ; HL -> name; CF set if present
-                jr    nc,list_done
-list_loop
-                push  hl                       ; HL = entry name
-                ld    a,(row_y)               ; type icon at (col 6, line)
-                ld    c,a
-                ld    b,6
-                call  GB_BLITE
-                ld    a,(row_y)               ; name to the right, centred
-                add   a,5
-                ld    c,a
-                ld    b,15
-                ld    d,1
-                ld    e,0
-                pop   hl
-                call  GB_TEXT
-                ld    hl,n_entries
-                inc   (hl)
-                ld    a,(row_y)
-                add   a,ROW_PITCH
-                ld    (row_y),a
-                cp    ROW_MAXY
-                jr    nc,list_done
-                call  GB_DIRN
-                jr    c,list_loop
-list_done
-                call  GB_CURSHOW             ; pointer on top
-                ld    a,NONE
-                ld    (sel_row),a
-                xor   a
-                ld    (dc_timer),a
+                call  fm_draw                ; window + list + pointer
 
 ; --- event loop ----------------------------------------------------------
 ev_loop
@@ -114,28 +72,69 @@ ev_rdone
                 ld    a,(click_row)
                 cp    b
                 jr    nz,ev_firstclick
-                call  dispatch_row           ; second click -> open
-                xor   a
-                ld    (dc_timer),a
-ev_clickdone
-                call  GB_CURSHOW             ; pointer back on top, re-saving the frame
+                call  launch_row             ; second click -> open in its app
+                call  fm_draw                ; redraw after the app returns
                 jp    ev_loop
 ev_firstclick
                 ld    a,(click_row)
                 ld    (dc_row),a
                 ld    a,DCLICK
                 ld    (dc_timer),a
-                jr    ev_clickdone
+                call  GB_CURSHOW             ; pointer back on top
+                jp    ev_loop
 app_done
                 ret                            ; back to the desktop kernel
 
+; --- draw the window + directory list, pointer on top --------------------
+fm_draw
+                ld    b,4                     ; window at (4,26), 56x150
+                ld    c,26
+                ld    d,56
+                ld    e,150
+                ld    hl,win_title
+                call  GB_WINDOW
+                xor   a
+                ld    (n_entries),a
+                ld    a,ROW_Y0
+                ld    (row_y),a
+                call  GB_DIR1
+                jr    nc,fd_done
+fd_loop
+                push  hl                       ; HL = entry name
+                ld    a,(row_y)
+                ld    c,a
+                ld    b,6
+                call  GB_BLITE               ; type icon
+                ld    a,(row_y)
+                add   a,5
+                ld    c,a
+                ld    b,15
+                ld    d,1
+                ld    e,0
+                pop   hl
+                call  GB_TEXT                ; name
+                ld    hl,n_entries
+                inc   (hl)
+                ld    a,(row_y)
+                add   a,ROW_PITCH
+                ld    (row_y),a
+                cp    ROW_MAXY
+                jr    nc,fd_done
+                call  GB_DIRN
+                jr    c,fd_loop
+fd_done
+                ld    a,NONE
+                ld    (sel_row),a
+                xor   a
+                ld    (dc_timer),a
+                jp    GB_CURSHOW             ; pointer on top (tail)
+
 ; --- selection -----------------------------------------------------------
-; select_row: frame click_row in red; erase the previous selection's frame.
 select_row
                 ld    a,(sel_row)
                 cp    NONE
                 jr    z,sr_draw
-                ld    b,a                     ; same row already selected?
+                ld    b,a
                 ld    a,(click_row)
                 cp    b
                 ret   z
@@ -152,69 +151,48 @@ sr_draw
                 ld    (sel_row),a
                 ret
 
-; row_frame_y: A = row -> frame_y = ROW_Y0 + row*ROW_PITCH - 1.
 row_frame_y
                 ld    b,a
-                add   a,a                     ; row*2
+                add   a,a
                 ld    c,a
                 ld    a,b
                 add   a,a
                 add   a,a
                 add   a,a
-                add   a,a                     ; row*16
+                add   a,a
                 add   a,c                     ; row*18
                 add   a,ROW_Y0-1
                 ld    (frame_y),a
                 ret
 
-; draw_frame: A = pen -> frame around the interior at frame_y.
 draw_frame
                 ld    (df_pen),a
-                ld    b,5                     ; x (window interior left)
+                ld    b,5
                 ld    a,(frame_y)
                 ld    c,a
-                ld    d,54                     ; w (interior width)
-                ld    e,17                     ; h (~ row pitch)
+                ld    d,54
+                ld    e,17
                 ld    a,(df_pen)
                 jp    GB_FRAME
 
-; --- dispatch (stub) -----------------------------------------------------
-; dispatch_row: re-enumerate to click_row, show "OPEN <name>" at the foot.
-dispatch_row
-                ld    hl,status_clr          ; wipe the status line
-                ld    b,3
-                ld    c,STATUS_Y
-                ld    d,1
-                ld    e,0
-                call  GB_TEXT
-                call  GB_DIR1                ; walk to the clicked entry
+; --- launch ---------------------------------------------------------------
+; launch_row: re-enumerate to the clicked entry (so fs_ent_name is set) and
+; open it with its app.
+launch_row
+                call  GB_DIR1
                 ld    a,(click_row)
                 or    a
-                jr    z,dr_have
+                jr    z,lr_go
                 ld    b,a
-dr_loop
+lr_loop
                 push  bc
                 call  GB_DIRN
                 pop   bc
-                djnz  dr_loop
-dr_have
-                push  hl                       ; HL = entry name
-                ld    hl,open_msg
-                ld    b,3
-                ld    c,STATUS_Y
-                ld    d,1
-                ld    e,0
-                call  GB_TEXT
-                pop   hl
-                ld    b,12
-                ld    c,STATUS_Y
-                ld    d,1
-                ld    e,0
-                jp    GB_TEXT
+                djnz  lr_loop
+lr_go
+                jp    GB_LAUNCH              ; fs_ent_name = clicked entry
 
 win_title       db    "DISK A",0
-open_msg        db    "OPEN",0
-status_clr      db    "                   ",0
 row_y           db    0
 n_entries       db    0
 sel_row         db    0
