@@ -18,7 +18,8 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm            # icon set -> PAGE_DATA
+"$RASM" apps/desktop/desktop.asm -eo         # -> build/DESKTOP.RAW
 "$RASM" apps/filemgr/filemgr.asm -eo         # -> build/FILEMGR.RAW
 "$RASM" apps/viewer/viewer.asm -eo           # -> build/VIEWER.RAW
 "$RASM" kernel/gbkern.asm -eo                # incbins apps + font + icons -> .dsk
-echo "Built build/gbkern.dsk (GBKERN + FILEMGR + VIEWER + DEFAULT.FNT + DEFAULT.IST)"
+echo "Built build/gbkern.dsk (GBKERN + DESKTOP + FILEMGR + VIEWER + assets)"

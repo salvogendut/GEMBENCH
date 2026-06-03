@@ -22,8 +22,11 @@
 APP_BASE        equ   #4000        ; the #4000-#7FFF paging window
 
 PAGE_DATA       equ   #C4          ; bank 0, block 0 -> kernel data buffers
-PAGE_APP0       equ   #C5          ; bank 0, block 1 -> application slot 0
-PAGE_APP1       equ   #C6          ; bank 0, block 2 -> application slot 1
+PAGE_APP0       equ   #C5          ; bank 0, block 1 -> app slot 0 (desktop)
+PAGE_APP1       equ   #C6          ; bank 0, block 2 -> app slot 1
+PAGE_APP2       equ   #C7          ; bank 0, block 3 -> app slot 2
+                                   ; apps nest desktop -> filemgr -> viewer; the
+                                   ; launcher uses PAGE_APP0 + launch depth
 DATA_BUF        equ   #4000        ; base of the kernel data buffers (in PAGE_DATA)
 DATA_FONT       equ   DATA_BUF     ; font set lives at the start of PAGE_DATA
 DATA_ICONS      equ   #4400        ; icon set (.IST) follows the font in PAGE_DATA
@@ -55,3 +58,7 @@ GB_LAUNCH       equ   GB_KERNEL+39 ; #8027  launch the app for the current entry
                                    ;        return when it quits
 GB_GETARG       equ   GB_KERNEL+42 ; #802A  -> HL = launch arg (11-byte 8.3 name
                                    ;        of the file the app was opened with)
+GB_RUN          equ   GB_KERNEL+45 ; #802D  run a named app: HL = 8.3 app name;
+                                   ;        runs in the next bank page, returns on quit
+GB_ICON         equ   GB_KERNEL+48 ; #8030  full icon blit: A=slot B=x C=y
+GB_FILL         equ   GB_KERNEL+51 ; #8033  filled rect: B=x C=y D=w E=h A=pen

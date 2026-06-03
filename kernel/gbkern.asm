@@ -33,6 +33,9 @@
                 jp    cursor_erase           ; GB_CURHIDE #8024
                 jp    k_launch               ; GB_LAUNCH  #8027
                 jp    k_getarg               ; GB_GETARG  #802A
+                jp    k_run                  ; GB_RUN     #802D
+                jp    k_icon                 ; GB_ICON    #8030
+                jp    k_fill                 ; GB_FILL    #8033
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -44,10 +47,12 @@ kernel_main
                 call  fs_init                ; pick storage backend (floppy here)
                 call  font_init              ; load the font into PAGE_DATA
                 call  icon_init              ; load the icon set into PAGE_DATA
-                call  app_launch             ; load FILEMGR.BIN into PAGE_APP0, run it
-                ld    a,2                     ; app quit -> back to BASIC (mode 2,
-                call  SCR_SET_MODE           ; clears) until the desktop kernel exists
+                ld    hl,name_desktop        ; the desktop is the first app
+                call  launch_app             ; run DESKTOP in PAGE_APP0
+                ld    a,2                     ; desktop quit (ESC) -> back to BASIC
+                call  SCR_SET_MODE
                 ret
+name_desktop    db    "DESKTOP BIN"
 
 ; --- palette -------------------------------------------------------------
 INK_DESKTOP     equ   1            ; blue  -> pen 0 (paper / backdrop)
@@ -646,81 +651,134 @@ icon_init
 icon_name       db    "DEFAULT IST"          ; 8.3, space-padded
 
 ; --- app launch ----------------------------------------------------------
-app_launch
-                di
-                ld    a,PAGE_APP0
-                call  bank_set
-                ld    hl,app_name             ; fs_req_name = "HELLO   BIN"
-                ld    de,fs_req_name
+; launch_app: HL = 8.3 app name. Load it into the next bank page (PAGE_APP0 +
+; launch depth) and run it; restore the caller's page when it quits. Apps nest
+; (desktop -> filemgr -> viewer); the caller's page is kept on the stack so any
+; depth restores correctly.
+launch_app
+                ld    de,fs_req_name         ; name -> fs_req_name (HL in caller page)
                 ld    bc,11
                 ldir
-                ld    hl,#3F00               ; cap: app must fit the 16K window
-                ld    (fs_load_max),hl
-                ld    hl,APP_BASE             ; load straight into the window
-                ld    (fs_load_dst),hl
-                call  fs_load_file
-                jr    nc,al_fail
-                ei                            ; app runs with interrupts on (the
-                call  APP_BASE               ; firmware keyboard scan needs them)
+                ld    a,(launch_depth)       ; target page = PAGE_APP0 + depth
+                cp    3
+                ret   nc                      ; no free page (max 3 apps) -> give up
+                add   a,PAGE_APP0
+                ld    c,a
+                ld    a,(bank_cur)           ; save caller's page (per depth) on stack
+                push  af
+                ld    hl,launch_depth
+                inc   (hl)
                 di
-                call  bank_normal
-                ei
-                ret
-al_fail
-                call  bank_normal
-                ei
-                ld    hl,msg_fail
-                jp    k_print
-
-app_name        db    "FILEMGR BIN"          ; 8.3, space-padded
-msg_fail        db    "APP LOAD FAILED",13,10,0
-
-; k_launch (GB_LAUNCH): open the current entry (fs_ent_name) with its app. Saves
-; the caller's page, captures the file name, loads the chosen app into PAGE_APP1,
-; runs it, then restores the caller's page. The launched app reads the file name
-; via GB_GETARG.
-k_launch
-                ld    a,(bank_cur)           ; remember the caller's page (FILEMGR)
-                ld    (kl_save),a
-                ld    hl,fs_ent_name         ; capture the file to open (fs_load_file
-                ld    de,launch_arg          ; below will overwrite fs_ent_name)
-                ld    bc,11
-                ldir
-                call  app_for_ext            ; fs_req_name = the app .BIN for the type
-                di
-                ld    a,PAGE_APP1            ; load + run the app in its own page
+                ld    a,c
                 call  bank_set
                 ld    hl,#3F00
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
                 call  fs_load_file
-                jr    nc,kl_done             ; app missing -> just return
+                jr    nc,la_done             ; missing -> just unwind
                 ei
                 call  APP_BASE
                 di
-kl_done
-                ld    a,(kl_save)            ; restore the caller's page
+la_done
+                ld    hl,launch_depth
+                dec   (hl)
+                pop   af                       ; caller's page
                 call  bank_set
                 ei
                 ret
+launch_depth    db    0
+
+; k_run (GB_RUN): run a named app. HL = 8.3 name (in the caller's page).
+k_run
+                jp    launch_app
+
+; k_launch (GB_LAUNCH): open the current entry (fs_ent_name) with its app. Capture
+; the file name (the load overwrites fs_ent_name), pick the app by type, run it.
+k_launch
+                ld    hl,fs_ent_name
+                ld    de,launch_arg
+                ld    bc,11
+                ldir
+                call  app_for_ext            ; HL = app .BIN for the type
+                jp    launch_app
 
 ; k_getarg (GB_GETARG): HL = the launch arg (the 8.3 file name the app opened).
 k_getarg
                 ld    hl,launch_arg
                 ret
 
-; app_for_ext: choose the app for fs_ent_name's type -> fs_req_name. For now
-; every type opens in VIEWER; this is where a real extension table will branch.
+; app_for_ext: HL = the app for fs_ent_name's type. For now every type opens in
+; VIEWER; this is where a real extension table will branch.
 app_for_ext
                 ld    hl,name_viewer
-                ld    de,fs_req_name
-                ld    bc,11
-                ldir
                 ret
 name_viewer     db    "VIEWER  BIN"
 launch_arg      defs  11
-kl_save         db    0
+
+; k_icon (GB_ICON): blit a full icon. A = slot, B = x, C = y. Reads the bitmap
+; from the .IST in PAGE_DATA, so swap pages around it.
+k_icon
+                ld    (gi_slot),a
+                ld    a,b
+                ld    (gi_x),a
+                ld    a,c
+                ld    (gi_y),a
+                ld    a,(bank_cur)
+                ld    (gi_save),a
+                ld    a,PAGE_DATA
+                call  bank_set
+                ld    a,(gi_slot)
+                call  icon_full_geom
+                call  blit_bitmap
+                ld    a,(gi_save)
+                jp    bank_set
+icon_full_geom                                 ; A = slot -> bm_src/w/h, bm_x/y
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                add   hl,hl                     ; slot*4
+                ld    de,DATA_ICONS+16
+                add   hl,de
+                ld    e,(hl)                  ; offset
+                inc   hl
+                ld    d,(hl)
+                inc   hl
+                ld    a,(hl)                  ; width
+                ld    (bm_w),a
+                inc   hl
+                ld    a,(hl)                  ; height (full)
+                ld    (bm_h),a
+                ld    hl,DATA_ICONS
+                add   hl,de
+                ld    (bm_src),hl
+                ld    a,(gi_x)
+                ld    (bm_x),a
+                ld    a,(gi_y)
+                ld    (bm_y),a
+                ret
+gi_slot         db    0
+gi_x            db    0
+gi_y            db    0
+gi_save         db    0
+
+; k_fill (GB_FILL): filled rectangle. B=x C=y D=w E=h A=pen. Capture the params
+; before pen_to_byte (it clobbers E).
+k_fill
+                ld    (kf_pen),a
+                ld    a,b
+                ld    (fb_x),a
+                ld    a,c
+                ld    (fb_y),a
+                ld    a,d
+                ld    (fb_w),a
+                ld    a,e
+                ld    (fb_h),a
+                ld    a,(kf_pen)
+                call  pen_to_byte
+                ld    (fb_val),a
+                jp    fill_block
+kf_pen          db    0
 
                 include "../lib/screen.asm"
                 include "../lib/text.asm"
@@ -735,6 +793,8 @@ kern_end                                        ; GBKERN.BIN is CODE ONLY (must 
                                                 ; below HIMEM ~#A67B). The packaging
                                                 ; incbins live above it - never loaded
                                                 ; at runtime, only read by `save`.
+dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.BIN
+dtp_imgend
 app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.BIN
 app_imgend
 vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.BIN
@@ -744,6 +804,7 @@ font_imgend
 icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
 icon_imgend
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
+                save  "DESKTOP.BIN",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
                 save  "VIEWER.BIN",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
