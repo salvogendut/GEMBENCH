@@ -27,6 +27,7 @@
         .globl  _gb_fs_load
         .globl  _gb_fs_save
         .globl  _gb_getkey
+        .globl  _gb_vsync
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -183,3 +184,7 @@ _gb_fs_save:
 ;; unsigned char gb_getkey(void);   -> typed char in A, or 0 if none
 _gb_getkey:
         jp      0x8045          ; GB_GETKEY (returns the char in A)
+
+;; void gb_vsync(void);   wait one frame (50 Hz), no pointer/clock side effects
+_gb_vsync:
+        jp      0x8048          ; GB_VSYNC
