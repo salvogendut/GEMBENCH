@@ -11,6 +11,7 @@
 app_entry
                 ld    hl,hello_msg
                 call  GB_PRINT               ; kernel API (resident, mapped)
+                call  GB_PDATA               ; kernel reads its banked buffer for us
                 ret                            ; back to the desktop kernel
 
 hello_msg       db    "HELLO FROM A BANKED APP!",13,10,0

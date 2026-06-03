@@ -1,20 +1,33 @@
 ; ---------------------------------------------------------------------------
-; lib/gbapp.inc - GEOBENCH app ABI (Phase 1 skeleton).
+; lib/gbapp.inc - GEOBENCH app ABI (Phase 1/2 skeleton).
 ;
-; Apps are separate binaries assembled at APP_BASE. The kernel loads an app into
-; an expansion bank and CALLs its entry with that bank paged into #4000-#7FFF.
-; The app reaches kernel services by CALLing fixed addresses in the resident
-; kernel region (GB_*), which stays mapped (#8000-#BFFF) while a bank is paged.
-; An app returns to the desktop by RET, or by CALL GB_QUIT.
+; Apps are separate binaries assembled at APP_BASE, loaded into an expansion
+; bank and entered there. They reach kernel services by CALLing fixed addresses
+; in the resident kernel region (GB_*), which stays mapped (#8000-#BFFF) while a
+; bank is paged. An app returns to the desktop by RET, or by CALL GB_QUIT.
+;
+; Memory model (see geobench-kernel-banking): the #4000-#7FFF window holds one
+; 16K page at a time. We carve the first expansion bank (bank 0) into pages:
+;   PAGE_DATA = kernel buffers (icon set, font, fs dir, ...)
+;   PAGE_APP0 = the first application
+; A kernel service that touches a banked buffer saves the caller's page
+; (bank_cur), swaps to PAGE_DATA, works, then restores the caller's page.
+; Params therefore pass in registers or a resident transfer buffer, never in
+; the window (it gets swapped out under the service).
 ;
 ; The kernel region is a jump table at GB_KERNEL: each entry is a 3-byte `jp`,
 ; so the addresses below are stable as the kernel grows (keep the table order).
 ; ---------------------------------------------------------------------------
 
-APP_BASE        equ   #4000        ; apps run in the #4000-#7FFF bank window
+APP_BASE        equ   #4000        ; the #4000-#7FFF paging window
+
+PAGE_DATA       equ   #C4          ; bank 0, block 0 -> kernel data buffers
+PAGE_APP0       equ   #C5          ; bank 0, block 1 -> application slot 0
+DATA_BUF        equ   #4000        ; base of the kernel data buffers (in PAGE_DATA)
 
 GB_KERNEL       equ   #8000        ; resident kernel base (fixed, RUN entry)
 GB_INIT         equ   GB_KERNEL+0  ; #8000  kernel boot (kernel only)
 GB_CLS          equ   GB_KERNEL+3  ; #8003  clear screen / home cursor
 GB_PRINT        equ   GB_KERNEL+6  ; #8006  HL = 0-term string -> text output
 GB_QUIT         equ   GB_KERNEL+9  ; #8009  app -> return to the desktop
+GB_PDATA        equ   GB_KERNEL+12 ; #800C  demo: print the banked data buffer
