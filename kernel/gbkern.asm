@@ -756,12 +756,28 @@ font_init
                 ld    (fs_load_max),hl
                 ld    hl,DATA_FONT           ; load into PAGE_DATA
                 ld    (fs_load_dst),hl
-                call  fs_load_file
+                ld    hl,def_fnt             ; fall back to DEFAULT.FNT if missing
+                call  load_or_default
                 ld    hl,DATA_FONT           ; cache geometry (font_glyphs -> PAGE_DATA)
                 call  font_apply_header
                 call  bank_normal
                 ei
                 ret
+def_fnt         db    "DEFAULT FNT"
+def_ist         db    "DEFAULT IST"
+
+; load_or_default: fs_req_name holds the wanted 8.3 name and fs_load_dst/max are
+; set. Try it; if the file is missing (a bad ICONS=/FONT= value), retry with the
+; 11-byte default name at HL so a typo can't leave the screen drawing garbage.
+load_or_default                                ; HL = default 8.3 name (11 bytes)
+                push  hl
+                call  fs_load_file
+                pop   hl
+                ret   c                         ; wanted file loaded
+                ld    de,fs_req_name           ; missing -> use the default name
+                ld    bc,11
+                ldir
+                jp    fs_load_file              ; (dst/max unchanged by the miss)
 
 ; icon_init: load <ICONS>.IST into PAGE_DATA at DATA_ICONS.
 icon_init
@@ -776,7 +792,8 @@ icon_init
                 ld    (fs_load_max),hl
                 ld    hl,DATA_ICONS
                 ld    (fs_load_dst),hl
-                call  fs_load_file
+                ld    hl,def_ist             ; fall back to DEFAULT.IST if missing
+                call  load_or_default
                 call  bank_normal
                 ei
                 ret
