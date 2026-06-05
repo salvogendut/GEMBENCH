@@ -16,6 +16,14 @@
                 include "../lib/gbapp.inc"
                 include "../lib/firmware.inc"
 
+; Config transfer area - resident low RAM (stays main RAM under banking, so the
+; paged-in GBCFG module can reach it). The kernel fills text/len, runs the
+; module, then reads the parsed ICONS=/FONT= stems back. See kernel/kc/.
+KCFG_TEXT       equ   #1000        ; GEOBENCH.CFG contents (<=512 bytes)
+KCFG_LEN        equ   #1200        ; word: cfg-text byte count (0 = no file)
+KCFG_ICONS      equ   #1202        ; 9 bytes: parsed icon-set stem (NUL-term)
+KCFG_FONT       equ   #120C        ; 9 bytes: parsed font-set stem (NUL-term)
+
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
                 jp    kernel_main            ; GB_INIT  #8000
@@ -71,6 +79,9 @@ kernel_main
                 ld    de,64
                 add   hl,de
                 call  fmt_mem                ; -> mem_str
+                call  cfg_boot               ; parse GEOBENCH.CFG (C module) ->
+                                             ; KCFG_ICONS / KCFG_FONT (before the
+                                             ; font/icon loaders consume them)
                 call  font_init              ; load the font into PAGE_DATA
                 call  icon_init              ; load the icon set into PAGE_DATA
                 call  clock_init             ; RTC or software clock -> time_str
@@ -677,16 +688,105 @@ ext_scr         db    "SCR"
 ext_txt         db    "TXT"
 name_geobench   db    "GEOBENCH"
 
+; --- config (C kernel module) --------------------------------------------
+; cfg_boot: seed defaults, load GEOBENCH.CFG into the transfer area, then run the
+; GBCFG C module (paged into a bank) to parse it into KCFG_ICONS / KCFG_FONT.
+; Absent file -> length 0 -> the parser is a no-op and the defaults stand.
+cfg_boot
+                ld    hl,cfg_default         ; KCFG_ICONS = "DEFAULT"
+                ld    de,KCFG_ICONS
+                ld    bc,9
+                ldir
+                ld    hl,cfg_default         ; KCFG_FONT  = "DEFAULT"
+                ld    de,KCFG_FONT
+                ld    bc,9
+                ldir
+                ld    hl,0                    ; default: no config text
+                ld    (KCFG_LEN),hl
+                ld    hl,cfg_fname           ; fs_req_name = "GEOBENCH.CFG"
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#0200               ; cfg text buffer is 512 bytes
+                ld    (fs_load_max),hl
+                ld    hl,KCFG_TEXT
+                ld    (fs_load_dst),hl
+                call  fs_load_file
+                jr    nc,cfgb_run            ; no file -> KCFG_LEN stays 0
+                ld    hl,(fs_ent_size)        ; file <512 so the low word is the size
+                ld    (KCFG_LEN),hl
+cfgb_run
+                jp    run_cfgmod
+cfg_default     db    "DEFAULT",0,0          ; 9 bytes
+cfg_fname       db    "GEOBENCHCFG"          ; "GEOBENCH.CFG" (8.3)
+
+; run_cfgmod: load GBCFG.BIN into PAGE_APP0 and CALL it (it parses the transfer
+; area). Mirrors launch_app's load path; runs under DI (the module needs no
+; interrupts) with no top-bar/ESC handling - this is boot time.
+run_cfgmod
+                ld    hl,cfgmod_name
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    a,(bank_cur)           ; save the current page
+                push  af
+                di
+                ld    a,PAGE_APP0
+                call  bank_set
+                ld    hl,#3F00
+                ld    (fs_load_max),hl
+                ld    hl,APP_BASE
+                ld    (fs_load_dst),hl
+                call  fs_load_file
+                jr    nc,rcm_done            ; module missing -> keep defaults
+                call  APP_BASE               ; crt0 _start -> main -> gb_cfg_parse
+rcm_done
+                pop   af                       ; restore the caller's page
+                call  bank_set
+                ei
+                ret
+cfgmod_name     db    "GBCFG   BIN"          ; 8.3, space-padded
+
+; name_from_stem: HL = NUL-terminated stem (<=8 chars), DE = 3-char extension.
+; Builds fs_req_name as an 8.3 name (8 chars space-padded + the extension), so a
+; config stem like "CLASSIC" becomes "CLASSIC FNT".
+name_from_stem
+                ld    (nfs_ext),de
+                ld    de,fs_req_name
+                ld    b,8
+nfs_name
+                ld    a,(hl)
+                or    a
+                jr    z,nfs_pad
+                ld    (de),a
+                inc   hl
+                inc   de
+                djnz  nfs_name
+                jr    nfs_doext
+nfs_pad
+                ld    a,' '
+nfs_padl
+                ld    (de),a
+                inc   de
+                djnz  nfs_padl
+nfs_doext
+                ld    hl,(nfs_ext)
+                ld    bc,3
+                ldir
+                ret
+nfs_ext         dw    0
+ext_fnt         db    "FNT"
+ext_ist         db    "IST"
+
 ; --- font in PAGE_DATA ----------------------------------------------------
-; font_init: page PAGE_DATA in, load DEFAULT.FNT into it, cache the geometry.
+; font_init: page PAGE_DATA in, load <FONT>.FNT into it, cache the geometry.
 font_init
                 di
                 ld    a,PAGE_DATA
                 call  bank_set
-                ld    hl,font_name           ; fs_req_name = "DEFAULT FNT"
-                ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                ld    hl,KCFG_FONT           ; fs_req_name = "<FONT>.FNT" (config)
+                ld    de,ext_fnt
+                call  name_from_stem
                 ld    hl,#1000               ; font fits easily
                 ld    (fs_load_max),hl
                 ld    hl,DATA_FONT           ; load into PAGE_DATA
@@ -697,17 +797,15 @@ font_init
                 call  bank_normal
                 ei
                 ret
-font_name       db    "DEFAULT FNT"          ; 8.3, space-padded
 
-; icon_init: load DEFAULT.IST into PAGE_DATA at DATA_ICONS.
+; icon_init: load <ICONS>.IST into PAGE_DATA at DATA_ICONS.
 icon_init
                 di
                 ld    a,PAGE_DATA
                 call  bank_set
-                ld    hl,icon_name           ; fs_req_name = "DEFAULT IST"
-                ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                ld    hl,KCFG_ICONS          ; fs_req_name = "<ICONS>.IST" (config)
+                ld    de,ext_ist
+                call  name_from_stem
                 ld    hl,#0C00               ; .IST <= 3K
                 ld    (fs_load_max),hl
                 ld    hl,DATA_ICONS
@@ -716,7 +814,6 @@ icon_init
                 call  bank_normal
                 ei
                 ret
-icon_name       db    "DEFAULT IST"          ; 8.3, space-padded
 
 ; --- app launch ----------------------------------------------------------
 ; launch_app: HL = 8.3 app name. Load it into the next bank page (PAGE_APP0 +
@@ -1448,6 +1545,8 @@ npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPA
 npd_imgend
 chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.BIN
 chl_imgend
+cfg_img         incbin "../build/GBCFG.RAW"     ; config-parser C module, as GBCFG.BIN
+cfg_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
 font_imgend
 icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
@@ -1460,6 +1559,7 @@ wel_imgend
                 save  "VIEWER.BIN",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
                 save  "NOTEPAD.BIN",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "CHELLO.BIN",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
+                save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"

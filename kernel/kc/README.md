@@ -38,19 +38,38 @@ kernel/kc/run_tests.sh        # host parity tests (no emulator)
 tools/build_kmod.sh kernel/kc/kcfg.c   # SDCC -mz80 + size report
 ```
 
-## Open integration step (next on #30)
+## How it is wired into the kernel
 
-The module compiles and is proven correct; it is **not yet wired into the
-kernel**. Remaining work:
+`kcfg_mod.c` is the loadable wrapper: built by `tools/build_cfgmod.sh` into
+`build/GBCFG.RAW` (crt0 first, so `_start` is at `#4000`), packaged on the disk
+as `GBCFG.BIN`, and loaded into a bank page + `call`ed exactly like an app. No
+inter-bank argument ABI was needed: the module reads/writes a **fixed resident
+transfer area in low RAM** (`#1000` text, `#1200` length, `#1202` ICONS out,
+`#120C` FONT out) which stays main RAM under banking, so `crt0` enters with a
+plain `call _main`.
 
-1. Pick the module's bank/load address and define the inter-bank entry ABI
-   (an asm shim, placed first in the module image, that reads a transfer block —
-   text ptr, length, two resident output ptrs — and calls `gb_cfg_parse`). The
-   output buffers (`cfg_icons`/`cfg_font`) must be **resident** so they survive
-   paging the module back out.
-2. At boot, the nucleus `fs_load_file`s `GEOBENCH.CFG`, pages the module in,
-   calls it, pages back.
-3. Have `font_init`/`icon_init` build the `.FNT`/`.IST` filename from the parsed
-   names (DEFAULT fallback = today's behavior, so default config is no
-   regression), reconnecting the `ICONS=`/`FONT=` keys that went dead when the
-   monolithic desktop was slimmed into the resident kernel.
+Boot flow (`kernel/gbkern.asm`):
+
+1. `cfg_boot` seeds the outputs with `DEFAULT`, `fs_load_file`s `GEOBENCH.CFG`
+   into the transfer area (length 0 if absent), then `run_cfgmod` pages
+   `GBCFG.BIN` into `PAGE_APP0` and calls it — the C parser fills the outputs.
+2. `font_init` / `icon_init` build `<FONT>.FNT` / `<ICONS>.IST` from the parsed
+   stems via `name_from_stem`, so `ICONS=`/`FONT=` select the set loaded (these
+   keys had gone dead when the monolithic desktop was slimmed into the kernel).
+
+Verified three ways in 1984 (`--memory=128`): no cfg → defaults → clean desktop;
+`ICONS=DEFAULT`/`FONT=DEFAULT` → identical (cfg load + parse + filename build all
+correct); `ICONS=NONE` → icons fail to load (the parsed value really selects the
+file). The resident kernel grew 9676 → **9839 bytes** for the boot glue, leaving
+~12 bytes under the `~#A67B` ceiling — proof that *further* migration must move
+logic into modules, not add resident asm.
+
+## Follow-ups
+
+- **DEFAULT fallback** when a configured `.FNT`/`.IST` is missing (today a bad
+  `ICONS=`/`FONT=` value loads nothing and draws garbage). Deferred because the
+  retry costs resident bytes we do not currently have — it pairs with trimming
+  the nucleus.
+- Retire `lib/config.asm` once nothing else references it (it is already
+  orphaned; left in place for this PR to keep the diff to the migration).
+- Next subsystem (directory parsing) follows the same module pattern.
