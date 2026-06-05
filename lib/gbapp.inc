@@ -86,3 +86,10 @@ GB_VSYNC        equ   GB_KERNEL+72 ; #8048  wait for the frame flyback (50 Hz pa
                                    ;        no pointer/clock) -> A = 1 if ESC is held
                                    ;        else 0. For keyboard apps that drive
                                    ;        their own loop instead of GB_POLL.
+GB_ONEVENT      equ   GB_KERNEL+75 ; #804B  register an event handler: HL = address
+                                   ;        of a void(void) function in the app, 0 to
+                                   ;        clear. The kernel CALLs it during GB_POLL
+                                   ;        when a top-bar click occurs, with a typed
+                                   ;        message at GB_MSG (#1302): type, p0, p1,
+                                   ;        p2. type GB_MSG_MENU(1) -> p0 = byte col.
+                                   ;        Handler must return promptly (no GB_POLL).

@@ -6,23 +6,38 @@
  * I/O is through a fixed transfer area in low RAM that stays main RAM under
  * banking (so it is reachable while this code is paged into the window).
  *
- * The kernel fills the area before the call and reads it after:
+ * The module owns the whole config-to-filename job (defaults, parse, 8.3 build),
+ * so the resident kernel only has to `ldir` the finished names. The kernel fills
+ * the input before the call and reads the outputs after:
  *   #1000  cfg text (<=512 bytes, the GEOBENCH.CFG contents)
  *   #1200  length   (word: number of cfg-text bytes; 0 = no file)
- *   #1202  ICONS out (9 bytes, seeded with the default, NUL-terminated)
- *   #120C  FONT  out (9 bytes, seeded with the default, NUL-terminated)
+ *   #1202  ICONS filename out (11-byte 8.3, e.g. "DEFAULT IST")
+ *   #120D  FONT  filename out (11-byte 8.3, e.g. "DEFAULT FNT")
  *
  * Using fixed addresses (not function args) means crt0 can enter with a plain
  * `call _main` - no inter-bank argument-passing ABI to hand-roll in asm.
  */
 #include "kcfg.h"
 
-#define KCFG_TEXT   ((const char *)0x1000)
-#define KCFG_LEN    (*(unsigned int *)0x1200)
-#define KCFG_ICONS  ((char *)0x1202)
-#define KCFG_FONT   ((char *)0x120C)
+#define KCFG_TEXT      ((const char *)0x1000)
+#define KCFG_LEN       (*(unsigned int *)0x1200)
+#define KCFG_ICONNAME  ((char *)0x1202)
+#define KCFG_FONTNAME  ((char *)0x120D)
+
+static void set_default(char *stem)     /* "DEFAULT" + NUL */
+{
+    stem[0] = 'D'; stem[1] = 'E'; stem[2] = 'F'; stem[3] = 'A';
+    stem[4] = 'U'; stem[5] = 'L'; stem[6] = 'T'; stem[7] = 0;
+}
 
 void main(void)
 {
-    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, KCFG_ICONS, KCFG_FONT);
+    char icons[9];
+    char font[9];
+
+    set_default(icons);                 /* absent keys keep the default */
+    set_default(font);
+    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font);
+    gb_make_83(icons, "IST", KCFG_ICONNAME);
+    gb_make_83(font,  "FNT", KCFG_FONTNAME);
 }

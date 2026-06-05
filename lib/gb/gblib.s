@@ -28,6 +28,7 @@
         .globl  _gb_fs_save
         .globl  _gb_getkey
         .globl  _gb_vsync
+        .globl  _gb_on_event
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -188,3 +189,7 @@ _gb_getkey:
 ;; void gb_vsync(void);   wait one frame (50 Hz), no pointer/clock side effects
 _gb_vsync:
         jp      0x8048          ; GB_VSYNC
+
+;; void gb_on_event(void (*handler)(void));   handler ptr in HL -> kernel stores it
+_gb_on_event:
+        jp      0x804B          ; GB_ONEVENT
