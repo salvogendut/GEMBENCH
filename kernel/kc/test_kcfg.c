@@ -32,6 +32,21 @@ static void check(const char *name, const char *cfg, unsigned int len,
 
 #define CHECK(name, lit, wi, wf) check((name), (lit), (unsigned)sizeof(lit) - 1, (wi), (wf))
 
+/* gb_make_83 builds an 11-byte 8.3 name; compare against an explicit literal
+ * (which includes the space padding). */
+static void check83(const char *name, const char *stem, const char *ext,
+                    const char *want11)
+{
+    char dst[11];
+    gb_make_83(stem, ext, dst);
+    if (memcmp(dst, want11, 11) != 0) {
+        printf("FAIL %-28s got=\"%.11s\" want=\"%.11s\"\n", name, dst, want11);
+        ++failures;
+    } else {
+        printf("ok   %-28s \"%.11s\"\n", name, dst);
+    }
+}
+
 int main(void)
 {
     CHECK("empty",                 "",                              "DEFAULT", "DEFAULT");
@@ -48,6 +63,11 @@ int main(void)
     CHECK("repeated key last wins","ICONS=A\r\nICONS=B\r\n",        "B",       "DEFAULT");
     CHECK("font then icons",       "FONT=F1\r\nICONS=I1\r\n",       "I1",      "F1");
     CHECK("crlf mixed with lf",    "ICONS=AA\nFONT=BB\r\n",         "AA",      "BB");
+
+    check83("make83 default",  "DEFAULT", "FNT", "DEFAULT FNT");
+    check83("make83 short",    "AA",      "IST", "AA      IST");
+    check83("make83 full 8",   "ABCDEFGH","FNT", "ABCDEFGHFNT");
+    check83("make83 empty",    "",        "IST", "        IST");
 
     if (failures) {
         printf("\n%d test(s) FAILED\n", failures);

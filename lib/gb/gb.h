@@ -39,4 +39,19 @@ unsigned char gb_fs_save(char *buf, unsigned int len);   /* save opened file -> 
                                                          /* 1 ok / 0 fail         */
 unsigned char gb_getkey(void);        /* typed char from the keyboard, 0 if none  */
 unsigned char gb_vsync(void);         /* wait one frame -> 1 if ESC held, else 0  */
+
+/* Event callback (issue #32): the kernel calls a registered handler when an
+ * event it owns occurs - currently a click in the top bar (GB_MSG_MENU). The
+ * handler is invoked during gb_poll (so call gb_poll in your loop), reads the
+ * message from gb_msg, and must return promptly (do not call gb_poll from it).
+ * The message lives at a fixed low-RAM address shared with the kernel. */
+typedef struct {
+    unsigned char type;   /* GB_MSG_* */
+    unsigned char p0;     /* menu: clicked byte column */
+    unsigned char p1;
+    unsigned char p2;
+} gb_msg_t;
+#define GB_MSG_MENU 1
+#define gb_msg (*(volatile gb_msg_t *)0x1302)
+void gb_on_event(void (*handler)(void));   /* register handler, 0 to clear */
 #endif /* GB_H */

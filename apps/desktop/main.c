@@ -97,11 +97,28 @@ static void drop(void)
     paint();
 }
 
+/* on_event: kernel callback (issue #32). Fires when the user clicks the
+   kernel-owned top bar; proves the kernel->app round-trip by showing the
+   message payload (the clicked column) in the hint line. */
+static void on_event(void)
+{
+    static char msg[] = "Top-bar click @ col 00";
+    unsigned char c;
+    if (gb_msg.type != GB_MSG_MENU) return;
+    c = gb_msg.p0;
+    msg[20] = "0123456789ABCDEF"[c >> 4];
+    msg[21] = "0123456789ABCDEF"[c & 15];
+    gb_curhide();
+    gb_text(1, 10, msg);
+    gb_curshow();
+}
+
 void main(void)
 {
     unsigned char flags, mx, my, held, icon;
 
     paint();
+    gb_on_event(on_event);                     /* top-bar clicks -> on_event */
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;

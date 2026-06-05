@@ -23,4 +23,10 @@
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out);
 
+/* gb_make_83: write an 11-byte AMSDOS 8.3 name into dst (8 chars space-padded +
+ * the 3-char extension) from a NUL-terminated stem (<=8 chars used) and ext.
+ * e.g. stem "CLASSIC", ext "FNT" -> "CLASSIC FNT". This moves the filename
+ * building off the (full) resident kernel and into the paged C module. */
+void gb_make_83(const char *stem, const char *ext, char *dst);
+
 #endif /* GB_KCFG_H */

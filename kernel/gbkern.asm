@@ -21,8 +21,14 @@
 ; module, then reads the parsed ICONS=/FONT= stems back. See kernel/kc/.
 KCFG_TEXT       equ   #1000        ; GEOBENCH.CFG contents (<=512 bytes)
 KCFG_LEN        equ   #1200        ; word: cfg-text byte count (0 = no file)
-KCFG_ICONS      equ   #1202        ; 9 bytes: parsed icon-set stem (NUL-term)
-KCFG_FONT       equ   #120C        ; 9 bytes: parsed font-set stem (NUL-term)
+KCFG_ICONNAME   equ   #1202        ; 11-byte 8.3 icon filename, built by the module
+KCFG_FONTNAME   equ   #120D        ; 11-byte 8.3 font filename, built by the module
+
+; Callback API (issue #32) - kernel->app event delivery, state in low RAM so it
+; costs no resident image bytes (low RAM stays main RAM under banking).
+APP_HANDLER     equ   #1300        ; word: registered app event handler (0 = none)
+GB_MSG          equ   #1302        ; message record: type, p0, p1, p2 (4 bytes)
+GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte column
 
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
@@ -51,6 +57,7 @@ KCFG_FONT       equ   #120C        ; 9 bytes: parsed font-set stem (NUL-term)
                 jp    k_fssave               ; GB_FSSAVE      #8042
                 jp    k_getkey               ; GB_GETKEY      #8045
                 jp    k_vsync                ; GB_VSYNC       #8048
+                jp    k_onevent              ; GB_ONEVENT     #804B
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -176,6 +183,7 @@ gp_noquit
                 jr    z,gp_nohold
                 set   2,d
 gp_nohold
+                call  menu_dispatch          ; kernel-owned top-bar click -> app
                 ld    a,(poll_byte)
                 ld    b,a
                 ld    a,(poll_line)
@@ -341,13 +349,8 @@ gf_pen          db    0
 k_cls
                 ld    a,1
                 jp    SCR_SET_MODE            ; mode 1 clears; returns to caller
-k_print
-                ld    a,(hl)
-                or    a
-                ret   z
-                call  TXT_OUTPUT
-                inc   hl
-                jr    k_print
+k_print                                        ; GB_PRINT: stub (unused early debug
+                ret                            ; print; no binding). Slot kept fixed.
 k_quit
                 ret                            ; (skeleton: app RETs anyway)
 
@@ -693,16 +696,8 @@ name_geobench   db    "GEOBENCH"
 ; GBCFG C module (paged into a bank) to parse it into KCFG_ICONS / KCFG_FONT.
 ; Absent file -> length 0 -> the parser is a no-op and the defaults stand.
 cfg_boot
-                ld    hl,cfg_default         ; KCFG_ICONS = "DEFAULT"
-                ld    de,KCFG_ICONS
-                ld    bc,9
-                ldir
-                ld    hl,cfg_default         ; KCFG_FONT  = "DEFAULT"
-                ld    de,KCFG_FONT
-                ld    bc,9
-                ldir
-                ld    hl,0                    ; default: no config text
-                ld    (KCFG_LEN),hl
+                ld    hl,0                    ; default: no config text (module then
+                ld    (KCFG_LEN),hl           ; emits the DEFAULT names itself)
                 ld    hl,cfg_fname           ; fs_req_name = "GEOBENCH.CFG"
                 ld    de,fs_req_name
                 ld    bc,11
@@ -717,7 +712,6 @@ cfg_boot
                 ld    (KCFG_LEN),hl
 cfgb_run
                 jp    run_cfgmod
-cfg_default     db    "DEFAULT",0,0          ; 9 bytes
 cfg_fname       db    "GEOBENCHCFG"          ; "GEOBENCH.CFG" (8.3)
 
 ; run_cfgmod: load GBCFG.BIN into PAGE_APP0 and CALL it (it parses the transfer
@@ -747,46 +741,17 @@ rcm_done
                 ret
 cfgmod_name     db    "GBCFG   BIN"          ; 8.3, space-padded
 
-; name_from_stem: HL = NUL-terminated stem (<=8 chars), DE = 3-char extension.
-; Builds fs_req_name as an 8.3 name (8 chars space-padded + the extension), so a
-; config stem like "CLASSIC" becomes "CLASSIC FNT".
-name_from_stem
-                ld    (nfs_ext),de
-                ld    de,fs_req_name
-                ld    b,8
-nfs_name
-                ld    a,(hl)
-                or    a
-                jr    z,nfs_pad
-                ld    (de),a
-                inc   hl
-                inc   de
-                djnz  nfs_name
-                jr    nfs_doext
-nfs_pad
-                ld    a,' '
-nfs_padl
-                ld    (de),a
-                inc   de
-                djnz  nfs_padl
-nfs_doext
-                ld    hl,(nfs_ext)
-                ld    bc,3
-                ldir
-                ret
-nfs_ext         dw    0
-ext_fnt         db    "FNT"
-ext_ist         db    "IST"
-
 ; --- font in PAGE_DATA ----------------------------------------------------
 ; font_init: page PAGE_DATA in, load <FONT>.FNT into it, cache the geometry.
+; The 8.3 filename was built by the GBCFG module (KCFG_FONTNAME); just copy it.
 font_init
                 di
                 ld    a,PAGE_DATA
                 call  bank_set
-                ld    hl,KCFG_FONT           ; fs_req_name = "<FONT>.FNT" (config)
-                ld    de,ext_fnt
-                call  name_from_stem
+                ld    hl,KCFG_FONTNAME       ; fs_req_name = the config font name
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
                 ld    hl,#1000               ; font fits easily
                 ld    (fs_load_max),hl
                 ld    hl,DATA_FONT           ; load into PAGE_DATA
@@ -803,9 +768,10 @@ icon_init
                 di
                 ld    a,PAGE_DATA
                 call  bank_set
-                ld    hl,KCFG_ICONS          ; fs_req_name = "<ICONS>.IST" (config)
-                ld    de,ext_ist
-                call  name_from_stem
+                ld    hl,KCFG_ICONNAME       ; fs_req_name = the config icon name
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
                 ld    hl,#0C00               ; .IST <= 3K
                 ld    (fs_load_max),hl
                 ld    hl,DATA_ICONS
@@ -831,6 +797,10 @@ launch_app
                 ld    c,a
                 ld    a,(bank_cur)           ; save caller's page (per depth) on stack
                 push  af
+                ld    hl,(APP_HANDLER)       ; save the parent's event handler and clear
+                push  hl                       ; it, so a top-bar click during the child
+                ld    hl,0                     ; cannot call the parent's handler (whose
+                ld    (APP_HANDLER),hl        ; page is not mapped while the child runs)
                 ld    hl,launch_depth
                 inc   (hl)
                 di
@@ -848,6 +818,8 @@ launch_app
 la_done
                 ld    hl,launch_depth
                 dec   (hl)
+                pop   hl                       ; restore the parent's event handler
+                ld    (APP_HANDLER),hl
                 pop   af                       ; caller's page
                 call  bank_set
                 call  draw_topbar             ; the app may have wiped it (e.g. a C
@@ -935,6 +907,38 @@ k_vsync
                 ret   z
                 inc   a
                 ret
+
+; k_onevent (GB_ONEVENT): register the calling app's event handler. HL = handler
+; address (a void(void) C function in the app's page), 0 to unregister. The
+; kernel calls it from menu_dispatch with a message in GB_MSG.
+k_onevent
+                ld    (APP_HANDLER),hl
+                ret
+
+; menu_dispatch: called from k_poll. If a fresh click (D bit0) landed in the
+; kernel-owned top bar and the app registered a handler, deliver a GB_MSG_MENU
+; message (p0 = byte column) and consume the click. The app's page is mapped
+; (it called GB_POLL), so the handler is a direct CALL - no bank trampoline.
+menu_dispatch
+                bit   0,d                     ; fresh click this frame?
+                ret   z
+                ld    a,(poll_line)
+                cp    8                        ; inside the 8px top bar (rows 0..7)?
+                ret   nc
+                ld    hl,(APP_HANDLER)        ; handler registered?
+                ld    a,h
+                or    l
+                ret   z
+                res   0,d                      ; consume the click (the app's poll
+                ld    a,GB_MSG_MENU            ; loop won't also see it)
+                ld    (GB_MSG),a
+                ld    a,(poll_byte)
+                ld    (GB_MSG+1),a            ; p0 = clicked byte column
+                push  de                       ; preserve the poll flags across the
+                call  md_call                  ; C handler (call (hl))
+                pop   de
+                ret
+md_call         jp    (hl)
 
 ; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
 ; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.
@@ -1040,105 +1044,19 @@ kf_pen          db    0
 ; screen rectangle to/from a caller buffer. B=x C=y D=w E=h HL=buffer (w*h
 ; bytes). The buffer lives in the caller's page (mapped during the call); the
 ; screen is resident, so no page swap is needed.
+; k_saverect / k_restorerect (GB_SAVERECT / GB_RESTORERECT): stubs. No app uses
+; them and there is no gb_saverect/gb_restorerect binding; bodies removed to
+; reclaim resident space. Slots kept so addresses are fixed. (save_block /
+; restore_block remain - the cursor save-under still uses them.)
 k_saverect
-                call  set_sb
-                jp    save_block
 k_restorerect
-                call  set_sb
-                jp    restore_block
-set_sb
-                ld    a,b
-                ld    (sb_x),a
-                ld    a,c
-                ld    (sb_y),a
-                ld    a,d
-                ld    (sb_w),a
-                ld    a,e
-                ld    (sb_h),a
-                ld    (sb_buf),hl
                 ret
 
-; k_xorframe (GB_XORFRAME): XOR a 1px rectangle outline into the screen. B=x
-; C=y D=w E=h. Self-erasing rubber-band: call again at the same spot to undo.
+; k_xorframe (GB_XORFRAME): stub. The rubber-band XOR frame was never wired up
+; (no app uses it, no gb_xorframe binding); body removed to reclaim resident
+; space for the callback API. The jump-table slot stays so addresses are fixed.
 k_xorframe
-                ld    a,b
-                ld    (xf_x),a
-                ld    a,c
-                ld    (xf_y),a
-                ld    a,d
-                ld    (xf_w),a
-                ld    a,e
-                ld    (xf_h),a
-                ld    a,(xf_x)               ; top edge
-                ld    d,a
-                ld    a,(xf_y)
-                ld    e,a
-                ld    a,(xf_w)
-                ld    b,a
-                call  xf_hline
-                ld    a,(xf_x)               ; bottom edge (y+h-1)
-                ld    d,a
-                ld    a,(xf_y)
-                ld    b,a
-                ld    a,(xf_h)
-                add   a,b
-                dec   a
-                ld    e,a
-                ld    a,(xf_w)
-                ld    b,a
-                call  xf_hline
-                ld    a,(xf_x)               ; left edge
-                ld    d,a
-                ld    a,(xf_y)
-                ld    e,a
-                ld    a,(xf_h)
-                ld    b,a
-                call  xf_vline
-                ld    a,(xf_x)               ; right edge (x+w-1)
-                ld    b,a
-                ld    a,(xf_w)
-                add   a,b
-                dec   a
-                ld    d,a
-                ld    a,(xf_y)
-                ld    e,a
-                ld    a,(xf_h)
-                ld    b,a
-                jp    xf_vline
-xf_hline                                       ; D=x E=y B=count -> XOR a row of bytes
-                ld    a,b
-                ld    (xf_cnt),a
-                call  scr_addr
-                ld    a,(xf_cnt)
-                ld    b,a
-xfh_loop
-                ld    a,(hl)
-                xor   #FF
-                ld    (hl),a
-                inc   hl
-                djnz  xfh_loop
                 ret
-xf_vline                                       ; D=x E=y B=rows -> XOR a column
-                ld    a,b
-                ld    (xf_cnt),a
-xfv_loop
-                push  de
-                call  scr_addr
-                ld    a,(hl)
-                xor   #FF
-                ld    (hl),a
-                pop   de
-                inc   e
-                ld    a,(xf_cnt)
-                dec   a
-                ld    (xf_cnt),a
-                jr    nz,xfv_loop
-                ret
-xf_x            db    0
-xf_y            db    0
-xf_w            db    0
-xf_h            db    0
-xf_cnt          db    0
 
 ; ===========================================================================
 ; Top bar (kernel-owned): total RAM (left) + clock (right) on lines 0-7. The

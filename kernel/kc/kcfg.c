@@ -52,6 +52,20 @@ static void copy_val(const char *p, const char *e, char *dst, unsigned char max)
     dst[n] = 0;
 }
 
+void gb_make_83(const char *stem, const char *ext, char *dst)
+{
+    unsigned char i = 0;
+    while (i < 8 && stem[i]) {       /* copy the stem, up to 8 chars */
+        dst[i] = stem[i];
+        ++i;
+    }
+    while (i < 8)                     /* space-pad the name field */
+        dst[i++] = ' ';
+    dst[8]  = ext[0];                 /* 3-char extension */
+    dst[9]  = ext[1];
+    dst[10] = ext[2];
+}
+
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out)
 {
