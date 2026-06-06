@@ -51,8 +51,10 @@ fs_dir_next
 fs_load_file
                 ld    hl,(fs_p_load)
                 jp    (hl)
-; fs_save_file: save fs_save_len bytes from (fs_save_src) to fs_req_name (must
-; exist; overwrite in place). CF set = saved, NC = failed.
+; fs_save_file: save fs_save_len bytes from (fs_save_src) to fs_req_name. The
+; AMSDOS backend creates the file if absent and allocates/frees 1KB blocks as the
+; size changes (single extent, <=16KB). CF set = saved, NC = failed (disk/dir
+; full, too big, or - FAT16 - not yet implemented).
 fs_save_file
                 ld    hl,(fs_p_save)
                 jp    (hl)

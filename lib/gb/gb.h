@@ -54,4 +54,18 @@ typedef struct {
 #define GB_MSG_MENU 1
 #define gb_msg (*(volatile gb_msg_t *)0x1302)
 void gb_on_event(void (*handler)(void));   /* register handler, 0 to clear */
+
+/* Top-bar menu (issue #34). The app registers menu titles the kernel draws in
+ * the bar (persisting across clock ticks); a click on the bar arrives via the
+ * gb_on_event callback as GB_MSG_MENU with p0 = the clicked byte column, so the
+ * app maps the column to its title and draws its own dropdown. def layout:
+ *   byte 0: title count (<=4)
+ *   then per title: byte col, then an 8-byte NUL/space-padded label
+ * Cleared automatically when the app launches a child or quits. */
+void gb_menu(const void *def);
+
+/* gb_set_name: set the current file (an 11-byte 8.3 name, space-padded, no dot,
+ * e.g. "NOTES   TXT") so a later gb_fs_load/gb_fs_save targets it - how an app
+ * does New / Save As / open a file chosen from a picker. */
+void gb_set_name(const char *name11);
 #endif /* GB_H */

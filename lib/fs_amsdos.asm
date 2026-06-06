@@ -584,6 +584,26 @@ fwr_res_loop
 fsam_save_file
                 call  fsam_motor_on
                 call  fsam_read_dir                  ; directory -> fsam_buf
+                ld    hl,(fs_save_len)                ; Rc = ceil((128+len)/128)
+                ld    de,128
+                add   hl,de
+                ld    de,127
+                add   hl,de
+                ld    a,h
+                add   a,a
+                ld    d,a
+                ld    a,l
+                rlca
+                and   1
+                add   a,d
+                ld    (fsam_rc),a
+                add   a,7                              ; nblk = ceil(Rc/8) 1KB blocks
+                srl   a
+                srl   a
+                srl   a
+                ld    (fsv_nblk),a
+                cp    17
+                jr    nc,fsv_fail                      ; > 16 blocks -> single extent only
                 ld    ix,fsam_buf                    ; find the Ex=0 entry by name
                 ld    b,64
 fsv_scan
@@ -594,54 +614,37 @@ fsv_scan
                 or    a
                 jr    nz,fsv_next
                 call  fsam_namematch
-                jr    z,fsv_found
+                jr    z,fsv_have                       ; existing file -> reuse the entry
 fsv_next
                 push  bc
                 ld    de,32
                 add   ix,de
                 pop   bc
                 djnz  fsv_scan
+                call  fsv_find_free_entry             ; not found -> create in a free slot
+                jr    nc,fsv_fail                      ; directory full
+                push  ix                              ; init it: user 0, name, the rest 0
+                pop   hl
+                ld    (hl),0
+                push  ix
+                pop   de
+                inc   de
+                ld    bc,31
+                ldir
+                ld    hl,fs_req_name
+                push  ix
+                pop   de
+                inc   de
+                ld    bc,11
+                ldir
+                jr    fsv_have
 fsv_fail
                 call  fsam_motor_off
                 or    a                               ; NC
                 ret
-fsv_found
-                ld    hl,(fs_save_len)                ; total = 128 + len
-                ld    de,128
-                add   hl,de
-                ld    de,127                          ; Rc = ceil(total/128)
-                add   hl,de
-                ld    a,h
-                add   a,a
-                ld    d,a
-                ld    a,l
-                rlca
-                and   1
-                add   a,d
-                ld    (fsam_rc),a
-                push  ix                              ; capacity = (#blocks)*8 records
-                pop   hl
-                ld    de,16
-                add   hl,de                           ; HL = block list
-                ld    b,16
-                ld    c,0
-fsv_cnt
-                ld    a,(hl)
-                or    a
-                jr    z,fsv_cntsk
-                inc   c
-fsv_cntsk
-                inc   hl
-                djnz  fsv_cnt
-                ld    a,c
-                add   a,a
-                add   a,a
-                add   a,a                              ; blocks*8
-                ld    b,a
-                ld    a,(fsam_rc)
-                cp    b
-                jr    z,fsv_fits
-                jr    nc,fsv_fail                      ; Rc > capacity -> won't fit
+fsv_have
+                call  fsv_ensure_blocks               ; alloc/free 1KB blocks to fsv_nblk
+                jr    nc,fsv_fail                      ; disk full
 fsv_fits
                 ld    hl,fsam_wbuf                    ; build the 128-byte header
                 ld    de,fsam_wbuf+1
@@ -802,6 +805,147 @@ fsv_fdpad
                 dec   bc
                 jr    fsv_filldata
 
+; fsv_find_free_entry: IX -> first &E5 (free) directory slot. CF set, or NC if the
+; directory is full.
+fsv_find_free_entry
+                ld    ix,fsam_buf
+                ld    b,64
+ffe_loop
+                ld    a,(ix+0)
+                cp    #E5
+                jr    z,ffe_found
+                push  bc
+                ld    de,32
+                add   ix,de
+                pop   bc
+                djnz  ffe_loop
+                or    a                               ; NC = directory full
+                ret
+ffe_found
+                scf
+                ret
+
+; fsv_ensure_blocks: make the entry at IX own exactly fsv_nblk 1KB blocks. Blocks
+; are packed at the front of the 16-byte block list. Grows by allocating free
+; blocks, shrinks by zeroing the tail. CF set = ok, NC = disk full.
+fsv_ensure_blocks
+                push  ix                              ; count current blocks -> C
+                pop   hl
+                ld    de,16
+                add   hl,de
+                ld    b,16
+                ld    c,0
+eb_count
+                ld    a,(hl)
+                or    a
+                jr    z,eb_counted                     ; first zero = end (packed front)
+                inc   c
+                inc   hl
+                djnz  eb_count
+eb_counted
+                ld    a,(fsv_nblk)
+                cp    c
+                jr    z,eb_ok
+                jr    nc,eb_grow                       ; need more blocks
+                ld    a,(fsv_nblk)                    ; need fewer -> zero slots [nblk..15]
+                ld    c,a
+eb_trim
+                ld    a,c
+                cp    16
+                jr    nc,eb_ok
+                push  ix
+                pop   hl
+                ld    de,16
+                add   hl,de
+                ld    e,c
+                ld    d,0
+                add   hl,de
+                ld    (hl),0
+                inc   c
+                jr    eb_trim
+eb_grow
+                ld    a,(fsv_nblk)
+                cp    c
+                jr    z,eb_ok
+                call  fsv_alloc1                       ; -> A = free block, NC = disk full
+                ret   nc
+                push  ix
+                pop   hl
+                ld    de,16
+                add   hl,de
+                ld    e,c
+                ld    d,0
+                add   hl,de
+                ld    (hl),a                           ; store the block at slot C
+                inc   c
+                jr    eb_grow
+eb_ok
+                scf
+                ret
+
+; fsv_alloc1: find a free 1KB block (2..179; 0/1 are the directory). A new block
+; is one that no directory entry references - and because each allocation is
+; written into the entry's block list before the next call, repeats are excluded.
+; -> A = block, CF set; NC if the disk is full. Preserves BC and IX.
+fsv_alloc1
+                push  bc
+                push  ix
+                ld    a,2
+fa1_try
+                ld    (fsv_cand),a
+                call  fsv_block_used                   ; Z if some entry uses it
+                jr    nz,fa1_free
+                ld    a,(fsv_cand)
+                inc   a
+                cp    180                              ; DATA format: blocks 0..179
+                jr    c,fa1_try
+                pop   ix
+                pop   bc
+                or    a                                ; NC = disk full
+                ret
+fa1_free
+                pop   ix
+                pop   bc
+                ld    a,(fsv_cand)
+                scf
+                ret
+
+; fsv_block_used: A = block number -> Z if any directory entry references it.
+fsv_block_used
+                ld    c,a                              ; C = target block
+                ld    hl,fsam_buf
+                ld    b,64
+fbu_ent
+                ld    a,(hl)
+                cp    #E5
+                jr    z,fbu_skip
+                push  hl
+                push  bc
+                ld    de,16
+                add   hl,de                            ; -> block list
+                ld    b,16
+fbu_blk
+                ld    a,(hl)
+                cp    c
+                jr    z,fbu_hit
+                inc   hl
+                djnz  fbu_blk
+                pop   bc
+                pop   hl
+fbu_skip
+                push  bc
+                ld    de,32
+                add   hl,de
+                pop   bc
+                djnz  fbu_ent
+                or    1                                ; NZ = free
+                ret
+fbu_hit
+                pop   bc
+                pop   hl
+                xor   a                                ; Z = used
+                ret
+
 ; fsam_namematch: IX = dir entry; Z if its 8.3 name == fs_req_name (11 bytes).
 fsam_namematch
                 push  ix
@@ -863,5 +1007,10 @@ fsv_si          defb  0            ; save: sector index within the file
 fsv_curtrk      defb  0            ; save: track the head is on
 fsv_dptr        defw  0            ; save: pointer into the source data
 fsv_drem        defw  0            ; save: source bytes left
-fsam_buf        defs  2048
-fsam_wbuf       defs  512          ; save: one assembled 512-byte sector
+fsv_nblk        defb  0            ; save: 1KB blocks the file needs
+fsv_cand        defb  0            ; alloc: candidate block being tested
+; fsam_buf (the 2KB whole-directory buffer) is defined after kern_end in
+; gbkern.asm so it is scratch RAM, not part of the loaded GBKERN.BIN image.
+; fsam_wbuf (the write sector) is aliased onto the IDE backend's fs_secbuf -
+; fs_init picks exactly one backend, so the two are never live at once.
+fsam_wbuf       equ   fs_secbuf

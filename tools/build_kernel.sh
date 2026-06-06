@@ -24,5 +24,6 @@ tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VI
 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD (C/SDCC) -> build/NOTEPAD.RAW
 tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
+tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 "$RASM" kernel/gbkern.asm -eo                # incbins apps + font + icons -> .dsk
 echo "Built build/gbkern.dsk (GBKERN + DESKTOP + FILEMGR + VIEWER + NOTEPAD + CHELLO + assets)"

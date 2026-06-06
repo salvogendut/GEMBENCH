@@ -29,6 +29,7 @@ KCFG_FONTNAME   equ   #120D        ; 11-byte 8.3 font filename, built by the mod
 APP_HANDLER     equ   #1300        ; word: registered app event handler (0 = none)
 GB_MSG          equ   #1302        ; message record: type, p0, p1, p2 (4 bytes)
 GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte column
+MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *count
 
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
@@ -58,6 +59,8 @@ GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte colu
                 jp    k_getkey               ; GB_GETKEY      #8045
                 jp    k_vsync                ; GB_VSYNC       #8048
                 jp    k_onevent              ; GB_ONEVENT     #804B
+                jp    k_menu                 ; GB_MENU        #804E
+                jp    k_setname              ; GB_SETNAME     #8051
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -70,6 +73,9 @@ kernel_main
                 ld    (#BDEE),a               ; KM TEST BREAK indirection to RET (that's
                                               ; what actually resets on ESC; disarm alone
                                               ; doesn't touch it)
+                call  disarm_joy_keys        ; joystick keys must not feed the char
+                                              ; buffer, or moving the pointer floods
+                                              ; gb_getkey (the keyboard is the joystick)
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
@@ -99,6 +105,36 @@ kernel_main
                 call  SCR_SET_MODE
                 ret
 name_desktop    db    "DESKTOP BIN"
+
+; disarm_joy_keys: the CPC joystick is keyboard matrix row 9 (key numbers 72..77 =
+; up/down/left/right/fire1/fire2). By default those keys translate to characters,
+; so moving the pointer (= the joystick) floods the firmware key buffer and any
+; app that calls gb_getkey (Notepad) redraws on every move. Set their normal /
+; shift / control translation to &FF (no character). KM_GET_JOYSTICK / KM_TEST_KEY
+; read the matrix directly and are unaffected, so the pointer still works.
+disarm_joy_keys
+                ld    c,72
+djk_loop
+                ld    a,c
+                ld    b,#FF
+                push  bc
+                call  KM_SET_TRANSLATE
+                pop   bc
+                ld    a,c
+                ld    b,#FF
+                push  bc
+                call  KM_SET_SHIFT
+                pop   bc
+                ld    a,c
+                ld    b,#FF
+                push  bc
+                call  KM_SET_CONTROL
+                pop   bc
+                inc   c
+                ld    a,c
+                cp    78
+                jr    c,djk_loop
+                ret
 
 ; --- palette -------------------------------------------------------------
 INK_DESKTOP     equ   1            ; blue  -> pen 0 (paper / backdrop)
@@ -818,6 +854,10 @@ launch_app
                 push  hl                       ; it, so a top-bar click during the child
                 ld    hl,0                     ; cannot call the parent's handler (whose
                 ld    (APP_HANDLER),hl        ; page is not mapped while the child runs)
+                ld    a,(MENU_DEF)           ; save & clear the parent's menu so the
+                push  af                       ; child starts with a clean top bar
+                xor   a
+                ld    (MENU_DEF),a
                 ld    hl,launch_depth
                 inc   (hl)
                 di
@@ -835,6 +875,8 @@ launch_app
 la_done
                 ld    hl,launch_depth
                 dec   (hl)
+                pop   af                       ; restore the parent's menu count
+                ld    (MENU_DEF),a
                 pop   hl                       ; restore the parent's event handler
                 ld    (APP_HANDLER),hl
                 pop   af                       ; caller's page
@@ -866,6 +908,15 @@ k_launch
 ; k_getarg (GB_GETARG): HL = the launch arg (the 8.3 file name the app opened).
 k_getarg
                 ld    hl,launch_arg
+                ret
+
+; k_setname (GB_SETNAME): set the current file name (the launch arg) so a later
+; GB_FSLOAD/GB_FSSAVE targets it - this is how an app does New / Save As / open a
+; picked file. HL = an 11-byte 8.3 name in the caller's page.
+k_setname
+                ld    de,launch_arg
+                ld    bc,11
+                ldir
                 ret
 
 ; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a
@@ -909,9 +960,35 @@ k_fssave
 ; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
 k_getkey
                 call  KM_READ_CHAR           ; CF + A = char, or NC = none. (Apps frame
-                ret   c                       ; on IY now, so KM_READ_CHAR clobbering IX
-                xor   a                       ; is harmless - see build_capp.sh.)
+                jr    nc,kgk_none            ; on IY now, so KM_READ_CHAR clobbering IX
+                                              ; is harmless - see build_capp.sh.)
+                ; The pointer is the joystick/cursor keys, and the firmware also
+                ; buffers those as characters - so moving the pointer would flood a
+                ; keyboard app (Notepad redrawing on every move). While any pointing
+                ; direction is physically held, the "char" is the pointer, not
+                ; typing: drop it. KM_TEST_KEY preserves B/DE/HL.
+                ld    (kgk_char),a           ; save char in memory (KM_TEST_KEY may
+                ld    hl,kgk_dirkeys         ; corrupt HL/BC, so don't trust regs)
+                ld    b,(hl)
+kgk_test
+                inc   hl
+                ld    a,(hl)
+                push  hl
+                push  bc
+                call  KM_TEST_KEY
+                pop   bc
+                pop   hl
+                jr    nz,kgk_none            ; a direction held -> discard the char
+                djnz  kgk_test
+                ld    a,(kgk_char)           ; a genuine typed character
                 ret
+kgk_none
+                xor   a
+                ret
+kgk_char        db    0
+kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs + fire
+                                              ; (fire = the click; it also buffers a
+                                              ; char, e.g. 'Z' - drop it while held)
 
 ; k_vsync (GB_VSYNC): wait for the frame flyback (50 Hz pace, no pointer/clock),
 ; then report whether ESC is held -> A = 1 if so, 0 otherwise. Lets a keyboard app
@@ -956,6 +1033,52 @@ menu_dispatch
                 pop   de
                 ret
 md_call         jp    (hl)
+
+; k_menu (GB_MENU): register the calling app's top-bar menu. HL = a blob in the
+; app page: count, then per title { col (byte), 8-byte NUL/space-padded label }.
+; Copied into resident MENU_DEF so draw_topbar can render it across clock ticks
+; and app switches; redraws the bar. launch_app clears it for a child app.
+k_menu
+                ld    a,(hl)                  ; count
+                cp    5
+                ret   nc                       ; > 4 titles unsupported -> ignore
+                ld    e,a                       ; len = count*9 + 1
+                add   a,a
+                add   a,a
+                add   a,a
+                add   a,e
+                inc   a
+                ld    c,a
+                ld    b,0
+                ld    de,MENU_DEF
+                ldir
+                jp    draw_topbar
+
+; draw_menu_titles: render the registered menu titles in the top bar. Called from
+; draw_topbar with PAGE_DATA mapped (the font is there) and the bar text pens set.
+draw_menu_titles
+                ld    a,(MENU_DEF)
+                or    a
+                ret   z
+                ld    b,a
+                ld    ix,MENU_DEF+1
+dmt_loop
+                push  bc
+                push  ix
+                ld    a,(ix+0)                ; title column
+                ld    (tc_x),a
+                xor   a
+                ld    (tc_y),a
+                push  ix
+                pop   hl
+                inc   hl                       ; label = entry + 1
+                call  draw_text
+                pop   ix
+                pop   bc
+                ld    de,9
+                add   ix,de
+                djnz  dmt_loop
+                ret
 
 ; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
 ; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.
@@ -1109,6 +1232,7 @@ draw_topbar
                 ld    (tc_y),a
                 ld    hl,mem_str
                 call  draw_text
+                call  draw_menu_titles       ; the focused app's menu titles
                 ld    a,CLK_COL
                 ld    (tc_x),a
                 xor   a
@@ -1212,13 +1336,27 @@ read_time                                      ; -> time_str "HH:MM"
                 ld    a,(have_rtc)
                 or    a
                 jr    z,rt_soft
+                ld    a,#0B                    ; register B bit2 (DM): 1 = binary
+                call  read_rtc_reg            ; (the SymbiFace/SymbOS world runs the
+                and   #04                      ;  RTC in binary; HDCPM/SymbOS set this)
+                ld    (rt_binmode),a
                 ld    a,#04
                 call  read_rtc_reg
+                and   #3F                      ; drop 12/24h + PM flags -> hours 0..23
+                call  rt_cvt                   ; binary -> BCD if in binary mode
                 ld    (rt_h),a
                 ld    a,#02
                 call  read_rtc_reg
+                call  rt_cvt
                 ld    (rt_m),a
                 jr    rt_fmt
+rt_cvt                                          ; A = raw reg; -> BCD for put_bcd2
+                ld    b,a
+                ld    a,(rt_binmode)
+                or    a
+                ld    a,b
+                ret   z                         ; BCD mode: use the register as-is
+                jp    bin_to_bcd                ; binary mode: convert to packed BCD
 rt_soft
                 ld    a,(sw_hour)
                 call  bin_to_bcd
@@ -1451,6 +1589,7 @@ sw_min          db    0
 sw_hour         db    0
 clk_frames      db    0
 have_rtc        db    0
+rt_binmode      db    0            ; RTC register B bit2 (DM): 0 = BCD, !=0 = binary
 rt_h            db    0
 rt_m            db    0
 md_save         dw    0
@@ -1466,10 +1605,18 @@ md_last         dw    0
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
-kern_end                                        ; GBKERN.BIN is CODE ONLY (must end
-                                                ; below HIMEM ~#A67B). The packaging
-                                                ; incbins live above it - never loaded
-                                                ; at runtime, only read by `save`.
+kern_end                                        ; GBKERN.BIN = #8000..kern_end only.
+; --- scratch buffers live in LOW RAM (always the main bank, below the stack) -----
+; They used to sit just above kern_end, but as the kernel grew they landed in the
+; UniDOS stack's path: HIMEM &A288 grows DOWN toward kern_end, so a 512-byte sector
+; write during a deep call (a Notepad save) smashed the return stack and the IDE
+; loop ran away. Low RAM #1800+ (the retired GBFAT transfer area) is clear of both
+; the descending stack and the resident image. Fixed addresses, not loaded data.
+fs_secbuf       equ   #1800            ; IDE sector buffer / aliased AMSDOS write sector
+fsam_buf        equ   #1A00            ; floppy whole-directory buffer
+                                                ; The packaging incbins below live
+                                                ; above kern_end - never loaded at
+                                                ; runtime, only read by `save`.
 dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.BIN
 dtp_imgend
 app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.BIN
@@ -1482,6 +1629,8 @@ chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELL
 chl_imgend
 cfg_img         incbin "../build/GBCFG.RAW"     ; config-parser C module, as GBCFG.BIN
 cfg_imgend
+fat_img         incbin "../build/GBFAT.RAW"     ; FAT16/IDE write module, as GBFAT.BIN
+fat_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
 font_imgend
 icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
@@ -1495,6 +1644,7 @@ wel_imgend
                 save  "NOTEPAD.BIN",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "CHELLO.BIN",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
+                save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
