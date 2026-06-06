@@ -5,15 +5,15 @@
  */
 #include "gb.h"
 
-/* gb_drag_window: drag a w x h outline (the caller has already lifted its window
- * to the backdrop) starting from the window at (*x,*y), following the pointer
- * until fire is released. Updates *x,*y to the dropped position, clamped on
- * screen below the top bar. Returns 1 if the window moved, else 0. The caller
- * redraws its window at (*x,*y) afterwards.
+/* gb_drag_window: the caller detected a title-bar press; run a drag. While fire
+ * is held, an outline follows the pointer. The window is only lifted (erased to
+ * the backdrop) and the outline shown once the pointer ACTUALLY moves, so a plain
+ * title-bar click costs nothing - no flash, no redraw. On release, updates *x,*y
+ * to the dropped position (clamped on screen, clear of the top bar) and returns
+ * 1; returns 0 if the window never moved (caller then leaves its window as-is).
  *
- * Mirrors the desktop's icon-drag: an outline tracks the pointer and erases
- * against the solid backdrop pen (no save-under). The cursor is lifted around
- * each outline edit so its save-under stays intact. */
+ * Mirrors the desktop's icon-drag: the outline erases against the solid backdrop
+ * pen (no save-under); the cursor is lifted around each outline edit. */
 unsigned char gb_drag_window(unsigned char *x, unsigned char *y,
                              unsigned char w, unsigned char h)
 {
@@ -22,11 +22,7 @@ unsigned char gb_drag_window(unsigned char *x, unsigned char *y,
     unsigned char gdy = (unsigned char)(gb_my() - oy);
     unsigned char xmax = (unsigned char)(80 - w);        /* screen = 80 x 200 */
     unsigned char ymax = (unsigned char)(200 - h);
-    unsigned char nx, ny, mx, my, f;
-
-    gb_curhide();
-    gb_frame(ox, oy, w, h, 3);                  /* outline at the start position */
-    gb_curshow();
+    unsigned char nx, ny, mx, my, f, lifted = 0;
 
     for (;;) {
         f = gb_poll();
@@ -40,21 +36,25 @@ unsigned char gb_drag_window(unsigned char *x, unsigned char *y,
         if (ny < 8)    ny = 8;                  /* keep clear of the top bar */
         if (ny > ymax) ny = ymax;
         if (nx == ox && ny == oy)
-            continue;
+            continue;                           /* not moved yet */
         gb_curhide();
-        gb_frame(ox, oy, w, h, 0);              /* erase old outline (backdrop) */
+        if (!lifted) {                          /* first move: lift window -> backdrop */
+            gb_fill(ox, oy, w, h, 0);
+            lifted = 1;
+        } else {
+            gb_frame(ox, oy, w, h, 0);          /* erase old outline */
+        }
         ox = nx;
         oy = ny;
-        gb_frame(ox, oy, w, h, 3);              /* draw new outline */
+        gb_frame(ox, oy, w, h, 3);              /* outline at the new position */
         gb_curshow();
     }
 
+    if (!lifted)
+        return 0;                               /* a plain click, never dragged */
     gb_curhide();
     gb_frame(ox, oy, w, h, 0);                  /* erase the final outline */
     gb_curshow();
-
-    if (ox == *x && oy == *y)
-        return 0;
     *x = ox;
     *y = oy;
     return 1;

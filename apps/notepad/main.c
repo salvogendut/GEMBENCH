@@ -370,11 +370,10 @@ void main(void)
             }
             if (my >= win_y && my < win_y + TITLE_H &&  /* title bar -> drag the window */
                 mx >= win_x + 5 && mx < win_x + WIN_W) {
-                gb_curhide();
-                gb_fill(win_x, win_y, WIN_W, WIN_H, 0);  /* lift to the backdrop */
-                gb_curshow();
-                gb_drag_window(&win_x, &win_y, WIN_W, WIN_H);
-                draw(); gb_curshow();                /* redraw at the new position */
+                if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+                    gb_restore_parent();             /* repaint what was behind us */
+                    gb_curhide(); draw(); gb_curshow();  /* our window on top */
+                }
                 continue;
             }
             if (my >= TX_Y0 && my < TX_Y0 + MAX_LINES * LINE_H && mx >= TX_COL) {

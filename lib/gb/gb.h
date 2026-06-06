@@ -74,4 +74,12 @@ void gb_menu(const void *def);
  * e.g. "NOTES   TXT") so a later gb_fs_load/gb_fs_save targets it - how an app
  * does New / Save As / open a file chosen from a picker. */
 void gb_set_name(const char *name11);
+
+/* Draggable-window background repaint (issue #43). An app registers a full-repaint
+ * handler (redraws its whole window/desktop, no input) with gb_on_repaint; when a
+ * child app moves a window, it calls gb_restore_parent first, and the kernel runs
+ * every ancestor's handler bottom-up to repaint what the window vacated, then the
+ * child redraws its window on top. */
+void gb_on_repaint(void (*handler)(void));   /* register full-repaint handler */
+void gb_restore_parent(void);                /* repaint ancestor apps behind us */
 #endif /* GB_H */

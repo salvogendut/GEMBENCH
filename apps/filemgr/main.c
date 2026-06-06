@@ -91,6 +91,7 @@ void main(void)
     total = count_files();
     top = 0; nsel = 0; dc_timer = 0;
     draw_list();
+    gb_on_repaint(draw_list);    /* repaint behind a child's (or our) moved window */
 
     for (;;) {
         flags = gb_poll();
@@ -109,11 +110,10 @@ void main(void)
         /* title bar (right of the close gadget) -> drag the window */
         if (my >= win_y && my < win_y + TITLE_H
             && mx >= win_x + 4 && mx < win_x + WIN_W) {
-            gb_curhide();
-            gb_fill(win_x, win_y, WIN_W, WIN_H, 0);   /* lift to the backdrop */
-            gb_curshow();
-            gb_drag_window(&win_x, &win_y, WIN_W, WIN_H);
-            draw_list();                              /* redraw at the new pos */
+            if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+                gb_restore_parent();                  /* repaint what was behind us */
+                draw_list();                          /* our window on top */
+            }
             continue;
         }
 

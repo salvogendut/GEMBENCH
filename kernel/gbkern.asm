@@ -32,6 +32,8 @@ APP_HANDLER     equ   #1300        ; word: registered app event handler (0 = non
 GB_MSG          equ   #1302        ; message record: type, p0, p1, p2 (4 bytes)
 GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte column
 MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *count
+REPAINT_HDLR    equ   #1340        ; per-depth full-repaint handlers (4 words), for
+                                   ; restoring the background under a moved window (#43)
 
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
@@ -63,6 +65,8 @@ MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *
                 jp    k_onevent              ; GB_ONEVENT     #804B
                 jp    k_menu                 ; GB_MENU        #804E
                 jp    k_setname              ; GB_SETNAME     #8051
+                jp    k_onrepaint            ; GB_ONREPAINT   #8054
+                jp    k_restore_parent       ; GB_RESTPAR     #8057
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -962,6 +966,72 @@ k_vsync
 k_onevent
                 ld    (APP_HANDLER),hl
                 ret
+
+; k_onrepaint (GB_ONREPAINT): register the calling app's full-repaint handler
+; (void(void) in its page) at its nesting slot, so a child can repaint it as the
+; background when a window moves over it (#43). HL = handler.
+k_onrepaint
+                ld    a,(launch_depth)        ; slot = depth-1 (this app's page index)
+                dec   a
+                add   a,a                       ; word index
+                ld    e,a
+                ld    d,0
+                ex    de,hl                     ; HL = offset, DE = handler
+                ld    bc,REPAINT_HDLR
+                add   hl,bc
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d
+                ret
+
+; k_restore_parent (GB_RESTPAR): repaint every ancestor app behind the caller,
+; bottom-up, so the area a moved window vacated shows what was under it. Maps each
+; ancestor's page in turn and calls its registered repaint handler, then restores
+; the caller's page. The caller redraws its own window on top afterwards. Mirrors
+; launch_app's map/call/restore discipline.
+k_restore_parent
+                ld    a,(launch_depth)
+                cp    2
+                ret   c                          ; depth<2 -> no ancestor to repaint
+                ld    a,(bank_cur)              ; remember the caller's page
+                ld    (krp_save),a
+                di
+                ld    b,0                        ; ancestor page index 0..depth-2
+krp_loop
+                ld    a,(launch_depth)
+                sub   2                          ; last ancestor index = depth-2
+                cp    b
+                jr    c,krp_restore
+                push  bc                          ; map ancestor page (clobbers A,B,C)
+                ld    a,b
+                add   a,PAGE_APP0
+                call  bank_set
+                pop   bc
+                ld    a,b                         ; handler = REPAINT_HDLR[b]
+                add   a,a
+                ld    e,a
+                ld    d,0
+                ld    hl,REPAINT_HDLR
+                add   hl,de
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)
+                ld    a,d
+                or    e
+                jr    z,krp_next                  ; no handler registered -> skip
+                push  bc
+                ex    de,hl                       ; HL = handler
+                call  md_call                     ; call (hl)
+                pop   bc
+krp_next
+                inc   b
+                jr    krp_loop
+krp_restore
+                ld    a,(krp_save)
+                call  bank_set                    ; back to the caller's page
+                ei
+                ret
+krp_save        db    0
 
 ; menu_dispatch: called from k_poll. If a fresh click (D bit0) landed in the
 ; kernel-owned top bar and the app registered a handler, deliver a GB_MSG_MENU
