@@ -17,6 +17,12 @@ void gb_text(unsigned char col, unsigned char line,      /* 6x8 text, white     
              const char *s);
 void gb_window(unsigned char col, unsigned char line,    /* window: pos + size   */
                unsigned char w, unsigned char h, const char *title);
+/* gb_drag_window: drag a w x h outline from (*x,*y) by the pointer until release;
+ * updates *x,*y to the dropped position (clamped on screen). Caller lifts its
+ * window to the backdrop first and redraws at (*x,*y) after. Returns 1 if moved.
+ * (lib/gb/gbwin.c) */
+unsigned char gb_drag_window(unsigned char *x, unsigned char *y,
+                             unsigned char w, unsigned char h);
 void gb_fill(unsigned char col, unsigned char line,      /* filled rectangle     */
              unsigned char w, unsigned char h, unsigned char pen);
 void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline    */
