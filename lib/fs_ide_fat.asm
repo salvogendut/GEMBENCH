@@ -23,6 +23,15 @@ FS_IDE_CMD      equ   #FD0F
 FS_IDE_STAT     equ   #FD0F
 FS_IDE_DATA     equ   #FD08
 
+; FAT16 write happens in a paged module (kernel/modules/gbfat.asm), loaded into
+; the free top of PAGE_DATA on demand. The resident stub marshals the data + name
+; into this low-RAM transfer area (resident, reachable from the paged module):
+GBFAT_LEN       equ   #1400        ; bytes to write (word)
+GBFAT_NAME      equ   #1402        ; 8.3 name (11 bytes)
+GBFAT_RES       equ   #140D        ; result: 1 = saved, 0 = failed
+GBFAT_DATA      equ   #1800        ; staged data (<= 8KB)
+GBFAT_LOAD      equ   #5000        ; module load address (above the font/icons)
+
 ; ---------------------------------------------------------------------------
 ; fside_dir_first: mount the volume (read BPB, locate the root directory) and
 ; return the first valid entry.
@@ -168,11 +177,59 @@ fdn_end
                 ret
 
 ; ---------------------------------------------------------------------------
-; fside_save_file: not yet implemented for the IDE/FAT16 backend. NC = failed.
-; (The floppy/AMSDOS backend has the write path; FAT16 write is a follow-up.)
+; fside_save_file: save fs_save_len bytes from (fs_save_src) to fs_req_name via
+; the paged FAT16-write module (GBFAT.BIN). The write path is too large to keep
+; resident, so the data + name are copied into the low-RAM transfer area (while
+; the app's page is still mapped), the module is loaded into the free top of
+; PAGE_DATA and CALLed, and it does the FAT16 write over the IDE ports. CF set =
+; saved. Files larger than the 8KB staging buffer are refused.
 fside_save_file
+                ld    hl,(fs_save_len)        ; refuse > 8KB (low-RAM staging buffer)
+                ld    de,#2000
+                or    a
+                sbc   hl,de
+                jr    nc,fsv_mod_fail
+                ld    hl,(fs_save_src)        ; copy the data out of the app page
+                ld    de,GBFAT_DATA           ; into low RAM (app page mapped now)
+                ld    bc,(fs_save_len)
+                ld    a,b
+                or    c
+                jr    z,fsv_mod_nlen
+                ldir
+fsv_mod_nlen
+                ld    hl,fs_req_name          ; name + length -> the transfer area
+                ld    de,GBFAT_NAME
+                ld    bc,11
+                ldir
+                ld    hl,(fs_save_len)
+                ld    (GBFAT_LEN),hl
+                ld    a,(bank_cur)            ; page in PAGE_DATA, load + run the module
+                push  af
+                ld    a,PAGE_DATA
+                call  bank_set
+                ld    hl,gbfat_modname        ; fs_req_name = "GBFAT   BIN"
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#2000
+                ld    (fs_load_max),hl
+                ld    hl,GBFAT_LOAD
+                ld    (fs_load_dst),hl
+                call  fs_load_file            ; load GBFAT.BIN -> #5000 (above the icons)
+                jr    nc,fsv_mod_unload        ; module missing -> fail
+                call  GBFAT_LOAD              ; run it (reads low RAM, writes the IDE)
+fsv_mod_unload
+                pop   af
+                call  bank_set
+                ld    a,(GBFAT_RES)          ; result byte -> CF
+                or    a
+                ret   z
+                scf
+                ret
+fsv_mod_fail
                 or    a
                 ret
+gbfat_modname   db    "GBFAT   BIN"          ; 8.3, space-padded
 
 ; ---------------------------------------------------------------------------
 ; fside_load_file: load the file named in fs_req_name (11-byte 8.3) into the
