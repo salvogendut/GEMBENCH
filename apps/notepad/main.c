@@ -39,7 +39,8 @@ static char line[WRAP + 2];
 static unsigned int len, cur;            /* text length, insertion index */
 static unsigned char view_first;         /* first visible display row */
 static unsigned char dirty, status;      /* 0 none, 1 saved, 2 failed */
-static unsigned char want_menu, modal;   /* File clicked; in a modal loop */
+static unsigned char want_menu, modal, close_menu; /* File clicked / modal / close it */
+static unsigned char keycool;            /* frames to flush keys after a click or fire */
 
 /* the kernel-drawn top-bar menu: one title "File" at MENU_COL */
 static const unsigned char file_menu[] = { 1, MENU_COL, 'F','i','l','e',0,0,0,0 };
@@ -157,10 +158,10 @@ static void to_83(const char *s)
    main loop to drop the menu (not while another modal popup is up). */
 static void on_menu(void)
 {
-    if (modal) return;
-    if (gb_msg.type == GB_MSG_MENU &&
-        gb_msg.p0 >= MENU_COL && gb_msg.p0 < MENU_END)
-        want_menu = 1;
+    if (gb_msg.type != GB_MSG_MENU) return;
+    if (gb_msg.p0 < MENU_COL || gb_msg.p0 >= MENU_END) return;
+    if (modal) close_menu = 1;   /* clicking File again while open -> close it */
+    else       want_menu = 1;
 }
 
 /* popup: draw a framed list at (x,y), n items from labels[], and run a pointer
@@ -168,8 +169,8 @@ static void on_menu(void)
 static unsigned char popup(unsigned char x, unsigned char y,
                            const char *const *labels, unsigned char n)
 {
-    unsigned char i, flags, row, sel = 0xFF;
-    modal = 1;
+    unsigned char i, flags, row, sel = 0xFF, esc = 0;
+    modal = 1; close_menu = 0;
     gb_curhide();
     gb_fill(x, y, 18, n * LINE_H + 4, 1);         /* white box + black frame */
     gb_frame(x, y, 18, n * LINE_H + 4, 2);
@@ -178,15 +179,22 @@ static unsigned char popup(unsigned char x, unsigned char y,
     gb_curshow();
     for (;;) {
         flags = gb_poll();
+        if (flags & GB_QUIT) { esc = 1; break; }      /* ESC closes the menu */
+        if (close_menu) break;                         /* clicked File again -> close */
         if (!(flags & GB_CLICK)) continue;
         if (gb_my() >= y + 2 && gb_my() < y + 2 + n * LINE_H &&
             gb_mx() >= x && gb_mx() < x + 18) {
             row = (gb_my() - (y + 2)) / LINE_H;
             if (row < n) { sel = row; break; }
         }
-        break;                                     /* clicked outside -> cancel */
+        break;                                         /* clicked elsewhere -> cancel */
     }
     modal = 0;
+    gb_curhide();
+    gb_fill(x, y, 18, n * LINE_H + 4, 0);          /* erase the popup box */
+    gb_curshow();
+    if (esc) while (gb_poll() & GB_QUIT) ;         /* swallow ESC so it doesn't quit */
+    keycool = 4;                                    /* flush the click's buffered chars */
     return sel;
 }
 
@@ -264,16 +272,24 @@ void main(void)
             continue;
         }
 
+        if (flags & GB_FIRE) keycool = 4;           /* fire held -> flush its 'Z'/'X' */
         if (flags & GB_CLICK) {                     /* click in text -> caret */
             unsigned char my = gb_my(), mx = gb_mx();
+            keycool = 4;
             if (my >= TX_Y0 && my < TX_Y0 + MAX_LINES * LINE_H && mx >= TX_COL) {
-                unsigned char row = view_first + (my - TX_Y0) / LINE_H;
-                unsigned char col = ((mx - TX_COL) * 2) / 3;
-                gb_curhide();
-                cur = idx_of(row, col);
-                draw();
-                gb_curshow();
+                unsigned int nc = idx_of(view_first + (my - TX_Y0) / LINE_H,
+                                         ((mx - TX_COL) * 2) / 3);
+                if (nc != cur) {                     /* redraw only if the caret moved */
+                    cur = nc;
+                    gb_curhide(); draw(); gb_curshow();
+                }
             }
+        }
+
+        if (keycool) {                               /* after a click/fire: drop the */
+            keycool--;                                /* buffered fire/direction chars */
+            while (gb_getkey()) ;
+            continue;
         }
 
         edited = 0;                                  /* drain typed keys */
