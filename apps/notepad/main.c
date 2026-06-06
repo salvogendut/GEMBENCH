@@ -41,6 +41,7 @@ static unsigned char view_first;         /* first visible display row */
 static unsigned char dirty, status;      /* 0 none, 1 saved, 2 failed */
 static unsigned char want_menu, modal, close_menu; /* File clicked / modal / close it */
 static unsigned char keycool;            /* frames to flush keys after a click or fire */
+static unsigned char prev_total;         /* display-row count at the last full draw */
 
 /* the kernel-drawn top-bar menu: one title "File" at MENU_COL */
 static const unsigned char file_menu[] = { 1, MENU_COL, 'F','i','l','e',0,0,0,0 };
@@ -86,26 +87,53 @@ static void status_line(void)
                           "Click text to place caret. Ctrl-Q=quit");
 }
 
-/* draw: full repaint - window, the visible rows (scrolled to keep the caret in
-   view), status line, and the caret. */
-static void draw(void)
+/* count_lines: index of the last display row (newlines + wraps). */
+static unsigned char count_lines(void)
+{
+    unsigned int i;
+    unsigned char col = 0, n = 0, ch;
+    for (i = 0; i < len; i++) {
+        ch = buf[i];
+        if (ch == '\n') { n++; col = 0; }
+        else if (ch >= 32) { if (++col == WRAP) { n++; col = 0; } }
+    }
+    return n;
+}
+
+/* scroll_to_caret: adjust view_first so the caret's row is on screen. */
+static void scroll_to_caret(void)
+{
+    unsigned char r, c;
+    pos_of(cur, &r, &c);
+    if (r < view_first) view_first = r;
+    else if (r >= view_first + MAX_LINES) view_first = r - MAX_LINES + 1;
+}
+
+/* render: paint the text using the current view_first. only==0xFF -> full (frame,
+   status, every visible row); otherwise repaint just that screen row (clearing it
+   first) - used for a single-line edit so typing doesn't flash the whole window.
+   Always (re)draws the caret. */
+static void render(unsigned char only)
 {
     unsigned int i;
     unsigned char col = 0, row = 0, scr, currow, curcol;
 
-    pos_of(cur, &currow, &curcol);               /* scroll to show the caret */
-    if (currow < view_first) view_first = currow;
-    else if (currow >= view_first + MAX_LINES) view_first = currow - MAX_LINES + 1;
-
-    gb_window(WIN_X, WIN_Y, WIN_W, WIN_H, dirty ? "NOTEPAD *" : "NOTEPAD");
-    status_line();
-
+    pos_of(cur, &currow, &curcol);
+    if (only == 0xFF) {
+        gb_window(WIN_X, WIN_Y, WIN_W, WIN_H, dirty ? "NOTEPAD *" : "NOTEPAD");
+        status_line();
+    }
     for (i = 0; i <= len; i++) {                  /* <= len: flush the last line */
         if (i == len || buf[i] == '\n' ||
             (buf[i] >= 32 && col == WRAP)) {
             if (row >= view_first && row - view_first < MAX_LINES) {
-                line[col] = 0;
-                gb_text(TX_COL, TX_Y0 + (row - view_first) * LINE_H, line);
+                scr = row - view_first;
+                if (only == 0xFF || scr == only) {
+                    line[col] = 0;
+                    if (only != 0xFF)             /* clear just this line first */
+                        gb_fill(WIN_X + 1, TX_Y0 + scr * LINE_H, WIN_W - 2, LINE_H, 0);
+                    gb_text(TX_COL, TX_Y0 + scr * LINE_H, line);
+                }
             }
             if (i == len) break;
             if (buf[i] == '\n') { row++; col = 0; continue; }
@@ -118,6 +146,14 @@ static void draw(void)
     }
     scr = currow - view_first;
     cursor_at(curcol, scr);
+}
+
+/* draw: full repaint (scroll to the caret, then render everything). */
+static void draw(void)
+{
+    scroll_to_caret();
+    render(0xFF);
+    prev_total = count_lines();
 }
 
 /* insert one char at the caret; grow the buffer right. */
@@ -190,12 +226,14 @@ static unsigned char popup(unsigned char x, unsigned char y,
         break;                                         /* clicked elsewhere -> cancel */
     }
     modal = 0;
-    gb_curhide();
+    if (esc) while (gb_poll() & GB_QUIT) ;         /* swallow ESC (gb_poll keeps the
+                                                      cursor's save-under consistent) */
+    gb_curhide();                                   /* erase the cursor cleanly */
     gb_fill(x, y, 18, n * LINE_H + 4, 0);          /* erase the popup box */
-    gb_curshow();
-    if (esc) while (gb_poll() & GB_QUIT) ;         /* swallow ESC so it doesn't quit */
     keycool = 4;                                    /* flush the click's buffered chars */
-    return sel;
+    return sel;                                     /* returns with the cursor hidden;
+                                                      the caller's draw + gb_curshow
+                                                      re-shows it exactly once */
 }
 
 static const char *const file_items[] = { "New", "Load", "Save" };
@@ -303,9 +341,17 @@ void main(void)
             else if (c >= 32 && c < 127) { ins((char)c); edited = 1; }
             /* other keys (arrows etc.) are ignored - no redraw */
         }
-        if (edited) {                                /* redraw only on an actual edit */
+        if (edited) {
+            unsigned char t = count_lines(), oldvf = view_first, cr, cc;
             gb_curhide();
-            draw();
+            scroll_to_caret();
+            pos_of(cur, &cr, &cc);
+            if (t != prev_total || view_first != oldvf) {
+                render(0xFF);                        /* line count or scroll changed */
+                prev_total = t;
+            } else {
+                render(cr - view_first);             /* just the caret's line */
+            }
             gb_curshow();
         }
     }
