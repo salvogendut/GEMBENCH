@@ -16,15 +16,17 @@
 #include "gb.h"
 
 #define NP_MAX    1024
-#define WIN_X     2
-#define WIN_Y     14
-#define WIN_W     76
-#define WIN_H     180
-#define TX_COL    4
-#define TX_Y0     28
+#define DEF_X     2            /* initial window position (the window is draggable) */
+#define DEF_Y     14
+#define WIN_W     66
+#define WIN_H     158
+#define TITLE_H   14
 #define LINE_H    10
-#define MAX_LINES 14
-#define WRAP      44
+#define MAX_LINES 13
+#define WRAP      40
+/* text origin, relative to the live (draggable) window position */
+#define TX_COL    (win_x + 2)
+#define TX_Y0     (win_y + TITLE_H)
 
 #define K_ENTER   0x0D
 #define K_BS      0x08
@@ -34,6 +36,8 @@
 #define MENU_COL  10             /* "File" title column in the top bar */
 #define MENU_END  16
 
+static unsigned char win_x = DEF_X;      /* live window position (draggable) */
+static unsigned char win_y = DEF_Y;
 static char buf[NP_MAX];
 static char line[WRAP + 2];
 static unsigned int len, cur;            /* text length, insertion index */
@@ -81,7 +85,7 @@ static void cursor_at(unsigned char col, unsigned char row)
 
 static void status_line(void)
 {
-    gb_text(TX_COL, WIN_Y + WIN_H - 11,
+    gb_text(TX_COL, win_y + WIN_H - 11,
             status == 1 ? "saved" :
             status == 2 ? "SAVE FAILED" :
                           "Click text to place caret. Ctrl-Q=quit");
@@ -120,7 +124,7 @@ static void render(unsigned char only)
 
     pos_of(cur, &currow, &curcol);
     if (only == 0xFF) {
-        gb_window(WIN_X, WIN_Y, WIN_W, WIN_H, dirty ? "NOTEPAD *" : "NOTEPAD");
+        gb_window(win_x, win_y, WIN_W, WIN_H, dirty ? "NOTEPAD *" : "NOTEPAD");
         status_line();
     }
     for (i = 0; i <= len; i++) {                  /* <= len: flush the last line */
@@ -131,7 +135,7 @@ static void render(unsigned char only)
                 if (only == 0xFF || scr == only) {
                     line[col] = 0;
                     if (only != 0xFF)             /* clear just this line first */
-                        gb_fill(WIN_X + 1, TX_Y0 + scr * LINE_H, WIN_W - 2, LINE_H, 0);
+                        gb_fill(win_x + 1, TX_Y0 + scr * LINE_H, WIN_W - 2, LINE_H, 0);
                     gb_text(TX_COL, TX_Y0 + scr * LINE_H, line);
                 }
             }
@@ -267,7 +271,7 @@ static void do_load(void)
         p = gb_dirn();
     }
     if (!n) return;
-    sel = popup(WIN_X + 6, TX_Y0, names, n);
+    sel = popup(win_x + 6, TX_Y0, names, n);
     if (sel == 0xFF) return;
     to_83(store[sel]);
     gb_set_name(name83);
@@ -358,10 +362,18 @@ void main(void)
         if (flags & GB_CLICK) {
             unsigned char my = gb_my(), mx = gb_mx();
             keycool = 4;
-            if (my >= WIN_Y && my < WIN_Y + 14 &&   /* close gadget (title-bar left) */
-                mx >= WIN_X && mx < WIN_X + 5) {
+            if (my >= win_y && my < win_y + TITLE_H &&  /* close gadget (title-bar left) */
+                mx >= win_x && mx < win_x + 5) {
                 if (try_close()) return;             /* quit back to the file manager */
                 draw(); gb_curshow();                /* cancelled -> repaint */
+                continue;
+            }
+            if (my >= win_y && my < win_y + TITLE_H &&  /* title bar -> drag the window */
+                mx >= win_x + 5 && mx < win_x + WIN_W) {
+                if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+                    gb_restore_parent();             /* repaint what was behind us */
+                    gb_curhide(); draw(); gb_curshow();  /* our window on top */
+                }
                 continue;
             }
             if (my >= TX_Y0 && my < TX_Y0 + MAX_LINES * LINE_H && mx >= TX_COL) {

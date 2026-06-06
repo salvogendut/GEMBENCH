@@ -122,6 +122,7 @@ void main(void)
 
     paint();
     gb_on_event(on_event);                     /* top-bar clicks -> on_event */
+    gb_on_repaint(paint);                      /* repaint behind a child's moved window */
     gb_menu(dt_menu);                          /* draw the desktop menu title */
     drag_active = 0;
     dc_timer = 0;

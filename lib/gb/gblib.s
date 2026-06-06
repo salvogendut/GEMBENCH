@@ -31,6 +31,8 @@
         .globl  _gb_on_event
         .globl  _gb_menu
         .globl  _gb_set_name
+        .globl  _gb_on_repaint
+        .globl  _gb_restore_parent
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -203,3 +205,12 @@ _gb_menu:
 ;; void gb_set_name(const char *name11);   11-byte 8.3 name in HL -> current file
 _gb_set_name:
         jp      0x8051          ; GB_SETNAME
+
+;; void gb_on_repaint(void (*handler)(void));   handler in HL -> kernel stores it
+;; at this app's nesting slot, for repainting behind a moved window (#43)
+_gb_on_repaint:
+        jp      0x8054          ; GB_ONREPAINT
+
+;; void gb_restore_parent(void);   repaint the ancestor apps behind the caller
+_gb_restore_parent:
+        jp      0x8057          ; GB_RESTPAR

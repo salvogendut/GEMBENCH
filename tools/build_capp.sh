@@ -30,8 +30,9 @@ mkdir -p "$work"
 # this stops a kernel call from wrecking an app's frame pointer (which crashed
 # the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
+"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc 0x6000 \
-    "$work/crt0.rel" "$work/main.rel" "$work/gblib.rel" -o "$work/app.ihx"
+    "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" "$work/gblib.rel" -o "$work/app.ihx"
 "$MAKEBIN" -p "$work/app.ihx" "$work/app.bin"
 
 # makebin emits a flat image from #0000; the app lives at #4000 -> strip low 16K.

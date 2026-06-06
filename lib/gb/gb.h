@@ -17,6 +17,12 @@ void gb_text(unsigned char col, unsigned char line,      /* 6x8 text, white     
              const char *s);
 void gb_window(unsigned char col, unsigned char line,    /* window: pos + size   */
                unsigned char w, unsigned char h, const char *title);
+/* gb_drag_window: drag a w x h outline from (*x,*y) by the pointer until release;
+ * updates *x,*y to the dropped position (clamped on screen). Caller lifts its
+ * window to the backdrop first and redraws at (*x,*y) after. Returns 1 if moved.
+ * (lib/gb/gbwin.c) */
+unsigned char gb_drag_window(unsigned char *x, unsigned char *y,
+                             unsigned char w, unsigned char h);
 void gb_fill(unsigned char col, unsigned char line,      /* filled rectangle     */
              unsigned char w, unsigned char h, unsigned char pen);
 void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline    */
@@ -68,4 +74,12 @@ void gb_menu(const void *def);
  * e.g. "NOTES   TXT") so a later gb_fs_load/gb_fs_save targets it - how an app
  * does New / Save As / open a file chosen from a picker. */
 void gb_set_name(const char *name11);
+
+/* Draggable-window background repaint (issue #43). An app registers a full-repaint
+ * handler (redraws its whole window/desktop, no input) with gb_on_repaint; when a
+ * child app moves a window, it calls gb_restore_parent first, and the kernel runs
+ * every ancestor's handler bottom-up to repaint what the window vacated, then the
+ * child redraws its window on top. */
+void gb_on_repaint(void (*handler)(void));   /* register full-repaint handler */
+void gb_restore_parent(void);                /* repaint ancestor apps behind us */
 #endif /* GB_H */
