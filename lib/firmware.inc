@@ -28,6 +28,9 @@ KM_READ_CHAR    equ   #BB09       ; -> CF + A = char from the buffer, or NC = no
 KM_DISARM_BREAK equ   #BB48       ; disable the ESC->BREAK (reset) mechanism
 KM_TEST_KEY     equ   #BB1E       ; A = key number; exit NZ if pressed
 KM_GET_JOYSTICK equ   #BB24       ; A = joystick 0 state, H = joystick 1
+KM_SET_TRANSLATE equ  #BB39       ; A = key number, B = char it returns (&FF = none)
+KM_SET_SHIFT    equ   #BB3C       ; ... when Shift is held
+KM_SET_CONTROL  equ   #BB3F       ; ... when Control is held
 
 ; --- Machine pack --------------------------------------------------------
 MC_WAIT_FLYBACK equ   #BD19       ; wait for frame flyback

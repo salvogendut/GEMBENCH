@@ -73,6 +73,9 @@ kernel_main
                 ld    (#BDEE),a               ; KM TEST BREAK indirection to RET (that's
                                               ; what actually resets on ESC; disarm alone
                                               ; doesn't touch it)
+                call  disarm_joy_keys        ; joystick keys must not feed the char
+                                              ; buffer, or moving the pointer floods
+                                              ; gb_getkey (the keyboard is the joystick)
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
@@ -102,6 +105,36 @@ kernel_main
                 call  SCR_SET_MODE
                 ret
 name_desktop    db    "DESKTOP BIN"
+
+; disarm_joy_keys: the CPC joystick is keyboard matrix row 9 (key numbers 72..77 =
+; up/down/left/right/fire1/fire2). By default those keys translate to characters,
+; so moving the pointer (= the joystick) floods the firmware key buffer and any
+; app that calls gb_getkey (Notepad) redraws on every move. Set their normal /
+; shift / control translation to &FF (no character). KM_GET_JOYSTICK / KM_TEST_KEY
+; read the matrix directly and are unaffected, so the pointer still works.
+disarm_joy_keys
+                ld    c,72
+djk_loop
+                ld    a,c
+                ld    b,#FF
+                push  bc
+                call  KM_SET_TRANSLATE
+                pop   bc
+                ld    a,c
+                ld    b,#FF
+                push  bc
+                call  KM_SET_SHIFT
+                pop   bc
+                ld    a,c
+                ld    b,#FF
+                push  bc
+                call  KM_SET_CONTROL
+                pop   bc
+                inc   c
+                ld    a,c
+                cp    78
+                jr    c,djk_loop
+                ret
 
 ; --- palette -------------------------------------------------------------
 INK_DESKTOP     equ   1            ; blue  -> pen 0 (paper / backdrop)
