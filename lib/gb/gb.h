@@ -63,4 +63,9 @@ void gb_on_event(void (*handler)(void));   /* register handler, 0 to clear */
  *   then per title: byte col, then an 8-byte NUL/space-padded label
  * Cleared automatically when the app launches a child or quits. */
 void gb_menu(const void *def);
+
+/* gb_set_name: set the current file (an 11-byte 8.3 name, space-padded, no dot,
+ * e.g. "NOTES   TXT") so a later gb_fs_load/gb_fs_save targets it - how an app
+ * does New / Save As / open a file chosen from a picker. */
+void gb_set_name(const char *name11);
 #endif /* GB_H */

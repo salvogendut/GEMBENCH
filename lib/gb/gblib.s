@@ -30,6 +30,7 @@
         .globl  _gb_vsync
         .globl  _gb_on_event
         .globl  _gb_menu
+        .globl  _gb_set_name
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -198,3 +199,7 @@ _gb_on_event:
 ;; void gb_menu(const void *def);   def ptr in HL -> kernel copies + draws the bar
 _gb_menu:
         jp      0x804E          ; GB_MENU
+
+;; void gb_set_name(const char *name11);   11-byte 8.3 name in HL -> current file
+_gb_set_name:
+        jp      0x8051          ; GB_SETNAME

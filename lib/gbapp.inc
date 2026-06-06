@@ -98,3 +98,6 @@ GB_MENU         equ   GB_KERNEL+78 ; #804E  register the top-bar menu: HL = blob
                                    ;        title) in the caller page. Kernel copies
                                    ;        it resident and draws the titles in the
                                    ;        bar. Cleared for a child app / on quit.
+GB_SETNAME      equ   GB_KERNEL+81 ; #8051  set the current file name (launch arg):
+                                   ;        HL = 11-byte 8.3 name. For New / Save As /
+                                   ;        opening a picked file.

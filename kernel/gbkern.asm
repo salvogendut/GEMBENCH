@@ -60,6 +60,7 @@ MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *
                 jp    k_vsync                ; GB_VSYNC       #8048
                 jp    k_onevent              ; GB_ONEVENT     #804B
                 jp    k_menu                 ; GB_MENU        #804E
+                jp    k_setname              ; GB_SETNAME     #8051
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -874,6 +875,15 @@ k_launch
 ; k_getarg (GB_GETARG): HL = the launch arg (the 8.3 file name the app opened).
 k_getarg
                 ld    hl,launch_arg
+                ret
+
+; k_setname (GB_SETNAME): set the current file name (the launch arg) so a later
+; GB_FSLOAD/GB_FSSAVE targets it - this is how an app does New / Save As / open a
+; picked file. HL = an 11-byte 8.3 name in the caller's page.
+k_setname
+                ld    de,launch_arg
+                ld    bc,11
+                ldir
                 ret
 
 ; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a
