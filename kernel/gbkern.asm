@@ -1336,13 +1336,27 @@ read_time                                      ; -> time_str "HH:MM"
                 ld    a,(have_rtc)
                 or    a
                 jr    z,rt_soft
+                ld    a,#0B                    ; register B bit2 (DM): 1 = binary
+                call  read_rtc_reg            ; (the SymbiFace/SymbOS world runs the
+                and   #04                      ;  RTC in binary; HDCPM/SymbOS set this)
+                ld    (rt_binmode),a
                 ld    a,#04
                 call  read_rtc_reg
+                and   #3F                      ; drop 12/24h + PM flags -> hours 0..23
+                call  rt_cvt                   ; binary -> BCD if in binary mode
                 ld    (rt_h),a
                 ld    a,#02
                 call  read_rtc_reg
+                call  rt_cvt
                 ld    (rt_m),a
                 jr    rt_fmt
+rt_cvt                                          ; A = raw reg; -> BCD for put_bcd2
+                ld    b,a
+                ld    a,(rt_binmode)
+                or    a
+                ld    a,b
+                ret   z                         ; BCD mode: use the register as-is
+                jp    bin_to_bcd                ; binary mode: convert to packed BCD
 rt_soft
                 ld    a,(sw_hour)
                 call  bin_to_bcd
@@ -1575,6 +1589,7 @@ sw_min          db    0
 sw_hour         db    0
 clk_frames      db    0
 have_rtc        db    0
+rt_binmode      db    0            ; RTC register B bit2 (DM): 0 = BCD, !=0 = binary
 rt_h            db    0
 rt_m            db    0
 md_save         dw    0
