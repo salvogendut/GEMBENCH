@@ -1,10 +1,9 @@
 /* viewer - GEOBENCH text-file viewer, the first C app that does real work.
  *
- * Launched by the file manager when a file is double-clicked (and the type->app
- * table routes .TXT here). Runs co-resident in its own bank page, asks the
- * kernel to load the opened file into a bank buffer (gb_fs_load), and renders
- * the text in a window - word-wrapped, the first screenful. A click or ESC
- * closes it, back to the file manager.
+ * Launched by the file manager for any non-.TXT file (the type->app default).
+ * Issue #45: a co-resident window - main() loads the file, renders it, registers
+ * with gb_wm_add and returns; the kernel WM loop drives on_frame / on_repaint.
+ * The close gadget (title-bar left) or ESC closes it; other clicks just focus it.
  *
  * Binary files load fine too; they just show as gibberish (control bytes are
  * skipped), so this doubles as a quick "peek" at anything on the disk. */
@@ -17,8 +16,15 @@
 #define MAX_LINES 14     /* visible lines (no scrolling yet)                  */
 #define WRAP      44     /* characters per line before a forced wrap          */
 
+#define WIN_X     2
+#define WIN_Y     14
+#define WIN_W     76
+#define WIN_H     180
+#define TITLE_H   14
+
 static char filebuf[VIEW_MAX];
 static char line[WRAP + 1];
+static unsigned int filen;       /* bytes loaded (for repaint) */
 
 /* render: lay out n bytes of filebuf as wrapped text lines in the window. */
 static void render(unsigned int n)
@@ -49,19 +55,42 @@ static void render(unsigned int n)
     }
 }
 
-void main(void)
+/* paint the whole window (title + text). */
+static void v_draw(void)
 {
-    unsigned int n;
-
-    gb_window(2, 14, 76, 180, "VIEWER");
-    n = gb_fs_load(filebuf, VIEW_MAX);
-    if (n == 0)
+    gb_window(WIN_X, WIN_Y, WIN_W, WIN_H, "VIEWER");
+    if (filen == 0)
         gb_text(TX_COL, TX_Y0, "(file is empty or could not be read)");
     else
-        render(n);
+        render(filen);
+}
 
+/* on_repaint: redraw the window when the WM restacks us. */
+static void v_repaint(void)
+{
+    gb_curhide();
+    v_draw();
     gb_curshow();
-    while (!(gb_poll() & (GB_QUIT | GB_CLICK))) {
-        /* idle until ESC or a click closes the viewer */
-    }
+}
+
+/* on_frame: close on ESC or a click in the close gadget; other clicks just focus. */
+static void on_frame(void)
+{
+    unsigned char flags = gb_flags();
+    if (flags & GB_QUIT) { gb_wm_close(); return; }
+    if (!(flags & GB_CLICK)) return;
+    if (gb_my() >= WIN_Y && gb_my() < WIN_Y + TITLE_H &&
+        gb_mx() >= WIN_X && gb_mx() < WIN_X + 5)
+        gb_wm_close();                     /* close gadget */
+}
+
+static const gb_win_t vwin = { WIN_X, WIN_Y, WIN_W, WIN_H, on_frame, v_repaint, 0, 0 };
+
+void main(void)
+{
+    filen = gb_fs_load(filebuf, VIEW_MAX);
+    gb_curhide();
+    v_draw();
+    gb_curshow();
+    gb_wm_add(&vwin);                       /* register; the kernel WM drives us */
 }

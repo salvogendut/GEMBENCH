@@ -45,15 +45,16 @@ WM_PAGES        equ   #134F        ; page-in-use bitmap: bit i = PAGE_APP0+i bus
 WM_NWIN         equ   #1350        ; number of live windows
 WM_FOCUS        equ   #1351        ; slot index of the focused window
 WM_TABLE        equ   #1352        ; WM_MAXWIN * WM_ESZ-byte entries:
-WM_ESZ          equ   12           ;   page,x,y,w,h, on_frame(2),on_repaint(2),
-WM_MAXWIN       equ   4            ;   on_event(2), flags(1: bit0 alive)
-WM_Z            equ   #1382        ; z-order: WM_NWIN slot indices, [0]=bottom
-WM_FR_PAGE      equ   1            ; entry field offsets (after +0 page):
-WM_FR_X         equ   1            ;   page,x,y,w,h, frame,repaint,event, flags
+WM_ESZ          equ   14           ;   page,x,y,w,h, on_frame(2),on_repaint(2),
+WM_MAXWIN       equ   4            ;   on_event(2), menu(2), flags(1: bit0 alive)
+WM_Z            equ   #138A        ; z-order: WM_NWIN slot indices, [0]=bottom
+WM_FPREV        equ   #138E        ; previously focused slot (menu-swap edge detect)
+WM_FR_X         equ   1            ; entry field offsets (after +0 page):
 WM_FR_FRAME     equ   5
 WM_FR_REPAINT   equ   7
 WM_FR_EVENT     equ   9
-WM_FR_FLAGS     equ   11
+WM_FR_MENU      equ   11
+WM_FR_FLAGS     equ   13
 
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
@@ -92,6 +93,7 @@ WM_FR_FLAGS     equ   11
                 jp    k_wm_open              ; GB_WMOPEN      #8060
                 jp    k_wm_close             ; GB_WMCLOSE     #8063
                 jp    k_wm_setpos            ; GB_WMSETPOS    #8066
+                jp    k_wm_launch            ; GB_WMLAUNCH    #8069
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -136,6 +138,8 @@ kernel_main
                 ld    bc,WM_Z+WM_MAXWIN-WM_PAGES-1
                 ld    (hl),0
                 ldir
+                ld    a,#FF                   ; no previous focus yet -> first map_focus
+                ld    (WM_FPREV),a           ; installs the desktop's menu
                 ld    hl,name_desktop        ; the desktop is the first app
                 call  launch_app             ; run DESKTOP in PAGE_APP0
                 ld    a,2                     ; desktop quit (ESC) -> back to BASIC
@@ -1103,9 +1107,9 @@ wm_register
                 inc   hl
                 ex    de,hl                       ; DE = entry+1
                 ld    hl,(wm_desc)
-                ld    bc,10                       ; x,y,w,h,on_frame,on_repaint,on_event
+                ld    bc,12                       ; x,y,w,h,on_frame,on_repaint,on_event,menu
                 ldir
-                ld    a,1                          ; entry+11 flags = alive
+                ld    a,1                          ; entry+13 flags = alive
                 ld    (de),a
                 ld    a,(wm_slot)                 ; focus the new window
                 ld    (WM_FOCUS),a
@@ -1169,6 +1173,21 @@ k_wm_open
                 ld    de,fs_req_name
                 ld    bc,11
                 ldir
+                jr    wm_open_go
+
+; k_wm_launch (GB_WMLAUNCH): open the current dir entry's app as a co-resident
+; window (non-blocking), with the file as the launch arg - the gb_launch of the WM
+; world. The file manager uses this so an opened file becomes a focusable window.
+k_wm_launch
+                ld    hl,fs_ent_name              ; the file -> launch arg (for the app)
+                ld    de,launch_arg
+                ld    bc,11
+                ldir
+                call  app_for_ext                 ; HL = the app .BIN for the file type
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+wm_open_go
                 call  wm_alloc_page
                 or    a
                 ret   z                            ; no free page
@@ -1257,11 +1276,14 @@ sp_y            db    0
 
 ; wm_map_focus: bank to the focused window's page and point APP_HANDLER at its
 ; on_event (so menu_dispatch in k_poll delivers top-bar clicks to the focused app).
+; On a focus change, also swap the top-bar menu to the focused window's (or clear
+; it) so the bar shows the right menu and clicks reach the right handler.
 wm_map_focus
                 ld    a,(WM_FOCUS)
                 call  wm_entry                    ; HL = entry
                 ld    a,(hl)                       ; page (+0)
                 call  bank_set                     ; preserves HL
+                push  hl
                 ld    de,WM_FR_EVENT
                 add   hl,de
                 ld    a,(hl)
@@ -1269,7 +1291,25 @@ wm_map_focus
                 ld    h,(hl)
                 ld    l,a
                 ld    (APP_HANDLER),hl
-                ret
+                pop   hl                            ; HL = entry
+                ld    a,(WM_FOCUS)               ; focus changed since last frame?
+                ld    de,WM_FPREV
+                ld    a,(de)
+                ld    b,a
+                ld    a,(WM_FOCUS)
+                cp    b
+                ret   z                            ; no change -> leave the bar as is
+                ld    (de),a                       ; WM_FPREV = focus
+                ld    de,WM_FR_MENU               ; focused window's menu def ptr
+                add   hl,de
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a
+                ld    a,h
+                or    l
+                jp    z,menu_clear                 ; no menu -> empty the bar
+                jp    menu_install                 ; install the focused window's menu
 
 ; wm_focus_click: if a fresh click landed on a window other than the focused one,
 ; move focus there. App windows also rise to the z-top (and the stack repaints) if
@@ -1458,6 +1498,7 @@ md_call         jp    (hl)
 ; Copied into resident MENU_DEF so draw_topbar can render it across clock ticks
 ; and app switches; redraws the bar. launch_app clears it for a child app.
 k_menu
+menu_install                                    ; HL = menu def (mapped page) -> MENU_DEF
                 ld    a,(hl)                  ; count
                 cp    5
                 ret   nc                       ; > 4 titles unsupported -> ignore
@@ -1471,6 +1512,12 @@ k_menu
                 ld    b,0
                 ld    de,MENU_DEF
                 ldir
+                jp    draw_topbar
+; menu_clear: empty the top-bar menu and redraw the bar (focus moved to a window
+; with no menu).
+menu_clear
+                xor   a
+                ld    (MENU_DEF),a
                 jp    draw_topbar
 
 ; draw_menu_titles: render the registered menu titles in the top bar. Called from

@@ -39,6 +39,7 @@
         .globl  _gb_wm_open
         .globl  _gb_wm_close
         .globl  _gb_wm_setpos
+        .globl  _gb_wm_launch
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -239,3 +240,7 @@ _gb_wm_close:
 ;; (call after dragging so click-to-focus follows the window).
 _gb_wm_setpos:
         jp      0x8066          ; GB_WMSETPOS
+;; void gb_wm_launch(void);   open the current dir entry's app as a co-resident
+;; window with the file as its launch arg (the non-blocking gb_launch).
+_gb_wm_launch:
+        jp      0x8069          ; GB_WMLAUNCH

@@ -71,16 +71,17 @@ static void draw_list(void)
     gb_curshow();
 }
 
-/* launch: open the file at absolute index idx. The launched app runs MODALLY (it
-   owns the screen until it quits); the kernel repaints all WM windows - including
-   our draw_list - when it returns, so we just clear the selection beforehand. */
+/* launch: open the file at absolute index idx as a co-resident window (#45) - it
+   opens on top and takes focus; we stay live underneath. Click between windows to
+   switch focus. (gb_wm_launch picks the app by type and passes the file as the arg,
+   the non-blocking gb_launch.) */
 static void launch(unsigned char idx)
 {
     unsigned char i;
     char *p = gb_dir1();
     for (i = 0; i < idx && p; i++) p = gb_dirn();
     nsel = 0;
-    gb_launch();
+    gb_wm_launch();
 }
 
 /* on_frame: one frame when this window is focused (kernel WM loop, issue #45).
@@ -144,7 +145,7 @@ static void on_frame(void)
 /* a co-resident window: click it to focus, drag the title bar to move it (the hit
    rect follows via gb_wm_setpos), the close gadget or ESC to close. on_repaint =
    draw_list, which the kernel calls to restack us. */
-static const gb_win_t fmwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, draw_list, 0 };
+static const gb_win_t fmwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, draw_list, 0, 0 };
 
 void main(void)
 {
