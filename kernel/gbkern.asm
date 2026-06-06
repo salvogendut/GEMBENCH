@@ -39,12 +39,21 @@ REPAINT_HDLR    equ   #1340        ; per-depth full-repaint handlers (4 words), 
                                    ; restoring the background under a moved window (#43)
 
 ; Window manager (issue #45) - the kernel owns the master loop and a table of
-; windows; each app registers one with gb_wm_run and becomes callback-driven.
-; State in low RAM (0 resident image bytes). Phase 1: one window (the desktop).
-WM_NWIN         equ   #1350        ; number of registered windows
-WM_FOCUS        equ   #1351        ; index of the focused window
-WM_TABLE        equ   #1352        ; WM_ESZ-byte entries (max 4):
-WM_ESZ          equ   9            ;   page, x, y, w, h, on_frame(2), on_repaint(2)
+; co-resident windows; each app registers one and becomes callback-driven. State
+; in low RAM (0 resident image bytes). Phase 2: multiple windows + click-to-focus.
+WM_PAGES        equ   #134F        ; page-in-use bitmap: bit i = PAGE_APP0+i busy
+WM_NWIN         equ   #1350        ; number of live windows
+WM_FOCUS        equ   #1351        ; slot index of the focused window
+WM_TABLE        equ   #1352        ; WM_MAXWIN * WM_ESZ-byte entries:
+WM_ESZ          equ   12           ;   page,x,y,w,h, on_frame(2),on_repaint(2),
+WM_MAXWIN       equ   4            ;   on_event(2), flags(1: bit0 alive)
+WM_Z            equ   #1382        ; z-order: WM_NWIN slot indices, [0]=bottom
+WM_FR_PAGE      equ   1            ; entry field offsets (after +0 page):
+WM_FR_X         equ   1            ;   page,x,y,w,h, frame,repaint,event, flags
+WM_FR_FRAME     equ   5
+WM_FR_REPAINT   equ   7
+WM_FR_EVENT     equ   9
+WM_FR_FLAGS     equ   11
 
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
@@ -79,6 +88,9 @@ WM_ESZ          equ   9            ;   page, x, y, w, h, on_frame(2), on_repaint
                 jp    k_onrepaint            ; GB_ONREPAINT   #8054
                 jp    k_restore_parent       ; GB_RESTPAR     #8057
                 jp    k_wm_run               ; GB_WMRUN       #805A
+                jp    k_wm_add               ; GB_WMADD       #805D
+                jp    k_wm_open              ; GB_WMOPEN      #8060
+                jp    k_wm_close             ; GB_WMCLOSE     #8063
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -118,8 +130,11 @@ kernel_main
                 call  icon_init              ; load the icon set into PAGE_DATA
                 call  clock_init             ; RTC or software clock -> time_str
                 call  draw_topbar            ; the kernel owns the top bar
-                xor   a                       ; window table empty (gb_wm_run appends)
-                ld    (WM_NWIN),a
+                ld    hl,WM_PAGES            ; clear all WM low-RAM state (pages bitmap,
+                ld    de,WM_PAGES+1          ; counts, table incl. alive flags, z-order)
+                ld    bc,WM_Z+WM_MAXWIN-WM_PAGES-1
+                ld    (hl),0
+                ldir
                 ld    hl,name_desktop        ; the desktop is the first app
                 call  launch_app             ; run DESKTOP in PAGE_APP0
                 ld    a,2                     ; desktop quit (ESC) -> back to BASIC
@@ -819,11 +834,11 @@ launch_app
                 ld    de,fs_req_name         ; name -> fs_req_name (HL in caller page)
                 ld    bc,11
                 ldir
-                ld    a,(launch_depth)       ; target page = PAGE_APP0 + depth
-                cp    3
-                ret   nc                      ; no free page (max 3 apps) -> give up
-                add   a,PAGE_APP0
-                ld    c,a
+                call  wm_alloc_page          ; grab a free bank page (not depth-based,
+                or    a                       ; so it never collides with a co-resident
+                ret   z                       ; WM window) -> A=page, 0 = none free
+                ld    c,a                      ; C = target page
+                push  bc                       ; save target page to free on return
                 ld    a,(bank_cur)           ; save caller's page (per depth) on stack
                 push  af
                 ld    hl,(APP_HANDLER)       ; save the parent's event handler and clear
@@ -857,8 +872,14 @@ la_done
                 ld    (APP_HANDLER),hl
                 pop   af                       ; caller's page
                 call  bank_set
+                pop   bc                       ; target page -> release it
+                ld    a,c
+                call  wm_free_page
                 call  draw_topbar             ; the app may have wiped it (e.g. a C
                                               ; app's gb_cls) - the bar is the kernel's
+                ld    a,(WM_NWIN)            ; if WM windows are live underneath (a modal
+                or    a                       ; app launched from one), repaint them so
+                call  nz,wm_repaint_all      ; the modal app's screen area is restored
                 ei
 la_escwait                                     ; if the app quit on ESC, wait for the
                 ld    a,66                     ; key to be released before the parent
@@ -866,6 +887,54 @@ la_escwait                                     ; if the app quit on ESC, wait fo
                 jr    nz,la_escwait            ; cascading all the way back to BASIC
                 ret
 launch_depth    db    0
+
+; wm_alloc_page: claim the lowest free app bank page -> A = PAGE_APP0+i (#C5..#C7),
+; or 0 if all three are busy. wm_free_page: A = page to release. The bitmap WM_PAGES
+; tracks pages held by co-resident WM windows and by modal launch_app calls alike.
+wm_alloc_page
+                ld    a,(WM_PAGES)
+                bit   0,a
+                jr    z,wap0
+                bit   1,a
+                jr    z,wap1
+                bit   2,a
+                jr    z,wap2
+                xor   a                         ; none free
+                ret
+wap0            set   0,a
+                ld    (WM_PAGES),a
+                ld    a,PAGE_APP0
+                ret
+wap1            set   1,a
+                ld    (WM_PAGES),a
+                ld    a,PAGE_APP0+1
+                ret
+wap2            set   2,a
+                ld    (WM_PAGES),a
+                ld    a,PAGE_APP0+2
+                ret
+wm_free_page
+                sub   PAGE_APP0               ; A = page index 0..2
+                ld    c,a
+                ld    a,(WM_PAGES)
+                or    a                         ; (defensive) nothing to clear
+                ret   z
+                ld    b,a
+                ld    a,c
+                or    a
+                jr    z,wfp0
+                dec   a
+                jr    z,wfp1
+                ld    a,b
+                res   2,a
+                jr    wfp_store
+wfp0            ld    a,b
+                res   0,a
+                jr    wfp_store
+wfp1            ld    a,b
+                res   1,a
+wfp_store       ld    (WM_PAGES),a
+                ret
 
 ; k_run (GB_RUN): run a named app. HL = 8.3 name (in the caller's page).
 k_run
@@ -1002,92 +1071,324 @@ k_onrepaint
                 ld    (hl),d
                 ret
 
-; k_restore_parent (GB_RESTPAR): repaint every ancestor app behind the caller,
-; bottom-up, so the area a moved window vacated shows what was under it. Maps each
-; ancestor's page in turn and calls its registered repaint handler, then restores
-; the caller's page. The caller redraws its own window on top afterwards. Mirrors
-; launch_app's map/call/restore discipline.
+; k_restore_parent (GB_RESTPAR): repaint everything behind the caller. Under the
+; window manager (issue #45) the live windows below a modal app are exactly the WM
+; windows, so this repaints them all bottom-up (wm_repaint_all) - e.g. a modal
+; Notepad dragging its window restores the desktop + file manager underneath, then
+; redraws itself on top. (Replaces the old per-depth REPAINT_HDLR walk, which the
+; co-resident model made obsolete.)
 k_restore_parent
-                ld    a,(launch_depth)
-                cp    2
-                ret   c                          ; depth<2 -> no ancestor to repaint
-                ld    a,(bank_cur)              ; remember the caller's page
-                ld    (krp_save),a
-                di
-                ld    b,0                        ; ancestor page index 0..depth-2
-krp_loop
-                ld    a,(launch_depth)
-                sub   2                          ; last ancestor index = depth-2
-                cp    b
-                jr    c,krp_restore
-                push  bc                          ; map ancestor page (clobbers A,B,C)
-                ld    a,b
-                add   a,PAGE_APP0
-                call  bank_set
-                pop   bc
-                ld    a,b                         ; handler = REPAINT_HDLR[b]
-                add   a,a
-                ld    e,a
-                ld    d,0
-                ld    hl,REPAINT_HDLR
-                add   hl,de
-                ld    e,(hl)
-                inc   hl
-                ld    d,(hl)
-                ld    a,d
-                or    e
-                jr    z,krp_next                  ; no handler registered -> skip
-                push  bc
-                ex    de,hl                       ; HL = handler
-                call  md_call                     ; call (hl)
-                pop   bc
-krp_next
-                inc   b
-                jr    krp_loop
-krp_restore
-                ld    a,(krp_save)
-                call  bank_set                    ; back to the caller's page
-                ei
-                ret
-krp_save        db    0
+                jp    wm_repaint_all
 
-; k_wm_run (GB_WMRUN): the cooperative window-manager loop (issue #45). The app
-; calls this once from main() with HL = a window descriptor in its page:
-;   { u8 x, u8 y, u8 w, u8 h, void(*on_frame)(void), void(*on_repaint)(void) }
-; It registers the window in WM_TABLE (page = the caller's), makes it the focus,
-; then runs the master loop forever: poll input, then CALL the focused window's
-; on_frame. Phase 1 has a single window (the desktop), always focused and already
-; mapped, so the loop is a thin inversion of the app's old for(;;); Phase 2 will
-; hit-test the rect on a click to switch focus and bank to another window's page.
-k_wm_run
-                push  hl                          ; HL = descriptor in the app page
-                ld    a,(WM_NWIN)
-                ld    (WM_FOCUS),a               ; the new window takes focus
-                call  wm_entry                    ; HL = WM_TABLE[NWIN]
-                ld    a,(bank_cur)               ; entry.page = the caller's page
+; ---- cooperative window manager (issue #45, phase 2) --------------------------
+; The kernel owns the master loop (wm_loop) and a table of co-resident windows.
+; The root window (desktop) enters the loop via GB_WMRUN; further windows are
+; opened non-blocking with GB_WMOPEN (load app -> its main calls GB_WMADD and
+; returns). The loop polls, then on a fresh click hit-tests the windows top-down
+; (z-order) and raises+focuses the one clicked, then calls the focused window's
+; on_frame. A window closes itself with GB_WMCLOSE.
+;
+; A descriptor is { u8 x,y,w,h; on_frame(2); on_repaint(2); on_event(2) }.
+
+; wm_register: HL = descriptor in the caller's page. Allocate a table slot, store
+; page = caller, copy the descriptor, mark alive, push onto z-order top and focus.
+wm_register
+                ld    (wm_desc),hl
+                call  wm_free_slot               ; A = first dead slot
+                ld    (wm_slot),a
+                call  wm_entry                    ; HL = WM_TABLE[slot]
+                ld    a,(bank_cur)               ; +0 page = caller
                 ld    (hl),a
                 inc   hl
-                ex    de,hl                       ; DE = entry+1 (x..on_repaint)
-                pop   hl                          ; HL = descriptor
-                ld    bc,8
-                ldir                              ; copy x,y,w,h,on_frame,on_repaint
+                ex    de,hl                       ; DE = entry+1
+                ld    hl,(wm_desc)
+                ld    bc,10                       ; x,y,w,h,on_frame,on_repaint,on_event
+                ldir
+                ld    a,1                          ; entry+11 flags = alive
+                ld    (de),a
+                ld    a,(wm_slot)                 ; focus the new window
+                ld    (WM_FOCUS),a
+                ld    hl,WM_Z                      ; WM_Z[NWIN] = slot (new z-top)
                 ld    a,(WM_NWIN)
-                inc   a
-                ld    (WM_NWIN),a
+                add   a,l
+                ld    l,a
+                ld    a,(wm_slot)
+                ld    (hl),a
+                ld    hl,WM_NWIN
+                inc   (hl)
+                ret
+
+; wm_free_slot: -> A = lowest table slot whose alive flag is clear.
+wm_free_slot
+                ld    hl,WM_TABLE+WM_FR_FLAGS
+                ld    de,WM_ESZ
+                ld    c,0
+wfs_l           ld    a,(hl)
+                and   1
+                jr    z,wfs_found
+                add   hl,de
+                inc   c
+                ld    a,c
+                cp    WM_MAXWIN
+                jr    c,wfs_l
+                ld    c,WM_MAXWIN-1               ; full (shouldn't happen) -> reuse last
+wfs_found       ld    a,c
+                ret
+
+; k_wm_run (GB_WMRUN): register the caller (the root/desktop window) and enter the
+; master loop. Never returns.
+k_wm_run
+                call  wm_register
 wm_loop
-                call  k_poll                      ; pace + cursor + clock + low-RAM result
-                ld    a,(WM_FOCUS)               ; HL = focused entry's on_frame
+                call  wm_map_focus               ; bank focused page; APP_HANDLER = its
+                call  k_poll                      ; on_event, so a top-bar click reaches
+                call  wm_focus_click             ; the right app. then route the click.
+                call  wm_map_focus               ; focus may have changed
+                ld    a,(WM_FOCUS)               ; call the focused window's on_frame
                 call  wm_entry
-                ld    de,5                        ; +5 = on_frame (after page,x,y,w,h)
+                ld    de,WM_FR_FRAME
                 add   hl,de
                 ld    a,(hl)
                 inc   hl
                 ld    h,(hl)
                 ld    l,a
-                call  md_call                     ; on_frame() in the focused page
+                call  md_call
                 jr    wm_loop
 
-; wm_entry: A = window index -> HL = WM_TABLE + A*WM_ESZ. Clobbers A,B,DE.
+; k_wm_add (GB_WMADD): register the caller's window (used by an app opened with
+; GB_WMOPEN); returns to the opener. The kernel's wm_loop then services it.
+k_wm_add
+                jp    wm_register
+
+; k_wm_open (GB_WMOPEN): HL = 8.3 app name in the caller page. Load it into a free
+; bank page and CALL its entry once (its main registers a window via GB_WMADD and
+; returns), then restore the caller's page. Non-blocking: the app becomes a live
+; window the master loop services, rather than running its own loop.
+k_wm_open
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                call  wm_alloc_page
+                or    a
+                ret   z                            ; no free page
+                ld    (wm_open_page),a
+                ld    a,(bank_cur)
+                ld    (wm_open_back),a
+                di
+                ld    a,(wm_open_page)
+                call  bank_set
+                ld    hl,#3F00
+                ld    (fs_load_max),hl
+                ld    hl,APP_BASE
+                ld    (fs_load_dst),hl
+                call  fs_load_file
+                jr    nc,wmo_fail
+                ei
+                call  APP_BASE                    ; main -> GB_WMADD + paint, then ret
+                di
+                ld    a,(wm_open_back)
+                call  bank_set
+                ei
+                ret
+wmo_fail
+                ld    a,(wm_open_back)
+                call  bank_set
+                ld    a,(wm_open_page)
+                call  wm_free_page
+                ei
+                ret
+
+; k_wm_close (GB_WMCLOSE): close the focused (calling) window - free its page, drop
+; it from the table and z-order, refocus the new z-top, and repaint. The caller's
+; on_frame must return immediately after. Mapping is unchanged on return so the
+; closing on_frame can still execute (its page content survives until reused).
+k_wm_close
+                ld    a,(WM_FOCUS)
+                ld    c,a                          ; C = slot being closed
+                call  wm_entry                    ; HL = entry
+                push  hl
+                ld    a,(hl)                       ; page
+                call  wm_free_page
+                pop   hl
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                ld    (hl),0                       ; mark dead
+                ld    hl,WM_Z                      ; compact WM_Z, dropping slot C
+                ld    de,WM_Z
+                ld    a,(WM_NWIN)
+                ld    b,a
+wmc_l           ld    a,(hl)
+                cp    c
+                jr    z,wmc_skip
+                ld    (de),a
+                inc   de
+wmc_skip        inc   hl
+                djnz  wmc_l
+                ld    hl,WM_NWIN
+                dec   (hl)
+                ld    a,(WM_NWIN)                  ; new focus = z-top = WM_Z[NWIN-1]
+                dec   a
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                ld    (WM_FOCUS),a
+                jp    wm_repaint_all               ; repaint remaining windows + return
+
+; wm_map_focus: bank to the focused window's page and point APP_HANDLER at its
+; on_event (so menu_dispatch in k_poll delivers top-bar clicks to the focused app).
+wm_map_focus
+                ld    a,(WM_FOCUS)
+                call  wm_entry                    ; HL = entry
+                ld    a,(hl)                       ; page (+0)
+                call  bank_set                     ; preserves HL
+                ld    de,WM_FR_EVENT
+                add   hl,de
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a
+                ld    (APP_HANDLER),hl
+                ret
+
+; wm_focus_click: if a fresh click landed on a window other than the focused one,
+; move focus there. App windows also rise to the z-top (and the stack repaints) if
+; not already on top; the desktop (slot 0) stays pinned at the bottom. The click is
+; not consumed - it is then delivered to the newly focused window's on_frame.
+wm_focus_click
+                ld    a,(POLL_FLAGS)
+                bit   0,a
+                ret   z                            ; no fresh click
+                call  wm_hit_test                  ; CF set = no window hit (e.g. top bar)
+                ret   c
+                ld    b,a
+                ld    a,(WM_FOCUS)
+                cp    b
+                ret   z                            ; already focused -> deliver
+                ld    a,b
+                ld    (WM_FOCUS),a               ; focus the clicked window
+                or    a
+                ret   z                            ; desktop: keep it at the bottom
+                ld    c,a                          ; c = clicked app slot
+                ld    a,(WM_NWIN)               ; already the z-top? then nothing to raise
+                dec   a
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    c
+                ret   z
+                ld    a,c
+                call  wm_raise                     ; bring it to the front
+                jp    wm_repaint_all               ; restack the screen
+
+; wm_hit_test: -> A = slot of the top-most window whose rect contains the pointer
+; (POLL_MX, POLL_MY), scanning z-order top->bottom; CF set if none.
+wm_hit_test
+                ld    a,(WM_NWIN)
+                ld    (wm_hz),a
+wht_l           ld    a,(wm_hz)
+                or    a
+                jr    z,wht_none
+                dec   a
+                ld    (wm_hz),a
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)                       ; slot = WM_Z[i]
+                call  wm_entry                     ; HL = entry
+                inc   hl                            ; +1 x
+                ld    a,(POLL_MX)
+                sub   (hl)
+                jr    c,wht_l                       ; mx < x
+                ld    c,a                            ; mx - x
+                inc   hl                            ; +2 y
+                inc   hl                            ; +3 w
+                ld    a,c
+                cp    (hl)
+                jr    nc,wht_l                      ; mx-x >= w
+                dec   hl                            ; +2 y
+                ld    a,(POLL_MY)
+                sub   (hl)
+                jr    c,wht_l                       ; my < y
+                ld    c,a                            ; my - y
+                inc   hl                            ; +3 w
+                inc   hl                            ; +4 h
+                ld    a,c
+                cp    (hl)
+                jr    nc,wht_l                      ; my-y >= h
+                ld    a,(wm_hz)                     ; hit -> recover slot
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                or    a                             ; clear CF
+                ret
+wht_none        scf
+                ret
+
+; wm_raise: A = slot -> move it to z-order top and focus it (keeps the others'
+; relative order). Compacts WM_Z removing the slot, then re-appends it at the end.
+wm_raise
+                ld    (WM_FOCUS),a
+                ld    c,a
+                ld    hl,WM_Z
+                ld    de,WM_Z
+                ld    a,(WM_NWIN)
+                ld    b,a
+wr_l            ld    a,(hl)
+                cp    c
+                jr    z,wr_skip
+                ld    (de),a
+                inc   de
+wr_skip         inc   hl
+                djnz  wr_l
+                ld    a,c
+                ld    (de),a                       ; slot back on top
+                ret
+
+; wm_repaint_all: repaint every window bottom-up (each in its own page, via its
+; on_repaint), then restore the caller's page. The cursor is left to the handlers:
+; each on_repaint redraws over the old pointer (a full backdrop fill, or a leading
+; gb_curhide) and ends with gb_curshow, so the cursor stays correct with no double
+; save-under here. WM_Z[0] is always the desktop, so its full paint runs first.
+wm_repaint_all
+                ld    a,(bank_cur)
+                ld    (wm_rp_back),a
+                di
+                xor   a
+                ld    (wm_rp_i),a
+wra_l           ld    a,(wm_rp_i)
+                ld    hl,WM_NWIN
+                cp    (hl)
+                jr    nc,wra_done
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)                       ; slot = WM_Z[i]
+                call  wm_entry                     ; HL = entry
+                ld    a,(hl)                       ; page
+                call  bank_set
+                ld    de,WM_FR_REPAINT
+                add   hl,de
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a
+                ld    a,h
+                or    l
+                jr    z,wra_next                   ; no handler
+                call  md_call
+wra_next        ld    a,(wm_rp_i)
+                inc   a
+                ld    (wm_rp_i),a
+                jr    wra_l
+wra_done        ld    a,(wm_rp_back)
+                call  bank_set
+                ei
+                ret
+
+; wm_entry: A = slot index -> HL = WM_TABLE + A*WM_ESZ. Clobbers A,B,DE.
 wm_entry
                 ld    hl,WM_TABLE
                 or    a
@@ -1098,6 +1399,14 @@ we_add
                 add   hl,de
                 djnz  we_add
                 ret
+
+wm_desc         dw    0            ; wm_register: descriptor ptr
+wm_slot         db    0            ; wm_register: chosen slot
+wm_open_page    db    0            ; k_wm_open: page being loaded
+wm_open_back    db    0            ; k_wm_open: caller's page to restore
+wm_hz           db    0            ; wm_hit_test: z scan index
+wm_rp_back      db    0            ; wm_repaint_all: caller's page
+wm_rp_i         db    0            ; wm_repaint_all: z index
 
 ; menu_dispatch: called from k_poll. If a fresh click (D bit0) landed in the
 ; kernel-owned top bar and the app registered a handler, deliver a GB_MSG_MENU
