@@ -78,6 +78,7 @@ kernel_main
                                               ; gb_getkey (the keyboard is the joystick)
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
+                call  input_init             ; enable the SymbiFace mouse if present
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
                 call  mem_detect             ; (it pokes every bank's #4000)
                 ei
@@ -172,7 +173,7 @@ k_curshow
 ; fresh click (fire just pressed), bit1 = quit (ESC). Interrupts must be on so
 ; the firmware scans the keyboard.
 k_poll
-                call  input_poll             ; in_dirs / in_fire / in_quit
+                call  input_poll             ; in_dx/in_dy + in_fire/in_quit
                 call  poll_move              ; -> DE = new x, HL = new y (clamped)
                 call  MC_WAIT_FLYBACK        ; pace to 50 Hz; do the move in the blank
                 call  cursor_move_to         ; erases+redraws ONLY if the position
@@ -229,72 +230,23 @@ poll_lastfire   db    0
 poll_byte       db    0
 poll_line       db    0
 
-; poll_move: compute the new cursor position from the held directions (in_dirs),
-; clamped. Returns DE = new x, HL = new y. Does NOT write cursor_x/y - that is
-; left to cursor_move_to, which only redraws when the position actually changes.
+; poll_move: apply the per-frame pointer delta (in_dx/in_dy, from input_poll -
+; joystick step and/or SymbiFace mouse) to the cursor, clamped to the screen.
+; Returns DE = new x, HL = new y. Does NOT write cursor_x/y - cursor_move_to does
+; that, redrawing only when the position actually changes.
 poll_move
-                ld    a,(in_dirs)            ; acceleration: a held direction steps
-                or    a                       ; finely for the first few frames (so a
-                jr    nz,pm_held              ; tap nudges ~1px) then faster when held
-                ld    (pm_accel),a           ; nothing held -> reset the ramp
-                jr    pm_setstep
-pm_held
-                ld    a,(pm_accel)
-                inc   a
-                cp    40
-                jr    c,pm_accsave
-                ld    a,39                    ; cap the ramp counter
-pm_accsave
-                ld    (pm_accel),a
-pm_setstep
-                ld    a,(pm_accel)
-                cp    7
-                ld    a,2                     ; 2 units (~1px): precise
-                jr    c,pm_havestep
-                ld    a,12                    ; held a while -> 12 units (~6px): fast
-pm_havestep
-                ld    (pm_step),a
-                ld    a,(in_dirs)
-                ld    c,a
                 ld    hl,(cursor_x)
-                bit   2,c                     ; DIR_LEFT
-                jr    z,pm_right
-                call  pm_sub
-pm_right
-                bit   3,c                     ; DIR_RIGHT
-                jr    z,pm_xclamp
-                call  pm_add
-pm_xclamp
+                ld    de,(in_dx)             ; signed delta this frame
+                add   hl,de
                 call  clamp638
                 ld    (pm_newx),hl
                 ld    hl,(cursor_y)
-                bit   0,c                     ; DIR_UP -> +y (screen up)
-                jr    z,pm_down
-                call  pm_add
-pm_down
-                bit   1,c                     ; DIR_DOWN -> -y
-                jr    z,pm_yclamp
-                call  pm_sub
-pm_yclamp
-                call  clamp398               ; HL = new y
-                ld    de,(pm_newx)           ; DE = new x
-                ret
-pm_add                                         ; HL += pm_step
-                ld    a,(pm_step)
-                ld    e,a
-                ld    d,0
+                ld    de,(in_dy)
                 add   hl,de
-                ret
-pm_sub                                         ; HL -= pm_step
-                ld    a,(pm_step)
-                ld    e,a
-                ld    d,0
-                or    a
-                sbc   hl,de
+                call  clamp398
+                ld    de,(pm_newx)
                 ret
 pm_newx         dw    0
-pm_step         db    0
-pm_accel        db    0
 clamp638
                 ld    de,638
                 jr    clamp_hl
