@@ -107,4 +107,5 @@ void gb_wm_run(const gb_win_t *desc);
 void gb_wm_add(const gb_win_t *desc);
 void gb_wm_open(const char *name);
 void gb_wm_close(void);
+void gb_wm_setpos(unsigned char x, unsigned char y);  /* move our hit rect (drag) */
 #endif /* GB_H */

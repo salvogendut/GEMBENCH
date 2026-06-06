@@ -103,6 +103,16 @@ static void on_frame(void)
         return;
     }
 
+    /* title bar (right of the close gadget) -> drag the window */
+    if (my >= win_y && my < win_y + TITLE_H
+        && mx >= win_x + 4 && mx < win_x + WIN_W) {
+        if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+            gb_wm_setpos(win_x, win_y);   /* move our hit rect to follow */
+            gb_restore_parent();          /* repaint the stack at the new spot */
+        }
+        return;
+    }
+
     /* footer pager: left half scrolls up, right half down */
     if (my >= foot_y && my < foot_y + 10) {
         if (mx < win_x + WIN_W / 2) {
@@ -131,8 +141,9 @@ static void on_frame(void)
     }
 }
 
-/* a fixed-position co-resident window; click it to focus, the close gadget or ESC
-   to close. on_repaint = draw_list, which the kernel calls to restack us. */
+/* a co-resident window: click it to focus, drag the title bar to move it (the hit
+   rect follows via gb_wm_setpos), the close gadget or ESC to close. on_repaint =
+   draw_list, which the kernel calls to restack us. */
 static const gb_win_t fmwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, draw_list, 0 };
 
 void main(void)

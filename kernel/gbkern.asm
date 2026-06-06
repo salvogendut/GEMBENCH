@@ -91,6 +91,7 @@ WM_FR_FLAGS     equ   11
                 jp    k_wm_add               ; GB_WMADD       #805D
                 jp    k_wm_open              ; GB_WMOPEN      #8060
                 jp    k_wm_close             ; GB_WMCLOSE     #8063
+                jp    k_wm_setpos            ; GB_WMSETPOS    #8066
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1234,6 +1235,25 @@ wmc_skip        inc   hl
                 ld    a,(hl)
                 ld    (WM_FOCUS),a
                 jp    wm_repaint_all               ; repaint remaining windows + return
+
+; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
+; (x,y), so click-to-focus follows a window the app has dragged. The caller updates
+; its own draw position and repaints (gb_restore_parent) separately.
+k_wm_setpos
+                ld    (sp_x),a
+                ld    a,l
+                ld    (sp_y),a
+                ld    a,(WM_FOCUS)
+                call  wm_entry                    ; HL = entry
+                inc   hl                            ; +1 x
+                ld    a,(sp_x)
+                ld    (hl),a
+                inc   hl                            ; +2 y
+                ld    a,(sp_y)
+                ld    (hl),a
+                ret
+sp_x            db    0
+sp_y            db    0
 
 ; wm_map_focus: bank to the focused window's page and point APP_HANDLER at its
 ; on_event (so menu_dispatch in k_poll delivers top-bar clicks to the focused app).

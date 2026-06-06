@@ -38,6 +38,7 @@
         .globl  _gb_wm_add
         .globl  _gb_wm_open
         .globl  _gb_wm_close
+        .globl  _gb_wm_setpos
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -234,3 +235,7 @@ _gb_wm_open:
 ;; void gb_wm_close(void);   close the calling window (return from on_frame after).
 _gb_wm_close:
         jp      0x8063          ; GB_WMCLOSE
+;; void gb_wm_setpos(u8 x, u8 y);   A=x, L=y -> move the focused window's hit rect
+;; (call after dragging so click-to-focus follows the window).
+_gb_wm_setpos:
+        jp      0x8066          ; GB_WMSETPOS
