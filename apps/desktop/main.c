@@ -97,6 +97,9 @@ static void drop(void)
     paint();
 }
 
+/* a single "Disk" menu title at byte column 10 (clear of mem and the clock) */
+static const unsigned char dt_menu[] = { 1, 10, 'D','i','s','k',0,0,0,0 };
+
 /* on_event: kernel callback (issue #32). Fires when the user clicks the
    kernel-owned top bar; proves the kernel->app round-trip by showing the
    message payload (the clicked column) in the hint line. */
@@ -119,6 +122,7 @@ void main(void)
 
     paint();
     gb_on_event(on_event);                     /* top-bar clicks -> on_event */
+    gb_menu(dt_menu);                          /* draw the desktop menu title */
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;

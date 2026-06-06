@@ -29,6 +29,7 @@
         .globl  _gb_getkey
         .globl  _gb_vsync
         .globl  _gb_on_event
+        .globl  _gb_menu
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -193,3 +194,7 @@ _gb_vsync:
 ;; void gb_on_event(void (*handler)(void));   handler ptr in HL -> kernel stores it
 _gb_on_event:
         jp      0x804B          ; GB_ONEVENT
+
+;; void gb_menu(const void *def);   def ptr in HL -> kernel copies + draws the bar
+_gb_menu:
+        jp      0x804E          ; GB_MENU

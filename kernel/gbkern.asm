@@ -29,6 +29,7 @@ KCFG_FONTNAME   equ   #120D        ; 11-byte 8.3 font filename, built by the mod
 APP_HANDLER     equ   #1300        ; word: registered app event handler (0 = none)
 GB_MSG          equ   #1302        ; message record: type, p0, p1, p2 (4 bytes)
 GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte column
+MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *count
 
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
@@ -58,6 +59,7 @@ GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte colu
                 jp    k_getkey               ; GB_GETKEY      #8045
                 jp    k_vsync                ; GB_VSYNC       #8048
                 jp    k_onevent              ; GB_ONEVENT     #804B
+                jp    k_menu                 ; GB_MENU        #804E
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -818,6 +820,10 @@ launch_app
                 push  hl                       ; it, so a top-bar click during the child
                 ld    hl,0                     ; cannot call the parent's handler (whose
                 ld    (APP_HANDLER),hl        ; page is not mapped while the child runs)
+                ld    a,(MENU_DEF)           ; save & clear the parent's menu so the
+                push  af                       ; child starts with a clean top bar
+                xor   a
+                ld    (MENU_DEF),a
                 ld    hl,launch_depth
                 inc   (hl)
                 di
@@ -835,6 +841,8 @@ launch_app
 la_done
                 ld    hl,launch_depth
                 dec   (hl)
+                pop   af                       ; restore the parent's menu count
+                ld    (MENU_DEF),a
                 pop   hl                       ; restore the parent's event handler
                 ld    (APP_HANDLER),hl
                 pop   af                       ; caller's page
@@ -956,6 +964,52 @@ menu_dispatch
                 pop   de
                 ret
 md_call         jp    (hl)
+
+; k_menu (GB_MENU): register the calling app's top-bar menu. HL = a blob in the
+; app page: count, then per title { col (byte), 8-byte NUL/space-padded label }.
+; Copied into resident MENU_DEF so draw_topbar can render it across clock ticks
+; and app switches; redraws the bar. launch_app clears it for a child app.
+k_menu
+                ld    a,(hl)                  ; count
+                cp    5
+                ret   nc                       ; > 4 titles unsupported -> ignore
+                ld    e,a                       ; len = count*9 + 1
+                add   a,a
+                add   a,a
+                add   a,a
+                add   a,e
+                inc   a
+                ld    c,a
+                ld    b,0
+                ld    de,MENU_DEF
+                ldir
+                jp    draw_topbar
+
+; draw_menu_titles: render the registered menu titles in the top bar. Called from
+; draw_topbar with PAGE_DATA mapped (the font is there) and the bar text pens set.
+draw_menu_titles
+                ld    a,(MENU_DEF)
+                or    a
+                ret   z
+                ld    b,a
+                ld    ix,MENU_DEF+1
+dmt_loop
+                push  bc
+                push  ix
+                ld    a,(ix+0)                ; title column
+                ld    (tc_x),a
+                xor   a
+                ld    (tc_y),a
+                push  ix
+                pop   hl
+                inc   hl                       ; label = entry + 1
+                call  draw_text
+                pop   ix
+                pop   bc
+                ld    de,9
+                add   ix,de
+                djnz  dmt_loop
+                ret
 
 ; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
 ; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.
@@ -1109,6 +1163,7 @@ draw_topbar
                 ld    (tc_y),a
                 ld    hl,mem_str
                 call  draw_text
+                call  draw_menu_titles       ; the focused app's menu titles
                 ld    a,CLK_COL
                 ld    (tc_x),a
                 xor   a
