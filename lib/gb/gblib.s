@@ -35,6 +35,10 @@
         .globl  _gb_restore_parent
         .globl  _gb_flags
         .globl  _gb_wm_run
+        .globl  _gb_wm_add
+        .globl  _gb_wm_open
+        .globl  _gb_wm_close
+        .globl  _gb_wm_setpos
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -216,7 +220,22 @@ _gb_on_repaint:
 _gb_restore_parent:
         jp      0x8057          ; GB_RESTPAR
 
-;; void gb_wm_run(const gb_win_t *desc);   desc in HL -> kernel registers the
-;; window and enters the master loop (issue #45). Does not return (Phase 1).
+;; void gb_wm_run(const gb_win_t *desc);   desc in HL -> register the root window
+;; and enter the kernel master loop (issue #45). Does not return.
 _gb_wm_run:
         jp      0x805A          ; GB_WMRUN
+;; void gb_wm_add(const gb_win_t *desc);   desc in HL -> register a co-resident
+;; window (called from an app opened with gb_wm_open); returns to the opener.
+_gb_wm_add:
+        jp      0x805D          ; GB_WMADD
+;; void gb_wm_open(const char *name);   8.3 name in HL -> open an app as a new
+;; co-resident window (non-blocking); returns once it has registered.
+_gb_wm_open:
+        jp      0x8060          ; GB_WMOPEN
+;; void gb_wm_close(void);   close the calling window (return from on_frame after).
+_gb_wm_close:
+        jp      0x8063          ; GB_WMCLOSE
+;; void gb_wm_setpos(u8 x, u8 y);   A=x, L=y -> move the focused window's hit rect
+;; (call after dragging so click-to-focus follows the window).
+_gb_wm_setpos:
+        jp      0x8066          ; GB_WMSETPOS

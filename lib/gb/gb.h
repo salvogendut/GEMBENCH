@@ -85,16 +85,27 @@ void gb_on_repaint(void (*handler)(void));   /* register full-repaint handler */
 void gb_restore_parent(void);                /* repaint ancestor apps behind us */
 
 /* Cooperative window manager (issue #45). Instead of owning a for(;;) loop, an
- * app fills a gb_win_t and calls gb_wm_run once from main(): the KERNEL runs the
- * master loop and calls the window's on_frame every frame (read input with
- * gb_flags/gb_mx/gb_my - do NOT call gb_poll inside it). on_repaint redraws the
- * whole window with no input. The rect (x,y,w,h) is the window's screen area, for
- * click-to-focus hit-testing once multiple windows coexist. gb_wm_run does not
- * return (Phase 1: the desktop is the single, permanent window). */
+ * app fills a gb_win_t and registers a window: the KERNEL runs the master loop,
+ * calls the focused window's on_frame every frame (read input with gb_flags/
+ * gb_mx/gb_my - do NOT call gb_poll inside it), and on a click hit-tests the
+ * rects to switch focus. on_repaint redraws the whole window with no input;
+ * on_event handles a top-bar click (0 = none). The rect (x,y,w,h) is the
+ * window's screen area used for click-to-focus.
+ *
+ *   gb_wm_run   - the ROOT window (desktop): register + enter the loop (no return).
+ *   gb_wm_open  - open an app as a new co-resident window on top (non-blocking).
+ *   gb_wm_add   - register the calling window (an app's main() does this when it
+ *                 was started by gb_wm_open), then return to the opener.
+ *   gb_wm_close - close the calling window; return from on_frame right after. */
 typedef struct {
-    unsigned char x, y, w, h;       /* window rect (byte col, line, size) */
-    void (*on_frame)(void);         /* called each frame when focused      */
-    void (*on_repaint)(void);       /* redraw the whole window, no input   */
+    unsigned char x, y, w, h;       /* window rect (byte col, line, size)  */
+    void (*on_frame)(void);         /* called each frame when focused       */
+    void (*on_repaint)(void);       /* redraw the whole window, no input    */
+    void (*on_event)(void);         /* top-bar click handler, or 0          */
 } gb_win_t;
 void gb_wm_run(const gb_win_t *desc);
+void gb_wm_add(const gb_win_t *desc);
+void gb_wm_open(const char *name);
+void gb_wm_close(void);
+void gb_wm_setpos(unsigned char x, unsigned char y);  /* move our hit rect (drag) */
 #endif /* GB_H */

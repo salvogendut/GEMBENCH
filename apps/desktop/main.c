@@ -150,11 +150,11 @@ static void on_frame(void)
     if (icon == NONE) return;
 
     if (dc_timer && dc_idx == icon) {      /* second click -> open */
-        if (icon == 0)      gb_run("FILEMGR BIN");
-        else if (icon == 1) gb_run("CHELLO  BIN");
+        if (icon == 0)      gb_wm_open("FILEMGR BIN");  /* co-resident window  */
+        else if (icon == 1) gb_run("CHELLO  BIN");      /* modal; kernel repaints
+                                                           the windows on return */
         dc_timer = 0;
         held_prev = 0;
-        paint();                           /* repaint after it returns */
     } else {                               /* first click: arm + start drag */
         dc_idx = icon;
         dc_timer = DCLICK;
@@ -162,18 +162,17 @@ static void on_frame(void)
     }
 }
 
-/* the desktop is one window covering the screen below the top bar; on_repaint is
-   the same full paint() used to restore the backdrop behind a child's window */
-static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint };
+/* the desktop is the root window: full screen below the top bar, on_repaint = the
+   full paint() (restacked behind any window), on_event = the top-bar click demo.
+   Its rect spans the screen so it is the bottom catch-all for click-to-focus. */
+static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint, on_event };
 
 void main(void)
 {
     paint();
-    gb_on_event(on_event);                     /* top-bar clicks -> on_event */
-    gb_on_repaint(paint);                      /* repaint behind a child's moved window */
     gb_menu(dt_menu);                          /* draw the desktop menu title */
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;
-    gb_wm_run(&deskwin);                        /* hand the loop to the kernel WM (#45) */
+    gb_wm_run(&deskwin);                        /* register + run the kernel WM (#45) */
 }
