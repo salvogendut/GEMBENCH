@@ -1059,21 +1059,10 @@ k_onevent
                 ld    (APP_HANDLER),hl
                 ret
 
-; k_onrepaint (GB_ONREPAINT): register the calling app's full-repaint handler
-; (void(void) in its page) at its nesting slot, so a child can repaint it as the
-; background when a window moves over it (#43). HL = handler.
+; k_onrepaint (GB_ONREPAINT): now a no-op kept for ABI. Under the window manager
+; an app's repaint handler lives in its gb_win_t (on_repaint); the old per-depth
+; REPAINT_HDLR table is unused. Left as a stub so the jump-table address is fixed.
 k_onrepaint
-                ld    a,(launch_depth)        ; slot = depth-1 (this app's page index)
-                dec   a
-                add   a,a                       ; word index
-                ld    e,a
-                ld    d,0
-                ex    de,hl                     ; HL = offset, DE = handler
-                ld    bc,REPAINT_HDLR
-                add   hl,bc
-                ld    (hl),e
-                inc   hl
-                ld    (hl),d
                 ret
 
 ; k_restore_parent (GB_RESTPAR): repaint everything behind the caller. Under the
@@ -1224,6 +1213,8 @@ wmo_fail
 ; closing on_frame can still execute (its page content survives until reused).
 k_wm_close
                 ld    a,(WM_FOCUS)
+                call  wm_set_clip                 ; damage = the closing window's rect
+                ld    a,(WM_FOCUS)
                 ld    c,a                          ; C = slot being closed
                 call  wm_entry                    ; HL = entry
                 push  hl
@@ -1256,23 +1247,62 @@ wmc_skip        inc   hl
                 jp    wm_repaint_all               ; repaint remaining windows + return
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
-; (x,y), so click-to-focus follows a window the app has dragged. The caller updates
-; its own draw position and repaints (gb_restore_parent) separately.
+; (x,y), so click-to-focus follows a window the app has dragged. Also sets the fill
+; clip to the damage = the bounding box of the old and new window rects, so the
+; following gb_restore_parent only repaints there (no full-screen flicker).
 k_wm_setpos
-                ld    (sp_x),a
+                ld    (sp_x),a                    ; new x
                 ld    a,l
-                ld    (sp_y),a
+                ld    (sp_y),a                    ; new y
                 ld    a,(WM_FOCUS)
-                call  wm_entry                    ; HL = entry
-                inc   hl                            ; +1 x
+                call  wm_entry                    ; HL = entry (+0); damage_axis keeps HL
+                inc   hl                            ; +1 old x
+                ld    b,(hl)
+                inc   hl
+                inc   hl                            ; +3 w
+                ld    c,(hl)
                 ld    a,(sp_x)
+                call  damage_axis                 ; D = min(ox,nx), E = span
+                ld    a,d
+                ld    (clip_x),a
+                ld    a,e
+                ld    (clip_w),a
+                dec   hl                            ; +2 old y
+                ld    b,(hl)
+                inc   hl
+                inc   hl                            ; +4 h
+                ld    c,(hl)
+                ld    a,(sp_y)
+                call  damage_axis
+                ld    a,d
+                ld    (clip_y),a
+                ld    a,e
+                ld    (clip_h),a
+                dec   hl                            ; +4 -> +1 (x)
+                dec   hl
+                dec   hl
+                ld    a,(sp_x)                     ; commit the new position
                 ld    (hl),a
-                inc   hl                            ; +2 y
+                inc   hl
                 ld    a,(sp_y)
                 ld    (hl),a
                 ret
 sp_x            db    0
 sp_y            db    0
+
+; damage_axis: B = old, A = new, C = size -> D = min(old,new), E = span =
+; max(old,new) + size - min. The 1-D damage extent of a move. Preserves HL.
+damage_axis
+                cp    b
+                jr    nc,dax_oldmin              ; new >= old -> min = old, max = new
+                ld    d,a                           ; min = new
+                ld    a,b                           ; max = old
+                jr    dax_span
+dax_oldmin      ld    d,b                           ; min = old (A = new = max)
+dax_span        add   a,c                           ; max + size
+                sub   d                             ; - min
+                ld    e,a
+                ret
 
 ; wm_map_focus: bank to the focused window's page and point APP_HANDLER at its
 ; on_event (so menu_dispatch in k_poll delivers top-bar clicks to the focused app).
@@ -1340,7 +1370,9 @@ wm_focus_click
                 ret   z
                 ld    a,c
                 call  wm_raise                     ; bring it to the front
-                jp    wm_repaint_all               ; restack the screen
+                ld    a,(WM_FOCUS)               ; damage = the raised window's rect
+                call  wm_set_clip
+                jp    wm_repaint_all               ; restack the screen (clipped)
 
 ; wm_hit_test: -> A = slot of the top-most window whose rect contains the pointer
 ; (POLL_MX, POLL_MY), scanning z-order top->bottom; CF set if none.
@@ -1445,7 +1477,37 @@ wra_next        ld    a,(wm_rp_i)
                 jr    wra_l
 wra_done        ld    a,(wm_rp_back)
                 call  bank_set
-                ei
+                call  clip_set_full              ; repaints are clip-limited; restore the
+                ei                                ; full-screen clip for normal drawing
+                ret
+
+; clip_set_full: reset the fill clip to the whole screen (no clipping).
+clip_set_full
+                xor   a
+                ld    (clip_x),a
+                ld    (clip_y),a
+                ld    a,80
+                ld    (clip_w),a
+                ld    a,200
+                ld    (clip_h),a
+                ret
+
+; wm_set_clip: A = slot -> set the fill clip to that window's rect, so the next
+; wm_repaint_all only erases inside the window's area (its damage region).
+wm_set_clip
+                call  wm_entry                    ; HL = entry
+                inc   hl                            ; +1 x
+                ld    a,(hl)
+                ld    (clip_x),a
+                inc   hl                            ; +2 y
+                ld    a,(hl)
+                ld    (clip_y),a
+                inc   hl                            ; +3 w
+                ld    a,(hl)
+                ld    (clip_w),a
+                inc   hl                            ; +4 h
+                ld    a,(hl)
+                ld    (clip_h),a
                 ret
 
 ; wm_entry: A = slot index -> HL = WM_TABLE + A*WM_ESZ. Clobbers A,B,DE.
