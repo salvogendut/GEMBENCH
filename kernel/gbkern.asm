@@ -960,9 +960,28 @@ k_fssave
 ; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
 k_getkey
                 call  KM_READ_CHAR           ; CF + A = char, or NC = none. (Apps frame
-                ret   c                       ; on IY now, so KM_READ_CHAR clobbering IX
-                xor   a                       ; is harmless - see build_capp.sh.)
+                jr    nc,kgk_none            ; on IY now, so KM_READ_CHAR clobbering IX
+                                              ; is harmless - see build_capp.sh.)
+                ; The pointer is the joystick/cursor keys, and the firmware also
+                ; buffers those as characters - so moving the pointer would flood a
+                ; keyboard app (Notepad redrawing on every move). While any pointing
+                ; direction is physically held, the "char" is the pointer, not
+                ; typing: drop it. KM_TEST_KEY preserves B/DE/HL.
+                ld    e,a                     ; save the char
+                ld    hl,kgk_dirkeys
+                ld    b,(hl)
+kgk_test
+                inc   hl
+                ld    a,(hl)
+                call  KM_TEST_KEY
+                jr    nz,kgk_none            ; a direction held -> discard the char
+                djnz  kgk_test
+                ld    a,e                     ; a genuine typed character
                 ret
+kgk_none
+                xor   a
+                ret
+kgk_dirkeys     db    8, 0,1,2,8, 72,73,74,75  ; cursor keys + joystick directions
 
 ; k_vsync (GB_VSYNC): wait for the frame flyback (50 Hz pace, no pointer/clock),
 ; then report whether ESC is held -> A = 1 if so, 0 otherwise. Lets a keyboard app
