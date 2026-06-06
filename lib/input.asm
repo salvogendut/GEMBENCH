@@ -2,10 +2,12 @@
 ; lib/input.asm - GEOBENCH input layer
 ;
 ; Polls the input devices and reports an abstract result, so the rest of the
-; system never reads hardware directly. Today it reads the keyboard (cursor
-; keys + Space + ESC) and the joystick port (an AMX-style mouse presents as the
-; joystick). A SYMBiFACE PS/2 mouse will be added here behind the same
-; interface for machines that have the board.
+; system never reads hardware directly. The pointer is driven by the joystick
+; port only (an AMX-style mouse / gamepad presents as the joystick); the cursor
+; keys and Space are deliberately NOT read, so the whole keyboard is free for
+; Notepad text entry. ESC is the one keyboard key kept here, as a universal quit
+; (it is never a text character, so it does not clash with typing). A SYMBiFACE
+; PS/2 mouse will be added here behind the same interface.
 ;
 ; Requires lib/firmware.inc (KM_TEST_KEY, KM_GET_JOYSTICK). Assembled into the
 ; consumer; no org.
@@ -40,58 +42,14 @@ JOY_FIRE1       equ   5           ; bit 5
 input_poll
                 xor   a
                 ld    (in_dirs),a
-                ld    (in_kbd_dirs),a
                 ld    (in_joy_dirs),a
                 ld    (in_fire),a
                 ld    (in_quit),a
-                call  read_keyboard          ; -> in_kbd_dirs
-                call  read_joystick          ; -> in_joy_dirs
-                ld    a,(in_kbd_dirs)        ; in_dirs = keyboard OR joystick
-                ld    b,a
-                ld    a,(in_joy_dirs)
-                or    b
+                call  read_joystick          ; mouse/joystick -> directions + fire
+                ld    a,(in_joy_dirs)        ; the pointer follows the joystick only
                 ld    (in_dirs),a
-                ret
-
-; ---------------------------------------------------------------------------
-; Keyboard: cursor keys move, Space = fire/select, ESC = quit.
-read_keyboard
-                ld    a,KEY_UP
-                call  KM_TEST_KEY
-                jr    z,rk_down
-                ld    a,(in_kbd_dirs)
-                or    DIR_UP
-                ld    (in_kbd_dirs),a
-rk_down
-                ld    a,KEY_DOWN
-                call  KM_TEST_KEY
-                jr    z,rk_left
-                ld    a,(in_kbd_dirs)
-                or    DIR_DOWN
-                ld    (in_kbd_dirs),a
-rk_left
-                ld    a,KEY_LEFT
-                call  KM_TEST_KEY
-                jr    z,rk_right
-                ld    a,(in_kbd_dirs)
-                or    DIR_LEFT
-                ld    (in_kbd_dirs),a
-rk_right
-                ld    a,KEY_RIGHT
-                call  KM_TEST_KEY
-                jr    z,rk_fire
-                ld    a,(in_kbd_dirs)
-                or    DIR_RIGHT
-                ld    (in_kbd_dirs),a
-rk_fire
-                ld    a,KEY_SPACE
-                call  KM_TEST_KEY
-                jr    z,rk_quit
-                ld    a,1
-                ld    (in_fire),a
-rk_quit
-                ld    a,KEY_ESC
-                call  KM_TEST_KEY
+                ld    a,KEY_ESC              ; ESC quits (not a text key, so it never
+                call  KM_TEST_KEY            ; clashes with Notepad typing)
                 ret   z
                 ld    a,1
                 ld    (in_quit),a
@@ -122,8 +80,7 @@ rj_fire2
                 ret
 
 ; --- State ---------------------------------------------------------------
-in_dirs         db    0            ; keyboard OR joystick directions (DIR_*)
-in_kbd_dirs     db    0            ; keyboard-only directions (window list scroll)
-in_joy_dirs     db    0            ; joystick/mouse-only directions
+in_dirs         db    0            ; held directions (DIR_*), from the joystick
+in_joy_dirs     db    0            ; joystick/mouse directions (scratch)
 in_fire         db    0
 in_quit         db    0

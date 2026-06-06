@@ -240,7 +240,7 @@ static void run_menu(void)
 
 void main(void)
 {
-    unsigned char flags, c, n;
+    unsigned char flags, c, n, edited;
 
     len = gb_fs_load(buf, NP_MAX);
     cur = len; view_first = 0; dirty = 0; status = 0;
@@ -254,6 +254,7 @@ void main(void)
 
     for (;;) {
         flags = gb_poll();
+        if (flags & GB_QUIT) return;                /* ESC quits */
 
         if (want_menu) {                            /* File title was clicked */
             want_menu = 0;
@@ -275,15 +276,19 @@ void main(void)
             }
         }
 
-        n = 8;                                       /* drain typed keys */
+        edited = 0;                                  /* drain typed keys */
+        n = 8;
         while (n--) {
             c = gb_getkey();
             if (!c) break;
             if (c == K_QUIT) return;
+            if (c == K_BS || c == K_DEL) { del_back(); edited = 1; }
+            else if (c == K_ENTER) { ins('\n'); edited = 1; }
+            else if (c >= 32 && c < 127) { ins((char)c); edited = 1; }
+            /* other keys (arrows etc.) are ignored - no redraw */
+        }
+        if (edited) {                                /* redraw only on an actual edit */
             gb_curhide();
-            if (c == K_BS || c == K_DEL) del_back();
-            else if (c == K_ENTER) ins('\n');
-            else if (c >= 32 && c < 127) ins((char)c);
             draw();
             gb_curshow();
         }
