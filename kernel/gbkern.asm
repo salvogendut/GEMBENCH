@@ -1590,10 +1590,17 @@ md_last         dw    0
                 include "../lib/fs_ide_fat.asm"
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
-kern_end                                        ; GBKERN.BIN is CODE ONLY (must end
-                                                ; below HIMEM ~#A67B). The packaging
-                                                ; incbins live above it - never loaded
-                                                ; at runtime, only read by `save`.
+kern_end                                        ; GBKERN.BIN = #8000..kern_end only.
+; --- scratch buffers: above the loaded image, uninitialised RAM at runtime -----
+; Keeping these 2.5KB out of GBKERN.BIN shrinks the load so it fits under the
+; UniDOS+FatFS HIMEM (&A288) on an IDE machine, not just AMSDOS (&A67B). fs_secbuf
+; is first (used by the IDE backend, stays below the lower IDE HIMEM); fsam_buf
+; (floppy only) follows and is never touched on an IDE machine.
+fs_secbuf       defs  512            ; IDE sector buffer / aliased AMSDOS write sector
+fsam_buf        defs  2048           ; floppy whole-directory buffer
+                                                ; The packaging incbins below live
+                                                ; above all of this - never loaded at
+                                                ; runtime, only read by `save`.
 dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.BIN
 dtp_imgend
 app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.BIN

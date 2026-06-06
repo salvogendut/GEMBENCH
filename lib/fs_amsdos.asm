@@ -1009,9 +1009,8 @@ fsv_dptr        defw  0            ; save: pointer into the source data
 fsv_drem        defw  0            ; save: source bytes left
 fsv_nblk        defb  0            ; save: 1KB blocks the file needs
 fsv_cand        defb  0            ; alloc: candidate block being tested
-fsam_buf        defs  2048
-; save: one assembled 512-byte sector. Aliased onto the IDE backend's sector
-; buffer (fs_secbuf) - fs_init picks exactly one backend, so the two are never
-; live at once. Saves 512 resident bytes (the kernel is right at the AMSDOS load
-; ceiling ~#A67B).
+; fsam_buf (the 2KB whole-directory buffer) is defined after kern_end in
+; gbkern.asm so it is scratch RAM, not part of the loaded GBKERN.BIN image.
+; fsam_wbuf (the write sector) is aliased onto the IDE backend's fs_secbuf -
+; fs_init picks exactly one backend, so the two are never live at once.
 fsam_wbuf       equ   fs_secbuf

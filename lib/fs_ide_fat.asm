@@ -409,4 +409,7 @@ fs_data_lba     defw  0            ; data region start LBA
 flf_secs        defw  0            ; load: sectors remaining
 flf_clus        defw  0            ; load: current cluster
 flf_sic         defb  0            ; load: sector within the cluster
-fs_secbuf       defs  512
+; fs_secbuf (the 512-byte sector buffer) is defined after kern_end in gbkern.asm
+; so it is NOT part of the loaded GBKERN.BIN image - it is scratch RAM filled at
+; runtime. Keeping it (and the 2KB fsam_buf) out of the image shrinks the load by
+; 2.5KB, so the kernel fits under UniDOS+FatFS HIMEM (&A288) on an IDE machine.
