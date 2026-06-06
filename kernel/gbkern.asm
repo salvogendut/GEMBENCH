@@ -31,9 +31,20 @@ KCFG_MEMSTR     equ   #121A        ; "<decimal>K" top-bar string (module -> kern
 APP_HANDLER     equ   #1300        ; word: registered app event handler (0 = none)
 GB_MSG          equ   #1302        ; message record: type, p0, p1, p2 (4 bytes)
 GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte column
+POLL_MX         equ   #1306        ; last poll: cursor byte column (mx)
+POLL_MY         equ   #1307        ; last poll: cursor line (my)
+POLL_FLAGS      equ   #1308        ; last poll: flags (bit0 click, bit1 quit, bit2 fire)
 MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *count
 REPAINT_HDLR    equ   #1340        ; per-depth full-repaint handlers (4 words), for
                                    ; restoring the background under a moved window (#43)
+
+; Window manager (issue #45) - the kernel owns the master loop and a table of
+; windows; each app registers one with gb_wm_run and becomes callback-driven.
+; State in low RAM (0 resident image bytes). Phase 1: one window (the desktop).
+WM_NWIN         equ   #1350        ; number of registered windows
+WM_FOCUS        equ   #1351        ; index of the focused window
+WM_TABLE        equ   #1352        ; WM_ESZ-byte entries (max 4):
+WM_ESZ          equ   9            ;   page, x, y, w, h, on_frame(2), on_repaint(2)
 
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
@@ -67,6 +78,7 @@ REPAINT_HDLR    equ   #1340        ; per-depth full-repaint handlers (4 words), 
                 jp    k_setname              ; GB_SETNAME     #8051
                 jp    k_onrepaint            ; GB_ONREPAINT   #8054
                 jp    k_restore_parent       ; GB_RESTPAR     #8057
+                jp    k_wm_run               ; GB_WMRUN       #805A
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -106,6 +118,8 @@ kernel_main
                 call  icon_init              ; load the icon set into PAGE_DATA
                 call  clock_init             ; RTC or software clock -> time_str
                 call  draw_topbar            ; the kernel owns the top bar
+                xor   a                       ; window table empty (gb_wm_run appends)
+                ld    (WM_NWIN),a
                 ld    hl,name_desktop        ; the desktop is the first app
                 call  launch_app             ; run DESKTOP in PAGE_APP0
                 ld    a,2                     ; desktop quit (ESC) -> back to BASIC
@@ -227,9 +241,13 @@ gp_noquit
                 set   2,d
 gp_nohold
                 call  menu_dispatch          ; kernel-owned top-bar click -> app
-                ld    a,(poll_byte)
+                ld    a,d                     ; publish the result to fixed low RAM so a
+                ld    (POLL_FLAGS),a          ; WM callback can read it without re-polling
+                ld    a,(poll_byte)           ; (gb_mx/gb_my/gb_flags read these)
+                ld    (POLL_MX),a
                 ld    b,a
                 ld    a,(poll_line)
+                ld    (POLL_MY),a
                 ld    c,a
                 ret
 poll_lastfire   db    0
@@ -1032,6 +1050,54 @@ krp_restore
                 ei
                 ret
 krp_save        db    0
+
+; k_wm_run (GB_WMRUN): the cooperative window-manager loop (issue #45). The app
+; calls this once from main() with HL = a window descriptor in its page:
+;   { u8 x, u8 y, u8 w, u8 h, void(*on_frame)(void), void(*on_repaint)(void) }
+; It registers the window in WM_TABLE (page = the caller's), makes it the focus,
+; then runs the master loop forever: poll input, then CALL the focused window's
+; on_frame. Phase 1 has a single window (the desktop), always focused and already
+; mapped, so the loop is a thin inversion of the app's old for(;;); Phase 2 will
+; hit-test the rect on a click to switch focus and bank to another window's page.
+k_wm_run
+                push  hl                          ; HL = descriptor in the app page
+                ld    a,(WM_NWIN)
+                ld    (WM_FOCUS),a               ; the new window takes focus
+                call  wm_entry                    ; HL = WM_TABLE[NWIN]
+                ld    a,(bank_cur)               ; entry.page = the caller's page
+                ld    (hl),a
+                inc   hl
+                ex    de,hl                       ; DE = entry+1 (x..on_repaint)
+                pop   hl                          ; HL = descriptor
+                ld    bc,8
+                ldir                              ; copy x,y,w,h,on_frame,on_repaint
+                ld    a,(WM_NWIN)
+                inc   a
+                ld    (WM_NWIN),a
+wm_loop
+                call  k_poll                      ; pace + cursor + clock + low-RAM result
+                ld    a,(WM_FOCUS)               ; HL = focused entry's on_frame
+                call  wm_entry
+                ld    de,5                        ; +5 = on_frame (after page,x,y,w,h)
+                add   hl,de
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a
+                call  md_call                     ; on_frame() in the focused page
+                jr    wm_loop
+
+; wm_entry: A = window index -> HL = WM_TABLE + A*WM_ESZ. Clobbers A,B,DE.
+wm_entry
+                ld    hl,WM_TABLE
+                or    a
+                ret   z
+                ld    b,a
+                ld    de,WM_ESZ
+we_add
+                add   hl,de
+                djnz  we_add
+                ret
 
 ; menu_dispatch: called from k_poll. If a fresh click (D bit0) landed in the
 ; kernel-owned top bar and the app registered a handler, deliver a GB_MSG_MENU
