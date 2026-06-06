@@ -1606,15 +1606,16 @@ md_last         dw    0
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
 kern_end                                        ; GBKERN.BIN = #8000..kern_end only.
-; --- scratch buffers: above the loaded image, uninitialised RAM at runtime -----
-; Keeping these 2.5KB out of GBKERN.BIN shrinks the load so it fits under the
-; UniDOS+FatFS HIMEM (&A288) on an IDE machine, not just AMSDOS (&A67B). fs_secbuf
-; is first (used by the IDE backend, stays below the lower IDE HIMEM); fsam_buf
-; (floppy only) follows and is never touched on an IDE machine.
-fs_secbuf       defs  512            ; IDE sector buffer / aliased AMSDOS write sector
-fsam_buf        defs  2048           ; floppy whole-directory buffer
+; --- scratch buffers live in LOW RAM (always the main bank, below the stack) -----
+; They used to sit just above kern_end, but as the kernel grew they landed in the
+; UniDOS stack's path: HIMEM &A288 grows DOWN toward kern_end, so a 512-byte sector
+; write during a deep call (a Notepad save) smashed the return stack and the IDE
+; loop ran away. Low RAM #1800+ (the retired GBFAT transfer area) is clear of both
+; the descending stack and the resident image. Fixed addresses, not loaded data.
+fs_secbuf       equ   #1800            ; IDE sector buffer / aliased AMSDOS write sector
+fsam_buf        equ   #1A00            ; floppy whole-directory buffer
                                                 ; The packaging incbins below live
-                                                ; above all of this - never loaded at
+                                                ; above kern_end - never loaded at
                                                 ; runtime, only read by `save`.
 dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.BIN
 dtp_imgend

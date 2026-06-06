@@ -483,15 +483,16 @@ dfs_cmp
                 ld    (sav_found),a
                 pop   de                          ; DE = offset within sector
                 ld    (sav_ent_off),de
-                call  dfs_store_lba
-                ld    bc,#1A                      ; old start cluster: low @0x1A hi @0x14
-                add   hl,bc
+                call  dfs_store_lba               ; (clobbers HL/BC - recompute below)
+                ld    hl,fs_secbuf+#1A            ; old start cluster: low word @0x1A
+                ld    de,(sav_ent_off)
+                add   hl,de
                 ld    a,(hl)
                 ld    (sav_old_clus),a
                 inc   hl
                 ld    a,(hl)
                 ld    (sav_old_clus+1),a
-                ld    hl,fs_secbuf+#14
+                ld    hl,fs_secbuf+#14            ; high word @0x14
                 ld    de,(sav_ent_off)
                 add   hl,de
                 ld    a,(hl)
