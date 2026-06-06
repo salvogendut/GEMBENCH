@@ -23,6 +23,8 @@
 #define KCFG_LEN       (*(unsigned int *)0x1200)
 #define KCFG_ICONNAME  ((char *)0x1202)
 #define KCFG_FONTNAME  ((char *)0x120D)
+#define KCFG_MEMKB     (*(unsigned int *)0x1218)   /* in:  total RAM in KB */
+#define KCFG_MEMSTR    ((char *)0x121A)            /* out: "<decimal>K" string */
 
 static void set_default(char *stem)     /* "DEFAULT" + NUL */
 {
@@ -40,4 +42,5 @@ void main(void)
     gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font);
     gb_make_83(icons, "IST", KCFG_ICONNAME);
     gb_make_83(font,  "FNT", KCFG_FONTNAME);
+    gb_fmt_mem(KCFG_MEMKB, KCFG_MEMSTR);    /* top-bar RAM string */
 }
