@@ -967,20 +967,25 @@ k_getkey
                 ; keyboard app (Notepad redrawing on every move). While any pointing
                 ; direction is physically held, the "char" is the pointer, not
                 ; typing: drop it. KM_TEST_KEY preserves B/DE/HL.
-                ld    e,a                     ; save the char
-                ld    hl,kgk_dirkeys
+                ld    (kgk_char),a           ; save char in memory (KM_TEST_KEY may
+                ld    hl,kgk_dirkeys         ; corrupt HL/BC, so don't trust regs)
                 ld    b,(hl)
 kgk_test
                 inc   hl
                 ld    a,(hl)
+                push  hl
+                push  bc
                 call  KM_TEST_KEY
+                pop   bc
+                pop   hl
                 jr    nz,kgk_none            ; a direction held -> discard the char
                 djnz  kgk_test
-                ld    a,e                     ; a genuine typed character
+                ld    a,(kgk_char)           ; a genuine typed character
                 ret
 kgk_none
                 xor   a
                 ret
+kgk_char        db    0
 kgk_dirkeys     db    8, 0,1,2,8, 72,73,74,75  ; cursor keys + joystick directions
 
 ; k_vsync (GB_VSYNC): wait for the frame flyback (50 Hz pace, no pointer/clock),
