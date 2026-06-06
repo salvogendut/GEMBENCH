@@ -9,10 +9,13 @@
  *   File > Load     pick a file from a list and open it
  *   File > Save     write the buffer (creates / grows the file via the new
  *                   AMSDOS write layer)
- *   Ctrl-Q          quit back to the file manager
+ *   Ctrl-Q          close the window (back to the file manager)
  *
- * Input is GB_POLL (pointer + click + the menu callback) plus GB_GETKEY for
- * typing. The view scrolls to keep the caret visible. */
+ * Issue #45: a co-resident window. main() loads the file, registers via gb_wm_add
+ * and returns; the kernel WM loop calls on_frame (read input with gb_flags/mx/my)
+ * and np_repaint to restack us. The modal popups (menu, Load, confirm) still poll
+ * themselves. Click our window to focus it; the view scrolls to keep the caret
+ * visible. */
 #include "gb.h"
 
 #define NP_MAX    1024
@@ -332,89 +335,110 @@ static unsigned char try_close(void)
     return (unsigned char)(status == 1);
 }
 
+/* np_repaint: kernel on_repaint - redraw the whole window (no input) when the WM
+   restacks us behind/above another window. */
+static void np_repaint(void)
+{
+    gb_curhide();
+    render(0xFF);
+    gb_curshow();
+}
+
+/* on_frame: one frame when Notepad is focused (kernel WM loop, issue #45). Reads
+   input with gb_flags/mx/my; the modal popups (run_menu/confirm) still poll
+   themselves. Each old loop 'continue' is a 'return'; quitting is gb_wm_close. */
+static void on_frame(void)
+{
+    unsigned char flags = gb_flags(), c, n, edited;
+
+    if (flags & GB_QUIT) { gb_wm_close(); return; }   /* ESC closes the window */
+
+    if (want_menu) {                            /* File title was clicked */
+        want_menu = 0;
+        run_menu();
+        draw();
+        gb_curshow();
+        return;
+    }
+
+    if (flags & GB_FIRE) keycool = 4;           /* fire held -> flush its 'Z'/'X' */
+    if (flags & GB_CLICK) {
+        unsigned char my = gb_my(), mx = gb_mx();
+        keycool = 4;
+        if (my >= win_y && my < win_y + TITLE_H &&  /* close gadget (title-bar left) */
+            mx >= win_x && mx < win_x + 5) {
+            if (try_close()) { gb_wm_close(); return; }  /* close the window */
+            draw(); gb_curshow();                /* cancelled -> repaint */
+            return;
+        }
+        if (my >= win_y && my < win_y + TITLE_H &&  /* title bar -> drag the window */
+            mx >= win_x + 5 && mx < win_x + WIN_W) {
+            if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+                gb_wm_setpos(win_x, win_y);      /* move our hit rect to follow */
+                gb_restore_parent();             /* repaint the stack (incl. our window) */
+            }
+            return;
+        }
+        if (my >= TX_Y0 && my < TX_Y0 + MAX_LINES * LINE_H && mx >= TX_COL) {
+            unsigned int nc = idx_of(view_first + (my - TX_Y0) / LINE_H,
+                                     ((mx - TX_COL) * 2) / 3);
+            if (nc != cur) {                     /* redraw only if the caret moved */
+                cur = nc;
+                gb_curhide(); draw(); gb_curshow();
+            }
+        }
+        return;
+    }
+
+    if (keycool) {                               /* after a click/fire: drop the */
+        keycool--;                                /* buffered fire/direction chars */
+        while (gb_getkey()) ;
+        return;
+    }
+
+    edited = 0;                                  /* drain typed keys */
+    n = 8;
+    while (n--) {
+        c = gb_getkey();
+        if (!c) break;
+        if (c == K_QUIT) { gb_wm_close(); return; }
+        if (c == K_BS || c == K_DEL) { del_back(); edited = 1; }
+        else if (c == K_ENTER) { ins('\n'); edited = 1; }
+        else if (c >= 32 && c < 127) { ins((char)c); edited = 1; }
+        /* other keys (arrows etc.) are ignored - no redraw */
+    }
+    if (edited) {
+        unsigned char t = count_lines(), oldvf = view_first, cr, cc;
+        gb_curhide();
+        scroll_to_caret();
+        pos_of(cur, &cr, &cc);
+        if (t != prev_total || view_first != oldvf) {
+            render(0xFF);                        /* line count or scroll changed */
+            prev_total = t;
+        } else {
+            render(cr - view_first);             /* just the caret's line */
+        }
+        gb_curshow();
+    }
+}
+
+/* a co-resident window (issue #45): on_repaint redraws it, on_event = the top-bar
+   File click, menu = the File title the kernel shows while we are focused. */
+static const gb_win_t npwin = {
+    DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, np_repaint, on_menu, file_menu
+};
+
 void main(void)
 {
-    unsigned char flags, c, n, edited;
+    unsigned char n;
 
-    len = gb_fs_load(buf, NP_MAX);
+    win_x = DEF_X; win_y = DEF_Y;
+    len = gb_fs_load(buf, NP_MAX);              /* the file we were launched with */
     cur = len; view_first = 0; dirty = 0; status = 0;
     want_menu = 0; modal = 0;
     for (n = 64; n; n--) if (!gb_getkey()) break;   /* drop buffered keys */
 
-    gb_on_event(on_menu);
-    gb_menu(file_menu);
     draw();
     gb_curshow();
-
-    for (;;) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) return;                /* ESC quits */
-
-        if (want_menu) {                            /* File title was clicked */
-            want_menu = 0;
-            run_menu();
-            draw();
-            gb_curshow();
-            continue;
-        }
-
-        if (flags & GB_FIRE) keycool = 4;           /* fire held -> flush its 'Z'/'X' */
-        if (flags & GB_CLICK) {
-            unsigned char my = gb_my(), mx = gb_mx();
-            keycool = 4;
-            if (my >= win_y && my < win_y + TITLE_H &&  /* close gadget (title-bar left) */
-                mx >= win_x && mx < win_x + 5) {
-                if (try_close()) return;             /* quit back to the file manager */
-                draw(); gb_curshow();                /* cancelled -> repaint */
-                continue;
-            }
-            if (my >= win_y && my < win_y + TITLE_H &&  /* title bar -> drag the window */
-                mx >= win_x + 5 && mx < win_x + WIN_W) {
-                if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
-                    gb_restore_parent();             /* repaint what was behind us */
-                    gb_curhide(); draw(); gb_curshow();  /* our window on top */
-                }
-                continue;
-            }
-            if (my >= TX_Y0 && my < TX_Y0 + MAX_LINES * LINE_H && mx >= TX_COL) {
-                unsigned int nc = idx_of(view_first + (my - TX_Y0) / LINE_H,
-                                         ((mx - TX_COL) * 2) / 3);
-                if (nc != cur) {                     /* redraw only if the caret moved */
-                    cur = nc;
-                    gb_curhide(); draw(); gb_curshow();
-                }
-            }
-        }
-
-        if (keycool) {                               /* after a click/fire: drop the */
-            keycool--;                                /* buffered fire/direction chars */
-            while (gb_getkey()) ;
-            continue;
-        }
-
-        edited = 0;                                  /* drain typed keys */
-        n = 8;
-        while (n--) {
-            c = gb_getkey();
-            if (!c) break;
-            if (c == K_QUIT) return;
-            if (c == K_BS || c == K_DEL) { del_back(); edited = 1; }
-            else if (c == K_ENTER) { ins('\n'); edited = 1; }
-            else if (c >= 32 && c < 127) { ins((char)c); edited = 1; }
-            /* other keys (arrows etc.) are ignored - no redraw */
-        }
-        if (edited) {
-            unsigned char t = count_lines(), oldvf = view_first, cr, cc;
-            gb_curhide();
-            scroll_to_caret();
-            pos_of(cur, &cr, &cc);
-            if (t != prev_total || view_first != oldvf) {
-                render(0xFF);                        /* line count or scroll changed */
-                prev_total = t;
-            } else {
-                render(cr - view_first);             /* just the caret's line */
-            }
-            gb_curshow();
-        }
-    }
+    gb_wm_add(&npwin);                           /* register; the kernel WM drives us */
 }

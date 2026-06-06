@@ -163,14 +163,14 @@ static void on_frame(void)
 }
 
 /* the desktop is the root window: full screen below the top bar, on_repaint = the
-   full paint() (restacked behind any window), on_event = the top-bar click demo.
-   Its rect spans the screen so it is the bottom catch-all for click-to-focus. */
-static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint, on_event };
+   full paint() (restacked behind any window), on_event = the top-bar click demo,
+   menu = the "Disk" title. Its rect spans the screen so it is the bottom catch-all
+   for click-to-focus; the kernel installs its menu when it has focus. */
+static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint, on_event, dt_menu };
 
 void main(void)
 {
     paint();
-    gb_menu(dt_menu);                          /* draw the desktop menu title */
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;

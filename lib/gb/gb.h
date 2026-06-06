@@ -102,10 +102,12 @@ typedef struct {
     void (*on_frame)(void);         /* called each frame when focused       */
     void (*on_repaint)(void);       /* redraw the whole window, no input    */
     void (*on_event)(void);         /* top-bar click handler, or 0          */
+    const void *menu;               /* top-bar menu def (gb_menu fmt), or 0 */
 } gb_win_t;
 void gb_wm_run(const gb_win_t *desc);
 void gb_wm_add(const gb_win_t *desc);
 void gb_wm_open(const char *name);
 void gb_wm_close(void);
 void gb_wm_setpos(unsigned char x, unsigned char y);  /* move our hit rect (drag) */
+void gb_wm_launch(void);              /* open current dir entry co-resident (+ arg) */
 #endif /* GB_H */
