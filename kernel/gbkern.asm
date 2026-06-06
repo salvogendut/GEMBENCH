@@ -986,7 +986,9 @@ kgk_none
                 xor   a
                 ret
 kgk_char        db    0
-kgk_dirkeys     db    8, 0,1,2,8, 72,73,74,75  ; cursor keys + joystick directions
+kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs + fire
+                                              ; (fire = the click; it also buffers a
+                                              ; char, e.g. 'Z' - drop it while held)
 
 ; k_vsync (GB_VSYNC): wait for the frame flyback (50 Hz pace, no pointer/clock),
 ; then report whether ESC is held -> A = 1 if so, 0 otherwise. Lets a keyboard app
