@@ -284,6 +284,50 @@ static void run_menu(void)
     else if (sel == 2) do_save();
 }
 
+/* confirm: "Save changes?" dialog -> 1 = YES, 0 = NO, 0xFF = cancelled (ESC). */
+static unsigned char confirm(void)
+{
+    unsigned char flags, sel = 0xFF;
+    unsigned char x = 28, y = 86, w = 26, h = 44;
+    modal = 1;
+    gb_curhide();
+    gb_fill(x, y, w, h, 1);                       /* white box + black frame */
+    gb_frame(x, y, w, h, 2);
+    gb_text(x + 1, y + 4,  "Save changes?");
+    gb_text(x + 3, y + 20, "YES");
+    gb_text(x + 3, y + 32, "NO");
+    gb_curshow();
+    for (;;) {
+        flags = gb_poll();
+        if (flags & GB_QUIT) break;                       /* ESC -> cancel */
+        if (!(flags & GB_CLICK)) continue;
+        if (gb_mx() >= x && gb_mx() < x + w) {
+            if (gb_my() >= y + 20 && gb_my() < y + 30) { sel = 1; break; }  /* YES */
+            if (gb_my() >= y + 32 && gb_my() < y + 42) { sel = 0; break; }  /* NO  */
+        }
+        /* clicks elsewhere keep the dialog open */
+    }
+    modal = 0;
+    if (sel == 0xFF) while (gb_poll() & GB_QUIT) ;   /* swallow ESC */
+    gb_curhide();
+    gb_fill(x, y, w, h, 0);                          /* erase the dialog */
+    keycool = 4;
+    return sel;
+}
+
+/* try_close: handle a click on the window close gadget. -> 1 if Notepad should
+   quit, 0 to stay open. Prompts to save when there are unsaved edits. */
+static unsigned char try_close(void)
+{
+    unsigned char ans;
+    if (!dirty) return 1;                /* nothing changed -> just close */
+    ans = confirm();
+    if (ans == 0xFF) return 0;           /* cancelled -> stay open */
+    if (ans == 0) return 1;              /* NO -> discard and close */
+    do_save();                            /* YES -> save; close only if it worked */
+    return (unsigned char)(status == 1);
+}
+
 void main(void)
 {
     unsigned char flags, c, n, edited;
@@ -311,9 +355,15 @@ void main(void)
         }
 
         if (flags & GB_FIRE) keycool = 4;           /* fire held -> flush its 'Z'/'X' */
-        if (flags & GB_CLICK) {                     /* click in text -> caret */
+        if (flags & GB_CLICK) {
             unsigned char my = gb_my(), mx = gb_mx();
             keycool = 4;
+            if (my >= WIN_Y && my < WIN_Y + 14 &&   /* close gadget (title-bar left) */
+                mx >= WIN_X && mx < WIN_X + 5) {
+                if (try_close()) return;             /* quit back to the file manager */
+                draw(); gb_curshow();                /* cancelled -> repaint */
+                continue;
+            }
             if (my >= TX_Y0 && my < TX_Y0 + MAX_LINES * LINE_H && mx >= TX_COL) {
                 unsigned int nc = idx_of(view_first + (my - TX_Y0) / LINE_H,
                                          ((mx - TX_COL) * 2) / 3);
