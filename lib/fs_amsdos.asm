@@ -243,24 +243,7 @@ fsam_read_id
 fsam_read_sector
                 push  de                             ; keep caller's track/sector id
                 ld    a,#46                          ; READ DATA, MFM
-                call  fsam_send
-                ld    a,(fsam_unit)
-                call  fsam_send                      ; (head<<2)|drive
-                ld    a,d
-                call  fsam_send                      ; C = track
-                ld    a,0
-                call  fsam_send                      ; H = head
-                ld    a,e
-                call  fsam_send                      ; R = sector
-                ld    a,2
-                call  fsam_send                      ; N = 2 (512)
-                ld    a,e
-                call  fsam_send                      ; EOT = R (single sector)
-                ld    a,#2A
-                call  fsam_send                      ; GPL
-                ld    a,#FF
-                call  fsam_send                      ; DTL
-
+                call  fsam_cmd9                       ; issue the command + params
                 ld    hl,(fsam_dst)
                 ld    de,512
 frs_exec
@@ -280,13 +263,39 @@ frs_exec
                 jr    nz,frs_exec
 frs_result
                 ld    (fsam_dst),hl
-                ld    b,7                             ; drain the 7 result bytes
-frs_res_loop
+                call  fsam_drain                      ; drain the 7 result bytes
+                pop   de                             ; restore caller's track/sector id
+                ret
+
+; fsam_cmd9: issue a 9-byte READ/WRITE DATA command. A = command byte (&46 READ /
+; &45 WRITE), D = track, E = sector id. Shared by fsam_read_sector/write_sector.
+fsam_cmd9
+                call  fsam_send                      ; command
+                ld    a,(fsam_unit)
+                call  fsam_send                      ; (head<<2)|drive
+                ld    a,d
+                call  fsam_send                      ; C = track
+                ld    a,0
+                call  fsam_send                      ; H = head
+                ld    a,e
+                call  fsam_send                      ; R = sector
+                ld    a,2
+                call  fsam_send                      ; N = 2 (512)
+                ld    a,e
+                call  fsam_send                      ; EOT = R (single sector)
+                ld    a,#2A
+                call  fsam_send                      ; GPL
+                ld    a,#FF
+                jp    fsam_send                      ; DTL (tail call)
+
+; fsam_drain: read and discard the 7 FDC result-phase bytes.
+fsam_drain
+                ld    b,7
+fdr_loop
                 push  bc
                 call  fsam_recv
                 pop   bc
-                djnz  frs_res_loop
-                pop   de                             ; restore caller's track/sector id
+                djnz  fdr_loop
                 ret
 
 ; ---------------------------------------------------------------------------
@@ -530,23 +539,7 @@ fslf_ok
 fsam_write_sector
                 push  de
                 ld    a,#45                          ; WRITE DATA, MFM
-                call  fsam_send
-                ld    a,(fsam_unit)
-                call  fsam_send                      ; (head<<2)|drive
-                ld    a,d
-                call  fsam_send                      ; C = track
-                ld    a,0
-                call  fsam_send                      ; H = head
-                ld    a,e
-                call  fsam_send                      ; R = sector
-                ld    a,2
-                call  fsam_send                      ; N = 2 (512)
-                ld    a,e
-                call  fsam_send                      ; EOT = R (single sector)
-                ld    a,#2A
-                call  fsam_send                      ; GPL
-                ld    a,#FF
-                call  fsam_send                      ; DTL
+                call  fsam_cmd9                       ; issue the command + params
                 ld    hl,(fsam_src)
                 ld    de,512
 fwr_exec
@@ -566,12 +559,7 @@ fwr_exec
                 jr    nz,fwr_exec
 fwr_result
                 ld    (fsam_src),hl
-                ld    b,7                             ; drain the 7 result bytes
-fwr_res_loop
-                push  bc
-                call  fsam_recv
-                pop   bc
-                djnz  fwr_res_loop
+                call  fsam_drain                      ; drain the 7 result bytes
                 pop   de
                 ret
 
