@@ -47,6 +47,19 @@ static void check83(const char *name, const char *stem, const char *ext,
     }
 }
 
+/* gb_fmt_mem formats a KB count as "<decimal>K". */
+static void checkmem(const char *name, unsigned int kb, const char *want)
+{
+    char dst[8];
+    gb_fmt_mem(kb, dst);
+    if (strcmp(dst, want) != 0) {
+        printf("FAIL %-28s got=\"%s\" want=\"%s\"\n", name, dst, want);
+        ++failures;
+    } else {
+        printf("ok   %-28s \"%s\"\n", name, dst);
+    }
+}
+
 int main(void)
 {
     CHECK("empty",                 "",                              "DEFAULT", "DEFAULT");
@@ -68,6 +81,15 @@ int main(void)
     check83("make83 short",    "AA",      "IST", "AA      IST");
     check83("make83 full 8",   "ABCDEFGH","FNT", "ABCDEFGHFNT");
     check83("make83 empty",    "",        "IST", "        IST");
+
+    checkmem("mem 0",      0,     "0K");
+    checkmem("mem 64",     64,    "64K");
+    checkmem("mem 128",    128,   "128K");
+    checkmem("mem 256",    256,   "256K");
+    checkmem("mem 576",    576,   "576K");
+    checkmem("mem 1024",   1024,  "1024K");
+    checkmem("mem 9",      9,     "9K");
+    checkmem("mem 10000",  10000, "10000K");
 
     if (failures) {
         printf("\n%d test(s) FAILED\n", failures);

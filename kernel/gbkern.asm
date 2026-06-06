@@ -23,6 +23,8 @@ KCFG_TEXT       equ   #1000        ; GEOBENCH.CFG contents (<=512 bytes)
 KCFG_LEN        equ   #1200        ; word: cfg-text byte count (0 = no file)
 KCFG_ICONNAME   equ   #1202        ; 11-byte 8.3 icon filename, built by the module
 KCFG_FONTNAME   equ   #120D        ; 11-byte 8.3 font filename, built by the module
+KCFG_MEMKB      equ   #1218        ; word: total RAM in KB (kernel -> module)
+KCFG_MEMSTR     equ   #121A        ; "<decimal>K" top-bar string (module -> kernel)
 
 ; Callback API (issue #32) - kernel->app event delivery, state in low RAM so it
 ; costs no resident image bytes (low RAM stays main RAM under banking).
@@ -92,7 +94,7 @@ kernel_main
                 add   hl,hl
                 ld    de,64
                 add   hl,de
-                call  fmt_mem                ; -> mem_str
+                ld    (KCFG_MEMKB),hl        ; -> KCFG_MEMSTR (formatted by GBCFG)
                 call  cfg_boot               ; parse GEOBENCH.CFG (C module) ->
                                              ; KCFG_ICONS / KCFG_FONT (before the
                                              ; font/icon loaders consume them)
@@ -1182,7 +1184,7 @@ draw_topbar
                 ld    (tc_x),a
                 xor   a
                 ld    (tc_y),a
-                ld    hl,mem_str
+                ld    hl,KCFG_MEMSTR
                 call  draw_text
                 call  draw_menu_titles       ; the focused app's menu titles
                 ld    a,CLK_COL
@@ -1400,48 +1402,9 @@ ckc_loop
                 xor   a
                 ret
 
-; fmt_mem: HL = total KB -> mem_str as "<decimal>K".
-fmt_mem
-                ld    ix,mem_str
-                xor   a
-                ld    (fm_lead),a
-                ld    de,10000
-                call  fm_digit
-                ld    de,1000
-                call  fm_digit
-                ld    de,100
-                call  fm_digit
-                ld    de,10
-                call  fm_digit
-                ld    a,l
-                add   a,'0'
-                ld    (ix+0),a
-                ld    (ix+1),'K'
-                ld    (ix+2),0
-                ret
-fm_digit
-                ld    a,#FF
-fmd_loop
-                inc   a
-                or    a
-                sbc   hl,de
-                jr    nc,fmd_loop
-                add   hl,de
-                or    a
-                jr    nz,fmd_emit
-                ld    a,(fm_lead)
-                or    a
-                ret   z
-                xor   a
-fmd_emit
-                ld    b,a
-                ld    a,1
-                ld    (fm_lead),a
-                ld    a,b
-                add   a,'0'
-                ld    (ix+0),a
-                inc   ix
-                ret
+; (fmt_mem migrated to the GBCFG C module: gb_fmt_mem in kernel/kc/kcfg.c. The
+; kernel leaves the KB count in KCFG_MEMKB before cfg_boot; the module writes the
+; "<decimal>K" string to KCFG_MEMSTR, which draw_topbar renders.)
 
 ; mem_detect: count present 64K expansion banks (port &7F00 value &C4+bank*8
 ; pages a bank's block 0 into #4000-#7FFF). MUST run resident and BEFORE
@@ -1532,8 +1495,6 @@ md_update
                 ld    (md_last+1),a
                 ret
 
-mem_str         defs  8
-fm_lead         db    0
 time_str        defs  6
 clk_shown       defs  6
 sw_sec          db    0

@@ -66,6 +66,26 @@ void gb_make_83(const char *stem, const char *ext, char *dst)
     dst[10] = ext[2];
 }
 
+void gb_fmt_mem(unsigned int kb, char *dst)
+{
+    static const unsigned int pow10[5] = { 10000, 1000, 100, 10, 1 };
+    unsigned char i, di = 0, lead = 0;
+
+    for (i = 0; i < 5; ++i) {         /* division-free: repeated subtraction */
+        unsigned char d = 0;
+        while (kb >= pow10[i]) {
+            kb -= pow10[i];
+            ++d;
+        }
+        if (d || lead || i == 4) {    /* suppress leading zeros; always emit units */
+            dst[di++] = (char)('0' + d);
+            lead = 1;
+        }
+    }
+    dst[di++] = 'K';
+    dst[di] = 0;
+}
+
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out)
 {

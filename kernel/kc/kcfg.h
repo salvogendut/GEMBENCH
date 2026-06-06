@@ -29,4 +29,9 @@ void gb_cfg_parse(const char *buf, unsigned int len,
  * building off the (full) resident kernel and into the paged C module. */
 void gb_make_83(const char *stem, const char *ext, char *dst);
 
+/* gb_fmt_mem: write the decimal representation of `kb` followed by 'K' and a NUL
+ * into dst (>= 7 bytes); no leading zeros (0 -> "0K"). Mirrors the old asm
+ * fmt_mem; division-free, so no SDCC runtime is pulled into the module. */
+void gb_fmt_mem(unsigned int kb, char *dst);
+
 #endif /* GB_KCFG_H */
