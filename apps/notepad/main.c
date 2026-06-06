@@ -1,24 +1,18 @@
-/* notepad - the GEOBENCH text editor (C), and the first app that writes to disk.
+/* notepad - the GEOBENCH text editor (C), pointer-driven (#34).
  *
- * Launched by the file manager when a .TXT is double-clicked. Loads the file
- * (gb_fs_load), shows it word-wrapped with a red underline cursor, and edits it
- * from the keyboard (gb_getkey):
+ * The top bar shows a "File" menu (New / Load / Save) drawn by the kernel; click
+ * it to drop the menu down. Click in the text to place the insertion point, then
+ * type to insert there (Backspace deletes before it). On the CPC the pointer is
+ * the arrow keys, so positioning the caret is by clicking, not by cursor keys.
  *
- *   printable keys   append a character
- *   Enter            newline
- *   Delete/Backspace remove the last character
- *   Ctrl-S           save (overwrites in place; the status line reports the result)
- *   ESC              quit back to the file manager
+ *   File > New     empty buffer, name UNTITLED.TXT
+ *   File > Load     pick a file from a list and open it
+ *   File > Save     write the buffer (creates / grows the file via the new
+ *                   AMSDOS write layer)
+ *   Ctrl-Q          quit back to the file manager
  *
- * The view scrolls so the end of the text (where editing happens) stays visible.
- * Typing within a line repaints only that line; the whole window is redrawn only
- * on a newline, a scroll, or a save. It paces with gb_vsync (no pointer), reads
- * only the keyboard, and quits when gb_vsync reports ESC held - so the desktop's
- * pointer/joystick never disturb it.
- *
- * v1 edits at the end (append / backspace); mid-text cursor movement is a
- * follow-up. Save overwrites in place, so the text must fit the file's current
- * disk allocation. */
+ * Input is GB_POLL (pointer + click + the menu callback) plus GB_GETKEY for
+ * typing. The view scrolls to keep the caret visible. */
 #include "gb.h"
 
 #define NP_MAX    1024
@@ -33,36 +27,49 @@
 #define WRAP      44
 
 #define K_ENTER   0x0D
-#define K_DEL     0x7F
 #define K_BS      0x08
-#define K_SAVE    0x13   /* Ctrl-S */
-#define K_QUIT    0x11   /* Ctrl-Q */
+#define K_DEL     0x7F
+#define K_QUIT    0x11           /* Ctrl-Q */
+
+#define MENU_COL  10             /* "File" title column in the top bar */
+#define MENU_END  16
 
 static char buf[NP_MAX];
 static char line[WRAP + 2];
-static unsigned int len;
-static unsigned char dirty;
-static unsigned char status;       /* 0 none, 1 saved, 2 save failed */
-static unsigned char prev_total;   /* line count at the last full draw */
+static unsigned int len, cur;            /* text length, insertion index */
+static unsigned char view_first;         /* first visible display row */
+static unsigned char dirty, status;      /* 0 none, 1 saved, 2 failed */
+static unsigned char want_menu, modal;   /* File clicked; in a modal loop */
 
-static unsigned char count_lines(void)
+/* the kernel-drawn top-bar menu: one title "File" at MENU_COL */
+static const unsigned char file_menu[] = { 1, MENU_COL, 'F','i','l','e',0,0,0,0 };
+
+/* pos_of: display (row,col) of buffer index idx (wrap + newlines). */
+static void pos_of(unsigned int idx, unsigned char *prow, unsigned char *pcol)
 {
     unsigned int i;
-    unsigned char col = 0, n = 0, ch;
-    for (i = 0; i < len; i++) {
+    unsigned char col = 0, row = 0, ch;
+    for (i = 0; i < idx; i++) {
         ch = buf[i];
-        if (ch == '\n') { n++; col = 0; }
-        else if (ch >= 32) { if (++col == WRAP) { n++; col = 0; } }
+        if (ch == '\n') { row++; col = 0; }
+        else if (ch >= 32) { if (++col == WRAP) { row++; col = 0; } }
     }
-    return n;
+    *prow = row; *pcol = col;
 }
 
-static void status_line(void)
+/* idx_of: buffer index nearest the display position (trow,tcol). */
+static unsigned int idx_of(unsigned char trow, unsigned char tcol)
 {
-    gb_text(TX_COL, WIN_Y + WIN_H - 11,
-            status == 1 ? "saved" :
-            status == 2 ? "SAVE FAILED - too big to fit" :
-                          "Ctrl-S=save  Ctrl-Q=quit");
+    unsigned int i;
+    unsigned char col = 0, row = 0, ch;
+    for (i = 0; i < len; i++) {
+        if (row == trow && col >= tcol) return i;
+        ch = buf[i];
+        if (ch == '\n') { if (row == trow) return i; row++; col = 0; }
+        else if (ch >= 32) { if (++col == WRAP) { row++; col = 0; } }
+        if (row > trow) return i;
+    }
+    return len;
 }
 
 static void cursor_at(unsigned char col, unsigned char row)
@@ -70,109 +77,215 @@ static void cursor_at(unsigned char col, unsigned char row)
     gb_fill(TX_COL + (col * 3) / 2, TX_Y0 + row * LINE_H + 7, 2, 2, 3);
 }
 
-/* draw: full repaint - window, the last screenful of text, status, cursor. */
+static void status_line(void)
+{
+    gb_text(TX_COL, WIN_Y + WIN_H - 11,
+            status == 1 ? "saved" :
+            status == 2 ? "SAVE FAILED" :
+                          "Click text to place caret. Ctrl-Q=quit");
+}
+
+/* draw: full repaint - window, the visible rows (scrolled to keep the caret in
+   view), status line, and the caret. */
 static void draw(void)
 {
     unsigned int i;
-    unsigned char ch, col = 0, lineno = 0, row = 0, first, total;
-    unsigned char curcol = 0, currow = 0;
+    unsigned char col = 0, row = 0, scr, currow, curcol;
 
-    total = count_lines();
-    prev_total = total;
-    first = (total >= MAX_LINES) ? (total - MAX_LINES + 1) : 0;
+    pos_of(cur, &currow, &curcol);               /* scroll to show the caret */
+    if (currow < view_first) view_first = currow;
+    else if (currow >= view_first + MAX_LINES) view_first = currow - MAX_LINES + 1;
 
     gb_window(WIN_X, WIN_Y, WIN_W, WIN_H, dirty ? "NOTEPAD *" : "NOTEPAD");
     status_line();
 
-    for (i = 0; i < len; i++) {
-        ch = buf[i];
-        if (ch == '\n') {
-            if (lineno >= first && row < MAX_LINES) {
+    for (i = 0; i <= len; i++) {                  /* <= len: flush the last line */
+        if (i == len || buf[i] == '\n' ||
+            (buf[i] >= 32 && col == WRAP)) {
+            if (row >= view_first && row - view_first < MAX_LINES) {
                 line[col] = 0;
-                gb_text(TX_COL, TX_Y0 + row * LINE_H, line);
-                row++;
+                gb_text(TX_COL, TX_Y0 + (row - view_first) * LINE_H, line);
             }
-            col = 0; lineno++;
-        } else if (ch >= 32) {
-            if (lineno >= first) line[col] = ch;
-            if (++col == WRAP) {
-                if (lineno >= first && row < MAX_LINES) {
-                    line[col] = 0;
-                    gb_text(TX_COL, TX_Y0 + row * LINE_H, line);
-                    row++;
-                }
-                col = 0; lineno++;
-            }
+            if (i == len) break;
+            if (buf[i] == '\n') { row++; col = 0; continue; }
+            row++; col = 0;                        /* wrap: fall through to place buf[i] */
+        }
+        if (buf[i] >= 32) {
+            if (row >= view_first && col < WRAP) line[col] = buf[i];
+            col++;
         }
     }
-    if (lineno >= first && row < MAX_LINES) {
-        line[col] = 0;
-        gb_text(TX_COL, TX_Y0 + row * LINE_H, line);
-        curcol = col; currow = row;
-    }
-    cursor_at(curcol, currow);
+    scr = currow - view_first;
+    cursor_at(curcol, scr);
 }
 
-/* draw_tail: repaint just the current (last) line - used when an append/backspace
-   doesn't change the line count, so the whole window needn't flicker. */
-static void draw_tail(void)
+/* insert one char at the caret; grow the buffer right. */
+static void ins(char c)
 {
-    unsigned int i, ls = 0;
-    unsigned char ch, col = 0, lineno = 0, first, currow;
+    unsigned int i;
+    if (len >= NP_MAX) return;
+    for (i = len; i > cur; i--) buf[i] = buf[i - 1];
+    buf[cur] = c;
+    len++; cur++;
+    dirty = 1; status = 0;
+}
 
-    for (i = 0; i < len; i++) {
-        ch = buf[i];
-        if (ch == '\n') { lineno++; col = 0; ls = i + 1; }
-        else if (ch >= 32) { if (++col == WRAP) { lineno++; col = 0; ls = i + 1; } }
+static void del_back(void)
+{
+    unsigned int i;
+    if (cur == 0) return;
+    for (i = cur; i < len; i++) buf[i - 1] = buf[i];
+    len--; cur--;
+    dirty = 1; status = 0;
+}
+
+/* 8.3 helpers: turn a "NAME.EXT" string (from gb_dir*) into an 11-byte name. */
+static char name83[11];
+static void to_83(const char *s)
+{
+    unsigned char i = 0, j;
+    for (j = 0; j < 11; j++) name83[j] = ' ';
+    while (s[i] && s[i] != '.' && i < 8) { name83[i] = s[i]; i++; }
+    while (s[i] && s[i] != '.') i++;
+    if (s[i] == '.') {
+        i++;
+        for (j = 0; j < 3 && s[i]; j++, i++) name83[8 + j] = s[i];
     }
-    first = (lineno >= MAX_LINES) ? (lineno - MAX_LINES + 1) : 0;
-    currow = lineno - first;
+}
 
-    col = 0;
-    for (i = ls; i < len; i++) { ch = buf[i]; if (ch >= 32) line[col++] = ch; }
-    line[col] = 0;
+/* on_menu: kernel callback on a top-bar click. If it hit the File title, ask the
+   main loop to drop the menu (not while another modal popup is up). */
+static void on_menu(void)
+{
+    if (modal) return;
+    if (gb_msg.type == GB_MSG_MENU &&
+        gb_msg.p0 >= MENU_COL && gb_msg.p0 < MENU_END)
+        want_menu = 1;
+}
 
-    gb_fill(WIN_X + 1, TX_Y0 + currow * LINE_H, WIN_W - 2, LINE_H, 0); /* clear line */
-    gb_text(TX_COL, TX_Y0 + currow * LINE_H, line);
-    cursor_at(col, currow);
-    status_line();
+/* popup: draw a framed list at (x,y), n items from labels[], and run a pointer
+   loop until the user clicks one (-> its index) or clicks away (-> 0xFF). */
+static unsigned char popup(unsigned char x, unsigned char y,
+                           const char *const *labels, unsigned char n)
+{
+    unsigned char i, flags, row, sel = 0xFF;
+    modal = 1;
+    gb_curhide();
+    gb_fill(x, y, 18, n * LINE_H + 4, 1);         /* white box + black frame */
+    gb_frame(x, y, 18, n * LINE_H + 4, 2);
+    for (i = 0; i < n; i++)
+        gb_text(x + 1, y + 2 + i * LINE_H, labels[i]);
+    gb_curshow();
+    for (;;) {
+        flags = gb_poll();
+        if (!(flags & GB_CLICK)) continue;
+        if (gb_my() >= y + 2 && gb_my() < y + 2 + n * LINE_H &&
+            gb_mx() >= x && gb_mx() < x + 18) {
+            row = (gb_my() - (y + 2)) / LINE_H;
+            if (row < n) { sel = row; break; }
+        }
+        break;                                     /* clicked outside -> cancel */
+    }
+    modal = 0;
+    return sel;
+}
+
+static const char *const file_items[] = { "New", "Load", "Save" };
+
+static void do_save(void)
+{
+    status = gb_fs_save(buf, len) ? 1 : 2;
+    if (status == 1) dirty = 0;
+}
+
+static void do_new(void)
+{
+    len = 0; cur = 0; view_first = 0; dirty = 0; status = 0;
+    gb_set_name("UNTITLEDTXT");
+}
+
+/* do_load: list directory entries in a popup; open the one clicked. */
+static void do_load(void)
+{
+    const char *names[MAX_LINES];
+    static char store[MAX_LINES][14];
+    char *p;
+    unsigned char n = 0, i, sel;
+
+    p = gb_dir1();
+    while (p && n < MAX_LINES) {
+        for (i = 0; i < 13 && p[i]; i++) store[n][i] = p[i];
+        store[n][i] = 0;
+        names[n] = store[n];
+        n++;
+        p = gb_dirn();
+    }
+    if (!n) return;
+    sel = popup(WIN_X + 6, TX_Y0, names, n);
+    if (sel == 0xFF) return;
+    to_83(store[sel]);
+    gb_set_name(name83);
+    len = gb_fs_load(buf, NP_MAX);
+    cur = 0; view_first = 0; dirty = 0; status = 0;
+}
+
+/* run_menu: drop the File menu and dispatch the chosen item. */
+static void run_menu(void)
+{
+    unsigned char sel = popup(MENU_COL, 8, file_items, 3);
+    if (sel == 0) do_new();
+    else if (sel == 1) do_load();
+    else if (sel == 2) do_save();
 }
 
 void main(void)
 {
-    unsigned char c, n, edited, need_full, t;
+    unsigned char flags, c, n;
 
-    gb_curhide();
     len = gb_fs_load(buf, NP_MAX);
-    dirty = 0; status = 0;
-    for (n = 64; n; n--)               /* drop keys buffered while navigating here */
-        if (!gb_getkey()) break;
+    cur = len; view_first = 0; dirty = 0; status = 0;
+    want_menu = 0; modal = 0;
+    for (n = 64; n; n--) if (!gb_getkey()) break;   /* drop buffered keys */
+
+    gb_on_event(on_menu);
+    gb_menu(file_menu);
     draw();
+    gb_curshow();
 
     for (;;) {
-        gb_vsync();                    /* pace one frame (50 Hz) */
-        edited = 0; need_full = 0;
-        for (n = 32; n; n--) {
+        flags = gb_poll();
+
+        if (want_menu) {                            /* File title was clicked */
+            want_menu = 0;
+            run_menu();
+            draw();
+            gb_curshow();
+            continue;
+        }
+
+        if (flags & GB_CLICK) {                     /* click in text -> caret */
+            unsigned char my = gb_my(), mx = gb_mx();
+            if (my >= TX_Y0 && my < TX_Y0 + MAX_LINES * LINE_H && mx >= TX_COL) {
+                unsigned char row = view_first + (my - TX_Y0) / LINE_H;
+                unsigned char col = ((mx - TX_COL) * 2) / 3;
+                gb_curhide();
+                cur = idx_of(row, col);
+                draw();
+                gb_curshow();
+            }
+        }
+
+        n = 8;                                       /* drain typed keys */
+        while (n--) {
             c = gb_getkey();
             if (!c) break;
-            if (c == K_QUIT) return;   /* Ctrl-Q -> quit (ESC is a no-op now) */
-            if (c == K_SAVE) {
-                status = gb_fs_save(buf, len) ? 1 : 2;
-                if (status == 1) dirty = 0;
-                edited = 1; need_full = 1;
-            } else if (c == K_DEL || c == K_BS) {
-                if (len) { len--; dirty = 1; status = 0; edited = 1; }
-            } else if (c == K_ENTER) {
-                if (len < NP_MAX) { buf[len++] = '\n'; dirty = 1; status = 0; edited = 1; need_full = 1; }
-            } else if (c >= 32 && c < 127) {
-                if (len < NP_MAX) { buf[len++] = (char)c; dirty = 1; status = 0; edited = 1; }
-            }
-            /* other keys (cursor, etc.) are ignored - no redraw */
-        }
-        if (edited) {
-            t = count_lines();
-            if (need_full || t != prev_total) draw();   /* draw() updates prev_total */
-            else draw_tail();
+            if (c == K_QUIT) return;
+            gb_curhide();
+            if (c == K_BS || c == K_DEL) del_back();
+            else if (c == K_ENTER) ins('\n');
+            else if (c >= 32 && c < 127) ins((char)c);
+            draw();
+            gb_curshow();
         }
     }
 }
