@@ -101,3 +101,21 @@ GB_MENU         equ   GB_KERNEL+78 ; #804E  register the top-bar menu: HL = blob
 GB_SETNAME      equ   GB_KERNEL+81 ; #8051  set the current file name (launch arg):
                                    ;        HL = 11-byte 8.3 name. For New / Save As /
                                    ;        opening a picked file.
+GB_ONREPAINT    equ   GB_KERNEL+84 ; #8054  register a full-repaint handler (#43):
+                                   ;        HL = void(void) in the app page, stored
+                                   ;        at this app's nesting slot. A child calls
+                                   ;        GB_RESTPAR to repaint it behind a window.
+GB_RESTPAR      equ   GB_KERNEL+87 ; #8057  repaint every ancestor app bottom-up
+                                   ;        (maps each page, calls its GB_ONREPAINT
+                                   ;        handler) so a moved/closed window's area
+                                   ;        shows what was under it. Restores the
+                                   ;        caller's page; caller redraws on top.
+GB_WMRUN        equ   GB_KERNEL+90 ; #805A  window-manager master loop (#45): HL = a
+                                   ;        descriptor { u8 x,y,w,h; on_frame(2);
+                                   ;        on_repaint(2) } in the app page. Registers
+                                   ;        the window (page = caller), takes focus,
+                                   ;        then loops: poll, CALL the focused
+                                   ;        window's on_frame. Does not return.
+                                   ;        on_frame reads gb_flags/gb_mx/gb_my; the
+                                   ;        poll result is published at POLL_MX #1306
+                                   ;        / POLL_MY #1307 / POLL_FLAGS #1308.

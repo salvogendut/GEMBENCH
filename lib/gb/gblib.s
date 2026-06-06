@@ -33,11 +33,11 @@
         .globl  _gb_set_name
         .globl  _gb_on_repaint
         .globl  _gb_restore_parent
+        .globl  _gb_flags
+        .globl  _gb_wm_run
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
-mx_v:   .ds     1               ; cursor byte col cached by the last gb_poll
-my_v:   .ds     1               ; cursor line cached by the last gb_poll
 
         .area   _CODE
 
@@ -131,21 +131,22 @@ _gb_curshow:
 _gb_curhide:
         jp      0x8024          ; GB_CURHIDE
 
-;; unsigned char gb_poll(void);   -> flags in A; caches cursor col/line
+;; unsigned char gb_poll(void);   -> flags in A. The kernel also publishes the
+;; result (mx/my/flags) to fixed low RAM, so gb_mx/gb_my/gb_flags read it without
+;; re-polling - and a window-manager callback (gb_wm_run) can too.
 _gb_poll:
-        call    0x801E          ; GB_POLL -> B=col C=line D=flags
-        ld      a, b
-        ld      (mx_v), a
-        ld      a, c
-        ld      (my_v), a
+        call    0x801E          ; GB_POLL -> D=flags (+ #1306/7/8 low RAM)
         ld      a, d
         ret
-;; unsigned char gb_mx(void); / gb_my(void);
+;; unsigned char gb_mx(void); / gb_my(void); / gb_flags(void);  read the last poll
 _gb_mx:
-        ld      a, (mx_v)
+        ld      a, (0x1306)     ; POLL_MX
         ret
 _gb_my:
-        ld      a, (my_v)
+        ld      a, (0x1307)     ; POLL_MY
+        ret
+_gb_flags:
+        ld      a, (0x1308)     ; POLL_FLAGS
         ret
 
 ;; char *gb_dir1(void); / char *gb_dirn(void);   -> name ptr in DE, 0 at end
@@ -214,3 +215,8 @@ _gb_on_repaint:
 ;; void gb_restore_parent(void);   repaint the ancestor apps behind the caller
 _gb_restore_parent:
         jp      0x8057          ; GB_RESTPAR
+
+;; void gb_wm_run(const gb_win_t *desc);   desc in HL -> kernel registers the
+;; window and enters the master loop (issue #45). Does not return (Phase 1).
+_gb_wm_run:
+        jp      0x805A          ; GB_WMRUN

@@ -35,6 +35,7 @@ void gb_curhide(void);                                   /* lift the pointer    
 unsigned char gb_poll(void);          /* frame poll -> flags; caches cursor pos   */
 unsigned char gb_mx(void);            /* last poll's cursor byte column           */
 unsigned char gb_my(void);            /* last poll's cursor line                  */
+unsigned char gb_flags(void);         /* last poll's flags (for gb_wm_run apps)   */
 char *gb_dir1(void);                  /* first dir entry -> "NAME.EXT", 0 at end  */
 char *gb_dirn(void);                  /* next dir entry  -> "NAME.EXT", 0 at end  */
 void gb_launch(void);                 /* launch the current dir entry             */
@@ -82,4 +83,18 @@ void gb_set_name(const char *name11);
  * child redraws its window on top. */
 void gb_on_repaint(void (*handler)(void));   /* register full-repaint handler */
 void gb_restore_parent(void);                /* repaint ancestor apps behind us */
+
+/* Cooperative window manager (issue #45). Instead of owning a for(;;) loop, an
+ * app fills a gb_win_t and calls gb_wm_run once from main(): the KERNEL runs the
+ * master loop and calls the window's on_frame every frame (read input with
+ * gb_flags/gb_mx/gb_my - do NOT call gb_poll inside it). on_repaint redraws the
+ * whole window with no input. The rect (x,y,w,h) is the window's screen area, for
+ * click-to-focus hit-testing once multiple windows coexist. gb_wm_run does not
+ * return (Phase 1: the desktop is the single, permanent window). */
+typedef struct {
+    unsigned char x, y, w, h;       /* window rect (byte col, line, size) */
+    void (*on_frame)(void);         /* called each frame when focused      */
+    void (*on_repaint)(void);       /* redraw the whole window, no input   */
+} gb_win_t;
+void gb_wm_run(const gb_win_t *desc);
 #endif /* GB_H */
