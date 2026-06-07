@@ -59,6 +59,9 @@ WM_DRAGX0       equ   #13C8        ; last drag position (byte col / line); movem
 WM_DRAGY0       equ   #13C9        ; vs this drives both the ghost and click/drag tell
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
+CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT.SPR is
+                                   ; loaded here at boot so the bitmaps aren't resident
+                                   ; (256B used; 512 reserved to #16FF for the sector copy)
 WM_FR_X         equ   1            ; entry field offsets (after +0 page):
 WM_FR_FRAME     equ   5
 WM_FR_REPAINT   equ   7
@@ -151,6 +154,7 @@ kernel_main
                                              ; font/icon loaders consume them)
                 call  font_init              ; load the font into PAGE_DATA
                 call  icon_init              ; load the icon set into PAGE_DATA
+                call  cursor_init            ; load the cursor sprite into low RAM (#65)
                 call  clock_init             ; RTC or software clock -> time_str
                 call  draw_topbar            ; the kernel owns the top bar
                 ld    hl,WM_PAGES            ; clear all WM low-RAM state (pages bitmap,
@@ -835,6 +839,31 @@ icon_init
                 call  bank_normal
                 ei
                 ret
+
+; cursor_init (#65): load the cursor sprite (DEFAULT.SPR) into low RAM at CUR_LOW,
+; so the 256-byte bitmaps need not be resident. Loads from the boot drive; into low
+; RAM (always mapped) so no PAGE_DATA swap. fs_load_max = 512 (the IDE reader copies
+; a whole sector); CUR_LOW..CUR_LOW+#1FF is reserved for that. If the file is
+; missing, blank the buffer so the cursor draws empty rather than garbage.
+cursor_init
+                ld    hl,cur_sprname
+                ld    de,fs_req_name
+                call  copy11
+                ld    hl,512
+                ld    (fs_load_max),hl
+                ld    hl,CUR_LOW
+                ld    (fs_load_dst),hl
+                di
+                call  fs_load_file
+                ei
+                ret   c
+                ld    hl,CUR_LOW             ; missing -> blank the sprite buffer
+                ld    de,CUR_LOW+1
+                ld    bc,255
+                ld    (hl),0
+                ldir
+                ret
+cur_sprname     db    "DEFAULT SPR"
 
 ; --- app launch ----------------------------------------------------------
 ; launch_app: HL = 8.3 app name. Load it into the next bank page (PAGE_APP0 +
@@ -2363,6 +2392,7 @@ icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAUL
 icon_imgend
 wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
 wel_imgend
+                include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.BIN",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
@@ -2375,4 +2405,6 @@ wel_imgend
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
+                save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
+                save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
