@@ -317,11 +317,10 @@ static void sb_click(unsigned char my)
    directory; "View" (left title) toggles list / icons. */
 static void on_event(void)
 {
-    if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped on this folder window (#62) */
-        gb_curhide();                     /* phase 1: just show what landed here */
-        gb_text(CT_X, CT_Y, "Drop:");
-        gb_text(CT_X + 6, CT_Y, name83(gb_dragname));
-        gb_curshow();
+    if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
+        gb_set_drive(my_drive);           /* copy it onto THIS window's drive, then re-list */
+        gb_file_copy();
+        relist();
         return;
     }
     if (gb_msg.type != GB_MSG_MENU) return;
