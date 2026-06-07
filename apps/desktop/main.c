@@ -129,7 +129,9 @@ static void drop(void)
     ic_y[drag_idx] = out_y;
     drag_active = 0;
     gb_curhide();
-    paint();
+    gb_restore_parent();                        /* repaint desktop + restack any windows
+                                                   on top, so they stay (one layer up) and
+                                                   aren't erased by our backdrop fill (#65) */
 }
 
 /* a single "Media" menu title at byte column 10 (clear of mem and the clock):
@@ -165,7 +167,7 @@ static void on_event(void)
     if (gb_msg.type != GB_MSG_MENU) return;
     gb_curhide();                                      /* "Media": re-poll drives + refresh */
     drive_poll();
-    paint();
+    gb_restore_parent();                               /* keep any open windows on top (#65) */
 }
 
 /* on_frame: one frame of the desktop, called by the kernel's window-manager loop
