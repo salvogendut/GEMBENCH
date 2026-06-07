@@ -137,4 +137,23 @@ unsigned char gb_drag_start(const char *name);
  * failure (not found, a directory, or unsupported backend). Used by the desktop
  * Trash drop handler (#62). */
 unsigned char gb_file_delete(const char *name);
+
+/* gb_drives: probe the drives GEOBENCH can reach. Returns a bitmask (#65):
+ *   GB_DRV_A (floppy A), GB_DRV_B (floppy B), GB_DRV_C (IDE / Disk C).
+ * Floppy probing spins the drive motor, so call at boot and on demand. */
+#define GB_DRV_A 0x01
+#define GB_DRV_B 0x02
+#define GB_DRV_C 0x04
+unsigned char gb_drives(void);
+
+/* Multi-drive (#65). gb_set_drive selects which drive subsequent FS calls target
+ * (0 = IDE / Disk C, 1 = floppy A, 2 = floppy B); gb_get_drive returns the current
+ * one. A File Manager window reads gb_get_drive at startup (the drive the desktop
+ * opened it on) and re-asserts gb_set_drive before its FS ops, so each window
+ * browses its own drive. */
+#define GB_DRIVE_C 0
+#define GB_DRIVE_A 1
+#define GB_DRIVE_B 2
+void gb_set_drive(unsigned char d);
+unsigned char gb_get_drive(void);
 #endif /* GB_H */

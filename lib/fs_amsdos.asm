@@ -128,6 +128,11 @@ fsam_end
 ; fsam_read_dir: sniff the format on track 0, seek to the directory track and
 ; read its 4 sectors into fsam_buf.
 fsam_read_dir
+                ld    hl,fsam_buf                ; clear the directory buffer first (it is
+                ld    de,fsam_buf+1              ; shared low RAM): a failed/empty-drive
+                ld    bc,2048-1                  ; read then lists as empty rather than
+                ld    (hl),#E5                   ; the previously-read drive's stale dir
+                ldir                              ; (#65 - opening empty floppy B showed A)
                 call  fsam_read_id               ; A = sector id under the head
                 and   #F0
                 cp    #40

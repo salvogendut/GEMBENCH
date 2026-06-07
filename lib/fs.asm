@@ -19,8 +19,24 @@
 ; fs_init: pick the backend once, before any directory call.
 fs_init
                 call  fs_ide_present
-                jr    nc,fsi_floppy
-                ld    hl,fside_dir_first
+                ld    a,1                       ; no IDE -> boot drive 1 (floppy A)
+                jr    nc,fsi_set
+                xor   a                          ; IDE -> boot drive 0 (Disk C)
+fsi_set
+                call  fs_set_drive               ; select the boot drive, then capture its
+                ld    hl,(fs_p_load)             ; loader as fs_sys_load: app binaries/
+                ld    (fs_sys_load),hl           ; modules always load from the boot drive,
+                ret                               ; regardless of a window's browse drive
+                ; (fs_set_drive falls through below for the GB_SETDRIVE path)
+
+; fs_set_drive: A = drive (0 = IDE/Disk C, 1 = floppy A, 2 = floppy B). Point the
+; backend vectors at the IDE or floppy routines (floppy: also set the FDC unit) and
+; record the current drive. Lets each File Manager window browse its own drive (#65).
+fs_set_drive
+                ld    (fs_cur_drive),a
+                or    a
+                jr    nz,fsd_floppy
+                ld    hl,fside_dir_first        ; drive 0 = IDE
                 ld    (fs_p_first),hl
                 ld    hl,fside_dir_next
                 ld    (fs_p_next),hl
@@ -31,7 +47,9 @@ fs_init
                 ld    hl,fside_delete_file
                 ld    (fs_p_delete),hl
                 ret
-fsi_floppy
+fsd_floppy
+                dec   a                          ; drive 1->unit 0, drive 2->unit 1
+                ld    (fsam_unit),a
                 ld    hl,fsam_dir_first
                 ld    (fs_p_first),hl
                 ld    hl,fsam_dir_next
@@ -43,6 +61,8 @@ fsi_floppy
                 ld    hl,fs_load_none          ; delete not implemented on floppy
                 ld    (fs_p_delete),hl
                 ret
+fs_cur_drive    defb  0
+fs_sys_load     defw  fside_load_file ; the boot drive's loader (fs_init captures it)
 
 ; fs_dir_first / fs_dir_next / fs_load_file: route to the selected backend.
 fs_dir_first
@@ -54,6 +74,11 @@ fs_dir_next
 ; fs_load_file: load file (fs_req_name) into (fs_load_dst). CF set = loaded.
 fs_load_file
                 ld    hl,(fs_p_load)
+                jp    (hl)
+; fs_load_sys: like fs_load_file but always from the BOOT drive (where app binaries
+; and the GBFAT module live), regardless of the active browse drive (#65).
+fs_load_sys
+                ld    hl,(fs_sys_load)
                 jp    (hl)
 ; fs_save_file: save fs_save_len bytes from (fs_save_src) to fs_req_name. The
 ; AMSDOS backend creates the file if absent and allocates/frees 1KB blocks as the

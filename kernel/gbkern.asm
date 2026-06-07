@@ -59,6 +59,9 @@ WM_DRAGX0       equ   #13C8        ; last drag position (byte col / line); movem
 WM_DRAGY0       equ   #13C9        ; vs this drives both the ghost and click/drag tell
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
+CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT.SPR is
+                                   ; loaded here at boot so the bitmaps aren't resident
+                                   ; (256B used; 512 reserved to #16FF for the sector copy)
 WM_FR_X         equ   1            ; entry field offsets (after +0 page):
 WM_FR_FRAME     equ   5
 WM_FR_REPAINT   equ   7
@@ -111,6 +114,9 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_entname              ; GB_ENTNAME     #8075
                 jp    k_drag_start           ; GB_DRAGSTART   #8078
                 jp    k_fs_delete            ; GB_FSDELETE    #807B
+                jp    k_drive_poll           ; GB_DRIVES      #807E
+                jp    fs_set_drive           ; GB_SETDRIVE    #8081 (A = drive)
+                jp    k_get_drive            ; GB_GETDRIVE    #8084
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -148,6 +154,7 @@ kernel_main
                                              ; font/icon loaders consume them)
                 call  font_init              ; load the font into PAGE_DATA
                 call  icon_init              ; load the icon set into PAGE_DATA
+                call  cursor_init            ; load the cursor sprite into low RAM (#65)
                 call  clock_init             ; RTC or software clock -> time_str
                 call  draw_topbar            ; the kernel owns the top bar
                 ld    hl,WM_PAGES            ; clear all WM low-RAM state (pages bitmap,
@@ -535,38 +542,16 @@ kf_stripe       ld    a,(kf_sy)
                 add   a,2
                 ld    (kf_sy),a
                 djnz  kf_stripe
-                ld    a,(kw_x)               ; left border: (x, y, 1, h) [fb_val #0F]
-                ld    b,a
-                ld    a,(kw_y)
-                ld    c,a
-                ld    d,1
-                ld    a,(kw_h)
-                ld    e,a
-                call  fill_xywh
-                ld    a,(kw_x)               ; right border: (x+w-1, y, 1, h)
-                ld    b,a
-                ld    a,(kw_w)
-                add   a,b
-                dec   a
-                ld    b,a
-                ld    a,(kw_y)
-                ld    c,a
-                ld    d,1
-                ld    a,(kw_h)
-                ld    e,a
-                call  fill_xywh
-                ld    a,(kw_x)               ; bottom border: (x, y+h-1, w, 1)
-                ld    b,a
-                ld    a,(kw_y)
-                ld    c,a
-                ld    a,(kw_h)
-                add   a,c
-                dec   a
-                ld    c,a
+                ld    a,(kw_x)               ; black borders via k_frame (all 4 edges; the
+                ld    b,a                     ; top edge coincides with the first title
+                ld    a,(kw_y)               ; stripe, so it is behavior-neutral) - was
+                ld    c,a                     ; three separate left/right/bottom fills
                 ld    a,(kw_w)
                 ld    d,a
-                ld    e,1
-                call  fill_xywh
+                ld    a,(kw_h)
+                ld    e,a
+                ld    a,2                     ; pen 2 = black (#0F)
+                call  k_frame
                 ld    a,#F0                   ; close gadget (white): (x+1, y+2, 2, 10)
                 ld    (fb_val),a
                 ld    a,(kw_x)
@@ -855,6 +840,31 @@ icon_init
                 ei
                 ret
 
+; cursor_init (#65): load the cursor sprite (DEFAULT.SPR) into low RAM at CUR_LOW,
+; so the 256-byte bitmaps need not be resident. Loads from the boot drive; into low
+; RAM (always mapped) so no PAGE_DATA swap. fs_load_max = 512 (the IDE reader copies
+; a whole sector); CUR_LOW..CUR_LOW+#1FF is reserved for that. If the file is
+; missing, blank the buffer so the cursor draws empty rather than garbage.
+cursor_init
+                ld    hl,cur_sprname
+                ld    de,fs_req_name
+                call  copy11
+                ld    hl,512
+                ld    (fs_load_max),hl
+                ld    hl,CUR_LOW
+                ld    (fs_load_dst),hl
+                di
+                call  fs_load_file
+                ei
+                ret   c
+                ld    hl,CUR_LOW             ; missing -> blank the sprite buffer
+                ld    de,CUR_LOW+1
+                ld    bc,255
+                ld    (hl),0
+                ldir
+                ret
+cur_sprname     db    "DEFAULT SPR"
+
 ; --- app launch ----------------------------------------------------------
 ; launch_app: HL = 8.3 app name. Load it into the next bank page (PAGE_APP0 +
 ; launch depth) and run it; restore the caller's page when it quits. Apps nest
@@ -1101,6 +1111,43 @@ k_fssave
 
 ; k_getkey (GB_GETKEY): A = a typed character from the keyboard buffer, or 0 if
 ; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
+; k_drive_poll (GB_DRIVES, #65): probe the drives GEOBENCH can reach and return a
+; bitmask in A: bit0 = floppy A, bit1 = floppy B, bit2 = IDE (Disk C). Probing a
+; floppy spins the motor + recalibrates (slow, noisy) - call at boot and on demand.
+k_drive_poll
+                ld    c,0                          ; result bits
+                call  fs_ide_present               ; IDE -> Disk C (bit2)
+                jr    nc,kdp_a
+                set   2,c
+kdp_a
+                push  bc
+                xor   a                             ; floppy A = unit 0
+                ld    (fsam_unit),a
+                call  fsam_present
+                pop   bc
+                jr    nc,kdp_b
+                set   0,c
+kdp_b
+                push  bc
+                ld    a,1                           ; floppy B = unit 1
+                ld    (fsam_unit),a
+                call  fsam_present
+                pop   bc
+                jr    nc,kdp_done
+                set   1,c
+kdp_done
+                xor   a                             ; leave the floppy backend on unit 0
+                ld    (fsam_unit),a
+                ld    a,c
+                ret
+
+; k_get_drive (GB_GETDRIVE, #65): A = the current active drive (0=IDE/C, 1=A, 2=B).
+; A window reads this at startup to learn which drive it was opened on. (GB_SETDRIVE
+; jumps straight to fs_set_drive.)
+k_get_drive
+                ld    a,(fs_cur_drive)
+                ret
+
 ; k_fs_delete (GB_FSDELETE, #62): HL = 11-byte 8.3 name in the caller page. Delete
 ; that file from the current directory (free clusters + clear the dir entry) via
 ; the paged GBFAT module. CF set = deleted. Used by drag-to-Trash.
@@ -1289,8 +1336,8 @@ wm_open_go
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
-                call  fs_load_file
-                jr    nc,wmo_fail
+                call  fs_load_sys                 ; app binary -> always the boot drive,
+                jr    nc,wmo_fail                 ; not the window's browse drive (#65)
                 ei
                 call  APP_BASE                    ; main -> GB_WMADD + paint, then ret
                 di
@@ -2345,6 +2392,7 @@ icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAUL
 icon_imgend
 wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
 wel_imgend
+                include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.BIN",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
@@ -2357,4 +2405,6 @@ wel_imgend
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
+                save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
+                save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
