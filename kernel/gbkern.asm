@@ -387,6 +387,20 @@ k_print                                        ; GB_PRINT: stub (unused early de
 k_quit
                 ret                            ; (skeleton: app RETs anyway)
 
+; to_data / from_data: save the caller's bank page and map PAGE_DATA (the font /
+; icon page), then restore it. One shared save slot (dp_save) - these swaps are
+; never nested (each service swaps, calls only non-swapping helpers, restores).
+; Replaces the open-coded save/swap/restore at every PAGE_DATA service.
+to_data
+                ld    a,(bank_cur)
+                ld    (dp_save),a
+                ld    a,PAGE_DATA
+                jp    bank_set
+from_data
+                ld    a,(dp_save)
+                jp    bank_set
+dp_save         db    0
+
 ; --- gb_text_draw: 6x8 font text service ---------------------------------
 ; B = byte col, C = line, D = pen, E = paper, HL = string (caller's page).
 ; Copy the string to resident scratch (caller page still mapped), set up the
@@ -403,14 +417,10 @@ gb_text_draw
                 pop   hl
                 ld    de,gtd_scratch          ; copy string out of the caller's page
                 call  gtd_copy
-                ld    a,(bank_cur)            ; save caller's page
-                ld    (gtd_save),a
-                ld    a,PAGE_DATA            ; swap to the font page
-                call  bank_set
+                call  to_data                 ; swap to the font page
                 ld    hl,gtd_scratch
                 call  draw_text
-                ld    a,(gtd_save)           ; restore caller's page
-                jp    bank_set
+                jp    from_data               ; restore caller's page
 gtd_copy                                       ; (HL) -> (DE) until NUL, cap 48
                 ld    b,48
 gtd_cloop
@@ -425,7 +435,6 @@ gtd_cloop
                 ld    (de),a
                 ret
 gtd_scratch     defs  49
-gtd_save        db    0
 
 ; --- gb_open_window: draw a window frame + title -------------------------
 ; B = x (byte col), C = y (line), D = w (bytes), E = h (lines), HL = title.
@@ -443,10 +452,7 @@ gb_open_window
                 ld    de,kw_title            ; copy title out of the caller's page
                 call  gtd_copy
                 call  kwin_frame             ; frame: fills to screen, no font
-                ld    a,(bank_cur)
-                ld    (kw_save),a
-                ld    a,PAGE_DATA            ; title needs the font page
-                call  bank_set
+                call  to_data                 ; title needs the font page
                 ld    b,1                     ; white on black title bar
                 ld    c,2
                 call  set_text_pens
@@ -458,8 +464,7 @@ gb_open_window
                 ld    (tc_y),a
                 ld    hl,kw_title
                 call  draw_text
-                ld    a,(kw_save)
-                jp    bank_set
+                jp    from_data
 
 ; kwin_frame: blue interior, black title bar + borders, white close gadget.
 kwin_frame
@@ -534,7 +539,6 @@ kw_x            db    0
 kw_y            db    0
 kw_w            db    0
 kw_h            db    0
-kw_save         db    0
 kw_title        defs  24
 
 ; --- directory enumeration services --------------------------------------
@@ -603,19 +607,14 @@ gb_blit_entry
                 ld    (be_y),a
                 call  ext_to_icon            ; A = slot (reads resident fs_ent_name)
                 ld    (be_slot),a
-                ld    a,(bank_cur)
-                ld    (be_save),a
-                ld    a,PAGE_DATA
-                call  bank_set
+                call  to_data
                 ld    a,(be_slot)
                 call  icon_geom              ; sets bm_src/bm_w/bm_h/bm_x/bm_y
                 call  blit_bitmap
-                ld    a,(be_save)
-                jp    bank_set
+                jp    from_data
 be_x            db    0
 be_y            db    0
 be_slot         db    0
-be_save         db    0
 ig_w            db    0
 ig_h            db    0
 
@@ -946,15 +945,11 @@ wfp_store       ld    (WM_PAGES),a
 k_run
                 jp    launch_app
 
-; k_launch (GB_LAUNCH): open the current entry (fs_ent_name) with its app. Capture
-; the file name (the load overwrites fs_ent_name), pick the app by type, run it.
+; k_launch (GB_LAUNCH): the old MODAL open-the-current-entry. Superseded by
+; GB_WMLAUNCH (co-resident) and no longer called by any app; kept as a stub so the
+; jump-table address stays fixed. (app_for_ext lives on - GB_WMLAUNCH uses it.)
 k_launch
-                ld    hl,fs_ent_name
-                ld    de,launch_arg
-                ld    bc,11
-                ldir
-                call  app_for_ext            ; HL = app .BIN for the type
-                jp    launch_app
+                ret
 
 ; focus_arg_ptr: HL = the focused window's 11-byte file arg (per-window, so two
 ; editors keep separate files). Each window captured the pending launch_arg at
@@ -1669,15 +1664,11 @@ k_icon
                 ld    (gi_x),a
                 ld    a,c
                 ld    (gi_y),a
-                ld    a,(bank_cur)
-                ld    (gi_save),a
-                ld    a,PAGE_DATA
-                call  bank_set
+                call  to_data
                 ld    a,(gi_slot)
                 call  icon_full_geom
                 call  blit_bitmap
-                ld    a,(gi_save)
-                jp    bank_set
+                jp    from_data
 icon_full_geom                                 ; A = slot -> bm_src/w/h, bm_x/y
                 ld    l,a
                 ld    h,0
@@ -1705,7 +1696,6 @@ icon_full_geom                                 ; A = slot -> bm_src/w/h, bm_x/y
 gi_slot         db    0
 gi_x            db    0
 gi_y            db    0
-gi_save         db    0
 
 ; k_fill (GB_FILL): filled rectangle. B=x C=y D=w E=h A=pen. Capture the params
 ; before pen_to_byte (it clobbers E).
@@ -1764,10 +1754,7 @@ draw_topbar
                 ld    a,#F0
                 ld    (fb_val),a
                 call  fill_block
-                ld    a,(bank_cur)
-                ld    (tb_save),a
-                ld    a,PAGE_DATA            ; text needs the font page
-                call  bank_set
+                call  to_data                 ; text needs the font page
                 ld    b,2                     ; black on white
                 ld    c,1
                 call  set_text_pens
@@ -1784,13 +1771,9 @@ draw_topbar
                 ld    (tc_y),a
                 ld    hl,time_str
                 call  draw_text
-                ld    a,(tb_save)
-                jp    bank_set
+                jp    from_data
 draw_clock
-                ld    a,(bank_cur)
-                ld    (tb_save),a
-                ld    a,PAGE_DATA
-                call  bank_set
+                call  to_data
                 ld    b,2
                 ld    c,1
                 call  set_text_pens
@@ -1800,9 +1783,7 @@ draw_clock
                 ld    (tc_y),a
                 ld    hl,time_str
                 call  draw_text
-                ld    a,(tb_save)
-                jp    bank_set
-tb_save         db    0
+                jp    from_data
 
 ; clock_tick: once per frame from k_poll. Every 50 frames refresh the time and,
 ; if "HH:MM" changed, redraw the clock (with the pointer lifted).
