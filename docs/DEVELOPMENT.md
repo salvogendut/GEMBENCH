@@ -50,6 +50,23 @@ cap32 and 1984 both accept a `.dsk` slot file. Two quick paths:
 1984 has its own invocation (see `../1984/INSTALL.md` / `1984.conf.example`);
 the build artifacts (`.bin` / `.dsk`) are the same.
 
+## Icon and font sets (GEOBENCH.CFG)
+
+`GEOBENCH.CFG` selects a named set: `ICONS=<name>` loads `<name>.IST`, `FONT=<name>`
+loads `<name>.FNT`; both fall back to `DEFAULT` if absent. Sets ship as files on
+the disk (and are `incbin`/`save`d onto `build/gbkern.dsk` in `kernel/gbkern.asm`).
+
+Build a set, then package it (add an `incbin` + a `save "<NAME>.<EXT>",...,DSK`
+line in `gbkern.asm`, and copy it to the IDE image in the deploy step):
+
+- **Font** (`.FNT`): from an 8×8 `.asm` font source — `tools/packfont.py
+  build/NAME.FNT lib/font.asm` (ships `CLASSIC.FNT`, the 8×8 ROM font). The 6×8
+  `DEFAULT.FNT` is generated procedurally by `tools/genfont.py`.
+- **Icons** (`.IST`): each icon is a 32×32 PNG → `tools/png2cpc.py assets/x.png
+  lib/icon_x.asm icon_x 32x32`, then `tools/packicons.py build/NAME.IST
+  lib/icon_*.asm ...` in **slot order** (must match `ext_to_icon` in `gbkern.asm`:
+  floppy ide clock trash geobench basic binary picture text folder).
+
 ## File line endings
 
 Any text/data file the CPC reads must use **CR+LF** (`0x0D 0x0A`), not Unix LF.

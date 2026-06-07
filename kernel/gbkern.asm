@@ -2184,6 +2184,8 @@ fat_img         incbin "../build/GBFAT.RAW"     ; FAT16/IDE write module, as GBF
 fat_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
 font_imgend
+cfont_img       incbin "../build/CLASSIC.FNT"   ; alternate 8x8 font (FONT=CLASSIC)
+cfont_imgend
 icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
 icon_imgend
 wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
@@ -2197,6 +2199,7 @@ wel_imgend
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
+                save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
