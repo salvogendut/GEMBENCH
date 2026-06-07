@@ -194,6 +194,22 @@ static void draw_name(unsigned char col, unsigned char line, char *name)
     gb_text(col, line, tmp);
 }
 
+/* fullname: the current entry's 8.3 name as "NAME.EXT" (list view shows the
+   extension; gb_dir* return name only). */
+static char *fullname(void)
+{
+    static char fn[13];
+    char *e = gb_entname();              /* 11-byte 8.3, space-padded, no dot */
+    unsigned char i, j = 0;
+    for (i = 0; i < 8 && e[i] != ' '; i++) fn[j++] = e[i];
+    if (e[8] != ' ') {                   /* has an extension */
+        fn[j++] = '.';
+        for (i = 8; i < 11 && e[i] != ' '; i++) fn[j++] = e[i];
+    }
+    fn[j] = 0;
+    return fn;
+}
+
 static void draw_list_view(void)
 {
     unsigned char i, y;
@@ -201,7 +217,7 @@ static void draw_list_view(void)
     for (i = 0; i < LVIS && name; i++) {
         y = CT_Y + i * ROW_H;
         gb_blite(CT_X, y + 1);              /* type icon (8 cols x 16 lines) */
-        gb_text(CT_X + 9, y + 6, name);
+        gb_text(CT_X + 9, y + 6, fullname());   /* NAME.EXT (icon view is name only) */
         name = gb_dirn();
     }
     if (nsel) {                              /* red frame on the selected row */

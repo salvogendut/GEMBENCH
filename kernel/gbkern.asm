@@ -98,6 +98,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_isdir                ; GB_ISDIR       #806C
                 jp    k_chdir                ; GB_CHDIR       #806F
                 jp    k_back                 ; GB_BACK        #8072
+                jp    k_entname              ; GB_ENTNAME     #8075
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1017,6 +1018,12 @@ k_back
                 ldir
                 ret
 
+; k_entname (GB_ENTNAME): HL = the last-enumerated entry's raw 11-byte 8.3 name
+; (space-padded, no dot) so an app can show the extension (gb_dir* return name-only).
+k_entname
+                ld    hl,fs_ent_name
+                ret
+
 ; focus_arg_ptr: HL = the focused window's 11-byte file arg (per-window, so two
 ; editors keep separate files). Each window captured the pending launch_arg at
 ; gb_wm_add; getarg/setname/fsload/fssave all act on the focused window's copy.
@@ -1690,37 +1697,34 @@ dmt_loop
 ; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.
 ; (Only VIEWER exists today, so most types fall through to it; add rows as new
 ; apps land.)
+; app_for_ext: HL = the app to open the current entry. Text-ish types (in the
+; edit_exts list) open in NOTEPAD; everything else in the read-only VIEWER.
 app_for_ext
-                ld    hl,app_table
-afe_loop
-                ld    a,(hl)                  ; 0 = end of table -> default app
+                ld    hl,edit_exts           ; 3-char editable extensions, 0-terminated
+afe_grp
+                ld    a,(hl)
                 or    a
-                jr    z,afe_default
-                push  hl                       ; compare the 3-char extension
-                ld    de,fs_ent_name+8
+                jr    z,afe_default          ; end of list -> default VIEWER
+                ld    de,fs_ent_name+8       ; compare this 3-char ext
                 ld    b,3
 afe_cmp
                 ld    a,(de)
                 cp    (hl)
-                jr    nz,afe_miss
+                jr    nz,afe_next
                 inc   hl
                 inc   de
                 djnz  afe_cmp
-                pop   de                       ; matched -> HL = the app name (after ext)
+                ld    hl,name_notepad        ; matched -> NOTEPAD
                 ret
-afe_miss
-                pop   hl                       ; skip this entry (3 ext + 11 name)
-                ld    de,14
-                add   hl,de
-                jr    afe_loop
+afe_next                                       ; skip the rest of this 3-char ext (B = the
+                inc   hl                       ; chars left from the mismatch) -> next group
+                djnz  afe_next
+                jr    afe_grp
 afe_default
                 ld    hl,name_viewer
                 ret
-app_table
-                db    "TXT","NOTEPAD BIN"      ; .TXT -> NOTEPAD (edit + save)
-                db    "CFG","NOTEPAD BIN"      ; .CFG -> NOTEPAD (edit GEOBENCH.CFG)
-                db    "BAS","NOTEPAD BIN"      ; .BAS -> NOTEPAD (ASCII BASIC)
-                db    0                          ; end of table
+edit_exts       db    "TXTCFGBAS",0          ; .TXT/.CFG/.BAS -> NOTEPAD (editable)
+name_notepad    db    "NOTEPAD BIN"
 name_viewer     db    "VIEWER  BIN"
 launch_arg      defs  11
 

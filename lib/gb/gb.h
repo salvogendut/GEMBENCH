@@ -118,4 +118,5 @@ void gb_wm_launch(void);              /* open current dir entry co-resident (+ a
 unsigned char gb_isdir(void);
 void gb_chdir(void);
 void gb_back(void);
+char *gb_entname(void);  /* current entry's raw 11-byte 8.3 name (with extension) */
 #endif /* GB_H */
