@@ -204,8 +204,7 @@ static void on_frame(void)
             gb_set_drive(icon);                              /* icon idx 0/1/2 = C/A/B   */
             gb_wm_open("FILEMGR APP");
         }
-        else if (icon == IDX_CLOCK) gb_run("CHELLO  APP");   /* modal; kernel repaints
-                                                                the windows on return */
+        else if (icon == IDX_CLOCK) gb_wm_open("CLOCK   APP"); /* analog clock window (#72) */
         dc_timer = 0;
         held_prev = 0;
     } else {                               /* first click: arm + start drag */

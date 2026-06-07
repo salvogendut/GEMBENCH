@@ -131,6 +131,15 @@ void gb_wm_launch(void);              /* open current dir entry co-resident (+ a
  * kernel's app_for_ext now lives in C (#70). */
 void gb_wm_launch_as(const char *app);
 
+/* Clock read-out (#72). gb_time() refreshes the time; read gb_hour/min/sec - RAW
+ * values, BCD unless gb_binmode is nonzero (convert in the app, to keep the kernel
+ * lean). CLOCK.APP draws its hands by calling the firmware graphics directly. */
+void gb_time(void);
+#define gb_hour    (*(volatile unsigned char *)0x1240)
+#define gb_min     (*(volatile unsigned char *)0x1241)
+#define gb_sec     (*(volatile unsigned char *)0x1242)
+#define gb_binmode (*(volatile unsigned char *)0x1243)
+
 /* Directory navigation (issue #54). gb_isdir reports whether the entry just
  * returned by gb_dir1/gb_dirn is a directory; gb_chdir descends into the
  * positioned entry (re-list afterwards to show it in the same window); gb_back
