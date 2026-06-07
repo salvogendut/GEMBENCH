@@ -22,6 +22,8 @@ GBFAT_ORG       equ   #5000
 GBFAT_LEN       equ   #1400
 GBFAT_NAME      equ   #1402
 GBFAT_RES       equ   #140D
+GBFAT_OP        equ   #140E        ; operation: 0 = save, 1 = delete (#62)
+GBFAT_DIR       equ   #140F        ; directory cluster (4 bytes) to operate in
 GBFAT_DATA      equ   #2200
 
 FS_IDE_SCNT     equ   #FD0A
@@ -37,13 +39,59 @@ fs_secbuf       equ   #1800        ; shared low-RAM sector buffer (resident agre
 
                 org   GBFAT_ORG
 
-; entry: run the save, store the result byte, return to the kernel.
+; entry: dispatch on GBFAT_OP (0 = save, 1 = delete), store the result, return.
+                ld    a,(GBFAT_OP)
+                or    a
+                jr    nz,ge_delete
                 call  gbfat_save
+                jr    ge_res
+ge_delete
+                call  gbfat_delete
+ge_res
                 ld    a,1
                 jr    c,gf_setres
                 xor   a
 gf_setres
                 ld    (GBFAT_RES),a
+                ret
+
+; gbfat_delete: remove the file named GBFAT_NAME from the directory at cluster
+; GBFAT_DIR - free its cluster chain and mark the directory entry deleted (0xE5).
+; Refuses directories (only files). CF set = deleted.
+gbfat_delete
+                call  fs_mount                   ; geometry (also sets fs_dir_clus=root)
+                ld    hl,GBFAT_DIR              ; operate in the requested directory
+                ld    de,fs_dir_clus
+                ld    bc,4
+                ldir
+                call  fs_dir_find_slot          ; locate GBFAT_NAME
+                ret   nc                          ; directory walk failed
+                ld    a,(sav_found)
+                or    a
+                jr    z,gd_fail                   ; name not present
+                ld    hl,sav_ent_lba             ; check the entry's attribute: refuse
+                call  lbatmp_from_var             ; directories (would orphan contents)
+                call  fs_read_sector
+                ld    hl,(sav_ent_off)
+                ld    de,fs_secbuf+#0B           ; attr byte at offset 0x0B
+                add   hl,de
+                ld    a,(hl)
+                and   #10
+                jr    nz,gd_fail                  ; directory -> refuse
+                ld    hl,sav_old_clus            ; free the file's cluster chain
+                call  fs_free_chain               ; (this reuses fs_secbuf)
+                ld    hl,sav_ent_lba             ; reload the dir sector and mark the
+                call  lbatmp_from_var             ; entry deleted
+                call  fs_read_sector
+                ld    hl,(sav_ent_off)
+                ld    de,fs_secbuf
+                add   hl,de
+                ld    (hl),#E5
+                call  fs_write_sector
+                scf
+                ret
+gd_fail
+                or    a
                 ret
 
 ; ---------------------------------------------------------------------------

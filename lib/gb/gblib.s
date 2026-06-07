@@ -45,6 +45,7 @@
         .globl  _gb_back
         .globl  _gb_entname
         .globl  _gb_drag_start
+        .globl  _gb_file_delete
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -269,3 +270,12 @@ _gb_entname:
 ;; Returns 1 if dropped on another window (it handled it), 0 if it was just a click.
 _gb_drag_start:
         jp      0x8078          ; GB_DRAGSTART (returns 1/0 in A)
+
+;; unsigned char gb_file_delete(const char *name);  name (11-byte 8.3) in HL ->
+;; delete that file from the current directory. Returns 1 if deleted, else 0.
+_gb_file_delete:
+        call    0x807B          ; GB_FSDELETE -> CF = deleted
+        ld      a, #0
+        ret     nc
+        inc     a
+        ret

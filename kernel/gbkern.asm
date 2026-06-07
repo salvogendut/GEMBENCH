@@ -110,6 +110,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_back                 ; GB_BACK        #8072
                 jp    k_entname              ; GB_ENTNAME     #8075
                 jp    k_drag_start           ; GB_DRAGSTART   #8078
+                jp    k_fs_delete            ; GB_FSDELETE    #807B
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1100,6 +1101,17 @@ k_fssave
 
 ; k_getkey (GB_GETKEY): A = a typed character from the keyboard buffer, or 0 if
 ; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
+; k_fs_delete (GB_FSDELETE, #62): HL = 11-byte 8.3 name in the caller page. Delete
+; that file from the current directory (free clusters + clear the dir entry) via
+; the paged GBFAT module. CF set = deleted. Used by drag-to-Trash.
+k_fs_delete
+                ld    de,fs_req_name
+                call  copy11
+                di
+                call  fs_delete_file
+                ei
+                ret
+
 k_getkey
                 call  KM_READ_CHAR           ; CF + A = char, or NC = none. (Apps frame
                 jr    nc,kgk_none            ; on IY now, so KM_READ_CHAR clobbering IX

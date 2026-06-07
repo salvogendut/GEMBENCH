@@ -131,4 +131,10 @@ char *gb_entname(void);  /* current entry's raw 11-byte 8.3 name (with extension
  * on_event got a GB_MSG_DROP and handled it), or 0 if it was just a click (no
  * movement / no target) so the caller should treat it as a normal selection. */
 unsigned char gb_drag_start(const char *name);
+
+/* gb_file_delete: delete a file (11-byte 8.3 name) from the current directory -
+ * frees its clusters and clears its directory entry. Returns 1 if deleted, 0 on
+ * failure (not found, a directory, or unsupported backend). Used by the desktop
+ * Trash drop handler (#62). */
+unsigned char gb_file_delete(const char *name);
 #endif /* GB_H */

@@ -28,6 +28,8 @@ fs_init
                 ld    (fs_p_load),hl
                 ld    hl,fside_save_file
                 ld    (fs_p_save),hl
+                ld    hl,fside_delete_file
+                ld    (fs_p_delete),hl
                 ret
 fsi_floppy
                 ld    hl,fsam_dir_first
@@ -38,6 +40,8 @@ fsi_floppy
                 ld    (fs_p_load),hl
                 ld    hl,fsam_save_file
                 ld    (fs_p_save),hl
+                ld    hl,fs_load_none          ; delete not implemented on floppy
+                ld    (fs_p_delete),hl
                 ret
 
 ; fs_dir_first / fs_dir_next / fs_load_file: route to the selected backend.
@@ -57,6 +61,11 @@ fs_load_file
 ; full, too big, or - FAT16 - not yet implemented).
 fs_save_file
                 ld    hl,(fs_p_save)
+                jp    (hl)
+; fs_delete_file: delete the file named fs_req_name from the current directory.
+; CF set = deleted, NC = failed/unsupported. (#62 drag-to-Trash)
+fs_delete_file
+                ld    hl,(fs_p_delete)
                 jp    (hl)
 fs_load_none
                 or    a                        ; not implemented -> NC
@@ -89,6 +98,7 @@ fs_p_first      defw  fside_dir_first   ; default IDE; fs_init rewrites on detec
 fs_p_next       defw  fside_dir_next
 fs_p_load       defw  fside_load_file
 fs_p_save       defw  fside_save_file
+fs_p_delete     defw  fside_delete_file
 fs_ent_name     defs  11
 fs_ent_attr     defb  0
 fs_ent_size     defs  4
