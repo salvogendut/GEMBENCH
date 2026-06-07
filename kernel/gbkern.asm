@@ -1718,6 +1718,8 @@ afe_default
                 ret
 app_table
                 db    "TXT","NOTEPAD BIN"      ; .TXT -> NOTEPAD (edit + save)
+                db    "CFG","NOTEPAD BIN"      ; .CFG -> NOTEPAD (edit GEOBENCH.CFG)
+                db    "BAS","NOTEPAD BIN"      ; .BAS -> NOTEPAD (ASCII BASIC)
                 db    0                          ; end of table
 name_viewer     db    "VIEWER  BIN"
 launch_arg      defs  11
