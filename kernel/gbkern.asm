@@ -95,6 +95,9 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_wm_close             ; GB_WMCLOSE     #8063
                 jp    k_wm_setpos            ; GB_WMSETPOS    #8066
                 jp    k_wm_launch            ; GB_WMLAUNCH    #8069
+                jp    k_isdir                ; GB_ISDIR       #806C
+                jp    k_chdir                ; GB_CHDIR       #806F
+                jp    k_back                 ; GB_BACK        #8072
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -576,7 +579,9 @@ gdir_done
                 scf
                 ret
 
-; fmt_entry: fs_ent_name (8.3, space padded) -> dir_namebuf as "NAME.EXT", 0.
+; fmt_entry: fs_ent_name (8.3, space padded) -> dir_namebuf as the bare "NAME", 0.
+; (Name only - the type is conveyed by the entry's icon; the old extension-display
+; branch was dead, showext was never set.)
 fmt_entry
                 ld    de,dir_namebuf
                 ld    hl,fs_ent_name
@@ -584,37 +589,16 @@ fmt_entry
 fe_name
                 ld    a,(hl)
                 cp    ' '
-                jr    z,fe_ext
+                jr    z,fe_end
                 ld    (de),a
                 inc   de
                 inc   hl
                 djnz  fe_name
-fe_ext
-                ld    a,(showext)            ; name-only by default; type from icon
-                or    a
-                jr    z,fe_end
-                ld    hl,fs_ent_name+8
-                ld    a,(hl)
-                cp    ' '
-                jr    z,fe_end
-                ld    a,'.'
-                ld    (de),a
-                inc   de
-                ld    b,3
-fe_xl
-                ld    a,(hl)
-                cp    ' '
-                jr    z,fe_end
-                ld    (de),a
-                inc   de
-                inc   hl
-                djnz  fe_xl
 fe_end
                 xor   a
                 ld    (de),a
                 ret
 dir_namebuf     defs  14
-showext         db    0            ; 0 = name only (default), 1 = NAME.EXT
 
 ; --- gb_blit_entry: half-height type icon for the current entry ----------
 ; B = byte col, C = line. Picks the icon by fs_ent_name's extension, reads the
@@ -687,6 +671,9 @@ ig_done
 ; ext_to_icon: A = icon slot for fs_ent_name (GEOBENCH/BAS/BIN/SCR/TXT -> their
 ; icons, else generic binary). Slots match the desktop's icon set order.
 ext_to_icon
+                ld    a,(fs_ent_attr)         ; directory -> folder icon (slot 9, #54)
+                and   #10
+                jr    nz,eti_folder
                 ld    hl,name_geobench
                 call  cmp_name8
                 jr    z,eti_geo
@@ -708,6 +695,8 @@ eti_scr         ld    a,7
 eti_txt         ld    a,8
                 ret
 eti_geo         ld    a,4
+                ret
+eti_folder      ld    a,9
                 ret
 
 cmp_name8                                      ; Z if name_geobench == fs_ent_name[0..7]
@@ -968,6 +957,64 @@ k_run
 ; GB_WMLAUNCH (co-resident) and no longer called by any app; kept as a stub so the
 ; jump-table address stays fixed. (app_for_ext lives on - GB_WMLAUNCH uses it.)
 k_launch
+                ret
+
+; Directory navigation (issue #54). The FAT backend enumerates the directory at
+; fs_dir_clus; gb_chdir descends into the positioned entry (pushing the parent on
+; a small stack) and gb_back pops it. On the floppy backend these touch FAT-only
+; state the AMSDOS reader ignores, and gb_isdir is always 0 (no subdirectories),
+; so the file manager simply never descends there.
+
+; k_isdir (GB_ISDIR): A = 1 if the last-enumerated entry is a directory, else 0.
+k_isdir
+                ld    a,(fs_ent_attr)
+                and   #10
+                ret   z
+                ld    a,1
+                ret
+
+; k_chdir (GB_CHDIR): descend into the positioned entry's directory - push the
+; current dir cluster, then set it to the entry's start cluster. The next listing
+; rewinds there. Refuses (no-op) when the stack is full.
+k_chdir
+                ld    a,(fs_dir_sp)
+                cp    4                          ; DIRSTACK depth
+                ret   nc
+                add   a,a                         ; slot = fs_dir_stack + sp*4
+                add   a,a
+                ld    e,a
+                ld    d,0
+                ld    hl,fs_dir_stack
+                add   hl,de
+                ex    de,hl                       ; DE = slot
+                ld    hl,fs_dir_clus             ; push current dir
+                ld    bc,4
+                ldir
+                ld    hl,fs_dir_sp
+                inc   (hl)
+                ld    hl,fs_ent_clus             ; descend: dir = entry's cluster
+                ld    de,fs_dir_clus
+                ld    bc,4
+                ldir
+                ret
+
+; k_back (GB_BACK): pop the dir stack into fs_dir_clus (parent directory); no-op
+; at the top level.
+k_back
+                ld    a,(fs_dir_sp)
+                or    a
+                ret   z
+                dec   a
+                ld    (fs_dir_sp),a
+                add   a,a                         ; slot = fs_dir_stack + sp*4
+                add   a,a
+                ld    e,a
+                ld    d,0
+                ld    hl,fs_dir_stack
+                add   hl,de
+                ld    de,fs_dir_clus
+                ld    bc,4
+                ldir
                 ret
 
 ; focus_arg_ptr: HL = the focused window's 11-byte file arg (per-window, so two

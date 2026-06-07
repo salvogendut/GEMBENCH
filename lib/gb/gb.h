@@ -110,4 +110,12 @@ void gb_wm_open(const char *name);
 void gb_wm_close(void);
 void gb_wm_setpos(unsigned char x, unsigned char y);  /* move our hit rect (drag) */
 void gb_wm_launch(void);              /* open current dir entry co-resident (+ arg) */
+
+/* Directory navigation (issue #54). gb_isdir reports whether the entry just
+ * returned by gb_dir1/gb_dirn is a directory; gb_chdir descends into the
+ * positioned entry (re-list afterwards to show it in the same window); gb_back
+ * returns to the parent directory (no-op at the top). */
+unsigned char gb_isdir(void);
+void gb_chdir(void);
+void gb_back(void);
 #endif /* GB_H */
