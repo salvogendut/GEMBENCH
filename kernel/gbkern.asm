@@ -121,6 +121,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    fs_set_drive           ; GB_SETDRIVE    #8081 (A = drive)
                 jp    k_get_drive            ; GB_GETDRIVE    #8084
                 jp    k_file_copy            ; GB_FSCOPY      #8087
+                jp    k_wm_launch_as         ; GB_WMLAUNCHAS  #808A (HL = app name)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -173,7 +174,7 @@ kernel_main
                 ld    a,2                     ; desktop quit (ESC) -> back to BASIC
                 call  SCR_SET_MODE
                 ret
-name_desktop    db    "DESKTOP BIN"
+name_desktop    db    "DESKTOP APP"
 
 ; disarm_joy_keys: the CPC joystick is keyboard matrix row 9 (key numbers 72..77 =
 ; up/down/left/right/fire1/fire2). By default those keys translate to characters,
@@ -697,6 +698,9 @@ ext_to_icon
                 ld    hl,ext_txt
                 call  cmp_ext
                 jr    z,eti_txt
+                ld    hl,ext_app
+                call  cmp_ext
+                jr    z,eti_app
                 ld    a,6                      ; binary (default)
                 ret
 eti_bas         ld    a,5
@@ -708,6 +712,8 @@ eti_txt         ld    a,8
 eti_geo         ld    a,4
                 ret
 eti_folder      ld    a,9
+                ret
+eti_app         ld    a,10                     ; GEOBENCH app (.APP) -> app icon (slot 10)
                 ret
 
 cmp_name8                                      ; Z if name_geobench == fs_ent_name[0..7]
@@ -740,6 +746,7 @@ cmp_ext                                        ; Z if (HL) 3-char ext == fs_ent_
 ext_bas         db    "BAS"
 ext_scr         db    "SCR"
 ext_txt         db    "TXT"
+ext_app         db    "APP"
 name_geobench   db    "GEOBENCH"
 
 ; --- config (C kernel module) --------------------------------------------
@@ -985,9 +992,9 @@ wfp_store       ld    (WM_PAGES),a
 k_run
                 jp    launch_app
 
-; k_launch (GB_LAUNCH): the old MODAL open-the-current-entry. Superseded by
-; GB_WMLAUNCH (co-resident) and no longer called by any app; kept as a stub so the
-; jump-table address stays fixed. (app_for_ext lives on - GB_WMLAUNCH uses it.)
+; k_launch (GB_LAUNCH): the old MODAL open-the-current-entry. Superseded by the
+; co-resident open path and no longer called by any app; kept as a stub so the
+; jump-table address stays fixed.
 k_launch
                 ret
 
@@ -1378,16 +1385,30 @@ k_wm_add
 k_wm_open
                 ld    de,fs_req_name
                 call  copy11
+                ld    hl,launch_arg               ; opened with no file -> blank the arg
+                ld    b,11                          ; so the app starts file-less
+                xor   a
+kwo_blank       ld    (hl),a
+                inc   hl
+                djnz  kwo_blank
                 jr    wm_open_go
 
-; k_wm_launch (GB_WMLAUNCH): open the current dir entry's app as a co-resident
-; window (non-blocking), with the file as the launch arg - the gb_launch of the WM
-; world. The file manager uses this so an opened file becomes a focusable window.
+; k_wm_launch (GB_WMLAUNCH): superseded. File-type -> app routing moved into the
+; File Manager (C); it now calls GB_WMLAUNCHAS with the app it chose. Kept as a
+; stub so the jump-table address stays fixed.
 k_wm_launch
-                ld    hl,fs_ent_name              ; the file -> launch arg (for the app)
+                ret
+
+; k_wm_launch_as (GB_WMLAUNCHAS): HL = the 8.3 app name to open as a co-resident
+; window. The current dir entry (fs_ent_name) becomes the new window's file arg, so
+; a data file auto-opens in the app the caller chose (the File Manager picks it by
+; extension - see apps/filemgr/main.c).
+k_wm_launch_as
+                push  hl                           ; app name
+                ld    hl,fs_ent_name              ; current entry -> the launch file arg
                 ld    de,launch_arg
                 call  copy11
-                call  app_for_ext                 ; HL = the app .BIN for the file type
+                pop   hl                           ; app name -> fs_req_name
                 ld    de,fs_req_name
                 call  copy11
 wm_open_go
@@ -1963,39 +1984,10 @@ dmt_loop
                 djnz  dmt_loop
                 ret
 
-; app_for_ext: HL = the app for fs_ent_name's type. Walks app_table: each entry
-; is a 3-char extension + an 11-char 8.3 app name; a 0 ends the table -> default.
-; (Only VIEWER exists today, so most types fall through to it; add rows as new
-; apps land.)
-; app_for_ext: HL = the app to open the current entry. Text-ish types (in the
-; edit_exts list) open in NOTEPAD; everything else in the read-only VIEWER.
-app_for_ext
-                ld    hl,edit_exts           ; 3-char editable extensions, 0-terminated
-afe_grp
-                ld    a,(hl)
-                or    a
-                jr    z,afe_default          ; end of list -> default VIEWER
-                ld    de,fs_ent_name+8       ; compare this 3-char ext
-                ld    b,3
-afe_cmp
-                ld    a,(de)
-                cp    (hl)
-                jr    nz,afe_next
-                inc   hl
-                inc   de
-                djnz  afe_cmp
-                ld    hl,name_notepad        ; matched -> NOTEPAD
-                ret
-afe_next                                       ; skip the rest of this 3-char ext (B = the
-                inc   hl                       ; chars left from the mismatch) -> next group
-                djnz  afe_next
-                jr    afe_grp
-afe_default
-                ld    hl,name_viewer
-                ret
-edit_exts       db    "TXTCFGBAS",0          ; .TXT/.CFG/.BAS -> NOTEPAD (editable)
-name_notepad    db    "NOTEPAD BIN"
-name_viewer     db    "VIEWER  BIN"
+; (File-type -> app routing lives in the File Manager now; the kernel just opens
+; the app the FM names, via GB_WMLAUNCHAS. The old resident app_for_ext + its name
+; tables were removed to reclaim space - the kernel->C migration that funds the
+; .APP launch model, #70.)
 launch_arg      defs  11
 
 ; k_icon (GB_ICON): blit a full icon. A = slot, B = x, C = y. Reads the bitmap
@@ -2441,18 +2433,24 @@ kern_end                                        ; GBKERN.BIN = #8000..kern_end o
 ; the descending stack and the resident image. Fixed addresses, not loaded data.
 fs_secbuf       equ   #1800            ; IDE sector buffer / aliased AMSDOS write sector
 fsam_buf        equ   #1A00            ; floppy whole-directory buffer
-                                                ; The packaging incbins below live
-                                                ; above kern_end - never loaded at
-                                                ; runtime, only read by `save`.
-dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.BIN
+                                                ; The packaging incbins below are
+                                                ; never loaded at runtime, only read
+                                                ; by `save`. They are ORG'd into low
+                                                ; memory (below the #8000 kernel) so
+                                                ; the growing payload (now incl.
+                                                ; ICONED) stays within the 64K image.
+                org   #0100
+dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
 dtp_imgend
-app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.BIN
+app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.APP
 app_imgend
-vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.BIN
+vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.APP
 vwr_imgend
-npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.BIN
+npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
 npd_imgend
-chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.BIN
+ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
+ied_imgend
+chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
 chl_imgend
 cfg_img         incbin "../build/GBCFG.RAW"     ; config-parser C module, as GBCFG.BIN
 cfg_imgend
@@ -2469,11 +2467,12 @@ wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
-                save  "DESKTOP.BIN",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
-                save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
-                save  "VIEWER.BIN",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
-                save  "NOTEPAD.BIN",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
-                save  "CHELLO.BIN",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
+                save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
+                save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
+                save  "VIEWER.APP",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
+                save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
+                save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
+                save  "CHELLO.APP",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"

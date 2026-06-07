@@ -202,9 +202,9 @@ static void on_frame(void)
     if (dc_timer && dc_idx == icon) {      /* second click -> open */
         if (ic_drive[icon]) {                                /* browse that drive (#65): */
             gb_set_drive(icon);                              /* icon idx 0/1/2 = C/A/B   */
-            gb_wm_open("FILEMGR BIN");
+            gb_wm_open("FILEMGR APP");
         }
-        else if (icon == IDX_CLOCK) gb_run("CHELLO  BIN");   /* modal; kernel repaints
+        else if (icon == IDX_CLOCK) gb_run("CHELLO  APP");   /* modal; kernel repaints
                                                                 the windows on return */
         dc_timer = 0;
         held_prev = 0;

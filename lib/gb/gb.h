@@ -15,6 +15,16 @@
 void gb_cls(void);                                       /* clear screen + home  */
 void gb_text(unsigned char col, unsigned char line,      /* 6x8 text, white      */
              const char *s);
+void gb_textk(unsigned char col, unsigned char line,     /* 6x8 text, black (pen 2) */
+              const char *s);
+void gb_textbw(unsigned char col, unsigned char line,    /* 6x8 text, black on white */
+               const char *s);
+/* Reusable UI triangle glyphs (font codes 128-131); draw like text, e.g.
+ * gb_textk(x, y, GLYPH_TRI_RIGHT). Present in DEFAULT.FNT (not CLASSIC.FNT). */
+#define GLYPH_TRI_UP    "\x80"
+#define GLYPH_TRI_DOWN  "\x81"
+#define GLYPH_TRI_LEFT  "\x82"
+#define GLYPH_TRI_RIGHT "\x83"
 void gb_window(unsigned char col, unsigned char line,    /* window: pos + size   */
                unsigned char w, unsigned char h, const char *title);
 /* gb_drag_window: drag a w x h outline from (*x,*y) by the pointer until release;
@@ -115,6 +125,11 @@ void gb_wm_open(const char *name);
 void gb_wm_close(void);
 void gb_wm_setpos(unsigned char x, unsigned char y);  /* move our hit rect (drag) */
 void gb_wm_launch(void);              /* open current dir entry co-resident (+ arg) */
+/* gb_wm_launch_as: open app `app` (an 8.3 name) as a co-resident window, with the
+ * current dir entry as its file arg (so a data file auto-opens). The File Manager
+ * picks the app by file extension - the file-type routing that used to live in the
+ * kernel's app_for_ext now lives in C (#70). */
+void gb_wm_launch_as(const char *app);
 
 /* Directory navigation (issue #54). gb_isdir reports whether the entry just
  * returned by gb_dir1/gb_dirn is a directory; gb_chdir descends into the
