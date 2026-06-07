@@ -23,7 +23,7 @@
 #define DCLICK   40           /* double-click window, frames */
 
 /* scrollbar at the left inner edge, content to its right */
-#define SB_W     2                       /* scrollbar width, byte cols */
+#define SB_W     3                       /* scrollbar width, byte cols */
 #define SB_X     (win_x + 1)             /* just inside the left border */
 #define CT_X     (win_x + 1 + SB_W)      /* content left */
 #define CT_Y     (win_y + TITLE_H)       /* content top, below the title bar */
@@ -107,8 +107,8 @@ static unsigned char thumb_y(void)
 
 static void draw_scrollbar(void)
 {
-    gb_fill(SB_X, CT_Y, SB_W, CT_H, 2);              /* black track */
-    gb_fill(SB_X, thumb_y(), SB_W, thumb_h(), 1);    /* white thumb */
+    gb_fill(SB_X, CT_Y, SB_W, CT_H, 1);                        /* white track */
+    gb_fill(SB_X + 1, thumb_y() + 1, 1, thumb_h() - 2, 3);     /* red thumb, inset 1px */
 }
 
 /* draw a name truncated to fit a cell (icons view) */
