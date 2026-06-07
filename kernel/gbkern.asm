@@ -112,6 +112,8 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_drag_start           ; GB_DRAGSTART   #8078
                 jp    k_fs_delete            ; GB_FSDELETE    #807B
                 jp    k_drive_poll           ; GB_DRIVES      #807E
+                jp    fs_set_drive           ; GB_SETDRIVE    #8081 (A = drive)
+                jp    k_get_drive            ; GB_GETDRIVE    #8084
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1132,6 +1134,13 @@ kdp_done
                 ld    a,c
                 ret
 
+; k_get_drive (GB_GETDRIVE, #65): A = the current active drive (0=IDE/C, 1=A, 2=B).
+; A window reads this at startup to learn which drive it was opened on. (GB_SETDRIVE
+; jumps straight to fs_set_drive.)
+k_get_drive
+                ld    a,(fs_cur_drive)
+                ret
+
 ; k_fs_delete (GB_FSDELETE, #62): HL = 11-byte 8.3 name in the caller page. Delete
 ; that file from the current directory (free clusters + clear the dir entry) via
 ; the paged GBFAT module. CF set = deleted. Used by drag-to-Trash.
@@ -1320,8 +1329,8 @@ wm_open_go
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
-                call  fs_load_file
-                jr    nc,wmo_fail
+                call  fs_load_sys                 ; app binary -> always the boot drive,
+                jr    nc,wmo_fail                 ; not the window's browse drive (#65)
                 ei
                 call  APP_BASE                    ; main -> GB_WMADD + paint, then ret
                 di

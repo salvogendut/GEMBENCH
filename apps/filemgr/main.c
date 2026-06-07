@@ -51,6 +51,8 @@ static unsigned char nsel;        /* 0 = none, else selected index + 1    */
 static unsigned char dc_idx;      /* index of the last click              */
 static unsigned char dc_timer;
 static unsigned char view = V_ICONS;   /* default = icon view (GEOBENCH.CFG VIEW=) */
+static unsigned char my_drive;         /* the drive this window browses (#65) */
+static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
 
 /* GEOBENCH.CFG is loaded once at startup; the View toggle rewrites the VIEW= line
    and saves it, so the choice persists across reboots. NOTE: gb_fs_load copies in
@@ -252,8 +254,10 @@ static void draw_icons_view(void)
 /* draw: full repaint of the window (on_repaint). */
 static void draw(void)
 {
+    gb_set_drive(my_drive);              /* this window's drive (#65) - on_repaint may
+                                            run while another window's drive is active */
     gb_curhide();
-    gb_window(win_x, win_y, WIN_W, WIN_H, "DISK A");
+    gb_window(win_x, win_y, WIN_W, WIN_H, drive_title[my_drive]);
     draw_scrollbar();
     if (view == V_ICONS) draw_icons_view();
     else                 draw_list_view();
@@ -338,6 +342,7 @@ static void on_frame(void)
 {
     unsigned char flags = gb_flags(), mx, my, idx;
 
+    gb_set_drive(my_drive);              /* re-assert our drive each focused frame (#65) */
     if (dc_timer) dc_timer--;
     if (flags & GB_QUIT) { gb_wm_close(); return; }    /* ESC closes the window */
     if (!(flags & GB_CLICK)) return;
@@ -398,15 +403,19 @@ static void on_frame(void)
 
 /* a co-resident window: on_repaint = draw, on_event = the View toggle, menu = the
    "View" title (shown in the top bar while we are focused). */
-static const gb_win_t fmwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, draw, on_event, fm_menu };
+static gb_win_t fmwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, draw, on_event, fm_menu };
 
 void main(void)
 {
-    win_x = DEF_X;
-    win_y = DEF_Y;
     nsel = 0; dc_timer = 0;
+    my_drive = gb_get_drive();   /* the drive the desktop opened us on (#65) */
+    win_x = DEF_X + my_drive * 8;   /* cascade so two drive windows don't fully overlap */
+    win_y = DEF_Y + my_drive * 14;
+    fmwin.x = win_x;             /* register the hit rect at the cascaded position */
+    fmwin.y = win_y;
     gb_wm_add(&fmwin);           /* register first (focus) so gb_set_name/fs_load
                                    target our window for the config read below */
+    gb_set_drive(my_drive);
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
     total = count_files();
     top = 0;

@@ -288,8 +288,8 @@ gbfat_run
                 ld    (fs_load_max),hl
                 ld    hl,GBFAT_LOAD
                 ld    (fs_load_dst),hl
-                call  fs_load_file           ; load GBFAT.BIN -> #5000 (above icons)
-                jr    nc,gr_unload            ; module missing -> fail
+                call  fs_load_sys            ; load GBFAT.BIN -> #5000 (from the boot
+                jr    nc,gr_unload            ; drive, where modules live)
                 call  GBFAT_LOAD             ; run it (reads low RAM, writes the IDE)
 gr_unload
                 pop   af
