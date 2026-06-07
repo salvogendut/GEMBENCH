@@ -53,8 +53,10 @@ static unsigned char dc_timer;
 static unsigned char view = V_ICONS;   /* default = icon view (GEOBENCH.CFG VIEW=) */
 
 /* GEOBENCH.CFG is loaded once at startup; the View toggle rewrites the VIEW= line
-   and saves it, so the choice persists across reboots. */
-static char cfgbuf[256];
+   and saves it, so the choice persists across reboots. NOTE: gb_fs_load copies in
+   whole 512-byte sectors, so the buffer must be a full sector even though the file
+   is tiny (a smaller buffer overflows into the globals after it). */
+static char cfgbuf[512];
 static unsigned int cfglen;
 
 /* the top-bar menu: "View" toggles list/icons, "Back" goes up a directory */
