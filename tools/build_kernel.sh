@@ -14,6 +14,7 @@ mkdir -p build
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
+python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
 python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \

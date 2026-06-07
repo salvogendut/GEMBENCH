@@ -43,6 +43,7 @@
         .globl  _gb_isdir
         .globl  _gb_chdir
         .globl  _gb_back
+        .globl  _gb_entname
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -256,3 +257,8 @@ _gb_chdir:
 ;; void gb_back(void);    up to the parent directory
 _gb_back:
         jp      0x8072          ; GB_BACK
+;; char *gb_entname(void);  the current dir entry's raw 11-byte 8.3 name (with ext)
+_gb_entname:
+        call    0x8075          ; GB_ENTNAME -> HL = fs_ent_name
+        ex      de, hl
+        ret

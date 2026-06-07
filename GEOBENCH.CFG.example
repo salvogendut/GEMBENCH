@@ -4,3 +4,6 @@ ICONS=DEFAULT
 # FONT: name of the font set to load (<name>.FNT); default DEFAULT (6x8).
 # Use CLASSIC for the original 8x8 CPC ROM font.
 FONT=DEFAULT
+# VIEW: File Manager view - DEFAULT (icons) or LIST. The "View" menu toggles this
+# and rewrites the line.
+VIEW=DEFAULT
