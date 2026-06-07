@@ -315,6 +315,19 @@ ch_hi
                 ex    de,hl                    ; clamp to DE
                 ret
 
+; fill_xywh: B=x C=y D=w E=h -> set fb_* then fill_block (fb_val preset). Shared
+; rectangle/edge filler so k_frame and kwin_frame don't each repeat the fb_* stores.
+fill_xywh
+                ld    a,b
+                ld    (fb_x),a
+                ld    a,c
+                ld    (fb_y),a
+                ld    a,d
+                ld    (fb_w),a
+                ld    a,e
+                ld    (fb_h),a
+                jp    fill_block
+
 ; k_frame (GB_FRAME): draw a 1px rectangle outline. B=x C=y D=w E=h (screen
 ; byte/line), A=pen (0..3). Screen only (no banked buffer), so no page swap.
 k_frame
@@ -329,57 +342,51 @@ k_frame
                 ld    (gf_h),a
                 ld    a,(gf_pen)
                 call  pen_to_byte            ; pen -> Mode 1 fill byte
-                ld    (gf_val),a
                 ld    (fb_val),a
-                ld    a,(gf_x)               ; top edge
-                ld    (fb_x),a
-                ld    a,(gf_y)
-                ld    (fb_y),a
-                ld    a,(gf_w)
-                ld    (fb_w),a
-                ld    a,1
-                ld    (fb_h),a
-                call  fill_block
-                ld    a,(gf_x)               ; bottom edge (y + h - 1)
-                ld    (fb_x),a
-                ld    a,(gf_y)
+                ld    a,(gf_x)               ; top edge: (x, y, w, 1)
                 ld    b,a
-                ld    a,(gf_h)
-                add   a,b
-                dec   a
-                ld    (fb_y),a
-                ld    a,(gf_w)
-                ld    (fb_w),a
-                ld    a,1
-                ld    (fb_h),a
-                call  fill_block
-                ld    a,(gf_x)               ; left edge
-                ld    (fb_x),a
                 ld    a,(gf_y)
-                ld    (fb_y),a
-                ld    a,1
-                ld    (fb_w),a
+                ld    c,a
+                ld    a,(gf_w)
+                ld    d,a
+                ld    e,1
+                call  fill_xywh
+                ld    a,(gf_x)               ; bottom edge: (x, y+h-1, w, 1)
+                ld    b,a
+                ld    a,(gf_y)
+                ld    c,a
                 ld    a,(gf_h)
-                ld    (fb_h),a
-                call  fill_block
-                ld    a,(gf_x)               ; right edge (x + w - 1)
+                add   a,c
+                dec   a
+                ld    c,a
+                ld    a,(gf_w)
+                ld    d,a
+                ld    e,1
+                call  fill_xywh
+                ld    a,(gf_x)               ; left edge: (x, y, 1, h)
+                ld    b,a
+                ld    a,(gf_y)
+                ld    c,a
+                ld    d,1
+                ld    a,(gf_h)
+                ld    e,a
+                call  fill_xywh
+                ld    a,(gf_x)               ; right edge: (x+w-1, y, 1, h)
                 ld    b,a
                 ld    a,(gf_w)
                 add   a,b
                 dec   a
-                ld    (fb_x),a
+                ld    b,a
                 ld    a,(gf_y)
-                ld    (fb_y),a
-                ld    a,1
-                ld    (fb_w),a
+                ld    c,a
+                ld    d,1
                 ld    a,(gf_h)
-                ld    (fb_h),a
-                jp    fill_block
+                ld    e,a
+                jp    fill_xywh
 gf_x            db    0
 gf_y            db    0
 gf_w            db    0
 gf_h            db    0
-gf_val          db    0
 gf_pen          db    0
 
 ; --- firmware text (kernel boot messages) --------------------------------
@@ -472,32 +479,31 @@ gb_open_window
 
 ; kwin_frame: blue interior, black title bar + borders, white close gadget.
 kwin_frame
-                ld    a,(kw_x)               ; interior (blue)
-                ld    (fb_x),a
+                xor   a                       ; interior (blue): (x, y, w, h)
+                ld    (fb_val),a
+                ld    a,(kw_x)
+                ld    b,a
                 ld    a,(kw_y)
-                ld    (fb_y),a
+                ld    c,a
                 ld    a,(kw_w)
-                ld    (fb_w),a
+                ld    d,a
                 ld    a,(kw_h)
-                ld    (fb_h),a
-                xor   a
+                ld    e,a
+                call  fill_xywh
+                ld    a,#F0                   ; title bar: white base (x, y, w, 14)
                 ld    (fb_val),a
-                call  fill_block
-                ld    a,(kw_x)               ; title bar: white base (14 high) ...
-                ld    (fb_x),a
+                ld    a,(kw_x)
+                ld    b,a
                 ld    a,(kw_y)
-                ld    (fb_y),a
+                ld    c,a
                 ld    a,(kw_w)
-                ld    (fb_w),a
-                ld    a,14
+                ld    d,a
+                ld    e,14
+                call  fill_xywh
+                ld    a,#0F                   ; ... black horizontal stripes (1-line
+                ld    (fb_val),a             ; fills, every other line; fb_x/fb_w
+                ld    a,1                     ; stay kw_x/kw_w from the fill above)
                 ld    (fb_h),a
-                ld    a,#F0
-                ld    (fb_val),a
-                call  fill_block
-                ld    a,1                     ; ... with black horizontal stripes
-                ld    (fb_h),a               ; (1-line fills on every other line)
-                ld    a,#0F
-                ld    (fb_val),a
                 ld    a,(kw_y)
                 ld    (kf_sy),a
                 ld    b,7
@@ -510,53 +516,49 @@ kf_stripe       ld    a,(kf_sy)
                 add   a,2
                 ld    (kf_sy),a
                 djnz  kf_stripe
-                ld    a,(kw_y)               ; restore fb_y for the borders (they
-                ld    (fb_y),a               ; reuse it); fb_val stays #0F (black)
-                ld    a,(kw_x)               ; left border
-                ld    (fb_x),a
-                ld    a,1
-                ld    (fb_w),a
-                ld    a,(kw_h)
-                ld    (fb_h),a
-                call  fill_block             ; (fb_y/fb_val still set)
-                ld    a,(kw_x)               ; right border
+                ld    a,(kw_x)               ; left border: (x, y, 1, h) [fb_val #0F]
                 ld    b,a
-                ld    a,(kw_w)
-                add   a,b
-                dec   a
-                ld    (fb_x),a
-                ld    a,1
-                ld    (fb_w),a
-                ld    a,(kw_h)
-                ld    (fb_h),a
-                call  fill_block
-                ld    a,(kw_x)               ; bottom border
-                ld    (fb_x),a
                 ld    a,(kw_y)
-                ld    b,a
+                ld    c,a
+                ld    d,1
                 ld    a,(kw_h)
+                ld    e,a
+                call  fill_xywh
+                ld    a,(kw_x)               ; right border: (x+w-1, y, 1, h)
+                ld    b,a
+                ld    a,(kw_w)
                 add   a,b
                 dec   a
-                ld    (fb_y),a
+                ld    b,a
+                ld    a,(kw_y)
+                ld    c,a
+                ld    d,1
+                ld    a,(kw_h)
+                ld    e,a
+                call  fill_xywh
+                ld    a,(kw_x)               ; bottom border: (x, y+h-1, w, 1)
+                ld    b,a
+                ld    a,(kw_y)
+                ld    c,a
+                ld    a,(kw_h)
+                add   a,c
+                dec   a
+                ld    c,a
                 ld    a,(kw_w)
-                ld    (fb_w),a
-                ld    a,1
-                ld    (fb_h),a
-                call  fill_block
-                ld    a,(kw_x)               ; close gadget (white)
+                ld    d,a
+                ld    e,1
+                call  fill_xywh
+                ld    a,#F0                   ; close gadget (white): (x+1, y+2, 2, 10)
+                ld    (fb_val),a
+                ld    a,(kw_x)
                 inc   a
-                ld    (fb_x),a
+                ld    b,a
                 ld    a,(kw_y)
                 add   a,2
-                ld    (fb_y),a
-                ld    a,2
-                ld    (fb_w),a
-                ld    a,10
-                ld    (fb_h),a
-                ld    a,#F0
-                ld    (fb_val),a
-                call  fill_block
-                ret
+                ld    c,a
+                ld    d,2
+                ld    e,10
+                jp    fill_xywh
 kw_x            db    0
 kw_y            db    0
 kw_w            db    0
