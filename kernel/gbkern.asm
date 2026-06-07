@@ -25,6 +25,7 @@ KCFG_ICONNAME   equ   #1202        ; 11-byte 8.3 icon filename, built by the mod
 KCFG_FONTNAME   equ   #120D        ; 11-byte 8.3 font filename, built by the module
 KCFG_MEMKB      equ   #1218        ; word: total RAM in KB (kernel -> module)
 KCFG_MEMSTR     equ   #121A        ; "<decimal>K" top-bar string (module -> kernel)
+KCFG_CURSORNAME equ   #1221        ; 11-byte 8.3 cursor filename (CURSOR=), built by module
 
 ; Callback API (issue #32) - kernel->app event delivery, state in low RAM so it
 ; costs no resident image bytes (low RAM stays main RAM under banking).
@@ -840,21 +841,23 @@ icon_init
                 ei
                 ret
 
-; cursor_init (#65): load the cursor sprite (DEFAULT.SPR) into low RAM at CUR_LOW,
-; so the 256-byte bitmaps need not be resident. Loads from the boot drive; into low
-; RAM (always mapped) so no PAGE_DATA swap. fs_load_max = 512 (the IDE reader copies
-; a whole sector); CUR_LOW..CUR_LOW+#1FF is reserved for that. If the file is
-; missing, blank the buffer so the cursor draws empty rather than garbage.
+; cursor_init (#65): load the cursor sprite (<CURSOR>.SPR from GEOBENCH.CFG, built
+; by the GBCFG module into KCFG_CURSORNAME) into low RAM at CUR_LOW, so the 256-byte
+; bitmaps need not be resident. Loads into low RAM (always mapped) so no PAGE_DATA
+; swap. fs_load_max = 512 (the IDE reader copies a whole sector); CUR_LOW..+#1FF is
+; reserved for that. Falls back to DEFAULT.SPR if the configured name is missing; if
+; even that is absent, the buffer is blanked (empty cursor, never garbage).
 cursor_init
-                ld    hl,cur_sprname
+                ld    hl,KCFG_CURSORNAME     ; fs_req_name = the config cursor name
                 ld    de,fs_req_name
                 call  copy11
                 ld    hl,512
                 ld    (fs_load_max),hl
                 ld    hl,CUR_LOW
                 ld    (fs_load_dst),hl
+                ld    hl,def_spr            ; fall back to DEFAULT.SPR if missing
                 di
-                call  fs_load_file
+                call  load_or_default
                 ei
                 ret   c
                 ld    hl,CUR_LOW             ; missing -> blank the sprite buffer
@@ -863,7 +866,7 @@ cursor_init
                 ld    (hl),0
                 ldir
                 ret
-cur_sprname     db    "DEFAULT SPR"
+def_spr         db    "DEFAULT SPR"
 
 ; --- app launch ----------------------------------------------------------
 ; launch_app: HL = 8.3 app name. Load it into the next bank page (PAGE_APP0 +
@@ -2393,6 +2396,7 @@ icon_imgend
 wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
+                include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.BIN",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.BIN",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
@@ -2407,4 +2411,6 @@ wel_imgend
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
                 save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data
+                save  "HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data,DSK,"build/gbkern.dsk"
+                save  "build/HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
