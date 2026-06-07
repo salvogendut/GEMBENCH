@@ -1,16 +1,18 @@
 /* filemgr - the GEOBENCH file manager, in C.
  *
- * Launched by the desktop when the Disk icon is double-clicked. Runs co-resident
- * in its own bank page, lists the active drive's directory in a window - a type
- * icon + name per entry - and SCROLLS when the list is taller than the window
- * (a footer pager: click the left half to scroll up, the right half down). A
- * click selects a row (red frame); a double-click launches the entry's app
- * (the kernel's type->app table). The close gadget or ESC closes the window.
+ * Lists the active drive's directory in a co-resident window (issue #45). Two
+ * views (issue #52), toggled by the top-bar "View" menu:
+ *   - LIST  : one entry per row, type icon + name.
+ *   - ICONS : the type icons laid out in a grid, names beneath.
+ * A scrollbar at the left inner edge scrolls whichever view is active: click the
+ * track above/below the thumb to page, or drag the thumb. A click selects an
+ * entry (red frame); a double-click opens it (gb_wm_launch -> a co-resident
+ * window by file type). The close gadget or ESC closes the window; drag the title
+ * bar to move it.
  *
- * Issue #45: a co-resident window managed by the kernel. main() registers it with
- * gb_wm_add and returns; the kernel's WM loop calls on_frame when we are focused
- * and draw_list (on_repaint) to restack us. Click our window to focus it; click
- * the desktop (or another window) to focus that. */
+ * All of this is app-level: the kernel/WM owns the window (focus, z-order, the
+ * rect-clipped repaint); the contents - views, grid, scrollbar - are drawn here
+ * with gb_dir*, gb_blite, gb_fill/gb_frame/gb_text. No kernel changes. */
 #include "gb.h"
 
 #define DEF_X    4            /* window position */
@@ -18,18 +20,40 @@
 #define WIN_W    56
 #define WIN_H    130
 #define TITLE_H  14
-#define ROW_OFF  18           /* first row, below the title bar */
-#define ROW_H    18
-#define VIS      5            /* visible rows (the rest scroll)  */
 #define DCLICK   40           /* double-click window, frames */
 
-static unsigned char win_x = DEF_X;   /* window position */
-static unsigned char win_y = DEF_Y;
-static unsigned char total;   /* number of files on the disk            */
-static unsigned char top;     /* index of the first visible row (scroll) */
-static unsigned char nsel;    /* 0 = none, else selected index + 1       */
-static unsigned char dc_row;  /* row index of the last click             */
+/* scrollbar at the left inner edge, content to its right */
+#define SB_W     2                       /* scrollbar width, byte cols */
+#define SB_X     (win_x + 1)             /* just inside the left border */
+#define CT_X     (win_x + 1 + SB_W)      /* content left */
+#define CT_Y     (win_y + TITLE_H)       /* content top, below the title bar */
+#define CT_W     (WIN_W - 2 - SB_W)      /* content width (52) */
+#define CT_H     (WIN_H - TITLE_H - 2)   /* content height (114) */
+
+/* list view */
+#define ROW_H    18
+#define LVIS     (CT_H / ROW_H)          /* visible rows (6) */
+
+/* icons view */
+#define ICOLS    3
+#define CELL_W   (CT_W / ICOLS)          /* cell width (17) */
+#define CELL_H   28                      /* icon (16) + name (8) + gap */
+#define IVIS     (CT_H / CELL_H)         /* visible grid rows (4) */
+#define NAME_MAX (CELL_W * 4 / 6)        /* chars that fit a cell (6px font) */
+
+#define V_LIST   0
+#define V_ICONS  1
+
+static unsigned char win_x = DEF_X, win_y = DEF_Y;
+static unsigned char total;       /* number of files on the disk          */
+static unsigned char top;         /* first visible LINE (row / grid row)  */
+static unsigned char nsel;        /* 0 = none, else selected index + 1    */
+static unsigned char dc_idx;      /* index of the last click              */
 static unsigned char dc_timer;
+static unsigned char view = V_LIST;
+
+/* the top-bar menu: a single "View" title that toggles the view on click */
+static const unsigned char fm_menu[] = { 1, 10, 'V','i','e','w',0,0,0,0 };
 
 static unsigned char count_files(void)
 {
@@ -39,64 +63,167 @@ static unsigned char count_files(void)
     return n;
 }
 
-/* draw_list: window, scroll pager, the visible rows, and the selection. */
-static void draw_list(void)
-{
-    unsigned char i, y;
-    unsigned char foot_y = win_y + WIN_H - 12;
-    char *name;
-
-    gb_curhide();
-    gb_window(win_x, win_y, WIN_W, WIN_H, "DISK A");
-
-    /* footer pager: show the arrows that apply (ASCII only - the font is 32..127) */
-    if (top > 0)             gb_text(win_x + 5, foot_y, "^ up");
-    if (top + VIS < total)   gb_text(win_x + WIN_W - 16, foot_y, "dn v");
-
-    name = gb_dir1();
-    for (i = 0; i < top && name; i++) name = gb_dirn();   /* skip to 'top' */
-    for (i = 0; i < VIS && name; i++) {
-        y = win_y + ROW_OFF + i * ROW_H;
-        gb_blite(win_x + 2, y);            /* the current entry's type icon */
-        gb_text(win_x + 11, y + 5, name);
-        name = gb_dirn();
-    }
-
-    if (nsel) {                          /* red frame on the selected row */
-        unsigned char s = nsel - 1;
-        if (s >= top && s < top + VIS)
-            gb_frame(win_x + 1, win_y + ROW_OFF - 1 + (s - top) * ROW_H,
-                     WIN_W - 2, 17, 3);
-    }
-    gb_curshow();
-}
-
-/* launch: open the file at absolute index idx as a co-resident window (#45) - it
-   opens on top and takes focus; we stay live underneath. Click between windows to
-   switch focus. (gb_wm_launch picks the app by type and passes the file as the arg,
-   the non-blocking gb_launch.) */
-static void launch(unsigned char idx)
+/* dir_seek: position the dir cursor at absolute index idx; return its name (0 if
+   past the end). The caller continues with gb_dirn() from there. */
+static char *dir_seek(unsigned char idx)
 {
     unsigned char i;
     char *p = gb_dir1();
     for (i = 0; i < idx && p; i++) p = gb_dirn();
+    return p;
+}
+
+/* scroll model: lines (rows in list, grid rows in icons) and how many are visible */
+static unsigned char total_lines(void)
+{
+    if (view == V_ICONS) return (unsigned char)((total + ICOLS - 1) / ICOLS);
+    return total;
+}
+static unsigned char vis_lines(void)
+{
+    return (view == V_ICONS) ? IVIS : LVIS;
+}
+static void clamp_top(void)
+{
+    unsigned char tl = total_lines(), vl = vis_lines();
+    if (tl <= vl) { top = 0; return; }
+    if (top > tl - vl) top = tl - vl;
+}
+
+/* thumb geometry: th = height, ty = top line (only meaningful when tl > vl). */
+static unsigned char thumb_h(void)
+{
+    unsigned char tl = total_lines(), vl = vis_lines(), th;
+    if (tl <= vl) return CT_H;
+    th = (unsigned char)(((unsigned)CT_H * vl) / tl);
+    return th < 6 ? 6 : th;
+}
+static unsigned char thumb_y(void)
+{
+    unsigned char tl = total_lines(), vl = vis_lines();
+    if (tl <= vl) return CT_Y;
+    return (unsigned char)(CT_Y + ((unsigned)(CT_H - thumb_h()) * top) / (tl - vl));
+}
+
+static void draw_scrollbar(void)
+{
+    gb_fill(SB_X, CT_Y, SB_W, CT_H, 2);              /* black track */
+    gb_fill(SB_X, thumb_y(), SB_W, thumb_h(), 1);    /* white thumb */
+}
+
+/* draw a name truncated to fit a cell (icons view) */
+static void draw_name(unsigned char col, unsigned char line, char *name)
+{
+    static char tmp[14];
+    unsigned char i;
+    for (i = 0; i < NAME_MAX && i < 13 && name[i]; i++) tmp[i] = name[i];
+    tmp[i] = 0;
+    gb_text(col, line, tmp);
+}
+
+static void draw_list_view(void)
+{
+    unsigned char i, y;
+    char *name = dir_seek(top);
+    for (i = 0; i < LVIS && name; i++) {
+        y = CT_Y + i * ROW_H;
+        gb_blite(CT_X, y + 1);              /* type icon (8 cols x 16 lines) */
+        gb_text(CT_X + 9, y + 6, name);
+        name = gb_dirn();
+    }
+    if (nsel) {                              /* red frame on the selected row */
+        unsigned char s = nsel - 1;
+        if (s >= top && s < top + LVIS)
+            gb_frame(CT_X, CT_Y + (s - top) * ROW_H, CT_W, 17, 3);
+    }
+}
+
+static void draw_icons_view(void)
+{
+    unsigned char r, c, cx, cy;
+    unsigned int idx = (unsigned int)top * ICOLS;    /* first visible item */
+    char *name = dir_seek((unsigned char)idx);
+    for (r = 0; r < IVIS; r++) {
+        for (c = 0; c < ICOLS; c++) {
+            if (!name) return;
+            cx = CT_X + c * CELL_W;
+            cy = CT_Y + r * CELL_H;
+            gb_blite(cx + (CELL_W - 8) / 2, cy + 1);   /* icon centered in the cell */
+            draw_name(cx, cy + 18, name);
+            if (nsel == (unsigned char)idx + 1)
+                gb_frame(cx, cy, CELL_W, CELL_H - 1, 3);
+            idx++;
+            name = gb_dirn();
+        }
+    }
+}
+
+/* draw: full repaint of the window (on_repaint). */
+static void draw(void)
+{
+    gb_curhide();
+    gb_window(win_x, win_y, WIN_W, WIN_H, "DISK A");
+    draw_scrollbar();
+    if (view == V_ICONS) draw_icons_view();
+    else                 draw_list_view();
+    gb_curshow();
+}
+
+/* launch: open the entry at absolute index idx as a co-resident window (#45). */
+static void launch(unsigned char idx)
+{
+    dir_seek(idx);                 /* position the dir cursor at the entry */
     nsel = 0;
     gb_wm_launch();
 }
 
-/* on_frame: one frame when this window is focused (kernel WM loop, issue #45).
-   Read input with gb_flags/mx/my; each old loop 'continue' is now a 'return'. */
+/* sb_drag: while the fire is held, map the pointer's Y to the scroll position
+   (self-driven poll loop, like the modal popups - the WM loop pauses meanwhile). */
+static void sb_drag(void)
+{
+    unsigned char tl = total_lines(), vl = vis_lines(), my, nt;
+    if (tl <= vl) return;
+    for (;;) {
+        if (!(gb_poll() & GB_FIRE)) break;
+        my = gb_my();
+        if (my < CT_Y) my = CT_Y;
+        if (my >= CT_Y + CT_H) my = CT_Y + CT_H - 1;
+        nt = (unsigned char)(((unsigned)(my - CT_Y) * (tl - vl)) / CT_H);
+        if (nt != top) { top = nt; clamp_top(); draw(); }
+    }
+}
+
+/* sb_click: a click in the scrollbar - page above/below the thumb, or drag it. */
+static void sb_click(unsigned char my)
+{
+    unsigned char ty = thumb_y(), th = thumb_h(), vl = vis_lines();
+    if (total_lines() <= vl) return;
+    if (my < ty)            { top = (top > vl) ? top - vl : 0; clamp_top(); draw(); }
+    else if (my >= ty + th) { top += vl; clamp_top(); draw(); }
+    else                    sb_drag();
+}
+
+/* on_event: top-bar "View" menu clicked -> toggle list / icons. */
+static void on_event(void)
+{
+    if (gb_msg.type != GB_MSG_MENU) return;
+    view ^= 1;
+    top = 0; nsel = 0;
+    clamp_top();
+    draw();
+}
+
+/* on_frame: one frame when focused (kernel WM loop). Read input via gb_flags/mx/my. */
 static void on_frame(void)
 {
-    unsigned char flags = gb_flags(), mx, my, vis, idx, foot_y;
+    unsigned char flags = gb_flags(), mx, my, idx;
 
     if (dc_timer) dc_timer--;
-    if (flags & GB_QUIT) { gb_wm_close(); return; }    /* ESC closes this window */
+    if (flags & GB_QUIT) { gb_wm_close(); return; }    /* ESC closes the window */
     if (!(flags & GB_CLICK)) return;
 
     mx = gb_mx();
     my = gb_my();
-    foot_y = win_y + WIN_H - 12;
 
     /* close gadget (top-left of the title bar) */
     if (my >= win_y && my < win_y + TITLE_H && mx >= win_x && mx < win_x + 4) {
@@ -105,54 +232,53 @@ static void on_frame(void)
     }
 
     /* title bar (right of the close gadget) -> drag the window */
-    if (my >= win_y && my < win_y + TITLE_H
-        && mx >= win_x + 4 && mx < win_x + WIN_W) {
+    if (my >= win_y && my < win_y + TITLE_H && mx >= win_x + 4 && mx < win_x + WIN_W) {
         if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
-            gb_wm_setpos(win_x, win_y);   /* move our hit rect to follow */
-            gb_restore_parent();          /* repaint the stack at the new spot */
+            gb_wm_setpos(win_x, win_y);
+            gb_restore_parent();
         }
         return;
     }
 
-    /* footer pager: left half scrolls up, right half down */
-    if (my >= foot_y && my < foot_y + 10) {
-        if (mx < win_x + WIN_W / 2) {
-            if (top > 0) { top--; draw_list(); }
+    /* scrollbar */
+    if (mx >= SB_X && mx < SB_X + SB_W && my >= CT_Y && my < CT_Y + CT_H) {
+        sb_click(my);
+        return;
+    }
+
+    /* content: pick the entry under the pointer (list row or grid cell) */
+    if (my >= CT_Y && my < CT_Y + CT_H && mx >= CT_X && mx < win_x + WIN_W) {
+        if (view == V_ICONS) {
+            unsigned char c = (mx - CT_X) / CELL_W;
+            unsigned char r = (my - CT_Y) / CELL_H;
+            if (c >= ICOLS) return;
+            idx = (unsigned char)((top + r) * ICOLS + c);
         } else {
-            if (top + VIS < total) { top++; draw_list(); }
+            idx = top + (my - CT_Y) / ROW_H;
         }
-        return;
-    }
-
-    /* a list row? */
-    if (my >= win_y + ROW_OFF && my < win_y + ROW_OFF + VIS * ROW_H
-        && mx >= win_x && mx < win_x + WIN_W) {
-        vis = (my - (win_y + ROW_OFF)) / ROW_H;
-        idx = top + vis;
         if (idx >= total) return;
-        if (dc_timer && dc_row == idx) {     /* double-click -> open */
+        if (dc_timer && dc_idx == idx) {     /* double-click -> open */
             launch(idx);
             dc_timer = 0;
         } else {                              /* single click -> select */
             nsel = idx + 1;
-            dc_row = idx;
+            dc_idx = idx;
             dc_timer = DCLICK;
-            draw_list();
+            draw();
         }
     }
 }
 
-/* a co-resident window: click it to focus, drag the title bar to move it (the hit
-   rect follows via gb_wm_setpos), the close gadget or ESC to close. on_repaint =
-   draw_list, which the kernel calls to restack us. */
-static const gb_win_t fmwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, draw_list, 0, 0 };
+/* a co-resident window: on_repaint = draw, on_event = the View toggle, menu = the
+   "View" title (shown in the top bar while we are focused). */
+static const gb_win_t fmwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, draw, on_event, fm_menu };
 
 void main(void)
 {
     win_x = DEF_X;
     win_y = DEF_Y;
     total = count_files();
-    top = 0; nsel = 0; dc_timer = 0;
-    draw_list();
+    top = 0; nsel = 0; dc_timer = 0; view = V_LIST;
+    draw();
     gb_wm_add(&fmwin);           /* register; the kernel WM drives us (#45) */
 }
