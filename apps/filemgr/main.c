@@ -50,7 +50,12 @@ static unsigned char top;         /* first visible LINE (row / grid row)  */
 static unsigned char nsel;        /* 0 = none, else selected index + 1    */
 static unsigned char dc_idx;      /* index of the last click              */
 static unsigned char dc_timer;
-static unsigned char view = V_LIST;
+static unsigned char view = V_ICONS;   /* default = icon view (GEOBENCH.CFG VIEW=) */
+
+/* GEOBENCH.CFG is loaded once at startup; the View toggle rewrites the VIEW= line
+   and saves it, so the choice persists across reboots. */
+static char cfgbuf[256];
+static unsigned int cfglen;
 
 /* the top-bar menu: "View" toggles list/icons, "Back" goes up a directory */
 static const unsigned char fm_menu[] = {
@@ -76,6 +81,67 @@ static char *dir_seek(unsigned char idx)
     char *p = gb_dir1();
     for (i = 0; i < idx && p; i++) p = gb_dirn();
     return p;
+}
+
+/* cfg_view_pos: index just past "VIEW=" in cfgbuf, or 0xFFFF if there's no such key. */
+static unsigned int cfg_view_pos(void)
+{
+    unsigned int i;
+    for (i = 0; i + 5 <= cfglen; i++)
+        if (cfgbuf[i] == 'V' && cfgbuf[i+1] == 'I' && cfgbuf[i+2] == 'E'
+            && cfgbuf[i+3] == 'W' && cfgbuf[i+4] == '=')
+            return i + 5;
+    return 0xFFFF;
+}
+
+/* cfg_load_view: load GEOBENCH.CFG and set the initial view from VIEW= (LIST -> list;
+   DEFAULT / absent / missing file -> icons). Keeps the buffer for cfg_save_view. */
+static void cfg_load_view(void)
+{
+    unsigned int p;
+    gb_set_name("GEOBENCHCFG");
+    cfglen = gb_fs_load(cfgbuf, sizeof(cfgbuf));
+    view = V_ICONS;
+    p = cfg_view_pos();
+    if (p != 0xFFFF && p + 4 <= cfglen && cfgbuf[p] == 'L' && cfgbuf[p+1] == 'I'
+        && cfgbuf[p+2] == 'S' && cfgbuf[p+3] == 'T')
+        view = V_LIST;
+}
+
+/* cfg_save_view: write the current view into GEOBENCH.CFG's VIEW= line (LIST or
+   DEFAULT), preserving the other keys, and save. Best-effort (no-op if the file
+   can't be written - e.g. it doesn't exist). */
+static void cfg_save_view(void)
+{
+    const char *val = (view == V_LIST) ? "LIST" : "DEFAULT";
+    unsigned char vlen = (view == V_LIST) ? 4 : 7;
+    unsigned int p, end, i;
+
+    if (cfglen == 0) return;                 /* no config loaded -> nothing to update */
+    p = cfg_view_pos();
+    if (p == 0xFFFF) {                        /* no VIEW= key: append a line */
+        if (cfglen + 7 + vlen > sizeof(cfgbuf)) return;
+        cfgbuf[cfglen++] = 'V'; cfgbuf[cfglen++] = 'I'; cfgbuf[cfglen++] = 'E';
+        cfgbuf[cfglen++] = 'W'; cfgbuf[cfglen++] = '=';
+        for (i = 0; i < vlen; i++) cfgbuf[cfglen++] = val[i];
+        cfgbuf[cfglen++] = '\r'; cfgbuf[cfglen++] = '\n';
+    } else {                                  /* replace the existing value in place */
+        end = p;
+        while (end < cfglen && cfgbuf[end] != '\r' && cfgbuf[end] != '\n') end++;
+        if (vlen > (unsigned char)(end - p)) {           /* grow: shift tail right */
+            unsigned int d = vlen - (end - p);
+            if (cfglen + d > sizeof(cfgbuf)) return;
+            for (i = cfglen; i > end; i--) cfgbuf[i - 1 + d] = cfgbuf[i - 1];
+            cfglen += d;
+        } else if (vlen < (unsigned char)(end - p)) {    /* shrink: shift tail left */
+            unsigned int d = (end - p) - vlen;
+            for (i = end; i < cfglen; i++) cfgbuf[i - d] = cfgbuf[i];
+            cfglen -= d;
+        }
+        for (i = 0; i < vlen; i++) cfgbuf[p + i] = val[i];
+    }
+    gb_set_name("GEOBENCHCFG");
+    gb_fs_save(cfgbuf, cfglen);
 }
 
 /* scroll model: lines (rows in list, grid rows in icons) and how many are visible */
@@ -231,8 +297,9 @@ static void on_event(void)
     if (gb_msg.p0 >= MENU_BACK_COL) {     /* Back */
         gb_back();
         relist();
-    } else {                              /* View */
+    } else {                              /* View: toggle + persist to GEOBENCH.CFG */
         view ^= 1;
+        cfg_save_view();
         top = 0; nsel = 0;
         clamp_top();
         draw();
@@ -303,8 +370,12 @@ void main(void)
 {
     win_x = DEF_X;
     win_y = DEF_Y;
+    nsel = 0; dc_timer = 0;
+    gb_wm_add(&fmwin);           /* register first (focus) so gb_set_name/fs_load
+                                   target our window for the config read below */
+    cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
     total = count_files();
-    top = 0; nsel = 0; dc_timer = 0; view = V_LIST;
+    top = 0;
+    clamp_top();
     draw();
-    gb_wm_add(&fmwin);           /* register; the kernel WM drives us (#45) */
 }
