@@ -433,6 +433,9 @@ void main(void)
     unsigned char n;
 
     win_x = DEF_X; win_y = DEF_Y;
+    gb_wm_add(&npwin);                           /* register FIRST: captures our file arg
+                                                   (per-window) + takes focus, so the load
+                                                   below targets OUR file, not a sibling's */
     len = gb_fs_load(buf, NP_MAX);              /* the file we were launched with */
     cur = len; view_first = 0; dirty = 0; status = 0;
     want_menu = 0; modal = 0;
@@ -440,5 +443,4 @@ void main(void)
 
     draw();
     gb_curshow();
-    gb_wm_add(&npwin);                           /* register; the kernel WM drives us */
 }

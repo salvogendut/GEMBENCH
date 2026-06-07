@@ -88,9 +88,10 @@ static const gb_win_t vwin = { WIN_X, WIN_Y, WIN_W, WIN_H, on_frame, v_repaint, 
 
 void main(void)
 {
+    gb_wm_add(&vwin);                       /* register FIRST: captures our file arg
+                                              (per-window) so the load below is ours */
     filen = gb_fs_load(filebuf, VIEW_MAX);
     gb_curhide();
     v_draw();
     gb_curshow();
-    gb_wm_add(&vwin);                       /* register; the kernel WM drives us */
 }

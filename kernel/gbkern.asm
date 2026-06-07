@@ -45,16 +45,17 @@ WM_PAGES        equ   #134F        ; page-in-use bitmap: bit i = PAGE_APP0+i bus
 WM_NWIN         equ   #1350        ; number of live windows
 WM_FOCUS        equ   #1351        ; slot index of the focused window
 WM_TABLE        equ   #1352        ; WM_MAXWIN * WM_ESZ-byte entries:
-WM_ESZ          equ   14           ;   page,x,y,w,h, on_frame(2),on_repaint(2),
-WM_MAXWIN       equ   4            ;   on_event(2), menu(2), flags(1: bit0 alive)
-WM_Z            equ   #138A        ; z-order: WM_NWIN slot indices, [0]=bottom
-WM_FPREV        equ   #138E        ; previously focused slot (menu-swap edge detect)
+WM_ESZ          equ   25           ;   page,x,y,w,h, on_frame(2),on_repaint(2),
+WM_MAXWIN       equ   4            ;   on_event(2), menu(2), flags(1), arg(11)
+WM_Z            equ   #13B6        ; z-order: WM_NWIN slot indices, [0]=bottom
+WM_FPREV        equ   #13BA        ; previously focused slot (menu-swap edge detect)
 WM_FR_X         equ   1            ; entry field offsets (after +0 page):
 WM_FR_FRAME     equ   5
 WM_FR_REPAINT   equ   7
 WM_FR_EVENT     equ   9
 WM_FR_MENU      equ   11
 WM_FR_FLAGS     equ   13
+WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_add
 
                 org   GB_KERNEL
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
@@ -955,16 +956,28 @@ k_launch
                 call  app_for_ext            ; HL = app .BIN for the type
                 jp    launch_app
 
-; k_getarg (GB_GETARG): HL = the launch arg (the 8.3 file name the app opened).
-k_getarg
-                ld    hl,launch_arg
+; focus_arg_ptr: HL = the focused window's 11-byte file arg (per-window, so two
+; editors keep separate files). Each window captured the pending launch_arg at
+; gb_wm_add; getarg/setname/fsload/fssave all act on the focused window's copy.
+focus_arg_ptr
+                ld    a,(WM_FOCUS)
+                call  wm_entry
+                ld    de,WM_FR_ARG
+                add   hl,de
                 ret
 
-; k_setname (GB_SETNAME): set the current file name (the launch arg) so a later
-; GB_FSLOAD/GB_FSSAVE targets it - this is how an app does New / Save As / open a
-; picked file. HL = an 11-byte 8.3 name in the caller's page.
+; k_getarg (GB_GETARG): HL = the launch arg (the 8.3 file name the app opened).
+k_getarg
+                jp    focus_arg_ptr
+
+; k_setname (GB_SETNAME): set the current file name so a later GB_FSLOAD/GB_FSSAVE
+; targets it - how an app does New / Save As / open a picked file. HL = an 11-byte
+; 8.3 name in the caller's page. Writes the focused window's per-window arg.
 k_setname
-                ld    de,launch_arg
+                push  hl                       ; HL = src name
+                call  focus_arg_ptr           ; HL = dst (focused window's arg)
+                ex    de,hl                     ; DE = dst
+                pop   hl                       ; HL = src
                 ld    bc,11
                 ldir
                 ret
@@ -977,7 +990,7 @@ k_fsload
                 ld    (fs_load_dst),hl
                 ex    de,hl
                 ld    (fs_load_max),hl
-                ld    hl,launch_arg          ; load by the launched file's name
+                call  focus_arg_ptr          ; load by the focused window's file name
                 ld    de,fs_req_name
                 ld    bc,11
                 ldir
@@ -997,7 +1010,7 @@ k_fssave
                 ld    (fs_save_src),hl
                 ex    de,hl
                 ld    (fs_save_len),hl
-                ld    hl,launch_arg          ; save by the launched file's name
+                call  focus_arg_ptr          ; save by the focused window's file name
                 ld    de,fs_req_name
                 ld    bc,11
                 ldir
@@ -1100,6 +1113,10 @@ wm_register
                 ldir
                 ld    a,1                          ; entry+13 flags = alive
                 ld    (de),a
+                inc   de                            ; entry+14 = arg: capture the pending
+                ld    hl,launch_arg               ; launch arg as this window's own file
+                ld    bc,11
+                ldir
                 ld    a,(wm_slot)                 ; focus the new window
                 ld    (WM_FOCUS),a
                 ld    hl,WM_Z                      ; WM_Z[NWIN] = slot (new z-top)
