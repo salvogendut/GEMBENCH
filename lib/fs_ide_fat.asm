@@ -44,10 +44,19 @@ GBFAT_LOAD      equ   #5000        ; module load address (above the font/icons)
                 include "fs_fat32_core.asm"
 
 ; ---------------------------------------------------------------------------
-; fside_dir_first: mount the volume + return the first valid directory entry.
+; fside_dir_first: return the first valid entry of the CURRENT directory. The
+; volume is mounted once (fs_mount sets fs_dir_clus = root); re-listing afterwards
+; rewinds whatever directory fs_dir_clus points at (so gb_chdir/gb_back persist
+; across re-lists instead of snapping back to root). See issue #54.
 fside_dir_first
-                call  fs_mount
-                call  fs_dir_rewind           ; load the first root-dir sector
+                ld    a,(fs_mounted)
+                or    a
+                jr    nz,fsdf_rewind
+                call  fs_mount               ; first time: BPB + root cluster
+                ld    a,1
+                ld    (fs_mounted),a
+fsdf_rewind
+                call  fs_dir_rewind           ; rewind the current directory
                 jp    fdn_loop                 ; scan for the first valid entry
 
 ; ---------------------------------------------------------------------------
@@ -92,6 +101,9 @@ fdn_have
                 ld    a,b
                 and   #08
                 jr    nz,fdn_skip              ; volume label / directory-as-label
+                ld    a,(hl)                   ; hide '.' and '..' (dir self / parent)
+                cp    '.'
+                jr    z,fdn_skip
 
                 push  hl                       ; valid -> copy fields out
                 ld    de,fs_ent_name
@@ -280,6 +292,9 @@ fsvm_fail
 gbfat_modname   db    "GBFAT   BIN"          ; 8.3, space-padded
 
 ; --- read-path state (shared core state lives in fs_fat32_core.asm) -------
+fs_mounted      defb  0            ; 0 until the volume is mounted once (#54)
+fs_dir_sp       defb  0            ; directory stack depth (chdir/back)
+fs_dir_stack    defs  16           ; 4 parent clusters (4 bytes each)
 flf_clus        defs  4            ; load: current file cluster
 fs_ent_clus     defs  4            ; selected entry's start cluster
 flf_sic         defb  0            ; load: sector within current cluster

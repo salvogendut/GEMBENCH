@@ -40,6 +40,9 @@
         .globl  _gb_wm_close
         .globl  _gb_wm_setpos
         .globl  _gb_wm_launch
+        .globl  _gb_isdir
+        .globl  _gb_chdir
+        .globl  _gb_back
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -244,3 +247,12 @@ _gb_wm_setpos:
 ;; window with the file as its launch arg (the non-blocking gb_launch).
 _gb_wm_launch:
         jp      0x8069          ; GB_WMLAUNCH
+;; unsigned char gb_isdir(void);   1 if the last dir entry is a directory, else 0
+_gb_isdir:
+        jp      0x806C          ; GB_ISDIR
+;; void gb_chdir(void);   descend into the positioned dir entry (#54)
+_gb_chdir:
+        jp      0x806F          ; GB_CHDIR
+;; void gb_back(void);    up to the parent directory
+_gb_back:
+        jp      0x8072          ; GB_BACK

@@ -52,8 +52,13 @@ static unsigned char dc_idx;      /* index of the last click              */
 static unsigned char dc_timer;
 static unsigned char view = V_LIST;
 
-/* the top-bar menu: a single "View" title that toggles the view on click */
-static const unsigned char fm_menu[] = { 1, 10, 'V','i','e','w',0,0,0,0 };
+/* the top-bar menu: "View" toggles list/icons, "Back" goes up a directory */
+static const unsigned char fm_menu[] = {
+    2,
+    10, 'V','i','e','w',0,0,0,0,
+    17, 'B','a','c','k',0,0,0,0
+};
+#define MENU_BACK_COL 17      /* click column >= this -> Back, else View */
 
 static unsigned char count_files(void)
 {
@@ -169,12 +174,27 @@ static void draw(void)
     gb_curshow();
 }
 
-/* launch: open the entry at absolute index idx as a co-resident window (#45). */
-static void launch(unsigned char idx)
+/* relist: re-read the current directory and redraw from the top (#54). */
+static void relist(void)
 {
-    dir_seek(idx);                 /* position the dir cursor at the entry */
-    nsel = 0;
-    gb_wm_launch();
+    total = count_files();
+    top = 0; nsel = 0;
+    clamp_top();
+    draw();
+}
+
+/* open_entry: a directory descends in place (gb_chdir + re-list, same window); a
+   file launches a co-resident app by type (gb_wm_launch). */
+static void open_entry(unsigned char idx)
+{
+    dir_seek(idx);                 /* position at the entry (sets attr + cluster) */
+    if (gb_isdir()) {
+        gb_chdir();
+        relist();
+    } else {
+        nsel = 0;
+        gb_wm_launch();
+    }
 }
 
 /* sb_drag: while the fire is held, map the pointer's Y to the scroll position
@@ -203,14 +223,20 @@ static void sb_click(unsigned char my)
     else                    sb_drag();
 }
 
-/* on_event: top-bar "View" menu clicked -> toggle list / icons. */
+/* on_event: a top-bar menu click. "Back" (right title) goes to the parent
+   directory; "View" (left title) toggles list / icons. */
 static void on_event(void)
 {
     if (gb_msg.type != GB_MSG_MENU) return;
-    view ^= 1;
-    top = 0; nsel = 0;
-    clamp_top();
-    draw();
+    if (gb_msg.p0 >= MENU_BACK_COL) {     /* Back */
+        gb_back();
+        relist();
+    } else {                              /* View */
+        view ^= 1;
+        top = 0; nsel = 0;
+        clamp_top();
+        draw();
+    }
 }
 
 /* on_frame: one frame when focused (kernel WM loop). Read input via gb_flags/mx/my. */
@@ -257,8 +283,8 @@ static void on_frame(void)
             idx = top + (my - CT_Y) / ROW_H;
         }
         if (idx >= total) return;
-        if (dc_timer && dc_idx == idx) {     /* double-click -> open */
-            launch(idx);
+        if (dc_timer && dc_idx == idx) {     /* double-click -> open (dir or file) */
+            open_entry(idx);
             dc_timer = 0;
         } else {                              /* single click -> select */
             nsel = idx + 1;
