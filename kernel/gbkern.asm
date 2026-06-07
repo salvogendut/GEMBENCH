@@ -55,8 +55,10 @@ WM_DRAGNAME     equ   #13BB        ; drag-and-drop (#62): dragged 11-byte 8.3 na
                                    ; app-visible (the drop target reads it on GB_MSG_DROP)
 WM_DRAGSRC      equ   #13C6        ; source window slot of the active drag
 WM_DRAGMOV      equ   #13C7        ; 1 once the pointer moved (a drag, not a click)
-WM_DRAGX0       equ   #13C8        ; drag start position (byte col / line) to detect
-WM_DRAGY0       equ   #13C9        ; movement
+WM_DRAGX0       equ   #13C8        ; last drag position (byte col / line); movement
+WM_DRAGY0       equ   #13C9        ; vs this drives both the ghost and click/drag tell
+GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
+GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
 WM_FR_X         equ   1            ; entry field offsets (after +0 page):
 WM_FR_FRAME     equ   5
 WM_FR_REPAINT   equ   7
@@ -1520,27 +1522,58 @@ k_drag_start
                 ld    a,(WM_FOCUS)               ; source = the focused (calling) window
                 ld    (WM_DRAGSRC),a
                 xor   a
-                ld    (WM_DRAGMOV),a             ; moved = 0
-                ld    a,(POLL_MX)                ; record the start position
+                ld    (WM_DRAGMOV),a             ; moved = 0, ghost not shown yet
+                ld    (ghost_on),a
+                ld    a,(POLL_MX)                ; seed the last position
                 ld    (WM_DRAGX0),a
                 ld    a,(POLL_MY)
                 ld    (WM_DRAGY0),a
 ds_loop
-                call  k_poll                      ; pace 50Hz + move cursor + POLL_*
-                ld    a,(POLL_MX)                ; pointer moved off the start cell?
+                call  k_poll                      ; pace 50Hz + track pointer + POLL_*
+                ld    a,(POLL_MX)                ; moved since last frame?
                 ld    hl,WM_DRAGX0
                 cp    (hl)
                 jr    nz,ds_moved
                 ld    a,(POLL_MY)
                 ld    hl,WM_DRAGY0
                 cp    (hl)
-                jr    z,ds_held
-ds_moved        ld    a,1
+                jr    z,ds_held                   ; stationary -> leave the ghost as is
+ds_moved        ld    a,(POLL_MX)                ; record the new last position
+                ld    (WM_DRAGX0),a
+                ld    a,(POLL_MY)
+                ld    (WM_DRAGY0),a
+                ld    a,1
                 ld    (WM_DRAGMOV),a
+                ld    a,(ghost_on)               ; ghost already up? -> move it
+                or    a
+                jr    nz,ds_gtrack
+                call  cursor_erase                ; first movement: hide the arrow and
+                ld    a,1                          ; show a box that follows the pointer
+                ld    (cur_supp),a
+                ld    (ghost_on),a
+                ld    a,GHOST_W                   ; the box's save-under is fixed-size in
+                ld    (sb_w),a                     ; the idle IDE sector buffer; set once
+                ld    a,GHOST_H
+                ld    (sb_h),a
+                ld    hl,fs_secbuf
+                ld    (sb_buf),hl
+                jr    ds_gpaint
+ds_gtrack       call  restore_block               ; erase the box at its old place
+ds_gpaint       call  ghost_place
+                call  ghost_draw
 ds_held         ld    a,(POLL_FLAGS)            ; fire still held -> keep dragging
                 bit   2,a
                 jr    nz,ds_loop
-                ld    a,(WM_DRAGMOV)            ; released: never moved -> a plain click
+                ld    a,(ghost_on)               ; released: tear the ghost down and
+                or    a                            ; bring the arrow back
+                jr    z,ds_norel
+                call  restore_block               ; erase the box
+                xor   a
+                ld    (ghost_on),a
+                ld    (cur_supp),a               ; A = 0 -> cursor visible again
+                call  cursor_draw
+ds_norel
+                ld    a,(WM_DRAGMOV)            ; never moved -> a plain click
                 or    a
                 jr    z,ds_click
                 call  wm_hit_test                 ; CF = nothing under the drop point
@@ -1576,6 +1609,37 @@ ds_click
                 xor   a
                 ret
 wm_drag_pg      db    0
+
+; ghost_place: sb_x/sb_y = the pointer (POLL_MX/MY), clamped so the GHOST_W x
+; GHOST_H box stays on screen. sb_w/sb_h/sb_buf were set once when the ghost first
+; appeared (they only change when the cursor save-under runs, which is suppressed
+; during the drag), so erase = restore_block and draw = save_block + outline.
+ghost_place
+                ld    a,(POLL_MX)
+                cp    80-GHOST_W+1
+                jr    c,gpl_x
+                ld    a,80-GHOST_W
+gpl_x           ld    (sb_x),a
+                ld    a,(POLL_MY)
+                cp    200-GHOST_H+1
+                jr    c,gpl_y
+                ld    a,200-GHOST_H
+gpl_y           ld    (sb_y),a
+                ret
+
+; ghost_draw: save the screen under the box, then draw a red outline there.
+ghost_draw
+                call  save_block
+                ld    a,(sb_x)
+                ld    b,a
+                ld    a,(sb_y)
+                ld    c,a
+                ld    d,GHOST_W
+                ld    e,GHOST_H
+                ld    a,3
+                jp    k_frame
+
+ghost_on        db    0
 
 ; wm_raise: A = slot -> move it to z-order top and focus it (keeps the others'
 ; relative order). Compacts WM_Z removing the slot, then re-appends it at the end.

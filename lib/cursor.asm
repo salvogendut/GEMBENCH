@@ -36,6 +36,9 @@ cursor_move_to
                 jr    nz,cm_go
                 ret
 cm_go
+                ld    a,(cur_supp)           ; suppressed (during a DnD drag, #62)?
+                or    a                       ; update the position but don't draw, so
+                jr    nz,cm_storeonly         ; the pointer still tracks under the ghost
                 push  de
                 push  hl
                 call  cursor_erase
@@ -44,6 +47,10 @@ cm_go
                 ld    (cursor_x),de
                 ld    (cursor_y),hl
                 jp    cursor_draw
+cm_storeonly
+                ld    (cursor_x),de
+                ld    (cursor_y),hl
+                ret
 
 ; cursor_erase: restore the screen block saved at the last draw position.
 cursor_erase
@@ -179,6 +186,7 @@ cursor_x        dw    320
 cursor_y        dw    200
 cur_xbyte       db    0
 cur_line        db    0
+cur_supp        db    0            ; 1 = suppress drawing (DnD drag shows a ghost instead)
 cur_sub         db    0
 cur_dptr        dw    0
 cur_mptr        dw    0
