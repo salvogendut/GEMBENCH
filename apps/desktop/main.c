@@ -124,9 +124,10 @@ static void on_event(void)
     static char msg[] = "Top-bar click @ col 00";
     unsigned char c;
     if (gb_msg.type == GB_MSG_DROP) {          /* a file was dropped on the desktop (#62) */
-        if (hit_icon(gb_mx(), gb_my()) == 2) { /* on the Trash icon? (phase 1: marker) */
+        if (hit_icon(gb_mx(), gb_my()) == 2) { /* on the Trash icon -> delete the file */
+            gb_file_delete(gb_dragname);       /* (the source window then re-lists) */
             gb_curhide();
-            gb_text(1, 10, trash_label());
+            gb_text(1, 10, trash_label());     /* "Trash: NAME" confirmation */
             gb_curshow();
         }
         return;

@@ -37,6 +37,8 @@ FS_IDE_DATA     equ   #FD08
 GBFAT_LEN       equ   #1400        ; bytes to write (word)
 GBFAT_NAME      equ   #1402        ; 8.3 name (11 bytes)
 GBFAT_RES       equ   #140D        ; result: 1 = saved, 0 = failed
+GBFAT_OP        equ   #140E        ; operation: 0 = save, 1 = delete (#62)
+GBFAT_DIR       equ   #140F        ; directory cluster (4 bytes) to operate in
 GBFAT_DATA      equ   #2200        ; staged data (<= GBFAT_MAX bytes)
 GBFAT_MAX       equ   #1C00        ; 7 KB staging cap (fits #2200..#3DFF in low RAM)
 GBFAT_LOAD      equ   #5000        ; module load address (above the font/icons)
@@ -263,6 +265,8 @@ fsvm_nlen
                 ldir
                 ld    hl,(fs_save_len)
                 ld    (GBFAT_LEN),hl
+                xor   a                        ; op = save
+                ld    (GBFAT_OP),a
                 ld    a,(bank_cur)            ; page in PAGE_DATA, load + run the module
                 push  af
                 ld    a,PAGE_DATA
@@ -288,6 +292,44 @@ fsvm_unload
                 ret
 fsvm_fail
                 or    a
+                ret
+
+; fside_delete_file: delete the file named fs_req_name from the current directory
+; (fs_dir_clus) - free its clusters and clear its dir entry, via the GBFAT module
+; (op = delete). CF set = deleted. Used by drag-to-Trash (#62).
+fside_delete_file
+                ld    hl,fs_req_name          ; name + current dir -> the transfer area
+                ld    de,GBFAT_NAME
+                ld    bc,11
+                ldir
+                ld    hl,fs_dir_clus
+                ld    de,GBFAT_DIR
+                ld    bc,4
+                ldir
+                ld    a,1
+                ld    (GBFAT_OP),a            ; op = delete
+                ld    a,(bank_cur)            ; page in PAGE_DATA, load + run the module
+                push  af
+                ld    a,PAGE_DATA
+                call  bank_set
+                ld    hl,gbfat_modname
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#2000
+                ld    (fs_load_max),hl
+                ld    hl,GBFAT_LOAD
+                ld    (fs_load_dst),hl
+                call  fs_load_file           ; load GBFAT.BIN -> #5000
+                jr    nc,fsd_unload           ; module missing -> fail
+                call  GBFAT_LOAD             ; run it (reads low RAM, writes the IDE)
+fsd_unload
+                pop   af
+                call  bank_set
+                ld    a,(GBFAT_RES)
+                or    a
+                ret   z
+                scf
                 ret
 gbfat_modname   db    "GBFAT   BIN"          ; 8.3, space-padded
 
