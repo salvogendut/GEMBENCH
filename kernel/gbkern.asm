@@ -538,38 +538,16 @@ kf_stripe       ld    a,(kf_sy)
                 add   a,2
                 ld    (kf_sy),a
                 djnz  kf_stripe
-                ld    a,(kw_x)               ; left border: (x, y, 1, h) [fb_val #0F]
-                ld    b,a
-                ld    a,(kw_y)
-                ld    c,a
-                ld    d,1
-                ld    a,(kw_h)
-                ld    e,a
-                call  fill_xywh
-                ld    a,(kw_x)               ; right border: (x+w-1, y, 1, h)
-                ld    b,a
-                ld    a,(kw_w)
-                add   a,b
-                dec   a
-                ld    b,a
-                ld    a,(kw_y)
-                ld    c,a
-                ld    d,1
-                ld    a,(kw_h)
-                ld    e,a
-                call  fill_xywh
-                ld    a,(kw_x)               ; bottom border: (x, y+h-1, w, 1)
-                ld    b,a
-                ld    a,(kw_y)
-                ld    c,a
-                ld    a,(kw_h)
-                add   a,c
-                dec   a
-                ld    c,a
+                ld    a,(kw_x)               ; black borders via k_frame (all 4 edges; the
+                ld    b,a                     ; top edge coincides with the first title
+                ld    a,(kw_y)               ; stripe, so it is behavior-neutral) - was
+                ld    c,a                     ; three separate left/right/bottom fills
                 ld    a,(kw_w)
                 ld    d,a
-                ld    e,1
-                call  fill_xywh
+                ld    a,(kw_h)
+                ld    e,a
+                ld    a,2                     ; pen 2 = black (#0F)
+                call  k_frame
                 ld    a,#F0                   ; close gadget (white): (x+1, y+2, 2, 10)
                 ld    (fb_val),a
                 ld    a,(kw_x)
