@@ -32,6 +32,11 @@ bitmap icons (Disk, Clock, Trash) driven by a keyboard/joystick pointer.
 
 ![Current status](initial.png)
 
+The ICONED icon/cursor editor open on a `.IST` set (magnified canvas, pen palette,
+Prev/Next, UNDO) over a File Manager window — all co-resident under the kernel WM:
+
+![ICONED editor + file manager](iconed.png)
+
 What works today:
 
 - **Desktop** — backdrop, top bar (RAM probe + clock), draggable labelled icons.

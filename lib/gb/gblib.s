@@ -10,6 +10,8 @@
         .module gblib
         .globl  _gb_cls
         .globl  _gb_text
+        .globl  _gb_textk
+        .globl  _gb_textbw
         .globl  _gb_window
         .globl  _gb_fill
         .globl  _gb_frame
@@ -40,6 +42,7 @@
         .globl  _gb_wm_close
         .globl  _gb_wm_setpos
         .globl  _gb_wm_launch
+        .globl  _gb_wm_launch_as
         .globl  _gb_isdir
         .globl  _gb_chdir
         .globl  _gb_back
@@ -68,6 +71,28 @@ _gb_text:
         ld      c, l
         ld      d, #1           ; pen   = 1 (white)
         ld      e, #0           ; paper = 0
+        pop     hl
+        ex      (sp), hl
+        call    0x800C          ; GB_TEXT
+        ret
+
+;; void gb_textk(u8 col, u8 line, const char *s);   like gb_text but pen 2 (black)
+_gb_textk:
+        ld      b, a
+        ld      c, l
+        ld      d, #2           ; pen   = 2 (black)
+        ld      e, #0           ; paper = 0
+        pop     hl
+        ex      (sp), hl
+        call    0x800C          ; GB_TEXT
+        ret
+
+;; void gb_textbw(u8 col, u8 line, const char *s);   black pen on white paper
+_gb_textbw:
+        ld      b, a
+        ld      c, l
+        ld      d, #2           ; pen   = 2 (black)
+        ld      e, #1           ; paper = 1 (white)
         pop     hl
         ex      (sp), hl
         call    0x800C          ; GB_TEXT
@@ -254,6 +279,10 @@ _gb_wm_setpos:
 ;; window with the file as its launch arg (the non-blocking gb_launch).
 _gb_wm_launch:
         jp      0x8069          ; GB_WMLAUNCH
+;; void gb_wm_launch_as(const char *app);   app (8.3 name) in HL -> open it as a
+;; co-resident window with the current dir entry as its file arg (#70).
+_gb_wm_launch_as:
+        jp      0x808A          ; GB_WMLAUNCHAS
 ;; unsigned char gb_isdir(void);   1 if the last dir entry is a directory, else 0
 _gb_isdir:
         jp      0x806C          ; GB_ISDIR

@@ -133,6 +133,12 @@ G = {
     '|': ["  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "  #  "],
     '}': [" #   ", "  #  ", "  #  ", "   # ", "  #  ", "  #  ", " #   "],
     '~': ["     ", "     ", " ##  ", "#  ##", "     ", "     ", "     "],
+    # Reusable UI triangle glyphs at codes 128-131 (up/down/left/right), e.g. for
+    # spinner/scroll arrows. Drawn like any character (gb_text white / gb_textk black).
+    chr(128): ["  #  ", "  #  ", " ### ", " ### ", "#####", "#####", "     "],  # up
+    chr(129): ["#####", "#####", " ### ", " ### ", "  #  ", "  #  ", "     "],  # down
+    chr(130): ["   ##", "  ###", " ####", "#####", " ####", "  ###", "   ##"],  # left
+    chr(131): ["##   ", "###  ", "#### ", "#####", "#### ", "###  ", "##   "],  # right
 }
 
 
@@ -157,7 +163,7 @@ def main(argv):
     if len(argv) != 2:
         sys.exit("usage: genfont.py <out.FNT>")
     out = argv[1]
-    last = 127
+    last = 131                                     # 32..127 ASCII + 128..131 triangles
     header = bytearray(16)
     header[0:4] = MAGIC
     header[4] = VERSION

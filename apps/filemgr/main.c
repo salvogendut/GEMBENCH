@@ -6,9 +6,9 @@
  *   - ICONS : the type icons laid out in a grid, names beneath.
  * A scrollbar at the left inner edge scrolls whichever view is active: click the
  * track above/below the thumb to page, or drag the thumb. A click selects an
- * entry (red frame); a double-click opens it (gb_wm_launch -> a co-resident
- * window by file type). The close gadget or ESC closes the window; drag the title
- * bar to move it.
+ * entry (red frame); a double-click opens it (open_entry routes by file extension
+ * to a co-resident app - #70). The close gadget or ESC closes the window; drag the
+ * title bar to move it.
  *
  * All of this is app-level: the kernel/WM owns the window (focus, z-order, the
  * rect-clipped repaint); the contents - views, grid, scrollbar - are drawn here
@@ -180,10 +180,18 @@ static unsigned char thumb_y(void)
     return (unsigned char)(CT_Y + ((unsigned)(CT_H - thumb_h()) * top) / (tl - vl));
 }
 
+#define ARR_H 8                          /* up/down scroll-button height (px) */
+
 static void draw_scrollbar(void)
 {
     gb_fill(SB_X, CT_Y, SB_W, CT_H, 1);                        /* white track */
     gb_fill(SB_X + 1, thumb_y() + 1, 1, thumb_h() - 2, 3);     /* red thumb, inset 1px */
+    /* up/down buttons: a white patch (covers the thumb if it parks at an end), then
+       the glyph black-on-white, aligned with the thumb (SB_X+1) */
+    gb_fill(SB_X, CT_Y, SB_W, ARR_H, 1);
+    gb_textbw(SB_X + 1, CT_Y, GLYPH_TRI_UP);
+    gb_fill(SB_X, CT_Y + CT_H - ARR_H, SB_W, ARR_H, 1);
+    gb_textbw(SB_X + 1, CT_Y + CT_H - ARR_H, GLYPH_TRI_DOWN);
 }
 
 /* draw a name truncated to fit a cell (icons view) */
@@ -273,18 +281,36 @@ static void relist(void)
     draw();
 }
 
+/* ext_is: does the positioned entry's raw 11-byte 8.3 name end in this extension? */
+static unsigned char ext_is(const char *e, char a, char b, char c)
+{
+    return (unsigned char)(e[8] == a && e[9] == b && e[10] == c);
+}
+
 /* open_entry: a directory descends in place (gb_chdir + re-list, same window); a
-   file launches a co-resident app by type (gb_wm_launch). */
+   file opens a co-resident app chosen here by extension (#70 - the routing that
+   used to live in the kernel's app_for_ext is now app-level C):
+     .APP             a GEOBENCH app -> run it (no file arg)
+     .IST / .SPR      the icon/cursor editor (ICONED), with the file
+     .TXT / .CFG / .BAS   the text editor (NOTEPAD), with the file
+     anything else    the read-only VIEWER, with the file
+   (Part 3 will route native .BIN/.BAS to a "run via AMSDOS" confirm instead.) */
 static void open_entry(unsigned char idx)
 {
+    char *e;
     dir_seek(idx);                 /* position at the entry (sets attr + cluster) */
-    if (gb_isdir()) {
-        gb_chdir();
-        relist();
-    } else {
-        nsel = 0;
-        gb_wm_launch();
-    }
+    if (gb_isdir()) { gb_chdir(); relist(); return; }
+    nsel = 0;
+    e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
+    if (ext_is(e, 'A', 'P', 'P'))
+        gb_wm_open(e);                          /* run the app itself, file-less */
+    else if (ext_is(e, 'I', 'S', 'T') || ext_is(e, 'S', 'P', 'R'))
+        gb_wm_launch_as("ICONED  APP");
+    else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G') ||
+             ext_is(e, 'B', 'A', 'S'))
+        gb_wm_launch_as("NOTEPAD APP");
+    else
+        gb_wm_launch_as("VIEWER  APP");
 }
 
 /* sb_drag: while the fire is held, map the pointer's Y to the scroll position
@@ -364,9 +390,18 @@ static void on_frame(void)
         return;
     }
 
-    /* scrollbar */
+    /* scrollbar: up/down arrow buttons (one line) at the ends, page/drag between */
     if (mx >= SB_X && mx < SB_X + SB_W && my >= CT_Y && my < CT_Y + CT_H) {
-        sb_click(my);
+        unsigned char old = top, tl = total_lines(), vl = vis_lines();
+        if (my < CT_Y + ARR_H) {                     /* up arrow */
+            if (top) top--;
+        } else if (my >= CT_Y + CT_H - ARR_H) {      /* down arrow */
+            if (tl > vl && top < tl - vl) top++;
+        } else {
+            sb_click(my);
+            return;
+        }
+        if (top != old) draw();
         return;
     }
 
