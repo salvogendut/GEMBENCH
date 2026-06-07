@@ -31,6 +31,8 @@ KCFG_MEMSTR     equ   #121A        ; "<decimal>K" top-bar string (module -> kern
 APP_HANDLER     equ   #1300        ; word: registered app event handler (0 = none)
 GB_MSG          equ   #1302        ; message record: type, p0, p1, p2 (4 bytes)
 GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte column
+GB_MSG_DROP     equ   2            ; message type: a file was dropped on this window
+                                   ; (DnD, #62); name at WM_DRAGNAME, pos at POLL_MX/MY
 POLL_MX         equ   #1306        ; last poll: cursor byte column (mx)
 POLL_MY         equ   #1307        ; last poll: cursor line (my)
 POLL_FLAGS      equ   #1308        ; last poll: flags (bit0 click, bit1 quit, bit2 fire)
@@ -49,6 +51,12 @@ WM_ESZ          equ   25           ;   page,x,y,w,h, on_frame(2),on_repaint(2),
 WM_MAXWIN       equ   4            ;   on_event(2), menu(2), flags(1), arg(11)
 WM_Z            equ   #13B6        ; z-order: WM_NWIN slot indices, [0]=bottom
 WM_FPREV        equ   #13BA        ; previously focused slot (menu-swap edge detect)
+WM_DRAGNAME     equ   #13BB        ; drag-and-drop (#62): dragged 11-byte 8.3 name,
+                                   ; app-visible (the drop target reads it on GB_MSG_DROP)
+WM_DRAGSRC      equ   #13C6        ; source window slot of the active drag
+WM_DRAGMOV      equ   #13C7        ; 1 once the pointer moved (a drag, not a click)
+WM_DRAGX0       equ   #13C8        ; drag start position (byte col / line) to detect
+WM_DRAGY0       equ   #13C9        ; movement
 WM_FR_X         equ   1            ; entry field offsets (after +0 page):
 WM_FR_FRAME     equ   5
 WM_FR_REPAINT   equ   7
@@ -99,6 +107,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_chdir                ; GB_CHDIR       #806F
                 jp    k_back                 ; GB_BACK        #8072
                 jp    k_entname              ; GB_ENTNAME     #8075
+                jp    k_drag_start           ; GB_DRAGSTART   #8078
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1494,6 +1503,79 @@ wht_l           ld    a,(wm_hz)
                 ret
 wht_none        scf
                 ret
+
+; k_drag_start (GB_DRAGSTART, #62): HL = 11-byte 8.3 name of the dragged item in
+; the caller (source) page. Record it, then run a drag loop (the WM loop is
+; suspended) that follows the pointer until the fire button is released. On release,
+; if the pointer moved and the drop point is over a different live window that has
+; an on_event handler, deliver a GB_MSG_DROP to it (its page mapped) - it reads the
+; name from WM_DRAGNAME and the drop position from gb_mx/gb_my. Returns A = 1 if it
+; was dropped on a target, A = 0 if it was just a click (no move / no target /
+; dropped on itself) so the source can fall through to its normal click handling.
+k_drag_start
+                ld    de,WM_DRAGNAME              ; stash the dragged name
+                call  copy11
+                ld    a,(bank_cur)               ; remember the source page to restore
+                ld    (wm_drag_pg),a
+                ld    a,(WM_FOCUS)               ; source = the focused (calling) window
+                ld    (WM_DRAGSRC),a
+                xor   a
+                ld    (WM_DRAGMOV),a             ; moved = 0
+                ld    a,(POLL_MX)                ; record the start position
+                ld    (WM_DRAGX0),a
+                ld    a,(POLL_MY)
+                ld    (WM_DRAGY0),a
+ds_loop
+                call  k_poll                      ; pace 50Hz + move cursor + POLL_*
+                ld    a,(POLL_MX)                ; pointer moved off the start cell?
+                ld    hl,WM_DRAGX0
+                cp    (hl)
+                jr    nz,ds_moved
+                ld    a,(POLL_MY)
+                ld    hl,WM_DRAGY0
+                cp    (hl)
+                jr    z,ds_held
+ds_moved        ld    a,1
+                ld    (WM_DRAGMOV),a
+ds_held         ld    a,(POLL_FLAGS)            ; fire still held -> keep dragging
+                bit   2,a
+                jr    nz,ds_loop
+                ld    a,(WM_DRAGMOV)            ; released: never moved -> a plain click
+                or    a
+                jr    z,ds_click
+                call  wm_hit_test                 ; CF = nothing under the drop point
+                jr    c,ds_click
+                ld    b,a                          ; B = target slot
+                ld    a,(WM_DRAGSRC)
+                cp    b
+                jr    z,ds_click                   ; dropped on itself -> no-op
+                ld    a,b
+                call  wm_entry                     ; HL = target entry
+                ld    c,(hl)                       ; C = target page (+0)
+                ld    de,WM_FR_EVENT               ; target's on_event handler
+                add   hl,de
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a
+                ld    a,h
+                or    l
+                jr    z,ds_click                   ; no handler -> treat as a click
+                ld    a,GB_MSG_DROP
+                ld    (GB_MSG),a
+                ld    a,c                           ; map the target's page, call it
+                call  bank_set                      ; (it reads WM_DRAGNAME + POLL_MX/MY)
+                call  md_call
+                ld    a,(wm_drag_pg)              ; restore the source page
+                call  bank_set
+                ld    a,1
+                ret
+ds_click
+                ld    a,(wm_drag_pg)              ; ensure the source page is mapped
+                call  bank_set
+                xor   a
+                ret
+wm_drag_pg      db    0
 
 ; wm_raise: A = slot -> move it to z-order top and focus it (keeps the others'
 ; relative order). Compacts WM_Z removing the slot, then re-appends it at the end.

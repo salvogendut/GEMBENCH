@@ -59,6 +59,11 @@ typedef struct {
     unsigned char p2;
 } gb_msg_t;
 #define GB_MSG_MENU 1
+/* GB_MSG_DROP (#62): a file was dropped on this window via drag-and-drop. The
+ * dragged item's 11-byte 8.3 name is at gb_dragname; the drop position is the
+ * current gb_mx()/gb_my(). Delivered to the *target* window's on_event handler. */
+#define GB_MSG_DROP 2
+#define gb_dragname ((const char *)0x13BB)
 #define gb_msg (*(volatile gb_msg_t *)0x1302)
 void gb_on_event(void (*handler)(void));   /* register handler, 0 to clear */
 
@@ -119,4 +124,11 @@ unsigned char gb_isdir(void);
 void gb_chdir(void);
 void gb_back(void);
 char *gb_entname(void);  /* current entry's raw 11-byte 8.3 name (with extension) */
+
+/* Drag-and-drop (issue #62). gb_drag_start begins dragging the named item (an
+ * 11-byte 8.3 name); it blocks, following the pointer until the button is
+ * released. Returns 1 if it was dropped on another window (that window's
+ * on_event got a GB_MSG_DROP and handled it), or 0 if it was just a click (no
+ * movement / no target) so the caller should treat it as a normal selection. */
+unsigned char gb_drag_start(const char *name);
 #endif /* GB_H */
