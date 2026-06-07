@@ -479,7 +479,7 @@ kwin_frame
                 xor   a
                 ld    (fb_val),a
                 call  fill_block
-                ld    a,(kw_x)               ; title bar (black, 14 high)
+                ld    a,(kw_x)               ; title bar: white base (14 high) ...
                 ld    (fb_x),a
                 ld    a,(kw_y)
                 ld    (fb_y),a
@@ -487,9 +487,27 @@ kwin_frame
                 ld    (fb_w),a
                 ld    a,14
                 ld    (fb_h),a
-                ld    a,#0F
+                ld    a,#F0
                 ld    (fb_val),a
                 call  fill_block
+                ld    a,1                     ; ... with black horizontal stripes
+                ld    (fb_h),a               ; (1-line fills on every other line)
+                ld    a,#0F
+                ld    (fb_val),a
+                ld    a,(kw_y)
+                ld    (kf_sy),a
+                ld    b,7
+kf_stripe       ld    a,(kf_sy)
+                ld    (fb_y),a
+                push  bc
+                call  fill_block
+                pop   bc
+                ld    a,(kf_sy)
+                add   a,2
+                ld    (kf_sy),a
+                djnz  kf_stripe
+                ld    a,(kw_y)               ; restore fb_y for the borders (they
+                ld    (fb_y),a               ; reuse it); fb_val stays #0F (black)
                 ld    a,(kw_x)               ; left border
                 ld    (fb_x),a
                 ld    a,1
@@ -539,6 +557,7 @@ kw_x            db    0
 kw_y            db    0
 kw_w            db    0
 kw_h            db    0
+kf_sy           db    0            ; kwin_frame: current title-bar stripe line
 kw_title        defs  24
 
 ; --- directory enumeration services --------------------------------------
