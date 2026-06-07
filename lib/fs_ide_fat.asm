@@ -267,7 +267,16 @@ fsvm_nlen
                 ld    (GBFAT_LEN),hl
                 xor   a                        ; op = save
                 ld    (GBFAT_OP),a
-                ld    a,(bank_cur)            ; page in PAGE_DATA, load + run the module
+                jp    gbfat_run               ; page in + load + run the module
+fsvm_fail
+                or    a
+                ret
+
+; gbfat_run: the transfer area is already filled (name/op + per-op fields). Page in
+; PAGE_DATA, load GBFAT.BIN to GBFAT_LOAD via the read path, CALL it, restore the
+; caller's page. CF set = GBFAT_RES nonzero (success). Shared by save + delete.
+gbfat_run
+                ld    a,(bank_cur)
                 push  af
                 ld    a,PAGE_DATA
                 call  bank_set
@@ -280,18 +289,15 @@ fsvm_nlen
                 ld    hl,GBFAT_LOAD
                 ld    (fs_load_dst),hl
                 call  fs_load_file           ; load GBFAT.BIN -> #5000 (above icons)
-                jr    nc,fsvm_unload           ; module missing -> fail
+                jr    nc,gr_unload            ; module missing -> fail
                 call  GBFAT_LOAD             ; run it (reads low RAM, writes the IDE)
-fsvm_unload
+gr_unload
                 pop   af
                 call  bank_set
                 ld    a,(GBFAT_RES)         ; result byte -> CF
                 or    a
                 ret   z
                 scf
-                ret
-fsvm_fail
-                or    a
                 ret
 
 ; fside_delete_file: delete the file named fs_req_name from the current directory
@@ -308,29 +314,7 @@ fside_delete_file
                 ldir
                 ld    a,1
                 ld    (GBFAT_OP),a            ; op = delete
-                ld    a,(bank_cur)            ; page in PAGE_DATA, load + run the module
-                push  af
-                ld    a,PAGE_DATA
-                call  bank_set
-                ld    hl,gbfat_modname
-                ld    de,fs_req_name
-                ld    bc,11
-                ldir
-                ld    hl,#2000
-                ld    (fs_load_max),hl
-                ld    hl,GBFAT_LOAD
-                ld    (fs_load_dst),hl
-                call  fs_load_file           ; load GBFAT.BIN -> #5000
-                jr    nc,fsd_unload           ; module missing -> fail
-                call  GBFAT_LOAD             ; run it (reads low RAM, writes the IDE)
-fsd_unload
-                pop   af
-                call  bank_set
-                ld    a,(GBFAT_RES)
-                or    a
-                ret   z
-                scf
-                ret
+                jp    gbfat_run               ; page in + load + run the module
 gbfat_modname   db    "GBFAT   BIN"          ; 8.3, space-padded
 
 ; --- read-path state (shared core state lives in fs_fat32_core.asm) -------

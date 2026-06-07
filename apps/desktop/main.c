@@ -15,7 +15,6 @@
  * backdrop pen - no save-under needed. */
 #include "gb.h"
 
-#define N_ICONS 3
 #define IC_W    8             /* icon width  (byte cols) = 32 px */
 #define IC_H    32            /* icon height (lines)             */
 #define BOX_H   44            /* icon + label box (hit-test/lift) */
@@ -25,14 +24,44 @@
 #define DCLICK  40
 #define NONE    0xFF
 
-/* icon positions are mutable (drag updates them) */
-static unsigned char ic_x[N_ICONS] = { 0, 72, 72 };
-static unsigned char ic_y[N_ICONS] = { 35, 35, 160 };
-static const unsigned char ic_slot[N_ICONS] = { 0, 2, 3 };     /* IST slots */
-static const char *const ic_lbl[N_ICONS] = { "Disk A", "Clock", "Trash" };
+/* The desktop icons: drives (C = IDE, A/B = floppies) + Clock + Trash (#65). The
+   drive icons appear only when that drive is present (gb_drives poll); Clock and
+   Trash are always shown. Positions are mutable (drag updates them). */
+#define N_ICONS  5
+#define IDX_C    0            /* Disk C = IDE */
+#define IDX_A    1            /* Disk A = floppy A */
+#define IDX_B    2            /* Disk B = floppy B */
+#define IDX_CLOCK 3
+#define IDX_TRASH 4
+
+static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, 72, 72 };
+static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 160 };
+static const unsigned char ic_slot[N_ICONS] = { 1, 0, 0, 2, 3 };  /* ide,flp,flp,clk,trash */
+static const char *const ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash" };
+static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0 };  /* opens the file mgr */
+static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };      /* drives set by poll */
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
 static unsigned char dc_timer, dc_idx, held_prev;
+
+#define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
+#define DRIVE_STEP 46         /* (BOX_H 44 + 2 gap), in detection order */
+
+/* drive_poll: probe the drives, show an icon per present one and pack them down
+   the left column in detection order (C, A, B) - no gaps for absent drives (#65). */
+static void drive_poll(void)
+{
+    unsigned char d = gb_drives(), i, n = 0;
+    ic_present[IDX_C] = (d & GB_DRV_C) ? 1 : 0;
+    ic_present[IDX_A] = (d & GB_DRV_A) ? 1 : 0;
+    ic_present[IDX_B] = (d & GB_DRV_B) ? 1 : 0;
+    for (i = 0; i < 3; i++)               /* the three drive icons are indices 0..2 */
+        if (ic_present[i]) {
+            ic_x[i] = 0;
+            ic_y[i] = DRIVE_TOP + n * DRIVE_STEP;
+            n++;
+        }
+}
 
 static void draw_icon(unsigned char i)
 {
@@ -44,8 +73,9 @@ static void paint(void)
 {
     unsigned char i;
     gb_fill(0, 8, 80, 192, 0);                 /* backdrop, below the top bar */
-    gb_text(1, 10, "Dbl-click: Disk=files, Clock=C demo");
-    for (i = 0; i < N_ICONS; i++) draw_icon(i);
+    gb_text(1, 10, "Dbl-click a drive to browse it");
+    for (i = 0; i < N_ICONS; i++)
+        if (ic_present[i]) draw_icon(i);
     gb_curshow();
 }
 
@@ -53,7 +83,8 @@ static unsigned char hit_icon(unsigned char mx, unsigned char my)
 {
     unsigned char i;
     for (i = 0; i < N_ICONS; i++)
-        if (mx >= ic_x[i] && mx < ic_x[i] + IC_W &&
+        if (ic_present[i] &&
+            mx >= ic_x[i] && mx < ic_x[i] + IC_W &&
             my >= ic_y[i] && my < ic_y[i] + BOX_H)
             return i;
     return NONE;
@@ -101,8 +132,9 @@ static void drop(void)
     paint();
 }
 
-/* a single "Disk" menu title at byte column 10 (clear of mem and the clock) */
-static const unsigned char dt_menu[] = { 1, 10, 'D','i','s','k',0,0,0,0 };
+/* a single "Media" menu title at byte column 10 (clear of mem and the clock):
+   clicking it re-polls the drives and refreshes the desktop (#65) */
+static const unsigned char dt_menu[] = { 1, 10, 'M','e','d','i','a',0,0,0 };
 
 /* on_event: kernel callback (issue #32). Fires when the user clicks the
    kernel-owned top bar; proves the kernel->app round-trip by showing the
@@ -121,24 +153,19 @@ static char *trash_label(void)
 
 static void on_event(void)
 {
-    static char msg[] = "Top-bar click @ col 00";
-    unsigned char c;
-    if (gb_msg.type == GB_MSG_DROP) {          /* a file was dropped on the desktop (#62) */
-        if (hit_icon(gb_mx(), gb_my()) == 2) { /* on the Trash icon -> delete the file */
-            gb_file_delete(gb_dragname);       /* (the source window then re-lists) */
+    if (gb_msg.type == GB_MSG_DROP) {                  /* a file dropped on the desktop (#62) */
+        if (hit_icon(gb_mx(), gb_my()) == IDX_TRASH) { /* on Trash -> delete the file */
+            gb_file_delete(gb_dragname);               /* (the source window then re-lists) */
             gb_curhide();
-            gb_text(1, 10, trash_label());     /* "Trash: NAME" confirmation */
+            gb_text(1, 10, trash_label());             /* "Trash: NAME" confirmation */
             gb_curshow();
         }
         return;
     }
     if (gb_msg.type != GB_MSG_MENU) return;
-    c = gb_msg.p0;
-    msg[20] = "0123456789ABCDEF"[c >> 4];
-    msg[21] = "0123456789ABCDEF"[c & 15];
-    gb_curhide();
-    gb_text(1, 10, msg);
-    gb_curshow();
+    gb_curhide();                                      /* "Media": re-poll drives + refresh */
+    drive_poll();
+    paint();
 }
 
 /* on_frame: one frame of the desktop, called by the kernel's window-manager loop
@@ -171,9 +198,9 @@ static void on_frame(void)
     if (icon == NONE) return;
 
     if (dc_timer && dc_idx == icon) {      /* second click -> open */
-        if (icon == 0)      gb_wm_open("FILEMGR BIN");  /* co-resident window  */
-        else if (icon == 1) gb_run("CHELLO  BIN");      /* modal; kernel repaints
-                                                           the windows on return */
+        if (ic_drive[icon])      gb_wm_open("FILEMGR BIN");  /* browse the drive    */
+        else if (icon == IDX_CLOCK) gb_run("CHELLO  BIN");   /* modal; kernel repaints
+                                                                the windows on return */
         dc_timer = 0;
         held_prev = 0;
     } else {                               /* first click: arm + start drag */
@@ -191,6 +218,7 @@ static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint, on_event, dt_m
 
 void main(void)
 {
+    drive_poll();                               /* drives present at boot -> icons (#65) */
     paint();
     drag_active = 0;
     dc_timer = 0;

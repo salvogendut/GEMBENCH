@@ -46,6 +46,7 @@
         .globl  _gb_entname
         .globl  _gb_drag_start
         .globl  _gb_file_delete
+        .globl  _gb_drives
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -279,3 +280,8 @@ _gb_file_delete:
         ret     nc
         inc     a
         ret
+
+;; unsigned char gb_drives(void);  probe drives -> bitmask in A:
+;;   bit0 = floppy A, bit1 = floppy B, bit2 = IDE (Disk C)
+_gb_drives:
+        jp      0x807E          ; GB_DRIVES (returns the mask in A)

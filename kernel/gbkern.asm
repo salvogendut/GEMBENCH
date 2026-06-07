@@ -111,6 +111,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_entname              ; GB_ENTNAME     #8075
                 jp    k_drag_start           ; GB_DRAGSTART   #8078
                 jp    k_fs_delete            ; GB_FSDELETE    #807B
+                jp    k_drive_poll           ; GB_DRIVES      #807E
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1101,6 +1102,36 @@ k_fssave
 
 ; k_getkey (GB_GETKEY): A = a typed character from the keyboard buffer, or 0 if
 ; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
+; k_drive_poll (GB_DRIVES, #65): probe the drives GEOBENCH can reach and return a
+; bitmask in A: bit0 = floppy A, bit1 = floppy B, bit2 = IDE (Disk C). Probing a
+; floppy spins the motor + recalibrates (slow, noisy) - call at boot and on demand.
+k_drive_poll
+                ld    c,0                          ; result bits
+                call  fs_ide_present               ; IDE -> Disk C (bit2)
+                jr    nc,kdp_a
+                set   2,c
+kdp_a
+                push  bc
+                xor   a                             ; floppy A = unit 0
+                ld    (fsam_unit),a
+                call  fsam_present
+                pop   bc
+                jr    nc,kdp_b
+                set   0,c
+kdp_b
+                push  bc
+                ld    a,1                           ; floppy B = unit 1
+                ld    (fsam_unit),a
+                call  fsam_present
+                pop   bc
+                jr    nc,kdp_done
+                set   1,c
+kdp_done
+                xor   a                             ; leave the floppy backend on unit 0
+                ld    (fsam_unit),a
+                ld    a,c
+                ret
+
 ; k_fs_delete (GB_FSDELETE, #62): HL = 11-byte 8.3 name in the caller page. Delete
 ; that file from the current directory (free clusters + clear the dir entry) via
 ; the paged GBFAT module. CF set = deleted. Used by drag-to-Trash.
