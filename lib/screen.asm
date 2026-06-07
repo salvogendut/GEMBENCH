@@ -66,6 +66,16 @@ scr_addr
 ; blit_bitmap: copy a bm_w x bm_h byte bitmap at (bm_x, bm_y) straight to the
 ; screen. bm_src points at row-major, already-encoded bytes.
 blit_bitmap
+                ld    a,(bm_x)               ; cull if fully outside the clip rect, so
+                ld    b,a                     ; an icon under a higher window is not drawn
+                ld    a,(bm_y)               ; over it during a partial repaint
+                ld    c,a
+                ld    a,(bm_w)
+                ld    d,a
+                ld    a,(bm_h)
+                ld    e,a
+                call  rect_cull
+                ret   c
                 ld    a,(bm_h)
                 ld    (bl_rows),a
                 ld    a,(bm_y)
@@ -186,6 +196,42 @@ cfc_yr          ld    b,a
                 or    a                         ; clear CF
                 ret
 cfc_empty       scf
+                ret
+
+; rect_cull: B=x C=y D=w E=h (byte cols / lines) -> CF set if the rectangle is
+; fully outside the clip rect (so the caller skips drawing). Used to cull whole
+; icons/glyphs so a lower layer never paints over a higher window during a partial
+; repaint. Clobbers A,H,L.
+rect_cull
+                ld    a,b                       ; X: right = x + w
+                add   a,d
+                ld    l,a
+                ld    a,(clip_x)
+                cp    l
+                jr    nc,rc_out                 ; clip_x >= right -> left of clip
+                ld    a,(clip_x)               ; clip_right = clip_x + clip_w
+                ld    h,a
+                ld    a,(clip_w)
+                add   a,h
+                cp    b
+                jr    c,rc_out                  ; clip_right < x -> right of clip
+                jr    z,rc_out                  ; clip_right == x -> right of clip
+                ld    a,c                       ; Y: bottom = y + h
+                add   a,e
+                ld    l,a
+                ld    a,(clip_y)
+                cp    l
+                jr    nc,rc_out                 ; above clip
+                ld    a,(clip_y)               ; clip_bottom = clip_y + clip_h
+                ld    h,a
+                ld    a,(clip_h)
+                add   a,h
+                cp    c
+                jr    c,rc_out                  ; below clip
+                jr    z,rc_out
+                or    a                          ; clear CF -> visible
+                ret
+rc_out          scf
                 ret
 
 ; ---------------------------------------------------------------------------
