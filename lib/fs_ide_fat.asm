@@ -105,13 +105,13 @@ fdn_have
                 cp    '.'
                 jr    z,fdn_skip
 
+                ld    a,b                       ; attr -> fs_ent_attr NOW, before the
+                ld    (fs_ent_attr),a           ; name ldir below clobbers B (BC count)
                 push  hl                       ; valid -> copy fields out
                 ld    de,fs_ent_name
                 ld    bc,11
                 ldir
                 pop   hl
-                ld    a,b                       ; attr saved in B
-                ld    (fs_ent_attr),a
                 push  hl
                 ld    de,#1C                    ; size (4 bytes @ 0x1C)
                 add   hl,de
