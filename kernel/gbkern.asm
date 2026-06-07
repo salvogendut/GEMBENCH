@@ -1121,16 +1121,11 @@ kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs +
                                               ; (fire = the click; it also buffers a
                                               ; char, e.g. 'Z' - drop it while held)
 
-; k_vsync (GB_VSYNC): wait for the frame flyback (50 Hz pace, no pointer/clock),
-; then report whether ESC is held -> A = 1 if so, 0 otherwise. Lets a keyboard app
-; quit reliably via the key matrix instead of a guessed ESC char code.
+; k_vsync (GB_VSYNC): no longer used - apps are frame-paced by the WM loop (on_frame
+; runs once per k_poll) rather than driving their own gb_vsync loop. Stubbed to a
+; sane "no ESC" return; ABI slot kept so the jump-table address stays fixed.
 k_vsync
-                call  MC_WAIT_FLYBACK
-                ld    a,66                   ; KEY_ESC
-                call  KM_TEST_KEY            ; NZ if held
-                ld    a,0
-                ret   z
-                inc   a
+                xor   a
                 ret
 
 ; k_onevent (GB_ONEVENT): register the calling app's event handler. HL = handler
