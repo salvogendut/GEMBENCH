@@ -58,6 +58,8 @@ WM_DRAGSRC      equ   #13C6        ; source window slot of the active drag
 WM_DRAGMOV      equ   #13C7        ; 1 once the pointer moved (a drag, not a click)
 WM_DRAGX0       equ   #13C8        ; last drag position (byte col / line); movement
 WM_DRAGY0       equ   #13C9        ; vs this drives both the ghost and click/drag tell
+WM_DRAGDRV      equ   #13CA        ; source drive of the active drag (for cross-drive copy)
+WM_DRAGDIR      equ   #13CB        ; source directory cluster (4 bytes), captured at start
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
 CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT.SPR is
@@ -118,6 +120,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_drive_poll           ; GB_DRIVES      #807E
                 jp    fs_set_drive           ; GB_SETDRIVE    #8081 (A = drive)
                 jp    k_get_drive            ; GB_GETDRIVE    #8084
+                jp    k_file_copy            ; GB_FSCOPY      #8087
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1151,6 +1154,68 @@ k_get_drive
                 ld    a,(fs_cur_drive)
                 ret
 
+; k_file_copy (GB_FSCOPY, #65 phase 3): copy the dragged file (WM_DRAGNAME) from the
+; source drive/dir captured at drag start (WM_DRAGDRV/WM_DRAGDIR) to the CURRENT
+; (target) drive - landing in that drive's root. Loads into the staging buffer
+; (<= GBFAT_MAX) then saves. The caller (the drop target window) sets the active
+; drive first. CF set = copied. Restores the target drive/dir so the caller relists.
+k_file_copy
+                ld    a,(fs_cur_drive)        ; remember the target context to restore
+                ld    (fc_tdrv),a
+                ld    hl,fs_dir_clus
+                ld    de,fc_tdir
+                ld    bc,4
+                ldir
+                ld    a,(WM_DRAGDRV)         ; --- switch to the source, load the file ---
+                call  fs_set_drive
+                ld    hl,WM_DRAGDIR
+                ld    de,fs_dir_clus
+                ld    bc,4
+                ldir
+                ld    hl,WM_DRAGNAME
+                ld    de,fs_req_name
+                call  copy11
+                ld    hl,GBFAT_MAX
+                ld    (fs_load_max),hl
+                ld    hl,GBFAT_DATA
+                ld    (fs_load_dst),hl
+                di
+                call  fs_load_file           ; -> BC = bytes loaded
+                ei
+                jr    nc,fc_fail              ; source file not found
+                ld    (fc_len),bc
+                ld    a,(fc_tdrv)            ; --- switch to the target, save the file ---
+                call  fs_set_drive
+                ld    hl,WM_DRAGNAME
+                ld    de,fs_req_name
+                call  copy11
+                ld    hl,GBFAT_DATA
+                ld    (fs_save_src),hl
+                ld    hl,(fc_len)
+                ld    (fs_save_len),hl
+                di
+                call  fs_save_file           ; CF = saved
+                ei
+                push  af
+                call  fc_restore
+                pop   af
+                ret
+fc_fail
+                call  fc_restore
+                or    a
+                ret
+fc_restore                                    ; active drive + dir = the target's again
+                ld    a,(fc_tdrv)
+                call  fs_set_drive
+                ld    hl,fc_tdir
+                ld    de,fs_dir_clus
+                ld    bc,4
+                ldir
+                ret
+fc_tdrv         db    0
+fc_tdir         defs  4
+fc_len          defw  0
+
 ; k_fs_delete (GB_FSDELETE, #62): HL = 11-byte 8.3 name in the caller page. Delete
 ; that file from the current directory (free clusters + clear the dir entry) via
 ; the paged GBFAT module. CF set = deleted. Used by drag-to-Trash.
@@ -1583,6 +1648,12 @@ k_drag_start
                 ld    (wm_drag_pg),a
                 ld    a,(WM_FOCUS)               ; source = the focused (calling) window
                 ld    (WM_DRAGSRC),a
+                ld    a,(fs_cur_drive)           ; capture the source drive + directory now
+                ld    (WM_DRAGDRV),a             ; (active = the source FM's) for a later
+                ld    hl,fs_dir_clus             ; cross-drive copy (#65 phase 3)
+                ld    de,WM_DRAGDIR
+                ld    bc,4
+                ldir
                 xor   a
                 ld    (WM_DRAGMOV),a             ; moved = 0, ghost not shown yet
                 ld    (ghost_on),a

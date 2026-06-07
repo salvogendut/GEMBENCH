@@ -156,4 +156,10 @@ unsigned char gb_drives(void);
 #define GB_DRIVE_B 2
 void gb_set_drive(unsigned char d);
 unsigned char gb_get_drive(void);
+
+/* gb_file_copy: copy the file currently being dragged (its name + source drive and
+ * directory were captured by gb_drag_start) into the *current* drive's root. Called
+ * by a drop-target window's on_event on GB_MSG_DROP to receive a cross-drive
+ * drag-and-drop. Returns 1 if copied, 0 on failure (#65 phase 3). */
+unsigned char gb_file_copy(void);
 #endif /* GB_H */
