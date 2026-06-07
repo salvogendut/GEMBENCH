@@ -66,6 +66,16 @@ scr_addr
 ; blit_bitmap: copy a bm_w x bm_h byte bitmap at (bm_x, bm_y) straight to the
 ; screen. bm_src points at row-major, already-encoded bytes.
 blit_bitmap
+                ld    a,(bm_x)               ; cull if fully outside the clip rect, so
+                ld    b,a                     ; an icon under a higher window is not drawn
+                ld    a,(bm_y)               ; over it during a partial repaint
+                ld    c,a
+                ld    a,(bm_w)
+                ld    d,a
+                ld    a,(bm_h)
+                ld    e,a
+                call  rect_cull
+                ret   c
                 ld    a,(bm_h)
                 ld    (bl_rows),a
                 ld    a,(bm_y)
@@ -97,17 +107,19 @@ bl_loop
 ; fill_block: fill an fb_w x fb_h byte rectangle at (fb_x, fb_y) with fb_val.
 ; (fb_val is a Mode 1 byte: #00 blue, #F0 white, #0F black, #FF red.)
 fill_block
-                ld    a,(fb_h)
+                call  clip_fb_copy           ; fbw_* = fb_* clipped to the clip rect
+                ret   c                        ; fully outside -> nothing to fill
+                ld    a,(fbw_h)
                 ld    (fb_rows),a
-                ld    a,(fb_y)
+                ld    a,(fbw_y)
                 ld    (fb_cy),a
 fbk_loop
-                ld    a,(fb_x)
+                ld    a,(fbw_x)
                 ld    d,a
                 ld    a,(fb_cy)
                 ld    e,a
                 call  scr_addr
-                ld    a,(fb_w)
+                ld    a,(fbw_w)
                 ld    b,a
                 ld    a,(fb_val)
                 ld    c,a
@@ -124,40 +136,102 @@ fbk_row
                 jr    nz,fbk_loop
                 ret
 
-; ---------------------------------------------------------------------------
-; fill_pattern: like fill_block but alternates fp_even / fp_odd by line, for a
-; two-tone dither (e.g. #50 / #A0 = a blue/white checkerboard in Mode 1).
-fill_pattern
-                ld    a,(fb_h)
-                ld    (fb_rows),a
-                ld    a,(fb_y)
-                ld    (fb_cy),a
-fp_loop
-                ld    a,(fb_x)
-                ld    d,a
-                ld    a,(fb_cy)
-                ld    e,a
-                call  scr_addr
-                ld    a,(fb_cy)             ; even or odd line?
-                rrca
-                ld    a,(fp_even)
-                jr    nc,fp_pick
-                ld    a,(fp_odd)
-fp_pick
-                ld    c,a
+; clip_fb_copy: fbw_* = intersection of fb_* (x,y,w,h) with the clip rect. CF set
+; if the intersection is empty. Leaves fb_* untouched. Clobbers A,B,C,D,E,H,L.
+clip_fb_copy
+                ld    a,(fb_x)               ; X: seg [fb_x, fb_x+fb_w)
+                ld    h,a
                 ld    a,(fb_w)
-                ld    b,a
-fp_row
-                ld    (hl),c
-                inc   hl
-                djnz  fp_row
-                ld    a,(fb_cy)
-                inc   a
-                ld    (fb_cy),a
-                ld    a,(fb_rows)
-                dec   a
-                ld    (fb_rows),a
-                jr    nz,fp_loop
+                add   a,h
+                ld    l,a                      ; L = fb_x + fb_w
+                ld    a,(clip_x)
+                ld    d,a
+                ld    a,(clip_w)
+                add   a,d
+                ld    e,a                      ; E = clip_x + clip_w
+                ld    a,h                      ; left = max(fb_x, clip_x)
+                cp    d
+                jr    nc,cfc_xl
+                ld    a,d
+cfc_xl          ld    c,a                      ; C = left
+                ld    a,l                      ; right = min(fb_end, clip_end)
+                cp    e
+                jr    c,cfc_xr
+                ld    a,e
+cfc_xr          ld    b,a                      ; B = right
+                ld    a,c
+                cp    b
+                jr    nc,cfc_empty            ; left >= right -> empty
+                ld    (fbw_x),a
+                ld    a,b
+                sub   c
+                ld    (fbw_w),a
+                ld    a,(fb_y)               ; Y: seg [fb_y, fb_y+fb_h)
+                ld    h,a
+                ld    a,(fb_h)
+                add   a,h
+                ld    l,a
+                ld    a,(clip_y)
+                ld    d,a
+                ld    a,(clip_h)
+                add   a,d
+                ld    e,a
+                ld    a,h
+                cp    d
+                jr    nc,cfc_yl
+                ld    a,d
+cfc_yl          ld    c,a
+                ld    a,l
+                cp    e
+                jr    c,cfc_yr
+                ld    a,e
+cfc_yr          ld    b,a
+                ld    a,c
+                cp    b
+                jr    nc,cfc_empty
+                ld    (fbw_y),a
+                ld    a,b
+                sub   c
+                ld    (fbw_h),a
+                or    a                         ; clear CF
+                ret
+cfc_empty       scf
+                ret
+
+; rect_cull: B=x C=y D=w E=h (byte cols / lines) -> CF set if the rectangle is
+; fully outside the clip rect (so the caller skips drawing). Used to cull whole
+; icons/glyphs so a lower layer never paints over a higher window during a partial
+; repaint. Clobbers A,H,L.
+rect_cull
+                ld    a,b                       ; X: right = x + w
+                add   a,d
+                ld    l,a
+                ld    a,(clip_x)
+                cp    l
+                jr    nc,rc_out                 ; clip_x >= right -> left of clip
+                ld    a,(clip_x)               ; clip_right = clip_x + clip_w
+                ld    h,a
+                ld    a,(clip_w)
+                add   a,h
+                cp    b
+                jr    c,rc_out                  ; clip_right < x -> right of clip
+                jr    z,rc_out                  ; clip_right == x -> right of clip
+                ld    a,c                       ; Y: bottom = y + h
+                add   a,e
+                ld    l,a
+                ld    a,(clip_y)
+                cp    l
+                jr    nc,rc_out                 ; above clip
+                ld    a,(clip_y)               ; clip_bottom = clip_y + clip_h
+                ld    h,a
+                ld    a,(clip_h)
+                add   a,h
+                cp    c
+                jr    c,rc_out                  ; below clip
+                jr    z,rc_out
+                or    a                          ; clear CF -> visible
+                ret
+rc_out          scf
                 ret
 
 ; ---------------------------------------------------------------------------
@@ -257,8 +331,20 @@ fb_h            db    0            ; height in rows
 fb_val          db    0            ; Mode 1 fill byte
 fb_rows         db    0
 fb_cy           db    0
-fp_even         db    #50          ; pattern byte on even lines
-fp_odd          db    #A0          ; pattern byte on odd lines
+
+; --- clip rectangle (issue #45 phase 4) ----------------------------------
+; fill_block clips its rect to this window before drawing, so a partial repaint
+; (a moved/closed window's damage area) only erases inside that area - the rest of
+; the screen is untouched, so unchanged windows/icons don't flicker. Default =
+; whole screen (no clipping). The WM narrows it around a repaint, then resets it.
+clip_x          db    0            ; clip rect, byte col / line / byte-w / lines
+clip_y          db    0
+clip_w          db    80
+clip_h          db    200
+fbw_x           db    0            ; fill_block's clipped working rect (fb_* kept
+fbw_y           db    0            ; intact so callers that reuse fb_* still work)
+fbw_w           db    0
+fbw_h           db    0
 
 ; --- save_block / restore_block parameters / scratch ---------------------
 sb_x            db    0            ; rectangle x in bytes

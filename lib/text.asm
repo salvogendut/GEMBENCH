@@ -136,9 +136,34 @@ draw_char
                 ld    a,c
                 ; fall through
 
-; draw_glyph: A = char. Draws the glyph at (dc_px pixels, tc_y line).
+; draw_glyph: A = char. Draws the glyph at (dc_px pixels, tc_y line). Culled if the
+; glyph cell is fully outside the clip rect, so a lower layer's text never paints
+; over a higher window during a partial repaint.
 draw_glyph
+                push  af                      ; cull clobbers A (the char)
+                ld    hl,(dc_px)             ; glyph byte col = dc_px / 4
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    b,l                      ; B = x (byte col)
+                ld    a,(tc_y)
+                ld    c,a                      ; C = y
+                ld    a,(font_w)             ; D = w in byte cols (generous: px/4 + 2)
+                srl   a
+                srl   a
+                add   a,2
+                ld    d,a
+                ld    a,(font_h)
+                ld    e,a                      ; E = h
+                call  rect_cull
+                jr    c,dg_culled
+                pop   af
                 ld    hl,font_first          ; glyph = font_glyphs + (char-first)*h
+                jr    dg_go
+dg_culled       pop   af
+                ret
+dg_go
                 sub   (hl)
                 ld    e,a
                 ld    d,0
