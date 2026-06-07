@@ -328,6 +328,13 @@ fill_xywh
                 ld    (fb_h),a
                 jp    fill_block
 
+; copy11: HL=src DE=dst -> copy 11 bytes (an 8.3 name). Shared by the many name-copy
+; sites (fs_req_name / launch_arg / window arg) to drop the per-site ld bc,11 + ldir.
+copy11
+                ld    bc,11
+                ldir
+                ret
+
 ; k_frame (GB_FRAME): draw a 1px rectangle outline. B=x C=y D=w E=h (screen
 ; byte/line), A=pen (0..3). Screen only (no banked buffer), so no page swap.
 k_frame
@@ -743,8 +750,7 @@ cfg_boot
                 ld    (KCFG_LEN),hl           ; emits the DEFAULT names itself)
                 ld    hl,cfg_fname           ; fs_req_name = "GEOBENCH.CFG"
                 ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                call  copy11
                 ld    hl,#0200               ; cfg text buffer is 512 bytes
                 ld    (fs_load_max),hl
                 ld    hl,KCFG_TEXT
@@ -763,8 +769,7 @@ cfg_fname       db    "GEOBENCHCFG"          ; "GEOBENCH.CFG" (8.3)
 run_cfgmod
                 ld    hl,cfgmod_name
                 ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                call  copy11
                 ld    a,(bank_cur)           ; save the current page
                 push  af
                 di
@@ -793,8 +798,7 @@ font_init
                 call  bank_set
                 ld    hl,KCFG_FONTNAME       ; fs_req_name = the config font name
                 ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                call  copy11
                 ld    hl,#1000               ; font fits easily
                 ld    (fs_load_max),hl
                 ld    hl,DATA_FONT           ; load into PAGE_DATA
@@ -818,8 +822,7 @@ load_or_default                                ; HL = default 8.3 name (11 bytes
                 pop   hl
                 ret   c                         ; wanted file loaded
                 ld    de,fs_req_name           ; missing -> use the default name
-                ld    bc,11
-                ldir
+                call  copy11
                 jp    fs_load_file              ; (dst/max unchanged by the miss)
 
 ; icon_init: load <ICONS>.IST into PAGE_DATA at DATA_ICONS.
@@ -829,8 +832,7 @@ icon_init
                 call  bank_set
                 ld    hl,KCFG_ICONNAME       ; fs_req_name = the config icon name
                 ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                call  copy11
                 ld    hl,#0C00               ; .IST <= 3K
                 ld    (fs_load_max),hl
                 ld    hl,DATA_ICONS
@@ -848,8 +850,7 @@ icon_init
 ; depth restores correctly.
 launch_app
                 ld    de,fs_req_name         ; name -> fs_req_name (HL in caller page)
-                ld    bc,11
-                ldir
+                call  copy11
                 call  wm_alloc_page          ; grab a free bank page (not depth-based,
                 or    a                       ; so it never collides with a co-resident
                 ret   z                       ; WM window) -> A=page, 0 = none free
@@ -1048,8 +1049,7 @@ k_setname
                 call  focus_arg_ptr           ; HL = dst (focused window's arg)
                 ex    de,hl                     ; DE = dst
                 pop   hl                       ; HL = src
-                ld    bc,11
-                ldir
+                call  copy11
                 ret
 
 ; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a
@@ -1062,8 +1062,7 @@ k_fsload
                 ld    (fs_load_max),hl
                 call  focus_arg_ptr          ; load by the focused window's file name
                 ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                call  copy11
                 di
                 call  fs_load_file
                 ei
@@ -1082,8 +1081,7 @@ k_fssave
                 ld    (fs_save_len),hl
                 call  focus_arg_ptr          ; save by the focused window's file name
                 ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                call  copy11
                 di
                 call  fs_save_file
                 ei
@@ -1185,8 +1183,7 @@ wm_register
                 ld    (de),a
                 inc   de                            ; entry+14 = arg: capture the pending
                 ld    hl,launch_arg               ; launch arg as this window's own file
-                ld    bc,11
-                ldir
+                call  copy11
                 ld    a,(wm_slot)                 ; focus the new window
                 ld    (WM_FOCUS),a
                 ld    hl,WM_Z                      ; WM_Z[NWIN] = slot (new z-top)
@@ -1247,8 +1244,7 @@ k_wm_add
 ; window the master loop services, rather than running its own loop.
 k_wm_open
                 ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                call  copy11
                 jr    wm_open_go
 
 ; k_wm_launch (GB_WMLAUNCH): open the current dir entry's app as a co-resident
@@ -1257,12 +1253,10 @@ k_wm_open
 k_wm_launch
                 ld    hl,fs_ent_name              ; the file -> launch arg (for the app)
                 ld    de,launch_arg
-                ld    bc,11
-                ldir
+                call  copy11
                 call  app_for_ext                 ; HL = the app .BIN for the file type
                 ld    de,fs_req_name
-                ld    bc,11
-                ldir
+                call  copy11
 wm_open_go
                 call  wm_alloc_page
                 or    a
