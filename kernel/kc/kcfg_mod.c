@@ -25,6 +25,7 @@
 #define KCFG_FONTNAME  ((char *)0x120D)
 #define KCFG_MEMKB     (*(unsigned int *)0x1218)   /* in:  total RAM in KB */
 #define KCFG_MEMSTR    ((char *)0x121A)            /* out: "<decimal>K" string */
+#define KCFG_CURSORNAME ((char *)0x1221)           /* out: CURSOR filename (11-byte 8.3) */
 
 static void set_default(char *stem)     /* "DEFAULT" + NUL */
 {
@@ -36,11 +37,14 @@ void main(void)
 {
     char icons[9];
     char font[9];
+    char cursor[9];
 
     set_default(icons);                 /* absent keys keep the default */
     set_default(font);
-    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font);
-    gb_make_83(icons, "IST", KCFG_ICONNAME);
-    gb_make_83(font,  "FNT", KCFG_FONTNAME);
+    set_default(cursor);
+    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor);
+    gb_make_83(icons,  "IST", KCFG_ICONNAME);
+    gb_make_83(font,   "FNT", KCFG_FONTNAME);
+    gb_make_83(cursor, "SPR", KCFG_CURSORNAME);
     gb_fmt_mem(KCFG_MEMKB, KCFG_MEMSTR);    /* top-bar RAM string */
 }

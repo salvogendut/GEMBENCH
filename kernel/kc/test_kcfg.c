@@ -16,10 +16,12 @@ static void check(const char *name, const char *cfg, unsigned int len,
 {
     char icons[GB_CFG_VAL_MAX + 1];
     char font[GB_CFG_VAL_MAX + 1];
+    char cursor[GB_CFG_VAL_MAX + 1];
     strcpy(icons, "DEFAULT");
     strcpy(font, "DEFAULT");
+    strcpy(cursor, "DEFAULT");
 
-    gb_cfg_parse(cfg, len, icons, font);
+    gb_cfg_parse(cfg, len, icons, font, cursor);
 
     if (strcmp(icons, want_icons) != 0 || strcmp(font, want_font) != 0) {
         printf("FAIL %-28s icons=\"%s\" (want \"%s\")  font=\"%s\" (want \"%s\")\n",
@@ -31,6 +33,22 @@ static void check(const char *name, const char *cfg, unsigned int len,
 }
 
 #define CHECK(name, lit, wi, wf) check((name), (lit), (unsigned)sizeof(lit) - 1, (wi), (wf))
+
+/* Parse and check the CURSOR= value (defaults to "DEFAULT" when absent). */
+static void checkcur(const char *name, const char *cfg, unsigned int len,
+                     const char *want_cursor)
+{
+    char icons[GB_CFG_VAL_MAX + 1], font[GB_CFG_VAL_MAX + 1], cursor[GB_CFG_VAL_MAX + 1];
+    strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT");
+    gb_cfg_parse(cfg, len, icons, font, cursor);
+    if (strcmp(cursor, want_cursor) != 0) {
+        printf("FAIL %-28s cursor=\"%s\" (want \"%s\")\n", name, cursor, want_cursor);
+        ++failures;
+    } else {
+        printf("ok   %-28s cursor=\"%s\"\n", name, cursor);
+    }
+}
+#define CHECKCUR(name, lit, wc) checkcur((name), (lit), (unsigned)sizeof(lit) - 1, (wc))
 
 /* gb_make_83 builds an 11-byte 8.3 name; compare against an explicit literal
  * (which includes the space padding). */
@@ -77,7 +95,12 @@ int main(void)
     CHECK("font then icons",       "FONT=F1\r\nICONS=I1\r\n",       "I1",      "F1");
     CHECK("crlf mixed with lf",    "ICONS=AA\nFONT=BB\r\n",         "AA",      "BB");
 
+    CHECKCUR("cursor absent",      "ICONS=X\r\n",                   "DEFAULT");
+    CHECKCUR("cursor set",         "CURSOR=FANCY\r\n",              "FANCY");
+    CHECKCUR("cursor with others", "FONT=F\r\nCURSOR=ARROW\r\nICONS=I\r\n", "ARROW");
+
     check83("make83 default",  "DEFAULT", "FNT", "DEFAULT FNT");
+    check83("make83 cursor",   "FANCY",   "SPR", "FANCY   SPR");
     check83("make83 short",    "AA",      "IST", "AA      IST");
     check83("make83 full 8",   "ABCDEFGH","FNT", "ABCDEFGHFNT");
     check83("make83 empty",    "",        "IST", "        IST");

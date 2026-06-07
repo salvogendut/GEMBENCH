@@ -87,7 +87,7 @@ void gb_fmt_mem(unsigned int kb, char *dst)
 }
 
 void gb_cfg_parse(const char *buf, unsigned int len,
-                  char *icons_out, char *font_out)
+                  char *icons_out, char *font_out, char *cursor_out)
 {
     const char *p = buf;
     const char *e = buf + len;
@@ -109,6 +109,8 @@ void gb_cfg_parse(const char *buf, unsigned int len,
             copy_val(v, e, icons_out, GB_CFG_VAL_MAX);
         else if ((v = match_key(p, e, "FONT=")) != 0)
             copy_val(v, e, font_out, GB_CFG_VAL_MAX);
+        else if ((v = match_key(p, e, "CURSOR=")) != 0)
+            copy_val(v, e, cursor_out, GB_CFG_VAL_MAX);
 
         while (p < e && !is_eol(*p))  /* advance to the end of this line */
             ++p;

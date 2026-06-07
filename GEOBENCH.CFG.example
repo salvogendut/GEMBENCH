@@ -4,6 +4,9 @@ ICONS=DEFAULT
 # FONT: name of the font set to load (<name>.FNT); default DEFAULT (6x8).
 # Use CLASSIC for the original 8x8 CPC ROM font.
 FONT=DEFAULT
+# CURSOR: name of the cursor sprite to load (<name>.SPR); default DEFAULT (arrow).
+# Use HAND for the hand pointer.
+CURSOR=DEFAULT
 # VIEW: File Manager view - DEFAULT (icons) or LIST. The "View" menu toggles this
 # and rewrites the line.
 VIEW=DEFAULT
