@@ -194,12 +194,10 @@ static void draw_name(unsigned char col, unsigned char line, char *name)
     gb_text(col, line, tmp);
 }
 
-/* fullname: the current entry's 8.3 name as "NAME.EXT" (list view shows the
-   extension; gb_dir* return name only). */
-static char *fullname(void)
+/* name83: format an 11-byte space-padded 8.3 name as "NAME.EXT". */
+static char *name83(const char *e)
 {
     static char fn[13];
-    char *e = gb_entname();              /* 11-byte 8.3, space-padded, no dot */
     unsigned char i, j = 0;
     for (i = 0; i < 8 && e[i] != ' '; i++) fn[j++] = e[i];
     if (e[8] != ' ') {                   /* has an extension */
@@ -209,6 +207,10 @@ static char *fullname(void)
     fn[j] = 0;
     return fn;
 }
+
+/* fullname: the current entry's 8.3 name as "NAME.EXT" (list view shows the
+   extension; gb_dir* return name only). */
+static char *fullname(void) { return name83(gb_entname()); }
 
 static void draw_list_view(void)
 {
@@ -311,6 +313,13 @@ static void sb_click(unsigned char my)
    directory; "View" (left title) toggles list / icons. */
 static void on_event(void)
 {
+    if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped on this folder window (#62) */
+        gb_curhide();                     /* phase 1: just show what landed here */
+        gb_text(CT_X, CT_Y, "Drop:");
+        gb_text(CT_X + 6, CT_Y, name83(gb_dragname));
+        gb_curshow();
+        return;
+    }
     if (gb_msg.type != GB_MSG_MENU) return;
     if (gb_msg.p0 >= MENU_BACK_COL) {     /* Back */
         gb_back();
@@ -368,6 +377,13 @@ static void on_frame(void)
             idx = top + (my - CT_Y) / ROW_H;
         }
         if (idx >= total) return;
+        /* press on an entry: a drag (press + move) drags it to another window /
+           the Trash (#62); a plain click (no move) falls through to select/open */
+        dir_seek(idx);                       /* position -> gb_entname is this entry */
+        if (gb_drag_start(gb_entname())) {   /* dropped on a target -> it handled it */
+            relist();                        /* refresh (a move changes this dir) */
+            return;
+        }
         if (dc_timer && dc_idx == idx) {     /* double-click -> open (dir or file) */
             open_entry(idx);
             dc_timer = 0;

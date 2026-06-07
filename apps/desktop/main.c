@@ -107,10 +107,30 @@ static const unsigned char dt_menu[] = { 1, 10, 'D','i','s','k',0,0,0,0 };
 /* on_event: kernel callback (issue #32). Fires when the user clicks the
    kernel-owned top bar; proves the kernel->app round-trip by showing the
    message payload (the clicked column) in the hint line. */
+/* trash_label: "Trash: NAME.EXT" from the dragged 11-byte 8.3 name (#62 phase 1). */
+static char *trash_label(void)
+{
+    static char m[20] = "Trash: ";
+    const char *e = gb_dragname;
+    unsigned char i, j = 7;
+    for (i = 0; i < 8 && e[i] != ' '; i++) m[j++] = e[i];
+    if (e[8] != ' ') { m[j++] = '.'; for (i = 8; i < 11 && e[i] != ' '; i++) m[j++] = e[i]; }
+    m[j] = 0;
+    return m;
+}
+
 static void on_event(void)
 {
     static char msg[] = "Top-bar click @ col 00";
     unsigned char c;
+    if (gb_msg.type == GB_MSG_DROP) {          /* a file was dropped on the desktop (#62) */
+        if (hit_icon(gb_mx(), gb_my()) == 2) { /* on the Trash icon? (phase 1: marker) */
+            gb_curhide();
+            gb_text(1, 10, trash_label());
+            gb_curshow();
+        }
+        return;
+    }
     if (gb_msg.type != GB_MSG_MENU) return;
     c = gb_msg.p0;
     msg[20] = "0123456789ABCDEF"[c >> 4];
