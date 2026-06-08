@@ -33,6 +33,8 @@ GB_TIME_BUF     equ   #1240        ; raw time: +0 hours(&3F), +1 min, +2 sec, +3
 BOOT_SP         equ   #1244        ; word: SP at kernel_main entry (GB_EXIT, #74)
 GB_KSIZE        equ   #1246        ; word: resident kernel size in bytes (System>Ram Usage)
                                     ; (binmode 0 = BCD regs, nonzero = already binary)
+BAR_HANDLER     equ   #1248        ; word: top-bar handler, run every WM frame in PAGE_APP0
+                                    ; regardless of focus (0 = none); bar-as-app expt (#77)
 
 ; Callback API (issue #32) - kernel->app event delivery, state in low RAM so it
 ; costs no resident image bytes (low RAM stays main RAM under banking).
@@ -132,6 +134,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_time                 ; GB_TIME        #808D (-> GB_TIME_BUF h,m,s)
                 jp    k_exit                 ; GB_EXIT        #8090 (leave -> AMSDOS)
                 jp    k_copy_end             ; GB_COPYEND     #8093 (restore target ctx)
+                jp    k_on_bar               ; GB_ONBAR       #8096 (HL = bar handler, #77)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1368,7 +1371,21 @@ wm_loop
                 ld    h,(hl)
                 ld    l,a
                 call  md_call
+                ld    hl,(BAR_HANDLER)            ; top-bar hook (#77): run the bar handler
+                ld    a,h                          ; every frame in the desktop's page, so the
+                or    l                            ; bar stays live regardless of which window
+                jr    z,wm_loop                    ; has focus
+                ld    a,PAGE_APP0
+                call  bank_set
+                ld    hl,(BAR_HANDLER)
+                call  md_call
                 jr    wm_loop
+
+; k_on_bar (GB_ONBAR #77): HL = a handler the WM loop runs every frame in PAGE_APP0
+; (the desktop's page) to draw the top bar, independent of focus. 0 to clear.
+k_on_bar
+                ld    (BAR_HANDLER),hl
+                ret
 
 ; k_wm_add (GB_WMADD): register the caller's window (used by an app opened with
 ; GB_WMOPEN); returns to the opener. The kernel's wm_loop then services it.

@@ -78,8 +78,17 @@ static void paint(void)
     gb_text(1, 10, "Dbl-click a drive to browse it");
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
-    if (show_ram) draw_footprint();            /* restore the footprint after a restack */
     gb_curshow();
+}
+
+/* bar_draw: the top-bar handler (experiment #77). The WM runs this every frame in our
+   page, regardless of focus - so the footprint (and, later, the whole bar) stays live
+   even while another window is focused. The value is constant, so redrawing it each
+   frame is invisible and also repaints it after the kernel's bar redraws on an app
+   switch. Draw only - no input here. */
+static void bar_draw(void)
+{
+    if (show_ram) draw_footprint();
 }
 
 static unsigned char hit_icon(unsigned char mx, unsigned char my)
@@ -266,13 +275,6 @@ static void on_frame(void)
        Exit to DOS to leave); ESC only closes apps launched on top of it */
 
     if (want_menu) { want_menu = 0; run_menu(); return; }
-    if (show_ram) {                            /* refresh the footprint once a minute */
-        gb_time();
-        if (gb_min != last_min) {
-            last_min = gb_min;
-            gb_curhide(); draw_footprint(); gb_curshow();
-        }
-    }
 
     held = flags & GB_FIRE;
     if (held_prev && !held && drag_active) {   /* fire released -> drop */
@@ -319,5 +321,6 @@ void main(void)
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;
+    gb_on_bar(bar_draw);                        /* top-bar handler runs every frame (#77) */
     gb_wm_run(&deskwin);                        /* register + run the kernel WM (#45) */
 }

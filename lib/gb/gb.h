@@ -201,4 +201,10 @@ void gb_copy_begin(void);
 void gb_copy_end(void);
 #define gb_copybuf ((char *)0x2200)
 #define GB_COPYMAX 0x1C00
+
+/* Top-bar handler (experiment #77). gb_on_bar registers a handler the WM master loop
+ * runs every frame in the desktop's page, regardless of which window has focus - so a
+ * desktop-owned top bar (clock, menu titles, footprint) stays live. Draw only (no
+ * input / no gb_poll); use change-detection to avoid a wasteful per-frame repaint. */
+void gb_on_bar(void (*handler)(void));
 #endif /* GB_H */
