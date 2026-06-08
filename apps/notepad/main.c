@@ -294,7 +294,7 @@ static unsigned char popup(unsigned char x, unsigned char y,
                                                       re-shows it exactly once */
 }
 
-static const char *const file_items[] = { "New", "Load", "Save" };
+static const char *const file_items[] = { "New", "Load", "Save", "Save As" };
 
 static void do_save(void)
 {
@@ -302,11 +302,81 @@ static void do_save(void)
     if (status == 1) dirty = 0;
 }
 
+/* ensure_ext: a name with no '.' gets a ".TXT" default (8.3, room permitting). */
+static char namebuf[16];
+static void ensure_ext(void)
+{
+    unsigned char i = 0, has = 0;
+    while (namebuf[i]) { if (namebuf[i] == '.') has = 1; i++; }
+    if (!has && i && i <= 8) {
+        namebuf[i++] = '.'; namebuf[i++] = 'T'; namebuf[i++] = 'X'; namebuf[i++] = 'T';
+        namebuf[i] = 0;
+    }
+}
+
+/* prompt_name: modal name-entry box. Types an uppercase 8.3 name into namebuf;
+   Enter (non-empty) -> 1, ESC/empty -> 0. Black-on-white, like the other dialogs. */
+static unsigned char prompt_name(const char *caption)
+{
+    unsigned char x = 12, y = 64, w = 52, h = 34;
+    unsigned char fl = 0, c, n = 0, done = 0, ok = 0, redraw = 1;
+    modal = 1;
+    namebuf[0] = 0;
+    while (gb_getkey()) ;                 /* drop the menu click's keys */
+    gb_curhide();
+    gb_fill(x, y, w, h, 1);               /* white box + black frame */
+    gb_frame(x, y, w, h, 2);
+    gb_textbw(x + 2, y + 3, caption);
+    gb_curshow();
+    while (!done) {
+        if (redraw) {
+            gb_curhide();
+            gb_fill(x + 2, y + 16, w - 4, 8, 1);   /* clear the field (white) */
+            gb_textbw(x + 2, y + 16, namebuf);
+            gb_curshow();
+            redraw = 0;
+        }
+        fl = gb_poll();
+        if (fl & GB_QUIT) { done = 1; break; }      /* ESC -> cancel */
+        while ((c = gb_getkey()) != 0) {
+            if (c == K_ENTER) { done = 1; ok = (unsigned char)(n > 0); break; }
+            else if ((c == K_BS || c == K_DEL) && n) { namebuf[--n] = 0; redraw = 1; }
+            else if (c >= 32 && c < 127 && n < 12) {
+                if (c >= 'a' && c <= 'z') c = (unsigned char)(c - 32);   /* 8.3 is upper */
+                namebuf[n++] = (char)c; namebuf[n] = 0; redraw = 1;
+            }
+        }
+    }
+    modal = 0;
+    if (fl & GB_QUIT) while (gb_poll() & GB_QUIT) ;
+    gb_curhide();
+    gb_fill(x, y, w, h, 0);               /* erase the dialog */
+    gb_curshow();
+    keycool = 4;
+    return ok;
+}
+
+/* set_file: namebuf "NAME[.EXT]" -> the current file name + title. */
+static void set_file(void)
+{
+    ensure_ext();
+    to_83(namebuf);
+    gb_set_name(name83);
+    fmt83(fbase, name83);
+}
+
 static void do_new(void)
 {
+    if (prompt_name("New file name:")) set_file();
+    else { gb_set_name("UNTITLEDTXT"); fmt83(fbase, "UNTITLEDTXT"); }
     len = 0; cur = 0; view_first = 0; dirty = 0; status = 0;
-    gb_set_name("UNTITLEDTXT");
-    fmt83(fbase, "UNTITLEDTXT");
+}
+
+static void do_saveas(void)
+{
+    if (!prompt_name("Save as:")) return;
+    set_file();
+    do_save();
 }
 
 /* is_binary: true if "NAME.EXT" has a known non-text extension (so Load skips it). */
@@ -358,10 +428,11 @@ static void do_load(void)
 /* run_menu: drop the File menu and dispatch the chosen item. */
 static void run_menu(void)
 {
-    unsigned char sel = popup(MENU_COL, 8, file_items, 3);
+    unsigned char sel = popup(MENU_COL, 8, file_items, 4);
     if (sel == 0) do_new();
     else if (sel == 1) do_load();
     else if (sel == 2) do_save();
+    else if (sel == 3) do_saveas();
 }
 
 /* confirm: "Save changes?" dialog -> 1 = YES, 0 = NO, 0xFF = cancelled (ESC). */
