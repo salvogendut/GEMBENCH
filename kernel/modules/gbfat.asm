@@ -18,7 +18,8 @@
 ; GBFAT.BIN (and copied onto the IDE volume).
 ; ---------------------------------------------------------------------------
 
-GBFAT_ORG       equ   #5000
+GBFAT_ORG       equ   #6000        ; in PAGE_DATA, above the font+icon set (#88: the
+                                   ; 15-icon set reached #534C and collided with #5000)
 GBFAT_LEN       equ   #1400
 GBFAT_NAME      equ   #1402
 GBFAT_RES       equ   #140D

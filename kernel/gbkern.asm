@@ -924,11 +924,11 @@ icon_init
                 ld    hl,KCFG_ICONNAME       ; fs_req_name = the config icon name
                 ld    de,fs_req_name
                 call  copy11
-                ld    hl,GB_KERNEL-DATA_ICONS-#200   ; cap = ALL the free icon region, from
-                ld    (fs_load_max),hl               ; DATA_ICONS up to the kernel (#8000),
-                                                     ; less a sector. Derived from the layout
-                                                     ; so it never needs hand-tuning: ~#3A00
-                                                     ; (~57 icons), the physical ceiling.
+                ld    hl,GBFAT_LOAD-DATA_ICONS-#200  ; cap = the free icon region: from
+                ld    (fs_load_max),hl               ; DATA_ICONS up to GBFAT_LOAD (the FAT
+                                                     ; write module also lives in PAGE_DATA),
+                                                     ; less a sector. ~#1A00 (~25 icons),
+                                                     ; derived so it never needs hand-tuning.
                 ld    hl,DATA_ICONS
                 ld    (fs_load_dst),hl
                 ld    hl,def_ist             ; fall back to DEFAULT.IST if missing
