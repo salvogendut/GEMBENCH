@@ -211,9 +211,9 @@ static unsigned char popup(unsigned char x, unsigned char y,
     unsigned char i, flags, row, sel = 0xFF;
     modal = 1;
     gb_curhide();
-    gb_fill(x, y, 22, n * 10 + 4, 1);
-    gb_frame(x, y, 22, n * 10 + 4, 2);
-    for (i = 0; i < n; i++) gb_textk(x + 1, y + 2 + i * 10, labels[i]);
+    gb_fill(x, y, 22, n * 10 + 4, 1);          /* white, no frame: a seamless drop from
+                                                  the (white) top bar - black ink only */
+    for (i = 0; i < n; i++) gb_textbw(x + 1, y + 2 + i * 10, labels[i]);
     gb_curshow();
     for (;;) {
         flags = gb_poll();
@@ -239,11 +239,11 @@ static unsigned char hh, mm;
 static void draw_field(unsigned char x, unsigned char y, unsigned char v)
 {
     char t[3];
-    gb_textk(x, y, GLYPH_TRI_UP);
+    gb_textbw(x, y, GLYPH_TRI_UP);
     put2(t, v); t[2] = 0;
     gb_fill(x, y + 9, 4, 8, 1);
-    gb_textk(x, y + 9, t);
-    gb_textk(x, y + 18, GLYPH_TRI_DOWN);
+    gb_textbw(x, y + 9, t);
+    gb_textbw(x, y + 18, GLYPH_TRI_DOWN);
 }
 static unsigned char set_time_dialog(void)
 {
@@ -257,11 +257,11 @@ static unsigned char set_time_dialog(void)
     gb_curhide();
     gb_fill(x, y, w, h, 1);
     gb_frame(x, y, w, h, 2);
-    gb_textk(x + 1, y + 1, "Set time");
-    gb_textk(hx + 5, ay + 9, ":");
+    gb_textbw(x + 1, y + 1, "Set time");
+    gb_textbw(hx + 5, ay + 9, ":");
     draw_field(hx, ay, hh);
     draw_field(mx, ay, mm);
-    gb_textk(x + 7, y + h - 9, "OK");
+    gb_textbw(x + 7, y + h - 9, "OK");
     gb_curshow();
 
     while (!done) {
