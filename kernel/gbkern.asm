@@ -830,6 +830,8 @@ appname_table   db    "NOTEPAD ",11
                 db    "CLOCK   ",2
                 db    "DESKTOP ",15
                 db    "FILEMGR ",16
+                db    "PAINT   ",17     ; PAINT.APP   (app not built yet, #100)
+                db    "FRACTAL ",18     ; FRACTAL.APP (app not built yet, #100)
                 db    0
 name_kernel     db    "GBKERN  "
 
