@@ -127,10 +127,11 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_drive_poll           ; GB_DRIVES      #807E
                 jp    fs_set_drive           ; GB_SETDRIVE    #8081 (A = drive)
                 jp    k_get_drive            ; GB_GETDRIVE    #8084
-                jp    k_file_copy            ; GB_FSCOPY      #8087
+                jp    k_copy_begin           ; GB_COPYBEGIN   #8087 (-> drag source ctx)
                 jp    k_wm_launch_as         ; GB_WMLAUNCHAS  #808A (HL = app name)
                 jp    k_time                 ; GB_TIME        #808D (-> GB_TIME_BUF h,m,s)
                 jp    k_exit                 ; GB_EXIT        #8090 (leave -> AMSDOS)
+                jp    k_copy_end             ; GB_COPYEND     #8093 (restore target ctx)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1185,67 +1186,39 @@ k_get_drive
                 ld    a,(fs_cur_drive)
                 ret
 
-; k_file_copy (GB_FSCOPY, #65 phase 3): copy the dragged file (WM_DRAGNAME) from the
-; source drive/dir captured at drag start (WM_DRAGDRV/WM_DRAGDIR) to the CURRENT
-; (target) drive - landing in that drive's root. Loads into the staging buffer
-; (<= GBFAT_MAX) then saves. The caller (the drop target window) sets the active
-; drive first. CF set = copied. Restores the target drive/dir so the caller relists.
-k_file_copy
-                ld    a,(fs_cur_drive)        ; remember the target context to restore
-                ld    (fc_tdrv),a
+; Cross-drive copy (#65 phase 3): the orchestration moved into the File Manager (C)
+; to reclaim resident space (#74). The kernel just flips the active drive+dir context
+; between the dragged file's source (captured at drag start) and the drop target; the
+; app does the load->save itself through the shared staging buffer (GBFAT_DATA).
+;
+; k_copy_begin (GB_COPYBEGIN): save the current (target) drive+dir, then switch to the
+; source drive+dir, so the caller can load the dragged file. Pairs with k_copy_end.
+k_copy_begin
+                ld    a,(fs_cur_drive)        ; save the caller's (target) context
+                ld    (cb_tdrv),a
                 ld    hl,fs_dir_clus
-                ld    de,fc_tdir
+                ld    de,cb_tdir
                 ld    bc,4
                 ldir
-                ld    a,(WM_DRAGDRV)         ; --- switch to the source, load the file ---
+                ld    a,(WM_DRAGDRV)         ; switch to the drag source drive + dir
                 call  fs_set_drive
                 ld    hl,WM_DRAGDIR
                 ld    de,fs_dir_clus
                 ld    bc,4
                 ldir
-                ld    hl,WM_DRAGNAME
-                ld    de,fs_req_name
-                call  copy11
-                ld    hl,GBFAT_MAX
-                ld    (fs_load_max),hl
-                ld    hl,GBFAT_DATA
-                ld    (fs_load_dst),hl
-                di
-                call  fs_load_file           ; -> BC = bytes loaded
-                ei
-                jr    nc,fc_fail              ; source file not found
-                ld    (fc_len),bc
-                ld    a,(fc_tdrv)            ; --- switch to the target, save the file ---
-                call  fs_set_drive
-                ld    hl,WM_DRAGNAME
-                ld    de,fs_req_name
-                call  copy11
-                ld    hl,GBFAT_DATA
-                ld    (fs_save_src),hl
-                ld    hl,(fc_len)
-                ld    (fs_save_len),hl
-                di
-                call  fs_save_file           ; CF = saved
-                ei
-                push  af
-                call  fc_restore
-                pop   af
                 ret
-fc_fail
-                call  fc_restore
-                or    a
-                ret
-fc_restore                                    ; active drive + dir = the target's again
-                ld    a,(fc_tdrv)
+; k_copy_end (GB_COPYEND): restore the saved (target) drive+dir, so the caller can
+; re-list its own directory.
+k_copy_end
+                ld    a,(cb_tdrv)
                 call  fs_set_drive
-                ld    hl,fc_tdir
+                ld    hl,cb_tdir
                 ld    de,fs_dir_clus
                 ld    bc,4
                 ldir
                 ret
-fc_tdrv         db    0
-fc_tdir         defs  4
-fc_len          defw  0
+cb_tdrv         db    0
+cb_tdir         defs  4
 
 ; k_fs_delete (GB_FSDELETE, #62): HL = 11-byte 8.3 name in the caller page. Delete
 ; that file from the current directory (free clusters + clear the dir entry) via

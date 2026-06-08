@@ -54,7 +54,8 @@
         .globl  _gb_drives
         .globl  _gb_set_drive
         .globl  _gb_get_drive
-        .globl  _gb_file_copy
+        .globl  _gb_copy_begin
+        .globl  _gb_copy_end
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -335,11 +336,10 @@ _gb_set_drive:
 _gb_get_drive:
         jp      0x8084          ; GB_GETDRIVE
 
-;; unsigned char gb_file_copy(void);  copy the dragged file (captured at drag start)
-;; from its source drive/dir into the current drive's root. Returns 1 if copied.
-_gb_file_copy:
-        call    0x8087          ; GB_FSCOPY -> CF = copied
-        ld      a, #0
-        ret     nc
-        inc     a
-        ret
+;; void gb_copy_begin(void);  switch the active drive+dir to the dragged file's source
+;; (captured at drag start), saving the caller's (target) context. Pair with gb_copy_end.
+_gb_copy_begin:
+        jp      0x8087          ; GB_COPYBEGIN
+;; void gb_copy_end(void);  restore the caller's (target) drive+dir saved by gb_copy_begin
+_gb_copy_end:
+        jp      0x8093          ; GB_COPYEND
