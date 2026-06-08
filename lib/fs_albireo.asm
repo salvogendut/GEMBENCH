@@ -36,18 +36,24 @@ ALBC_CHECK      equ   #06
 ALBC_USBMODE    equ   #15
 ALBC_GETSTAT    equ   #22
 ALBC_RDDATA0    equ   #27
+ALBC_WRREQ      equ   #2D          ; WR_REQ_DATA (chip asks how many bytes to take)
 ALBC_SETNAME    equ   #2F
 ALBC_DISKMOUNT  equ   #31
 ALBC_FILEOPEN   equ   #32
 ALBC_ENUMGO     equ   #33
+ALBC_FILECREATE equ   #34
+ALBC_FILEERASE  equ   #35
 ALBC_FILECLOSE  equ   #36
 ALBC_BYTEREAD   equ   #3A
 ALBC_BYTERDGO   equ   #3B
+ALBC_BYTEWRITE  equ   #3C
+ALBC_BYTEWRGO   equ   #3D
 
 ; CH376 status / return codes
 ALB_RET_SUCCESS equ   #51          ; SET_USB_MODE ack on the DATA port
 ALB_INT_SUCCESS equ   #14
 ALB_INT_DISKRD  equ   #1D
+ALB_INT_DISKWR  equ   #1E
 ALB_USBMODE_SD  equ   3            ; host mode, micro-SD (LLM_MicroSD)
 
 ; ---------------------------------------------------------------------------
@@ -258,10 +264,73 @@ alf_nf
                 or    a
                 ret
 
-; fsalb_save_file / fsalb_delete_file: not implemented in this spike. The CH376
-; supports FILE_CREATE/BYTE_WRITE/FILE_ERASE, but the write loop comes next.
+; ---------------------------------------------------------------------------
+; fsalb_save_file: write fs_save_len bytes from (fs_save_src) to fs_req_name.
+; FILE_CREATE truncates/recreates (so this overwrites), then a BYTE_WRITE loop
+; streams the data straight from the caller's still-mapped app page - the chip
+; meters each round via WR_REQ_DATA, so there's no low-RAM staging or size cap.
+; CF set = saved, NC = failed.
 fsalb_save_file
+                call  alb_ensure_mount
+                jr    nc,asv_fail
+                call  alb_setname_req
+                ld    a,ALBC_FILECREATE
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,asv_fail                 ; couldn't create the file
+                ld    a,ALBC_BYTEWRITE
+                call  alb_sendcmd
+                ld    hl,(fs_save_len)            ; total length -> kicks the write
+                ld    a,l
+                out   (c),a
+                ld    a,h
+                out   (c),a
+                ld    hl,(fs_save_src)            ; HL = source, advanced per chunk
+asv_loop
+                call  alb_waitint                 ; DISK_WRITE = wants data, SUCCESS = end
+                cp    ALB_INT_SUCCESS
+                jr    z,asv_close
+                cp    ALB_INT_DISKWR
+                jr    nz,asv_fail
+                ld    a,ALBC_WRREQ                ; ask how many bytes the chip will take
+                call  alb_sendcmd
+                in    a,(c)                        ; A = accept count (0..255)
+                or    a
+                jr    z,asv_go
+                call  alb_outira                  ; stream A bytes from (HL), advance HL
+asv_go
+                ld    a,ALBC_BYTEWRGO             ; flush the chunk, advance
+                call  alb_sendcmd
+                jr    asv_loop
+asv_close
+                ld    a,ALBC_FILECLOSE
+                call  alb_sendcmd
+                ld    a,1                          ; close param 1 = update the file size
+                out   (c),a
+                call  alb_waitint
+                scf
+                ret
+asv_fail
+                or    a
+                ret
+
+; fsalb_delete_file: erase fs_req_name. FILE_ERASE opens-then-deletes a closed
+; file, so SET_FILE_NAME + FILE_ERASE is enough. CF set = deleted, NC = failed.
+; NOTE: 1984's fat.c returns DISK_ERR for FILE_ERASE, so this can't be verified in
+; the emulator - it works on real CH376 hardware.
 fsalb_delete_file
+                call  alb_ensure_mount
+                jr    nc,adl_fail
+                call  alb_setname_req
+                ld    a,ALBC_FILEERASE
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,adl_fail
+                scf
+                ret
+adl_fail
                 or    a
                 ret
 
