@@ -135,6 +135,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_exit                 ; GB_EXIT        #8090 (leave -> AMSDOS)
                 jp    k_copy_end             ; GB_COPYEND     #8093 (restore target ctx)
                 jp    k_on_bar               ; GB_ONBAR       #8096 (HL = bar handler, #77)
+                jp    k_wm_setsize           ; GB_WMSETSIZE   #8099 (A = w, L = h, #81)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1538,6 +1539,45 @@ k_wm_setpos
                 ret
 sp_x            db    0
 sp_y            db    0
+
+; k_wm_setsize (GB_WMSETSIZE, #81): A = new w, L = new h. Resize the focused window's
+; rect (top-left stays put). Damage clip = its (x,y) covering max(old,new) size, so the
+; following gb_restore_parent repaints any area a shrink vacated.
+k_wm_setsize
+                ld    (ss_w),a
+                ld    a,l
+                ld    (ss_h),a
+                ld    a,(WM_FOCUS)
+                call  wm_entry                    ; HL = entry (+0 page)
+                inc   hl                            ; +1 x
+                ld    a,(hl)
+                ld    (clip_x),a                  ; clip x = window x (unchanged)
+                inc   hl                            ; +2 y
+                ld    a,(hl)
+                ld    (clip_y),a
+                inc   hl                            ; +3 w
+                ld    b,(hl)                       ; old w
+                ld    a,(ss_w)                     ; clip w = max(old, new)
+                cp    b
+                jr    nc,kss_w
+                ld    a,b
+kss_w
+                ld    (clip_w),a
+                ld    a,(ss_w)
+                ld    (hl),a                       ; commit new w
+                inc   hl                            ; +4 h
+                ld    b,(hl)                       ; old h
+                ld    a,(ss_h)
+                cp    b
+                jr    nc,kss_h
+                ld    a,b
+kss_h
+                ld    (clip_h),a
+                ld    a,(ss_h)
+                ld    (hl),a                       ; commit new h
+                ret
+ss_w            db    0
+ss_h            db    0
 
 ; damage_axis: B = old, A = new, C = size -> D = min(old,new), E = span =
 ; max(old,new) + size - min. The 1-D damage extent of a move. Preserves HL.

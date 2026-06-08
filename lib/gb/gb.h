@@ -124,6 +124,19 @@ void gb_wm_add(const gb_win_t *desc);
 void gb_wm_open(const char *name);
 void gb_wm_close(void);
 void gb_wm_setpos(unsigned char x, unsigned char y);  /* move our hit rect (drag) */
+/* Resizeable windows (#81). A window with a resize grip (bottom-right corner) draws
+ * it with gb_draw_grip in its frame; a press there (gb_in_grip) runs gb_drag_resize,
+ * which keeps the top-left fixed and pulls the bottom-right corner. After the drag,
+ * call gb_wm_setsize so click-to-focus + the restack use the new size, then redraw.
+ * Apps reflow content to win_w/win_h; fixed-layout apps (e.g. ICONED) skip it. */
+#define GRIP_W 2          /* grip size: 2 bytes (8px) x 6px */
+#define GRIP_H 6
+void gb_wm_setsize(unsigned char w, unsigned char h);
+void gb_draw_grip(unsigned char x, unsigned char y, unsigned char w, unsigned char h);
+unsigned char gb_in_grip(unsigned char x, unsigned char y, unsigned char w,
+                         unsigned char h, unsigned char mx, unsigned char my);
+unsigned char gb_drag_resize(unsigned char x, unsigned char y, unsigned char *w,
+                             unsigned char *h, unsigned char minw, unsigned char minh);
 void gb_wm_launch(void);              /* open current dir entry co-resident (+ arg) */
 /* gb_wm_launch_as: open app `app` (an 8.3 name) as a co-resident window, with the
  * current dir entry as its file arg (so a data file auto-opens). The File Manager

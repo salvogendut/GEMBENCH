@@ -17,8 +17,10 @@
 
 #define DEF_X    4            /* window position */
 #define DEF_Y    26
-#define WIN_W    56
-#define WIN_H    130
+#define DEF_W    56            /* default size; the window is resizeable (#81) */
+#define DEF_H    130
+#define MIN_W    24            /* min size keeps the title + a couple of rows usable */
+#define MIN_H    62
 #define TITLE_H  14
 #define DCLICK   40           /* double-click window, frames */
 
@@ -27,8 +29,8 @@
 #define SB_X     (win_x + 1)             /* just inside the left border */
 #define CT_X     (win_x + 1 + SB_W)      /* content left */
 #define CT_Y     (win_y + TITLE_H)       /* content top, below the title bar */
-#define CT_W     (WIN_W - 2 - SB_W)      /* content width (52) */
-#define CT_H     (WIN_H - TITLE_H - 2)   /* content height (114) */
+#define CT_W     (win_w - 2 - SB_W)      /* content width (runtime, resizeable) */
+#define CT_H     (win_h - TITLE_H - 2)   /* content height (runtime) */
 
 /* list view */
 #define ROW_H    18
@@ -45,6 +47,7 @@
 #define V_ICONS  1
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
+static unsigned char win_w = DEF_W, win_h = DEF_H;
 static unsigned char total;       /* number of files on the disk          */
 static unsigned char top;         /* first visible LINE (row / grid row)  */
 static unsigned char nsel;        /* 0 = none, else selected index + 1    */
@@ -265,10 +268,11 @@ static void draw(void)
     gb_set_drive(my_drive);              /* this window's drive (#65) - on_repaint may
                                             run while another window's drive is active */
     gb_curhide();
-    gb_window(win_x, win_y, WIN_W, WIN_H, drive_title[my_drive]);
+    gb_window(win_x, win_y, win_w, win_h, drive_title[my_drive]);
     draw_scrollbar();
     if (view == V_ICONS) draw_icons_view();
     else                 draw_list_view();
+    gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip, bottom-right (#81) */
     gb_curshow();
 }
 
@@ -389,10 +393,20 @@ static void on_frame(void)
     }
 
     /* title bar (right of the close gadget) -> drag the window */
-    if (my >= win_y && my < win_y + TITLE_H && mx >= win_x + 4 && mx < win_x + WIN_W) {
-        if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+    if (my >= win_y && my < win_y + TITLE_H && mx >= win_x + 4 && mx < win_x + win_w) {
+        if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
             gb_wm_setpos(win_x, win_y);
             gb_restore_parent();
+        }
+        return;
+    }
+
+    /* resize grip (bottom-right corner) -> resize the window (#81) */
+    if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {
+        if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
+            gb_wm_setsize(win_w, win_h);
+            gb_restore_parent();
+            draw();
         }
         return;
     }
@@ -413,7 +427,7 @@ static void on_frame(void)
     }
 
     /* content: pick the entry under the pointer (list row or grid cell) */
-    if (my >= CT_Y && my < CT_Y + CT_H && mx >= CT_X && mx < win_x + WIN_W) {
+    if (my >= CT_Y && my < CT_Y + CT_H && mx >= CT_X && mx < win_x + win_w) {
         if (view == V_ICONS) {
             unsigned char c = (mx - CT_X) / CELL_W;
             unsigned char r = (my - CT_Y) / CELL_H;
@@ -444,7 +458,7 @@ static void on_frame(void)
 
 /* a co-resident window: on_repaint = draw, on_event = the View toggle, menu = the
    "View" title (shown in the top bar while we are focused). */
-static gb_win_t fmwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, draw, on_event, fm_menu };
+static gb_win_t fmwin = { DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, draw, on_event, fm_menu };
 
 void main(void)
 {
