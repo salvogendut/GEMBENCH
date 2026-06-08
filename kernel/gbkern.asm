@@ -723,7 +723,7 @@ ext_to_icon
                 ld    a,(fs_ent_attr)         ; directory -> folder icon (slot 9, #54)
                 and   #10
                 jr    nz,eti_folder
-                ld    hl,name_geobench
+                ld    hl,name_kernel          ; the kernel binary -> geobench icon (slot 4)
                 call  cmp_name8
                 jr    z,eti_geo
                 ld    hl,ext_bas
@@ -735,6 +735,15 @@ ext_to_icon
                 ld    hl,ext_txt
                 call  cmp_ext
                 jr    z,eti_txt
+                ld    hl,ext_cfg              ; .CFG (incl. GEOBENCH.CFG) -> text icon
+                call  cmp_ext
+                jr    z,eti_txt
+                ld    hl,ext_fnt              ; .FNT font set -> font icon
+                call  cmp_ext
+                jr    z,eti_fnt
+                ld    hl,ext_ist              ; .IST icon set -> icon-set icon
+                call  cmp_ext
+                jr    z,eti_ist
                 ld    hl,ext_app
                 call  cmp_ext
                 jr    z,eti_app
@@ -750,12 +759,26 @@ eti_geo         ld    a,4
                 ret
 eti_folder      ld    a,9
                 ret
-eti_app         ld    hl,name_notepad8         ; NOTEPAD.APP -> its own icon (slot 11)
+eti_fnt         ld    a,13
+                ret
+eti_ist         ld    a,14
+                ret
+eti_app         ld    hl,name_notepad8         ; NOTEPAD.APP -> notepad icon (slot 11)
                 call  cmp_name8
                 jr    z,eti_np
+                ld    hl,name_iconed8          ; ICONED.APP -> icon-editor icon (slot 12)
+                call  cmp_name8
+                jr    z,eti_ied
+                ld    hl,name_clock8           ; CLOCK.APP -> clock icon (slot 2)
+                call  cmp_name8
+                jr    z,eti_clk
                 ld    a,10                     ; other GEOBENCH apps (.APP) -> app icon (10)
                 ret
 eti_np          ld    a,11
+                ret
+eti_ied         ld    a,12
+                ret
+eti_clk         ld    a,2
                 ret
 
 cmp_name8                                      ; Z if name_geobench == fs_ent_name[0..7]
@@ -789,8 +812,13 @@ ext_bas         db    "BAS"
 ext_scr         db    "SCR"
 ext_txt         db    "TXT"
 ext_app         db    "APP"
-name_geobench   db    "GEOBENCH"
-name_notepad8   db    "NOTEPAD "      ; 8-char name field of NOTEPAD.APP (icon #86)
+ext_cfg         db    "CFG"
+ext_fnt         db    "FNT"
+ext_ist         db    "IST"
+name_kernel     db    "GBKERN  "      ; the kernel binary -> geobench icon (#88)
+name_notepad8   db    "NOTEPAD "      ; 8-char name fields of the GEOBENCH apps (#86/#88)
+name_iconed8    db    "ICONED  "
+name_clock8     db    "CLOCK   "
 
 ; --- config (C kernel module) --------------------------------------------
 ; cfg_boot: seed defaults, load GEOBENCH.CFG into the transfer area, then run the

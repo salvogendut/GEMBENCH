@@ -19,7 +19,9 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
-    lib/icon_app.asm lib/icon_notepad.asm  # slot 9=folder, 10=.APP, 11=NOTEPAD.APP
+    lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
+    lib/icon_font.asm lib/icon_iconset.asm \
+    # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=.IST
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR (C/SDCC) -> build/FILEMGR.RAW
 tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
