@@ -675,7 +675,7 @@ ig_h            db    0
 ; rows) instead of the half-height middle band - the File Manager's icon-grid view
 ; uses it so tall art (e.g. the geobench lollipop) isn't cut. B = x, C = y. picks
 ; the slot by the current entry, then hands to k_icon's full blit. ext_to_icon
-; clobbers B (cmp_name8), so save x,y across it.
+; clobbers B (cmp_name), so save x,y across it.
 gb_blit_entry_full
                 push  bc
                 call  ext_to_icon            ; A = slot for the current entry
@@ -729,124 +729,109 @@ ig_done
                 ld    (bm_y),a
                 ret
 
-; ext_to_icon: A = icon slot for fs_ent_name (GEOBENCH/BAS/BIN/SCR/TXT -> their
-; icons, else generic binary). Slots match the desktop's icon set order.
+; ext_to_icon: A = icon slot for the current entry (fs_ent_name + fs_ent_attr).
+; Table-driven (#95, was a long chain of inline cmp_ext / cmp_name8 checks): a
+; folder check, the kernel-name special case, then an ext table ({3 chars, slot};
+; APP's slot #FF means "look the name up in the app-name table"), else binary.
 ext_to_icon
-                ld    a,(fs_ent_attr)         ; directory -> folder icon (slot 9, #54)
+                ld    a,(fs_ent_attr)         ; directory -> folder (slot 9)
                 and   #10
                 jr    nz,eti_folder
                 ld    hl,name_kernel          ; the kernel binary -> geobench icon (slot 4)
-                call  cmp_name8
+                call  cmp_name
                 jr    z,eti_geo
-                ld    hl,ext_bas
-                call  cmp_ext
-                jr    z,eti_bas
-                ld    hl,ext_scr
-                call  cmp_ext
-                jr    z,eti_scr
-                ld    hl,ext_pic              ; .PIC pictures -> picture icon (slot 7)
-                call  cmp_ext
-                jr    z,eti_scr
-                ld    hl,ext_txt
-                call  cmp_ext
-                jr    z,eti_txt
-                ld    hl,ext_cfg              ; .CFG (incl. GEOBENCH.CFG) -> text icon
-                call  cmp_ext
-                jr    z,eti_txt
-                ld    hl,ext_fnt              ; .FNT font set -> font icon
-                call  cmp_ext
-                jr    z,eti_fnt
-                ld    hl,ext_ist              ; .IST icon set -> icon-set icon
-                call  cmp_ext
-                jr    z,eti_ist
-                ld    hl,ext_app
-                call  cmp_ext
-                jr    z,eti_app
-                ld    a,6                      ; binary (default)
+                ld    hl,ext_table            ; scan {3-char ext, slot byte}
+eti_el          ld    a,(hl)
+                or    a
+                jr    z,eti_bin               ; 0 terminator -> binary default
+                call  cmp_ext                 ; 3 chars at HL vs ext; HL preserved
+                jr    z,eti_eh
+                inc   hl                        ; next entry (3 ext + 1 slot)
+                inc   hl
+                inc   hl
+                inc   hl
+                jr    eti_el
+eti_eh          inc   hl                        ; HL -> the slot byte
+                inc   hl
+                inc   hl
+                ld    a,(hl)
+                inc   a                          ; #FF (the .APP sentinel) -> 0
+                jr    z,eti_appname
+                dec   a                          ; restore the real slot
                 ret
-eti_bas         ld    a,5
-                ret
-eti_scr         ld    a,7
-                ret
-eti_txt         ld    a,8
-                ret
-eti_geo         ld    a,4
+eti_bin         ld    a,6
                 ret
 eti_folder      ld    a,9
                 ret
-eti_fnt         ld    a,13
+eti_geo         ld    a,4
                 ret
-eti_ist         ld    a,14
+; .APP name sub-dispatch: scan {8-char name, slot}, else the generic app icon (10).
+eti_appname     ld    hl,appname_table
+eti_al          ld    a,(hl)
+                or    a
+                jr    z,eti_appdef
+                call  cmp_name                ; 8 chars at HL vs name; HL preserved
+                jr    z,eti_ah
+                ld    bc,9                      ; next entry (8 name + 1 slot)
+                add   hl,bc
+                jr    eti_al
+eti_ah          ld    de,8                      ; HL -> the slot byte
+                add   hl,de
+                ld    a,(hl)
                 ret
-eti_app         ld    hl,name_notepad8         ; NOTEPAD.APP -> notepad icon (slot 11)
-                call  cmp_name8
-                jr    z,eti_np
-                ld    hl,name_iconed8          ; ICONED.APP -> icon-editor icon (slot 12)
-                call  cmp_name8
-                jr    z,eti_ied
-                ld    hl,name_clock8           ; CLOCK.APP -> clock icon (slot 2)
-                call  cmp_name8
-                jr    z,eti_clk
-                ld    hl,name_desktop8         ; DESKTOP.APP -> desktop icon (slot 15)
-                call  cmp_name8
-                jr    z,eti_dsk
-                ld    hl,name_filemgr8         ; FILEMGR.APP -> file-manager icon (slot 16)
-                call  cmp_name8
-                jr    z,eti_fm
-                ld    a,10                     ; other GEOBENCH apps (.APP) -> app icon (10)
-                ret
-eti_np          ld    a,11
-                ret
-eti_ied         ld    a,12
-                ret
-eti_dsk         ld    a,15
-                ret
-eti_fm          ld    a,16
-                ret
-eti_clk         ld    a,2
+eti_appdef      ld    a,10
                 ret
 
-cmp_name8                                      ; Z if name_geobench == fs_ent_name[0..7]
-                ld    de,fs_ent_name
-                ld    b,8
-cn8
-                ld    a,(de)
-                cp    (hl)
-                ret   nz
-                inc   hl
-                inc   de
-                djnz  cn8
-                xor   a
-                ret
-cmp_ext                                        ; Z if (HL) 3-char ext == fs_ent_name+8
+; cmp_ext: Z if the 3 chars at HL == fs_ent_name+8. HL preserved. Clobbers A, DE.
+cmp_ext
+                push  hl
                 ld    de,fs_ent_name+8
                 ld    a,(de)
                 cp    (hl)
-                ret   nz
+                jr    nz,cmpe_x
                 inc   hl
                 inc   de
                 ld    a,(de)
                 cp    (hl)
-                ret   nz
+                jr    nz,cmpe_x
                 inc   hl
                 inc   de
                 ld    a,(de)
                 cp    (hl)
+cmpe_x          pop   hl
                 ret
-ext_bas         db    "BAS"
-ext_scr         db    "SCR"
-ext_pic         db    "PIC"
-ext_txt         db    "TXT"
-ext_app         db    "APP"
-ext_cfg         db    "CFG"
-ext_fnt         db    "FNT"
-ext_ist         db    "IST"
-name_kernel     db    "GBKERN  "      ; the kernel binary -> geobench icon (#88)
-name_notepad8   db    "NOTEPAD "      ; 8-char name fields of the GEOBENCH apps (#86/#88)
-name_iconed8    db    "ICONED  "
-name_clock8     db    "CLOCK   "
-name_desktop8   db    "DESKTOP "
-name_filemgr8   db    "FILEMGR "
+; cmp_name: Z if the 8 chars at HL == fs_ent_name[0..7]. HL preserved. Clobbers A,B,DE.
+cmp_name
+                push  hl
+                ld    de,fs_ent_name
+                ld    b,8
+cmpn_l          ld    a,(de)
+                cp    (hl)
+                jr    nz,cmpn_x
+                inc   hl
+                inc   de
+                djnz  cmpn_l
+cmpn_x          pop   hl
+                ret
+
+; ext table: {3-char ext, slot}. APP -> #FF = sentinel for the app-name table.
+ext_table       db    "BAS",5
+                db    "SCR",7
+                db    "PIC",7
+                db    "TXT",8
+                db    "CFG",8
+                db    "FNT",13
+                db    "IST",14
+                db    "APP",#FF
+                db    0
+; app-name sub-table: {8-char name, slot}. (GBKERN handled separately above.)
+appname_table   db    "NOTEPAD ",11
+                db    "ICONED  ",12
+                db    "CLOCK   ",2
+                db    "DESKTOP ",15
+                db    "FILEMGR ",16
+                db    0
+name_kernel     db    "GBKERN  "
 
 ; --- config (C kernel module) --------------------------------------------
 ; cfg_boot: seed defaults, load GEOBENCH.CFG into the transfer area, then run the
@@ -2467,7 +2452,7 @@ kern_end                                        ; GBKERN.BIN = #8000..kern_end o
 ; silent crash). This assert turns that into a LOUD build failure so a too-big
 ; kernel is caught here, not in the field. (Reclaim, or move scratch out, to fix.)
 HIMEM           equ   #A288        ; UniDOS HIMEM (stack top); see docs/AMSDOS notes
-STACK_RESERVE   equ   192          ; min bytes kept free below HIMEM for the stack
+STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the stack (#95)
                 assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big: <192B stack left under HIMEM - reclaim resident bytes"
 
 ; --- scratch buffers live in LOW RAM (always the main bank, below the stack) -----
