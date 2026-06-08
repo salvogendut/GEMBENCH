@@ -2,15 +2,12 @@
 ; lib/input.asm - GEOBENCH input layer
 ;
 ; Polls the pointer devices and reports an abstract per-frame result, so the
-; rest of the system never reads hardware directly. The mouse takes precedence:
-; the joystick drives the pointer only as a FALLBACK when no mouse is present, so
-; an idle/noisy joystick can't fight a real mouse (input_poll gates it on
-; mouse_enabled).
-;   - SYMBiFACE II PS/2 mouse (port #FD10), polled only when a SymbiFace is
-;     detected - the pointer when present.
+; rest of the system never reads hardware directly. Two sources are COMBINED
+; every frame, so the joystick is always a working fallback:
 ;   - joystick port (KM_GET_JOYSTICK; an AMX-style mouse/gamepad presents as the
 ;     joystick). Held directions -> a stepped delta, with an acceleration ramp.
-;     The fallback when no mouse is detected. #FD10 returns 0x00 both when idle AND when no mouse is fitted, so
+;   - SYMBiFACE II PS/2 mouse (port #FD10), polled only when a SymbiFace is
+;     detected. #FD10 returns 0x00 both when idle AND when no mouse is fitted, so
 ;     a mouse cannot be sensed at rest - we just read its packets when they come.
 ;     The port floats on a board with no SymbiFace, so it is gated behind a
 ;     presence probe (the SymbiFace IDE controller answering fs_ide_present).
@@ -77,12 +74,8 @@ input_poll
                 ld    (in_fire),a
                 ld    (in_quit),a
                 ld    (in_joy_dirs),a
-                ld    a,(mouse_enabled)       ; the joystick is a FALLBACK: only drive the
-                or    a                        ; pointer from it when NO mouse is present, so a
-                jr    nz,ip_mouse              ; noisy/idle joystick can't fight a real mouse
                 call  read_joystick          ; -> in_joy_dirs, in_fire, in_quit
                 call  joy_to_delta           ; held dirs (+ accel) -> in_dx/in_dy
-ip_mouse
                 call  read_mouse             ; SymbiFace mouse -> in_dx/in_dy + buttons
                 ld    a,KEY_ESC              ; ESC quits (never a text key)
                 call  KM_TEST_KEY
