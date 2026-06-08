@@ -18,6 +18,10 @@ build/
 # Emulator screenshots (1984 F4 dumps)
 *.ppm
 
+# Python artifacts
+__pycache__/
+*.pyc
+
 # Editor / OS cruft
 *~
 .DS_Store
