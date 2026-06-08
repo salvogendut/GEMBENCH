@@ -884,8 +884,11 @@ icon_init
                 ld    hl,KCFG_ICONNAME       ; fs_req_name = the config icon name
                 ld    de,fs_req_name
                 call  copy11
-                ld    hl,#1000               ; .IST <= 4K (12 icons = 3136B + headroom)
-                ld    (fs_load_max),hl
+                ld    hl,GB_KERNEL-DATA_ICONS-#200   ; cap = ALL the free icon region, from
+                ld    (fs_load_max),hl               ; DATA_ICONS up to the kernel (#8000),
+                                                     ; less a sector. Derived from the layout
+                                                     ; so it never needs hand-tuning: ~#3A00
+                                                     ; (~57 icons), the physical ceiling.
                 ld    hl,DATA_ICONS
                 ld    (fs_load_dst),hl
                 ld    hl,def_ist             ; fall back to DEFAULT.IST if missing
