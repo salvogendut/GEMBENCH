@@ -43,10 +43,10 @@ fs_init
                 jr    nc,fsi_set
                 xor   a                          ; card present -> boot drive 0 (Disk C)
 fsi_set
-                call  fs_set_drive               ; select the boot drive, then capture its
-                ld    hl,(fs_p_load)             ; loader as fs_sys_load: app binaries/
-                ld    (fs_sys_load),hl           ; modules always load from the boot drive,
-                ret                               ; regardless of a window's browse drive
+                ld    (fs_boot_drive),a           ; remember the boot drive NUMBER: app
+                call  fs_set_drive               ; binaries + modules always load from it
+                ret                               ; (fs_load_sys), regardless of a window's
+                                                 ; browse drive (#65/#110)
                 ; (fs_set_drive falls through below for the GB_SETDRIVE path)
 
 ; fs_set_drive: A = drive (0 = IDE/Disk C, 1 = floppy A, 2 = floppy B). Point the
@@ -82,7 +82,9 @@ fsd_floppy
                 ld    (fs_p_delete),hl
                 ret
 fs_cur_drive    defb  0
-fs_sys_load     defw  D0_LOAD       ; the boot drive's loader (fs_init captures it)
+fs_boot_drive   defb  0            ; #110: boot drive number; fs_load_sys loads apps/modules
+                                   ; from it regardless of a window's browse drive
+fls_browse      defb  0            ; fs_load_sys scratch: browse drive to restore
 
 ; fs_dir_first / fs_dir_next / fs_load_file: route to the selected backend.
 fs_dir_first
@@ -98,8 +100,16 @@ fs_load_file
 ; fs_load_sys: like fs_load_file but always from the BOOT drive (where app binaries
 ; and the GBFAT module live), regardless of the active browse drive (#65).
 fs_load_sys
-                ld    hl,(fs_sys_load)
-                jp    (hl)
+                ld    a,(fs_cur_drive)            ; save the active browse drive
+                ld    (fls_browse),a
+                ld    a,(fs_boot_drive)           ; load from the boot drive (where the app
+                call  fs_set_drive               ; binaries + GBFAT module live), NOT the
+                call  fs_load_file               ; window's browse drive - #110: a floppy-B
+                push  af                          ; window must still load apps off floppy A
+                ld    a,(fls_browse)             ; (CF result preserved across the restore)
+                call  fs_set_drive               ; restore the browse drive
+                pop   af
+                ret
 ; fs_save_file: save fs_save_len bytes from (fs_save_src) to fs_req_name. The
 ; AMSDOS backend creates the file if absent and allocates/frees 1KB blocks as the
 ; size changes (single extent, <=16KB). CF set = saved, NC = failed (disk/dir

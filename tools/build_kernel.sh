@@ -39,7 +39,8 @@ tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR (C/SDCC) -> build/F
 tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
 DATA_LOC=0x6800 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: code-heavy,
                                    # so a higher data-loc gives it ~1.9K code room (#97)
-tools/build_capp.sh apps/iconed build/ICONED.RAW   # ICONED (C/SDCC) -> build/ICONED.RAW
+DATA_LOC=0x5C00 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower data-loc so
+                                   # its 7KB icon-set buffer (BUFSZ) fits below #8000 (#110)
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
 tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
