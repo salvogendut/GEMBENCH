@@ -98,7 +98,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    gb_open_window         ; GB_WINDOW #800F
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012
                 jp    gb_fs_dir_next         ; GB_DIRN   #8015
-                jp    gb_blit_entry          ; GB_BLITE  #8018
+                jp    k_vsync                ; GB_BLITE  #8018 (removed: mapping->FM, #103)
                 jp    k_curshow              ; GB_CURSHOW #801B
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
@@ -142,7 +142,8 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_copy_end             ; GB_COPYEND     #8093 (restore target ctx)
                 jp    k_on_bar               ; GB_ONBAR       #8096 (HL = bar handler, #77)
                 jp    k_wm_setsize           ; GB_WMSETSIZE   #8099 (A = w, L = h, #81)
-                jp    gb_blit_entry_full     ; GB_BLITEFULL   #809C (B=x C=y, full icon #88)
+                jp    k_vsync                ; GB_BLITEFULL   #809C (removed: mapping->FM, #103)
+                jp    k_icon_half            ; GB_ICONHALF    #809F (A=slot B=x C=y, #103)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -650,16 +651,16 @@ fe_end
                 ret
 dir_namebuf     defs  14
 
-; --- gb_blit_entry: half-height type icon for the current entry ----------
-; B = byte col, C = line. Picks the icon by fs_ent_name's extension, reads the
-; bitmap + size from the .IST in PAGE_DATA, and blits its middle band.
-gb_blit_entry
+; --- k_icon_half (GB_ICONHALF): half-height (middle-band) blit of icon A=slot at
+; B=x, C=y. The file->slot mapping now lives in the File Manager (#103); the kernel
+; only blits a given slot (it owns PAGE_DATA where the .IST lives). The grid view
+; uses k_icon (full icon), the list view uses this (compact 16px middle band).
+k_icon_half
+                ld    (be_slot),a            ; save the slot (A is reused below)
                 ld    a,b
                 ld    (be_x),a
                 ld    a,c
                 ld    (be_y),a
-                call  ext_to_icon            ; A = slot (reads resident fs_ent_name)
-                ld    (be_slot),a
                 call  to_data
                 ld    a,(be_slot)
                 call  icon_geom              ; sets bm_src/bm_w/bm_h/bm_x/bm_y
@@ -670,17 +671,6 @@ be_y            db    0
 be_slot         db    0
 ig_w            db    0
 ig_h            db    0
-
-; gb_blit_entry_full (GB_BLITEFULL): like gb_blit_entry, but the FULL icon (all
-; rows) instead of the half-height middle band - the File Manager's icon-grid view
-; uses it so tall art (e.g. the geobench lollipop) isn't cut. B = x, C = y. picks
-; the slot by the current entry, then hands to k_icon's full blit. ext_to_icon
-; clobbers B (cmp_name), so save x,y across it.
-gb_blit_entry_full
-                push  bc
-                call  ext_to_icon            ; A = slot for the current entry
-                pop   bc
-                jp    k_icon                  ; full blit: A = slot, B = x, C = y
 
 ; icon_geom: A = slot -> from the .IST directory (DATA_ICONS) set up a
 ; half-height blit (middle band) at (be_x, be_y). PAGE_DATA must be mapped.
@@ -729,111 +719,8 @@ ig_done
                 ld    (bm_y),a
                 ret
 
-; ext_to_icon: A = icon slot for the current entry (fs_ent_name + fs_ent_attr).
-; Table-driven (#95, was a long chain of inline cmp_ext / cmp_name8 checks): a
-; folder check, the kernel-name special case, then an ext table ({3 chars, slot};
-; APP's slot #FF means "look the name up in the app-name table"), else binary.
-ext_to_icon
-                ld    a,(fs_ent_attr)         ; directory -> folder (slot 9)
-                and   #10
-                jr    nz,eti_folder
-                ld    hl,name_kernel          ; the kernel binary -> geobench icon (slot 4)
-                call  cmp_name
-                jr    z,eti_geo
-                ld    hl,ext_table            ; scan {3-char ext, slot byte}
-eti_el          ld    a,(hl)
-                or    a
-                jr    z,eti_bin               ; 0 terminator -> binary default
-                call  cmp_ext                 ; 3 chars at HL vs ext; HL preserved
-                jr    z,eti_eh
-                inc   hl                        ; next entry (3 ext + 1 slot)
-                inc   hl
-                inc   hl
-                inc   hl
-                jr    eti_el
-eti_eh          inc   hl                        ; HL -> the slot byte
-                inc   hl
-                inc   hl
-                ld    a,(hl)
-                inc   a                          ; #FF (the .APP sentinel) -> 0
-                jr    z,eti_appname
-                dec   a                          ; restore the real slot
-                ret
-eti_bin         ld    a,6
-                ret
-eti_folder      ld    a,9
-                ret
-eti_geo         ld    a,4
-                ret
-; .APP name sub-dispatch: scan {8-char name, slot}, else the generic app icon (10).
-eti_appname     ld    hl,appname_table
-eti_al          ld    a,(hl)
-                or    a
-                jr    z,eti_appdef
-                call  cmp_name                ; 8 chars at HL vs name; HL preserved
-                jr    z,eti_ah
-                ld    bc,9                      ; next entry (8 name + 1 slot)
-                add   hl,bc
-                jr    eti_al
-eti_ah          ld    de,8                      ; HL -> the slot byte
-                add   hl,de
-                ld    a,(hl)
-                ret
-eti_appdef      ld    a,10
-                ret
-
-; cmp_ext: Z if the 3 chars at HL == fs_ent_name+8. HL preserved. Clobbers A, DE.
-cmp_ext
-                push  hl
-                ld    de,fs_ent_name+8
-                ld    a,(de)
-                cp    (hl)
-                jr    nz,cmpe_x
-                inc   hl
-                inc   de
-                ld    a,(de)
-                cp    (hl)
-                jr    nz,cmpe_x
-                inc   hl
-                inc   de
-                ld    a,(de)
-                cp    (hl)
-cmpe_x          pop   hl
-                ret
-; cmp_name: Z if the 8 chars at HL == fs_ent_name[0..7]. HL preserved. Clobbers A,B,DE.
-cmp_name
-                push  hl
-                ld    de,fs_ent_name
-                ld    b,8
-cmpn_l          ld    a,(de)
-                cp    (hl)
-                jr    nz,cmpn_x
-                inc   hl
-                inc   de
-                djnz  cmpn_l
-cmpn_x          pop   hl
-                ret
-
-; ext table: {3-char ext, slot}. APP -> #FF = sentinel for the app-name table.
-ext_table       db    "BAS",5
-                db    "SCR",7
-                db    "PIC",7
-                db    "TXT",8
-                db    "CFG",8
-                db    "FNT",13
-                db    "IST",14
-                db    "APP",#FF
-                db    0
-; app-name sub-table: {8-char name, slot}. (GBKERN handled separately above.)
-appname_table   db    "NOTEPAD ",11
-                db    "ICONED  ",12
-                db    "CLOCK   ",2
-                db    "DESKTOP ",15
-                db    "FILEMGR ",16
-                db    "PAINT   ",17     ; PAINT.APP   (app not built yet, #100)
-                db    "FRACTAL ",18     ; FRACTAL.APP (app not built yet, #100)
-                db    0
-name_kernel     db    "GBKERN  "
+; (file -> icon-slot mapping moved to the File Manager, #103 - the kernel now
+; only blits a given slot via k_icon / k_icon_half; the .IST lives in PAGE_DATA.)
 
 ; --- config (C kernel module) --------------------------------------------
 ; cfg_boot: seed defaults, load GEOBENCH.CFG into the transfer area, then run the
