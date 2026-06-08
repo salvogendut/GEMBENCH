@@ -26,7 +26,8 @@ python3 tools/packicons.py build/DEFAULT.IST \
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR (C/SDCC) -> build/FILEMGR.RAW
 tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
-tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD (C/SDCC) -> build/NOTEPAD.RAW
+DATA_LOC=0x6800 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: code-heavy,
+                                   # so a higher data-loc gives it ~1.9K code room (#97)
 tools/build_capp.sh apps/iconed build/ICONED.RAW   # ICONED (C/SDCC) -> build/ICONED.RAW
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
 tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
