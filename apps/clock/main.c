@@ -16,26 +16,43 @@
 
 #define DEF_X    24
 #define DEF_Y    20
-#define WIN_W    28           /* bytes (112 px) */
-#define WIN_H    122          /* px */
+#define DEF_W    28           /* default size, bytes (112 px); resizeable (#81) */
+#define DEF_H    122          /* px */
+#define MIN_W    22
+#define MIN_H    96
 #define TITLE_H  14
-
-#define R        44           /* face radius (px) */
-#define TICK_IN  37           /* hour-tick inner radius; hands stay inside this */
-#define L_HOUR   20
-#define L_MIN    30
-#define L_SEC    36
 
 #define MENU_COL 10           /* "Options" title column in the top bar */
 #define MENU_END 22
 
-#define CX       (win_x * 4 + WIN_W * 2)     /* live clock centre, screen pixels */
-#define CY       (win_y + 58)
-
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
+static unsigned char win_w = DEF_W, win_h = DEF_H;  /* live size (resizeable) */
 static unsigned char show_sec;               /* 0 = H:M (minute refresh), 1 = +seconds */
 static unsigned char ph, pm, ps, pshow, have_prev;  /* previous h/m/s + show state */
 static unsigned char want_menu, modal;
+
+/* face geometry, recomputed from the live window rect on every full draw (#81): the
+   analog face scales to whatever the window has been resized to. */
+static int cx, cy;                           /* face centre, screen pixels */
+static unsigned char rr, tick_in, l_hour, l_min, l_sec;  /* radius + hand lengths */
+static unsigned char dig_y;                  /* digital read-out row (px) */
+
+static void relayout(void)
+{
+    unsigned char top   = (unsigned char)(win_y + TITLE_H);
+    unsigned char dy    = (unsigned char)(win_y + win_h - 16);   /* read-out row */
+    unsigned char avail = (unsigned char)(dy - 2 - top);         /* face height band */
+    unsigned char rw    = (unsigned char)(win_w * 2 - 6);        /* radius bound: width  */
+    unsigned char rh    = (unsigned char)(avail / 2 - 2);        /* radius bound: height */
+    rr = (rw < rh) ? rw : rh;
+    cx = win_x * 4 + win_w * 2;
+    cy = top + avail / 2;
+    tick_in = (unsigned char)((unsigned int)rr * 37 / 44);       /* keep proportions */
+    l_hour  = (unsigned char)((unsigned int)rr * 20 / 44);
+    l_min   = (unsigned char)((unsigned int)rr * 30 / 44);
+    l_sec   = (unsigned char)((unsigned int)rr * 36 / 44);
+    dig_y = dy;
+}
 
 static const signed char SIN64[60] = {
       0,  7, 13, 20, 26, 32, 38, 43, 48, 52, 55, 58,
@@ -107,12 +124,12 @@ static unsigned char tobcd(unsigned char v)
 
 /* --- drawing ----------------------------------------------------------------- */
 
-static int px_at(unsigned char pos, unsigned char rad) { return CX + (int)SIN64[pos] * rad / 64; }
-static int py_at(unsigned char pos, unsigned char rad) { return CY - (int)COS64[pos] * rad / 64; }
+static int px_at(unsigned char pos, unsigned char rad) { return cx + (int)SIN64[pos] * rad / 64; }
+static int py_at(unsigned char pos, unsigned char rad) { return cy - (int)COS64[pos] * rad / 64; }
 
 static void hand(unsigned char pos, unsigned char len, unsigned char pen)
 {
-    line(CX, CY, px_at(pos, len), py_at(pos, len), pen);
+    line(cx, cy, px_at(pos, len), py_at(pos, len), pen);
 }
 
 static unsigned char hourpos(unsigned char h, unsigned char m)
@@ -125,50 +142,52 @@ static void draw_face(void)
     unsigned char k, k2;
     for (k = 0; k < 60; k += 2) {                 /* rim: 30 segments */
         k2 = (unsigned char)((k + 2) % 60);
-        line(px_at(k, R), py_at(k, R), px_at(k2, R), py_at(k2, R), 1);
+        line(px_at(k, rr), py_at(k, rr), px_at(k2, rr), py_at(k2, rr), 1);
     }
     for (k = 0; k < 60; k += 5)                    /* 12 hour ticks */
-        line(px_at(k, R), py_at(k, R), px_at(k, TICK_IN), py_at(k, TICK_IN), 1);
+        line(px_at(k, rr), py_at(k, rr), px_at(k, tick_in), py_at(k, tick_in), 1);
 }
 
 /* draw (or erase, pen 0) the hands for h:m[:s]. withsec controls the second hand. */
 static void hands(unsigned char h, unsigned char m, unsigned char s,
                   unsigned char withsec, unsigned char pen_hm, unsigned char pen_s)
 {
-    hand(hourpos(h, m), L_HOUR, pen_hm);
-    hand(m, L_MIN, pen_hm);
-    if (withsec) hand(s, L_SEC, pen_s);
+    hand(hourpos(h, m), l_hour, pen_hm);
+    hand(m, l_min, pen_hm);
+    if (withsec) hand(s, l_sec, pen_s);
 }
 
 static char dig[9];
 static void put2(char *p, unsigned char v) { p[0] = '0' + v / 10; p[1] = '0' + v % 10; }
 static void draw_digital(unsigned char h, unsigned char m, unsigned char s)
 {
-    unsigned char x = show_sec ? (win_x + 8) : (win_x + 9);
+    unsigned char x = (unsigned char)(win_x + (win_w - (show_sec ? 12 : 8)) / 2);
     put2(dig, h); dig[2] = ':'; put2(dig + 3, m);
     if (show_sec) { dig[5] = ':'; put2(dig + 6, s); dig[8] = 0; }
     else dig[5] = 0;
-    gb_fill(win_x + 6, win_y + 106, 16, 8, 0);
-    gb_text(x, win_y + 106, dig);
+    gb_fill((unsigned char)(win_x + (win_w - 16) / 2), dig_y, 16, 8, 0);
+    gb_text(x, dig_y, dig);
 }
 
 static unsigned char cursor_over(void)
 {
     unsigned char mx = gb_mx(), my = gb_my();
-    return (unsigned char)(mx >= win_x && mx < win_x + WIN_W && my >= win_y && my < win_y + WIN_H);
+    return (unsigned char)(mx >= win_x && mx < win_x + win_w && my >= win_y && my < win_y + win_h);
 }
 
 /* full_draw: paint the whole window (open / on_repaint / after a drag or toggle). */
 static void full_draw(void)
 {
     unsigned char h, m, s;
+    relayout();
     gb_time();
     h = bin(gb_hour); m = bin(gb_min); s = bin(gb_sec);
     gb_curhide();
-    gb_window(win_x, win_y, WIN_W, WIN_H, "Clock");
+    gb_window(win_x, win_y, win_w, win_h, "Clock");
     draw_face();
     hands(h, m, s, show_sec, 1, 3);
     draw_digital(h, m, s);
+    gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#81) */
     gb_curshow();
     ph = h; pm = m; ps = s; pshow = show_sec; have_prev = 1;
 }
@@ -323,10 +342,19 @@ static void on_frame(void)
 
     if (!(flags & GB_CLICK)) return;
     mx = gb_mx(); my = gb_my();
+    if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {  /* resize grip (#81) */
+        if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
+            gb_wm_setsize(win_w, win_h);
+            gb_restore_parent();
+            have_prev = 0;                         /* face rescaled: no stale hands */
+            full_draw();                           /* redraw the face at the new size */
+        }
+        return;
+    }
     if (my >= win_y && my < win_y + TITLE_H) {
         if (mx >= win_x && mx < win_x + 5) { gb_wm_close(); return; }
-        if (mx >= win_x + 5 && mx < win_x + WIN_W) {
-            if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+        if (mx >= win_x + 5 && mx < win_x + win_w) {
+            if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
                 gb_wm_setpos(win_x, win_y);
                 gb_restore_parent();
                 full_draw();                       /* redraw the face at the new spot */
@@ -336,12 +364,12 @@ static void on_frame(void)
 }
 
 static const gb_win_t clkwin = {
-    DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, full_draw, on_menu, clk_menu
+    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, full_draw, on_menu, clk_menu
 };
 
 void main(void)
 {
-    win_x = DEF_X; win_y = DEF_Y;
+    win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
     show_sec = 0; have_prev = 0; want_menu = 0; modal = 0;
     gb_wm_add(&clkwin);
     full_draw();

@@ -41,6 +41,7 @@
         .globl  _gb_wm_open
         .globl  _gb_wm_close
         .globl  _gb_wm_setpos
+        .globl  _gb_wm_setsize
         .globl  _gb_wm_launch
         .globl  _gb_wm_launch_as
         .globl  _gb_time
@@ -279,6 +280,10 @@ _gb_wm_close:
 ;; (call after dragging so click-to-focus follows the window).
 _gb_wm_setpos:
         jp      0x8066          ; GB_WMSETPOS
+;; void gb_wm_setsize(u8 w, u8 h);   A=w, L=h -> resize the focused window's hit rect
+;; (call after a resize-drag so click-to-focus + restack use the new size, #81).
+_gb_wm_setsize:
+        jp      0x8099          ; GB_WMSETSIZE
 ;; void gb_wm_launch(void);   open the current dir entry's app as a co-resident
 ;; window with the file as its launch arg (the non-blocking gb_launch).
 _gb_wm_launch:
