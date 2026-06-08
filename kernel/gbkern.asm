@@ -26,6 +26,11 @@ KCFG_FONTNAME   equ   #120D        ; 11-byte 8.3 font filename, built by the mod
 KCFG_MEMKB      equ   #1218        ; word: total RAM in KB (kernel -> module)
 KCFG_MEMSTR     equ   #121A        ; "<decimal>K" top-bar string (module -> kernel)
 KCFG_CURSORNAME equ   #1221        ; 11-byte 8.3 cursor filename (CURSOR=), built by module
+; CLOCK.APP support (#72): a tiny time read-out (kept minimal - the BCD->binary
+; conversion lives in the C app; the clock draws its hands by calling the firmware
+; graphics directly, so no resident line primitive is needed).
+GB_TIME_BUF     equ   #1240        ; raw time: +0 hours(&3F), +1 min, +2 sec, +3 binmode
+                                    ; (binmode 0 = BCD regs, nonzero = already binary)
 
 ; Callback API (issue #32) - kernel->app event delivery, state in low RAM so it
 ; costs no resident image bytes (low RAM stays main RAM under banking).
@@ -122,6 +127,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_get_drive            ; GB_GETDRIVE    #8084
                 jp    k_file_copy            ; GB_FSCOPY      #8087
                 jp    k_wm_launch_as         ; GB_WMLAUNCHAS  #808A (HL = app name)
+                jp    k_time                 ; GB_TIME        #808D (-> GB_TIME_BUF h,m,s)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -2308,6 +2314,39 @@ ckc_loop
                 xor   a
                 ret
 
+; k_time (GB_TIME #808D): current time -> GB_TIME_BUF (raw h, m, s + binmode). From
+; the Dallas RTC (regs 4/2/0; binmode = reg B bit2) or the software clock (binary).
+; The app converts BCD->binary when binmode is 0. Kept tiny (#72).
+k_time
+                ld    a,(have_rtc)
+                or    a
+                jr    z,kt_soft
+                ld    a,#0B
+                call  read_rtc_reg
+                and   #04
+                ld    (GB_TIME_BUF+3),a       ; binmode (0 = BCD)
+                ld    a,#04
+                call  read_rtc_reg
+                and   #3F
+                ld    (GB_TIME_BUF+0),a
+                ld    a,#02
+                call  read_rtc_reg
+                ld    (GB_TIME_BUF+1),a
+                ld    a,#00
+                call  read_rtc_reg
+                ld    (GB_TIME_BUF+2),a
+                ret
+kt_soft
+                ld    a,(sw_hour)
+                ld    (GB_TIME_BUF+0),a
+                ld    a,(sw_min)
+                ld    (GB_TIME_BUF+1),a
+                ld    a,(sw_sec)
+                ld    (GB_TIME_BUF+2),a
+                ld    a,4                       ; nonzero -> already binary, no convert
+                ld    (GB_TIME_BUF+3),a
+                ret
+
 ; (fmt_mem migrated to the GBCFG C module: gb_fmt_mem in kernel/kc/kcfg.c. The
 ; kernel leaves the KB count in KCFG_MEMKB before cfg_boot; the module writes the
 ; "<decimal>K" string to KCFG_MEMSTR, which draw_topbar renders.)
@@ -2435,23 +2474,13 @@ fs_secbuf       equ   #1800            ; IDE sector buffer / aliased AMSDOS writ
 fsam_buf        equ   #1A00            ; floppy whole-directory buffer
                                                 ; The packaging incbins below are
                                                 ; never loaded at runtime, only read
-                                                ; by `save`. They are ORG'd into low
-                                                ; memory (below the #8000 kernel) so
-                                                ; the growing payload (now incl.
-                                                ; ICONED) stays within the 64K image.
-                org   #0100
-dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
-dtp_imgend
-app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.APP
-app_imgend
-vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.APP
-vwr_imgend
-npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
-npd_imgend
-ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
-ied_imgend
-chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
-chl_imgend
+                                                ; by `save`. The payload outgrew a
+                                                ; single free region, so it is split:
+                                                ; the modules/fonts/assets sit ABOVE
+                                                ; the kernel, the (larger) app binaries
+                                                ; in low memory at #0100 - both within
+                                                ; the 64K image and clear of #8000..
+                                                ; kern_end (GBKERN.BIN).
 cfg_img         incbin "../build/GBCFG.RAW"     ; config-parser C module, as GBCFG.BIN
 cfg_imgend
 fat_img         incbin "../build/GBFAT.RAW"     ; FAT16/IDE write module, as GBFAT.BIN
@@ -2466,12 +2495,28 @@ wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in 
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
+                org   #0100                     ; --- app binaries, low region ---
+dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
+dtp_imgend
+app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.APP
+app_imgend
+vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.APP
+vwr_imgend
+npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
+npd_imgend
+ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
+ied_imgend
+clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
+clk_imgend
+chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
+chl_imgend
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
                 save  "VIEWER.APP",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
+                save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
                 save  "CHELLO.APP",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
