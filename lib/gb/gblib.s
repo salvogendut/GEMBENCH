@@ -56,6 +56,7 @@
         .globl  _gb_get_drive
         .globl  _gb_copy_begin
         .globl  _gb_copy_end
+        .globl  _gb_on_bar
 
         .area   _BSS
 sv_ret: .ds     2               ; saved return addr for the multi-pop wrappers
@@ -343,3 +344,7 @@ _gb_copy_begin:
 ;; void gb_copy_end(void);  restore the caller's (target) drive+dir saved by gb_copy_begin
 _gb_copy_end:
         jp      0x8093          ; GB_COPYEND
+;; void gb_on_bar(void (*handler)(void));  handler in HL -> the WM runs it every frame
+;; in the desktop's page to draw the top bar, regardless of focus (#77). 0 to clear.
+_gb_on_bar:
+        jp      0x8096          ; GB_ONBAR

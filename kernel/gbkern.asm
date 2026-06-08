@@ -33,6 +33,8 @@ GB_TIME_BUF     equ   #1240        ; raw time: +0 hours(&3F), +1 min, +2 sec, +3
 BOOT_SP         equ   #1244        ; word: SP at kernel_main entry (GB_EXIT, #74)
 GB_KSIZE        equ   #1246        ; word: resident kernel size in bytes (System>Ram Usage)
                                     ; (binmode 0 = BCD regs, nonzero = already binary)
+BAR_HANDLER     equ   #1248        ; word: top-bar handler, run every WM frame in PAGE_APP0
+                                    ; regardless of focus (0 = none); bar-as-app expt (#77)
 
 ; Callback API (issue #32) - kernel->app event delivery, state in low RAM so it
 ; costs no resident image bytes (low RAM stays main RAM under banking).
@@ -132,6 +134,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_time                 ; GB_TIME        #808D (-> GB_TIME_BUF h,m,s)
                 jp    k_exit                 ; GB_EXIT        #8090 (leave -> AMSDOS)
                 jp    k_copy_end             ; GB_COPYEND     #8093 (restore target ctx)
+                jp    k_on_bar               ; GB_ONBAR       #8096 (HL = bar handler, #77)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -171,8 +174,8 @@ kernel_main
                 call  font_init              ; load the font into PAGE_DATA
                 call  icon_init              ; load the icon set into PAGE_DATA
                 call  cursor_init            ; load the cursor sprite into low RAM (#65)
-                call  clock_init             ; RTC or software clock -> time_str
-                call  draw_topbar            ; the kernel owns the top bar
+                call  clock_init             ; detect RTC + seed the software clock (#77:
+                                              ; the desktop draws the bar, not the kernel)
                 ld    hl,WM_PAGES            ; clear all WM low-RAM state (pages bitmap,
                 ld    de,WM_PAGES+1          ; counts, table incl. alive flags, z-order)
                 ld    bc,WM_Z+WM_MAXWIN-WM_PAGES-1
@@ -952,8 +955,8 @@ la_done
                 pop   bc                       ; target page -> release it
                 ld    a,c
                 call  wm_free_page
-                call  draw_topbar             ; the app may have wiped it (e.g. a C
-                                              ; app's gb_cls) - the bar is the kernel's
+                                              ; (#77: the desktop redraws the bar via its
+                                              ; always-run handler, no draw_topbar here)
                 ld    a,(WM_NWIN)            ; if WM windows are live underneath (a modal
                 or    a                       ; app launched from one), repaint them so
                 call  nz,wm_repaint_all      ; the modal app's screen area is restored
@@ -1368,7 +1371,21 @@ wm_loop
                 ld    h,(hl)
                 ld    l,a
                 call  md_call
+                ld    hl,(BAR_HANDLER)            ; top-bar hook (#77): run the bar handler
+                ld    a,h                          ; every frame in the desktop's page, so the
+                or    l                            ; bar stays live regardless of which window
+                jr    z,wm_loop                    ; has focus
+                ld    a,PAGE_APP0
+                call  bank_set
+                ld    hl,(BAR_HANDLER)
+                call  md_call
                 jr    wm_loop
+
+; k_on_bar (GB_ONBAR #77): HL = a handler the WM loop runs every frame in PAGE_APP0
+; (the desktop's page) to draw the top bar, independent of focus. 0 to clear.
+k_on_bar
+                ld    (BAR_HANDLER),hl
+                ret
 
 ; k_wm_add (GB_WMADD): register the caller's window (used by an app opened with
 ; GB_WMOPEN); returns to the opener. The kernel's wm_loop then services it.
@@ -1930,8 +1947,8 @@ md_call         jp    (hl)
 
 ; k_menu (GB_MENU): register the calling app's top-bar menu. HL = a blob in the
 ; app page: count, then per title { col (byte), 8-byte NUL/space-padded label }.
-; Copied into resident MENU_DEF so draw_topbar can render it across clock ticks
-; and app switches; redraws the bar. launch_app clears it for a child app.
+; Copied into resident MENU_DEF; the desktop's bar handler watches MENU_DEF and
+; redraws the titles when it changes (#77). launch_app clears it for a child app.
 k_menu
 menu_install                                    ; HL = menu def (mapped page) -> MENU_DEF
                 ld    a,(hl)                  ; count
@@ -1947,39 +1964,14 @@ menu_install                                    ; HL = menu def (mapped page) ->
                 ld    b,0
                 ld    de,MENU_DEF
                 ldir
-                jp    draw_topbar
-; menu_clear: empty the top-bar menu and redraw the bar (focus moved to a window
-; with no menu).
+                ret
+; menu_clear: empty the top-bar menu (focus moved to a window with no menu).
 menu_clear
                 xor   a
                 ld    (MENU_DEF),a
-                jp    draw_topbar
-
-; draw_menu_titles: render the registered menu titles in the top bar. Called from
-; draw_topbar with PAGE_DATA mapped (the font is there) and the bar text pens set.
-draw_menu_titles
-                ld    a,(MENU_DEF)
-                or    a
-                ret   z
-                ld    b,a
-                ld    ix,MENU_DEF+1
-dmt_loop
-                push  bc
-                push  ix
-                ld    a,(ix+0)                ; title column
-                ld    (tc_x),a
-                xor   a
-                ld    (tc_y),a
-                push  ix
-                pop   hl
-                inc   hl                       ; label = entry + 1
-                call  draw_text
-                pop   ix
-                pop   bc
-                ld    de,9
-                add   ix,de
-                djnz  dmt_loop
                 ret
+
+; (menu titles are rendered by the desktop's bar handler now, from MENU_DEF - #77)
 
 ; (File-type -> app routing lives in the File Manager now; the kernel just opens
 ; the app the FM names, via GB_WMLAUNCHAS. The old resident app_for_ext + its name
@@ -2074,50 +2066,9 @@ TICKS_PER_SEC   equ   50
 RTC_ADDR        equ   #FD15        ; Dallas RTC on SymbiFace II / Cyboard
 RTC_DATA        equ   #FD14
 
-draw_topbar
-                xor   a                        ; white strip across the top
-                ld    (fb_x),a
-                ld    (fb_y),a
-                ld    a,80
-                ld    (fb_w),a
-                ld    a,8
-                ld    (fb_h),a
-                ld    a,#F0
-                ld    (fb_val),a
-                call  fill_block
-                call  to_data                 ; text needs the font page
-                ld    b,2                     ; black on white
-                ld    c,1
-                call  set_text_pens
-                ld    a,1
-                ld    (tc_x),a
-                xor   a
-                ld    (tc_y),a
-                ld    hl,KCFG_MEMSTR
-                call  draw_text
-                call  draw_menu_titles       ; the focused app's menu titles
-                ld    a,CLK_COL
-                ld    (tc_x),a
-                xor   a
-                ld    (tc_y),a
-                ld    hl,time_str
-                call  draw_text
-                jp    from_data
-draw_clock
-                call  to_data
-                ld    b,2
-                ld    c,1
-                call  set_text_pens
-                ld    a,CLK_COL
-                ld    (tc_x),a
-                xor   a
-                ld    (tc_y),a
-                ld    hl,time_str
-                call  draw_text
-                jp    from_data
-
-; clock_tick: once per frame from k_poll. Every 50 frames refresh the time and,
-; if "HH:MM" changed, redraw the clock (with the pointer lifted).
+; clock_tick: once per frame from k_poll. Advances the software clock (when there is
+; no RTC) every 50 frames, so gb_time stays correct. The desktop draws the bar now,
+; so there is no clock drawing here (#77).
 clock_tick
                 ld    a,(clk_frames)
                 inc   a
@@ -2128,32 +2079,18 @@ clock_tick
                 ld    a,(have_rtc)
                 or    a
                 call  z,sw_tick
-                call  read_time
-                call  clk_changed
-                ret   z
-                ld    hl,time_str
-                ld    de,clk_shown
-                ld    bc,6
-                ldir
-                call  cursor_erase
-                call  draw_clock
-                jp    cursor_draw
+                ret
 ct_keep
                 ld    (clk_frames),a
                 ret
 
-clock_init
+clock_init                                      ; detect the RTC + seed the software clock
                 xor   a
                 ld    (sw_sec),a
                 ld    (sw_min),a
                 ld    (sw_hour),a
                 ld    (clk_frames),a
                 call  rtc_detect
-                call  read_time
-                ld    hl,time_str
-                ld    de,clk_shown
-                ld    bc,6
-                ldir
                 ret
 rtc_detect
                 ld    e,#5A
@@ -2189,81 +2126,8 @@ read_rtc_reg                                   ; A = reg -> A = value
                 ld    bc,RTC_DATA
                 in    a,(c)
                 ret
-read_time                                      ; -> time_str "HH:MM"
-                ld    a,(have_rtc)
-                or    a
-                jr    z,rt_soft
-                ld    a,#0B                    ; register B bit2 (DM): 1 = binary
-                call  read_rtc_reg            ; (the SymbiFace/SymbOS world runs the
-                and   #04                      ;  RTC in binary; HDCPM/SymbOS set this)
-                ld    (rt_binmode),a
-                ld    a,#04
-                call  read_rtc_reg
-                and   #3F                      ; drop 12/24h + PM flags -> hours 0..23
-                call  rt_cvt                   ; binary -> BCD if in binary mode
-                ld    (rt_h),a
-                ld    a,#02
-                call  read_rtc_reg
-                call  rt_cvt
-                ld    (rt_m),a
-                jr    rt_fmt
-rt_cvt                                          ; A = raw reg; -> BCD for put_bcd2
-                ld    b,a
-                ld    a,(rt_binmode)
-                or    a
-                ld    a,b
-                ret   z                         ; BCD mode: use the register as-is
-                jp    bin_to_bcd                ; binary mode: convert to packed BCD
-rt_soft
-                ld    a,(sw_hour)
-                call  bin_to_bcd
-                ld    (rt_h),a
-                ld    a,(sw_min)
-                call  bin_to_bcd
-                ld    (rt_m),a
-rt_fmt
-                ld    de,time_str
-                ld    a,(rt_h)
-                call  put_bcd2
-                ld    a,':'
-                ld    (de),a
-                inc   de
-                ld    a,(rt_m)
-                call  put_bcd2
-                xor   a
-                ld    (de),a
-                ret
-put_bcd2                                        ; A = BCD -> two digits at (DE)
-                push  af
-                rrca
-                rrca
-                rrca
-                rrca
-                and   #0F
-                add   a,'0'
-                ld    (de),a
-                inc   de
-                pop   af
-                and   #0F
-                add   a,'0'
-                ld    (de),a
-                inc   de
-                ret
-bin_to_bcd                                      ; A (0..99) -> packed BCD
-                ld    b,#FF
-btb_loop
-                inc   b
-                sub   10
-                jr    nc,btb_loop
-                add   a,10
-                ld    c,a
-                ld    a,b
-                rlca
-                rlca
-                rlca
-                rlca
-                or    c
-                ret
+; (read_time / put_bcd2 / bin_to_bcd removed: the desktop formats the clock from
+; gb_time now - #77. sw_tick stays: it advances the software clock for gb_time.)
 sw_tick
                 ld    a,(sw_sec)
                 inc   a
@@ -2291,20 +2155,6 @@ swt_min
 swt_sec
                 ld    (sw_sec),a
                 ret
-clk_changed                                     ; Z if time_str == clk_shown (5 chars)
-                ld    hl,time_str
-                ld    de,clk_shown
-                ld    b,5
-ckc_loop
-                ld    a,(de)
-                cp    (hl)
-                ret   nz
-                inc   hl
-                inc   de
-                djnz  ckc_loop
-                xor   a
-                ret
-
 ; k_time (GB_TIME #808D): current time -> GB_TIME_BUF (raw h, m, s + binmode). From
 ; the Dallas RTC (regs 4/2/0; binmode = reg B bit2) or the software clock (binary).
 ; The app converts BCD->binary when binmode is 0. Kept tiny (#72).
@@ -2431,16 +2281,11 @@ md_update
                 ld    (md_last+1),a
                 ret
 
-time_str        defs  6
-clk_shown       defs  6
-sw_sec          db    0
-sw_min          db    0
+sw_sec          db    0            ; software clock (when no RTC); advanced by sw_tick,
+sw_min          db    0            ; read by gb_time. The desktop draws/formats the bar.
 sw_hour         db    0
 clk_frames      db    0
 have_rtc        db    0
-rt_binmode      db    0            ; RTC register B bit2 (DM): 0 = BCD, !=0 = binary
-rt_h            db    0
-rt_m            db    0
 md_save         dw    0
 md_count        db    0
 md_last         dw    0

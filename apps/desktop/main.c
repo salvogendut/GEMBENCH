@@ -43,8 +43,7 @@ static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };      /* drives set
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
 static unsigned char dc_timer, dc_idx, held_prev;
-static unsigned char want_menu, show_ram, last_min = 0xFF;   /* System menu (#74) */
-static void draw_footprint(void);                            /* (defined below; used by paint) */
+static unsigned char want_menu, show_ram;   /* System menu (#74) */
 
 #define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
 #define DRIVE_STEP 46         /* (BOX_H 44 + 2 gap), in detection order */
@@ -75,11 +74,68 @@ static void paint(void)
 {
     unsigned char i;
     gb_fill(0, 8, 80, 192, 0);                 /* backdrop, below the top bar */
-    gb_text(1, 10, "Dbl-click a drive to browse it");
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
-    if (show_ram) draw_footprint();            /* restore the footprint after a restack */
     gb_curshow();
+}
+
+/* The top bar is now drawn here, not in the kernel (experiment #77). The WM runs
+   bar_draw() every frame in our page regardless of focus, so the clock + the focused
+   window's menu titles stay live behind any window. Nothing else touches lines 0-7
+   (windows start at line 8), so each element is drawn once and only repainted when it
+   changes (clock minute, menu def). Kernel state we read: KCFG_MEMSTR (RAM size, set
+   by the GBCFG module) and MENU_DEF (the focused window's menu, kept by the WM). */
+#define KCFG_MEMSTR ((const char *)0x121A)
+#define MENU_DEF    ((volatile unsigned char *)0x1310)
+#define CLK_COL     68            /* clock column (matches the old kernel bar) */
+
+static unsigned char bar_init, bar_min, bar_msig;
+
+static unsigned char bin(unsigned char v)   /* raw RTC reg -> binary (gb_time) */
+{
+    return gb_binmode ? v : (unsigned char)((v >> 4) * 10 + (v & 15));
+}
+static void put2(char *p, unsigned char v) { p[0] = '0' + v / 10; p[1] = '0' + v % 10; }
+
+/* bar_menu: the focused window's menu titles (MENU_DEF: count, then {col, 8-byte
+   label}*count). Clear the title region first so a previous app's titles are gone. */
+static void bar_menu(void)
+{
+    unsigned char n = MENU_DEF[0], i, j;
+    char lbl[9];
+    gb_curhide();
+    gb_fill(8, 0, 46, 8, 1);                  /* white, cols 8..53 (RAM/footprint/clock kept) */
+    for (i = 0; i < n && i < 4; i++) {
+        for (j = 0; j < 8; j++) lbl[j] = MENU_DEF[2 + i * 9 + j];
+        lbl[8] = 0;
+        gb_textbw(MENU_DEF[1 + i * 9], 0, lbl);
+    }
+    gb_curshow();
+}
+
+static void bar_clock(void)
+{
+    char t[6];
+    gb_time();
+    put2(t, bin(gb_hour)); t[2] = ':'; put2(t + 3, bin(gb_min)); t[5] = 0;
+    gb_curhide(); gb_textbw(CLK_COL, 0, t); gb_curshow();
+}
+
+static void bar_draw(void)
+{
+    unsigned char msig, i;
+    if (!bar_init) {                          /* first frame: white strip + RAM size */
+        gb_curhide();
+        gb_fill(0, 0, 80, 8, 1);
+        gb_textbw(1, 0, KCFG_MEMSTR);
+        gb_curshow();
+        bar_init = 1; bar_min = 0xFF; bar_msig = 0xFF;
+    }
+    msig = 0;                                  /* menu titles: redraw when MENU_DEF changes */
+    for (i = 0; i < (unsigned char)(MENU_DEF[0] * 9 + 1) && i < 40; i++) msig += MENU_DEF[i];
+    if (msig != bar_msig) { bar_msig = msig; bar_menu(); }
+    gb_time();                                 /* clock: redraw when the minute changes */
+    if (bin(gb_min) != bar_min) { bar_min = bin(gb_min); bar_clock(); }
 }
 
 static unsigned char hit_icon(unsigned char mx, unsigned char my)
@@ -207,10 +263,13 @@ static void run_menu(void)
         "Ram Usage", "Refresh Media", "Tidy Icons", "Exit to DOS"
     };
     unsigned char sel = popup(MENU_COL, 8, items, 4);
-    if (sel == 0) {                            /* Ram Usage: toggle the footprint */
+    if (sel == 0) {                            /* Ram Usage: toggle the footprint (it then
+                                                  persists - nothing else touches the bar) */
         show_ram ^= 1;
-        if (show_ram) last_min = 0xFF;          /* force an immediate first draw */
-        else { gb_curhide(); gb_fill(FP_COL, 0, 13, 8, 1); gb_curshow(); }
+        gb_curhide();
+        if (show_ram) draw_footprint();
+        else gb_fill(FP_COL, 0, 13, 8, 1);
+        gb_curshow();
     } else if (sel == 1) {                     /* Refresh Media (the old "Media") */
         gb_curhide();
         drive_poll();
@@ -266,13 +325,6 @@ static void on_frame(void)
        Exit to DOS to leave); ESC only closes apps launched on top of it */
 
     if (want_menu) { want_menu = 0; run_menu(); return; }
-    if (show_ram) {                            /* refresh the footprint once a minute */
-        gb_time();
-        if (gb_min != last_min) {
-            last_min = gb_min;
-            gb_curhide(); draw_footprint(); gb_curshow();
-        }
-    }
 
     held = flags & GB_FIRE;
     if (held_prev && !held && drag_active) {   /* fire released -> drop */
@@ -319,5 +371,6 @@ void main(void)
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;
+    gb_on_bar(bar_draw);                        /* top-bar handler runs every frame (#77) */
     gb_wm_run(&deskwin);                        /* register + run the kernel WM (#45) */
 }
