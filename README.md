@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="GEOBENCH logo" width="280">
+</p>
+
 # GEOBENCH
 
 A graphical desktop environment for the **Amstrad CPC** — a hybrid clone that
