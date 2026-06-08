@@ -10,15 +10,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."          # repo root
 RASM="${RASM:-rasm}"
 
-# STORAGE selects the drive-0 backend (#104): "ide" (default, SYMBiFACE IDE FAT32)
-# or "albireo" (CH376 USB/SD). The two are mutually exclusive - only one is built
-# into the kernel - so the IDE FAT32 core stays off an Albireo build.
+# Every card gets its own kernel + QA subdir (below). STORAGE only picks which
+# variant is left in build/ for the dev harness (--disk-a / deploy_ide.sh):
+# "ide" (default) or "albireo". The backends are mutually exclusive per build, so
+# the IDE FAT32 core stays off an Albireo kernel (#104).
 STORAGE_FLAG=""
 if [ "${STORAGE:-ide}" = "albireo" ]; then
     STORAGE_FLAG="-DSTORAGE_ALBIREO=1"
-    echo "Storage backend: Albireo (CH376)"
-else
-    echo "Storage backend: IDE (default)"
 fi
 
 mkdir -p build
@@ -46,10 +44,25 @@ tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CL
 tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
-"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG  # incbins apps + font + icons -> .dsk
-echo "Built build/gbkern.dsk (GBKERN + DESKTOP + FILEMGR + VIEWER + NOTEPAD + CHELLO + assets)"
-
-# QA/: the complete distribution, ready to copy onto a CPC USB/SD drive (#102).
+# QA/<CARD>/: one distribution per storage card (#104). The apps/modules/assets
+# above are shared; only the kernel differs, so we assemble each variant and stage
+# it into its own subdir with BOTH formats: the loose files to copy onto that
+# card's FAT drive, and a bootable floppy image (GEOBENCH.DSK) for a CPC that
+# boots from disc. Add a card here (e.g. M4 "-DSTORAGE_M4=1") when its backend lands.
+build_variant() {                                # $1 = subdir name, $2 = rasm -D flag
+    rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
+    "$RASM" kernel/gbkern.asm -eo $2             # incbins apps + font + icons -> .dsk + RAW
+    tools/stage_dist.sh "QA/$1"                  # loose files for the card's FAT drive
+    cp build/gbkern.dsk "QA/$1/GEOBENCH.DSK"     # bootable floppy image
+    echo "  QA/$1: $(ls "QA/$1" | wc -l) files (incl. GEOBENCH.DSK floppy image)"
+}
 rm -rf QA
-tools/stage_dist.sh QA
-echo "Staged the GEOBENCH distribution -> QA/ ($(ls QA | wc -l) files)"
+echo "Staging per-storage distributions -> QA/"
+build_variant IDE     ""
+build_variant ALBIREO "-DSTORAGE_ALBIREO=1"
+
+# Leave build/ as the STORAGE-selected variant (default IDE) so the --disk-a test
+# harness and deploy_ide.sh see a predictable build/gbkern.dsk + build/GBKERN.RAW.
+rm -f build/gbkern.dsk
+"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG >/dev/null
+echo "Built QA/IDE + QA/ALBIREO; build/ = ${STORAGE:-ide} variant for testing"
