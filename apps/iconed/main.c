@@ -49,10 +49,12 @@
 #define MENU_COL  10           /* "File" title column in the top bar (matches notepad) */
 #define MENU_END  16
 
-/* BUFSZ holds the whole file. gb_fs_load copies in WHOLE 512-byte sectors, so this
-   must be >= the file rounded up to a sector or the load overflows into the globals
-   after it (DEFAULT.IST is 2876 -> 6 sectors = 3072). 4096 = 8 sectors. */
-#define BUFSZ     4096
+/* BUFSZ holds the whole file. gb_fs_load copies in WHOLE 512-byte sectors and is
+   ALSO passed as fs_load_max, so a file bigger than BUFSZ is refused (the load is
+   not partial) - so this must cover the largest icon set (#110). The icon-set
+   ceiling is DATA_MODTOP-DATA_ICONS-#200 = 6656 -> 13 sectors; 7168 = 14 sectors
+   covers any DEFAULT.IST. (Was 4096, which the now-5216-byte DEFAULT.IST exceeds.) */
+#define BUFSZ     7168
 #define CUR_W     4            /* cursor: 4 bytes/row x 16 rows, phase = 64 bytes */
 #define CUR_H     16
 #define PHASE     64

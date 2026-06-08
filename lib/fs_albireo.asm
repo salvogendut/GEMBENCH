@@ -206,13 +206,13 @@ ade_skip
 ; CF set = loaded, NC = not found.
 fsalb_load_file
                 call  alb_ensure_mount
-                jr    nc,alf_nf
+                jp    nc,alf_nf                   ; jp: alf_nf is out of jr range (#110)
                 call  alb_setname_req
                 ld    a,ALBC_FILEOPEN
                 call  alb_sendcmd
                 call  alb_waitint
                 cp    ALB_INT_SUCCESS
-                jr    nz,alf_nf                   ; missing / is a directory
+                jp    nz,alf_nf                   ; missing / is a directory
                 ld    a,ALBC_BYTEREAD
                 call  alb_sendcmd
                 ld    a,#FF
@@ -230,6 +230,19 @@ alf_loop
                 or    a
                 jr    z,alf_eof
                 ld    e,a                          ; E = chunk length
+                ld    d,0                           ; #110: refuse if this chunk would push
+                ld    hl,(fs_ent_size)             ; the total past fs_load_max (the caller's
+                add   hl,de                        ; buffer) - the chip doesn't give the size
+                ld    bc,(fs_load_max)             ; up front, so guard mid-stream like the IDE
+                or    a                             ; backend does up front
+                sbc   hl,bc
+                jr    z,alf_inbounds               ; total == max: ok
+                jr    c,alf_inbounds               ; total <  max: ok
+                pop   af                            ; total > max: too big -> abort the load
+                jr    alf_toobig
+alf_inbounds
+                ld    bc,ALB_DAT                    ; restore BC = data port (the cmp used it)
+                ld    a,e                           ; A = chunk length
                 ld    hl,(fs_load_dst)
                 call  alb_inira                    ; A bytes -> (fs_load_dst)
                 ld    d,0
@@ -260,6 +273,12 @@ alf_done
                 call  alb_waitint
                 scf
                 ret
+alf_toobig                                         ; #110: file > buffer -> close + fail (NC)
+                ld    a,ALBC_FILECLOSE
+                call  alb_sendcmd
+                xor   a
+                out   (c),a
+                call  alb_waitint
 alf_nf
                 or    a
                 ret
