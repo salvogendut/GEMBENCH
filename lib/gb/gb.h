@@ -40,6 +40,7 @@ void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline   
 void gb_icon(unsigned char slot, unsigned char col,      /* full icon blit       */
              unsigned char line);
 void gb_blite(unsigned char col, unsigned char line);    /* current entry's icon */
+void gb_blite_full(unsigned char col, unsigned char line); /* ...full height (grid) */
 void gb_curshow(void);                                   /* draw the pointer     */
 void gb_curhide(void);                                   /* lift the pointer     */
 unsigned char gb_poll(void);          /* frame poll -> flags; caches cursor pos   */

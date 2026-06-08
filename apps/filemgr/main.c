@@ -18,7 +18,7 @@
 #define DEF_X    4            /* window position */
 #define DEF_Y    26
 #define DEF_W    56            /* default size; the window is resizeable (#81) */
-#define DEF_H    130
+#define DEF_H    158           /* taller default so full icons still show ~3 rows (#88) */
 #define MIN_W    24            /* min size keeps the title + a couple of rows usable */
 #define MIN_H    62
 #define TITLE_H  14
@@ -43,7 +43,7 @@
 /* icons view */
 #define ICOLS    3
 #define CELL_W   (CT_W / ICOLS)          /* cell width (17) */
-#define CELL_H   28                      /* icon (16) + name (8) + gap */
+#define CELL_H   44                      /* full icon (32) + name (8) + gap (#88) */
 #define IVIS     (CT_H / CELL_H)         /* visible grid rows (4) */
 #define NAME_MAX (CELL_W * 4 / 6)        /* chars that fit a cell (6px font) */
 
@@ -256,8 +256,8 @@ static void draw_icons_view(void)
             if (!name) return;
             cx = CT_X + c * CELL_W;
             cy = CT_Y + r * CELL_H;
-            gb_blite(cx + (CELL_W - 8) / 2, cy + 1);   /* icon centered in the cell */
-            draw_name(cx, cy + 18, name);
+            gb_blite_full(cx + (CELL_W - 8) / 2, cy + 1);  /* full icon, uncut (#88) */
+            draw_name(cx, cy + 34, name);                   /* name below the 32px icon */
             if (nsel == (unsigned char)idx + 1)
                 gb_frame(cx, cy, CELL_W, CELL_H - 1, 3);
             idx++;
