@@ -142,6 +142,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_copy_end             ; GB_COPYEND     #8093 (restore target ctx)
                 jp    k_on_bar               ; GB_ONBAR       #8096 (HL = bar handler, #77)
                 jp    k_wm_setsize           ; GB_WMSETSIZE   #8099 (A = w, L = h, #81)
+                jp    gb_blit_entry_full     ; GB_BLITEFULL   #809C (B=x C=y, full icon #88)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -669,6 +670,17 @@ be_y            db    0
 be_slot         db    0
 ig_w            db    0
 ig_h            db    0
+
+; gb_blit_entry_full (GB_BLITEFULL): like gb_blit_entry, but the FULL icon (all
+; rows) instead of the half-height middle band - the File Manager's icon-grid view
+; uses it so tall art (e.g. the geobench lollipop) isn't cut. B = x, C = y. picks
+; the slot by the current entry, then hands to k_icon's full blit. ext_to_icon
+; clobbers B (cmp_name8), so save x,y across it.
+gb_blit_entry_full
+                push  bc
+                call  ext_to_icon            ; A = slot for the current entry
+                pop   bc
+                jp    k_icon                  ; full blit: A = slot, B = x, C = y
 
 ; icon_geom: A = slot -> from the .IST directory (DATA_ICONS) set up a
 ; half-height blit (middle band) at (be_x, be_y). PAGE_DATA must be mapped.

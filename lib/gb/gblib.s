@@ -17,6 +17,7 @@
         .globl  _gb_frame
         .globl  _gb_icon
         .globl  _gb_blite
+        .globl  _gb_blite_full
         .globl  _gb_curshow
         .globl  _gb_curhide
         .globl  _gb_poll
@@ -170,6 +171,13 @@ _gb_blite:
         ld      b, a
         ld      c, l
         jp      0x8018          ; GB_BLITE
+
+;; void gb_blite_full(unsigned char col, unsigned char line);  current entry's icon,
+;; FULL height (the grid view, so tall art isn't cut)
+_gb_blite_full:
+        ld      b, a
+        ld      c, l
+        jp      0x809C          ; GB_BLITEFULL
 
 ;; void gb_curshow(void); / gb_curhide(void);
 _gb_curshow:
