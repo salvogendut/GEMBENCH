@@ -63,6 +63,18 @@ static char wtitle[18];                   /* fbase + " *" when dirty (window tit
 static unsigned char blink_ctr, caret_vis, cur_scr, cur_col;  /* caret blink (#86) */
 #define BLINK_FRAMES 16                   /* ~3 Hz caret blink at 50 fps */
 
+/* arrow-key caret nav (#86): the pointer PLACES the caret, the keyboard arrows
+   NUDGE it. We read the cursor keys straight off the matrix (KM_TEST_KEY) rather
+   than re-arming them globally - re-arming would re-flood every app on pointer
+   moves (the very thing disarm_joy_keys prevents). */
+#define A_UP      0
+#define A_DOWN    1
+#define A_LEFT    2
+#define A_RIGHT   3
+#define REP_DELAY 14                      /* frames held before a key auto-repeats */
+#define REP_RATE  3                       /* frames between repeats */
+static unsigned char arr_prev, arr_rep, arr_bits;
+
 /* the kernel-drawn top-bar menu: one title "File" at MENU_COL */
 static const unsigned char file_menu[] = { 1, MENU_COL, 'F','i','l','e',0,0,0,0 };
 
@@ -405,6 +417,97 @@ static unsigned char cursor_over(void)
                            my >= win_y && my < win_y + win_h);
 }
 
+/* read_arrows: matrix state of the four cursor keys -> arr_bits (bit0 up, 1 down,
+   2 left, 3 right). KM_TEST_KEY (&BB1E): A = key number (72..75 = U/D/L/R), returns
+   NZ when pressed. We talk to the matrix directly so the keys stay globally disarmed
+   (no char-buffer flood) yet still reach us. Only A + arr_bits cross each call, so a
+   KM_TEST_KEY register clobber can't corrupt the accumulator. */
+static void read_arrows(void) __naked
+{
+__asm
+    xor  a
+    ld   (_arr_bits), a
+    ld   a, #72            ; cursor up
+    call #0xBB1E
+    jr   z, 1$
+    ld   a, (_arr_bits)
+    or   #0x01
+    ld   (_arr_bits), a
+1$: ld   a, #73            ; cursor down
+    call #0xBB1E
+    jr   z, 2$
+    ld   a, (_arr_bits)
+    or   #0x02
+    ld   (_arr_bits), a
+2$: ld   a, #74            ; cursor left
+    call #0xBB1E
+    jr   z, 3$
+    ld   a, (_arr_bits)
+    or   #0x04
+    ld   (_arr_bits), a
+3$: ld   a, #75            ; cursor right
+    call #0xBB1E
+    jr   z, 4$
+    ld   a, (_arr_bits)
+    or   #0x08
+    ld   (_arr_bits), a
+4$: ret
+__endasm;
+}
+
+/* move_caret: step the insertion point one cell in a direction. Up/Down keep the
+   display column via the wrap-aware pos_of/idx_of; Left/Right walk the buffer. */
+static void move_caret(unsigned char dir)
+{
+    unsigned char r, c;
+    if (dir == A_LEFT)  { if (cur) cur--; }
+    else if (dir == A_RIGHT) { if (cur < len) cur++; }
+    else {
+        pos_of(cur, &r, &c);
+        if (dir == A_UP) { if (r) cur = idx_of((unsigned char)(r - 1), c); }
+        else             cur = idx_of((unsigned char)(r + 1), c);   /* A_DOWN (clamps) */
+    }
+}
+
+/* move_redraw: move the caret, then repaint just the old + new caret lines (or the
+   whole window if the view scrolled), keeping the cursor solid + the blink reset. */
+static void move_redraw(unsigned char dir)
+{
+    unsigned char oldscr = cur_scr, oldvf = view_first;
+    move_caret(dir);
+    caret_vis = 1; blink_ctr = 0;
+    gb_curhide();
+    scroll_to_caret();
+    /* render() always (re)draws the caret at its current position, so repainting the
+       OLD caret line both erases the old underscore and paints the new one (which sits
+       on whatever line the caret moved to). A scroll needs the whole window. */
+    if (view_first != oldvf) render(0xFF);
+    else                     render(oldscr);
+    gb_curshow();
+}
+
+/* handle_arrows: edge-detect + auto-repeat the cursor keys. Returns 1 if an arrow
+   is engaged (caret moved or key held), so the caller skips typing/blink this frame. */
+static unsigned char handle_arrows(void)
+{
+    unsigned char now, fresh, act = 0, dir;
+    read_arrows();
+    now = arr_bits;
+    fresh = (unsigned char)(now & ~arr_prev);
+    if (fresh) { arr_rep = REP_DELAY; act = fresh; }      /* new press -> move now */
+    else if (now && now == arr_prev) {                    /* held -> maybe repeat */
+        if (--arr_rep == 0) { arr_rep = REP_RATE; act = now; }
+    }
+    arr_prev = now;
+    if (!act) return (unsigned char)(now ? 1 : 0);        /* held, not yet repeating */
+    if (act & 1) dir = A_UP;
+    else if (act & 2) dir = A_DOWN;
+    else if (act & 4) dir = A_LEFT;
+    else dir = A_RIGHT;
+    move_redraw(dir);
+    return 1;
+}
+
 /* np_repaint: kernel on_repaint - redraw the whole window (no input) when the WM
    restacks us behind/above another window. */
 static void np_repaint(void)
@@ -479,6 +582,8 @@ static void on_frame(void)
         return;
     }
 
+    if (handle_arrows()) return;                 /* arrow nudged the caret (#86 item 6) */
+
     edited = 0;                                  /* drain typed keys */
     n = 8;
     while (n--) {
@@ -527,7 +632,7 @@ void main(void)
     char raw[11];
 
     win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
-    caret_vis = 1; blink_ctr = 0;
+    caret_vis = 1; blink_ctr = 0; arr_prev = 0; arr_rep = 0;
     gb_wm_add(&npwin);                           /* register FIRST: captures our file arg
                                                    (per-window) + takes focus, so the load
                                                    below targets OUR file, not a sibling's */
