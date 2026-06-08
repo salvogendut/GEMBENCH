@@ -44,15 +44,26 @@ MOUSE_MAXPKT     equ   8           ; burst-read safety cap (protocol emits <=4)
 ; input_init: enable the mouse only if a SymbiFace is present. Its IDE controller
 ; answers fs_ide_present; the mouse port floats on a board without one, which
 ; would otherwise inject noise. Joystick-only when absent.
+;
+; #104: an Albireo box has no SymbiFace IDE to probe, so fs_ide_present is the
+; wrong signal there - it would leave the pointer dead. On an Albireo build enable
+; the mouse unconditionally (#FD10 is the pointer; the SymbiFace mouse, or a USB
+; mouse on real hardware, drives it). TODO: read the Albireo USB HID directly.
 input_init
                 xor   a
                 ld    (mouse_enabled),a
                 ld    (mouse_btn_state),a
+                if STORAGE_ALBIREO
+                ld    a,1
+                ld    (mouse_enabled),a
+                ret
+                else
                 call  fs_ide_present
                 ret   nc
                 ld    a,1
                 ld    (mouse_enabled),a
                 ret
+                endif
 
 ; ---------------------------------------------------------------------------
 input_poll

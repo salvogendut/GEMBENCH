@@ -10,6 +10,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."          # repo root
 RASM="${RASM:-rasm}"
 
+# STORAGE selects the drive-0 backend (#104): "ide" (default, SYMBiFACE IDE FAT32)
+# or "albireo" (CH376 USB/SD). The two are mutually exclusive - only one is built
+# into the kernel - so the IDE FAT32 core stays off an Albireo build.
+STORAGE_FLAG=""
+if [ "${STORAGE:-ide}" = "albireo" ]; then
+    STORAGE_FLAG="-DSTORAGE_ALBIREO=1"
+    echo "Storage backend: Albireo (CH376)"
+else
+    echo "Storage backend: IDE (default)"
+fi
+
 mkdir -p build
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 
@@ -22,9 +33,9 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
     lib/icon_font.asm lib/icon_iconset.asm \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
-    lib/icon_paint.asm lib/icon_fractal.asm \
+    lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
     # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=.IST 15=DESKTOP 16=FILEMGR
-    # 17=PAINT 18=FRACTAL
+    # 17=PAINT 18=FRACTAL 19=SD (Albireo Disk C, #104)
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR (C/SDCC) -> build/FILEMGR.RAW
 tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
@@ -35,7 +46,7 @@ tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CL
 tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
-"$RASM" kernel/gbkern.asm -eo                # incbins apps + font + icons -> .dsk
+"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG  # incbins apps + font + icons -> .dsk
 echo "Built build/gbkern.dsk (GBKERN + DESKTOP + FILEMGR + VIEWER + NOTEPAD + CHELLO + assets)"
 
 # QA/: the complete distribution, ready to copy onto a CPC USB/SD drive (#102).

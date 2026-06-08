@@ -16,12 +16,32 @@
 ;   fs_ent_size   4 bytes  (little-endian)
 ; ---------------------------------------------------------------------------
 
-; fs_init: pick the backend once, before any directory call.
+; Drive-0 backend entry points, resolved at build time (#104). Drive 0 is the
+; "hard" volume: the Albireo CH376 card (STORAGE_ALBIREO=1) or the SYMBiFACE IDE
+; (default). The rest of fs.asm is backend-agnostic - it only uses these aliases.
+                if STORAGE_ALBIREO
+D0_PRESENT      equ   fsalb_present
+D0_FIRST        equ   fsalb_dir_first
+D0_NEXT         equ   fsalb_dir_next
+D0_LOAD         equ   fsalb_load_file
+D0_SAVE         equ   fsalb_save_file
+D0_DELETE       equ   fsalb_delete_file
+                else
+D0_PRESENT      equ   fs_ide_present
+D0_FIRST        equ   fside_dir_first
+D0_NEXT         equ   fside_dir_next
+D0_LOAD         equ   fside_load_file
+D0_SAVE         equ   fside_save_file
+D0_DELETE       equ   fside_delete_file
+                endif
+
+; fs_init: pick the boot drive once, before any directory call. If the drive-0
+; card is present boot from it (Disk C), else fall back to floppy A.
 fs_init
-                call  fs_ide_present
-                ld    a,1                       ; no IDE -> boot drive 1 (floppy A)
+                call  D0_PRESENT
+                ld    a,1                       ; card absent -> boot drive 1 (floppy A)
                 jr    nc,fsi_set
-                xor   a                          ; IDE -> boot drive 0 (Disk C)
+                xor   a                          ; card present -> boot drive 0 (Disk C)
 fsi_set
                 call  fs_set_drive               ; select the boot drive, then capture its
                 ld    hl,(fs_p_load)             ; loader as fs_sys_load: app binaries/
@@ -36,15 +56,15 @@ fs_set_drive
                 ld    (fs_cur_drive),a
                 or    a
                 jr    nz,fsd_floppy
-                ld    hl,fside_dir_first        ; drive 0 = IDE
+                ld    hl,D0_FIRST              ; drive 0 = the build's hard backend
                 ld    (fs_p_first),hl
-                ld    hl,fside_dir_next
+                ld    hl,D0_NEXT
                 ld    (fs_p_next),hl
-                ld    hl,fside_load_file
+                ld    hl,D0_LOAD
                 ld    (fs_p_load),hl
-                ld    hl,fside_save_file
+                ld    hl,D0_SAVE
                 ld    (fs_p_save),hl
-                ld    hl,fside_delete_file
+                ld    hl,D0_DELETE
                 ld    (fs_p_delete),hl
                 ret
 fsd_floppy
@@ -62,7 +82,7 @@ fsd_floppy
                 ld    (fs_p_delete),hl
                 ret
 fs_cur_drive    defb  0
-fs_sys_load     defw  fside_load_file ; the boot drive's loader (fs_init captures it)
+fs_sys_load     defw  D0_LOAD       ; the boot drive's loader (fs_init captures it)
 
 ; fs_dir_first / fs_dir_next / fs_load_file: route to the selected backend.
 fs_dir_first
@@ -119,11 +139,11 @@ fsip_absent
                 ret
 
 ; --- state / shared per-entry output -------------------------------------
-fs_p_first      defw  fside_dir_first   ; default IDE; fs_init rewrites on detect
-fs_p_next       defw  fside_dir_next
-fs_p_load       defw  fside_load_file
-fs_p_save       defw  fside_save_file
-fs_p_delete     defw  fside_delete_file
+fs_p_first      defw  D0_FIRST         ; default drive 0; fs_init rewrites on detect
+fs_p_next       defw  D0_NEXT
+fs_p_load       defw  D0_LOAD
+fs_p_save       defw  D0_SAVE
+fs_p_delete     defw  D0_DELETE
 fs_ent_name     defs  11
 fs_ent_attr     defb  0
 fs_ent_size     defs  4

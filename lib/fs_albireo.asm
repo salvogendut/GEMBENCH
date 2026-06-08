@@ -1,0 +1,320 @@
+; ---------------------------------------------------------------------------
+; lib/fs_albireo.asm - storage backend: FAT over the Albireo (CH376 USB/SD).
+;
+; SPIKE (#104): proves GEOBENCH can read its disk through the Albireo card
+; instead of the SYMBiFACE IDE. The Albireo is a WCH CH376 chip that owns the
+; filesystem in firmware - we do NOT parse FAT here (contrast fs_ide_fat.asm).
+; We issue high-level file commands and the chip walks the directory / file.
+;
+; Two 8-bit ports, addressed with 16-bit OUT (C)/IN A,(C) so A8-A15 = #FE:
+;   #FE81  w COMMAND / r STATUS (bit7 = !INT: 0 = interrupt pending)
+;   #FE80  r/w DATA   (command parameters + response payload)
+; The cmd port is the data port | 1, so "send command then DATA follows" is
+; just OUT cmd / DEC C (see alb_sendcmd).
+;
+; Backend entry points (same shape as fside_*/fsam_* so lib/fs.asm routes here):
+;   fsalb_dir_first -> CF set = first entry ready in fs_ent_*, NC = empty
+;   fsalb_dir_next  -> CF set = next entry ready,              NC = end of dir
+;   fsalb_load_file -> CF set = loaded (fs_ent_size = bytes read), NC = absent
+;   fsalb_save_file / fsalb_delete_file -> NC (not in this spike)
+;
+; CH376 dir entries arrive as the raw 32-byte FAT record (name[11], attr@0x0B,
+; size@0x1C) - the same layout fs_ide_fat.asm decodes, so fs_ent_* fills the
+; same way and the File Manager is none the wiser.
+;
+; The INI/OUTI idioms below use `ini:inc b` / `inc b:outi`: OUTI decrements B
+; *before* the bus cycle and INI *after*, so during the actual I/O B = #FE and
+; the chip is addressed correctly; the inc keeps the port high byte stable
+; across the loop (A holds the count, not B).
+; ---------------------------------------------------------------------------
+
+ALB_CMD         equ   #FE81        ; command (w) / status (r)
+ALB_DAT         equ   #FE80        ; data (r/w)
+
+; CH376 command codes (subset)
+ALBC_CHECK      equ   #06
+ALBC_USBMODE    equ   #15
+ALBC_GETSTAT    equ   #22
+ALBC_RDDATA0    equ   #27
+ALBC_SETNAME    equ   #2F
+ALBC_DISKMOUNT  equ   #31
+ALBC_FILEOPEN   equ   #32
+ALBC_ENUMGO     equ   #33
+ALBC_FILECLOSE  equ   #36
+ALBC_BYTEREAD   equ   #3A
+ALBC_BYTERDGO   equ   #3B
+
+; CH376 status / return codes
+ALB_RET_SUCCESS equ   #51          ; SET_USB_MODE ack on the DATA port
+ALB_INT_SUCCESS equ   #14
+ALB_INT_DISKRD  equ   #1D
+ALB_USBMODE_SD  equ   3            ; host mode, micro-SD (LLM_MicroSD)
+
+; ---------------------------------------------------------------------------
+; alb_sendcmd: A = command byte. Writes it to the command port and leaves
+; BC = DATA port so the caller can stream parameters with OUT (C)/IN A,(C).
+alb_sendcmd
+                ld    bc,ALB_CMD
+                out   (c),a
+                dec   c                        ; BC -> ALB_DAT
+                ret
+
+; alb_waitint: spin on the STATUS port until the chip raises its interrupt,
+; then GET_STATUS to read and clear it. Returns A = interrupt status code.
+alb_waitint
+                push  de
+                ld    de,0                      ; ~65536 spins then give up
+awi_loop
+                ld    bc,ALB_CMD
+                in    a,(c)                     ; STATUS: bit7 = !INT
+                rla                              ; bit7 -> CF (1 = no interrupt)
+                jr    nc,awi_got
+                dec   de
+                ld    a,d
+                or    e
+                jr    nz,awi_loop
+awi_got
+                pop   de
+                ld    a,ALBC_GETSTAT
+                out   (c),a                     ; BC still = ALB_CMD here
+                dec   c
+                in    a,(c)                     ; status code from DATA port
+                ret
+
+; fsalb_present: probe the chip. CHECK_EXIST echoes ~param on DATA. CF set = found.
+fsalb_present
+                ld    a,ALBC_CHECK
+                call  alb_sendcmd
+                ld    a,#55
+                out   (c),a                     ; param -> chip replies ~#55 = #AA
+                in    a,(c)
+                cp    #AA
+                jr    nz,alp_no
+                scf
+                ret
+alp_no
+                or    a
+                ret
+
+; alb_ensure_mount: SET_USB_MODE + DISK_MOUNT once. CF set = mounted.
+alb_ensure_mount
+                ld    a,(fsalb_mounted)
+                or    a
+                scf
+                ret   nz
+                ld    e,ALB_USBMODE_SD
+                ld    a,ALBC_USBMODE
+                call  alb_sendcmd
+                out   (c),e                     ; mode byte -> chip acks on DATA
+                ex    (sp),hl
+                ex    (sp),hl                    ; brief settle (>20us on real HW)
+                in    a,(c)
+                cp    ALB_RET_SUCCESS
+                jr    nz,aem_fail
+                ld    a,ALBC_DISKMOUNT
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,aem_fail
+                ld    a,1
+                ld    (fsalb_mounted),a
+                scf
+                ret
+aem_fail
+                or    a
+                ret
+
+; ---------------------------------------------------------------------------
+; fsalb_dir_first: open the root directory for a wildcard enumeration. The
+; chip stages the first matching entry; we decode it (skipping '.'/'..'/LFN/
+; volume) and return it. CF set = entry ready.
+fsalb_dir_first
+                call  alb_ensure_mount
+                jr    nc,alb_scan_end
+                ld    a,ALBC_SETNAME             ; SET_FILE_NAME "*" -> "/*"
+                call  alb_sendcmd
+                ld    a,'*'
+                out   (c),a
+                xor   a
+                out   (c),a                      ; NUL terminator
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint
+                jr    alb_scan_eval
+
+; fsalb_dir_next: advance the enumeration to the next entry.
+fsalb_dir_next
+                ld    a,ALBC_ENUMGO
+                call  alb_sendcmd
+                call  alb_waitint
+alb_scan_eval
+                cp    ALB_INT_DISKRD             ; entry available?
+                jr    nz,alb_scan_end            ; ERR_MISS_FILE/other -> end
+                call  alb_decode_entry           ; fill fs_ent_*, CF = keep
+                jr    nc,fsalb_dir_next          ; filtered -> skip to next
+                scf
+                ret
+alb_scan_end
+                or    a                          ; NC = end of directory
+                ret
+
+; alb_decode_entry: RD_USB_DATA0 the staged 32-byte FAT record into fs_ent_*.
+; CF set = a real file/dir to show, NC = skip (LFN fragment / volume / '.').
+alb_decode_entry
+                ld    a,ALBC_RDDATA0
+                call  alb_sendcmd
+                in    a,(c)                      ; payload length (expect 32)
+                cp    32
+                jr    nz,ade_skip
+                ld    hl,fs_ent_name             ; name[0..10]
+                ld    a,11
+                call  alb_inira
+                in    a,(c)                      ; attribute @0x0B
+                ld    (fs_ent_attr),a
+                ld    d,a
+                ld    a,16                        ; skip 0x0C..0x1B
+                call  alb_invoid
+                ld    hl,fs_ent_size             ; size @0x1C (4 bytes)
+                ld    a,4
+                call  alb_inira
+                ld    a,d                          ; LFN fragment? (attr&0x0F==0x0F)
+                and   #0F
+                cp    #0F
+                jr    z,ade_skip
+                ld    a,d                          ; volume label? (attr&0x08)
+                and   #08
+                jr    nz,ade_skip
+                ld    a,(fs_ent_name)             ; '.' / '..'
+                cp    '.'
+                jr    z,ade_skip
+                scf
+                ret
+ade_skip
+                or    a
+                ret
+
+; ---------------------------------------------------------------------------
+; fsalb_load_file: open fs_req_name in the root and stream it into (fs_load_dst).
+; Requests #FFFF bytes and reads 255-byte chunks until the chip reports EOF
+; (a zero-length chunk with status SUCCESS). fs_ent_size := bytes read.
+; CF set = loaded, NC = not found.
+fsalb_load_file
+                call  alb_ensure_mount
+                jr    nc,alf_nf
+                call  alb_setname_req
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,alf_nf                   ; missing / is a directory
+                ld    a,ALBC_BYTEREAD
+                call  alb_sendcmd
+                ld    a,#FF
+                out   (c),a                       ; request #FFFF bytes (lo)
+                out   (c),a                       ; (hi) -> kicks the read
+                ld    hl,0
+                ld    (fs_ent_size),hl
+                ld    (fs_ent_size+2),hl
+alf_loop
+                call  alb_waitint                 ; DISK_READ = more, SUCCESS = end
+                push  af
+                ld    a,ALBC_RDDATA0
+                call  alb_sendcmd
+                in    a,(c)                        ; chunk length (0..255)
+                or    a
+                jr    z,alf_eof
+                ld    e,a                          ; E = chunk length
+                ld    hl,(fs_load_dst)
+                call  alb_inira                    ; A bytes -> (fs_load_dst)
+                ld    d,0
+                ld    hl,(fs_load_dst)             ; advance destination
+                add   hl,de
+                ld    (fs_load_dst),hl
+                ld    hl,(fs_ent_size)             ; running byte count
+                add   hl,de
+                ld    (fs_ent_size),hl
+                jr    nc,alf_nocarry
+                ld    hl,(fs_ent_size+2)
+                inc   hl
+                ld    (fs_ent_size+2),hl
+alf_nocarry
+                pop   af
+                cp    ALB_INT_SUCCESS              ; was that the final chunk?
+                jr    z,alf_done
+                ld    a,ALBC_BYTERDGO
+                call  alb_sendcmd                  ; ask for the next chunk
+                jr    alf_loop
+alf_eof
+                pop   af
+alf_done
+                ld    a,ALBC_FILECLOSE
+                call  alb_sendcmd
+                xor   a
+                out   (c),a                        ; close param (no size update)
+                call  alb_waitint
+                scf
+                ret
+alf_nf
+                or    a
+                ret
+
+; fsalb_save_file / fsalb_delete_file: not implemented in this spike. The CH376
+; supports FILE_CREATE/BYTE_WRITE/FILE_ERASE, but the write loop comes next.
+fsalb_save_file
+fsalb_delete_file
+                or    a
+                ret
+
+; ---------------------------------------------------------------------------
+; alb_setname_req: SET_FILE_NAME from the 11-byte packed 8.3 fs_req_name, sent
+; as "NNNNNNNN.EEE\0" (the chip's normaliser prepends '/' and trims padding).
+alb_setname_req
+                ld    a,ALBC_SETNAME
+                call  alb_sendcmd
+                ld    hl,fs_req_name
+                ld    a,8
+                call  alb_outira                  ; 8 name chars
+                ld    a,'.'
+                out   (c),a
+                ld    a,3
+                call  alb_outira                  ; 3 extension chars
+                xor   a
+                out   (c),a                        ; NUL terminator
+                ret
+
+; alb_inira: read A bytes from BC(=DATA) into (HL). B preserved (port high).
+alb_inira
+                ini
+                inc   b
+                dec   a
+                jr    nz,alb_inira
+                ret
+
+; alb_outira: write A bytes from (HL) to BC(=DATA). B preserved.
+alb_outira
+                inc   b
+                outi
+                dec   a
+                jr    nz,alb_outira
+                ret
+
+; alb_invoid: read and discard A bytes from BC(=DATA).
+alb_invoid
+                push  af
+                in    a,(c)
+                pop   af
+                dec   a
+                jr    nz,alb_invoid
+                ret
+
+fsalb_mounted   defb  0            ; 0 until SET_USB_MODE+DISK_MOUNT done once
+
+; Shared directory-context state the kernel manipulates generically (k_chdir/
+; k_back, cross-drive copy). The IDE backend tracks the current directory by FAT
+; cluster; the CH376 tracks it internally by path, so this backend lists the root
+; only for now and ignores fs_dir_clus - these just satisfy the kernel's refs.
+; TODO(#104): path-based current-dir for subdirectory navigation on Albireo.
+fs_dir_clus     defs  4            ; current directory (unused by the CH376 path model)
+fs_dir_sp       defb  0            ; chdir/back stack depth
+fs_dir_stack    defs  16           ; 4 parent dirs (4 bytes each)
+fs_ent_clus     defs  4            ; positioned entry's start cluster
