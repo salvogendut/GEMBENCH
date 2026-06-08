@@ -31,6 +31,10 @@
 #define CT_Y     (win_y + TITLE_H)       /* content top, below the title bar */
 #define CT_W     (win_w - 2 - SB_W)      /* content width (runtime, resizeable) */
 #define CT_H     (win_h - TITLE_H - 2)   /* content height (runtime) */
+#define CT_BOT   (win_y + win_h - 2)     /* content bottom = CT_Y + CT_H, but written
+                                            flat: SDCC miscompiles the summed-macro form
+                                            CT_Y + CT_H (TITLE_H cancels), placing the
+                                            down-button mid-window (#81) */
 
 /* list view */
 #define ROW_H    18
@@ -193,8 +197,8 @@ static void draw_scrollbar(void)
        the glyph black-on-white, aligned with the thumb (SB_X+1) */
     gb_fill(SB_X, CT_Y, SB_W, ARR_H, 1);
     gb_textbw(SB_X + 1, CT_Y, GLYPH_TRI_UP);
-    gb_fill(SB_X, CT_Y + CT_H - ARR_H, SB_W, ARR_H, 1);
-    gb_textbw(SB_X + 1, CT_Y + CT_H - ARR_H, GLYPH_TRI_DOWN);
+    gb_fill(SB_X, CT_BOT - ARR_H, SB_W, ARR_H, 1);
+    gb_textbw(SB_X + 1, CT_BOT - ARR_H, GLYPH_TRI_DOWN);
 }
 
 /* draw a name truncated to fit a cell (icons view) */
@@ -327,7 +331,7 @@ static void sb_drag(void)
         if (!(gb_poll() & GB_FIRE)) break;
         my = gb_my();
         if (my < CT_Y) my = CT_Y;
-        if (my >= CT_Y + CT_H) my = CT_Y + CT_H - 1;
+        if (my >= CT_BOT) my = CT_BOT - 1;
         nt = (unsigned char)(((unsigned)(my - CT_Y) * (tl - vl)) / CT_H);
         if (nt != top) { top = nt; clamp_top(); draw(); }
     }
@@ -405,6 +409,8 @@ static void on_frame(void)
     if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {
         if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
             gb_wm_setsize(win_w, win_h);
+            clamp_top();          /* taller window shows more rows -> re-clamp the scroll,
+                                     else the thumb runs past the new track bottom (#81) */
             gb_restore_parent();
             draw();
         }
@@ -412,11 +418,11 @@ static void on_frame(void)
     }
 
     /* scrollbar: up/down arrow buttons (one line) at the ends, page/drag between */
-    if (mx >= SB_X && mx < SB_X + SB_W && my >= CT_Y && my < CT_Y + CT_H) {
+    if (mx >= SB_X && mx < SB_X + SB_W && my >= CT_Y && my < CT_BOT) {
         unsigned char old = top, tl = total_lines(), vl = vis_lines();
         if (my < CT_Y + ARR_H) {                     /* up arrow */
             if (top) top--;
-        } else if (my >= CT_Y + CT_H - ARR_H) {      /* down arrow */
+        } else if (my >= CT_BOT - ARR_H) {           /* down arrow */
             if (tl > vl && top < tl - vl) top++;
         } else {
             sb_click(my);
@@ -427,7 +433,7 @@ static void on_frame(void)
     }
 
     /* content: pick the entry under the pointer (list row or grid cell) */
-    if (my >= CT_Y && my < CT_Y + CT_H && mx >= CT_X && mx < win_x + win_w) {
+    if (my >= CT_Y && my < CT_BOT && mx >= CT_X && mx < win_x + win_w) {
         if (view == V_ICONS) {
             unsigned char c = (mx - CT_X) / CELL_W;
             unsigned char r = (my - CT_Y) / CELL_H;
