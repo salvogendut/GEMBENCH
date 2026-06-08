@@ -74,7 +74,6 @@ static void paint(void)
 {
     unsigned char i;
     gb_fill(0, 8, 80, 192, 0);                 /* backdrop, below the top bar */
-    gb_text(1, 10, "Dbl-click a drive to browse it");
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
     gb_curshow();
