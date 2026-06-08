@@ -744,6 +744,9 @@ ext_to_icon
                 ld    hl,ext_scr
                 call  cmp_ext
                 jr    z,eti_scr
+                ld    hl,ext_pic              ; .PIC pictures -> picture icon (slot 7)
+                call  cmp_ext
+                jr    z,eti_scr
                 ld    hl,ext_txt
                 call  cmp_ext
                 jr    z,eti_txt
@@ -832,6 +835,7 @@ cmp_ext                                        ; Z if (HL) 3-char ext == fs_ent_
                 ret
 ext_bas         db    "BAS"
 ext_scr         db    "SCR"
+ext_pic         db    "PIC"
 ext_txt         db    "TXT"
 ext_app         db    "APP"
 ext_cfg         db    "CFG"
