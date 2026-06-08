@@ -24,22 +24,7 @@ cp --reflink=auto "$SRC" "$IMG"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
-# kernel: headered
-python3 tools/amsdos_header.py build/GBKERN.RAW "$STAGE/GBKERN.BIN" GBKERN BIN 0x8000
-# launchable apps: headerless raw, .APP
-for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK CHELLO; do
-    cp "build/$a.RAW" "$STAGE/$a.APP"
-done
-# kernel modules: headerless raw, .BIN
-cp build/GBCFG.RAW "$STAGE/GBCFG.BIN"
-cp build/GBFAT.RAW "$STAGE/GBFAT.BIN"
-# assets
-cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST \
-   build/DEFAULT.SPR build/HAND.SPR "$STAGE/"
-cp assets/WELCOME.TXT "$STAGE/"
-# config (CR+LF line endings, as the CPC requires)
-printf 'FONT=DEFAULT\r\nICONS=DEFAULT\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\n' \
-    > "$STAGE/GEOBENCH.CFG"
+tools/stage_dist.sh "$STAGE"   # stage the full distribution (shared)
 
 for f in "$STAGE"/*; do
     mcopy -i "$IMG" -o "$f" ::/

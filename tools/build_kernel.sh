@@ -37,3 +37,8 @@ tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel modu
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 "$RASM" kernel/gbkern.asm -eo                # incbins apps + font + icons -> .dsk
 echo "Built build/gbkern.dsk (GBKERN + DESKTOP + FILEMGR + VIEWER + NOTEPAD + CHELLO + assets)"
+
+# QA/: the complete distribution, ready to copy onto a CPC USB/SD drive (#102).
+rm -rf QA
+tools/stage_dist.sh QA
+echo "Staged the GEOBENCH distribution -> QA/ ($(ls QA | wc -l) files)"
