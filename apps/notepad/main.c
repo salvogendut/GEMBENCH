@@ -106,10 +106,18 @@ static unsigned int idx_of(unsigned char trow, unsigned char tcol)
     return len;
 }
 
+/* The underscore cursor sits in the inter-line gap (row +8, below the 8px glyph)
+   so the blink can erase just its cell without ever nicking a character. */
 static void cursor_at(unsigned char col, unsigned char row)
 {
-    if (caret_vis)                       /* skipped on the blink-off phase (#86) */
-        gb_fill(TX_COL + (col * 3) / 2, TX_Y0 + row * LINE_H + 7, 2, 2, 3);
+    gb_fill(TX_COL + (col * 3) / 2, TX_Y0 + row * LINE_H + 8, 2, 2, 3);
+}
+
+/* caret_erase: clear just the cursor cell (blink-off) - no line repaint, so the
+   text doesn't flash every blink. Glyph-safe because the cursor is in the gap. */
+static void caret_erase(void)
+{
+    gb_fill(TX_COL + (cur_col * 3) / 2, TX_Y0 + cur_scr * LINE_H + 8, 2, 2, 0);
 }
 
 /* fmt83: 11-byte space-padded 8.3 name -> "NAME.EXT" display string. */
@@ -583,6 +591,7 @@ static unsigned char handle_arrows(void)
    restacks us behind/above another window. */
 static void np_repaint(void)
 {
+    caret_vis = 1; blink_ctr = 0;        /* show the cursor solid after a restack */
     gb_curhide();
     render(0xFF);
     gb_curshow();
@@ -686,7 +695,7 @@ static void on_frame(void)
         caret_vis ^= 1;
         if (co) gb_curhide();
         if (caret_vis) cursor_at(cur_col, cur_scr);
-        else render(cur_scr);                    /* repaint the line -> caret erased */
+        else caret_erase();                      /* erase just the cell - no line flash */
         if (co) gb_curshow();
     }
 }
