@@ -22,11 +22,10 @@
 APP_BASE        equ   #4000        ; the #4000-#7FFF paging window
 
 PAGE_DATA       equ   #C4          ; bank 0, block 0 -> kernel data buffers
-PAGE_APP0       equ   #C5          ; bank 0, block 1 -> app slot 0 (desktop)
-PAGE_APP1       equ   #C6          ; bank 0, block 2 -> app slot 1
-PAGE_APP2       equ   #C7          ; bank 0, block 3 -> app slot 2
-                                   ; apps nest desktop -> filemgr -> viewer; the
-                                   ; launcher uses PAGE_APP0 + launch depth
+PAGE_APP0       equ   #C5          ; bank 0, block 1 -> the desktop (always APP_PAGES[0])
+                                   ; Further app pages are no longer fixed constants: the
+                                   ; kernel builds a pool (APP_PAGES) across every detected
+                                   ; bank at boot - see app_pool_init / wm_alloc_page (#84).
 DATA_BUF        equ   #4000        ; base of the kernel data buffers (in PAGE_DATA)
 DATA_FONT       equ   DATA_BUF     ; font set lives at the start of PAGE_DATA
 DATA_ICONS      equ   #4400        ; icon set (.IST) follows the font in PAGE_DATA
@@ -55,7 +54,7 @@ GB_FRAME        equ   GB_KERNEL+33 ; #8021  rectangle outline: B=x C=y D=w E=h
 GB_CURHIDE      equ   GB_KERNEL+36 ; #8024  lift the pointer (before drawing under
                                    ;        it; pair with GB_CURSHOW after)
 GB_LAUNCH       equ   GB_KERNEL+39 ; #8027  launch the app for the current entry
-                                   ;        (fs_ent_name) into PAGE_APP1, run it,
+                                   ;        (fs_ent_name) into a free app page, run it,
                                    ;        return when it quits
 GB_GETARG       equ   GB_KERNEL+42 ; #802A  -> HL = launch arg (11-byte 8.3 name
                                    ;        of the file the app was opened with)
