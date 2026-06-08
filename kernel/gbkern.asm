@@ -2459,6 +2459,17 @@ md_last         dw    0
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
 kern_end                                        ; GBKERN.BIN = #8000..kern_end only.
+
+; --- STABILITY GUARD: the resident kernel must not eat the stack -----------------
+; The CPC runs on the UniDOS stack, which grows DOWN from HIMEM (&A288) toward
+; kern_end - the only stack space is the gap between them. If the kernel grows into
+; the reserve the stack smashes the resident image on a deep call + interrupt (a
+; silent crash). This assert turns that into a LOUD build failure so a too-big
+; kernel is caught here, not in the field. (Reclaim, or move scratch out, to fix.)
+HIMEM           equ   #A288        ; UniDOS HIMEM (stack top); see docs/AMSDOS notes
+STACK_RESERVE   equ   192          ; min bytes kept free below HIMEM for the stack
+                assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big: <192B stack left under HIMEM - reclaim resident bytes"
+
 ; --- scratch buffers live in LOW RAM (always the main bank, below the stack) -----
 ; They used to sit just above kern_end, but as the kernel grew they landed in the
 ; UniDOS stack's path: HIMEM &A288 grows DOWN toward kern_end, so a 512-byte sector
@@ -2486,6 +2497,10 @@ cfont_img       incbin "../build/CLASSIC.FNT"   ; alternate 8x8 font (FONT=CLASS
 cfont_imgend
 icon_img        incbin "../build/DEFAULT.IST"   ; packaged on the disk as DEFAULT.IST
 icon_imgend
+                ; STABILITY GUARD: the icon set loads into PAGE_DATA at DATA_ICONS and
+                ; must stay below GBFAT_LOAD (the FAT module shares PAGE_DATA) - else a
+                ; save/delete/copy overwrites the end of the set (garbled icons, #88).
+                assert icon_imgend-icon_img<=GBFAT_LOAD-DATA_ICONS-#200,"DEFAULT.IST too big: would collide with GBFAT in PAGE_DATA - fewer icons or raise GBFAT_LOAD"
 wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
