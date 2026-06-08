@@ -41,7 +41,7 @@ GBFAT_OP        equ   #140E        ; operation: 0 = save, 1 = delete (#62)
 GBFAT_DIR       equ   #140F        ; directory cluster (4 bytes) to operate in
 GBFAT_DATA      equ   #2200        ; staged data (<= GBFAT_MAX bytes)
 GBFAT_MAX       equ   #1C00        ; 7 KB staging cap (fits #2200..#3DFF in low RAM)
-GBFAT_LOAD      equ   #6000        ; module load address, above the font+icon set in
+GBFAT_LOAD      equ   DATA_MODTOP  ; module load address, above the font+icon set in
                                    ; PAGE_DATA (must match GBFAT_ORG in gbfat.asm; #88)
 
                 include "fs_fat32_core.asm"

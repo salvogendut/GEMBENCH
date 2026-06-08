@@ -10,6 +10,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."          # repo root
 RASM="${RASM:-rasm}"
 
+# STORAGE selects the drive-0 backend (#104): "ide" (default, SYMBiFACE IDE FAT32)
+# or "albireo" (CH376 USB/SD). The two are mutually exclusive - only one is built
+# into the kernel - so the IDE FAT32 core stays off an Albireo build.
+STORAGE_FLAG=""
+if [ "${STORAGE:-ide}" = "albireo" ]; then
+    STORAGE_FLAG="-DSTORAGE_ALBIREO=1"
+    echo "Storage backend: Albireo (CH376)"
+else
+    echo "Storage backend: IDE (default)"
+fi
+
 mkdir -p build
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 
@@ -35,7 +46,7 @@ tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CL
 tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
-"$RASM" kernel/gbkern.asm -eo                # incbins apps + font + icons -> .dsk
+"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG  # incbins apps + font + icons -> .dsk
 echo "Built build/gbkern.dsk (GBKERN + DESKTOP + FILEMGR + VIEWER + NOTEPAD + CHELLO + assets)"
 
 # QA/: the complete distribution, ready to copy onto a CPC USB/SD drive (#102).

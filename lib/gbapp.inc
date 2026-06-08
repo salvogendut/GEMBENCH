@@ -29,6 +29,11 @@ PAGE_APP0       equ   #C5          ; bank 0, block 1 -> the desktop (always APP_
 DATA_BUF        equ   #4000        ; base of the kernel data buffers (in PAGE_DATA)
 DATA_FONT       equ   DATA_BUF     ; font set lives at the start of PAGE_DATA
 DATA_ICONS      equ   #4400        ; icon set (.IST) follows the font in PAGE_DATA
+DATA_MODTOP     equ   #6000        ; ceiling of the icon region in PAGE_DATA: the on-demand
+                                   ; write module (GBFAT on IDE builds) loads here, so the icon
+                                   ; set must stay below it. Build-independent (#104) - the IDE
+                                   ; backend's GBFAT_LOAD aliases this; an Albireo write module
+                                   ; would reuse the same slot.
 
 GB_KERNEL       equ   #8000        ; resident kernel base (fixed, RUN entry)
 GB_INIT         equ   GB_KERNEL+0  ; #8000  kernel boot (kernel only)

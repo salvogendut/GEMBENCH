@@ -308,3 +308,13 @@ alb_invoid
                 ret
 
 fsalb_mounted   defb  0            ; 0 until SET_USB_MODE+DISK_MOUNT done once
+
+; Shared directory-context state the kernel manipulates generically (k_chdir/
+; k_back, cross-drive copy). The IDE backend tracks the current directory by FAT
+; cluster; the CH376 tracks it internally by path, so this backend lists the root
+; only for now and ignores fs_dir_clus - these just satisfy the kernel's refs.
+; TODO(#104): path-based current-dir for subdirectory navigation on Albireo.
+fs_dir_clus     defs  4            ; current directory (unused by the CH376 path model)
+fs_dir_sp       defb  0            ; chdir/back stack depth
+fs_dir_stack    defs  16           ; 4 parent dirs (4 bytes each)
+fs_ent_clus     defs  4            ; positioned entry's start cluster
