@@ -344,8 +344,15 @@ static void sb_click(unsigned char my)
 static void on_event(void)
 {
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
-        gb_set_drive(my_drive);           /* copy it onto THIS window's drive, then re-list */
-        gb_file_copy();
+        unsigned int n;                   /* copy it onto THIS window's drive (#74) */
+        gb_set_drive(my_drive);
+        gb_copy_begin();                  /* switch to the drag source drive/dir */
+        gb_set_name(gb_dragname);
+        n = gb_fs_load(gb_copybuf, GB_COPYMAX);
+        gb_set_drive(my_drive);           /* back to this window's drive */
+        gb_set_name(gb_dragname);
+        gb_fs_save(gb_copybuf, n);        /* lands in the root */
+        gb_copy_end();                    /* restore this window's drive/dir */
         relist();
         return;
     }

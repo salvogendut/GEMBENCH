@@ -186,9 +186,19 @@ unsigned char gb_drives(void);
 void gb_set_drive(unsigned char d);
 unsigned char gb_get_drive(void);
 
-/* gb_file_copy: copy the file currently being dragged (its name + source drive and
- * directory were captured by gb_drag_start) into the *current* drive's root. Called
- * by a drop-target window's on_event on GB_MSG_DROP to receive a cross-drive
- * drag-and-drop. Returns 1 if copied, 0 on failure (#65 phase 3). */
-unsigned char gb_file_copy(void);
+/* Cross-drive copy (#65 phase 3; orchestration moved app-side in #74). On a
+ * GB_MSG_DROP, the drop-target window copies the dragged file (name = gb_dragname)
+ * from its source drive/dir to its own drive's root, via the shared staging buffer:
+ *   gb_copy_begin();                          // switch to the drag source
+ *   gb_set_name(gb_dragname);
+ *   n = gb_fs_load(gb_copybuf, GB_COPYMAX);
+ *   gb_set_drive(my_drive);                    // back to this window's drive
+ *   gb_set_name(gb_dragname);
+ *   gb_fs_save(gb_copybuf, n);                 // lands in the root
+ *   gb_copy_end();                             // restore this window's drive/dir
+ * gb_copybuf is the kernel's FAT staging area (low RAM), so no app buffer is needed. */
+void gb_copy_begin(void);
+void gb_copy_end(void);
+#define gb_copybuf ((char *)0x2200)
+#define GB_COPYMAX 0x1C00
 #endif /* GB_H */
