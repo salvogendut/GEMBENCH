@@ -784,11 +784,21 @@ eti_app         ld    hl,name_notepad8         ; NOTEPAD.APP -> notepad icon (sl
                 ld    hl,name_clock8           ; CLOCK.APP -> clock icon (slot 2)
                 call  cmp_name8
                 jr    z,eti_clk
+                ld    hl,name_desktop8         ; DESKTOP.APP -> desktop icon (slot 15)
+                call  cmp_name8
+                jr    z,eti_dsk
+                ld    hl,name_filemgr8         ; FILEMGR.APP -> file-manager icon (slot 16)
+                call  cmp_name8
+                jr    z,eti_fm
                 ld    a,10                     ; other GEOBENCH apps (.APP) -> app icon (10)
                 ret
 eti_np          ld    a,11
                 ret
 eti_ied         ld    a,12
+                ret
+eti_dsk         ld    a,15
+                ret
+eti_fm          ld    a,16
                 ret
 eti_clk         ld    a,2
                 ret
@@ -831,6 +841,8 @@ name_kernel     db    "GBKERN  "      ; the kernel binary -> geobench icon (#88)
 name_notepad8   db    "NOTEPAD "      ; 8-char name fields of the GEOBENCH apps (#86/#88)
 name_iconed8    db    "ICONED  "
 name_clock8     db    "CLOCK   "
+name_desktop8   db    "DESKTOP "
+name_filemgr8   db    "FILEMGR "
 
 ; --- config (C kernel module) --------------------------------------------
 ; cfg_boot: seed defaults, load GEOBENCH.CFG into the transfer area, then run the
