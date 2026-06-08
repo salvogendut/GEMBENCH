@@ -43,6 +43,8 @@ static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };      /* drives set
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
 static unsigned char dc_timer, dc_idx, held_prev;
+static unsigned char want_menu, show_ram, last_min = 0xFF;   /* System menu (#74) */
+static void draw_footprint(void);                            /* (defined below; used by paint) */
 
 #define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
 #define DRIVE_STEP 46         /* (BOX_H 44 + 2 gap), in detection order */
@@ -76,6 +78,7 @@ static void paint(void)
     gb_text(1, 10, "Dbl-click a drive to browse it");
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
+    if (show_ram) draw_footprint();            /* restore the footprint after a restack */
     gb_curshow();
 }
 
@@ -134,9 +137,90 @@ static void drop(void)
                                                    aren't erased by our backdrop fill (#65) */
 }
 
-/* a single "Media" menu title at byte column 10 (clear of mem and the clock):
-   clicking it re-polls the drives and refreshes the desktop (#65) */
-static const unsigned char dt_menu[] = { 1, 10, 'M','e','d','i','a',0,0,0 };
+/* a "System" menu title in the top bar (#74), right next to the RAM size; clicking
+   it drops a menu (Ram Usage / Refresh Media / Exit to DOS). The Ram-Usage footprint
+   shows separately, on the left of the clock. */
+#define MENU_COL  8
+#define MENU_END  18
+#define FP_COL    54          /* footprint column - left of the clock (CLK_COL 68) */
+static const unsigned char dt_menu[] = { 1, MENU_COL, 'S','y','s','t','e','m',0,0 };
+
+/* popup: a frameless white menu (a seamless drop from the white top bar), black
+   ink; returns the clicked row or 0xFF. Self-polling, like the apps' modals. */
+static unsigned char popup(unsigned char x, unsigned char y,
+                           const char *const *labels, unsigned char n)
+{
+    unsigned char i, flags, row, sel = 0xFF;
+    gb_curhide();
+    gb_fill(x, y, 26, n * 10 + 2, 1);
+    for (i = 0; i < n; i++) gb_textbw(x + 1, y + 1 + i * 10, labels[i]);
+    gb_curshow();
+    for (;;) {
+        flags = gb_poll();
+        if (flags & GB_QUIT) break;
+        if (!(flags & GB_CLICK)) continue;
+        if (gb_my() >= y + 1 && gb_my() < y + 1 + n * 10 && gb_mx() >= x && gb_mx() < x + 26) {
+            row = (gb_my() - (y + 1)) / 10;
+            if (row < n) { sel = row; break; }
+        }
+        break;
+    }
+    if (sel == 0xFF) while (gb_poll() & GB_QUIT) ;
+    gb_curhide();
+    gb_fill(x, y, 26, n * 10 + 2, 0);          /* erase (backdrop) */
+    gb_curshow();
+    return sel;
+}
+
+/* draw_footprint: the resident kernel size on the top bar, left of the clock, as
+   "<n>K used", black-on-white like the bar. */
+static char fp[12];
+static void draw_footprint(void)
+{
+    unsigned int k = (gb_ksize + 512) / 1024;  /* bytes -> KB, rounded */
+    unsigned char n = 0, i = 0;
+    char tmp[4];
+    if (!k) tmp[n++] = '0';
+    while (k) { tmp[n++] = '0' + k % 10; k /= 10; }
+    while (n) fp[i++] = tmp[--n];
+    fp[i++] = 'K'; fp[i++] = ' ';
+    fp[i++] = 'u'; fp[i++] = 's'; fp[i++] = 'e'; fp[i++] = 'd'; fp[i] = 0;
+    gb_textbw(FP_COL, 0, fp);
+}
+
+/* tidy_icons: snap every icon back to its boot position - drives packed down the
+   left column (detection order), Clock/Trash on the right - then repaint (#74). */
+static void tidy_icons(void)
+{
+    unsigned char i, n = 0;
+    for (i = 0; i < 3; i++)
+        if (ic_present[i]) { ic_x[i] = 0; ic_y[i] = DRIVE_TOP + n * DRIVE_STEP; n++; }
+    ic_x[IDX_CLOCK] = 72; ic_y[IDX_CLOCK] = 35;     /* the boot positions (see ic_x/ic_y) */
+    ic_x[IDX_TRASH] = 72; ic_y[IDX_TRASH] = 160;
+    gb_curhide();
+    gb_restore_parent();
+}
+
+static void run_menu(void)
+{
+    static const char *const items[4] = {
+        "Ram Usage", "Refresh Media", "Tidy Icons", "Exit to DOS"
+    };
+    unsigned char sel = popup(MENU_COL, 8, items, 4);
+    if (sel == 0) {                            /* Ram Usage: toggle the footprint */
+        show_ram ^= 1;
+        if (show_ram) last_min = 0xFF;          /* force an immediate first draw */
+        else { gb_curhide(); gb_fill(FP_COL, 0, 13, 8, 1); gb_curshow(); }
+    } else if (sel == 1) {                     /* Refresh Media (the old "Media") */
+        gb_curhide();
+        drive_poll();
+        gb_restore_parent();
+    } else if (sel == 2) {                     /* Tidy Icons */
+        tidy_icons();
+    } else if (sel == 3) {                     /* Exit to DOS */
+        gb_exit();                              /* does not return */
+    }
+}
 
 /* on_event: kernel callback (issue #32). Fires when the user clicks the
    kernel-owned top bar; proves the kernel->app round-trip by showing the
@@ -165,9 +249,8 @@ static void on_event(void)
         return;
     }
     if (gb_msg.type != GB_MSG_MENU) return;
-    gb_curhide();                                      /* "Media": re-poll drives + refresh */
-    drive_poll();
-    gb_restore_parent();                               /* keep any open windows on top (#65) */
+    if (gb_msg.p0 < MENU_COL || gb_msg.p0 >= MENU_END) return;
+    want_menu = 1;                                      /* "System" clicked -> drop the menu */
 }
 
 /* on_frame: one frame of the desktop, called by the kernel's window-manager loop
@@ -179,8 +262,17 @@ static void on_frame(void)
     unsigned char flags = gb_flags(), mx = gb_mx(), my = gb_my(), held, icon;
 
     if (dc_timer) dc_timer--;
-    /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (you reboot
-       the CPC to leave); it only closes apps launched on top of it */
+    /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
+       Exit to DOS to leave); ESC only closes apps launched on top of it */
+
+    if (want_menu) { want_menu = 0; run_menu(); return; }
+    if (show_ram) {                            /* refresh the footprint once a minute */
+        gb_time();
+        if (gb_min != last_min) {
+            last_min = gb_min;
+            gb_curhide(); draw_footprint(); gb_curshow();
+        }
+    }
 
     held = flags & GB_FIRE;
     if (held_prev && !held && drag_active) {   /* fire released -> drop */

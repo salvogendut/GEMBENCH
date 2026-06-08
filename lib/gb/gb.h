@@ -140,6 +140,11 @@ void gb_time(void);
 #define gb_sec     (*(volatile unsigned char *)0x1242)
 #define gb_binmode (*(volatile unsigned char *)0x1243)
 
+/* System menu (#74). gb_ksize = resident kernel size in bytes (for "Ram Usage").
+ * gb_exit() leaves GEOBENCH and returns to AMSDOS - it does not return. */
+#define gb_ksize (*(volatile unsigned int *)0x1246)
+void gb_exit(void);
+
 /* Directory navigation (issue #54). gb_isdir reports whether the entry just
  * returned by gb_dir1/gb_dirn is a directory; gb_chdir descends into the
  * positioned entry (re-list afterwards to show it in the same window); gb_back
