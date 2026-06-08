@@ -31,7 +31,7 @@ mkdir -p "$work"
 # the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
-"$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc 0x6000 \
+"$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc 0x6200 \
     "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" "$work/gblib.rel" -o "$work/app.ihx"
 "$MAKEBIN" -p "$work/app.ihx" "$work/app.bin"
 

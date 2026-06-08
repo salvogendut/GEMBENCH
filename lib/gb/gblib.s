@@ -33,6 +33,7 @@
         .globl  _gb_on_event
         .globl  _gb_menu
         .globl  _gb_set_name
+        .globl  _gb_get_name
         .globl  _gb_on_repaint
         .globl  _gb_restore_parent
         .globl  _gb_flags
@@ -251,6 +252,16 @@ _gb_menu:
 ;; void gb_set_name(const char *name11);   11-byte 8.3 name in HL -> current file
 _gb_set_name:
         jp      0x8051          ; GB_SETNAME
+
+;; void gb_get_name(char *dst11);   copy this window's 11-byte launch name into dst
+;; (GB_GETARG returns HL = the name in low RAM, always mapped). For the title bar.
+_gb_get_name:
+        push    hl              ; HL = dst (first arg)
+        call    0x802A          ; GB_GETARG -> HL = name ptr
+        pop     de              ; DE = dst
+        ld      bc, #11
+        ldir
+        ret
 
 ;; void gb_on_repaint(void (*handler)(void));   handler in HL -> kernel stores it
 ;; at this app's nesting slot, for repainting behind a moved window (#43)

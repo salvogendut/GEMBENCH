@@ -750,7 +750,12 @@ eti_geo         ld    a,4
                 ret
 eti_folder      ld    a,9
                 ret
-eti_app         ld    a,10                     ; GEOBENCH app (.APP) -> app icon (slot 10)
+eti_app         ld    hl,name_notepad8         ; NOTEPAD.APP -> its own icon (slot 11)
+                call  cmp_name8
+                jr    z,eti_np
+                ld    a,10                     ; other GEOBENCH apps (.APP) -> app icon (10)
+                ret
+eti_np          ld    a,11
                 ret
 
 cmp_name8                                      ; Z if name_geobench == fs_ent_name[0..7]
@@ -785,6 +790,7 @@ ext_scr         db    "SCR"
 ext_txt         db    "TXT"
 ext_app         db    "APP"
 name_geobench   db    "GEOBENCH"
+name_notepad8   db    "NOTEPAD "      ; 8-char name field of NOTEPAD.APP (icon #86)
 
 ; --- config (C kernel module) --------------------------------------------
 ; cfg_boot: seed defaults, load GEOBENCH.CFG into the transfer area, then run the
@@ -878,8 +884,11 @@ icon_init
                 ld    hl,KCFG_ICONNAME       ; fs_req_name = the config icon name
                 ld    de,fs_req_name
                 call  copy11
-                ld    hl,#0C00               ; .IST <= 3K
-                ld    (fs_load_max),hl
+                ld    hl,GB_KERNEL-DATA_ICONS-#200   ; cap = ALL the free icon region, from
+                ld    (fs_load_max),hl               ; DATA_ICONS up to the kernel (#8000),
+                                                     ; less a sector. Derived from the layout
+                                                     ; so it never needs hand-tuning: ~#3A00
+                                                     ; (~57 icons), the physical ceiling.
                 ld    hl,DATA_ICONS
                 ld    (fs_load_dst),hl
                 ld    hl,def_ist             ; fall back to DEFAULT.IST if missing
