@@ -91,6 +91,10 @@ void gb_menu(const void *def);
  * does New / Save As / open a file chosen from a picker. */
 void gb_set_name(const char *name11);
 
+/* gb_get_name: copy this window's 11-byte launch name (the file it was opened with,
+ * space-padded 8.3, no dot) into dst - e.g. to show it in a title bar. */
+void gb_get_name(char *dst11);
+
 /* Draggable-window background repaint (issue #43). An app registers a full-repaint
  * handler (redraws its whole window/desktop, no input) with gb_on_repaint; when a
  * child app moves a window, it calls gb_restore_parent first, and the kernel runs

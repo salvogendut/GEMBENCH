@@ -18,7 +18,10 @@
  * visible. */
 #include "gb.h"
 
-#define NP_MAX    1024
+#define NP_MAX    4096           /* editable text capacity (was 1024); fits the app's
+                                    #6000-#7FFF data window with room to spare */
+#define NP_BUF    (NP_MAX + 512)  /* +1 sector of slack: gb_fs_load copies whole 512B
+                                    sectors, so the buffer outruns the load cap */
 #define DEF_X     2            /* initial window position (the window is draggable) */
 #define DEF_Y     14
 #define DEF_W     66           /* default size; the window is resizeable (#81) */
@@ -38,6 +41,7 @@
 #define K_ENTER   0x0D
 #define K_BS      0x08
 #define K_DEL     0x7F
+#define K_TAB     0x09
 #define K_QUIT    0x11           /* Ctrl-Q */
 
 #define MENU_COL  10             /* "File" title column in the top bar */
@@ -46,7 +50,7 @@
 static unsigned char win_x = DEF_X;      /* live window position (draggable) */
 static unsigned char win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;   /* live size (resizeable, #81) */
-static char buf[NP_MAX];
+static char buf[NP_BUF];
 static char line[MAXWRAP];
 static unsigned int len, cur;            /* text length, insertion index */
 static unsigned char view_first;         /* first visible display row */
@@ -54,6 +58,10 @@ static unsigned char dirty, status;      /* 0 none, 1 saved, 2 failed */
 static unsigned char want_menu, modal, close_menu; /* File clicked / modal / close it */
 static unsigned char keycool;            /* frames to flush keys after a click or fire */
 static unsigned char prev_total;         /* display-row count at the last full draw */
+static char fbase[14];                    /* "NAME.EXT" of the open file (title base) */
+static char wtitle[18];                   /* fbase + " *" when dirty (window title) */
+static unsigned char blink_ctr, caret_vis, cur_scr, cur_col;  /* caret blink (#86) */
+#define BLINK_FRAMES 16                   /* ~3 Hz caret blink at 50 fps */
 
 /* the kernel-drawn top-bar menu: one title "File" at MENU_COL */
 static const unsigned char file_menu[] = { 1, MENU_COL, 'F','i','l','e',0,0,0,0 };
@@ -88,7 +96,30 @@ static unsigned int idx_of(unsigned char trow, unsigned char tcol)
 
 static void cursor_at(unsigned char col, unsigned char row)
 {
-    gb_fill(TX_COL + (col * 3) / 2, TX_Y0 + row * LINE_H + 7, 2, 2, 3);
+    if (caret_vis)                       /* skipped on the blink-off phase (#86) */
+        gb_fill(TX_COL + (col * 3) / 2, TX_Y0 + row * LINE_H + 7, 2, 2, 3);
+}
+
+/* fmt83: 11-byte space-padded 8.3 name -> "NAME.EXT" display string. */
+static void fmt83(char *dst, const char *n11)
+{
+    unsigned char i, j = 0;
+    for (i = 0; i < 8 && n11[i] != ' '; i++) dst[j++] = n11[i];
+    if (n11[8] != ' ') {
+        dst[j++] = '.';
+        for (i = 8; i < 11 && n11[i] != ' '; i++) dst[j++] = n11[i];
+    }
+    dst[j] = 0;
+}
+
+/* win_title: the window title = the file name, with " *" appended when unsaved. */
+static const char *win_title(void)
+{
+    unsigned char i = 0, j = 0;
+    while (fbase[i]) wtitle[j++] = fbase[i++];
+    if (dirty) { wtitle[j++] = ' '; wtitle[j++] = '*'; }
+    wtitle[j] = 0;
+    return wtitle;
 }
 
 static void status_line(void)
@@ -132,7 +163,7 @@ static void render(unsigned char only)
 
     pos_of(cur, &currow, &curcol);
     if (only == 0xFF) {
-        gb_window(win_x, win_y, win_w, win_h, dirty ? "NOTEPAD *" : "NOTEPAD");
+        gb_window(win_x, win_y, win_w, win_h, win_title());
         status_line();
         gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#81) */
     }
@@ -158,12 +189,14 @@ static void render(unsigned char only)
         }
     }
     scr = currow - view_first;
+    cur_scr = scr; cur_col = curcol;     /* remember for the blink redraw (#86) */
     cursor_at(curcol, scr);
 }
 
 /* draw: full repaint (scroll to the caret, then render everything). */
 static void draw(void)
 {
+    caret_vis = 1; blink_ctr = 0;        /* caret solid right after any redraw (#86) */
     scroll_to_caret();
     render(0xFF);
     prev_total = count_lines();
@@ -261,9 +294,28 @@ static void do_new(void)
 {
     len = 0; cur = 0; view_first = 0; dirty = 0; status = 0;
     gb_set_name("UNTITLEDTXT");
+    fmt83(fbase, "UNTITLEDTXT");
 }
 
-/* do_load: list directory entries in a popup; open the one clicked. */
+/* is_binary: true if "NAME.EXT" has a known non-text extension (so Load skips it). */
+static unsigned char is_binary(const char *name)
+{
+    static const char bin[9][4] = { "APP","BIN","IST","SPR","FNT","RAW","IMG","SNA","DSK" };
+    const char *e = name;
+    char ext[4];
+    unsigned char i, k;
+    while (*e && *e != '.') e++;
+    if (*e != '.') return 0;             /* no extension -> treat as text */
+    e++;
+    for (i = 0; i < 3 && e[i] && e[i] != ' '; i++) ext[i] = e[i];
+    ext[i] = 0;
+    for (k = 0; k < 9; k++)
+        if (bin[k][0] == ext[0] && bin[k][1] == ext[1] && bin[k][2] == ext[2])
+            return 1;
+    return 0;
+}
+
+/* do_load: list the (text) directory entries in a popup; open the one clicked. */
 static void do_load(void)
 {
     const char *names[MAXVIS];
@@ -273,10 +325,12 @@ static void do_load(void)
 
     p = gb_dir1();
     while (p && n < MAX_LINES) {
-        for (i = 0; i < 13 && p[i]; i++) store[n][i] = p[i];
-        store[n][i] = 0;
-        names[n] = store[n];
-        n++;
+        if (!is_binary(p)) {             /* skip .APP/.BIN/... - text files only (#86) */
+            for (i = 0; i < 13 && p[i]; i++) store[n][i] = p[i];
+            store[n][i] = 0;
+            names[n] = store[n];
+            n++;
+        }
         p = gb_dirn();
     }
     if (!n) return;
@@ -284,6 +338,7 @@ static void do_load(void)
     if (sel == 0xFF) return;
     to_83(store[sel]);
     gb_set_name(name83);
+    fmt83(fbase, name83);                /* title -> the opened file's name */
     len = gb_fs_load(buf, NP_MAX);
     cur = 0; view_first = 0; dirty = 0; status = 0;
 }
@@ -341,6 +396,15 @@ static unsigned char try_close(void)
     return (unsigned char)(status == 1);
 }
 
+/* cursor_over: is the pointer inside our window? (so the blink only lifts the
+   pointer when it actually sits over the text - no per-blink pointer flicker.) */
+static unsigned char cursor_over(void)
+{
+    unsigned char mx = gb_mx(), my = gb_my();
+    return (unsigned char)(mx >= win_x && mx < win_x + win_w &&
+                           my >= win_y && my < win_y + win_h);
+}
+
 /* np_repaint: kernel on_repaint - redraw the whole window (no input) when the WM
    restacks us behind/above another window. */
 static void np_repaint(void)
@@ -370,6 +434,11 @@ static void on_frame(void)
     if (flags & GB_FIRE) keycool = 4;           /* fire held -> flush its 'Z'/'X' */
     if (flags & GB_CLICK) {
         unsigned char my = gb_my(), mx = gb_mx();
+        /* text area bottom, precomputed flat: TX_Y0 + MAX_LINES*LINE_H is the summed
+           (win_y+TITLE_H)+(win_h-...) form SDCC miscompiles - cf. the FM CT_BOT fix
+           (#81). vis is a single win_h macro; TX_Y0 + a runtime value is safe. */
+        unsigned char vis = MAX_LINES;
+        unsigned char txbot = (unsigned char)(TX_Y0 + vis * LINE_H);
         keycool = 4;
         if (my >= win_y && my < win_y + TITLE_H &&  /* close gadget (title-bar left) */
             mx >= win_x && mx < win_x + 5) {
@@ -393,7 +462,7 @@ static void on_frame(void)
             }
             return;
         }
-        if (my >= TX_Y0 && my < TX_Y0 + MAX_LINES * LINE_H && mx >= TX_COL) {
+        if (my >= TX_Y0 && my < txbot && mx >= TX_COL) {
             unsigned int nc = idx_of(view_first + (my - TX_Y0) / LINE_H,
                                      ((mx - TX_COL) * 2) / 3);
             if (nc != cur) {                     /* redraw only if the caret moved */
@@ -418,11 +487,13 @@ static void on_frame(void)
         if (c == K_QUIT) { gb_wm_close(); return; }
         if (c == K_BS || c == K_DEL) { del_back(); edited = 1; }
         else if (c == K_ENTER) { ins('\n'); edited = 1; }
+        else if (c == K_TAB) { ins(' '); ins(' '); ins(' '); ins(' '); edited = 1; }
         else if (c >= 32 && c < 127) { ins((char)c); edited = 1; }
         /* other keys (arrows etc.) are ignored - no redraw */
     }
     if (edited) {
         unsigned char t = count_lines(), oldvf = view_first, cr, cc;
+        caret_vis = 1; blink_ctr = 0;            /* caret solid while typing (#86) */
         gb_curhide();
         scroll_to_caret();
         pos_of(cur, &cr, &cc);
@@ -433,6 +504,14 @@ static void on_frame(void)
             render(cr - view_first);             /* just the caret's line */
         }
         gb_curshow();
+    } else if (++blink_ctr >= BLINK_FRAMES) {    /* idle -> blink the caret (#86) */
+        unsigned char co = cursor_over();
+        blink_ctr = 0;
+        caret_vis ^= 1;
+        if (co) gb_curhide();
+        if (caret_vis) cursor_at(cur_col, cur_scr);
+        else render(cur_scr);                    /* repaint the line -> caret erased */
+        if (co) gb_curshow();
     }
 }
 
@@ -445,12 +524,20 @@ static const gb_win_t npwin = {
 void main(void)
 {
     unsigned char n;
+    char raw[11];
 
     win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
+    caret_vis = 1; blink_ctr = 0;
     gb_wm_add(&npwin);                           /* register FIRST: captures our file arg
                                                    (per-window) + takes focus, so the load
                                                    below targets OUR file, not a sibling's */
-    len = gb_fs_load(buf, NP_MAX);              /* the file we were launched with */
+    gb_get_name(raw);                            /* the file name we were launched with */
+    len = gb_fs_load(buf, NP_MAX);              /* ...and its contents (0 if none) */
+    fmt83(fbase, raw);                           /* show it in the title bar (#86) */
+    if (!fbase[0]) {                             /* opened blank -> Untitled */
+        fmt83(fbase, "UNTITLEDTXT");
+        gb_set_name("UNTITLEDTXT");
+    }
     cur = len; view_first = 0; dirty = 0; status = 0;
     want_menu = 0; modal = 0;
     for (n = 64; n; n--) if (!gb_getkey()) break;   /* drop buffered keys */
