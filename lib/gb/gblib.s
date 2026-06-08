@@ -16,8 +16,7 @@
         .globl  _gb_fill
         .globl  _gb_frame
         .globl  _gb_icon
-        .globl  _gb_blite
-        .globl  _gb_blite_full
+        .globl  _gb_icon_half
         .globl  _gb_curshow
         .globl  _gb_curhide
         .globl  _gb_poll
@@ -166,18 +165,18 @@ _gb_icon:
         ld      hl, (sv_ret)
         jp      (hl)
 
-;; void gb_blite(u8 col, u8 line);   A=col, L=line -> B=col C=line
-_gb_blite:
-        ld      b, a
+;; void gb_icon_half(u8 slot, u8 col, u8 line);   half-height (middle band) blit of a
+;; given slot. A=slot, L=col, [SP+2]=line -> A=slot B=col C=line. (#103)
+_gb_icon_half:
+        ld      b, l            ; B = col (A still holds slot)
+        pop     hl
+        ld      (sv_ret), hl
+        pop     hl              ; L=line, H=overshoot
+        dec     sp
         ld      c, l
-        jp      0x8018          ; GB_BLITE
-
-;; void gb_blite_full(unsigned char col, unsigned char line);  current entry's icon,
-;; FULL height (the grid view, so tall art isn't cut)
-_gb_blite_full:
-        ld      b, a
-        ld      c, l
-        jp      0x809C          ; GB_BLITEFULL
+        call    0x809F          ; GB_ICONHALF
+        ld      hl, (sv_ret)
+        jp      (hl)
 
 ;; void gb_curshow(void); / gb_curhide(void);
 _gb_curshow:

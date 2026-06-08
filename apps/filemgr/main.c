@@ -229,13 +229,80 @@ static char *name83(const char *e)
    extension; gb_dir* return name only). */
 static char *fullname(void) { return name83(gb_entname()); }
 
+/* DEFAULT.IST slot order (matches the packicons line in tools/build_kernel.sh).
+   The file -> icon mapping lives here now, not in the kernel (#103). */
+#define ICON_CLOCK 2
+#define ICON_GEOBENCH 4
+#define ICON_BASIC 5
+#define ICON_BINARY 6
+#define ICON_PICTURE 7
+#define ICON_TEXT 8
+#define ICON_FOLDER 9
+#define ICON_APP 10
+#define ICON_NOTEPAD 11
+#define ICON_ICONED 12
+#define ICON_FNT 13
+#define ICON_IST 14
+#define ICON_DESKTOP 15
+#define ICON_FILEMGR 16
+#define ICON_PAINT 17
+#define ICON_FRACTAL 18
+
+/* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
+static unsigned char name_is(const char *name, const char *want)
+{
+    unsigned char i = 0;
+    while (want[i]) { if (name[i] != want[i]) return 0; i++; }
+    return (unsigned char)(name[i] == '.' || name[i] == 0);
+}
+/* ext_of: the (uppercase, <=3 char) extension of "NAME.EXT" into ext[4]. */
+static void ext_of(const char *name, char *ext)
+{
+    const char *e = name;
+    unsigned char i;
+    while (*e && *e != '.') e++;
+    if (*e != '.') { ext[0] = 0; return; }
+    e++;
+    for (i = 0; i < 3 && e[i] && e[i] != ' '; i++) ext[i] = e[i];
+    ext[i] = 0;
+}
+static unsigned char ext_eq(const char *ext, const char *want)
+{
+    return (unsigned char)(ext[0] == want[0] && ext[1] == want[1] && ext[2] == want[2]);
+}
+
+/* entry_icon: the current entry (name + gb_isdir) -> its DEFAULT.IST slot. */
+static unsigned char entry_icon(const char *name)
+{
+    char ext[4];
+    if (gb_isdir()) return ICON_FOLDER;
+    if (name_is(name, "GBKERN")) return ICON_GEOBENCH;   /* the kernel binary */
+    ext_of(name, ext);
+    if (ext_eq(ext, "BAS")) return ICON_BASIC;
+    if (ext_eq(ext, "SCR") || ext_eq(ext, "PIC")) return ICON_PICTURE;
+    if (ext_eq(ext, "TXT") || ext_eq(ext, "CFG")) return ICON_TEXT;
+    if (ext_eq(ext, "FNT")) return ICON_FNT;
+    if (ext_eq(ext, "IST")) return ICON_IST;
+    if (ext_eq(ext, "APP")) {
+        if (name_is(name, "NOTEPAD")) return ICON_NOTEPAD;
+        if (name_is(name, "ICONED"))  return ICON_ICONED;
+        if (name_is(name, "CLOCK"))   return ICON_CLOCK;
+        if (name_is(name, "DESKTOP")) return ICON_DESKTOP;
+        if (name_is(name, "FILEMGR")) return ICON_FILEMGR;
+        if (name_is(name, "PAINT"))   return ICON_PAINT;
+        if (name_is(name, "FRACTAL")) return ICON_FRACTAL;
+        return ICON_APP;
+    }
+    return ICON_BINARY;
+}
+
 static void draw_list_view(void)
 {
     unsigned char i, y;
     char *name = dir_seek(top);
     for (i = 0; i < LVIS && name; i++) {
         y = CT_Y + i * ROW_H;
-        gb_blite(CT_X, y + 1);              /* type icon (8 cols x 16 lines) */
+        gb_icon_half(entry_icon(fullname()), CT_X, y + 1);  /* half-height type icon (#103) */
         gb_text(CT_X + 9, y + 6, fullname());   /* NAME.EXT (icon view is name only) */
         name = gb_dirn();
     }
@@ -256,7 +323,7 @@ static void draw_icons_view(void)
             if (!name) return;
             cx = CT_X + c * CELL_W;
             cy = CT_Y + r * CELL_H;
-            gb_blite_full(cx + (CELL_W - 8) / 2, cy + 1);  /* full icon, uncut (#88) */
+            gb_icon(entry_icon(fullname()), cx + (CELL_W - 8) / 2, cy + 1);  /* full icon (#103) */
             draw_name(cx, cy + 34, name);                   /* name below the 32px icon */
             if (nsel == (unsigned char)idx + 1)
                 gb_frame(cx, cy, CELL_W, CELL_H - 1, 3);
