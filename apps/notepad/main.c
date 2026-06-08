@@ -21,12 +21,16 @@
 #define NP_MAX    1024
 #define DEF_X     2            /* initial window position (the window is draggable) */
 #define DEF_Y     14
-#define WIN_W     66
-#define WIN_H     158
+#define DEF_W     66           /* default size; the window is resizeable (#81) */
+#define DEF_H     158
+#define MIN_W     30
+#define MIN_H     72
 #define TITLE_H   14
 #define LINE_H    10
-#define MAX_LINES 13
-#define WRAP      40
+#define MAX_LINES ((win_h - TITLE_H - 13) / LINE_H)   /* visible text rows (runtime) */
+#define WRAP      ((win_w - 4) * 2 / 3)               /* chars per wrapped line (runtime) */
+#define MAXWRAP   52           /* line[] cap = max WRAP (80-col window) */
+#define MAXVIS    18           /* names[] cap = max MAX_LINES */
 /* text origin, relative to the live (draggable) window position */
 #define TX_COL    (win_x + 2)
 #define TX_Y0     (win_y + TITLE_H)
@@ -41,8 +45,9 @@
 
 static unsigned char win_x = DEF_X;      /* live window position (draggable) */
 static unsigned char win_y = DEF_Y;
+static unsigned char win_w = DEF_W, win_h = DEF_H;   /* live size (resizeable, #81) */
 static char buf[NP_MAX];
-static char line[WRAP + 2];
+static char line[MAXWRAP];
 static unsigned int len, cur;            /* text length, insertion index */
 static unsigned char view_first;         /* first visible display row */
 static unsigned char dirty, status;      /* 0 none, 1 saved, 2 failed */
@@ -88,7 +93,7 @@ static void cursor_at(unsigned char col, unsigned char row)
 
 static void status_line(void)
 {
-    gb_text(TX_COL, win_y + WIN_H - 11,
+    gb_text(TX_COL, win_y + win_h - 11,
             status == 1 ? "saved" :
             status == 2 ? "SAVE FAILED" :
                           "Click text to place caret. Ctrl-Q=quit");
@@ -127,8 +132,9 @@ static void render(unsigned char only)
 
     pos_of(cur, &currow, &curcol);
     if (only == 0xFF) {
-        gb_window(win_x, win_y, WIN_W, WIN_H, dirty ? "NOTEPAD *" : "NOTEPAD");
+        gb_window(win_x, win_y, win_w, win_h, dirty ? "NOTEPAD *" : "NOTEPAD");
         status_line();
+        gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#81) */
     }
     for (i = 0; i <= len; i++) {                  /* <= len: flush the last line */
         if (i == len || buf[i] == '\n' ||
@@ -138,7 +144,7 @@ static void render(unsigned char only)
                 if (only == 0xFF || scr == only) {
                     line[col] = 0;
                     if (only != 0xFF)             /* clear just this line first */
-                        gb_fill(win_x + 1, TX_Y0 + scr * LINE_H, WIN_W - 2, LINE_H, 0);
+                        gb_fill(win_x + 1, TX_Y0 + scr * LINE_H, win_w - 2, LINE_H, 0);
                     gb_text(TX_COL, TX_Y0 + scr * LINE_H, line);
                 }
             }
@@ -260,8 +266,8 @@ static void do_new(void)
 /* do_load: list directory entries in a popup; open the one clicked. */
 static void do_load(void)
 {
-    const char *names[MAX_LINES];
-    static char store[MAX_LINES][14];
+    const char *names[MAXVIS];
+    static char store[MAXVIS][14];
     char *p;
     unsigned char n = 0, i, sel;
 
@@ -371,9 +377,17 @@ static void on_frame(void)
             draw(); gb_curshow();                /* cancelled -> repaint */
             return;
         }
+        if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {  /* resize grip (#81) */
+            if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
+                gb_wm_setsize(win_w, win_h);     /* commit size + damage clip */
+                gb_restore_parent();             /* repaint the stack */
+                draw(); gb_curshow();
+            }
+            return;
+        }
         if (my >= win_y && my < win_y + TITLE_H &&  /* title bar -> drag the window */
-            mx >= win_x + 5 && mx < win_x + WIN_W) {
-            if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+            mx >= win_x + 5 && mx < win_x + win_w) {
+            if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
                 gb_wm_setpos(win_x, win_y);      /* move our hit rect to follow */
                 gb_restore_parent();             /* repaint the stack (incl. our window) */
             }
@@ -425,14 +439,14 @@ static void on_frame(void)
 /* a co-resident window (issue #45): on_repaint redraws it, on_event = the top-bar
    File click, menu = the File title the kernel shows while we are focused. */
 static const gb_win_t npwin = {
-    DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, np_repaint, on_menu, file_menu
+    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, np_repaint, on_menu, file_menu
 };
 
 void main(void)
 {
     unsigned char n;
 
-    win_x = DEF_X; win_y = DEF_Y;
+    win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
     gb_wm_add(&npwin);                           /* register FIRST: captures our file arg
                                                    (per-window) + takes focus, so the load
                                                    below targets OUR file, not a sibling's */

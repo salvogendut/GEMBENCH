@@ -2371,6 +2371,15 @@ wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in 
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
+                                                ; ICONED + CHELLO ride in the ABOVE-kernel
+                                                ; region too: the low #0100 app window
+                                                ; (#0100..#7FFF, 32K) overflowed once the
+                                                ; resizeable windows grew the apps, so the
+                                                ; two least-coupled binaries moved up here.
+ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
+ied_imgend
+chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
+chl_imgend
                 org   #0100                     ; --- app binaries, low region ---
 dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
 dtp_imgend
@@ -2380,12 +2389,8 @@ vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER
 vwr_imgend
 npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
 npd_imgend
-ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
-ied_imgend
 clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
 clk_imgend
-chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
-chl_imgend
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
