@@ -33,6 +33,27 @@ mkdir -p "$work"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc 0x6200 \
     "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" "$work/gblib.rel" -o "$work/app.ihx"
+# STABILITY GUARD: the app must fit its 16K page - code below the data-loc (#6200),
+# data+bss below the kernel (#8000). A silent overflow corrupts memory at runtime
+# (it bit NOTEPAD once); turn it into a loud build failure here.
+python3 - "$work/app.map" "$APP" <<'PY'
+import sys, re
+mapf, app = sys.argv[1], sys.argv[2]
+area = {}
+for line in open(mapf):
+    m = re.match(r'^(_CODE|_DATA|_BSS|_INITIALIZED|_GSINIT)\s+([0-9A-Fa-f]{8})\s+([0-9A-Fa-f]{8})', line)
+    if m:
+        area[m.group(1)] = (int(m.group(2), 16), int(m.group(3), 16))
+code_end = sum(area.get('_CODE', (0, 0)))
+top = max((s + sz) for s, sz in area.values()) if area else 0
+errs = []
+if code_end > 0x6200: errs.append('code ends 0x%04X > data-loc 0x6200' % code_end)
+if top > 0x8000:      errs.append('data/bss ends 0x%04X > kernel 0x8000' % top)
+if errs:
+    sys.stderr.write('FIT ERROR (%s): %s - shrink it or move --data-loc\n' % (app, '; '.join(errs)))
+    sys.exit(1)
+PY
+
 "$MAKEBIN" -p "$work/app.ihx" "$work/app.bin"
 
 # makebin emits a flat image from #0000; the app lives at #4000 -> strip low 16K.
