@@ -34,9 +34,11 @@
 #define IDX_CLOCK 3
 #define IDX_TRASH 4
 
+#define ICON_IDE 1            /* IST slots (packicons order): Disk C as IDE ... */
+#define ICON_SD  19           /* ... vs Albireo SD/USB card (#104) */
 static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, 72, 72 };
 static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 160 };
-static const unsigned char ic_slot[N_ICONS] = { 1, 0, 0, 2, 3 };  /* ide,flp,flp,clk,trash */
+static unsigned char ic_slot[N_ICONS] = { ICON_IDE, 0, 0, 2, 3 };  /* C,flp,flp,clk,trash */
 static const char *const ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash" };
 static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0 };  /* opens the file mgr */
 static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };      /* drives set by poll */
@@ -56,6 +58,7 @@ static void drive_poll(void)
     ic_present[IDX_C] = (d & GB_DRV_C) ? 1 : 0;
     ic_present[IDX_A] = (d & GB_DRV_A) ? 1 : 0;
     ic_present[IDX_B] = (d & GB_DRV_B) ? 1 : 0;
+    ic_slot[IDX_C] = (d & GB_DRV_C_SD) ? ICON_SD : ICON_IDE;  /* Albireo card vs IDE (#104) */
     for (i = 0; i < 3; i++)               /* the three drive icons are indices 0..2 */
         if (ic_present[i]) {
             ic_x[i] = 0;

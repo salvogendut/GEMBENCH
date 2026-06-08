@@ -1156,17 +1156,22 @@ k_fssave
 ; k_getkey (GB_GETKEY): A = a typed character from the keyboard buffer, or 0 if
 ; none is waiting. Non-blocking (the firmware's IRQ scan fills the buffer).
 ; k_drive_poll (GB_DRIVES, #65): probe the drives GEOBENCH can reach and return a
-; bitmask in A: bit0 = floppy A, bit1 = floppy B, bit2 = IDE (Disk C). Probing a
-; floppy spins the motor + recalibrates (slow, noisy) - call at boot and on demand.
+; bitmask in A: bit0 = floppy A, bit1 = floppy B, bit2 = Disk C (the hard volume),
+; bit3 = Disk C is an Albireo SD/USB card (vs IDE) so the desktop can pick its icon
+; (#104). Probing a floppy spins the motor + recalibrates (slow) - call on demand.
 k_drive_poll
                 ld    c,0                          ; result bits
                 if STORAGE_ALBIREO
-                call  fsalb_present                ; Albireo -> Disk C (bit2)
-                else
-                call  fs_ide_present               ; IDE -> Disk C (bit2)
-                endif
+                call  fsalb_present                ; Albireo -> Disk C (bit2) + SD flag (bit3)
                 jr    nc,kdp_a
                 set   2,c
+                set   3,c                          ; bit3 = Disk C is an Albireo SD/USB card
+                jr    kdp_a                          ; (so the desktop can pick the SD icon, #104)
+                else
+                call  fs_ide_present               ; IDE -> Disk C (bit2)
+                jr    nc,kdp_a
+                set   2,c
+                endif
 kdp_a
                 push  bc
                 xor   a                             ; floppy A = unit 0

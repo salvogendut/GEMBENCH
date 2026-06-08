@@ -186,11 +186,14 @@ unsigned char gb_drag_start(const char *name);
 unsigned char gb_file_delete(const char *name);
 
 /* gb_drives: probe the drives GEOBENCH can reach. Returns a bitmask (#65):
- *   GB_DRV_A (floppy A), GB_DRV_B (floppy B), GB_DRV_C (IDE / Disk C).
+ *   GB_DRV_A (floppy A), GB_DRV_B (floppy B), GB_DRV_C (Disk C, the hard volume).
+ *   GB_DRV_C_SD: Disk C is an Albireo SD/USB card (vs IDE), set with GB_DRV_C so
+ *   the desktop can show a different icon (#104).
  * Floppy probing spins the drive motor, so call at boot and on demand. */
-#define GB_DRV_A 0x01
-#define GB_DRV_B 0x02
-#define GB_DRV_C 0x04
+#define GB_DRV_A    0x01
+#define GB_DRV_B    0x02
+#define GB_DRV_C    0x04
+#define GB_DRV_C_SD 0x08
 unsigned char gb_drives(void);
 
 /* Multi-drive (#65). gb_set_drive selects which drive subsequent FS calls target
