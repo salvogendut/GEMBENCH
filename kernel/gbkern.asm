@@ -30,6 +30,8 @@ KCFG_CURSORNAME equ   #1221        ; 11-byte 8.3 cursor filename (CURSOR=), buil
 ; conversion lives in the C app; the clock draws its hands by calling the firmware
 ; graphics directly, so no resident line primitive is needed).
 GB_TIME_BUF     equ   #1240        ; raw time: +0 hours(&3F), +1 min, +2 sec, +3 binmode
+BOOT_SP         equ   #1244        ; word: SP at kernel_main entry (GB_EXIT, #74)
+GB_KSIZE        equ   #1246        ; word: resident kernel size in bytes (System>Ram Usage)
                                     ; (binmode 0 = BCD regs, nonzero = already binary)
 
 ; Callback API (issue #32) - kernel->app event delivery, state in low RAM so it
@@ -128,9 +130,11 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_file_copy            ; GB_FSCOPY      #8087
                 jp    k_wm_launch_as         ; GB_WMLAUNCHAS  #808A (HL = app name)
                 jp    k_time                 ; GB_TIME        #808D (-> GB_TIME_BUF h,m,s)
+                jp    k_exit                 ; GB_EXIT        #8090 (leave -> AMSDOS)
 
 ; ---------------------------------------------------------------------------
 kernel_main
+                ld    (BOOT_SP),sp           ; entry SP, for GB_EXIT's clean return (#74)
                 ld    a,1
                 call  SCR_SET_MODE           ; mode 1, screen cleared
                 call  TXT_CUR_DISABLE        ; no blinking firmware cursor blob
@@ -175,11 +179,25 @@ kernel_main
                 ldir
                 ld    a,#FF                   ; no previous focus yet -> first map_focus
                 ld    (WM_FPREV),a           ; installs the desktop's menu
+                ld    hl,kern_end-GB_KERNEL  ; resident kernel size -> GB_KSIZE (Ram Usage)
+                ld    (GB_KSIZE),hl
                 ld    hl,name_desktop        ; the desktop is the first app
-                call  launch_app             ; run DESKTOP in PAGE_APP0
-                ld    a,2                     ; desktop quit (ESC) -> back to BASIC
+                call  launch_app             ; run DESKTOP in PAGE_APP0 (the WM master loop
+                                              ; runs forever; only GB_EXIT gets past here)
+km_finish                                      ; reached by k_exit's longjmp
+                ei
+                ld    a,2                     ; back to BASIC's 80-col mode
                 call  SCR_SET_MODE
-                ret
+                ret                           ; -> AMSDOS / BASIC
+
+; k_exit (GB_EXIT #8090): leave GEOBENCH and return to AMSDOS. The WM master loop
+; never returns, so longjmp out of the whole nested call chain by restoring SP to
+; the boot value, then fall into km_finish's clean exit (#74).
+k_exit
+                di
+                call  bank_normal             ; main RAM at #4000-#7FFF (for BASIC)
+                ld    sp,(BOOT_SP)
+                jp    km_finish
 name_desktop    db    "DESKTOP APP"
 
 ; disarm_joy_keys: the CPC joystick is keyboard matrix row 9 (key numbers 72..77 =

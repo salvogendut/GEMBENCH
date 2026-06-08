@@ -44,6 +44,7 @@
         .globl  _gb_wm_launch
         .globl  _gb_wm_launch_as
         .globl  _gb_time
+        .globl  _gb_exit
         .globl  _gb_isdir
         .globl  _gb_chdir
         .globl  _gb_back
@@ -287,6 +288,9 @@ _gb_wm_launch_as:
 ;; void gb_time(void);   refresh GB_TIME_BUF (#1240: raw h, m, s, binmode) from the clock
 _gb_time:
         jp      0x808D          ; GB_TIME
+;; void gb_exit(void);   leave GEOBENCH and return to AMSDOS (does not return) (#74)
+_gb_exit:
+        jp      0x8090          ; GB_EXIT
 ;; unsigned char gb_isdir(void);   1 if the last dir entry is a directory, else 0
 _gb_isdir:
         jp      0x806C          ; GB_ISDIR
