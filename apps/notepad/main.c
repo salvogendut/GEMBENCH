@@ -44,8 +44,12 @@
 #define K_TAB     0x09
 #define K_QUIT    0x11           /* Ctrl-Q */
 
-#define MENU_COL  10             /* "File" title column in the top bar */
-#define MENU_END  16
+#define FILE_COL  10             /* top-bar menu titles: "File" then "Edit" */
+#define FILE_END  16
+#define EDIT_COL  18
+#define EDIT_END  24
+
+#define CLIP_MAX  512            /* copy/paste clipboard (#99) */
 
 static unsigned char win_x = DEF_X;      /* live window position (draggable) */
 static unsigned char win_y = DEF_Y;
@@ -55,7 +59,11 @@ static char line[MAXWRAP];
 static unsigned int len, cur;            /* text length, insertion index */
 static unsigned char view_first;         /* first visible display row */
 static unsigned char dirty, status;      /* 0 none, 1 saved, 2 failed */
-static unsigned char want_menu, modal, close_menu; /* File clicked / modal / close it */
+static unsigned char want_menu, want_edit, modal, close_menu; /* File/Edit clicked / modal */
+static char clip[CLIP_MAX];              /* copy/paste clipboard (#99) */
+static unsigned int cliplen;
+static unsigned int sel_a, sel_b;        /* selection [sel_a, sel_b) in buffer order */
+static unsigned char sel_on;             /* a selection exists */
 static unsigned char keycool;            /* frames to flush keys after a click or fire */
 static unsigned char prev_total;         /* display-row count at the last full draw */
 static char fbase[14];                    /* "NAME.EXT" of the open file (title base) */
@@ -75,8 +83,11 @@ static unsigned char blink_ctr, caret_vis, cur_scr, cur_col;  /* caret blink (#8
 #define REP_RATE  3                       /* frames between repeats */
 static unsigned char arr_prev, arr_rep, arr_bits;
 
-/* the kernel-drawn top-bar menu: one title "File" at MENU_COL */
-static const unsigned char file_menu[] = { 1, MENU_COL, 'F','i','l','e',0,0,0,0 };
+/* the kernel-drawn top-bar menu: "File" then "Edit" (#99) */
+static const unsigned char top_menu[] = {
+    2, FILE_COL, 'F','i','l','e',0,0,0,0,
+       EDIT_COL, 'E','d','i','t',0,0,0,0
+};
 
 /* pos_of: display (row,col) of buffer index idx (wrap + newlines). */
 static void pos_of(unsigned int idx, unsigned char *prow, unsigned char *pcol)
@@ -150,6 +161,29 @@ static void status_line(void)
                           "Click text to place caret. Ctrl-Q=quit");
 }
 
+/* draw_selection: overlay the selected chars [sel_a, sel_b) in reverse video
+   (gb_textbw = black-on-white) over the already-drawn text, walking the wrap
+   layout like pos_of. Visible rows only. Call after render() on a full draw. */
+static void draw_selection(void)
+{
+    unsigned int i;
+    unsigned char col = 0, row = 0, ch, scr;
+    char one[2];
+    if (!sel_on || sel_a >= sel_b) return;
+    one[1] = 0;
+    for (i = 0; i < len && i < sel_b; i++) {
+        ch = buf[i];
+        if (i >= sel_a && ch >= 32 &&
+            row >= view_first && (unsigned char)(row - view_first) < MAX_LINES) {
+            scr = (unsigned char)(row - view_first);
+            one[0] = ch;
+            gb_textbw(TX_COL + (col * 3) / 2, TX_Y0 + scr * LINE_H, one);
+        }
+        if (ch == '\n') { row++; col = 0; }
+        else if (ch >= 32) { if (++col == WRAP) { row++; col = 0; } }
+    }
+}
+
 /* count_lines: index of the last display row (newlines + wraps). */
 static unsigned char count_lines(void)
 {
@@ -192,9 +226,9 @@ static void render(unsigned char only)
             (buf[i] >= 32 && col == WRAP)) {
             if (row >= view_first && row - view_first < MAX_LINES) {
                 scr = row - view_first;
-                if (only == 0xFF || scr == only) {
+                if (only >= 0xFE || scr == only) {   /* 0xFF=full, 0xFE=body, else 1 row */
                     line[col] = 0;
-                    if (only != 0xFF)             /* clear just this line first */
+                    if (only < 0xFE)                 /* single-line: clear it first */
                         gb_fill(win_x + 1, TX_Y0 + scr * LINE_H, win_w - 2, LINE_H, 0);
                     gb_text(TX_COL, TX_Y0 + scr * LINE_H, line);
                 }
@@ -219,7 +253,19 @@ static void draw(void)
     caret_vis = 1; blink_ctr = 0;        /* caret solid right after any redraw (#86) */
     scroll_to_caret();
     render(0xFF);
+    draw_selection();                    /* reverse-video highlight over the text (#99) */
     prev_total = count_lines();
+}
+
+/* redraw_body: repaint just the text area + selection (no window frame) - used during
+   the selection drag so the title bar doesn't flash on every step (#99). */
+static void redraw_body(void)
+{
+    caret_vis = 1; blink_ctr = 0;
+    scroll_to_caret();
+    gb_fill(win_x + 1, TX_Y0, win_w - 2, (unsigned char)(MAX_LINES * LINE_H), 0);
+    render(0xFE);
+    draw_selection();
 }
 
 /* insert one char at the caret; grow the buffer right. */
@@ -261,9 +307,13 @@ static void to_83(const char *s)
 static void on_menu(void)
 {
     if (gb_msg.type != GB_MSG_MENU) return;
-    if (gb_msg.p0 < MENU_COL || gb_msg.p0 >= MENU_END) return;
-    if (modal) close_menu = 1;   /* clicking File again while open -> close it */
-    else       want_menu = 1;
+    if (gb_msg.p0 >= FILE_COL && gb_msg.p0 < FILE_END) {
+        if (modal) close_menu = 1;   /* clicking the title again while open -> close it */
+        else       want_menu = 1;
+    } else if (gb_msg.p0 >= EDIT_COL && gb_msg.p0 < EDIT_END) {
+        if (modal) close_menu = 1;
+        else       want_edit = 1;
+    }
 }
 
 /* popup: draw a framed list at (x,y), n items from labels[], and run a pointer
@@ -436,11 +486,59 @@ static void do_load(void)
 /* run_menu: drop the File menu and dispatch the chosen item. */
 static void run_menu(void)
 {
-    unsigned char sel = popup(MENU_COL, 8, file_items, 4);
+    unsigned char sel = popup(FILE_COL, 8, file_items, 4);
     if (sel == 0) do_new();
     else if (sel == 1) do_load();
     else if (sel == 2) do_save();
     else if (sel == 3) do_saveas();
+}
+
+/* --- Edit menu: copy / paste over a selection (#99) ----------------------- */
+
+static void delete_range(unsigned int a, unsigned int b)
+{
+    unsigned int i;
+    if (a >= b || b > len) return;
+    for (i = b; i < len; i++) buf[i - (b - a)] = buf[i];
+    len -= (b - a);
+    cur = a;
+    dirty = 1; status = 0;
+}
+
+static void select_all(void)
+{
+    if (!len) { sel_on = 0; return; }
+    sel_a = 0; sel_b = len; sel_on = 1; cur = len;
+}
+
+static void copy_sel(void)
+{
+    unsigned int i, n = 0;
+    if (!sel_on || sel_a >= sel_b) return;
+    for (i = sel_a; i < sel_b && n < CLIP_MAX; i++) clip[n++] = buf[i];
+    cliplen = n;
+}
+
+/* paste_clip: replace any selection with the clipboard, inserted at the caret. */
+static void paste_clip(void)
+{
+    unsigned int i;
+    if (sel_on && sel_a < sel_b) delete_range(sel_a, sel_b);   /* caret -> sel_a */
+    sel_on = 0;
+    if (!cliplen || len + cliplen > NP_MAX) return;
+    for (i = len; i > cur; i--) buf[i - 1 + cliplen] = buf[i - 1];  /* open a gap */
+    for (i = 0; i < cliplen; i++) buf[cur + i] = clip[i];
+    len += cliplen; cur += cliplen;
+    dirty = 1; status = 0;
+}
+
+static const char *const edit_items[] = { "Select", "Copy", "Paste" };
+static void run_edit(void)
+{
+    unsigned char sel = popup(EDIT_COL, 8, edit_items, 3);
+    if (sel == 0) select_all();
+    else if (sel == 1) copy_sel();
+    else if (sel == 2) paste_clip();
 }
 
 /* confirm: "Save changes?" dialog -> 1 = YES, 0 = NO, 0xFF = cancelled (ESC). */
@@ -587,6 +685,41 @@ static unsigned char handle_arrows(void)
     return 1;
 }
 
+/* text_press: a press in the text area. A plain click places the caret (clearing
+   any selection); a drag (fire held + the pointer moved) selects the dragged range,
+   highlighted in reverse video. anchor = idx under the press, extent follows the
+   pointer (wrap-aware idx_of). (#99) */
+static void text_press(unsigned char mx, unsigned char my)
+{
+    unsigned int anchor, ext, last;
+    unsigned char moved = 0, r, fl;
+    r = (unsigned char)(view_first + (my - TX_Y0) / LINE_H);
+    anchor = idx_of(r, (unsigned char)(((mx - TX_COL) * 2) / 3));
+    ext = anchor; last = anchor;
+    for (;;) {
+        fl = gb_poll();
+        if (!(fl & GB_FIRE)) break;
+        { unsigned char qx = gb_mx(), qy = gb_my();
+          r = (qy < TX_Y0) ? view_first
+                           : (unsigned char)(view_first + (qy - TX_Y0) / LINE_H);
+          ext = idx_of(r, (qx > TX_COL) ? (unsigned char)(((qx - TX_COL) * 2) / 3) : 0); }
+        if (ext != anchor) moved = 1;
+        if (ext != last) {                       /* selection changed -> repaint the body */
+            last = ext;
+            cur = ext;
+            if (anchor <= ext) { sel_a = anchor; sel_b = ext; }
+            else               { sel_a = ext;    sel_b = anchor; }
+            sel_on = (unsigned char)(sel_a != sel_b);
+            gb_curhide(); redraw_body(); gb_curshow();
+        }
+    }
+    if (!moved && (anchor != cur || sel_on)) {   /* plain click -> caret, no selection */
+        cur = anchor; sel_on = 0;
+        gb_curhide(); draw(); gb_curshow();
+    }
+    keycool = 4;
+}
+
 /* np_repaint: kernel on_repaint - redraw the whole window (no input) when the WM
    restacks us behind/above another window. */
 static void np_repaint(void)
@@ -594,6 +727,7 @@ static void np_repaint(void)
     caret_vis = 1; blink_ctr = 0;        /* show the cursor solid after a restack */
     gb_curhide();
     render(0xFF);
+    draw_selection();                    /* (#99) */
     gb_curshow();
 }
 
@@ -609,6 +743,13 @@ static void on_frame(void)
     if (want_menu) {                            /* File title was clicked */
         want_menu = 0;
         run_menu();
+        draw();
+        gb_curshow();
+        return;
+    }
+    if (want_edit) {                            /* Edit title was clicked (#99) */
+        want_edit = 0;
+        run_edit();
         draw();
         gb_curshow();
         return;
@@ -645,14 +786,8 @@ static void on_frame(void)
             }
             return;
         }
-        if (my >= TX_Y0 && my < txbot && mx >= TX_COL) {
-            unsigned int nc = idx_of(view_first + (my - TX_Y0) / LINE_H,
-                                     ((mx - TX_COL) * 2) / 3);
-            if (nc != cur) {                     /* redraw only if the caret moved */
-                cur = nc;
-                gb_curhide(); draw(); gb_curshow();
-            }
-        }
+        if (my >= TX_Y0 && my < txbot && mx >= TX_COL)
+            text_press(mx, my);                  /* click = caret, drag = select (#99) */
         return;
     }
 
@@ -678,12 +813,14 @@ static void on_frame(void)
     }
     if (edited) {
         unsigned char t = count_lines(), oldvf = view_first, cr, cc;
+        unsigned char had_sel = sel_on;          /* any edit collapses the selection (#99) */
+        sel_on = 0;
         caret_vis = 1; blink_ctr = 0;            /* caret solid while typing (#86) */
         gb_curhide();
         scroll_to_caret();
         pos_of(cur, &cr, &cc);
-        if (t != prev_total || view_first != oldvf) {
-            render(0xFF);                        /* line count or scroll changed */
+        if (had_sel || t != prev_total || view_first != oldvf) {
+            render(0xFF);                        /* full (clears any old highlight too) */
             prev_total = t;
         } else {
             render(cr - view_first);             /* just the caret's line */
@@ -703,7 +840,7 @@ static void on_frame(void)
 /* a co-resident window (issue #45): on_repaint redraws it, on_event = the top-bar
    File click, menu = the File title the kernel shows while we are focused. */
 static const gb_win_t npwin = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, np_repaint, on_menu, file_menu
+    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, np_repaint, on_menu, top_menu
 };
 
 void main(void)
@@ -724,7 +861,8 @@ void main(void)
         gb_set_name("UNTITLEDTXT");
     }
     cur = len; view_first = 0; dirty = 0; status = 0;
-    want_menu = 0; modal = 0;
+    want_menu = 0; want_edit = 0; modal = 0;
+    sel_on = 0; cliplen = 0;                      /* copy/paste state (#99) */
     for (n = 64; n; n--) if (!gb_getkey()) break;   /* drop buffered keys */
 
     draw();
