@@ -53,22 +53,28 @@ REPAINT_HDLR    equ   #1340        ; per-depth full-repaint handlers (4 words), 
 ; Window manager (issue #45) - the kernel owns the master loop and a table of
 ; co-resident windows; each app registers one and becomes callback-driven. State
 ; in low RAM (0 resident image bytes). Phase 2: multiple windows + click-to-focus.
-WM_PAGES        equ   #134F        ; page-in-use bitmap: bit i = PAGE_APP0+i busy
 WM_NWIN         equ   #1350        ; number of live windows
 WM_FOCUS        equ   #1351        ; slot index of the focused window
 WM_TABLE        equ   #1352        ; WM_MAXWIN * WM_ESZ-byte entries:
 WM_ESZ          equ   25           ;   page,x,y,w,h, on_frame(2),on_repaint(2),
-WM_MAXWIN       equ   4            ;   on_event(2), menu(2), flags(1), arg(11)
-WM_Z            equ   #13B6        ; z-order: WM_NWIN slot indices, [0]=bottom
-WM_FPREV        equ   #13BA        ; previously focused slot (menu-swap edge detect)
-WM_DRAGNAME     equ   #13BB        ; drag-and-drop (#62): dragged 11-byte 8.3 name,
+WM_MAXWIN       equ   8            ;   on_event(2), menu(2), flags(1), arg(11)
+                                   ; #84: 8 = desktop + 7 windows (table #1352..#1419)
+WM_Z            equ   #141A        ; z-order: WM_NWIN slot indices, [0]=bottom
+WM_FPREV        equ   #1422        ; previously focused slot (menu-swap edge detect)
+WM_DRAGNAME     equ   #1423        ; drag-and-drop (#62): dragged 11-byte 8.3 name,
                                    ; app-visible (the drop target reads it on GB_MSG_DROP)
-WM_DRAGSRC      equ   #13C6        ; source window slot of the active drag
-WM_DRAGMOV      equ   #13C7        ; 1 once the pointer moved (a drag, not a click)
-WM_DRAGX0       equ   #13C8        ; last drag position (byte col / line); movement
-WM_DRAGY0       equ   #13C9        ; vs this drives both the ghost and click/drag tell
-WM_DRAGDRV      equ   #13CA        ; source drive of the active drag (for cross-drive copy)
-WM_DRAGDIR      equ   #13CB        ; source directory cluster (4 bytes), captured at start
+WM_DRAGSRC      equ   #142E        ; source window slot of the active drag
+WM_DRAGMOV      equ   #142F        ; 1 once the pointer moved (a drag, not a click)
+WM_DRAGX0       equ   #1430        ; last drag position (byte col / line); movement
+WM_DRAGY0       equ   #1431        ; vs this drives both the ghost and click/drag tell
+WM_DRAGDRV      equ   #1432        ; source drive of the active drag (for cross-drive copy)
+WM_DRAGDIR      equ   #1433        ; source directory cluster (4 bytes), captured at start
+; --- app bank-page pool (#84): built at boot from the detected RAM. The old fixed
+; 3-bit page bitmap (first expansion bank only) is gone; the pool now spans every
+; detected bank, capped at WM_MAXWIN. The desktop (first claim) always gets [0]. ---
+APP_NPAGES      equ   #1437        ; usable app-page count (3 on 128K, up to WM_MAXWIN)
+APP_PAGES       equ   #1438        ; WM_MAXWIN port values; [0] = PAGE_APP0 (#C5, desktop)
+APP_BUSY        equ   #1440        ; WM_MAXWIN busy flags (0 free / 1 busy), parallel
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
 CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT.SPR is
@@ -158,6 +164,7 @@ kernel_main
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
                 call  mem_detect             ; (it pokes every bank's #4000)
                 ei
+                ld    (md_banks),a           ; keep the raw bank count for app_pool_init (#84)
                 ld    l,a                     ; total KB = 64 + banks*64
                 ld    h,0
                 add   hl,hl
@@ -177,11 +184,12 @@ kernel_main
                 call  cursor_init            ; load the cursor sprite into low RAM (#65)
                 call  clock_init             ; detect RTC + seed the software clock (#77:
                                               ; the desktop draws the bar, not the kernel)
-                ld    hl,WM_PAGES            ; clear all WM low-RAM state (pages bitmap,
-                ld    de,WM_PAGES+1          ; counts, table incl. alive flags, z-order)
-                ld    bc,WM_Z+WM_MAXWIN-WM_PAGES-1
+                ld    hl,WM_NWIN            ; clear WM low-RAM state (counts, focus, table
+                ld    de,WM_NWIN+1          ; incl. alive flags, z-order)
+                ld    bc,WM_Z+WM_MAXWIN-WM_NWIN-1
                 ld    (hl),0
                 ldir
+                call  app_pool_init          ; build the app-page pool from md_banks (#84)
                 ld    a,#FF                   ; no previous focus yet -> first map_focus
                 ld    (WM_FPREV),a           ; installs the desktop's menu
                 ld    hl,kern_end-GB_KERNEL  ; resident kernel size -> GB_KSIZE (Ram Usage)
@@ -969,52 +977,98 @@ la_escwait                                     ; if the app quit on ESC, wait fo
                 ret
 launch_depth    db    0
 
-; wm_alloc_page: claim the lowest free app bank page -> A = PAGE_APP0+i (#C5..#C7),
-; or 0 if all three are busy. wm_free_page: A = page to release. The bitmap WM_PAGES
-; tracks pages held by co-resident WM windows and by modal launch_app calls alike.
+; app_pool_init (#84): build the app-page pool from the detected bank count
+; (md_banks). Index 0..2 = bank 0 blocks 1..3 (#C5..#C7; block 0 is PAGE_DATA);
+; then each further bank contributes all four blocks (&C4 + bank*8 + block), the
+; same value lib/bank.asm's bank_page forms. Appends until the list reaches
+; WM_MAXWIN entries or RAM runs out. Sets APP_NPAGES; zeroes APP_BUSY. So the
+; desktop (first claim) always lands in APP_PAGES[0] = PAGE_APP0 = #C5, and a
+; plain 128K machine yields exactly 3 pages (desktop + 2), as before.
+app_pool_init
+                ld    hl,APP_PAGES
+                ld    (hl),#C5               ; bank 0 block 1
+                inc   hl
+                ld    (hl),#C6               ; bank 0 block 2
+                inc   hl
+                ld    (hl),#C7               ; bank 0 block 3
+                inc   hl
+                ld    c,3                      ; C = entries so far
+                ld    a,(md_banks)
+                ld    b,a                      ; B = detected bank count
+                ld    d,1                      ; D = bank index, from 1
+api_bank        ld    a,d
+                cp    b
+                jr    nc,api_done             ; bank index >= count -> done
+                ld    a,d
+                add   a,a
+                add   a,a
+                add   a,a                      ; A = bank*8
+                add   a,#C4                     ; A = &C4 + bank*8 (this bank's block 0)
+                ld    e,a                       ; E = current port value
+                add   a,4
+                ld    (api_end),a              ; sentinel = base + 4 (one past block 3)
+api_blk         ld    a,c
+                cp    WM_MAXWIN
+                jr    nc,api_done             ; list full -> stop
+                ld    (hl),e                    ; store this block's port value
+                inc   hl
+                inc   c
+                inc   e
+                ld    a,(api_end)
+                cp    e
+                jr    nz,api_blk               ; more blocks in this bank
+                inc   d                          ; next bank
+                jr    api_bank
+api_done        ld    a,c
+                ld    (APP_NPAGES),a
+                ld    hl,APP_BUSY              ; mark every page free
+                ld    de,APP_BUSY+1
+                ld    bc,WM_MAXWIN-1
+                ld    (hl),0
+                ldir
+                ret
+api_end         db    0
+md_banks        db    0
+
+; wm_alloc_page: claim the lowest free app page -> A = its port value, or 0 if all
+; APP_NPAGES pages are in use. wm_free_page: A = the port value to release. The pool
+; serves both co-resident WM windows (wm_open_go) and modal launch_app calls.
 wm_alloc_page
-                ld    a,(WM_PAGES)
-                bit   0,a
-                jr    z,wap0
-                bit   1,a
-                jr    z,wap1
-                bit   2,a
-                jr    z,wap2
-                xor   a                         ; none free
-                ret
-wap0            set   0,a
-                ld    (WM_PAGES),a
-                ld    a,PAGE_APP0
-                ret
-wap1            set   1,a
-                ld    (WM_PAGES),a
-                ld    a,PAGE_APP0+1
-                ret
-wap2            set   2,a
-                ld    (WM_PAGES),a
-                ld    a,PAGE_APP0+2
-                ret
-wm_free_page
-                sub   PAGE_APP0               ; A = page index 0..2
-                ld    c,a
-                ld    a,(WM_PAGES)
-                or    a                         ; (defensive) nothing to clear
-                ret   z
-                ld    b,a
-                ld    a,c
+                ld    a,(APP_NPAGES)
                 or    a
-                jr    z,wfp0
-                dec   a
-                jr    z,wfp1
-                ld    a,b
-                res   2,a
-                jr    wfp_store
-wfp0            ld    a,b
-                res   0,a
-                jr    wfp_store
-wfp1            ld    a,b
-                res   1,a
-wfp_store       ld    (WM_PAGES),a
+                ret   z                         ; (defensive) no pages at all
+                ld    b,a                        ; B = page count
+                ld    hl,APP_BUSY
+                ld    de,APP_PAGES
+wap_scan        ld    a,(hl)
+                or    a
+                jr    z,wap_take                ; busy flag clear -> free slot
+                inc   hl
+                inc   de
+                djnz  wap_scan
+                xor   a                          ; none free
+                ret
+wap_take        ld    (hl),1                     ; mark busy
+                ld    a,(de)                      ; A = its port value
+                ret
+wm_free_page                                     ; A = port value to release
+                ld    b,a                         ; B = target port
+                ld    a,(APP_NPAGES)
+                or    a
+                ret   z
+                ld    c,a                          ; C = page count
+                ld    hl,APP_PAGES
+                ld    de,APP_BUSY
+wfp_scan        ld    a,(hl)
+                cp    b
+                jr    z,wfp_hit
+                inc   hl
+                inc   de
+                dec   c
+                jr    nz,wfp_scan
+                ret                                ; not found (defensive)
+wfp_hit         xor   a
+                ld    (de),a                       ; clear the parallel busy flag
                 ret
 
 ; k_run (GB_RUN): run a named app. HL = 8.3 name (in the caller's page).
