@@ -2474,25 +2474,13 @@ fs_secbuf       equ   #1800            ; IDE sector buffer / aliased AMSDOS writ
 fsam_buf        equ   #1A00            ; floppy whole-directory buffer
                                                 ; The packaging incbins below are
                                                 ; never loaded at runtime, only read
-                                                ; by `save`. They are ORG'd into low
-                                                ; memory (below the #8000 kernel) so
-                                                ; the growing payload (now incl.
-                                                ; ICONED) stays within the 64K image.
-                org   #0100
-dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
-dtp_imgend
-app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.APP
-app_imgend
-vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.APP
-vwr_imgend
-npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
-npd_imgend
-ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
-ied_imgend
-clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
-clk_imgend
-chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
-chl_imgend
+                                                ; by `save`. The payload outgrew a
+                                                ; single free region, so it is split:
+                                                ; the modules/fonts/assets sit ABOVE
+                                                ; the kernel, the (larger) app binaries
+                                                ; in low memory at #0100 - both within
+                                                ; the 64K image and clear of #8000..
+                                                ; kern_end (GBKERN.BIN).
 cfg_img         incbin "../build/GBCFG.RAW"     ; config-parser C module, as GBCFG.BIN
 cfg_imgend
 fat_img         incbin "../build/GBFAT.RAW"     ; FAT16/IDE write module, as GBFAT.BIN
@@ -2507,6 +2495,21 @@ wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in 
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
+                org   #0100                     ; --- app binaries, low region ---
+dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
+dtp_imgend
+app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.APP
+app_imgend
+vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.APP
+vwr_imgend
+npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
+npd_imgend
+ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
+ied_imgend
+clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
+clk_imgend
+chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
+chl_imgend
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
