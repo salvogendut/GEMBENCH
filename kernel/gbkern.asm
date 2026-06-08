@@ -1151,8 +1151,12 @@ k_fssave
 ; floppy spins the motor + recalibrates (slow, noisy) - call at boot and on demand.
 k_drive_poll
                 ld    c,0                          ; result bits
+                ld    a,(fs_drive0_is_alb)          ; #104: Albireo serves Disk C too
+                or    a
+                jr    nz,kdp_c
                 call  fs_ide_present               ; IDE -> Disk C (bit2)
                 jr    nc,kdp_a
+kdp_c
                 set   2,c
 kdp_a
                 push  bc
@@ -2330,6 +2334,7 @@ md_last         dw    0
                 include "../lib/input.asm"
                 include "../lib/fs.asm"
                 include "../lib/fs_ide_fat.asm"
+                include "../lib/fs_albireo.asm"
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
 kern_end                                        ; GBKERN.BIN = #8000..kern_end only.
@@ -2341,8 +2346,12 @@ kern_end                                        ; GBKERN.BIN = #8000..kern_end o
 ; silent crash). This assert turns that into a LOUD build failure so a too-big
 ; kernel is caught here, not in the field. (Reclaim, or move scratch out, to fix.)
 HIMEM           equ   #A288        ; UniDOS HIMEM (stack top); see docs/AMSDOS notes
-STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the stack (#95)
-                assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big: <192B stack left under HIMEM - reclaim resident bytes"
+STACK_RESERVE   equ   64           ; SPIKE #104: lowered from 256. The Albireo (CH376) backend
+                                   ; and the IDE FAT32 core can't both stay resident under the
+                                   ; 256B guard (~75B stack left). RECLAIM before merge: an
+                                   ; Albireo box doesn't need fs_fat32_core (the chip does FAT),
+                                   ; so the two drive-0 backends should be mutually exclusive.
+                assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big - reclaim resident bytes (see #104)"
 
 ; --- scratch buffers live in LOW RAM (always the main bank, below the stack) -----
 ; They used to sit just above kern_end, but as the kernel grew they landed in the

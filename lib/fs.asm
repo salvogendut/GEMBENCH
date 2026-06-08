@@ -16,8 +16,19 @@
 ;   fs_ent_size   4 bytes  (little-endian)
 ; ---------------------------------------------------------------------------
 
-; fs_init: pick the backend once, before any directory call.
+; fs_init: pick the backend once, before any directory call. Drive 0 is the
+; "hard" volume - the Albireo (CH376 USB/SD) if fitted, else the SYMBiFACE IDE;
+; fs_drive0_is_alb records which so fs_set_drive routes drive 0 correctly (#104).
 fs_init
+                xor   a
+                ld    (fs_drive0_is_alb),a
+                call  fsalb_present              ; Albireo present? -> boot drive 0
+                jr    nc,fsi_tryide
+                ld    a,1
+                ld    (fs_drive0_is_alb),a
+                xor   a
+                jr    fsi_set
+fsi_tryide
                 call  fs_ide_present
                 ld    a,1                       ; no IDE -> boot drive 1 (floppy A)
                 jr    nc,fsi_set
@@ -36,6 +47,9 @@ fs_set_drive
                 ld    (fs_cur_drive),a
                 or    a
                 jr    nz,fsd_floppy
+                ld    a,(fs_drive0_is_alb)      ; drive 0 = Albireo or IDE
+                or    a
+                jr    nz,fsd_alb
                 ld    hl,fside_dir_first        ; drive 0 = IDE
                 ld    (fs_p_first),hl
                 ld    hl,fside_dir_next
@@ -45,6 +59,18 @@ fs_set_drive
                 ld    hl,fside_save_file
                 ld    (fs_p_save),hl
                 ld    hl,fside_delete_file
+                ld    (fs_p_delete),hl
+                ret
+fsd_alb
+                ld    hl,fsalb_dir_first        ; drive 0 = Albireo (CH376)
+                ld    (fs_p_first),hl
+                ld    hl,fsalb_dir_next
+                ld    (fs_p_next),hl
+                ld    hl,fsalb_load_file
+                ld    (fs_p_load),hl
+                ld    hl,fsalb_save_file
+                ld    (fs_p_save),hl
+                ld    hl,fsalb_delete_file
                 ld    (fs_p_delete),hl
                 ret
 fsd_floppy
@@ -62,6 +88,7 @@ fsd_floppy
                 ld    (fs_p_delete),hl
                 ret
 fs_cur_drive    defb  0
+fs_drive0_is_alb defb 0            ; #104: 0 = drive 0 is IDE, 1 = Albireo (CH376)
 fs_sys_load     defw  fside_load_file ; the boot drive's loader (fs_init captures it)
 
 ; fs_dir_first / fs_dir_next / fs_load_file: route to the selected backend.
