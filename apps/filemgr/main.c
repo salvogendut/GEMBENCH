@@ -421,10 +421,9 @@ static void open_entry(unsigned char idx)
     else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G') ||
              ext_is(e, 'B', 'A', 'S'))
         gb_wm_launch_as("NOTEPAD APP");
-    else if (ext_is(e, 'P', 'I', 'C'))
-        gb_wm_launch_as("PAINT   APP");         /* the paint app (#114) */
     else
-        gb_wm_launch_as("VIEWER  APP");
+        gb_wm_launch_as("VIEWER  APP");         /* default: view it (incl. .PIC images,
+                                                   #114) - PAINT edits via File > Load */
 }
 
 /* sb_drag: while the fire is held, map the pointer's Y to the scroll position

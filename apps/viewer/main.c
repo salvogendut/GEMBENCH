@@ -72,12 +72,56 @@ static void render(unsigned int n)
     }
 }
 
-/* paint the whole window (title + text). */
+/* A .PIC, once parsed: row stride in bytes, height in rows, and the bitmap offset
+   into filebuf. Set by parse_pic for either header version. */
+static unsigned char pic_wb, pic_h;
+static unsigned int  pic_off;
+
+/* is_pic: does the loaded file start with PAINT's .PIC header "GBPC"? (#114) */
+static unsigned char is_pic(void)
+{
+    return (unsigned char)(filen >= 6 &&
+        filebuf[0] == 'G' && filebuf[1] == 'B' && filebuf[2] == 'P' && filebuf[3] == 'C');
+}
+
+/* parse_pic: read the dimensions + bitmap offset for v1 or v2 (#114).
+     v2: GBPC | ver=2 | mode | width_px(2) | height_px(2) | inks[4] | bitmap@14
+     v1: GBPC | wb     | h    | bitmap@6
+   (the palette is recorded but not applied - Mode-1's palette is global, shared with
+   the desktop, so a windowed view stays in the standard inks.) */
+static void parse_pic(void)
+{
+    if ((unsigned char)filebuf[4] == 2) {            /* v2 */
+        unsigned int w = (unsigned char)filebuf[6] | ((unsigned int)(unsigned char)filebuf[7] << 8);
+        pic_wb  = (unsigned char)((w + 3) >> 2);     /* Mode-1: 4 px per byte */
+        pic_h   = (unsigned char)filebuf[8];         /* height low byte (>255 needs scroll) */
+        pic_off = 14;
+    } else {                                         /* v1 */
+        pic_wb  = (unsigned char)filebuf[4];
+        pic_h   = (unsigned char)filebuf[5];
+        pic_off = 6;
+    }
+}
+
+/* draw_pic: blit the .PIC bitmap 1:1 (same call PAINT uses), height clamped to the
+   screen; oversized widths / heights await a scrolling view. */
+static void draw_pic(void)
+{
+    unsigned char h = pic_h, maxh = (unsigned char)(199 - TX_Y0);
+    if (h > maxh) h = maxh;
+    if (pic_off + (unsigned int)pic_wb * h > filen) return;   /* truncated/bad */
+    gb_restorerect((unsigned char)(WIN_X + 2), TX_Y0, pic_wb, h,
+                   (unsigned char *)filebuf + pic_off);
+}
+
+/* paint the whole window (title + text, or a .PIC image). */
 static void v_draw(void)
 {
     gb_window(WIN_X, WIN_Y, win_w, win_h, fbase[0] ? fbase : "VIEWER");
     if (filen == 0)
         gb_text(TX_COL, TX_Y0, "(file is empty or could not be read)");
+    else if (is_pic())
+        draw_pic();
     else
         render(filen);
     gb_draw_grip(WIN_X, WIN_Y, win_w, win_h);   /* resize grip (#81) */
@@ -120,6 +164,16 @@ void main(void)
     gb_get_name(raw);                       /* the file we were launched with -> title */
     fmt83(fbase, raw);
     filen = gb_fs_load(filebuf, VIEW_MAX);
+    if (is_pic()) {                         /* a picture -> size the window to it (#114) */
+        parse_pic();
+        win_w = (unsigned char)(pic_wb + 3);
+        if (win_w < MIN_W) win_w = MIN_W;
+        if (win_w > (unsigned char)(80 - WIN_X)) win_w = (unsigned char)(80 - WIN_X);
+        win_h = (unsigned char)((TX_Y0 - WIN_Y) + pic_h + 4);
+        if (win_h < MIN_H) win_h = MIN_H;
+        if (win_h > (unsigned char)(200 - WIN_Y)) win_h = (unsigned char)(200 - WIN_Y);
+        gb_wm_setsize(win_w, win_h);
+    }
     gb_curhide();
     v_draw();
     gb_curshow();

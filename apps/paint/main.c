@@ -13,8 +13,8 @@
  *   palette and a pencil-width +/- sit below. Tool/ink/width selection is by click;
  *   only the pencil draws yet (shapes/fill/undo land in Phase 4).
  * Phase 2 (here): files. A top-bar "File" menu (New / Load / Save / Save As) and
- *   the .PIC format - a 6-byte header ("GBPC", width-bytes, height) then the raw
- *   Mode-1 canvas. The canvas sits right after the header in one buffer, so Save
+ *   the .PIC format - a versioned header ("GBPC", v2: mode, width/height in px, a
+ *   4-ink palette) then the raw Mode-1 canvas in one buffer, so Save
  *   and Load are a single gb_fs_save/gb_fs_load. The window title shows the file
  *   name (" *" when unsaved); the File Manager routes .PIC here.
  *
@@ -60,14 +60,20 @@ static unsigned char win_x = DEF_X, win_y = DEF_Y;
 #define SW_WB 3                                      /* swatch width in bytes    */
 #define WID_Y (unsigned char)(PAL_Y + PAL_H + 2)     /* pencil-width control row */
 
-/* .PIC = a 6-byte header ("GBPC", wb, h) then the Mode-1 canvas. The canvas lives
-   right after the header in one buffer so Save/Load are a single fs call; PIC_MAX
-   rounds PIC_LEN up to a 512-byte sector for gb_fs_load. */
-#define PIC_HDR  6
-#define PIC_LEN  (PIC_HDR + CANVAS_WB * CANVAS_H)    /* 2506 */
+/* .PIC v2 = a 14-byte header then the Mode-1 canvas, all in one buffer so Save/Load
+   are a single fs call (#114):
+     0  "GBPC" magic     4  version = 2     5  mode = 1 (Mode-1, 4 colours)
+     6  width_px (2, LE) 8  height_px (2, LE)
+     10 inks[4]          pen 0..3 -> CPC hardware ink (the picture's palette)
+     14 canvas bytes (width_px/4 stride * height rows)
+   PIC_MAX rounds PIC_LEN up to a 512-byte sector for gb_fs_load. */
+#define PIC_HDR  14
+#define PIC_LEN  (PIC_HDR + CANVAS_WB * CANVAS_H)    /* 2514 */
 #define PIC_MAX  2560                                 /* PIC_LEN -> whole sectors */
 static unsigned char picbuf[PIC_MAX];
 #define canvas (picbuf + PIC_HDR)                     /* the canvas body */
+/* the GEOBENCH 4-pen palette (kernel set_palette): pen0..3 CPC hardware inks */
+static const unsigned char pic_inks[4] = { 1, 26, 0, 6 };  /* blue, white, black, red */
 
 static unsigned char pen = 2;          /* current ink: 0 blue 1 white 2 black 3 red */
 static unsigned char tool = TOOL_PENCIL;
@@ -276,12 +282,14 @@ static unsigned char ext_is_pic(const char *name)
     return (unsigned char)(e[0] == '.' && e[1] == 'P' && e[2] == 'I' && e[3] == 'C');
 }
 
-/* pic_valid: does picbuf hold a "GBPC" header for our 100x100 canvas? */
+/* pic_valid: does picbuf hold a v2 "GBPC" header for our 100x100 canvas? */
 static unsigned char pic_valid(unsigned int got)
 {
     return (unsigned char)(got >= PIC_LEN &&
         picbuf[0] == 'G' && picbuf[1] == 'B' && picbuf[2] == 'P' && picbuf[3] == 'C' &&
-        picbuf[4] == CANVAS_WB && picbuf[5] == CANVAS_H);
+        picbuf[4] == 2 &&                              /* version 2 */
+        picbuf[6] == CANVAS_W && picbuf[7] == 0 &&     /* width_px  = 100 */
+        picbuf[8] == CANVAS_H && picbuf[9] == 0);      /* height_px = 100 */
 }
 
 /* ---- File menu actions ------------------------------------------------------ */
@@ -308,7 +316,12 @@ static void set_file(void)             /* namebuf -> current file name + title *
 static void do_save(void)
 {
     picbuf[0] = 'G'; picbuf[1] = 'B'; picbuf[2] = 'P'; picbuf[3] = 'C';
-    picbuf[4] = CANVAS_WB; picbuf[5] = CANVAS_H;
+    picbuf[4] = 2;                       /* version */
+    picbuf[5] = 1;                       /* mode 1 (4 colours) */
+    picbuf[6] = CANVAS_W; picbuf[7] = 0; /* width_px  = 100 */
+    picbuf[8] = CANVAS_H; picbuf[9] = 0; /* height_px = 100 */
+    picbuf[10] = pic_inks[0]; picbuf[11] = pic_inks[1];
+    picbuf[12] = pic_inks[2]; picbuf[13] = pic_inks[3];
     if (gb_fs_save((char *)picbuf, PIC_LEN)) dirty = 0;
 }
 
