@@ -34,6 +34,9 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
     # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=.IST 15=DESKTOP 16=FILEMGR
     # 17=PAINT 18=FRACTAL 19=SD (Albireo Disk C, #104)
+python3 tools/packicons.py build/PAINT.IST \
+    assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
+    assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR (C/SDCC) -> build/FILEMGR.RAW
 tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW

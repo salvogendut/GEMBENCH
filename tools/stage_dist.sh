@@ -24,7 +24,7 @@ done
 cp build/GBCFG.RAW "$OUT/GBCFG.BIN"
 cp build/GBFAT.RAW "$OUT/GBFAT.BIN"
 # assets
-cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST \
+cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST build/PAINT.IST \
    build/DEFAULT.SPR build/HAND.SPR "$OUT/"
 cp assets/WELCOME.TXT "$OUT/"
 # config (CR+LF line endings, as the CPC requires)

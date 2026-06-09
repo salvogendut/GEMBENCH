@@ -2427,6 +2427,8 @@ icon_imgend
                 ; must stay below DATA_MODTOP (the write module shares PAGE_DATA) - else a
                 ; save/delete/copy overwrites the end of the set (garbled icons, #88).
                 assert icon_imgend-icon_img<=DATA_MODTOP-DATA_ICONS-#200,"DEFAULT.IST too big: would collide with the write module in PAGE_DATA - fewer icons or raise DATA_MODTOP"
+pist_img        incbin "../build/PAINT.IST"     ; PAINT toolchest icon set (#114), packaged
+pist_imgend                                     ; as PAINT.IST - PAINT loads it, ICONED edits it
 wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
@@ -2467,6 +2469,7 @@ clk_imgend
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
+                save  "PAINT.IST",pist_img,pist_imgend-pist_img,DSK,"build/gbkern.dsk"
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
                 save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data
