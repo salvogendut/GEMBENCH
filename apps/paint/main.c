@@ -196,6 +196,122 @@ static void plot(unsigned char cx, unsigned char cy)
     }
 }
 
+/* ---- Phase 4: undo, flood fill, shapes (#114) ------------------------------- */
+#define CANVAS_SZ (CANVAS_WB * CANVAS_H)
+static unsigned char undo[CANVAS_SZ];   /* one-level snapshot (also the shape base) */
+static unsigned char undo_valid;
+static unsigned char fire_prev;         /* edge-detect the fire press                */
+
+static void save_undo(void)             /* snapshot the canvas before an operation */
+{
+    unsigned int n;
+    for (n = 0; n < CANVAS_SZ; n++) undo[n] = canvas[n];
+    undo_valid = 1;
+}
+static void do_undo(void)               /* swap canvas <-> snapshot (so Undo redoes) */
+{
+    unsigned int n; unsigned char t;
+    if (!undo_valid) return;
+    for (n = 0; n < CANVAS_SZ; n++) { t = canvas[n]; canvas[n] = undo[n]; undo[n] = t; }
+    blit_canvas();
+}
+
+/* read / write a canvas pixel's pen */
+static unsigned char get_pen(unsigned char x, unsigned char y)
+{
+    unsigned char b = canvas[(unsigned int)y * CANVAS_WB + (x >> 2)], i = (unsigned char)(x & 3);
+    return (unsigned char)(((b >> (7 - i)) & 1) | (((b >> (3 - i)) & 1) << 1));
+}
+static void cpix(unsigned char x, unsigned char y)            /* in-bounds set (fill) */
+{
+    unsigned int off = (unsigned int)y * CANVAS_WB + (x >> 2);
+    canvas[off] = set_pixel(canvas[off], (unsigned char)(x & 3), pen);
+}
+static void cpset(int x, int y)                               /* bounds-checked (shapes) */
+{
+    if (x >= 0 && x < CANVAS_W && y >= 0 && y < CANVAS_H) {
+        unsigned int off = (unsigned int)y * CANVAS_WB + ((unsigned int)x >> 2);
+        canvas[off] = set_pixel(canvas[off], (unsigned char)(x & 3), pen);
+    }
+}
+
+/* 4-connected scanline flood fill from (x,y). A bounded seed stack (drops seeds when
+   full -> at worst a partial fill, never a crash). */
+#define FILL_STK 256
+static unsigned int fstk[FILL_STK];
+static unsigned int fsp;
+static void fpush(unsigned char x, unsigned char y)          /* pack as (y<<8)|x */
+{
+    if (fsp < FILL_STK) fstk[fsp++] = (unsigned int)((unsigned int)y << 8) | x;
+}
+static void flood_fill(unsigned char x, unsigned char y)
+{
+    unsigned char target = get_pen(x, y), xl, xr, xx, inside, fx, fy;
+    unsigned int v;
+    if (target == pen) return;
+    fsp = 0; fpush(x, y);
+    while (fsp) {
+        v = fstk[--fsp]; fx = (unsigned char)(v & 0xFF); fy = (unsigned char)(v >> 8);
+        if (get_pen(fx, fy) != target) continue;          /* already filled (dup seed) */
+        xl = fx; while (xl > 0 && get_pen((unsigned char)(xl - 1), fy) == target) xl--;
+        xr = fx; while (xr < CANVAS_W - 1 && get_pen((unsigned char)(xr + 1), fy) == target) xr++;
+        for (xx = xl; xx <= xr; xx++) cpix(xx, fy);
+        if (fy > 0) { inside = 0; for (xx = xl; xx <= xr; xx++)
+            if (get_pen(xx, (unsigned char)(fy - 1)) == target) { if (!inside) { fpush(xx, (unsigned char)(fy - 1)); inside = 1; } } else inside = 0; }
+        if (fy < CANVAS_H - 1) { inside = 0; for (xx = xl; xx <= xr; xx++)
+            if (get_pen(xx, (unsigned char)(fy + 1)) == target) { if (!inside) { fpush(xx, (unsigned char)(fy + 1)); inside = 1; } } else inside = 0; }
+    }
+    dirty = 1;
+}
+
+/* ---- shapes (outline, into the canvas buffer) ------------------------------- */
+static int isqrt(unsigned int v) { unsigned int r = 0; while ((unsigned int)(r + 1) * (r + 1) <= v) r++; return (int)r; }
+
+static void draw_rect(int x0, int y0, int x1, int y1)         /* rectangle outline */
+{
+    int x, y, t;
+    if (x0 > x1) { t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { t = y0; y0 = y1; y1 = t; }
+    for (x = x0; x <= x1; x++) { cpset(x, y0); cpset(x, y1); }
+    for (y = y0; y <= y1; y++) { cpset(x0, y); cpset(x1, y); }
+}
+static void draw_circle(int cx, int cy, int r)               /* midpoint circle outline */
+{
+    int x = r, y = 0, err = 1 - r;
+    if (r <= 0) { cpset(cx, cy); return; }
+    while (x >= y) {
+        cpset(cx + x, cy + y); cpset(cx - x, cy + y); cpset(cx + x, cy - y); cpset(cx - x, cy - y);
+        cpset(cx + y, cy + x); cpset(cx - y, cy + x); cpset(cx + y, cy - x); cpset(cx - y, cy - x);
+        y++; if (err < 0) err += 2 * y + 1; else { x--; err += 2 * (y - x) + 1; }
+    }
+}
+
+/* rubber_band: drag a square/circle from (sx,sy); the outline previews against the
+   pre-shape snapshot until release commits it. */
+static void rubber_band(unsigned char sx, unsigned char sy)
+{
+    unsigned char cx = sx, cy = sy, ncx, ncy, my, first = 1, fl;
+    unsigned int px, n, cxl = (unsigned int)CVX * 4;
+    save_undo();                                          /* base = pre-shape + undo */
+    for (;;) {
+        fl = gb_poll();
+        if (!(fl & GB_FIRE)) break;                       /* release -> commit */
+        my = gb_my();
+        ncy = (my < CVY) ? 0 : (unsigned char)(my - CVY); if (ncy >= CANVAS_H) ncy = CANVAS_H - 1;
+        px = gb_mxp();
+        if (px < cxl) ncx = 0; else { px -= cxl; ncx = (px >= CANVAS_W) ? CANVAS_W - 1 : (unsigned char)px; }
+        if (first || ncx != cx || ncy != cy) {
+            first = 0; cx = ncx; cy = ncy;
+            for (n = 0; n < CANVAS_SZ; n++) canvas[n] = undo[n];   /* restore base */
+            if (tool == TOOL_SQUARE) draw_rect(sx, sy, cx, cy);
+            else { int dx = (int)cx - sx, dy = (int)cy - sy;
+                   draw_circle(sx, sy, isqrt((unsigned int)(dx * dx + dy * dy))); }
+            blit_canvas();
+        }
+    }
+    dirty = 1;
+}
+
 /* win_title: the window title = the file name, " *" appended when unsaved. */
 static const char *win_title(void)
 {
@@ -230,7 +346,8 @@ static unsigned char hit_toolchest(unsigned char mx, unsigned char my)
         ry = (unsigned char)(my - TCY);
         if (ry % TOOL_SY < TOOL_H) {
             k = (unsigned char)((ry / TOOL_SY) * 2 + (rx >= TOOL_WB ? 1 : 0));
-            if (k < N_TOOLS) { tool = k; draw_toolchest(); }
+            if (k == TOOL_UNDO) do_undo();          /* undo is an action, not a mode */
+            else if (k < N_TOOLS) { tool = k; draw_toolchest(); }
         }
         return 1;
     }
@@ -414,17 +531,24 @@ static void on_frame(void)
         if (hit_toolchest(mx, my)) return;
     }
 
-    if (!(flags & GB_FIRE)) return;                    /* continuous: canvas draw */
-    if (tool != TOOL_PENCIL) return;                   /* shapes/fill/undo: Phase 4 */
+    if (!(flags & GB_FIRE)) { fire_prev = 0; return; }   /* canvas drawing */
     my = gb_my();
-    if (my < CVY) return;
+    if (my < CVY) { fire_prev = 1; return; }
     cy = (unsigned char)(my - CVY);
-    if (cy >= CANVAS_H) return;
+    if (cy >= CANVAS_H) { fire_prev = 1; return; }
     px = gb_mxp();
     cxl = (unsigned int)CVX * 4;                       /* canvas left, in pixels */
-    if (px < cxl) return;
+    if (px < cxl) { fire_prev = 1; return; }
     px -= cxl;
-    if (px < CANVAS_W) plot((unsigned char)px, cy);
+    if (px >= CANVAS_W) { fire_prev = 1; return; }
+    if (tool == TOOL_PENCIL) {                         /* continuous freehand */
+        if (!fire_prev) save_undo();                   /* once, at the stroke start */
+        plot((unsigned char)px, cy);
+    } else if (!fire_prev) {                           /* fill / shapes: once per press */
+        if (tool == TOOL_FILL) { save_undo(); flood_fill((unsigned char)px, cy); blit_canvas(); }
+        else if (tool == TOOL_SQUARE || tool == TOOL_CIRCLE) rubber_band((unsigned char)px, cy);
+    }
+    fire_prev = 1;
 }
 
 static gb_win_t pwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, on_repaint, on_menu, top_menu };
@@ -441,6 +565,8 @@ void main(void)
     pen_w = 1;
     dirty = 0;
     want_menu = 0;
+    undo_valid = 0;
+    fire_prev = 0;
     canvas_clear();
     load_tools();                                /* PAINT.IST -> ist[] (sets fs name) */
     gb_wm_add(&pwin);                            /* register FIRST: captures our file arg */

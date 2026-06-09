@@ -2438,8 +2438,9 @@ wel_imgend
                                                 ; two least-coupled binaries moved up here.
 ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
 ied_imgend
-pnt_img         incbin "../build/PAINT.RAW"     ; packaged on the disk as PAINT.APP (#114)
-pnt_imgend
+                ; PAINT.APP is packaged by a SECOND rasm pass (kernel/pack_apps.asm):
+                ; this 64K image filled up, and the .dsk save accumulates across rasm
+                ; invocations, so the overflow apps get their own packaging pass (#114).
                 org   #0100                     ; --- app binaries, low region ---
 dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
 dtp_imgend
@@ -2461,7 +2462,6 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
-                save  "PAINT.APP",pnt_img,pnt_imgend-pnt_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"

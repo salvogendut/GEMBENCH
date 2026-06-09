@@ -60,6 +60,7 @@ tools/build_fatmod.sh                              # FAT16/IDE write module -> b
 build_variant() {                                # $1 = subdir name, $2 = rasm -D flag
     rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
     "$RASM" kernel/gbkern.asm -eo $2             # incbins apps + font + icons -> .dsk + RAW
+    "$RASM" kernel/pack_apps.asm -eo             # 2nd pass: overflow apps -> same .dsk (#114)
     tools/stage_dist.sh "QA/$1"                  # loose files for the card's FAT drive
     cp build/gbkern.dsk "QA/$1/GEOBENCH.DSK"     # bootable floppy image
     echo "  QA/$1: $(ls "QA/$1" | wc -l) files (incl. GEOBENCH.DSK floppy image)"
@@ -73,4 +74,5 @@ build_variant ALBIREO "-DSTORAGE_ALBIREO=1"
 # harness and deploy_ide.sh see a predictable build/gbkern.dsk + build/GBKERN.RAW.
 rm -f build/gbkern.dsk
 "$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG >/dev/null
+"$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 echo "Built QA/IDE + QA/ALBIREO; build/ = ${STORAGE:-ide} variant for testing"
