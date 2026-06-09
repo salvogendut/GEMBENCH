@@ -41,7 +41,8 @@ python3 tools/packicons.py build/PAINT.IST \
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
 DATA_LOC=0x6500 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: higher data-loc
                                    # for code room now it sorts (a ~2.6K listing cache, #118)
-tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
+DATA_LOC=0x4D00 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: low data-loc for a
+                                   # big file buffer (12K) so larger .PIC images fit the bank
 DATA_LOC=0x6800 DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD:
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
