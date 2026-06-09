@@ -11,8 +11,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="${1:-apps/chello}"
-OUT="${2:-build/CHELLO.RAW}"
+APP="${1:-apps/clock}"
+OUT="${2:-build/CLOCK.RAW}"
 GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.s)
 # DATA_LOC: where this app's data starts (code is #4000.. below it, data ..#7FFF
 # above). The default 0x6200 is a 50/50 split; a code-heavy/data-light app (NOTEPAD)

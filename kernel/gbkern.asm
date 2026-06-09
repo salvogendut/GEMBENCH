@@ -2433,15 +2433,13 @@ wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in 
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
-                                                ; ICONED + CHELLO ride in the ABOVE-kernel
+                                                ; ICONED + PAINT ride in the ABOVE-kernel
                                                 ; region too: the low #0100 app window
                                                 ; (#0100..#7FFF, 32K) overflowed once the
                                                 ; resizeable windows grew the apps, so the
                                                 ; two least-coupled binaries moved up here.
 ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
 ied_imgend
-chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
-chl_imgend
 pnt_img         incbin "../build/PAINT.RAW"     ; packaged on the disk as PAINT.APP (#114)
 pnt_imgend
                 org   #0100                     ; --- app binaries, low region ---
@@ -2462,7 +2460,6 @@ clk_imgend
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
-                save  "CHELLO.APP",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
                 save  "PAINT.APP",pnt_img,pnt_imgend-pnt_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
