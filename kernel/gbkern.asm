@@ -1043,10 +1043,14 @@ k_isdir
                 ld    a,1
                 ret
 
-; k_chdir (GB_CHDIR): descend into the positioned entry's directory - push the
-; current dir cluster, then set it to the entry's start cluster. The next listing
-; rewinds there. Refuses (no-op) when the stack is full.
+; k_chdir (GB_CHDIR): descend into the positioned entry's directory. The IDE backend
+; pushes the current dir cluster and sets it to the entry's start cluster; the
+; Albireo backend (#104) appends "/<name>" to its path string instead. The next
+; listing rewinds there. Refuses (no-op) when the stack/path is full.
 k_chdir
+                if STORAGE_ALBIREO
+                jp    fsalb_chdir
+                else
                 ld    a,(fs_dir_sp)
                 cp    4                          ; DIRSTACK depth
                 ret   nc
@@ -1067,10 +1071,14 @@ k_chdir
                 ld    bc,4
                 ldir
                 ret
+                endif
 
-; k_back (GB_BACK): pop the dir stack into fs_dir_clus (parent directory); no-op
-; at the top level.
+; k_back (GB_BACK): go to the parent directory (no-op at the top). IDE pops the dir
+; cluster stack; Albireo (#104) truncates its path string at the last '/'.
 k_back
+                if STORAGE_ALBIREO
+                jp    fsalb_back
+                else
                 ld    a,(fs_dir_sp)
                 or    a
                 ret   z
@@ -1086,6 +1094,7 @@ k_back
                 ld    bc,4
                 ldir
                 ret
+                endif
 
 ; k_entname (GB_ENTNAME): HL = the last-enumerated entry's raw 11-byte 8.3 name
 ; (space-padded, no dot) so an app can show the extension (gb_dir* return name-only).
