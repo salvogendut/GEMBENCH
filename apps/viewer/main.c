@@ -29,6 +29,19 @@ static char filebuf[VIEW_MAX];
 static char line[MAXWRAP];
 static unsigned int filen;       /* bytes loaded (for repaint) */
 static unsigned char win_w = DEF_W, win_h = DEF_H;   /* live size (resizeable) */
+static char fbase[14];           /* "NAME.EXT" of the open file (window title) */
+
+/* fmt83: 11-byte space-padded 8.3 name -> "NAME.EXT" display string. */
+static void fmt83(char *dst, const char *n11)
+{
+    unsigned char i, j = 0;
+    for (i = 0; i < 8 && n11[i] != ' '; i++) dst[j++] = n11[i];
+    if (n11[8] != ' ') {
+        dst[j++] = '.';
+        for (i = 8; i < 11 && n11[i] != ' '; i++) dst[j++] = n11[i];
+    }
+    dst[j] = 0;
+}
 
 /* render: lay out n bytes of filebuf as wrapped text lines in the window. */
 static void render(unsigned int n)
@@ -62,7 +75,7 @@ static void render(unsigned int n)
 /* paint the whole window (title + text). */
 static void v_draw(void)
 {
-    gb_window(WIN_X, WIN_Y, win_w, win_h, "VIEWER");
+    gb_window(WIN_X, WIN_Y, win_w, win_h, fbase[0] ? fbase : "VIEWER");
     if (filen == 0)
         gb_text(TX_COL, TX_Y0, "(file is empty or could not be read)");
     else
@@ -101,8 +114,11 @@ static const gb_win_t vwin = { WIN_X, WIN_Y, DEF_W, DEF_H, on_frame, v_repaint, 
 
 void main(void)
 {
+    char raw[11];
     gb_wm_add(&vwin);                       /* register FIRST: captures our file arg
                                               (per-window) so the load below is ours */
+    gb_get_name(raw);                       /* the file we were launched with -> title */
+    fmt83(fbase, raw);
     filen = gb_fs_load(filebuf, VIEW_MAX);
     gb_curhide();
     v_draw();

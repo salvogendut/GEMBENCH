@@ -73,6 +73,7 @@ static unsigned char count, idx;           /* icon-set count + current index    
 static unsigned char selpen;               /* selected palette pen 0..3            */
 static unsigned char want_menu;            /* File title clicked -> run the menu     */
 static unsigned char status;               /* 0 none, 1 saved, 2 failed            */
+static char fbase[14];                     /* "NAME.EXT" of the open file (title)   */
 static unsigned char u_valid, u_cx, u_cy, u_pen;  /* single-level undo of last paint */
 
 static const unsigned char file_menu[] = { 1, MENU_COL, 'F','i','l','e',0,0,0,0 };
@@ -250,8 +251,7 @@ static void status_line(void)
 
 static void draw(void)
 {
-    gb_window(win_x, win_y, WIN_W, WIN_H,
-              mode == M_CURSOR ? "ICONED cursor" : "ICONED icons");
+    gb_window(win_x, win_y, WIN_W, WIN_H, fbase[0] ? fbase : "ICONED");
     draw_canvas();
     draw_palette();
     draw_nav();
@@ -280,6 +280,18 @@ static void to_83(const char *s)
         i++;
         for (j = 0; j < 3 && s[i]; j++, i++) name83[8 + j] = s[i];
     }
+}
+
+/* fmt83: 11-byte space-padded 8.3 name -> "NAME.EXT" display string (window title). */
+static void fmt83(char *dst, const char *n11)
+{
+    unsigned char i, j = 0;
+    for (i = 0; i < 8 && n11[i] != ' '; i++) dst[j++] = n11[i];
+    if (n11[8] != ' ') {
+        dst[j++] = '.';
+        for (i = 8; i < 11 && n11[i] != ' '; i++) dst[j++] = n11[i];
+    }
+    dst[j] = 0;
 }
 
 /* is_editable: name (NAME.EXT) ends in .IST or .SPR (case as stored). */
@@ -315,6 +327,7 @@ static void do_load(void)
     if (sel == 0xFF) return;
     to_83(store[sel]);
     gb_set_name(name83);
+    fmt83(fbase, name83);                /* title -> the opened file's name */
     filelen = gb_fs_load(buf, BUFSZ);
     sniff();
     selpen = (mode == M_CURSOR) ? 1 : 1;
@@ -451,8 +464,11 @@ void main(void)
 {
     unsigned char n;
 
+    char raw[11];
     win_x = DEF_X; win_y = DEF_Y;
     gb_wm_add(&iewin);                       /* register first: captures our file arg */
+    gb_get_name(raw);                        /* the file we were launched with -> title */
+    fmt83(fbase, raw);
     filelen = gb_fs_load(buf, BUFSZ);
     selpen = 1; want_menu = 0; status = 0;
     sniff();
