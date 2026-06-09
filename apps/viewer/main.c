@@ -3,22 +3,23 @@
  * Launched by the file manager for any non-.TXT file (the type->app default).
  * Issue #45: a co-resident window - main() loads the file, renders it, registers
  * with gb_wm_add and returns; the kernel WM loop drives on_frame / on_repaint.
- * The close gadget (title-bar left) or ESC closes it; other clicks just focus it.
+ * The close gadget (title-bar left) or ESC closes it; the title bar drags it, the
+ * corner grip resizes it; other clicks just focus it.
  *
  * Binary files load fine too; they just show as gibberish (control bytes are
  * skipped), so this doubles as a quick "peek" at anything on the disk. */
 #include "gb.h"
 
 #define VIEW_MAX  6144   /* file buffer size; also the load cap passed to gb_fs_load */
-#define TX_COL    4      /* text start: byte column inside the window         */
-#define TX_Y0     26     /* first text line (pixels), below the title bar     */
+#define TX_COL    (unsigned char)(win_x + 2)     /* text/image start: byte col in window */
+#define TX_Y0     (unsigned char)(win_y + 12)    /* first text line / image top (rows)  */
 #define LINE_H    11     /* line pitch (pixels)                               */
 #define MAX_LINES ((win_h - 16) / LINE_H)       /* visible text rows (runtime) */
 #define WRAP      ((win_w - 9) * 2 / 3)          /* chars per line (runtime)    */
 #define MAXWRAP   48     /* line[] cap = max WRAP at 80-col                    */
 
-#define WIN_X     2
-#define WIN_Y     14
+#define DEF_X     2      /* initial position; the window is draggable now      */
+#define DEF_Y     14
 #define DEF_W     76     /* default size; the window is resizeable (#81)      */
 #define DEF_H     180
 #define MIN_W     30
@@ -28,6 +29,7 @@
 static char filebuf[VIEW_MAX];
 static char line[MAXWRAP];
 static unsigned int filen;       /* bytes loaded (for repaint) */
+static unsigned char win_x = DEF_X, win_y = DEF_Y;   /* live position (draggable)   */
 static unsigned char win_w = DEF_W, win_h = DEF_H;   /* live size (resizeable) */
 static char fbase[14];           /* "NAME.EXT" of the open file (window title) */
 
@@ -110,21 +112,21 @@ static void draw_pic(void)
     unsigned char h = pic_h, maxh = (unsigned char)(199 - TX_Y0);
     if (h > maxh) h = maxh;
     if (pic_off + (unsigned int)pic_wb * h > filen) return;   /* truncated/bad */
-    gb_restorerect((unsigned char)(WIN_X + 2), TX_Y0, pic_wb, h,
+    gb_restorerect((unsigned char)(win_x + 2), TX_Y0, pic_wb, h,
                    (unsigned char *)filebuf + pic_off);
 }
 
 /* paint the whole window (title + text, or a .PIC image). */
 static void v_draw(void)
 {
-    gb_window(WIN_X, WIN_Y, win_w, win_h, fbase[0] ? fbase : "VIEWER");
+    gb_window(win_x, win_y, win_w, win_h, fbase[0] ? fbase : "VIEWER");
     if (filen == 0)
         gb_text(TX_COL, TX_Y0, "(file is empty or could not be read)");
     else if (is_pic())
         draw_pic();
     else
         render(filen);
-    gb_draw_grip(WIN_X, WIN_Y, win_w, win_h);   /* resize grip (#81) */
+    gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#81) */
 }
 
 /* on_repaint: redraw the window when the WM restacks us. */
@@ -135,26 +137,35 @@ static void v_repaint(void)
     gb_curshow();
 }
 
-/* on_frame: close on ESC or a click in the close gadget; other clicks just focus. */
+/* on_frame: ESC / close gadget closes; the title bar drags the window; the grip
+   resizes; other clicks just focus. */
 static void on_frame(void)
 {
-    unsigned char flags = gb_flags();
+    unsigned char flags = gb_flags(), mx, my;
     if (flags & GB_QUIT) { gb_wm_close(); return; }
     if (!(flags & GB_CLICK)) return;
-    if (gb_in_grip(WIN_X, WIN_Y, win_w, win_h, gb_mx(), gb_my())) {  /* resize grip (#81) */
-        if (gb_drag_resize(WIN_X, WIN_Y, &win_w, &win_h, MIN_W, MIN_H)) {
+    mx = gb_mx(); my = gb_my();
+    if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {       /* resize grip (#81) */
+        if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
             gb_wm_setsize(win_w, win_h);
             gb_restore_parent();
             gb_curhide(); v_draw(); gb_curshow();
         }
         return;
     }
-    if (gb_my() >= WIN_Y && gb_my() < WIN_Y + TITLE_H &&
-        gb_mx() >= WIN_X && gb_mx() < WIN_X + 5)
-        gb_wm_close();                     /* close gadget */
+    if (my >= win_y && my < (unsigned char)(win_y + TITLE_H)) { /* title bar */
+        if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { gb_wm_close(); return; }  /* close */
+        if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + win_w)) {  /* drag */
+            if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
+                gb_wm_setpos(win_x, win_y);
+                gb_restore_parent();
+                gb_curhide(); v_draw(); gb_curshow();
+            }
+        }
+    }
 }
 
-static const gb_win_t vwin = { WIN_X, WIN_Y, DEF_W, DEF_H, on_frame, v_repaint, 0, 0 };
+static const gb_win_t vwin = { DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, v_repaint, 0, 0 };
 
 void main(void)
 {
@@ -168,10 +179,10 @@ void main(void)
         parse_pic();
         win_w = (unsigned char)(pic_wb + 3);
         if (win_w < MIN_W) win_w = MIN_W;
-        if (win_w > (unsigned char)(80 - WIN_X)) win_w = (unsigned char)(80 - WIN_X);
-        win_h = (unsigned char)((TX_Y0 - WIN_Y) + pic_h + 4);
+        if (win_w > (unsigned char)(80 - win_x)) win_w = (unsigned char)(80 - win_x);
+        win_h = (unsigned char)((TX_Y0 - win_y) + pic_h + 4);
         if (win_h < MIN_H) win_h = MIN_H;
-        if (win_h > (unsigned char)(200 - WIN_Y)) win_h = (unsigned char)(200 - WIN_Y);
+        if (win_h > (unsigned char)(200 - win_y)) win_h = (unsigned char)(200 - win_y);
         gb_wm_setsize(win_w, win_h);
     }
     gb_curhide();
