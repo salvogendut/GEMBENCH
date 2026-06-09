@@ -17,7 +17,7 @@ mkdir -p "$OUT"
 # kernel: headered
 python3 tools/amsdos_header.py build/GBKERN.RAW "$OUT/GBKERN.BIN" GBKERN BIN 0x8000
 # launchable apps: headerless raw, .APP
-for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT; do
+for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS; do
     cp "build/$a.RAW" "$OUT/$a.APP"
 done
 # kernel modules: headerless raw, .BIN
