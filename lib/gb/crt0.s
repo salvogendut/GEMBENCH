@@ -13,6 +13,8 @@
         .globl  l__INITIALIZER          ; linker-defined: length of _INITIALIZER
         .globl  s__INITIALIZER          ; ... start of the source (in the image)
         .globl  s__INITIALIZED          ; ... start of the dest (RAM)
+        .globl  l__BSS                  ; ... length of the zero-init area
+        .globl  s__BSS                  ; ... start of it (RAM)
 
         .area   _CODE
 _start::
@@ -22,6 +24,23 @@ _start::
 
         .area   _GSINIT
 gsinit::
+        ;; Zero _BSS. C requires uninitialised globals to start at 0, and a relaunched
+        ;; app (Exit to DOS -> run"GBKERN) must NOT inherit the previous run's BSS - the
+        ;; desktop's bar_init stayed set, so its top bar never redrew. The image holds
+        ;; no BSS bytes (it's RAM), so the loader can't clear it; we do, here.
+        ld      bc, #l__BSS
+        ld      a, b
+        or      a, c
+        jr      Z, bss_done
+        ld      hl, #s__BSS
+        ld      (hl), #0x00
+        dec     bc
+        ld      a, b
+        or      a, c
+        jr      Z, bss_done             ; exactly one BSS byte -> already cleared
+        ld      de, #s__BSS+1
+        ldir                            ; propagate the zero across the rest
+bss_done:
         ld      bc, #l__INITIALIZER
         ld      a, b
         or      a, c
