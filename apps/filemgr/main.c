@@ -282,6 +282,7 @@ static const char *win_title(void)               /* "Disk C" + path -> title_buf
 #define ICON_FILEMGR 16
 #define ICON_PAINT 17
 #define ICON_FRACTAL 18
+#define ICON_VIEWER 20
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -326,6 +327,7 @@ static unsigned char entry_icon(const char *name)
         if (name_is(name, "FILEMGR")) return ICON_FILEMGR;
         if (name_is(name, "PAINT"))   return ICON_PAINT;
         if (name_is(name, "FRACTAL")) return ICON_FRACTAL;
+        if (name_is(name, "VIEWER"))  return ICON_VIEWER;
         return ICON_APP;
     }
     return ICON_BINARY;
