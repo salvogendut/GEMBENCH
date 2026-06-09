@@ -327,6 +327,7 @@ static unsigned char entry_icon(const char *name)
         if (name_is(name, "FILEMGR")) return ICON_FILEMGR;
         if (name_is(name, "PAINT"))   return ICON_PAINT;
         if (name_is(name, "FRACTAL")) return ICON_FRACTAL;
+        if (name_is(name, "XAOS"))    return ICON_FRACTAL;   /* the fractal generator (#116) */
         if (name_is(name, "VIEWER"))  return ICON_VIEWER;
         return ICON_APP;
     }

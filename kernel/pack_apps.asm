@@ -12,3 +12,6 @@
 pnt_img         incbin "../build/PAINT.RAW"     ; packaged on the disk as PAINT.APP (#114)
 pnt_imgend
                 save  "PAINT.APP",pnt_img,pnt_imgend-pnt_img,DSK,"build/gbkern.dsk"
+xao_img         incbin "../build/XAOS.RAW"      ; packaged on the disk as XAOS.APP (#116)
+xao_imgend
+                save  "XAOS.APP",xao_img,xao_imgend-xao_img,DSK,"build/gbkern.dsk"
