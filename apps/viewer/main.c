@@ -10,7 +10,8 @@
  * skipped), so this doubles as a quick "peek" at anything on the disk. */
 #include "gb.h"
 
-#define VIEW_MAX  6144   /* file buffer size; also the load cap passed to gb_fs_load */
+#define VIEW_MAX  12288  /* file buffer + load cap. Big enough for a ~200x200 .PIC
+                            (a full-screen 320x200 is 16K - won't fit the 16K bank). */
 #define TX_COL    (unsigned char)(win_x + 2)     /* text/image start: byte col in window */
 #define TX_Y0     (unsigned char)(win_y + 12)    /* first text line / image top (rows)  */
 #define LINE_H    11     /* line pitch (pixels)                               */
