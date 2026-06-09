@@ -28,9 +28,8 @@
 #define CANVAS_WB 25                    /* canvas width in bytes (100 px / 4)    */
 #define CANVAS_H  100                   /* canvas height in rows (px)            */
 #define CANVAS_W  (CANVAS_WB * 4)       /* 100 px                                */
-#define WIN_W     (CANVAS_WB + 19)      /* canvas + 16-byte (2x32px) toolchest   */
-#define STRIP_H   16                    /* palette + width strip below the canvas */
-#define WIN_H     (TITLE_H + CANVAS_H + 2 + STRIP_H)
+#define WIN_W     (CANVAS_WB + 15)      /* canvas + toolchest, in bytes          */
+#define WIN_H     (TITLE_H + CANVAS_H + 4)
 
 #define WHITE_BYTE 0xF0                 /* 4 px of pen 1 (white) - the blank canvas */
 
@@ -41,30 +40,29 @@
 #define TOOL_FILL   3
 #define TOOL_UNDO   4
 #define N_TOOLS     5
-#define TOOL_WB     8                   /* tool icon width in bytes (32 px)      */
-#define TOOL_H      32                  /* tool icon height in rows              */
-#define TOOL_SY     33                  /* tool row stride (32 + 1 gap): 3 rows ~ canvas */
+#define TOOL_WB     6                   /* tool icon width in bytes (24 px)      */
+#define TOOL_H      24                  /* tool icon height in rows              */
+#define TOOL_SY     27                  /* tool row stride (24 + 3 gap)          */
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 /* live (draggable) window-relative geometry */
 #define CVX  (unsigned char)(win_x + 1)            /* canvas left, byte column */
 #define CVY  (unsigned char)(win_y + TITLE_H + 1)  /* canvas top, screen row   */
-/* toolchest column: just right of the canvas, two 32px icons wide, full height */
+/* toolchest column: just right of the canvas */
 #define TCX  (unsigned char)(CVX + CANVAS_WB + 1)  /* tools left, byte column  */
 #define TCY  CVY                                    /* tools top = canvas top   */
-/* palette + width controls sit in a strip below the canvas (full window width) */
-#define STRIP_Y (unsigned char)(CVY + CANVAS_H + 2)
-#define PAL_H 12
-#define SW_WB 4                                      /* swatch width in bytes (16px) */
-#define WX   (unsigned char)(CVX + 18)               /* width control x in the strip */
+#define PAL_Y (unsigned char)(TCY + 3 * TOOL_SY)    /* ink swatches below tools */
+#define PAL_H 10
+#define SW_WB 3                                      /* swatch width in bytes    */
+#define WID_Y (unsigned char)(PAL_Y + PAL_H + 2)     /* pencil-width control row */
 
 static unsigned char canvas[CANVAS_WB * CANVAS_H];
 static unsigned char pen = 2;          /* current ink: 0 blue 1 white 2 black 3 red */
 static unsigned char tool = TOOL_PENCIL;
 static unsigned char pen_w = 1;        /* pencil width 1..4                     */
 
-/* PAINT.IST loaded whole at startup; tools blit straight out of it. 5x 32x32 ~ 1.3K. */
-#define IST_MAX 2048
+/* PAINT.IST loaded whole at startup; tools blit straight out of it. 2 sectors. */
+#define IST_MAX 1024
 static unsigned char ist[IST_MAX];
 static unsigned char ist_ok = 0;       /* a valid GBIS set with >=N_TOOLS icons? */
 
@@ -137,14 +135,14 @@ static void draw_toolchest(void)
     gb_frame(tool_x(tool), tool_y(tool), TOOL_WB, TOOL_H, 3);   /* selected: red */
 
     for (k = 0; k < 4; k++)
-        gb_fill((unsigned char)(CVX + k * SW_WB), STRIP_Y, SW_WB, PAL_H, k);
-    gb_frame((unsigned char)(CVX + pen * SW_WB), STRIP_Y, SW_WB, PAL_H, 2); /* sel: black */
+        gb_fill((unsigned char)(TCX + k * SW_WB), PAL_Y, SW_WB, PAL_H, k);
+    gb_frame((unsigned char)(TCX + pen * SW_WB), PAL_Y, SW_WB, PAL_H, 2); /* sel: black */
 
-    gb_fill(WX, STRIP_Y, 11, 10, 1);                 /* white strip for the width control */
-    gb_textbw(WX, (unsigned char)(STRIP_Y + 1), "-");
+    gb_fill(TCX, WID_Y, TOOL_WB * 2, 8, 1);          /* white strip for the width row */
+    gb_textbw(TCX, WID_Y, "-");
     wbuf[0] = (char)('0' + pen_w); wbuf[1] = 0;
-    gb_textbw((unsigned char)(WX + 4), (unsigned char)(STRIP_Y + 1), wbuf);
-    gb_textbw((unsigned char)(WX + 8), (unsigned char)(STRIP_Y + 1), "+");
+    gb_textbw((unsigned char)(TCX + 5), WID_Y, wbuf);
+    gb_textbw((unsigned char)(TCX + TOOL_WB + 3), WID_Y, "+");
     gb_curshow();
 }
 
@@ -182,29 +180,28 @@ static void on_repaint(void) { draw(); }
    it hit something (so the canvas-draw path is skipped). */
 static unsigned char hit_toolchest(unsigned char mx, unsigned char my)
 {
-    unsigned char ry, k;
+    unsigned char rx, ry, k;
+    if (mx < TCX || mx >= (unsigned char)(TCX + TOOL_WB * 2)) return 0;
+    rx = (unsigned char)(mx - TCX);
 
-    if (mx >= TCX && mx < (unsigned char)(TCX + TOOL_WB * 2) &&
-        my >= TCY && my < (unsigned char)(TCY + 3 * TOOL_SY)) {     /* tools */
+    if (my >= TCY && my < (unsigned char)(TCY + 3 * TOOL_SY)) {     /* tools */
         ry = (unsigned char)(my - TCY);
         if (ry % TOOL_SY < TOOL_H) {
-            k = (unsigned char)((ry / TOOL_SY) * 2 + ((mx - TCX) >= TOOL_WB ? 1 : 0));
+            k = (unsigned char)((ry / TOOL_SY) * 2 + (rx >= TOOL_WB ? 1 : 0));
             if (k < N_TOOLS) { tool = k; draw_toolchest(); }
         }
         return 1;
     }
-    if (my >= STRIP_Y && my < (unsigned char)(STRIP_Y + PAL_H)) {   /* bottom strip */
-        if (mx >= CVX && mx < (unsigned char)(CVX + 4 * SW_WB)) {   /* palette */
-            k = (unsigned char)((mx - CVX) / SW_WB);
-            if (k < 4) { pen = k; draw_toolchest(); }
-            return 1;
-        }
-        if (mx >= WX && mx < (unsigned char)(WX + 12)) {            /* width -/+ */
-            if (mx < (unsigned char)(WX + 4)) { if (pen_w > 1) pen_w--; }
-            else if (mx >= (unsigned char)(WX + 8)) { if (pen_w < 4) pen_w++; }
-            draw_toolchest();
-            return 1;
-        }
+    if (my >= PAL_Y && my < (unsigned char)(PAL_Y + PAL_H)) {       /* palette */
+        k = (unsigned char)(rx / SW_WB);
+        if (k < 4) { pen = k; draw_toolchest(); }
+        return 1;
+    }
+    if (my >= WID_Y && my < (unsigned char)(WID_Y + 8)) {           /* width -/+ */
+        if (rx < TOOL_WB) { if (pen_w > 1) pen_w--; }
+        else              { if (pen_w < 4) pen_w++; }
+        draw_toolchest();
+        return 1;
     }
     return 0;
 }
