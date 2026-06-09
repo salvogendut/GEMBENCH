@@ -84,21 +84,20 @@ input_poll
                 ld    (in_quit),a
                 ret
 
-; read_joystick: directions -> in_joy_dirs; fire 1 = select, fire 2 = quit.
+; read_joystick: directions -> in_joy_dirs; EITHER fire button -> select/click.
+; A generic Atari-style joystick's single fire reads as the CPC's Fire 2, while the
+; CPC's own sticks / the emulator's gamepad use Fire 1 - so accept both, else real
+; hardware can't click (#124). Quit stays on ESC (see input_poll), not a fire button.
 read_joystick
                 call  KM_GET_JOYSTICK
                 ld    c,a
                 and   #0F                     ; bits 0..3 = DIR_* directions
                 ld    (in_joy_dirs),a
-                bit   JOY_FIRE1,c
-                jr    z,rj_fire2
-                ld    a,1
-                ld    (in_fire),a
-rj_fire2
-                bit   JOY_FIRE2,c
+                ld    a,c
+                and   #30                     ; bit5 (fire1) | bit4 (fire2) = either fire
                 ret   z
                 ld    a,1
-                ld    (in_quit),a
+                ld    (in_fire),a
                 ret
 
 ; joy_to_delta: held directions -> a per-frame delta, with the acceleration ramp
