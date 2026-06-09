@@ -313,9 +313,55 @@ static void on_menu(void)
 
 static const char *const file_items[] = { "New", "Load", "Save", "Save As" };
 
+/* is_bas: is the current file a BASIC program? .BAS needs CR+LF line endings on the
+   CPC (where Notepad otherwise keeps plain \n); is_bas reads the 8.3 name's ext. */
+static unsigned char is_bas(void)
+{
+    return (unsigned char)(name83[8] == 'B' && name83[9] == 'A' && name83[10] == 'S');
+}
+
+/* strip_cr: drop every \r from buf[0..n) so a CR+LF file edits as plain \n lines;
+   returns the new length. */
+static unsigned int strip_cr(unsigned int n)
+{
+    unsigned int i, j = 0;
+    for (i = 0; i < n; i++) if (buf[i] != '\r') buf[j++] = buf[i];
+    return j;
+}
+
+/* to_crlf: rewrite buf in place as CR+LF (each \n -> \r\n) with a trailing CR+LF, for
+   a .BAS save (CPC BASIC needs every line, including the last, terminated). Returns
+   the new length, or 'len' unchanged if it would not fit NP_BUF (caller saves as-is).
+   Expands back-to-front so the destination never overruns the unread source. */
+static unsigned int to_crlf(void)
+{
+    unsigned int nl = 0, i, w, newlen;
+    unsigned char trail, ch;
+    for (i = 0; i < len; i++) if (buf[i] == '\n') nl++;
+    trail = (unsigned char)(len == 0 || buf[len - 1] != '\n');   /* need a final \n? */
+    newlen = len + nl + (trail ? 2 : 0);       /* each \n gains a \r; trailing gains \r\n */
+    if (newlen > NP_BUF) return len;           /* won't fit -> save as-is */
+    w = newlen;
+    if (trail) { buf[--w] = '\n'; buf[--w] = '\r'; }
+    i = len;
+    while (i) {
+        ch = (unsigned char)buf[--i];
+        buf[--w] = (char)ch;
+        if (ch == '\n') buf[--w] = '\r';
+    }
+    return newlen;
+}
+
 static void do_save(void)
 {
-    status = gb_fs_save(buf, len) ? 1 : 2;
+    if (is_bas()) {                            /* CR+LF for CPC BASIC, then restore \n */
+        unsigned int orig = len, wl = to_crlf();
+        status = gb_fs_save(buf, wl) ? 1 : 2;
+        strip_cr(wl);                          /* collapse back; buf[0..orig) == original */
+        len = orig;                            /* drop the file-only trailing terminator */
+    } else {
+        status = gb_fs_save(buf, len) ? 1 : 2;
+    }
     if (status == 1) dirty = 0;
 }
 
@@ -397,6 +443,7 @@ static void do_load(void)
     gb_set_name(name83);
     fmt83(fbase, name83);                /* title -> the opened file's name */
     len = gb_fs_load(buf, NP_MAX);
+    if (is_bas()) len = strip_cr(len);   /* .BAS comes in CR+LF -> edit as plain \n */
     cur = 0; view_first = 0; dirty = 0; status = 0;
 }
 
@@ -512,34 +559,37 @@ static unsigned char cursor_over(void)
 }
 
 /* read_arrows: matrix state of the four cursor keys -> arr_bits (bit0 up, 1 down,
-   2 left, 3 right). KM_TEST_KEY (&BB1E): A = key number (72..75 = U/D/L/R), returns
-   NZ when pressed. We talk to the matrix directly so the keys stay globally disarmed
-   (no char-buffer flood) yet still reach us. Only A + arr_bits cross each call, so a
-   KM_TEST_KEY register clobber can't corrupt the accumulator. */
+   2 left, 3 right). KM_TEST_KEY (&BB1E): A = key number, returns NZ when pressed.
+   The CPC firmware key numbers for the cursor keys are 0=Up, 1=Right, 2=Down,
+   8=Left (NOT 72-75, which are Joystick 0 - reading those nudged the caret with the
+   gamepad d-pad but never with the actual arrow keys). We talk to the matrix
+   directly so the keys stay globally disarmed (no char-buffer flood) yet still reach
+   us. Only A + arr_bits cross each call, so a KM_TEST_KEY register clobber can't
+   corrupt the accumulator. */
 static void read_arrows(void) __naked
 {
 __asm
     xor  a
     ld   (_arr_bits), a
-    ld   a, #72            ; cursor up
+    ld   a, #0             ; cursor up
     call #0xBB1E
     jr   z, 1$
     ld   a, (_arr_bits)
     or   #0x01
     ld   (_arr_bits), a
-1$: ld   a, #73            ; cursor down
+1$: ld   a, #2             ; cursor down
     call #0xBB1E
     jr   z, 2$
     ld   a, (_arr_bits)
     or   #0x02
     ld   (_arr_bits), a
-2$: ld   a, #74            ; cursor left
+2$: ld   a, #8             ; cursor left
     call #0xBB1E
     jr   z, 3$
     ld   a, (_arr_bits)
     or   #0x04
     ld   (_arr_bits), a
-3$: ld   a, #75            ; cursor right
+3$: ld   a, #1             ; cursor right
     call #0xBB1E
     jr   z, 4$
     ld   a, (_arr_bits)
@@ -771,7 +821,9 @@ void main(void)
                                                    (per-window) + takes focus, so the load
                                                    below targets OUR file, not a sibling's */
     gb_get_name(raw);                            /* the file name we were launched with */
+    for (n = 0; n < 11; n++) name83[n] = raw[n]; /* current 8.3 name (for is_bas etc.) */
     len = gb_fs_load(buf, NP_MAX);              /* ...and its contents (0 if none) */
+    if (is_bas()) len = strip_cr(len);           /* .BAS in CR+LF -> edit as plain \n */
     fmt83(fbase, raw);                           /* show it in the title bar (#86) */
     if (!fbase[0]) {                             /* opened blank -> Untitled */
         fmt83(fbase, "UNTITLEDTXT");
