@@ -65,7 +65,13 @@ line in `gbkern.asm`, and copy it to the IDE image in the deploy step):
 - **Icons** (`.IST`): each icon is a 32×32 PNG → `tools/png2cpc.py assets/x.png
   lib/icon_x.asm icon_x 32x32`, then `tools/packicons.py build/NAME.IST
   lib/icon_*.asm ...` in **slot order** (must match `ext_to_icon` in `gbkern.asm`:
-  floppy ide clock trash geobench basic binary picture text folder).
+  floppy ide clock trash geobench basic binary picture text folder). Edit an icon
+  set interactively with `tools/iconedit.py` (tkinter).
+- **Pictures** (`.PIC`): convert a PNG to a 4-colour Mode-1 picture with
+  `tools/picconv.py` — a tkinter GUI (Open / dither / width / preview / Save) or a
+  CLI (`tools/picconv.py in.png out.PIC -d floyd -w 160`). `.PIC` opens in the
+  Viewer and edits in PAINT; no packaging needed (it's user content, not a build
+  asset).
 
 ## File line endings
 
