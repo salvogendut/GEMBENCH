@@ -229,6 +229,41 @@ static char *name83(const char *e)
    extension; gb_dir* return name only). */
 static char *fullname(void) { return name83(gb_entname()); }
 
+/* Breadcrumb path shown in the title bar (#104), tracked app-level so it works on
+   any backend: "" = root, "/GAMES", "/GAMES/RPG". path_push on descend, path_pop
+   on Back; win_title builds "<drive><path>" for gb_window. */
+static char fm_path[40];
+static char title_buf[40];
+
+static void path_push(const char *name)         /* append "/name" (bounds-checked) */
+{
+    unsigned char i = 0, n = 0;
+    while (fm_path[i]) i++;
+    while (name[n]) n++;
+    if ((unsigned char)(i + n + 2) >= sizeof(fm_path)) return;   /* too deep -> leave */
+    fm_path[i++] = '/';
+    while (*name) fm_path[i++] = *name++;
+    fm_path[i] = 0;
+}
+
+static void path_pop(void)                       /* drop the last "/component" */
+{
+    unsigned char i = 0, last = 0;
+    while (fm_path[i]) { if (fm_path[i] == '/') last = i; i++; }
+    fm_path[last] = 0;                            /* "/GAMES"->"", "/A/B"->"/A" */
+}
+
+static const char *win_title(void)               /* "Disk C" + path -> title_buf */
+{
+    unsigned char i = 0, j = 0;
+    const char *d = drive_title[my_drive];
+    while (d[j]) title_buf[i++] = d[j++];
+    j = 0;
+    while (fm_path[j] && i < (unsigned char)(sizeof(title_buf) - 1)) title_buf[i++] = fm_path[j++];
+    title_buf[i] = 0;
+    return title_buf;
+}
+
 /* DEFAULT.IST slot order (matches the packicons line in tools/build_kernel.sh).
    The file -> icon mapping lives here now, not in the kernel (#103). */
 #define ICON_CLOCK 2
@@ -339,7 +374,7 @@ static void draw(void)
     gb_set_drive(my_drive);              /* this window's drive (#65) - on_repaint may
                                             run while another window's drive is active */
     gb_curhide();
-    gb_window(win_x, win_y, win_w, win_h, drive_title[my_drive]);
+    gb_window(win_x, win_y, win_w, win_h, win_title());
     draw_scrollbar();
     if (view == V_ICONS) draw_icons_view();
     else                 draw_list_view();
@@ -374,7 +409,7 @@ static void open_entry(unsigned char idx)
 {
     char *e;
     dir_seek(idx);                 /* position at the entry (sets attr + cluster) */
-    if (gb_isdir()) { gb_chdir(); relist(); return; }
+    if (gb_isdir()) { path_push(fullname()); gb_chdir(); relist(); return; }
     nsel = 0;
     e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
     if (ext_is(e, 'A', 'P', 'P'))
@@ -434,6 +469,7 @@ static void on_event(void)
     if (gb_msg.type != GB_MSG_MENU) return;
     if (gb_msg.p0 >= MENU_BACK_COL) {     /* Back */
         gb_back();
+        path_pop();
         relist();
     } else {                              /* View: toggle + persist to GEOBENCH.CFG */
         view ^= 1;

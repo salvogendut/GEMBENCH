@@ -137,8 +137,11 @@ aem_fail
 fsalb_dir_first
                 call  alb_ensure_mount
                 jr    nc,alb_scan_end
-                ld    a,ALBC_SETNAME             ; SET_FILE_NAME "*" -> "/*"
-                call  alb_sendcmd
+                ld    a,ALBC_SETNAME             ; SET_FILE_NAME <path>/* (#104: current
+                call  alb_sendcmd                ; dir - "/*" at root, "/GAMES/*" in a subdir)
+                call  alb_emit_path
+                ld    a,'/'
+                out   (c),a
                 ld    a,'*'
                 out   (c),a
                 xor   a
@@ -359,6 +362,9 @@ adl_fail
 alb_setname_req
                 ld    a,ALBC_SETNAME
                 call  alb_sendcmd
+                call  alb_emit_path               ; <path> prefix (#104 subdirs)
+                ld    a,'/'
+                out   (c),a
                 ld    hl,fs_req_name
                 ld    a,8
                 call  alb_outira                  ; 8 name chars
@@ -368,6 +374,94 @@ alb_setname_req
                 call  alb_outira                  ; 3 extension chars
                 xor   a
                 out   (c),a                        ; NUL terminator
+                ret
+
+; alb_emit_path: stream alb_path (NUL-terminated current dir) to the DATA port for
+; use inside a SET_FILE_NAME. "" at root emits nothing. B/C (port) preserved.
+alb_emit_path
+                ld    hl,alb_path
+aep_loop
+                ld    a,(hl)
+                or    a
+                ret   z
+                inc   b
+                outi                               ; out (c),(hl); hl++; b restored
+                jr    aep_loop
+
+; ---------------------------------------------------------------------------
+; fsalb_chdir (GB_CHDIR on the Albireo build): descend into the positioned folder
+; by appending "/<name>" to alb_path. fs_ent_name holds the folder's 8.3 name (the
+; FM dir_seek'd it before chdir). Refuses (no-op) if the path would overflow.
+fsalb_chdir
+                ld    hl,alb_path                 ; HL -> end of path, B = its length
+                ld    b,0
+fch_end
+                ld    a,(hl)
+                or    a
+                jr    z,fch_atend
+                inc   hl
+                inc   b
+                jr    fch_end
+fch_atend
+                ld    a,b                          ; keep room for "/NAME.EXT" + NUL
+                cp    ALB_PATH_MAX-14
+                ret   nc                            ; too deep -> ignore
+                ld    (hl),'/'
+                inc   hl
+                ; fall through: append the compacted 8.3 fs_ent_name at HL + NUL
+alb_append_name
+                ld    de,fs_ent_name              ; up to 8 name chars (stop at space)
+                ld    b,8
+aan_name
+                ld    a,(de)
+                cp    ' '
+                jr    z,aan_ext
+                ld    (hl),a
+                inc   hl
+                inc   de
+                djnz  aan_name
+aan_ext
+                ld    de,fs_ent_name+8            ; extension (3 chars)
+                ld    a,(de)
+                cp    ' '
+                jr    z,aan_done                   ; no extension
+                ld    (hl),'.'
+                inc   hl
+                ld    b,3
+aan_extc
+                ld    a,(de)
+                cp    ' '
+                jr    z,aan_done
+                ld    (hl),a
+                inc   hl
+                inc   de
+                djnz  aan_extc
+aan_done
+                ld    (hl),0                       ; NUL-terminate the path
+                ret
+
+; fsalb_back (GB_BACK on the Albireo build): go up one level - truncate alb_path at
+; its last '/'. Root ("") is a no-op.
+fsalb_back
+                ld    hl,alb_path
+                ld    de,0                          ; DE = last '/' seen (0 = none)
+fbk_scan
+                ld    a,(hl)
+                or    a
+                jr    z,fbk_done
+                cp    '/'
+                jr    nz,fbk_next
+                ld    d,h
+                ld    e,l
+fbk_next
+                inc   hl
+                jr    fbk_scan
+fbk_done
+                ld    a,d
+                or    e
+                ret   z                              ; no '/' -> already at root
+                ex    de,hl
+                ld    (hl),0                          ; truncate at the last '/'
                 ret
 
 ; alb_inira: read A bytes from BC(=DATA) into (HL). B preserved (port high).
@@ -396,6 +490,12 @@ alb_invoid
                 ret
 
 fsalb_mounted   defb  0            ; 0 until SET_USB_MODE+DISK_MOUNT done once
+
+; #104: current directory as a CH376 path, NUL-terminated. "" = root; "/GAMES" or
+; "/GAMES/RPG" in a subdir. fsalb_chdir appends "/<name>", fsalb_back truncates at
+; the last '/'. Prefixed onto every SET_FILE_NAME via alb_emit_path. Zero-init = root.
+ALB_PATH_MAX    equ   64
+alb_path        defs  ALB_PATH_MAX
 
 ; Shared directory-context state the kernel manipulates generically (k_chdir/
 ; k_back, cross-drive copy). The IDE backend tracks the current directory by FAT
