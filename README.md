@@ -42,6 +42,12 @@ Prev/Next, UNDO) over a File Manager window — all co-resident under the kernel
 
 ![ICONED editor + file manager](iconed.png)
 
+Several apps running at once: the File Manager (sorted listing), the Viewer showing
+`PENGUIN.PIC` (a photo converted with `tools/picconv.py`), and the analog Clock —
+all co-resident windows under the kernel window manager:
+
+![Multiple apps: file manager, picture viewer, clock](geobench.png)
+
 What works today:
 
 - **Desktop** — backdrop, top bar (RAM probe + clock), draggable labelled icons,
