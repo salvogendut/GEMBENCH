@@ -33,6 +33,11 @@ void gb_window(unsigned char col, unsigned char line,    /* window: pos + size  
  * (lib/gb/gbwin.c) */
 unsigned char gb_drag_window(unsigned char *x, unsigned char *y,
                              unsigned char w, unsigned char h);
+/* gb_restorerect: blit a wbytes x h Mode-1 byte buffer to the screen at (x,y) in
+ * byte columns / rows (#114). The buffer is row-major (wbytes per row). Bracket
+ * with gb_curhide/gb_curshow. Used for the PAINT canvas + tool icons. */
+void gb_restorerect(unsigned char x, unsigned char y,
+                    unsigned char wbytes, unsigned char h, const void *buf);
 void gb_fill(unsigned char col, unsigned char line,      /* filled rectangle     */
              unsigned char w, unsigned char h, unsigned char pen);
 void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline    */
@@ -46,6 +51,7 @@ void gb_curhide(void);                                   /* lift the pointer    
 unsigned char gb_poll(void);          /* frame poll -> flags; caches cursor pos   */
 unsigned char gb_mx(void);            /* last poll's cursor byte column           */
 unsigned char gb_my(void);            /* last poll's cursor line                  */
+unsigned int  gb_mxp(void);           /* pointer PIXEL x 0-319 (pixel-accurate, #114) */
 unsigned char gb_flags(void);         /* last poll's flags (for gb_wm_run apps)   */
 char *gb_dir1(void);                  /* first dir entry -> "NAME.EXT", 0 at end  */
 char *gb_dirn(void);                  /* next dir entry  -> "NAME.EXT", 0 at end  */

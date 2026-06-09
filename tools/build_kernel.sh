@@ -43,6 +43,7 @@ DATA_LOC=0x5C00 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
                                    # its 7KB icon-set buffer (BUFSZ) fits below #8000 (#110)
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
 tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
+tools/build_capp.sh apps/paint  build/PAINT.RAW    # PAINT (C/SDCC) -> build/PAINT.RAW (#114)
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 # QA/<CARD>/: one distribution per storage card (#104). The apps/modules/assets

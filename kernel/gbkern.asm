@@ -153,6 +153,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_wm_setsize           ; GB_WMSETSIZE   #8099 (A = w, L = h, #81)
                 jp    k_vsync                ; GB_BLITEFULL   #809C (removed: mapping->FM, #103)
                 jp    k_icon_half            ; GB_ICONHALF    #809F (A=slot B=x C=y, #103)
+                jp    k_mxp                  ; GB_MXP         #80A2 -> HL = pointer pixel x (#114)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -2098,16 +2099,36 @@ k_fill
                 jp    fill_block
 kf_pen          db    0
 
-; k_saverect / k_restorerect (GB_SAVERECT / GB_RESTORERECT): save/restore a
-; screen rectangle to/from a caller buffer. B=x C=y D=w E=h HL=buffer (w*h
-; bytes). The buffer lives in the caller's page (mapped during the call); the
-; screen is resident, so no page swap is needed.
-; k_saverect / k_restorerect (GB_SAVERECT / GB_RESTORERECT): stubs. No app uses
-; them and there is no gb_saverect/gb_restorerect binding; bodies removed to
-; reclaim resident space. Slots kept so addresses are fixed. (save_block /
-; restore_block remain - the cursor save-under still uses them.)
+; k_saverect / k_restorerect (GB_SAVERECT / GB_RESTORERECT): save/restore a screen
+; rectangle to/from a caller buffer. B=x C=y D=w E=h HL=buffer (w*h bytes, in the
+; caller's page, mapped during the call). Thin wrappers over the cursor save-under
+; primitives save_block/restore_block (lib/screen.asm), which manage the upper-ROM
+; shadow when reading screen RAM. The sb_* params are shared with the cursor, so a
+; caller must bracket with gb_curhide/gb_curshow (#114: PAINT canvas blit).
 k_saverect
+                call  rect_args
+                jp    save_block
 k_restorerect
+                call  rect_args
+                jp    restore_block
+rect_args                                      ; B=x C=y D=w E=h HL=buf -> sb_*
+                ld    a,b
+                ld    (sb_x),a
+                ld    a,c
+                ld    (sb_y),a
+                ld    a,d
+                ld    (sb_w),a
+                ld    a,e
+                ld    (sb_h),a
+                ld    (sb_buf),hl
+                ret
+
+; k_mxp (GB_MXP, #114): HL = the pointer's PIXEL x (0-319), for pixel-accurate
+; drawing (gb_mx only gives the byte column). cursor_x is in 1/2-pixel units.
+k_mxp
+                ld    hl,(cursor_x)
+                srl   h
+                rr    l                          ; HL = cursor_x / 2 = pixel x
                 ret
 
 ; k_xorframe (GB_XORFRAME): stub. The rubber-band XOR frame was never wired up
@@ -2419,6 +2440,8 @@ ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED
 ied_imgend
 chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
 chl_imgend
+pnt_img         incbin "../build/PAINT.RAW"     ; packaged on the disk as PAINT.APP (#114)
+pnt_imgend
                 org   #0100                     ; --- app binaries, low region ---
 dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
 dtp_imgend
@@ -2438,6 +2461,7 @@ clk_imgend
                 save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
                 save  "CHELLO.APP",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
+                save  "PAINT.APP",pnt_img,pnt_imgend-pnt_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
