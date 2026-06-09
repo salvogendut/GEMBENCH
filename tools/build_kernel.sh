@@ -39,7 +39,8 @@ python3 tools/packicons.py build/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
-tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR (C/SDCC) -> build/FILEMGR.RAW
+DATA_LOC=0x6500 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: higher data-loc
+                                   # for code room now it sorts (a ~2.6K listing cache, #118)
 tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
 DATA_LOC=0x6800 DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD:
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room

@@ -47,9 +47,10 @@ What works today:
 - **Desktop** — backdrop, top bar (RAM probe + clock), draggable labelled icons,
   a System menu (Ram Usage / Refresh Media / Tidy Icons / Exit to DOS).
 - **File manager** — double-click the Disk icon to open a window listing the
-  drive; a type icon + name per file, a **scrolling** list, click to select,
-  double-click to open (routed to the right app by a type→app table). Reaches
-  every file regardless of how many; multi-drive, drag-and-drop, a Trash.
+  drive; a type icon + name per file (**list** or **icon** view), entries **sorted
+  by type then alphabetically**, a **scrolling** list, click to select, double-click
+  to open (routed to the right app by a type→app table). Multi-drive, drag-and-drop,
+  a Trash.
 - **Notepad** — a text editor: type/edit, word-wrap, copy/paste, click or cursor
   keys to place the caret, a File menu (New/Load/Save/Save As). Saves `.BAS` with
   CR+LF so CPC BASIC can load them.
@@ -252,7 +253,8 @@ Done:
 
 1. ✅ **Boot + desktop** — Mode 1 backdrop, top bar, software pointer.
 2. ✅ **Windowing + icons** — windows with title bars/gadgets, draggable icons.
-3. ✅ **File manager** — browse a drive, select, scroll, open by type.
+3. ✅ **File manager** — browse a drive (list/icon views, sorted by type + name),
+   select, scroll, open by type.
 4. ✅ **Banked app model + app API** — separate-binary apps over a kernel API.
 5. ✅ **Apps in C** — the whole app layer moved from assembly to C over `libgb`.
 6. ✅ **Storage write layer** — FAT16/FAT32 + Albireo read/write (save/delete/copy).

@@ -76,13 +76,18 @@ static const unsigned char fm_menu[] = {
 };
 #define MENU_BACK_COL 17      /* click column >= this -> Back, else View */
 
-static unsigned char count_files(void)
-{
-    unsigned char n = 0;
-    char *p = gb_dir1();
-    while (p) { n++; p = gb_dirn(); }
-    return n;
-}
+/* Sorted listing cache (#118): the directory is streamed once into these arrays in
+   raw order, then `order` is sorted by (type, name) and BOTH views + the click/open
+   path index through it. Capped at MAX_ENT (CPC dirs are small; a larger directory
+   shows the first MAX_ENT sorted). Also spares the FAT a re-stream per drawn item. */
+#define MAX_ENT 200
+/* Flat 11-byte name records (NOT char[MAX_ENT][11]): a 2D char array indexed by an
+   8-bit var makes SDCC compute the *11 offset in 8 bits, which wraps past entry 23.
+   NAME_AT forces the multiply to 16-bit. */
+static char          names[MAX_ENT * 11];  /* raw 8.3 names, in raw directory order */
+static unsigned char icons[MAX_ENT];       /* precomputed type icon per entry        */
+static unsigned char order[MAX_ENT];       /* sorted permutation -> raw index         */
+#define NAME_AT(k) (&names[(unsigned int)(k) * 11])
 
 /* dir_seek: position the dir cursor at absolute index idx; return its name (0 if
    past the end). The caller continues with gb_dirn() from there. */
@@ -229,6 +234,7 @@ static char *name83(const char *e)
    extension; gb_dir* return name only). */
 static char *fullname(void) { return name83(gb_entname()); }
 
+
 /* Breadcrumb path shown in the title bar (#104), tracked app-level so it works on
    any backend: "" = root, "/GAMES", "/GAMES/RPG". path_push on descend, path_pop
    on Back; win_title builds "<drive><path>" for gb_window. */
@@ -334,39 +340,91 @@ static unsigned char entry_icon(const char *name)
     return ICON_BINARY;
 }
 
+/* rank_of: the type group an icon sorts into - folders first, then apps, pictures,
+   text, BASIC, icon sets, fonts, the kernel, binaries (#118). */
+static unsigned char rank_of(unsigned char ic)
+{
+    switch (ic) {
+        case ICON_FOLDER:   return 0;
+        case ICON_DESKTOP: case ICON_FILEMGR: case ICON_NOTEPAD: case ICON_ICONED:
+        case ICON_PAINT:    case ICON_VIEWER:  case ICON_CLOCK:   case ICON_FRACTAL:
+        case ICON_APP:      return 1;
+        case ICON_PICTURE:  return 2;
+        case ICON_TEXT:     return 3;
+        case ICON_BASIC:    return 4;
+        case ICON_IST:      return 5;
+        case ICON_FNT:      return 6;
+        case ICON_GEOBENCH: return 7;
+        default:            return 8;   /* binaries / unknown */
+    }
+}
+
+/* entry_less: is raw entry a ordered before raw entry b? By type group, then name. */
+static unsigned char entry_less(unsigned char a, unsigned char b)
+{
+    unsigned char ra = rank_of(icons[a]), rb = rank_of(icons[b]), i;
+    char *na = NAME_AT(a), *nb = NAME_AT(b);
+    if (ra != rb) return (unsigned char)(ra < rb);
+    for (i = 0; i < 11; i++)
+        if (na[i] != nb[i]) return (unsigned char)(na[i] < nb[i]);
+    return 0;
+}
+
+/* build_list: stream the directory into the cache (raw order, with each entry's type
+   icon), then insertion-sort `order` by (type, name). Sets `total`. */
+static void build_list(void)
+{
+    unsigned char n = 0, i, j, v;
+    char *p, *e;
+    gb_set_drive(my_drive);
+    p = gb_dir1();
+    while (p && n < MAX_ENT) {
+        char *d = NAME_AT(n);
+        e = gb_entname();
+        for (i = 0; i < 11; i++) d[i] = e[i];
+        icons[n] = entry_icon(name83(e));   /* uses gb_isdir() of the current entry */
+        order[n] = n;
+        n++;
+        p = gb_dirn();
+    }
+    total = n;
+    for (i = 1; i < n; i++) {                /* insertion sort the permutation */
+        v = order[i]; j = i;
+        while (j > 0 && entry_less(v, order[j - 1])) { order[j] = order[j - 1]; j--; }
+        order[j] = v;
+    }
+}
+
 static void draw_list_view(void)
 {
-    unsigned char i, y;
-    char *name = dir_seek(top);
-    for (i = 0; i < LVIS && name; i++) {
+    unsigned char i, y, p, raw;
+    for (i = 0; i < LVIS; i++) {                   /* draw from the sorted cache (#118) */
+        p = (unsigned char)(top + i);
+        if (p >= total) break;
+        raw = order[p];
         y = CT_Y + i * ROW_H;
-        gb_icon_half(entry_icon(fullname()), CT_X, y + 1);  /* half-height type icon (#103) */
-        gb_text(CT_X + 9, y + 6, fullname());   /* NAME.EXT (icon view is name only) */
-        name = gb_dirn();
-    }
-    if (nsel) {                              /* red frame on the selected row */
-        unsigned char s = nsel - 1;
-        if (s >= top && s < top + LVIS)
-            gb_frame(CT_X, CT_Y + (s - top) * ROW_H, CT_W, 17, 3);
+        gb_icon_half(icons[raw], CT_X, y + 1);     /* half-height type icon (#103) */
+        gb_text(CT_X + 9, y + 6, name83(NAME_AT(raw)));   /* NAME.EXT */
+        if (nsel == (unsigned char)(p + 1))        /* red frame on the selected row */
+            gb_frame(CT_X, y, CT_W, 17, 3);
     }
 }
 
 static void draw_icons_view(void)
 {
-    unsigned char r, c, cx, cy;
+    unsigned char r, c, cx, cy, raw;
     unsigned int idx = (unsigned int)top * ICOLS;    /* first visible item */
-    char *name = dir_seek((unsigned char)idx);
     for (r = 0; r < IVIS; r++) {
         for (c = 0; c < ICOLS; c++) {
-            if (!name) return;
+            if (idx >= total) return;
+            raw = order[(unsigned char)idx];
             cx = CT_X + c * CELL_W;
             cy = CT_Y + r * CELL_H;
-            gb_icon(entry_icon(fullname()), cx + (CELL_W - 8) / 2, cy + 1);  /* full icon (#103) */
-            draw_name(cx, cy + 34, name);                   /* name below the 32px icon */
-            if (nsel == (unsigned char)idx + 1)
+            gb_icon(icons[raw], cx + (CELL_W - 8) / 2, cy + 1);   /* full icon (#103) */
+            draw_name(cx, cy + 34, name83(NAME_AT(raw)));           /* name below the icon */
+            if (nsel == (unsigned char)(idx + 1))
                 gb_frame(cx, cy, CELL_W, CELL_H - 1, 3);
             idx++;
-            name = gb_dirn();
         }
     }
 }
@@ -388,7 +446,7 @@ static void draw(void)
 /* relist: re-read the current directory and redraw from the top (#54). */
 static void relist(void)
 {
-    total = count_files();
+    build_list();              /* stream + sort the directory (sets total) (#118) */
     top = 0; nsel = 0;
     clamp_top();
     draw();
@@ -411,7 +469,7 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
 static void open_entry(unsigned char idx)
 {
     char *e;
-    dir_seek(idx);                 /* position at the entry (sets attr + cluster) */
+    dir_seek(order[idx]);          /* sorted display index -> raw entry (sets attr/cluster) */
     if (gb_isdir()) { path_push(fullname()); gb_chdir(); relist(); return; }
     nsel = 0;
     e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
@@ -552,7 +610,7 @@ static void on_frame(void)
         if (idx >= total) return;
         /* press on an entry: a drag (press + move) drags it to another window /
            the Trash (#62); a plain click (no move) falls through to select/open */
-        dir_seek(idx);                       /* position -> gb_entname is this entry */
+        dir_seek(order[idx]);                /* sorted index -> raw entry for gb_entname */
         if (gb_drag_start(gb_entname())) {   /* dropped on a target -> it handled it */
             relist();                        /* refresh (a move changes this dir) */
             return;
@@ -585,7 +643,7 @@ void main(void)
                                    target our window for the config read below */
     gb_set_drive(my_drive);
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
-    total = count_files();
+    build_list();                /* stream + sort the directory (sets total) (#118) */
     top = 0;
     clamp_top();
     draw();

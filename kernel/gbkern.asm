@@ -2438,6 +2438,9 @@ wel_imgend
                                                 ; two least-coupled binaries moved up here.
 ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
 ied_imgend
+vwr_img         incbin "../build/VIEWER.RAW"    ; up here (the high region freed space when
+vwr_imgend                                      ; PAINT moved to pass 2) so the low region
+                                                ; fits the bigger FILEMGR (sorting, #118)
                 ; PAINT.APP is packaged by a SECOND rasm pass (kernel/pack_apps.asm):
                 ; this 64K image filled up, and the .dsk save accumulates across rasm
                 ; invocations, so the overflow apps get their own packaging pass (#114).
@@ -2446,8 +2449,6 @@ dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTO
 dtp_imgend
 app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.APP
 app_imgend
-vwr_img         incbin "../build/VIEWER.RAW"    ; packaged on the disk as VIEWER.APP
-vwr_imgend
 npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
 npd_imgend
 clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
