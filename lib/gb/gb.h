@@ -93,6 +93,25 @@ void gb_on_event(void (*handler)(void));   /* register handler, 0 to clear */
  * Cleared automatically when the app launches a child or quits. */
 void gb_menu(const void *def);
 
+/* Shared modal dialogs (#114, lib/gb/gbwin.c) - the File-menu building blocks every
+ * menu-driven app reuses. Recipe for a new app:
+ *   - put a menu def in your gb_win_t.menu + a gb_on_event handler that, when a
+ *     title is clicked, sets a "want_menu" flag IF !gb_modal() (so a click during a
+ *     dialog is ignored);
+ *   - in on_frame, when want_menu, call gb_popup(titleCol, 8, items, n), dispatch
+ *     the returned row to your New/Load/Save handlers, then repaint your window.
+ * gb_popup: framed list, auto-sized; returns the row clicked or 0xFF (cancel/ESC).
+ * gb_prompt: name-entry box; fills buf with an UPPERCASE 8.3 name (<= maxlen, <=12),
+ *   returns 1 on Enter (non-empty) or 0 on ESC/empty.
+ * gb_modal: 1 while any of these (or a custom dialog) is up. A custom modal dialog
+ *   brackets itself with gb_modal_set(1)/(0). Both leave the cursor shown and the
+ *   popup erased to the backdrop - repaint your window after. */
+unsigned char gb_popup(unsigned char col, unsigned char line,
+                       const char *const *labels, unsigned char n);
+unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen);
+unsigned char gb_modal(void);
+void          gb_modal_set(unsigned char on);
+
 /* gb_set_name: set the current file (an 11-byte 8.3 name, space-padded, no dot,
  * e.g. "NOTES   TXT") so a later gb_fs_load/gb_fs_save targets it - how an app
  * does New / Save As / open a file chosen from a picker. */

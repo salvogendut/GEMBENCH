@@ -78,7 +78,7 @@ static unsigned char dirty;            /* unsaved edits -> " *" in the title    
    click delivers GB_MSG_MENU to on_menu, which arms want_menu for the main loop. */
 #define FILE_COL 10
 #define FILE_END 16
-static unsigned char want_menu, modal, close_menu;
+static unsigned char want_menu;        /* File title clicked -> run the menu */
 static char fbase[14];                 /* "NAME.PIC" - the title base           */
 static char wtitle[18];                /* fbase + " *" when dirty               */
 static char name83[11];                /* current 8.3 file name (fs target)     */
@@ -284,80 +284,8 @@ static unsigned char pic_valid(unsigned int got)
         picbuf[4] == CANVAS_WB && picbuf[5] == CANVAS_H);
 }
 
-/* ---- modal dialogs (mirrors NOTEPAD's popup / prompt_name) ------------------- */
-#define ITEM_H 10
-
-static unsigned char popup(unsigned char x, unsigned char y,
-                           const char *const *labels, unsigned char n)
-{
-    unsigned char i, flags, row, sel = 0xFF, esc = 0;
-    modal = 1; close_menu = 0;
-    gb_curhide();
-    gb_fill(x, y, 16, n * ITEM_H + 4, 1);             /* white box + black frame */
-    gb_frame(x, y, 16, n * ITEM_H + 4, 2);
-    for (i = 0; i < n; i++) gb_text(x + 1, y + 2 + i * ITEM_H, labels[i]);
-    gb_curshow();
-    for (;;) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) { esc = 1; break; }       /* ESC closes the menu */
-        if (close_menu) break;                          /* clicked File again -> close */
-        if (!(flags & GB_CLICK)) continue;
-        if (gb_my() >= y + 2 && gb_my() < y + 2 + n * ITEM_H &&
-            gb_mx() >= x && gb_mx() < x + 16) {
-            row = (gb_my() - (y + 2)) / ITEM_H;
-            if (row < n) { sel = row; break; }
-        }
-        break;                                          /* clicked elsewhere -> cancel */
-    }
-    modal = 0;
-    if (esc) while (gb_poll() & GB_QUIT) ;
-    gb_curhide();
-    gb_fill(x, y, 16, n * ITEM_H + 4, 0);             /* erase to backdrop; caller redraws */
-    gb_curshow();
-    return sel;
-}
-
-static char namebuf[16];
-static unsigned char prompt_name(const char *caption)
-{
-    unsigned char x = 12, y = 60, w = 52, h = 34;
-    unsigned char fl = 0, c, n = 0, done = 0, ok = 0, redraw = 1;
-    modal = 1;
-    namebuf[0] = 0;
-    while (gb_getkey()) ;                  /* drop the menu click's keys */
-    gb_curhide();
-    gb_fill(x, y, w, h, 1);
-    gb_frame(x, y, w, h, 2);
-    gb_textbw(x + 2, y + 3, caption);
-    gb_curshow();
-    while (!done) {
-        if (redraw) {
-            gb_curhide();
-            gb_fill(x + 2, y + 16, w - 4, 8, 1);   /* clear the field (white) */
-            gb_textbw(x + 2, y + 16, namebuf);
-            gb_curshow();
-            redraw = 0;
-        }
-        fl = gb_poll();
-        if (fl & GB_QUIT) { done = 1; break; }      /* ESC -> cancel */
-        while ((c = gb_getkey()) != 0) {
-            if (c == 0x0D) { done = 1; ok = (unsigned char)(n > 0); break; }
-            else if ((c == 0x08 || c == 0x7F) && n) { namebuf[--n] = 0; redraw = 1; }
-            else if (c >= 32 && c < 127 && n < 12) {
-                if (c >= 'a' && c <= 'z') c = (unsigned char)(c - 32);   /* 8.3 is upper */
-                namebuf[n++] = (char)c; namebuf[n] = 0; redraw = 1;
-            }
-        }
-    }
-    modal = 0;
-    if (fl & GB_QUIT) while (gb_poll() & GB_QUIT) ;
-    gb_curhide();
-    gb_fill(x, y, w, h, 0);
-    gb_curshow();
-    return ok;
-}
-
 /* ---- File menu actions ------------------------------------------------------ */
+static char namebuf[16];               /* gb_prompt target for New / Save As */
 /* ensure_pic_ext: a typed name with no '.' gets a ".PIC" default. */
 static void ensure_pic_ext(void)
 {
@@ -386,7 +314,7 @@ static void do_save(void)
 
 static void do_saveas(void)
 {
-    if (!prompt_name("Save as:")) return;
+    if (!gb_prompt("Save as:", namebuf, 12)) return;
     set_file();
     do_save();
 }
@@ -419,7 +347,7 @@ static void do_load(void)
         p = gb_dirn();
     }
     if (!nn) return;
-    sel = popup((unsigned char)(win_x + 2), CVY, names, nn);
+    sel = gb_popup((unsigned char)(win_x + 2), CVY, names, nn);
     if (sel == 0xFF) return;
     to_83(store[sel]);
     gb_set_name(name83);
@@ -433,21 +361,19 @@ static const char *const file_items[] = { "New", "Load", "Save", "Save As" };
 
 static void run_menu(void)
 {
-    unsigned char sel = popup(FILE_COL, 8, file_items, 4);
+    unsigned char sel = gb_popup(FILE_COL, 8, file_items, 4);
     if (sel == 0) do_new();
     else if (sel == 1) do_load();
     else if (sel == 2) do_save();
     else if (sel == 3) do_saveas();
 }
 
-/* on_menu: kernel callback on a top-bar click; arm the File menu for on_frame. */
+/* on_menu: kernel callback on a top-bar click; arm the File menu for on_frame.
+   Ignored while a dialog is up (gb_modal) so re-clicking File just closes it. */
 static void on_menu(void)
 {
-    if (gb_msg.type != GB_MSG_MENU) return;
-    if (gb_msg.p0 >= FILE_COL && gb_msg.p0 < FILE_END) {
-        if (modal) close_menu = 1;     /* clicking File again while open -> close it */
-        else       want_menu = 1;
-    }
+    if (gb_msg.type != GB_MSG_MENU || gb_modal()) return;
+    if (gb_msg.p0 >= FILE_COL && gb_msg.p0 < FILE_END) want_menu = 1;
 }
 
 static void on_frame(void)
@@ -501,7 +427,7 @@ void main(void)
     tool = TOOL_PENCIL;
     pen_w = 1;
     dirty = 0;
-    want_menu = 0; modal = 0; close_menu = 0;
+    want_menu = 0;
     canvas_clear();
     load_tools();                                /* PAINT.IST -> ist[] (sets fs name) */
     gb_wm_add(&pwin);                            /* register FIRST: captures our file arg */

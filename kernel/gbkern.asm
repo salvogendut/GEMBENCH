@@ -2427,8 +2427,6 @@ icon_imgend
                 ; must stay below DATA_MODTOP (the write module shares PAGE_DATA) - else a
                 ; save/delete/copy overwrites the end of the set (garbled icons, #88).
                 assert icon_imgend-icon_img<=DATA_MODTOP-DATA_ICONS-#200,"DEFAULT.IST too big: would collide with the write module in PAGE_DATA - fewer icons or raise DATA_MODTOP"
-pist_img        incbin "../build/PAINT.IST"     ; PAINT toolchest icon set (#114), packaged
-pist_imgend                                     ; as PAINT.IST - PAINT loads it, ICONED edits it
 wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
@@ -2453,6 +2451,9 @@ npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPA
 npd_imgend
 clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
 clk_imgend
+pist_img        incbin "../build/PAINT.IST"     ; PAINT toolchest set (#114): PAINT loads it,
+pist_imgend                                     ; ICONED edits it. Packaging only - down here
+                                                ; in the low region to keep the high region < #FFFF
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"

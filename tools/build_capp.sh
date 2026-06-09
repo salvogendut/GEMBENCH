@@ -36,8 +36,15 @@ mkdir -p "$work"
 # the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
+# Opt-in modal dialogs (gb_popup/gb_prompt). Linked only when DIALOGS=1 so a
+# dialog-free app (file manager, desktop, clock, viewer) carries none of it (#114).
+DLG_REL=""
+if [ "${DIALOGS:-0}" = "1" ]; then
+    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdlg.c" -o "$work/gbdlg.rel"
+    DLG_REL="$work/gbdlg.rel"
+fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
-    "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" "$work/gblib.rel" -o "$work/app.ihx"
+    "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page - code below its data-loc, data+bss
 # below the kernel (#8000). A silent overflow corrupts memory at runtime (it bit
 # NOTEPAD once); turn it into a loud build failure here.

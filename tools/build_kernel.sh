@@ -46,7 +46,8 @@ DATA_LOC=0x6800 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: co
 DATA_LOC=0x5C00 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower data-loc so
                                    # its 7KB icon-set buffer (BUFSZ) fits below #8000 (#110)
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
-tools/build_capp.sh apps/paint  build/PAINT.RAW    # PAINT (C/SDCC) -> build/PAINT.RAW (#114)
+DIALOGS=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: links the shared gb_popup/
+                                   # gb_prompt dialogs (gbdlg.c) for its File menu (#114)
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 # QA/<CARD>/: one distribution per storage card (#104). The apps/modules/assets
