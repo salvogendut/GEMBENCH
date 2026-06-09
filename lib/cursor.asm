@@ -18,7 +18,10 @@ CUR_W           equ   cursor_arrow_w
 CUR_H           equ   cursor_arrow_h
 
 cursor_show
-                jp    cursor_draw
+                ld    a,(cur_shown)          ; already on screen? a bare re-draw would
+                or    a                       ; save the cursor into its own save-under
+                ret   nz                      ; -> a ghost on the next move (#126). cursor_
+                jp    cursor_draw             ; move_to already guards this way (it erases)
 
 ; cursor_move_to: DE = x, HL = y (graphics). No-op if unchanged.
 cursor_move_to
@@ -54,6 +57,8 @@ cm_storeonly
 
 ; cursor_erase: restore the screen block saved at the last draw position.
 cursor_erase
+                xor   a                       ; cursor no longer on screen (#126)
+                ld    (cur_shown),a
                 ld    a,(cur_xbyte)
                 ld    (sb_x),a
                 ld    a,(cur_line)
@@ -179,6 +184,8 @@ cc_col
                 dec   a
                 ld    (cc_rows),a
                 jr    nz,cc_row
+                ld    a,1                      ; cursor now on screen (#126)
+                ld    (cur_shown),a
                 ret
 
 ; --- State ---------------------------------------------------------------
@@ -187,6 +194,7 @@ cursor_y        dw    200
 cur_xbyte       db    0
 cur_line        db    0
 cur_supp        db    0            ; 1 = suppress drawing (DnD drag shows a ghost instead)
+cur_shown       db    0            ; 1 = the arrow is currently composited on screen (#126)
 cur_sub         db    0
 cur_dptr        dw    0
 cur_mptr        dw    0
