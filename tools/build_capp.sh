@@ -11,8 +11,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="${1:-apps/chello}"
-OUT="${2:-build/CHELLO.RAW}"
+APP="${1:-apps/clock}"
+OUT="${2:-build/CLOCK.RAW}"
 GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.s)
 # DATA_LOC: where this app's data starts (code is #4000.. below it, data ..#7FFF
 # above). The default 0x6200 is a 50/50 split; a code-heavy/data-light app (NOTEPAD)
@@ -36,8 +36,21 @@ mkdir -p "$work"
 # the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
+# Opt-in modal dialogs, linked only when asked so dialog-free apps carry none (#114):
+#   DIALOGS=1  -> gbdlg.c   (gb_popup list menu + gb_modal flag)
+#   PROMPT=1   -> gbprompt.c (gb_prompt name box; implies DIALOGS=1, uses gb_modal_set)
+# A popup-only app (ICONED) sets DIALOGS=1; a Save-As app (PAINT, NOTEPAD) sets both.
+DLG_REL=""
+if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ]; then
+    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdlg.c" -o "$work/gbdlg.rel"
+    DLG_REL="$work/gbdlg.rel"
+fi
+if [ "${PROMPT:-0}" = "1" ]; then
+    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbprompt.c" -o "$work/gbprompt.rel"
+    DLG_REL="$DLG_REL $work/gbprompt.rel"
+fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
-    "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" "$work/gblib.rel" -o "$work/app.ihx"
+    "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page - code below its data-loc, data+bss
 # below the kernel (#8000). A silent overflow corrupts memory at runtime (it bit
 # NOTEPAD once); turn it into a loud build failure here.

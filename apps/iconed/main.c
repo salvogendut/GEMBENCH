@@ -71,8 +71,9 @@ static unsigned char grid[32][32];         /* [row][col] pen 0..3 (cursor 0=clea
 static unsigned char gw, gh;               /* current item size in pixels          */
 static unsigned char count, idx;           /* icon-set count + current index       */
 static unsigned char selpen;               /* selected palette pen 0..3            */
-static unsigned char want_menu, modal;     /* File clicked / a modal popup is up    */
+static unsigned char want_menu;            /* File title clicked -> run the menu     */
 static unsigned char status;               /* 0 none, 1 saved, 2 failed            */
+static char fbase[14];                     /* "NAME.EXT" of the open file (title)   */
 static unsigned char u_valid, u_cx, u_cy, u_pen;  /* single-level undo of last paint */
 
 static const unsigned char file_menu[] = { 1, MENU_COL, 'F','i','l','e',0,0,0,0 };
@@ -250,8 +251,7 @@ static void status_line(void)
 
 static void draw(void)
 {
-    gb_window(win_x, win_y, WIN_W, WIN_H,
-              mode == M_CURSOR ? "ICONED cursor" : "ICONED icons");
+    gb_window(win_x, win_y, WIN_W, WIN_H, fbase[0] ? fbase : "ICONED");
     draw_canvas();
     draw_palette();
     draw_nav();
@@ -263,37 +263,9 @@ static void draw(void)
 
 static void on_menu(void)
 {
-    if (gb_msg.type != GB_MSG_MENU) return;
+    if (gb_msg.type != GB_MSG_MENU || gb_modal()) return;   /* ignore clicks while modal */
     if (gb_msg.p0 < MENU_COL || gb_msg.p0 >= MENU_END) return;
     want_menu = 1;
-}
-
-static unsigned char popup(unsigned char x, unsigned char y,
-                           const char *const *labels, unsigned char n)
-{
-    unsigned char i, flags, row, sel = 0xFF, esc = 0;
-    modal = 1;
-    gb_curhide();
-    gb_fill(x, y, 18, n * 10 + 4, 1);
-    gb_frame(x, y, 18, n * 10 + 4, 2);
-    for (i = 0; i < n; i++) gb_text(x + 1, y + 2 + i * 10, labels[i]);
-    gb_curshow();
-    for (;;) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) { esc = 1; break; }
-        if (!(flags & GB_CLICK)) continue;
-        if (gb_my() >= y + 2 && gb_my() < y + 2 + n * 10 &&
-            gb_mx() >= x && gb_mx() < x + 18) {
-            row = (gb_my() - (y + 2)) / 10;
-            if (row < n) { sel = row; break; }
-        }
-        break;
-    }
-    modal = 0;
-    if (esc) while (gb_poll() & GB_QUIT) ;
-    gb_curhide();
-    gb_fill(x, y, 18, n * 10 + 4, 0);
-    return sel;
 }
 
 /* 8.3 helpers + extension test, like notepad's to_83. */
@@ -308,6 +280,18 @@ static void to_83(const char *s)
         i++;
         for (j = 0; j < 3 && s[i]; j++, i++) name83[8 + j] = s[i];
     }
+}
+
+/* fmt83: 11-byte space-padded 8.3 name -> "NAME.EXT" display string (window title). */
+static void fmt83(char *dst, const char *n11)
+{
+    unsigned char i, j = 0;
+    for (i = 0; i < 8 && n11[i] != ' '; i++) dst[j++] = n11[i];
+    if (n11[8] != ' ') {
+        dst[j++] = '.';
+        for (i = 8; i < 11 && n11[i] != ' '; i++) dst[j++] = n11[i];
+    }
+    dst[j] = 0;
 }
 
 /* is_editable: name (NAME.EXT) ends in .IST or .SPR (case as stored). */
@@ -339,10 +323,11 @@ static void do_load(void)
         p = gb_dirn();
     }
     if (!n) return;
-    sel = popup(win_x + 6, win_y + 16, names, n);
+    sel = gb_popup(win_x + 6, win_y + 16, names, n);
     if (sel == 0xFF) return;
     to_83(store[sel]);
     gb_set_name(name83);
+    fmt83(fbase, name83);                /* title -> the opened file's name */
     filelen = gb_fs_load(buf, BUFSZ);
     sniff();
     selpen = (mode == M_CURSOR) ? 1 : 1;
@@ -360,7 +345,7 @@ static const char *const file_items[] = { "Load", "Save" };
 
 static void run_menu(void)
 {
-    unsigned char sel = popup(MENU_COL, 8, file_items, 2);
+    unsigned char sel = gb_popup(MENU_COL, 8, file_items, 2);
     if (sel == 0) do_load();
     else if (sel == 1) do_save();
 }
@@ -422,7 +407,7 @@ static void on_frame(void)
     unsigned char flags = gb_flags(), mx, my, k, y;
 
     if (flags & GB_QUIT) { gb_wm_close(); return; }
-    if (want_menu) { want_menu = 0; run_menu(); draw(); gb_curshow(); return; }
+    if (want_menu) { want_menu = 0; run_menu(); gb_curhide(); draw(); gb_curshow(); return; }
     if (!(flags & GB_CLICK)) return;
 
     mx = gb_mx(); my = gb_my();
@@ -479,10 +464,13 @@ void main(void)
 {
     unsigned char n;
 
+    char raw[11];
     win_x = DEF_X; win_y = DEF_Y;
     gb_wm_add(&iewin);                       /* register first: captures our file arg */
+    gb_get_name(raw);                        /* the file we were launched with -> title */
+    fmt83(fbase, raw);
     filelen = gb_fs_load(buf, BUFSZ);
-    selpen = 1; want_menu = 0; modal = 0; status = 0;
+    selpen = 1; want_menu = 0; status = 0;
     sniff();
     for (n = 64; n; n--) if (!gb_getkey()) break;
 

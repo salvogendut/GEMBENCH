@@ -59,7 +59,7 @@ static char line[MAXWRAP];
 static unsigned int len, cur;            /* text length, insertion index */
 static unsigned char view_first;         /* first visible display row */
 static unsigned char dirty, status;      /* 0 none, 1 saved, 2 failed */
-static unsigned char want_menu, want_edit, modal, close_menu; /* File/Edit clicked / modal */
+static unsigned char want_menu, want_edit;   /* File / Edit title clicked -> run the menu */
 static char clip[CLIP_MAX];              /* copy/paste clipboard (#99) */
 static unsigned int cliplen;
 static unsigned int sel_a, sel_b;        /* selection [sel_a, sel_b) in buffer order */
@@ -302,61 +302,66 @@ static void to_83(const char *s)
     }
 }
 
-/* on_menu: kernel callback on a top-bar click. If it hit the File title, ask the
-   main loop to drop the menu (not while another modal popup is up). */
+/* on_menu: kernel callback on a top-bar click; arm the File / Edit menu for the
+   main loop. Ignored while a dialog is up (gb_modal) so re-clicking just closes it. */
 static void on_menu(void)
 {
-    if (gb_msg.type != GB_MSG_MENU) return;
-    if (gb_msg.p0 >= FILE_COL && gb_msg.p0 < FILE_END) {
-        if (modal) close_menu = 1;   /* clicking the title again while open -> close it */
-        else       want_menu = 1;
-    } else if (gb_msg.p0 >= EDIT_COL && gb_msg.p0 < EDIT_END) {
-        if (modal) close_menu = 1;
-        else       want_edit = 1;
-    }
-}
-
-/* popup: draw a framed list at (x,y), n items from labels[], and run a pointer
-   loop until the user clicks one (-> its index) or clicks away (-> 0xFF). */
-static unsigned char popup(unsigned char x, unsigned char y,
-                           const char *const *labels, unsigned char n)
-{
-    unsigned char i, flags, row, sel = 0xFF, esc = 0;
-    modal = 1; close_menu = 0;
-    gb_curhide();
-    gb_fill(x, y, 18, n * LINE_H + 4, 1);         /* white box + black frame */
-    gb_frame(x, y, 18, n * LINE_H + 4, 2);
-    for (i = 0; i < n; i++)
-        gb_text(x + 1, y + 2 + i * LINE_H, labels[i]);
-    gb_curshow();
-    for (;;) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) { esc = 1; break; }      /* ESC closes the menu */
-        if (close_menu) break;                         /* clicked File again -> close */
-        if (!(flags & GB_CLICK)) continue;
-        if (gb_my() >= y + 2 && gb_my() < y + 2 + n * LINE_H &&
-            gb_mx() >= x && gb_mx() < x + 18) {
-            row = (gb_my() - (y + 2)) / LINE_H;
-            if (row < n) { sel = row; break; }
-        }
-        break;                                         /* clicked elsewhere -> cancel */
-    }
-    modal = 0;
-    if (esc) while (gb_poll() & GB_QUIT) ;         /* swallow ESC (gb_poll keeps the
-                                                      cursor's save-under consistent) */
-    gb_curhide();                                   /* erase the cursor cleanly */
-    gb_fill(x, y, 18, n * LINE_H + 4, 0);          /* erase the popup box */
-    keycool = 4;                                    /* flush the click's buffered chars */
-    return sel;                                     /* returns with the cursor hidden;
-                                                      the caller's draw + gb_curshow
-                                                      re-shows it exactly once */
+    if (gb_msg.type != GB_MSG_MENU || gb_modal()) return;
+    if (gb_msg.p0 >= FILE_COL && gb_msg.p0 < FILE_END) want_menu = 1;
+    else if (gb_msg.p0 >= EDIT_COL && gb_msg.p0 < EDIT_END) want_edit = 1;
 }
 
 static const char *const file_items[] = { "New", "Load", "Save", "Save As" };
 
+/* is_bas: is the current file a BASIC program? .BAS needs CR+LF line endings on the
+   CPC (where Notepad otherwise keeps plain \n); is_bas reads the 8.3 name's ext. */
+static unsigned char is_bas(void)
+{
+    return (unsigned char)(name83[8] == 'B' && name83[9] == 'A' && name83[10] == 'S');
+}
+
+/* strip_cr: drop every \r from buf[0..n) so a CR+LF file edits as plain \n lines;
+   returns the new length. */
+static unsigned int strip_cr(unsigned int n)
+{
+    unsigned int i, j = 0;
+    for (i = 0; i < n; i++) if (buf[i] != '\r') buf[j++] = buf[i];
+    return j;
+}
+
+/* to_crlf: rewrite buf in place as CR+LF (each \n -> \r\n) with a trailing CR+LF, for
+   a .BAS save (CPC BASIC needs every line, including the last, terminated). Returns
+   the new length, or 'len' unchanged if it would not fit NP_BUF (caller saves as-is).
+   Expands back-to-front so the destination never overruns the unread source. */
+static unsigned int to_crlf(void)
+{
+    unsigned int nl = 0, i, w, newlen;
+    unsigned char trail, ch;
+    for (i = 0; i < len; i++) if (buf[i] == '\n') nl++;
+    trail = (unsigned char)(len == 0 || buf[len - 1] != '\n');   /* need a final \n? */
+    newlen = len + nl + (trail ? 2 : 0);       /* each \n gains a \r; trailing gains \r\n */
+    if (newlen > NP_BUF) return len;           /* won't fit -> save as-is */
+    w = newlen;
+    if (trail) { buf[--w] = '\n'; buf[--w] = '\r'; }
+    i = len;
+    while (i) {
+        ch = (unsigned char)buf[--i];
+        buf[--w] = (char)ch;
+        if (ch == '\n') buf[--w] = '\r';
+    }
+    return newlen;
+}
+
 static void do_save(void)
 {
-    status = gb_fs_save(buf, len) ? 1 : 2;
+    if (is_bas()) {                            /* CR+LF for CPC BASIC, then restore \n */
+        unsigned int orig = len, wl = to_crlf();
+        status = gb_fs_save(buf, wl) ? 1 : 2;
+        strip_cr(wl);                          /* collapse back; buf[0..orig) == original */
+        len = orig;                            /* drop the file-only trailing terminator */
+    } else {
+        status = gb_fs_save(buf, len) ? 1 : 2;
+    }
     if (status == 1) dirty = 0;
 }
 
@@ -372,48 +377,6 @@ static void ensure_ext(void)
     }
 }
 
-/* prompt_name: modal name-entry box. Types an uppercase 8.3 name into namebuf;
-   Enter (non-empty) -> 1, ESC/empty -> 0. Black-on-white, like the other dialogs. */
-static unsigned char prompt_name(const char *caption)
-{
-    unsigned char x = 12, y = 64, w = 52, h = 34;
-    unsigned char fl = 0, c, n = 0, done = 0, ok = 0, redraw = 1;
-    modal = 1;
-    namebuf[0] = 0;
-    while (gb_getkey()) ;                 /* drop the menu click's keys */
-    gb_curhide();
-    gb_fill(x, y, w, h, 1);               /* white box + black frame */
-    gb_frame(x, y, w, h, 2);
-    gb_textbw(x + 2, y + 3, caption);
-    gb_curshow();
-    while (!done) {
-        if (redraw) {
-            gb_curhide();
-            gb_fill(x + 2, y + 16, w - 4, 8, 1);   /* clear the field (white) */
-            gb_textbw(x + 2, y + 16, namebuf);
-            gb_curshow();
-            redraw = 0;
-        }
-        fl = gb_poll();
-        if (fl & GB_QUIT) { done = 1; break; }      /* ESC -> cancel */
-        while ((c = gb_getkey()) != 0) {
-            if (c == K_ENTER) { done = 1; ok = (unsigned char)(n > 0); break; }
-            else if ((c == K_BS || c == K_DEL) && n) { namebuf[--n] = 0; redraw = 1; }
-            else if (c >= 32 && c < 127 && n < 12) {
-                if (c >= 'a' && c <= 'z') c = (unsigned char)(c - 32);   /* 8.3 is upper */
-                namebuf[n++] = (char)c; namebuf[n] = 0; redraw = 1;
-            }
-        }
-    }
-    modal = 0;
-    if (fl & GB_QUIT) while (gb_poll() & GB_QUIT) ;
-    gb_curhide();
-    gb_fill(x, y, w, h, 0);               /* erase the dialog */
-    gb_curshow();
-    keycool = 4;
-    return ok;
-}
-
 /* set_file: namebuf "NAME[.EXT]" -> the current file name + title. */
 static void set_file(void)
 {
@@ -425,14 +388,14 @@ static void set_file(void)
 
 static void do_new(void)
 {
-    if (prompt_name("New file name:")) set_file();
+    if (gb_prompt("New file name:", namebuf, 12)) set_file();
     else { gb_set_name("UNTITLEDTXT"); fmt83(fbase, "UNTITLEDTXT"); }
     len = 0; cur = 0; view_first = 0; dirty = 0; status = 0;
 }
 
 static void do_saveas(void)
 {
-    if (!prompt_name("Save as:")) return;
+    if (!gb_prompt("Save as:", namebuf, 12)) return;
     set_file();
     do_save();
 }
@@ -474,19 +437,20 @@ static void do_load(void)
         p = gb_dirn();
     }
     if (!n) return;
-    sel = popup(win_x + 6, TX_Y0, names, n);
+    sel = gb_popup(win_x + 6, TX_Y0, names, n);
     if (sel == 0xFF) return;
     to_83(store[sel]);
     gb_set_name(name83);
     fmt83(fbase, name83);                /* title -> the opened file's name */
     len = gb_fs_load(buf, NP_MAX);
+    if (is_bas()) len = strip_cr(len);   /* .BAS comes in CR+LF -> edit as plain \n */
     cur = 0; view_first = 0; dirty = 0; status = 0;
 }
 
 /* run_menu: drop the File menu and dispatch the chosen item. */
 static void run_menu(void)
 {
-    unsigned char sel = popup(FILE_COL, 8, file_items, 4);
+    unsigned char sel = gb_popup(FILE_COL, 8, file_items, 4);
     if (sel == 0) do_new();
     else if (sel == 1) do_load();
     else if (sel == 2) do_save();
@@ -535,7 +499,7 @@ static void paste_clip(void)
 static const char *const edit_items[] = { "Select", "Copy", "Paste" };
 static void run_edit(void)
 {
-    unsigned char sel = popup(EDIT_COL, 8, edit_items, 3);
+    unsigned char sel = gb_popup(EDIT_COL, 8, edit_items, 3);
     if (sel == 0) select_all();
     else if (sel == 1) copy_sel();
     else if (sel == 2) paste_clip();
@@ -546,7 +510,7 @@ static unsigned char confirm(void)
 {
     unsigned char flags, sel = 0xFF;
     unsigned char x = 28, y = 86, w = 26, h = 44;
-    modal = 1;
+    gb_modal_set(1);
     gb_curhide();
     gb_fill(x, y, w, h, 1);                       /* white box + black frame */
     gb_frame(x, y, w, h, 2);
@@ -564,7 +528,7 @@ static unsigned char confirm(void)
         }
         /* clicks elsewhere keep the dialog open */
     }
-    modal = 0;
+    gb_modal_set(0);
     if (sel == 0xFF) while (gb_poll() & GB_QUIT) ;   /* swallow ESC */
     gb_curhide();
     gb_fill(x, y, w, h, 0);                          /* erase the dialog */
@@ -595,34 +559,37 @@ static unsigned char cursor_over(void)
 }
 
 /* read_arrows: matrix state of the four cursor keys -> arr_bits (bit0 up, 1 down,
-   2 left, 3 right). KM_TEST_KEY (&BB1E): A = key number (72..75 = U/D/L/R), returns
-   NZ when pressed. We talk to the matrix directly so the keys stay globally disarmed
-   (no char-buffer flood) yet still reach us. Only A + arr_bits cross each call, so a
-   KM_TEST_KEY register clobber can't corrupt the accumulator. */
+   2 left, 3 right). KM_TEST_KEY (&BB1E): A = key number, returns NZ when pressed.
+   The CPC firmware key numbers for the cursor keys are 0=Up, 1=Right, 2=Down,
+   8=Left (NOT 72-75, which are Joystick 0 - reading those nudged the caret with the
+   gamepad d-pad but never with the actual arrow keys). We talk to the matrix
+   directly so the keys stay globally disarmed (no char-buffer flood) yet still reach
+   us. Only A + arr_bits cross each call, so a KM_TEST_KEY register clobber can't
+   corrupt the accumulator. */
 static void read_arrows(void) __naked
 {
 __asm
     xor  a
     ld   (_arr_bits), a
-    ld   a, #72            ; cursor up
+    ld   a, #0             ; cursor up
     call #0xBB1E
     jr   z, 1$
     ld   a, (_arr_bits)
     or   #0x01
     ld   (_arr_bits), a
-1$: ld   a, #73            ; cursor down
+1$: ld   a, #2             ; cursor down
     call #0xBB1E
     jr   z, 2$
     ld   a, (_arr_bits)
     or   #0x02
     ld   (_arr_bits), a
-2$: ld   a, #74            ; cursor left
+2$: ld   a, #8             ; cursor left
     call #0xBB1E
     jr   z, 3$
     ld   a, (_arr_bits)
     or   #0x04
     ld   (_arr_bits), a
-3$: ld   a, #75            ; cursor right
+3$: ld   a, #1             ; cursor right
     call #0xBB1E
     jr   z, 4$
     ld   a, (_arr_bits)
@@ -743,15 +710,15 @@ static void on_frame(void)
     if (want_menu) {                            /* File title was clicked */
         want_menu = 0;
         run_menu();
-        draw();
-        gb_curshow();
+        keycool = 4;                            /* flush the dialog click's buffered keys */
+        gb_curhide(); draw(); gb_curshow();     /* gb_popup/gb_prompt return cursor shown */
         return;
     }
     if (want_edit) {                            /* Edit title was clicked (#99) */
         want_edit = 0;
         run_edit();
-        draw();
-        gb_curshow();
+        keycool = 4;
+        gb_curhide(); draw(); gb_curshow();
         return;
     }
 
@@ -854,14 +821,16 @@ void main(void)
                                                    (per-window) + takes focus, so the load
                                                    below targets OUR file, not a sibling's */
     gb_get_name(raw);                            /* the file name we were launched with */
+    for (n = 0; n < 11; n++) name83[n] = raw[n]; /* current 8.3 name (for is_bas etc.) */
     len = gb_fs_load(buf, NP_MAX);              /* ...and its contents (0 if none) */
+    if (is_bas()) len = strip_cr(len);           /* .BAS in CR+LF -> edit as plain \n */
     fmt83(fbase, raw);                           /* show it in the title bar (#86) */
     if (!fbase[0]) {                             /* opened blank -> Untitled */
         fmt83(fbase, "UNTITLEDTXT");
         gb_set_name("UNTITLEDTXT");
     }
     cur = len; view_first = 0; dirty = 0; status = 0;
-    want_menu = 0; want_edit = 0; modal = 0;
+    want_menu = 0; want_edit = 0;
     sel_on = 0; cliplen = 0;                      /* copy/paste state (#99) */
     for (n = 64; n; n--) if (!gb_getkey()) break;   /* drop buffered keys */
 

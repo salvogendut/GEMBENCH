@@ -153,6 +153,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_wm_setsize           ; GB_WMSETSIZE   #8099 (A = w, L = h, #81)
                 jp    k_vsync                ; GB_BLITEFULL   #809C (removed: mapping->FM, #103)
                 jp    k_icon_half            ; GB_ICONHALF    #809F (A=slot B=x C=y, #103)
+                jp    k_mxp                  ; GB_MXP         #80A2 -> HL = pointer pixel x (#114)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -2098,16 +2099,36 @@ k_fill
                 jp    fill_block
 kf_pen          db    0
 
-; k_saverect / k_restorerect (GB_SAVERECT / GB_RESTORERECT): save/restore a
-; screen rectangle to/from a caller buffer. B=x C=y D=w E=h HL=buffer (w*h
-; bytes). The buffer lives in the caller's page (mapped during the call); the
-; screen is resident, so no page swap is needed.
-; k_saverect / k_restorerect (GB_SAVERECT / GB_RESTORERECT): stubs. No app uses
-; them and there is no gb_saverect/gb_restorerect binding; bodies removed to
-; reclaim resident space. Slots kept so addresses are fixed. (save_block /
-; restore_block remain - the cursor save-under still uses them.)
+; k_saverect / k_restorerect (GB_SAVERECT / GB_RESTORERECT): save/restore a screen
+; rectangle to/from a caller buffer. B=x C=y D=w E=h HL=buffer (w*h bytes, in the
+; caller's page, mapped during the call). Thin wrappers over the cursor save-under
+; primitives save_block/restore_block (lib/screen.asm), which manage the upper-ROM
+; shadow when reading screen RAM. The sb_* params are shared with the cursor, so a
+; caller must bracket with gb_curhide/gb_curshow (#114: PAINT canvas blit).
 k_saverect
+                call  rect_args
+                jp    save_block
 k_restorerect
+                call  rect_args
+                jp    restore_block
+rect_args                                      ; B=x C=y D=w E=h HL=buf -> sb_*
+                ld    a,b
+                ld    (sb_x),a
+                ld    a,c
+                ld    (sb_y),a
+                ld    a,d
+                ld    (sb_w),a
+                ld    a,e
+                ld    (sb_h),a
+                ld    (sb_buf),hl
+                ret
+
+; k_mxp (GB_MXP, #114): HL = the pointer's PIXEL x (0-319), for pixel-accurate
+; drawing (gb_mx only gives the byte column). cursor_x is in 1/2-pixel units.
+k_mxp
+                ld    hl,(cursor_x)
+                srl   h
+                rr    l                          ; HL = cursor_x / 2 = pixel x
                 ret
 
 ; k_xorframe (GB_XORFRAME): stub. The rubber-band XOR frame was never wired up
@@ -2410,15 +2431,16 @@ wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in 
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
-                                                ; ICONED + CHELLO ride in the ABOVE-kernel
+                                                ; ICONED + PAINT ride in the ABOVE-kernel
                                                 ; region too: the low #0100 app window
                                                 ; (#0100..#7FFF, 32K) overflowed once the
                                                 ; resizeable windows grew the apps, so the
                                                 ; two least-coupled binaries moved up here.
 ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
 ied_imgend
-chl_img         incbin "../build/CHELLO.RAW"    ; C-app spike, packaged as CHELLO.APP
-chl_imgend
+                ; PAINT.APP is packaged by a SECOND rasm pass (kernel/pack_apps.asm):
+                ; this 64K image filled up, and the .dsk save accumulates across rasm
+                ; invocations, so the overflow apps get their own packaging pass (#114).
                 org   #0100                     ; --- app binaries, low region ---
 dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
 dtp_imgend
@@ -2430,6 +2452,9 @@ npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPA
 npd_imgend
 clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
 clk_imgend
+pist_img        incbin "../build/PAINT.IST"     ; PAINT toolchest set (#114): PAINT loads it,
+pist_imgend                                     ; ICONED edits it. Packaging only - down here
+                                                ; in the low region to keep the high region < #FFFF
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
@@ -2437,12 +2462,12 @@ clk_imgend
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
-                save  "CHELLO.APP",chl_img,chl_imgend-chl_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
+                save  "PAINT.IST",pist_img,pist_imgend-pist_img,DSK,"build/gbkern.dsk"
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
                 save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data

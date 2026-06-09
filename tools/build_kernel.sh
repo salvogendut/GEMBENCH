@@ -32,17 +32,24 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_font.asm lib/icon_iconset.asm \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
     lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
+    lib/icon_viewer.asm \
     # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=.IST 15=DESKTOP 16=FILEMGR
-    # 17=PAINT 18=FRACTAL 19=SD (Albireo Disk C, #104)
+    # 17=PAINT 18=FRACTAL 19=SD (Albireo Disk C, #104) 20=VIEWER
+python3 tools/packicons.py build/PAINT.IST \
+    assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
+    assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR (C/SDCC) -> build/FILEMGR.RAW
 tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
-DATA_LOC=0x6800 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: code-heavy,
-                                   # so a higher data-loc gives it ~1.9K code room (#97)
-DATA_LOC=0x5C00 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower data-loc so
-                                   # its 7KB icon-set buffer (BUFSZ) fits below #8000 (#110)
+DATA_LOC=0x6800 DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD:
+                                   # code-heavy, so a higher data-loc gives it ~1.9K code room
+                                   # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
+DATA_LOC=0x5C00 DIALOGS=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
+                                   # data-loc so its 7KB icon-set buffer (BUFSZ) fits below
+                                   # #8000 (#110); DIALOGS=1 for the shared Load/Save popup (#114)
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
-tools/build_capp.sh apps/chello build/CHELLO.RAW   # C app (SDCC) -> build/CHELLO.RAW
+DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: shared list popup
+                                   # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 # QA/<CARD>/: one distribution per storage card (#104). The apps/modules/assets
@@ -53,6 +60,7 @@ tools/build_fatmod.sh                              # FAT16/IDE write module -> b
 build_variant() {                                # $1 = subdir name, $2 = rasm -D flag
     rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
     "$RASM" kernel/gbkern.asm -eo $2             # incbins apps + font + icons -> .dsk + RAW
+    "$RASM" kernel/pack_apps.asm -eo             # 2nd pass: overflow apps -> same .dsk (#114)
     tools/stage_dist.sh "QA/$1"                  # loose files for the card's FAT drive
     cp build/gbkern.dsk "QA/$1/GEOBENCH.DSK"     # bootable floppy image
     echo "  QA/$1: $(ls "QA/$1" | wc -l) files (incl. GEOBENCH.DSK floppy image)"
@@ -66,4 +74,5 @@ build_variant ALBIREO "-DSTORAGE_ALBIREO=1"
 # harness and deploy_ide.sh see a predictable build/gbkern.dsk + build/GBKERN.RAW.
 rm -f build/gbkern.dsk
 "$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG >/dev/null
+"$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 echo "Built QA/IDE + QA/ALBIREO; build/ = ${STORAGE:-ide} variant for testing"

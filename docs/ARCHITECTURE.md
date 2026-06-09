@@ -11,9 +11,11 @@ GEOBENCH is organised as layers, lowest (closest to hardware) at the bottom:
 
 ```
 ┌─────────────────────────────────────────────┐
-│  apps/     desktop · filemgr · viewer (C)    │  ← banked binaries, run on demand
+│  apps/  desktop·filemgr·notepad·iconed·       │  ← banked binaries, run on demand
+│         paint·viewer·clock (C)                │
 ├─────────────────────────────────────────────┤
-│  libgb     C bindings -> the kernel jump table│  ← lib/gb/ (gb.h + trampolines)
+│  libgb  C bindings -> the kernel jump table,  │  ← lib/gb/ (gb.h + trampolines,
+│         window + dialog helpers               │     gbwin.c, gbdlg.c/gbprompt.c)
 ├─────────────────────────────────────────────┤
 │  kernel/   boot · banking · screen · text ·   │  ← resident; Z80 asm
 │            input · cursor · fs · loader · API  │
@@ -38,8 +40,8 @@ RAM-config port pages a 16K block into the `#4000–#7FFF` window:
   bank page (`PAGE_DATA`); a service swaps that page in, touches the buffer, and
   restores the caller's page.
 - **Apps are loaded into bank pages** (`PAGE_APP0+`) at `#4000` and run there.
-  They nest: desktop -> filemgr -> viewer, each in its own page; the launcher
-  keeps the caller's page on the stack and restores it when the app quits.
+  They nest: desktop -> filemgr -> (notepad/paint/viewer/...), each in its own
+  page; the launcher keeps the caller's page on the stack and restores it on quit.
 
 ## Execution model
 

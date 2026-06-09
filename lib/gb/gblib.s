@@ -13,6 +13,8 @@
         .globl  _gb_textk
         .globl  _gb_textbw
         .globl  _gb_window
+        .globl  _gb_restorerect
+        .globl  _gb_mxp
         .globl  _gb_fill
         .globl  _gb_frame
         .globl  _gb_icon
@@ -118,6 +120,28 @@ _gb_window:
         call    0x800F          ; GB_WINDOW
         ld      hl, (sv_ret)
         jp      (hl)
+
+;; void gb_restorerect(u8 x, u8 y, u8 wbytes, u8 h, const void *buf);
+;;   blit a wbytes x h byte buffer to the screen at (x,y). Same arg shape as
+;;   gb_window: A=x, L=y, stack [ret][wbytes,h][buf]. (#114)
+_gb_restorerect:
+        ld      b, a
+        ld      c, l
+        pop     hl
+        ld      (sv_ret), hl
+        pop     hl              ; L=wbytes, H=h
+        ld      d, l
+        ld      e, h
+        pop     hl              ; buf
+        call    0x8039          ; GB_RESTORERECT
+        ld      hl, (sv_ret)
+        jp      (hl)
+
+;; unsigned int gb_mxp(void);  -> pointer PIXEL x (0-319). (#114)
+_gb_mxp:
+        call    0x80A2          ; GB_MXP -> HL = pixel x
+        ex      de, hl          ; SDCC z80 returns 16-bit in DE
+        ret
 
 ;; void gb_fill(u8 col, u8 line, u8 w, u8 h, u8 pen);    -> GB_FILL
 ;; void gb_frame(u8 col, u8 line, u8 w, u8 h, u8 pen);   -> GB_FRAME
