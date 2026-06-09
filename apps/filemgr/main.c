@@ -421,6 +421,8 @@ static void open_entry(unsigned char idx)
     else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G') ||
              ext_is(e, 'B', 'A', 'S'))
         gb_wm_launch_as("NOTEPAD APP");
+    else if (ext_is(e, 'P', 'I', 'C'))
+        gb_wm_launch_as("PAINT   APP");         /* the paint app (#114) */
     else
         gb_wm_launch_as("VIEWER  APP");
 }
