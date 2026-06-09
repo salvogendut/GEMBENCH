@@ -36,12 +36,18 @@ mkdir -p "$work"
 # the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
-# Opt-in modal dialogs (gb_popup/gb_prompt). Linked only when DIALOGS=1 so a
-# dialog-free app (file manager, desktop, clock, viewer) carries none of it (#114).
+# Opt-in modal dialogs, linked only when asked so dialog-free apps carry none (#114):
+#   DIALOGS=1  -> gbdlg.c   (gb_popup list menu + gb_modal flag)
+#   PROMPT=1   -> gbprompt.c (gb_prompt name box; implies DIALOGS=1, uses gb_modal_set)
+# A popup-only app (ICONED) sets DIALOGS=1; a Save-As app (PAINT, NOTEPAD) sets both.
 DLG_REL=""
-if [ "${DIALOGS:-0}" = "1" ]; then
+if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdlg.c" -o "$work/gbdlg.rel"
     DLG_REL="$work/gbdlg.rel"
+fi
+if [ "${PROMPT:-0}" = "1" ]; then
+    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbprompt.c" -o "$work/gbprompt.rel"
+    DLG_REL="$DLG_REL $work/gbprompt.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"

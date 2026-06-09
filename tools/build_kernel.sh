@@ -41,13 +41,15 @@ python3 tools/packicons.py build/PAINT.IST \
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR (C/SDCC) -> build/FILEMGR.RAW
 tools/build_capp.sh apps/viewer build/VIEWER.RAW   # VIEWER (C/SDCC) -> build/VIEWER.RAW
-DATA_LOC=0x6800 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: code-heavy,
-                                   # so a higher data-loc gives it ~1.9K code room (#97)
-DATA_LOC=0x5C00 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower data-loc so
-                                   # its 7KB icon-set buffer (BUFSZ) fits below #8000 (#110)
+DATA_LOC=0x6800 DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD:
+                                   # code-heavy, so a higher data-loc gives it ~1.9K code room
+                                   # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
+DATA_LOC=0x5C00 DIALOGS=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
+                                   # data-loc so its 7KB icon-set buffer (BUFSZ) fits below
+                                   # #8000 (#110); DIALOGS=1 for the shared Load/Save popup (#114)
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
-DIALOGS=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: links the shared gb_popup/
-                                   # gb_prompt dialogs (gbdlg.c) for its File menu (#114)
+DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: shared list popup
+                                   # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 # QA/<CARD>/: one distribution per storage card (#104). The apps/modules/assets
