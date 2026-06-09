@@ -13,8 +13,10 @@
         .globl  l__INITIALIZER          ; linker-defined: length of _INITIALIZER
         .globl  s__INITIALIZER          ; ... start of the source (in the image)
         .globl  s__INITIALIZED          ; ... start of the dest (RAM)
-        .globl  l__BSS                  ; ... length of the zero-init area
-        .globl  s__BSS                  ; ... start of it (RAM)
+        .globl  l__DATA                  ; ... uninitialised globals (SDCC puts them
+        .globl  s__DATA                  ;     here, NOT _BSS) - length + start
+        .globl  l__BSS                   ; ... the (small) _BSS area too
+        .globl  s__BSS
 
         .area   _CODE
 _start::
@@ -22,25 +24,38 @@ _start::
         call    _main
         ret                     ; back to the kernel's launch_app
 
-        .area   _GSINIT
-gsinit::
-        ;; Zero _BSS. C requires uninitialised globals to start at 0, and a relaunched
-        ;; app (Exit to DOS -> run"GBKERN) must NOT inherit the previous run's BSS - the
-        ;; desktop's bar_init stayed set, so its top bar never redrew. The image holds
-        ;; no BSS bytes (it's RAM), so the loader can't clear it; we do, here.
-        ld      bc, #l__BSS
+        ;; zero_region: HL = start, BC = length -> fill with 0. (Self-propagating
+        ;; ldir: set the first byte, then copy it forward.)
+zero_region:
         ld      a, b
         or      a, c
-        jr      Z, bss_done
-        ld      hl, #s__BSS
+        ret     Z
         ld      (hl), #0x00
         dec     bc
         ld      a, b
         or      a, c
-        jr      Z, bss_done             ; exactly one BSS byte -> already cleared
-        ld      de, #s__BSS+1
-        ldir                            ; propagate the zero across the rest
-bss_done:
+        ret     Z
+        ld      d, h
+        ld      e, l
+        inc     de
+        ldir
+        ret
+
+        .area   _GSINIT
+gsinit::
+        ;; Zero the uninitialised globals. C requires them to start at 0, and a
+        ;; relaunched app (Exit to DOS -> run"GBKERN) must NOT inherit the previous
+        ;; run's values - the desktop's bar_init stayed set, so its top bar never
+        ;; redrew. SDCC keeps these in _DATA (with _BSS a small extra); the image has
+        ;; no bytes for either (they're RAM) so the loader can't clear them, we do.
+        ld      hl, #s__DATA
+        ld      bc, #l__DATA
+        call    zero_region
+        ld      hl, #s__BSS
+        ld      bc, #l__BSS
+        call    zero_region
+        ;; copy initialised globals from the image to RAM (_INITIALIZED sits between
+        ;; _DATA and _BSS, so it survives the zeroing above and gets its values here)
         ld      bc, #l__INITIALIZER
         ld      a, b
         or      a, c
