@@ -33,7 +33,7 @@ We're a long way from this, but it's the north star.
 
 The current GEOBENCH desktop running on the Amstrad CPC (1984 emulator): a Mode 1
 backdrop, a top bar showing total RAM and a clock, and draggable multicolour
-bitmap icons (Disk, Clock, Trash) driven by a keyboard/joystick pointer.
+bitmap icons (Disk, Clock, Trash) driven by a joystick (or AMX mouse) / keyboard pointer.
 
 ![Current status](initial.png)
 
@@ -171,9 +171,10 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
 - **Amstrad CPC** (464 / 664 / 6128, and CPC+) with **128K+ RAM** (the banked app
   model needs the expansion banks; 512K is typical and fine).
 - Mode 1 (320×200, 4 colours) for the desktop.
-- **Keyboard/joystick-driven software pointer** today; the input layer stays
-  abstract so an AMX-style joystick mouse or a **SYMBiFACE II / Cyboard PS/2
-  mouse** can be added for machines that have one.
+- **Joystick / keyboard-driven software pointer.** An **AMX mouse works too** — it
+  plugs into the joystick port and reports as a joystick (movement + buttons), so
+  the same pointer path drives it (either fire button clicks). A **SYMBiFACE II /
+  Cyboard PS/2 mouse** can be added for machines that have one.
 - Floppy or IDE (FAT16) storage. Networking via Net4CPC (W5100S) is a possible
   future extension — see the related `n4c-nettools` project.
 
