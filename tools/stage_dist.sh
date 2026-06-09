@@ -27,6 +27,7 @@ cp build/GBFAT.RAW "$OUT/GBFAT.BIN"
 cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST build/PAINT.IST \
    build/DEFAULT.SPR build/HAND.SPR "$OUT/"
 cp assets/WELCOME.TXT "$OUT/"
+cp assets/penguin.PIC "$OUT/PENGUIN.PIC"   # sample 200x200 picture (view in Viewer)
 # config (CR+LF line endings, as the CPC requires)
 printf 'FONT=DEFAULT\r\nICONS=DEFAULT\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\n' \
     > "$OUT/GEOBENCH.CFG"
