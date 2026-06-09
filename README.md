@@ -12,8 +12,9 @@ Workbench**, reimagined for 8-bit Z80 hardware.
 > Z80 **kernel** owns the machine and exposes a fixed jump-table API; the
 > **apps are written in C** (SDCC) and run co-resident in expansion-bank pages,
 > reaching the kernel through a small `libgb`. The desktop, a scrolling file
-> manager, and a text viewer all work: double-click a drive to browse it,
-> double-click a file to open it in its app. Build with `tools/build_kernel.sh`.
+> manager, a text editor, an icon editor, a paint app, an image/text viewer and a
+> clock all work: double-click a drive to browse it, double-click a file to open it
+> in its app. Build with `tools/build_kernel.sh`.
 
 ## Visual target
 
@@ -43,14 +44,27 @@ Prev/Next, UNDO) over a File Manager window — all co-resident under the kernel
 
 What works today:
 
-- **Desktop** — backdrop, top bar (RAM probe + clock), draggable labelled icons.
+- **Desktop** — backdrop, top bar (RAM probe + clock), draggable labelled icons,
+  a System menu (Ram Usage / Refresh Media / Tidy Icons / Exit to DOS).
 - **File manager** — double-click the Disk icon to open a window listing the
   drive; a type icon + name per file, a **scrolling** list, click to select,
-  double-click to open. Reaches every file regardless of how many.
-- **Text viewer** — double-click a `.TXT` (routed by a type→app table) to open it
-  in a window with word-wrapped text.
-- **Banked app model** — the desktop, file manager and viewer are separate
-  binaries, paged into expansion-bank slots and run co-resident with the kernel.
+  double-click to open (routed to the right app by a type→app table). Reaches
+  every file regardless of how many; multi-drive, drag-and-drop, a Trash.
+- **Notepad** — a text editor: type/edit, word-wrap, copy/paste, click or cursor
+  keys to place the caret, a File menu (New/Load/Save/Save As). Saves `.BAS` with
+  CR+LF so CPC BASIC can load them.
+- **ICONED** — an icon/cursor editor for `.IST` sets and `.SPR` cursors (magnified
+  canvas, pen palette, Prev/Next, undo, Load/Save).
+- **Paint** — a Mode-1 paint app: a canvas + toolchest (pencil, square, circle,
+  flood fill, undo), a 4-ink palette and pencil width, New/Load/Save to the `.PIC`
+  format (a versioned bitmap with its own size + palette). Tool icons are a normal
+  `.IST` set, editable in ICONED.
+- **Viewer** — open any file to peek at it: word-wrapped text, or a `.PIC` image
+  rendered to a window sized to the picture. Draggable, resizeable.
+- **Clock** — an analog clock window (Dallas RTC, else software).
+- **Banked app model** — the desktop and every app are separate binaries, paged
+  into expansion-bank slots and run co-resident with the kernel. Shared UI (window
+  drag/resize, the File-menu popup + name prompt) lives in `libgb`.
 - **Hybrid implementation** — the kernel is Z80 assembly; **every app is C**.
 
 ## What is this?
@@ -98,8 +112,8 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
 - **Apps in C (`apps/`, SDCC).** Each app is a single `main.c` compiled to run at
   `#4000` in a bank page. It reaches the kernel only through **`libgb`**
   (`lib/gb/` — `gb.h` + asm trampolines that map the C calling convention onto the
-  jump table). The desktop launches the file manager and the viewer; an app
-  returns to its caller by `return`.
+  jump table). The desktop launches the file manager, which opens each file in its
+  app (Notepad, ICONED, Paint, Viewer, ...); an app returns to its caller by `return`.
 - **Storage backends.** A small dispatcher (`lib/fs.asm`) picks AMSDOS-over-floppy
   or FAT16-over-IDE at boot, so the same desktop runs on a plain floppy CPC or a
   SYMBiFACE/Cyboard IDE-equipped one.
@@ -134,7 +148,8 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
 - **Proportional bitmap fonts** and a consistent system look.
 - **A disk-based application model** — load apps from disk on demand, keep the
   resident kernel small.
-- **Bundled productivity apps** in the spirit of geoWrite / geoPaint.
+- **Bundled productivity apps** in the spirit of geoWrite / geoPaint — Notepad and
+  Paint are the first of these.
 
 ### From Amiga Workbench
 
@@ -216,13 +231,17 @@ geobench/
 ├── lib/               # kernel libraries: screen, text/font, input, cursor,
 │   │                  #   fs (AMSDOS + FAT16), banking, icon/cursor bitmaps
 │   ├── gbapp.inc      #   the app ABI (jump-table addresses, memory model)
-│   └── gb/            #   libgb: the shared C bindings (gb.h, gblib.s, crt0.s)
+│   └── gb/            #   libgb: shared C bindings (gb.h, gblib.s, crt0.s) +
+│                      #     window drag/resize (gbwin.c) + dialogs (gbdlg/gbprompt.c)
 ├── apps/              # the C apps (each a single main.c)
-│   ├── desktop/       #   the boot shell: backdrop, icons, drag, launch
-│   ├── filemgr/       #   scrolling file manager
-│   ├── viewer/        #   text-file viewer
-│   └── chello/        #   "hello from C" demo (the original C-app spike)
-├── assets/            # icon/cursor source PNGs + sample files (WELCOME.TXT)
+│   ├── desktop/       #   the boot shell: backdrop, icons, drag, launch, System menu
+│   ├── filemgr/       #   scrolling file manager (multi-drive, drag-and-drop, Trash)
+│   ├── notepad/       #   text editor (File/Edit menus, copy/paste, .BAS CR+LF)
+│   ├── iconed/        #   icon/cursor editor for .IST sets and .SPR cursors
+│   ├── paint/         #   Mode-1 paint app (toolchest, palette, .PIC files)
+│   ├── viewer/        #   text + .PIC image viewer
+│   └── clock/         #   analog clock window
+├── assets/            # icon/cursor/paint source PNGs + sample files (WELCOME.TXT)
 ├── docs/              # architecture, development, references
 └── tools/            # host-side build/asset tooling (build_kernel.sh, ...)
 ```
@@ -236,14 +255,19 @@ Done:
 3. ✅ **File manager** — browse a drive, select, scroll, open by type.
 4. ✅ **Banked app model + app API** — separate-binary apps over a kernel API.
 5. ✅ **Apps in C** — the whole app layer moved from assembly to C over `libgb`.
+6. ✅ **Storage write layer** — FAT16/FAT32 + Albireo read/write (save/delete/copy).
+7. ✅ **Apps** — Notepad (editor), ICONED (icon/cursor editor), Paint (`.PIC`),
+   Clock, plus the image/text Viewer.
+8. ✅ **Menu bar** — top-bar File/Edit menus dispatched to the focused app, with a
+   shared popup + name-prompt in `libgb`.
 
 Next:
 
-- **More apps** — an editable notepad (needs a storage *write* layer), an icon
-  editor, settings.
-- **Menu bar** — File/Edit menus in the top bar, dispatched to the focused app.
+- **Paint** follow-ups — resizable canvas, full-screen palette view, scrolling for
+  pictures bigger than the screen.
 - **Launching legacy `.BIN`/`.BAS`** software (see above).
 - **Drawers/folders** and richer desktop arrangement.
+- **Settings** app for `GEOBENCH.CFG` (icon set / font / cursor).
 
 ## License
 
