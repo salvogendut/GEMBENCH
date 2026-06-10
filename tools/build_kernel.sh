@@ -63,7 +63,7 @@ tools/build_fatmod.sh                              # FAT16/IDE write module -> b
 # boots from disc. Add a card here (e.g. M4 "-DSTORAGE_M4=1") when its backend lands.
 build_variant() {                                # $1 = subdir name, $2 = rasm -D flag
     rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
-    "$RASM" kernel/gbkern.asm -eo $2             # incbins apps + font + icons -> .dsk + RAW
+    "$RASM" kernel/gbkern.asm -eo $2 ${EXTRA_RASM:-} # incbins apps + font + icons -> .dsk + RAW
     "$RASM" kernel/pack_apps.asm -eo             # 2nd pass: overflow apps -> same .dsk (#114)
     tools/stage_dist.sh "QA/$1"                  # loose files for the card's FAT drive
     cp build/gbkern.dsk "QA/$1/GEOBENCH.DSK"     # bootable floppy image

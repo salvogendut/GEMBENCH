@@ -40,24 +40,65 @@ fdf_logd        ld    a,b
                 call  acc_add16
                 call  acc_store_fat
 
-                ld    hl,fs_secbuf+#24        ; sectors per FAT (FAT32, 32-bit)
+                ld    hl,(fs_secbuf+#16)      ; #130: 16-bit sectors/FAT - nonzero => FAT16
+                ld    a,h
+                or    l
+                jr    z,fdf_fat32
+                ld    (fatsz_tmp),hl          ; FAT16: fatsz = this word (zero-extended to 32)
+                xor   a
+                ld    (fatsz_tmp+2),a
+                ld    (fatsz_tmp+3),a
+                inc   a                        ; a = 1
+                ld    (fs_is_fat16),a
+                jr    fdf_havefatsz
+fdf_fat32
+                ld    hl,fs_secbuf+#24        ; FAT32: sectors per FAT (32-bit)
                 ld    de,fatsz_tmp
                 ld    bc,4
                 ldir
-                ld    a,(fs_secbuf+#10)       ; data_lba = fat_lba + numFATs*fatsz
-                ld    (fs_numfat),a
-                ld    b,a                       ; (acc still holds fat_lba)
+                xor   a
+                ld    (fs_is_fat16),a
+fdf_havefatsz
+                ld    a,(fs_secbuf+#10)       ; acc += numFATs*fatsz -> FAT32 data start, or
+                ld    (fs_numfat),a           ; FAT16 fixed-root-dir start (acc still = fat_lba)
+                ld    b,a
 fdf_dl          push  bc
                 ld    hl,fatsz_tmp
                 call  acc_add
                 pop   bc
                 djnz  fdf_dl
-                call  acc_store_data
 
+                ld    a,(fs_is_fat16)
+                or    a
+                jr    nz,fdf_root16
+                call  acc_store_data          ; FAT32: data starts right after the FATs
                 ld    hl,fs_secbuf+#2C        ; root directory start cluster
                 ld    de,fs_dir_clus
                 ld    bc,4
                 ldir
+                ret
+fdf_root16                                     ; FAT16: the fixed root dir sits here; data follows
+                ld    hl,acc                  ; fs_root_lba = fat_lba + numFATs*fatsz
+                ld    de,fs_root_lba
+                ld    bc,4
+                ldir
+                ld    hl,(fs_secbuf+#11)      ; root entry count (16-bit)
+                ld    de,15                    ; root_secs = (entries+15) >> 4
+                add   hl,de                    ; (32 bytes/entry, 512/sector -> /16)
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    a,l
+                ld    (fs_root_secs),a
+                ld    e,a                       ; data_lba = root_lba + root_secs
+                ld    d,0
+                call  acc_add16
+                call  acc_store_data
                 ret
 
 ; fs_dir_rewind: position at the first sector of the root directory cluster.
@@ -65,8 +106,16 @@ fs_dir_rewind
                 xor   a
                 ld    (fs_dir_sic),a
                 ld    (fs_ent_idx),a
-                ld    hl,fs_dir_clus
+                ld    a,(fs_is_fat16)         ; #130
+                or    a
+                jr    nz,fdr_fat16
+                ld    hl,fs_dir_clus          ; FAT32: root is a cluster chain
                 call  clus_first_lba
+                call  save_dir_lba
+                jp    fs_read_sector
+fdr_fat16                                      ; FAT16: fixed root dir region, sector 0
+                ld    hl,fs_root_lba
+                call  lbatmp_from_var
                 call  save_dir_lba
                 jp    fs_read_sector
 save_dir_lba                                    ; remember the dir sector now in secbuf
@@ -79,6 +128,9 @@ save_dir_lba                                    ; remember the dir sector now in
 ; fs_dir_step: advance to the next directory sector (within the cluster, else
 ; follow the FAT to the next cluster). CF set = sector loaded, NC = end of chain.
 fs_dir_step
+                ld    a,(fs_is_fat16)         ; #130
+                or    a
+                jr    nz,fds_fat16
                 ld    a,(fs_dir_sic)
                 inc   a
                 ld    b,a
@@ -107,14 +159,35 @@ fds_load
 fds_end
                 or    a
                 ret
+fds_fat16                                      ; #130 FAT16: walk the fixed root region in order
+                ld    a,(fs_dir_sic)
+                inc   a
+                ld    (fs_dir_sic),a
+                ld    b,a
+                ld    a,(fs_root_secs)         ; sic >= root_secs -> end of root directory
+                cp    b
+                jr    z,fds_end
+                jr    c,fds_end
+                ld    hl,fs_root_lba
+                call  lbatmp_from_var
+                ld    a,(fs_dir_sic)
+                call  lba_add_a
+                call  save_dir_lba
+                call  fs_read_sector
+                scf
+                ret
 
 ; fs_fat_next: HL -> 4-byte cluster variable. Replace it with the next cluster
 ; in the FAT32 chain. CF set = valid next cluster, NC = end-of-chain (>=EOC).
 fs_fat_next
                 ld    (fn_ptr),hl
                 call  acc_load                ; acc = cluster
-                call  acc_shl                  ; *4 -> FAT byte offset
-                call  acc_shl
+                call  acc_shl                  ; *2 (FAT16 byte offset)
+                ld    a,(fs_is_fat16)         ; #130
+                or    a
+                jr    nz,ffn_within
+                call  acc_shl                  ; *4 (FAT32 byte offset)
+ffn_within
                 ld    a,(acc)                  ; within = offset & 0x1FF
                 ld    (fn_within),a
                 ld    a,(acc+1)
@@ -129,17 +202,20 @@ fs_fat_next
                 ld    hl,(fn_within)           ; entry = secbuf + within
                 ld    de,fs_secbuf
                 add   hl,de
-                ld    a,(hl)
+                ld    a,(hl)                   ; low two bytes (FAT16 and FAT32 share these)
                 ld    (acc),a
                 inc   hl
                 ld    a,(hl)
                 ld    (acc+1),a
-                inc   hl
+                ld    a,(fs_is_fat16)         ; #130
+                or    a
+                jr    nz,ffn_eoc16
+                inc   hl                        ; FAT32: two more bytes (28-bit entry)
                 ld    a,(hl)
                 ld    (acc+2),a
                 inc   hl
                 ld    a,(hl)
-                and   #0F                       ; FAT32 entries are 28-bit
+                and   #0F
                 ld    (acc+3),a
                 ld    a,(acc+3)                ; end-of-chain if >= 0x0FFFFFF8
                 cp    #0F
@@ -147,6 +223,18 @@ fs_fat_next
                 ld    a,(acc+2)
                 cp    #FF
                 jr    c,fn_valid
+                ld    a,(acc+1)
+                cp    #FF
+                jr    c,fn_valid
+                ld    a,(acc)
+                cp    #F8
+                jr    c,fn_valid
+                or    a                         ; EOC -> NC
+                ret
+ffn_eoc16                                       ; #130 FAT16: clear high bytes, EOC if >= 0xFFF8
+                xor   a
+                ld    (acc+2),a
+                ld    (acc+3),a
                 ld    a,(acc+1)
                 cp    #FF
                 jr    c,fn_valid
@@ -411,4 +499,7 @@ fs_clshift      defb  0            ; log2(sectors per cluster)
 fs_dir_sic      defb  0            ; dir: sector within current cluster
 fs_ent_idx      defb  0            ; dir: entry index within current sector
 fs_numfat       defb  0            ; number of FAT copies
+fs_is_fat16     defb  0            ; #130: 1 = FAT16 volume (fixed root dir, 16-bit FAT), else FAT32
+fs_root_lba     defs  4            ; #130 FAT16: absolute LBA of the fixed root directory
+fs_root_secs    defb  0            ; #130 FAT16: root directory size in sectors
 fat_eoc         defb  #FF,#FF,#FF,#0F  ; FAT32 end-of-chain marker

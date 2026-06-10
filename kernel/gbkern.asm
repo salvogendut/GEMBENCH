@@ -24,6 +24,9 @@
                 ifndef STORAGE_ALBIREO
 STORAGE_ALBIREO equ   0
                 endif
+                ifndef SPIKE                  ; #130: -DSPIKE=1 builds a minimal storage spike -
+SPIKE           equ   0                       ; load DESKTOP.APP right after fs_init, report, hang
+                endif
 
 ; Config transfer area - resident low RAM (stays main RAM under banking, so the
 ; paged-in GBCFG module can reach it). The kernel fills text/len, runs the
@@ -172,6 +175,34 @@ kernel_main
                                               ; gb_getkey (the keyboard is the joystick)
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
+                if SPIKE
+                ; #130 SPIKE harness (-DSPIKE=1): isolate the storage read - run the real
+                ; boot's pre-load setup, load DESKTOP.APP into a plain low buffer (no banking),
+                ; then HANG on the border (WHITE = loaded, RED = not found). Never reboots.
+                call  input_init             ; faithful context: the same setup the real boot
+                di                            ; runs between fs_init and its first load, so the
+                call  mem_detect             ; mount lands correctly
+                ei
+                call  bank_normal            ; mem_detect leaves the bank config dirty
+                ld    hl,spike_name
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#3F00
+                ld    (fs_load_max),hl
+                ld    hl,#4000               ; plain low buffer (no bank paging)
+                ld    (fs_load_dst),hl
+                call  fs_load_file
+                jr    nc,spike_fail
+                ld    bc,#1A1A               ; WHITE held = DESKTOP.APP loaded OK in isolation
+                call  SCR_SET_BORDER
+spike_hang      jr    spike_hang
+spike_fail
+                ld    bc,#0606               ; RED held = file not found / load refused
+                call  SCR_SET_BORDER
+                jr    spike_hang
+spike_name      db    "DESKTOP APP"  ; #130 SPIKE: the file to test-load from the card
+                endif
                 call  input_init             ; enable the SymbiFace mouse if present
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
                 call  mem_detect             ; (it pokes every bank's #4000)
@@ -2394,7 +2425,10 @@ kern_end                                        ; GBKERN.BIN = #8000..kern_end o
 ; kernel is caught here, not in the field. (Reclaim, or move scratch out, to fix.)
 HIMEM           equ   #A288        ; UniDOS HIMEM (stack top); see docs/AMSDOS notes
 STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the stack (#95)
+                if SPIKE                     ; #130: the throwaway spike hangs early (tiny stack)
+                else
                 assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big - reclaim resident bytes (see #104)"
+                endif
 
 ; --- scratch buffers live in LOW RAM (always the main bank, below the stack) -----
 ; They used to sit just above kern_end, but as the kernel grew they landed in the
