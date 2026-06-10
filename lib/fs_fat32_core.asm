@@ -150,6 +150,7 @@ fds_nextclus
 fds_load
                 ld    hl,fs_dir_clus
                 call  clus_first_lba
+fds_addread                                    ; shared tail: lba_tmp += sic, then read it
                 ld    a,(fs_dir_sic)
                 call  lba_add_a
                 call  save_dir_lba
@@ -170,12 +171,7 @@ fds_fat16                                      ; #130 FAT16: walk the fixed root
                 jr    c,fds_end
                 ld    hl,fs_root_lba
                 call  lbatmp_from_var
-                ld    a,(fs_dir_sic)
-                call  lba_add_a
-                call  save_dir_lba
-                call  fs_read_sector
-                scf
-                ret
+                jr    fds_addread
 
 ; fs_fat_next: HL -> 4-byte cluster variable. Replace it with the next cluster
 ; in the FAT32 chain. CF set = valid next cluster, NC = end-of-chain (>=EOC).
@@ -217,12 +213,13 @@ ffn_within
                 ld    a,(hl)
                 and   #0F
                 ld    (acc+3),a
-                ld    a,(acc+3)                ; end-of-chain if >= 0x0FFFFFF8
+                ld    a,(acc+3)                ; FAT32: end-of-chain if >= 0x0FFFFFF8
                 cp    #0F
                 jr    c,fn_valid
                 ld    a,(acc+2)
                 cp    #FF
                 jr    c,fn_valid
+ffn_eoc_lo                                      ; shared low-word EOC test (FAT16 joins here)
                 ld    a,(acc+1)
                 cp    #FF
                 jr    c,fn_valid
@@ -231,18 +228,11 @@ ffn_within
                 jr    c,fn_valid
                 or    a                         ; EOC -> NC
                 ret
-ffn_eoc16                                       ; #130 FAT16: clear high bytes, EOC if >= 0xFFF8
-                xor   a
+ffn_eoc16                                       ; #130 FAT16: clear the high bytes -> a 16-bit
+                xor   a                         ; value, then EOC if >= 0xFFF8 via the shared test
                 ld    (acc+2),a
                 ld    (acc+3),a
-                ld    a,(acc+1)
-                cp    #FF
-                jr    c,fn_valid
-                ld    a,(acc)
-                cp    #F8
-                jr    c,fn_valid
-                or    a                         ; EOC -> NC
-                ret
+                jr    ffn_eoc_lo
 fn_valid
                 ld    hl,acc
                 ld    de,(fn_ptr)

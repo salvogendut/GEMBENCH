@@ -304,7 +304,9 @@ fdr_loop
                 ret
 
 ; ---------------------------------------------------------------------------
-; fsam_send: write A as a command byte (wait RQM=1, DIO=0).
+; fsam_send: write A as a command byte (wait RQM=1, DIO=0). Reached only after
+; fsam_present confirms an FDC, so the wait stays unbounded (a present FDC answers
+; in microseconds); no-controller machines are caught by fsam_present's pre-check.
 fsam_send
                 push  de                             ; preserve caller's track/sector
                 ld    e,a
@@ -339,6 +341,18 @@ frcv_wait
 ; recalibrates and tries a READ ID; a normal result (ST0 IC bits 7-6 == 00)
 ; means a disk is in the drive. CF set = present.
 fsam_present
+                ld    bc,FSAM_MSR                     ; #130b: bounded FDC-presence probe FIRST, so a
+                ld    d,0                             ; machine with no disc controller (e.g. a stock
+fsp_probe                                            ; 464) reports "absent" instead of hanging. An
+                in    a,(c)                           ; idle FDC's status reads #80 (RQM=1, DIO=0);
+                and   #C0                             ; a missing controller floats high -> #C0 (#00).
+                cp    #80
+                jr    z,fsp_have
+                dec   d                              ; ~256 reads is ample - a present FDC is ready
+                jr    nz,fsp_probe                   ; at once; absence just needs to be bounded
+                or    a                              ; no FDC within the bound -> absent (CF clear)
+                ret
+fsp_have
                 call  fsam_motor_on                  ; motor + recalibrate the unit
                 ld    a,#4A                          ; READ ID
                 call  fsam_send
