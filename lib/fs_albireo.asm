@@ -55,6 +55,7 @@ ALB_INT_SUCCESS equ   #14
 ALB_INT_DISKRD  equ   #1D
 ALB_INT_DISKWR  equ   #1E
 ALB_USBMODE_SD  equ   3            ; host mode, micro-SD (LLM_MicroSD)
+ALB_USBMODE_USB equ   6            ; #132: host mode, USB + reset the USB bus (for UMS drives)
 
 ; ---------------------------------------------------------------------------
 ; alb_sendcmd: A = command byte. Writes it to the command port and leaves
@@ -69,12 +70,20 @@ alb_sendcmd
 ; then GET_STATUS to read and clear it. Returns A = interrupt status code.
 alb_waitint
                 push  de
-                ld    de,0                      ; ~65536 spins then give up
-awi_loop
+                ld    de,0                      ; 65536 spins; the per-spin delay below makes
+awi_loop                                        ; that ~3s (#132 - matches UniDOS WaitInterrupt)
                 ld    bc,ALB_CMD
                 in    a,(c)                     ; STATUS: bit7 = !INT
                 rla                              ; bit7 -> CF (1 = no interrupt)
                 jr    nc,awi_got
+                ex    (sp),hl                  ; #132: pace the poll (~38us/spin) so the timeout
+                ex    (sp),hl                  ; is seconds, not ~0.5s. The real CH376 needs that
+                ex    (sp),hl                  ; long for DISK_MOUNT / USB enumeration; without it
+                ex    (sp),hl                  ; we time out early and trust a premature status,
+                ex    (sp),hl                  ; whose garbage byte-count overruns a read buffer ->
+                ex    (sp),hl                  ; reboot on real HW (the emulator answers instantly,
+                ex    (sp),hl                  ; so it never surfaced). 8 swaps = HL/stack restored.
+                ex    (sp),hl
                 dec   de
                 ld    a,d
                 or    e
@@ -108,25 +117,51 @@ alb_ensure_mount
                 or    a
                 scf
                 ret   nz
-                ld    e,ALB_USBMODE_SD
-                ld    a,ALBC_USBMODE
-                call  alb_sendcmd
-                out   (c),e                     ; mode byte -> chip acks on DATA
-                ex    (sp),hl
-                ex    (sp),hl                    ; brief settle (>20us on real HW)
-                in    a,(c)
-                cp    ALB_RET_SUCCESS
-                jr    nz,aem_fail
-                ld    a,ALBC_DISKMOUNT
-                call  alb_sendcmd
-                call  alb_waitint
-                cp    ALB_INT_SUCCESS
-                jr    nz,aem_fail
+                ld    e,ALB_USBMODE_USB        ; #132: a USB (UMS) drive needs USB-HOST mode, not
+                ld    d,1                       ; SD; mode 6 resets the bus -> wait for re-attach
+                call  alb_try_mount
+                jr    c,aem_ok
+                ld    e,ALB_USBMODE_SD         ; fall back to SD-card mode (the original behaviour)
+                ld    d,0
+                call  alb_try_mount
+                jr    nc,aem_fail
+aem_ok
                 ld    a,1
                 ld    (fsalb_mounted),a
                 scf
                 ret
 aem_fail
+                or    a
+                ret
+
+; alb_try_mount: E = SET_USB_MODE byte; D != 0 if that mode resets the USB bus (then we
+; wait for the device to re-enumerate before DISK_MOUNT). CF set = mounted, NC = not.
+alb_try_mount
+                ld    a,ALBC_USBMODE
+                call  alb_sendcmd
+                out   (c),e                     ; mode byte -> chip acks on DATA
+                ex    (sp),hl                  ; settle >20us before reading the ack
+                ex    (sp),hl
+                ex    (sp),hl
+                ex    (sp),hl
+                ex    (sp),hl
+                ex    (sp),hl
+                in    a,(c)
+                cp    ALB_RET_SUCCESS
+                jr    nz,atm_fail
+                ld    a,d                       ; bus was reset -> consume the CONNECT interrupt
+                or    a                          ; (the device re-enumerates) before mounting
+                jr    z,atm_mount
+                call  alb_waitint
+atm_mount
+                ld    a,ALBC_DISKMOUNT
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,atm_fail
+                scf
+                ret
+atm_fail
                 or    a
                 ret
 
