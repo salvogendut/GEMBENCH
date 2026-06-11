@@ -58,6 +58,7 @@ DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
+tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
 # QA/<CARD>/: one distribution per storage card (#104). The apps/modules/assets
 # above are shared; only the kernel differs, so we assemble each variant and stage
 # it into its own subdir with BOTH formats: the loose files to copy onto that

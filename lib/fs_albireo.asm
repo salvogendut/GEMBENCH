@@ -321,6 +321,16 @@ alf_nf
                 or    a
                 ret
 
+; #134 system-dir hooks (Albireo). TODO: real /GEOBENCH resolve via the CH376 path.
+; Flat for now - loads stay at the CH376 current dir (root); implemented after the
+; IDE path is verified.
+fs_sys_resolve
+                ret
+fs_sysdir_enter
+                ret
+fs_sysdir_leave
+                ret
+
 ; ---------------------------------------------------------------------------
 ; fsalb_save_file: write fs_save_len bytes from (fs_save_src) to fs_req_name.
 ; FILE_CREATE truncates/recreates (so this overwrites), then a BYTE_WRITE loop

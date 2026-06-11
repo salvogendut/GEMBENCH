@@ -175,6 +175,9 @@ kernel_main
                                               ; gb_getkey (the keyboard is the joystick)
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
+                ld    a,(fs_boot_drive)      ; #134: on the card (drive 0), point the system dir
+                or    a                       ; at /GEOBENCH if present (else flat root); skip on
+                call  z,fs_sys_resolve       ; a floppy boot drive (no subdirectories)
                 if SPIKE
                 ; #130 SPIKE harness (-DSPIKE=1): isolate the storage read - run the real
                 ; boot's pre-load setup, load DESKTOP.APP into a plain low buffer (no banking),
@@ -801,7 +804,7 @@ run_cfgmod
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
-                call  fs_load_file
+                call  fs_load_sys           ; #134: GBCFG.BIN lives in the /GEOBENCH system dir
                 jr    nc,rcm_done            ; module missing -> keep defaults
                 call  APP_BASE               ; crt0 _start -> main -> gb_cfg_parse
 rcm_done
@@ -840,12 +843,12 @@ def_ist         db    "DEFAULT IST"
 ; 11-byte default name at HL so a typo can't leave the screen drawing garbage.
 load_or_default                                ; HL = default 8.3 name (11 bytes)
                 push  hl
-                call  fs_load_file
+                call  fs_load_sys             ; #134: fonts/icons/cursor live in /GEOBENCH
                 pop   hl
                 ret   c                         ; wanted file loaded
                 ld    de,fs_req_name           ; missing -> use the default name
                 call  copy11
-                jp    fs_load_file              ; (dst/max unchanged by the miss)
+                jp    fs_load_sys              ; (dst/max unchanged by the miss)
 
 ; icon_init: load <ICONS>.IST into PAGE_DATA at DATA_ICONS.
 icon_init
@@ -927,7 +930,7 @@ launch_app
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
-                call  fs_load_file
+                call  fs_load_sys           ; #134: app binaries live in the /GEOBENCH system dir
                 jr    nc,la_done             ; missing -> just unwind
                 ei
                 call  APP_BASE
@@ -2451,6 +2454,8 @@ cfg_img         incbin "../build/GBCFG.RAW"     ; config-parser C module, as GBC
 cfg_imgend
 fat_img         incbin "../build/GBFAT.RAW"     ; FAT16/IDE write module, as GBFAT.BIN
 fat_imgend
+flsv_img        incbin "../build/FLOPPYSV.RAW"  ; AMSDOS/floppy write module, as FLOPPYSV.BIN (#135)
+flsv_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
 font_imgend
 cfont_img       incbin "../build/CLASSIC.FNT"   ; alternate 8x8 font (FONT=CLASSIC)
@@ -2499,6 +2504,7 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
+                save  "FLOPPYSV.BIN",flsv_img,flsv_imgend-flsv_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
