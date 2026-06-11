@@ -182,7 +182,12 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
 ## Target hardware
 
 - **Amstrad CPC** (464 / 664 / 6128, and CPC+) with **128K+ RAM** (the banked app
-  model needs the expansion banks; 512K is typical and fine).
+  model needs the expansion banks; 512K is typical and fine). Larger expansions
+  are **detected and reported** up to 1MB — the boot probe walks both the 8
+  DK'tronics banks (port `&7F`) and the **Yarek / CPC4MB** upper-bank ports
+  (`&7E…`), so the top bar shows the true total (e.g. **1088K** on a CPC464 with a
+  1MB Yarek). The app-page pool draws from the detected banks; the space beyond
+  what the windows use is free headroom (issue #138).
 - Mode 1 (320×200, 4 colours) for the desktop.
 - **Joystick / keyboard-driven software pointer.** An **AMX mouse works too** — it
   plugs into the joystick port and reports as a joystick (movement + buttons), so
