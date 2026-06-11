@@ -75,10 +75,22 @@ build_variant() {                                # $1 = kernel name, $2 = rasm -
 rm -rf QA; mkdir -p QA
 echo "Building both card kernels + the unified card distribution -> QA/"
 build_variant GBIDE ""
-cp build/gbkern.dsk QA/GEOBENCH.DSK               # one bootable floppy image (boots via RUN"GBKERN)
+cp build/gbkern.dsk QA/GEOBENCH.DSK               # one bootable floppy image
+# Add a GB.BAS loader so the floppy also boots via RUN"GB (-> RUN"GBKERN; one kernel,
+# no card to detect). Must be a HEADERLESS ASCII file - RASM's DSK save adds an AMSDOS
+# header, so use iDSK (-t 0). Graceful: without iDSK the floppy still boots via RUN"GBKERN.
+IDSK="${IDSK:-$HOME/Dev/cpc-mastering/idsk}"
+if [ -x "$IDSK" ]; then
+    printf '10 RUN"GBKERN\r\n' > build/GB.BAS
+    "$IDSK" QA/GEOBENCH.DSK -i build/GB.BAS -t 0 >/dev/null 2>&1 \
+        && echo "  + GB.BAS on QA/GEOBENCH.DSK (floppy RUN\"GB)" \
+        || echo "  (iDSK present but GB.BAS insert failed - floppy still RUN\"GBKERN)"
+else
+    echo "  (no iDSK at \$IDSK - floppy boots via RUN\"GBKERN; set IDSK= to add the GB.BAS loader)"
+fi
 build_variant GBALB "-DSTORAGE_ALBIREO=1"
 tools/stage_dist.sh QA/CARD                       # unified: GB.BAS + GBIDE.BIN + GBALB.BIN + /GEOBENCH
-echo "  QA/CARD: any IDE/Albireo card (RUN\"GB); QA/GEOBENCH.DSK: floppy boot (RUN\"GBKERN)"
+echo "  QA/CARD: any IDE/Albireo card (RUN\"GB); QA/GEOBENCH.DSK: floppy (RUN\"GB or RUN\"GBKERN)"
 
 # Leave build/ as the STORAGE-selected variant (default IDE) so the --disk-a test
 # harness and deploy_ide.sh see a predictable build/gbkern.dsk + build/GBKERN.RAW.
