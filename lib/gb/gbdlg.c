@@ -27,6 +27,13 @@ static unsigned char dlg_modal;
 unsigned char gb_modal(void)                 { return dlg_modal; }
 void          gb_modal_set(unsigned char on) { dlg_modal = on; }
 
+/* gb_popup_close: ask the live gb_popup loop to close (cancel). The kernel consumes
+ * a click on a menu *title* (the bar is kernel-owned) before the popup loop can see
+ * it as a click-away, so a re-click of the title can't close the menu by itself -
+ * the title handler calls this to make the toggle work. */
+static unsigned char dlg_close;
+void          gb_popup_close(void)           { dlg_close = 1; }
+
 /* pop_row: paint row i of a popup either normal (black-on-white) or reverse
  * (white-on-black, for the row under the pointer). The text call paints its own
  * paper behind the glyphs, so no separate fill is needed. Bracket with
@@ -59,6 +66,7 @@ unsigned char gb_popup(unsigned char x, unsigned char y,
     }
     w = (unsigned char)((longest * 6) / 4 + 3);   /* 6px glyphs over 4px bytes */
     dlg_modal = 1;
+    dlg_close = 0;
     gb_curhide();
     gb_fill(x, y, w, boxh, 1);              /* white box + black frame */
     gb_frame(x, y, w, boxh, 2);
@@ -67,6 +75,7 @@ unsigned char gb_popup(unsigned char x, unsigned char y,
     gb_curshow();
     for (;;) {
         flags = gb_poll();
+        if (dlg_close) { esc = 1; break; }           /* a title re-click asked us to close */
         over = 0xFF;                                 /* which row is the pointer over? */
         if (gb_my() >= (unsigned char)(y + 2) && gb_my() < (unsigned char)(y + 2 + n * 10) &&
             gb_mx() >= x && gb_mx() < (unsigned char)(x + w)) {

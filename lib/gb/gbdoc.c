@@ -114,6 +114,9 @@ unsigned char gb_doc_event(void)
 {
     unsigned char i, col;
     if (gb_msg.type != GB_MSG_MENU) return 0;
+    if (gb_modal()) { gb_popup_close(); return 1; }  /* a dropdown is up: re-clicking the title
+                                          closes it. The kernel ate this bar click before the popup
+                                          loop could see it as a click-away, so signal it. (#142) */
     col = gb_msg.p0;
     for (i = 0; i < g_ntitles; i++) {
         unsigned char w = (unsigned char)((slen(g_label[i]) * 6 + 3) / 4);

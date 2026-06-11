@@ -113,6 +113,10 @@ unsigned char gb_popup(unsigned char col, unsigned char line,
 unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen);
 unsigned char gb_modal(void);
 void          gb_modal_set(unsigned char on);
+/* gb_popup_close: make a live gb_popup cancel itself - used by the top-bar menu toggle.
+ * A re-click of a menu title can't reach the popup as a click-away (the kernel consumes
+ * bar clicks), so the title handler signals the close here. */
+void          gb_popup_close(void);
 
 /* ---- Document-app framework (#142) -----------------------------------------
  * An app that edits a document registers a gb_doc_t once, and the system gives
