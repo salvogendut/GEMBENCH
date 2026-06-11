@@ -92,6 +92,19 @@ void gb_menu_add(const char *title, const char *const *items, unsigned char n,
 }
 
 void gb_doc_dirty(void) { g_dirty = 1; }
+unsigned char gb_doc_modified(void) { return g_dirty; }
+
+/* g_name: the current file's 11-byte 8.3 name, kept so the app can read it (title,
+ * extension checks) after Load/Save As changed it. set_name keeps it in step with
+ * the kernel's current file. */
+static char g_name[11];
+const char *gb_doc_name(void) { return g_name; }
+static void set_name(const char *n11)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++) g_name[i] = n11[i];
+    gb_set_name(g_name);
+}
 
 /* on_event: a top-bar title was clicked -> arm its menu. Returns 1 if it was one
  * of ours (so the app's on_event stops). */
@@ -109,6 +122,8 @@ unsigned char gb_doc_event(void)
 
 /* --- the standard File actions ------------------------------------------- */
 
+static void do_save(void);
+
 /* confirm_save: if the document is dirty, ask. -> 1 = go ahead (saved or
  * discarded), 0 = cancel the operation. */
 static unsigned char confirm_save(void)
@@ -116,11 +131,7 @@ static unsigned char confirm_save(void)
     unsigned char sel;
     if (!g_dirty) return 1;
     sel = gb_popup(28, 90, confirm_items, 3);
-    if (sel == 0) {                                  /* Save */
-        gb_fs_save(g_doc->buf, g_doc->on_save());
-        g_dirty = 0;
-        return 1;
-    }
+    if (sel == 0) { do_save(); return 1; }           /* Save */
     if (sel == 1) return 1;                          /* Don't Save */
     return 0;                                        /* Cancel / ESC */
 }
@@ -128,7 +139,7 @@ static unsigned char confirm_save(void)
 static void do_new(void)
 {
     if (!confirm_save()) return;
-    gb_set_name("UNTITLED   ");
+    set_name("UNTITLED   ");
     if (g_doc->on_new) g_doc->on_new();
     g_dirty = 0;
 }
@@ -157,7 +168,7 @@ static void do_load(void)
     sel = gb_popup(10, 18, names, n);
     if (sel == 0xFF) return;
     to_83(store[sel]);
-    gb_set_name(name83);                              /* picker name -> current file */
+    set_name(name83);                              /* picker name -> current file */
     len = gb_fs_load(g_doc->buf, g_doc->bufmax);
     if (g_doc->on_open) g_doc->on_open(len);
     g_dirty = 0;
@@ -165,7 +176,10 @@ static void do_load(void)
 
 static void do_save(void)
 {
-    if (gb_fs_save(g_doc->buf, g_doc->on_save())) g_dirty = 0;
+    unsigned int n  = g_doc->on_save();
+    unsigned char ok = gb_fs_save(g_doc->buf, n);
+    if (g_doc->on_saved) g_doc->on_saved();          /* restore buf if on_save transformed it */
+    if (ok) g_dirty = 0;
 }
 
 static char namebuf[16];
@@ -173,7 +187,7 @@ static void do_saveas(void)
 {
     if (!gb_prompt("Save as:", namebuf, 12)) return;
     to_83(namebuf);
-    gb_set_name(name83);
+    set_name(name83);
     do_save();
 }
 
@@ -200,3 +214,7 @@ unsigned char gb_doc_frame(void)
     }
     return 1;
 }
+
+/* gb_doc_close: the window close gadget was hit - offer to save first. 1 = go
+ * ahead and close, 0 = stay open (user cancelled). */
+unsigned char gb_doc_close(void) { return confirm_save(); }

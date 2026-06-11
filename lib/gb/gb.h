@@ -134,6 +134,8 @@ typedef struct {
     void         (*on_new)(void);               /* clear to an empty document */
     void         (*on_open)(unsigned int len);  /* buf holds a loaded file of `len` bytes */
     unsigned int (*on_save)(void);              /* fill buf -> bytes to write */
+    void         (*on_saved)(void);             /* optional: after the write (restore buf
+                                                   if on_save transformed it); NULL if none */
     /* Optional Edit menu: if on_copy is non-NULL the framework also adds a
      * standard "Edit" menu (Select All / Copy / Paste) backed by the shared
      * clipboard (gb_clip_*), so copy/paste works across apps. The hooks do the
@@ -145,6 +147,9 @@ typedef struct {
 } gb_doc_t;
 void          gb_doc(const gb_doc_t *d);   /* register; adds the standard File (+Edit) menu */
 void          gb_doc_dirty(void);          /* mark the document modified */
+unsigned char gb_doc_modified(void);       /* is it dirty? (e.g. for a "*" in the title) */
+const char   *gb_doc_name(void);           /* the current file's 11-byte 8.3 name */
+unsigned char gb_doc_close(void);          /* on the close gadget: confirm-if-dirty; 1=close ok */
 unsigned char gb_doc_event(void);          /* in on_event: 1 if the framework handled it */
 unsigned char gb_doc_frame(void);          /* in on_frame: ran a menu? (1 -> repaint window) */
 
