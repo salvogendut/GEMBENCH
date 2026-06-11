@@ -189,9 +189,12 @@ static void render(void)
 /* ---- window chrome ---------------------------------------------------------- */
 static const char *win_title(void)
 {
-    unsigned char i = 0, j = 0;
+    /* single-index copy: the two-index `wtitle[j++] = fbase[i++]` form is
+       miscompiled by SDCC under --fomit-frame-pointer (copied only 1 char, #142). */
+    unsigned char j = 0;
+    char c;
     if (!fbase[0]) return "XAOS";
-    while (fbase[i]) wtitle[j++] = fbase[i++];
+    while ((c = fbase[j]) != 0) { wtitle[j] = c; j++; }
     wtitle[j] = 0;
     return wtitle;
 }

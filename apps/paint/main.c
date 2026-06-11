@@ -315,8 +315,11 @@ static void rubber_band(unsigned char sx, unsigned char sy)
 /* win_title: the window title = the file name, " *" appended when unsaved. */
 static const char *win_title(void)
 {
-    unsigned char i = 0, j = 0;
-    while (fbase[i]) wtitle[j++] = fbase[i++];
+    /* single-index copy: the two-index `wtitle[j++] = fbase[i++]` form is
+       miscompiled by SDCC under --fomit-frame-pointer (copied only 1 char, #142). */
+    unsigned char j = 0;
+    char c;
+    while ((c = fbase[j]) != 0) { wtitle[j] = c; j++; }
     if (dirty) { wtitle[j++] = ' '; wtitle[j++] = '*'; }
     wtitle[j] = 0;
     return wtitle;

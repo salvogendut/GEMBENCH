@@ -133,9 +133,14 @@ static void fmt83(char *dst, const char *n11)
 /* win_title: the window title = the file name, with " *" appended when unsaved. */
 static const char *win_title(void)
 {
-    unsigned char i = 0, j = 0;
+    /* NB: copy with a SINGLE index. `while (fbase[i]) wtitle[j++] = fbase[i++];`
+       (two separate auto-incrementing indices in one statement) is miscompiled by
+       SDCC under --fomit-frame-pointer here - it copied only the first char, so the
+       title showed just "G" instead of "GBKERN.BIN" (#142). */
+    unsigned char j = 0;
+    char c;
     fmt83(fbase, gb_doc_name());                 /* current file name -> "NAME.EXT" */
-    while (fbase[i]) wtitle[j++] = fbase[i++];
+    while ((c = fbase[j]) != 0) { wtitle[j] = c; j++; }
     if (gb_doc_modified()) { wtitle[j++] = ' '; wtitle[j++] = '*'; }
     wtitle[j] = 0;
     return wtitle;
