@@ -33,8 +33,10 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
     lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
     lib/icon_viewer.asm \
+    lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
     # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=.IST 15=DESKTOP 16=FILEMGR
     # 17=PAINT 18=FRACTAL 19=SD (Albireo Disk C, #104) 20=VIEWER
+    # 21=TELNET 22=NETWORK 23=SHELL
 python3 tools/packicons.py build/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)
