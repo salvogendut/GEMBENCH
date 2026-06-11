@@ -2044,7 +2044,20 @@ md_call         jp    (hl)
 ; app page: count, then per title { col (byte), 8-byte NUL/space-padded label }.
 ; Copied into resident MENU_DEF; the desktop's bar handler watches MENU_DEF and
 ; redraws the titles when it changes (#77). launch_app clears it for a child app.
-k_menu
+k_menu                                          ; HL = def ptr in the focused app's page.
+                ; Also record it as the focused window's menu, so a later focus change
+                ; re-installs it instead of clearing the bar (#142: gb_menu must persist
+                ; like a static gb_win_t.menu does).
+                push  hl
+                ld    a,(WM_FOCUS)
+                call  wm_entry                  ; HL = focused window's WM entry
+                ld    de,WM_FR_MENU
+                add   hl,de                     ; -> its menu-def-ptr field
+                pop   de                         ; DE = the def ptr
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d
+                ex    de,hl                       ; HL = def ptr (fall into the copy)
 menu_install                                    ; HL = menu def (mapped page) -> MENU_DEF
                 ld    a,(hl)                  ; count
                 cp    5
