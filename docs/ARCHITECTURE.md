@@ -132,6 +132,28 @@ layer from the start — the above is purely about coaxing *legacy* binaries in.
 - **AMSDOS:** file I/O goes through firmware vectors. Note that USB/FAT-drive
   AMSDOS shifts some CAS IN vectors — see the sibling `n4c-nettools` notes.
 
+## Booting and distribution
+
+One image works on any machine. `bash tools/build_kernel.sh` stages (and ships under
+`QA/`):
+
+- **`QA/CARD/`** — for an IDE or Albireo card: the BASIC loader `GB.BAS`, both per-card
+  kernels `GBIDE.BIN` (FAT16/FAT32 over IDE) and `GBALB.BIN` (CH376/Albireo),
+  `GEOBENCH.CFG`, and a `GEOBENCH/` subfolder holding everything the kernel loads at
+  boot (apps, modules, fonts, icons, cursor). The card root stays clean next to
+  SymBOS/CP/M/UniDOS files.
+- **`QA/GEOBENCH.DSK`** — a flat bootable floppy.
+
+`RUN"GB` runs `GB.BAS`, which probes the bus (an IDE register read-back, then a CH376
+`CHECK_EXIST`) and `RUN"`s the matching kernel. The kernel then loads from `/GEOBENCH`
+(the IDE backend walks the FAT subdirectory; the Albireo backend prefixes its CH376
+path), falling back to a flat root on floppies.
+
+The loader is **BASIC, not machine code**, on purpose: under UniDOS (CP/M-based) a
+`RUN"`-loaded binary that returns triggers a warm-boot, the firmware CAS goes to tape,
+and the DOS's RSXs/BIOS are unreachable from a loaded binary — whereas a BASIC program
+runs with the DOS fully active, so its `RUN"GBIDE` simply works.
+
 ## Open questions
 
 - Relocatable app binaries vs fixed load address + banking?
