@@ -17,7 +17,10 @@
 ; swap the running code out from under itself. Call with interrupts disabled if
 ; an ISR might also touch the window.
 ;
-; Matches the probe convention in kernel/gbkern.asm (mem_detect / md_port).
+; Matches the probe convention in kernel/gbkern.asm (mem_detect / md_page).
+; NB: bank_page uses only port &7F00, so it can address banks 0..7 (the 512K
+; DK'tronics group). mem_detect now *counts* Yarek banks above that (>576K, via
+; ports &7E/&7D/&7C); using them for app pages needs this pager extended too.
 ; ---------------------------------------------------------------------------
 
 BANK_PORT       equ   #7F00

@@ -199,8 +199,8 @@ static void drop(void)
 /* a "System" menu title in the top bar (#74), right next to the RAM size; clicking
    it drops a menu (Ram Usage / Refresh Media / Exit to DOS). The Ram-Usage footprint
    shows separately, on the left of the clock. */
-#define MENU_COL  8
-#define MENU_END  18
+#define MENU_COL  10         /* byte col (x4 px): clears a 5-char "1024K" (#138) */
+#define MENU_END  20
 #define FP_COL    54          /* footprint column - left of the clock (CLK_COL 68) */
 static const unsigned char dt_menu[] = { 1, MENU_COL, 'S','y','s','t','e','m',0,0 };
 
