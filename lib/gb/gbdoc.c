@@ -15,11 +15,13 @@
 #include "gb.h"
 
 #define DOC_MAXTITLES 4              /* File + up to 3 app titles */
-#define DOC_MAXFILES  24             /* entries shown in the Load picker */
+#define DOC_MAXFILES  16             /* entries shown in the Load picker */
 
 static const gb_doc_t *g_doc;
 static unsigned char   g_dirty;
 static unsigned char   g_want;       /* 0 = none, else (title index + 1) to drop */
+static char            g_name[11];   /* current file's 8.3 name (Load/Save As update it) */
+static void set_name(const char *n11);
 
 static const char     *g_label[DOC_MAXTITLES];
 static const char *const *g_items[DOC_MAXTITLES];
@@ -76,6 +78,8 @@ void gb_doc(const gb_doc_t *d)
     g_handler[0] = 0;                 /* File is handled internally */
     g_ntitles    = 1;
     rebuild();
+    gb_get_name(g_name);              /* adopt the file we were launched with */
+    if (g_name[0] == 0 || g_name[0] == ' ') set_name("UNTITLED   ");
 }
 
 void gb_menu_add(const char *title, const char *const *items, unsigned char n,
@@ -94,10 +98,8 @@ void gb_menu_add(const char *title, const char *const *items, unsigned char n,
 void gb_doc_dirty(void) { g_dirty = 1; }
 unsigned char gb_doc_modified(void) { return g_dirty; }
 
-/* g_name: the current file's 11-byte 8.3 name, kept so the app can read it (title,
- * extension checks) after Load/Save As changed it. set_name keeps it in step with
- * the kernel's current file. */
-static char g_name[11];
+/* gb_doc_name: the current file's 8.3 name (kept in step with the kernel via
+ * set_name), so the app can read it for its title / extension checks. */
 const char *gb_doc_name(void) { return g_name; }
 static void set_name(const char *n11)
 {

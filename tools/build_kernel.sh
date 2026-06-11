@@ -45,14 +45,14 @@ DATA_LOC=0x6500 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: hi
                                    # for code room now it sorts (a ~2.6K listing cache, #118)
 DATA_LOC=0x4D00 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: low data-loc for a
                                    # big file buffer (12K) so larger .PIC images fit the bank
-DATA_LOC=0x6800 DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD:
+DATA_LOC=0x6A00 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-DATA_LOC=0x5C00 DIALOGS=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
+DATA_LOC=0x5F00 DIALOGS=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
                                    # data-loc so its 7KB icon-set buffer (BUFSZ) fits below
                                    # #8000 (#110); DIALOGS=1 for the shared Load/Save popup (#114)
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
-DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: shared list popup
+DATA_LOC=0x6300 DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: shared list popup
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
