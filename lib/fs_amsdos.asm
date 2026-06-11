@@ -1,26 +1,21 @@
 ; ---------------------------------------------------------------------------
-; lib/fs_amsdos.asm - storage backend: the AMSDOS directory read straight off
-; the floppy via the uPD765 FDC. No AMSDOS/UniDOS ROM involvement, so it works
-; on any CPC with a disc drive regardless of which DOS ROM is fitted.
+; lib/fs_amsdos.asm - storage backend: the AMSDOS directory + file LOAD read
+; straight off the floppy via the uPD765 FDC. No AMSDOS/UniDOS ROM involvement, so
+; it works on any CPC with a disc drive regardless of which DOS ROM is fitted.
+;
+; This is the RESIDENT half: directory listing (fsam_dir_first/next), file load
+; (fsam_load_file) and the presence probe (fsam_present), plus the shared low-level
+; FDC primitives (lib/fs_amsdos_core.asm). The WRITE path is large and only needed
+; on a save, so it lives in a paged module (kernel/modules/floppysv.asm); the
+; resident fsam_save_file below is a thin stub that marshals + loads it (#135).
 ;
 ; Exposes the backend interface (see lib/fs.asm); fields fs_ent_name/attr/size
 ; live in lib/fs.asm and are shared with the IDE backend.
 ;   fsam_dir_first -> CF set = first entry ready, NC = empty
 ;   fsam_dir_next  -> CF set = next entry ready,  NC = end of directory
-;
-; uPD765 ports (fixed on every CPC):
-;   &FB7E MSR (read): b7 RQM, b6 DIO(1=FDC->CPU), b5 EXM, b4 CB, b0 FDD0 seeking
-;   &FB7F data    &FA7E motor (write, bit0 = on)
-;
-; AMSDOS directory: 64 entries x 32 bytes = 4 sectors (512-byte, N=2). Format is
-; sniffed with a READ ID: DATA = track 0 sectors &C1.., SYSTEM = track 2 &41..,
-; IBM = track 0 &01.. . CP/M-2.2 dir entry: byte0 user (&E5 = empty), 1..8 name,
-; 9..11 ext (top bits = attributes), 12 Ex / 14 S2 = extent number, 15 Rc.
 ; ---------------------------------------------------------------------------
 
-FSAM_MSR        equ   #FB7E
-FSAM_DATA       equ   #FB7F
-FSAM_MOTOR      equ   #FA7E
+                include "fs_amsdos_core.asm"
 
 ; ---------------------------------------------------------------------------
 ; fsam_dir_first: read the whole directory into fsam_buf, then return entry 0.
@@ -122,218 +117,6 @@ fsam_skip
                 jr    fsam_scan
 fsam_end
                 or    a                            ; CF clear = end of directory
-                ret
-
-; ---------------------------------------------------------------------------
-; fsam_read_dir: sniff the format on track 0, seek to the directory track and
-; read its 4 sectors into fsam_buf.
-fsam_read_dir
-                ld    hl,fsam_buf                ; clear the directory buffer first (it is
-                ld    de,fsam_buf+1              ; shared low RAM): a failed/empty-drive
-                ld    bc,2048-1                  ; read then lists as empty rather than
-                ld    (hl),#E5                   ; the previously-read drive's stale dir
-                ldir                              ; (#65 - opening empty floppy B showed A)
-                call  fsam_read_id               ; A = sector id under the head
-                and   #F0
-                cp    #40
-                jr    z,frd_system
-                cp    #C0
-                jr    z,frd_data
-                ld    a,#01                       ; IBM format
-                ld    (fsam_base),a
-                xor   a
-                ld    (fsam_track),a
-                jr    frd_go
-frd_data
-                ld    a,#C1
-                ld    (fsam_base),a
-                xor   a
-                ld    (fsam_track),a
-                jr    frd_go
-frd_system
-                ld    a,#41
-                ld    (fsam_base),a
-                ld    a,2
-                ld    (fsam_track),a
-frd_go
-                ld    a,(fsam_track)
-                call  fsam_seek
-
-                ld    hl,fsam_buf
-                ld    (fsam_dst),hl
-                ld    a,(fsam_base)
-                ld    e,a                          ; E = current sector id
-                ld    b,4
-frd_loop
-                push  bc
-                ld    a,(fsam_track)
-                ld    d,a
-                call  fsam_read_sector             ; 512 -> (fsam_dst), advances it
-                pop   bc
-                inc   e
-                djnz  frd_loop
-                ret
-
-; ---------------------------------------------------------------------------
-; Motor on, then recalibrate (seek to track 0).
-fsam_motor_on
-                ld    bc,FSAM_MOTOR
-                ld    a,1
-                out   (c),a
-                ld    de,0                          ; spin-up delay
-fmo_spin
-                dec   de
-                ld    a,d
-                or    e
-                jr    nz,fmo_spin
-                ld    a,#07                         ; RECALIBRATE
-                call  fsam_send
-                ld    a,(fsam_unit)                  ; drive 0/1
-                call  fsam_send
-                jp    fsam_wait_seek
-
-fsam_motor_off
-                ld    bc,FSAM_MOTOR
-                xor   a
-                out   (c),a
-                ret
-
-; fsam_seek: A = track.
-fsam_seek
-                ld    d,a
-                ld    a,#0F                         ; SEEK
-                call  fsam_send
-                ld    a,(fsam_unit)                  ; (head<<2)|drive
-                call  fsam_send
-                ld    a,d
-                call  fsam_send
-                ; fall through to wait
-fsam_wait_seek
-                ld    hl,0                            ; guard against a hang
-fws_loop
-                ld    bc,FSAM_MSR
-                in    a,(c)
-                and   1                              ; FDD0 still seeking?
-                jr    z,fws_done
-                dec   hl
-                ld    a,h
-                or    l
-                jr    nz,fws_loop
-fws_done
-                ld    a,#08                          ; SENSE INTERRUPT STATUS
-                call  fsam_send
-                call  fsam_recv                      ; ST0
-                call  fsam_recv                      ; PCN
-                ret
-
-; ---------------------------------------------------------------------------
-; fsam_read_id: READ ID on track 0 -> A = sector id (R) under the head.
-fsam_read_id
-                ld    a,#4A
-                call  fsam_send
-                ld    a,(fsam_unit)
-                call  fsam_send
-                call  fsam_recv                      ; ST0
-                call  fsam_recv                      ; ST1
-                call  fsam_recv                      ; ST2
-                call  fsam_recv                      ; C
-                call  fsam_recv                      ; H
-                call  fsam_recv                      ; R
-                ld    h,a
-                call  fsam_recv                      ; N
-                ld    a,h
-                ret
-
-; fsam_read_sector: D=track, E=sector id. 512 bytes -> (fsam_dst); advances it.
-fsam_read_sector
-                push  de                             ; keep caller's track/sector id
-                ld    a,#46                          ; READ DATA, MFM
-                call  fsam_cmd9                       ; issue the command + params
-                ld    hl,(fsam_dst)
-                ld    de,512
-frs_exec
-                ld    bc,FSAM_MSR
-                in    a,(c)
-                bit   7,a                            ; RQM?
-                jr    z,frs_exec
-                bit   5,a                            ; still in execution phase?
-                jr    z,frs_result
-                ld    bc,FSAM_DATA
-                in    a,(c)
-                ld    (hl),a
-                inc   hl
-                dec   de
-                ld    a,d
-                or    e
-                jr    nz,frs_exec
-frs_result
-                ld    (fsam_dst),hl
-                call  fsam_drain                      ; drain the 7 result bytes
-                pop   de                             ; restore caller's track/sector id
-                ret
-
-; fsam_cmd9: issue a 9-byte READ/WRITE DATA command. A = command byte (&46 READ /
-; &45 WRITE), D = track, E = sector id. Shared by fsam_read_sector/write_sector.
-fsam_cmd9
-                call  fsam_send                      ; command
-                ld    a,(fsam_unit)
-                call  fsam_send                      ; (head<<2)|drive
-                ld    a,d
-                call  fsam_send                      ; C = track
-                ld    a,0
-                call  fsam_send                      ; H = head
-                ld    a,e
-                call  fsam_send                      ; R = sector
-                ld    a,2
-                call  fsam_send                      ; N = 2 (512)
-                ld    a,e
-                call  fsam_send                      ; EOT = R (single sector)
-                ld    a,#2A
-                call  fsam_send                      ; GPL
-                ld    a,#FF
-                jp    fsam_send                      ; DTL (tail call)
-
-; fsam_drain: read and discard the 7 FDC result-phase bytes.
-fsam_drain
-                ld    b,7
-fdr_loop
-                push  bc
-                call  fsam_recv
-                pop   bc
-                djnz  fdr_loop
-                ret
-
-; ---------------------------------------------------------------------------
-; fsam_send: write A as a command byte (wait RQM=1, DIO=0). Reached only after
-; fsam_present confirms an FDC, so the wait stays unbounded (a present FDC answers
-; in microseconds); no-controller machines are caught by fsam_present's pre-check.
-fsam_send
-                push  de                             ; preserve caller's track/sector
-                ld    e,a
-fsnd_wait
-                ld    bc,FSAM_MSR
-                in    a,(c)
-                bit   7,a
-                jr    z,fsnd_wait
-                bit   6,a                            ; DIO must be 0 to accept
-                jr    nz,fsnd_wait
-                ld    a,e
-                ld    bc,FSAM_DATA
-                out   (c),a
-                pop   de
-                ret
-
-; fsam_recv: read a result byte into A (wait RQM=1, DIO=1).
-fsam_recv
-frcv_wait
-                ld    bc,FSAM_MSR
-                in    a,(c)
-                bit   7,a
-                jr    z,frcv_wait
-                bit   6,a                            ; DIO=1 -> data ready
-                jr    z,frcv_wait
-                ld    bc,FSAM_DATA
-                in    a,(c)
                 ret
 
 ; ---------------------------------------------------------------------------
@@ -553,471 +336,84 @@ fslf_ok
                 ret
 
 ; ---------------------------------------------------------------------------
-; fsam_write_sector: D=track, E=sector id. Writes 512 bytes from (fsam_src) to
-; the sector and advances fsam_src. Mirrors fsam_read_sector with WRITE DATA.
-fsam_write_sector
-                push  de
-                ld    a,#45                          ; WRITE DATA, MFM
-                call  fsam_cmd9                       ; issue the command + params
-                ld    hl,(fsam_src)
-                ld    de,512
-fwr_exec
-                ld    bc,FSAM_MSR
-                in    a,(c)
-                bit   7,a                            ; RQM?
-                jr    z,fwr_exec
-                bit   5,a                            ; still in execution phase?
-                jr    z,fwr_result
-                ld    a,(hl)
-                ld    bc,FSAM_DATA
-                out   (c),a
-                inc   hl
-                dec   de
-                ld    a,d
-                or    e
-                jr    nz,fwr_exec
-fwr_result
-                ld    (fsam_src),hl
-                call  fsam_drain                      ; drain the 7 result bytes
-                pop   de
-                ret
+; fsam_save_file: resident stub. The floppy WRITE path (block alloc + sector
+; assembly + directory writeback) is large and only needed on a save, so it lives
+; in a paged module (kernel/modules/floppysv.asm) loaded on demand - the gbfat
+; pattern (#135). This stub stages the source out of the caller's app page into low
+; RAM (the module can't reach another page mapped in the same #4000-#7FFF window),
+; marshals name/len/unit into the transfer area, loads + CALLs the module.
+;   FSV_TX_LEN/NAME/RES/UNIT  the marshalling slots (reuse the gbfat area - the IDE
+;                             write + floppy write are never live at once)
+;   FSV_TX_DATA (<=7KB)       the staged source data
+FSV_TX_LEN      equ   #1400
+FSV_TX_NAME     equ   #1402
+FSV_TX_RES      equ   #140D
+FSV_TX_UNIT     equ   #140F
+FSV_TX_DATA     equ   #2200
+FSV_TX_MAX      equ   #1C00        ; 7 KB staging cap (matches the gbfat/IDE save cap)
 
-; ---------------------------------------------------------------------------
-; fsam_save_file: overwrite fs_req_name (must already exist, single extent) with
-; fs_save_len bytes from (fs_save_src). Writes a 128-byte AMSDOS header + the data
-; into the file's existing allocation blocks, updates the record count, and writes
-; the directory back. CF set = saved; NC = not found, or won't fit the current
-; allocation (no block allocation / file creation yet).
 fsam_save_file
-                call  fsam_motor_on
-                call  fsam_read_dir                  ; directory -> fsam_buf
-                ld    hl,(fs_save_len)                ; Rc = ceil((128+len)/128)
-                ld    de,128
-                add   hl,de
-                ld    de,127
-                add   hl,de
-                ld    a,h
-                add   a,a
-                ld    d,a
-                ld    a,l
-                rlca
-                and   1
-                add   a,d
-                ld    (fsam_rc),a
-                add   a,7                              ; nblk = ceil(Rc/8) 1KB blocks
-                srl   a
-                srl   a
-                srl   a
-                ld    (fsv_nblk),a
-                cp    17
-                jr    nc,fsv_fail                      ; > 16 blocks -> single extent only
-                ld    ix,fsam_buf                    ; find the Ex=0 entry by name
-                ld    b,64
-fsv_scan
-                ld    a,(ix+0)
-                cp    #E5
-                jr    z,fsv_next
-                ld    a,(ix+12)
+                ld    hl,(fs_save_len)        ; refuse > staging cap
+                ld    de,FSV_TX_MAX
                 or    a
-                jr    nz,fsv_next
-                call  fsam_namematch
-                jr    z,fsv_have                       ; existing file -> reuse the entry
-fsv_next
-                push  bc
-                ld    de,32
-                add   ix,de
-                pop   bc
-                djnz  fsv_scan
-                call  fsv_find_free_entry             ; not found -> create in a free slot
-                jr    nc,fsv_fail                      ; directory full
-                push  ix                              ; init it: user 0, name, the rest 0
-                pop   hl
-                ld    (hl),0
-                push  ix
-                pop   de
-                inc   de
-                ld    bc,31
-                ldir
-                ld    hl,fs_req_name
-                push  ix
-                pop   de
-                inc   de
-                ld    bc,11
-                ldir
-                jr    fsv_have
-fsv_fail
-                call  fsam_motor_off
-                or    a                               ; NC
+                sbc   hl,de
+                jr    c,fsamv_ok
+                or    a                        ; too big -> NC
                 ret
-fsv_have
-                call  fsv_ensure_blocks               ; alloc/free 1KB blocks to fsv_nblk
-                jr    nc,fsv_fail                      ; disk full
-fsv_fits
-                ld    hl,fsam_wbuf                    ; build the 128-byte header
-                ld    de,fsam_wbuf+1
-                ld    bc,127
-                ld    (hl),0
-                ldir                                  ; zero 128 bytes
-                ld    hl,fs_req_name                  ; name -> [1..11]
-                ld    de,fsam_wbuf+1
-                ld    bc,11
-                ldir
-                ld    a,2
-                ld    (fsam_wbuf+18),a                ; type = binary
-                ld    hl,(fs_save_len)
-                ld    (fsam_wbuf+24),hl               ; logical length
-                ld    (fsam_wbuf+64),hl               ; real length (low 16)
-                ld    hl,fsam_wbuf                    ; checksum = sum [0..66]
-                ld    de,0
-                ld    b,67
-fsv_sum
-                ld    a,(hl)
-                add   a,e
-                ld    e,a
-                jr    nc,fsv_snc
-                inc   d
-fsv_snc
-                inc   hl
-                djnz  fsv_sum
-                ex    de,hl
-                ld    (fsam_wbuf+67),hl
-                ld    hl,(fs_save_src)                ; data stream
-                ld    (fsv_dptr),hl
-                ld    hl,(fs_save_len)
-                ld    (fsv_drem),hl
-                xor   a
-                ld    (fsv_si),a
-                ld    a,#FF
-                ld    (fsv_curtrk),a                  ; force a seek
-                ld    a,(fsam_rc)                     ; nsec = ceil(Rc/4)
-                add   a,3
-                rrca
-                rrca
-                and   #3F
-                ld    (fsv_nsec),a
-fsv_wr
-                ld    a,(fsv_nsec)
-                or    a
-                jr    z,fsv_dir
-                dec   a
-                ld    (fsv_nsec),a
-                ld    a,(fsv_si)                      ; assemble the sector
-                or    a
-                jr    nz,fsv_body
-                ld    hl,fsam_wbuf+128                ; sector 0: header + data
-                ld    bc,384
-                call  fsv_filldata
-                jr    fsv_emit
-fsv_body
-                ld    hl,fsam_wbuf
-                ld    bc,512
-                call  fsv_filldata
-fsv_emit
-                ld    a,(fsv_si)                      ; block = blocklist[si/2]
-                srl   a
-                ld    e,a
-                ld    d,0
-                push  ix
-                pop   hl
-                ld    bc,16
-                add   hl,bc
-                add   hl,de
-                ld    l,(hl)
-                ld    h,0
-                add   hl,hl                            ; block*2
-                ld    a,(fsv_si)
-                and   1
-                or    l
-                ld    l,a                              ; L = block*2 + (si&1)
-                call  fsam_div9                        ; HL/9 -> B=track, A=remainder
-                ld    c,a
-                ld    a,b
-                ld    e,a                              ; E = track
-                ld    a,(fsv_curtrk)
-                cp    e
-                jr    z,fsv_noseek
-                ld    a,e
-                ld    (fsv_curtrk),a
-                push  bc
-                ld    a,e
-                call  fsam_seek
-                pop   bc
-fsv_noseek
-                ld    a,(fsv_curtrk)
-                ld    d,a                              ; D = track
-                ld    a,#C1
-                add   a,c
-                ld    e,a                              ; E = physical sector
-                ld    hl,fsam_wbuf
-                ld    (fsam_src),hl
-                call  fsam_write_sector
-                ld    a,(fsv_si)
-                inc   a
-                ld    (fsv_si),a
-                jr    fsv_wr
-fsv_dir
-                ld    a,(fsam_rc)                     ; commit the new record count
-                ld    (ix+15),a
-                xor   a
-                ld    (ix+12),a                        ; Ex = 0 (single extent)
-                ld    a,(fsam_track)                  ; write the directory back
-                call  fsam_seek
-                ld    hl,fsam_buf
-                ld    (fsam_src),hl
-                ld    a,(fsam_base)
-                ld    e,a
-                ld    b,4
-fsv_dirloop
-                push  bc
-                ld    a,(fsam_track)
-                ld    d,a
-                call  fsam_write_sector
-                pop   bc
-                inc   e
-                djnz  fsv_dirloop
-                call  fsam_motor_off
-                scf
-                ret
-
-; fsv_filldata: HL=dest, BC=count. Copy min(count, fsv_drem) bytes from (fsv_dptr)
-; advancing it, then pad the rest with 0.
-fsv_filldata
+fsamv_ok
+                ld    hl,(fs_save_src)        ; stage the data out of the caller's page
+                ld    de,FSV_TX_DATA          ; into low RAM (caller's page mapped now)
+                ld    bc,(fs_save_len)
                 ld    a,b
                 or    c
-                ret   z
-                push  hl
-                ld    hl,(fsv_drem)
-                ld    a,h
-                or    l
-                pop   hl
-                jr    z,fsv_fdpad
-                push  bc
-                ld    bc,(fsv_dptr)
-                ld    a,(bc)
-                inc   bc
-                ld    (fsv_dptr),bc
-                pop   bc
-                ld    (hl),a
-                inc   hl
-                push  hl
-                ld    hl,(fsv_drem)
-                dec   hl
-                ld    (fsv_drem),hl
-                pop   hl
-                dec   bc
-                jr    fsv_filldata
-fsv_fdpad
-                ld    (hl),0
-                inc   hl
-                dec   bc
-                jr    fsv_filldata
+                jr    z,fsamv_nlen
+                ldir
+fsamv_nlen
+                ld    hl,fs_req_name          ; name -> the transfer area
+                ld    de,FSV_TX_NAME
+                ld    bc,11
+                ldir
+                ld    hl,(fs_save_len)
+                ld    (FSV_TX_LEN),hl
+                ld    a,(fsam_unit)           ; which floppy unit (0=A,1=B)
+                ld    (FSV_TX_UNIT),a
+                ; fall through to load + run the module
 
-; fsv_find_free_entry: IX -> first &E5 (free) directory slot. CF set, or NC if the
-; directory is full.
-fsv_find_free_entry
-                ld    ix,fsam_buf
-                ld    b,64
-ffe_loop
-                ld    a,(ix+0)
-                cp    #E5
-                jr    z,ffe_found
-                push  bc
-                ld    de,32
-                add   ix,de
-                pop   bc
-                djnz  ffe_loop
-                or    a                               ; NC = directory full
-                ret
-ffe_found
-                scf
-                ret
-
-; fsv_ensure_blocks: make the entry at IX own exactly fsv_nblk 1KB blocks. Blocks
-; are packed at the front of the 16-byte block list. Grows by allocating free
-; blocks, shrinks by zeroing the tail. CF set = ok, NC = disk full.
-fsv_ensure_blocks
-                push  ix                              ; count current blocks -> C
-                pop   hl
-                ld    de,16
-                add   hl,de
-                ld    b,16
-                ld    c,0
-eb_count
-                ld    a,(hl)
-                or    a
-                jr    z,eb_counted                     ; first zero = end (packed front)
-                inc   c
-                inc   hl
-                djnz  eb_count
-eb_counted
-                ld    a,(fsv_nblk)
-                cp    c
-                jr    z,eb_ok
-                jr    nc,eb_grow                       ; need more blocks
-                ld    a,(fsv_nblk)                    ; need fewer -> zero slots [nblk..15]
-                ld    c,a
-eb_trim
-                ld    a,c
-                cp    16
-                jr    nc,eb_ok
-                push  ix
-                pop   hl
-                ld    de,16
-                add   hl,de
-                ld    e,c
-                ld    d,0
-                add   hl,de
-                ld    (hl),0
-                inc   c
-                jr    eb_trim
-eb_grow
-                ld    a,(fsv_nblk)
-                cp    c
-                jr    z,eb_ok
-                call  fsv_alloc1                       ; -> A = free block, NC = disk full
-                ret   nc
-                push  ix
-                pop   hl
-                ld    de,16
-                add   hl,de
-                ld    e,c
-                ld    d,0
-                add   hl,de
-                ld    (hl),a                           ; store the block at slot C
-                inc   c
-                jr    eb_grow
-eb_ok
-                scf
-                ret
-
-; fsv_alloc1: find a free 1KB block (2..179; 0/1 are the directory). A new block
-; is one that no directory entry references - and because each allocation is
-; written into the entry's block list before the next call, repeats are excluded.
-; -> A = block, CF set; NC if the disk is full. Preserves BC and IX.
-fsv_alloc1
-                push  bc
-                push  ix
-                ld    a,2
-fa1_try
-                ld    (fsv_cand),a
-                call  fsv_block_used                   ; Z if some entry uses it
-                jr    nz,fa1_free
-                ld    a,(fsv_cand)
-                inc   a
-                cp    180                              ; DATA format: blocks 0..179
-                jr    c,fa1_try
-                pop   ix
-                pop   bc
-                or    a                                ; NC = disk full
-                ret
-fa1_free
-                pop   ix
-                pop   bc
-                ld    a,(fsv_cand)
-                scf
-                ret
-
-; fsv_block_used: A = block number -> Z if any directory entry references it.
-fsv_block_used
-                ld    c,a                              ; C = target block
-                ld    hl,fsam_buf
-                ld    b,64
-fbu_ent
-                ld    a,(hl)
-                cp    #E5
-                jr    z,fbu_skip
-                push  hl
-                push  bc
-                ld    de,16
-                add   hl,de                            ; -> block list
-                ld    b,16
-fbu_blk
-                ld    a,(hl)
-                cp    c
-                jr    z,fbu_hit
-                inc   hl
-                djnz  fbu_blk
-                pop   bc
-                pop   hl
-fbu_skip
-                push  bc
-                ld    de,32
-                add   hl,de
-                pop   bc
-                djnz  fbu_ent
-                or    1                                ; NZ = free
-                ret
-fbu_hit
-                pop   bc
-                pop   hl
-                xor   a                                ; Z = used
-                ret
-
-; fsam_namematch: IX = dir entry; Z if its 8.3 name == fs_req_name (11 bytes).
-fsam_namematch
-                push  ix
-                pop   hl
-                inc   hl                              ; entry name starts at +1
+; floppysv_run: page in PAGE_DATA, load FLOPPYSV.BIN to DATA_MODTOP via the read
+; path (from the boot drive, where modules live), CALL it, restore the caller's
+; page. CF set = FSV_TX_RES nonzero (saved).
+floppysv_run
+                ld    a,(bank_cur)
+                push  af
+                ld    a,PAGE_DATA
+                call  bank_set
+                ld    hl,floppysv_modname     ; fs_req_name = "FLOPPYSVBIN"
                 ld    de,fs_req_name
-                ld    b,11
-fnm_loop
-                ld    a,(hl)
-                and   #7F                             ; drop attribute bits
-                ld    c,a
-                ld    a,(de)
-                cp    c
-                jr    nz,fnm_no
-                inc   hl
-                inc   de
-                djnz  fnm_loop
-                xor   a
-                ret
-fnm_no
-                or    1
-                ret
-
-; fsam_div9: HL / 9 -> B = quotient, A = remainder (0..8). Clobbers DE.
-fsam_div9
-                ld    b,0
-fd9_loop
-                ld    a,h
+                ld    bc,11
+                ldir
+                ld    hl,#1000
+                ld    (fs_load_max),hl
+                ld    hl,DATA_MODTOP
+                ld    (fs_load_dst),hl
+                call  fs_load_sys
+                jr    nc,fsvr_unload
+                call  DATA_MODTOP             ; run it (reads low RAM, writes the floppy)
+fsvr_unload
+                pop   af
+                call  bank_set
+                ld    a,(FSV_TX_RES)
                 or    a
-                jr    nz,fd9_sub
-                ld    a,l
-                cp    9
-                jr    c,fd9_done
-fd9_sub
-                or    a
-                ld    de,9
-                sbc   hl,de
-                inc   b
-                jr    fd9_loop
-fd9_done
-                ld    a,l
+                ret   z
+                scf
                 ret
+floppysv_modname db    "FLOPPYSVBIN"          ; 8.3, space-padded
 
-; --- state ---------------------------------------------------------------
+; --- resident state (load + listing; save state lives in the module) --------
 fslf_blocks     defs  16           ; allocation block numbers of the found extent
 fslf_secs       defb  0            ; sectors left to read
 fslf_si         defb  0            ; sector index within the file
 fslf_rc         defb  0            ; record count (for the no-header size)
 fslf_curtrk     defb  0            ; track the head is currently on
-fsam_unit       defb  0            ; selected drive: 0 = A, 1 = B
-fsam_base       defb  #C1
-fsam_track      defb  0
-fsam_idx        defb  0
-fsam_dst        defw  0
-fsam_src        defw  0            ; fsam_write_sector source pointer
-fsam_rc         defb  0            ; save: record count being written
-fsv_nsec        defb  0            ; save: sectors left to write
-fsv_si          defb  0            ; save: sector index within the file
-fsv_curtrk      defb  0            ; save: track the head is on
-fsv_dptr        defw  0            ; save: pointer into the source data
-fsv_drem        defw  0            ; save: source bytes left
-fsv_nblk        defb  0            ; save: 1KB blocks the file needs
-fsv_cand        defb  0            ; alloc: candidate block being tested
-; fsam_buf (the 2KB whole-directory buffer) is defined after kern_end in
-; gbkern.asm so it is scratch RAM, not part of the loaded GBKERN.BIN image.
-; fsam_wbuf (the write sector) is aliased onto the IDE backend's fs_secbuf -
-; fs_init picks exactly one backend, so the two are never live at once.
-fsam_wbuf       equ   fs_secbuf
+fsam_idx        defb  0            ; directory-listing cursor
+; fsam_buf (the 2KB whole-directory buffer) and fs_secbuf are fixed low-RAM equs in
+; gbkern.asm (the module agrees on the addresses).

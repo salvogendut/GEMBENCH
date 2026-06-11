@@ -321,6 +321,34 @@ alf_nf
                 or    a
                 ret
 
+ALB_PATH_MAX    equ   64           ; CH376 current-dir path buffer size (defined here so
+                                   ; the #134 alb_path_save defs below can see it)
+; #134 system-dir hooks (Albireo). The CH376 is path-based: system loads run from
+; the "/GEOBENCH" path prefix, regardless of the File Manager's browse path. No
+; resolve needed (alb_emit_path prefixes alb_path onto every SET_FILE_NAME);
+; enter swaps alb_path to /GEOBENCH and leave restores the browse path.
+fs_sys_resolve
+                ret
+fs_sysdir_enter
+                ld    hl,alb_path                 ; save the active browse path
+                ld    de,alb_path_save
+                ld    bc,ALB_PATH_MAX
+                ldir
+                ld    hl,alb_sysdir               ; alb_path = "/GEOBENCH"
+                ld    de,alb_path
+                ld    bc,alb_sysdir_end-alb_sysdir
+                ldir
+                ret
+fs_sysdir_leave
+                ld    hl,alb_path_save            ; restore the browse path
+                ld    de,alb_path
+                ld    bc,ALB_PATH_MAX
+                ldir
+                ret
+alb_sysdir      db    "/GEOBENCH",0
+alb_sysdir_end
+alb_path_save   defs  ALB_PATH_MAX
+
 ; ---------------------------------------------------------------------------
 ; fsalb_save_file: write fs_save_len bytes from (fs_save_src) to fs_req_name.
 ; FILE_CREATE truncates/recreates (so this overwrites), then a BYTE_WRITE loop
@@ -529,7 +557,6 @@ fsalb_mounted   defb  0            ; 0 until SET_USB_MODE+DISK_MOUNT done once
 ; #104: current directory as a CH376 path, NUL-terminated. "" = root; "/GAMES" or
 ; "/GAMES/RPG" in a subdir. fsalb_chdir appends "/<name>", fsalb_back truncates at
 ; the last '/'. Prefixed onto every SET_FILE_NAME via alb_emit_path. Zero-init = root.
-ALB_PATH_MAX    equ   64
 alb_path        defs  ALB_PATH_MAX
 
 ; Shared directory-context state the kernel manipulates generically (k_chdir/

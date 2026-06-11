@@ -58,27 +58,43 @@ DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
-# QA/<CARD>/: one distribution per storage card (#104). The apps/modules/assets
-# above are shared; only the kernel differs, so we assemble each variant and stage
-# it into its own subdir with BOTH formats: the loose files to copy onto that
-# card's FAT drive, and a bootable floppy image (GEOBENCH.DSK) for a CPC that
-# boots from disc. Add a card here (e.g. M4 "-DSTORAGE_M4=1") when its backend lands.
-build_variant() {                                # $1 = subdir name, $2 = rasm -D flag
+tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
+# One UNIFIED card distribution (#136): the apps/modules/assets above are shared and
+# only the kernel differs, so we assemble each card's kernel, capture its raw image,
+# and stage ONE QA/CARD/ holding the BASIC loader GB.BAS + both per-card kernels
+# (GBIDE.BIN, GBALB.BIN). RUN"GB probes the bus and RUN"s the right one -> one image
+# works on any card. Plus a single bootable floppy image QA/GEOBENCH.DSK (any kernel
+# falls back to floppy when no card is present). Add a card with another build_variant
+# + a probe line in stage_dist's GB.BAS when its backend lands.
+build_variant() {                                # $1 = kernel name, $2 = rasm -D flag
     rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
     "$RASM" kernel/gbkern.asm -eo $2 ${EXTRA_RASM:-} # incbins apps + font + icons -> .dsk + RAW
     "$RASM" kernel/pack_apps.asm -eo             # 2nd pass: overflow apps -> same .dsk (#114)
-    tools/stage_dist.sh "QA/$1"                  # loose files for the card's FAT drive
-    cp build/gbkern.dsk "QA/$1/GEOBENCH.DSK"     # bootable floppy image
-    echo "  QA/$1: $(ls "QA/$1" | wc -l) files (incl. GEOBENCH.DSK floppy image)"
+    cp build/GBKERN.RAW "build/$1.RAW"           # capture this card's kernel for the unified stage
 }
-rm -rf QA
-echo "Staging per-storage distributions -> QA/"
-build_variant IDE     ""
-build_variant ALBIREO "-DSTORAGE_ALBIREO=1"
+rm -rf QA; mkdir -p QA
+echo "Building both card kernels + the unified card distribution -> QA/"
+build_variant GBIDE ""
+cp build/gbkern.dsk QA/GEOBENCH.DSK               # one bootable floppy image
+# Add a GB.BAS loader so the floppy also boots via RUN"GB (-> RUN"GBKERN; one kernel,
+# no card to detect). Must be a HEADERLESS ASCII file - RASM's DSK save adds an AMSDOS
+# header, so use iDSK (-t 0). Graceful: without iDSK the floppy still boots via RUN"GBKERN.
+IDSK="${IDSK:-$HOME/Dev/cpc-mastering/idsk}"
+if [ -x "$IDSK" ]; then
+    printf '10 RUN"GBKERN\r\n' > build/GB.BAS
+    "$IDSK" QA/GEOBENCH.DSK -i build/GB.BAS -t 0 >/dev/null 2>&1 \
+        && echo "  + GB.BAS on QA/GEOBENCH.DSK (floppy RUN\"GB)" \
+        || echo "  (iDSK present but GB.BAS insert failed - floppy still RUN\"GBKERN)"
+else
+    echo "  (no iDSK at \$IDSK - floppy boots via RUN\"GBKERN; set IDSK= to add the GB.BAS loader)"
+fi
+build_variant GBALB "-DSTORAGE_ALBIREO=1"
+tools/stage_dist.sh QA/CARD                       # unified: GB.BAS + GBIDE.BIN + GBALB.BIN + /GEOBENCH
+echo "  QA/CARD: any IDE/Albireo card (RUN\"GB); QA/GEOBENCH.DSK: floppy (RUN\"GB or RUN\"GBKERN)"
 
 # Leave build/ as the STORAGE-selected variant (default IDE) so the --disk-a test
 # harness and deploy_ide.sh see a predictable build/gbkern.dsk + build/GBKERN.RAW.
 rm -f build/gbkern.dsk
 "$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG >/dev/null
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
-echo "Built QA/IDE + QA/ALBIREO; build/ = ${STORAGE:-ide} variant for testing"
+echo "Built QA/CARD (unified card deploy) + QA/GEOBENCH.DSK (floppy); build/ = ${STORAGE:-ide} variant"

@@ -119,8 +119,7 @@ fdn_have
                 ld    de,#1C                    ; size (4 bytes @ 0x1C)
                 add   hl,de
                 ld    de,fs_ent_size
-                ld    bc,4
-                ldir
+                call  copy4
                 pop   hl
                 push  hl                       ; cluster: low word @0x1A
                 ld    de,#1A
@@ -185,8 +184,7 @@ flf_sh          srl   h
                 ld    (flf_secs),hl
                 ld    hl,fs_ent_clus          ; flf_clus = start cluster (32-bit)
                 ld    de,flf_clus
-                ld    bc,4
-                ldir
+                call  copy4
                 xor   a
                 ld    (flf_sic),a
 flf_loop
@@ -239,6 +237,50 @@ flf_cn
                 inc   de
                 djnz  flf_cn
                 xor   a
+                ret
+
+; ---------------------------------------------------------------------------
+; fs_sys_resolve (#134): point fs_sys_clus at the /GEOBENCH folder so system files
+; load from there. Run once at boot after the mount, while fs_dir_clus is the root.
+; If there's no GEOBENCH subdir (flat card), fs_sys_clus stays the root.
+fs_sys_resolve
+                ld    hl,fs_dir_clus            ; default: system dir = root (flat layout)
+                ld    de,fs_sys_clus
+                call  copy4
+                ld    hl,sys_dirname            ; look for a "GEOBENCH" directory in the root
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                call  fside_dir_first
+fsr_loop        jr    nc,fsr_done
+                ld    a,(fs_ent_attr)
+                and   #10                        ; directory entry?
+                jr    z,fsr_next
+                call  flf_cmpname                ; named GEOBENCH?
+                jr    nz,fsr_next
+                ld    hl,fs_ent_clus            ; yes -> system dir = its start cluster
+                ld    de,fs_sys_clus
+                call  copy4
+                ret
+fsr_next        call  fside_dir_next
+                jr    fsr_loop
+fsr_done        ret
+sys_dirname     db    "GEOBENCH   "
+
+; fs_sysdir_enter / fs_sysdir_leave (#134): briefly make the FAT dir the /GEOBENCH
+; system dir for one system load, then restore the File Manager's browse dir.
+fs_sysdir_enter
+                ld    hl,fs_dir_clus
+                ld    de,fs_dir_save
+                call  copy4
+                ld    hl,fs_sys_clus
+                ld    de,fs_dir_clus
+                call  copy4
+                ret
+fs_sysdir_leave
+                ld    hl,fs_dir_save
+                ld    de,fs_dir_clus
+                call  copy4
                 ret
 
 ; ---------------------------------------------------------------------------
@@ -311,8 +353,7 @@ fside_delete_file
                 ldir
                 ld    hl,fs_dir_clus
                 ld    de,GBFAT_DIR
-                ld    bc,4
-                ldir
+                call  copy4
                 ld    a,1
                 ld    (GBFAT_OP),a            ; op = delete
                 jp    gbfat_run               ; page in + load + run the module
@@ -324,5 +365,7 @@ fs_dir_sp       defb  0            ; directory stack depth (chdir/back)
 fs_dir_stack    defs  16           ; 4 parent clusters (4 bytes each)
 flf_clus        defs  4            ; load: current file cluster
 fs_ent_clus     defs  4            ; selected entry's start cluster
+fs_sys_clus     defs  4            ; #134: the /GEOBENCH system dir cluster (root if absent)
+fs_dir_save     defs  4            ; #134: browse dir saved across a system load
 flf_sic         defb  0            ; load: sector within current cluster
 flf_secs        defw  0            ; load: sectors remaining

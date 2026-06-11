@@ -121,24 +121,37 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
   (`lib/gb/` — `gb.h` + asm trampolines that map the C calling convention onto the
   jump table). The desktop launches the file manager, which opens each file in its
   app (Notepad, ICONED, Paint, Viewer, ...); an app returns to its caller by `return`.
-- **Storage backends.** A small dispatcher (`lib/fs.asm`) picks AMSDOS-over-floppy
-  or FAT16-over-IDE at boot, so the same desktop runs on a plain floppy CPC or a
-  SYMBiFACE/Cyboard IDE-equipped one.
+- **Storage backends.** A dispatcher (`lib/fs.asm`) selects the card backend at
+  build time — FAT16/FAT32 over a SYMBiFACE/Cyboard **IDE**, or a CH376 **Albireo**
+  card — and falls back to AMSDOS-over-**floppy**, so the same desktop runs on any of
+  them. A small BASIC loader (`GB.BAS`) auto-detects the card so one `RUN"GB` boots
+  them all (see below).
 
-## Building and running
+## Building, deploying and running
 
 The kernel is assembled with **RASM**; the apps are compiled with **SDCC**
-(`sdcc`, `sdasz80`, `makebin` on `PATH`). One script builds everything into a
-disk image:
+(`sdcc`, `sdasz80`, `makebin` on `PATH`). One script builds the whole distribution
+(it needs `iDSK` to add the floppy loader — set `IDSK=` if it is not on the default
+path; without it the floppy still boots via `RUN"GBKERN`):
 
 ```bash
-tools/build_kernel.sh           # apps (SDCC) + kernel (RASM) -> build/gbkern.dsk
+bash tools/build_kernel.sh
 ```
 
-Run it in an emulator (or on hardware):
+This stages two outputs (also committed under `QA/`, so you can grab them ready-built):
+
+- **`QA/CARD/`** — the card distribution. Copy its contents onto an IDE or Albireo
+  card. The card root stays clean: only the loader `GB.BAS`, the two kernels
+  `GBIDE.BIN`/`GBALB.BIN`, and `GEOBENCH.CFG` — everything the kernel loads at boot
+  lives in a `GEOBENCH/` subfolder.
+- **`QA/GEOBENCH.DSK`** — a single bootable floppy image.
+
+Boot with **`RUN"GB`** on any machine: the loader `GB.BAS` probes the bus and runs the
+matching kernel (IDE → `GBIDE`, Albireo → `GBALB`, otherwise the floppy `GBKERN`). On a
+floppy you can also `RUN"GBKERN` directly.
 
 ```bash
-1984 --memory=128 --disk-a=build/gbkern.dsk --autostart=GBKERN
+1984 --memory=128 --disk-a=QA/GEOBENCH.DSK --autostart=GB     # floppy in an emulator
 ```
 
 `tools/build_capp.sh <app_dir> <out.RAW>` builds a single C app against `libgb`

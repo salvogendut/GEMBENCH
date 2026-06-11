@@ -54,8 +54,7 @@ fdf_logd        ld    a,b
 fdf_fat32
                 ld    hl,fs_secbuf+#24        ; FAT32: sectors per FAT (32-bit)
                 ld    de,fatsz_tmp
-                ld    bc,4
-                ldir
+                call  copy4
                 xor   a
                 ld    (fs_is_fat16),a
 fdf_havefatsz
@@ -74,14 +73,12 @@ fdf_dl          push  bc
                 call  acc_store_data          ; FAT32: data starts right after the FATs
                 ld    hl,fs_secbuf+#2C        ; root directory start cluster
                 ld    de,fs_dir_clus
-                ld    bc,4
-                ldir
+                call  copy4
                 ret
 fdf_root16                                     ; FAT16: the fixed root dir sits here; data follows
                 ld    hl,acc                  ; fs_root_lba = fat_lba + numFATs*fatsz
                 ld    de,fs_root_lba
-                ld    bc,4
-                ldir
+                call  copy4
                 ld    hl,(fs_secbuf+#11)      ; root entry count (16-bit)
                 ld    de,15                    ; root_secs = (entries+15) >> 4
                 add   hl,de                    ; (32 bytes/entry, 512/sector -> /16)
@@ -99,6 +96,9 @@ fdf_root16                                     ; FAT16: the fixed root dir sits 
                 ld    d,0
                 call  acc_add16
                 call  acc_store_data
+                ld    hl,0                     ; #134: FAT16 root has no cluster - mark
+                ld    (fs_dir_clus),hl         ; fs_dir_clus = 0 as the root sentinel; a
+                ld    (fs_dir_clus+2),hl       ; subdirectory gets its (nonzero) start cluster
                 ret
 
 ; fs_dir_rewind: position at the first sector of the root directory cluster.
@@ -109,20 +109,29 @@ fs_dir_rewind
                 ld    a,(fs_is_fat16)         ; #130
                 or    a
                 jr    nz,fdr_fat16
-                ld    hl,fs_dir_clus          ; FAT32: root is a cluster chain
+fdr_cluster                                    ; FAT32, or a FAT16 subdirectory: cluster chain
+                ld    hl,fs_dir_clus
                 call  clus_first_lba
                 call  save_dir_lba
                 jp    fs_read_sector
-fdr_fat16                                      ; FAT16: fixed root dir region, sector 0
-                ld    hl,fs_root_lba
+fdr_fat16                                      ; FAT16: zero cluster = fixed root region; a
+                ld    hl,fs_dir_clus          ; nonzero cluster is a subdirectory chain (#134)
+                ld    a,(hl)
+                inc   hl
+                or    (hl)
+                inc   hl
+                or    (hl)
+                inc   hl
+                or    (hl)
+                jr    nz,fdr_cluster
+                ld    hl,fs_root_lba          ; FAT16 root: the fixed root dir region
                 call  lbatmp_from_var
                 call  save_dir_lba
                 jp    fs_read_sector
 save_dir_lba                                    ; remember the dir sector now in secbuf
                 ld    hl,lba_tmp
                 ld    de,fs_dir_cur_lba
-                ld    bc,4
-                ldir
+                call  copy4
                 ret
 
 ; fs_dir_step: advance to the next directory sector (within the cluster, else
@@ -130,7 +139,17 @@ save_dir_lba                                    ; remember the dir sector now in
 fs_dir_step
                 ld    a,(fs_is_fat16)         ; #130
                 or    a
-                jr    nz,fds_fat16
+                jr    z,fds_cluster
+                ld    hl,fs_dir_clus          ; #134: FAT16 zero cluster = fixed root; a
+                ld    a,(hl)                  ; nonzero cluster is a subdirectory chain
+                inc   hl
+                or    (hl)
+                inc   hl
+                or    (hl)
+                inc   hl
+                or    (hl)
+                jr    z,fds_fat16
+fds_cluster                                    ; FAT32, or a FAT16 subdirectory: cluster step
                 ld    a,(fs_dir_sic)
                 inc   a
                 ld    b,a
@@ -236,8 +255,7 @@ ffn_eoc16                                       ; #130 FAT16: clear the high byt
 fn_valid
                 ld    hl,acc
                 ld    de,(fn_ptr)
-                ld    bc,4
-                ldir
+                call  copy4
                 scf
                 ret
 
@@ -340,11 +358,17 @@ fs_detect_part
                 jr    z,fdp_none
                 ld    hl,fs_secbuf+#1C6        ; partition 0 start LBA (4 bytes)
                 ld    de,fs_part_lba
-                ld    bc,4
-                ldir
+                call  copy4
                 ret
 fdp_none
                 jp    clear_part_lba
+
+; copy4 (#134 reclaim): HL -> DE, 4 bytes. Shared by the FAT cluster/LBA/acc
+; copies (was an inline ld bc,4 + ldir at ~26 sites).
+copy4
+                ld    bc,4
+                ldir
+                ret
 
 ; --- 32-bit helpers (operate on the 4-byte little-endian accumulator acc) ----
 clear_part_lba
@@ -363,31 +387,26 @@ clear_lba_tmp
                 ret
 lbatmp_from_var                                ; HL -> 4-byte source; lba_tmp = (HL)
                 ld    de,lba_tmp
-                ld    bc,4
-                ldir
+                call  copy4
                 ret
 acc_load                                        ; HL -> 4-byte source; acc = (HL)
                 ld    de,acc
-                ld    bc,4
-                ldir
+                call  copy4
                 ret
 acc_to_lba                                      ; lba_tmp = acc
                 ld    hl,acc
                 ld    de,lba_tmp
-                ld    bc,4
-                ldir
+                call  copy4
                 ret
 acc_store_fat                                   ; fs_fat_lba = acc
                 ld    hl,acc
                 ld    de,fs_fat_lba
-                ld    bc,4
-                ldir
+                call  copy4
                 ret
 acc_store_data                                  ; fs_data_lba = acc
                 ld    hl,acc
                 ld    de,fs_data_lba
-                ld    bc,4
-                ldir
+                call  copy4
                 ret
 acc_add                                         ; acc += (HL)  [HL -> 4-byte LE]
                 ld    de,acc

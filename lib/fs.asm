@@ -104,9 +104,11 @@ fs_load_sys
                 ld    (fls_browse),a
                 ld    a,(fs_boot_drive)           ; load from the boot drive (where the app
                 call  fs_set_drive               ; binaries + GBFAT module live), NOT the
-                call  fs_load_file               ; window's browse drive - #110: a floppy-B
-                push  af                          ; window must still load apps off floppy A
-                ld    a,(fls_browse)             ; (CF result preserved across the restore)
+                call  fs_sysdir_enter            ; #134: ...and from the /GEOBENCH system dir,
+                call  fs_load_file               ; not the FM's browse folder (window's browse
+                push  af                          ; drive - #110: a floppy-B window must still
+                call  fs_sysdir_leave            ; load apps off floppy A)
+                ld    a,(fls_browse)             ; (CF result preserved across the restores)
                 call  fs_set_drive               ; restore the browse drive
                 pop   af
                 ret
