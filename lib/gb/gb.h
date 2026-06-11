@@ -19,6 +19,8 @@ void gb_textk(unsigned char col, unsigned char line,     /* 6x8 text, black (pen
               const char *s);
 void gb_textbw(unsigned char col, unsigned char line,    /* 6x8 text, black on white */
                const char *s);
+void gb_textrev(unsigned char col, unsigned char line,   /* 6x8 text, white on black (reverse) */
+                const char *s);
 /* Reusable UI triangle glyphs (font codes 128-131); draw like text, e.g.
  * gb_textk(x, y, GLYPH_TRI_RIGHT). Present in DEFAULT.FNT (not CLASSIC.FNT). */
 #define GLYPH_TRI_UP    "\x80"
@@ -144,7 +146,7 @@ typedef struct {
 void          gb_doc(const gb_doc_t *d);   /* register; adds the standard File (+Edit) menu */
 void          gb_doc_dirty(void);          /* mark the document modified */
 unsigned char gb_doc_event(void);          /* in on_event: 1 if the framework handled it */
-void          gb_doc_frame(void);          /* in on_frame: run a pending File/Edit menu */
+unsigned char gb_doc_frame(void);          /* in on_frame: ran a menu? (1 -> repaint window) */
 
 /* Shared clipboard (#142): a system buffer that survives app switches, so copy in
  * one app and paste in another. An app's on_copy fills it; on_paste reads it. */

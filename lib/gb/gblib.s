@@ -12,6 +12,7 @@
         .globl  _gb_text
         .globl  _gb_textk
         .globl  _gb_textbw
+        .globl  _gb_textrev
         .globl  _gb_window
         .globl  _gb_restorerect
         .globl  _gb_mxp
@@ -101,6 +102,18 @@ _gb_textbw:
         ld      c, l
         ld      d, #2           ; pen   = 2 (black)
         ld      e, #1           ; paper = 1 (white)
+        pop     hl
+        ex      (sp), hl
+        call    0x800C          ; GB_TEXT
+        ret
+
+;; void gb_textrev(u8 col, u8 line, const char *s);   white pen on black paper
+;;   (reverse video, for a highlighted menu row)
+_gb_textrev:
+        ld      b, a
+        ld      c, l
+        ld      d, #1           ; pen   = 1 (white)
+        ld      e, #2           ; paper = 2 (black)
         pop     hl
         ex      (sp), hl
         call    0x800C          ; GB_TEXT
