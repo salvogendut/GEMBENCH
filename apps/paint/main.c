@@ -78,19 +78,11 @@ static const unsigned char pic_inks[4] = { 1, 26, 0, 6 };  /* blue, white, black
 static unsigned char pen = 2;          /* current ink: 0 blue 1 white 2 black 3 red */
 static unsigned char tool = TOOL_PENCIL;
 static unsigned char pen_w = 1;        /* pencil width 1..4                     */
-static unsigned char dirty;            /* unsaved edits -> " *" in the title    */
 
-/* File menu (top bar). The kernel draws the "File" title while we are focused; a
-   click delivers GB_MSG_MENU to on_menu, which arms want_menu for the main loop. */
-#define FILE_COL 10
-#define FILE_END 16
-static unsigned char want_menu;        /* File title clicked -> run the menu */
-static char fbase[14];                 /* "NAME.PIC" - the title base           */
-static char wtitle[18];                /* fbase + " *" when dirty               */
-static char name83[11];                /* current 8.3 file name (fs target)     */
-static const unsigned char top_menu[] = {
-    1, FILE_COL, 'F','i','l','e',0,0,0,0
-};
+/* window-title scratch: the file name (from gb_doc) + " *" when unsaved. */
+static char fbase[14];                 /* "NAME.PIC" formatted from gb_doc_name() */
+static char wtitle[18];                /* fbase + " *" when modified            */
+static void fmt83(char *dst, const char *n11);   /* defined below; used by win_title */
 
 /* PAINT.IST loaded whole at startup; tools blit straight out of it. 2 sectors. */
 #define IST_MAX 1024
@@ -182,7 +174,7 @@ static void plot(unsigned char cx, unsigned char cy)
 {
     unsigned char dx, dy, x, y;
     unsigned int off;
-    dirty = 1;
+    gb_doc_dirty();
     for (dy = 0; dy < pen_w; dy++) {
         y = (unsigned char)(cy + dy);
         if (y >= CANVAS_H) break;
@@ -261,7 +253,7 @@ static void flood_fill(unsigned char x, unsigned char y)
         if (fy < CANVAS_H - 1) { inside = 0; for (xx = xl; xx <= xr; xx++)
             if (get_pen(xx, (unsigned char)(fy + 1)) == target) { if (!inside) { fpush(xx, (unsigned char)(fy + 1)); inside = 1; } } else inside = 0; }
     }
-    dirty = 1;
+    gb_doc_dirty();
 }
 
 /* ---- shapes (outline, into the canvas buffer) ------------------------------- */
@@ -309,18 +301,19 @@ static void rubber_band(unsigned char sx, unsigned char sy)
             blit_canvas();
         }
     }
-    dirty = 1;
+    gb_doc_dirty();
 }
 
 /* win_title: the window title = the file name, " *" appended when unsaved. */
 static const char *win_title(void)
 {
-    /* single-index copy: the two-index `wtitle[j++] = fbase[i++]` form is
-       miscompiled by SDCC under --fomit-frame-pointer (copied only 1 char, #142). */
+    /* name from the framework (gb_doc); single-index copy - the two-index form is
+       miscompiled by SDCC under --fomit-frame-pointer (#142). */
     unsigned char j = 0;
     char c;
+    fmt83(fbase, gb_doc_name());
     while ((c = fbase[j]) != 0) { wtitle[j] = c; j++; }
-    if (dirty) { wtitle[j++] = ' '; wtitle[j++] = '*'; }
+    if (gb_doc_modified()) { wtitle[j++] = ' '; wtitle[j++] = '*'; }
     wtitle[j] = 0;
     return wtitle;
 }
@@ -381,27 +374,6 @@ static void fmt83(char *dst, const char *n11)
     dst[j] = 0;
 }
 
-/* to_83: "NAME.EXT" -> the 11-byte space-padded name83 (the fs target). */
-static void to_83(const char *s)
-{
-    unsigned char i = 0, j;
-    for (j = 0; j < 11; j++) name83[j] = ' ';
-    while (s[i] && s[i] != '.' && i < 8) { name83[i] = s[i]; i++; }
-    while (s[i] && s[i] != '.') i++;
-    if (s[i] == '.') {
-        i++;
-        for (j = 0; j < 3 && s[i]; j++, i++) name83[8 + j] = s[i];
-    }
-}
-
-/* ext_is_pic: does "NAME.EXT" end in .PIC ? */
-static unsigned char ext_is_pic(const char *name)
-{
-    const char *e = name;
-    while (*e && *e != '.') e++;
-    return (unsigned char)(e[0] == '.' && e[1] == 'P' && e[2] == 'I' && e[3] == 'C');
-}
-
 /* pic_valid: does picbuf hold a v2 "GBPC" header for our 100x100 canvas? */
 static unsigned char pic_valid(unsigned int got)
 {
@@ -412,28 +384,19 @@ static unsigned char pic_valid(unsigned int got)
         picbuf[8] == CANVAS_H && picbuf[9] == 0);      /* height_px = 100 */
 }
 
-/* ---- File menu actions ------------------------------------------------------ */
-static char namebuf[16];               /* gb_prompt target for New / Save As */
-/* ensure_pic_ext: a typed name with no '.' gets a ".PIC" default. */
-static void ensure_pic_ext(void)
-{
-    unsigned char i = 0, has = 0;
-    while (namebuf[i]) { if (namebuf[i] == '.') has = 1; i++; }
-    if (!has && i && i <= 8) {
-        namebuf[i++] = '.'; namebuf[i++] = 'P'; namebuf[i++] = 'I'; namebuf[i++] = 'C';
-        namebuf[i] = 0;
-    }
-}
+/* ---- the document, via the gb_doc framework (#142) -------------------------- *
+ * The document IS picbuf (the .PIC buffer). The framework owns the File menu and the
+ * navigable Open/Save dialog; we provide three hooks. */
+static const char *const paint_exts[] = { "PIC", 0 };
 
-static void set_file(void)             /* namebuf -> current file name + title */
-{
-    ensure_pic_ext();
-    to_83(namebuf);
-    gb_set_name(name83);
-    fmt83(fbase, name83);
-}
+/* p_new: New -> blank canvas (the framework sets the name to UNTITLED + clears dirty). */
+static void p_new(void) { canvas_clear(); }
 
-static void do_save(void)
+/* p_open: a .PIC was just loaded into picbuf - validate it, blank on a bad format. */
+static void p_open(unsigned int got) { if (!pic_valid(got)) canvas_clear(); }
+
+/* p_save: stamp the .PIC header into picbuf and return the byte count to write. */
+static unsigned int p_save(void)
 {
     picbuf[0] = 'G'; picbuf[1] = 'B'; picbuf[2] = 'P'; picbuf[3] = 'C';
     picbuf[4] = 2;                       /* version */
@@ -442,72 +405,15 @@ static void do_save(void)
     picbuf[8] = CANVAS_H; picbuf[9] = 0; /* height_px = 100 */
     picbuf[10] = pic_inks[0]; picbuf[11] = pic_inks[1];
     picbuf[12] = pic_inks[2]; picbuf[13] = pic_inks[3];
-    if (gb_fs_save((char *)picbuf, PIC_LEN)) dirty = 0;
+    return PIC_LEN;
 }
 
-static void do_saveas(void)
-{
-    if (!gb_prompt("Save as:", namebuf, 12)) return;
-    set_file();
-    do_save();
-}
+static const gb_doc_t pdoc = {
+    (char *)picbuf, PIC_MAX, p_new, p_open, p_save, 0, 0, 0, 0, paint_exts
+};
 
-static void do_new(void)
-{
-    canvas_clear();
-    gb_set_name("UNTITLEDPIC");
-    fmt83(fbase, "UNTITLEDPIC");
-    dirty = 0;
-}
-
-/* do_load: list the .PIC files in a popup; load the one clicked. */
-static void do_load(void)
-{
-    const char *names[24];
-    static char store[24][14];
-    char *p;
-    unsigned char nn = 0, i, sel;
-    unsigned int got;
-
-    p = gb_dir1();
-    while (p && nn < 24) {
-        if (ext_is_pic(p)) {
-            for (i = 0; i < 13 && p[i]; i++) store[nn][i] = p[i];
-            store[nn][i] = 0;
-            names[nn] = store[nn];
-            nn++;
-        }
-        p = gb_dirn();
-    }
-    if (!nn) return;
-    sel = gb_popup((unsigned char)(win_x + 2), CVY, names, nn);
-    if (sel == 0xFF) return;
-    to_83(store[sel]);
-    gb_set_name(name83);
-    fmt83(fbase, name83);
-    got = gb_fs_load((char *)picbuf, PIC_MAX);   /* loads straight into the canvas body */
-    if (!pic_valid(got)) canvas_clear();         /* not our format -> blank */
-    dirty = 0;
-}
-
-static const char *const file_items[] = { "New", "Load", "Save", "Save As" };
-
-static void run_menu(void)
-{
-    unsigned char sel = gb_popup(FILE_COL, 8, file_items, 4);
-    if (sel == 0) do_new();
-    else if (sel == 1) do_load();
-    else if (sel == 2) do_save();
-    else if (sel == 3) do_saveas();
-}
-
-/* on_menu: kernel callback on a top-bar click; arm the File menu for on_frame.
-   Ignored while a dialog is up (gb_modal) so re-clicking File just closes it. */
-static void on_menu(void)
-{
-    if (gb_msg.type != GB_MSG_MENU || gb_modal()) return;
-    if (gb_msg.p0 >= FILE_COL && gb_msg.p0 < FILE_END) want_menu = 1;
-}
+/* on_menu: a top-bar title was clicked -> hand it to the framework. */
+static void on_menu(void) { gb_doc_event(); }
 
 static void on_frame(void)
 {
@@ -516,12 +422,12 @@ static void on_frame(void)
 
     if (flags & GB_QUIT) { gb_wm_close(); return; }
 
-    if (want_menu) { want_menu = 0; run_menu(); draw(); return; }  /* File menu */
+    if (gb_doc_frame()) { draw(); return; }            /* a File menu ran (#142) */
 
     if (flags & GB_CLICK) {                            /* discrete: title + toolchest */
         mx = gb_mx(); my = gb_my();
         if (my >= win_y && my < (unsigned char)(win_y + TITLE_H)) {
-            if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { gb_wm_close(); return; }
+            if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { if (gb_doc_close()) gb_wm_close(); return; }
             if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + WIN_W)) {
                 if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
                     gb_wm_setpos(win_x, win_y);
@@ -554,34 +460,25 @@ static void on_frame(void)
     fire_prev = 1;
 }
 
-static gb_win_t pwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, on_repaint, on_menu, top_menu };
+static gb_win_t pwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, on_repaint, on_menu, 0 };
 
 void main(void)
 {
     unsigned char i;
-    char raw[11];
 
     win_x = DEF_X;
     win_y = DEF_Y;
     pen = 2;
     tool = TOOL_PENCIL;
     pen_w = 1;
-    dirty = 0;
-    want_menu = 0;
     undo_valid = 0;
     fire_prev = 0;
     canvas_clear();
     load_tools();                                /* PAINT.IST -> ist[] (sets fs name) */
     gb_wm_add(&pwin);                            /* register FIRST: captures our file arg */
-    gb_get_name(raw);                            /* the .PIC we were launched with (or none) */
-    fmt83(fbase, raw);
-    if (!fbase[0]) {                             /* opened blank -> Untitled */
-        fmt83(fbase, "UNTITLEDPIC");
-        gb_set_name("UNTITLEDPIC");
-    } else {                                     /* opened a .PIC -> load it into the canvas */
-        gb_set_name(raw);
-        if (!pic_valid(gb_fs_load((char *)picbuf, PIC_MAX))) canvas_clear();
-    }
+    gb_doc(&pdoc);                               /* standard File menu; adopts the launch name */
+    /* load the launch .PIC (gb_fs_load returns 0 if launched blank -> invalid -> clear) */
+    if (!pic_valid(gb_fs_load((char *)picbuf, PIC_MAX))) canvas_clear();
     for (i = 64; i; i--) if (!gb_getkey()) break;   /* drop buffered keys */
     draw();
 }

@@ -52,7 +52,7 @@ DATA_LOC=0x5F00 DIALOGS=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICO
                                    # data-loc so its 7KB icon-set buffer (BUFSZ) fits below
                                    # #8000 (#110); DIALOGS=1 for the shared Load/Save popup (#114)
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
-DATA_LOC=0x6300 DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: shared list popup
+DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: doc framework (#142)
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
