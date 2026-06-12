@@ -55,23 +55,35 @@ What works today:
 - **File manager** — double-click the Disk icon to open a window listing the
   drive; a type icon + name per file (**list** or **icon** view), entries **sorted
   by type then alphabetically**, a **scrolling** list, click to select, double-click
-  to open (routed to the right app by a type→app table). Multi-drive, drag-and-drop,
-  a Trash.
-- **Notepad** — a text editor: type/edit, word-wrap, copy/paste, click or cursor
-  keys to place the caret, a File menu (New/Load/Save/Save As). Saves `.BAS` with
-  CR+LF so CPC BASIC can load them.
+  to open (routed to the right app by a type→app table). A **`..` entry** (with an
+  up-arrow icon) goes up a directory; a **View** menu toggles list/icons and
+  maximises the window. Multi-drive, drag-and-drop, a Trash.
+- **Notepad** — a text editor: type/edit, word-wrap, click or cursor keys to place
+  the caret, **File / Edit / View** menus (New/Load/Save/Save As, copy/paste,
+  Fullscreen). Saves `.BAS` with CR+LF so CPC BASIC can load them.
 - **ICONED** — an icon/cursor editor for `.IST` sets and `.SPR` cursors (magnified
-  canvas, pen palette, Prev/Next, undo, Load/Save).
+  canvas, pen palette, Prev/Next, undo, New/Load/Save/Save As, View > Fullscreen).
 - **Paint** — a Mode-1 paint app: a canvas + toolchest (pencil, square, circle,
   flood fill, undo), a 4-ink palette and pencil width, New/Load/Save to the `.PIC`
-  format (a versioned bitmap with its own size + palette). Tool icons are a normal
-  `.IST` set, editable in ICONED.
+  format (a versioned bitmap with its own size + palette), View > Fullscreen. Tool
+  icons are a normal `.IST` set, editable in ICONED.
 - **Viewer** — open any file to peek at it: word-wrapped text, or a `.PIC` image
-  rendered to a window sized to the picture. Draggable, resizeable.
-- **Clock** — an analog clock window (Dallas RTC, else software).
+  rendered to a window sized to the picture. File > Load opens another file, View >
+  Fullscreen maximises. Draggable, resizeable.
+- **Clock** — an analog clock window (Dallas RTC, else software); View > Fullscreen
+  rescales the face to the whole screen, an Options menu sets the time / toggles seconds.
+- **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
+  from one place: it registers a small "document" (its buffer + new/open/save hooks)
+  and the framework supplies a standard **File** menu (New / Load / Save / Save As),
+  an **Edit** menu (Select All / Copy / Paste over a **shared cross-app clipboard**)
+  and a **View** menu (**Fullscreen** + app-specific entries), plus a navigable
+  Open/Save file dialog. Apps carry no menu or dialog code; even the desktop's
+  **System** menu and the clock's **Options** menu render through the same path. The
+  heavy dialog renderer lives in a **paged kernel module**, so it isn't duplicated
+  into every bank.
 - **Banked app model** — the desktop and every app are separate binaries, paged
-  into expansion-bank slots and run co-resident with the kernel. Shared UI (window
-  drag/resize, the File-menu popup + name prompt) lives in `libgb`.
+  into expansion-bank slots and run co-resident with the kernel; shared window
+  chrome (drag/resize) lives in `libgb`.
 - **Hybrid implementation** — the kernel is Z80 assembly; **every app is C**.
 
 ## What is this?
@@ -257,14 +269,17 @@ geobench/
 ├── lib/               # kernel libraries: screen, text/font, input, cursor,
 │   │                  #   fs (AMSDOS + FAT16), banking, icon/cursor bitmaps
 │   ├── gbapp.inc      #   the app ABI (jump-table addresses, memory model)
-│   └── gb/            #   libgb: shared C bindings (gb.h, gblib.s, crt0.s) +
-│                      #     window drag/resize (gbwin.c) + dialogs (gbdlg/gbprompt.c)
+│   └── gb/            #   libgb: shared C bindings (gb.h, gblib.s, crt0.s), the
+│                      #     gb_doc menu/document framework (gbdoc.c), window
+│                      #     drag/resize (gbwin.c) + dialog stubs (the dialog renderer
+│                      #     is a paged kernel module, kernel/kc/gbui_mod.c)
 ├── apps/              # the C apps (each a single main.c)
 │   ├── desktop/       #   the boot shell: backdrop, icons, drag, launch, System menu
 │   ├── filemgr/       #   scrolling file manager (multi-drive, drag-and-drop, Trash)
-│   ├── notepad/       #   text editor (File/Edit menus, copy/paste, .BAS CR+LF)
+│   ├── notepad/       #   text editor (File/Edit/View menus, copy/paste, .BAS CR+LF)
 │   ├── iconed/        #   icon/cursor editor for .IST sets and .SPR cursors
 │   ├── paint/         #   Mode-1 paint app (toolchest, palette, .PIC files)
+│   ├── xaos/          #   fixed-point Mandelbrot generator (.PIC export)
 │   ├── viewer/        #   text + .PIC image viewer
 │   └── clock/         #   analog clock window
 ├── assets/            # icon/cursor/paint source PNGs + sample files (WELCOME.TXT)
@@ -285,13 +300,15 @@ Done:
 6. ✅ **Storage write layer** — FAT16/FAT32 + Albireo read/write (save/delete/copy).
 7. ✅ **Apps** — Notepad (editor), ICONED (icon/cursor editor), Paint (`.PIC`),
    Clock, plus the image/text Viewer.
-8. ✅ **Menu bar** — top-bar File/Edit menus dispatched to the focused app, with a
-   shared popup + name-prompt in `libgb`.
+8. ✅ **Unified menu system (`gb_doc`)** — one File / Edit / View menu framework for
+   every app (New/Load/Save/Save As, a shared cross-app clipboard, **Fullscreen**, a
+   navigable Open/Save dialog in a paged module); the desktop's System menu and the
+   clock's Options menu render through it too.
 
 Next:
 
-- **Paint** follow-ups — resizable canvas, full-screen palette view, scrolling for
-  pictures bigger than the screen.
+- **Paint** follow-ups — resizable canvas and scrolling for pictures bigger than the
+  screen (Fullscreen already centers the canvas + tools).
 - **Launching legacy `.BIN`/`.BAS`** software (see above).
 - **Drawers/folders** and richer desktop arrangement.
 - **Settings** app for `GEOBENCH.CFG` (icon set / font / cursor).
