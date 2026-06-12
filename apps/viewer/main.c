@@ -36,6 +36,7 @@ static unsigned char win_x = DEF_X, win_y = DEF_Y;   /* live position (draggable
 static unsigned char win_w = DEF_W, win_h = DEF_H;   /* live size (resizeable) */
 static char fbase[14];           /* "NAME.EXT" of the open file (window title) */
 static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Fullscreen (#142) */
+static unsigned char opened;         /* 0 until the first on_frame has run v_open */
 
 /* fmt83: 11-byte space-padded 8.3 name -> "NAME.EXT" display string. */
 static void fmt83(char *dst, const char *n11)
@@ -144,20 +145,25 @@ static void v_repaint(void)
 /* on_open: a file was just loaded into filebuf (the launch file, or File > Load).
    Adopt its name, size the window to a .PIC, and repaint. The gb_doc framework
    calls this; main() calls it too for the launch file (#142). */
+/* size_to_pic: resize the window to the parsed picture. Calls gb_wm_setsize, so ONLY
+   from an on_frame context (File>Load, or the first launch frame) - doing it in main()
+   during launch, before the WM services the window, drops it from the bar (#144). */
+static void size_to_pic(void)
+{
+    win_w = (unsigned char)(pic_wb + 3);
+    if (win_w < MIN_W) win_w = MIN_W;
+    if (win_w > (unsigned char)(80 - win_x)) win_w = (unsigned char)(80 - win_x);
+    win_h = (unsigned char)((TX_Y0 - win_y) + pic_h + 4);
+    if (win_h < MIN_H) win_h = MIN_H;
+    if (win_h > (unsigned char)(200 - win_y)) win_h = (unsigned char)(200 - win_y);
+    gb_wm_setsize(win_w, win_h);
+}
+
 static void v_open(unsigned int len)
 {
     filen = len;
     fmt83(fbase, gb_doc_name());            /* the framework has set the current name */
-    if (is_pic()) {                         /* a picture -> size the window to it (#114) */
-        parse_pic();
-        win_w = (unsigned char)(pic_wb + 3);
-        if (win_w < MIN_W) win_w = MIN_W;
-        if (win_w > (unsigned char)(80 - win_x)) win_w = (unsigned char)(80 - win_x);
-        win_h = (unsigned char)((TX_Y0 - win_y) + pic_h + 4);
-        if (win_h < MIN_H) win_h = MIN_H;
-        if (win_h > (unsigned char)(200 - win_y)) win_h = (unsigned char)(200 - win_y);
-        gb_wm_setsize(win_w, win_h);
-    }
+    if (is_pic()) { parse_pic(); size_to_pic(); }   /* a picture -> size the window to it (#114) */
     gb_curhide(); v_draw(); gb_curshow();
 }
 
@@ -192,6 +198,17 @@ static void v_menu(void) { gb_doc_event(); }
 static void on_frame(void)
 {
     unsigned char flags = gb_flags(), mx, my;
+    if (!opened) {                         /* size to the launch picture HERE, not in main():
+                                              gb_wm_setsize during launch (before the WM services
+                                              the new window) drops it from the bar (#144) */
+        opened = 1;
+        if (is_pic()) {
+            size_to_pic();
+            gb_restore_parent();
+            gb_curhide(); v_draw(); gb_curshow();
+        }
+        return;
+    }
     if (flags & GB_QUIT) { gb_wm_close(); return; }
     if (gb_doc_frame()) { gb_curhide(); v_draw(); gb_curshow(); return; }  /* a menu ran (#142) */
     if (!(flags & GB_CLICK)) return;
@@ -223,5 +240,9 @@ void main(void)
     gb_wm_add(&vwin);                       /* register FIRST: captures our file arg
                                               (per-window) so the load below is ours */
     gb_doc(&vdoc);                          /* File > Load + View > Fullscreen (#142) */
-    v_open(gb_fs_load(filebuf, VIEW_MAX));  /* load + size + paint the launch file */
+    filen = gb_fs_load(filebuf, VIEW_MAX);  /* load the launch file */
+    fmt83(fbase, gb_doc_name());
+    if (is_pic()) parse_pic();              /* parse dims so v_draw can blit; resize deferred (#144) */
+    gb_curhide(); v_draw(); gb_curshow();   /* paint at the default size; the first on_frame
+                                               sizes the window to a picture (#144) */
 }
