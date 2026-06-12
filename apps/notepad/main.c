@@ -18,9 +18,10 @@
  * visible. */
 #include "gb.h"
 
-#define NP_MAX    3840           /* editable text capacity (was 4096; trimmed 256B to fit
-                                    the navigable file dialog - restore when the shared
-                                    clipboard (gb_clip_*) reclaims notepad's local clip[]) */
+#define NP_MAX    3584           /* editable text capacity (was 4096; trimmed to fit the
+                                    navigable file dialog + per-app extension filter -
+                                    restore to 4096 when the shared clipboard (gb_clip_*)
+                                    reclaims notepad's local clip[512]) */
 #define NP_BUF    (NP_MAX + 512)  /* +1 sector of slack: gb_fs_load copies whole 512B
                                     sectors, so the buffer outruns the load cap */
 #define DEF_X     2            /* initial window position (the window is draggable) */
@@ -352,8 +353,10 @@ static void np_saved(void)
     if (is_bas()) { strip_cr(sv_wl); len = sv_orig; }   /* collapse back to \n */
 }
 
+/* the file types Notepad opens - the file dialog shows only these (+ folders) */
+static const char *const np_exts[] = { "TXT", "BAS", "CFG", 0 };
 static const gb_doc_t npdoc = {
-    buf, NP_MAX, np_new, np_open, np_save, np_saved, 0, 0, 0
+    buf, NP_MAX, np_new, np_open, np_save, np_saved, 0, 0, 0, np_exts
 };
 
 /* --- Edit menu: copy / paste over a selection (#99) ----------------------- */

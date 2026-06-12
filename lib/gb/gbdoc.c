@@ -155,7 +155,7 @@ static void do_load(void)
     char nm[11];
     unsigned int len;
     if (!confirm_save()) return;
-    if (!gb_pickfile(nm)) return;
+    if (!gb_pickfile(nm, g_doc->exts)) return;     /* filtered to the app's file types */
     set_name(nm);                                  /* chosen file -> current file */
     len = gb_fs_load(g_doc->buf, g_doc->bufmax);   /* targets the navigated directory */
     if (g_doc->on_open) g_doc->on_open(len);
@@ -173,7 +173,7 @@ static void do_save(void)
 static char namebuf[16];
 static void do_saveas(void)
 {
-    if (!gb_pickdir()) return;                     /* navigate to the destination dir */
+    if (!gb_pickdir(g_doc->exts)) return;          /* navigate to the destination dir */
     if (!gb_prompt("Save as:", namebuf, 12)) return;
     to_83(namebuf);
     set_name(name83);

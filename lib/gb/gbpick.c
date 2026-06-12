@@ -20,6 +20,7 @@
 
 static char          store[PICK_MAX][14];   /* display labels: "NAME.EXT" / "NAME/" */
 static unsigned char isdir_f[PICK_MAX];     /* parallel: is entry i a directory?    */
+static const char *const *g_exts;           /* current extension filter (NULL = all) */
 
 /* name_disp: raw 11-byte 8.3 name -> "NAME.EXT" (file) or "NAME/" (folder), into dst. */
 static void name_disp(char *dst, const char *raw, unsigned char dir)
@@ -31,19 +32,35 @@ static void name_disp(char *dst, const char *raw, unsigned char dir)
     dst[j] = 0;
 }
 
-/* seek_to: re-position the directory enumerator on entry idx (raw order), so the
- * kernel's "current entry" (fs_ent_*) is that one - for gb_chdir / gb_entname. */
-static void seek_to(unsigned char idx)
+/* shown: is the current entry listed? Folders always; files only if their extension
+ * is in g_exts (NULL = all files). Reads the kernel's current entry (gb_isdir/entname). */
+static unsigned char shown(void)
 {
+    const char *raw;
     unsigned char k;
-    gb_dir1();
-    for (k = 0; k < idx; k++) gb_dirn();
+    if (gb_isdir() || !g_exts) return 1;
+    raw = gb_entname();
+    for (k = 0; g_exts[k]; k++)
+        if (raw[8] == g_exts[k][0] && raw[9] == g_exts[k][1] && raw[10] == g_exts[k][2]) return 1;
+    return 0;
 }
 
-/* pick: the shared navigable loop. savemode 0 = Open (a chosen file's raw 8.3 name
- * is copied to out11, 1 returned); savemode 1 = Save (navigate, then "[Save here]"
- * returns 1). 0 = cancelled. Folders descend, ".." goes up; leaves the FS in the
- * chosen directory. out11 may be NULL in save mode. */
+/* seek_to: re-position the enumerator on the idx-th *shown* entry (same filter as the
+ * list), so the kernel's "current entry" is that one - for gb_chdir / gb_entname. */
+static void seek_to(unsigned char idx)
+{
+    unsigned char s = 0;
+    char *p = gb_dir1();
+    while (p) {
+        if (shown()) { if (s == idx) return; s++; }
+        p = gb_dirn();
+    }
+}
+
+/* pick: the shared navigable loop (filter = g_exts). savemode 0 = Open (a chosen file's
+ * raw 8.3 name is copied to out11, 1 returned); savemode 1 = Save (navigate, then
+ * "[Save here]" returns 1). 0 = cancelled. Folders descend, ".." goes up; leaves the FS
+ * in the chosen directory. out11 may be NULL in save mode. */
 static unsigned char pick(unsigned char savemode, char *out11)
 {
     const char *labels[PICK_MAX + 2];
@@ -53,9 +70,11 @@ static unsigned char pick(unsigned char savemode, char *out11)
         nreal = 0;
         p = gb_dir1();
         while (p && nreal < PICK_MAX) {
-            isdir_f[nreal] = gb_isdir();
-            name_disp(store[nreal], gb_entname(), isdir_f[nreal]);
-            nreal++;
+            if (shown()) {
+                isdir_f[nreal] = gb_isdir();
+                name_disp(store[nreal], gb_entname(), isdir_f[nreal]);
+                nreal++;
+            }
             p = gb_dirn();
         }
         nlab = 0;
@@ -67,8 +86,8 @@ static unsigned char pick(unsigned char savemode, char *out11)
         if (sel == 0xFF) return 0;                      /* cancel / ESC */
         if (sel == 0) { gb_back(); continue; }          /* .. */
         if (savemode && sel == 1) return 1;             /* [Save here] */
-        i = (unsigned char)(sel - base);                /* real entry index */
-        if (isdir_f[i]) { seek_to(i); gb_chdir(); continue; }   /* descend into folder */
+        i = (unsigned char)(sel - base);                /* shown-entry index */
+        if (isdir_f[i]) { seek_to(i); gb_chdir(); continue; }   /* descend */
         if (savemode) continue;                         /* a file in Save mode -> ignore */
         seek_to(i);                                     /* Open: select this file */
         if (out11) { p = gb_entname(); for (i = 0; i < 11; i++) out11[i] = p[i]; }
@@ -76,10 +95,11 @@ static unsigned char pick(unsigned char savemode, char *out11)
     }
 }
 
-/* gb_pickfile: navigable Open dialog. On a pick, fills name11 with the chosen file's
- * raw 11-byte 8.3 name and leaves the FS in its directory; returns 1 (0 = cancel). */
-unsigned char gb_pickfile(char *name11) { return pick(0, name11); }
+/* gb_pickfile: navigable Open dialog filtered to `exts` (per-app: each app passes its
+ * own list). Fills name11 with the chosen file's raw 11-byte name, FS left in its
+ * directory; returns 1 (0 = cancel). */
+unsigned char gb_pickfile(char *name11, const char *const *exts) { g_exts = exts; return pick(0, name11); }
 
-/* gb_pickdir: navigable destination chooser. Navigate, then "[Save here]" leaves the
- * FS in that directory and returns 1 (0 = cancel) - the caller then prompts a name. */
-unsigned char gb_pickdir(void) { return pick(1, 0); }
+/* gb_pickdir: navigable destination chooser (files shown for reference, filtered to
+ * `exts`). "[Save here]" leaves the FS in that directory and returns 1 (0 = cancel). */
+unsigned char gb_pickdir(const char *const *exts) { g_exts = exts; return pick(1, 0); }

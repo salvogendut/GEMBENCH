@@ -127,9 +127,11 @@ void          gb_popup_close(void);
  *   gb_pickfile - Open: pick a file; fills name11 with its raw 11-byte 8.3 name,
  *                 returns 1 (0 = cancel). Caller then gb_set_name(name11)+gb_fs_load.
  *   gb_pickdir  - Save destination: navigate, then "[Save here]" returns 1 with the
- *                 FS in that directory (0 = cancel). Caller then prompts a name. */
-unsigned char gb_pickfile(char *name11);
-unsigned char gb_pickdir(void);
+ *                 FS in that directory (0 = cancel). Caller then prompts a name.
+ * `exts` is a NULL-terminated list of 3-char space-padded uppercase extensions to
+ * show (e.g. {"TXT","BAS",0}); NULL shows all files. Folders are always shown. */
+unsigned char gb_pickfile(char *name11, const char *const *exts);
+unsigned char gb_pickdir(const char *const *exts);
 
 /* ---- Document-app framework (#142) -----------------------------------------
  * An app that edits a document registers a gb_doc_t once, and the system gives
@@ -161,6 +163,10 @@ typedef struct {
     void         (*on_copy)(void);
     void         (*on_paste)(void);
     void         (*on_selectall)(void);
+    /* File dialog extension filter: a NULL-terminated list of 3-char (space-padded)
+     * uppercase extensions the app handles, e.g. {"TXT","BAS","CFG",0}. The Open/Save
+     * dialog then shows only these files (folders always shown). NULL = show all. */
+    const char *const *exts;
 } gb_doc_t;
 void          gb_doc(const gb_doc_t *d);   /* register; adds the standard File (+Edit) menu */
 void          gb_doc_dirty(void);          /* mark the document modified */
