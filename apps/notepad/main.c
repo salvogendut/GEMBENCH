@@ -18,8 +18,9 @@
  * visible. */
 #include "gb.h"
 
-#define NP_MAX    4096           /* editable text capacity (was 1024); fits the app's
-                                    #6000-#7FFF data window with room to spare */
+#define NP_MAX    4096           /* editable text capacity - restored to 4096 (#142): the
+                                    shared clipboard (gb_clip_*) replaced the local clip[512],
+                                    so the file dialog + extension filter fit without trimming */
 #define NP_BUF    (NP_MAX + 512)  /* +1 sector of slack: gb_fs_load copies whole 512B
                                     sectors, so the buffer outruns the load cap */
 #define DEF_X     2            /* initial window position (the window is draggable) */
@@ -44,12 +45,6 @@
 #define K_TAB     0x09
 #define K_QUIT    0x11           /* Ctrl-Q */
 
-#define FILE_COL  10             /* top-bar menu titles: "File" then "Edit" */
-#define FILE_END  16
-#define EDIT_COL  18
-#define EDIT_END  24
-
-#define CLIP_MAX  512            /* copy/paste clipboard (#99) */
 
 static unsigned char win_x = DEF_X;      /* live window position (draggable) */
 static unsigned char win_y = DEF_Y;
@@ -58,10 +53,6 @@ static char buf[NP_BUF];
 static char line[MAXWRAP];
 static unsigned int len, cur;            /* text length, insertion index */
 static unsigned char view_first;         /* first visible display row */
-static unsigned char dirty, status;      /* 0 none, 1 saved, 2 failed */
-static unsigned char want_menu, want_edit;   /* File / Edit title clicked -> run the menu */
-static char clip[CLIP_MAX];              /* copy/paste clipboard (#99) */
-static unsigned int cliplen;
 static unsigned int sel_a, sel_b;        /* selection [sel_a, sel_b) in buffer order */
 static unsigned char sel_on;             /* a selection exists */
 static unsigned char keycool;            /* frames to flush keys after a click or fire */
@@ -82,12 +73,6 @@ static unsigned char blink_ctr, caret_vis, cur_scr, cur_col;  /* caret blink (#8
 #define REP_DELAY 14                      /* frames held before a key auto-repeats */
 #define REP_RATE  3                       /* frames between repeats */
 static unsigned char arr_prev, arr_rep, arr_bits;
-
-/* the kernel-drawn top-bar menu: "File" then "Edit" (#99) */
-static const unsigned char top_menu[] = {
-    2, FILE_COL, 'F','i','l','e',0,0,0,0,
-       EDIT_COL, 'E','d','i','t',0,0,0,0
-};
 
 /* pos_of: display (row,col) of buffer index idx (wrap + newlines). */
 static void pos_of(unsigned int idx, unsigned char *prow, unsigned char *pcol)
@@ -146,19 +131,22 @@ static void fmt83(char *dst, const char *n11)
 /* win_title: the window title = the file name, with " *" appended when unsaved. */
 static const char *win_title(void)
 {
-    unsigned char i = 0, j = 0;
-    while (fbase[i]) wtitle[j++] = fbase[i++];
-    if (dirty) { wtitle[j++] = ' '; wtitle[j++] = '*'; }
+    /* NB: copy with a SINGLE index. `while (fbase[i]) wtitle[j++] = fbase[i++];`
+       (two separate auto-incrementing indices in one statement) is miscompiled by
+       SDCC under --fomit-frame-pointer here - it copied only the first char, so the
+       title showed just "G" instead of "GBKERN.BIN" (#142). */
+    unsigned char j = 0;
+    char c;
+    fmt83(fbase, gb_doc_name());                 /* current file name -> "NAME.EXT" */
+    while ((c = fbase[j]) != 0) { wtitle[j] = c; j++; }
+    if (gb_doc_modified()) { wtitle[j++] = ' '; wtitle[j++] = '*'; }
     wtitle[j] = 0;
     return wtitle;
 }
 
 static void status_line(void)
 {
-    gb_text(TX_COL, win_y + win_h - 11,
-            status == 1 ? "saved" :
-            status == 2 ? "SAVE FAILED" :
-                          "Click text to place caret. Ctrl-Q=quit");
+    gb_text(TX_COL, win_y + win_h - 11, "Click text to place caret. Ctrl-Q=quit");
 }
 
 /* draw_selection: overlay the selected chars [sel_a, sel_b) in reverse video
@@ -276,7 +264,7 @@ static void ins(char c)
     for (i = len; i > cur; i--) buf[i] = buf[i - 1];
     buf[cur] = c;
     len++; cur++;
-    dirty = 1; status = 0;
+    gb_doc_dirty();
 }
 
 static void del_back(void)
@@ -285,39 +273,22 @@ static void del_back(void)
     if (cur == 0) return;
     for (i = cur; i < len; i++) buf[i - 1] = buf[i];
     len--; cur--;
-    dirty = 1; status = 0;
+    gb_doc_dirty();
 }
 
-/* 8.3 helpers: turn a "NAME.EXT" string (from gb_dir*) into an 11-byte name. */
-static char name83[11];
-static void to_83(const char *s)
-{
-    unsigned char i = 0, j;
-    for (j = 0; j < 11; j++) name83[j] = ' ';
-    while (s[i] && s[i] != '.' && i < 8) { name83[i] = s[i]; i++; }
-    while (s[i] && s[i] != '.') i++;
-    if (s[i] == '.') {
-        i++;
-        for (j = 0; j < 3 && s[i]; j++, i++) name83[8 + j] = s[i];
-    }
-}
-
-/* on_menu: kernel callback on a top-bar click; arm the File / Edit menu for the
-   main loop. Ignored while a dialog is up (gb_modal) so re-clicking just closes it. */
+/* on_menu: a top-bar title (File or our Edit) was clicked -> hand it to the
+   document framework, which drops the dropdown on the next on_frame (#142). */
 static void on_menu(void)
 {
-    if (gb_msg.type != GB_MSG_MENU || gb_modal()) return;
-    if (gb_msg.p0 >= FILE_COL && gb_msg.p0 < FILE_END) want_menu = 1;
-    else if (gb_msg.p0 >= EDIT_COL && gb_msg.p0 < EDIT_END) want_edit = 1;
+    gb_doc_event();
 }
 
-static const char *const file_items[] = { "New", "Load", "Save", "Save As" };
-
-/* is_bas: is the current file a BASIC program? .BAS needs CR+LF line endings on the
-   CPC (where Notepad otherwise keeps plain \n); is_bas reads the 8.3 name's ext. */
+/* is_bas: is the current file a BASIC program? .BAS needs CR+LF on the CPC (we
+   otherwise edit plain \n); read the framework's current 8.3 name. */
 static unsigned char is_bas(void)
 {
-    return (unsigned char)(name83[8] == 'B' && name83[9] == 'A' && name83[10] == 'S');
+    const char *n = gb_doc_name();
+    return (unsigned char)(n[8] == 'B' && n[9] == 'A' && n[10] == 'S');
 }
 
 /* strip_cr: drop every \r from buf[0..n) so a CR+LF file edits as plain \n lines;
@@ -352,110 +323,55 @@ static unsigned int to_crlf(void)
     return newlen;
 }
 
-static void do_save(void)
+/* --- document-framework hooks (#142): the standard File menu (New/Load/Save/Save
+   As) is the system's; we provide only how to clear, read in, and write out our
+   text buffer. The .BAS CR+LF round-trip rides on_save (expand) + on_saved (undo). */
+static unsigned int sv_orig, sv_wl;            /* .BAS save round-trip state */
+
+static void np_new(void)
 {
-    if (is_bas()) {                            /* CR+LF for CPC BASIC, then restore \n */
-        unsigned int orig = len, wl = to_crlf();
-        status = gb_fs_save(buf, wl) ? 1 : 2;
-        strip_cr(wl);                          /* collapse back; buf[0..orig) == original */
-        len = orig;                            /* drop the file-only trailing terminator */
-    } else {
-        status = gb_fs_save(buf, len) ? 1 : 2;
-    }
-    if (status == 1) dirty = 0;
+    len = 0; cur = 0; view_first = 0; sel_on = 0;
+}
+static void np_open(unsigned int n)
+{
+    len = n;
+    if (is_bas()) len = strip_cr(len);         /* .BAS arrives CR+LF -> edit as \n */
+    cur = 0; view_first = 0; sel_on = 0;
+}
+static unsigned int np_save(void)
+{
+    if (!is_bas()) return len;
+    sv_orig = len; sv_wl = to_crlf();          /* expand to CR+LF for CPC BASIC */
+    return sv_wl;
+}
+static void np_saved(void)
+{
+    if (is_bas()) { strip_cr(sv_wl); len = sv_orig; }   /* collapse back to \n */
 }
 
-/* ensure_ext: a name with no '.' gets a ".TXT" default (8.3, room permitting). */
-static char namebuf[16];
-static void ensure_ext(void)
+/* the file types Notepad opens - the file dialog shows only these (+ folders) */
+static const char *const np_exts[] = { "TXT", "BAS", "CFG", 0 };
+static void select_all(void);            /* the Edit-menu hooks (defined below) */
+static void copy_sel(void);
+static void paste_clip(void);
+
+/* np_fullscreen: View > Fullscreen - resize our window to cover the screen (below the
+ * top bar) and back. Notepad is resizable (#81), so the text just reflows. Restoring
+ * repaints the desktop we vacated. */
+static void np_fullscreen(unsigned char on)
 {
-    unsigned char i = 0, has = 0;
-    while (namebuf[i]) { if (namebuf[i] == '.') has = 1; i++; }
-    if (!has && i && i <= 8) {
-        namebuf[i++] = '.'; namebuf[i++] = 'T'; namebuf[i++] = 'X'; namebuf[i++] = 'T';
-        namebuf[i] = 0;
-    }
+    if (on) { win_x = 0; win_y = 8; win_w = 80; win_h = 192; }
+    else    { win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H; }
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(win_w, win_h);
+    if (!on) gb_restore_parent();        /* repaint what the full-screen window covered */
+    gb_curhide(); draw(); gb_curshow();
 }
 
-/* set_file: namebuf "NAME[.EXT]" -> the current file name + title. */
-static void set_file(void)
-{
-    ensure_ext();
-    to_83(namebuf);
-    gb_set_name(name83);
-    fmt83(fbase, name83);
-}
-
-static void do_new(void)
-{
-    if (gb_prompt("New file name:", namebuf, 12)) set_file();
-    else { gb_set_name("UNTITLEDTXT"); fmt83(fbase, "UNTITLEDTXT"); }
-    len = 0; cur = 0; view_first = 0; dirty = 0; status = 0;
-}
-
-static void do_saveas(void)
-{
-    if (!gb_prompt("Save as:", namebuf, 12)) return;
-    set_file();
-    do_save();
-}
-
-/* is_binary: true if "NAME.EXT" has a known non-text extension (so Load skips it). */
-static unsigned char is_binary(const char *name)
-{
-    static const char bin[9][4] = { "APP","BIN","IST","SPR","FNT","RAW","IMG","SNA","DSK" };
-    const char *e = name;
-    char ext[4];
-    unsigned char i, k;
-    while (*e && *e != '.') e++;
-    if (*e != '.') return 0;             /* no extension -> treat as text */
-    e++;
-    for (i = 0; i < 3 && e[i] && e[i] != ' '; i++) ext[i] = e[i];
-    ext[i] = 0;
-    for (k = 0; k < 9; k++)
-        if (bin[k][0] == ext[0] && bin[k][1] == ext[1] && bin[k][2] == ext[2])
-            return 1;
-    return 0;
-}
-
-/* do_load: list the (text) directory entries in a popup; open the one clicked. */
-static void do_load(void)
-{
-    const char *names[MAXVIS];
-    static char store[MAXVIS][14];
-    char *p;
-    unsigned char n = 0, i, sel;
-
-    p = gb_dir1();
-    while (p && n < MAX_LINES) {
-        if (!is_binary(p)) {             /* skip .APP/.BIN/... - text files only (#86) */
-            for (i = 0; i < 13 && p[i]; i++) store[n][i] = p[i];
-            store[n][i] = 0;
-            names[n] = store[n];
-            n++;
-        }
-        p = gb_dirn();
-    }
-    if (!n) return;
-    sel = gb_popup(win_x + 6, TX_Y0, names, n);
-    if (sel == 0xFF) return;
-    to_83(store[sel]);
-    gb_set_name(name83);
-    fmt83(fbase, name83);                /* title -> the opened file's name */
-    len = gb_fs_load(buf, NP_MAX);
-    if (is_bas()) len = strip_cr(len);   /* .BAS comes in CR+LF -> edit as plain \n */
-    cur = 0; view_first = 0; dirty = 0; status = 0;
-}
-
-/* run_menu: drop the File menu and dispatch the chosen item. */
-static void run_menu(void)
-{
-    unsigned char sel = gb_popup(FILE_COL, 8, file_items, 4);
-    if (sel == 0) do_new();
-    else if (sel == 1) do_load();
-    else if (sel == 2) do_save();
-    else if (sel == 3) do_saveas();
-}
+static const gb_doc_t npdoc = {
+    buf, NP_MAX, np_new, np_open, np_save, np_saved, copy_sel, paste_clip, select_all,
+    np_exts, 0, 0, np_fullscreen, 0, 0
+};
 
 /* --- Edit menu: copy / paste over a selection (#99) ----------------------- */
 
@@ -466,7 +382,7 @@ static void delete_range(unsigned int a, unsigned int b)
     for (i = b; i < len; i++) buf[i - (b - a)] = buf[i];
     len -= (b - a);
     cur = a;
-    dirty = 1; status = 0;
+    gb_doc_dirty();
 }
 
 static void select_all(void)
@@ -475,78 +391,43 @@ static void select_all(void)
     sel_a = 0; sel_b = len; sel_on = 1; cur = len;
 }
 
+/* copy_sel / paste_clip / select_all are the framework's Edit-menu hooks (#142): the
+ * standard Edit menu (Select All / Copy / Paste) is added by gb_doc, and copy/paste go
+ * through the SHARED clipboard (gb_clip_*) so they work across apps. */
 static void copy_sel(void)
 {
-    unsigned int i, n = 0;
     if (!sel_on || sel_a >= sel_b) return;
-    for (i = sel_a; i < sel_b && n < CLIP_MAX; i++) clip[n++] = buf[i];
-    cliplen = n;
+    gb_clip_set(buf + sel_a, sel_b - sel_a);
 }
 
-/* paste_clip: replace any selection with the clipboard, inserted at the caret. */
+/* paste_clip: replace any selection with the clipboard, inserted at the caret. No local
+ * buffer - open the gap, then read the clipboard straight into it. */
 static void paste_clip(void)
 {
-    unsigned int i;
+    unsigned int n;
+    char *s, *d, *lo;
     if (sel_on && sel_a < sel_b) delete_range(sel_a, sel_b);   /* caret -> sel_a */
     sel_on = 0;
-    if (!cliplen || len + cliplen > NP_MAX) return;
-    for (i = len; i > cur; i--) buf[i - 1 + cliplen] = buf[i - 1];  /* open a gap */
-    for (i = 0; i < cliplen; i++) buf[cur + i] = clip[i];
-    len += cliplen; cur += cliplen;
-    dirty = 1; status = 0;
+    n = gb_clip_len();
+    if (!n || len >= NP_MAX) return;
+    if (n > NP_MAX - len) n = NP_MAX - len;                    /* clamp (avoids len+n wrap) */
+    /* open a gap of n at the caret, copying end-first. Pointer walk, NOT the index
+       form buf[i-1+n]=buf[i-1]: under --fomit-frame-pointer SDCC spilled that loop's
+       dst pointer and clobbered the loop counter, looping forever -> crash (#142). */
+    lo = buf + cur;
+    s  = buf + len;
+    d  = s + n;
+    while (s > lo) *--d = *--s;
+    gb_clip_get(buf + cur, n);                                 /* fill it from the clipboard */
+    len += n; cur += n;
+    gb_doc_dirty();
 }
 
-static const char *const edit_items[] = { "Select", "Copy", "Paste" };
-static void run_edit(void)
-{
-    unsigned char sel = gb_popup(EDIT_COL, 8, edit_items, 3);
-    if (sel == 0) select_all();
-    else if (sel == 1) copy_sel();
-    else if (sel == 2) paste_clip();
-}
-
-/* confirm: "Save changes?" dialog -> 1 = YES, 0 = NO, 0xFF = cancelled (ESC). */
-static unsigned char confirm(void)
-{
-    unsigned char flags, sel = 0xFF;
-    unsigned char x = 28, y = 86, w = 26, h = 44;
-    gb_modal_set(1);
-    gb_curhide();
-    gb_fill(x, y, w, h, 1);                       /* white box + black frame */
-    gb_frame(x, y, w, h, 2);
-    gb_text(x + 1, y + 4,  "Save changes?");
-    gb_text(x + 3, y + 20, "YES");
-    gb_text(x + 3, y + 32, "NO");
-    gb_curshow();
-    for (;;) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) break;                       /* ESC -> cancel */
-        if (!(flags & GB_CLICK)) continue;
-        if (gb_mx() >= x && gb_mx() < x + w) {
-            if (gb_my() >= y + 20 && gb_my() < y + 30) { sel = 1; break; }  /* YES */
-            if (gb_my() >= y + 32 && gb_my() < y + 42) { sel = 0; break; }  /* NO  */
-        }
-        /* clicks elsewhere keep the dialog open */
-    }
-    gb_modal_set(0);
-    if (sel == 0xFF) while (gb_poll() & GB_QUIT) ;   /* swallow ESC */
-    gb_curhide();
-    gb_fill(x, y, w, h, 0);                          /* erase the dialog */
-    keycool = 4;
-    return sel;
-}
-
-/* try_close: handle a click on the window close gadget. -> 1 if Notepad should
-   quit, 0 to stay open. Prompts to save when there are unsaved edits. */
+/* try_close: the close gadget was hit -> let the framework offer to save first
+   (it owns the "Save changes?" dialog). 1 = close, 0 = stay open. */
 static unsigned char try_close(void)
 {
-    unsigned char ans;
-    if (!dirty) return 1;                /* nothing changed -> just close */
-    ans = confirm();
-    if (ans == 0xFF) return 0;           /* cancelled -> stay open */
-    if (ans == 0) return 1;              /* NO -> discard and close */
-    do_save();                            /* YES -> save; close only if it worked */
-    return (unsigned char)(status == 1);
+    return gb_doc_close();
 }
 
 /* cursor_over: is the pointer inside our window? (so the blink only lifts the
@@ -707,18 +588,9 @@ static void on_frame(void)
 
     if (flags & GB_QUIT) { gb_wm_close(); return; }   /* ESC closes the window */
 
-    if (want_menu) {                            /* File title was clicked */
-        want_menu = 0;
-        run_menu();
+    if (gb_doc_frame()) {                       /* a File/Edit menu ran (#142) */
         keycool = 4;                            /* flush the dialog click's buffered keys */
-        gb_curhide(); draw(); gb_curshow();     /* gb_popup/gb_prompt return cursor shown */
-        return;
-    }
-    if (want_edit) {                            /* Edit title was clicked (#99) */
-        want_edit = 0;
-        run_edit();
-        keycool = 4;
-        gb_curhide(); draw(); gb_curshow();
+        gb_curhide(); draw(); gb_curshow();     /* popups return the cursor shown */
         return;
     }
 
@@ -804,34 +676,24 @@ static void on_frame(void)
     }
 }
 
-/* a co-resident window (issue #45): on_repaint redraws it, on_event = the top-bar
-   File click, menu = the File title the kernel shows while we are focused. */
+/* a co-resident window (issue #45): on_repaint redraws it, on_event hands top-bar
+   clicks to the document framework, which owns the bar menu (so menu = 0). */
 static const gb_win_t npwin = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, np_repaint, on_menu, top_menu
+    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, np_repaint, on_menu, 0
 };
 
 void main(void)
 {
     unsigned char n;
-    char raw[11];
 
     win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
     caret_vis = 1; blink_ctr = 0; arr_prev = 0; arr_rep = 0;
-    gb_wm_add(&npwin);                           /* register FIRST: captures our file arg
-                                                   (per-window) + takes focus, so the load
-                                                   below targets OUR file, not a sibling's */
-    gb_get_name(raw);                            /* the file name we were launched with */
-    for (n = 0; n < 11; n++) name83[n] = raw[n]; /* current 8.3 name (for is_bas etc.) */
-    len = gb_fs_load(buf, NP_MAX);              /* ...and its contents (0 if none) */
+    gb_wm_add(&npwin);                           /* register FIRST: captures our file arg */
+    gb_doc(&npdoc);                              /* standard File + Edit menus; adopts the name */
+    len = gb_fs_load(buf, NP_MAX);              /* load the launch file (0 if none) */
     if (is_bas()) len = strip_cr(len);           /* .BAS in CR+LF -> edit as plain \n */
-    fmt83(fbase, raw);                           /* show it in the title bar (#86) */
-    if (!fbase[0]) {                             /* opened blank -> Untitled */
-        fmt83(fbase, "UNTITLEDTXT");
-        gb_set_name("UNTITLEDTXT");
-    }
-    cur = len; view_first = 0; dirty = 0; status = 0;
-    want_menu = 0; want_edit = 0;
-    sel_on = 0; cliplen = 0;                      /* copy/paste state (#99) */
+    cur = len; view_first = 0;
+    sel_on = 0;                                  /* selection state (clipboard is shared now) */
     for (n = 64; n; n--) if (!gb_getkey()) break;   /* drop buffered keys */
 
     draw();

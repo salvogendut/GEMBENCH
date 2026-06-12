@@ -29,8 +29,11 @@
 #define MAXITER   20
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
-#define CVX    (unsigned char)(win_x + 1)            /* canvas left, byte column */
-#define CVY    (unsigned char)(win_y + TITLE_H + 1)  /* canvas top, screen row   */
+static unsigned char winw = WIN_W, winh = WIN_H;   /* live window size (Fullscreen, #142) */
+static unsigned char ox = DEF_X, oy = DEF_Y;       /* content origin (centered when bigger) */
+static void recalc_origin(void);                   /* defined below */
+#define CVX    (unsigned char)(ox + 1)               /* canvas left, byte column */
+#define CVY    (unsigned char)(oy + TITLE_H + 1)     /* canvas top, screen row   */
 #define CTRL_Y (unsigned char)(CVY + CANVAS_H + 2)   /* control strip (the +/- buttons) */
 
 /* .PIC v2 header (14 bytes) then the canvas, in one buffer so Save is one fs call.
@@ -47,15 +50,16 @@ static const unsigned char pic_inks[4] = { 1, 26, 0, 6 };   /* GEOBENCH palette 
 #define HOME_STEP 160                   /* ~0.039/px -> ~3.1 wide, square pixels */
 static int cx0 = HOME_CX, cy0 = HOME_CY, step = HOME_STEP;
 
-/* File menu state + the saved file name (shown in the title once saved). */
-#define FILE_COL 10
-#define FILE_END 16
-static unsigned char want_menu;
-static char name83[11];
-static char fbase[14];
-static char wtitle[18];
-static char namebuf[16];
-static const unsigned char top_menu[] = { 1, FILE_COL, 'F','i','l','e',0,0,0,0 };
+/* The document is the fractal DEFINITION - a small .TXT of the view maths (Save/Load);
+   "Save as PIC" exports the rendered image separately. A fresh fractal is only generated
+   on File>New, not at launch. */
+#define DEFMAX   512                   /* gb_fs_load copies whole sectors -> >= 1 sector */
+static unsigned char defbuf[DEFMAX];   /* the .TXT definition (the gb_doc buffer) */
+static unsigned char generated;        /* 1 once a fractal is rendered (New / Load) */
+static char name83[11];                /* 8.3 scratch for the PIC export name */
+static char fbase[14];                 /* title: NAME.EXT from gb_doc_name() */
+static char wtitle[18];                /* fbase + " *" when modified */
+static char namebuf[16];               /* gb_prompt target for Save as PIC */
 
 /* ---- Q4.12 signed multiply: fr = (fa * fb) >> 12 (hand-written, the hot op) ---- */
 static int fa, fb, fr;
@@ -187,11 +191,16 @@ static void render(void)
 }
 
 /* ---- window chrome ---------------------------------------------------------- */
+static void fmt83(char *dst, const char *n11);   /* below */
 static const char *win_title(void)
 {
-    unsigned char i = 0, j = 0;
-    if (!fbase[0]) return "XAOS";
-    while (fbase[i]) wtitle[j++] = fbase[i++];
+    /* name from gb_doc; single-index copy (the two-index form is miscompiled by SDCC
+       under --fomit-frame-pointer, #142). */
+    unsigned char j = 0;
+    char c;
+    fmt83(fbase, gb_doc_name());
+    while ((c = fbase[j]) != 0) { wtitle[j] = c; j++; }
+    if (gb_doc_modified()) { wtitle[j++] = ' '; wtitle[j++] = '*'; }
     wtitle[j] = 0;
     return wtitle;
 }
@@ -205,17 +214,23 @@ static void btn(unsigned char bx, const char *label)
 static void draw_buttons(void)
 {
     gb_curhide();
-    btn((unsigned char)(win_x + 1), "+");
-    btn((unsigned char)(win_x + 6), "-");
+    btn((unsigned char)(ox + 1), "+");
+    btn((unsigned char)(ox + 6), "-");
     gb_curshow();
 }
 static void draw_all(void)
 {
+    recalc_origin();
     gb_curhide();
-    gb_window(win_x, win_y, WIN_W, WIN_H, win_title());
+    gb_window(win_x, win_y, winw, winh, win_title());
     gb_curshow();
     blit_canvas();
     draw_buttons();
+    if (!generated) {                                  /* nothing rendered yet (#142) */
+        gb_curhide();
+        gb_text((unsigned char)(win_x + 2), (unsigned char)(CVY + 4), "File > New");
+        gb_curshow();
+    }
 }
 static void on_repaint(void) { draw_all(); }
 
@@ -226,6 +241,7 @@ static void rezoom(unsigned char px, unsigned char py, unsigned char num, unsign
     cy0 += (int)((int)py - CANVAS_H / 2) * step;
     step = (int)((long)step * num / den);
     if (step < 1) step = 1;
+    gb_doc_dirty();                       /* the view (definition) changed (#142) */
     render();
 }
 
@@ -261,25 +277,107 @@ static void write_pic(void)            /* v2 header + the canvas -> the open fil
     picbuf[12] = pic_inks[2]; picbuf[13] = pic_inks[3];
     gb_fs_save((char *)picbuf, PIC_LEN);
 }
-static void do_save(void)
+/* ---- the fractal DEFINITION as a .TXT: "XAOS\n<cx0>\n<cy0>\n<step>\n" ---------- */
+static char *put_int(char *p, int v)   /* signed decimal + newline */
 {
-    if (!gb_prompt("Save as:", namebuf, 12)) return;
+    char tmp[6]; unsigned char n = 0; unsigned int u;
+    if (v < 0) { *p++ = '-'; u = (unsigned int)(0 - v); } else u = (unsigned int)v;
+    do { tmp[n++] = (char)('0' + u % 10); u /= 10; } while (u);
+    while (n) *p++ = tmp[--n];
+    *p++ = '\n';
+    return p;
+}
+static int get_int(char **pp)          /* parse a signed int, advance past its line */
+{
+    char *p = *pp; int v = 0; unsigned char neg = 0;
+    while (*p == ' ' || *p == '\n' || *p == '\r') p++;
+    if (*p == '-') { neg = 1; p++; }
+    while (*p >= '0' && *p <= '9') { v = v * 10 + (*p - '0'); p++; }
+    while (*p && *p != '\n') p++;
+    if (*p) p++;
+    *pp = p;
+    return neg ? -v : v;
+}
+
+/* ---- the document, via the gb_doc framework (#142) -------------------------- */
+static const char *const x_exts[] = { "TXT", 0 };
+
+/* x_new: generate a fresh fractal (the whole set) - only now, not at launch. */
+static void x_new(void)
+{
+    cx0 = HOME_CX; cy0 = HOME_CY; step = HOME_STEP;
+    generated = 1;
+    render();
+}
+
+/* x_open: a definition .TXT was loaded into defbuf - parse the maths + render it. */
+static void x_open(unsigned int len)
+{
+    char *p = (char *)defbuf;
+    if (len >= 5 && defbuf[0] == 'X' && defbuf[1] == 'A' && defbuf[2] == 'O' && defbuf[3] == 'S') {
+        while (*p && *p != '\n') p++;
+        if (*p) p++;                       /* skip the "XAOS" magic line */
+        cx0 = get_int(&p); cy0 = get_int(&p); step = get_int(&p);
+        if (step < 1) step = 1;
+        generated = 1;
+        render();
+    } else {
+        generated = 0;                     /* not our format -> nothing to show */
+    }
+}
+
+/* x_save: serialise the current view maths into defbuf -> the byte count to write. */
+static unsigned int x_save(void)
+{
+    char *p = (char *)defbuf;
+    *p++ = 'X'; *p++ = 'A'; *p++ = 'O'; *p++ = 'S'; *p++ = '\n';
+    p = put_int(p, cx0);
+    p = put_int(p, cy0);
+    p = put_int(p, step);
+    return (unsigned int)(p - (char *)defbuf);
+}
+
+/* x_savepic (Save as PIC): export the rendered image as a .PIC, without disturbing the
+   document's current .TXT file name. */
+static void x_savepic(void)
+{
+    char keep[11];
+    if (!generated) return;
+    if (!gb_prompt("Save as PIC:", namebuf, 12)) return;
+    gb_get_name(keep);                      /* remember the .TXT name */
     ensure_pic_ext();
     to_83(namebuf);
     gb_set_name(name83);
-    fmt83(fbase, name83);              /* title -> the saved name */
-    write_pic();
+    write_pic();                            /* gb_fs_save(picbuf) under the PIC name */
+    gb_set_name(keep);                       /* restore the document's .TXT name */
 }
-static const char *const file_items[] = { "Save" };
-static void run_menu(void)
+
+/* recalc_origin: refresh the centered content origin from the live geometry. */
+static void recalc_origin(void)
 {
-    if (gb_popup(FILE_COL, 8, file_items, 1) == 0) do_save();
+    ox = (unsigned char)(win_x + (winw - WIN_W) / 2);
+    oy = (unsigned char)(win_y + (winh - WIN_H) / 2);
 }
-static void on_menu(void)
+
+/* x_fullscreen: View > Fullscreen - cover the screen (canvas + buttons recenter) and back. */
+static void x_fullscreen(unsigned char on)
 {
-    if (gb_msg.type != GB_MSG_MENU || gb_modal()) return;
-    if (gb_msg.p0 >= FILE_COL && gb_msg.p0 < FILE_END) want_menu = 1;
+    if (on) { win_x = 0; win_y = 8; winw = 80; winh = 192; }
+    else    { win_x = DEF_X; win_y = DEF_Y; winw = WIN_W; winh = WIN_H; }
+    recalc_origin();
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(winw, winh);
+    if (!on) gb_restore_parent();
+    draw_all();
 }
+
+static const gb_doc_t xdoc = {
+    defbuf, DEFMAX, x_new, x_open, x_save, 0, 0, 0, 0, x_exts, "Save as PIC", x_savepic,
+    x_fullscreen, 0, 0
+};
+
+/* on_menu: a top-bar title was clicked -> hand it to the framework. */
+static void on_menu(void) { gb_doc_event(); }
 
 static void on_frame(void)
 {
@@ -288,18 +386,18 @@ static void on_frame(void)
 
     if (flags & GB_QUIT) { gb_wm_close(); return; }
 
-    if (want_menu) { want_menu = 0; run_menu(); draw_all(); return; }
+    if (gb_doc_frame()) { draw_all(); return; }        /* a File menu ran (#142) */
 
-    while ((c = gb_getkey()) != 0)                     /* 'r' resets the home view */
-        if (c == 'r' || c == 'R') { cx0 = HOME_CX; cy0 = HOME_CY; step = HOME_STEP; render(); return; }
+    while ((c = gb_getkey()) != 0)                     /* 'r' = reset to the home view */
+        if (c == 'r' || c == 'R') { x_new(); gb_doc_dirty(); return; }
 
     if (!(flags & GB_CLICK)) return;
     mx = gb_mx(); my = gb_my();
 
     if (my >= win_y && my < (unsigned char)(win_y + TITLE_H)) {         /* title bar */
-        if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { gb_wm_close(); return; }
-        if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + WIN_W)) {
-            if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+        if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { if (gb_doc_close()) gb_wm_close(); return; }
+        if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + winw)) {
+            if (gb_drag_window(&win_x, &win_y, winw, winh)) {
                 gb_wm_setpos(win_x, win_y);
                 gb_restore_parent();
                 draw_all();
@@ -307,10 +405,11 @@ static void on_frame(void)
         }
         return;
     }
+    if (!generated) return;                            /* zoom/pan need a fractal first (#142) */
     if (my >= CTRL_Y && my < (unsigned char)(CTRL_Y + 9)) {             /* +/- buttons */
-        if (mx >= (unsigned char)(win_x + 1) && mx < (unsigned char)(win_x + 5))
+        if (mx >= (unsigned char)(ox + 1) && mx < (unsigned char)(ox + 5))
             rezoom(CANVAS_W / 2, CANVAS_H / 2, 1, 2);                   /* zoom in  */
-        else if (mx >= (unsigned char)(win_x + 6) && mx < (unsigned char)(win_x + 10))
+        else if (mx >= (unsigned char)(ox + 6) && mx < (unsigned char)(ox + 10))
             rezoom(CANVAS_W / 2, CANVAS_H / 2, 2, 1);                   /* zoom out */
         return;
     }
@@ -324,16 +423,19 @@ static void on_frame(void)
     }
 }
 
-static gb_win_t xwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, on_repaint, on_menu, top_menu };
+static gb_win_t xwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, on_repaint, on_menu, 0 };
 
 void main(void)
 {
     unsigned char n;
+    unsigned int len;
     win_x = DEF_X; win_y = DEF_Y;
     cx0 = HOME_CX; cy0 = HOME_CY; step = HOME_STEP;
-    want_menu = 0; fbase[0] = 0;
-    gb_wm_add(&xwin);
-    draw_all();
+    generated = 0;
+    gb_wm_add(&xwin);                                   /* register FIRST: captures our file arg */
+    gb_doc(&xdoc);                                      /* standard File menu; adopts the name */
+    len = gb_fs_load(defbuf, DEFMAX);                   /* launched with a definition .TXT? */
+    if (len) x_open(len);                               /* parse + render it (else stays empty) */
     for (n = 64; n; n--) if (!gb_getkey()) break;       /* drop buffered keys */
-    render();
+    draw_all();                                         /* a fresh launch shows "File > New" */
 }

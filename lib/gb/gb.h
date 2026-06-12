@@ -19,6 +19,8 @@ void gb_textk(unsigned char col, unsigned char line,     /* 6x8 text, black (pen
               const char *s);
 void gb_textbw(unsigned char col, unsigned char line,    /* 6x8 text, black on white */
                const char *s);
+void gb_textrev(unsigned char col, unsigned char line,   /* 6x8 text, white on black (reverse) */
+                const char *s);
 /* Reusable UI triangle glyphs (font codes 128-131); draw like text, e.g.
  * gb_textk(x, y, GLYPH_TRI_RIGHT). Present in DEFAULT.FNT (not CLASSIC.FNT). */
 #define GLYPH_TRI_UP    "\x80"
@@ -111,6 +113,92 @@ unsigned char gb_popup(unsigned char col, unsigned char line,
 unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen);
 unsigned char gb_modal(void);
 void          gb_modal_set(unsigned char on);
+/* gb_popup_close: make a live gb_popup cancel itself - used by the top-bar menu toggle.
+ * A re-click of a menu title can't reach the popup as a click-away (the kernel consumes
+ * bar clicks), so the title handler signals the close here. */
+void          gb_popup_close(void);
+
+/* Navigable file/folder chooser (#142, lib/gb/gbpick.c, opt-in via build_capp.sh
+ * PICKER=1 - DOC=1 implies it). The standard Open/Save dialog, built on the dir
+ * primitives (gb_dir1/dirn/isdir/entname + gb_chdir/back), shared by any app - this
+ * is the file DIALOG, not the File Manager. Folders descend, ".." goes up; both
+ * leave the filesystem positioned in the chosen directory, so a following
+ * gb_fs_load / gb_fs_save (or gb_set_name) targets it.
+ *   gb_pickfile - Open: pick a file; fills name11 with its raw 11-byte 8.3 name,
+ *                 returns 1 (0 = cancel). Caller then gb_set_name(name11)+gb_fs_load.
+ *   gb_pickdir  - Save destination: navigate, then "[Save here]" returns 1 with the
+ *                 FS in that directory (0 = cancel). Caller then prompts a name.
+ * `exts` is a NULL-terminated list of 3-char space-padded uppercase extensions to
+ * show (e.g. {"TXT","BAS",0}); NULL shows all files. Folders are always shown. */
+unsigned char gb_pickfile(char *name11, const char *const *exts);
+unsigned char gb_pickdir(const char *const *exts);
+
+/* ---- Document-app framework (#142) -----------------------------------------
+ * An app that edits a document registers a gb_doc_t once, and the system gives
+ * it a standard "File" menu (New / Load / Save / Save As) in the top bar and
+ * runs those actions for it - so the app carries NO menu or file-dialog code.
+ * The app provides only its buffer and three hooks:
+ *   on_new()         reset to an empty document
+ *   on_open(len)     buf now holds a `len`-byte file just loaded - parse it
+ *   on_save() -> len fill buf with the document, return the byte count to write
+ * Mark edits with gb_doc_dirty() so New / Load / close can offer to save first.
+ *
+ * Recipe: call gb_doc(&doc) before gb_wm_run; in your on_event call
+ * gb_doc_event() first (returns 1 if the framework consumed the event); in your
+ * on_frame call gb_doc_frame() (runs a pending File menu). Add app-specific
+ * menus with gb_menu_add; their selections arrive as GB_MSG_MENUSEL. */
+typedef struct {
+    char         *buf;          /* document buffer (in the app's bank) */
+    unsigned int  bufmax;       /* its capacity in bytes */
+    void         (*on_new)(void);               /* clear to an empty document */
+    void         (*on_open)(unsigned int len);  /* buf holds a loaded file of `len` bytes */
+    unsigned int (*on_save)(void);              /* fill buf -> bytes to write */
+    void         (*on_saved)(void);             /* optional: after the write (restore buf
+                                                   if on_save transformed it); NULL if none */
+    /* Optional Edit menu: if on_copy is non-NULL the framework also adds a
+     * standard "Edit" menu (Select All / Copy / Paste) backed by the shared
+     * clipboard (gb_clip_*), so copy/paste works across apps. The hooks do the
+     * app-specific part: copy the selection INTO the clipboard, paste the
+     * clipboard AT the cursor, select everything. Leave NULL for a view-only app. */
+    void         (*on_copy)(void);
+    void         (*on_paste)(void);
+    void         (*on_selectall)(void);
+    /* File dialog extension filter: a NULL-terminated list of 3-char (space-padded)
+     * uppercase extensions the app handles, e.g. {"TXT","BAS","CFG",0}. The Open/Save
+     * dialog then shows only these files (folders always shown). NULL = show all. */
+    const char *const *exts;
+    /* Optional extra File item: if export_label is non-NULL the framework adds it to the
+     * File menu after Save As (e.g. XAOS "Save as PIC" - export the rendered image while
+     * Save keeps the definition). on_export does the whole action itself. NULL = none. */
+    const char  *export_label;
+    void         (*on_export)(void);
+    /* Optional View menu (added after Edit). "Fullscreen" is offered when on_fullscreen
+     * is non-NULL - the framework toggles a flag and calls on_fullscreen(on); the app
+     * resizes its own window to cover the screen (on=1) or restore (on=0) and repaints.
+     * Any view_items (NULL-terminated) follow, dispatched to on_view(index). */
+    void         (*on_fullscreen)(unsigned char on);
+    const char *const *view_items;
+    void         (*on_view)(unsigned char item);
+} gb_doc_t;
+void          gb_doc(const gb_doc_t *d);   /* register; adds the standard File (+Edit) menu */
+void          gb_doc_dirty(void);          /* mark the document modified */
+unsigned char gb_doc_modified(void);       /* is it dirty? (e.g. for a "*" in the title) */
+const char   *gb_doc_name(void);           /* the current file's 11-byte 8.3 name */
+unsigned char gb_doc_close(void);          /* on the close gadget: confirm-if-dirty; 1=close ok */
+unsigned char gb_doc_event(void);          /* in on_event: 1 if the framework handled it */
+unsigned char gb_doc_frame(void);          /* in on_frame: ran a menu? (1 -> repaint window) */
+
+/* Shared clipboard (#142): a system buffer that survives app switches, so copy in
+ * one app and paste in another. An app's on_copy fills it; on_paste reads it. */
+void          gb_clip_set(const char *buf, unsigned int len);   /* copy in */
+unsigned int  gb_clip_len(void);                                /* clipboard length */
+unsigned int  gb_clip_get(char *buf, unsigned int max);         /* paste out -> length */
+
+/* gb_menu_add: add an app-specific menu title with `n` items to the top bar
+ * (alongside the standard File menu). When the user picks item `i`, the
+ * framework calls on_select(i). e.g. gb_menu_add("Edit", edit_items, 3, do_edit). */
+void gb_menu_add(const char *title, const char *const *items, unsigned char n,
+                 void (*on_select)(unsigned char item));
 
 /* gb_set_name: set the current file (an 11-byte 8.3 name, space-padded, no dot,
  * e.g. "NOTES   TXT") so a later gb_fs_load/gb_fs_save targets it - how an app

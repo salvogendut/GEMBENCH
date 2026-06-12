@@ -45,7 +45,8 @@ static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };      /* drives set
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
 static unsigned char dc_timer, dc_idx, held_prev;
-static unsigned char want_menu, show_ram;   /* System menu (#74) */
+static unsigned char show_ram;               /* System menu footprint toggle (#74) */
+static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
 
 #define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
 #define DRIVE_STEP 46         /* (BOX_H 44 + 2 gap), in detection order */
@@ -196,40 +197,12 @@ static void drop(void)
                                                    aren't erased by our backdrop fill (#65) */
 }
 
-/* a "System" menu title in the top bar (#74), right next to the RAM size; clicking
-   it drops a menu (Ram Usage / Refresh Media / Exit to DOS). The Ram-Usage footprint
-   shows separately, on the left of the clock. */
-#define MENU_COL  10         /* byte col (x4 px): clears a 5-char "1024K" (#138) */
-#define MENU_END  20
-#define FP_COL    54          /* footprint column - left of the clock (CLK_COL 68) */
-static const unsigned char dt_menu[] = { 1, MENU_COL, 'S','y','s','t','e','m',0,0 };
-
-/* popup: a frameless white menu (a seamless drop from the white top bar), black
-   ink; returns the clicked row or 0xFF. Self-polling, like the apps' modals. */
-static unsigned char popup(unsigned char x, unsigned char y,
-                           const char *const *labels, unsigned char n)
-{
-    unsigned char i, flags, row, sel = 0xFF;
-    gb_curhide();
-    gb_fill(x, y, 26, n * 10 + 2, 1);
-    for (i = 0; i < n; i++) gb_textbw(x + 1, y + 1 + i * 10, labels[i]);
-    gb_curshow();
-    for (;;) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) break;
-        if (!(flags & GB_CLICK)) continue;
-        if (gb_my() >= y + 1 && gb_my() < y + 1 + n * 10 && gb_mx() >= x && gb_mx() < x + 26) {
-            row = (gb_my() - (y + 1)) / 10;
-            if (row < n) { sel = row; break; }
-        }
-        break;
-    }
-    if (sel == 0xFF) while (gb_poll() & GB_QUIT) ;
-    gb_curhide();
-    gb_fill(x, y, 26, n * 10 + 2, 0);          /* erase (backdrop) */
-    gb_curshow();
-    return sel;
-}
+/* The "System" menu now rides the shared gb_doc menu system (#142): the desktop
+   registers an empty document (no File/Edit/View) and adds one "System" title with
+   gb_menu_add, so its dropdown renders with the same framed/reverse-video hover look
+   as every app's menus - one menu path for the whole UI. */
+#define FP_COL    54          /* Ram-Usage footprint column - left of the clock (CLK_COL 68) */
+static const gb_doc_t deskdoc = { 0 };        /* no document -> gb_doc adds no titles */
 
 /* draw_footprint: the resident kernel size on the top bar, left of the clock, as
    "<n>K used", black-on-white like the bar. */
@@ -260,12 +233,12 @@ static void tidy_icons(void)
     gb_restore_parent();
 }
 
-static void run_menu(void)
+/* sys_action: the System menu handler, dispatched by the gb_doc framework (#142). */
+static const char *const sys_items[4] = {
+    "Ram Usage", "Refresh Media", "Tidy Icons", "Exit to DOS"
+};
+static void sys_action(unsigned char sel)
 {
-    static const char *const items[4] = {
-        "Ram Usage", "Refresh Media", "Tidy Icons", "Exit to DOS"
-    };
-    unsigned char sel = popup(MENU_COL, 8, items, 4);
     if (sel == 0) {                            /* Ram Usage: toggle the footprint (it then
                                                   persists - nothing else touches the bar) */
         show_ram ^= 1;
@@ -310,9 +283,7 @@ static void on_event(void)
         }
         return;
     }
-    if (gb_msg.type != GB_MSG_MENU) return;
-    if (gb_msg.p0 < MENU_COL || gb_msg.p0 >= MENU_END) return;
-    want_menu = 1;                                      /* "System" clicked -> drop the menu */
+    gb_doc_event();                                    /* a top-bar title click -> the framework */
 }
 
 /* on_frame: one frame of the desktop, called by the kernel's window-manager loop
@@ -323,11 +294,16 @@ static void on_frame(void)
 {
     unsigned char flags = gb_flags(), mx = gb_mx(), my = gb_my(), held, icon;
 
+    if (!menu_inited) {                          /* 1st frame: the window is now registered+focused */
+        menu_inited = 1;
+        gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
+        gb_menu_add("System", sys_items, 4, sys_action);
+    }
     if (dc_timer) dc_timer--;
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
        Exit to DOS to leave); ESC only closes apps launched on top of it */
 
-    if (want_menu) { want_menu = 0; run_menu(); return; }
+    if (gb_doc_frame()) { gb_curhide(); paint(); return; }   /* a System menu item ran (#142) */
 
     held = flags & GB_FIRE;
     if (held_prev && !held && drag_active) {   /* fire released -> drop */
@@ -362,10 +338,10 @@ static void on_frame(void)
 }
 
 /* the desktop is the root window: full screen below the top bar, on_repaint = the
-   full paint() (restacked behind any window), on_event = the top-bar click demo,
-   menu = the "Disk" title. Its rect spans the screen so it is the bottom catch-all
-   for click-to-focus; the kernel installs its menu when it has focus. */
-static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint, on_event, dt_menu };
+   full paint() (restacked behind any window), on_event = file-drop + the System menu.
+   menu = 0: the gb_doc framework installs the "System" title dynamically (#142). Its
+   rect spans the screen so it is the bottom catch-all for click-to-focus. */
+static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint, on_event, 0 };
 
 void main(void)
 {

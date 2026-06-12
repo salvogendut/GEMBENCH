@@ -99,7 +99,11 @@ gd_fail
 ; gbfat_save: write GBFAT_LEN bytes from GBFAT_DATA to a file named GBFAT_NAME on
 ; the FAT32 volume (create or overwrite in place). CF set = saved.
 gbfat_save
-                call  fs_mount
+                call  fs_mount                   ; geometry (also sets fs_dir_clus=root)
+                ld    hl,GBFAT_DIR              ; operate in the requested directory, not
+                ld    de,fs_dir_clus           ; root (#142: saves were landing in root)
+                ld    bc,4
+                ldir
                 ld    a,(fs_clshift)          ; clbytes = 512<<clshift; nclus =
                 add   a,9                      ; ceil(len/clbytes) = (len+clbytes-1)>>(9+clshift)
                 ld    b,a
