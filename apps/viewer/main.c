@@ -10,11 +10,10 @@
  * skipped), so this doubles as a quick "peek" at anything on the disk. */
 #include "gb.h"
 
-#define VIEW_MAX  9728   /* file buffer + load cap = 19 sectors (~200x194 .PIC). Trimmed
-                            from 12288 to make room for the gb_doc framework code (#142):
-                            code + this buffer now fill the 16K bank. The largest .PIC the
-                            bank can hold is just under 200x200; a full-screen 320x200 (16K)
-                            never fit anyway. */
+#define VIEW_MAX  10240   /* file buffer + load cap = 20 sectors, holds a full 200x200 .PIC
+                            (PENGUIN.PIC, 10014 B). Restored to 10240 once the read-only
+                            gb_doc build (DOCRO=1) freed the Save/Save As code room (#144);
+                            a full-screen 320x200 (16K) still won't fit the 16K bank. */
 #define TX_COL    (unsigned char)(win_x + 2)     /* text/image start: byte col in window */
 #define TX_Y0     (unsigned char)(win_y + 12)    /* first text line / image top (rows)  */
 #define LINE_H    11     /* line pitch (pixels)                               */
