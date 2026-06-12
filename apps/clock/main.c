@@ -22,14 +22,12 @@
 #define MIN_H    96
 #define TITLE_H  14
 
-#define MENU_COL 10           /* "Options" title column in the top bar */
-#define MENU_END 22
-
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;  /* live size (resizeable) */
 static unsigned char show_sec;               /* 0 = H:M (minute refresh), 1 = +seconds */
 static unsigned char ph, pm, ps, pshow, have_prev;  /* previous h/m/s + show state */
-static unsigned char want_menu, modal;
+static unsigned char modal;                  /* a self-polling dialog is up (Set time) */
+static unsigned char fs_px, fs_py, fs_pw, fs_ph;    /* geometry saved across Fullscreen (#142) */
 
 /* face geometry, recomputed from the live window rect on every full draw (#81): the
    analog face scales to whatever the window has been resized to. */
@@ -213,44 +211,10 @@ static unsigned char changed(void)
     return show_sec ? (bin(gb_sec) != ps) : (bin(gb_min) != pm);
 }
 
-/* --- Options menu + dialogs (modal, self-polling like the other apps) --------- */
+/* --- Options menu + dialogs (gb_doc framework + a bespoke Set-time dialog) ----- */
 
-static const unsigned char clk_menu[] = { 1, MENU_COL, 'O','p','t','i','o','n','s' };
-
-static void on_menu(void)
-{
-    if (gb_msg.type != GB_MSG_MENU) return;
-    if (gb_msg.p0 < MENU_COL || gb_msg.p0 >= MENU_END) return;
-    want_menu = 1;
-}
-
-static unsigned char popup(unsigned char x, unsigned char y,
-                           const char *const *labels, unsigned char n)
-{
-    unsigned char i, flags, row, sel = 0xFF;
-    modal = 1;
-    gb_curhide();
-    gb_fill(x, y, 22, n * 10 + 4, 1);          /* white, no frame: a seamless drop from
-                                                  the (white) top bar - black ink only */
-    for (i = 0; i < n; i++) gb_textbw(x + 1, y + 2 + i * 10, labels[i]);
-    gb_curshow();
-    for (;;) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) break;
-        if (!(flags & GB_CLICK)) continue;
-        if (gb_my() >= y + 2 && gb_my() < y + 2 + n * 10 && gb_mx() >= x && gb_mx() < x + 22) {
-            row = (gb_my() - (y + 2)) / 10;
-            if (row < n) { sel = row; break; }
-        }
-        break;
-    }
-    modal = 0;
-    if (sel == 0xFF) while (gb_poll() & GB_QUIT) ;
-    gb_curhide();
-    gb_fill(x, y, 22, n * 10 + 4, 0);
-    gb_curshow();
-    return sel;
-}
+/* on_event: a top-bar title click -> the framework (View / Options) (#142). */
+static void clk_event(void) { gb_doc_event(); }
 
 /* set_time_dialog: +/- on hours and minutes (triangle glyphs), OK applies to the
    RTC. Returns 1 if the time was set. */
@@ -316,16 +280,36 @@ static unsigned char set_time_dialog(void)
     return ok;
 }
 
-static void run_menu(void)
+/* clk_fullscreen: View > Fullscreen - the analog face rescales to the whole screen
+   (relayout derives the radius from the live window rect) (#142). */
+static void clk_fullscreen(unsigned char on)
 {
-    const char *items[2];
-    unsigned char sel;
-    items[0] = "Set time";
-    items[1] = show_sec ? "Hide Seconds" : "Show Seconds";
-    sel = popup(MENU_COL, 8, items, 2);
-    if (sel == 0) { if (set_time_dialog()) have_prev = 0; full_draw(); }
-    else if (sel == 1) { show_sec ^= 1; full_draw(); }
+    if (on) {
+        fs_px = win_x; fs_py = win_y; fs_pw = win_w; fs_ph = win_h;
+        win_x = 0; win_y = 8; win_w = 80; win_h = 192;
+    } else {
+        win_x = fs_px; win_y = fs_py; win_w = fs_pw; win_h = fs_ph;
+    }
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(win_w, win_h);
+    have_prev = 0;                               /* face rescaled: no stale hands */
+    if (!on) gb_restore_parent();
 }
+
+/* opt_action: the Options menu (gb_menu_add) - Set time / toggle the seconds hand. The
+   repaint happens once in on_frame after gb_doc_frame returns (#142). */
+static const char *const opt_items[2] = { "Set time", "Toggle Seconds" };
+static void opt_action(unsigned char sel)
+{
+    if (sel == 0) { if (set_time_dialog()) have_prev = 0; }
+    else if (sel == 1) show_sec ^= 1;
+}
+
+/* no document (no File/Edit); gb_doc adds just View > Fullscreen, Options is added
+   on top with gb_menu_add. */
+static const gb_doc_t clkdoc = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, clk_fullscreen, 0, 0
+};
 
 /* --- WM callbacks ------------------------------------------------------------ */
 
@@ -335,7 +319,7 @@ static void on_frame(void)
 
     if (flags & GB_QUIT) { gb_wm_close(); return; }
 
-    if (want_menu) { want_menu = 0; run_menu(); return; }
+    if (gb_doc_frame()) { full_draw(); return; }   /* a View/Options item ran (#142) */
 
     gb_time();
     if (changed()) tick();
@@ -364,13 +348,15 @@ static void on_frame(void)
 }
 
 static const gb_win_t clkwin = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, full_draw, on_menu, clk_menu
+    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, full_draw, clk_event, 0
 };
 
 void main(void)
 {
     win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
-    show_sec = 0; have_prev = 0; want_menu = 0; modal = 0;
+    show_sec = 0; have_prev = 0; modal = 0;
     gb_wm_add(&clkwin);
+    gb_doc(&clkdoc);                             /* View > Fullscreen (#142) */
+    gb_menu_add("Options", opt_items, 2, opt_action);
     full_draw();
 }
