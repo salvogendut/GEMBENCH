@@ -79,8 +79,8 @@ static void parse_pic(void)
 }
 static void draw_pic(void)
 {
-    unsigned char h = pic_h, maxh = (unsigned char)(199 - TX_Y0);
-    if (h > maxh) h = maxh;
+    unsigned char h = pic_h, maxh = (unsigned char)(win_h - 14);   /* window content height */
+    if (h > maxh) h = maxh;                                        /* don't spill past the frame */
     if (pic_off + (unsigned int)pic_wb * h > filen) return;
     gb_restorerect((unsigned char)(win_x + 2), TX_Y0, pic_wb, h, (unsigned char *)filebuf + pic_off);
 }
@@ -171,9 +171,10 @@ static const gb_doc_t vdoc = {
 
 void main(void)
 {
-    gb_wm_managed(&vmw);              /* register the window (focus + initial paint) */
+    filen = gb_fs_load(filebuf, VIEW_MAX);   /* load FIRST so the initial paint shows content,
+                                                not the empty-file message (#146) */
+    if (is_pic()) parse_pic();
+    gb_wm_managed(&vmw);              /* register + initial paint (the content is ready) */
     gb_doc(&vdoc);                    /* File>Load + View>Fullscreen on the focused window */
-    filen = gb_fs_load(filebuf, VIEW_MAX);
-    fmt83(vtitle, gb_doc_name());
-    if (is_pic()) parse_pic();        /* the first frame sizes the window to it */
+    fmt83(vtitle, gb_doc_name());     /* title shows on the first frame's redraw */
 }
