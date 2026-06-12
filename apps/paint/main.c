@@ -392,8 +392,16 @@ static const char *const paint_exts[] = { "PIC", 0 };
 /* p_new: New -> blank canvas (the framework sets the name to UNTITLED + clears dirty). */
 static void p_new(void) { canvas_clear(); }
 
-/* p_open: a .PIC was just loaded into picbuf - validate it, blank on a bad format. */
-static void p_open(unsigned int got) { if (!pic_valid(got)) canvas_clear(); }
+/* p_open: a .PIC was just loaded into picbuf. Paint edits 100x100 only; a picture that
+ * is the wrong size or too big to load (gb_fs_load refuses files > picbuf) alerts the
+ * user instead of silently blanking. */
+static const char *const toobig_msg[] = { "Picture must be 100x100" };
+static void p_open(unsigned int got)
+{
+    if (pic_valid(got)) return;
+    canvas_clear();
+    gb_popup(10, 40, toobig_msg, 1);   /* one-line alert; click/Esc to dismiss */
+}
 
 /* p_save: stamp the .PIC header into picbuf and return the byte count to write. */
 static unsigned int p_save(void)
