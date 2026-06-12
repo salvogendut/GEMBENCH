@@ -46,9 +46,6 @@
 #define UNDO_W    7
 #define UNDO_H    9
 
-#define MENU_COL  10           /* "File" title column in the top bar (matches notepad) */
-#define MENU_END  16
-
 /* BUFSZ holds the whole file. gb_fs_load copies in WHOLE 512-byte sectors and is
    ALSO passed as fs_load_max, so a file bigger than BUFSZ is refused (the load is
    not partial) - so this must cover the largest icon set (#110). The icon-set
@@ -71,12 +68,11 @@ static unsigned char grid[32][32];         /* [row][col] pen 0..3 (cursor 0=clea
 static unsigned char gw, gh;               /* current item size in pixels          */
 static unsigned char count, idx;           /* icon-set count + current index       */
 static unsigned char selpen;               /* selected palette pen 0..3            */
-static unsigned char want_menu;            /* File title clicked -> run the menu     */
-static unsigned char status;               /* 0 none, 1 saved, 2 failed            */
-static char fbase[14];                     /* "NAME.EXT" of the open file (title)   */
+static char fbase[14];                     /* "NAME.EXT" from gb_doc_name() (title) */
+static char wtitle[18];                    /* fbase + " *" when modified           */
 static unsigned char u_valid, u_cx, u_cy, u_pen;  /* single-level undo of last paint */
-
-static const unsigned char file_menu[] = { 1, MENU_COL, 'F','i','l','e',0,0,0,0 };
+static void fmt83(char *dst, const char *n11);   /* both defined below; used by draw() */
+static const char *win_title(void);
 
 /* ---- Mode-1 pixel packing (pixel i: bit0 @ 7-i, bit1 @ 3-i) ------------------ */
 
@@ -243,15 +239,13 @@ static void draw_undo(void)
 
 static void status_line(void)
 {
-    gb_text(win_x + 1, win_y + WIN_H - 11,
-            status == 1 ? "saved" :
-            status == 2 ? "SAVE FAILED" :
-                          "Pick a pen, click to paint");
+    /* save feedback is now the title's " *" dirty marker (gb_doc_modified). */
+    gb_text(win_x + 1, win_y + WIN_H - 11, "Pick a pen, click to paint");
 }
 
 static void draw(void)
 {
-    gb_window(win_x, win_y, WIN_W, WIN_H, fbase[0] ? fbase : "ICONED");
+    gb_window(win_x, win_y, WIN_W, WIN_H, win_title());
     draw_canvas();
     draw_palette();
     draw_nav();
@@ -261,26 +255,8 @@ static void draw(void)
 
 /* ---- file menu (kernel-drawn top bar; popup pattern from notepad) ------------ */
 
-static void on_menu(void)
-{
-    if (gb_msg.type != GB_MSG_MENU || gb_modal()) return;   /* ignore clicks while modal */
-    if (gb_msg.p0 < MENU_COL || gb_msg.p0 >= MENU_END) return;
-    want_menu = 1;
-}
-
-/* 8.3 helpers + extension test, like notepad's to_83. */
-static char name83[11];
-static void to_83(const char *s)
-{
-    unsigned char i = 0, j;
-    for (j = 0; j < 11; j++) name83[j] = ' ';
-    while (s[i] && s[i] != '.' && i < 8) { name83[i] = s[i]; i++; }
-    while (s[i] && s[i] != '.') i++;
-    if (s[i] == '.') {
-        i++;
-        for (j = 0; j < 3 && s[i]; j++, i++) name83[8 + j] = s[i];
-    }
-}
+/* on_menu: a top-bar title was clicked -> hand it to the framework. */
+static void on_menu(void) { gb_doc_event(); }
 
 /* fmt83: 11-byte space-padded 8.3 name -> "NAME.EXT" display string (window title). */
 static void fmt83(char *dst, const char *n11)
@@ -294,61 +270,50 @@ static void fmt83(char *dst, const char *n11)
     dst[j] = 0;
 }
 
-/* is_editable: name (NAME.EXT) ends in .IST or .SPR (case as stored). */
-static unsigned char is_editable(const char *s)
+/* win_title: the file name (from gb_doc) + " *" when unsaved. Single-index copy (the
+   two-index form is miscompiled by SDCC under --fomit-frame-pointer, #142). */
+static const char *win_title(void)
 {
-    unsigned char i = 0;
-    while (s[i] && s[i] != '.') i++;
-    if (!s[i]) return 0;
-    i++;
-    return (unsigned char)((s[i] == 'I' && s[i+1] == 'S' && s[i+2] == 'T') ||
-                           (s[i] == 'S' && s[i+1] == 'P' && s[i+2] == 'R'));
+    unsigned char j = 0;
+    char c;
+    fmt83(fbase, gb_doc_name());
+    while ((c = fbase[j]) != 0) { wtitle[j] = c; j++; }
+    if (gb_doc_modified()) { wtitle[j++] = ' '; wtitle[j++] = '*'; }
+    wtitle[j] = 0;
+    return wtitle;
 }
 
-static void do_load(void)
-{
-    const char *names[12];
-    static char store[12][14];
-    char *p;
-    unsigned char n = 0, i, sel;
+/* ---- the document, via the gb_doc framework (#142) -------------------------- *
+ * The document is buf (a .IST icon set or a .SPR cursor). The framework owns the File
+ * menu (New / Load / Save / Save As) + the navigable dialog; we provide the hooks. */
+static const char *const ie_exts[] = { "IST", "SPR", 0 };
 
-    p = gb_dir1();
-    while (p && n < 12) {
-        if (is_editable(p)) {
-            for (i = 0; i < 13 && p[i]; i++) store[n][i] = p[i];
-            store[n][i] = 0;
-            names[n] = store[n];
-            n++;
-        }
-        p = gb_dirn();
-    }
-    if (!n) return;
-    sel = gb_popup(win_x + 6, win_y + 16, names, n);
-    if (sel == 0xFF) return;
-    to_83(store[sel]);
-    gb_set_name(name83);
-    fmt83(fbase, name83);                /* title -> the opened file's name */
-    filelen = gb_fs_load(buf, BUFSZ);
+/* ie_new: a blank single 24x24 icon set (GBIS v2) so New gives something to draw. */
+static void ie_new(void)
+{
+    unsigned int i;
+    for (i = 0; i < 20 + 6 * 24; i++) buf[i] = 0;
+    buf[0] = 'G'; buf[1] = 'B'; buf[2] = 'I'; buf[3] = 'S';
+    buf[4] = 2; buf[5] = 1;                       /* version 2, count 1 */
+    buf[16] = 20; buf[18] = 6; buf[19] = 24;      /* dir[0]: off=20, wb=6, h=24 */
+    filelen = 20 + 6 * 24;
     sniff();
-    selpen = (mode == M_CURSOR) ? 1 : 1;
-    status = 0;
 }
 
-static void do_save(void)
+/* ie_open: a .IST/.SPR was just loaded into buf - classify + decode the first item. */
+static void ie_open(unsigned int len) { filelen = len; sniff(); }
+
+/* ie_save: fold the current edit back into buf and return the byte count to write. */
+static unsigned int ie_save(void)
 {
-    if (mode == M_ICON)        { encode_icon(idx); status = gb_fs_save(buf, filelen) ? 1 : 2; }
-    else if (mode == M_CURSOR) { encode_cursor();  status = gb_fs_save(buf, 256)     ? 1 : 2; }
-    else                       { status = 2; }
+    if (mode == M_ICON)   { encode_icon(idx); return filelen; }
+    if (mode == M_CURSOR) { encode_cursor();  return 256; }
+    return 0;
 }
 
-static const char *const file_items[] = { "Load", "Save" };
-
-static void run_menu(void)
-{
-    unsigned char sel = gb_popup(MENU_COL, 8, file_items, 2);
-    if (sel == 0) do_load();
-    else if (sel == 1) do_save();
-}
+static const gb_doc_t iedoc = {
+    buf, BUFSZ, ie_new, ie_open, ie_save, 0, 0, 0, 0, ie_exts
+};
 
 /* ---- WM callbacks ----------------------------------------------------------- */
 
@@ -372,6 +337,7 @@ static void paint_cell(unsigned char cx, unsigned char cy)
     u_pen = grid[cy][cx];
     u_valid = 1;
     grid[cy][cx] = selpen;
+    gb_doc_dirty();                       /* mark the document unsaved (#142) */
     cell_redraw(cx, cy);
 }
 
@@ -407,13 +373,13 @@ static void on_frame(void)
     unsigned char flags = gb_flags(), mx, my, k, y;
 
     if (flags & GB_QUIT) { gb_wm_close(); return; }
-    if (want_menu) { want_menu = 0; run_menu(); gb_curhide(); draw(); gb_curshow(); return; }
+    if (gb_doc_frame()) { gb_curhide(); draw(); gb_curshow(); return; }   /* a File menu ran (#142) */
     if (!(flags & GB_CLICK)) return;
 
     mx = gb_mx(); my = gb_my();
 
     if (my >= win_y && my < win_y + TITLE_H) {        /* title bar */
-        if (mx >= win_x && mx < win_x + 5) { gb_wm_close(); return; }   /* close */
+        if (mx >= win_x && mx < win_x + 5) { if (gb_doc_close()) gb_wm_close(); return; }   /* close */
         if (mx >= win_x + 5 && mx < win_x + WIN_W) {                    /* drag  */
             if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
                 gb_wm_setpos(win_x, win_y);
@@ -457,21 +423,19 @@ static void on_frame(void)
 }
 
 static const gb_win_t iewin = {
-    DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, ie_repaint, on_menu, file_menu
+    DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, ie_repaint, on_menu, 0
 };
 
 void main(void)
 {
     unsigned char n;
 
-    char raw[11];
     win_x = DEF_X; win_y = DEF_Y;
     gb_wm_add(&iewin);                       /* register first: captures our file arg */
-    gb_get_name(raw);                        /* the file we were launched with -> title */
-    fmt83(fbase, raw);
-    filelen = gb_fs_load(buf, BUFSZ);
-    selpen = 1; want_menu = 0; status = 0;
-    sniff();
+    gb_doc(&iedoc);                          /* standard File menu; adopts the launch name */
+    filelen = gb_fs_load(buf, BUFSZ);        /* load the launch file (0 if none) */
+    sniff();                                 /* classify it (M_ICON / M_CURSOR / M_NONE) */
+    selpen = 1;
     for (n = 64; n; n--) if (!gb_getkey()) break;
 
     draw();
