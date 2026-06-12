@@ -51,9 +51,9 @@
    not partial) - so this must cover the largest icon set (#110). The icon-set
    ceiling is DATA_MODTOP-DATA_ICONS-#200 = 6656 -> 13 sectors; 7168 = 14 sectors
    covers any DEFAULT.IST. (Was 4096, which the now-5216-byte DEFAULT.IST exceeds.) */
-#define BUFSZ     6144         /* 12 sectors. Holds DEFAULT.IST (5216) + most sets; trimmed
-                                  from the 6656 ceiling to fit Fullscreen - the very largest
-                                  (6145-6656) sets won't load (rare; revisit with icon-zoom) */
+#define BUFSZ     6656         /* 13 sectors - covers DEFAULT.IST (6256 -> 6656 loaded) and most sets. Restored
+                                  from 6144 once the grid was packed 4px/byte (freed 768 B), so
+                                  loading the default set and Fullscreen both fit again (#142). */
 #define CUR_W     4            /* cursor: 4 bytes/row x 16 rows, phase = 64 bytes */
 #define CUR_H     16
 #define PHASE     64
@@ -69,7 +69,10 @@ static void recalc_origin(void);                   /* defined below */
 static unsigned char buf[BUFSZ];
 static unsigned int  filelen;
 static unsigned char mode;                 /* M_ICON / M_CURSOR / M_NONE          */
-static unsigned char grid[32][32];         /* [row][col] pen 0..3 (cursor 0=clear) */
+/* The edit grid: up to 32x32 pixels, pen 0..3 each. Packed 4 pixels/byte (2 bits
+   each) so a 32x32 icon is 256 B not 1024 - that headroom is what lets BUFSZ cover
+   DEFAULT.IST (6656) AND keep Fullscreen (#142). Use gget/gset, never index direct. */
+static unsigned char grid[32][8];          /* [row][col>>2]; 2 bits per pixel */
 static unsigned char gw, gh;               /* current item size in pixels          */
 static unsigned char count, idx;           /* icon-set count + current index       */
 static unsigned char selpen;               /* selected palette pen 0..3            */
@@ -91,6 +94,18 @@ static unsigned char set_pixel(unsigned char b, unsigned char i, unsigned char p
     if (pen & 1) b |= (unsigned char)(1 << (7 - i));
     if (pen & 2) b |= (unsigned char)(1 << (3 - i));
     return b;
+}
+
+/* gget/gset: read/write a single pen in the packed grid (4 pixels/byte). */
+static unsigned char gget(unsigned char y, unsigned char x)
+{
+    return (unsigned char)((grid[y][x >> 2] >> ((x & 3) << 1)) & 3);
+}
+static void gset(unsigned char y, unsigned char x, unsigned char pen)
+{
+    unsigned char sh = (unsigned char)((x & 3) << 1);
+    grid[y][x >> 2] = (unsigned char)((grid[y][x >> 2] & ~(unsigned char)(3 << sh))
+                                      | (unsigned char)((pen & 3) << sh));
 }
 
 /* ---- .IST icon set ---------------------------------------------------------- */
@@ -116,7 +131,7 @@ static void decode_icon(unsigned char k)
     for (y = 0; y < icon_h; y++)
         for (bx = 0; bx < icon_wb; bx++) {
             b = buf[icon_off + (unsigned int)y * icon_wb + bx];
-            for (i = 0; i < 4; i++) grid[y][bx * 4 + i] = dec_pixel(b, i);
+            for (i = 0; i < 4; i++) gset(y, (unsigned char)(bx * 4 + i), dec_pixel(b, i));
         }
 }
 
@@ -127,7 +142,7 @@ static void encode_icon(unsigned char k)   /* current grid -> buf at icon k */
     for (y = 0; y < icon_h; y++)
         for (bx = 0; bx < icon_wb; bx++) {
             b = 0;
-            for (i = 0; i < 4; i++) b = set_pixel(b, i, grid[y][bx * 4 + i]);
+            for (i = 0; i < 4; i++) b = set_pixel(b, i, gget(y, (unsigned char)(bx * 4 + i)));
             buf[icon_off + (unsigned int)y * icon_wb + bx] = b;
         }
 }
@@ -144,7 +159,7 @@ static void decode_cursor(void)            /* phase 0 (d0 @0, m0 @PHASE) -> grid
             d = buf[(unsigned int)y * CUR_W + bx];
             m = buf[PHASE + (unsigned int)y * CUR_W + bx];
             for (i = 0; i < 4; i++)
-                grid[y][bx * 4 + i] = ((m >> (7 - i)) & 1) ? 0 : dec_pixel(d, i);
+                gset(y, (unsigned char)(bx * 4 + i), ((m >> (7 - i)) & 1) ? 0 : dec_pixel(d, i));
         }
 }
 
@@ -157,7 +172,7 @@ static void enc_cursor_phase(unsigned char shift, unsigned int db, unsigned int 
             d = 0; m = 0;
             for (i = 0; i < 4; i++) {
                 x = bx * 4 + i - shift;            /* source pixel for this column */
-                pen = (x >= 0 && x < 16) ? grid[y][x] : 0;
+                pen = (x >= 0 && x < 16) ? gget(y, (unsigned char)x) : 0;
                 if (pen == 0) m = set_pixel(m, i, 3);   /* transparent: mask both bits */
                 else          d = set_pixel(d, i, pen);
             }
@@ -208,7 +223,7 @@ static void draw_canvas(void)
     if (mode == M_NONE) { gb_text(CANVAS_X, CANVAS_Y0, "Empty - File>Load"); return; }
     for (y = 0; y < gh; y++)
         for (x = 0; x < gw; x++)
-            gb_fill(CANVAS_X + x, CANVAS_Y0 + y * CELL_H, 1, CELL_H, grid[y][x]);
+            gb_fill(CANVAS_X + x, CANVAS_Y0 + y * CELL_H, 1, CELL_H, gget(y, x));
     gb_frame(CANVAS_X, CANVAS_Y0, gw, gh * CELL_H, 2);
 }
 
@@ -353,16 +368,16 @@ static void ie_repaint(void)
 static void cell_redraw(unsigned char cx, unsigned char cy)
 {
     gb_curhide();
-    gb_fill(CANVAS_X + cx, CANVAS_Y0 + cy * CELL_H, 1, CELL_H, grid[cy][cx]);
+    gb_fill(CANVAS_X + cx, CANVAS_Y0 + cy * CELL_H, 1, CELL_H, gget(cy, cx));
     gb_curshow();
 }
 
 static void paint_cell(unsigned char cx, unsigned char cy)
 {
     u_cx = cx; u_cy = cy;                 /* remember for UNDO */
-    u_pen = grid[cy][cx];
+    u_pen = gget(cy, cx);
     u_valid = 1;
-    grid[cy][cx] = selpen;
+    gset(cy, cx, selpen);
     gb_doc_dirty();                       /* mark the document unsaved (#142) */
     cell_redraw(cx, cy);
 }
@@ -373,8 +388,8 @@ static void do_undo(void)
 {
     unsigned char t;
     if (!u_valid) return;
-    t = grid[u_cy][u_cx];
-    grid[u_cy][u_cx] = u_pen;
+    t = gget(u_cy, u_cx);
+    gset(u_cy, u_cx, u_pen);
     u_pen = t;
     cell_redraw(u_cx, u_cy);
 }
