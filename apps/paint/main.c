@@ -20,8 +20,9 @@
  *
  * Pixel addressing: Mode-1 packs 4 px per byte; pixel i has bit0 @ 7-i, bit1 @ 3-i
  * (same as ICONED). gb_my is pixel-accurate (rows); gb_mxp gives the pixel x (#114,
- * gb_mx only resolves to the byte column). Co-resident window (gb_wm_add + the WM
- * loop drives on_frame / on_repaint), like apps/iconed/main.c.
+ * gb_mx only resolves to the byte column). A kernel-MANAGED window (gb_wm_managed; the
+ * WM owns the frame/title/close/drag) - p_draw/p_frame/p_click/p_drag/p_close, like
+ * apps/iconed/main.c (#146).
  */
 #include "gb.h"
 

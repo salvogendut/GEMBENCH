@@ -11,11 +11,11 @@
  *                   AMSDOS write layer)
  *   Ctrl-Q          close the window (back to the file manager)
  *
- * Issue #45: a co-resident window. main() loads the file, registers via gb_wm_add
- * and returns; the kernel WM loop calls on_frame (read input with gb_flags/mx/my)
- * and np_repaint to restack us. The modal popups (menu, Load, confirm) still poll
- * themselves. Click our window to focus it; the view scrolls to keep the caret
- * visible. */
+ * #146: a kernel-MANAGED window (gb_wm_managed). The WM owns the frame/title/close/
+ * drag/grip; main() registers and loads the file, then paints once via gb_restore_parent.
+ * The kernel calls n_draw (content), n_frame (typing + caret), n_click (text/grip), n_drag,
+ * n_close. The modal popups (menu, Load, confirm) still poll themselves. Click our window
+ * to focus it; the view scrolls to keep the caret visible. */
 #include "gb.h"
 
 #define NP_MAX    4096           /* editable text capacity - restored to 4096 (#142): the

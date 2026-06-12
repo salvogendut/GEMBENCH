@@ -15,9 +15,10 @@
  * The Mode-1 bit packing / mask / shift math matches tools/packicons.py +
  * tools/png2spr.py and is round-trip-checked by tools/test_iconed_codec.py.
  *
- * Issue #45: a co-resident window like Notepad - main() loads the file, registers
- * via gb_wm_add and returns; the kernel WM loop drives on_frame / ie_repaint. The
- * File menu and its Load popup poll themselves (modal). */
+ * #146: a kernel-MANAGED window like Notepad - the WM owns the frame/title/close/drag;
+ * main() registers (gb_wm_managed), loads the file, paints once via gb_restore_parent. The
+ * kernel calls ie_draw / ie_frame / ie_click / ie_drag / ie_close. The File menu and its
+ * Load popup poll themselves (modal). */
 #include "gb.h"
 
 #define DEF_X     2
