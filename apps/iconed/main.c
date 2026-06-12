@@ -219,11 +219,20 @@ static void fmt_idx(void)                  /* "idx+1/count" */
 
 static void draw_canvas(void)
 {
-    unsigned char x, y;
+    unsigned char y, bx, i, b, row, h = gh, wb = (unsigned char)(gw >> 2);
     if (mode == M_NONE) { gb_text(CANVAS_X, CANVAS_Y0, "Empty - File>Load"); return; }
-    for (y = 0; y < gh; y++)
-        for (x = 0; x < gw; x++)
-            gb_fill(CANVAS_X + x, CANVAS_Y0 + y * CELL_H, 1, CELL_H, gget(y, x));
+    /* Read the packed grid a BYTE at a time (4 pixels) rather than calling gget per
+       pixel: fewer accesses in this 1024-cell loop, and no per-cell call frame - the
+       per-pixel call made the long redraw drop rows on Prev/Next cycling (#144). */
+    for (y = 0; y < h; y++) {
+        row = (unsigned char)(CANVAS_Y0 + y * CELL_H);
+        for (bx = 0; bx < wb; bx++) {
+            b = grid[y][bx];
+            for (i = 0; i < 4; i++)
+                gb_fill((unsigned char)(CANVAS_X + (bx << 2) + i), row, 1, CELL_H,
+                        (unsigned char)((b >> (i << 1)) & 3));
+        }
+    }
     gb_frame(CANVAS_X, CANVAS_Y0, gw, gh * CELL_H, 2);
 }
 

@@ -41,6 +41,7 @@ static const char *const confirm_items[] = { "Save", "Don't Save", "Cancel" };
 
 static unsigned char slen(const char *s) { unsigned char n = 0; while (s[n]) n++; return n; }
 
+#ifndef GBDOC_RO       /* to_83 / name83 are only used by Save As (omitted in read-only) */
 /* to_83: "NAME.EXT" (or "NAME") -> an 11-byte space-padded 8.3 name (no dot) for
  * gb_set_name. */
 static char name83[11];
@@ -55,6 +56,7 @@ static void to_83(const char *src)
         for (j = 0; j < 3 && src[i]; j++) name83[8 + j] = src[i++];
     }
 }
+#endif
 
 /* (re)build the kernel MENU_DEF from the registered titles, auto-placing columns,
  * and hand it to the bar. */
@@ -188,18 +190,24 @@ unsigned char gb_doc_event(void)
 
 /* --- the standard File actions ------------------------------------------- */
 
+#ifndef GBDOC_RO
 static void do_save(void);
+#endif
 
 /* confirm_save: if the document is dirty, ask. -> 1 = go ahead (saved or
  * discarded), 0 = cancel the operation. */
 static unsigned char confirm_save(void)
 {
+#ifdef GBDOC_RO
+    return 1;                                        /* read-only: never dirty, nothing to save */
+#else
     unsigned char sel;
     if (!g_dirty) return 1;
     sel = gb_popup(28, 90, confirm_items, 3);
     if (sel == 0) { do_save(); return 1; }           /* Save */
     if (sel == 1) return 1;                          /* Don't Save */
     return 0;                                        /* Cancel / ESC */
+#endif
 }
 
 static void do_new(void)
@@ -224,6 +232,7 @@ static void do_load(void)
     g_dirty = 0;
 }
 
+#ifndef GBDOC_RO       /* Save / Save As are omitted entirely in a read-only doc (#144) */
 static void do_save(void)
 {
     unsigned int n  = g_doc->on_save();
@@ -241,6 +250,7 @@ static void do_saveas(void)
     set_name(name83);
     do_save();                                     /* writes into the navigated dir */
 }
+#endif
 
 static void file_action(unsigned char sel)
 {
@@ -249,8 +259,10 @@ static void file_action(unsigned char sel)
     a = file_act[sel];
     if      (a == 0) do_new();
     else if (a == 1) do_load();
+#ifndef GBDOC_RO
     else if (a == 2) do_save();
     else if (a == 3) do_saveas();
+#endif
     else if (a == 4) { if (g_doc->on_export) g_doc->on_export(); }   /* the optional export */
 }
 

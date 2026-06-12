@@ -46,9 +46,9 @@ DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): Sys
 DATA_LOC=0x7240 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
                                    # the gb_doc-grown code + ".." entry; the ~3.1K listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
-DATA_LOC=0x5780 DOC=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: data-loc just
-                                   # above the gb_doc-grown code; a 10K file buffer (200x200 .PIC)
-                                   # fills the rest of the bank. DOC=1 = File>Load + View>Fullscreen (#142)
+DATA_LOC=0x56C0 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
+                                   # gb_doc (DOCRO=1 omits Save/Save As) so a full 10240-B buffer
+                                   # (200x200 .PIC) fits. File>Load + View>Fullscreen (#142/#144)
 DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)

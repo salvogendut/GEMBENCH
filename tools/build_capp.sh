@@ -43,12 +43,15 @@ mkdir -p "$work"
 #   DIALOGS / PROMPT / PICKER  -> gbui_stub.c (the stubs)
 #   DOC=1                      -> gbdoc.c too (the document/File-menu framework)
 DLG_REL=""
-if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ] || [ "${PICKER:-0}" = "1" ] || [ "${DOC:-0}" = "1" ]; then
+if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ] || [ "${PICKER:-0}" = "1" ] || [ "${DOC:-0}" = "1" ] || [ "${DOCRO:-0}" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
     DLG_REL="$work/gbui_stub.rel"
 fi
-if [ "${DOC:-0}" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
+# DOC=1 = the full document framework; DOCRO=1 = a READ-ONLY variant (-DGBDOC_RO) that
+# omits the Save/Save As path, so a viewer-style app saves that code room (#144).
+if [ "${DOC:-0}" = "1" ] || [ "${DOCRO:-0}" = "1" ]; then
+    RO=""; [ "${DOCRO:-0}" = "1" ] && RO="-DGBDOC_RO"
+    "$SDCC" -mz80 --fomit-frame-pointer $RO -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
     DLG_REL="$DLG_REL $work/gbdoc.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
