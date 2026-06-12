@@ -173,17 +173,14 @@ static const gb_doc_t vdoc = {
 
 void main(void)
 {
-    char nm[11];
-    gb_get_name(nm);                 /* the file we were launched with (kernel launch arg) */
-    gb_set_name(nm);                 /* target it for the load - NOT the stale boot name */
-    filen = gb_fs_load(filebuf, VIEW_MAX);   /* load BEFORE the window is drawn, so its first
-                                                paint already has the picture (no empty flash) */
+    gb_wm_managed(&vmw);             /* register + focus FIRST, but it does NOT draw yet (#146):
+                                        now gb_fs_load/gb_doc target THIS window's launch file,
+                                        and nothing is on screen while we do the slow load */
+    filen = gb_fs_load(filebuf, VIEW_MAX);   /* the file we were launched with */
     loaded = 1;
-    fmt83(vtitle, nm);               /* title ready for the initial paint too */
-    if (is_pic()) parse_pic();
-    gb_wm_managed(&vmw);             /* register + initial paint: the content is ready */
-    if (is_pic()) {                  /* size to the picture now, before the WM loop's repaint */
+    if (is_pic()) {                  /* size to the picture before the first paint */
         unsigned char x = gb_wm_x(), y = gb_wm_y(), w, h;
+        parse_pic();
         w = (unsigned char)(pic_wb + 3);
         if (w < MIN_W) w = MIN_W;
         if (w > (unsigned char)(80 - x)) w = (unsigned char)(80 - x);
@@ -193,6 +190,7 @@ void main(void)
         gb_wm_setsize(w, h);
         opened = 1;                  /* already sized; v_frame's deferred resize is for File>Load */
     }
-    gb_doc(&vdoc);                   /* menus on the focused window */
-    gb_restore_parent();             /* one repaint at the fitted size */
+    gb_doc(&vdoc);                   /* menus + adopt the name for the title */
+    fmt83(vtitle, gb_doc_name());
+    gb_restore_parent();             /* FIRST paint: content, fitted - the window appears ready */
 }

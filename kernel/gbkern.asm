@@ -1544,9 +1544,11 @@ k_wm_managed
                 ld    (hl),d                 ; REPAINT (entry+7,8) is garbage but the managed
                                              ; flag means wm_repaint_all skips it; MENU (entry+
                                              ; 11,12) is set by the app's gb_doc before the loop
-                ld    a,(WM_FOCUS)           ; paint the new window now (nothing else will
-                call  wm_entry               ; until a restack/focus change)
-                jp    wm_chrome_draw
+                ld    a,(WM_FOCUS)           ; publish MW_RECT so the app can read gb_wm_x/y/w/h
+                call  wm_entry               ; in main, but DON'T draw yet: the app loads its
+                jp    mw_publish             ; content then calls gb_restore_parent for the first
+                                             ; paint, so a window never shows empty during a slow
+                                             ; load (#146). A managed app MUST paint when ready.
 
 ; mw_publish: HL = entry. Copy x,y,w,h -> MW_RECT (the app reads it via gb_wm_x/y/w/h);
 ; (mw_desc) = the descriptor pointer. HL preserved.
