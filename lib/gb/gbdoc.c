@@ -4,10 +4,9 @@
  * hooks) and gets a standard top-bar "File" menu (New / Load / Save / Save As) that
  * the framework renders and runs - so the app carries no menu or file-dialog code.
  * Apps add their own titles with gb_menu_add. Linked only when build_capp.sh sets
- * DOC=1; it pulls in gbdlg (gb_popup) and gbprompt (gb_prompt).
- *
- * Step 1a: the render is still gb_popup (libgb). The API (gb_doc/gb_menu_add) is
- * stable, so a later step can move the render into a system service unchanged.
+ * DOC=1; the dialogs it calls (gb_popup/gb_prompt/gb_pickfile/gb_pickdir) are the tiny
+ * gbui_stub stubs - the heavy render lives in the paged GBUI module (#142 step 1b), so
+ * gbdoc + an app's menus add only a few hundred bytes, not the whole dialog stack.
  *
  * Recipe (see gb.h): gb_doc(&doc) before gb_wm_run; in on_event call gb_doc_event()
  * first; in on_frame call gb_doc_frame() and repaint your window if it returns 1.

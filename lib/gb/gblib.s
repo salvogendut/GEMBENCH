@@ -19,6 +19,7 @@
         .globl  _gb_clip_set
         .globl  _gb_clip_get
         .globl  _gb_clip_len
+        .globl  _gb_ui
         .globl  _gb_fill
         .globl  _gb_frame
         .globl  _gb_icon
@@ -173,6 +174,12 @@ _gb_clip_len:
         call    0x80AB          ; GB_CLIPLEN -> BC = length
         ld      d, b
         ld      e, c
+        ret
+
+;; unsigned char gb_ui(void);  -> run the paged dialog module, BC=UI_RES -> A (#142)
+_gb_ui:
+        call    0x80AE          ; GB_UI
+        ld      a, c
         ret
 
 ;; void gb_fill(u8 col, u8 line, u8 w, u8 h, u8 pen);    -> GB_FILL

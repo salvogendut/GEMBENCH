@@ -18,3 +18,6 @@ xao_imgend
 pen_img         incbin "../assets/penguin.PIC" ; sample 200x200 picture -> PENGUIN.PIC
 pen_imgend
                 save  "PENGUIN.PIC",pen_img,pen_imgend-pen_img,DSK,"build/gbkern.dsk"
+ui_img          incbin "../build/GBUI.RAW"      ; paged dialog module -> GBUI.BIN (#142 step 1b)
+ui_imgend
+                save  "GBUI.BIN",ui_img,ui_imgend-ui_img,DSK,"build/gbkern.dsk"

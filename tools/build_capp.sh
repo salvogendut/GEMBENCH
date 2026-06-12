@@ -36,26 +36,16 @@ mkdir -p "$work"
 # the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
-# Opt-in modal dialogs, linked only when asked so dialog-free apps carry none (#114):
-#   DIALOGS=1  -> gbdlg.c   (gb_popup list menu + gb_modal flag)
-#   PROMPT=1   -> gbprompt.c (gb_prompt name box; implies DIALOGS=1, uses gb_modal_set)
-#   PICKER=1   -> gbpick.c  (navigable file/folder Open/Save chooser, #142; implies
-#                            DIALOGS - it uses gb_popup. Any app can pick files with it.)
-#   DOC=1      -> gbdoc.c    (document-app framework: standard File menu, #142;
-#                            implies DIALOGS+PROMPT+PICKER - File>Load/Save As use them)
-# A popup-only app (ICONED) sets DIALOGS=1; a Save-As app (PAINT, NOTEPAD) sets both.
+# Opt-in dialogs (#114, #142). The heavy render (popup/prompt/file-picker) now lives in
+# the paged GBUI kernel module (#142 step 1b); an app that needs ANY dialog links only
+# the tiny marshalling stub gbui_stub.c (gb_popup/gb_prompt/gb_pickfile/gb_pickdir ->
+# GB_UI). That ~800-byte/app saving is what lets the data-heavy apps fit gb_doc.
+#   DIALOGS / PROMPT / PICKER  -> gbui_stub.c (the stubs)
+#   DOC=1                      -> gbdoc.c too (the document/File-menu framework)
 DLG_REL=""
 if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ] || [ "${PICKER:-0}" = "1" ] || [ "${DOC:-0}" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdlg.c" -o "$work/gbdlg.rel"
-    DLG_REL="$work/gbdlg.rel"
-fi
-if [ "${PROMPT:-0}" = "1" ] || [ "${DOC:-0}" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbprompt.c" -o "$work/gbprompt.rel"
-    DLG_REL="$DLG_REL $work/gbprompt.rel"
-fi
-if [ "${PICKER:-0}" = "1" ] || [ "${DOC:-0}" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbpick.c" -o "$work/gbpick.rel"
-    DLG_REL="$DLG_REL $work/gbpick.rel"
+    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
+    DLG_REL="$work/gbui_stub.rel"
 fi
 if [ "${DOC:-0}" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"

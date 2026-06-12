@@ -59,6 +59,7 @@ DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
+tools/build_uimod.sh build/GBUI.RAW                # paged dialog module (#142) -> build/GBUI.RAW
 # One UNIFIED card distribution (#136): the apps/modules/assets above are shared and
 # only the kernel differs, so we assemble each card's kernel, capture its raw image,
 # and stage ONE QA/CARD/ holding the BASIC loader GB.BAS + both per-card kernels

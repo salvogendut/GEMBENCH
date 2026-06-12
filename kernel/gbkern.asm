@@ -95,6 +95,16 @@ CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT
 CLIP_LEN        equ   #3E00        ; shared clipboard (#142): word = length, data #3E02..
 CLIP_DATA       equ   #3E02        ; #3FFF (510 bytes). Non-banked low RAM above gb_copybuf
 CLIP_CAP        equ   510          ; (which ends #3E00), so it survives app switches.
+; Paged UI-dialog service (#142): apps marshal a request into this low-RAM block, the
+; kernel pages in the GBUI module (#6000 in PAGE_DATA) and CALLs it; it renders the
+; dialog (popup/prompt/file-picker) and writes the result back here.
+UI_OP           equ   #1700        ; op: 1 popup, 2 prompt, 3 pickfile, 4 pickdir
+UI_COL          equ   #1701        ; arg: column
+UI_LINE         equ   #1702        ; arg: line
+UI_N            equ   #1703        ; arg: popup label count / prompt maxlen
+UI_RES          equ   #1704        ; result byte (popup row/0xFF, prompt 1/0, pick 1/0)
+UI_MODAL        equ   #1705        ; 1 while the UI module runs -> menu_dispatch skips the app
+UI_TEXT         equ   #1708        ; packed text: popup labels / prompt caption+buffer / exts
 WM_FR_X         equ   1            ; entry field offsets (after +0 page):
 WM_FR_FRAME     equ   5
 WM_FR_REPAINT   equ   7
@@ -163,6 +173,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_clip_set             ; GB_CLIPSET     #80A5 (HL=src, DE=len) shared clipboard (#142)
                 jp    k_clip_get             ; GB_CLIPGET     #80A8 (HL=dst, DE=max) -> BC=copied
                 jp    k_clip_len             ; GB_CLIPLEN     #80AB -> BC = clipboard length
+                jp    k_ui                   ; GB_UI          #80AE run the paged dialog module -> BC=UI_RES
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1221,6 +1232,41 @@ k_clip_len
                 ld    bc,(CLIP_LEN)
                 ret
 
+; k_ui (GB_UI #80AE): the paged dialog service (#142). The caller has marshalled its
+; request into the low-RAM UI_* block; page in PAGE_DATA, load the GBUI module to
+; DATA_MODTOP (#6000, above font+icons), raise UI_MODAL (so the dialog's own gb_poll
+; loop doesn't dispatch top-bar clicks into the now-swapped-out app), CALL it to render
+; + write UI_RES, then restore. Returns BC = UI_RES for the C trampoline. The dialog is
+; modal: this call blocks until the user picks/cancels.
+k_ui
+                ld    a,1
+                ld    (UI_MODAL),a
+                ld    a,(bank_cur)
+                push  af
+                ld    a,PAGE_DATA
+                call  bank_set
+                ld    hl,gbui_modname         ; "GBUI    BIN" -> fs_req_name
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#2000                ; module load cap (8 KB window to #8000)
+                ld    (fs_load_max),hl
+                ld    hl,DATA_MODTOP          ; #6000
+                ld    (fs_load_dst),hl
+                call  fs_load_sys            ; GBUI.BIN -> #6000 (boot drive, preserves browse dir)
+                jr    nc,kui_done             ; missing -> leave UI_RES (caller pre-set a cancel)
+                call  DATA_MODTOP            ; run the module: render, write UI_RES
+kui_done
+                pop   af
+                call  bank_set
+                xor   a
+                ld    (UI_MODAL),a
+                ld    a,(UI_RES)
+                ld    c,a
+                ld    b,0
+                ret
+gbui_modname    db    "GBUI    BIN"
+
 ; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a
 ; caller buffer. HL = dst (in the caller's page, which stays mapped through the
 ; FDC read - fsam_buf is resident, so no page swap), DE = max bytes. Returns
@@ -2079,6 +2125,9 @@ wm_rp_i         db    0            ; wm_repaint_all: z index
 ; message (p0 = byte column) and consume the click. The app's page is mapped
 ; (it called GB_POLL), so the handler is a direct CALL - no bank trampoline.
 menu_dispatch
+                ld    a,(UI_MODAL)            ; a paged UI dialog is up? then the focused app's
+                or    a                        ; bank is swapped out for the module - do NOT call
+                ret   nz                        ; its handler. The dialog's own poll sees the click
                 bit   0,d                     ; fresh click this frame?
                 ret   z
                 ld    a,(poll_line)

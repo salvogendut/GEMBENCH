@@ -34,6 +34,7 @@ done
 cp build/GBCFG.RAW "$SYS/GBCFG.BIN"
 cp build/GBFAT.RAW "$SYS/GBFAT.BIN"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.BIN"   # #135: paged AMSDOS/floppy write module
+cp build/GBUI.RAW "$SYS/GBUI.BIN"           # #142: paged dialog (popup/prompt/file-picker) module
 cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST build/PAINT.IST \
    build/DEFAULT.SPR build/HAND.SPR "$SYS/"
 cp assets/WELCOME.TXT "$SYS/"
