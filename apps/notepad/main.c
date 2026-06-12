@@ -389,13 +389,20 @@ static void copy_sel(void)
  * buffer - open the gap, then read the clipboard straight into it. */
 static void paste_clip(void)
 {
-    unsigned int i, n;
+    unsigned int n;
+    char *s, *d, *lo;
     if (sel_on && sel_a < sel_b) delete_range(sel_a, sel_b);   /* caret -> sel_a */
     sel_on = 0;
     n = gb_clip_len();
     if (!n || len >= NP_MAX) return;
-    if (len + n > NP_MAX) n = NP_MAX - len;                    /* clamp to remaining room */
-    for (i = len; i > cur; i--) buf[i - 1 + n] = buf[i - 1];   /* open a gap */
+    if (n > NP_MAX - len) n = NP_MAX - len;                    /* clamp (avoids len+n wrap) */
+    /* open a gap of n at the caret, copying end-first. Pointer walk, NOT the index
+       form buf[i-1+n]=buf[i-1]: under --fomit-frame-pointer SDCC spilled that loop's
+       dst pointer and clobbered the loop counter, looping forever -> crash (#142). */
+    lo = buf + cur;
+    s  = buf + len;
+    d  = s + n;
+    while (s > lo) *--d = *--s;
     gb_clip_get(buf + cur, n);                                 /* fill it from the clipboard */
     len += n; cur += n;
     gb_doc_dirty();
