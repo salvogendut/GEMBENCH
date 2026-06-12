@@ -2603,8 +2603,6 @@ wel_imgend
                                                 ; (#0100..#7FFF, 32K) overflowed once the
                                                 ; resizeable windows grew the apps, so the
                                                 ; two least-coupled binaries moved up here.
-ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
-ied_imgend
 vwr_img         incbin "../build/VIEWER.RAW"    ; up here (the high region freed space when
 vwr_imgend                                      ; PAINT moved to pass 2) so the low region
                                                 ; fits the bigger FILEMGR (sorting, #118)
@@ -2628,7 +2626,6 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
                 save  "VIEWER.APP",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
-                save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"

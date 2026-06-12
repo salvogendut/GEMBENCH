@@ -28,9 +28,9 @@
 #define CELL_H    4            /* screen px per bitmap row (4x zoom; 1 byte wide)   */
 
 /* live (draggable) window-relative geometry */
-#define CANVAS_X  (win_x + 1)
-#define CANVAS_Y0 (win_y + 16)
-#define PANEL_X   (win_x + 34)
+#define CANVAS_X  (ox + 1)
+#define CANVAS_Y0 (oy + 16)
+#define PANEL_X   (ox + 34)
 
 #define SW_W      4            /* palette swatch: 4 bytes x 10 px, 13 px pitch */
 #define SW_H      10
@@ -51,8 +51,9 @@
    not partial) - so this must cover the largest icon set (#110). The icon-set
    ceiling is DATA_MODTOP-DATA_ICONS-#200 = 6656 -> 13 sectors; 7168 = 14 sectors
    covers any DEFAULT.IST. (Was 4096, which the now-5216-byte DEFAULT.IST exceeds.) */
-#define BUFSZ     6656         /* = the icon-set ceiling (DATA_MODTOP-DATA_ICONS-#200),
-                                  13 sectors; trimmed from 7168 to keep the bank fitting */
+#define BUFSZ     6144         /* 12 sectors. Holds DEFAULT.IST (5216) + most sets; trimmed
+                                  from the 6656 ceiling to fit Fullscreen - the very largest
+                                  (6145-6656) sets won't load (rare; revisit with icon-zoom) */
 #define CUR_W     4            /* cursor: 4 bytes/row x 16 rows, phase = 64 bytes */
 #define CUR_H     16
 #define PHASE     64
@@ -62,6 +63,9 @@
 #define M_NONE    0xFF
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
+static unsigned char winw = WIN_W, winh = WIN_H;   /* live window size (Fullscreen, #142) */
+static unsigned char ox = DEF_X, oy = DEF_Y;       /* content origin (centered when bigger) */
+static void recalc_origin(void);                   /* defined below */
 static unsigned char buf[BUFSZ];
 static unsigned int  filelen;
 static unsigned char mode;                 /* M_ICON / M_CURSOR / M_NONE          */
@@ -241,12 +245,13 @@ static void draw_undo(void)
 static void status_line(void)
 {
     /* save feedback is now the title's " *" dirty marker (gb_doc_modified). */
-    gb_text(win_x + 1, win_y + WIN_H - 11, "Pick a pen, click to paint");
+    gb_text(win_x + 1, win_y + winh - 11, "Pick a pen, click to paint");
 }
 
 static void draw(void)
 {
-    gb_window(win_x, win_y, WIN_W, WIN_H, win_title());
+    recalc_origin();
+    gb_window(win_x, win_y, winw, winh, win_title());
     draw_canvas();
     draw_palette();
     draw_nav();
@@ -312,8 +317,28 @@ static unsigned int ie_save(void)
     return 0;
 }
 
+/* recalc_origin: refresh the centered content origin from the live geometry. */
+static void recalc_origin(void)
+{
+    ox = (unsigned char)(win_x + (winw - WIN_W) / 2);
+    oy = (unsigned char)(win_y + (winh - WIN_H) / 2);
+}
+
+/* ie_fullscreen: View > Fullscreen - cover the screen (grid + panel recenter) and back. */
+static void ie_fullscreen(unsigned char on)
+{
+    if (on) { win_x = 0; win_y = 8; winw = 80; winh = 192; }
+    else    { win_x = DEF_X; win_y = DEF_Y; winw = WIN_W; winh = WIN_H; }
+    recalc_origin();
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(winw, winh);
+    if (!on) gb_restore_parent();
+    gb_curhide(); draw(); gb_curshow();
+}
+
 static const gb_doc_t iedoc = {
-    buf, BUFSZ, ie_new, ie_open, ie_save, 0, 0, 0, 0, ie_exts
+    buf, BUFSZ, ie_new, ie_open, ie_save, 0, 0, 0, 0, ie_exts,
+    0, 0, ie_fullscreen, 0, 0
 };
 
 /* ---- WM callbacks ----------------------------------------------------------- */
@@ -381,8 +406,8 @@ static void on_frame(void)
 
     if (my >= win_y && my < win_y + TITLE_H) {        /* title bar */
         if (mx >= win_x && mx < win_x + 5) { if (gb_doc_close()) gb_wm_close(); return; }   /* close */
-        if (mx >= win_x + 5 && mx < win_x + WIN_W) {                    /* drag  */
-            if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+        if (mx >= win_x + 5 && mx < win_x + winw) {                    /* drag  */
+            if (gb_drag_window(&win_x, &win_y, winw, winh)) {
                 gb_wm_setpos(win_x, win_y);
                 gb_restore_parent();
             }

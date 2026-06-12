@@ -15,6 +15,9 @@ pnt_imgend
 xao_img         incbin "../build/XAOS.RAW"      ; packaged on the disk as XAOS.APP (#116)
 xao_imgend
                 save  "XAOS.APP",xao_img,xao_imgend-xao_img,DSK,"build/gbkern.dsk"
+ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP (moved
+ied_imgend                                      ; to pass 2 - the main image filled up, #142)
+                save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
 pen_img         incbin "../assets/penguin.PIC" ; sample 200x200 picture -> PENGUIN.PIC
 pen_imgend
                 save  "PENGUIN.PIC",pen_img,pen_imgend-pen_img,DSK,"build/gbkern.dsk"

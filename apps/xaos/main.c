@@ -29,8 +29,11 @@
 #define MAXITER   20
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
-#define CVX    (unsigned char)(win_x + 1)            /* canvas left, byte column */
-#define CVY    (unsigned char)(win_y + TITLE_H + 1)  /* canvas top, screen row   */
+static unsigned char winw = WIN_W, winh = WIN_H;   /* live window size (Fullscreen, #142) */
+static unsigned char ox = DEF_X, oy = DEF_Y;       /* content origin (centered when bigger) */
+static void recalc_origin(void);                   /* defined below */
+#define CVX    (unsigned char)(ox + 1)               /* canvas left, byte column */
+#define CVY    (unsigned char)(oy + TITLE_H + 1)     /* canvas top, screen row   */
 #define CTRL_Y (unsigned char)(CVY + CANVAS_H + 2)   /* control strip (the +/- buttons) */
 
 /* .PIC v2 header (14 bytes) then the canvas, in one buffer so Save is one fs call.
@@ -211,14 +214,15 @@ static void btn(unsigned char bx, const char *label)
 static void draw_buttons(void)
 {
     gb_curhide();
-    btn((unsigned char)(win_x + 1), "+");
-    btn((unsigned char)(win_x + 6), "-");
+    btn((unsigned char)(ox + 1), "+");
+    btn((unsigned char)(ox + 6), "-");
     gb_curshow();
 }
 static void draw_all(void)
 {
+    recalc_origin();
     gb_curhide();
-    gb_window(win_x, win_y, WIN_W, WIN_H, win_title());
+    gb_window(win_x, win_y, winw, winh, win_title());
     gb_curshow();
     blit_canvas();
     draw_buttons();
@@ -348,8 +352,28 @@ static void x_savepic(void)
     gb_set_name(keep);                       /* restore the document's .TXT name */
 }
 
+/* recalc_origin: refresh the centered content origin from the live geometry. */
+static void recalc_origin(void)
+{
+    ox = (unsigned char)(win_x + (winw - WIN_W) / 2);
+    oy = (unsigned char)(win_y + (winh - WIN_H) / 2);
+}
+
+/* x_fullscreen: View > Fullscreen - cover the screen (canvas + buttons recenter) and back. */
+static void x_fullscreen(unsigned char on)
+{
+    if (on) { win_x = 0; win_y = 8; winw = 80; winh = 192; }
+    else    { win_x = DEF_X; win_y = DEF_Y; winw = WIN_W; winh = WIN_H; }
+    recalc_origin();
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(winw, winh);
+    if (!on) gb_restore_parent();
+    draw_all();
+}
+
 static const gb_doc_t xdoc = {
-    defbuf, DEFMAX, x_new, x_open, x_save, 0, 0, 0, 0, x_exts, "Save as PIC", x_savepic
+    defbuf, DEFMAX, x_new, x_open, x_save, 0, 0, 0, 0, x_exts, "Save as PIC", x_savepic,
+    x_fullscreen, 0, 0
 };
 
 /* on_menu: a top-bar title was clicked -> hand it to the framework. */
@@ -372,8 +396,8 @@ static void on_frame(void)
 
     if (my >= win_y && my < (unsigned char)(win_y + TITLE_H)) {         /* title bar */
         if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { if (gb_doc_close()) gb_wm_close(); return; }
-        if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + WIN_W)) {
-            if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+        if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + winw)) {
+            if (gb_drag_window(&win_x, &win_y, winw, winh)) {
                 gb_wm_setpos(win_x, win_y);
                 gb_restore_parent();
                 draw_all();
@@ -383,9 +407,9 @@ static void on_frame(void)
     }
     if (!generated) return;                            /* zoom/pan need a fractal first (#142) */
     if (my >= CTRL_Y && my < (unsigned char)(CTRL_Y + 9)) {             /* +/- buttons */
-        if (mx >= (unsigned char)(win_x + 1) && mx < (unsigned char)(win_x + 5))
+        if (mx >= (unsigned char)(ox + 1) && mx < (unsigned char)(ox + 5))
             rezoom(CANVAS_W / 2, CANVAS_H / 2, 1, 2);                   /* zoom in  */
-        else if (mx >= (unsigned char)(win_x + 6) && mx < (unsigned char)(win_x + 10))
+        else if (mx >= (unsigned char)(ox + 6) && mx < (unsigned char)(ox + 10))
             rezoom(CANVAS_W / 2, CANVAS_H / 2, 2, 1);                   /* zoom out */
         return;
     }

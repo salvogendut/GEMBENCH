@@ -48,7 +48,7 @@ DATA_LOC=0x4D00 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: low d
 DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-DATA_LOC=0x5F70 DOC=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
+DATA_LOC=0x6150 DOC=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
                                    # data-loc so its 7KB icon-set buffer (BUFSZ) fits below
                                    # #8000 (#110); DIALOGS=1 for the shared Load/Save popup (#114)
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
