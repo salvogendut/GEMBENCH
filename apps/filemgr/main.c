@@ -68,13 +68,10 @@ static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
 static char cfgbuf[512];
 static unsigned int cfglen;
 
-/* the top-bar menu: "View" toggles list/icons, "Back" goes up a directory */
-static const unsigned char fm_menu[] = {
-    2,
-    10, 'V','i','e','w',0,0,0,0,
-    17, 'B','a','c','k',0,0,0,0
-};
-#define MENU_BACK_COL 17      /* click column >= this -> Back, else View */
+/* The top bar is the gb_doc View menu (#142): Fullscreen (framework), then our two
+   view_items - "Icons / List" toggles the layout, "Up" goes up a directory. FM has no
+   document, so it gets no File menu. */
+static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Fullscreen */
 
 /* Sorted listing cache (#118): the directory is streamed once into these arrays in
    raw order, then `order` is sorted by (type, name) and BOTH views + the click/open
@@ -511,8 +508,48 @@ static void sb_click(unsigned char my)
     else                    sb_drag();
 }
 
-/* on_event: a top-bar menu click. "Back" (right title) goes to the parent
-   directory; "View" (left title) toggles list / icons. */
+/* fm_view: the gb_doc View menu's app items (after Fullscreen). 0 = toggle the
+   list/icons layout (persisted to GEOBENCH.CFG); 1 = go up a directory (#142). */
+static void fm_view(unsigned char item)
+{
+    if (item == 0) {                      /* Icons / List: toggle + persist */
+        view ^= 1;
+        cfg_save_view();
+        top = 0; nsel = 0;
+        clamp_top();
+        draw();
+    } else if (item == 1) {               /* Up: parent directory */
+        gb_back();
+        path_pop();
+        relist();
+    }
+}
+
+/* fm_fullscreen: View > Fullscreen - cover the screen and restore the prior
+   geometry on exit; the listing reflows to the new size (#142). */
+static void fm_fullscreen(unsigned char on)
+{
+    if (on) {
+        fs_px = win_x; fs_py = win_y; fs_pw = win_w; fs_ph = win_h;
+        win_x = 0; win_y = 8; win_w = 80; win_h = 192;
+    } else {
+        win_x = fs_px; win_y = fs_py; win_w = fs_pw; win_h = fs_ph;
+    }
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(win_w, win_h);
+    clamp_top();                          /* a taller window shows more rows */
+    if (!on) gb_restore_parent();
+    draw();
+}
+
+static const char *const fm_view_items[] = { "Icons / List", "Up", 0 };
+static const gb_doc_t fmdoc = {          /* no document -> no File menu, just View */
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, fm_fullscreen, fm_view_items, fm_view
+};
+
+/* on_event: a file dropped here from another window is copied onto our drive (#65);
+   a top-bar menu click goes to the framework's View handler (#142). */
 static void on_event(void)
 {
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
@@ -528,18 +565,7 @@ static void on_event(void)
         relist();
         return;
     }
-    if (gb_msg.type != GB_MSG_MENU) return;
-    if (gb_msg.p0 >= MENU_BACK_COL) {     /* Back */
-        gb_back();
-        path_pop();
-        relist();
-    } else {                              /* View: toggle + persist to GEOBENCH.CFG */
-        view ^= 1;
-        cfg_save_view();
-        top = 0; nsel = 0;
-        clamp_top();
-        draw();
-    }
+    gb_doc_event();                       /* the View menu (Fullscreen / Icons-List / Up) */
 }
 
 /* on_frame: one frame when focused (kernel WM loop). Read input via gb_flags/mx/my. */
@@ -550,6 +576,7 @@ static void on_frame(void)
     gb_set_drive(my_drive);              /* re-assert our drive each focused frame (#65) */
     if (dc_timer) dc_timer--;
     if (flags & GB_QUIT) { gb_wm_close(); return; }    /* ESC closes the window */
+    if (gb_doc_frame()) { draw(); return; }            /* a View menu ran (#142) */
     if (!(flags & GB_CLICK)) return;
 
     mx = gb_mx();
@@ -557,7 +584,7 @@ static void on_frame(void)
 
     /* close gadget (top-left of the title bar) */
     if (my >= win_y && my < win_y + TITLE_H && mx >= win_x && mx < win_x + 4) {
-        gb_wm_close();
+        if (gb_doc_close()) gb_wm_close();
         return;
     }
 
@@ -627,9 +654,9 @@ static void on_frame(void)
     }
 }
 
-/* a co-resident window: on_repaint = draw, on_event = the View toggle, menu = the
-   "View" title (shown in the top bar while we are focused). */
-static gb_win_t fmwin = { DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, draw, on_event, fm_menu };
+/* a co-resident window: on_repaint = draw, on_event = file-drop + the View menu.
+   menu = 0: the gb_doc framework drives the top bar (gb_menu) while we're focused. */
+static gb_win_t fmwin = { DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, draw, on_event, 0 };
 
 void main(void)
 {
@@ -641,6 +668,7 @@ void main(void)
     fmwin.y = win_y;
     gb_wm_add(&fmwin);           /* register first (focus) so gb_set_name/fs_load
                                    target our window for the config read below */
+    gb_doc(&fmdoc);              /* View menu (Fullscreen / Icons-List / Up); no File (#142) */
     gb_set_drive(my_drive);
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
     build_list();                /* stream + sort the directory (sets total) (#118) */

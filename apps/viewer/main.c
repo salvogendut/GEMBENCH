@@ -10,8 +10,11 @@
  * skipped), so this doubles as a quick "peek" at anything on the disk. */
 #include "gb.h"
 
-#define VIEW_MAX  12288  /* file buffer + load cap. Big enough for a ~200x200 .PIC
-                            (a full-screen 320x200 is 16K - won't fit the 16K bank). */
+#define VIEW_MAX  9728   /* file buffer + load cap = 19 sectors (~200x194 .PIC). Trimmed
+                            from 12288 to make room for the gb_doc framework code (#142):
+                            code + this buffer now fill the 16K bank. The largest .PIC the
+                            bank can hold is just under 200x200; a full-screen 320x200 (16K)
+                            never fit anyway. */
 #define TX_COL    (unsigned char)(win_x + 2)     /* text/image start: byte col in window */
 #define TX_Y0     (unsigned char)(win_y + 12)    /* first text line / image top (rows)  */
 #define LINE_H    11     /* line pitch (pixels)                               */
@@ -33,6 +36,7 @@ static unsigned int filen;       /* bytes loaded (for repaint) */
 static unsigned char win_x = DEF_X, win_y = DEF_Y;   /* live position (draggable)   */
 static unsigned char win_w = DEF_W, win_h = DEF_H;   /* live size (resizeable) */
 static char fbase[14];           /* "NAME.EXT" of the open file (window title) */
+static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Fullscreen (#142) */
 
 /* fmt83: 11-byte space-padded 8.3 name -> "NAME.EXT" display string. */
 static void fmt83(char *dst, const char *n11)
@@ -138,12 +142,59 @@ static void v_repaint(void)
     gb_curshow();
 }
 
+/* on_open: a file was just loaded into filebuf (the launch file, or File > Load).
+   Adopt its name, size the window to a .PIC, and repaint. The gb_doc framework
+   calls this; main() calls it too for the launch file (#142). */
+static void v_open(unsigned int len)
+{
+    filen = len;
+    fmt83(fbase, gb_doc_name());            /* the framework has set the current name */
+    if (is_pic()) {                         /* a picture -> size the window to it (#114) */
+        parse_pic();
+        win_w = (unsigned char)(pic_wb + 3);
+        if (win_w < MIN_W) win_w = MIN_W;
+        if (win_w > (unsigned char)(80 - win_x)) win_w = (unsigned char)(80 - win_x);
+        win_h = (unsigned char)((TX_Y0 - win_y) + pic_h + 4);
+        if (win_h < MIN_H) win_h = MIN_H;
+        if (win_h > (unsigned char)(200 - win_y)) win_h = (unsigned char)(200 - win_y);
+        gb_wm_setsize(win_w, win_h);
+    }
+    gb_curhide(); v_draw(); gb_curshow();
+}
+
+/* on_fullscreen: View > Fullscreen - cover the screen (text reflows / a picture
+   shows from the top-left), restoring the prior geometry on exit (#142). */
+static void v_fullscreen(unsigned char on)
+{
+    if (on) {
+        fs_px = win_x; fs_py = win_y; fs_pw = win_w; fs_ph = win_h;
+        win_x = 0; win_y = 8; win_w = 80; win_h = 192;
+    } else {
+        win_x = fs_px; win_y = fs_py; win_w = fs_pw; win_h = fs_ph;
+    }
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(win_w, win_h);
+    if (!on) gb_restore_parent();
+    gb_curhide(); v_draw(); gb_curshow();
+}
+
+/* Read-only document: File offers only Load (no New/Save); View offers Fullscreen.
+   exts = NULL so Load shows every file (the viewer opens text and .PIC alike). */
+static const gb_doc_t vdoc = {
+    filebuf, VIEW_MAX, 0, v_open, 0, 0, 0, 0, 0, 0,
+    0, 0, v_fullscreen, 0, 0
+};
+
+/* on_menu: a top-bar title was clicked -> hand it to the framework. */
+static void v_menu(void) { gb_doc_event(); }
+
 /* on_frame: ESC / close gadget closes; the title bar drags the window; the grip
    resizes; other clicks just focus. */
 static void on_frame(void)
 {
     unsigned char flags = gb_flags(), mx, my;
     if (flags & GB_QUIT) { gb_wm_close(); return; }
+    if (gb_doc_frame()) { gb_curhide(); v_draw(); gb_curshow(); return; }  /* a menu ran (#142) */
     if (!(flags & GB_CLICK)) return;
     mx = gb_mx(); my = gb_my();
     if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {       /* resize grip (#81) */
@@ -155,7 +206,7 @@ static void on_frame(void)
         return;
     }
     if (my >= win_y && my < (unsigned char)(win_y + TITLE_H)) { /* title bar */
-        if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { gb_wm_close(); return; }  /* close */
+        if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { if (gb_doc_close()) gb_wm_close(); return; }  /* close */
         if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + win_w)) {  /* drag */
             if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
                 gb_wm_setpos(win_x, win_y);
@@ -166,27 +217,12 @@ static void on_frame(void)
     }
 }
 
-static const gb_win_t vwin = { DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, v_repaint, 0, 0 };
+static const gb_win_t vwin = { DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, v_repaint, v_menu, 0 };
 
 void main(void)
 {
-    char raw[11];
     gb_wm_add(&vwin);                       /* register FIRST: captures our file arg
                                               (per-window) so the load below is ours */
-    gb_get_name(raw);                       /* the file we were launched with -> title */
-    fmt83(fbase, raw);
-    filen = gb_fs_load(filebuf, VIEW_MAX);
-    if (is_pic()) {                         /* a picture -> size the window to it (#114) */
-        parse_pic();
-        win_w = (unsigned char)(pic_wb + 3);
-        if (win_w < MIN_W) win_w = MIN_W;
-        if (win_w > (unsigned char)(80 - win_x)) win_w = (unsigned char)(80 - win_x);
-        win_h = (unsigned char)((TX_Y0 - win_y) + pic_h + 4);
-        if (win_h < MIN_H) win_h = MIN_H;
-        if (win_h > (unsigned char)(200 - win_y)) win_h = (unsigned char)(200 - win_y);
-        gb_wm_setsize(win_w, win_h);
-    }
-    gb_curhide();
-    v_draw();
-    gb_curshow();
+    gb_doc(&vdoc);                          /* File > Load + View > Fullscreen (#142) */
+    v_open(gb_fs_load(filebuf, VIEW_MAX));  /* load + size + paint the launch file */
 }

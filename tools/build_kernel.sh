@@ -41,14 +41,16 @@ python3 tools/packicons.py build/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
-DATA_LOC=0x6500 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: higher data-loc
-                                   # for code room now it sorts (a ~2.6K listing cache, #118)
-DATA_LOC=0x4D00 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: low data-loc for a
-                                   # big file buffer (12K) so larger .PIC images fit the bank
+DATA_LOC=0x6E00 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
+                                   # the gb_doc-grown code; the ~3.1K listing cache (#118) fits
+                                   # the rest. DOC=1 = View menu (Fullscreen / Icons-List / Up) (#142)
+DATA_LOC=0x5780 DOC=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: data-loc just
+                                   # above the gb_doc-grown code; a 10K file buffer (200x200 .PIC)
+                                   # fills the rest of the bank. DOC=1 = File>Load + View>Fullscreen (#142)
 DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-DATA_LOC=0x6150 DOC=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
+DATA_LOC=0x6280 DOC=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
                                    # data-loc so its 7KB icon-set buffer (BUFSZ) fits below
                                    # #8000 (#110); DIALOGS=1 for the shared Load/Save popup (#114)
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
@@ -71,6 +73,7 @@ build_variant() {                                # $1 = kernel name, $2 = rasm -
     rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
     "$RASM" kernel/gbkern.asm -eo $2 ${EXTRA_RASM:-} # incbins apps + font + icons -> .dsk + RAW
     "$RASM" kernel/pack_apps.asm -eo             # 2nd pass: overflow apps -> same .dsk (#114)
+    "$RASM" kernel/pack_apps2.asm -eo            # 3rd pass: VIEWER + FILEMGR -> same .dsk (#142)
     cp build/GBKERN.RAW "build/$1.RAW"           # capture this card's kernel for the unified stage
 }
 rm -rf QA; mkdir -p QA
@@ -98,4 +101,5 @@ echo "  QA/CARD: any IDE/Albireo card (RUN\"GB); QA/GEOBENCH.DSK: floppy (RUN\"G
 rm -f build/gbkern.dsk
 "$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG >/dev/null
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
+"$RASM" kernel/pack_apps2.asm -eo >/dev/null     # 3rd pass: VIEWER + FILEMGR -> .dsk (#142)
 echo "Built QA/CARD (unified card deploy) + QA/GEOBENCH.DSK (floppy); build/ = ${STORAGE:-ide} variant"

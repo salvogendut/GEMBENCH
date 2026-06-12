@@ -29,7 +29,14 @@ static unsigned char   g_col[DOC_MAXTITLES];     /* each title's byte column */
 static unsigned char   g_ntitles;
 static unsigned char   g_def[1 + DOC_MAXTITLES * 9];   /* MENU_DEF: count, {col,label[8]}* */
 
-static const char *file_items[5] = { "New", "Load", "Save", "Save As", 0 };  /* [4] = optional export */
+/* The File menu is built per-app: only items whose hook exists appear, so a
+ * read-only app (on_open only) shows just "Load", and a document-less app (the
+ * File Manager) shows no File title at all (#142). file_act maps each visible
+ * item back to its action. */
+static const char     *file_items[6];
+static unsigned char   file_act[6];   /* per visible item: 0 New,1 Load,2 Save,3 Save As,4 Export */
+static unsigned char   file_nf;       /* number of visible File items */
+static void            file_action(unsigned char sel);
 static const char *const confirm_items[] = { "Save", "Don't Save", "Cancel" };
 
 static unsigned char slen(const char *s) { unsigned char n = 0; while (s[n]) n++; return n; }
@@ -96,12 +103,23 @@ void gb_doc(const gb_doc_t *d)
     g_doc = d;
     g_dirty = 0;
     g_want = 0;
-    g_label[0]   = "File";
-    g_items[0]   = file_items;
-    g_nitems[0]  = 4;
-    g_handler[0] = 0;                 /* File is handled internally */
-    if (d->export_label) { file_items[4] = d->export_label; g_nitems[0] = 5; }
-    g_ntitles    = 1;
+    g_ntitles = 0;
+    {                                 /* build the File menu from the hooks present */
+        unsigned char nf = 0;
+        if (d->on_new)  { file_items[nf] = "New";     file_act[nf++] = 0; }
+        if (d->on_open) { file_items[nf] = "Load";    file_act[nf++] = 1; }
+        if (d->on_save) { file_items[nf] = "Save";    file_act[nf++] = 2;
+                          file_items[nf] = "Save As"; file_act[nf++] = 3; }
+        if (d->export_label) { file_items[nf] = d->export_label; file_act[nf++] = 4; }
+        file_items[nf] = 0; file_nf = nf;
+        if (nf) {                     /* a document-less app gets no File title at all */
+            g_label[g_ntitles]   = "File";
+            g_items[g_ntitles]   = file_items;
+            g_nitems[g_ntitles]  = nf;
+            g_handler[g_ntitles] = file_action;
+            g_ntitles++;
+        }
+    }
     if (d->on_copy) {                 /* standard Edit menu, backed by the shared clipboard */
         g_label[g_ntitles]   = "Edit";
         g_items[g_ntitles]   = edit_items;
@@ -226,11 +244,14 @@ static void do_saveas(void)
 
 static void file_action(unsigned char sel)
 {
-    if      (sel == 0) do_new();
-    else if (sel == 1) do_load();
-    else if (sel == 2) do_save();
-    else if (sel == 3) do_saveas();
-    else if (sel == 4) { if (g_doc->on_export) g_doc->on_export(); }   /* the optional export */
+    unsigned char a;
+    if (sel >= file_nf) return;
+    a = file_act[sel];
+    if      (a == 0) do_new();
+    else if (a == 1) do_load();
+    else if (a == 2) do_save();
+    else if (a == 3) do_saveas();
+    else if (a == 4) { if (g_doc->on_export) g_doc->on_export(); }   /* the optional export */
 }
 
 /* on_frame: drop a pending menu and dispatch it. Returns 1 if a menu ran (the
@@ -243,8 +264,7 @@ unsigned char gb_doc_frame(void)
     g_want = 0;
     sel = gb_popup(g_col[t], 8, g_items[t], g_nitems[t]);
     if (sel != 0xFF) {
-        if (t == 0) file_action(sel);                /* File (built-in) */
-        else if (g_handler[t]) g_handler[t](sel);    /* app menu -> its handler */
+        if (g_handler[t]) g_handler[t](sel);         /* File / Edit / View / app menu */
     }
     return 1;
 }

@@ -2598,22 +2598,14 @@ wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in 
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
-                                                ; ICONED + PAINT ride in the ABOVE-kernel
-                                                ; region too: the low #0100 app window
-                                                ; (#0100..#7FFF, 32K) overflowed once the
-                                                ; resizeable windows grew the apps, so the
-                                                ; two least-coupled binaries moved up here.
-vwr_img         incbin "../build/VIEWER.RAW"    ; up here (the high region freed space when
-vwr_imgend                                      ; PAINT moved to pass 2) so the low region
-                                                ; fits the bigger FILEMGR (sorting, #118)
-                ; PAINT.APP is packaged by a SECOND rasm pass (kernel/pack_apps.asm):
-                ; this 64K image filled up, and the .dsk save accumulates across rasm
-                ; invocations, so the overflow apps get their own packaging pass (#114).
+                ; Overflow apps are packaged by FURTHER rasm passes: this 64K image
+                ; filled up, and the .dsk save accumulates across rasm invocations, so
+                ; the largest binaries get their own passes - PAINT/XAOS/ICONED in
+                ; pack_apps.asm (#114), and the gb_doc-grown VIEWER + FILEMGR in
+                ; pack_apps2.asm (#142). Both are too big for this image's free regions.
                 org   #0100                     ; --- app binaries, low region ---
 dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
 dtp_imgend
-app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.APP
-app_imgend
 npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
 npd_imgend
 clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
@@ -2623,8 +2615,6 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                                                 ; in the low region to keep the high region < #FFFF
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
-                save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
-                save  "VIEWER.APP",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
