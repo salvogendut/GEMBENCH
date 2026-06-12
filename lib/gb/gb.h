@@ -172,6 +172,13 @@ typedef struct {
      * Save keeps the definition). on_export does the whole action itself. NULL = none. */
     const char  *export_label;
     void         (*on_export)(void);
+    /* Optional View menu (added after Edit). "Fullscreen" is offered when on_fullscreen
+     * is non-NULL - the framework toggles a flag and calls on_fullscreen(on); the app
+     * resizes its own window to cover the screen (on=1) or restore (on=0) and repaints.
+     * Any view_items (NULL-terminated) follow, dispatched to on_view(index). */
+    void         (*on_fullscreen)(unsigned char on);
+    const char *const *view_items;
+    void         (*on_view)(unsigned char item);
 } gb_doc_t;
 void          gb_doc(const gb_doc_t *d);   /* register; adds the standard File (+Edit) menu */
 void          gb_doc_dirty(void);          /* mark the document modified */

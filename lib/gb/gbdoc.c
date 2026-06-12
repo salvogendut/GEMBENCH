@@ -77,6 +77,20 @@ static void edit_action(unsigned char sel)
     else if (sel == 2) { if (g_doc->on_paste)     g_doc->on_paste(); }
 }
 
+/* --- the View menu (#142): added when the doc provides on_fullscreen or view_items.
+ * "Fullscreen" toggles (the app resizes its own window); app view_items follow. */
+static const char *g_view[8];          /* "Fullscreen" + the app's view_items */
+static unsigned char g_fullscreen;     /* current fullscreen toggle state */
+static void view_action(unsigned char sel)
+{
+    unsigned char base = 0;
+    if (g_doc->on_fullscreen) {
+        if (sel == 0) { g_fullscreen = (unsigned char)!g_fullscreen; g_doc->on_fullscreen(g_fullscreen); return; }
+        base = 1;
+    }
+    if (g_doc->on_view) g_doc->on_view((unsigned char)(sel - base));
+}
+
 void gb_doc(const gb_doc_t *d)
 {
     g_doc = d;
@@ -89,11 +103,22 @@ void gb_doc(const gb_doc_t *d)
     if (d->export_label) { file_items[4] = d->export_label; g_nitems[0] = 5; }
     g_ntitles    = 1;
     if (d->on_copy) {                 /* standard Edit menu, backed by the shared clipboard */
-        g_label[1]   = "Edit";
-        g_items[1]   = edit_items;
-        g_nitems[1]  = 3;
-        g_handler[1] = edit_action;
-        g_ntitles    = 2;
+        g_label[g_ntitles]   = "Edit";
+        g_items[g_ntitles]   = edit_items;
+        g_nitems[g_ntitles]  = 3;
+        g_handler[g_ntitles] = edit_action;
+        g_ntitles++;
+    }
+    if (d->on_fullscreen || d->view_items) {        /* View menu (Fullscreen + app items) */
+        unsigned char t = g_ntitles, nv = 0, i;
+        if (d->on_fullscreen) g_view[nv++] = "Fullscreen";
+        if (d->view_items) for (i = 0; d->view_items[i] && nv < 7; i++) g_view[nv++] = d->view_items[i];
+        g_label[t]   = "View";
+        g_items[t]   = g_view;
+        g_nitems[t]  = nv;
+        g_handler[t] = view_action;
+        g_fullscreen = 0;
+        g_ntitles    = (unsigned char)(t + 1);
     }
     rebuild();
     gb_get_name(g_name);              /* adopt the file we were launched with */

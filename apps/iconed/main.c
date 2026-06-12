@@ -51,7 +51,8 @@
    not partial) - so this must cover the largest icon set (#110). The icon-set
    ceiling is DATA_MODTOP-DATA_ICONS-#200 = 6656 -> 13 sectors; 7168 = 14 sectors
    covers any DEFAULT.IST. (Was 4096, which the now-5216-byte DEFAULT.IST exceeds.) */
-#define BUFSZ     7168
+#define BUFSZ     6656         /* = the icon-set ceiling (DATA_MODTOP-DATA_ICONS-#200),
+                                  13 sectors; trimmed from 7168 to keep the bank fitting */
 #define CUR_W     4            /* cursor: 4 bytes/row x 16 rows, phase = 64 bytes */
 #define CUR_H     16
 #define PHASE     64

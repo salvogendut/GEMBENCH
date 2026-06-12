@@ -354,8 +354,23 @@ static const char *const np_exts[] = { "TXT", "BAS", "CFG", 0 };
 static void select_all(void);            /* the Edit-menu hooks (defined below) */
 static void copy_sel(void);
 static void paste_clip(void);
+
+/* np_fullscreen: View > Fullscreen - resize our window to cover the screen (below the
+ * top bar) and back. Notepad is resizable (#81), so the text just reflows. Restoring
+ * repaints the desktop we vacated. */
+static void np_fullscreen(unsigned char on)
+{
+    if (on) { win_x = 0; win_y = 8; win_w = 80; win_h = 192; }
+    else    { win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H; }
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(win_w, win_h);
+    if (!on) gb_restore_parent();        /* repaint what the full-screen window covered */
+    gb_curhide(); draw(); gb_curshow();
+}
+
 static const gb_doc_t npdoc = {
-    buf, NP_MAX, np_new, np_open, np_save, np_saved, copy_sel, paste_clip, select_all, np_exts
+    buf, NP_MAX, np_new, np_open, np_save, np_saved, copy_sel, paste_clip, select_all,
+    np_exts, 0, 0, np_fullscreen, 0, 0
 };
 
 /* --- Edit menu: copy / paste over a selection (#99) ----------------------- */
