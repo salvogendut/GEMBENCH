@@ -63,22 +63,26 @@ if [ "${DOC:-0}" = "1" ]; then
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
-# STABILITY GUARD: the app must fit its 16K page - code below its data-loc, data+bss
-# below the kernel (#8000). A silent overflow corrupts memory at runtime (it bit
-# NOTEPAD once); turn it into a loud build failure here.
+# STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
+# (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
+# AFTER the code) must end below data-loc - otherwise the RAM data area starts inside
+# it and gsinit zeroes its own code as it runs -> instant reboot (bit NOTEPAD: a
+# _CODE-only check passed while _GSINIT overlapped _DATA). And data+bss must end below
+# the kernel (#8000). Turn either overflow into a loud build failure.
 python3 - "$work/app.map" "$APP" "$DATA_LOC" <<'PY'
 import sys, re
 mapf, app, dloc = sys.argv[1], sys.argv[2], int(sys.argv[3], 16)
 area = {}
 for line in open(mapf):
-    m = re.match(r'^(_CODE|_DATA|_BSS|_INITIALIZED|_GSINIT)\s+([0-9A-Fa-f]{8})\s+([0-9A-Fa-f]{8})', line)
+    m = re.match(r'^(_CODE|_DATA|_BSS|_INITIALIZED|_GSINIT|_GSFINAL|_INITIALIZER)\s+([0-9A-Fa-f]{8})\s+([0-9A-Fa-f]{8})', line)
     if m:
         area[m.group(1)] = (int(m.group(2), 16), int(m.group(3), 16))
-code_end = sum(area.get('_CODE', (0, 0)))
+LOAD = ('_CODE', '_GSINIT', '_GSFINAL', '_INITIALIZER')   # the loaded image (before data-loc)
+img_end = max((area[a][0] + area[a][1]) for a in LOAD if a in area)
 top = max((s + sz) for s, sz in area.values()) if area else 0
 errs = []
-if code_end > dloc:  errs.append('code ends 0x%04X > data-loc 0x%04X' % (code_end, dloc))
-if top > 0x8000:     errs.append('data/bss ends 0x%04X > kernel 0x8000' % top)
+if img_end > dloc:  errs.append('loaded image ends 0x%04X > data-loc 0x%04X (gsinit/data overlap)' % (img_end, dloc))
+if top > 0x8000:    errs.append('data/bss ends 0x%04X > kernel 0x8000' % top)
 if errs:
     sys.stderr.write('FIT ERROR (%s): %s - shrink it or raise DATA_LOC\n' % (app, '; '.join(errs)))
     sys.exit(1)
