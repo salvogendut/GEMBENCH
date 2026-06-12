@@ -46,6 +46,11 @@
         .globl  _gb_flags
         .globl  _gb_wm_run
         .globl  _gb_wm_add
+        .globl  _gb_wm_managed
+        .globl  _gb_wm_x
+        .globl  _gb_wm_y
+        .globl  _gb_wm_w
+        .globl  _gb_wm_h
         .globl  _gb_wm_open
         .globl  _gb_wm_close
         .globl  _gb_wm_setpos
@@ -350,6 +355,24 @@ _gb_wm_run:
 ;; window (called from an app opened with gb_wm_open); returns to the opener.
 _gb_wm_add:
         jp      0x805D          ; GB_WMADD
+;; void gb_wm_managed(const gb_mwin_t *desc);   desc in HL -> register a kernel-managed
+;; window (#146): the WM owns the chrome, the app provides content hooks.
+_gb_wm_managed:
+        jp      0x80B1          ; GB_WMMANAGED
+;; The live window rect, published by the WM into MW_RECT (#1448) before each managed
+;; hook; the app reads it (gb_wm_x/y/w/h).  (char return in A, like gb_mx.)
+_gb_wm_x:
+        ld      a,(0x1448)
+        ret
+_gb_wm_y:
+        ld      a,(0x1449)
+        ret
+_gb_wm_w:
+        ld      a,(0x144A)
+        ret
+_gb_wm_h:
+        ld      a,(0x144B)
+        ret
 ;; void gb_wm_open(const char *name);   8.3 name in HL -> open an app as a new
 ;; co-resident window (non-blocking); returns once it has registered.
 _gb_wm_open:
