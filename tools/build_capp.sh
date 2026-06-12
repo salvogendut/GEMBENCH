@@ -39,17 +39,23 @@ mkdir -p "$work"
 # Opt-in modal dialogs, linked only when asked so dialog-free apps carry none (#114):
 #   DIALOGS=1  -> gbdlg.c   (gb_popup list menu + gb_modal flag)
 #   PROMPT=1   -> gbprompt.c (gb_prompt name box; implies DIALOGS=1, uses gb_modal_set)
+#   PICKER=1   -> gbpick.c  (navigable file/folder Open/Save chooser, #142; implies
+#                            DIALOGS - it uses gb_popup. Any app can pick files with it.)
 #   DOC=1      -> gbdoc.c    (document-app framework: standard File menu, #142;
-#                            implies DIALOGS+PROMPT - it uses gb_popup + gb_prompt)
+#                            implies DIALOGS+PROMPT+PICKER - File>Load/Save As use them)
 # A popup-only app (ICONED) sets DIALOGS=1; a Save-As app (PAINT, NOTEPAD) sets both.
 DLG_REL=""
-if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ] || [ "${DOC:-0}" = "1" ]; then
+if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ] || [ "${PICKER:-0}" = "1" ] || [ "${DOC:-0}" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdlg.c" -o "$work/gbdlg.rel"
     DLG_REL="$work/gbdlg.rel"
 fi
 if [ "${PROMPT:-0}" = "1" ] || [ "${DOC:-0}" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbprompt.c" -o "$work/gbprompt.rel"
     DLG_REL="$DLG_REL $work/gbprompt.rel"
+fi
+if [ "${PICKER:-0}" = "1" ] || [ "${DOC:-0}" = "1" ]; then
+    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbpick.c" -o "$work/gbpick.rel"
+    DLG_REL="$DLG_REL $work/gbpick.rel"
 fi
 if [ "${DOC:-0}" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"

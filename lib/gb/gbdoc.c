@@ -15,7 +15,6 @@
 #include "gb.h"
 
 #define DOC_MAXTITLES 4              /* File + up to 3 app titles */
-#define DOC_MAXFILES  16             /* entries shown in the Load picker */
 
 static const gb_doc_t *g_doc;
 static unsigned char   g_dirty;
@@ -149,32 +148,16 @@ static void do_new(void)
     g_dirty = 0;
 }
 
-/* do_load: list the current directory's files in a picker and open the choice. */
-static char store[DOC_MAXFILES][14];
+/* do_load: the shared navigable file chooser (gbpick), then open the choice from
+ * its directory. The picker leaves the FS positioned in the chosen folder. */
 static void do_load(void)
 {
-    const char *names[DOC_MAXFILES];
-    char *p;
-    unsigned char n = 0, i, sel;
+    char nm[11];
     unsigned int len;
-
     if (!confirm_save()) return;
-    p = gb_dir1();
-    while (p && n < DOC_MAXFILES) {
-        if (!gb_isdir()) {                           /* files only, no folders */
-            for (i = 0; i < 13 && p[i]; i++) store[n][i] = p[i];
-            store[n][i] = 0;
-            names[n] = store[n];
-            n++;
-        }
-        p = gb_dirn();
-    }
-    if (!n) return;
-    sel = gb_popup(10, 18, names, n);
-    if (sel == 0xFF) return;
-    to_83(store[sel]);
-    set_name(name83);                              /* picker name -> current file */
-    len = gb_fs_load(g_doc->buf, g_doc->bufmax);
+    if (!gb_pickfile(nm)) return;
+    set_name(nm);                                  /* chosen file -> current file */
+    len = gb_fs_load(g_doc->buf, g_doc->bufmax);   /* targets the navigated directory */
     if (g_doc->on_open) g_doc->on_open(len);
     g_dirty = 0;
 }
@@ -190,10 +173,11 @@ static void do_save(void)
 static char namebuf[16];
 static void do_saveas(void)
 {
+    if (!gb_pickdir()) return;                     /* navigate to the destination dir */
     if (!gb_prompt("Save as:", namebuf, 12)) return;
     to_83(namebuf);
     set_name(name83);
-    do_save();
+    do_save();                                     /* writes into the navigated dir */
 }
 
 static void file_action(unsigned char sel)

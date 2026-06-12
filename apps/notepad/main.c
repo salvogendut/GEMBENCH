@@ -18,8 +18,9 @@
  * visible. */
 #include "gb.h"
 
-#define NP_MAX    4096           /* editable text capacity (was 1024); fits the app's
-                                    #6000-#7FFF data window with room to spare */
+#define NP_MAX    3840           /* editable text capacity (was 4096; trimmed 256B to fit
+                                    the navigable file dialog - restore when the shared
+                                    clipboard (gb_clip_*) reclaims notepad's local clip[]) */
 #define NP_BUF    (NP_MAX + 512)  /* +1 sector of slack: gb_fs_load copies whole 512B
                                     sectors, so the buffer outruns the load cap */
 #define DEF_X     2            /* initial window position (the window is draggable) */

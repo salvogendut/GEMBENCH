@@ -118,6 +118,19 @@ void          gb_modal_set(unsigned char on);
  * bar clicks), so the title handler signals the close here. */
 void          gb_popup_close(void);
 
+/* Navigable file/folder chooser (#142, lib/gb/gbpick.c, opt-in via build_capp.sh
+ * PICKER=1 - DOC=1 implies it). The standard Open/Save dialog, built on the dir
+ * primitives (gb_dir1/dirn/isdir/entname + gb_chdir/back), shared by any app - this
+ * is the file DIALOG, not the File Manager. Folders descend, ".." goes up; both
+ * leave the filesystem positioned in the chosen directory, so a following
+ * gb_fs_load / gb_fs_save (or gb_set_name) targets it.
+ *   gb_pickfile - Open: pick a file; fills name11 with its raw 11-byte 8.3 name,
+ *                 returns 1 (0 = cancel). Caller then gb_set_name(name11)+gb_fs_load.
+ *   gb_pickdir  - Save destination: navigate, then "[Save here]" returns 1 with the
+ *                 FS in that directory (0 = cancel). Caller then prompts a name. */
+unsigned char gb_pickfile(char *name11);
+unsigned char gb_pickdir(void);
+
 /* ---- Document-app framework (#142) -----------------------------------------
  * An app that edits a document registers a gb_doc_t once, and the system gives
  * it a standard "File" menu (New / Load / Save / Save As) in the top bar and
