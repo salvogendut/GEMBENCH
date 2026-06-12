@@ -1510,44 +1510,41 @@ wm_register
 ;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 on_draw +8 on_click +10 on_frame
 ;   +12 on_close +14 on_event +16 title
 k_wm_managed
-                ld    (wm_desc),hl
-                call  wm_free_slot
-                ld    (wm_slot),a
+                call  wm_register            ; HL = desc; register as a normal window (slot,
+                                             ; page, focus, z-order, arg, flags=alive; copies
+                                             ; desc[0..11] -> entry+1..12). wm_register stashed
+                                             ; the desc ptr in wm_desc. Now patch for managed:
+                ld    a,(WM_FOCUS)           ; the just-registered window
                 call  wm_entry               ; HL = entry
-                ld    a,(bank_cur)
-                ld    (hl),a                 ; +0 page = caller
-                inc   hl                     ; +1 (x)
-                ex    de,hl                  ; DE = entry+1
-                ld    hl,(wm_desc)
-                ld    bc,4
-                ldir                         ; entry+1..4 = x,y,w,h ; DE = entry+5
-                ld    hl,(wm_desc)           ; WM_FR_FRAME (entry+5,6) = desc ptr
-                ex    de,hl                  ; HL = entry+5, DE = desc
+                push  hl
+                ld    de,WM_FR_FLAGS         ; FLAGS |= managed
+                add   hl,de
+                set   1,(hl)
+                pop   hl
+                push  hl
+                ld    de,WM_FR_FRAME         ; WM_FR_FRAME (entry+5,6) = the descriptor ptr
+                add   hl,de
+                ld    de,(wm_desc)
                 ld    (hl),e
                 inc   hl
-                ld    (hl),d                 ; HL = entry+7
-                xor   a                      ; zero REPAINT/EVENT/MENU (entry+7..12)
-                ld    b,6
-kwm_z           ld    (hl),a
+                ld    (hl),d
+                pop   hl
+                ld    de,WM_FR_EVENT         ; WM_FR_EVENT = desc.on_event (so bar clicks/drops
+                add   hl,de                  ; reach the app's menu handler via the normal path)
+                push  hl                     ; HL = entry+9
+                ld    hl,(wm_desc)
+                ld    de,14
+                add   hl,de
+                ld    e,(hl)
                 inc   hl
-                djnz  kwm_z                  ; HL = entry+13 (FLAGS)
-                ld    a,1+MW_MANAGED          ; alive | managed
-                ld    (hl),a
-                inc   hl                     ; entry+14 = arg
-                ex    de,hl                  ; DE = entry+14
-                ld    hl,launch_arg
-                call  copy11                 ; capture the launch file arg
-                ld    a,(wm_slot)            ; focus + push z-top
-                ld    (WM_FOCUS),a
-                ld    hl,WM_Z
-                ld    a,(WM_NWIN)
-                add   a,l
-                ld    l,a
-                ld    a,(wm_slot)
-                ld    (hl),a
-                ld    hl,WM_NWIN
-                inc   (hl)
-                ret
+                ld    d,(hl)                 ; DE = on_event ptr
+                pop   hl                     ; HL = entry+9
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d
+                ret                           ; REPAINT (entry+7,8) is garbage but the managed
+                                             ; flag means wm_repaint_all skips it; MENU (entry+
+                                             ; 11,12) is set by the app's gb_doc before the loop
 
 ; mw_publish: HL = entry. Copy x,y,w,h -> MW_RECT (the app reads it via gb_wm_x/y/w/h);
 ; (mw_desc) = the descriptor pointer. HL preserved.
