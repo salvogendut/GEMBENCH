@@ -218,12 +218,9 @@ static void draw_buttons(void)
     btn((unsigned char)(ox + 6), "-");
     gb_curshow();
 }
-static void draw_all(void)
+static void draw_all(void)        /* content only; the WM drew the frame/title (#146) */
 {
     recalc_origin();
-    gb_curhide();
-    gb_window(win_x, win_y, winw, winh, win_title());
-    gb_curshow();
     blit_canvas();
     draw_buttons();
     if (!generated) {                                  /* nothing rendered yet (#142) */
@@ -232,7 +229,12 @@ static void draw_all(void)
         gb_curshow();
     }
 }
-static void on_repaint(void) { draw_all(); }
+/* sync_rect: pull the live WM-owned geometry before we use it (#146). */
+static void sync_rect(void)
+{
+    win_x = gb_wm_x(); win_y = gb_wm_y(); winw = gb_wm_w(); winh = gb_wm_h();
+}
+static void x_draw(void) { sync_rect(); draw_all(); }   /* on_draw */
 
 /* recentre the view on canvas pixel (px,py) and rescale step by num/den, re-render. */
 static void rezoom(unsigned char px, unsigned char py, unsigned char num, unsigned char den)
@@ -362,13 +364,9 @@ static void recalc_origin(void)
 /* x_fullscreen: View > Fullscreen - cover the screen (canvas + buttons recenter) and back. */
 static void x_fullscreen(unsigned char on)
 {
-    if (on) { win_x = 0; win_y = 8; winw = 80; winh = 192; }
-    else    { win_x = DEF_X; win_y = DEF_Y; winw = WIN_W; winh = WIN_H; }
-    recalc_origin();
-    gb_wm_setpos(win_x, win_y);
-    gb_wm_setsize(winw, winh);
-    if (!on) gb_restore_parent();
-    draw_all();
+    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(80, 192); }
+    else    { gb_wm_setpos(DEF_X, DEF_Y); gb_wm_setsize(WIN_W, WIN_H); }
+    gb_restore_parent();          /* WM repaints frame + x_draw at the new size */
 }
 
 static const gb_doc_t xdoc = {
@@ -379,33 +377,26 @@ static const gb_doc_t xdoc = {
 /* on_menu: a top-bar title was clicked -> hand it to the framework. */
 static void on_menu(void) { gb_doc_event(); }
 
-static void on_frame(void)
+/* on_frame (#146): the WM handled close/drag; run the menu framework + the 'r' reset key. */
+static void x_frame(void)
 {
-    unsigned char flags = gb_flags(), mx, my, c, cy;
-    unsigned int px;
-
-    if (flags & GB_QUIT) { gb_wm_close(); return; }
-
-    if (gb_doc_frame()) { draw_all(); return; }        /* a File menu ran (#142) */
-
+    unsigned char c;
+    sync_rect();
+    win_title();                                       /* keep wtitle fresh for the WM title */
+    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a File menu ran (#142) */
     while ((c = gb_getkey()) != 0)                     /* 'r' = reset to the home view */
         if (c == 'r' || c == 'R') { x_new(); gb_doc_dirty(); return; }
+}
 
-    if (!(flags & GB_CLICK)) return;
-    mx = gb_mx(); my = gb_my();
-
-    if (my >= win_y && my < (unsigned char)(win_y + TITLE_H)) {         /* title bar */
-        if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { if (gb_doc_close()) gb_wm_close(); return; }
-        if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + winw)) {
-            if (gb_drag_window(&win_x, &win_y, winw, winh)) {
-                gb_wm_setpos(win_x, win_y);
-                gb_restore_parent();
-                draw_all();
-            }
-        }
-        return;
-    }
+/* on_click (#146): a content press - the +/- zoom buttons or a canvas recentre. */
+static void x_click(void)
+{
+    unsigned char mx, my, cy;
+    unsigned int px;
+    sync_rect();
+    recalc_origin();                                   /* ox/oy for the CTRL_Y/CVY hit-tests */
     if (!generated) return;                            /* zoom/pan need a fractal first (#142) */
+    mx = gb_mx(); my = gb_my();
     if (my >= CTRL_Y && my < (unsigned char)(CTRL_Y + 9)) {             /* +/- buttons */
         if (mx >= (unsigned char)(ox + 1) && mx < (unsigned char)(ox + 5))
             rezoom(CANVAS_W / 2, CANVAS_H / 2, 1, 2);                   /* zoom in  */
@@ -423,19 +414,39 @@ static void on_frame(void)
     }
 }
 
-static gb_win_t xwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, on_repaint, on_menu, 0 };
+/* on_drag (#146): a title-bar press -> move the window. */
+static void x_drag(void)
+{
+    sync_rect();
+    if (gb_drag_window(&win_x, &win_y, winw, winh)) {
+        gb_wm_setpos(win_x, win_y);
+        gb_restore_parent();
+    }
+}
+
+/* on_close (#146): offer to save, then close (or repaint on cancel). */
+static void x_close(void)
+{
+    if (gb_doc_close()) gb_wm_close();
+    else gb_restore_parent();
+}
+
+static const gb_mwin_t xmw = {
+    DEF_X, DEF_Y, WIN_W, WIN_H, 0, 0,                  /* min_w=0: not grip-resizable */
+    x_draw, x_click, x_frame, x_close, on_menu, wtitle, x_drag
+};
 
 void main(void)
 {
     unsigned char n;
     unsigned int len;
-    win_x = DEF_X; win_y = DEF_Y;
     cx0 = HOME_CX; cy0 = HOME_CY; step = HOME_STEP;
     generated = 0;
-    gb_wm_add(&xwin);                                   /* register FIRST: captures our file arg */
+    gb_wm_managed(&xmw);                                /* register FIRST (no draw): captures arg */
     gb_doc(&xdoc);                                      /* standard File menu; adopts the name */
     len = gb_fs_load(defbuf, DEFMAX);                   /* launched with a definition .TXT? */
     if (len) x_open(len);                               /* parse + render it (else stays empty) */
+    win_title();                                        /* build wtitle before the first paint */
     for (n = 64; n; n--) if (!gb_getkey()) break;       /* drop buffered keys */
-    draw_all();                                         /* a fresh launch shows "File > New" */
+    gb_restore_parent();                               /* first paint: WM chrome + x_draw */
 }

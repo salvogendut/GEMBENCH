@@ -323,13 +323,10 @@ static const char *win_title(void)
     return wtitle;
 }
 
-/* full window redraw (frame + canvas + toolchest) */
+/* content redraw (canvas + toolchest); the WM drew the frame/title (#146) */
 static void draw(void)
 {
     recalc_origin();
-    gb_curhide();
-    gb_window(win_x, win_y, winw, winh, win_title());
-    gb_curshow();
     blit_canvas();
     draw_toolchest();
 }
@@ -341,20 +338,21 @@ static void recalc_origin(void)
     oy = (unsigned char)(win_y + (winh - WIN_H) / 2);
 }
 
-/* p_fullscreen: View > Fullscreen - cover the screen (canvas + tools recenter) and back;
- * restoring repaints the desktop we vacated. */
-static void p_fullscreen(unsigned char on)
+/* sync_rect: pull the live WM-owned geometry before we use it (#146). */
+static void sync_rect(void)
 {
-    if (on) { win_x = 0; win_y = 8; winw = 80; winh = 192; }
-    else    { win_x = DEF_X; win_y = DEF_Y; winw = WIN_W; winh = WIN_H; }
-    recalc_origin();
-    gb_wm_setpos(win_x, win_y);
-    gb_wm_setsize(winw, winh);
-    if (!on) gb_restore_parent();
-    draw();
+    win_x = gb_wm_x(); win_y = gb_wm_y(); winw = gb_wm_w(); winh = gb_wm_h();
 }
 
-static void on_repaint(void) { draw(); }
+/* p_fullscreen: View > Fullscreen - cover the screen (canvas + tools recenter) and back. */
+static void p_fullscreen(unsigned char on)
+{
+    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(80, 192); }
+    else    { gb_wm_setpos(DEF_X, DEF_Y); gb_wm_setsize(WIN_W, WIN_H); }
+    gb_restore_parent();          /* WM repaints frame + p_draw at the new size */
+}
+
+static void p_draw(void) { sync_rect(); draw(); }   /* on_draw */
 
 /* a discrete click in the toolchest -> select tool / ink / width. Returns 1 if
    it hit something (so the canvas-draw path is skipped). */
@@ -450,32 +448,19 @@ static const gb_doc_t pdoc = {
 /* on_menu: a top-bar title was clicked -> hand it to the framework. */
 static void on_menu(void) { gb_doc_event(); }
 
-static void on_frame(void)
+/* on_frame (#146): the WM handled close/drag; run the menu framework, then the
+   CONTINUOUS canvas drawing (fire held) - the toolchest/title are discrete (on_click). */
+static void p_frame(void)
 {
-    unsigned char flags = gb_flags(), mx, my, cy;
+    unsigned char my, cy;
     unsigned int px, cxl;
 
-    if (flags & GB_QUIT) { gb_wm_close(); return; }
+    sync_rect();
+    recalc_origin();                                   /* ox/oy for the CVX/CVY canvas bounds */
+    win_title();                                       /* keep wtitle fresh for the WM title */
+    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a File menu ran (#142) */
 
-    if (gb_doc_frame()) { draw(); return; }            /* a File menu ran (#142) */
-
-    if (flags & GB_CLICK) {                            /* discrete: title + toolchest */
-        mx = gb_mx(); my = gb_my();
-        if (my >= win_y && my < (unsigned char)(win_y + TITLE_H)) {
-            if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { if (gb_doc_close()) gb_wm_close(); return; }
-            if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + winw)) {
-                if (gb_drag_window(&win_x, &win_y, winw, winh)) {
-                    gb_wm_setpos(win_x, win_y);
-                    gb_restore_parent();
-                    draw();
-                }
-            }
-            return;
-        }
-        if (hit_toolchest(mx, my)) return;
-    }
-
-    if (!(flags & GB_FIRE)) { fire_prev = 0; return; }   /* canvas drawing */
+    if (!(gb_flags() & GB_FIRE)) { fire_prev = 0; return; }   /* canvas drawing */
     my = gb_my();
     if (my < CVY) { fire_prev = 1; return; }
     cy = (unsigned char)(my - CVY);
@@ -495,14 +480,41 @@ static void on_frame(void)
     fire_prev = 1;
 }
 
-static gb_win_t pwin = { DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, on_repaint, on_menu, 0 };
+/* on_click (#146): a content press - only the toolchest is discrete (a canvas press is
+   handled continuously by the fire path in p_frame). */
+static void p_click(void)
+{
+    sync_rect();
+    recalc_origin();
+    hit_toolchest(gb_mx(), gb_my());
+}
+
+/* on_drag (#146): a title-bar press -> move the window. */
+static void p_drag(void)
+{
+    sync_rect();
+    if (gb_drag_window(&win_x, &win_y, winw, winh)) {
+        gb_wm_setpos(win_x, win_y);
+        gb_restore_parent();
+    }
+}
+
+/* on_close (#146): offer to save, then close (or repaint on cancel). */
+static void p_close(void)
+{
+    if (gb_doc_close()) gb_wm_close();
+    else gb_restore_parent();
+}
+
+static const gb_mwin_t pmw = {
+    DEF_X, DEF_Y, WIN_W, WIN_H, 0, 0,                  /* min_w=0: not grip-resizable */
+    p_draw, p_click, p_frame, p_close, on_menu, wtitle, p_drag
+};
 
 void main(void)
 {
     unsigned char i;
 
-    win_x = DEF_X;
-    win_y = DEF_Y;
     pen = 2;
     tool = TOOL_PENCIL;
     pen_w = 1;
@@ -510,10 +522,11 @@ void main(void)
     fire_prev = 0;
     canvas_clear();
     load_tools();                                /* PAINT.IST -> ist[] (sets fs name) */
-    gb_wm_add(&pwin);                            /* register FIRST: captures our file arg */
+    gb_wm_managed(&pmw);                          /* register FIRST (no draw): captures our arg */
     gb_doc(&pdoc);                               /* standard File menu; adopts the launch name */
     /* load the launch .PIC (gb_fs_load returns 0 if launched blank -> invalid -> clear) */
     if (!pic_valid(gb_fs_load((char *)picbuf, PIC_MAX))) canvas_clear();
+    win_title();                                 /* build wtitle before the first paint */
     for (i = 64; i; i--) if (!gb_getkey()) break;   /* drop buffered keys */
-    draw();
+    gb_restore_parent();                         /* first paint: WM chrome + p_draw */
 }
