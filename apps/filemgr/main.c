@@ -68,8 +68,8 @@ static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
 static char cfgbuf[512];
 static unsigned int cfglen;
 
-/* The top bar is the gb_doc View menu (#142): Fullscreen (framework), then our two
-   view_items - "Icons / List" toggles the layout, "Up" goes up a directory. FM has no
+/* The top bar is the gb_doc View menu (#142): Fullscreen (framework) + "Icons / List".
+   Going up a directory is the ".." entry in the listing (not a menu item). FM has no
    document, so it gets no File menu. */
 static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Fullscreen */
 
@@ -157,11 +157,18 @@ static void cfg_save_view(void)
     gb_fs_save(cfgbuf, cfglen);
 }
 
+/* The listing shows a synthetic ".." entry first whenever we're not at the drive
+   root, so "up a directory" is a normal double-click (#142). up_avail is that 0/1
+   offset; disp_total = the real entries plus it. Display position 0 is "..", the
+   rest map to sorted real index (pos - up_avail). */
+static unsigned char up_avail(void);     /* defined after fm_path */
+static unsigned char disp_total(void) { return (unsigned char)(total + up_avail()); }
+
 /* scroll model: lines (rows in list, grid rows in icons) and how many are visible */
 static unsigned char total_lines(void)
 {
-    if (view == V_ICONS) return (unsigned char)((total + ICOLS - 1) / ICOLS);
-    return total;
+    if (view == V_ICONS) return (unsigned char)((disp_total() + ICOLS - 1) / ICOLS);
+    return disp_total();
 }
 static unsigned char vis_lines(void)
 {
@@ -256,6 +263,10 @@ static void path_pop(void)                       /* drop the last "/component" *
     fm_path[last] = 0;                            /* "/GAMES"->"", "/A/B"->"/A" */
 }
 
+/* up_avail: 1 when we're in a subdirectory (so the ".." entry is shown), 0 at the
+   drive root (fm_path empty -> no parent). */
+static unsigned char up_avail(void) { return (unsigned char)(fm_path[0] != 0); }
+
 static const char *win_title(void)               /* "Disk C" + path -> title_buf */
 {
     unsigned char i = 0, j = 0;
@@ -286,6 +297,7 @@ static const char *win_title(void)               /* "Disk C" + path -> title_buf
 #define ICON_PAINT 17
 #define ICON_FRACTAL 18
 #define ICON_VIEWER 20
+#define ICON_UP 24            /* up-arrow for the ".." parent-dir entry (#142) */
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -394,14 +406,19 @@ static void build_list(void)
 
 static void draw_list_view(void)
 {
-    unsigned char i, y, p, raw;
+    unsigned char i, y, p, raw, up = up_avail();
     for (i = 0; i < LVIS; i++) {                   /* draw from the sorted cache (#118) */
         p = (unsigned char)(top + i);
-        if (p >= total) break;
-        raw = order[p];
+        if (p >= disp_total()) break;
         y = CT_Y + i * ROW_H;
-        gb_icon_half(icons[raw], CT_X, y + 1);     /* half-height type icon (#103) */
-        gb_text(CT_X + 9, y + 6, name83(NAME_AT(raw)));   /* NAME.EXT */
+        if (up && p == 0) {                        /* the ".." parent-dir entry (#142) */
+            gb_icon(ICON_UP, CT_X, y + 1);         /* 16px icon - fits the row at full height */
+            gb_text(CT_X + 9, y + 6, "..");
+        } else {
+            raw = order[(unsigned char)(p - up)];
+            gb_icon_half(icons[raw], CT_X, y + 1); /* half-height type icon (#103) */
+            gb_text(CT_X + 9, y + 6, name83(NAME_AT(raw)));   /* NAME.EXT */
+        }
         if (nsel == (unsigned char)(p + 1))        /* red frame on the selected row */
             gb_frame(CT_X, y, CT_W, 17, 3);
     }
@@ -409,16 +426,23 @@ static void draw_list_view(void)
 
 static void draw_icons_view(void)
 {
-    unsigned char r, c, cx, cy, raw;
+    unsigned char r, c, cx, cy, raw, up = up_avail();
     unsigned int idx = (unsigned int)top * ICOLS;    /* first visible item */
+    unsigned int dt = disp_total();
     for (r = 0; r < IVIS; r++) {
         for (c = 0; c < ICOLS; c++) {
-            if (idx >= total) return;
-            raw = order[(unsigned char)idx];
+            if (idx >= dt) return;
             cx = CT_X + c * CELL_W;
             cy = CT_Y + r * CELL_H;
-            gb_icon(icons[raw], cx + (CELL_W - 8) / 2, cy + 1);   /* full icon (#103) */
-            draw_name(cx, cy + 34, name83(NAME_AT(raw)));           /* name below the icon */
+            if (up && idx == 0) {                                /* the ".." entry (#142) */
+                gb_icon(ICON_UP, (unsigned char)(cx + (CELL_W - 4) / 2),  /* 16px, centered */
+                        (unsigned char)(cy + 9));                        /* in the 32px band */
+                gb_text((unsigned char)(cx + (CELL_W - 3) / 2), cy + 34, "..");  /* centered */
+            } else {
+                raw = order[(unsigned char)(idx - up)];
+                gb_icon(icons[raw], cx + (CELL_W - 8) / 2, cy + 1);   /* full icon (#103) */
+                draw_name(cx, cy + 34, name83(NAME_AT(raw)));         /* name below the icon */
+            }
             if (nsel == (unsigned char)(idx + 1))
                 gb_frame(cx, cy, CELL_W, CELL_H - 1, 3);
             idx++;
@@ -448,6 +472,9 @@ static void relist(void)
     clamp_top();
     draw();
 }
+
+/* go_up: ascend to the parent directory (the ".." entry / old View>Up). */
+static void go_up(void) { gb_back(); path_pop(); relist(); }
 
 /* ext_is: does the positioned entry's raw 11-byte 8.3 name end in this extension? */
 static unsigned char ext_is(const char *e, char a, char b, char c)
@@ -509,7 +536,8 @@ static void sb_click(unsigned char my)
 }
 
 /* fm_view: the gb_doc View menu's app items (after Fullscreen). 0 = toggle the
-   list/icons layout (persisted to GEOBENCH.CFG); 1 = go up a directory (#142). */
+   list/icons layout (persisted to GEOBENCH.CFG). "Up" is no longer a menu item -
+   it's the ".." entry in the listing now (#142). */
 static void fm_view(unsigned char item)
 {
     if (item == 0) {                      /* Icons / List: toggle + persist */
@@ -518,10 +546,6 @@ static void fm_view(unsigned char item)
         top = 0; nsel = 0;
         clamp_top();
         draw();
-    } else if (item == 1) {               /* Up: parent directory */
-        gb_back();
-        path_pop();
-        relist();
     }
 }
 
@@ -542,7 +566,7 @@ static void fm_fullscreen(unsigned char on)
     draw();
 }
 
-static const char *const fm_view_items[] = { "Icons / List", "Up", 0 };
+static const char *const fm_view_items[] = { "Icons / List", 0 };
 static const gb_doc_t fmdoc = {          /* no document -> no File menu, just View */
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, fm_fullscreen, fm_view_items, fm_view
@@ -634,7 +658,13 @@ static void on_frame(void)
         } else {
             idx = top + (my - CT_Y) / ROW_H;
         }
-        if (idx >= total) return;
+        if (idx >= disp_total()) return;
+        if (up_avail() && idx == 0) {        /* the ".." entry: double-click ascends (#142) */
+            if (dc_timer && dc_idx == idx) { go_up(); dc_timer = 0; }
+            else { nsel = idx + 1; dc_idx = idx; dc_timer = DCLICK; draw(); }
+            return;
+        }
+        idx = (unsigned char)(idx - up_avail());   /* display position -> sorted real index */
         /* press on an entry: a drag (press + move) drags it to another window /
            the Trash (#62); a plain click (no move) falls through to select/open */
         dir_seek(order[idx]);                /* sorted index -> raw entry for gb_entname */
@@ -642,12 +672,12 @@ static void on_frame(void)
             relist();                        /* refresh (a move changes this dir) */
             return;
         }
-        if (dc_timer && dc_idx == idx) {     /* double-click -> open (dir or file) */
+        if (dc_timer && dc_idx == (unsigned char)(idx + up_avail())) {   /* double-click -> open */
             open_entry(idx);
             dc_timer = 0;
         } else {                              /* single click -> select */
-            nsel = idx + 1;
-            dc_idx = idx;
+            nsel = (unsigned char)(idx + up_avail() + 1);
+            dc_idx = (unsigned char)(idx + up_avail());
             dc_timer = DCLICK;
             draw();
         }

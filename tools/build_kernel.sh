@@ -34,16 +34,17 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
     lib/icon_viewer.asm \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
+    lib/icon_up.asm \
     # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=.IST 15=DESKTOP 16=FILEMGR
     # 17=PAINT 18=FRACTAL 19=SD (Albireo Disk C, #104) 20=VIEWER
-    # 21=TELNET 22=NETWORK 23=SHELL
+    # 21=TELNET 22=NETWORK 23=SHELL 24=UP (FileMgr ".." entry, #142)
 python3 tools/packicons.py build/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)
 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC) -> build/DESKTOP.RAW
-DATA_LOC=0x6E00 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
-                                   # the gb_doc-grown code; the ~3.1K listing cache (#118) fits
-                                   # the rest. DOC=1 = View menu (Fullscreen / Icons-List / Up) (#142)
+DATA_LOC=0x7240 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
+                                   # the gb_doc-grown code + ".." entry; the ~3.1K listing cache
+                                   # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
 DATA_LOC=0x5780 DOC=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: data-loc just
                                    # above the gb_doc-grown code; a 10K file buffer (200x200 .PIC)
                                    # fills the rest of the bank. DOC=1 = File>Load + View>Fullscreen (#142)
