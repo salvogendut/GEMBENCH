@@ -11,11 +11,11 @@
  *                   AMSDOS write layer)
  *   Ctrl-Q          close the window (back to the file manager)
  *
- * Issue #45: a co-resident window. main() loads the file, registers via gb_wm_add
- * and returns; the kernel WM loop calls on_frame (read input with gb_flags/mx/my)
- * and np_repaint to restack us. The modal popups (menu, Load, confirm) still poll
- * themselves. Click our window to focus it; the view scrolls to keep the caret
- * visible. */
+ * #146: a kernel-MANAGED window (gb_wm_managed). The WM owns the frame/title/close/
+ * drag/grip; main() registers and loads the file, then paints once via gb_restore_parent.
+ * The kernel calls n_draw (content), n_frame (typing + caret), n_click (text/grip), n_drag,
+ * n_close. The modal popups (menu, Load, confirm) still poll themselves. Click our window
+ * to focus it; the view scrolls to keep the caret visible. */
 #include "gb.h"
 
 #define NP_MAX    4096           /* editable text capacity - restored to 4096 (#142): the
@@ -204,8 +204,7 @@ static void render(unsigned char only)
     unsigned char col = 0, row = 0, scr, currow, curcol;
 
     pos_of(cur, &currow, &curcol);
-    if (only == 0xFF) {
-        gb_window(win_x, win_y, win_w, win_h, win_title());
+    if (only == 0xFF) {                          /* the WM drew the frame/title (#146) */
         status_line();
         gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#81) */
     }
@@ -235,11 +234,19 @@ static void render(unsigned char only)
     cursor_at(curcol, scr);
 }
 
-/* draw: full repaint (scroll to the caret, then render everything). */
+/* sync_rect: pull the live WM-owned geometry into win_x/y/w/h before we use it (#146). */
+static void sync_rect(void)
+{
+    win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
+}
+
+/* draw: full content repaint - clear the text area (the WM drew the frame), then scroll
+   to the caret and render everything. */
 static void draw(void)
 {
     caret_vis = 1; blink_ctr = 0;        /* caret solid right after any redraw (#86) */
     scroll_to_caret();
+    gb_fill(win_x + 1, TX_Y0, win_w - 2, (unsigned char)(MAX_LINES * LINE_H), 0);  /* clear text (#146) */
     render(0xFF);
     draw_selection();                    /* reverse-video highlight over the text (#99) */
     prev_total = count_lines();
@@ -360,12 +367,9 @@ static void paste_clip(void);
  * repaints the desktop we vacated. */
 static void np_fullscreen(unsigned char on)
 {
-    if (on) { win_x = 0; win_y = 8; win_w = 80; win_h = 192; }
-    else    { win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H; }
-    gb_wm_setpos(win_x, win_y);
-    gb_wm_setsize(win_w, win_h);
-    if (!on) gb_restore_parent();        /* repaint what the full-screen window covered */
-    gb_curhide(); draw(); gb_curshow();
+    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(80, 192); }
+    else    { gb_wm_setpos(DEF_X, DEF_Y); gb_wm_setsize(DEF_W, DEF_H); }
+    gb_restore_parent();                 /* WM repaints frame + n_draw at the new size */
 }
 
 static const gb_doc_t npdoc = {
@@ -568,77 +572,80 @@ static void text_press(unsigned char mx, unsigned char my)
     keycool = 4;
 }
 
-/* np_repaint: kernel on_repaint - redraw the whole window (no input) when the WM
-   restacks us behind/above another window. */
-static void np_repaint(void)
+/* on_draw (#146): the WM drew the frame/title; paint the content (status + text + sel). */
+static void n_draw(void)
 {
-    caret_vis = 1; blink_ctr = 0;        /* show the cursor solid after a restack */
-    gb_curhide();
-    render(0xFF);
-    draw_selection();                    /* (#99) */
-    gb_curshow();
+    sync_rect();
+    draw();
 }
 
-/* on_frame: one frame when Notepad is focused (kernel WM loop, issue #45). Reads
-   input with gb_flags/mx/my; the modal popups (run_menu/confirm) still poll
-   themselves. Each old loop 'continue' is a 'return'; quitting is gb_wm_close. */
-static void on_frame(void)
+/* on_click (#146): a content-area press. The chrome (close/title/drag) was handled by the
+   WM; here only the resize grip and a text click matter. */
+static void n_click(void)
 {
-    unsigned char flags = gb_flags(), c, n, edited;
+    unsigned char mx = gb_mx(), my = gb_my();
+    unsigned char vis, txbot;
+    sync_rect();
+    keycool = 4;                                 /* flush the click's buffered keys */
+    if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {  /* resize grip (#81) */
+        if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
+            gb_wm_setsize(win_w, win_h);         /* commit size + damage clip */
+            gb_restore_parent();                 /* WM repaints frame + n_draw */
+        }
+        return;
+    }
+    /* text area bottom, precomputed flat: the summed (win_y+TITLE_H)+(win_h-...) form
+       SDCC miscompiles - cf. the FM CT_BOT fix (#81). TX_Y0 + a runtime value is safe. */
+    vis = MAX_LINES;
+    txbot = (unsigned char)(TX_Y0 + vis * LINE_H);
+    if (my >= TX_Y0 && my < txbot && mx >= TX_COL)
+        text_press(mx, my);                      /* click = caret, drag = select (#99) */
+}
 
-    if (flags & GB_QUIT) { gb_wm_close(); return; }   /* ESC closes the window */
+/* on_drag (#146): a title-bar press -> move the window. */
+static void n_drag(void)
+{
+    sync_rect();
+    if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
+        gb_wm_setpos(win_x, win_y);
+        gb_restore_parent();
+    }
+}
 
-    if (gb_doc_frame()) {                       /* a File/Edit menu ran (#142) */
-        keycool = 4;                            /* flush the dialog click's buffered keys */
-        gb_curhide(); draw(); gb_curshow();     /* popups return the cursor shown */
+/* on_close (#146): the close gadget/ESC -> let the framework offer to save first; repaint
+   over the dialog if the user cancelled. */
+static void n_close(void)
+{
+    if (try_close()) gb_wm_close();
+    else gb_restore_parent();
+}
+
+/* on_frame (#146): the WM handled close/drag/grip routing; run the menu framework, then
+   the keyboard (typing + arrows) and the caret blink. */
+static void n_frame(void)
+{
+    unsigned char c, n, edited;
+
+    sync_rect();
+    win_title();                                 /* keep wtitle fresh for the WM title draw */
+
+    if (gb_doc_frame()) {                         /* a File/Edit menu/dialog ran (#142) */
+        keycool = 4;                              /* flush the dialog click's buffered keys */
+        gb_restore_parent();                      /* repaint frame + content over the popup */
         return;
     }
 
-    if (flags & GB_FIRE) keycool = 4;           /* fire held -> flush its 'Z'/'X' */
-    if (flags & GB_CLICK) {
-        unsigned char my = gb_my(), mx = gb_mx();
-        /* text area bottom, precomputed flat: TX_Y0 + MAX_LINES*LINE_H is the summed
-           (win_y+TITLE_H)+(win_h-...) form SDCC miscompiles - cf. the FM CT_BOT fix
-           (#81). vis is a single win_h macro; TX_Y0 + a runtime value is safe. */
-        unsigned char vis = MAX_LINES;
-        unsigned char txbot = (unsigned char)(TX_Y0 + vis * LINE_H);
-        keycool = 4;
-        if (my >= win_y && my < win_y + TITLE_H &&  /* close gadget (title-bar left) */
-            mx >= win_x && mx < win_x + 5) {
-            if (try_close()) { gb_wm_close(); return; }  /* close the window */
-            draw(); gb_curshow();                /* cancelled -> repaint */
-            return;
-        }
-        if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {  /* resize grip (#81) */
-            if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
-                gb_wm_setsize(win_w, win_h);     /* commit size + damage clip */
-                gb_restore_parent();             /* repaint the stack */
-                draw(); gb_curshow();
-            }
-            return;
-        }
-        if (my >= win_y && my < win_y + TITLE_H &&  /* title bar -> drag the window */
-            mx >= win_x + 5 && mx < win_x + win_w) {
-            if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
-                gb_wm_setpos(win_x, win_y);      /* move our hit rect to follow */
-                gb_restore_parent();             /* repaint the stack (incl. our window) */
-            }
-            return;
-        }
-        if (my >= TX_Y0 && my < txbot && mx >= TX_COL)
-            text_press(mx, my);                  /* click = caret, drag = select (#99) */
-        return;
-    }
+    if (gb_flags() & GB_FIRE) keycool = 4;        /* fire held -> flush its 'Z'/'X' */
 
-    if (keycool) {                               /* after a click/fire: drop the */
-        keycool--;                                /* buffered fire/direction chars */
+    if (keycool) {                                /* after a click/fire: drop the */
+        keycool--;                                 /* buffered fire/direction chars */
         while (gb_getkey()) ;
         return;
     }
 
-    if (handle_arrows()) return;                 /* arrow nudged the caret (#86 item 6) */
+    if (handle_arrows()) return;                  /* arrow nudged the caret (#86 item 6) */
 
-    edited = 0;                                  /* drain typed keys */
+    edited = 0;                                   /* drain typed keys */
     n = 8;
     while (n--) {
         c = gb_getkey();
@@ -652,50 +659,51 @@ static void on_frame(void)
     }
     if (edited) {
         unsigned char t = count_lines(), oldvf = view_first, cr, cc;
-        unsigned char had_sel = sel_on;          /* any edit collapses the selection (#99) */
+        unsigned char had_sel = sel_on;           /* any edit collapses the selection (#99) */
         sel_on = 0;
-        caret_vis = 1; blink_ctr = 0;            /* caret solid while typing (#86) */
+        caret_vis = 1; blink_ctr = 0;             /* caret solid while typing (#86) */
         gb_curhide();
         scroll_to_caret();
         pos_of(cur, &cr, &cc);
         if (had_sel || t != prev_total || view_first != oldvf) {
-            render(0xFF);                        /* full (clears any old highlight too) */
+            redraw_body();                        /* clear the text area + redraw + highlight */
             prev_total = t;
         } else {
-            render(cr - view_first);             /* just the caret's line */
+            render(cr - view_first);              /* just the caret's line */
         }
         gb_curshow();
-    } else if (++blink_ctr >= BLINK_FRAMES) {    /* idle -> blink the caret (#86) */
+    } else if (++blink_ctr >= BLINK_FRAMES) {     /* idle -> blink the caret (#86) */
         unsigned char co = cursor_over();
         blink_ctr = 0;
         caret_vis ^= 1;
         if (co) gb_curhide();
         if (caret_vis) cursor_at(cur_col, cur_scr);
-        else caret_erase();                      /* erase just the cell - no line flash */
+        else caret_erase();                       /* erase just the cell - no line flash */
         if (co) gb_curshow();
     }
 }
 
-/* a co-resident window (issue #45): on_repaint redraws it, on_event hands top-bar
-   clicks to the document framework, which owns the bar menu (so menu = 0). */
-static const gb_win_t npwin = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, np_repaint, on_menu, 0
+/* a kernel-managed window (#146): the WM owns the frame/title/close/drag/grip; we supply
+   the content (n_draw), clicks (n_click/n_drag), the per-frame loop (n_frame), the save
+   prompt (n_close), and the bar-menu handler (on_menu). title = wtitle (kept fresh). */
+static const gb_mwin_t npmw = {
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H,
+    n_draw, n_click, n_frame, n_close, on_menu, wtitle, n_drag
 };
 
 void main(void)
 {
     unsigned char n;
 
-    win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
     caret_vis = 1; blink_ctr = 0; arr_prev = 0; arr_rep = 0;
-    gb_wm_add(&npwin);                           /* register FIRST: captures our file arg */
+    gb_wm_managed(&npmw);                        /* register FIRST (no draw): captures our arg */
     gb_doc(&npdoc);                              /* standard File + Edit menus; adopts the name */
     len = gb_fs_load(buf, NP_MAX);              /* load the launch file (0 if none) */
     if (is_bas()) len = strip_cr(len);           /* .BAS in CR+LF -> edit as plain \n */
     cur = len; view_first = 0;
     sel_on = 0;                                  /* selection state (clipboard is shared now) */
+    win_title();                                 /* build wtitle before the first paint */
     for (n = 64; n; n--) if (!gb_getkey()) break;   /* drop buffered keys */
 
-    draw();
-    gb_curshow();
+    gb_restore_parent();                         /* first paint: WM chrome + n_draw */
 }

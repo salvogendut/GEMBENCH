@@ -239,6 +239,37 @@ typedef struct {
 } gb_win_t;
 void gb_wm_run(const gb_win_t *desc);
 void gb_wm_add(const gb_win_t *desc);
+
+/* Managed window (#146): the KERNEL owns the chrome. Register with gb_wm_managed and
+ * the WM draws the frame/title/grip and runs close/drag/resize for you; the app
+ * provides only the interior. All hooks are void(void) - read input with gb_mx/gb_my,
+ * and the live window rect with gb_wm_x/y/w/h:
+ *   on_draw    draw the CONTENT (the WM already drew the frame/title/grip)
+ *   on_click   a click landed in the content area (chrome was handled)
+ *   on_frame   each focused frame with no chrome click (run gb_doc_frame, idle/tick); 0 ok
+ *   on_close   close requested (gadget/ESC): confirm + gb_wm_close (or just close); 0 = always
+ *   on_event   top-bar click / file drop (or 0)
+ * title -> the app's title string (read each repaint). Resizable iff min_w != 0. The
+ * live geometry is the WM's; the app reads it but never writes it. */
+typedef struct {
+    unsigned char x, y, w, h;       /* initial rect (byte col, line, size) */
+    unsigned char min_w, min_h;     /* min size; min_w == 0 -> not resizable */
+    void (*on_draw)(void);
+    void (*on_click)(void);
+    void (*on_frame)(void);
+    void (*on_close)(void);
+    void (*on_event)(void);
+    const char *title;
+    void (*on_drag)(void);          /* a title-bar press (not the close gadget): run a window
+                                     * drag (gb_drag_window + gb_wm_setpos + gb_restore_parent),
+                                     * or 0 for a fixed window. (grip-resize is detected in
+                                     * on_click via gb_in_grip - the kernel only routes title.) */
+} gb_mwin_t;
+void          gb_wm_managed(const gb_mwin_t *desc);   /* register a kernel-managed window */
+unsigned char gb_wm_x(void);    /* live window rect (WM-owned) */
+unsigned char gb_wm_y(void);
+unsigned char gb_wm_w(void);
+unsigned char gb_wm_h(void);
 void gb_wm_open(const char *name);
 void gb_wm_close(void);
 void gb_wm_setpos(unsigned char x, unsigned char y);  /* move our hit rect (drag) */

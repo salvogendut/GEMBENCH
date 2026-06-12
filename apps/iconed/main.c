@@ -15,9 +15,10 @@
  * The Mode-1 bit packing / mask / shift math matches tools/packicons.py +
  * tools/png2spr.py and is round-trip-checked by tools/test_iconed_codec.py.
  *
- * Issue #45: a co-resident window like Notepad - main() loads the file, registers
- * via gb_wm_add and returns; the kernel WM loop drives on_frame / ie_repaint. The
- * File menu and its Load popup poll themselves (modal). */
+ * #146: a kernel-MANAGED window like Notepad - the WM owns the frame/title/close/drag;
+ * main() registers (gb_wm_managed), loads the file, paints once via gb_restore_parent. The
+ * kernel calls ie_draw / ie_frame / ie_click / ie_drag / ie_close. The File menu and its
+ * Load popup poll themselves (modal). */
 #include "gb.h"
 
 #define DEF_X     2
@@ -272,15 +273,19 @@ static void status_line(void)
     gb_text(win_x + 1, win_y + winh - 11, "Pick a pen, click to paint");
 }
 
-static void draw(void)
+static void draw(void)            /* content only; the WM drew the frame/title (#146) */
 {
     recalc_origin();
-    gb_window(win_x, win_y, winw, winh, win_title());
     draw_canvas();
     draw_palette();
     draw_nav();
     draw_undo();
     status_line();
+}
+/* sync_rect: pull the live WM-owned geometry before we use it (#146). */
+static void sync_rect(void)
+{
+    win_x = gb_wm_x(); win_y = gb_wm_y(); winw = gb_wm_w(); winh = gb_wm_h();
 }
 
 /* ---- file menu (kernel-drawn top bar; popup pattern from notepad) ------------ */
@@ -351,13 +356,9 @@ static void recalc_origin(void)
 /* ie_fullscreen: View > Fullscreen - cover the screen (grid + panel recenter) and back. */
 static void ie_fullscreen(unsigned char on)
 {
-    if (on) { win_x = 0; win_y = 8; winw = 80; winh = 192; }
-    else    { win_x = DEF_X; win_y = DEF_Y; winw = WIN_W; winh = WIN_H; }
-    recalc_origin();
-    gb_wm_setpos(win_x, win_y);
-    gb_wm_setsize(winw, winh);
-    if (!on) gb_restore_parent();
-    gb_curhide(); draw(); gb_curshow();
+    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(80, 192); }
+    else    { gb_wm_setpos(DEF_X, DEF_Y); gb_wm_setsize(WIN_W, WIN_H); }
+    gb_restore_parent();          /* WM repaints frame + ie_draw at the new size */
 }
 
 static const gb_doc_t iedoc = {
@@ -367,12 +368,7 @@ static const gb_doc_t iedoc = {
 
 /* ---- WM callbacks ----------------------------------------------------------- */
 
-static void ie_repaint(void)
-{
-    gb_curhide();
-    draw();
-    gb_curshow();
-}
+static void ie_draw(void) { sync_rect(); draw(); }   /* on_draw (#146): WM owns the cursor */
 
 static void cell_redraw(unsigned char cx, unsigned char cy)
 {
@@ -418,26 +414,38 @@ static void switch_icon(unsigned char next)
     gb_curshow();
 }
 
-static void on_frame(void)
+/* on_frame (#146): the WM handled close/drag; run the menu framework. */
+static void ie_frame(void)
 {
-    unsigned char flags = gb_flags(), mx, my, k, y;
+    sync_rect();
+    win_title();                                      /* keep wtitle fresh for the WM title */
+    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a File menu ran (#142) */
+}
 
-    if (flags & GB_QUIT) { gb_wm_close(); return; }
-    if (gb_doc_frame()) { gb_curhide(); draw(); gb_curshow(); return; }   /* a File menu ran (#142) */
-    if (!(flags & GB_CLICK)) return;
+/* on_close (#146): offer to save, then close (or repaint on cancel). */
+static void ie_close(void)
+{
+    if (gb_doc_close()) gb_wm_close();
+    else gb_restore_parent();
+}
 
-    mx = gb_mx(); my = gb_my();
-
-    if (my >= win_y && my < win_y + TITLE_H) {        /* title bar */
-        if (mx >= win_x && mx < win_x + 5) { if (gb_doc_close()) gb_wm_close(); return; }   /* close */
-        if (mx >= win_x + 5 && mx < win_x + winw) {                    /* drag  */
-            if (gb_drag_window(&win_x, &win_y, winw, winh)) {
-                gb_wm_setpos(win_x, win_y);
-                gb_restore_parent();
-            }
-        }
-        return;
+/* on_drag (#146): a title-bar press -> move the window. */
+static void ie_drag(void)
+{
+    sync_rect();
+    if (gb_drag_window(&win_x, &win_y, winw, winh)) {
+        gb_wm_setpos(win_x, win_y);
+        gb_restore_parent();
     }
+}
+
+/* on_click (#146): a content press - canvas paint, palette, Prev/Next, or UNDO. */
+static void ie_click(void)
+{
+    unsigned char mx, my, k, y;
+    sync_rect();
+    recalc_origin();                                  /* origin for the CANVAS_X/PANEL hit-tests */
+    mx = gb_mx(); my = gb_my();
 
     if (mode != M_NONE &&                              /* canvas paint */
         mx >= CANVAS_X && mx < CANVAS_X + gw &&
@@ -472,22 +480,22 @@ static void on_frame(void)
     }
 }
 
-static const gb_win_t iewin = {
-    DEF_X, DEF_Y, WIN_W, WIN_H, on_frame, ie_repaint, on_menu, 0
+static const gb_mwin_t iemw = {
+    DEF_X, DEF_Y, WIN_W, WIN_H, 0, 0,        /* min_w=0: not grip-resizable */
+    ie_draw, ie_click, ie_frame, ie_close, on_menu, wtitle, ie_drag
 };
 
 void main(void)
 {
     unsigned char n;
 
-    win_x = DEF_X; win_y = DEF_Y;
-    gb_wm_add(&iewin);                       /* register first: captures our file arg */
+    gb_wm_managed(&iemw);                    /* register FIRST (no draw): captures our file arg */
     gb_doc(&iedoc);                          /* standard File menu; adopts the launch name */
     filelen = gb_fs_load(buf, BUFSZ);        /* load the launch file (0 if none) */
     sniff();                                 /* classify it (M_ICON / M_CURSOR / M_NONE) */
     selpen = 1;
+    win_title();                             /* build wtitle before the first paint */
     for (n = 64; n; n--) if (!gb_getkey()) break;
 
-    draw();
-    gb_curshow();
+    gb_restore_parent();                     /* first paint: WM chrome + ie_draw */
 }

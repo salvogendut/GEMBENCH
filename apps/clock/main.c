@@ -173,20 +173,19 @@ static unsigned char cursor_over(void)
     return (unsigned char)(mx >= win_x && mx < win_x + win_w && my >= win_y && my < win_y + win_h);
 }
 
-/* full_draw: paint the whole window (open / on_repaint / after a drag or toggle). */
-static void full_draw(void)
+/* on_draw (#146): the WM already drew the frame/title/close; paint just the content
+   (face + hands + digital + grip). The face rescales to the live window rect. */
+static void c_draw(void)
 {
     unsigned char h, m, s;
+    win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
     relayout();
     gb_time();
     h = bin(gb_hour); m = bin(gb_min); s = bin(gb_sec);
-    gb_curhide();
-    gb_window(win_x, win_y, win_w, win_h, "Clock");
     draw_face();
     hands(h, m, s, show_sec, 1, 3);
     draw_digital(h, m, s);
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#81) */
-    gb_curshow();
     ph = h; pm = m; ps = s; pshow = show_sec; have_prev = 1;
 }
 
@@ -285,15 +284,13 @@ static unsigned char set_time_dialog(void)
 static void clk_fullscreen(unsigned char on)
 {
     if (on) {
-        fs_px = win_x; fs_py = win_y; fs_pw = win_w; fs_ph = win_h;
-        win_x = 0; win_y = 8; win_w = 80; win_h = 192;
+        fs_px = gb_wm_x(); fs_py = gb_wm_y(); fs_pw = gb_wm_w(); fs_ph = gb_wm_h();
+        gb_wm_setpos(0, 8); gb_wm_setsize(80, 192);
     } else {
-        win_x = fs_px; win_y = fs_py; win_w = fs_pw; win_h = fs_ph;
+        gb_wm_setpos(fs_px, fs_py); gb_wm_setsize(fs_pw, fs_ph);
     }
-    gb_wm_setpos(win_x, win_y);
-    gb_wm_setsize(win_w, win_h);
     have_prev = 0;                               /* face rescaled: no stale hands */
-    if (!on) gb_restore_parent();
+    gb_restore_parent();
 }
 
 /* opt_action: the Options menu (gb_menu_add) - Set time / toggle the seconds hand. The
@@ -313,50 +310,48 @@ static const gb_doc_t clkdoc = {
 
 /* --- WM callbacks ------------------------------------------------------------ */
 
-static void on_frame(void)
+/* on_frame (#146): the WM handled close/drag/grip routing; run the menu framework and
+   tick the hands. (No QUIT / hit-testing here - the kernel does the chrome.) */
+static void c_frame(void)
 {
-    unsigned char flags = gb_flags(), mx, my;
-
-    if (flags & GB_QUIT) { gb_wm_close(); return; }
-
-    if (gb_doc_frame()) { full_draw(); return; }   /* a View/Options item ran (#142) */
-
+    win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
+    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a View/Options item ran (#142) */
     gb_time();
     if (changed()) tick();
+}
 
-    if (!(flags & GB_CLICK)) return;
-    mx = gb_mx(); my = gb_my();
-    if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {  /* resize grip (#81) */
+/* on_click (#146): the only content gesture is the resize grip. */
+static void c_click(void)
+{
+    win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
+    if (gb_in_grip(win_x, win_y, win_w, win_h, gb_mx(), gb_my()))
         if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
             gb_wm_setsize(win_w, win_h);
-            gb_restore_parent();
             have_prev = 0;                         /* face rescaled: no stale hands */
-            full_draw();                           /* redraw the face at the new size */
+            gb_restore_parent();
         }
-        return;
-    }
-    if (my >= win_y && my < win_y + TITLE_H) {
-        if (mx >= win_x && mx < win_x + 5) { gb_wm_close(); return; }
-        if (mx >= win_x + 5 && mx < win_x + win_w) {
-            if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
-                gb_wm_setpos(win_x, win_y);
-                gb_restore_parent();
-                full_draw();                       /* redraw the face at the new spot */
-            }
-        }
+}
+
+/* on_drag (#146): a title-bar press -> move the window. */
+static void c_drag(void)
+{
+    win_x = gb_wm_x(); win_y = gb_wm_y();
+    if (gb_drag_window(&win_x, &win_y, gb_wm_w(), gb_wm_h())) {
+        gb_wm_setpos(win_x, win_y);
+        gb_restore_parent();
     }
 }
 
-static const gb_win_t clkwin = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, full_draw, clk_event, 0
+static const gb_mwin_t cmw = {
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H,
+    c_draw, c_click, c_frame, 0 /* on_close: always */, clk_event, "Clock", c_drag
 };
 
 void main(void)
 {
-    win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
     show_sec = 0; have_prev = 0; modal = 0;
-    gb_wm_add(&clkwin);
+    gb_wm_managed(&cmw);                         /* register (no draw yet) (#146) */
     gb_doc(&clkdoc);                             /* View > Fullscreen (#142) */
     gb_menu_add("Options", opt_items, 2, opt_action);
-    full_draw();
+    gb_restore_parent();                         /* first paint: WM chrome + c_draw */
 }

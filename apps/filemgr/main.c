@@ -450,18 +450,34 @@ static void draw_icons_view(void)
     }
 }
 
-/* draw: full repaint of the window (on_repaint). */
-static void draw(void)
+/* draw_body: the window CONTENT (scrollbar + listing + grip); the WM drew the frame (#146). */
+static void draw_body(void)
 {
-    gb_set_drive(my_drive);              /* this window's drive (#65) - on_repaint may
-                                            run while another window's drive is active */
-    gb_curhide();
-    gb_window(win_x, win_y, win_w, win_h, win_title());
+    gb_set_drive(my_drive);              /* this window's drive (#65) - a repaint may run
+                                            while another window's drive is active */
     draw_scrollbar();
     if (view == V_ICONS) draw_icons_view();
     else                 draw_list_view();
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip, bottom-right (#81) */
+}
+/* draw: interactive content redraw (manages the cursor) - the scroll/select paths use it
+   to refresh the listing without a full-stack repaint or a title change. */
+static void draw(void)
+{
+    gb_curhide();
+    draw_body();
     gb_curshow();
+}
+/* sync_rect: pull the live WM-owned geometry before we use it (#146). */
+static void sync_rect(void)
+{
+    win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
+}
+/* fm_draw (on_draw): the WM drew the frame/title and owns the cursor; paint the content. */
+static void fm_draw(void)
+{
+    sync_rect();
+    draw_body();
 }
 
 /* relist: re-read the current directory and redraw from the top (#54). */
@@ -470,7 +486,8 @@ static void relist(void)
     build_list();              /* stream + sort the directory (sets total) (#118) */
     top = 0; nsel = 0;
     clamp_top();
-    draw();
+    win_title();               /* the path changed -> refresh the title buffer (#146) */
+    gb_restore_parent();       /* full repaint: the WM redraws the frame/title + fm_draw */
 }
 
 /* go_up: ascend to the parent directory (the ".." entry / old View>Up). */
@@ -562,8 +579,7 @@ static void fm_fullscreen(unsigned char on)
     gb_wm_setpos(win_x, win_y);
     gb_wm_setsize(win_w, win_h);
     clamp_top();                          /* a taller window shows more rows */
-    if (!on) gb_restore_parent();
-    draw();
+    gb_restore_parent();                  /* WM repaints frame + fm_draw at the new size */
 }
 
 static const char *const fm_view_items[] = { "Icons / List", 0 };
@@ -576,6 +592,7 @@ static const gb_doc_t fmdoc = {          /* no document -> no File menu, just Vi
    a top-bar menu click goes to the framework's View handler (#142). */
 static void on_event(void)
 {
+    sync_rect();
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
         unsigned int n;                   /* copy it onto THIS window's drive (#74) */
         gb_set_drive(my_drive);
@@ -592,34 +609,43 @@ static void on_event(void)
     gb_doc_event();                       /* the View menu (Fullscreen / Icons-List / Up) */
 }
 
-/* on_frame: one frame when focused (kernel WM loop). Read input via gb_flags/mx/my. */
-static void on_frame(void)
+/* on_frame (#146): the WM handled close/drag/grip routing; re-assert our drive, tick the
+   double-click timer, and run the View menu framework. */
+static void fm_frame(void)
 {
-    unsigned char flags = gb_flags(), mx, my, idx;
-
+    sync_rect();
     gb_set_drive(my_drive);              /* re-assert our drive each focused frame (#65) */
     if (dc_timer) dc_timer--;
-    if (flags & GB_QUIT) { gb_wm_close(); return; }    /* ESC closes the window */
-    if (gb_doc_frame()) { draw(); return; }            /* a View menu ran (#142) */
-    if (!(flags & GB_CLICK)) return;
+    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a View menu ran (#142) */
+}
 
+/* on_close (#146): no document to save -> just close. */
+static void fm_close(void)
+{
+    if (gb_doc_close()) gb_wm_close();
+    else gb_restore_parent();
+}
+
+/* on_drag (#146): a title-bar press -> move the window. */
+static void fm_drag(void)
+{
+    sync_rect();
+    if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
+        gb_wm_setpos(win_x, win_y);
+        gb_restore_parent();
+    }
+}
+
+/* on_click (#146): a content press - resize grip, scrollbar, or an entry (select / open /
+   drag to another window or the Trash). */
+static void fm_click(void)
+{
+    unsigned char mx, my, idx;
+
+    sync_rect();
+    gb_set_drive(my_drive);
     mx = gb_mx();
     my = gb_my();
-
-    /* close gadget (top-left of the title bar) */
-    if (my >= win_y && my < win_y + TITLE_H && mx >= win_x && mx < win_x + 4) {
-        if (gb_doc_close()) gb_wm_close();
-        return;
-    }
-
-    /* title bar (right of the close gadget) -> drag the window */
-    if (my >= win_y && my < win_y + TITLE_H && mx >= win_x + 4 && mx < win_x + win_w) {
-        if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
-            gb_wm_setpos(win_x, win_y);
-            gb_restore_parent();
-        }
-        return;
-    }
 
     /* resize grip (bottom-right corner) -> resize the window (#81) */
     if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {
@@ -628,7 +654,6 @@ static void on_frame(void)
             clamp_top();          /* taller window shows more rows -> re-clamp the scroll,
                                      else the thumb runs past the new track bottom (#81) */
             gb_restore_parent();
-            draw();
         }
         return;
     }
@@ -684,9 +709,14 @@ static void on_frame(void)
     }
 }
 
-/* a co-resident window: on_repaint = draw, on_event = file-drop + the View menu.
-   menu = 0: the gb_doc framework drives the top bar (gb_menu) while we're focused. */
-static gb_win_t fmwin = { DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, draw, on_event, 0 };
+/* a kernel-managed window (#146): the WM owns the frame/title/close/drag/grip; we supply
+   content (fm_draw), clicks (fm_click/fm_drag), the per-frame loop (fm_frame), close
+   (fm_close), and on_event (file-drop + the View menu). title is set in main once the
+   path is known; relist() refreshes it. The descriptor is mutable so we can cascade x/y. */
+static gb_mwin_t fmmw = {
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H,
+    fm_draw, fm_click, fm_frame, fm_close, on_event, 0, fm_drag
+};
 
 void main(void)
 {
@@ -694,15 +724,16 @@ void main(void)
     my_drive = gb_get_drive();   /* the drive the desktop opened us on (#65) */
     win_x = DEF_X + my_drive * 8;   /* cascade so two drive windows don't fully overlap */
     win_y = DEF_Y + my_drive * 14;
-    fmwin.x = win_x;             /* register the hit rect at the cascaded position */
-    fmwin.y = win_y;
-    gb_wm_add(&fmwin);           /* register first (focus) so gb_set_name/fs_load
+    fmmw.x = win_x;              /* register the window at the cascaded position */
+    fmmw.y = win_y;
+    gb_wm_managed(&fmmw);        /* register first (no draw, focus) so gb_set_name/fs_load
                                    target our window for the config read below */
-    gb_doc(&fmdoc);              /* View menu (Fullscreen / Icons-List / Up); no File (#142) */
+    gb_doc(&fmdoc);              /* View menu (Fullscreen / Icons-List); no File (#142) */
     gb_set_drive(my_drive);
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
     build_list();                /* stream + sort the directory (sets total) (#118) */
     top = 0;
     clamp_top();
-    draw();
+    fmmw.title = win_title();    /* build "<drive><path>" before the first paint (#146) */
+    gb_restore_parent();         /* first paint: WM chrome + fm_draw */
 }

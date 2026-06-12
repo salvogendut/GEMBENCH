@@ -87,6 +87,10 @@ WM_DRAGDIR      equ   #1433        ; source directory cluster (4 bytes), capture
 APP_NPAGES      equ   #1437        ; usable app-page count (3 on 128K, up to WM_MAXWIN)
 APP_PAGES       equ   #1438        ; WM_MAXWIN port values; [0] = PAGE_APP0 (#C5, desktop)
 APP_BUSY        equ   #1440        ; WM_MAXWIN busy flags (0 free / 1 busy), parallel
+MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the focused
+                                   ; managed window's live x,y,w,h here before each hook
+                                   ; so the app reads its rect with gb_wm_x/y/w/h
+MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
 CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT.SPR is
@@ -174,6 +178,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_clip_get             ; GB_CLIPGET     #80A8 (HL=dst, DE=max) -> BC=copied
                 jp    k_clip_len             ; GB_CLIPLEN     #80AB -> BC = clipboard length
                 jp    k_ui                   ; GB_UI          #80AE run the paged dialog module -> BC=UI_RES
+                jp    k_wm_managed           ; GB_WMMANAGED   #80B1 register a kernel-managed window (#146)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1497,6 +1502,160 @@ wm_register
                 inc   (hl)
                 ret
 
+; ===== managed windows (#146): the kernel owns the chrome ====================
+; k_wm_managed (GB_WMMANAGED): HL = a gb_mwin_t descriptor in the caller's page.
+; Register a window the WM draws + drives: the descriptor pointer goes in WM_FR_FRAME
+; and FLAGS gets MW_MANAGED, so wm_loop / wm_repaint_all route it to wm_chrome_frame /
+; wm_chrome_draw instead of the app's on_frame/on_repaint. Descriptor layout:
+;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 on_draw +8 on_click +10 on_frame
+;   +12 on_close +14 on_event +16 title
+k_wm_managed
+                call  wm_register            ; HL = desc; register as a normal window (slot,
+                                             ; page, focus, z-order, arg, flags=alive; copies
+                                             ; desc[0..11] -> entry+1..12). wm_register stashed
+                                             ; the desc ptr in wm_desc. Now patch for managed:
+                ld    a,(WM_FOCUS)           ; the just-registered window
+                call  wm_entry               ; HL = entry
+                push  hl
+                ld    de,WM_FR_FLAGS         ; FLAGS |= managed
+                add   hl,de
+                set   1,(hl)
+                pop   hl
+                push  hl
+                ld    de,WM_FR_FRAME         ; WM_FR_FRAME (entry+5,6) = the descriptor ptr
+                add   hl,de
+                ld    de,(wm_desc)
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d
+                pop   hl
+                ld    de,WM_FR_EVENT         ; WM_FR_EVENT = desc.on_event (so bar clicks/drops
+                add   hl,de                  ; reach the app's menu handler via the normal path)
+                push  hl                     ; HL = entry+9
+                ld    hl,(wm_desc)
+                ld    de,14
+                add   hl,de
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)                 ; DE = on_event ptr
+                pop   hl                     ; HL = entry+9
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d                 ; REPAINT (entry+7,8) is garbage but the managed
+                                             ; flag means wm_repaint_all skips it; MENU (entry+
+                                             ; 11,12) is set by the app's gb_doc before the loop
+                ld    a,(WM_FOCUS)           ; publish MW_RECT so the app can read gb_wm_x/y/w/h
+                call  wm_entry               ; in main, but DON'T draw yet: the app loads its
+                jp    mw_publish             ; content then calls gb_restore_parent for the first
+                                             ; paint, so a window never shows empty during a slow
+                                             ; load (#146). A managed app MUST paint when ready.
+
+; mw_publish: HL = entry. Copy x,y,w,h -> MW_RECT (the app reads it via gb_wm_x/y/w/h);
+; (mw_desc) = the descriptor pointer. HL preserved.
+mw_publish
+                push  hl
+                inc   hl                     ; entry+1
+                ld    de,MW_RECT
+                ld    bc,4
+                ldir                         ; MW_RECT = x,y,w,h ; HL = entry+5
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)
+                ld    (mw_desc),de           ; desc ptr
+                pop   hl
+                ret
+
+; mw_hook: A = byte offset of a void(void) hook in the descriptor. Call it (if non-0).
+; Clobbers HL,DE,A. md_call rets here.
+mw_hook
+                ld    hl,(mw_desc)
+                ld    e,a
+                ld    d,0
+                add   hl,de                  ; HL = desc + offset
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a                     ; HL = hook ptr
+                ld    a,h
+                or    l
+                ret   z                       ; null -> skip
+                jp    md_call                 ; jp (hl); the hook rets to mw_hook's caller
+
+; wm_chrome_draw: HL = entry. Draw frame+title (gb_open_window) then the content (on_draw).
+wm_chrome_draw
+                call  mw_publish
+                ld    hl,(mw_desc)           ; title = *(desc+16)
+                ld    de,16
+                add   hl,de
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)
+                ex    de,hl                  ; HL = title ptr (caller page)
+                ld    a,(MW_RECT)
+                ld    b,a                     ; x
+                ld    a,(MW_RECT+1)
+                ld    c,a                     ; y
+                ld    a,(MW_RECT+2)
+                ld    d,a                     ; w
+                ld    a,(MW_RECT+3)
+                ld    e,a                     ; h
+                call  gb_open_window         ; frame + title
+                ld    a,6                     ; on_draw -> content
+                jp    mw_hook
+
+; wm_chrome_frame: HL = entry. The per-frame router: idle hook, then QUIT/close,
+; close-gadget, content click. (Title drag + grip resize land in slice 2.)
+wm_chrome_frame
+                call  mw_publish
+                ld    a,10                   ; on_frame (idle/menus)
+                call  mw_hook
+                ld    a,(POLL_FLAGS)
+                bit   1,a                     ; GB_QUIT
+                jr    nz,mw_do_close
+                ld    a,(POLL_FLAGS)
+                bit   0,a                     ; GB_CLICK
+                ret   z
+                ld    a,(POLL_MY)            ; my - win_y in title band?
+                ld    e,a
+                ld    a,(MW_RECT+1)
+                ld    d,a
+                ld    a,e
+                sub   d
+                jr    c,mwf_content           ; my < win_y
+                cp    14                       ; TITLE_H
+                jr    nc,mwf_content           ; my >= win_y+14 -> content
+                ld    a,(POLL_MX)            ; in title bar: close gadget? mx < win_x+5
+                ld    e,a
+                ld    a,(MW_RECT)
+                add   a,5
+                cp    e
+                jr    c,mwf_title             ; win_x+5 < mx -> title -> drag
+                jr    z,mwf_title
+                jr    mw_do_close             ; mx < win_x+5 -> close gadget
+mwf_title
+                ld    a,18                   ; title-bar press -> on_drag (#146 slice 2)
+                jp    mw_hook
+mwf_content
+                ld    a,8                     ; content (incl. grip) -> on_click
+                jp    mw_hook
+
+; mw_do_close: a close was requested - run the app's on_close (it confirms + closes),
+; or just close if it has none.
+mw_do_close
+                ld    hl,(mw_desc)
+                ld    de,12                  ; on_close
+                add   hl,de
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a
+                ld    a,h
+                or    l
+                jp    z,k_wm_close            ; no on_close -> close directly
+                jp    md_call                 ; on_close (confirms + gb_wm_close)
+
+mw_desc         dw    0                       ; scratch: the focused managed window's descriptor
+
 ; wm_free_slot: -> A = lowest table slot whose alive flag is clear.
 wm_free_slot
                 ld    hl,WM_TABLE+WM_FR_FLAGS
@@ -1524,7 +1683,16 @@ wm_loop
                 call  wm_focus_click             ; the right app. then route the click.
                 call  wm_map_focus               ; focus may have changed
                 ld    a,(WM_FOCUS)               ; call the focused window's on_frame
-                call  wm_entry
+                call  wm_entry                   ; HL = entry
+                push  hl                          ; #146: managed window -> kernel router
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                bit   1,(hl)
+                pop   hl                          ; HL = entry
+                jr    z,wmf_legacy
+                call  wm_chrome_frame
+                jr    wmf_done
+wmf_legacy
                 ld    de,WM_FR_FRAME
                 add   hl,de
                 ld    a,(hl)
@@ -1532,6 +1700,7 @@ wm_loop
                 ld    h,(hl)
                 ld    l,a
                 call  md_call
+wmf_done
                 ld    hl,(BAR_HANDLER)            ; top-bar hook (#77): run the bar handler
                 ld    a,h                          ; every frame in the desktop's page, so the
                 or    l                            ; bar stays live regardless of which window
@@ -2050,7 +2219,16 @@ wra_l           ld    a,(wm_rp_i)
                 ld    a,(hl)                       ; slot = WM_Z[i]
                 call  wm_entry                     ; HL = entry
                 ld    a,(hl)                       ; page
-                call  bank_set
+                call  bank_set                     ; (preserves HL = entry)
+                push  hl                           ; #146: managed -> kernel draws chrome
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                bit   1,(hl)
+                pop   hl                            ; HL = entry
+                jr    z,wra_legacy
+                call  wm_chrome_draw
+                jr    wra_next
+wra_legacy
                 ld    de,WM_FR_REPAINT
                 add   hl,de
                 ld    a,(hl)
