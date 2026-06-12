@@ -1541,10 +1541,12 @@ k_wm_managed
                 pop   hl                     ; HL = entry+9
                 ld    (hl),e
                 inc   hl
-                ld    (hl),d
-                ret                           ; REPAINT (entry+7,8) is garbage but the managed
+                ld    (hl),d                 ; REPAINT (entry+7,8) is garbage but the managed
                                              ; flag means wm_repaint_all skips it; MENU (entry+
                                              ; 11,12) is set by the app's gb_doc before the loop
+                ld    a,(WM_FOCUS)           ; paint the new window now (nothing else will
+                call  wm_entry               ; until a restack/focus change)
+                jp    wm_chrome_draw
 
 ; mw_publish: HL = entry. Copy x,y,w,h -> MW_RECT (the app reads it via gb_wm_x/y/w/h);
 ; (mw_desc) = the descriptor pointer. HL preserved.
