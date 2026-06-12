@@ -28,6 +28,7 @@ static unsigned int filen;
 static unsigned char win_x, win_y, win_w, win_h;   /* refreshed from the WM each draw */
 static char vtitle[14];                            /* "NAME.EXT" - the WM draws it */
 static unsigned char opened;                       /* 0 -> the next frame sizes to a picture */
+static unsigned char loaded;                       /* 0 until the file is read (blank, no msg) */
 
 /* fmt83: 11-byte 8.3 name -> "NAME.EXT". */
 static void fmt83(char *dst, const char *n11)
@@ -89,7 +90,8 @@ static void draw_pic(void)
 static void v_draw(void)
 {
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
-    if (filen == 0)        gb_text(TX_COL, TX_Y0, "(file is empty or could not be read)");
+    if (!loaded)           ;   /* still loading -> blank window, not the empty-file message */
+    else if (filen == 0)   gb_text(TX_COL, TX_Y0, "(file is empty or could not be read)");
     else if (is_pic())     draw_pic();
     else                   render(filen);
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#146) */
@@ -171,10 +173,26 @@ static const gb_doc_t vdoc = {
 
 void main(void)
 {
-    filen = gb_fs_load(filebuf, VIEW_MAX);   /* load FIRST so the initial paint shows content,
-                                                not the empty-file message (#146) */
+    char nm[11];
+    gb_get_name(nm);                 /* the file we were launched with (kernel launch arg) */
+    gb_set_name(nm);                 /* target it for the load - NOT the stale boot name */
+    filen = gb_fs_load(filebuf, VIEW_MAX);   /* load BEFORE the window is drawn, so its first
+                                                paint already has the picture (no empty flash) */
+    loaded = 1;
+    fmt83(vtitle, nm);               /* title ready for the initial paint too */
     if (is_pic()) parse_pic();
-    gb_wm_managed(&vmw);              /* register + initial paint (the content is ready) */
-    gb_doc(&vdoc);                    /* File>Load + View>Fullscreen on the focused window */
-    fmt83(vtitle, gb_doc_name());     /* title shows on the first frame's redraw */
+    gb_wm_managed(&vmw);             /* register + initial paint: the content is ready */
+    if (is_pic()) {                  /* size to the picture now, before the WM loop's repaint */
+        unsigned char x = gb_wm_x(), y = gb_wm_y(), w, h;
+        w = (unsigned char)(pic_wb + 3);
+        if (w < MIN_W) w = MIN_W;
+        if (w > (unsigned char)(80 - x)) w = (unsigned char)(80 - x);
+        h = (unsigned char)(pic_h + 16);
+        if (h < MIN_H) h = MIN_H;
+        if (h > (unsigned char)(200 - y)) h = (unsigned char)(200 - y);
+        gb_wm_setsize(w, h);
+        opened = 1;                  /* already sized; v_frame's deferred resize is for File>Load */
+    }
+    gb_doc(&vdoc);                   /* menus on the focused window */
+    gb_restore_parent();             /* one repaint at the fitted size */
 }
