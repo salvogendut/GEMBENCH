@@ -66,6 +66,18 @@ static void rebuild(void)
     gb_menu(g_def);
 }
 
+/* --- the standard Edit menu (#142): added when the doc provides on_copy --- *
+ * Copy/Paste go through the shared clipboard - gb_clip_* are resident kernel calls
+ * (a fixed low-RAM buffer at #3E00), so the clipboard survives app switches and the
+ * code isn't duplicated into every app's bank. */
+static const char *const edit_items[] = { "Select All", "Copy", "Paste" };
+static void edit_action(unsigned char sel)
+{
+    if      (sel == 0) { if (g_doc->on_selectall) g_doc->on_selectall(); }
+    else if (sel == 1) { if (g_doc->on_copy)      g_doc->on_copy(); }
+    else if (sel == 2) { if (g_doc->on_paste)     g_doc->on_paste(); }
+}
+
 void gb_doc(const gb_doc_t *d)
 {
     g_doc = d;
@@ -76,6 +88,13 @@ void gb_doc(const gb_doc_t *d)
     g_nitems[0]  = 4;
     g_handler[0] = 0;                 /* File is handled internally */
     g_ntitles    = 1;
+    if (d->on_copy) {                 /* standard Edit menu, backed by the shared clipboard */
+        g_label[1]   = "Edit";
+        g_items[1]   = edit_items;
+        g_nitems[1]  = 3;
+        g_handler[1] = edit_action;
+        g_ntitles    = 2;
+    }
     rebuild();
     gb_get_name(g_name);              /* adopt the file we were launched with */
     if (g_name[0] == 0 || g_name[0] == ' ') set_name("UNTITLED   ");

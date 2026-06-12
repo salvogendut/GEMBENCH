@@ -16,6 +16,9 @@
         .globl  _gb_window
         .globl  _gb_restorerect
         .globl  _gb_mxp
+        .globl  _gb_clip_set
+        .globl  _gb_clip_get
+        .globl  _gb_clip_len
         .globl  _gb_fill
         .globl  _gb_frame
         .globl  _gb_icon
@@ -154,6 +157,22 @@ _gb_restorerect:
 _gb_mxp:
         call    0x80A2          ; GB_MXP -> HL = pixel x
         ex      de, hl          ; SDCC z80 returns 16-bit in DE
+        ret
+
+;; void gb_clip_set(const char *buf, unsigned int len);  HL=buf, DE=len (shared clipboard #142)
+_gb_clip_set:
+        jp      0x80A5          ; GB_CLIPSET
+;; unsigned int gb_clip_get(char *buf, unsigned int max);  HL=buf, DE=max -> DE = copied
+_gb_clip_get:
+        call    0x80A8          ; GB_CLIPGET -> BC = copied
+        ld      d, b
+        ld      e, c
+        ret
+;; unsigned int gb_clip_len(void);  -> DE = clipboard length
+_gb_clip_len:
+        call    0x80AB          ; GB_CLIPLEN -> BC = length
+        ld      d, b
+        ld      e, c
         ret
 
 ;; void gb_fill(u8 col, u8 line, u8 w, u8 h, u8 pen);    -> GB_FILL

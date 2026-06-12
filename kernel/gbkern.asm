@@ -92,6 +92,9 @@ GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbu
 CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT.SPR is
                                    ; loaded here at boot so the bitmaps aren't resident
                                    ; (256B used; 512 reserved to #16FF for the sector copy)
+CLIP_LEN        equ   #3E00        ; shared clipboard (#142): word = length, data #3E02..
+CLIP_DATA       equ   #3E02        ; #3FFF (510 bytes). Non-banked low RAM above gb_copybuf
+CLIP_CAP        equ   510          ; (which ends #3E00), so it survives app switches.
 WM_FR_X         equ   1            ; entry field offsets (after +0 page):
 WM_FR_FRAME     equ   5
 WM_FR_REPAINT   equ   7
@@ -157,10 +160,15 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_vsync                ; GB_BLITEFULL   #809C (removed: mapping->FM, #103)
                 jp    k_icon_half            ; GB_ICONHALF    #809F (A=slot B=x C=y, #103)
                 jp    k_mxp                  ; GB_MXP         #80A2 -> HL = pointer pixel x (#114)
+                jp    k_clip_set             ; GB_CLIPSET     #80A5 (HL=src, DE=len) shared clipboard (#142)
+                jp    k_clip_get             ; GB_CLIPGET     #80A8 (HL=dst, DE=max) -> BC=copied
+                jp    k_clip_len             ; GB_CLIPLEN     #80AB -> BC = clipboard length
 
 ; ---------------------------------------------------------------------------
 kernel_main
                 ld    (BOOT_SP),sp           ; entry SP, for GB_EXIT's clean return (#74)
+                ld    hl,0                    ; #142: empty the shared clipboard at boot
+                ld    (CLIP_LEN),hl          ; (else the first paste reads a garbage length)
                 ld    a,1
                 call  SCR_SET_MODE           ; mode 1, screen cleared
                 call  TXT_CUR_DISABLE        ; no blinking firmware cursor blob
@@ -1160,6 +1168,57 @@ k_setname
                 ex    de,hl                     ; DE = dst
                 pop   hl                       ; HL = src
                 call  copy11
+                ret
+
+; The shared clipboard (#142): a fixed low-RAM buffer (CLIP_LEN word + CLIP_DATA bytes)
+; that survives app switches, so copy in one app and paste in another. Resident, so the
+; code isn't duplicated into every app's bank. Low RAM is always mapped.
+
+; k_clip_set (GB_CLIPSET): copy DE bytes from HL into the clipboard, clamped to CLIP_CAP.
+; HL = src (caller page, mapped), DE = length.
+k_clip_set
+                or    a                        ; clamp DE to CLIP_CAP
+                push  hl                        ; save src
+                ld    hl,CLIP_CAP
+                sbc   hl,de                     ; CLIP_CAP - len ; NC = len <= CLIP_CAP
+                jr    nc,kcs_len
+                ld    de,CLIP_CAP
+kcs_len         pop   hl                        ; HL = src
+                ld    (CLIP_LEN),de            ; store the length
+                ld    b,d
+                ld    c,e                        ; BC = count
+                ld    a,b
+                or    c
+                ret   z                          ; nothing to copy
+                ld    de,CLIP_DATA
+                ldir                             ; src -> clipboard
+                ret
+
+; k_clip_get (GB_CLIPGET): copy up to DE bytes of the clipboard into HL. HL = dst (caller
+; page), DE = max. Returns BC = bytes copied (the trampoline maps BC -> the C return).
+k_clip_get
+                ld    bc,(CLIP_LEN)            ; BC = stored length
+                push  hl                        ; save dst
+                ld    h,b
+                ld    l,c
+                or    a
+                sbc   hl,de                     ; len - max ; CF = len < max
+                jr    c,kcg_n                    ; copy len (BC already)
+                ld    b,d
+                ld    c,e                        ; else copy max
+kcg_n           pop   de                         ; DE = dst
+                ld    hl,CLIP_DATA              ; HL = src
+                ld    a,b
+                or    c
+                ret   z                          ; count 0 -> BC=0
+                push  bc                        ; save count
+                ldir                             ; clipboard -> dst
+                pop   bc                         ; BC = count (return)
+                ret
+
+; k_clip_len (GB_CLIPLEN): BC = the clipboard length (for sizing a paste).
+k_clip_len
+                ld    bc,(CLIP_LEN)
                 ret
 
 ; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a

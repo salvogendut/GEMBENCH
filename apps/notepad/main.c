@@ -18,10 +18,9 @@
  * visible. */
 #include "gb.h"
 
-#define NP_MAX    3584           /* editable text capacity (was 4096; trimmed to fit the
-                                    navigable file dialog + per-app extension filter -
-                                    restore to 4096 when the shared clipboard (gb_clip_*)
-                                    reclaims notepad's local clip[512]) */
+#define NP_MAX    4096           /* editable text capacity - restored to 4096 (#142): the
+                                    shared clipboard (gb_clip_*) replaced the local clip[512],
+                                    so the file dialog + extension filter fit without trimming */
 #define NP_BUF    (NP_MAX + 512)  /* +1 sector of slack: gb_fs_load copies whole 512B
                                     sectors, so the buffer outruns the load cap */
 #define DEF_X     2            /* initial window position (the window is draggable) */
@@ -46,7 +45,6 @@
 #define K_TAB     0x09
 #define K_QUIT    0x11           /* Ctrl-Q */
 
-#define CLIP_MAX  512            /* copy/paste clipboard (#99) */
 
 static unsigned char win_x = DEF_X;      /* live window position (draggable) */
 static unsigned char win_y = DEF_Y;
@@ -55,8 +53,6 @@ static char buf[NP_BUF];
 static char line[MAXWRAP];
 static unsigned int len, cur;            /* text length, insertion index */
 static unsigned char view_first;         /* first visible display row */
-static char clip[CLIP_MAX];              /* copy/paste clipboard (#99) */
-static unsigned int cliplen;
 static unsigned int sel_a, sel_b;        /* selection [sel_a, sel_b) in buffer order */
 static unsigned char sel_on;             /* a selection exists */
 static unsigned char keycool;            /* frames to flush keys after a click or fire */
@@ -355,8 +351,11 @@ static void np_saved(void)
 
 /* the file types Notepad opens - the file dialog shows only these (+ folders) */
 static const char *const np_exts[] = { "TXT", "BAS", "CFG", 0 };
+static void select_all(void);            /* the Edit-menu hooks (defined below) */
+static void copy_sel(void);
+static void paste_clip(void);
 static const gb_doc_t npdoc = {
-    buf, NP_MAX, np_new, np_open, np_save, np_saved, 0, 0, 0, np_exts
+    buf, NP_MAX, np_new, np_open, np_save, np_saved, copy_sel, paste_clip, select_all, np_exts
 };
 
 /* --- Edit menu: copy / paste over a selection (#99) ----------------------- */
@@ -377,33 +376,29 @@ static void select_all(void)
     sel_a = 0; sel_b = len; sel_on = 1; cur = len;
 }
 
+/* copy_sel / paste_clip / select_all are the framework's Edit-menu hooks (#142): the
+ * standard Edit menu (Select All / Copy / Paste) is added by gb_doc, and copy/paste go
+ * through the SHARED clipboard (gb_clip_*) so they work across apps. */
 static void copy_sel(void)
 {
-    unsigned int i, n = 0;
     if (!sel_on || sel_a >= sel_b) return;
-    for (i = sel_a; i < sel_b && n < CLIP_MAX; i++) clip[n++] = buf[i];
-    cliplen = n;
+    gb_clip_set(buf + sel_a, sel_b - sel_a);
 }
 
-/* paste_clip: replace any selection with the clipboard, inserted at the caret. */
+/* paste_clip: replace any selection with the clipboard, inserted at the caret. No local
+ * buffer - open the gap, then read the clipboard straight into it. */
 static void paste_clip(void)
 {
-    unsigned int i;
+    unsigned int i, n;
     if (sel_on && sel_a < sel_b) delete_range(sel_a, sel_b);   /* caret -> sel_a */
     sel_on = 0;
-    if (!cliplen || len + cliplen > NP_MAX) return;
-    for (i = len; i > cur; i--) buf[i - 1 + cliplen] = buf[i - 1];  /* open a gap */
-    for (i = 0; i < cliplen; i++) buf[cur + i] = clip[i];
-    len += cliplen; cur += cliplen;
+    n = gb_clip_len();
+    if (!n || len >= NP_MAX) return;
+    if (len + n > NP_MAX) n = NP_MAX - len;                    /* clamp to remaining room */
+    for (i = len; i > cur; i--) buf[i - 1 + n] = buf[i - 1];   /* open a gap */
+    gb_clip_get(buf + cur, n);                                 /* fill it from the clipboard */
+    len += n; cur += n;
     gb_doc_dirty();
-}
-
-static const char *const edit_items[] = { "Select", "Copy", "Paste" };
-static void run_edit_item(unsigned char item)   /* framework calls us with the chosen row */
-{
-    if (item == 0) select_all();
-    else if (item == 1) copy_sel();
-    else if (item == 2) paste_clip();
 }
 
 /* try_close: the close gadget was hit -> let the framework offer to save first
@@ -672,12 +667,11 @@ void main(void)
     win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
     caret_vis = 1; blink_ctr = 0; arr_prev = 0; arr_rep = 0;
     gb_wm_add(&npwin);                           /* register FIRST: captures our file arg */
-    gb_doc(&npdoc);                              /* standard File menu; adopts the launch name */
-    gb_menu_add("Edit", edit_items, 3, run_edit_item);
+    gb_doc(&npdoc);                              /* standard File + Edit menus; adopts the name */
     len = gb_fs_load(buf, NP_MAX);              /* load the launch file (0 if none) */
     if (is_bas()) len = strip_cr(len);           /* .BAS in CR+LF -> edit as plain \n */
     cur = len; view_first = 0;
-    sel_on = 0; cliplen = 0;                      /* copy/paste state (#99) */
+    sel_on = 0;                                  /* selection state (clipboard is shared now) */
     for (n = 64; n; n--) if (!gb_getkey()) break;   /* drop buffered keys */
 
     draw();

@@ -179,6 +179,7 @@ unsigned char gb_doc_frame(void);          /* in on_frame: ran a menu? (1 -> rep
 /* Shared clipboard (#142): a system buffer that survives app switches, so copy in
  * one app and paste in another. An app's on_copy fills it; on_paste reads it. */
 void          gb_clip_set(const char *buf, unsigned int len);   /* copy in */
+unsigned int  gb_clip_len(void);                                /* clipboard length */
 unsigned int  gb_clip_get(char *buf, unsigned int max);         /* paste out -> length */
 
 /* gb_menu_add: add an app-specific menu title with `n` items to the top bar

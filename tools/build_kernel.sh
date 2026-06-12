@@ -45,7 +45,7 @@ DATA_LOC=0x6500 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: hi
                                    # for code room now it sorts (a ~2.6K listing cache, #118)
 DATA_LOC=0x4D00 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: low data-loc for a
                                    # big file buffer (12K) so larger .PIC images fit the bank
-DATA_LOC=0x6BA0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
+DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
 DATA_LOC=0x5F00 DIALOGS=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: lower
