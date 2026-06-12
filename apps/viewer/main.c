@@ -92,6 +92,7 @@ static void v_draw(void)
     if (filen == 0)        gb_text(TX_COL, TX_Y0, "(file is empty or could not be read)");
     else if (is_pic())     draw_pic();
     else                   render(filen);
+    gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#146) */
 }
 
 /* on_frame: size the window to a picture on the first frame (deferred from main so the
@@ -119,6 +120,27 @@ static void v_frame(void)
 static void v_close(void) { if (gb_doc_close()) gb_wm_close(); }
 static void v_event(void) { gb_doc_event(); }
 
+/* on_drag: a title-bar press - move the window (#146 slice 2). */
+static void v_drag(void)
+{
+    unsigned char x = gb_wm_x(), y = gb_wm_y();
+    if (gb_drag_window(&x, &y, gb_wm_w(), gb_wm_h())) {
+        gb_wm_setpos(x, y);
+        gb_restore_parent();
+    }
+}
+
+/* on_click: a content-area press - only the resize grip matters to the viewer. */
+static void v_click(void)
+{
+    unsigned char x = gb_wm_x(), y = gb_wm_y(), w = gb_wm_w(), h = gb_wm_h();
+    if (gb_in_grip(x, y, w, h, gb_mx(), gb_my()))
+        if (gb_drag_resize(x, y, &w, &h, MIN_W, MIN_H)) {
+            gb_wm_setsize(w, h);
+            gb_restore_parent();
+        }
+}
+
 /* View > Fullscreen (gb_doc): the WM owns the geometry, so just setpos/setsize. */
 static void v_fullscreen(unsigned char on)
 {
@@ -140,7 +162,7 @@ static void v_open(unsigned int len)
 
 static const gb_mwin_t vmw = {
     DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H,
-    v_draw, 0, v_frame, v_close, v_event, vtitle
+    v_draw, v_click, v_frame, v_close, v_event, vtitle, v_drag
 };
 /* read-only doc: File offers only Load; View offers Fullscreen (exts NULL = show all). */
 static const gb_doc_t vdoc = {

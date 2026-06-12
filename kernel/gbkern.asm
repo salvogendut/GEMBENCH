@@ -1627,12 +1627,14 @@ wm_chrome_frame
                 ld    a,(MW_RECT)
                 add   a,5
                 cp    e
-                jr    c,mwf_title             ; win_x+5 < mx -> title (drag, slice 2)
+                jr    c,mwf_title             ; win_x+5 < mx -> title -> drag
                 jr    z,mwf_title
                 jr    mw_do_close             ; mx < win_x+5 -> close gadget
-mwf_title       ret                           ; title drag: slice 2 (paged module)
+mwf_title
+                ld    a,18                   ; title-bar press -> on_drag (#146 slice 2)
+                jp    mw_hook
 mwf_content
-                ld    a,8                     ; content -> on_click
+                ld    a,8                     ; content (incl. grip) -> on_click
                 jp    mw_hook
 
 ; mw_do_close: a close was requested - run the app's on_close (it confirms + closes),

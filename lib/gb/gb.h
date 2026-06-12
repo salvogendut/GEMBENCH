@@ -260,6 +260,10 @@ typedef struct {
     void (*on_close)(void);
     void (*on_event)(void);
     const char *title;
+    void (*on_drag)(void);          /* a title-bar press (not the close gadget): run a window
+                                     * drag (gb_drag_window + gb_wm_setpos + gb_restore_parent),
+                                     * or 0 for a fixed window. (grip-resize is detected in
+                                     * on_click via gb_in_grip - the kernel only routes title.) */
 } gb_mwin_t;
 void          gb_wm_managed(const gb_mwin_t *desc);   /* register a kernel-managed window */
 unsigned char gb_wm_x(void);    /* live window rect (WM-owned) */
