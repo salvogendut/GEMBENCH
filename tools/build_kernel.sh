@@ -54,7 +54,7 @@ DATA_LOC=0x5F00 DOC=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED:
 tools/build_capp.sh apps/clock  build/CLOCK.RAW    # CLOCK  (C/SDCC) -> build/CLOCK.RAW
 DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: doc framework (#142)
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
-DIALOGS=1 PROMPT=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
+DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW

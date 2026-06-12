@@ -29,7 +29,7 @@ static unsigned char   g_col[DOC_MAXTITLES];     /* each title's byte column */
 static unsigned char   g_ntitles;
 static unsigned char   g_def[1 + DOC_MAXTITLES * 9];   /* MENU_DEF: count, {col,label[8]}* */
 
-static const char *const file_items[] = { "New", "Load", "Save", "Save As" };
+static const char *file_items[5] = { "New", "Load", "Save", "Save As", 0 };  /* [4] = optional export */
 static const char *const confirm_items[] = { "Save", "Don't Save", "Cancel" };
 
 static unsigned char slen(const char *s) { unsigned char n = 0; while (s[n]) n++; return n; }
@@ -86,6 +86,7 @@ void gb_doc(const gb_doc_t *d)
     g_items[0]   = file_items;
     g_nitems[0]  = 4;
     g_handler[0] = 0;                 /* File is handled internally */
+    if (d->export_label) { file_items[4] = d->export_label; g_nitems[0] = 5; }
     g_ntitles    = 1;
     if (d->on_copy) {                 /* standard Edit menu, backed by the shared clipboard */
         g_label[1]   = "Edit";
@@ -204,6 +205,7 @@ static void file_action(unsigned char sel)
     else if (sel == 1) do_load();
     else if (sel == 2) do_save();
     else if (sel == 3) do_saveas();
+    else if (sel == 4) { if (g_doc->on_export) g_doc->on_export(); }   /* the optional export */
 }
 
 /* on_frame: drop a pending menu and dispatch it. Returns 1 if a menu ran (the

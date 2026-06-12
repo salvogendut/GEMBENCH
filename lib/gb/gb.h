@@ -167,6 +167,11 @@ typedef struct {
      * uppercase extensions the app handles, e.g. {"TXT","BAS","CFG",0}. The Open/Save
      * dialog then shows only these files (folders always shown). NULL = show all. */
     const char *const *exts;
+    /* Optional extra File item: if export_label is non-NULL the framework adds it to the
+     * File menu after Save As (e.g. XAOS "Save as PIC" - export the rendered image while
+     * Save keeps the definition). on_export does the whole action itself. NULL = none. */
+    const char  *export_label;
+    void         (*on_export)(void);
 } gb_doc_t;
 void          gb_doc(const gb_doc_t *d);   /* register; adds the standard File (+Edit) menu */
 void          gb_doc_dirty(void);          /* mark the document modified */
