@@ -49,9 +49,14 @@
 #define TOOL_SY     27                  /* tool row stride (24 + 3 gap)          */
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
-/* live (draggable) window-relative geometry */
-#define CVX  (unsigned char)(win_x + 1)            /* canvas left, byte column */
-#define CVY  (unsigned char)(win_y + TITLE_H + 1)  /* canvas top, screen row   */
+static unsigned char winw = WIN_W, winh = WIN_H;   /* live window size (Fullscreen, #142) */
+/* content origin (ox,oy): the window top-left normally, but CENTERED when the window is
+   bigger than the content (Fullscreen). recalc_origin() refreshes it after any geometry
+   change; drawing/hit-testing read the variables (cheap, vs a macro division everywhere). */
+static unsigned char ox = DEF_X, oy = DEF_Y;
+static void recalc_origin(void);                   /* defined below */
+#define CVX  (unsigned char)(ox + 1)               /* canvas left, byte column */
+#define CVY  (unsigned char)(oy + TITLE_H + 1)     /* canvas top, screen row   */
 /* toolchest column: just right of the canvas */
 #define TCX  (unsigned char)(CVX + CANVAS_WB + 1)  /* tools left, byte column  */
 #define TCY  CVY                                    /* tools top = canvas top   */
@@ -321,11 +326,32 @@ static const char *win_title(void)
 /* full window redraw (frame + canvas + toolchest) */
 static void draw(void)
 {
+    recalc_origin();
     gb_curhide();
-    gb_window(win_x, win_y, WIN_W, WIN_H, win_title());
+    gb_window(win_x, win_y, winw, winh, win_title());
     gb_curshow();
     blit_canvas();
     draw_toolchest();
+}
+
+/* recalc_origin: refresh the centered content origin from the live geometry. */
+static void recalc_origin(void)
+{
+    ox = (unsigned char)(win_x + (winw - WIN_W) / 2);
+    oy = (unsigned char)(win_y + (winh - WIN_H) / 2);
+}
+
+/* p_fullscreen: View > Fullscreen - cover the screen (canvas + tools recenter) and back;
+ * restoring repaints the desktop we vacated. */
+static void p_fullscreen(unsigned char on)
+{
+    if (on) { win_x = 0; win_y = 8; winw = 80; winh = 192; }
+    else    { win_x = DEF_X; win_y = DEF_Y; winw = WIN_W; winh = WIN_H; }
+    recalc_origin();
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(winw, winh);
+    if (!on) gb_restore_parent();
+    draw();
 }
 
 static void on_repaint(void) { draw(); }
@@ -417,7 +443,8 @@ static unsigned int p_save(void)
 }
 
 static const gb_doc_t pdoc = {
-    (char *)picbuf, PIC_MAX, p_new, p_open, p_save, 0, 0, 0, 0, paint_exts
+    (char *)picbuf, PIC_MAX, p_new, p_open, p_save, 0, 0, 0, 0, paint_exts,
+    0, 0, p_fullscreen, 0, 0
 };
 
 /* on_menu: a top-bar title was clicked -> hand it to the framework. */
@@ -436,8 +463,8 @@ static void on_frame(void)
         mx = gb_mx(); my = gb_my();
         if (my >= win_y && my < (unsigned char)(win_y + TITLE_H)) {
             if (mx >= win_x && mx < (unsigned char)(win_x + 5)) { if (gb_doc_close()) gb_wm_close(); return; }
-            if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + WIN_W)) {
-                if (gb_drag_window(&win_x, &win_y, WIN_W, WIN_H)) {
+            if (mx >= (unsigned char)(win_x + 5) && mx < (unsigned char)(win_x + winw)) {
+                if (gb_drag_window(&win_x, &win_y, winw, winh)) {
                     gb_wm_setpos(win_x, win_y);
                     gb_restore_parent();
                     draw();
