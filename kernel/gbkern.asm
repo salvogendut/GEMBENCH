@@ -121,8 +121,8 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
                 jp    kernel_main            ; GB_INIT  #8000
                 jp    k_cls                  ; GB_CLS   #8003
-                jp    k_print                ; GB_PRINT #8006
-                jp    k_quit                 ; GB_QUIT  #8009
+                jp    k_noop                 ; GB_PRINT #8006 (dead stub -> shared ret, #148)
+                jp    k_noop                 ; GB_QUIT  #8009 (dead stub -> shared ret, #148)
                 jp    gb_text_draw           ; GB_TEXT   #800C
                 jp    gb_open_window         ; GB_WINDOW #800F
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012
@@ -132,14 +132,14 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
                 jp    cursor_erase           ; GB_CURHIDE #8024
-                jp    k_launch               ; GB_LAUNCH  #8027
-                jp    k_getarg               ; GB_GETARG  #802A
-                jp    k_run                  ; GB_RUN     #802D
+                jp    k_noop                 ; GB_LAUNCH  #8027 (dead stub -> shared ret, #148)
+                jp    focus_arg_ptr          ; GB_GETARG  #802A (k_getarg collapsed, #148)
+                jp    launch_app             ; GB_RUN     #802D (k_run collapsed, #148)
                 jp    k_icon                 ; GB_ICON    #8030
                 jp    k_fill                 ; GB_FILL    #8033
                 jp    k_saverect             ; GB_SAVERECT    #8036
                 jp    k_restorerect          ; GB_RESTORERECT #8039
-                jp    k_xorframe             ; GB_XORFRAME    #803C
+                jp    k_noop                 ; GB_XORFRAME    #803C (dead stub -> shared ret, #148)
                 jp    k_fsload               ; GB_FSLOAD      #803F
                 jp    k_fssave               ; GB_FSSAVE      #8042
                 jp    k_getkey               ; GB_GETKEY      #8045
@@ -147,14 +147,14 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_onevent              ; GB_ONEVENT     #804B
                 jp    k_menu                 ; GB_MENU        #804E
                 jp    k_setname              ; GB_SETNAME     #8051
-                jp    k_onrepaint            ; GB_ONREPAINT   #8054
+                jp    k_noop                 ; GB_ONREPAINT   #8054 (dead stub -> shared ret, #148)
                 jp    wm_repaint_all         ; GB_RESTPAR     #8057 (was jp k_restore_parent; #148)
                 jp    k_wm_run               ; GB_WMRUN       #805A
                 jp    wm_register            ; GB_WMADD       #805D (was jp k_wm_add; #148)
                 jp    k_wm_open              ; GB_WMOPEN      #8060
                 jp    k_wm_close             ; GB_WMCLOSE     #8063
                 jp    k_wm_setpos            ; GB_WMSETPOS    #8066
-                jp    k_wm_launch            ; GB_WMLAUNCH    #8069
+                jp    k_noop                 ; GB_WMLAUNCH    #8069 (dead stub -> shared ret, #148)
                 jp    k_isdir                ; GB_ISDIR       #806C
                 jp    k_chdir                ; GB_CHDIR       #806F
                 jp    k_back                 ; GB_BACK        #8072
@@ -530,10 +530,8 @@ gf_pen          db    0
 k_cls
                 ld    a,1
                 jp    SCR_SET_MODE            ; mode 1 clears; returns to caller
-k_print                                        ; GB_PRINT: stub (unused early debug
-                ret                            ; print; no binding). Slot kept fixed.
-k_quit
-                ret                            ; (skeleton: app RETs anyway)
+k_noop                                         ; shared no-op for dead ABI slots (#148):
+                ret                            ; GB_PRINT/QUIT/LAUNCH/XORFRAME/ONREPAINT/WMLAUNCH
 
 ; to_data / from_data: save the caller's bank page and map PAGE_DATA (the font /
 ; icon page), then restore it. One shared save slot (dp_save) - these swaps are
@@ -1077,15 +1075,11 @@ wfp_hit         xor   a
                 ld    (de),a                       ; clear the parallel busy flag
                 ret
 
-; k_run (GB_RUN): run a named app. HL = 8.3 name (in the caller's page).
-k_run
-                jp    launch_app
+; GB_RUN (HL = 8.3 name in the caller's page): the slot jumps straight to
+; launch_app (k_run wrapper collapsed, #148).
 
 ; k_launch (GB_LAUNCH): the old MODAL open-the-current-entry. Superseded by the
-; co-resident open path and no longer called by any app; kept as a stub so the
-; jump-table address stays fixed.
-k_launch
-                ret
+; co-resident open path and no longer called by any app; the slot -> k_noop (#148).
 
 ; Directory navigation (issue #54). The FAT backend enumerates the directory at
 ; fs_dir_clus; gb_chdir descends into the positioned entry (pushing the parent on
@@ -1170,9 +1164,8 @@ focus_arg_ptr
                 add   hl,de
                 ret
 
-; k_getarg (GB_GETARG): HL = the launch arg (the 8.3 file name the app opened).
-k_getarg
-                jp    focus_arg_ptr
+; GB_GETARG (HL = the launch arg, the 8.3 file name the app opened): the slot
+; jumps straight to focus_arg_ptr (k_getarg wrapper collapsed, #148).
 
 ; k_setname (GB_SETNAME): set the current file name so a later GB_FSLOAD/GB_FSSAVE
 ; targets it - how an app does New / Save As / open a picked file. HL = an 11-byte
@@ -1447,9 +1440,7 @@ k_onevent
 
 ; k_onrepaint (GB_ONREPAINT): now a no-op kept for ABI. Under the window manager
 ; an app's repaint handler lives in its gb_win_t (on_repaint); the old per-depth
-; REPAINT_HDLR table is unused. Left as a stub so the jump-table address is fixed.
-k_onrepaint
-                ret
+; REPAINT_HDLR table is unused. The slot stays fixed and -> k_noop (#148).
 
 ; k_restore_parent (GB_RESTPAR): repaint everything behind the caller. Under the
 ; window manager (issue #45) the live windows below a modal app are exactly the WM
@@ -1733,10 +1724,8 @@ kwo_blank       ld    (hl),a
                 jr    wm_open_go
 
 ; k_wm_launch (GB_WMLAUNCH): superseded. File-type -> app routing moved into the
-; File Manager (C); it now calls GB_WMLAUNCHAS with the app it chose. Kept as a
-; stub so the jump-table address stays fixed.
-k_wm_launch
-                ret
+; File Manager (C); it now calls GB_WMLAUNCHAS with the app it chose. The slot
+; stays fixed (addresses) and -> k_noop (#148).
 
 ; k_wm_launch_as (GB_WMLAUNCHAS): HL = the 8.3 app name to open as a co-resident
 ; window. The current dir entry (fs_ent_name) becomes the new window's file arg, so
@@ -2467,9 +2456,7 @@ k_mxp
 
 ; k_xorframe (GB_XORFRAME): stub. The rubber-band XOR frame was never wired up
 ; (no app uses it, no gb_xorframe binding); body removed to reclaim resident
-; space for the callback API. The jump-table slot stays so addresses are fixed.
-k_xorframe
-                ret
+; space. The jump-table slot stays (addresses fixed) and -> k_noop (#148).
 
 ; ===========================================================================
 ; Top bar (kernel-owned): total RAM (left) + clock (right) on lines 0-7. The

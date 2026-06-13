@@ -59,17 +59,23 @@ cm_storeonly
 cursor_erase
                 xor   a                       ; cursor no longer on screen (#126)
                 ld    (cur_shown),a
+                call  cur_setsb
+                jp    restore_block
+
+; cur_setsb: point the shared save_block/restore_block params (sb_*) at the
+; cursor's clipped on-screen rectangle + cur_bg buffer (used by draw and erase).
+cur_setsb
                 ld    a,(cur_xbyte)
                 ld    (sb_x),a
                 ld    a,(cur_line)
                 ld    (sb_y),a
-                ld    a,CUR_W
+                ld    a,(cur_dcols)           ; clipped extent (edge overhang trimmed)
                 ld    (sb_w),a
-                ld    a,CUR_H
+                ld    a,(cur_drows)
                 ld    (sb_h),a
                 ld    hl,cur_bg
                 ld    (sb_buf),hl
-                jp    restore_block
+                ret
 
 ; cursor_draw: place the sprite at (cursor_x, cursor_y) minus the hotspot.
 cursor_draw
@@ -90,33 +96,37 @@ cd_xok
                 srl   h
                 rr    l
                 ld    a,l
-                cp    80-CUR_W+1              ; clamp to [0, 80-CUR_W]
-                jr    c,cd_xb
-                ld    a,80-CUR_W
+                cp    80                       ; clamp hotspot byte to [0, 79] so the tip can
+                jr    c,cd_xb                  ; reach the right border; the sprite clips there
+                ld    a,79
 cd_xb
                 ld    (cur_xbyte),a
+                sub   80-CUR_W                 ; cur_skip = max(0, xbyte-(80-CUR_W)): sprite cols
+                jr    nc,cd_xclip              ; that fall off the right edge (0 = fully on screen)
+                xor   a
+cd_xclip
+                ld    (cur_skip),a
+                ld    b,a                       ; cur_dcols = CUR_W - cur_skip (cols on screen)
+                ld    a,CUR_W
+                sub   b
+                ld    (cur_dcols),a
                 ld    hl,(cursor_y)          ; line = 199 - cursor_y/2 - hotspot_y
                 srl   h
                 rr    l
                 ld    a,199
                 sub   l
-                sub   cursor_arrow_hy
-                cp    200-CUR_H+1             ; clamp to [0, 200-CUR_H]
-                jr    c,cd_yb
-                ld    a,200-CUR_H
-cd_yb
+                sub   cursor_arrow_hy          ; a = line in [0, 199] (hotspot row on screen)
                 ld    (cur_line),a
-
-                ld    a,(cur_xbyte)          ; save the background block
-                ld    (sb_x),a
-                ld    a,(cur_line)
-                ld    (sb_y),a
-                ld    a,CUR_W
-                ld    (sb_w),a
+                sub   200-CUR_H                ; rows that fall off the bottom edge
+                jr    nc,cd_yclip
+                xor   a
+cd_yclip
+                ld    b,a                       ; cur_drows = CUR_H - (clipped rows)
                 ld    a,CUR_H
-                ld    (sb_h),a
-                ld    hl,cur_bg
-                ld    (sb_buf),hl
+                sub   b
+                ld    (cur_drows),a
+
+                call  cur_setsb              ; save the on-screen (clipped) background block
                 call  save_block
 
                 ld    a,(cur_sub)            ; pick the pre-shifted data/mask
@@ -130,21 +140,13 @@ cd_yb
                 ld    h,(hl)
                 ld    l,a
                 ld    (cur_dptr),hl
-                ld    a,(cur_sub)
-                add   a,a
-                ld    e,a
-                ld    d,0
-                ld    hl,cursor_arrow_mask
-                add   hl,de
-                ld    a,(hl)
-                inc   hl
-                ld    h,(hl)
-                ld    l,a
+                ld    de,#40                 ; mask buffer is always data+#40 (cursor_arrow.asm
+                add   hl,de                   ; layout: d0@+0,m0@+#40 / d2@+#80,m2@+#C0)
                 ld    (cur_mptr),hl
                 ld    hl,cur_bg
                 ld    (cur_bgp),hl
 
-                ld    a,CUR_H                 ; composite into screen
+                ld    a,(cur_drows)           ; composite into screen (clipped rows)
                 ld    (cc_rows),a
                 ld    a,(cur_line)
                 ld    (cc_y),a
@@ -154,7 +156,7 @@ cc_row
                 ld    a,(cc_y)
                 ld    e,a
                 call  scr_addr               ; HL = screen row addr
-                ld    a,CUR_W
+                ld    a,(cur_dcols)           ; clipped cols
                 ld    (cc_cols),a
 cc_col
                 push  hl
@@ -177,6 +179,15 @@ cc_col
                 dec   a
                 ld    (cc_cols),a
                 jr    nz,cc_col
+                ld    a,(cur_skip)            ; advance data/mask past the clipped (off-screen)
+                ld    c,a                      ; sprite cols to the next row (0 when not clipped;
+                ld    b,0                      ; cur_bgp is cur_dcols-wide, already aligned)
+                ld    hl,(cur_dptr)
+                add   hl,bc
+                ld    (cur_dptr),hl
+                ld    hl,(cur_mptr)
+                add   hl,bc
+                ld    (cur_mptr),hl
                 ld    a,(cc_y)
                 inc   a
                 ld    (cc_y),a
@@ -202,4 +213,7 @@ cur_bgp         dw    0
 cc_rows         db    0
 cc_y            db    0
 cc_cols         db    0
+cur_dcols       db    cursor_arrow_w           ; on-screen sprite cols (clipped at right edge)
+cur_drows       db    cursor_arrow_h           ; on-screen sprite rows (clipped at bottom edge)
+cur_skip        db    0                        ; CUR_W - cur_dcols (sprite cols to skip per row)
 cur_bg          defs  cursor_arrow_w*cursor_arrow_h
