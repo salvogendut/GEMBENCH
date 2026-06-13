@@ -128,7 +128,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012
                 jp    gb_fs_dir_next         ; GB_DIRN   #8015
                 jp    k_vsync                ; GB_BLITE  #8018 (removed: mapping->FM, #103)
-                jp    k_curshow              ; GB_CURSHOW #801B
+                jp    cursor_show            ; GB_CURSHOW #801B (was jp k_curshow; #148)
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
                 jp    cursor_erase           ; GB_CURHIDE #8024
@@ -148,9 +148,9 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_menu                 ; GB_MENU        #804E
                 jp    k_setname              ; GB_SETNAME     #8051
                 jp    k_onrepaint            ; GB_ONREPAINT   #8054
-                jp    k_restore_parent       ; GB_RESTPAR     #8057
+                jp    wm_repaint_all         ; GB_RESTPAR     #8057 (was jp k_restore_parent; #148)
                 jp    k_wm_run               ; GB_WMRUN       #805A
-                jp    k_wm_add               ; GB_WMADD       #805D
+                jp    wm_register            ; GB_WMADD       #805D (was jp k_wm_add; #148)
                 jp    k_wm_open              ; GB_WMOPEN      #8060
                 jp    k_wm_close             ; GB_WMCLOSE     #8063
                 jp    k_wm_setpos            ; GB_WMSETPOS    #8066
@@ -340,9 +340,8 @@ set_palette
                 jp    SCR_SET_BORDER
 
 ; --- input + cursor services ---------------------------------------------
-; k_curshow: draw the pointer (the app calls this once after drawing its UI).
-k_curshow
-                jp    cursor_show
+; GB_CURSHOW draws the pointer (apps call it once after drawing their UI); the jump
+; table goes straight to cursor_show now (#148, reclaimed the k_curshow wrapper).
 
 ; k_poll: frame-paced input poll. Moves the cursor by the held directions and
 ; redraws it; returns B = cursor byte col, C = cursor line, D flags: bit0 = a
@@ -1456,10 +1455,8 @@ k_onrepaint
 ; window manager (issue #45) the live windows below a modal app are exactly the WM
 ; windows, so this repaints them all bottom-up (wm_repaint_all) - e.g. a modal
 ; Notepad dragging its window restores the desktop + file manager underneath, then
-; redraws itself on top. (Replaces the old per-depth REPAINT_HDLR walk, which the
-; co-resident model made obsolete.)
-k_restore_parent
-                jp    wm_repaint_all
+; redraws itself on top. The jump table goes straight to wm_repaint_all now (#148,
+; reclaimed the k_restore_parent wrapper).
 
 ; ---- cooperative window manager (issue #45, phase 2) --------------------------
 ; The kernel owns the master loop (wm_loop) and a table of co-resident windows.
@@ -1717,10 +1714,8 @@ k_on_bar
                 ld    (BAR_HANDLER),hl
                 ret
 
-; k_wm_add (GB_WMADD): register the caller's window (used by an app opened with
-; GB_WMOPEN); returns to the opener. The kernel's wm_loop then services it.
-k_wm_add
-                jp    wm_register
+; GB_WMADD registers the caller's window (legacy gb_wm_add); the jump table goes
+; straight to wm_register now (#148, reclaimed the k_wm_add wrapper).
 
 ; k_wm_open (GB_WMOPEN): HL = 8.3 app name in the caller page. Load it into a free
 ; bank page and CALL its entry once (its main registers a window via GB_WMADD and
@@ -2206,7 +2201,10 @@ wr_skip         inc   hl
 wm_repaint_all
                 ld    a,(bank_cur)
                 ld    (wm_rp_back),a
-                di
+                ld    a,(cur_supp)              ; #148: hide the pointer before the repaint so it
+                or    a                           ; can't pollute its save-under (else a later move
+                call  z,cursor_erase             ; restores stale content = a pointer-sized hole).
+                di                                ; Skip during a DnD ghost (cur_supp owns the screen)
                 xor   a
                 ld    (wm_rp_i),a
 wra_l           ld    a,(wm_rp_i)
@@ -2247,6 +2245,9 @@ wra_done        ld    a,(wm_rp_back)
                 call  bank_set
                 call  clip_set_full              ; repaints are clip-limited; restore the
                 ei                                ; full-screen clip for normal drawing
+                ld    a,(cur_supp)              ; #148: redraw the pointer + re-save a FRESH
+                or    a                           ; save-under over the just-repainted content
+                call  z,cursor_draw               ; (unless a DnD ghost owns the screen)
                 ret
 
 ; clip_set_full: reset the fill clip to the whole screen (no clipping).
