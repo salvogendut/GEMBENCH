@@ -2246,10 +2246,12 @@ wra_done        ld    a,(wm_rp_back)
                 call  bank_set
                 call  clip_set_full              ; repaints are clip-limited; restore the
                 ei                                ; full-screen clip for normal drawing
-                ld    a,(cur_supp)              ; #148: redraw the pointer + re-save a FRESH
-                or    a                           ; save-under over the just-repainted content
-                call  z,cursor_draw               ; (unless a DnD ghost owns the screen)
-                ret
+                ld    a,(cur_supp)              ; #148: ensure the pointer is up with a FRESH
+                or    a                           ; save-under over the just-repainted content.
+                call  z,cursor_show               ; GUARDED (#153): a handler that ends in gb_curshow
+                ret                                ; (e.g. the desktop paint) already drew it - don't
+                                                  ; redraw, or we'd save cur_bg OVER the cursor's own
+                                                  ; pixels and stamp a ghost on the next move.
 
 ; clip_set_full: reset the fill clip to the whole screen (no clipping).
 clip_set_full
