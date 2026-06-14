@@ -46,6 +46,8 @@ static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };      /* drives set
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
 static unsigned char drag_armed, arm_mx, arm_my;   /* pressed on an icon, not yet lifted (#153) */
+static unsigned char sel_idx = NONE;               /* selected icon (red frame), NONE = none (#153) */
+static unsigned char desk_active;                  /* set by on_frame -> the desktop is focused (#153) */
 static unsigned char dc_timer, dc_idx, held_prev;
 static unsigned char show_ram;               /* System menu footprint toggle (#74) */
 static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
@@ -82,11 +84,29 @@ static void paint(void)
     gb_fill(0, 8, 80, 192, 0);                 /* backdrop, below the top bar */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
+    if (sel_idx != NONE && ic_present[sel_idx])    /* red selection frame (#153) */
+        gb_frame(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H, 3);
     /* #153: do NOT show the cursor here. As the WM's bottom on_repaint, paint()
        runs FIRST in wm_repaint_all - any window drawn on top would overwrite the
        pointer while its save-under still held the backdrop, so a later move left a
        blue hole. The repaint bracket now draws the pointer once, LAST. Standalone
        callers (System menu, boot) gb_curshow themselves. */
+}
+
+/* select_icon: move the red selection frame to icon (NONE clears it), erasing the
+   previous one in place so we never leave a stray frame behind (#153). */
+static void select_icon(unsigned char icon)
+{
+    if (sel_idx == icon) return;
+    gb_curhide();
+    if (sel_idx != NONE && ic_present[sel_idx]) {
+        gb_frame(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H, 0);   /* erase old frame */
+        draw_icon(sel_idx);                                       /* restore the glyph edge */
+    }
+    if (icon != NONE)
+        gb_frame(ic_x[icon], ic_y[icon], IC_W, IC_H, 3);
+    gb_curshow();
+    sel_idx = icon;
 }
 
 /* The top bar is now drawn here, not in the kernel (experiment #77). The WM runs
@@ -146,6 +166,16 @@ static void bar_draw(void)
     if (msig != bar_msig) { bar_msig = msig; bar_menu(); }
     gb_time();                                 /* clock: redraw when the minute changes */
     if (bin(gb_min) != bar_min) { bar_min = bin(gb_min); bar_clock(); }
+    /* The desktop loses focus when a window is clicked, and its on_frame stops
+       running - but this bar hook runs every frame in the desktop's page regardless
+       of focus. on_frame (above) sets desk_active when the desktop is focused; if it
+       did NOT run this frame, a window has focus, so clear a left-over selection
+       (reset the clip first so the erase isn't clipped to some window's rect, #153). */
+    if (!desk_active && sel_idx != NONE) {
+        gb_wm_damage(0, 0, 80, 200);
+        select_icon(NONE);
+    }
+    desk_active = 0;                            /* consume the flag; on_frame re-sets it if focused */
 }
 
 static unsigned char hit_icon(unsigned char mx, unsigned char my)
@@ -249,6 +279,9 @@ static void sys_action(unsigned char sel)
                                                   persists - nothing else touches the bar) */
         show_ram ^= 1;
         gb_curhide();
+        gb_wm_damage(0, 0, 80, 200);           /* the footprint lives in the bar, outside the
+                                                  System dropdown's damage clip - widen first
+                                                  or the draw is clipped away (#153) */
         if (show_ram) draw_footprint();
         else gb_fill(FP_COL, 0, 13, 8, 1);
         gb_curshow();
@@ -300,6 +333,7 @@ static void on_frame(void)
 {
     unsigned char flags = gb_flags(), mx = gb_mx(), my = gb_my(), held, icon;
 
+    desk_active = 1;                              /* the desktop is focused this frame (#153) */
     if (!menu_inited) {                          /* 1st frame: the window is now registered+focused */
         menu_inited = 1;
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
@@ -343,20 +377,22 @@ static void on_frame(void)
 
     if (!(flags & GB_CLICK)) return;       /* a fresh press? */
     icon = hit_icon(mx, my);
-    if (icon == NONE) return;
+    if (icon == NONE) { select_icon(NONE); return; }   /* click empty space -> deselect (#153) */
 
     if (dc_timer && dc_idx == icon) {      /* second click -> open */
         unsigned char opens = ic_drive[icon] || icon == IDX_CLOCK;
         if (opens && gb_wm_full())                           /* no free bank -> say so (#153) */
             gb_alert("Sorry, not enough RAM", "to run more apps.");
         else if (ic_drive[icon]) {                           /* browse that drive (#65): */
+            select_icon(NONE);                               /* opening clears the selection (#153) */
             gb_set_drive(icon);                              /* icon idx 0/1/2 = C/A/B   */
             gb_wm_open("FILEMGR APP");
         }
-        else if (icon == IDX_CLOCK) gb_wm_open("CLOCK   APP"); /* analog clock window (#72) */
+        else if (icon == IDX_CLOCK) { select_icon(NONE); gb_wm_open("CLOCK   APP"); } /* clock (#72) */
         dc_timer = 0;
         held_prev = 0;
-    } else {                               /* first click: arm; the lift waits for movement (#153) */
+    } else {                               /* first click: select + arm; the lift waits for movement (#153) */
+        select_icon(icon);
         dc_idx = icon;
         dc_timer = DCLICK;
         drag_armed = 1;
