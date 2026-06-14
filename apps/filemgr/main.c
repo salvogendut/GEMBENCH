@@ -411,6 +411,7 @@ static void draw_list_view(void)
         p = (unsigned char)(top + i);
         if (p >= disp_total()) break;
         y = CT_Y + i * ROW_H;
+        gb_frame(CT_X, y, CT_W, 17, 0);            /* erase any stale selection frame first (#153) */
         if (up && p == 0) {                        /* the ".." parent-dir entry (#142) */
             gb_icon(ICON_UP, CT_X, y + 1);         /* 16px icon - fits the row at full height */
             gb_text(CT_X + 9, y + 6, "..");
@@ -434,6 +435,7 @@ static void draw_icons_view(void)
             if (idx >= dt) return;
             cx = CT_X + c * CELL_W;
             cy = CT_Y + r * CELL_H;
+            gb_frame(cx, cy, CELL_W, CELL_H - 1, 0);             /* erase any stale frame first (#153) */
             if (up && idx == 0) {                                /* the ".." entry (#142) */
                 gb_icon(ICON_UP, (unsigned char)(cx + (CELL_W - 4) / 2),  /* 16px, centered */
                         (unsigned char)(cy + 9));                        /* in the 32px band */
