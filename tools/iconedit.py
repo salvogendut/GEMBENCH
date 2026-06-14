@@ -157,6 +157,7 @@ class IconEditor(tk.Tk):
         self.mode = None        # "IST" or "SPR"
         self.index = 0
         self.scale = 24
+        self.preview_scale = PREVIEW_SCALE
         self.tool = tk.StringVar(value="pen")
         self.pen = tk.IntVar(value=2)
         self.fill = tk.BooleanVar(value=False)
@@ -256,6 +257,14 @@ class IconEditor(tk.Tk):
         ttk.Button(zoom, text="+", width=2,
                    command=lambda: self._set_scale(self.scale + 4)).pack(side="left")
 
+        ttk.Label(right, text="Preview size").pack(anchor="w", pady=(6, 0))
+        pvz = ttk.Frame(right)
+        pvz.pack(anchor="w")
+        ttk.Button(pvz, text="-", width=2,
+                   command=lambda: self._set_preview_scale(self.preview_scale - 1)).pack(side="left")
+        ttk.Button(pvz, text="+", width=2,
+                   command=lambda: self._set_preview_scale(self.preview_scale + 1)).pack(side="left")
+
         ttk.Separator(right, orient="horizontal").pack(fill="x", pady=4)
         self.status = ttk.Label(right, text="", foreground="#666", wraplength=120)
         self.status.pack(anchor="w")
@@ -277,6 +286,10 @@ class IconEditor(tk.Tk):
 
     def _set_scale(self, s):
         self.scale = max(4, min(48, s))
+        self._redraw()
+
+    def _set_preview_scale(self, s):
+        self.preview_scale = max(1, min(10, s))
         self._redraw()
 
     # -- file ops ------------------------------------------------------------
@@ -641,7 +654,7 @@ class IconEditor(tk.Tk):
         """(px0, py0, ps): top-left of the preview box + per-pixel scale."""
         cw = self.canvas.winfo_width()
         ch = self.canvas.winfo_height()
-        ps = PREVIEW_SCALE
+        ps = self.preview_scale
         bw = ic["w"] * 4 * ps
         bh = ic["h"] * ps
         px0 = max(PREVIEW_MARGIN, cw - PREVIEW_MARGIN - bw)
@@ -674,7 +687,8 @@ class IconEditor(tk.Tk):
                                      px0 + bw + pad, py0 + bh + pad,
                                      fill="#161616", outline="#888", width=1,
                                      tags="preview")
-        self.canvas.create_text(px0 - pad, py0 - pad - 1, text="preview",
+        self.canvas.create_text(px0 - pad, py0 - pad - 1,
+                                text=f"preview {self.preview_scale}x",
                                 anchor="sw", fill="#aaa",
                                 font=("TkDefaultFont", 7), tags="preview")
         for y in range(ph):
