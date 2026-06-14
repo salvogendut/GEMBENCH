@@ -346,7 +346,10 @@ static void on_frame(void)
     if (icon == NONE) return;
 
     if (dc_timer && dc_idx == icon) {      /* second click -> open */
-        if (ic_drive[icon]) {                                /* browse that drive (#65): */
+        unsigned char opens = ic_drive[icon] || icon == IDX_CLOCK;
+        if (opens && gb_wm_full())                           /* no free bank -> say so (#153) */
+            gb_alert("Sorry, not enough RAM", "to run more apps.");
+        else if (ic_drive[icon]) {                           /* browse that drive (#65): */
             gb_set_drive(icon);                              /* icon idx 0/1/2 = C/A/B   */
             gb_wm_open("FILEMGR APP");
         }

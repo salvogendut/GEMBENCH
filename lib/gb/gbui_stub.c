@@ -38,6 +38,15 @@ unsigned char gb_popup(unsigned char col, unsigned char line,
     return gb_ui();
 }
 
+/* gb_alert: a click-to-dismiss notice. Reuses gb_popup (already paged in the module)
+   as the box - the two lines ARE the "rows"; any click closes it and the return value
+   is ignored. Centered horizontally for the typical width (#153). */
+void gb_alert(const char *l1, const char *l2)
+{
+    const char *const m[2] = { l1, l2 };
+    gb_popup(23, 84, m, 2);
+}
+
 unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen)
 {
     char *p = UI_TEXT;

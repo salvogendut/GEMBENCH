@@ -225,6 +225,8 @@ void gb_on_repaint(void (*handler)(void));   /* register full-repaint handler */
 void gb_restore_parent(void);                /* repaint ancestor apps behind us */
 void gb_wm_damage(unsigned char x, unsigned char y,
                   unsigned char w, unsigned char h);  /* limit the next repaint to a rect (#153) */
+unsigned char gb_wm_full(void);              /* 1 = no free app bank for another window (#153) */
+void gb_alert(const char *l1, const char *l2);  /* modal message box, click to dismiss (#153) */
 
 /* Cooperative window manager (issue #45). Instead of owning a for(;;) loop, an
  * app fills a gb_win_t and registers a window: the KERNEL runs the master loop,

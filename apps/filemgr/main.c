@@ -512,6 +512,10 @@ static void open_entry(unsigned char idx)
     char *e;
     dir_seek(order[idx]);          /* sorted display index -> raw entry (sets attr/cluster) */
     if (gb_isdir()) { path_push(fullname()); gb_chdir(); relist(); return; }
+    if (gb_wm_full()) {            /* every app bank is taken - say so, don't dead-click (#153) */
+        gb_alert("Sorry, not enough RAM", "to run more apps.");
+        return;
+    }
     nsel = 0;
     e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
     if (ext_is(e, 'A', 'P', 'P'))

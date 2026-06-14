@@ -44,6 +44,7 @@
         .globl  _gb_on_repaint
         .globl  _gb_restore_parent
         .globl  _gb_wm_damage
+        .globl  _gb_wm_full
         .globl  _gb_flags
         .globl  _gb_wm_run
         .globl  _gb_wm_add
@@ -361,6 +362,17 @@ _gb_wm_damage:
         call    0x80B4          ; GB_WMDAMAGE
         ld      hl, (sv_ret)
         jp      (hl)
+; gb_wm_full(): 1 if the app-bank pool is full (no room for another window), else 0.
+; A window == one busy bank, so full <=> WM_NWIN >= APP_NPAGES. Reads kernel low RAM
+; directly (no kernel call), like gb_mx (#153).
+_gb_wm_full:
+        ld      a, (0x1437)     ; APP_NPAGES (total app banks)
+        ld      b, a
+        ld      a, (0x1350)     ; WM_NWIN (live windows = busy banks)
+        cp      b               ; CF=1 if WM_NWIN < APP_NPAGES (room)
+        sbc     a, a            ; 0xFF if room, 0x00 if full
+        inc     a               ; 0 = room, 1 = full
+        ret
 
 ;; void gb_wm_run(const gb_win_t *desc);   desc in HL -> register the root window
 ;; and enter the kernel master loop (issue #45). Does not return.
