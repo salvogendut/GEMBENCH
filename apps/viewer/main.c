@@ -155,7 +155,8 @@ static void v_fullscreen(unsigned char on)
     if (on) { px = gb_wm_x(); py = gb_wm_y(); pw = gb_wm_w(); ph = gb_wm_h();
               gb_wm_setpos(0, 8); gb_wm_setsize(80, 192); }
     else    { gb_wm_setpos(px, py); gb_wm_setsize(pw, ph); }
-    gb_restore_parent();
+    gb_wm_damage(0, 8, 80, 192);   /* repaint ONCE in the frame handler, clipped to the toggle
+                                      area; repainting here too double-paints (the flicker, #153) */
 }
 
 /* on_open (File>Load): adopt the name, parse a picture, re-arm the resize. */

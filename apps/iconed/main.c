@@ -358,7 +358,8 @@ static void ie_fullscreen(unsigned char on)
 {
     if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(80, 192); }
     else    { gb_wm_setpos(DEF_X, DEF_Y); gb_wm_setsize(WIN_W, WIN_H); }
-    gb_restore_parent();          /* WM repaints frame + ie_draw at the new size */
+    gb_wm_damage(0, 8, 80, 192);  /* repaint ONCE in on_frame, clipped to the toggle area;
+                                     repainting here too double-paints (the flicker, #153) */
 }
 
 static const gb_doc_t iedoc = {

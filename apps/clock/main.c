@@ -290,7 +290,8 @@ static void clk_fullscreen(unsigned char on)
         gb_wm_setpos(fs_px, fs_py); gb_wm_setsize(fs_pw, fs_ph);
     }
     have_prev = 0;                               /* face rescaled: no stale hands */
-    gb_restore_parent();
+    gb_wm_damage(0, 8, 80, 192);                 /* repaint ONCE in on_frame, clipped to the toggle
+                                                    area; repainting here too flickers (#153) */
 }
 
 /* opt_action: the Options menu (gb_menu_add) - Set time / toggle the seconds hand. The
