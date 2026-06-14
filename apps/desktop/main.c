@@ -23,6 +23,7 @@
 #define YMAX    (200 - BOX_H)
 #define DCLICK  40
 #define NONE    0xFF
+#define DRAGTH  2             /* press must move this far before it lifts (#153) */
 
 /* The desktop icons: drives (C = IDE, A/B = floppies) + Clock + Trash (#65). The
    drive icons appear only when that drive is present (gb_drives poll); Clock and
@@ -44,6 +45,7 @@ static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0 };  /* opens the 
 static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };      /* drives set by poll */
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
+static unsigned char drag_armed, arm_mx, arm_my;   /* pressed on an icon, not yet lifted (#153) */
 static unsigned char dc_timer, dc_idx, held_prev;
 static unsigned char show_ram;               /* System menu footprint toggle (#74) */
 static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
@@ -307,11 +309,21 @@ static void on_frame(void)
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
        Exit to DOS to leave); ESC only closes apps launched on top of it */
 
-    if (gb_doc_frame()) { gb_curhide(); paint(); gb_curshow(); return; }   /* a System menu item ran (#142) */
+    if (gb_doc_frame()) {                  /* a System menu opened/ran (#142) */
+        gb_curhide();
+        gb_wm_damage(0, 0, 80, 200);       /* gb_popup left a narrow damage clip; the desktop
+                                              repaints fully here and paint() doesn't reset the
+                                              clip, so widen it back or the next op stays clipped
+                                              (#153: a dragged icon vanished on drop). */
+        paint();
+        gb_curshow();
+        return;
+    }
 
     held = flags & GB_FIRE;
-    if (held_prev && !held && drag_active) {   /* fire released -> drop */
-        drop();
+    if (held_prev && !held) {              /* fire released */
+        if (drag_active) drop();           /* was dragging -> drop at the new spot */
+        drag_armed = 0;                    /* armed but never moved -> just a click, icon untouched */
         held_prev = 0;
         return;
     }
@@ -319,6 +331,13 @@ static void on_frame(void)
 
     if (drag_active) {                     /* follow the pointer */
         dragmove(mx, my);
+        return;
+    }
+
+    if (drag_armed) {                      /* pressed on an icon: lift only once it really moves (#153) */
+        unsigned char dx = (mx > arm_mx) ? (unsigned char)(mx - arm_mx) : (unsigned char)(arm_mx - mx);
+        unsigned char dy = (my > arm_my) ? (unsigned char)(my - arm_my) : (unsigned char)(arm_my - my);
+        if (dx >= DRAGTH || dy >= DRAGTH) { drag_armed = 0; dragstart(dc_idx, mx, my); }
         return;
     }
 
@@ -334,10 +353,12 @@ static void on_frame(void)
         else if (icon == IDX_CLOCK) gb_wm_open("CLOCK   APP"); /* analog clock window (#72) */
         dc_timer = 0;
         held_prev = 0;
-    } else {                               /* first click: arm + start drag */
+    } else {                               /* first click: arm; the lift waits for movement (#153) */
         dc_idx = icon;
         dc_timer = DCLICK;
-        dragstart(icon, mx, my);
+        drag_armed = 1;
+        arm_mx = mx;
+        arm_my = my;
     }
 }
 
