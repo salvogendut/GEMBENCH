@@ -310,6 +310,12 @@ cfl_done
 ; Both status waits are bounded (DE down to 0) so a drive left mid-operation by
 ; UniDOS/FatFS fails out instead of hanging forever.
 fs_read_sector
+                ifdef GB_ROM                  ; #152: this build's IDE driver lives in GEOBENCH.ROM
+                ld    a,(gb_rom_num)          ; 0xFF = ROM not found -> fail (no in-RAM copy here)
+                inc   a
+                ret   z
+                jp    gb_rom_call             ; reads lba_tmp -> fs_secbuf from the ROM copy
+                else
                 ld    de,0                     ; wait BSY=0 before commanding
 frs_bsy
                 ld    bc,FS_IDE_STAT
@@ -369,6 +375,7 @@ frs_read
                 or    e
                 jr    nz,frs_read
                 ret
+                endif                          ; GB_ROM (in-RAM driver only in non-ROM builds, #152)
 
 ; fs_detect_part: fs_secbuf holds LBA 0. Set fs_part_lba (32-bit) to the first
 ; MBR partition's start LBA, or 0 for a superfloppy (FAT BPB directly at LBA 0).

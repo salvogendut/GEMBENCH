@@ -27,6 +27,14 @@ STORAGE_ALBIREO equ   0
                 ifndef SPIKE                  ; #130: -DSPIKE=1 builds a minimal storage spike -
 SPIKE           equ   0                       ; load DESKTOP.APP right after fs_init, report, hang
                 endif
+                ifndef GB_ROM_REQ             ; #152: -DGB_ROM_REQ=1 routes IDE fs_read_sector
+GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present (IDE variant only;
+                endif                          ; the Albireo build has no IDE backend)
+                if GB_ROM_REQ
+                if STORAGE_ALBIREO == 0
+GB_ROM          equ   1
+                endif
+                endif
 
 ; Config transfer area - resident low RAM (stays main RAM under banking, so the
 ; paged-in GBCFG module can reach it). The kernel fills text/len, runs the
@@ -205,6 +213,9 @@ kernel_main
                                               ; gb_getkey (the keyboard is the joystick)
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
+                ifdef GB_ROM                  ; #152: detect GEOBENCH.ROM before the first read
+                call  gb_rom_probe
+                endif
                 ld    a,(fs_boot_drive)      ; #134: on the card (drive 0), point the system dir
                 or    a                       ; at /GEOBENCH if present (else flat root); skip on
                 call  z,fs_sys_resolve       ; a floppy boot drive (no subdirectories)
