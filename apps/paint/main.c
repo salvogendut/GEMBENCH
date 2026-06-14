@@ -507,9 +507,23 @@ static void p_close(void)
     else gb_restore_parent();
 }
 
+/* the window's single handler (#148). */
+static void p_proc(void)
+{
+    switch (gb_msg.type) {
+        case GB_MSG_DRAW:  p_draw();  break;
+        case GB_MSG_CLICK: p_click(); break;
+        case GB_MSG_FRAME: p_frame(); break;
+        case GB_MSG_CLOSE: p_close(); break;
+        case GB_MSG_DRAG:  p_drag();  break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  on_menu(); break;
+    }
+}
+
 static const gb_mwin_t pmw = {
     DEF_X, DEF_Y, WIN_W, WIN_H, 0, 0,                  /* min_w=0: not grip-resizable */
-    p_draw, p_click, p_frame, p_close, on_menu, wtitle, p_drag
+    p_proc, wtitle
 };
 
 void main(void)

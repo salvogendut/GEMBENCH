@@ -54,6 +54,11 @@ APP_HANDLER     equ   #1300        ; word: registered app event handler (0 = non
 GB_MSG          equ   #1302        ; message record: type, p0, p1, p2 (4 bytes)
 GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte column
 GB_MSG_DROP     equ   2            ; message type: a file was dropped on this window
+GB_MSG_DRAW     equ   3            ; managed-window messages (#148): dispatched to the
+GB_MSG_CLICK    equ   4            ; single gb_mwin_t.proc, keyed by gb_msg.type. The
+GB_MSG_FRAME    equ   5            ; proc switches on it (one WndProc per window).
+GB_MSG_CLOSE    equ   6
+GB_MSG_DRAG     equ   7
                                    ; (DnD, #62); name at WM_DRAGNAME, pos at POLL_MX/MY
 POLL_MX         equ   #1306        ; last poll: cursor byte column (mx)
 POLL_MY         equ   #1307        ; last poll: cursor line (my)
@@ -1560,11 +1565,11 @@ k_wm_managed
                 add   hl,de                  ; reach the app's menu handler via the normal path)
                 push  hl                     ; HL = entry+9
                 ld    hl,(wm_desc)
-                ld    de,14
-                add   hl,de
-                ld    e,(hl)
+                ld    de,6                   ; WM_FR_EVENT = desc.proc (#148): menu/drop come
+                add   hl,de                  ; through here too, so every message reaches the
+                ld    e,(hl)                 ; one WndProc (keyed by gb_msg.type)
                 inc   hl
-                ld    d,(hl)                 ; DE = on_event ptr
+                ld    d,(hl)                 ; DE = proc ptr
                 pop   hl                     ; HL = entry+9
                 ld    (hl),e
                 inc   hl
@@ -1592,27 +1597,27 @@ mw_publish
                 pop   hl
                 ret
 
-; mw_hook: A = byte offset of a void(void) hook in the descriptor. Call it (if non-0).
-; Clobbers HL,DE,A. md_call rets here.
+; mw_hook: A = a GB_MSG_* window message. Set gb_msg.type, then dispatch to the
+; window's single proc (desc+6). The proc switches on the type. Clobbers HL,DE,A.
 mw_hook
+                ld    (GB_MSG),a              ; gb_msg.type = the message being delivered
                 ld    hl,(mw_desc)
-                ld    e,a
-                ld    d,0
-                add   hl,de                  ; HL = desc + offset
+                ld    de,6
+                add   hl,de                  ; HL = &desc.proc
                 ld    a,(hl)
                 inc   hl
                 ld    h,(hl)
-                ld    l,a                     ; HL = hook ptr
+                ld    l,a                     ; HL = proc ptr
                 ld    a,h
                 or    l
-                ret   z                       ; null -> skip
-                jp    md_call                 ; jp (hl); the hook rets to mw_hook's caller
+                ret   z                       ; no proc -> skip (shouldn't happen)
+                jp    md_call                 ; jp (hl); the proc rets to mw_hook's caller
 
 ; wm_chrome_draw: HL = entry. Draw frame+title (gb_open_window) then the content (on_draw).
 wm_chrome_draw
                 call  mw_publish
-                ld    hl,(mw_desc)           ; title = *(desc+16)
-                ld    de,16
+                ld    hl,(mw_desc)           ; title = *(desc+8)
+                ld    de,8
                 add   hl,de
                 ld    e,(hl)
                 inc   hl
@@ -1627,14 +1632,14 @@ wm_chrome_draw
                 ld    a,(MW_RECT+3)
                 ld    e,a                     ; h
                 call  gb_open_window         ; frame + title
-                ld    a,6                     ; on_draw -> content
+                ld    a,GB_MSG_DRAW          ; -> the proc draws the content
                 jp    mw_hook
 
 ; wm_chrome_frame: HL = entry. The per-frame router: idle hook, then QUIT/close,
 ; close-gadget, content click. (Title drag + grip resize land in slice 2.)
 wm_chrome_frame
                 call  mw_publish
-                ld    a,10                   ; on_frame (idle/menus)
+                ld    a,GB_MSG_FRAME         ; per-frame (idle/menus/tick)
                 call  mw_hook
                 ld    a,(POLL_FLAGS)
                 bit   1,a                     ; GB_QUIT
@@ -1660,26 +1665,18 @@ wm_chrome_frame
                 jr    z,mwf_title
                 jr    mw_do_close             ; mx < win_x+5 -> close gadget
 mwf_title
-                ld    a,18                   ; title-bar press -> on_drag (#146 slice 2)
+                ld    a,GB_MSG_DRAG          ; title-bar press -> drag the window
                 jp    mw_hook
 mwf_content
-                ld    a,8                     ; content (incl. grip) -> on_click
+                ld    a,GB_MSG_CLICK         ; content (incl. grip) -> a content press
                 jp    mw_hook
 
-; mw_do_close: a close was requested - run the app's on_close (it confirms + closes),
-; or just close if it has none.
+; mw_do_close: a close was requested - deliver GB_MSG_CLOSE to the window's proc
+; (it confirms + calls gb_wm_close). Every managed window has a proc, so there is
+; no "no handler" path; mw_hook's null guard falls through to no-op if it's ever 0.
 mw_do_close
-                ld    hl,(mw_desc)
-                ld    de,12                  ; on_close
-                add   hl,de
-                ld    a,(hl)
-                inc   hl
-                ld    h,(hl)
-                ld    l,a
-                ld    a,h
-                or    l
-                jp    z,k_wm_close            ; no on_close -> close directly
-                jp    md_call                 ; on_close (confirms + gb_wm_close)
+                ld    a,GB_MSG_CLOSE
+                jp    mw_hook
 
 mw_desc         dw    0                       ; scratch: the focused managed window's descriptor
 

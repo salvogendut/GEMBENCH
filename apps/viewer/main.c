@@ -168,9 +168,22 @@ static void v_open(unsigned int len)
     opened = 0;                       /* the next frame sizes to the new picture */
 }
 
+/* the window's single handler (#148): the kernel calls it for every message. */
+static void v_proc(void)
+{
+    switch (gb_msg.type) {
+        case GB_MSG_DRAW:  v_draw();  break;
+        case GB_MSG_CLICK: v_click(); break;
+        case GB_MSG_FRAME: v_frame(); break;
+        case GB_MSG_CLOSE: v_close(); break;
+        case GB_MSG_DRAG:  v_drag();  break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  v_event(); break;
+    }
+}
+
 static const gb_mwin_t vmw = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H,
-    v_draw, v_click, v_frame, v_close, v_event, vtitle, v_drag
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, v_proc, vtitle
 };
 /* read-only doc: File offers only Load; View offers Fullscreen (exts NULL = show all). */
 static const gb_doc_t vdoc = {

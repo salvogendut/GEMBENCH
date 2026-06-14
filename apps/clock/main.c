@@ -342,9 +342,22 @@ static void c_drag(void)
     }
 }
 
+/* the window's single handler (#148). */
+static void c_proc(void)
+{
+    switch (gb_msg.type) {
+        case GB_MSG_DRAW:  c_draw();      break;
+        case GB_MSG_CLICK: c_click();     break;
+        case GB_MSG_FRAME: c_frame();     break;
+        case GB_MSG_CLOSE: gb_wm_close(); break;   /* no confirm: just close */
+        case GB_MSG_DRAG:  c_drag();      break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  clk_event();   break;
+    }
+}
+
 static const gb_mwin_t cmw = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H,
-    c_draw, c_click, c_frame, 0 /* on_close: always */, clk_event, "Clock", c_drag
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, c_proc, "Clock"
 };
 
 void main(void)

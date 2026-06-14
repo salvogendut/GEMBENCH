@@ -713,9 +713,22 @@ static void fm_click(void)
    content (fm_draw), clicks (fm_click/fm_drag), the per-frame loop (fm_frame), close
    (fm_close), and on_event (file-drop + the View menu). title is set in main once the
    path is known; relist() refreshes it. The descriptor is mutable so we can cascade x/y. */
+/* the window's single handler (#148). */
+static void fm_proc(void)
+{
+    switch (gb_msg.type) {
+        case GB_MSG_DRAW:  fm_draw();  break;
+        case GB_MSG_CLICK: fm_click(); break;
+        case GB_MSG_FRAME: fm_frame(); break;
+        case GB_MSG_CLOSE: fm_close(); break;
+        case GB_MSG_DRAG:  fm_drag();  break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  on_event(); break;
+    }
+}
+
 static gb_mwin_t fmmw = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H,
-    fm_draw, fm_click, fm_frame, fm_close, on_event, 0, fm_drag
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0
 };
 
 void main(void)
