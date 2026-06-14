@@ -562,7 +562,12 @@ static void fm_view(unsigned char item)
         cfg_save_view();
         top = 0; nsel = 0;
         clamp_top();
-        draw();
+        gb_curhide();
+        gb_fill(CT_X, CT_Y, CT_W, CT_H, 0);   /* clear the old layout: icons<->list use a
+                                                 different grid, so the new one must paint on
+                                                 a blank content rect, not over the old (#153) */
+        draw_body();
+        gb_curshow();
     }
 }
 
