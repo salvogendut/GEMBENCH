@@ -54,6 +54,11 @@ APP_HANDLER     equ   #1300        ; word: registered app event handler (0 = non
 GB_MSG          equ   #1302        ; message record: type, p0, p1, p2 (4 bytes)
 GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte column
 GB_MSG_DROP     equ   2            ; message type: a file was dropped on this window
+GB_MSG_DRAW     equ   3            ; managed-window messages (#148): dispatched to the
+GB_MSG_CLICK    equ   4            ; single gb_mwin_t.proc, keyed by gb_msg.type. The
+GB_MSG_FRAME    equ   5            ; proc switches on it (one WndProc per window).
+GB_MSG_CLOSE    equ   6
+GB_MSG_DRAG     equ   7
                                    ; (DnD, #62); name at WM_DRAGNAME, pos at POLL_MX/MY
 POLL_MX         equ   #1306        ; last poll: cursor byte column (mx)
 POLL_MY         equ   #1307        ; last poll: cursor line (my)
@@ -87,11 +92,28 @@ WM_DRAGDIR      equ   #1433        ; source directory cluster (4 bytes), capture
 APP_NPAGES      equ   #1437        ; usable app-page count (3 on 128K, up to WM_MAXWIN)
 APP_PAGES       equ   #1438        ; WM_MAXWIN port values; [0] = PAGE_APP0 (#C5, desktop)
 APP_BUSY        equ   #1440        ; WM_MAXWIN busy flags (0 free / 1 busy), parallel
+MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the focused
+                                   ; managed window's live x,y,w,h here before each hook
+                                   ; so the app reads its rect with gb_wm_x/y/w/h
+MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
 CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT.SPR is
                                    ; loaded here at boot so the bitmaps aren't resident
                                    ; (256B used; 512 reserved to #16FF for the sector copy)
+CLIP_LEN        equ   #3E00        ; shared clipboard (#142): word = length, data #3E02..
+CLIP_DATA       equ   #3E02        ; #3FFF (510 bytes). Non-banked low RAM above gb_copybuf
+CLIP_CAP        equ   510          ; (which ends #3E00), so it survives app switches.
+; Paged UI-dialog service (#142): apps marshal a request into this low-RAM block, the
+; kernel pages in the GBUI module (#6000 in PAGE_DATA) and CALLs it; it renders the
+; dialog (popup/prompt/file-picker) and writes the result back here.
+UI_OP           equ   #1700        ; op: 1 popup, 2 prompt, 3 pickfile, 4 pickdir
+UI_COL          equ   #1701        ; arg: column
+UI_LINE         equ   #1702        ; arg: line
+UI_N            equ   #1703        ; arg: popup label count / prompt maxlen
+UI_RES          equ   #1704        ; result byte (popup row/0xFF, prompt 1/0, pick 1/0)
+UI_MODAL        equ   #1705        ; 1 while the UI module runs -> menu_dispatch skips the app
+UI_TEXT         equ   #1708        ; packed text: popup labels / prompt caption+buffer / exts
 WM_FR_X         equ   1            ; entry field offsets (after +0 page):
 WM_FR_FRAME     equ   5
 WM_FR_REPAINT   equ   7
@@ -104,25 +126,25 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
                 jp    kernel_main            ; GB_INIT  #8000
                 jp    k_cls                  ; GB_CLS   #8003
-                jp    k_print                ; GB_PRINT #8006
-                jp    k_quit                 ; GB_QUIT  #8009
+                jp    k_noop                 ; GB_PRINT #8006 (dead stub -> shared ret, #148)
+                jp    k_noop                 ; GB_QUIT  #8009 (dead stub -> shared ret, #148)
                 jp    gb_text_draw           ; GB_TEXT   #800C
                 jp    gb_open_window         ; GB_WINDOW #800F
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012
                 jp    gb_fs_dir_next         ; GB_DIRN   #8015
                 jp    k_vsync                ; GB_BLITE  #8018 (removed: mapping->FM, #103)
-                jp    k_curshow              ; GB_CURSHOW #801B
+                jp    cursor_show            ; GB_CURSHOW #801B (was jp k_curshow; #148)
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
                 jp    cursor_erase           ; GB_CURHIDE #8024
-                jp    k_launch               ; GB_LAUNCH  #8027
-                jp    k_getarg               ; GB_GETARG  #802A
-                jp    k_run                  ; GB_RUN     #802D
+                jp    k_noop                 ; GB_LAUNCH  #8027 (dead stub -> shared ret, #148)
+                jp    focus_arg_ptr          ; GB_GETARG  #802A (k_getarg collapsed, #148)
+                jp    launch_app             ; GB_RUN     #802D (k_run collapsed, #148)
                 jp    k_icon                 ; GB_ICON    #8030
                 jp    k_fill                 ; GB_FILL    #8033
                 jp    k_saverect             ; GB_SAVERECT    #8036
                 jp    k_restorerect          ; GB_RESTORERECT #8039
-                jp    k_xorframe             ; GB_XORFRAME    #803C
+                jp    k_noop                 ; GB_XORFRAME    #803C (dead stub -> shared ret, #148)
                 jp    k_fsload               ; GB_FSLOAD      #803F
                 jp    k_fssave               ; GB_FSSAVE      #8042
                 jp    k_getkey               ; GB_GETKEY      #8045
@@ -130,14 +152,14 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_onevent              ; GB_ONEVENT     #804B
                 jp    k_menu                 ; GB_MENU        #804E
                 jp    k_setname              ; GB_SETNAME     #8051
-                jp    k_onrepaint            ; GB_ONREPAINT   #8054
-                jp    k_restore_parent       ; GB_RESTPAR     #8057
+                jp    k_noop                 ; GB_ONREPAINT   #8054 (dead stub -> shared ret, #148)
+                jp    wm_repaint_all         ; GB_RESTPAR     #8057 (was jp k_restore_parent; #148)
                 jp    k_wm_run               ; GB_WMRUN       #805A
-                jp    k_wm_add               ; GB_WMADD       #805D
+                jp    wm_register            ; GB_WMADD       #805D (was jp k_wm_add; #148)
                 jp    k_wm_open              ; GB_WMOPEN      #8060
                 jp    k_wm_close             ; GB_WMCLOSE     #8063
                 jp    k_wm_setpos            ; GB_WMSETPOS    #8066
-                jp    k_wm_launch            ; GB_WMLAUNCH    #8069
+                jp    k_noop                 ; GB_WMLAUNCH    #8069 (dead stub -> shared ret, #148)
                 jp    k_isdir                ; GB_ISDIR       #806C
                 jp    k_chdir                ; GB_CHDIR       #806F
                 jp    k_back                 ; GB_BACK        #8072
@@ -157,10 +179,18 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_vsync                ; GB_BLITEFULL   #809C (removed: mapping->FM, #103)
                 jp    k_icon_half            ; GB_ICONHALF    #809F (A=slot B=x C=y, #103)
                 jp    k_mxp                  ; GB_MXP         #80A2 -> HL = pointer pixel x (#114)
+                jp    k_clip_set             ; GB_CLIPSET     #80A5 (HL=src, DE=len) shared clipboard (#142)
+                jp    k_clip_get             ; GB_CLIPGET     #80A8 (HL=dst, DE=max) -> BC=copied
+                jp    k_clip_len             ; GB_CLIPLEN     #80AB -> BC = clipboard length
+                jp    k_ui                   ; GB_UI          #80AE run the paged dialog module -> BC=UI_RES
+                jp    k_wm_managed           ; GB_WMMANAGED   #80B1 register a kernel-managed window (#146)
+                jp    k_wm_damage            ; GB_WMDAMAGE    #80B4 set the repaint clip = a damage rect (#153)
 
 ; ---------------------------------------------------------------------------
 kernel_main
                 ld    (BOOT_SP),sp           ; entry SP, for GB_EXIT's clean return (#74)
+                ld    hl,0                    ; #142: empty the shared clipboard at boot
+                ld    (CLIP_LEN),hl          ; (else the first paste reads a garbage length)
                 ld    a,1
                 call  SCR_SET_MODE           ; mode 1, screen cleared
                 call  TXT_CUR_DISABLE        ; no blinking firmware cursor blob
@@ -316,9 +346,8 @@ set_palette
                 jp    SCR_SET_BORDER
 
 ; --- input + cursor services ---------------------------------------------
-; k_curshow: draw the pointer (the app calls this once after drawing its UI).
-k_curshow
-                jp    cursor_show
+; GB_CURSHOW draws the pointer (apps call it once after drawing their UI); the jump
+; table goes straight to cursor_show now (#148, reclaimed the k_curshow wrapper).
 
 ; k_poll: frame-paced input poll. Moves the cursor by the held directions and
 ; redraws it; returns B = cursor byte col, C = cursor line, D flags: bit0 = a
@@ -507,10 +536,8 @@ gf_pen          db    0
 k_cls
                 ld    a,1
                 jp    SCR_SET_MODE            ; mode 1 clears; returns to caller
-k_print                                        ; GB_PRINT: stub (unused early debug
-                ret                            ; print; no binding). Slot kept fixed.
-k_quit
-                ret                            ; (skeleton: app RETs anyway)
+k_noop                                         ; shared no-op for dead ABI slots (#148):
+                ret                            ; GB_PRINT/QUIT/LAUNCH/XORFRAME/ONREPAINT/WMLAUNCH
 
 ; to_data / from_data: save the caller's bank page and map PAGE_DATA (the font /
 ; icon page), then restore it. One shared save slot (dp_save) - these swaps are
@@ -1054,15 +1081,11 @@ wfp_hit         xor   a
                 ld    (de),a                       ; clear the parallel busy flag
                 ret
 
-; k_run (GB_RUN): run a named app. HL = 8.3 name (in the caller's page).
-k_run
-                jp    launch_app
+; GB_RUN (HL = 8.3 name in the caller's page): the slot jumps straight to
+; launch_app (k_run wrapper collapsed, #148).
 
 ; k_launch (GB_LAUNCH): the old MODAL open-the-current-entry. Superseded by the
-; co-resident open path and no longer called by any app; kept as a stub so the
-; jump-table address stays fixed.
-k_launch
-                ret
+; co-resident open path and no longer called by any app; the slot -> k_noop (#148).
 
 ; Directory navigation (issue #54). The FAT backend enumerates the directory at
 ; fs_dir_clus; gb_chdir descends into the positioned entry (pushing the parent on
@@ -1147,9 +1170,8 @@ focus_arg_ptr
                 add   hl,de
                 ret
 
-; k_getarg (GB_GETARG): HL = the launch arg (the 8.3 file name the app opened).
-k_getarg
-                jp    focus_arg_ptr
+; GB_GETARG (HL = the launch arg, the 8.3 file name the app opened): the slot
+; jumps straight to focus_arg_ptr (k_getarg wrapper collapsed, #148).
 
 ; k_setname (GB_SETNAME): set the current file name so a later GB_FSLOAD/GB_FSSAVE
 ; targets it - how an app does New / Save As / open a picked file. HL = an 11-byte
@@ -1161,6 +1183,92 @@ k_setname
                 pop   hl                       ; HL = src
                 call  copy11
                 ret
+
+; The shared clipboard (#142): a fixed low-RAM buffer (CLIP_LEN word + CLIP_DATA bytes)
+; that survives app switches, so copy in one app and paste in another. Resident, so the
+; code isn't duplicated into every app's bank. Low RAM is always mapped.
+
+; k_clip_set (GB_CLIPSET): copy DE bytes from HL into the clipboard, clamped to CLIP_CAP.
+; HL = src (caller page, mapped), DE = length.
+k_clip_set
+                or    a                        ; clamp DE to CLIP_CAP
+                push  hl                        ; save src
+                ld    hl,CLIP_CAP
+                sbc   hl,de                     ; CLIP_CAP - len ; NC = len <= CLIP_CAP
+                jr    nc,kcs_len
+                ld    de,CLIP_CAP
+kcs_len         pop   hl                        ; HL = src
+                ld    (CLIP_LEN),de            ; store the length
+                ld    b,d
+                ld    c,e                        ; BC = count
+                ld    a,b
+                or    c
+                ret   z                          ; nothing to copy
+                ld    de,CLIP_DATA
+                ldir                             ; src -> clipboard
+                ret
+
+; k_clip_get (GB_CLIPGET): copy up to DE bytes of the clipboard into HL. HL = dst (caller
+; page), DE = max. Returns BC = bytes copied (the trampoline maps BC -> the C return).
+k_clip_get
+                ld    bc,(CLIP_LEN)            ; BC = stored length
+                push  hl                        ; save dst
+                ld    h,b
+                ld    l,c
+                or    a
+                sbc   hl,de                     ; len - max ; CF = len < max
+                jr    c,kcg_n                    ; copy len (BC already)
+                ld    b,d
+                ld    c,e                        ; else copy max
+kcg_n           pop   de                         ; DE = dst
+                ld    hl,CLIP_DATA              ; HL = src
+                ld    a,b
+                or    c
+                ret   z                          ; count 0 -> BC=0
+                push  bc                        ; save count
+                ldir                             ; clipboard -> dst
+                pop   bc                         ; BC = count (return)
+                ret
+
+; k_clip_len (GB_CLIPLEN): BC = the clipboard length (for sizing a paste).
+k_clip_len
+                ld    bc,(CLIP_LEN)
+                ret
+
+; k_ui (GB_UI #80AE): the paged dialog service (#142). The caller has marshalled its
+; request into the low-RAM UI_* block; page in PAGE_DATA, load the GBUI module to
+; DATA_MODTOP (#6000, above font+icons), raise UI_MODAL (so the dialog's own gb_poll
+; loop doesn't dispatch top-bar clicks into the now-swapped-out app), CALL it to render
+; + write UI_RES, then restore. Returns BC = UI_RES for the C trampoline. The dialog is
+; modal: this call blocks until the user picks/cancels.
+k_ui
+                ld    a,1
+                ld    (UI_MODAL),a
+                ld    a,(bank_cur)
+                push  af
+                ld    a,PAGE_DATA
+                call  bank_set
+                ld    hl,gbui_modname         ; "GBUI    BIN" -> fs_req_name
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#2000                ; module load cap (8 KB window to #8000)
+                ld    (fs_load_max),hl
+                ld    hl,DATA_MODTOP          ; #6000
+                ld    (fs_load_dst),hl
+                call  fs_load_sys            ; GBUI.BIN -> #6000 (boot drive, preserves browse dir)
+                jr    nc,kui_done             ; missing -> leave UI_RES (caller pre-set a cancel)
+                call  DATA_MODTOP            ; run the module: render, write UI_RES
+kui_done
+                pop   af
+                call  bank_set
+                xor   a
+                ld    (UI_MODAL),a
+                ld    a,(UI_RES)
+                ld    c,a
+                ld    b,0
+                ret
+gbui_modname    db    "GBUI    BIN"
 
 ; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a
 ; caller buffer. HL = dst (in the caller's page, which stays mapped through the
@@ -1338,18 +1446,14 @@ k_onevent
 
 ; k_onrepaint (GB_ONREPAINT): now a no-op kept for ABI. Under the window manager
 ; an app's repaint handler lives in its gb_win_t (on_repaint); the old per-depth
-; REPAINT_HDLR table is unused. Left as a stub so the jump-table address is fixed.
-k_onrepaint
-                ret
+; REPAINT_HDLR table is unused. The slot stays fixed and -> k_noop (#148).
 
 ; k_restore_parent (GB_RESTPAR): repaint everything behind the caller. Under the
 ; window manager (issue #45) the live windows below a modal app are exactly the WM
 ; windows, so this repaints them all bottom-up (wm_repaint_all) - e.g. a modal
 ; Notepad dragging its window restores the desktop + file manager underneath, then
-; redraws itself on top. (Replaces the old per-depth REPAINT_HDLR walk, which the
-; co-resident model made obsolete.)
-k_restore_parent
-                jp    wm_repaint_all
+; redraws itself on top. The jump table goes straight to wm_repaint_all now (#148,
+; reclaimed the k_restore_parent wrapper).
 
 ; ---- cooperative window manager (issue #45, phase 2) --------------------------
 ; The kernel owns the master loop (wm_loop) and a table of co-resident windows.
@@ -1363,6 +1467,53 @@ k_restore_parent
 
 ; wm_register: HL = descriptor in the caller's page. Allocate a table slot, store
 ; page = caller, copy the descriptor, mark alive, push onto z-order top and focus.
+; --- z-order manager (#148): the ONLY code that mutates WM_Z / WM_NWIN. ---------
+; Three callers (register/close/raise) used to open-code the compaction; one held
+; the slot in C across wm_free_page (which does ld c,a) and dropped the wrong
+; window. Centralising it kills that bug class and dedups the loops.
+;
+; wm_z_append: A = slot -> WM_Z[WM_NWIN++] = slot (new z-top). Clobbers A,B,HL.
+wm_z_append
+                ld    b,a                          ; B = slot
+                ld    hl,WM_NWIN
+                ld    a,(hl)                       ; A = NWIN
+                inc   (hl)                          ; NWIN++
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a                           ; HL = &WM_Z[NWIN]
+                ld    (hl),b
+                ret
+
+; wm_z_remove: C = slot -> compact WM_Z dropping slot C, dec NWIN once. Keeps C.
+; Clobbers A,B,DE,HL (NOT C - callers may still need the slot).
+wm_z_remove
+                ld    hl,WM_Z
+                ld    de,WM_Z
+                ld    a,(WM_NWIN)
+                ld    b,a
+wzr_l           ld    a,(hl)
+                cp    c
+                jr    z,wzr_skip
+                ld    (de),a
+                inc   de
+wzr_skip        inc   hl
+                djnz  wzr_l
+                ld    hl,WM_NWIN
+                dec   (hl)
+                ret
+
+; wm_focus_top: WM_FOCUS = WM_Z[NWIN-1] (the live z-top). NWIN>=1 (desktop is [0]).
+; The z-top is always alive (the manager keeps WM_Z == the live slots).
+wm_focus_top
+                ld    a,(WM_NWIN)
+                dec   a
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                ld    (WM_FOCUS),a
+                ret
+
 wm_register
                 ld    (wm_desc),hl
                 call  wm_free_slot               ; A = first dead slot
@@ -1380,17 +1531,160 @@ wm_register
                 inc   de                            ; entry+14 = arg: capture the pending
                 ld    hl,launch_arg               ; launch arg as this window's own file
                 call  copy11
-                ld    a,(wm_slot)                 ; focus the new window
+                ld    a,(wm_slot)                 ; focus + append the new window (z-top)
                 ld    (WM_FOCUS),a
-                ld    hl,WM_Z                      ; WM_Z[NWIN] = slot (new z-top)
-                ld    a,(WM_NWIN)
-                add   a,l
-                ld    l,a
-                ld    a,(wm_slot)
-                ld    (hl),a
-                ld    hl,WM_NWIN
-                inc   (hl)
+                jp    wm_z_append                  ; A = slot; tail-call (rets to wm_register's caller)
+
+; ===== managed windows (#146): the kernel owns the chrome ====================
+; k_wm_managed (GB_WMMANAGED): HL = a gb_mwin_t descriptor in the caller's page.
+; Register a window the WM draws + drives: the descriptor pointer goes in WM_FR_FRAME
+; and FLAGS gets MW_MANAGED, so wm_loop / wm_repaint_all route it to wm_chrome_frame /
+; wm_chrome_draw instead of the app's on_frame/on_repaint. Descriptor layout:
+;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 on_draw +8 on_click +10 on_frame
+;   +12 on_close +14 on_event +16 title
+k_wm_managed
+                call  wm_register            ; HL = desc; register as a normal window (slot,
+                                             ; page, focus, z-order, arg, flags=alive; copies
+                                             ; desc[0..11] -> entry+1..12). wm_register stashed
+                                             ; the desc ptr in wm_desc. Now patch for managed:
+                ld    a,(WM_FOCUS)           ; the just-registered window
+                call  wm_entry               ; HL = entry
+                push  hl
+                ld    de,WM_FR_FLAGS         ; FLAGS |= managed
+                add   hl,de
+                set   1,(hl)
+                pop   hl
+                push  hl
+                ld    de,WM_FR_FRAME         ; WM_FR_FRAME (entry+5,6) = the descriptor ptr
+                add   hl,de
+                ld    de,(wm_desc)
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d
+                pop   hl
+                ld    de,WM_FR_EVENT         ; WM_FR_EVENT = desc.on_event (so bar clicks/drops
+                add   hl,de                  ; reach the app's menu handler via the normal path)
+                push  hl                     ; HL = entry+9
+                ld    hl,(wm_desc)
+                ld    de,6                   ; WM_FR_EVENT = desc.proc (#148): menu/drop come
+                add   hl,de                  ; through here too, so every message reaches the
+                ld    e,(hl)                 ; one WndProc (keyed by gb_msg.type)
+                inc   hl
+                ld    d,(hl)                 ; DE = proc ptr
+                pop   hl                     ; HL = entry+9
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d                 ; REPAINT (entry+7,8) is garbage but the managed
+                                             ; flag means wm_repaint_all skips it; MENU (entry+
+                                             ; 11,12) is set by the app's gb_doc before the loop
+                ld    a,(WM_FOCUS)           ; publish MW_RECT so the app can read gb_wm_x/y/w/h
+                call  wm_entry               ; in main, but DON'T draw yet: the app loads its
+                call  mw_publish             ; content then calls gb_restore_parent for the first
+                                             ; paint, so a window never shows empty during a slow
+                                             ; load (#146). A managed app MUST paint when ready.
+                                             ; mw_publish preserves A (still = WM_FOCUS), so:
+                jp    wm_set_clip            ; #153: pre-set the clip to the new window's rect so
+                                             ; that first gb_restore_parent repaints only OUR area,
+                                             ; not the whole desktop (the open "flash"); then
+                                             ; wm_repaint_all restores the full-screen clip.
+
+; mw_publish: HL = entry. Copy x,y,w,h -> MW_RECT (the app reads it via gb_wm_x/y/w/h);
+; (mw_desc) = the descriptor pointer. HL preserved.
+mw_publish
+                push  hl
+                inc   hl                     ; entry+1
+                ld    de,MW_RECT
+                ld    bc,4
+                ldir                         ; MW_RECT = x,y,w,h ; HL = entry+5
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)
+                ld    (mw_desc),de           ; desc ptr
+                pop   hl
                 ret
+
+; mw_hook: A = a GB_MSG_* window message. Set gb_msg.type, then dispatch to the
+; window's single proc (desc+6). The proc switches on the type. Clobbers HL,DE,A.
+mw_hook
+                ld    (GB_MSG),a              ; gb_msg.type = the message being delivered
+                ld    hl,(mw_desc)
+                ld    de,6
+                add   hl,de                  ; HL = &desc.proc
+                ld    a,(hl)
+                inc   hl
+                ld    h,(hl)
+                ld    l,a                     ; HL = proc ptr
+                ld    a,h
+                or    l
+                ret   z                       ; no proc -> skip (shouldn't happen)
+                jp    md_call                 ; jp (hl); the proc rets to mw_hook's caller
+
+; wm_chrome_draw: HL = entry. Draw frame+title (gb_open_window) then the content (on_draw).
+wm_chrome_draw
+                call  mw_publish
+                ld    hl,(mw_desc)           ; title = *(desc+8)
+                ld    de,8
+                add   hl,de
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)
+                ex    de,hl                  ; HL = title ptr (caller page)
+                ld    a,(MW_RECT)
+                ld    b,a                     ; x
+                ld    a,(MW_RECT+1)
+                ld    c,a                     ; y
+                ld    a,(MW_RECT+2)
+                ld    d,a                     ; w
+                ld    a,(MW_RECT+3)
+                ld    e,a                     ; h
+                call  gb_open_window         ; frame + title
+                ld    a,GB_MSG_DRAW          ; -> the proc draws the content
+                jp    mw_hook
+
+; wm_chrome_frame: HL = entry. The per-frame router: idle hook, then QUIT/close,
+; close-gadget, content click. (Title drag + grip resize land in slice 2.)
+wm_chrome_frame
+                call  mw_publish
+                ld    a,GB_MSG_FRAME         ; per-frame (idle/menus/tick)
+                call  mw_hook
+                ld    a,(POLL_FLAGS)
+                bit   1,a                     ; GB_QUIT
+                jr    nz,mw_do_close
+                ld    a,(POLL_FLAGS)
+                bit   0,a                     ; GB_CLICK
+                ret   z
+                ld    a,(POLL_MY)            ; my - win_y in title band?
+                ld    e,a
+                ld    a,(MW_RECT+1)
+                ld    d,a
+                ld    a,e
+                sub   d
+                jr    c,mwf_content           ; my < win_y
+                cp    14                       ; TITLE_H
+                jr    nc,mwf_content           ; my >= win_y+14 -> content
+                ld    a,(POLL_MX)            ; in title bar: close gadget? mx < win_x+5
+                ld    e,a
+                ld    a,(MW_RECT)
+                add   a,5
+                cp    e
+                jr    c,mwf_title             ; win_x+5 < mx -> title -> drag
+                jr    z,mwf_title
+                jr    mw_do_close             ; mx < win_x+5 -> close gadget
+mwf_title
+                ld    a,GB_MSG_DRAG          ; title-bar press -> drag the window
+                jp    mw_hook
+mwf_content
+                ld    a,GB_MSG_CLICK         ; content (incl. grip) -> a content press
+                jp    mw_hook
+
+; mw_do_close: a close was requested - deliver GB_MSG_CLOSE to the window's proc
+; (it confirms + calls gb_wm_close). Every managed window has a proc, so there is
+; no "no handler" path; mw_hook's null guard falls through to no-op if it's ever 0.
+mw_do_close
+                ld    a,GB_MSG_CLOSE
+                jp    mw_hook
+
+mw_desc         dw    0                       ; scratch: the focused managed window's descriptor
 
 ; wm_free_slot: -> A = lowest table slot whose alive flag is clear.
 wm_free_slot
@@ -1419,7 +1713,16 @@ wm_loop
                 call  wm_focus_click             ; the right app. then route the click.
                 call  wm_map_focus               ; focus may have changed
                 ld    a,(WM_FOCUS)               ; call the focused window's on_frame
-                call  wm_entry
+                call  wm_entry                   ; HL = entry
+                push  hl                          ; #146: managed window -> kernel router
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                bit   1,(hl)
+                pop   hl                          ; HL = entry
+                jr    z,wmf_legacy
+                call  wm_chrome_frame
+                jr    wmf_done
+wmf_legacy
                 ld    de,WM_FR_FRAME
                 add   hl,de
                 ld    a,(hl)
@@ -1427,6 +1730,7 @@ wm_loop
                 ld    h,(hl)
                 ld    l,a
                 call  md_call
+wmf_done
                 ld    hl,(BAR_HANDLER)            ; top-bar hook (#77): run the bar handler
                 ld    a,h                          ; every frame in the desktop's page, so the
                 or    l                            ; bar stays live regardless of which window
@@ -1443,10 +1747,8 @@ k_on_bar
                 ld    (BAR_HANDLER),hl
                 ret
 
-; k_wm_add (GB_WMADD): register the caller's window (used by an app opened with
-; GB_WMOPEN); returns to the opener. The kernel's wm_loop then services it.
-k_wm_add
-                jp    wm_register
+; GB_WMADD registers the caller's window (legacy gb_wm_add); the jump table goes
+; straight to wm_register now (#148, reclaimed the k_wm_add wrapper).
 
 ; k_wm_open (GB_WMOPEN): HL = 8.3 app name in the caller page. Load it into a free
 ; bank page and CALL its entry once (its main registers a window via GB_WMADD and
@@ -1464,10 +1766,8 @@ kwo_blank       ld    (hl),a
                 jr    wm_open_go
 
 ; k_wm_launch (GB_WMLAUNCH): superseded. File-type -> app routing moved into the
-; File Manager (C); it now calls GB_WMLAUNCHAS with the app it chose. Kept as a
-; stub so the jump-table address stays fixed.
-k_wm_launch
-                ret
+; File Manager (C); it now calls GB_WMLAUNCHAS with the app it chose. The slot
+; stays fixed (addresses) and -> k_noop (#148).
 
 ; k_wm_launch_as (GB_WMLAUNCHAS): HL = the 8.3 app name to open as a co-resident
 ; window. The current dir entry (fs_ent_name) becomes the new window's file arg, so
@@ -1522,33 +1822,15 @@ k_wm_close
                 ld    a,(WM_FOCUS)
                 ld    c,a                          ; C = slot being closed
                 call  wm_entry                    ; HL = entry
-                push  hl
                 ld    a,(hl)                       ; page
-                call  wm_free_page
-                pop   hl
+                push  af                           ; save it: wm_free_page clobbers everything
                 ld    de,WM_FR_FLAGS
                 add   hl,de
-                ld    (hl),0                       ; mark dead
-                ld    hl,WM_Z                      ; compact WM_Z, dropping slot C
-                ld    de,WM_Z
-                ld    a,(WM_NWIN)
-                ld    b,a
-wmc_l           ld    a,(hl)
-                cp    c
-                jr    z,wmc_skip
-                ld    (de),a
-                inc   de
-wmc_skip        inc   hl
-                djnz  wmc_l
-                ld    hl,WM_NWIN
-                dec   (hl)
-                ld    a,(WM_NWIN)                  ; new focus = z-top = WM_Z[NWIN-1]
-                dec   a
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                ld    (WM_FOCUS),a
+                ld    (hl),0                       ; mark dead (clear the alive flag)
+                call  wm_z_remove                 ; drop slot C from the z-order (keeps C)
+                call  wm_focus_top                ; refocus the new live z-top
+                pop   af                           ; A = the closed window's page
+                call  wm_free_page                 ; release it (z-order already updated)
                 jp    wm_repaint_all               ; repaint remaining windows + return
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
@@ -1909,20 +2191,9 @@ ghost_on        db    0
 wm_raise
                 ld    (WM_FOCUS),a
                 ld    c,a
-                ld    hl,WM_Z
-                ld    de,WM_Z
-                ld    a,(WM_NWIN)
-                ld    b,a
-wr_l            ld    a,(hl)
-                cp    c
-                jr    z,wr_skip
-                ld    (de),a
-                inc   de
-wr_skip         inc   hl
-                djnz  wr_l
+                call  wm_z_remove                 ; drop it from the z-order...
                 ld    a,c
-                ld    (de),a                       ; slot back on top
-                ret
+                jp    wm_z_append                  ; ...and re-append on top (tail-call)
 
 ; wm_repaint_all: repaint every window bottom-up (each in its own page, via its
 ; on_repaint), then restore the caller's page. The cursor is left to the handlers:
@@ -1932,7 +2203,10 @@ wr_skip         inc   hl
 wm_repaint_all
                 ld    a,(bank_cur)
                 ld    (wm_rp_back),a
-                di
+                ld    a,(cur_supp)              ; #148: hide the pointer before the repaint so it
+                or    a                           ; can't pollute its save-under (else a later move
+                call  z,cursor_erase             ; restores stale content = a pointer-sized hole).
+                di                                ; Skip during a DnD ghost (cur_supp owns the screen)
                 xor   a
                 ld    (wm_rp_i),a
 wra_l           ld    a,(wm_rp_i)
@@ -1944,8 +2218,22 @@ wra_l           ld    a,(wm_rp_i)
                 ld    l,a
                 ld    a,(hl)                       ; slot = WM_Z[i]
                 call  wm_entry                     ; HL = entry
+                push  hl                           ; #148 guard: never paint a dead slot
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                ld    a,(hl)                       ; flags
+                pop   hl                            ; HL = entry
+                bit   0,a                          ; alive?
+                jr    z,wra_next                   ; dead -> skip (z-order should exclude it)
+                push  af                           ; keep flags across bank_set
                 ld    a,(hl)                       ; page
-                call  bank_set
+                call  bank_set                     ; (preserves HL = entry)
+                pop   af                            ; #146: managed -> kernel draws chrome
+                bit   1,a                          ; managed?
+                jr    z,wra_legacy
+                call  wm_chrome_draw
+                jr    wra_next
+wra_legacy
                 ld    de,WM_FR_REPAINT
                 add   hl,de
                 ld    a,(hl)
@@ -1964,17 +2252,32 @@ wra_done        ld    a,(wm_rp_back)
                 call  bank_set
                 call  clip_set_full              ; repaints are clip-limited; restore the
                 ei                                ; full-screen clip for normal drawing
+                ld    a,(cur_supp)              ; #148: ensure the pointer is up with a FRESH
+                or    a                           ; save-under over the just-repainted content.
+                call  z,cursor_show               ; GUARDED (#153): a handler that ends in gb_curshow
+                ret                                ; (e.g. the desktop paint) already drew it - don't
+                                                  ; redraw, or we'd save cur_bg OVER the cursor's own
+                                                  ; pixels and stamp a ghost on the next move.
+
+; k_wm_damage (GB_WMDAMAGE): set the repaint clip to a caller-supplied damage rect,
+; so the next gb_restore_parent only repaints that region instead of the whole
+; screen (#153 - kills the full-desktop flash after a dropdown menu). gb_popup
+; passes its box UNION the focused window's rect, so the repaint covers both the
+; dropdown's footprint (the part that overhangs other windows) and the window the
+; menu action changed. Registers are pre-swapped by the trampoline for two word
+; stores: C=x B=y (-> clip_x,clip_y) and E=w D=h (-> clip_w,clip_h).
+k_wm_damage
+                ld    (clip_x),bc                 ; clip_x = x, clip_y = y
+                ld    (clip_w),de                 ; clip_w = w, clip_h = h
                 ret
 
-; clip_set_full: reset the fill clip to the whole screen (no clipping).
+; clip_set_full: reset the fill clip to the whole screen (no clipping). Two word
+; stores (clobbers BC,DE - the only caller reloads A and ignores BC/DE, #153).
 clip_set_full
-                xor   a
-                ld    (clip_x),a
-                ld    (clip_y),a
-                ld    a,80
-                ld    (clip_w),a
-                ld    a,200
-                ld    (clip_h),a
+                ld    bc,0                       ; clip_x = 0, clip_y = 0
+                ld    (clip_x),bc
+                ld    de,#C850                   ; clip_w = 80 (#50), clip_h = 200 (#C8)
+                ld    (clip_w),de
                 ret
 
 ; wm_set_clip: A = slot -> set the fill clip to that window's rect, so the next
@@ -2020,6 +2323,9 @@ wm_rp_i         db    0            ; wm_repaint_all: z index
 ; message (p0 = byte column) and consume the click. The app's page is mapped
 ; (it called GB_POLL), so the handler is a direct CALL - no bank trampoline.
 menu_dispatch
+                ld    a,(UI_MODAL)            ; a paged UI dialog is up? then the focused app's
+                or    a                        ; bank is swapped out for the module - do NOT call
+                ret   nz                        ; its handler. The dialog's own poll sees the click
                 bit   0,d                     ; fresh click this frame?
                 ret   z
                 ld    a,(poll_line)
@@ -2044,7 +2350,20 @@ md_call         jp    (hl)
 ; app page: count, then per title { col (byte), 8-byte NUL/space-padded label }.
 ; Copied into resident MENU_DEF; the desktop's bar handler watches MENU_DEF and
 ; redraws the titles when it changes (#77). launch_app clears it for a child app.
-k_menu
+k_menu                                          ; HL = def ptr in the focused app's page.
+                ; Also record it as the focused window's menu, so a later focus change
+                ; re-installs it instead of clearing the bar (#142: gb_menu must persist
+                ; like a static gb_win_t.menu does).
+                push  hl
+                ld    a,(WM_FOCUS)
+                call  wm_entry                  ; HL = focused window's WM entry
+                ld    de,WM_FR_MENU
+                add   hl,de                     ; -> its menu-def-ptr field
+                pop   de                         ; DE = the def ptr
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d
+                ex    de,hl                       ; HL = def ptr (fall into the copy)
 menu_install                                    ; HL = menu def (mapped page) -> MENU_DEF
                 ld    a,(hl)                  ; count
                 cp    5
@@ -2167,9 +2486,7 @@ k_mxp
 
 ; k_xorframe (GB_XORFRAME): stub. The rubber-band XOR frame was never wired up
 ; (no app uses it, no gb_xorframe binding); body removed to reclaim resident
-; space for the callback API. The jump-table slot stays so addresses are fixed.
-k_xorframe
-                ret
+; space. The jump-table slot stays (addresses fixed) and -> k_noop (#148).
 
 ; ===========================================================================
 ; Top bar (kernel-owned): total RAM (left) + clock (right) on lines 0-7. The
@@ -2477,24 +2794,14 @@ wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in 
 wel_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
-                                                ; ICONED + PAINT ride in the ABOVE-kernel
-                                                ; region too: the low #0100 app window
-                                                ; (#0100..#7FFF, 32K) overflowed once the
-                                                ; resizeable windows grew the apps, so the
-                                                ; two least-coupled binaries moved up here.
-ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP
-ied_imgend
-vwr_img         incbin "../build/VIEWER.RAW"    ; up here (the high region freed space when
-vwr_imgend                                      ; PAINT moved to pass 2) so the low region
-                                                ; fits the bigger FILEMGR (sorting, #118)
-                ; PAINT.APP is packaged by a SECOND rasm pass (kernel/pack_apps.asm):
-                ; this 64K image filled up, and the .dsk save accumulates across rasm
-                ; invocations, so the overflow apps get their own packaging pass (#114).
+                ; Overflow apps are packaged by FURTHER rasm passes: this 64K image
+                ; filled up, and the .dsk save accumulates across rasm invocations, so
+                ; the largest binaries get their own passes - PAINT/XAOS/ICONED in
+                ; pack_apps.asm (#114), and the gb_doc-grown VIEWER + FILEMGR in
+                ; pack_apps2.asm (#142). Both are too big for this image's free regions.
                 org   #0100                     ; --- app binaries, low region ---
 dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTOP.APP
 dtp_imgend
-app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.APP
-app_imgend
 npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
 npd_imgend
 clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
@@ -2504,10 +2811,7 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                                                 ; in the low region to keep the high region < #FFFF
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
-                save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
-                save  "VIEWER.APP",vwr_img,vwr_imgend-vwr_img,DSK,"build/gbkern.dsk"
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
-                save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"

@@ -12,9 +12,14 @@
         .globl  _gb_text
         .globl  _gb_textk
         .globl  _gb_textbw
+        .globl  _gb_textrev
         .globl  _gb_window
         .globl  _gb_restorerect
         .globl  _gb_mxp
+        .globl  _gb_clip_set
+        .globl  _gb_clip_get
+        .globl  _gb_clip_len
+        .globl  _gb_ui
         .globl  _gb_fill
         .globl  _gb_frame
         .globl  _gb_icon
@@ -38,9 +43,16 @@
         .globl  _gb_get_name
         .globl  _gb_on_repaint
         .globl  _gb_restore_parent
+        .globl  _gb_wm_damage
+        .globl  _gb_wm_full
         .globl  _gb_flags
         .globl  _gb_wm_run
         .globl  _gb_wm_add
+        .globl  _gb_wm_managed
+        .globl  _gb_wm_x
+        .globl  _gb_wm_y
+        .globl  _gb_wm_w
+        .globl  _gb_wm_h
         .globl  _gb_wm_open
         .globl  _gb_wm_close
         .globl  _gb_wm_setpos
@@ -106,6 +118,18 @@ _gb_textbw:
         call    0x800C          ; GB_TEXT
         ret
 
+;; void gb_textrev(u8 col, u8 line, const char *s);   white pen on black paper
+;;   (reverse video, for a highlighted menu row)
+_gb_textrev:
+        ld      b, a
+        ld      c, l
+        ld      d, #1           ; pen   = 1 (white)
+        ld      e, #2           ; paper = 2 (black)
+        pop     hl
+        ex      (sp), hl
+        call    0x800C          ; GB_TEXT
+        ret
+
 ;; void gb_window(u8 col, u8 line, u8 w, u8 h, const char *title);
 ;;   A=col, L=line; stack [ret][w,h][title]. -> B=x C=y D=w E=h HL=title.
 _gb_window:
@@ -141,6 +165,28 @@ _gb_restorerect:
 _gb_mxp:
         call    0x80A2          ; GB_MXP -> HL = pixel x
         ex      de, hl          ; SDCC z80 returns 16-bit in DE
+        ret
+
+;; void gb_clip_set(const char *buf, unsigned int len);  HL=buf, DE=len (shared clipboard #142)
+_gb_clip_set:
+        jp      0x80A5          ; GB_CLIPSET
+;; unsigned int gb_clip_get(char *buf, unsigned int max);  HL=buf, DE=max -> DE = copied
+_gb_clip_get:
+        call    0x80A8          ; GB_CLIPGET -> BC = copied
+        ld      d, b
+        ld      e, c
+        ret
+;; unsigned int gb_clip_len(void);  -> DE = clipboard length
+_gb_clip_len:
+        call    0x80AB          ; GB_CLIPLEN -> BC = length
+        ld      d, b
+        ld      e, c
+        ret
+
+;; unsigned char gb_ui(void);  -> run the paged dialog module, BC=UI_RES -> A (#142)
+_gb_ui:
+        call    0x80AE          ; GB_UI
+        ld      a, c
         ret
 
 ;; void gb_fill(u8 col, u8 line, u8 w, u8 h, u8 pen);    -> GB_FILL
@@ -302,6 +348,31 @@ _gb_on_repaint:
 ;; void gb_restore_parent(void);   repaint the ancestor apps behind the caller
 _gb_restore_parent:
         jp      0x8057          ; GB_RESTPAR
+; gb_wm_damage(x,y,w,h): set the repaint clip to a damage rect (#153). Pre-swap the
+; args so the kernel can store them as two words: C=x B=y (clip_x,clip_y),
+; E=w D=h (clip_w,clip_h).
+_gb_wm_damage:
+        ld      c, a            ; C = x
+        ld      b, l            ; B = y
+        pop     hl
+        ld      (sv_ret), hl
+        pop     hl              ; L=w, H=h
+        ld      e, l            ; E = w
+        ld      d, h            ; D = h
+        call    0x80B4          ; GB_WMDAMAGE
+        ld      hl, (sv_ret)
+        jp      (hl)
+; gb_wm_full(): 1 if the app-bank pool is full (no room for another window), else 0.
+; A window == one busy bank, so full <=> WM_NWIN >= APP_NPAGES. Reads kernel low RAM
+; directly (no kernel call), like gb_mx (#153).
+_gb_wm_full:
+        ld      a, (0x1437)     ; APP_NPAGES (total app banks)
+        ld      b, a
+        ld      a, (0x1350)     ; WM_NWIN (live windows = busy banks)
+        cp      b               ; CF=1 if WM_NWIN < APP_NPAGES (room)
+        sbc     a, a            ; 0xFF if room, 0x00 if full
+        inc     a               ; 0 = room, 1 = full
+        ret
 
 ;; void gb_wm_run(const gb_win_t *desc);   desc in HL -> register the root window
 ;; and enter the kernel master loop (issue #45). Does not return.
@@ -311,6 +382,24 @@ _gb_wm_run:
 ;; window (called from an app opened with gb_wm_open); returns to the opener.
 _gb_wm_add:
         jp      0x805D          ; GB_WMADD
+;; void gb_wm_managed(const gb_mwin_t *desc);   desc in HL -> register a kernel-managed
+;; window (#146): the WM owns the chrome, the app provides content hooks.
+_gb_wm_managed:
+        jp      0x80B1          ; GB_WMMANAGED
+;; The live window rect, published by the WM into MW_RECT (#1448) before each managed
+;; hook; the app reads it (gb_wm_x/y/w/h).  (char return in A, like gb_mx.)
+_gb_wm_x:
+        ld      a,(0x1448)
+        ret
+_gb_wm_y:
+        ld      a,(0x1449)
+        ret
+_gb_wm_w:
+        ld      a,(0x144A)
+        ret
+_gb_wm_h:
+        ld      a,(0x144B)
+        ret
 ;; void gb_wm_open(const char *name);   8.3 name in HL -> open an app as a new
 ;; co-resident window (non-blocking); returns once it has registered.
 _gb_wm_open:

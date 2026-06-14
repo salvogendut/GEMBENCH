@@ -36,37 +36,46 @@ mkdir -p "$work"
 # the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
-# Opt-in modal dialogs, linked only when asked so dialog-free apps carry none (#114):
-#   DIALOGS=1  -> gbdlg.c   (gb_popup list menu + gb_modal flag)
-#   PROMPT=1   -> gbprompt.c (gb_prompt name box; implies DIALOGS=1, uses gb_modal_set)
-# A popup-only app (ICONED) sets DIALOGS=1; a Save-As app (PAINT, NOTEPAD) sets both.
+# Opt-in dialogs (#114, #142). The heavy render (popup/prompt/file-picker) now lives in
+# the paged GBUI kernel module (#142 step 1b); an app that needs ANY dialog links only
+# the tiny marshalling stub gbui_stub.c (gb_popup/gb_prompt/gb_pickfile/gb_pickdir ->
+# GB_UI). That ~800-byte/app saving is what lets the data-heavy apps fit gb_doc.
+#   DIALOGS / PROMPT / PICKER  -> gbui_stub.c (the stubs)
+#   DOC=1                      -> gbdoc.c too (the document/File-menu framework)
 DLG_REL=""
-if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdlg.c" -o "$work/gbdlg.rel"
-    DLG_REL="$work/gbdlg.rel"
+if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ] || [ "${PICKER:-0}" = "1" ] || [ "${DOC:-0}" = "1" ] || [ "${DOCRO:-0}" = "1" ]; then
+    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
+    DLG_REL="$work/gbui_stub.rel"
 fi
-if [ "${PROMPT:-0}" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbprompt.c" -o "$work/gbprompt.rel"
-    DLG_REL="$DLG_REL $work/gbprompt.rel"
+# DOC=1 = the full document framework; DOCRO=1 = a READ-ONLY variant (-DGBDOC_RO) that
+# omits the Save/Save As path, so a viewer-style app saves that code room (#144).
+if [ "${DOC:-0}" = "1" ] || [ "${DOCRO:-0}" = "1" ]; then
+    RO=""; [ "${DOCRO:-0}" = "1" ] && RO="-DGBDOC_RO"
+    "$SDCC" -mz80 --fomit-frame-pointer $RO -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
+    DLG_REL="$DLG_REL $work/gbdoc.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
-# STABILITY GUARD: the app must fit its 16K page - code below its data-loc, data+bss
-# below the kernel (#8000). A silent overflow corrupts memory at runtime (it bit
-# NOTEPAD once); turn it into a loud build failure here.
+# STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
+# (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
+# AFTER the code) must end below data-loc - otherwise the RAM data area starts inside
+# it and gsinit zeroes its own code as it runs -> instant reboot (bit NOTEPAD: a
+# _CODE-only check passed while _GSINIT overlapped _DATA). And data+bss must end below
+# the kernel (#8000). Turn either overflow into a loud build failure.
 python3 - "$work/app.map" "$APP" "$DATA_LOC" <<'PY'
 import sys, re
 mapf, app, dloc = sys.argv[1], sys.argv[2], int(sys.argv[3], 16)
 area = {}
 for line in open(mapf):
-    m = re.match(r'^(_CODE|_DATA|_BSS|_INITIALIZED|_GSINIT)\s+([0-9A-Fa-f]{8})\s+([0-9A-Fa-f]{8})', line)
+    m = re.match(r'^(_CODE|_DATA|_BSS|_INITIALIZED|_GSINIT|_GSFINAL|_INITIALIZER)\s+([0-9A-Fa-f]{8})\s+([0-9A-Fa-f]{8})', line)
     if m:
         area[m.group(1)] = (int(m.group(2), 16), int(m.group(3), 16))
-code_end = sum(area.get('_CODE', (0, 0)))
+LOAD = ('_CODE', '_GSINIT', '_GSFINAL', '_INITIALIZER')   # the loaded image (before data-loc)
+img_end = max((area[a][0] + area[a][1]) for a in LOAD if a in area)
 top = max((s + sz) for s, sz in area.values()) if area else 0
 errs = []
-if code_end > dloc:  errs.append('code ends 0x%04X > data-loc 0x%04X' % (code_end, dloc))
-if top > 0x8000:     errs.append('data/bss ends 0x%04X > kernel 0x8000' % top)
+if img_end > dloc:  errs.append('loaded image ends 0x%04X > data-loc 0x%04X (gsinit/data overlap)' % (img_end, dloc))
+if top > 0x8000:    errs.append('data/bss ends 0x%04X > kernel 0x8000' % top)
 if errs:
     sys.stderr.write('FIT ERROR (%s): %s - shrink it or raise DATA_LOC\n' % (app, '; '.join(errs)))
     sys.exit(1)

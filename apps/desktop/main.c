@@ -21,8 +21,9 @@
 #define XMAX    (80 - IC_W)   /* drag clamps */
 #define YMIN    9
 #define YMAX    (200 - BOX_H)
-#define DCLICK  40
+#define DCLICK  75            /* double-click window, frames (gamepad-friendly, #153) */
 #define NONE    0xFF
+#define DRAGTH  2             /* press must move this far before it lifts (#153) */
 
 /* The desktop icons: drives (C = IDE, A/B = floppies) + Clock + Trash (#65). The
    drive icons appear only when that drive is present (gb_drives poll); Clock and
@@ -44,8 +45,12 @@ static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0 };  /* opens the 
 static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };      /* drives set by poll */
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
+static unsigned char drag_armed, arm_mx, arm_my;   /* pressed on an icon, not yet lifted (#153) */
+static unsigned char sel_idx = NONE;               /* selected icon (red frame), NONE = none (#153) */
+static unsigned char desk_active;                  /* set by on_frame -> the desktop is focused (#153) */
 static unsigned char dc_timer, dc_idx, held_prev;
-static unsigned char want_menu, show_ram;   /* System menu (#74) */
+static unsigned char show_ram;               /* System menu footprint toggle (#74) */
+static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
 
 #define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
 #define DRIVE_STEP 46         /* (BOX_H 44 + 2 gap), in detection order */
@@ -79,7 +84,29 @@ static void paint(void)
     gb_fill(0, 8, 80, 192, 0);                 /* backdrop, below the top bar */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
+    if (sel_idx != NONE && ic_present[sel_idx])    /* red selection frame (#153) */
+        gb_frame(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H, 3);
+    /* #153: do NOT show the cursor here. As the WM's bottom on_repaint, paint()
+       runs FIRST in wm_repaint_all - any window drawn on top would overwrite the
+       pointer while its save-under still held the backdrop, so a later move left a
+       blue hole. The repaint bracket now draws the pointer once, LAST. Standalone
+       callers (System menu, boot) gb_curshow themselves. */
+}
+
+/* select_icon: move the red selection frame to icon (NONE clears it), erasing the
+   previous one in place so we never leave a stray frame behind (#153). */
+static void select_icon(unsigned char icon)
+{
+    if (sel_idx == icon) return;
+    gb_curhide();
+    if (sel_idx != NONE && ic_present[sel_idx]) {
+        gb_frame(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H, 0);   /* erase old frame */
+        draw_icon(sel_idx);                                       /* restore the glyph edge */
+    }
+    if (icon != NONE)
+        gb_frame(ic_x[icon], ic_y[icon], IC_W, IC_H, 3);
     gb_curshow();
+    sel_idx = icon;
 }
 
 /* The top bar is now drawn here, not in the kernel (experiment #77). The WM runs
@@ -139,6 +166,16 @@ static void bar_draw(void)
     if (msig != bar_msig) { bar_msig = msig; bar_menu(); }
     gb_time();                                 /* clock: redraw when the minute changes */
     if (bin(gb_min) != bar_min) { bar_min = bin(gb_min); bar_clock(); }
+    /* The desktop loses focus when a window is clicked, and its on_frame stops
+       running - but this bar hook runs every frame in the desktop's page regardless
+       of focus. on_frame (above) sets desk_active when the desktop is focused; if it
+       did NOT run this frame, a window has focus, so clear a left-over selection
+       (reset the clip first so the erase isn't clipped to some window's rect, #153). */
+    if (!desk_active && sel_idx != NONE) {
+        gb_wm_damage(0, 0, 80, 200);
+        select_icon(NONE);
+    }
+    desk_active = 0;                            /* consume the flag; on_frame re-sets it if focused */
 }
 
 static unsigned char hit_icon(unsigned char mx, unsigned char my)
@@ -196,40 +233,12 @@ static void drop(void)
                                                    aren't erased by our backdrop fill (#65) */
 }
 
-/* a "System" menu title in the top bar (#74), right next to the RAM size; clicking
-   it drops a menu (Ram Usage / Refresh Media / Exit to DOS). The Ram-Usage footprint
-   shows separately, on the left of the clock. */
-#define MENU_COL  10         /* byte col (x4 px): clears a 5-char "1024K" (#138) */
-#define MENU_END  20
-#define FP_COL    54          /* footprint column - left of the clock (CLK_COL 68) */
-static const unsigned char dt_menu[] = { 1, MENU_COL, 'S','y','s','t','e','m',0,0 };
-
-/* popup: a frameless white menu (a seamless drop from the white top bar), black
-   ink; returns the clicked row or 0xFF. Self-polling, like the apps' modals. */
-static unsigned char popup(unsigned char x, unsigned char y,
-                           const char *const *labels, unsigned char n)
-{
-    unsigned char i, flags, row, sel = 0xFF;
-    gb_curhide();
-    gb_fill(x, y, 26, n * 10 + 2, 1);
-    for (i = 0; i < n; i++) gb_textbw(x + 1, y + 1 + i * 10, labels[i]);
-    gb_curshow();
-    for (;;) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) break;
-        if (!(flags & GB_CLICK)) continue;
-        if (gb_my() >= y + 1 && gb_my() < y + 1 + n * 10 && gb_mx() >= x && gb_mx() < x + 26) {
-            row = (gb_my() - (y + 1)) / 10;
-            if (row < n) { sel = row; break; }
-        }
-        break;
-    }
-    if (sel == 0xFF) while (gb_poll() & GB_QUIT) ;
-    gb_curhide();
-    gb_fill(x, y, 26, n * 10 + 2, 0);          /* erase (backdrop) */
-    gb_curshow();
-    return sel;
-}
+/* The "System" menu now rides the shared gb_doc menu system (#142): the desktop
+   registers an empty document (no File/Edit/View) and adds one "System" title with
+   gb_menu_add, so its dropdown renders with the same framed/reverse-video hover look
+   as every app's menus - one menu path for the whole UI. */
+#define FP_COL    54          /* Ram-Usage footprint column - left of the clock (CLK_COL 68) */
+static const gb_doc_t deskdoc = { 0 };        /* no document -> gb_doc adds no titles */
 
 /* draw_footprint: the resident kernel size on the top bar, left of the clock, as
    "<n>K used", black-on-white like the bar. */
@@ -260,16 +269,19 @@ static void tidy_icons(void)
     gb_restore_parent();
 }
 
-static void run_menu(void)
+/* sys_action: the System menu handler, dispatched by the gb_doc framework (#142). */
+static const char *const sys_items[4] = {
+    "Ram Usage", "Refresh Media", "Tidy Icons", "Exit to DOS"
+};
+static void sys_action(unsigned char sel)
 {
-    static const char *const items[4] = {
-        "Ram Usage", "Refresh Media", "Tidy Icons", "Exit to DOS"
-    };
-    unsigned char sel = popup(MENU_COL, 8, items, 4);
     if (sel == 0) {                            /* Ram Usage: toggle the footprint (it then
                                                   persists - nothing else touches the bar) */
         show_ram ^= 1;
         gb_curhide();
+        gb_wm_damage(0, 0, 80, 200);           /* the footprint lives in the bar, outside the
+                                                  System dropdown's damage clip - widen first
+                                                  or the draw is clipped away (#153) */
         if (show_ram) draw_footprint();
         else gb_fill(FP_COL, 0, 13, 8, 1);
         gb_curshow();
@@ -310,9 +322,7 @@ static void on_event(void)
         }
         return;
     }
-    if (gb_msg.type != GB_MSG_MENU) return;
-    if (gb_msg.p0 < MENU_COL || gb_msg.p0 >= MENU_END) return;
-    want_menu = 1;                                      /* "System" clicked -> drop the menu */
+    gb_doc_event();                                    /* a top-bar title click -> the framework */
 }
 
 /* on_frame: one frame of the desktop, called by the kernel's window-manager loop
@@ -323,15 +333,31 @@ static void on_frame(void)
 {
     unsigned char flags = gb_flags(), mx = gb_mx(), my = gb_my(), held, icon;
 
+    desk_active = 1;                              /* the desktop is focused this frame (#153) */
+    if (!menu_inited) {                          /* 1st frame: the window is now registered+focused */
+        menu_inited = 1;
+        gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
+        gb_menu_add("System", sys_items, 4, sys_action);
+    }
     if (dc_timer) dc_timer--;
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
        Exit to DOS to leave); ESC only closes apps launched on top of it */
 
-    if (want_menu) { want_menu = 0; run_menu(); return; }
+    if (gb_doc_frame()) {                  /* a System menu opened/ran (#142) */
+        gb_curhide();
+        gb_wm_damage(0, 0, 80, 200);       /* gb_popup left a narrow damage clip; the desktop
+                                              repaints fully here and paint() doesn't reset the
+                                              clip, so widen it back or the next op stays clipped
+                                              (#153: a dragged icon vanished on drop). */
+        paint();
+        gb_curshow();
+        return;
+    }
 
     held = flags & GB_FIRE;
-    if (held_prev && !held && drag_active) {   /* fire released -> drop */
-        drop();
+    if (held_prev && !held) {              /* fire released */
+        if (drag_active) drop();           /* was dragging -> drop at the new spot */
+        drag_armed = 0;                    /* armed but never moved -> just a click, icon untouched */
         held_prev = 0;
         return;
     }
@@ -342,35 +368,50 @@ static void on_frame(void)
         return;
     }
 
+    if (drag_armed) {                      /* pressed on an icon: lift only once it really moves (#153) */
+        unsigned char dx = (mx > arm_mx) ? (unsigned char)(mx - arm_mx) : (unsigned char)(arm_mx - mx);
+        unsigned char dy = (my > arm_my) ? (unsigned char)(my - arm_my) : (unsigned char)(arm_my - my);
+        if (dx >= DRAGTH || dy >= DRAGTH) { drag_armed = 0; dragstart(dc_idx, mx, my); }
+        return;
+    }
+
     if (!(flags & GB_CLICK)) return;       /* a fresh press? */
     icon = hit_icon(mx, my);
-    if (icon == NONE) return;
+    if (icon == NONE) { select_icon(NONE); return; }   /* click empty space -> deselect (#153) */
 
     if (dc_timer && dc_idx == icon) {      /* second click -> open */
-        if (ic_drive[icon]) {                                /* browse that drive (#65): */
+        unsigned char opens = ic_drive[icon] || icon == IDX_CLOCK;
+        if (opens && gb_wm_full())                           /* no free bank -> say so (#153) */
+            gb_alert("Sorry, not enough RAM", "to run more apps.");
+        else if (ic_drive[icon]) {                           /* browse that drive (#65): */
+            select_icon(NONE);                               /* opening clears the selection (#153) */
             gb_set_drive(icon);                              /* icon idx 0/1/2 = C/A/B   */
             gb_wm_open("FILEMGR APP");
         }
-        else if (icon == IDX_CLOCK) gb_wm_open("CLOCK   APP"); /* analog clock window (#72) */
+        else if (icon == IDX_CLOCK) { select_icon(NONE); gb_wm_open("CLOCK   APP"); } /* clock (#72) */
         dc_timer = 0;
         held_prev = 0;
-    } else {                               /* first click: arm + start drag */
+    } else {                               /* first click: select + arm; the lift waits for movement (#153) */
+        select_icon(icon);
         dc_idx = icon;
         dc_timer = DCLICK;
-        dragstart(icon, mx, my);
+        drag_armed = 1;
+        arm_mx = mx;
+        arm_my = my;
     }
 }
 
 /* the desktop is the root window: full screen below the top bar, on_repaint = the
-   full paint() (restacked behind any window), on_event = the top-bar click demo,
-   menu = the "Disk" title. Its rect spans the screen so it is the bottom catch-all
-   for click-to-focus; the kernel installs its menu when it has focus. */
-static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint, on_event, dt_menu };
+   full paint() (restacked behind any window), on_event = file-drop + the System menu.
+   menu = 0: the gb_doc framework installs the "System" title dynamically (#142). Its
+   rect spans the screen so it is the bottom catch-all for click-to-focus. */
+static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint, on_event, 0 };
 
 void main(void)
 {
     drive_poll();                               /* drives present at boot -> icons (#65) */
     paint();
+    gb_curshow();                               /* paint() no longer shows the pointer (#153) */
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;

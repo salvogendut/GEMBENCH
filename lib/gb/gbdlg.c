@@ -27,12 +27,37 @@ static unsigned char dlg_modal;
 unsigned char gb_modal(void)                 { return dlg_modal; }
 void          gb_modal_set(unsigned char on) { dlg_modal = on; }
 
-/* gb_popup: a framed list of n labels at (col,line), auto-sized to the longest
- * label. Returns the clicked row, or 0xFF if cancelled (clicked away / ESC). */
+/* gb_popup_close: ask the live gb_popup loop to close (cancel). The kernel consumes
+ * a click on a menu *title* (the bar is kernel-owned) before the popup loop can see
+ * it as a click-away, so a re-click of the title can't close the menu by itself -
+ * the title handler calls this to make the toggle work. */
+static unsigned char dlg_close;
+void          gb_popup_close(void)           { dlg_close = 1; }
+
+/* pop_row: paint row i of a popup either normal (black-on-white) or reverse
+ * (white-on-black, for the row under the pointer). The text call paints its own
+ * paper behind the glyphs, so no separate fill is needed. Bracket with
+ * gb_curhide/show. */
+static void pop_row(unsigned char x, unsigned char y,
+                    const char *label, unsigned char i, unsigned char rev)
+{
+    unsigned char ty = (unsigned char)(y + 2 + i * 10);
+    if (rev) gb_textrev((unsigned char)(x + 1), ty, label);
+    else     gb_textbw ((unsigned char)(x + 1), ty, label);
+}
+
+/* gb_popup: THE GEOBENCH dropdown menu - one implementation every menu uses (the
+ * desktop's System menu and every app's title menus), so they all look and behave
+ * the same. A framed black-on-white list at (col,line), auto-sized to the longest
+ * label; the row under the pointer highlights in reverse video; a click in a row
+ * selects it, a click away or ESC cancels. Returns the clicked row, or 0xFF if
+ * cancelled. Raises gb_modal() while up (so a caller's on_event ignores top-bar
+ * clicks - re-clicking the menu title then closes the menu instead of re-arming
+ * it). Leaves the box erased to the backdrop; the caller repaints behind. */
 unsigned char gb_popup(unsigned char x, unsigned char y,
                        const char *const *labels, unsigned char n)
 {
-    unsigned char i, flags, row, sel = 0xFF, esc = 0, w, c, longest = 0;
+    unsigned char i, flags, sel = 0xFF, esc = 0, w, c, longest = 0, hot = 0xFF, over;
     unsigned char boxh = (unsigned char)(n * 10 + 4);
 
     for (i = 0; i < n; i++) {               /* width = longest label + padding */
@@ -41,27 +66,57 @@ unsigned char gb_popup(unsigned char x, unsigned char y,
     }
     w = (unsigned char)((longest * 6) / 4 + 3);   /* 6px glyphs over 4px bytes */
     dlg_modal = 1;
+    dlg_close = 0;
     gb_curhide();
     gb_fill(x, y, w, boxh, 1);              /* white box + black frame */
     gb_frame(x, y, w, boxh, 2);
     for (i = 0; i < n; i++)
-        gb_text((unsigned char)(x + 1), (unsigned char)(y + 2 + i * 10), labels[i]);
+        gb_textbw((unsigned char)(x + 1), (unsigned char)(y + 2 + i * 10), labels[i]);
     gb_curshow();
     for (;;) {
         flags = gb_poll();
-        if (flags & GB_QUIT) { esc = 1; break; }    /* ESC closes the menu */
-        if (!(flags & GB_CLICK)) continue;
+        if (dlg_close) { esc = 1; break; }           /* a title re-click asked us to close */
+        over = 0xFF;                                 /* which row is the pointer over? */
         if (gb_my() >= (unsigned char)(y + 2) && gb_my() < (unsigned char)(y + 2 + n * 10) &&
             gb_mx() >= x && gb_mx() < (unsigned char)(x + w)) {
-            row = (unsigned char)((gb_my() - (y + 2)) / 10);
-            if (row < n) { sel = row; break; }
+            unsigned char r = (unsigned char)((gb_my() - (y + 2)) / 10);
+            if (r < n) over = r;
         }
-        break;                                       /* clicked elsewhere -> cancel */
+        if (over != hot) {                           /* move the reverse-video highlight */
+            gb_curhide();
+            if (hot  != 0xFF) pop_row(x, y, labels[hot],  hot,  0);
+            if (over != 0xFF) pop_row(x, y, labels[over], over, 1);
+            gb_curshow();
+            hot = over;
+        }
+        if (flags & GB_QUIT) { esc = 1; break; }     /* ESC closes the menu */
+        if (flags & GB_CLICK) { if (over != 0xFF) sel = over; break; }  /* row: select; away: cancel */
     }
     dlg_modal = 0;
-    if (esc) while (gb_poll() & GB_QUIT) ;
+    /* Consume the click/ESC that ended the menu so it doesn't leak into POLL_FLAGS,
+       where wm_chrome_frame would re-process it as a WINDOW click (#153: a menu
+       selection over the title bar hit the close gadget -> the window vanished). */
+    while (gb_poll() & (GB_QUIT | GB_CLICK)) ;
+    (void)esc;
     gb_curhide();
     gb_fill(x, y, w, boxh, 0);              /* erase to backdrop; caller redraws */
     gb_curshow();
+    /* #153: limit the caller's gb_restore_parent to the damage = this box UNION the
+       focused window, instead of a whole-screen repaint (the desktop flash). The
+       box must be in the damage because it overhangs whatever was behind it; the
+       window must be in it because the menu action changed the window's content.
+       (The desktop's own System menu reads a stale rect here, but it already did a
+       full paint() before - so this is no worse, and app menus stop flashing.) */
+    {
+        unsigned char wx = gb_wm_x(), wy = gb_wm_y();
+        unsigned char wr = (unsigned char)(wx + gb_wm_w());
+        unsigned char wb = (unsigned char)(wy + gb_wm_h());
+        unsigned char br = (unsigned char)(x + w), bb = (unsigned char)(y + boxh);
+        unsigned char lx = (x < wx) ? x : wx;
+        unsigned char ty = (y < wy) ? y : wy;
+        unsigned char rx = (br > wr) ? br : wr;
+        unsigned char by = (bb > wb) ? bb : wb;
+        gb_wm_damage(lx, ty, (unsigned char)(rx - lx), (unsigned char)(by - ty));
+    }
     return sel;
 }

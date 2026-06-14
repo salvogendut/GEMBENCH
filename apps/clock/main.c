@@ -22,14 +22,12 @@
 #define MIN_H    96
 #define TITLE_H  14
 
-#define MENU_COL 10           /* "Options" title column in the top bar */
-#define MENU_END 22
-
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;  /* live size (resizeable) */
 static unsigned char show_sec;               /* 0 = H:M (minute refresh), 1 = +seconds */
 static unsigned char ph, pm, ps, pshow, have_prev;  /* previous h/m/s + show state */
-static unsigned char want_menu, modal;
+static unsigned char modal;                  /* a self-polling dialog is up (Set time) */
+static unsigned char fs_px, fs_py, fs_pw, fs_ph;    /* geometry saved across Fullscreen (#142) */
 
 /* face geometry, recomputed from the live window rect on every full draw (#81): the
    analog face scales to whatever the window has been resized to. */
@@ -175,20 +173,19 @@ static unsigned char cursor_over(void)
     return (unsigned char)(mx >= win_x && mx < win_x + win_w && my >= win_y && my < win_y + win_h);
 }
 
-/* full_draw: paint the whole window (open / on_repaint / after a drag or toggle). */
-static void full_draw(void)
+/* on_draw (#146): the WM already drew the frame/title/close; paint just the content
+   (face + hands + digital + grip). The face rescales to the live window rect. */
+static void c_draw(void)
 {
     unsigned char h, m, s;
+    win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
     relayout();
     gb_time();
     h = bin(gb_hour); m = bin(gb_min); s = bin(gb_sec);
-    gb_curhide();
-    gb_window(win_x, win_y, win_w, win_h, "Clock");
     draw_face();
     hands(h, m, s, show_sec, 1, 3);
     draw_digital(h, m, s);
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#81) */
-    gb_curshow();
     ph = h; pm = m; ps = s; pshow = show_sec; have_prev = 1;
 }
 
@@ -213,44 +210,10 @@ static unsigned char changed(void)
     return show_sec ? (bin(gb_sec) != ps) : (bin(gb_min) != pm);
 }
 
-/* --- Options menu + dialogs (modal, self-polling like the other apps) --------- */
+/* --- Options menu + dialogs (gb_doc framework + a bespoke Set-time dialog) ----- */
 
-static const unsigned char clk_menu[] = { 1, MENU_COL, 'O','p','t','i','o','n','s' };
-
-static void on_menu(void)
-{
-    if (gb_msg.type != GB_MSG_MENU) return;
-    if (gb_msg.p0 < MENU_COL || gb_msg.p0 >= MENU_END) return;
-    want_menu = 1;
-}
-
-static unsigned char popup(unsigned char x, unsigned char y,
-                           const char *const *labels, unsigned char n)
-{
-    unsigned char i, flags, row, sel = 0xFF;
-    modal = 1;
-    gb_curhide();
-    gb_fill(x, y, 22, n * 10 + 4, 1);          /* white, no frame: a seamless drop from
-                                                  the (white) top bar - black ink only */
-    for (i = 0; i < n; i++) gb_textbw(x + 1, y + 2 + i * 10, labels[i]);
-    gb_curshow();
-    for (;;) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) break;
-        if (!(flags & GB_CLICK)) continue;
-        if (gb_my() >= y + 2 && gb_my() < y + 2 + n * 10 && gb_mx() >= x && gb_mx() < x + 22) {
-            row = (gb_my() - (y + 2)) / 10;
-            if (row < n) { sel = row; break; }
-        }
-        break;
-    }
-    modal = 0;
-    if (sel == 0xFF) while (gb_poll() & GB_QUIT) ;
-    gb_curhide();
-    gb_fill(x, y, 22, n * 10 + 4, 0);
-    gb_curshow();
-    return sel;
-}
+/* on_event: a top-bar title click -> the framework (View / Options) (#142). */
+static void clk_event(void) { gb_doc_event(); }
 
 /* set_time_dialog: +/- on hours and minutes (triangle glyphs), OK applies to the
    RTC. Returns 1 if the time was set. */
@@ -316,61 +279,93 @@ static unsigned char set_time_dialog(void)
     return ok;
 }
 
-static void run_menu(void)
+/* clk_fullscreen: View > Fullscreen - the analog face rescales to the whole screen
+   (relayout derives the radius from the live window rect) (#142). */
+static void clk_fullscreen(unsigned char on)
 {
-    const char *items[2];
-    unsigned char sel;
-    items[0] = "Set time";
-    items[1] = show_sec ? "Hide Seconds" : "Show Seconds";
-    sel = popup(MENU_COL, 8, items, 2);
-    if (sel == 0) { if (set_time_dialog()) have_prev = 0; full_draw(); }
-    else if (sel == 1) { show_sec ^= 1; full_draw(); }
+    if (on) {
+        fs_px = gb_wm_x(); fs_py = gb_wm_y(); fs_pw = gb_wm_w(); fs_ph = gb_wm_h();
+        gb_wm_setpos(0, 8); gb_wm_setsize(80, 192);
+    } else {
+        gb_wm_setpos(fs_px, fs_py); gb_wm_setsize(fs_pw, fs_ph);
+    }
+    have_prev = 0;                               /* face rescaled: no stale hands */
+    gb_wm_damage(0, 8, 80, 192);                 /* repaint ONCE in on_frame, clipped to the toggle
+                                                    area; repainting here too flickers (#153) */
 }
+
+/* opt_action: the Options menu (gb_menu_add) - Set time / toggle the seconds hand. The
+   repaint happens once in on_frame after gb_doc_frame returns (#142). */
+static const char *const opt_items[2] = { "Set time", "Toggle Seconds" };
+static void opt_action(unsigned char sel)
+{
+    if (sel == 0) { if (set_time_dialog()) have_prev = 0; }
+    else if (sel == 1) show_sec ^= 1;
+}
+
+/* no document (no File/Edit); gb_doc adds just View > Fullscreen, Options is added
+   on top with gb_menu_add. */
+static const gb_doc_t clkdoc = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, clk_fullscreen, 0, 0
+};
 
 /* --- WM callbacks ------------------------------------------------------------ */
 
-static void on_frame(void)
+/* on_frame (#146): the WM handled close/drag/grip routing; run the menu framework and
+   tick the hands. (No QUIT / hit-testing here - the kernel does the chrome.) */
+static void c_frame(void)
 {
-    unsigned char flags = gb_flags(), mx, my;
-
-    if (flags & GB_QUIT) { gb_wm_close(); return; }
-
-    if (want_menu) { want_menu = 0; run_menu(); return; }
-
+    win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
+    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a View/Options item ran (#142) */
     gb_time();
     if (changed()) tick();
+}
 
-    if (!(flags & GB_CLICK)) return;
-    mx = gb_mx(); my = gb_my();
-    if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {  /* resize grip (#81) */
+/* on_click (#146): the only content gesture is the resize grip. */
+static void c_click(void)
+{
+    win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
+    if (gb_in_grip(win_x, win_y, win_w, win_h, gb_mx(), gb_my()))
         if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
             gb_wm_setsize(win_w, win_h);
-            gb_restore_parent();
             have_prev = 0;                         /* face rescaled: no stale hands */
-            full_draw();                           /* redraw the face at the new size */
+            gb_restore_parent();
         }
-        return;
-    }
-    if (my >= win_y && my < win_y + TITLE_H) {
-        if (mx >= win_x && mx < win_x + 5) { gb_wm_close(); return; }
-        if (mx >= win_x + 5 && mx < win_x + win_w) {
-            if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
-                gb_wm_setpos(win_x, win_y);
-                gb_restore_parent();
-                full_draw();                       /* redraw the face at the new spot */
-            }
-        }
+}
+
+/* on_drag (#146): a title-bar press -> move the window. */
+static void c_drag(void)
+{
+    win_x = gb_wm_x(); win_y = gb_wm_y();
+    if (gb_drag_window(&win_x, &win_y, gb_wm_w(), gb_wm_h())) {
+        gb_wm_setpos(win_x, win_y);
+        gb_restore_parent();
     }
 }
 
-static const gb_win_t clkwin = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, full_draw, on_menu, clk_menu
+/* the window's single handler (#148). */
+static void c_proc(void)
+{
+    switch (gb_msg.type) {
+        case GB_MSG_DRAW:  c_draw();      break;
+        case GB_MSG_CLICK: c_click();     break;
+        case GB_MSG_FRAME: c_frame();     break;
+        case GB_MSG_CLOSE: gb_wm_close(); break;   /* no confirm: just close */
+        case GB_MSG_DRAG:  c_drag();      break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  clk_event();   break;
+    }
+}
+
+static const gb_mwin_t cmw = {
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, c_proc, "Clock"
 };
 
 void main(void)
 {
-    win_x = DEF_X; win_y = DEF_Y; win_w = DEF_W; win_h = DEF_H;
-    show_sec = 0; have_prev = 0; want_menu = 0; modal = 0;
-    gb_wm_add(&clkwin);
-    full_draw();
+    show_sec = 0; have_prev = 0; modal = 0;
+    gb_wm_managed(&cmw);                         /* register (no draw yet) (#146) */
+    gb_doc(&clkdoc);                             /* View > Fullscreen (#142) */
+    gb_menu_add("Options", opt_items, 2, opt_action);
+    gb_restore_parent();                         /* first paint: WM chrome + c_draw */
 }

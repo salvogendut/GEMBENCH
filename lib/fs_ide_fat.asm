@@ -306,6 +306,10 @@ fsvm_nlen
                 ld    de,GBFAT_NAME
                 ld    bc,11
                 ldir
+                ld    hl,fs_dir_clus          ; current browse dir -> the module, so the
+                ld    de,GBFAT_DIR            ; save lands here, not in root (#142)
+                ld    bc,4
+                ldir
                 ld    hl,(fs_save_len)
                 ld    (GBFAT_LEN),hl
                 xor   a                        ; op = save

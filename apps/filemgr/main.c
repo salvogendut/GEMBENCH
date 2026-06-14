@@ -22,7 +22,7 @@
 #define MIN_W    24            /* min size keeps the title + a couple of rows usable */
 #define MIN_H    62
 #define TITLE_H  14
-#define DCLICK   40           /* double-click window, frames */
+#define DCLICK   75           /* double-click window, frames (gamepad-friendly, #153) */
 
 /* scrollbar at the left inner edge, content to its right */
 #define SB_W     3                       /* scrollbar width, byte cols */
@@ -68,13 +68,10 @@ static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
 static char cfgbuf[512];
 static unsigned int cfglen;
 
-/* the top-bar menu: "View" toggles list/icons, "Back" goes up a directory */
-static const unsigned char fm_menu[] = {
-    2,
-    10, 'V','i','e','w',0,0,0,0,
-    17, 'B','a','c','k',0,0,0,0
-};
-#define MENU_BACK_COL 17      /* click column >= this -> Back, else View */
+/* The top bar is the gb_doc View menu (#142): Fullscreen (framework) + "Icons / List".
+   Going up a directory is the ".." entry in the listing (not a menu item). FM has no
+   document, so it gets no File menu. */
+static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Fullscreen */
 
 /* Sorted listing cache (#118): the directory is streamed once into these arrays in
    raw order, then `order` is sorted by (type, name) and BOTH views + the click/open
@@ -160,11 +157,18 @@ static void cfg_save_view(void)
     gb_fs_save(cfgbuf, cfglen);
 }
 
+/* The listing shows a synthetic ".." entry first whenever we're not at the drive
+   root, so "up a directory" is a normal double-click (#142). up_avail is that 0/1
+   offset; disp_total = the real entries plus it. Display position 0 is "..", the
+   rest map to sorted real index (pos - up_avail). */
+static unsigned char up_avail(void);     /* defined after fm_path */
+static unsigned char disp_total(void) { return (unsigned char)(total + up_avail()); }
+
 /* scroll model: lines (rows in list, grid rows in icons) and how many are visible */
 static unsigned char total_lines(void)
 {
-    if (view == V_ICONS) return (unsigned char)((total + ICOLS - 1) / ICOLS);
-    return total;
+    if (view == V_ICONS) return (unsigned char)((disp_total() + ICOLS - 1) / ICOLS);
+    return disp_total();
 }
 static unsigned char vis_lines(void)
 {
@@ -259,6 +263,10 @@ static void path_pop(void)                       /* drop the last "/component" *
     fm_path[last] = 0;                            /* "/GAMES"->"", "/A/B"->"/A" */
 }
 
+/* up_avail: 1 when we're in a subdirectory (so the ".." entry is shown), 0 at the
+   drive root (fm_path empty -> no parent). */
+static unsigned char up_avail(void) { return (unsigned char)(fm_path[0] != 0); }
+
 static const char *win_title(void)               /* "Disk C" + path -> title_buf */
 {
     unsigned char i = 0, j = 0;
@@ -289,6 +297,7 @@ static const char *win_title(void)               /* "Disk C" + path -> title_buf
 #define ICON_PAINT 17
 #define ICON_FRACTAL 18
 #define ICON_VIEWER 20
+#define ICON_UP 24            /* up-arrow for the ".." parent-dir entry (#142) */
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -397,14 +406,20 @@ static void build_list(void)
 
 static void draw_list_view(void)
 {
-    unsigned char i, y, p, raw;
+    unsigned char i, y, p, raw, up = up_avail();
     for (i = 0; i < LVIS; i++) {                   /* draw from the sorted cache (#118) */
         p = (unsigned char)(top + i);
-        if (p >= total) break;
-        raw = order[p];
+        if (p >= disp_total()) break;
         y = CT_Y + i * ROW_H;
-        gb_icon_half(icons[raw], CT_X, y + 1);     /* half-height type icon (#103) */
-        gb_text(CT_X + 9, y + 6, name83(NAME_AT(raw)));   /* NAME.EXT */
+        gb_frame(CT_X, y, CT_W, 17, 0);            /* erase any stale selection frame first (#153) */
+        if (up && p == 0) {                        /* the ".." parent-dir entry (#142) */
+            gb_icon(ICON_UP, CT_X, y + 1);         /* 16px icon - fits the row at full height */
+            gb_text(CT_X + 9, y + 6, "..");
+        } else {
+            raw = order[(unsigned char)(p - up)];
+            gb_icon_half(icons[raw], CT_X, y + 1); /* half-height type icon (#103) */
+            gb_text(CT_X + 9, y + 6, name83(NAME_AT(raw)));   /* NAME.EXT */
+        }
         if (nsel == (unsigned char)(p + 1))        /* red frame on the selected row */
             gb_frame(CT_X, y, CT_W, 17, 3);
     }
@@ -412,16 +427,24 @@ static void draw_list_view(void)
 
 static void draw_icons_view(void)
 {
-    unsigned char r, c, cx, cy, raw;
+    unsigned char r, c, cx, cy, raw, up = up_avail();
     unsigned int idx = (unsigned int)top * ICOLS;    /* first visible item */
+    unsigned int dt = disp_total();
     for (r = 0; r < IVIS; r++) {
         for (c = 0; c < ICOLS; c++) {
-            if (idx >= total) return;
-            raw = order[(unsigned char)idx];
+            if (idx >= dt) return;
             cx = CT_X + c * CELL_W;
             cy = CT_Y + r * CELL_H;
-            gb_icon(icons[raw], cx + (CELL_W - 8) / 2, cy + 1);   /* full icon (#103) */
-            draw_name(cx, cy + 34, name83(NAME_AT(raw)));           /* name below the icon */
+            gb_frame(cx, cy, CELL_W, CELL_H - 1, 0);             /* erase any stale frame first (#153) */
+            if (up && idx == 0) {                                /* the ".." entry (#142) */
+                gb_icon(ICON_UP, (unsigned char)(cx + (CELL_W - 4) / 2),  /* 16px, centered */
+                        (unsigned char)(cy + 9));                        /* in the 32px band */
+                gb_text((unsigned char)(cx + (CELL_W - 3) / 2), cy + 34, "..");  /* centered */
+            } else {
+                raw = order[(unsigned char)(idx - up)];
+                gb_icon(icons[raw], cx + (CELL_W - 8) / 2, cy + 1);   /* full icon (#103) */
+                draw_name(cx, cy + 34, name83(NAME_AT(raw)));         /* name below the icon */
+            }
             if (nsel == (unsigned char)(idx + 1))
                 gb_frame(cx, cy, CELL_W, CELL_H - 1, 3);
             idx++;
@@ -429,18 +452,34 @@ static void draw_icons_view(void)
     }
 }
 
-/* draw: full repaint of the window (on_repaint). */
-static void draw(void)
+/* draw_body: the window CONTENT (scrollbar + listing + grip); the WM drew the frame (#146). */
+static void draw_body(void)
 {
-    gb_set_drive(my_drive);              /* this window's drive (#65) - on_repaint may
-                                            run while another window's drive is active */
-    gb_curhide();
-    gb_window(win_x, win_y, win_w, win_h, win_title());
+    gb_set_drive(my_drive);              /* this window's drive (#65) - a repaint may run
+                                            while another window's drive is active */
     draw_scrollbar();
     if (view == V_ICONS) draw_icons_view();
     else                 draw_list_view();
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip, bottom-right (#81) */
+}
+/* draw: interactive content redraw (manages the cursor) - the scroll/select paths use it
+   to refresh the listing without a full-stack repaint or a title change. */
+static void draw(void)
+{
+    gb_curhide();
+    draw_body();
     gb_curshow();
+}
+/* sync_rect: pull the live WM-owned geometry before we use it (#146). */
+static void sync_rect(void)
+{
+    win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
+}
+/* fm_draw (on_draw): the WM drew the frame/title and owns the cursor; paint the content. */
+static void fm_draw(void)
+{
+    sync_rect();
+    draw_body();
 }
 
 /* relist: re-read the current directory and redraw from the top (#54). */
@@ -449,8 +488,12 @@ static void relist(void)
     build_list();              /* stream + sort the directory (sets total) (#118) */
     top = 0; nsel = 0;
     clamp_top();
-    draw();
+    win_title();               /* the path changed -> refresh the title buffer (#146) */
+    gb_restore_parent();       /* full repaint: the WM redraws the frame/title + fm_draw */
 }
+
+/* go_up: ascend to the parent directory (the ".." entry / old View>Up). */
+static void go_up(void) { gb_back(); path_pop(); relist(); }
 
 /* ext_is: does the positioned entry's raw 11-byte 8.3 name end in this extension? */
 static unsigned char ext_is(const char *e, char a, char b, char c)
@@ -471,6 +514,10 @@ static void open_entry(unsigned char idx)
     char *e;
     dir_seek(order[idx]);          /* sorted display index -> raw entry (sets attr/cluster) */
     if (gb_isdir()) { path_push(fullname()); gb_chdir(); relist(); return; }
+    if (gb_wm_full()) {            /* every app bank is taken - say so, don't dead-click (#153) */
+        gb_alert("Sorry, not enough RAM", "to run more apps.");
+        return;
+    }
     nsel = 0;
     e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
     if (ext_is(e, 'A', 'P', 'P'))
@@ -511,10 +558,52 @@ static void sb_click(unsigned char my)
     else                    sb_drag();
 }
 
-/* on_event: a top-bar menu click. "Back" (right title) goes to the parent
-   directory; "View" (left title) toggles list / icons. */
+/* fm_view: the gb_doc View menu's app items (after Fullscreen). 0 = toggle the
+   list/icons layout (persisted to GEOBENCH.CFG). "Up" is no longer a menu item -
+   it's the ".." entry in the listing now (#142). */
+static void fm_view(unsigned char item)
+{
+    if (item == 0) {                      /* Icons / List: toggle + persist */
+        view ^= 1;
+        cfg_save_view();
+        top = 0; nsel = 0;
+        clamp_top();
+        gb_curhide();
+        gb_fill(CT_X, CT_Y, CT_W, CT_H, 0);   /* clear the old layout: icons<->list use a
+                                                 different grid, so the new one must paint on
+                                                 a blank content rect, not over the old (#153) */
+        draw_body();
+        gb_curshow();
+    }
+}
+
+/* fm_fullscreen: View > Fullscreen - cover the screen and restore the prior
+   geometry on exit; the listing reflows to the new size (#142). */
+static void fm_fullscreen(unsigned char on)
+{
+    if (on) {
+        fs_px = win_x; fs_py = win_y; fs_pw = win_w; fs_ph = win_h;
+        win_x = 0; win_y = 8; win_w = 80; win_h = 192;
+    } else {
+        win_x = fs_px; win_y = fs_py; win_w = fs_pw; win_h = fs_ph;
+    }
+    gb_wm_setpos(win_x, win_y);
+    gb_wm_setsize(win_w, win_h);
+    clamp_top();                          /* a taller window shows more rows */
+    gb_restore_parent();                  /* WM repaints frame + fm_draw at the new size */
+}
+
+static const char *const fm_view_items[] = { "Icons / List", 0 };
+static const gb_doc_t fmdoc = {          /* no document -> no File menu, just View */
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, fm_fullscreen, fm_view_items, fm_view
+};
+
+/* on_event: a file dropped here from another window is copied onto our drive (#65);
+   a top-bar menu click goes to the framework's View handler (#142). */
 static void on_event(void)
 {
+    sync_rect();
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
         unsigned int n;                   /* copy it onto THIS window's drive (#74) */
         gb_set_drive(my_drive);
@@ -528,47 +617,46 @@ static void on_event(void)
         relist();
         return;
     }
-    if (gb_msg.type != GB_MSG_MENU) return;
-    if (gb_msg.p0 >= MENU_BACK_COL) {     /* Back */
-        gb_back();
-        path_pop();
-        relist();
-    } else {                              /* View: toggle + persist to GEOBENCH.CFG */
-        view ^= 1;
-        cfg_save_view();
-        top = 0; nsel = 0;
-        clamp_top();
-        draw();
+    gb_doc_event();                       /* the View menu (Fullscreen / Icons-List / Up) */
+}
+
+/* on_frame (#146): the WM handled close/drag/grip routing; re-assert our drive, tick the
+   double-click timer, and run the View menu framework. */
+static void fm_frame(void)
+{
+    sync_rect();
+    gb_set_drive(my_drive);              /* re-assert our drive each focused frame (#65) */
+    if (dc_timer) dc_timer--;
+    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a View menu ran (#142) */
+}
+
+/* on_close (#146): no document to save -> just close. */
+static void fm_close(void)
+{
+    if (gb_doc_close()) gb_wm_close();
+    else gb_restore_parent();
+}
+
+/* on_drag (#146): a title-bar press -> move the window. */
+static void fm_drag(void)
+{
+    sync_rect();
+    if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
+        gb_wm_setpos(win_x, win_y);
+        gb_restore_parent();
     }
 }
 
-/* on_frame: one frame when focused (kernel WM loop). Read input via gb_flags/mx/my. */
-static void on_frame(void)
+/* on_click (#146): a content press - resize grip, scrollbar, or an entry (select / open /
+   drag to another window or the Trash). */
+static void fm_click(void)
 {
-    unsigned char flags = gb_flags(), mx, my, idx;
+    unsigned char mx, my, idx;
 
-    gb_set_drive(my_drive);              /* re-assert our drive each focused frame (#65) */
-    if (dc_timer) dc_timer--;
-    if (flags & GB_QUIT) { gb_wm_close(); return; }    /* ESC closes the window */
-    if (!(flags & GB_CLICK)) return;
-
+    sync_rect();
+    gb_set_drive(my_drive);
     mx = gb_mx();
     my = gb_my();
-
-    /* close gadget (top-left of the title bar) */
-    if (my >= win_y && my < win_y + TITLE_H && mx >= win_x && mx < win_x + 4) {
-        gb_wm_close();
-        return;
-    }
-
-    /* title bar (right of the close gadget) -> drag the window */
-    if (my >= win_y && my < win_y + TITLE_H && mx >= win_x + 4 && mx < win_x + win_w) {
-        if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
-            gb_wm_setpos(win_x, win_y);
-            gb_restore_parent();
-        }
-        return;
-    }
 
     /* resize grip (bottom-right corner) -> resize the window (#81) */
     if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {
@@ -577,7 +665,6 @@ static void on_frame(void)
             clamp_top();          /* taller window shows more rows -> re-clamp the scroll,
                                      else the thumb runs past the new track bottom (#81) */
             gb_restore_parent();
-            draw();
         }
         return;
     }
@@ -607,7 +694,13 @@ static void on_frame(void)
         } else {
             idx = top + (my - CT_Y) / ROW_H;
         }
-        if (idx >= total) return;
+        if (idx >= disp_total()) return;
+        if (up_avail() && idx == 0) {        /* the ".." entry: double-click ascends (#142) */
+            if (dc_timer && dc_idx == idx) { go_up(); dc_timer = 0; }
+            else { nsel = idx + 1; dc_idx = idx; dc_timer = DCLICK; draw(); }
+            return;
+        }
+        idx = (unsigned char)(idx - up_avail());   /* display position -> sorted real index */
         /* press on an entry: a drag (press + move) drags it to another window /
            the Trash (#62); a plain click (no move) falls through to select/open */
         dir_seek(order[idx]);                /* sorted index -> raw entry for gb_entname */
@@ -615,21 +708,39 @@ static void on_frame(void)
             relist();                        /* refresh (a move changes this dir) */
             return;
         }
-        if (dc_timer && dc_idx == idx) {     /* double-click -> open (dir or file) */
+        if (dc_timer && dc_idx == (unsigned char)(idx + up_avail())) {   /* double-click -> open */
             open_entry(idx);
             dc_timer = 0;
         } else {                              /* single click -> select */
-            nsel = idx + 1;
-            dc_idx = idx;
+            nsel = (unsigned char)(idx + up_avail() + 1);
+            dc_idx = (unsigned char)(idx + up_avail());
             dc_timer = DCLICK;
             draw();
         }
     }
 }
 
-/* a co-resident window: on_repaint = draw, on_event = the View toggle, menu = the
-   "View" title (shown in the top bar while we are focused). */
-static gb_win_t fmwin = { DEF_X, DEF_Y, DEF_W, DEF_H, on_frame, draw, on_event, fm_menu };
+/* a kernel-managed window (#146): the WM owns the frame/title/close/drag/grip; we supply
+   content (fm_draw), clicks (fm_click/fm_drag), the per-frame loop (fm_frame), close
+   (fm_close), and on_event (file-drop + the View menu). title is set in main once the
+   path is known; relist() refreshes it. The descriptor is mutable so we can cascade x/y. */
+/* the window's single handler (#148). */
+static void fm_proc(void)
+{
+    switch (gb_msg.type) {
+        case GB_MSG_DRAW:  fm_draw();  break;
+        case GB_MSG_CLICK: fm_click(); break;
+        case GB_MSG_FRAME: fm_frame(); break;
+        case GB_MSG_CLOSE: fm_close(); break;
+        case GB_MSG_DRAG:  fm_drag();  break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  on_event(); break;
+    }
+}
+
+static gb_mwin_t fmmw = {
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0
+};
 
 void main(void)
 {
@@ -637,14 +748,16 @@ void main(void)
     my_drive = gb_get_drive();   /* the drive the desktop opened us on (#65) */
     win_x = DEF_X + my_drive * 8;   /* cascade so two drive windows don't fully overlap */
     win_y = DEF_Y + my_drive * 14;
-    fmwin.x = win_x;             /* register the hit rect at the cascaded position */
-    fmwin.y = win_y;
-    gb_wm_add(&fmwin);           /* register first (focus) so gb_set_name/fs_load
+    fmmw.x = win_x;              /* register the window at the cascaded position */
+    fmmw.y = win_y;
+    gb_wm_managed(&fmmw);        /* register first (no draw, focus) so gb_set_name/fs_load
                                    target our window for the config read below */
+    gb_doc(&fmdoc);              /* View menu (Fullscreen / Icons-List); no File (#142) */
     gb_set_drive(my_drive);
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
     build_list();                /* stream + sort the directory (sets total) (#118) */
     top = 0;
     clamp_top();
-    draw();
+    fmmw.title = win_title();    /* build "<drive><path>" before the first paint (#146) */
+    gb_restore_parent();         /* first paint: WM chrome + fm_draw */
 }
