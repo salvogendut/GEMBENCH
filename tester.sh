@@ -1,1 +1,0 @@
-mkdir -p /tmp/gb1984/.config/1984 && sed 's/^mx4=.*/mx4=false/; s/^rom_board=.*/rom_board=false/; s/^symbiface_ide=.*/symbiface_ide=false/'     ~/.config/1984/1984.conf > /tmp/gb1984/.config/1984/1984.conf && HOME=/tmp/gb1984 ~/Dev/1984/1984 --6128 --memory=128     --disk-a="$HOME/Dev/geobench/QA/GEOBENCH.DSK" --autostart=GB
