@@ -54,6 +54,11 @@ APP_HANDLER     equ   #1300        ; word: registered app event handler (0 = non
 GB_MSG          equ   #1302        ; message record: type, p0, p1, p2 (4 bytes)
 GB_MSG_MENU     equ   1            ; message type: top-bar click, p0 = byte column
 GB_MSG_DROP     equ   2            ; message type: a file was dropped on this window
+GB_MSG_DRAW     equ   3            ; managed-window messages (#148): dispatched to the
+GB_MSG_CLICK    equ   4            ; single gb_mwin_t.proc, keyed by gb_msg.type. The
+GB_MSG_FRAME    equ   5            ; proc switches on it (one WndProc per window).
+GB_MSG_CLOSE    equ   6
+GB_MSG_DRAG     equ   7
                                    ; (DnD, #62); name at WM_DRAGNAME, pos at POLL_MX/MY
 POLL_MX         equ   #1306        ; last poll: cursor byte column (mx)
 POLL_MY         equ   #1307        ; last poll: cursor line (my)
@@ -121,25 +126,25 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
                 jp    kernel_main            ; GB_INIT  #8000
                 jp    k_cls                  ; GB_CLS   #8003
-                jp    k_print                ; GB_PRINT #8006
-                jp    k_quit                 ; GB_QUIT  #8009
+                jp    k_noop                 ; GB_PRINT #8006 (dead stub -> shared ret, #148)
+                jp    k_noop                 ; GB_QUIT  #8009 (dead stub -> shared ret, #148)
                 jp    gb_text_draw           ; GB_TEXT   #800C
                 jp    gb_open_window         ; GB_WINDOW #800F
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012
                 jp    gb_fs_dir_next         ; GB_DIRN   #8015
                 jp    k_vsync                ; GB_BLITE  #8018 (removed: mapping->FM, #103)
-                jp    k_curshow              ; GB_CURSHOW #801B
+                jp    cursor_show            ; GB_CURSHOW #801B (was jp k_curshow; #148)
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
                 jp    cursor_erase           ; GB_CURHIDE #8024
-                jp    k_launch               ; GB_LAUNCH  #8027
-                jp    k_getarg               ; GB_GETARG  #802A
-                jp    k_run                  ; GB_RUN     #802D
+                jp    k_noop                 ; GB_LAUNCH  #8027 (dead stub -> shared ret, #148)
+                jp    focus_arg_ptr          ; GB_GETARG  #802A (k_getarg collapsed, #148)
+                jp    launch_app             ; GB_RUN     #802D (k_run collapsed, #148)
                 jp    k_icon                 ; GB_ICON    #8030
                 jp    k_fill                 ; GB_FILL    #8033
                 jp    k_saverect             ; GB_SAVERECT    #8036
                 jp    k_restorerect          ; GB_RESTORERECT #8039
-                jp    k_xorframe             ; GB_XORFRAME    #803C
+                jp    k_noop                 ; GB_XORFRAME    #803C (dead stub -> shared ret, #148)
                 jp    k_fsload               ; GB_FSLOAD      #803F
                 jp    k_fssave               ; GB_FSSAVE      #8042
                 jp    k_getkey               ; GB_GETKEY      #8045
@@ -147,14 +152,14 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_onevent              ; GB_ONEVENT     #804B
                 jp    k_menu                 ; GB_MENU        #804E
                 jp    k_setname              ; GB_SETNAME     #8051
-                jp    k_onrepaint            ; GB_ONREPAINT   #8054
-                jp    k_restore_parent       ; GB_RESTPAR     #8057
+                jp    k_noop                 ; GB_ONREPAINT   #8054 (dead stub -> shared ret, #148)
+                jp    wm_repaint_all         ; GB_RESTPAR     #8057 (was jp k_restore_parent; #148)
                 jp    k_wm_run               ; GB_WMRUN       #805A
-                jp    k_wm_add               ; GB_WMADD       #805D
+                jp    wm_register            ; GB_WMADD       #805D (was jp k_wm_add; #148)
                 jp    k_wm_open              ; GB_WMOPEN      #8060
                 jp    k_wm_close             ; GB_WMCLOSE     #8063
                 jp    k_wm_setpos            ; GB_WMSETPOS    #8066
-                jp    k_wm_launch            ; GB_WMLAUNCH    #8069
+                jp    k_noop                 ; GB_WMLAUNCH    #8069 (dead stub -> shared ret, #148)
                 jp    k_isdir                ; GB_ISDIR       #806C
                 jp    k_chdir                ; GB_CHDIR       #806F
                 jp    k_back                 ; GB_BACK        #8072
@@ -340,9 +345,8 @@ set_palette
                 jp    SCR_SET_BORDER
 
 ; --- input + cursor services ---------------------------------------------
-; k_curshow: draw the pointer (the app calls this once after drawing its UI).
-k_curshow
-                jp    cursor_show
+; GB_CURSHOW draws the pointer (apps call it once after drawing their UI); the jump
+; table goes straight to cursor_show now (#148, reclaimed the k_curshow wrapper).
 
 ; k_poll: frame-paced input poll. Moves the cursor by the held directions and
 ; redraws it; returns B = cursor byte col, C = cursor line, D flags: bit0 = a
@@ -531,10 +535,8 @@ gf_pen          db    0
 k_cls
                 ld    a,1
                 jp    SCR_SET_MODE            ; mode 1 clears; returns to caller
-k_print                                        ; GB_PRINT: stub (unused early debug
-                ret                            ; print; no binding). Slot kept fixed.
-k_quit
-                ret                            ; (skeleton: app RETs anyway)
+k_noop                                         ; shared no-op for dead ABI slots (#148):
+                ret                            ; GB_PRINT/QUIT/LAUNCH/XORFRAME/ONREPAINT/WMLAUNCH
 
 ; to_data / from_data: save the caller's bank page and map PAGE_DATA (the font /
 ; icon page), then restore it. One shared save slot (dp_save) - these swaps are
@@ -1078,15 +1080,11 @@ wfp_hit         xor   a
                 ld    (de),a                       ; clear the parallel busy flag
                 ret
 
-; k_run (GB_RUN): run a named app. HL = 8.3 name (in the caller's page).
-k_run
-                jp    launch_app
+; GB_RUN (HL = 8.3 name in the caller's page): the slot jumps straight to
+; launch_app (k_run wrapper collapsed, #148).
 
 ; k_launch (GB_LAUNCH): the old MODAL open-the-current-entry. Superseded by the
-; co-resident open path and no longer called by any app; kept as a stub so the
-; jump-table address stays fixed.
-k_launch
-                ret
+; co-resident open path and no longer called by any app; the slot -> k_noop (#148).
 
 ; Directory navigation (issue #54). The FAT backend enumerates the directory at
 ; fs_dir_clus; gb_chdir descends into the positioned entry (pushing the parent on
@@ -1171,9 +1169,8 @@ focus_arg_ptr
                 add   hl,de
                 ret
 
-; k_getarg (GB_GETARG): HL = the launch arg (the 8.3 file name the app opened).
-k_getarg
-                jp    focus_arg_ptr
+; GB_GETARG (HL = the launch arg, the 8.3 file name the app opened): the slot
+; jumps straight to focus_arg_ptr (k_getarg wrapper collapsed, #148).
 
 ; k_setname (GB_SETNAME): set the current file name so a later GB_FSLOAD/GB_FSSAVE
 ; targets it - how an app does New / Save As / open a picked file. HL = an 11-byte
@@ -1448,18 +1445,14 @@ k_onevent
 
 ; k_onrepaint (GB_ONREPAINT): now a no-op kept for ABI. Under the window manager
 ; an app's repaint handler lives in its gb_win_t (on_repaint); the old per-depth
-; REPAINT_HDLR table is unused. Left as a stub so the jump-table address is fixed.
-k_onrepaint
-                ret
+; REPAINT_HDLR table is unused. The slot stays fixed and -> k_noop (#148).
 
 ; k_restore_parent (GB_RESTPAR): repaint everything behind the caller. Under the
 ; window manager (issue #45) the live windows below a modal app are exactly the WM
 ; windows, so this repaints them all bottom-up (wm_repaint_all) - e.g. a modal
 ; Notepad dragging its window restores the desktop + file manager underneath, then
-; redraws itself on top. (Replaces the old per-depth REPAINT_HDLR walk, which the
-; co-resident model made obsolete.)
-k_restore_parent
-                jp    wm_repaint_all
+; redraws itself on top. The jump table goes straight to wm_repaint_all now (#148,
+; reclaimed the k_restore_parent wrapper).
 
 ; ---- cooperative window manager (issue #45, phase 2) --------------------------
 ; The kernel owns the master loop (wm_loop) and a table of co-resident windows.
@@ -1473,6 +1466,53 @@ k_restore_parent
 
 ; wm_register: HL = descriptor in the caller's page. Allocate a table slot, store
 ; page = caller, copy the descriptor, mark alive, push onto z-order top and focus.
+; --- z-order manager (#148): the ONLY code that mutates WM_Z / WM_NWIN. ---------
+; Three callers (register/close/raise) used to open-code the compaction; one held
+; the slot in C across wm_free_page (which does ld c,a) and dropped the wrong
+; window. Centralising it kills that bug class and dedups the loops.
+;
+; wm_z_append: A = slot -> WM_Z[WM_NWIN++] = slot (new z-top). Clobbers A,B,HL.
+wm_z_append
+                ld    b,a                          ; B = slot
+                ld    hl,WM_NWIN
+                ld    a,(hl)                       ; A = NWIN
+                inc   (hl)                          ; NWIN++
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a                           ; HL = &WM_Z[NWIN]
+                ld    (hl),b
+                ret
+
+; wm_z_remove: C = slot -> compact WM_Z dropping slot C, dec NWIN once. Keeps C.
+; Clobbers A,B,DE,HL (NOT C - callers may still need the slot).
+wm_z_remove
+                ld    hl,WM_Z
+                ld    de,WM_Z
+                ld    a,(WM_NWIN)
+                ld    b,a
+wzr_l           ld    a,(hl)
+                cp    c
+                jr    z,wzr_skip
+                ld    (de),a
+                inc   de
+wzr_skip        inc   hl
+                djnz  wzr_l
+                ld    hl,WM_NWIN
+                dec   (hl)
+                ret
+
+; wm_focus_top: WM_FOCUS = WM_Z[NWIN-1] (the live z-top). NWIN>=1 (desktop is [0]).
+; The z-top is always alive (the manager keeps WM_Z == the live slots).
+wm_focus_top
+                ld    a,(WM_NWIN)
+                dec   a
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                ld    (WM_FOCUS),a
+                ret
+
 wm_register
                 ld    (wm_desc),hl
                 call  wm_free_slot               ; A = first dead slot
@@ -1490,17 +1530,9 @@ wm_register
                 inc   de                            ; entry+14 = arg: capture the pending
                 ld    hl,launch_arg               ; launch arg as this window's own file
                 call  copy11
-                ld    a,(wm_slot)                 ; focus the new window
+                ld    a,(wm_slot)                 ; focus + append the new window (z-top)
                 ld    (WM_FOCUS),a
-                ld    hl,WM_Z                      ; WM_Z[NWIN] = slot (new z-top)
-                ld    a,(WM_NWIN)
-                add   a,l
-                ld    l,a
-                ld    a,(wm_slot)
-                ld    (hl),a
-                ld    hl,WM_NWIN
-                inc   (hl)
-                ret
+                jp    wm_z_append                  ; A = slot; tail-call (rets to wm_register's caller)
 
 ; ===== managed windows (#146): the kernel owns the chrome ====================
 ; k_wm_managed (GB_WMMANAGED): HL = a gb_mwin_t descriptor in the caller's page.
@@ -1533,11 +1565,11 @@ k_wm_managed
                 add   hl,de                  ; reach the app's menu handler via the normal path)
                 push  hl                     ; HL = entry+9
                 ld    hl,(wm_desc)
-                ld    de,14
-                add   hl,de
-                ld    e,(hl)
+                ld    de,6                   ; WM_FR_EVENT = desc.proc (#148): menu/drop come
+                add   hl,de                  ; through here too, so every message reaches the
+                ld    e,(hl)                 ; one WndProc (keyed by gb_msg.type)
                 inc   hl
-                ld    d,(hl)                 ; DE = on_event ptr
+                ld    d,(hl)                 ; DE = proc ptr
                 pop   hl                     ; HL = entry+9
                 ld    (hl),e
                 inc   hl
@@ -1565,27 +1597,27 @@ mw_publish
                 pop   hl
                 ret
 
-; mw_hook: A = byte offset of a void(void) hook in the descriptor. Call it (if non-0).
-; Clobbers HL,DE,A. md_call rets here.
+; mw_hook: A = a GB_MSG_* window message. Set gb_msg.type, then dispatch to the
+; window's single proc (desc+6). The proc switches on the type. Clobbers HL,DE,A.
 mw_hook
+                ld    (GB_MSG),a              ; gb_msg.type = the message being delivered
                 ld    hl,(mw_desc)
-                ld    e,a
-                ld    d,0
-                add   hl,de                  ; HL = desc + offset
+                ld    de,6
+                add   hl,de                  ; HL = &desc.proc
                 ld    a,(hl)
                 inc   hl
                 ld    h,(hl)
-                ld    l,a                     ; HL = hook ptr
+                ld    l,a                     ; HL = proc ptr
                 ld    a,h
                 or    l
-                ret   z                       ; null -> skip
-                jp    md_call                 ; jp (hl); the hook rets to mw_hook's caller
+                ret   z                       ; no proc -> skip (shouldn't happen)
+                jp    md_call                 ; jp (hl); the proc rets to mw_hook's caller
 
 ; wm_chrome_draw: HL = entry. Draw frame+title (gb_open_window) then the content (on_draw).
 wm_chrome_draw
                 call  mw_publish
-                ld    hl,(mw_desc)           ; title = *(desc+16)
-                ld    de,16
+                ld    hl,(mw_desc)           ; title = *(desc+8)
+                ld    de,8
                 add   hl,de
                 ld    e,(hl)
                 inc   hl
@@ -1600,14 +1632,14 @@ wm_chrome_draw
                 ld    a,(MW_RECT+3)
                 ld    e,a                     ; h
                 call  gb_open_window         ; frame + title
-                ld    a,6                     ; on_draw -> content
+                ld    a,GB_MSG_DRAW          ; -> the proc draws the content
                 jp    mw_hook
 
 ; wm_chrome_frame: HL = entry. The per-frame router: idle hook, then QUIT/close,
 ; close-gadget, content click. (Title drag + grip resize land in slice 2.)
 wm_chrome_frame
                 call  mw_publish
-                ld    a,10                   ; on_frame (idle/menus)
+                ld    a,GB_MSG_FRAME         ; per-frame (idle/menus/tick)
                 call  mw_hook
                 ld    a,(POLL_FLAGS)
                 bit   1,a                     ; GB_QUIT
@@ -1633,26 +1665,18 @@ wm_chrome_frame
                 jr    z,mwf_title
                 jr    mw_do_close             ; mx < win_x+5 -> close gadget
 mwf_title
-                ld    a,18                   ; title-bar press -> on_drag (#146 slice 2)
+                ld    a,GB_MSG_DRAG          ; title-bar press -> drag the window
                 jp    mw_hook
 mwf_content
-                ld    a,8                     ; content (incl. grip) -> on_click
+                ld    a,GB_MSG_CLICK         ; content (incl. grip) -> a content press
                 jp    mw_hook
 
-; mw_do_close: a close was requested - run the app's on_close (it confirms + closes),
-; or just close if it has none.
+; mw_do_close: a close was requested - deliver GB_MSG_CLOSE to the window's proc
+; (it confirms + calls gb_wm_close). Every managed window has a proc, so there is
+; no "no handler" path; mw_hook's null guard falls through to no-op if it's ever 0.
 mw_do_close
-                ld    hl,(mw_desc)
-                ld    de,12                  ; on_close
-                add   hl,de
-                ld    a,(hl)
-                inc   hl
-                ld    h,(hl)
-                ld    l,a
-                ld    a,h
-                or    l
-                jp    z,k_wm_close            ; no on_close -> close directly
-                jp    md_call                 ; on_close (confirms + gb_wm_close)
+                ld    a,GB_MSG_CLOSE
+                jp    mw_hook
 
 mw_desc         dw    0                       ; scratch: the focused managed window's descriptor
 
@@ -1717,10 +1741,8 @@ k_on_bar
                 ld    (BAR_HANDLER),hl
                 ret
 
-; k_wm_add (GB_WMADD): register the caller's window (used by an app opened with
-; GB_WMOPEN); returns to the opener. The kernel's wm_loop then services it.
-k_wm_add
-                jp    wm_register
+; GB_WMADD registers the caller's window (legacy gb_wm_add); the jump table goes
+; straight to wm_register now (#148, reclaimed the k_wm_add wrapper).
 
 ; k_wm_open (GB_WMOPEN): HL = 8.3 app name in the caller page. Load it into a free
 ; bank page and CALL its entry once (its main registers a window via GB_WMADD and
@@ -1738,10 +1760,8 @@ kwo_blank       ld    (hl),a
                 jr    wm_open_go
 
 ; k_wm_launch (GB_WMLAUNCH): superseded. File-type -> app routing moved into the
-; File Manager (C); it now calls GB_WMLAUNCHAS with the app it chose. Kept as a
-; stub so the jump-table address stays fixed.
-k_wm_launch
-                ret
+; File Manager (C); it now calls GB_WMLAUNCHAS with the app it chose. The slot
+; stays fixed (addresses) and -> k_noop (#148).
 
 ; k_wm_launch_as (GB_WMLAUNCHAS): HL = the 8.3 app name to open as a co-resident
 ; window. The current dir entry (fs_ent_name) becomes the new window's file arg, so
@@ -1796,33 +1816,15 @@ k_wm_close
                 ld    a,(WM_FOCUS)
                 ld    c,a                          ; C = slot being closed
                 call  wm_entry                    ; HL = entry
-                push  hl
                 ld    a,(hl)                       ; page
-                call  wm_free_page
-                pop   hl
+                push  af                           ; save it: wm_free_page clobbers everything
                 ld    de,WM_FR_FLAGS
                 add   hl,de
-                ld    (hl),0                       ; mark dead
-                ld    hl,WM_Z                      ; compact WM_Z, dropping slot C
-                ld    de,WM_Z
-                ld    a,(WM_NWIN)
-                ld    b,a
-wmc_l           ld    a,(hl)
-                cp    c
-                jr    z,wmc_skip
-                ld    (de),a
-                inc   de
-wmc_skip        inc   hl
-                djnz  wmc_l
-                ld    hl,WM_NWIN
-                dec   (hl)
-                ld    a,(WM_NWIN)                  ; new focus = z-top = WM_Z[NWIN-1]
-                dec   a
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                ld    (WM_FOCUS),a
+                ld    (hl),0                       ; mark dead (clear the alive flag)
+                call  wm_z_remove                 ; drop slot C from the z-order (keeps C)
+                call  wm_focus_top                ; refocus the new live z-top
+                pop   af                           ; A = the closed window's page
+                call  wm_free_page                 ; release it (z-order already updated)
                 jp    wm_repaint_all               ; repaint remaining windows + return
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
@@ -2183,20 +2185,9 @@ ghost_on        db    0
 wm_raise
                 ld    (WM_FOCUS),a
                 ld    c,a
-                ld    hl,WM_Z
-                ld    de,WM_Z
-                ld    a,(WM_NWIN)
-                ld    b,a
-wr_l            ld    a,(hl)
-                cp    c
-                jr    z,wr_skip
-                ld    (de),a
-                inc   de
-wr_skip         inc   hl
-                djnz  wr_l
+                call  wm_z_remove                 ; drop it from the z-order...
                 ld    a,c
-                ld    (de),a                       ; slot back on top
-                ret
+                jp    wm_z_append                  ; ...and re-append on top (tail-call)
 
 ; wm_repaint_all: repaint every window bottom-up (each in its own page, via its
 ; on_repaint), then restore the caller's page. The cursor is left to the handlers:
@@ -2206,7 +2197,10 @@ wr_skip         inc   hl
 wm_repaint_all
                 ld    a,(bank_cur)
                 ld    (wm_rp_back),a
-                di
+                ld    a,(cur_supp)              ; #148: hide the pointer before the repaint so it
+                or    a                           ; can't pollute its save-under (else a later move
+                call  z,cursor_erase             ; restores stale content = a pointer-sized hole).
+                di                                ; Skip during a DnD ghost (cur_supp owns the screen)
                 xor   a
                 ld    (wm_rp_i),a
 wra_l           ld    a,(wm_rp_i)
@@ -2218,13 +2212,18 @@ wra_l           ld    a,(wm_rp_i)
                 ld    l,a
                 ld    a,(hl)                       ; slot = WM_Z[i]
                 call  wm_entry                     ; HL = entry
-                ld    a,(hl)                       ; page
-                call  bank_set                     ; (preserves HL = entry)
-                push  hl                           ; #146: managed -> kernel draws chrome
+                push  hl                           ; #148 guard: never paint a dead slot
                 ld    de,WM_FR_FLAGS
                 add   hl,de
-                bit   1,(hl)
+                ld    a,(hl)                       ; flags
                 pop   hl                            ; HL = entry
+                bit   0,a                          ; alive?
+                jr    z,wra_next                   ; dead -> skip (z-order should exclude it)
+                push  af                           ; keep flags across bank_set
+                ld    a,(hl)                       ; page
+                call  bank_set                     ; (preserves HL = entry)
+                pop   af                            ; #146: managed -> kernel draws chrome
+                bit   1,a                          ; managed?
                 jr    z,wra_legacy
                 call  wm_chrome_draw
                 jr    wra_next
@@ -2247,6 +2246,9 @@ wra_done        ld    a,(wm_rp_back)
                 call  bank_set
                 call  clip_set_full              ; repaints are clip-limited; restore the
                 ei                                ; full-screen clip for normal drawing
+                ld    a,(cur_supp)              ; #148: redraw the pointer + re-save a FRESH
+                or    a                           ; save-under over the just-repainted content
+                call  z,cursor_draw               ; (unless a DnD ghost owns the screen)
                 ret
 
 ; clip_set_full: reset the fill clip to the whole screen (no clipping).
@@ -2466,9 +2468,7 @@ k_mxp
 
 ; k_xorframe (GB_XORFRAME): stub. The rubber-band XOR frame was never wired up
 ; (no app uses it, no gb_xorframe binding); body removed to reclaim resident
-; space for the callback API. The jump-table slot stays so addresses are fixed.
-k_xorframe
-                ret
+; space. The jump-table slot stays (addresses fixed) and -> k_noop (#148).
 
 ; ===========================================================================
 ; Top bar (kernel-owned): total RAM (left) + clock (right) on lines 0-7. The

@@ -686,9 +686,22 @@ static void n_frame(void)
 /* a kernel-managed window (#146): the WM owns the frame/title/close/drag/grip; we supply
    the content (n_draw), clicks (n_click/n_drag), the per-frame loop (n_frame), the save
    prompt (n_close), and the bar-menu handler (on_menu). title = wtitle (kept fresh). */
+/* the window's single handler (#148). */
+static void n_proc(void)
+{
+    switch (gb_msg.type) {
+        case GB_MSG_DRAW:  n_draw();  break;
+        case GB_MSG_CLICK: n_click(); break;
+        case GB_MSG_FRAME: n_frame(); break;
+        case GB_MSG_CLOSE: n_close(); break;
+        case GB_MSG_DRAG:  n_drag();  break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  on_menu(); break;
+    }
+}
+
 static const gb_mwin_t npmw = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H,
-    n_draw, n_click, n_frame, n_close, on_menu, wtitle, n_drag
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, n_proc, wtitle
 };
 
 void main(void)

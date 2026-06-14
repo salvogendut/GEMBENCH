@@ -480,9 +480,23 @@ static void ie_click(void)
     }
 }
 
+/* the window's single handler (#148). */
+static void ie_proc(void)
+{
+    switch (gb_msg.type) {
+        case GB_MSG_DRAW:  ie_draw();  break;
+        case GB_MSG_CLICK: ie_click(); break;
+        case GB_MSG_FRAME: ie_frame(); break;
+        case GB_MSG_CLOSE: ie_close(); break;
+        case GB_MSG_DRAG:  ie_drag();  break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  on_menu();  break;
+    }
+}
+
 static const gb_mwin_t iemw = {
     DEF_X, DEF_Y, WIN_W, WIN_H, 0, 0,        /* min_w=0: not grip-resizable */
-    ie_draw, ie_click, ie_frame, ie_close, on_menu, wtitle, ie_drag
+    ie_proc, wtitle
 };
 
 void main(void)

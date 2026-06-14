@@ -59,6 +59,7 @@ static void render(unsigned int n)
 
 static unsigned char pic_wb, pic_h;
 static unsigned int  pic_off;
+static unsigned char rmin_w = MIN_W, rmin_h = MIN_H;   /* live resize floor (= picture size) */
 
 static unsigned char is_pic(void)
 {
@@ -77,6 +78,10 @@ static void parse_pic(void)
         pic_h   = (unsigned char)filebuf[5];
         pic_off = 6;
     }
+    /* the window can't be shrunk below the picture (the blit has no width clip,
+       so a smaller window would let the image spill past the frame). */
+    rmin_w = (unsigned char)(pic_wb + 3); if (rmin_w < MIN_W) rmin_w = MIN_W;
+    rmin_h = (unsigned char)(pic_h + 16); if (rmin_h < MIN_H) rmin_h = MIN_H;
 }
 static void draw_pic(void)
 {
@@ -137,7 +142,7 @@ static void v_click(void)
 {
     unsigned char x = gb_wm_x(), y = gb_wm_y(), w = gb_wm_w(), h = gb_wm_h();
     if (gb_in_grip(x, y, w, h, gb_mx(), gb_my()))
-        if (gb_drag_resize(x, y, &w, &h, MIN_W, MIN_H)) {
+        if (gb_drag_resize(x, y, &w, &h, rmin_w, rmin_h)) {
             gb_wm_setsize(w, h);
             gb_restore_parent();
         }
@@ -158,13 +163,27 @@ static void v_open(unsigned int len)
 {
     filen = len;
     fmt83(vtitle, gb_doc_name());
-    if (is_pic()) parse_pic();
+    if (is_pic()) parse_pic();        /* sets the picture-sized resize floor */
+    else { rmin_w = MIN_W; rmin_h = MIN_H; }   /* text: back to the small floor */
     opened = 0;                       /* the next frame sizes to the new picture */
 }
 
+/* the window's single handler (#148): the kernel calls it for every message. */
+static void v_proc(void)
+{
+    switch (gb_msg.type) {
+        case GB_MSG_DRAW:  v_draw();  break;
+        case GB_MSG_CLICK: v_click(); break;
+        case GB_MSG_FRAME: v_frame(); break;
+        case GB_MSG_CLOSE: v_close(); break;
+        case GB_MSG_DRAG:  v_drag();  break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  v_event(); break;
+    }
+}
+
 static const gb_mwin_t vmw = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H,
-    v_draw, v_click, v_frame, v_close, v_event, vtitle, v_drag
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, v_proc, vtitle
 };
 /* read-only doc: File offers only Load; View offers Fullscreen (exts NULL = show all). */
 static const gb_doc_t vdoc = {
