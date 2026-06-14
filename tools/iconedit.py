@@ -139,6 +139,11 @@ GRID_LINE = "#404060"
 CHECKER_A = "#bdbdbd"
 CHECKER_B = "#8a8a8a"
 
+# Real-size preview inset (lower-right): one icon pixel -> PREVIEW_SCALE screen px,
+# so you see the final effect while editing the zoomed grid.
+PREVIEW_SCALE = 2
+PREVIEW_MARGIN = 12
+
 # ----------------------------------------------------------------------------
 
 class IconEditor(tk.Tk):
@@ -152,12 +157,14 @@ class IconEditor(tk.Tk):
         self.mode = None        # "IST" or "SPR"
         self.index = 0
         self.scale = 24
+        self.preview_scale = PREVIEW_SCALE
         self.tool = tk.StringVar(value="pen")
         self.pen = tk.IntVar(value=2)
         self.fill = tk.BooleanVar(value=False)
         self.dirty = False
         self.undo_stack = []
         self.preview = None     # (tool, x0, y0, x1, y1) during a drag
+        self.clipboard_icon = None   # {"w","h","grid"} copied by Edit > Copy Icon
 
         self._build_ui()
         self._bind_keys()
@@ -189,6 +196,9 @@ class IconEditor(tk.Tk):
 
         m_edit = tk.Menu(menubar, tearoff=0)
         m_edit.add_command(label="Undo", accelerator="Ctrl+Z", command=self.undo)
+        m_edit.add_separator()
+        m_edit.add_command(label="Copy Icon", accelerator="Ctrl+C", command=self.copy_icon)
+        m_edit.add_command(label="Paste Icon", accelerator="Ctrl+V", command=self.paste_icon)
         menubar.add_cascade(label="Edit", menu=m_edit)
         self.config(menu=menubar)
 
@@ -251,6 +261,14 @@ class IconEditor(tk.Tk):
         ttk.Button(zoom, text="+", width=2,
                    command=lambda: self._set_scale(self.scale + 4)).pack(side="left")
 
+        ttk.Label(right, text="Preview size").pack(anchor="w", pady=(6, 0))
+        pvz = ttk.Frame(right)
+        pvz.pack(anchor="w")
+        ttk.Button(pvz, text="-", width=2,
+                   command=lambda: self._set_preview_scale(self.preview_scale - 1)).pack(side="left")
+        ttk.Button(pvz, text="+", width=2,
+                   command=lambda: self._set_preview_scale(self.preview_scale + 1)).pack(side="left")
+
         ttk.Separator(right, orient="horizontal").pack(fill="x", pady=4)
         self.status = ttk.Label(right, text="", foreground="#666", wraplength=120)
         self.status.pack(anchor="w")
@@ -259,6 +277,8 @@ class IconEditor(tk.Tk):
         self.bind("<Control-s>", lambda e: self.save())
         self.bind("<Control-o>", lambda e: self.open_dialog())
         self.bind("<Control-z>", lambda e: self.undo())
+        self.bind("<Control-c>", lambda e: self.copy_icon())
+        self.bind("<Control-v>", lambda e: self.paste_icon())
         self.bind("<Left>",  lambda e: self.prev_icon())
         self.bind("<Right>", lambda e: self.next_icon())
         for k in "1234":
@@ -272,6 +292,10 @@ class IconEditor(tk.Tk):
 
     def _set_scale(self, s):
         self.scale = max(4, min(48, s))
+        self._redraw()
+
+    def _set_preview_scale(self, s):
+        self.preview_scale = max(1, min(10, s))
         self._redraw()
 
     # -- file ops ------------------------------------------------------------
@@ -404,6 +428,37 @@ class IconEditor(tk.Tk):
         self.index = min(self.index, len(self.icons) - 1)
         self._touched()
 
+    def copy_icon(self):
+        ic = self._cur()
+        if ic is None:
+            return
+        self.clipboard_icon = {"w": ic["w"], "h": ic["h"],
+                               "grid": [row[:] for row in ic["grid"]]}
+        self.status.config(text=f"Copied {ic['w']*4}x{ic['h']} icon")
+
+    def paste_icon(self):
+        if self.clipboard_icon is None:
+            messagebox.showinfo("Paste Icon", "Nothing copied yet.")
+            return
+        ic = self._cur()
+        if ic is None:
+            return
+        cb = self.clipboard_icon
+        self._push_undo()
+        if self.mode == "SPR":
+            # cursor is a fixed 16x16 grid: drop the copy in top-left, clipped
+            for y in range(ic["h"]):
+                for x in range(ic["w"] * 4):
+                    inside = y < cb["h"] and x < cb["w"] * 4
+                    ic["grid"][y][x] = cb["grid"][y][x] if inside else 0
+        else:
+            # IST icons keep their own size: replace this one wholesale
+            ic["w"] = cb["w"]
+            ic["h"] = cb["h"]
+            ic["grid"] = [row[:] for row in cb["grid"]]
+        self._touched()
+        self.status.config(text=f"Pasted {cb['w']*4}x{cb['h']} icon")
+
     def prev_icon(self):
         if not self.icons:
             return
@@ -490,6 +545,7 @@ class IconEditor(tk.Tk):
                 ic["grid"][y][x] = pen
                 self.dirty = True
                 self._draw_cell(ic, x, y)
+                self._draw_preview_cell(ic, x, y, self._preview_geom(ic))
                 self._refresh_title()
 
     def _line(self, x0, y0, x1, y1, pen):
@@ -608,6 +664,7 @@ class IconEditor(tk.Tk):
                     self.canvas.create_oval(rx, ry, rxe, rye,
                                             outline=col, width=2)
         self.info_var.set(self._info_text())
+        self._draw_preview()
 
     def _draw_cell(self, ic, x, y):
         ox, oy = self._origin(ic)
@@ -627,6 +684,53 @@ class IconEditor(tk.Tk):
         else:
             self.canvas.create_rectangle(x0, y0, x1, y1,
                                          fill=PEN_RGB[pen], outline="")
+
+    # -- real-size preview inset (lower-right) --------------------------------
+
+    def _preview_geom(self, ic):
+        """(px0, py0, ps): top-left of the preview box + per-pixel scale."""
+        cw = self.canvas.winfo_width()
+        ch = self.canvas.winfo_height()
+        ps = self.preview_scale
+        bw = ic["w"] * 4 * ps
+        bh = ic["h"] * ps
+        px0 = max(PREVIEW_MARGIN, cw - PREVIEW_MARGIN - bw)
+        py0 = max(PREVIEW_MARGIN + 8, ch - PREVIEW_MARGIN - bh)
+        return px0, py0, ps
+
+    def _draw_preview_cell(self, ic, x, y, geom):
+        """Repaint a single preview pixel (lets pen strokes update live)."""
+        px0, py0, ps = geom
+        x0 = px0 + x * ps
+        y0 = py0 + y * ps
+        self.canvas.delete(f"pv_{x}_{y}")
+        self.canvas.create_rectangle(x0, y0, x0 + ps, y0 + ps,
+                                     fill=PEN_RGB[ic["grid"][y][x]], outline="",
+                                     tags=("preview", f"pv_{x}_{y}"))
+
+    def _draw_preview(self):
+        """The whole preview box: a 1:N inset of the icon, so the final effect is
+        visible while editing the zoomed grid. Pen 0 shows as the desktop blue."""
+        self.canvas.delete("preview")
+        ic = self._cur()
+        if ic is None:
+            return
+        geom = self._preview_geom(ic)
+        px0, py0, ps = geom
+        pw, ph = ic["w"] * 4, ic["h"]
+        bw, bh = pw * ps, ph * ps
+        pad = 3
+        self.canvas.create_rectangle(px0 - pad, py0 - pad,
+                                     px0 + bw + pad, py0 + bh + pad,
+                                     fill="#161616", outline="#888", width=1,
+                                     tags="preview")
+        self.canvas.create_text(px0 - pad, py0 - pad - 1,
+                                text=f"preview {self.preview_scale}x",
+                                anchor="sw", fill="#aaa",
+                                font=("TkDefaultFont", 7), tags="preview")
+        for y in range(ph):
+            for x in range(pw):
+                self._draw_preview_cell(ic, x, y, geom)
 
     def _info_text(self):
         ic = self._cur()
