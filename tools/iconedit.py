@@ -139,6 +139,11 @@ GRID_LINE = "#404060"
 CHECKER_A = "#bdbdbd"
 CHECKER_B = "#8a8a8a"
 
+# Real-size preview inset (lower-right): one icon pixel -> PREVIEW_SCALE screen px,
+# so you see the final effect while editing the zoomed grid.
+PREVIEW_SCALE = 2
+PREVIEW_MARGIN = 12
+
 # ----------------------------------------------------------------------------
 
 class IconEditor(tk.Tk):
@@ -490,6 +495,7 @@ class IconEditor(tk.Tk):
                 ic["grid"][y][x] = pen
                 self.dirty = True
                 self._draw_cell(ic, x, y)
+                self._draw_preview_cell(ic, x, y, self._preview_geom(ic))
                 self._refresh_title()
 
     def _line(self, x0, y0, x1, y1, pen):
@@ -608,6 +614,7 @@ class IconEditor(tk.Tk):
                     self.canvas.create_oval(rx, ry, rxe, rye,
                                             outline=col, width=2)
         self.info_var.set(self._info_text())
+        self._draw_preview()
 
     def _draw_cell(self, ic, x, y):
         ox, oy = self._origin(ic)
@@ -627,6 +634,52 @@ class IconEditor(tk.Tk):
         else:
             self.canvas.create_rectangle(x0, y0, x1, y1,
                                          fill=PEN_RGB[pen], outline="")
+
+    # -- real-size preview inset (lower-right) --------------------------------
+
+    def _preview_geom(self, ic):
+        """(px0, py0, ps): top-left of the preview box + per-pixel scale."""
+        cw = self.canvas.winfo_width()
+        ch = self.canvas.winfo_height()
+        ps = PREVIEW_SCALE
+        bw = ic["w"] * 4 * ps
+        bh = ic["h"] * ps
+        px0 = max(PREVIEW_MARGIN, cw - PREVIEW_MARGIN - bw)
+        py0 = max(PREVIEW_MARGIN + 8, ch - PREVIEW_MARGIN - bh)
+        return px0, py0, ps
+
+    def _draw_preview_cell(self, ic, x, y, geom):
+        """Repaint a single preview pixel (lets pen strokes update live)."""
+        px0, py0, ps = geom
+        x0 = px0 + x * ps
+        y0 = py0 + y * ps
+        self.canvas.delete(f"pv_{x}_{y}")
+        self.canvas.create_rectangle(x0, y0, x0 + ps, y0 + ps,
+                                     fill=PEN_RGB[ic["grid"][y][x]], outline="",
+                                     tags=("preview", f"pv_{x}_{y}"))
+
+    def _draw_preview(self):
+        """The whole preview box: a 1:N inset of the icon, so the final effect is
+        visible while editing the zoomed grid. Pen 0 shows as the desktop blue."""
+        self.canvas.delete("preview")
+        ic = self._cur()
+        if ic is None:
+            return
+        geom = self._preview_geom(ic)
+        px0, py0, ps = geom
+        pw, ph = ic["w"] * 4, ic["h"]
+        bw, bh = pw * ps, ph * ps
+        pad = 3
+        self.canvas.create_rectangle(px0 - pad, py0 - pad,
+                                     px0 + bw + pad, py0 + bh + pad,
+                                     fill="#161616", outline="#888", width=1,
+                                     tags="preview")
+        self.canvas.create_text(px0 - pad, py0 - pad - 1, text="preview",
+                                anchor="sw", fill="#aaa",
+                                font=("TkDefaultFont", 7), tags="preview")
+        for y in range(ph):
+            for x in range(pw):
+                self._draw_preview_cell(ic, x, y, geom)
 
     def _info_text(self):
         ic = self._cur()
