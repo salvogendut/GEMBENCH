@@ -1780,12 +1780,10 @@ k_wm_close
                 ld    a,(WM_FOCUS)
                 ld    c,a                          ; C = slot being closed
                 call  wm_entry                    ; HL = entry
-                push  hl
                 ld    a,(hl)                       ; page
-                call  wm_free_page
-                pop   hl
-                ld    de,WM_FR_FLAGS
-                add   hl,de
+                push  af                           ; free the page LAST: wm_free_page clobbers C
+                ld    de,WM_FR_FLAGS               ; (the compaction key), so defer it past the
+                add   hl,de                         ; WM_Z compaction below (#148).
                 ld    (hl),0                       ; mark dead
                 ld    hl,WM_Z                      ; compact WM_Z, dropping slot C
                 ld    de,WM_Z
@@ -1807,6 +1805,8 @@ wmc_skip        inc   hl
                 ld    l,a
                 ld    a,(hl)
                 ld    (WM_FOCUS),a
+                pop   af                           ; A = the closed window's page
+                call  wm_free_page                 ; release it now C is no longer needed
                 jp    wm_repaint_all               ; repaint remaining windows + return
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
