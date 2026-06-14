@@ -101,5 +101,22 @@ unsigned char gb_popup(unsigned char x, unsigned char y,
     gb_curhide();
     gb_fill(x, y, w, boxh, 0);              /* erase to backdrop; caller redraws */
     gb_curshow();
+    /* #153: limit the caller's gb_restore_parent to the damage = this box UNION the
+       focused window, instead of a whole-screen repaint (the desktop flash). The
+       box must be in the damage because it overhangs whatever was behind it; the
+       window must be in it because the menu action changed the window's content.
+       (The desktop's own System menu reads a stale rect here, but it already did a
+       full paint() before - so this is no worse, and app menus stop flashing.) */
+    {
+        unsigned char wx = gb_wm_x(), wy = gb_wm_y();
+        unsigned char wr = (unsigned char)(wx + gb_wm_w());
+        unsigned char wb = (unsigned char)(wy + gb_wm_h());
+        unsigned char br = (unsigned char)(x + w), bb = (unsigned char)(y + boxh);
+        unsigned char lx = (x < wx) ? x : wx;
+        unsigned char ty = (y < wy) ? y : wy;
+        unsigned char rx = (br > wr) ? br : wr;
+        unsigned char by = (bb > wb) ? bb : wb;
+        gb_wm_damage(lx, ty, (unsigned char)(rx - lx), (unsigned char)(by - ty));
+    }
     return sel;
 }

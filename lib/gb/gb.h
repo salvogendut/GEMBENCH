@@ -223,6 +223,8 @@ void gb_get_name(char *dst11);
  * child redraws its window on top. */
 void gb_on_repaint(void (*handler)(void));   /* register full-repaint handler */
 void gb_restore_parent(void);                /* repaint ancestor apps behind us */
+void gb_wm_damage(unsigned char x, unsigned char y,
+                  unsigned char w, unsigned char h);  /* limit the next repaint to a rect (#153) */
 
 /* Cooperative window manager (issue #45). Instead of owning a for(;;) loop, an
  * app fills a gb_win_t and registers a window: the KERNEL runs the master loop,

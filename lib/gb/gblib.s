@@ -43,6 +43,7 @@
         .globl  _gb_get_name
         .globl  _gb_on_repaint
         .globl  _gb_restore_parent
+        .globl  _gb_wm_damage
         .globl  _gb_flags
         .globl  _gb_wm_run
         .globl  _gb_wm_add
@@ -346,6 +347,20 @@ _gb_on_repaint:
 ;; void gb_restore_parent(void);   repaint the ancestor apps behind the caller
 _gb_restore_parent:
         jp      0x8057          ; GB_RESTPAR
+; gb_wm_damage(x,y,w,h): set the repaint clip to a damage rect (#153). Pre-swap the
+; args so the kernel can store them as two words: C=x B=y (clip_x,clip_y),
+; E=w D=h (clip_w,clip_h).
+_gb_wm_damage:
+        ld      c, a            ; C = x
+        ld      b, l            ; B = y
+        pop     hl
+        ld      (sv_ret), hl
+        pop     hl              ; L=w, H=h
+        ld      e, l            ; E = w
+        ld      d, h            ; D = h
+        call    0x80B4          ; GB_WMDAMAGE
+        ld      hl, (sv_ret)
+        jp      (hl)
 
 ;; void gb_wm_run(const gb_win_t *desc);   desc in HL -> register the root window
 ;; and enter the kernel master loop (issue #45). Does not return.

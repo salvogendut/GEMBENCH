@@ -184,6 +184,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_clip_len             ; GB_CLIPLEN     #80AB -> BC = clipboard length
                 jp    k_ui                   ; GB_UI          #80AE run the paged dialog module -> BC=UI_RES
                 jp    k_wm_managed           ; GB_WMMANAGED   #80B1 register a kernel-managed window (#146)
+                jp    k_wm_damage            ; GB_WMDAMAGE    #80B4 set the repaint clip = a damage rect (#153)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -2252,6 +2253,18 @@ wra_done        ld    a,(wm_rp_back)
                 ret                                ; (e.g. the desktop paint) already drew it - don't
                                                   ; redraw, or we'd save cur_bg OVER the cursor's own
                                                   ; pixels and stamp a ghost on the next move.
+
+; k_wm_damage (GB_WMDAMAGE): set the repaint clip to a caller-supplied damage rect,
+; so the next gb_restore_parent only repaints that region instead of the whole
+; screen (#153 - kills the full-desktop flash after a dropdown menu). gb_popup
+; passes its box UNION the focused window's rect, so the repaint covers both the
+; dropdown's footprint (the part that overhangs other windows) and the window the
+; menu action changed. Registers are pre-swapped by the trampoline for two word
+; stores: C=x B=y (-> clip_x,clip_y) and E=w D=h (-> clip_w,clip_h).
+k_wm_damage
+                ld    (clip_x),bc                 ; clip_x = x, clip_y = y
+                ld    (clip_w),de                 ; clip_w = w, clip_h = h
+                ret
 
 ; clip_set_full: reset the fill clip to the whole screen (no clipping).
 clip_set_full
