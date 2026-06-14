@@ -22,7 +22,7 @@
 #define MIN_W    24            /* min size keeps the title + a couple of rows usable */
 #define MIN_H    62
 #define TITLE_H  14
-#define DCLICK   40           /* double-click window, frames */
+#define DCLICK   75           /* double-click window, frames (gamepad-friendly, #153) */
 
 /* scrollbar at the left inner edge, content to its right */
 #define SB_W     3                       /* scrollbar width, byte cols */

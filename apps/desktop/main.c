@@ -21,7 +21,7 @@
 #define XMAX    (80 - IC_W)   /* drag clamps */
 #define YMIN    9
 #define YMAX    (200 - BOX_H)
-#define DCLICK  40
+#define DCLICK  75            /* double-click window, frames (gamepad-friendly, #153) */
 #define NONE    0xFF
 #define DRAGTH  2             /* press must move this far before it lifts (#153) */
 
