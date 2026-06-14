@@ -1579,9 +1579,14 @@ k_wm_managed
                                              ; 11,12) is set by the app's gb_doc before the loop
                 ld    a,(WM_FOCUS)           ; publish MW_RECT so the app can read gb_wm_x/y/w/h
                 call  wm_entry               ; in main, but DON'T draw yet: the app loads its
-                jp    mw_publish             ; content then calls gb_restore_parent for the first
+                call  mw_publish             ; content then calls gb_restore_parent for the first
                                              ; paint, so a window never shows empty during a slow
                                              ; load (#146). A managed app MUST paint when ready.
+                                             ; mw_publish preserves A (still = WM_FOCUS), so:
+                jp    wm_set_clip            ; #153: pre-set the clip to the new window's rect so
+                                             ; that first gb_restore_parent repaints only OUR area,
+                                             ; not the whole desktop (the open "flash"); then
+                                             ; wm_repaint_all restores the full-screen clip.
 
 ; mw_publish: HL = entry. Copy x,y,w,h -> MW_RECT (the app reads it via gb_wm_x/y/w/h);
 ; (mw_desc) = the descriptor pointer. HL preserved.
@@ -2266,15 +2271,13 @@ k_wm_damage
                 ld    (clip_w),de                 ; clip_w = w, clip_h = h
                 ret
 
-; clip_set_full: reset the fill clip to the whole screen (no clipping).
+; clip_set_full: reset the fill clip to the whole screen (no clipping). Two word
+; stores (clobbers BC,DE - the only caller reloads A and ignores BC/DE, #153).
 clip_set_full
-                xor   a
-                ld    (clip_x),a
-                ld    (clip_y),a
-                ld    a,80
-                ld    (clip_w),a
-                ld    a,200
-                ld    (clip_h),a
+                ld    bc,0                       ; clip_x = 0, clip_y = 0
+                ld    (clip_x),bc
+                ld    de,#C850                   ; clip_w = 80 (#50), clip_h = 200 (#C8)
+                ld    (clip_w),de
                 ret
 
 ; wm_set_clip: A = slot -> set the fill clip to that window's rect, so the next
