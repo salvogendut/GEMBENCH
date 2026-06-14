@@ -1461,6 +1461,53 @@ k_onevent
 
 ; wm_register: HL = descriptor in the caller's page. Allocate a table slot, store
 ; page = caller, copy the descriptor, mark alive, push onto z-order top and focus.
+; --- z-order manager (#148): the ONLY code that mutates WM_Z / WM_NWIN. ---------
+; Three callers (register/close/raise) used to open-code the compaction; one held
+; the slot in C across wm_free_page (which does ld c,a) and dropped the wrong
+; window. Centralising it kills that bug class and dedups the loops.
+;
+; wm_z_append: A = slot -> WM_Z[WM_NWIN++] = slot (new z-top). Clobbers A,B,HL.
+wm_z_append
+                ld    b,a                          ; B = slot
+                ld    hl,WM_NWIN
+                ld    a,(hl)                       ; A = NWIN
+                inc   (hl)                          ; NWIN++
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a                           ; HL = &WM_Z[NWIN]
+                ld    (hl),b
+                ret
+
+; wm_z_remove: C = slot -> compact WM_Z dropping slot C, dec NWIN once. Keeps C.
+; Clobbers A,B,DE,HL (NOT C - callers may still need the slot).
+wm_z_remove
+                ld    hl,WM_Z
+                ld    de,WM_Z
+                ld    a,(WM_NWIN)
+                ld    b,a
+wzr_l           ld    a,(hl)
+                cp    c
+                jr    z,wzr_skip
+                ld    (de),a
+                inc   de
+wzr_skip        inc   hl
+                djnz  wzr_l
+                ld    hl,WM_NWIN
+                dec   (hl)
+                ret
+
+; wm_focus_top: WM_FOCUS = WM_Z[NWIN-1] (the live z-top). NWIN>=1 (desktop is [0]).
+; The z-top is always alive (the manager keeps WM_Z == the live slots).
+wm_focus_top
+                ld    a,(WM_NWIN)
+                dec   a
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                ld    (WM_FOCUS),a
+                ret
+
 wm_register
                 ld    (wm_desc),hl
                 call  wm_free_slot               ; A = first dead slot
@@ -1478,17 +1525,9 @@ wm_register
                 inc   de                            ; entry+14 = arg: capture the pending
                 ld    hl,launch_arg               ; launch arg as this window's own file
                 call  copy11
-                ld    a,(wm_slot)                 ; focus the new window
+                ld    a,(wm_slot)                 ; focus + append the new window (z-top)
                 ld    (WM_FOCUS),a
-                ld    hl,WM_Z                      ; WM_Z[NWIN] = slot (new z-top)
-                ld    a,(WM_NWIN)
-                add   a,l
-                ld    l,a
-                ld    a,(wm_slot)
-                ld    (hl),a
-                ld    hl,WM_NWIN
-                inc   (hl)
-                ret
+                jp    wm_z_append                  ; A = slot; tail-call (rets to wm_register's caller)
 
 ; ===== managed windows (#146): the kernel owns the chrome ====================
 ; k_wm_managed (GB_WMMANAGED): HL = a gb_mwin_t descriptor in the caller's page.
@@ -1781,32 +1820,14 @@ k_wm_close
                 ld    c,a                          ; C = slot being closed
                 call  wm_entry                    ; HL = entry
                 ld    a,(hl)                       ; page
-                push  af                           ; free the page LAST: wm_free_page clobbers C
-                ld    de,WM_FR_FLAGS               ; (the compaction key), so defer it past the
-                add   hl,de                         ; WM_Z compaction below (#148).
-                ld    (hl),0                       ; mark dead
-                ld    hl,WM_Z                      ; compact WM_Z, dropping slot C
-                ld    de,WM_Z
-                ld    a,(WM_NWIN)
-                ld    b,a
-wmc_l           ld    a,(hl)
-                cp    c
-                jr    z,wmc_skip
-                ld    (de),a
-                inc   de
-wmc_skip        inc   hl
-                djnz  wmc_l
-                ld    hl,WM_NWIN
-                dec   (hl)
-                ld    a,(WM_NWIN)                  ; new focus = z-top = WM_Z[NWIN-1]
-                dec   a
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                ld    (WM_FOCUS),a
+                push  af                           ; save it: wm_free_page clobbers everything
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                ld    (hl),0                       ; mark dead (clear the alive flag)
+                call  wm_z_remove                 ; drop slot C from the z-order (keeps C)
+                call  wm_focus_top                ; refocus the new live z-top
                 pop   af                           ; A = the closed window's page
-                call  wm_free_page                 ; release it now C is no longer needed
+                call  wm_free_page                 ; release it (z-order already updated)
                 jp    wm_repaint_all               ; repaint remaining windows + return
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
@@ -2167,20 +2188,9 @@ ghost_on        db    0
 wm_raise
                 ld    (WM_FOCUS),a
                 ld    c,a
-                ld    hl,WM_Z
-                ld    de,WM_Z
-                ld    a,(WM_NWIN)
-                ld    b,a
-wr_l            ld    a,(hl)
-                cp    c
-                jr    z,wr_skip
-                ld    (de),a
-                inc   de
-wr_skip         inc   hl
-                djnz  wr_l
+                call  wm_z_remove                 ; drop it from the z-order...
                 ld    a,c
-                ld    (de),a                       ; slot back on top
-                ret
+                jp    wm_z_append                  ; ...and re-append on top (tail-call)
 
 ; wm_repaint_all: repaint every window bottom-up (each in its own page, via its
 ; on_repaint), then restore the caller's page. The cursor is left to the handlers:
@@ -2205,13 +2215,18 @@ wra_l           ld    a,(wm_rp_i)
                 ld    l,a
                 ld    a,(hl)                       ; slot = WM_Z[i]
                 call  wm_entry                     ; HL = entry
-                ld    a,(hl)                       ; page
-                call  bank_set                     ; (preserves HL = entry)
-                push  hl                           ; #146: managed -> kernel draws chrome
+                push  hl                           ; #148 guard: never paint a dead slot
                 ld    de,WM_FR_FLAGS
                 add   hl,de
-                bit   1,(hl)
+                ld    a,(hl)                       ; flags
                 pop   hl                            ; HL = entry
+                bit   0,a                          ; alive?
+                jr    z,wra_next                   ; dead -> skip (z-order should exclude it)
+                push  af                           ; keep flags across bank_set
+                ld    a,(hl)                       ; page
+                call  bank_set                     ; (preserves HL = entry)
+                pop   af                            ; #146: managed -> kernel draws chrome
+                bit   1,a                          ; managed?
                 jr    z,wra_legacy
                 call  wm_chrome_draw
                 jr    wra_next
