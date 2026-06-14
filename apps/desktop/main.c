@@ -80,7 +80,11 @@ static void paint(void)
     gb_fill(0, 8, 80, 192, 0);                 /* backdrop, below the top bar */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
-    gb_curshow();
+    /* #153: do NOT show the cursor here. As the WM's bottom on_repaint, paint()
+       runs FIRST in wm_repaint_all - any window drawn on top would overwrite the
+       pointer while its save-under still held the backdrop, so a later move left a
+       blue hole. The repaint bracket now draws the pointer once, LAST. Standalone
+       callers (System menu, boot) gb_curshow themselves. */
 }
 
 /* The top bar is now drawn here, not in the kernel (experiment #77). The WM runs
@@ -303,7 +307,7 @@ static void on_frame(void)
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
        Exit to DOS to leave); ESC only closes apps launched on top of it */
 
-    if (gb_doc_frame()) { gb_curhide(); paint(); return; }   /* a System menu item ran (#142) */
+    if (gb_doc_frame()) { gb_curhide(); paint(); gb_curshow(); return; }   /* a System menu item ran (#142) */
 
     held = flags & GB_FIRE;
     if (held_prev && !held && drag_active) {   /* fire released -> drop */
@@ -347,6 +351,7 @@ void main(void)
 {
     drive_poll();                               /* drives present at boot -> icons (#65) */
     paint();
+    gb_curshow();                               /* paint() no longer shows the pointer (#153) */
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;
