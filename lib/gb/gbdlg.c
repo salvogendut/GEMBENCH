@@ -93,7 +93,11 @@ unsigned char gb_popup(unsigned char x, unsigned char y,
         if (flags & GB_CLICK) { if (over != 0xFF) sel = over; break; }  /* row: select; away: cancel */
     }
     dlg_modal = 0;
-    if (esc) while (gb_poll() & GB_QUIT) ;
+    /* Consume the click/ESC that ended the menu so it doesn't leak into POLL_FLAGS,
+       where wm_chrome_frame would re-process it as a WINDOW click (#153: a menu
+       selection over the title bar hit the close gadget -> the window vanished). */
+    while (gb_poll() & (GB_QUIT | GB_CLICK)) ;
+    (void)esc;
     gb_curhide();
     gb_fill(x, y, w, boxh, 0);              /* erase to backdrop; caller redraws */
     gb_curshow();
