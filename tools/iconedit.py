@@ -164,6 +164,7 @@ class IconEditor(tk.Tk):
         self.dirty = False
         self.undo_stack = []
         self.preview = None     # (tool, x0, y0, x1, y1) during a drag
+        self.clipboard_icon = None   # {"w","h","grid"} copied by Edit > Copy Icon
 
         self._build_ui()
         self._bind_keys()
@@ -195,6 +196,9 @@ class IconEditor(tk.Tk):
 
         m_edit = tk.Menu(menubar, tearoff=0)
         m_edit.add_command(label="Undo", accelerator="Ctrl+Z", command=self.undo)
+        m_edit.add_separator()
+        m_edit.add_command(label="Copy Icon", accelerator="Ctrl+C", command=self.copy_icon)
+        m_edit.add_command(label="Paste Icon", accelerator="Ctrl+V", command=self.paste_icon)
         menubar.add_cascade(label="Edit", menu=m_edit)
         self.config(menu=menubar)
 
@@ -273,6 +277,8 @@ class IconEditor(tk.Tk):
         self.bind("<Control-s>", lambda e: self.save())
         self.bind("<Control-o>", lambda e: self.open_dialog())
         self.bind("<Control-z>", lambda e: self.undo())
+        self.bind("<Control-c>", lambda e: self.copy_icon())
+        self.bind("<Control-v>", lambda e: self.paste_icon())
         self.bind("<Left>",  lambda e: self.prev_icon())
         self.bind("<Right>", lambda e: self.next_icon())
         for k in "1234":
@@ -421,6 +427,37 @@ class IconEditor(tk.Tk):
         del self.icons[self.index]
         self.index = min(self.index, len(self.icons) - 1)
         self._touched()
+
+    def copy_icon(self):
+        ic = self._cur()
+        if ic is None:
+            return
+        self.clipboard_icon = {"w": ic["w"], "h": ic["h"],
+                               "grid": [row[:] for row in ic["grid"]]}
+        self.status.config(text=f"Copied {ic['w']*4}x{ic['h']} icon")
+
+    def paste_icon(self):
+        if self.clipboard_icon is None:
+            messagebox.showinfo("Paste Icon", "Nothing copied yet.")
+            return
+        ic = self._cur()
+        if ic is None:
+            return
+        cb = self.clipboard_icon
+        self._push_undo()
+        if self.mode == "SPR":
+            # cursor is a fixed 16x16 grid: drop the copy in top-left, clipped
+            for y in range(ic["h"]):
+                for x in range(ic["w"] * 4):
+                    inside = y < cb["h"] and x < cb["w"] * 4
+                    ic["grid"][y][x] = cb["grid"][y][x] if inside else 0
+        else:
+            # IST icons keep their own size: replace this one wholesale
+            ic["w"] = cb["w"]
+            ic["h"] = cb["h"]
+            ic["grid"] = [row[:] for row in cb["grid"]]
+        self._touched()
+        self.status.config(text=f"Pasted {cb['w']*4}x{cb['h']} icon")
 
     def prev_icon(self):
         if not self.icons:
