@@ -29,3 +29,4 @@ __pycache__/
 # QA/GEOBENCH.DSK), so re-include it despite the *.BIN/*.DSK/*.RAW ignores above.
 # Regenerate with `bash tools/build_kernel.sh`.
 !QA/**
+rom/GEOBENCH.ROM
