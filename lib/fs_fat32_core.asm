@@ -10,7 +10,15 @@
 ; The includer MUST define before the include: the FS_IDE_* port equates and
 ; fs_secbuf (the 512-byte sector buffer address). Per-entry output fields
 ; fs_ent_name/attr/size and fs_req_name live in lib/fs.asm (resident only).
+;
+; FAT16_ONLY (#148): pass -DFAT16_ONLY=1 to omit the FAT32 read branches and
+; assume a FAT16 volume - real CPC IDE/SD cards are FAT16 (#130). Smaller
+; resident reader for the real-hardware GBIDE; the dev/test FAT32 images need a
+; full build. The paged write module (gbfat.asm) never sets it (keeps FAT32).
 ; ---------------------------------------------------------------------------
+                ifndef FAT16_ONLY
+FAT16_ONLY      equ   0
+                endif
 
 ; fs_mount: MBR/partition probe + FAT32 BPB -> fs_fat_lba, fs_data_lba, fs_spc,
 ; fs_clshift, fs_numfat, fs_dir_clus (root cluster). No directory scan.
@@ -41,6 +49,14 @@ fdf_logd        ld    a,b
                 call  acc_store_fat
 
                 ld    hl,(fs_secbuf+#16)      ; #130: 16-bit sectors/FAT - nonzero => FAT16
+       if FAT16_ONLY
+                ld    (fatsz_tmp),hl          ; FAT16 assumed: this word is fatsz
+                xor   a
+                ld    (fatsz_tmp+2),a
+                ld    (fatsz_tmp+3),a
+                inc   a
+                ld    (fs_is_fat16),a          ; = 1 (the runtime checks still read it)
+       else
                 ld    a,h
                 or    l
                 jr    z,fdf_fat32
@@ -57,6 +73,7 @@ fdf_fat32
                 call  copy4
                 xor   a
                 ld    (fs_is_fat16),a
+       endif
 fdf_havefatsz
                 ld    a,(fs_secbuf+#10)       ; acc += numFATs*fatsz -> FAT32 data start, or
                 ld    (fs_numfat),a           ; FAT16 fixed-root-dir start (acc still = fat_lba)
@@ -67,6 +84,7 @@ fdf_dl          push  bc
                 pop   bc
                 djnz  fdf_dl
 
+       if !FAT16_ONLY
                 ld    a,(fs_is_fat16)
                 or    a
                 jr    nz,fdf_root16
@@ -75,6 +93,7 @@ fdf_dl          push  bc
                 ld    de,fs_dir_clus
                 call  copy4
                 ret
+       endif
 fdf_root16                                     ; FAT16: the fixed root dir sits here; data follows
                 ld    hl,acc                  ; fs_root_lba = fat_lba + numFATs*fatsz
                 ld    de,fs_root_lba
@@ -198,11 +217,13 @@ fs_fat_next
                 ld    (fn_ptr),hl
                 call  acc_load                ; acc = cluster
                 call  acc_shl                  ; *2 (FAT16 byte offset)
+       if !FAT16_ONLY
                 ld    a,(fs_is_fat16)         ; #130
                 or    a
                 jr    nz,ffn_within
                 call  acc_shl                  ; *4 (FAT32 byte offset)
 ffn_within
+       endif
                 ld    a,(acc)                  ; within = offset & 0x1FF
                 ld    (fn_within),a
                 ld    a,(acc+1)
@@ -222,6 +243,11 @@ ffn_within
                 inc   hl
                 ld    a,(hl)
                 ld    (acc+1),a
+       if FAT16_ONLY
+                xor   a                         ; FAT16: the high two bytes are always 0
+                ld    (acc+2),a
+                ld    (acc+3),a
+       else
                 ld    a,(fs_is_fat16)         ; #130
                 or    a
                 jr    nz,ffn_eoc16
@@ -238,6 +264,7 @@ ffn_within
                 ld    a,(acc+2)
                 cp    #FF
                 jr    c,fn_valid
+       endif
 ffn_eoc_lo                                      ; shared low-word EOC test (FAT16 joins here)
                 ld    a,(acc+1)
                 cp    #FF
@@ -247,11 +274,13 @@ ffn_eoc_lo                                      ; shared low-word EOC test (FAT1
                 jr    c,fn_valid
                 or    a                         ; EOC -> NC
                 ret
+       if !FAT16_ONLY
 ffn_eoc16                                       ; #130 FAT16: clear the high bytes -> a 16-bit
                 xor   a                         ; value, then EOC if >= 0xFFF8 via the shared test
                 ld    (acc+2),a
                 ld    (acc+3),a
                 jr    ffn_eoc_lo
+       endif
 fn_valid
                 ld    hl,acc
                 ld    de,(fn_ptr)
