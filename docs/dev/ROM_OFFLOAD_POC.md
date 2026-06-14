@@ -76,6 +76,28 @@ the fixed offset. Found -> set a `gb_rom_present` flag + remember the number; ro
 FS calls through `gb_rom_call`. Not found -> fall back to the in-RAM `fs_read_sector`
 (stock build unchanged).
 
+## Status (in progress)
+
+- [x] `rom/geobench_rom.asm` + `tools/build_rom.sh` -> 16K `rom/GEOBENCH.ROM` (dispatch
+      table + `"GBROM"` signature, verified).
+- [x] **`lba_tmp` relocated to a fixed `#1250`** (`lib/fs_fat32_core.asm`, free gap
+      `#124A-#12FF`) so the ROM copy reads the same bytes; reclaims 4 resident bytes as
+      a bonus (kern_end `#A186` -> `#A182`, slack 2 -> 6). Kernel builds clean.
+- [x] **Real `gbrom_fs_read_sector` body in the ROM** (verbatim `fs_read_sector`,
+      sharing `FS_IDE_*` / `fs_secbuf #1800` / `lba_tmp #1250`). ROM builds; `jp #C009`
+      reaches the body.
+- [ ] Resident `gb_rom_call` stub (`di` / `OUT (#DF),num` / `call #C000` / restore / `ei`).
+- [ ] Boot probe: scan ROM numbers for the `"GBROM"` signature at `#C003`; store the
+      number + set `gb_rom_present`.
+- [ ] Route the kernel's `fs_read_sector` through it when present (dispatcher; guard the
+      ROM-call with conditional assembly so the paged `gbfat.asm` copy stays in-RAM).
+- [ ] Boot the IDE build with `GEOBENCH.ROM` in a free `[expansion_roms]` slot; confirm
+      the desktop + directory load from IDE => driver ran from ROM.
+
+**Next-session blocker to resolve first (empirical):** the exact `OUT (#DF)` ROM-number
+<-> 1984 expansion-slot mapping. Pick a free slot (slot_6), add `GEOBENCH.ROM`, and
+probe in 1984 to learn which number selects it. Everything else is wired and ready.
+
 ## PoC milestone (testable)
 
 1. `rom/geobench_rom.asm` + `tools/build_rom.sh` -> `GEOBENCH.ROM` (16K, padded).

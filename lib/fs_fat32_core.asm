@@ -527,7 +527,10 @@ fs_fat_lba      defs  4            ; absolute FAT start LBA
 fs_data_lba     defs  4            ; absolute data region start LBA
 fs_dir_clus     defs  4            ; current root-dir cluster
 acc             defs  4            ; 32-bit work accumulator
-lba_tmp         defs  4            ; LBA staged for fs_read_sector
+lba_tmp         equ   #1250        ; LBA staged for fs_read_sector. FIXED low-RAM addr
+                                   ; (free gap #124A-#12FF) so GEOBENCH.ROM's copy of
+                                   ; fs_read_sector reads the same bytes (#152). Was
+                                   ; `defs 4` here - reclaims 4 resident bytes too.
 fatsz_tmp       defs  4            ; sectors per FAT (geometry calc)
 fs_dir_cur_lba  defs  4            ; LBA of the dir sector currently in secbuf
 fn_ptr          defw  0            ; fs_fat_next: cluster-var pointer
