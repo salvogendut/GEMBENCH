@@ -19,6 +19,15 @@ if [ "${STORAGE:-ide}" = "albireo" ]; then
     STORAGE_FLAG="-DSTORAGE_ALBIREO=1"
 fi
 
+# FAT16=1: build the IDE kernel FAT16-only (drops the FAT32 read branches, ~81 B
+# smaller resident). Real CPC IDE/SD cards are FAT16 (#130, #148); the dev/test
+# FAT32 images need the default full build. Albireo is unaffected (chip does FAT).
+FAT16_FLAG=""
+if [ "${FAT16:-0}" = "1" ]; then
+    FAT16_FLAG="-DFAT16_ONLY=1"
+    echo "FAT16=1: building a FAT16-only IDE kernel (no FAT32 read path)"
+fi
+
 mkdir -p build
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 
@@ -81,7 +90,7 @@ build_variant() {                                # $1 = kernel name, $2 = rasm -
 }
 rm -rf QA; mkdir -p QA
 echo "Building both card kernels + the unified card distribution -> QA/"
-build_variant GBIDE ""
+build_variant GBIDE "$FAT16_FLAG"
 cp build/gbkern.dsk QA/GEOBENCH.DSK               # one bootable floppy image
 # Add a GB.BAS loader so the floppy also boots via RUN"GB (-> RUN"GBKERN; one kernel,
 # no card to detect). Must be a HEADERLESS ASCII file - RASM's DSK save adds an AMSDOS
@@ -102,7 +111,7 @@ echo "  QA/CARD: any IDE/Albireo card (RUN\"GB); QA/GEOBENCH.DSK: floppy (RUN\"G
 # Leave build/ as the STORAGE-selected variant (default IDE) so the --disk-a test
 # harness and deploy_ide.sh see a predictable build/gbkern.dsk + build/GBKERN.RAW.
 rm -f build/gbkern.dsk
-"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG >/dev/null
+"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG ${FAT16_FLAG:+$FAT16_FLAG} >/dev/null
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 "$RASM" kernel/pack_apps2.asm -eo >/dev/null     # 3rd pass: VIEWER + FILEMGR -> .dsk (#142)
 echo "Built QA/CARD (unified card deploy) + QA/GEOBENCH.DSK (floppy); build/ = ${STORAGE:-ide} variant"
