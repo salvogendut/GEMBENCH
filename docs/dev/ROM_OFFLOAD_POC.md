@@ -98,6 +98,46 @@ FS calls through `gb_rom_call`. Not found -> fall back to the in-RAM `fs_read_se
 <-> 1984 expansion-slot mapping. Pick a free slot (slot_6), add `GEOBENCH.ROM`, and
 probe in 1984 to learn which number selects it. Everything else is wired and ready.
 
+## Runtime test — IN PROGRESS (reboots; resume here)
+
+Seam committed (`db0c3f1`), builds, fits budget (ROM-only IDE: kern_end `#A186`,
+slack 2). Enabled with `-DGB_ROM_REQ=1` (IDE variant only). **But: booting the GB_ROM
+FAT16 build (`QA/CARD` GBIDE.BIN, GEOBENCH.ROM in slot 6) via `|drive,"A","IDE:"` +
+`RUN"GB` immediately REBOOTS the CPC.** Cause not yet found.
+
+Convention is solid (from 1984 `src/cpc.c`/`mem.c`): `OUT (#DF),A` = ROM number;
+`slot_N` = number N; empty slots read `0xFF`; 0=BASIC, 7=AMSDOS reserved.
+
+Ruled out:
+- `gb_rom_num` garbage before init: `fs_init`/`fs_ide_present` do NOT read a sector
+  (just an ATA reg read-back), and the first `fs_read_sector` is `fs_sys_resolve`
+  AFTER the probe. `#1250` (lba_tmp) and `#1254` (gb_rom_num) are in the free gap
+  `#124A-#12FF`.
+- Premature `ei`: interrupts are already ON at the probe (UniDOS RUN" hands over EI;
+  first kernel `di` is at gbkern ~line 227, AFTER `gb_rom_probe`).
+
+To investigate next (in order):
+1. **Isolate lba_tmp-relocation vs the seam:** build NORMAL (no `GB_ROM_REQ`, so
+   in-RAM driver but WITH the `lba_tmp`→#1250 move + dispatcher restructure) and boot
+   it. Boots clean => the seam is the culprit; reboots => the relocation is (recheck
+   `#1250` truly free, or a `defs`-block shift broke a hardcoded offset).
+2. **Probe vs call:** force `gb_rom_num=#FF` (skip the scan) so `fs_read_sector` just
+   `ret z`s — if it still reboots, it's `gb_rom_probe` itself (gate-array `#7F81` /
+   `OUT #DF` scan / restore-to-7 disrupting UniDOS at #C000); if not, it's
+   `gb_rom_call` / the ROM body.
+3. **Restore target:** the probe/call restore upper ROM to **7** (UniDOS). If the
+   firmware's live ROM at hand-over wasn't 7, restoring to 7 breaks it. Try preserving
+   the IFF and/or not changing the selection persistently. (Can't read the current
+   upper-ROM select — write-only — so track it, or leave GEOBENCH selected and verify
+   nothing else reads #C000-on between save_block windows.)
+4. Capture a `--save-sna-at` at an early boot frame and read `gb_rom_num` (#1254) +
+   the PC to see whether the probe ran and where it died.
+
+Tooling notes: headless 1984 with this FatFS/IDE config runs <8 fps (slow to iterate;
+the real rig boots normally). The IDE test image MUST be the `QA/CARD` layout
+(`GB.BAS` + `GBIDE.BIN` + `/GEOBENCH`, booted `RUN"GB`) — NOT `tools/build_ide_img.sh`
+(old flat `GBKERN.BIN` + `.BIN` apps, `RUN"GBKERN`).
+
 ## PoC milestone (testable)
 
 1. `rom/geobench_rom.asm` + `tools/build_rom.sh` -> `GEOBENCH.ROM` (16K, padded).
