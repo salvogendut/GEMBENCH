@@ -17,7 +17,9 @@
 
 FS_STATE_LOWRAM equ   1            ; route the core + gbfat scratch state to low RAM
 FS_STATE_BASE   equ   #1C00        ; free low-RAM block (#1C00-#21FF; gap above fsam_buf)
-                include "../lib/fs_fat_lowram.inc"  ; FAT core state addresses (shared with resident)
+; NOTE: fs_fat_lowram.inc is included AFTER `org #C000` below - it defines fat_eoc as a
+; `defb`, which must land INSIDE the ROM image (before org it lands at address 0 and the
+; ROM reads garbage for the FAT end-of-chain marker -> corrupt FAT entries on a save, #152).
 GBFAT_AS_INCLUDE equ  1            ; gbfat.asm: no org #6000 / no GBFAT.RAW save here
 FAT16_ONLY      equ   0            ; the ROM carries the full FAT16+FAT32 read+write core
 FS_RDIO_LOWRAM  equ   1            ; floppy read backend (fs_amsdos): scratch -> fixed low RAM
@@ -47,6 +49,7 @@ gbrom_sig       db    "GBROM", 1                 ; #C003 magic + version (boot p
                 jp    fside_dir_first            ; #C018 index 6: IDE dir first
                 jp    fside_dir_next             ; #C01B index 7: IDE dir next
                 jp    fside_load_file            ; #C01E index 8: IDE file load
+                include "../lib/fs_fat_lowram.inc"  ; FAT core state addrs + fat_eoc (in-ROM, #152)
 
 ; --- the offloaded drivers ------------------------------------------------------
 ; gbfat.asm supplies: GBFAT_*/FS_IDE_*/fs_secbuf equates, the gbfat_entry write
