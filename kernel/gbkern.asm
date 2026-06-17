@@ -36,6 +36,11 @@ GB_ROM          equ   1
                 endif
                 endif
 
+                ifdef GB_ROM                  ; #152: the floppy read backend (fs_amsdos) is offloaded
+FS_RDIO_LOWRAM  equ   1                       ; to GEOBENCH.ROM; its scratch state must live in fixed
+FSAM_STATE_BASE equ   #1256                   ; low RAM (ROM is read-only) so the resident + ROM agree.
+                endif                          ; Free gap #1255-#12FF (above lba_tmp/gb_rom_num).
+
 ; Config transfer area - resident low RAM (stays main RAM under banking, so the
 ; paged-in GBCFG module can reach it). The kernel fills text/len, runs the
 ; module, then reads the parsed ICONS=/FONT= stems back. See kernel/kc/.

@@ -409,11 +409,22 @@ fsvr_unload
 floppysv_modname db    "FLOPPYSVBIN"          ; 8.3, space-padded
 
 ; --- resident state (load + listing; save state lives in the module) --------
+; #152: fixed low RAM in the GEOBENCH.ROM build (FS_RDIO_LOWRAM), packed right after
+; the core state (FSAM_CORE_END); the resident/paged builds keep the original `defs`.
+                ifdef FS_RDIO_LOWRAM
+fslf_blocks     equ   FSAM_CORE_END+0  ; allocation block numbers of the found extent (16)
+fslf_secs       equ   FSAM_CORE_END+16 ; sectors left to read
+fslf_si         equ   FSAM_CORE_END+17 ; sector index within the file
+fslf_rc         equ   FSAM_CORE_END+18 ; record count (for the no-header size)
+fslf_curtrk     equ   FSAM_CORE_END+19 ; track the head is currently on
+fsam_idx        equ   FSAM_CORE_END+20 ; directory-listing cursor (ends at FSAM_CORE_END+21)
+                else
 fslf_blocks     defs  16           ; allocation block numbers of the found extent
 fslf_secs       defb  0            ; sectors left to read
 fslf_si         defb  0            ; sector index within the file
 fslf_rc         defb  0            ; record count (for the no-header size)
 fslf_curtrk     defb  0            ; track the head is currently on
 fsam_idx        defb  0            ; directory-listing cursor
+                endif
 ; fsam_buf (the 2KB whole-directory buffer) and fs_secbuf are fixed low-RAM equs in
 ; gbkern.asm (the module agrees on the addresses).
