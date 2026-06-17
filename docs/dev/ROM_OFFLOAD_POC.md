@@ -86,37 +86,60 @@ FS calls through `gb_rom_call`. Not found -> fall back to the in-RAM `fs_read_se
 - [x] **Real `gbrom_fs_read_sector` body in the ROM** (verbatim `fs_read_sector`,
       sharing `FS_IDE_*` / `fs_secbuf #1800` / `lba_tmp #1250`). ROM builds; `jp #C009`
       reaches the body.
-- [ ] Resident `gb_rom_call` stub (`di` / `OUT (#DF),num` / `call #C000` / restore / `ei`).
-- [ ] Boot probe: scan ROM numbers for the `"GBROM"` signature at `#C003`; store the
-      number + set `gb_rom_present`.
-- [ ] Route the kernel's `fs_read_sector` through it when present (dispatcher; guard the
-      ROM-call with conditional assembly so the paged `gbfat.asm` copy stays in-RAM).
-- [ ] Boot the IDE build with `GEOBENCH.ROM` in a free `[expansion_roms]` slot; confirm
-      the desktop + directory load from IDE => driver ran from ROM.
+- [x] Resident `gb_rom_call` stub (`di` / `OUT (#DF),num` / `OUT (#7F),#85` / `call #C000` / restore / `ei`).
+- [x] Boot probe: scan ROM numbers for the `"GBROM"` signature at `#C003`; store the
+      number in `gb_rom_num` (`#1254`).
+- [x] Route the kernel's `fs_read_sector` through it when present (dispatcher; guarded by
+      conditional assembly so the paged `gbfat.asm` copy stays in-RAM).
+- [x] Boot the IDE build with `GEOBENCH.ROM` in a free `[board:cyboard]` slot (slot_6);
+      desktop + File Manager directory listing load from IDE => **driver ran from ROM. ✅**
 
-**Next-session blocker to resolve first (empirical):** the exact `OUT (#DF)` ROM-number
-<-> 1984 expansion-slot mapping. Pick a free slot (slot_6), add `GEOBENCH.ROM`, and
-probe in 1984 to learn which number selects it. Everything else is wired and ready.
+ROM-number<->slot mapping confirmed empirically in 1984: `OUT (#DF),6` selects
+`[board:cyboard] slot_6`; the probe finds `"GBROM"` and sets `gb_rom_num=6`.
 
-## Runtime test — IN PROGRESS (reboots; resume here)
+## Runtime test — RESOLVED ✅ (the reboot was a gate-array RMR bug)
 
-Seam committed (`db0c3f1`), builds, fits budget (ROM-only IDE: kern_end `#A186`,
-slack 2). Enabled with `-DGB_ROM_REQ=1` (IDE variant only). **But: booting the GB_ROM
-FAT16 build (`QA/CARD` GBIDE.BIN, GEOBENCH.ROM in slot 6) via `|drive,"A","IDE:"` +
-`RUN"GB` immediately REBOOTS the CPC.** Cause not yet found.
+The GB_ROM FAT16 build now boots to the desktop and lists the IDE directory with the
+read driver executing from `GEOBENCH.ROM`. Verified headless in 1984 (`gb_rom_num=6`,
+FM shows `C/GEOBENCH`) and on real hardware.
 
-Convention is solid (from 1984 `src/cpc.c`/`mem.c`): `OUT (#DF),A` = ROM number;
-`slot_N` = number N; empty slots read `0xFF`; 0=BASIC, 7=AMSDOS reserved.
+**Root cause — the upper-ROM page-in value also paged the LOWER ROM.** `gb_rom_call`
+(and `gb_rom_probe`) used `#7F81` to enable the upper ROM. From 1984 `src/gate_array.c`:
+`lower_rom = !(val & 0x04)`, `upper_rom = !(val & 0x08)`. `#81` has bit2 **clear**, so it
+enables the **lower** ROM too - the firmware ROM is paged in over `#0000-#3FFF`, exactly
+where `lba_tmp` (`#1250`) and `fs_secbuf` (`#1800`) live. The ROM read then fetched its
+LBA from firmware bytes (garbage), read a wrong sector, corrupted the mount, and reset.
 
-Ruled out:
-- `gb_rom_num` garbage before init: `fs_init`/`fs_ide_present` do NOT read a sector
-  (just an ATA reg read-back), and the first `fs_read_sector` is `fs_sys_resolve`
-  AFTER the probe. `#1250` (lba_tmp) and `#1254` (gb_rom_num) are in the free gap
-  `#124A-#12FF`.
-- Premature `ei`: interrupts are already ON at the probe (UniDOS RUN" hands over EI;
-  first kernel `di` is at gbkern ~line 227, AFTER `gb_rom_probe`).
+**Fix:** page in with **`#7F85`** (`%10000101`: bit2 **set** -> lower ROM OFF / low RAM
+visible; bit3 clear -> upper ROM ON; mode 1) in both the probe and the call. Two
+constants in `lib/fs_ide_fat.asm`. (`save_block` gets away with `#7F81` because it only
+ever touches screen RAM at `#C000` under the paging, never low RAM.)
 
-To investigate next (in order):
+**How it was pinned down (bisection, all headless in 1984):**
+1. NORMAL build (no GB_ROM, but with the `lba_tmp`->`#1250` move) boots clean => the
+   relocation is innocent.
+2. Probe-only (`-DGB_PROBE_ONLY`: probe at boot, reads stay in-RAM) boots, `gb_rom_num=6`
+   => the probe is innocent.
+3. The in-RAM read wrapped in the SAME paging dance (`-DGB_DANCE`, no `#C000` execution,
+   valid sectors) ALSO reboots => it is NOT executing-from-ROM and NOT the ROM body.
+4. `di`-only wrapper (`-DGB_DITEST`: `di`/`ei` around the in-RAM read, no ROM paging)
+   BOOTS => `di`/`ei` is harmless; the ROM-select/`#7F81` paging is the killer.
+5. 1984 `gate_array.c` bit semantics => `#7F81` enables the lower ROM => `#7F85` fix.
+
+(Earlier wrong turns, kept for the record: an interrupt-state `ld a,i`/`ret po` preserve
+and an enable-then-select order swap both still rebooted - because the real fault was the
+lower-ROM bit, not interrupts or order.)
+
+### Test harness (reuse for the rest of the offload)
+- Config: `/tmp/gbide.conf` - `[board:cyboard]` with HDCPM(1) + GEOBENCH.ROM(6) +
+  UNIDOS(7) + UNITOOLS(8) + FATFS-P1/P2(9/10); `symbiface_ide=true`,
+  `ide_image=~/Downloads/CFCARD.img` (FAT16, `QA/CARD` layout at partition offset 16384).
+- Sync a fresh build: `mcopy -i ~/Downloads/CFCARD.img@@16384 -o QA/CARD/GBIDE.BIN ::/`.
+- Boot: `1984 --config=/tmp/gbide.conf --paste='|drive,"A","IDE:"\nrun"gb\n'
+  --save-sna-at=5400:x.sna --screenshot-at=5450:x.ppm`. Read `gb_rom_num` at SNA
+  offset `256+0x1254`; `0x6` + a desktop screenshot = booted, `0x0` + UniDOS banner = reboot.
+
+## Earlier investigation notes (superseded by the fix above)
 1. **Isolate lba_tmp-relocation vs the seam:** build NORMAL (no `GB_ROM_REQ`, so
    in-RAM driver but WITH the `lba_tmp`→#1250 move + dispatcher restructure) and boot
    it. Boots clean => the seam is the culprit; reboots => the relocation is (recheck

@@ -385,13 +385,13 @@ gb_rom_num      equ   #1254        ; 0xFF = not found, else the upper-ROM number
 
 ; gb_rom_probe: scan upper ROM numbers 1..15 (skip 0=BASIC, 7=AMSDOS) for the
 ; "GBROM" signature at #C003. Found -> gb_rom_num = the number; leaves AMSDOS (7)
-; selected. Reads see the selected upper ROM at #C000 while it is enabled (#7F81).
+; selected. Reads see the selected upper ROM at #C000 while it is enabled (#7F85).
 gb_rom_probe
                 di
                 ld    a,#FF
                 ld    (gb_rom_num),a
-                ld    bc,#7F81               ; upper ROM ON (mode 1) so #C000 reads the ROM
-                out   (c),c
+                ld    bc,#7F85               ; upper ROM ON + lower ROM OFF (mode 1): #C000 reads the
+                out   (c),c                  ; ROM, low RAM stays visible (#152 - see gb_rom_call)
                 ld    d,1                    ; D = candidate ROM number
 grp_loop        ld    a,d
                 cp    7
@@ -435,15 +435,15 @@ grp_done        ld    bc,#DF00               ; restore AMSDOS (7)
 ; (#1250); on return fs_secbuf (#1800) holds the sector. DI across the whole
 ; paged-in window so no interrupt sees GEOBENCH.ROM at #C000; restore AMSDOS first.
 gb_rom_call
-                di
+                di                            ; no IRQ may see GEOBENCH.ROM paged in at #C000
                 ld    bc,#DF00
                 ld    a,(gb_rom_num)
                 out   (c),a                  ; select GEOBENCH.ROM
-                ld    bc,#7F81
-                out   (c),c                  ; upper ROM ON, mode 1
-                call  #C000                  ; -> jp gbrom_fs_read_sector
-                ld    bc,#DF00
-                ld    a,7
+                ld    bc,#7F85               ; upper ROM ON + lower ROM OFF, mode 1. CRUCIAL (#152):
+                out   (c),c                  ; #7F81 ALSO paged the firmware LOWER ROM in over
+                call  #C000                  ; #0000-#3FFF, so the body read lba_tmp (#1250) from ROM
+                ld    bc,#DF00               ; - a garbage LBA - and rebooted the CPC. Bit2=1 keeps
+                ld    a,7                     ; the low-RAM lba_tmp/fs_secbuf visible to the read.
                 out   (c),a                  ; restore AMSDOS
                 ei
                 ret
