@@ -135,6 +135,49 @@ offload; it was repaired with `fsck.fat -w` + re-copying `QA/CARD`. The harness 
 size assert), boot a **FAT32** `ide_image`, then `dd ... skip=32 count=<part-secs>` + `fsck.fat -n`
 the partition. A "saved OK" border does NOT prove FS consistency - always fsck.
 
+## AMSDOS floppy read offload — IN PROGRESS (increment 1 done + committed)
+
+Move the floppy READ backend (`fsam_dir_first/dir_next/load_file/present` + the FDC core in
+`fs_amsdos.asm`/`fs_amsdos_core.asm`) into `GEOBENCH.ROM`. The ROM **uniquely** enables this: #135
+found "floppy LOAD can't be paged - it writes app pages" (paged modules live in the app bank
+`#4000-#7FFF`); the ROM is at `#C000`, independent of that bank, so a ROM floppy-load CAN write
+app pages. Floppy is also FLAT (no subdirs) so it sidesteps the IDE read's browse-dir clobber.
+Lower-risk than the IDE read (only exercised on Disk A/B, not every boot).
+
+- **Increment 1 — DONE (2bc9927):** relocated the fs_amsdos/core scratch state to fixed low RAM
+  (`FS_RDIO_LOWRAM`, `FSAM_STATE_BASE=#1256`); `else` branch byte-identical. Reclaimed 26 B
+  (GBIDE 8543->8517). Verified: desktop boots + floppy dir read returns the right first file.
+
+- **Test harness (rebuild as needed):** `-DGBFTEST=1` after `fs_sys_resolve` -> `xor a;
+  ld (fsam_unit),a; call fsam_dir_first; border WHITE if CF else RED; hang`. Config:
+  `gbide_flp.conf` = gbide.conf + `drive_a=<repo>/QA/GEOBENCH.DSK`. Read `fs_ent_name` from the
+  SNA (symbol `FS_ENT_NAME`, e.g. #9793) - should be `GBKERN  BIN`. (Build is over budget ->
+  temporarily exempt from the size assert.)
+
+- **Increment 2 — TODO (the code move + transfer-area bridge):**
+  1. **Split `fs_amsdos.asm`:** the read path (dir/load/present + core) goes to the ROM, but
+     `fsam_save_file` (the WRITE stub, lines ~355-410) loads the paged `floppysv` module and has
+     resident deps (`fs_load_sys`, bank) - it must STAY resident. Guard `fsam_save_file` with
+     `ifndef FS_RDIO_LOWRAM` (excluded from the ROM include) and keep a resident copy, OR extract
+     it to its own file. Confirm whether `fsam_save_file` needs the FDC core (if not, the resident
+     keeps only the stub).
+  2. **I/O scratch (transfer area)** at `#1270+` (after the fsam state): the ROM build defines
+     `fs_ent_name`(11)/`fs_ent_attr`(1)/`fs_ent_size`(4) [outputs] + `fs_req_name`(11)/
+     `fs_load_dst`(2)/`fs_load_max`(2) [inputs] as equs there (fs_amsdos references exactly these
+     - verified, NOT fs_ent_clus). The resident keeps its own `fs_ent_*` (fs.asm defs, untouched).
+  3. **ROM dispatch:** add idx2 `jp fsam_dir_first`, idx3 `jp fsam_dir_next`, idx4
+     `jp fsam_load_file`, idx5 `jp fsam_present` (after `#C009`). Include the read half of
+     fs_amsdos in the ROM.
+  4. **Resident stubs** `gb_rom_fsam_*` (mirror `gb_rom_call`, page in with `#7F85`): before a
+     LOAD, copy resident `fs_req_name`/`fs_load_dst`/`fs_load_max` -> scratch (+ set the app bank);
+     call the ROM dispatch; after dir/load, copy scratch `fs_ent_*` -> resident `fs_ent_*`; return
+     the ROM's CF (survives the `out`/`ei` restore). `fsam_unit` is already shared at `#1256`.
+  5. **Rewire `fs.asm:fs_set_drive`** floppy branch: point `fs_p_first/next/load` at the stubs.
+  6. **Drop the read half of fs_amsdos from the resident** (the reclaim).
+  - **Test:** GBFTEST floppy dir read (-> GBKERN BIN via the ROM); a floppy file LOAD into an app
+    page (the #135 capability - verify the ldir lands in the banked page); full boot; FM open
+    Disk A. The write path (`floppysv`) must still save to a floppy.
+
 ## FS READ mount/dir offload — DESIGNED, not yet implemented (the ~1KB resident win for #156)
 
 Goal: move the resident FAT *read* backend (`fside_dir_first/dir_next/load_file` in
