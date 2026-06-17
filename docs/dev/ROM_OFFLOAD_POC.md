@@ -193,7 +193,26 @@ Lower-risk than the IDE read (only exercised on Disk A/B, not every boot).
     page (the #135 capability - verify the ldir lands in the banked page); full boot; FM open
     Disk A. The write path (`floppysv`) must still save to a floppy.
 
-## FS READ mount/dir offload — IN PROGRESS (foundation done; the code move is teed up)
+## FS READ mount/dir offload — DONE ✅ (the IDE read backend runs from the ROM)
+
+The big ~1KB reclaim for #156 is done + committed. The IDE FAT read backend
+(`fside_dir_first/dir_next/load_file` + `flf_cmpname`, extracted to `lib/fs_ide_read.asm`)
+runs from `GEOBENCH.ROM`; the GB_ROM resident build compiles thin ROM-call stubs that marshal
+the `#1270` transfer area (+ `FSAM_IO_CLUS`) and share the FAT core state at `#1C00`. Dispatch
+slots `#C018/#C01B/#C01E`. The resident `fs_fat32_core` include is dropped (a tiny `copy4` +
+`flf_cmpname` kept for `fs_sys_resolve`). **GBIDE FAT16 7691 → 6817 B** (~874 B); non-ROM,
+Albireo, paged modules unchanged. Verified on FAT16 + FAT32 (desktop boot exercises
+`fs_sys_resolve` + the app load through the stubs) + real hardware, and a save-then-relist on
+FAT32 (ROM read + ROM write together) is fsck-clean.
+
+> BUG FOUND + FIXED during B2: B1 had put `fat_eoc` (a `defb`) in a `.inc` included BEFORE
+> `org #C000`, so it landed outside the ROM image and the ROM read garbage for the FAT
+> end-of-chain marker — latent (reads don't use it) until a SAVE wrote a corrupt FAT entry
+> (`fat_set_val = 0xED7F8901` instead of `0x0FFFFFFF`). Fix (`5761063`): include the `.inc`
+> AFTER `org`. Pinpointed via an SNA dump of `#1C00` right after a save. LESSON: any `defb`
+> shared with the ROM must be placed after the ROM's `org`, or it falls outside the image.
+
+### (superseded) original design
 
 The ~1KB resident win for #156. Foundation committed:
 - **Inc A (efbbc13):** resident GB_ROM build shares the FAT core state with the ROM at #1C00
