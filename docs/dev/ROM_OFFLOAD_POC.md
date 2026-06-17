@@ -135,6 +135,49 @@ offload; it was repaired with `fsck.fat -w` + re-copying `QA/CARD`. The harness 
 size assert), boot a **FAT32** `ide_image`, then `dd ... skip=32 count=<part-secs>` + `fsck.fat -n`
 the partition. A "saved OK" border does NOT prove FS consistency - always fsck.
 
+## FS READ mount/dir offload — DESIGNED, not yet implemented (the ~1KB resident win for #156)
+
+Goal: move the resident FAT *read* backend (`fside_dir_first/dir_next/load_file` in
+`fs_ide_fat.asm` + the `fs_fat32_core` mount/dir/cluster code) into `GEOBENCH.ROM`, so the
+resident kernel calls ROM entries and drops its own copy - the ~1KB resident reclaim that
+unblocks the #156 maximize gadget. The ROM already carries `fs_fat32_core` (for the write), so
+the code largely exists there; this wires the resident READ ops to it.
+
+**Why it's higher-risk than the write offload:** the read path is load-bearing (every boot,
+every FM listing, every app load). A bug = unbootable. Plan each step + regression-test on BOTH
+FAT16 (CFCARD.img) and FAT32 (the mkfs.fat image) before the next.
+
+**State to relocate to fixed low RAM (so the ROM can read/write it), ~72 B:**
+- `fs.asm`: `fs_ent_name`(11) `fs_ent_attr`(1) `fs_ent_size`(4) `fs_req_name`(11)
+  `fs_load_dst`(2) `fs_load_max`(2) `fs_cur_drive`(1). (`fs_p_*` dispatch ptrs stay resident.)
+- `fs_ide_fat.asm`: `fs_mounted`(1) `fs_dir_sp`(1) `fs_dir_stack`(16) `flf_clus`(4)
+  `fs_ent_clus`(4) `fs_sys_clus`(4) `fs_dir_save`(4) `flf_sic`(1) `flf_secs`(2).
+  Use the same `FS_STATE_LOWRAM`/`else`-is-byte-identical pattern as `fs_fat32_core` (verify the
+  resident GBIDE.BIN is unchanged by the relocation alone). Pick a free block (e.g. `#1C70+`,
+  above the write state at `#1C00..#1C66`, still below `GBFAT_DATA #2200`).
+
+**THE design risk - the browse directory.** `fs_dir_clus` (core state) is the FM's current
+folder AND what the read walks. The WRITE path's `fs_mount` resets `fs_dir_clus` to root, so if
+read and write share one core-state block a save would silently snap the FM back to root. The
+write offload sidestepped this by keeping its `#1C00` state separate from the resident read
+state. Keep them separate: the READ path gets its own dir/nav context (its own `fs_dir_clus` +
+`fs_dir_stack`); the write keeps `#1C00`. They may share the static MOUNT GEOMETRY (`fs_part_lba`
+/`fs_fat_lba`/`fs_data_lba`/`fs_spc`/...) since that's volume-constant, but NOT the browse dir.
+
+**ROM dispatch (extend the table):** restructure the head into a clean jp-table -
+`#C000` jp fs_read_sector (idx0), `#C003` "GBROM",1, `#C009` jp gbfat_entry (idx1, write),
+then idx2 `rom_dir_first`, idx3 `rom_dir_next`, idx4 `rom_load_file` (and maybe idx5
+`fs_sys_resolve`). Resident `gb_rom_call_dirfirst/_dirnext/_loadfile` (mirror `gb_rom_call`).
+`load_file` writes `fs_load_dst` which may point into a banked app page at `#4000-#7FFF` - that
+window is the MMR bank, untouched by the `#7F85` upper-ROM paging, so the resident sets the bank
+before the ROM call and the ROM's `ldir` lands correctly (verify with an app load).
+
+**Then drop the resident `fs_fat32_core` include from `fs_ide_fat.asm`** (and the resident
+`fside_*` read code) once nothing resident calls them - that's where the bytes come back.
+
+**Test matrix:** boot; FM directory listing; chdir into a subdir + back; open an app (load);
+**save a file, then confirm the FM browse dir survived** (the clobber test); on FAT16 AND FAT32.
+
 ## Read-sector offload — RESOLVED ✅ (the reboot was a gate-array RMR bug)
 
 The GB_ROM FAT16 build now boots to the desktop and lists the IDE directory with the
