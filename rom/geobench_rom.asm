@@ -17,6 +17,7 @@
 
 FS_STATE_LOWRAM equ   1            ; route the core + gbfat scratch state to low RAM
 FS_STATE_BASE   equ   #1C00        ; free low-RAM block (#1C00-#21FF; gap above fsam_buf)
+                include "../lib/fs_fat_lowram.inc"  ; FAT core state addresses (shared with resident)
 GBFAT_AS_INCLUDE equ  1            ; gbfat.asm: no org #6000 / no GBFAT.RAW save here
 FAT16_ONLY      equ   0            ; the ROM carries the full FAT16+FAT32 read+write core
 FS_RDIO_LOWRAM  equ   1            ; floppy read backend (fs_amsdos): scratch -> fixed low RAM

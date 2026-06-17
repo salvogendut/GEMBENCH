@@ -45,6 +45,7 @@ GB_ROM_STUBS    equ   1                       ; low RAM (ROM is read-only). This
 ; resident's directory position survives a save). Reclaims the core-state defs too.
 FS_STATE_LOWRAM equ   1
 FS_STATE_BASE   equ   #1C00
+                include "../lib/fs_fat_lowram.inc"  ; FAT core state addresses (shared with the ROM)
                 endif
 
 ; Config transfer area - resident low RAM (stays main RAM under banking, so the
