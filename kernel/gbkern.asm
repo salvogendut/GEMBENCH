@@ -40,6 +40,11 @@ GB_ROM          equ   1
 FS_RDIO_LOWRAM  equ   1                       ; to GEOBENCH.ROM; its scratch state must live in fixed
 GB_ROM_STUBS    equ   1                       ; low RAM (ROM is read-only). This resident build replaces
                 include "../lib/fs_rom_lowram.inc"  ; the fs_amsdos read code with thin gb_rom-call stubs.
+; #152: share the FAT core state with GEOBENCH.ROM at #1C00 (the IDE read + write paths
+; both use it; the write's fs_mount restores fs_dir_clus to the browse dir so the
+; resident's directory position survives a save). Reclaims the core-state defs too.
+FS_STATE_LOWRAM equ   1
+FS_STATE_BASE   equ   #1C00
                 endif
 
 ; Config transfer area - resident low RAM (stays main RAM under banking, so the
