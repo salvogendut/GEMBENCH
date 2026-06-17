@@ -193,7 +193,46 @@ Lower-risk than the IDE read (only exercised on Disk A/B, not every boot).
     page (the #135 capability - verify the ldir lands in the banked page); full boot; FM open
     Disk A. The write path (`floppysv`) must still save to a floppy.
 
-## FS READ mount/dir offload — DESIGNED, not yet implemented (the ~1KB resident win for #156)
+## FS READ mount/dir offload — IN PROGRESS (foundation done; the code move is teed up)
+
+The ~1KB resident win for #156. Foundation committed:
+- **Inc A (efbbc13):** resident GB_ROM build shares the FAT core state with the ROM at #1C00
+  (FS_STATE_LOWRAM). Safe because gbfat_save restores fs_dir_clus to the browse dir. Validated:
+  desktop boots + a save-then-relist test (-DGBSRTEST, FAT32) finds the saved file, fsck-clean.
+- **Inc B1 (df911d8):** FAT core-state equs extracted to lib/fs_fat_lowram.inc (shared by the
+  resident + ROM), so the resident keeps the state addresses after the read code leaves. Pure
+  refactor, boots.
+
+**Inc B2 (TODO) - the code move (the ~1KB reclaim). Follow the floppy template exactly:**
+1. **Split fs_ide_fat.asm.** Extract the read backend (fside_dir_first/dir_next/load_file +
+   flf_cmpname, lines ~54-244) into a new lib/fs_ide_read.asm. fs_ide_fat.asm keeps fs_sys_resolve,
+   fs_sysdir_enter/leave, the write stubs (gbfat_run/fside_save/delete) and the seam
+   (gb_rom_probe/gb_rom_call/_write) - all resident.
+2. **Conditionals in fs_ide_fat.asm** (mirror fs_amsdos):
+   - core include (line 47): `if (not GB_ROM_STUBS) and (not IN_GBROM)` - only the non-ROM
+     resident includes fs_fat32_core here (the ROM already has it via gbfat; the GB_ROM resident
+     uses stubs).
+   - read: `ifndef GB_ROM_STUBS` -> `include "fs_ide_read.asm"`; `else` -> the stubs
+     (gb_rom_fside_dir_first @ROM idx6, dir_next @idx7, load_file @idx8; reuse gb_rom_fsam_invoke
+     + a fside_ent_out copy helper).
+3. **ROM (geobench_rom.asm):** add dispatch jp fside_dir_first (#C018), jp fside_dir_next (#C01B),
+   jp fside_load_file (#C01E); `include "../lib/fs_ide_read.asm"` AFTER gbfat (which provides the
+   core); add the IDE I/O aliases - reuse FSAM_IO_NAME/ATTR/SIZE/REQ/DST/MAX and add FSAM_IO_CLUS
+   (IDE entries carry a start cluster; floppy didn't). Alias fs_ent_clus = FSAM_IO_CLUS.
+4. **State split** (the intricate part): fs_mounted + flf_clus/flf_sic/flf_secs are ROM-only ->
+   put them in fs_fat_lowram.inc at FS_STATE_BASE+104.. (after the gbfat write state +43..102;
+   NOTE this region overlaps fsam_buf #1A00-#21FF but IDE-read and floppy-read are never
+   concurrent, like the existing #1C00 overlap). fs_dir_sp/fs_dir_stack/fs_sys_clus/fs_dir_save
+   stay resident (used by k_chdir/k_back + fs_sys_resolve). fs_ent_clus -> resident defs, the
+   stub copies it out of FSAM_IO_CLUS (alongside fs_ent_name/attr/size out of FSAM_IO_NAME..).
+5. **Drop the resident fs_fat32_core include** (the reclaim) once nothing resident calls it
+   (fside_* are stubs; gbfat_run/save go to the ROM; nav uses only the #1C00 state addresses).
+6. **Test (all via the normal boot - no harness):** desktop boots (fs_sys_resolve finds /GEOBENCH
+   via the dir stubs, DESKTOP.APP loads via the load stub into its bank page - the ldir lands in
+   the MMR bank #4000-#7FFF, untouched by #7F85), FM lists C/GEOBENCH, chdir into /GEOBENCH + back,
+   save a file then re-list (browse dir survives). FAT16 (CFCARD) AND FAT32.
+
+## FS READ mount/dir offload — original design (#152, #156)
 
 Goal: move the resident FAT *read* backend (`fside_dir_first/dir_next/load_file` in
 `fs_ide_fat.asm` + the `fs_fat32_core` mount/dir/cluster code) into `GEOBENCH.ROM`, so the
