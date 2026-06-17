@@ -29,4 +29,5 @@ FSAM_IO_ATTR    equ   #127B        ; output: entry attribute (1)
 FSAM_IO_SIZE    equ   #127C        ; output: entry size (4)
 FSAM_IO_REQ     equ   #1280        ; input: name to load (11)
 FSAM_IO_DST     equ   #128B        ; input: load destination (2)
-FSAM_IO_MAX     equ   #128D        ; input: load max bytes (2)   -> ends #128E
+FSAM_IO_MAX     equ   #128D        ; input: load max bytes (2)
+FSAM_IO_CLUS    equ   #128F        ; output: IDE entry start cluster (4; floppy has none) -> #1292

@@ -31,6 +31,7 @@ fs_ent_size     equ   FSAM_IO_SIZE
 fs_req_name     equ   FSAM_IO_REQ
 fs_load_dst     equ   FSAM_IO_DST
 fs_load_max     equ   FSAM_IO_MAX
+fs_ent_clus     equ   FSAM_IO_CLUS        ; IDE entries carry a start cluster (floppy didn't)
 
                 org   #C000
 ROM_BASE        equ   #C000
@@ -43,6 +44,9 @@ gbrom_sig       db    "GBROM", 1                 ; #C003 magic + version (boot p
                 jp    fsam_dir_next              ; #C00F index 3: floppy dir next
                 jp    fsam_load_file             ; #C012 index 4: floppy file load
                 jp    fsam_present               ; #C015 index 5: floppy presence probe
+                jp    fside_dir_first            ; #C018 index 6: IDE dir first
+                jp    fside_dir_next             ; #C01B index 7: IDE dir next
+                jp    fside_load_file            ; #C01E index 8: IDE file load
 
 ; --- the offloaded drivers ------------------------------------------------------
 ; gbfat.asm supplies: GBFAT_*/FS_IDE_*/fs_secbuf equates, the gbfat_entry write
@@ -52,6 +56,7 @@ gbrom_sig       db    "GBROM", 1                 ; #C003 magic + version (boot p
 ; FS_*_LOWRAM flags set, all writable state is equ'd into low RAM (nothing in ROM).
                 include "../kernel/modules/gbfat.asm"
                 include "../lib/fs_amsdos.asm"
+                include "../lib/fs_ide_read.asm"   ; IDE read backend (uses gbfat's fs_fat32_core)
 
 ; --- pad to a full 16K ROM image ------------------------------------------------
                 assert $ <= #10000

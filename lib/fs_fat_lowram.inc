@@ -28,3 +28,10 @@ fs_is_fat16     equ   FS_STATE_BASE+37 ; #130: 1 = FAT16 volume, else FAT32
 fs_root_lba     equ   FS_STATE_BASE+38 ; #130 FAT16: LBA of the fixed root directory
 fs_root_secs    equ   FS_STATE_BASE+42 ; #130 FAT16: root directory size in sectors
 FS_CORE_STATE_END equ FS_STATE_BASE+43 ; gbfat write state continues from here (+43..+102)
+; IDE read-only scratch (#152): only the ROM read backend touches these; placed after the
+; gbfat write state (+43..102). Overlaps fsam_buf #1A00-#21FF, but IDE-read and floppy-read
+; are never concurrent (same benign overlap as the rest of the #1C00 block).
+fs_mounted      equ   FS_STATE_BASE+104 ; 0 until the volume is mounted once
+flf_clus        equ   FS_STATE_BASE+105 ; load: current file cluster (4)
+flf_sic         equ   FS_STATE_BASE+109 ; load: sector within current cluster
+flf_secs        equ   FS_STATE_BASE+110 ; load: sectors remaining (2) -> ends +112

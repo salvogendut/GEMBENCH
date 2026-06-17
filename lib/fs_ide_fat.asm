@@ -44,193 +44,56 @@ GBFAT_MAX       equ   #1C00        ; 7 KB staging cap (fits #2200..#3DFF in low 
 GBFAT_LOAD      equ   DATA_MODTOP  ; module load address, above the font+icon set in
                                    ; PAGE_DATA (must match GBFAT_ORG in gbfat.asm; #88)
 
-                include "fs_fat32_core.asm"
+                ifndef GB_ROM_STUBS          ; #152: the GB_ROM resident build uses the ROM's core
+                include "fs_fat32_core.asm"  ; (via gbfat.asm) + the #1C00 state in fs_fat_lowram.inc
+                endif
 
-; ---------------------------------------------------------------------------
-; fside_dir_first: return the first valid entry of the CURRENT directory. The
-; volume is mounted once (fs_mount sets fs_dir_clus = root); re-listing afterwards
-; rewinds whatever directory fs_dir_clus points at (so gb_chdir/gb_back persist
-; across re-lists instead of snapping back to root). See issue #54.
-fside_dir_first
-                ld    a,(fs_mounted)
-                or    a
-                jr    nz,fsdf_rewind
-                call  fs_mount               ; first time: BPB + root cluster
-                ld    a,1
-                ld    (fs_mounted),a
-fsdf_rewind
-                call  fs_dir_rewind           ; rewind the current directory
-                jp    fdn_loop                 ; scan for the first valid entry
-
-; ---------------------------------------------------------------------------
-; fside_dir_next: scan forward for the next valid 8.3 entry, walking the root
-; directory's cluster chain across sectors.
-fside_dir_next
-fdn_loop
-                ld    a,(fs_ent_idx)
-                cp    16                       ; 16 entries per 512-byte sector
-                jr    c,fdn_have
-                call  fs_dir_step              ; advance to the next dir sector
-                jp    nc,fdn_end               ; end of directory chain
-                xor   a
-                ld    (fs_ent_idx),a
-fdn_have
-                ld    a,(fs_ent_idx)           ; entry ptr = secbuf + idx*32
-                ld    l,a
-                ld    h,0
-                add   hl,hl
-                add   hl,hl
-                add   hl,hl
-                add   hl,hl
-                add   hl,hl
-                ld    de,fs_secbuf
-                add   hl,de
-
-                ld    a,(hl)
-                or    a
-                jp    z,fdn_end                ; &00 = end of directory
-                cp    #E5
-                jr    z,fdn_skip               ; deleted entry
-
-                push  hl
-                ld    de,#0B
-                add   hl,de
-                ld    a,(hl)                   ; attribute byte
-                pop   hl
-                ld    b,a
-                and   #0F
-                cp    #0F
-                jr    z,fdn_skip               ; long-file-name fragment
-                ld    a,b
-                and   #08
-                jr    nz,fdn_skip              ; volume label / directory-as-label
-                ld    a,(hl)                   ; hide '.' and '..' (dir self / parent)
-                cp    '.'
-                jr    z,fdn_skip
-
-                ld    a,b                       ; attr -> fs_ent_attr NOW, before the
-                ld    (fs_ent_attr),a           ; name ldir below clobbers B (BC count)
-                push  hl                       ; valid -> copy fields out
-                ld    de,fs_ent_name
+                ifndef GB_ROM_STUBS          ; non-ROM resident: the real read backend
+                include "fs_ide_read.asm"
+                else                          ; #152 GB_ROM resident: fside_* run from GEOBENCH.ROM
+; (idx 6-8). Page the ROM in, call the slot, and marshal the I/O transfer area (#1270)
+; <-> the resident fs_ent_*/fs_req_name/fs_load_*. gb_rom_fsam_invoke is in fs_amsdos.asm.
+fside_dir_first ld    hl,#C018               ; ROM idx6
+                call  gb_rom_fsam_invoke
+                jr    fside_ent_out
+fside_dir_next  ld    hl,#C01B               ; ROM idx7
+                call  gb_rom_fsam_invoke
+                jr    fside_ent_out
+fside_load_file ld    hl,fs_req_name          ; marshal inputs into the transfer area
+                ld    de,FSAM_IO_REQ
                 ld    bc,11
                 ldir
-                pop   hl
-                push  hl
-                ld    de,#1C                    ; size (4 bytes @ 0x1C)
-                add   hl,de
+                ld    hl,(fs_load_dst)
+                ld    (FSAM_IO_DST),hl
+                ld    hl,(fs_load_max)
+                ld    (FSAM_IO_MAX),hl
+                ld    hl,#C01E               ; ROM idx8 (writes the file into (fs_load_dst))
+                call  gb_rom_fsam_invoke
+                push  af                       ; preserve CF (loaded?)
+                ld    hl,FSAM_IO_SIZE         ; copy the loaded size back out
                 ld    de,fs_ent_size
-                call  copy4
-                pop   hl
-                push  hl                       ; cluster: low word @0x1A
-                ld    de,#1A
-                add   hl,de
-                ld    a,(hl)
-                ld    (fs_ent_clus),a
-                inc   hl
-                ld    a,(hl)
-                ld    (fs_ent_clus+1),a
-                pop   hl
-                push  hl                       ; cluster: high word @0x14
-                ld    de,#14
-                add   hl,de
-                ld    a,(hl)
-                ld    (fs_ent_clus+2),a
-                inc   hl
-                ld    a,(hl)
-                ld    (fs_ent_clus+3),a
-                pop   hl
-
-                ld    a,(fs_ent_idx)
-                inc   a
-                ld    (fs_ent_idx),a
-                scf
-                ret
-fdn_skip
-                ld    a,(fs_ent_idx)
-                inc   a
-                ld    (fs_ent_idx),a
-                jp    fdn_loop
-fdn_end
-                or    a                         ; CF clear = end of directory
-                ret
-
-; ---------------------------------------------------------------------------
-; fside_load_file: load the file named in fs_req_name (11-byte 8.3) into the
-; buffer at (fs_load_dst). CF set = loaded (fs_ent_size set), NC = not found.
-fside_load_file
-                call  fside_dir_first
-flf_find
-                jr    nc,flf_notfound
-                call  flf_cmpname
-                jr    z,flf_found
-                call  fside_dir_next
-                jr    flf_find
-flf_notfound
-                or    a
-                ret
-flf_found
-                ld    hl,(fs_load_max)        ; size > caller's buffer? refuse
-                ld    de,(fs_ent_size)
-                or    a
-                sbc   hl,de
-                jr    c,flf_notfound
-                ld    hl,(fs_ent_size)        ; sectors = ceil(size/512)
-                ld    de,511
-                add   hl,de
-                ld    b,9
-flf_sh          srl   h
-                rr    l
-                djnz  flf_sh
-                ld    (flf_secs),hl
-                ld    hl,fs_ent_clus          ; flf_clus = start cluster (32-bit)
-                ld    de,flf_clus
-                call  copy4
-                xor   a
-                ld    (flf_sic),a
-flf_loop
-                ld    hl,(flf_secs)
-                ld    a,h
-                or    l
-                jr    z,flf_done
-                ld    hl,flf_clus             ; LBA = cluster base + sector-in-cluster
-                call  clus_first_lba
-                ld    a,(flf_sic)
-                call  lba_add_a
-                call  fs_read_sector
-                ld    hl,fs_secbuf            ; copy the sector to the destination
-                ld    de,(fs_load_dst)
-                ld    bc,512
+                ld    bc,4
                 ldir
-                ld    (fs_load_dst),de
-                ld    hl,(flf_secs)
-                dec   hl
-                ld    (flf_secs),hl
-                ld    a,(flf_sic)             ; advance sector-in-cluster
-                inc   a
-                ld    b,a
-                ld    a,(fs_spc)
-                cp    b
-                jr    nz,flf_keepsic
-                ld    hl,flf_clus             ; cluster boundary -> next cluster
-                call  fs_fat_next
-                jr    nc,flf_done             ; chain ended early -> stop
-                xor   a
-                ld    (flf_sic),a
-                jr    flf_loop
-flf_keepsic
-                ld    a,b
-                ld    (flf_sic),a
-                jr    flf_loop
-flf_done
-                scf
+                pop   af
                 ret
-
-flf_cmpname                                    ; fs_ent_name == fs_req_name? Z if so
-                ld    hl,fs_ent_name
+; fside_ent_out: copy the entry the ROM wrote (name+attr+size, 16 contiguous; then the
+; start cluster) out of the transfer area into the resident fs_ent_*. Preserves the CF.
+fside_ent_out   push  af
+                ld    hl,FSAM_IO_NAME
+                ld    de,fs_ent_name
+                ld    bc,16
+                ldir
+                ld    hl,FSAM_IO_CLUS
+                ld    de,fs_ent_clus
+                ld    bc,4
+                ldir
+                pop   af
+                ret
+flf_cmpname                                    ; resident copy - fs_sys_resolve uses it (the ROM
+                ld    hl,fs_ent_name           ; has its own copy for the ROM's fside_load_file)
                 ld    de,fs_req_name
                 ld    b,11
-flf_cn
-                ld    a,(de)
+flf_cn          ld    a,(de)
                 cp    (hl)
                 ret   nz
                 inc   hl
@@ -238,6 +101,11 @@ flf_cn
                 djnz  flf_cn
                 xor   a
                 ret
+copy4                                          ; resident copy - fs_sys_resolve/fs_sysdir_* use it
+                ld    bc,4                      ; (lived in fs_fat32_core, now ROM-only)
+                ldir
+                ret
+                endif
 
 ; ---------------------------------------------------------------------------
 ; fs_sys_resolve (#134): point fs_sys_clus at the /GEOBENCH folder so system files
@@ -376,15 +244,21 @@ fside_delete_file
 gbfat_modname   db    "GBFAT   BIN"          ; 8.3, space-padded
 
 ; --- read-path state (shared core state lives in fs_fat32_core.asm) -------
+; #152: fs_mounted + flf_* are ROM-only (only the read backend touches them); in the
+; FS_STATE_LOWRAM build they live in fs_fat_lowram.inc. fs_dir_sp/fs_dir_stack/
+; fs_ent_clus/fs_sys_clus/fs_dir_save stay resident (navigation + system-dir + the
+; stub copies fs_ent_clus out of the transfer area).
+                ifndef FS_STATE_LOWRAM
 fs_mounted      defb  0            ; 0 until the volume is mounted once (#54)
+flf_clus        defs  4            ; load: current file cluster
+flf_sic         defb  0            ; load: sector within current cluster
+flf_secs        defw  0            ; load: sectors remaining
+                endif
 fs_dir_sp       defb  0            ; directory stack depth (chdir/back)
 fs_dir_stack    defs  16           ; 4 parent clusters (4 bytes each)
-flf_clus        defs  4            ; load: current file cluster
 fs_ent_clus     defs  4            ; selected entry's start cluster
 fs_sys_clus     defs  4            ; #134: the /GEOBENCH system dir cluster (root if absent)
 fs_dir_save     defs  4            ; #134: browse dir saved across a system load
-flf_sic         defb  0            ; load: sector within current cluster
-flf_secs        defw  0            ; load: sectors remaining
 
                 ifdef GB_ROM
 ; ---------------------------------------------------------------------------
