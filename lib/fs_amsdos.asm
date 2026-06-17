@@ -15,6 +15,10 @@
 ;   fsam_dir_next  -> CF set = next entry ready,  NC = end of directory
 ; ---------------------------------------------------------------------------
 
+; #152: the READ backend (dir/load/present + the FDC core) lives in GEOBENCH.ROM
+; (IN_GBROM) and the non-ROM resident build; the GB_ROM resident build (GB_ROM_STUBS)
+; replaces it with thin ROM-call stubs (see the else branch after fsam_load_file).
+                ifndef GB_ROM_STUBS
                 include "fs_amsdos_core.asm"
 
 ; ---------------------------------------------------------------------------
@@ -335,6 +339,63 @@ fslf_ok
                 scf
                 ret
 
+                else                          ; #152 GB_ROM resident: thin ROM-call stubs
+; fsam_dir_first/dir_next/present/load_file run from GEOBENCH.ROM (idx 2-5). The FDC
+; core + the real code are in the ROM; here we page it in, call the slot, and marshal
+; the I/O transfer area (#1270) <-> the resident fs_ent_*/fs_req_name/fs_load_*.
+fsam_dir_first  ld    hl,#C00C               ; ROM idx2
+                call  gb_rom_fsam_invoke
+                jr    fsam_ent_out
+fsam_dir_next   ld    hl,#C00F               ; ROM idx3
+                call  gb_rom_fsam_invoke
+                jr    fsam_ent_out
+fsam_present    ld    hl,#C015               ; ROM idx5 (presence probe; no entry output)
+                jp    gb_rom_fsam_invoke
+fsam_load_file  ld    hl,fs_req_name          ; marshal inputs into the transfer area
+                ld    de,FSAM_IO_REQ
+                ld    bc,11
+                ldir
+                ld    hl,(fs_load_dst)
+                ld    (FSAM_IO_DST),hl
+                ld    hl,(fs_load_max)
+                ld    (FSAM_IO_MAX),hl
+                ld    hl,#C012               ; ROM idx4
+                call  gb_rom_fsam_invoke
+                push  af                       ; preserve CF (loaded?)
+                ld    hl,FSAM_IO_SIZE         ; copy the loaded size back out
+                ld    de,fs_ent_size
+                ld    bc,4
+                ldir
+                pop   af
+                ret
+; fsam_ent_out: copy the entry the ROM wrote to the transfer area (name+attr+size,
+; 16 contiguous bytes) into the resident fs_ent_* fields. Preserves the dir CF.
+fsam_ent_out    push  af
+                ld    hl,FSAM_IO_NAME
+                ld    de,fs_ent_name
+                ld    bc,16
+                ldir
+                pop   af
+                ret
+; gb_rom_fsam_invoke: HL = ROM dispatch slot. Page GEOBENCH.ROM in (#7F85: upper ROM
+; on, lower ROM off so low RAM stays visible), call (HL), restore AMSDOS. CF survives.
+gb_rom_fsam_invoke
+                di
+                ld    bc,#DF00
+                ld    a,(gb_rom_num)
+                out   (c),a
+                ld    bc,#7F85
+                out   (c),c
+                call  grfi_jphl
+                ld    bc,#DF00
+                ld    a,7
+                out   (c),a
+                ei
+                ret
+grfi_jphl       jp    (hl)
+                endif                          ; GB_ROM_STUBS
+
+                ifndef IN_GBROM              ; the WRITE stub is resident-only (not in the ROM)
 ; ---------------------------------------------------------------------------
 ; fsam_save_file: resident stub. The floppy WRITE path (block alloc + sector
 ; assembly + directory writeback) is large and only needed on a save, so it lives
@@ -407,18 +468,12 @@ fsvr_unload
                 scf
                 ret
 floppysv_modname db    "FLOPPYSVBIN"          ; 8.3, space-padded
+                endif                          ; IN_GBROM (write stub resident-only)
 
 ; --- resident state (load + listing; save state lives in the module) --------
-; #152: fixed low RAM in the GEOBENCH.ROM build (FS_RDIO_LOWRAM), packed right after
-; the core state (FSAM_CORE_END); the resident/paged builds keep the original `defs`.
-                ifdef FS_RDIO_LOWRAM
-fslf_blocks     equ   FSAM_CORE_END+0  ; allocation block numbers of the found extent (16)
-fslf_secs       equ   FSAM_CORE_END+16 ; sectors left to read
-fslf_si         equ   FSAM_CORE_END+17 ; sector index within the file
-fslf_rc         equ   FSAM_CORE_END+18 ; record count (for the no-header size)
-fslf_curtrk     equ   FSAM_CORE_END+19 ; track the head is currently on
-fsam_idx        equ   FSAM_CORE_END+20 ; directory-listing cursor (ends at FSAM_CORE_END+21)
-                else
+; #152: fixed low RAM in the GEOBENCH.ROM build (FS_RDIO_LOWRAM, in fs_rom_lowram.inc),
+; packed right after the core state; the resident/paged builds keep the original `defs`.
+                ifndef FS_RDIO_LOWRAM
 fslf_blocks     defs  16           ; allocation block numbers of the found extent
 fslf_secs       defb  0            ; sectors left to read
 fslf_si         defb  0            ; sector index within the file

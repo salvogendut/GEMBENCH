@@ -19,6 +19,17 @@ FS_STATE_LOWRAM equ   1            ; route the core + gbfat scratch state to low
 FS_STATE_BASE   equ   #1C00        ; free low-RAM block (#1C00-#21FF; gap above fsam_buf)
 GBFAT_AS_INCLUDE equ  1            ; gbfat.asm: no org #6000 / no GBFAT.RAW save here
 FAT16_ONLY      equ   0            ; the ROM carries the full FAT16+FAT32 read+write core
+FS_RDIO_LOWRAM  equ   1            ; floppy read backend (fs_amsdos): scratch -> fixed low RAM
+IN_GBROM        equ   1            ; build the READ half of fs_amsdos here (no resident write stub)
+                include "../lib/fs_rom_lowram.inc"   ; fsam state + I/O transfer area addresses
+fsam_buf        equ   #1A00        ; floppy whole-directory buffer (2KB; resident agrees)
+; the floppy read code writes/reads the entry + load fields via the I/O transfer area
+fs_ent_name     equ   FSAM_IO_NAME
+fs_ent_attr     equ   FSAM_IO_ATTR
+fs_ent_size     equ   FSAM_IO_SIZE
+fs_req_name     equ   FSAM_IO_REQ
+fs_load_dst     equ   FSAM_IO_DST
+fs_load_max     equ   FSAM_IO_MAX
 
                 org   #C000
 ROM_BASE        equ   #C000
@@ -27,13 +38,19 @@ ROM_BASE        equ   #C000
                 jp    fs_read_sector            ; #C000 index 0: read one sector
 gbrom_sig       db    "GBROM", 1                 ; #C003 magic + version (boot probe)
                 jp    gbfat_entry                ; #C009 index 1: FAT write (save/delete)
+                jp    fsam_dir_first             ; #C00C index 2: floppy dir first
+                jp    fsam_dir_next              ; #C00F index 3: floppy dir next
+                jp    fsam_load_file             ; #C012 index 4: floppy file load
+                jp    fsam_present               ; #C015 index 5: floppy presence probe
 
 ; --- the offloaded drivers ------------------------------------------------------
 ; gbfat.asm supplies: GBFAT_*/FS_IDE_*/fs_secbuf equates, the gbfat_entry write
 ; module (save + delete + fs_write_sector), and `include`s lib/fs_fat32_core.asm
-; (mount + read + cluster/dir math, providing fs_read_sector). With FS_STATE_LOWRAM
-; set, all writable state is equ'd into the #1C00 block (nothing lands in ROM).
+; (mount + read + cluster/dir math, providing fs_read_sector). fs_amsdos.asm (with
+; IN_GBROM) supplies the floppy READ backend + the uPD765 FDC core. With the
+; FS_*_LOWRAM flags set, all writable state is equ'd into low RAM (nothing in ROM).
                 include "../kernel/modules/gbfat.asm"
+                include "../lib/fs_amsdos.asm"
 
 ; --- pad to a full 16K ROM image ------------------------------------------------
                 assert $ <= #10000
