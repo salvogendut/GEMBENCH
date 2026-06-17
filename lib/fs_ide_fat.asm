@@ -267,55 +267,7 @@ fs_dir_save     defs  4            ; #134: browse dir saved across a system load
 ; -DGB_ROM=1; the paged gbfat.asm write module is built WITHOUT it, so its copy of
 ; fs_read_sector stays in-RAM.
 ; ---------------------------------------------------------------------------
-gb_rom_num      equ   #1254        ; 0xFF = not found, else the upper-ROM number
-
-; gb_rom_probe: scan upper ROM numbers 1..15 (skip 0=BASIC, 7=AMSDOS) for the
-; "GBROM" signature at #C003. Found -> gb_rom_num = the number; leaves AMSDOS (7)
-; selected. Reads see the selected upper ROM at #C000 while it is enabled (#7F85).
-gb_rom_probe
-                di
-                ld    a,#FF
-                ld    (gb_rom_num),a
-                ld    bc,#7F85               ; upper ROM ON + lower ROM OFF (mode 1): #C000 reads the
-                out   (c),c                  ; ROM, low RAM stays visible (#152 - see gb_rom_call)
-                ld    d,1                    ; D = candidate ROM number
-grp_loop        ld    a,d
-                cp    7
-                jr    z,grp_next             ; skip AMSDOS
-                ld    bc,#DF00
-                out   (c),a                  ; select ROM D (value = ROM number)
-                ld    hl,#C003
-                ld    a,(hl)
-                cp    'G'
-                jr    nz,grp_next
-                inc   hl
-                ld    a,(hl)
-                cp    'B'
-                jr    nz,grp_next
-                inc   hl
-                ld    a,(hl)
-                cp    'R'
-                jr    nz,grp_next
-                inc   hl
-                ld    a,(hl)
-                cp    'O'
-                jr    nz,grp_next
-                inc   hl
-                ld    a,(hl)
-                cp    'M'
-                jr    nz,grp_next
-                ld    a,d                     ; full "GBROM" match -> found
-                ld    (gb_rom_num),a
-                jr    grp_done
-grp_next        inc   d
-                ld    a,d
-                cp    16
-                jr    c,grp_loop
-grp_done        ld    bc,#DF00               ; restore AMSDOS (7)
-                ld    a,7
-                out   (c),a
-                ei
-                ret
+; gb_rom_num + gb_rom_probe moved to lib/fs_rom_seam.asm (shared by all backends, #152)
 
 ; gb_rom_call: read one sector via GEOBENCH.ROM (#C000, index 0). The kernel has
 ; staged lba_tmp (#1250); on return fs_secbuf (#1800) holds the sector.

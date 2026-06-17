@@ -377,22 +377,7 @@ fsam_ent_out    push  af
                 ldir
                 pop   af
                 ret
-; gb_rom_fsam_invoke: HL = ROM dispatch slot. Page GEOBENCH.ROM in (#7F85: upper ROM
-; on, lower ROM off so low RAM stays visible), call (HL), restore AMSDOS. CF survives.
-gb_rom_fsam_invoke
-                di
-                ld    bc,#DF00
-                ld    a,(gb_rom_num)
-                out   (c),a
-                ld    bc,#7F85
-                out   (c),c
-                call  grfi_jphl
-                ld    bc,#DF00
-                ld    a,7
-                out   (c),a
-                ei
-                ret
-grfi_jphl       jp    (hl)
+; gb_rom_fsam_invoke moved to lib/fs_rom_seam.asm (shared by all backends, #152)
                 endif                          ; GB_ROM_STUBS
 
                 ifndef IN_GBROM              ; the WRITE stub is resident-only (not in the ROM)

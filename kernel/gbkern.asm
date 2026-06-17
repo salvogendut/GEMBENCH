@@ -2758,6 +2758,9 @@ md_count        db    0
                 include "../lib/cursor.asm"
                 include "../lib/input.asm"
                 include "../lib/fs.asm"
+                ifdef GB_ROM                  ; #152: the GEOBENCH.ROM seam, shared by every backend
+                include "../lib/fs_rom_seam.asm"
+                endif
                 if STORAGE_ALBIREO
                 include "../lib/fs_albireo.asm"
                 else
