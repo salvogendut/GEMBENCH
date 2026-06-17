@@ -38,9 +38,12 @@ FS_IDE_DATA     equ   #FD08
 
 fs_secbuf       equ   #1800        ; shared low-RAM sector buffer (resident agrees)
 
-                org   GBFAT_ORG
+                ifndef GBFAT_AS_INCLUDE       ; #152: the ROM build includes this body at
+                org   GBFAT_ORG               ; #C000+ and supplies its own org/save; the paged
+                endif                          ; module keeps org #6000 + the GBFAT.RAW save.
 
 ; entry: dispatch on GBFAT_OP (0 = save, 1 = delete), store the result, return.
+gbfat_entry
                 ld    a,(GBFAT_OP)
                 or    a
                 jr    nz,ge_delete
@@ -681,6 +684,33 @@ fxw_done
                 include "../../lib/fs_fat32_core.asm"
 
 ; --- write-path state ---------------------------------------------------
+; #152: in the ROM build (FS_STATE_LOWRAM) this scratch must live in low RAM (ROM is
+; read-only) - equ'd off the core's FS_CORE_STATE_END so it packs right after the core
+; state. The paged module keeps the original `defs` in its bank RAM (else branch).
+                ifdef FS_STATE_LOWRAM
+GBFAT_STATE     equ   FS_CORE_STATE_END        ; gbfat scratch follows the core state
+alloc_clus      equ   GBFAT_STATE+0
+alloc_seclba    equ   GBFAT_STATE+4
+alloc_scan      equ   GBFAT_STATE+8
+alloc_secs      equ   GBFAT_STATE+12
+fat_set_clus    equ   GBFAT_STATE+14
+fat_set_val     equ   GBFAT_STATE+18
+fc_clus         equ   GBFAT_STATE+22
+fc_cur          equ   GBFAT_STATE+26
+sav_nclus       equ   GBFAT_STATE+30
+sav_left        equ   GBFAT_STATE+32
+sav_first_clus  equ   GBFAT_STATE+34
+sav_prev_clus   equ   GBFAT_STATE+38
+sav_have_prev   equ   GBFAT_STATE+42
+sav_src         equ   GBFAT_STATE+43
+sav_rem         equ   GBFAT_STATE+45
+sav_found       equ   GBFAT_STATE+47
+sav_free_ok     equ   GBFAT_STATE+48
+sav_ent_lba     equ   GBFAT_STATE+49
+sav_ent_off     equ   GBFAT_STATE+53
+sav_old_clus    equ   GBFAT_STATE+55
+swc_left        equ   GBFAT_STATE+59           ; ends at GBFAT_STATE+60
+                else
 alloc_clus      defs  4            ; fs_alloc_cluster result
 alloc_seclba    defs  4            ; FAT scan: current sector LBA
 alloc_scan      defs  4            ; FAT scan: current cluster number
@@ -702,5 +732,8 @@ sav_ent_lba     defs  4            ; dir slot: entry's sector LBA
 sav_ent_off     defw  0            ; dir slot: entry offset within the sector
 sav_old_clus    defs  4            ; dir slot: existing entry's start cluster
 swc_left        defb  0            ; sector-write loop counter
+                endif
 
+                ifndef GBFAT_AS_INCLUDE
                 save  "build/GBFAT.RAW",GBFAT_ORG,$-GBFAT_ORG
+                endif

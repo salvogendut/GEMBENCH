@@ -323,6 +323,18 @@ fsvm_fail
 ; PAGE_DATA, load GBFAT.BIN to GBFAT_LOAD via the read path, CALL it, restore the
 ; caller's page. CF set = GBFAT_RES nonzero (success). Shared by save + delete.
 gbfat_run
+                ifdef GB_ROM                  ; #152: run the write module straight from GEOBENCH.ROM
+                ld    a,(gb_rom_num)          ; (no GBFAT.BIN load, no PAGE_DATA) when the ROM is present
+                inc   a
+                jr    z,gbfat_run_paged       ; 0xFF = ROM absent -> paged-module fallback
+                call  gb_rom_call_write       ; gbfat_entry @ #C009; transfer area already filled
+                ld    a,(GBFAT_RES)
+                or    a
+                ret   z
+                scf
+                ret
+                endif
+gbfat_run_paged
                 ld    a,(bank_cur)
                 push  af
                 ld    a,PAGE_DATA
@@ -431,19 +443,37 @@ grp_done        ld    bc,#DF00               ; restore AMSDOS (7)
                 ei
                 ret
 
-; gb_rom_call: read one sector via GEOBENCH.ROM. The kernel has staged lba_tmp
-; (#1250); on return fs_secbuf (#1800) holds the sector. DI across the whole
-; paged-in window so no interrupt sees GEOBENCH.ROM at #C000; restore AMSDOS first.
+; gb_rom_call: read one sector via GEOBENCH.ROM (#C000, index 0). The kernel has
+; staged lba_tmp (#1250); on return fs_secbuf (#1800) holds the sector.
+; gb_rom_call_write: run the FAT write module (#C009, index 1) from the ROM - the
+; transfer area (GBFAT_*) is already filled; GBFAT_RES holds the result on return.
+; Both share gb_rom_invoke: DI across the whole paged-in window (no IRQ sees
+; GEOBENCH.ROM at #C000), select the ROM, page it in with #7F85 (upper ROM ON +
+; lower ROM OFF - CRUCIAL #152: #7F81 also paged the firmware LOWER ROM over
+; #0000-#3FFF and the read fetched a garbage lba_tmp -> reboot), restore AMSDOS.
 gb_rom_call
                 di                            ; no IRQ may see GEOBENCH.ROM paged in at #C000
                 ld    bc,#DF00
                 ld    a,(gb_rom_num)
                 out   (c),a                  ; select GEOBENCH.ROM
-                ld    bc,#7F85               ; upper ROM ON + lower ROM OFF, mode 1. CRUCIAL (#152):
-                out   (c),c                  ; #7F81 ALSO paged the firmware LOWER ROM in over
-                call  #C000                  ; #0000-#3FFF, so the body read lba_tmp (#1250) from ROM
-                ld    bc,#DF00               ; - a garbage LBA - and rebooted the CPC. Bit2=1 keeps
-                ld    a,7                     ; the low-RAM lba_tmp/fs_secbuf visible to the read.
+                ld    bc,#7F85               ; upper ROM ON + lower ROM OFF (low RAM visible), mode 1
+                out   (c),c
+                call  #C000                  ; index 0: read one sector
+                ld    bc,#DF00
+                ld    a,7
+                out   (c),a                  ; restore AMSDOS
+                ei
+                ret
+gb_rom_call_write
+                di
+                ld    bc,#DF00
+                ld    a,(gb_rom_num)
+                out   (c),a                  ; select GEOBENCH.ROM
+                ld    bc,#7F85
+                out   (c),c
+                call  #C009                  ; index 1: FAT write (save/delete)
+                ld    bc,#DF00
+                ld    a,7
                 out   (c),a                  ; restore AMSDOS
                 ei
                 ret

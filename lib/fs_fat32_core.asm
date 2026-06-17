@@ -529,15 +529,38 @@ laa_c
                 jr    laa_c
 
 ; --- shared core state ---------------------------------------------------
+; lba_tmp is a FIXED low-RAM addr (free gap #124A-#12FF) so GEOBENCH.ROM's copy of
+; fs_read_sector reads the same bytes (#152); fat_eoc is a read-only constant (fine
+; in ROM). The rest is WRITABLE scratch: in the GEOBENCH.ROM build (FS_STATE_LOWRAM)
+; it must live in low RAM (ROM is read-only), so it is equ'd off FS_STATE_BASE; the
+; resident/paged builds keep the original `defs` (this `else` branch is unchanged).
+lba_tmp         equ   #1250
+                ifdef FS_STATE_LOWRAM            ; #152: ROM build - state at fixed low RAM
+fat_eoc         defb  #FF,#FF,#FF,#0F  ; FAT32 end-of-chain marker (const, read-only OK in ROM)
+fs_part_lba     equ   FS_STATE_BASE+0  ; partition base LBA (0 = superfloppy)
+fs_fat_lba      equ   FS_STATE_BASE+4  ; absolute FAT start LBA
+fs_data_lba     equ   FS_STATE_BASE+8  ; absolute data region start LBA
+fs_dir_clus     equ   FS_STATE_BASE+12 ; current root-dir cluster
+acc             equ   FS_STATE_BASE+16 ; 32-bit work accumulator
+fatsz_tmp       equ   FS_STATE_BASE+20 ; sectors per FAT (geometry calc)
+fs_dir_cur_lba  equ   FS_STATE_BASE+24 ; LBA of the dir sector currently in secbuf
+fn_ptr          equ   FS_STATE_BASE+28 ; fs_fat_next: cluster-var pointer
+fn_within       equ   FS_STATE_BASE+30 ; fs_fat_next: FAT entry offset in sector
+fs_spc          equ   FS_STATE_BASE+32 ; sectors per cluster
+fs_clshift      equ   FS_STATE_BASE+33 ; log2(sectors per cluster)
+fs_dir_sic      equ   FS_STATE_BASE+34 ; dir: sector within current cluster
+fs_ent_idx      equ   FS_STATE_BASE+35 ; dir: entry index within current sector
+fs_numfat       equ   FS_STATE_BASE+36 ; number of FAT copies
+fs_is_fat16     equ   FS_STATE_BASE+37 ; #130: 1 = FAT16 volume, else FAT32
+fs_root_lba     equ   FS_STATE_BASE+38 ; #130 FAT16: LBA of the fixed root directory
+fs_root_secs    equ   FS_STATE_BASE+42 ; #130 FAT16: root directory size in sectors
+FS_CORE_STATE_END equ FS_STATE_BASE+43 ; (gbfat state continues from here)
+                else
 fs_part_lba     defs  4            ; partition base LBA (0 = superfloppy)
 fs_fat_lba      defs  4            ; absolute FAT start LBA
 fs_data_lba     defs  4            ; absolute data region start LBA
 fs_dir_clus     defs  4            ; current root-dir cluster
 acc             defs  4            ; 32-bit work accumulator
-lba_tmp         equ   #1250        ; LBA staged for fs_read_sector. FIXED low-RAM addr
-                                   ; (free gap #124A-#12FF) so GEOBENCH.ROM's copy of
-                                   ; fs_read_sector reads the same bytes (#152). Was
-                                   ; `defs 4` here - reclaims 4 resident bytes too.
 fatsz_tmp       defs  4            ; sectors per FAT (geometry calc)
 fs_dir_cur_lba  defs  4            ; LBA of the dir sector currently in secbuf
 fn_ptr          defw  0            ; fs_fat_next: cluster-var pointer
@@ -551,3 +574,4 @@ fs_is_fat16     defb  0            ; #130: 1 = FAT16 volume (fixed root dir, 16-
 fs_root_lba     defs  4            ; #130 FAT16: absolute LBA of the fixed root directory
 fs_root_secs    defb  0            ; #130 FAT16: root directory size in sectors
 fat_eoc         defb  #FF,#FF,#FF,#0F  ; FAT32 end-of-chain marker
+                endif

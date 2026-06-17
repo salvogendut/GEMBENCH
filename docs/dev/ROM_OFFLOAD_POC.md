@@ -97,7 +97,45 @@ FS calls through `gb_rom_call`. Not found -> fall back to the in-RAM `fs_read_se
 ROM-number<->slot mapping confirmed empirically in 1984: `OUT (#DF),6` selects
 `[board:cyboard] slot_6`; the probe finds `"GBROM"` and sets `gb_rom_num=6`.
 
-## Runtime test — RESOLVED ✅ (the reboot was a gate-array RMR bug)
+## FAT WRITE offload — DONE ✅ (validated on FAT32)
+
+The FAT *write* path (save/delete) now runs from `GEOBENCH.ROM` too. Validated headless: a ROM
+write on a FAT32 volume creates the file with correct content and leaves the filesystem
+**fsck-clean** (no cross-links/broken chains; only the cosmetic FSINFO free-count hint is off by
+one - a pre-existing gbfat behavior, identical to the paged module). The FAT16 read path still
+boots to the desktop. Builds: GBIDE (FAT16) `8543 B`, fits budget.
+
+> NOTE: the gbfat write path is **FAT32-only** (`fs_alloc_cluster`/`fs_fat_set` assume 4-byte
+> FAT entries). Writing to a **FAT16** volume corrupts it - this is a pre-existing limitation,
+> NOT the offload (the paged module does the same). Test write offloads on a FAT32 image, and
+> always `fsck.fat -n` after - a "saved OK" border does not prove FS consistency.
+
+**Architecture (done):**
+- ROM is read-only, so the write path's WRITABLE scratch can't live in it. The shared core
+  (`fs_fat32_core.asm`) + the gbfat module relocate their state to a fixed low-RAM block via
+  `FS_STATE_LOWRAM` / `FS_STATE_BASE = #1C00` (free gap above `fsam_buf #1A00`, below
+  `GBFAT_DATA #2200`). Core state = `#1C00+0..+42` (`FS_CORE_STATE_END=+43`); gbfat state =
+  `+43..+102`. The `else` branch keeps the original `defs` so the resident read path + paged
+  module are byte-identical (verified: GBIDE.BIN unchanged, GBFAT.RAW byte-identical).
+- `gbfat.asm` made ROM-includable (guard `org`/`save` with `GBFAT_AS_INCLUDE`, add a
+  `gbfat_entry` label). The ROM (`geobench_rom.asm`) now: `#C000` jp fs_read_sector (idx0),
+  `#C003` "GBROM" sig, `#C009` jp gbfat_entry (idx1), then `include ../kernel/modules/gbfat.asm`
+  (one shared core serves read idx0 + write). Resident `gb_rom_call_write` (calls `#C009`) +
+  `gbfat_run` routes to the ROM when present, else the paged fallback.
+
+**Validation (headless):** built with a temporary `-DGBWTEST` harness (save a file right after
+`fs_sys_resolve`, then hang; WHITE border = saved). On a **FAT32** image (created with
+`mkfs.fat -F32` at partition offset 16384, populated from `QA/CARD`): `gb_rom_num=6`, the file
+read back correct, and `fsck.fat -n` on the carved partition was clean (27 files, no structural
+errors; only the FSINFO free-count off by one). A first run on **FAT16** `CFCARD.img` *did*
+corrupt `GBCFG.BIN` (cross-linked) - that was the FAT32-only-write limitation above, not the
+offload; it was repaired with `fsck.fat -w` + re-copying `QA/CARD`. The harness was removed after.
+
+**Test recipe for the next offload:** `-DGBWTEST=1` (over budget -> temporarily exempt from the
+size assert), boot a **FAT32** `ide_image`, then `dd ... skip=32 count=<part-secs>` + `fsck.fat -n`
+the partition. A "saved OK" border does NOT prove FS consistency - always fsck.
+
+## Read-sector offload — RESOLVED ✅ (the reboot was a gate-array RMR bug)
 
 The GB_ROM FAT16 build now boots to the desktop and lists the IDE directory with the
 read driver executing from `GEOBENCH.ROM`. Verified headless in 1984 (`gb_rom_num=6`,
