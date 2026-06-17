@@ -135,7 +135,22 @@ offload; it was repaired with `fsck.fat -w` + re-copying `QA/CARD`. The harness 
 size assert), boot a **FAT32** `ide_image`, then `dd ... skip=32 count=<part-secs>` + `fsck.fat -n`
 the partition. A "saved OK" border does NOT prove FS consistency - always fsck.
 
-## AMSDOS floppy read offload — IN PROGRESS (increment 1 done + committed)
+## AMSDOS floppy read offload — DONE ✅ (read backend runs from the ROM)
+
+Increments 1 (`2bc9927`, state relocation) + 2 (`c52f23d`, the code move) are committed. The
+floppy READ backend (`fsam_dir_first/dir_next/load_file/present` + the uPD765 FDC core) runs
+from `GEOBENCH.ROM`; the resident `fs_amsdos.asm` compiles to thin ROM-call stubs that marshal a
+`#1270` low-RAM I/O transfer area (`lib/fs_rom_lowram.inc`) <-> the resident `fs_ent_*`/
+`fs_req_name`/`fs_load_*`. ROM dispatch slots: `#C00C/#C00F/#C012/#C015`. `fsam_save_file` (the
+write stub) stays resident; non-ROM/Albireo builds + the paged `floppysv` are byte-identical.
+**Reclaimed ~780 B** (GBIDE 8517 -> 7738). Verified headless: floppy dir read returns the right
+first file via the ROM, full desktop boots with Disk A/B. The transfer-area marshalling pattern
+proven here is the template for the FS read offload below.
+
+> TODO (rig validation): the floppy LOAD-to-app-page path (the #135 capability the ROM uniquely
+> unblocks) uses the same bridge but wasn't headlessly exercised - open Disk A + run an app.
+
+### (history) increment 1 — state relocation
 
 Move the floppy READ backend (`fsam_dir_first/dir_next/load_file/present` + the FDC core in
 `fs_amsdos.asm`/`fs_amsdos_core.asm`) into `GEOBENCH.ROM`. The ROM **uniquely** enables this: #135
