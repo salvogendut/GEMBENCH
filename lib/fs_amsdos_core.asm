@@ -269,7 +269,12 @@ fd9_done
                 ret
 
 ; --- shared core state -----------------------------------------------------
+; #152: in the GEOBENCH.ROM build (FS_RDIO_LOWRAM) this scratch lives at fixed low
+; RAM (ROM is read-only) and is defined in lib/fs_rom_lowram.inc; the resident/paged
+; builds keep the original `defs`.
+                ifndef FS_RDIO_LOWRAM
 fsam_unit       defb  0            ; selected drive: 0 = A, 1 = B
 fsam_base       defb  #C1          ; first physical sector id (format-dependent)
 fsam_track      defb  0            ; directory track
 fsam_dst        defw  0            ; fsam_read_sector destination, advances
+                endif

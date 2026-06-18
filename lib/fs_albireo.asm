@@ -58,6 +58,10 @@ ALB_USBMODE_SD  equ   3            ; host mode, micro-SD (LLM_MicroSD)
 ALB_USBMODE_USB equ   6            ; #132: host mode, USB + reset the USB bus (for UMS drives)
 
 ; ---------------------------------------------------------------------------
+; #152: the CH376 I/O code below runs from GEOBENCH.ROM (IN_GBROM) and the plain
+; resident build; the GB_ROM resident replaces it with thin ROM-call stubs.
+                ifndef GB_ROM_STUBS
+; ---------------------------------------------------------------------------
 ; alb_sendcmd: A = command byte. Writes it to the command port and leaves
 ; BC = DATA port so the caller can stream parameters with OUT (C)/IN A,(C).
 alb_sendcmd
@@ -95,11 +99,17 @@ awi_got
                 dec   c
                 in    a,(c)                     ; status code from DATA port
                 ret
+                endif                          ; GB_ROM_STUBS (alb_sendcmd / alb_waitint)
 
 ; fsalb_present: probe the chip. CHECK_EXIST echoes ~param on DATA. CF set = found.
+; Resident in every build (fs_init calls it at boot, BEFORE gb_rom_probe runs - so it
+; can't be a ROM stub) and self-contained (inlines alb_sendcmd, which lives in the ROM).
+                ifndef IN_GBROM
 fsalb_present
+                ld    bc,ALB_CMD
                 ld    a,ALBC_CHECK
-                call  alb_sendcmd
+                out   (c),a
+                dec   c                         ; BC -> ALB_DAT
                 ld    a,#55
                 out   (c),a                     ; param -> chip replies ~#55 = #AA
                 in    a,(c)
@@ -110,7 +120,9 @@ fsalb_present
 alp_no
                 or    a
                 ret
+                endif                          ; IN_GBROM (fsalb_present resident-only)
 
+                ifndef GB_ROM_STUBS
 ; alb_ensure_mount: SET_USB_MODE + DISK_MOUNT once. CF set = mounted.
 alb_ensure_mount
                 ld    a,(fsalb_mounted)
@@ -320,13 +332,19 @@ alf_toobig                                         ; #110: file > buffer -> clos
 alf_nf
                 or    a
                 ret
+                endif                          ; GB_ROM_STUBS (mount + dir + load CH376 code)
 
 ALB_PATH_MAX    equ   64           ; CH376 current-dir path buffer size (defined here so
                                    ; the #134 alb_path_save defs below can see it)
+                ifdef FS_ALB_LOWRAM           ; #152: the low-RAM layout (fs_alb_lowram.inc)
+                assert fsalb_mounted==alb_path+ALB_PATH_MAX,"fs_alb_lowram.inc: fsalb_mounted must follow alb_path[ALB_PATH_MAX]"
+                endif
 ; #134 system-dir hooks (Albireo). The CH376 is path-based: system loads run from
 ; the "/GEOBENCH" path prefix, regardless of the File Manager's browse path. No
 ; resolve needed (alb_emit_path prefixes alb_path onto every SET_FILE_NAME);
-; enter swaps alb_path to /GEOBENCH and leave restores the browse path.
+; enter swaps alb_path to /GEOBENCH and leave restores the browse path. These edit
+; the alb_path string only (no CH376 I/O), so they stay resident, never in the ROM.
+                ifndef IN_GBROM
 fs_sys_resolve
                 ret
 fs_sysdir_enter
@@ -348,7 +366,9 @@ fs_sysdir_leave
 alb_sysdir      db    "/GEOBENCH",0
 alb_sysdir_end
 alb_path_save   defs  ALB_PATH_MAX
+                endif                          ; IN_GBROM (sysdir hooks resident-only)
 
+                ifndef GB_ROM_STUBS
 ; ---------------------------------------------------------------------------
 ; fsalb_save_file: write fs_save_len bytes from (fs_save_src) to fs_req_name.
 ; FILE_CREATE truncates/recreates (so this overwrites), then a BYTE_WRITE loop
@@ -450,8 +470,12 @@ aep_loop
                 inc   b
                 outi                               ; out (c),(hl); hl++; b restored
                 jr    aep_loop
+                endif                          ; GB_ROM_STUBS (save + delete + setname + emit)
 
 ; ---------------------------------------------------------------------------
+; fsalb_chdir / fsalb_back edit the alb_path string only (k_chdir/k_back jp here
+; directly, no CH376 I/O), so they stay resident in every build, never in the ROM.
+                ifndef IN_GBROM
 ; fsalb_chdir (GB_CHDIR on the Albireo build): descend into the positioned folder
 ; by appending "/<name>" to alb_path. fs_ent_name holds the folder's 8.3 name (the
 ; FM dir_seek'd it before chdir). Refuses (no-op) if the path would overflow.
@@ -526,7 +550,9 @@ fbk_done
                 ex    de,hl
                 ld    (hl),0                          ; truncate at the last '/'
                 ret
+                endif                          ; IN_GBROM (fsalb_chdir / fsalb_back resident-only)
 
+                ifndef GB_ROM_STUBS
 ; alb_inira: read A bytes from BC(=DATA) into (HL). B preserved (port high).
 alb_inira
                 ini
@@ -551,20 +577,84 @@ alb_invoid
                 dec   a
                 jr    nz,alb_invoid
                 ret
+                endif                          ; GB_ROM_STUBS (alb_inira / outira / invoid)
 
+                ifdef GB_ROM_STUBS
+; ---------------------------------------------------------------------------
+; #152 GB_ROM resident: thin ROM-call stubs for the CH376 I/O. The real code runs from
+; GEOBENCH.ROM (Albireo dispatch slots #C018..#C027); here we marshal the I/O transfer
+; area (#1270) <-> the resident fs_ent_*/fs_req_name/fs_load_*/fs_save_*. alb_path (#1293)
+; + fsalb_mounted (#12D3) are FIXED shared low RAM, so the ROM reads them directly and the
+; stubs needn't pass them (the resident fsalb_chdir/back/sysdir edit them in place).
+fsalb_dir_first ld    hl,#C018               ; ROM Albireo idx0
+                call  gb_rom_fsam_invoke
+                jr    alb_ent_out
+fsalb_dir_next  ld    hl,#C01B               ; ROM Albireo idx1
+                call  gb_rom_fsam_invoke
+                jr    alb_ent_out
+fsalb_load_file ld    hl,fs_req_name          ; marshal inputs -> the transfer area
+                ld    de,FSAM_IO_REQ
+                ld    bc,11
+                ldir
+                ld    hl,(fs_load_dst)
+                ld    (FSAM_IO_DST),hl
+                ld    hl,(fs_load_max)
+                ld    (FSAM_IO_MAX),hl
+                ld    hl,#C01E               ; ROM Albireo idx2
+                call  gb_rom_fsam_invoke
+                push  af                       ; preserve CF (loaded?)
+                ld    hl,FSAM_IO_SIZE         ; copy the loaded size back out
+                ld    de,fs_ent_size
+                ld    bc,4
+                ldir
+                pop   af
+                ret
+fsalb_save_file ld    hl,fs_req_name          ; name + source pointer + length -> transfer area
+                ld    de,FSAM_IO_REQ
+                ld    bc,11
+                ldir
+                ld    hl,(fs_save_src)
+                ld    (ALB_IO_SRC),hl          ; the app page stays mapped under #7F85
+                ld    hl,(fs_save_len)
+                ld    (ALB_IO_SLEN),hl
+                ld    hl,#C021               ; ROM Albireo idx3
+                jp    gb_rom_fsam_invoke
+fsalb_delete_file
+                ld    hl,fs_req_name
+                ld    de,FSAM_IO_REQ
+                ld    bc,11
+                ldir
+                ld    hl,#C024               ; ROM Albireo idx4
+                jp    gb_rom_fsam_invoke
+; alb_ent_out: copy the entry the ROM wrote to the transfer area (name+attr+size, 16
+; contiguous bytes) into the resident fs_ent_* fields. Preserves the dir CF.
+alb_ent_out     push  af
+                ld    hl,FSAM_IO_NAME
+                ld    de,fs_ent_name
+                ld    bc,16
+                ldir
+                pop   af
+                ret
+                endif                          ; GB_ROM_STUBS (Albireo I/O stubs)
+
+; --- state ------------------------------------------------------------------
+; #152: in the GEOBENCH.ROM builds (FS_ALB_LOWRAM) alb_path + fsalb_mounted are fixed
+; low-RAM equs (fs_alb_lowram.inc) shared with the ROM; the plain resident/paged builds
+; keep the original defs. #104: alb_path is the current directory as a CH376 path,
+; NUL-terminated ("" = root; "/GAMES"); fsalb_chdir appends "/<name>", fsalb_back
+; truncates at the last '/'; alb_emit_path prefixes it onto every SET_FILE_NAME.
+                ifndef FS_ALB_LOWRAM
 fsalb_mounted   defb  0            ; 0 until SET_USB_MODE+DISK_MOUNT done once
+alb_path        defs  ALB_PATH_MAX ; zero-init = root
+                endif
 
-; #104: current directory as a CH376 path, NUL-terminated. "" = root; "/GAMES" or
-; "/GAMES/RPG" in a subdir. fsalb_chdir appends "/<name>", fsalb_back truncates at
-; the last '/'. Prefixed onto every SET_FILE_NAME via alb_emit_path. Zero-init = root.
-alb_path        defs  ALB_PATH_MAX
-
-; Shared directory-context state the kernel manipulates generically (k_chdir/
-; k_back, cross-drive copy). The IDE backend tracks the current directory by FAT
-; cluster; the CH376 tracks it internally by path, so this backend lists the root
-; only for now and ignores fs_dir_clus - these just satisfy the kernel's refs.
-; TODO(#104): path-based current-dir for subdirectory navigation on Albireo.
+; Shared directory-context state the kernel manipulates generically (k_chdir/k_back,
+; cross-drive copy). The CH376 tracks the current dir internally by path and ignores
+; fs_dir_clus - these just satisfy the kernel's refs, so they stay resident, never in
+; the ROM. TODO(#104): path-based current-dir for subdirectory navigation on Albireo.
+                ifndef IN_GBROM
 fs_dir_clus     defs  4            ; current directory (unused by the CH376 path model)
 fs_dir_sp       defb  0            ; chdir/back stack depth
 fs_dir_stack    defs  16           ; 4 parent dirs (4 bytes each)
 fs_ent_clus     defs  4            ; positioned entry's start cluster
+                endif

@@ -7,7 +7,13 @@ it's the host-side workflow.
 
 - **Assembler:** [RASM](http://www.roudoudou.com/rasm/) (`rasm` on PATH —
   v3.2.1+). RASM can emit raw binaries, AMSDOS-headed binaries, and `.dsk`
-  images directly, so no separate disk tool is required.
+  images directly, so no separate disk tool is required for the floppy.
+- **C compiler:** [SDCC](http://sdcc.sourceforge.net/) (`sdcc`, `sdasz80`,
+  `makebin`) for the apps.
+- **Card image:** `tools/build_card_img.sh` needs `sfdisk` (util-linux),
+  `mkfs.fat` (dosfstools) and `mcopy` (mtools) to build the partitioned FAT16
+  `QA/GEOBENCH.IMG`. The project distrobox carries all of these. `tools/build_rom.sh`
+  (the driver-offload ROM) needs only `rasm`.
 - **Emulators:** see below.
 
 ## Emulators

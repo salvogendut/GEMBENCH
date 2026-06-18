@@ -27,6 +27,33 @@ STORAGE_ALBIREO equ   0
                 ifndef SPIKE                  ; #130: -DSPIKE=1 builds a minimal storage spike -
 SPIKE           equ   0                       ; load DESKTOP.APP right after fs_init, report, hang
                 endif
+                ifndef GB_ROM_REQ             ; #152: -DGB_ROM_REQ=1 routes the offloadable drivers
+GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present. Both the IDE and the
+                endif                          ; Albireo build can offload (floppy read + the backend).
+                if GB_ROM_REQ
+GB_ROM          equ   1
+                endif
+
+                ifdef GB_ROM                  ; #152: the floppy read backend (fs_amsdos) is offloaded
+FS_RDIO_LOWRAM  equ   1                       ; to GEOBENCH.ROM; its scratch state must live in fixed
+GB_ROM_STUBS    equ   1                       ; low RAM (ROM is read-only). This resident build replaces
+                include "../lib/fs_rom_lowram.inc"  ; the fs_amsdos read code with thin gb_rom-call stubs.
+                if STORAGE_ALBIREO == 0
+; #152: share the FAT core state with GEOBENCH.ROM at #1C00 (IDE only - the CH376 owns its
+; filesystem in firmware, so the Albireo backend has no fs_fat32_core state to relocate; its
+; fs_dir_clus is its own resident defs, which fs_fat_lowram.inc would collide with). The IDE
+; read + write paths both use it; the write's fs_mount restores fs_dir_clus to the browse dir
+; so the resident's directory position survives a save. Reclaims the core-state defs too.
+FS_STATE_LOWRAM equ   1
+FS_STATE_BASE   equ   #1C00
+                include "../lib/fs_fat_lowram.inc"  ; FAT core state addresses (shared with the ROM)
+                else
+; #152: the Albireo CH376 I/O backend is offloaded to GEOBENCH.ROM; its persistent path
+; state (alb_path/fsalb_mounted) + per-call save args live in fixed low RAM the ROM agrees on.
+FS_ALB_LOWRAM   equ   1
+                include "../lib/fs_alb_lowram.inc"  ; alb_path #1293 + save args (shared with the ROM)
+                endif
+                endif
 
 ; Config transfer area - resident low RAM (stays main RAM under banking, so the
 ; paged-in GBCFG module can reach it). The kernel fills text/len, runs the
@@ -205,6 +232,9 @@ kernel_main
                                               ; gb_getkey (the keyboard is the joystick)
                 call  set_palette            ; GEOBENCH 4-pen palette
                 call  fs_init                ; pick storage backend (floppy here)
+                ifdef GB_ROM                  ; #152: detect GEOBENCH.ROM before the first read
+                call  gb_rom_probe
+                endif
                 ld    a,(fs_boot_drive)      ; #134: on the card (drive 0), point the system dir
                 or    a                       ; at /GEOBENCH if present (else flat root); skip on
                 call  z,fs_sys_resolve       ; a floppy boot drive (no subdirectories)
@@ -2735,6 +2765,9 @@ md_count        db    0
                 include "../lib/cursor.asm"
                 include "../lib/input.asm"
                 include "../lib/fs.asm"
+                ifdef GB_ROM                  ; #152: the GEOBENCH.ROM seam, shared by every backend
+                include "../lib/fs_rom_seam.asm"
+                endif
                 if STORAGE_ALBIREO
                 include "../lib/fs_albireo.asm"
                 else

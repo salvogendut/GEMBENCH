@@ -106,7 +106,10 @@ else
 fi
 build_variant GBALB "-DSTORAGE_ALBIREO=1"
 tools/stage_dist.sh QA/CARD                       # unified: GB.BAS + GBIDE.BIN + GBALB.BIN + /GEOBENCH
-echo "  QA/CARD: any IDE/Albireo card (RUN\"GB); QA/GEOBENCH.DSK: floppy (RUN\"GB or RUN\"GBKERN)"
+# A ready-to-flash card image (partitioned FAT16) usable on BOTH the IDE and the Albireo.
+tools/build_card_img.sh QA/CARD QA/GEOBENCH.IMG \
+    || echo "  (QA/GEOBENCH.IMG skipped - needs sfdisk + mkfs.fat + mtools)"
+echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: IDE/Albireo card; QA/GEOBENCH.DSK: floppy (RUN\"GB)"
 
 # Leave build/ as the STORAGE-selected variant (default IDE) so the --disk-a test
 # harness and deploy_ide.sh see a predictable build/gbkern.dsk + build/GBKERN.RAW.

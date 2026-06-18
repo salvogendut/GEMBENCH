@@ -137,7 +137,9 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
   build time — FAT16/FAT32 over a SYMBiFACE/Cyboard **IDE**, or a CH376 **Albireo**
   card — and falls back to AMSDOS-over-**floppy**, so the same desktop runs on any of
   them. A small BASIC loader (`GB.BAS`) auto-detects the card so one `RUN"GB` boots
-  them all (see below).
+  them all (see below). These screen-independent drivers can be **offloaded to a
+  loadable upper ROM** (`GEOBENCH.ROM`) to free resident `#8000` RAM — see *Optional:
+  the GEOBENCH ROM* below.
 
 ## Building, deploying and running
 
@@ -150,12 +152,17 @@ path; without it the floppy still boots via `RUN"GBKERN`):
 bash tools/build_kernel.sh
 ```
 
-This stages two outputs (also committed under `QA/`, so you can grab them ready-built):
+This stages these outputs (the loose files and the floppy are committed under `QA/`, so you
+can grab them ready-built):
 
-- **`QA/CARD/`** — the card distribution. Copy its contents onto an IDE or Albireo
+- **`QA/CARD/`** — the loose card distribution. Copy its contents onto an IDE or Albireo
   card. The card root stays clean: only the loader `GB.BAS`, the two kernels
   `GBIDE.BIN`/`GBALB.BIN`, and `GEOBENCH.CFG` — everything the kernel loads at boot
   lives in a `GEOBENCH/` subfolder.
+- **`QA/GEOBENCH.IMG`** — a ready-to-flash **card image**: a partitioned FAT16 disk usable on
+  **both** the SYMBiFACE IDE (which reads the MBR partition) and the Albireo CH376 (which
+  auto-detects the FAT). Built by `tools/build_card_img.sh`; a 32 MB local artifact, rebuilt
+  every build and not committed.
 - **`QA/GEOBENCH.DSK`** — a single bootable floppy image.
 
 Boot with **`RUN"GB`** on any machine: the loader `GB.BAS` probes the bus and runs the
@@ -165,6 +172,22 @@ floppy you can also `RUN"GBKERN` directly.
 ```bash
 1984 --memory=128 --disk-a=QA/GEOBENCH.DSK --autostart=GB     # floppy in an emulator
 ```
+
+### Optional: the GEOBENCH ROM
+
+`tools/build_rom.sh` builds a 16K upper ROM per card — `rom/GEOBENCH.ROM` (IDE) and
+`rom/GBALB.ROM` (Albireo) — that does two things:
+
+- **Offloads the low-level drivers.** The screen-independent storage drivers (FAT
+  read/write, the AMSDOS floppy reader, the IDE backend and the CH376/Albireo backend) run
+  from the ROM instead of the resident kernel, freeing `#8000` RAM. The resident kernel keeps
+  thin stubs that page the ROM in and call it; build that variant with
+  `EXTRA_RASM="-DGB_ROM_REQ=1"`. Without the ROM the plain kernel runs every driver resident,
+  so the ROM is **optional**.
+- **Announces GEOBENCH at boot.** It is a standard CPC **background ROM**, so the firmware
+  prints a `GEOBENCH <commit>` banner at cold boot (like M4 or SymbOS) before BASIC's prompt.
+
+Flash the matching ROM into a free upper-ROM slot.
 
 `tools/build_capp.sh <app_dir> <out.RAW>` builds a single C app against `libgb`
 if you just want to iterate on one.
@@ -282,9 +305,11 @@ geobench/
 │   ├── xaos/          #   fixed-point Mandelbrot generator (.PIC export)
 │   ├── viewer/        #   text + .PIC image viewer
 │   └── clock/         #   analog clock window
+├── rom/               # GEOBENCH.ROM: the offloaded low-level drivers + boot banner,
+│                      #   as a 16K loadable upper ROM (built per card by build_rom.sh)
 ├── assets/            # icon/cursor/paint source PNGs + sample files (WELCOME.TXT)
 ├── docs/              # architecture, development, references
-└── tools/            # host-side build/asset tooling (build_kernel.sh, ...)
+└── tools/            # host-side build/asset tooling (build_kernel.sh, build_rom.sh, ...)
 ```
 
 ## Roadmap (rough)
@@ -304,6 +329,11 @@ Done:
    every app (New/Load/Save/Save As, a shared cross-app clipboard, **Fullscreen**, a
    navigable Open/Save dialog in a paged module); the desktop's System menu and the
    clock's Options menu render through it too.
+9. ✅ **Driver offload to ROM (#152)** — the screen-independent low-level drivers (FAT
+   read/write, AMSDOS floppy, IDE, CH376/Albireo) run from a 16K upper ROM
+   (`GEOBENCH.ROM`/`GBALB.ROM`), freeing resident RAM; the ROM is also a CPC background ROM
+   that boots a `GEOBENCH <commit>` banner. A single FAT16 card image (`QA/GEOBENCH.IMG`)
+   boots on both IDE and Albireo.
 
 Next:
 
