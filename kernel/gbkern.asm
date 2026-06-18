@@ -27,25 +27,27 @@ STORAGE_ALBIREO equ   0
                 ifndef SPIKE                  ; #130: -DSPIKE=1 builds a minimal storage spike -
 SPIKE           equ   0                       ; load DESKTOP.APP right after fs_init, report, hang
                 endif
-                ifndef GB_ROM_REQ             ; #152: -DGB_ROM_REQ=1 routes IDE fs_read_sector
-GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present (IDE variant only;
-                endif                          ; the Albireo build has no IDE backend)
+                ifndef GB_ROM_REQ             ; #152: -DGB_ROM_REQ=1 routes the offloadable drivers
+GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present. Both the IDE and the
+                endif                          ; Albireo build can offload (floppy read + the backend).
                 if GB_ROM_REQ
-                if STORAGE_ALBIREO == 0
 GB_ROM          equ   1
-                endif
                 endif
 
                 ifdef GB_ROM                  ; #152: the floppy read backend (fs_amsdos) is offloaded
 FS_RDIO_LOWRAM  equ   1                       ; to GEOBENCH.ROM; its scratch state must live in fixed
 GB_ROM_STUBS    equ   1                       ; low RAM (ROM is read-only). This resident build replaces
                 include "../lib/fs_rom_lowram.inc"  ; the fs_amsdos read code with thin gb_rom-call stubs.
-; #152: share the FAT core state with GEOBENCH.ROM at #1C00 (the IDE read + write paths
-; both use it; the write's fs_mount restores fs_dir_clus to the browse dir so the
-; resident's directory position survives a save). Reclaims the core-state defs too.
+                if STORAGE_ALBIREO == 0
+; #152: share the FAT core state with GEOBENCH.ROM at #1C00 (IDE only - the CH376 owns its
+; filesystem in firmware, so the Albireo backend has no fs_fat32_core state to relocate; its
+; fs_dir_clus is its own resident defs, which fs_fat_lowram.inc would collide with). The IDE
+; read + write paths both use it; the write's fs_mount restores fs_dir_clus to the browse dir
+; so the resident's directory position survives a save. Reclaims the core-state defs too.
 FS_STATE_LOWRAM equ   1
 FS_STATE_BASE   equ   #1C00
                 include "../lib/fs_fat_lowram.inc"  ; FAT core state addresses (shared with the ROM)
+                endif
                 endif
 
 ; Config transfer area - resident low RAM (stays main RAM under banking, so the
