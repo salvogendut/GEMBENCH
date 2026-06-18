@@ -47,6 +47,11 @@ GB_ROM_STUBS    equ   1                       ; low RAM (ROM is read-only). This
 FS_STATE_LOWRAM equ   1
 FS_STATE_BASE   equ   #1C00
                 include "../lib/fs_fat_lowram.inc"  ; FAT core state addresses (shared with the ROM)
+                else
+; #152: the Albireo CH376 I/O backend is offloaded to GEOBENCH.ROM; its persistent path
+; state (alb_path/fsalb_mounted) + per-call save args live in fixed low RAM the ROM agrees on.
+FS_ALB_LOWRAM   equ   1
+                include "../lib/fs_alb_lowram.inc"  ; alb_path #1293 + save args (shared with the ROM)
                 endif
                 endif
 
