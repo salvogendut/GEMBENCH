@@ -53,34 +53,108 @@ FAT16_ONLY      equ   0            ; the ROM carries the full FAT16+FAT32 read+w
                 org   #C000
 ROM_BASE        equ   #C000
 
-; --- dispatch table + signature (fixed offsets the resident kernel calls) --------
-                if STORAGE_ALBIREO
-                jp    rom_inert                 ; #C000 index 0: (IDE read - unused on Albireo)
-gbrom_sig       db    "GBROM", 1                 ; #C003 magic + version (boot probe)
-                jp    rom_inert                 ; #C009 index 1: (FAT write - unused on Albireo)
+; --- standard CPC background-ROM header (#152: announce GEOBENCH at cold boot like
+; M4/SymbOS, and offer the |GB RSX). The firmware inits this ROM at boot -> rom_init prints
+; the banner. The offload dispatch follows at #C00C (unchanged); the three slots that
+; collided with the header (IDE read leaf, gbfat, "GBROM" sig) moved to #C027/#C02A/#C02D.
+                db    1                          ; #C000 ROM type: 1 = background (init'd at boot)
+                db    1, 0, 0                     ; #C001-3 mark / version / modification
+                dw    gb_rsx_names               ; #C004-5 RSX command name table
+                jp    rom_init                    ; #C006 background init (firmware calls -> banner)
+                jp    cmd_gb                       ; #C009 |GB RSX (command 0) -> start GEOBENCH
+; --- offload dispatch (fixed offsets the resident kernel calls; #C00C+ unchanged) -------
                 jp    fsam_dir_first             ; #C00C index 2: floppy dir first
                 jp    fsam_dir_next              ; #C00F index 3: floppy dir next
                 jp    fsam_load_file             ; #C012 index 4: floppy file load
                 jp    fsam_present               ; #C015 index 5: floppy presence probe
+                if STORAGE_ALBIREO
                 jp    fsalb_dir_first            ; #C018 index 6: Albireo dir first
                 jp    fsalb_dir_next             ; #C01B index 7: Albireo dir next
                 jp    fsalb_load_file            ; #C01E index 8: Albireo file load
                 jp    fsalb_save_file            ; #C021 index 9: Albireo save
                 jp    fsalb_delete_file          ; #C024 index 10: Albireo delete
-rom_inert       ret                              ; #C027 inert target for the unused IDE slots
+                jp    rom_inert                  ; #C027 (IDE read leaf - unused on Albireo)
+                jp    rom_inert                  ; #C02A (FAT write - unused on Albireo)
                 else
-                jp    fs_read_sector            ; #C000 index 0: read one sector
-gbrom_sig       db    "GBROM", 1                 ; #C003 magic + version (boot probe)
-                jp    gbfat_entry                ; #C009 index 1: FAT write (save/delete)
-                jp    fsam_dir_first             ; #C00C index 2: floppy dir first
-                jp    fsam_dir_next              ; #C00F index 3: floppy dir next
-                jp    fsam_load_file             ; #C012 index 4: floppy file load
-                jp    fsam_present               ; #C015 index 5: floppy presence probe
                 jp    fside_dir_first            ; #C018 index 6: IDE dir first
                 jp    fside_dir_next             ; #C01B index 7: IDE dir next
                 jp    fside_load_file            ; #C01E index 8: IDE file load
+                jp    rom_inert                  ; #C021 (no offloaded save on IDE)
+                jp    rom_inert                  ; #C024 (no offloaded delete on IDE)
+                jp    fs_read_sector             ; #C027 index 0: read one sector (moved off header)
+                jp    gbfat_entry                ; #C02A index 1: FAT write (moved off header)
+                endif
+                assert $==#C02D,"dispatch must reach #C02D for the GBROM signature"
+gbrom_sig       db    "GBROM", 1                 ; #C02D magic + version (boot probe; was #C003)
+                if STORAGE_ALBIREO == 0
                 include "../lib/fs_fat_lowram.inc"  ; FAT core state addrs + fat_eoc (in-ROM, #152)
                 endif
+
+; --- background-ROM init: print the boot banner via firmware text output -----------
+; The firmware (KL_INIT_BACK) calls this at cold boot with both ROMs paged in, so a plain
+; TXT_OUTPUT loop works. CONTRACT (CPC background ROM): DE = first free byte, HL = last free
+; byte - BOTH must be PRESERVED; return CF SET so the firmware registers the |GB RSX (it
+; skips registration on NC) and reserves the 4-byte RSX chain at the top of free RAM. GEOBENCH
+; reserves no workspace of its own, so HL/DE return unchanged. (Clobbering HL here corrupts
+; the firmware memory map -> no BASIC prompt, #152.) TXT_OUTPUT preserves BC/DE/HL.
+TXT_OUTPUT      equ   #BB5A
+rom_init        push  hl                          ; preserve the free-RAM bounds the firmware passed
+                push  de
+                push  bc
+                ld    hl,gb_banner_str
+ri_loop         ld    a,(hl)
+                or    a
+                jr    z,ri_done
+                call  TXT_OUTPUT
+                inc   hl
+                jr    ri_loop
+ri_done         pop   bc
+                pop   de
+                pop   hl
+                scf                               ; accept + register the RSX; HL/DE unchanged
+                ret
+
+; --- |GB RSX: load + run the GEOBENCH kernel ---------------------------------------
+; The firmware CAS routines are no use here (UniDOS maps CAS to TAPE), so on the Albireo we
+; bootstrap through the ROM's OWN CH376 driver (fsalb_load_file): the card is right here and
+; needs no UniDOS file API. The kernel binary on the SD carries a 128-byte AMSDOS header, so
+; we load at #7F80 to land the image at its #8000 origin, then jp #8000 (the kernel sets up
+; its own stack + banking; it loads below the firmware stack, so nothing is clobbered).
+; fsalb_mounted carries the mount over into the kernel. Returns to BASIC (NC) if not found -
+; e.g. |GB before the drive is mapped (UniDOS: |drive,"A","SD:").
+                if STORAGE_ALBIREO
+cmd_gb          xor   a
+                ld    (alb_path),a              ; browse path = root -> absolute "/GBALB.BIN"
+                ld    (fsalb_mounted),a         ; mount the card fresh (the kernel does this at boot;
+                                                ; works on real HW - 1984 won't model it while UniDOS
+                                                ; still holds the CH376, so |GB is real-HW only)
+                ld    hl,gb_kernel_83           ; fs_req_name = "GBALB   BIN" (packed 8.3)
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#7F80                 ; header @ #7F80 -> kernel image @ #8000
+                ld    (fs_load_dst),hl
+                ld    hl,#3000                 ; generous size cap (kernel < 12K)
+                ld    (fs_load_max),hl
+                call  fsalb_load_file
+                ret   nc                        ; not found / drive absent -> back to BASIC
+                jp    #8000                     ; run GEOBENCH
+gb_kernel_83    db    "GBALB   BIN"
+                else
+cmd_gb          ld    hl,cmd_gb_msg             ; IDE |GB: Phase 2 TODO (FAT core needs a mount)
+cg_loop         ld    a,(hl)
+                or    a
+                ret   z
+                call  TXT_OUTPUT
+                inc   hl
+                jr    cg_loop
+cmd_gb_msg      db    13,10,"GEOBENCH: type RUN",34,"GBIDE",13,10,0
+                endif
+
+gb_rsx_names    db    "G", 'B'+#80, 0            ; |GB  (last char +#80, then 0 terminator)
+gb_banner_str   db    13,10,"GEOBENCH "
+                include "gitcommit.inc"           ; db "<commit>",13,10,0 (generated by build_rom.sh)
+rom_inert       ret                              ; inert target for the unused dispatch slots
 
 ; --- the offloaded drivers ------------------------------------------------------
 ; fs_amsdos.asm (with IN_GBROM) supplies the floppy READ backend + the uPD765 FDC core

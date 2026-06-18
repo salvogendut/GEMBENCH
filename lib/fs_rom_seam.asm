@@ -10,7 +10,8 @@
 gb_rom_num      equ   #1254        ; 0xFF = ROM not found, else the upper-ROM number
 
 ; gb_rom_probe: scan upper ROM numbers 1..15 (skip 0=BASIC, 7=AMSDOS) for the
-; "GBROM" signature at #C003. Found -> gb_rom_num = the number; leaves AMSDOS (7)
+; "GBROM" signature at #C02D (after the CPC background-ROM header, #152). Found ->
+; gb_rom_num = the number; leaves AMSDOS (7)
 ; selected. Pages in with #7F85 (upper ROM ON + lower ROM OFF so low RAM stays
 ; visible). Run once at boot.
 gb_rom_probe
@@ -25,7 +26,7 @@ grp_loop        ld    a,d
                 jr    z,grp_next             ; skip AMSDOS
                 ld    bc,#DF00
                 out   (c),a                  ; select ROM D (value = ROM number)
-                ld    hl,#C003
+                ld    hl,#C02D               ; "GBROM" sig (moved off the CPC ROM header, #152)
                 ld    a,(hl)
                 cp    'G'
                 jr    nz,grp_next

@@ -284,7 +284,7 @@ gb_rom_call
                 out   (c),a                  ; select GEOBENCH.ROM
                 ld    bc,#7F85               ; upper ROM ON + lower ROM OFF (low RAM visible), mode 1
                 out   (c),c
-                call  #C000                  ; index 0: read one sector
+                call  #C027                  ; index 0: read one sector (moved off the ROM header, #152)
                 ld    bc,#DF00
                 ld    a,7
                 out   (c),a                  ; restore AMSDOS
@@ -297,7 +297,7 @@ gb_rom_call_write
                 out   (c),a                  ; select GEOBENCH.ROM
                 ld    bc,#7F85
                 out   (c),c
-                call  #C009                  ; index 1: FAT write (save/delete)
+                call  #C02A                  ; index 1: FAT write (save/delete) (moved off the ROM header, #152)
                 ld    bc,#DF00
                 ld    a,7
                 out   (c),a                  ; restore AMSDOS
