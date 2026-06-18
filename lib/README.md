@@ -18,7 +18,10 @@ layers never poke video, storage or input registers directly.
 | `cursor_arrow.asm`, `cursor_hand.asm` | Pointer bitmaps. |
 | `fs.asm` | Storage dispatcher — picks a backend at boot. |
 | `fs_amsdos.asm` | AMSDOS directory + file load over the floppy. |
-| `fs_ide_fat.asm` | FAT16 over SYMBiFACE/Cyboard IDE. |
+| `fs_ide_fat.asm` | FAT16/FAT32 over SYMBiFACE/Cyboard IDE (mount + write + seam). |
+| `fs_ide_read.asm` | The IDE FAT read backend (dir + load), shared by the ROM. |
+| `fs_albireo.asm` | CH376/Albireo backend (the chip does FAT in firmware). |
+| `fs_rom_seam.asm`, `fs_*_lowram.inc` | #152 ROM offload: the seam that pages `GEOBENCH.ROM` in + the fixed low-RAM addresses the resident stubs and the ROM share. |
 | `bank.asm` | Expansion-RAM paging (the `#4000–#7FFF` window). |
 | `config.asm` | `GEOBENCH.CFG` (key=value) parser. |
 | `icon_*.asm` | Icon bitmaps, packed into the `.IST` icon set at build time. |

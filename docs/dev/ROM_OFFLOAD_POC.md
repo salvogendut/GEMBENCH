@@ -1,5 +1,13 @@
 # GEOBENCH.ROM offload — PoC design & findings (#152)
 
+> **Status: SHIPPED.** The PoC below grew into the full feature on branch
+> `152-rom-offload`. The IDE *and* Albireo backends now run from the ROM (FAT
+> read/write, AMSDOS floppy read, IDE read, the CH376 backend), the kernel keeps thin
+> stubs (`-DGB_ROM_REQ=1`), and the image is also a CPC **background ROM** that boots a
+> `GEOBENCH <commit>` banner. Build with `tools/build_rom.sh` (→ `rom/GEOBENCH.ROM` for
+> IDE, `rom/GBALB.ROM` for Albireo). See *The GEOBENCH ROM* in `docs/ARCHITECTURE.md`.
+> This file is kept as the design record + the gotchas hunted along the way.
+
 Goal of the PoC (from #152): run `fs_read_sector` + the FAT16 read path from a 16K
 loadable **upper ROM** (`#C000`), prove the IDE desktop boots with the driver living
 in ROM, and reclaim resident `#8000` space.

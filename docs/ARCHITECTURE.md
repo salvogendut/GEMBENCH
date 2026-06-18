@@ -142,6 +142,10 @@ One image works on any machine. `bash tools/build_kernel.sh` stages (and ships u
   `GEOBENCH.CFG`, and a `GEOBENCH/` subfolder holding everything the kernel loads at
   boot (apps, modules, fonts, icons, cursor). The card root stays clean next to
   SymBOS/CP/M/UniDOS files.
+- **`QA/GEOBENCH.IMG`** — a ready-to-flash card image: one partitioned **FAT16** disk
+  (MBR partition at sector 32) that boots on **both** backends — the SYMBiFACE IDE reads
+  the partition table, the Albireo CH376 auto-detects the FAT. Rebuilt every build
+  (`tools/build_card_img.sh`); a local artifact, not committed.
 - **`QA/GEOBENCH.DSK`** — a flat bootable floppy.
 
 `RUN"GB` runs `GB.BAS`, which probes the bus (an IDE register read-back, then a CH376
@@ -153,6 +157,27 @@ The loader is **BASIC, not machine code**, on purpose: under UniDOS (CP/M-based)
 `RUN"`-loaded binary that returns triggers a warm-boot, the firmware CAS goes to tape,
 and the DOS's RSXs/BIOS are unreachable from a loaded binary — whereas a BASIC program
 runs with the DOS fully active, so its `RUN"GBIDE` simply works.
+
+### The GEOBENCH ROM (driver offload + boot banner, #152)
+
+The screen-independent low-level drivers — the FAT read/write core, the AMSDOS floppy
+reader, the IDE backend and the CH376/Albireo backend — can run from a **16K loadable
+upper ROM** instead of the resident kernel, freeing `#8000` RAM (the headroom that
+unblocks window-chrome work like #156). `tools/build_rom.sh` builds one per card:
+`rom/GEOBENCH.ROM` (IDE) and `rom/GBALB.ROM` (Albireo).
+
+A driver call pages the ROM in (`OUT (#7F),#85` — upper ROM on, **lower** ROM off so
+low-RAM scratch stays visible; `#7F81` would overlay the firmware lower ROM and corrupt
+it), `OUT (#DF)` selects the ROM number, and the kernel `CALL`s a fixed dispatch slot.
+The ROM is read-only, so each backend's writable state is relocated to fixed low RAM that
+both the resident stubs and the ROM agree on (the FAT core at `#1C00`, the CH376 path at
+`#1293`, a transfer area at `#1270`). The resident kernel is built with `-DGB_ROM_REQ=1`
+to use the stubs; without the ROM the plain kernel runs every driver resident, so the ROM
+is optional.
+
+The same image is a standard CPC **background ROM** (type-1 header at `#C000`): the
+firmware initialises it at cold boot and it prints a `GEOBENCH <commit>` banner before
+BASIC's prompt, like M4 or SymbOS. The offload dispatch table lives just past the header.
 
 ## Open questions
 
