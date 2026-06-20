@@ -134,12 +134,14 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
   jump table). The desktop launches the file manager, which opens each file in its
   app (Notepad, ICONED, Paint, Viewer, ...); an app returns to its caller by `return`.
 - **Storage backends.** A dispatcher (`lib/fs.asm`) selects the card backend at
-  build time — FAT16/FAT32 over a SYMBiFACE/Cyboard **IDE**, or a CH376 **Albireo**
-  card — and falls back to AMSDOS-over-**floppy**, so the same desktop runs on any of
-  them. A small BASIC loader (`GB.BAS`) auto-detects the card so one `RUN"GB` boots
-  them all (see below). These screen-independent drivers can be **offloaded to a
-  loadable upper ROM** (`GEOBENCH.ROM`) to free resident `#8000` RAM — see *Optional:
-  the GEOBENCH ROM* below.
+  build time. The **shipped** card runs a CH376 **Albireo** kernel, which also falls
+  back to AMSDOS-over-**floppy** when no card is present — so one binary covers both
+  storage paths and `RUN"GB` boots it. The FAT16/FAT32 **IDE** backend (SYMBiFACE/
+  Cyboard) is retired from the shipped card but still in the tree, buildable via
+  `STORAGE=ide` for recovery/tests, with its full kernel history frozen on branch
+  `legacy-ide`. These screen-independent drivers can be **offloaded to a loadable
+  upper ROM** (`GEOBENCH.ROM`) to free resident `#8000` RAM — see *Optional: the
+  GEOBENCH ROM* below.
 
 ## Building, deploying and running
 
@@ -155,19 +157,19 @@ bash tools/build_kernel.sh
 This stages these outputs (the loose files and the floppy are committed under `QA/`, so you
 can grab them ready-built):
 
-- **`QA/CARD/`** — the loose card distribution. Copy its contents onto an IDE or Albireo
-  card. The card root stays clean: only the loader `GB.BAS`, the two kernels
-  `GBIDE.BIN`/`GBALB.BIN`, and `GEOBENCH.CFG` — everything the kernel loads at boot
+- **`QA/CARD/`** — the loose card distribution. Copy its contents onto an Albireo
+  card. The card root stays clean: only the loader `GB.BAS`, the Albireo kernel
+  `GBALB.BIN`, and `GEOBENCH.CFG` — everything the kernel loads at boot
   lives in a `GEOBENCH/` subfolder.
-- **`QA/GEOBENCH.IMG`** — a ready-to-flash **card image**: a partitioned FAT16 disk usable on
-  **both** the SYMBiFACE IDE (which reads the MBR partition) and the Albireo CH376 (which
-  auto-detects the FAT). Built by `tools/build_card_img.sh`; a 32 MB local artifact, rebuilt
-  every build and not committed.
+- **`QA/GEOBENCH.IMG`** — a ready-to-flash **Albireo card image**: a partitioned FAT16 disk
+  the Albireo CH376 auto-detects. Built by `tools/build_card_img.sh`; a 32 MB local artifact,
+  rebuilt every build and not committed. (The image is a plain FAT16 partition, so an IDE
+  build (`STORAGE=ide`) can read the same card.)
 - **`QA/GEOBENCH.DSK`** — a single bootable floppy image.
 
-Boot with **`RUN"GB`** on any machine: the loader `GB.BAS` probes the bus and runs the
-matching kernel (IDE → `GBIDE`, Albireo → `GBALB`, otherwise the floppy `GBKERN`). On a
-floppy you can also `RUN"GBKERN` directly.
+Boot with **`RUN"GB`** on any machine: the loader `GB.BAS` runs `GBALB`, the Albireo kernel,
+which drives a CH376 card or falls back to the AMSDOS floppy. On a floppy you can also
+`RUN"GBKERN` directly.
 
 ```bash
 1984 --memory=128 --disk-a=QA/GEOBENCH.DSK --autostart=GB     # floppy in an emulator
@@ -228,7 +230,8 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
   plugs into the joystick port and reports as a joystick (movement + buttons), so
   the same pointer path drives it (either fire button clicks). A **SYMBiFACE II /
   Cyboard PS/2 mouse** can be added for machines that have one.
-- Floppy or IDE (FAT16) storage. Networking via Net4CPC (W5100S) is a possible
+- Albireo (CH376) card or AMSDOS floppy storage (IDE is retired from the shipped card,
+  still buildable via `STORAGE=ide`). Networking via Net4CPC (W5100S) is a possible
   future extension — see the related `n4c-nettools` project.
 
 ## Goals
@@ -332,8 +335,11 @@ Done:
 9. ✅ **Driver offload to ROM (#152)** — the screen-independent low-level drivers (FAT
    read/write, AMSDOS floppy, IDE, CH376/Albireo) run from a 16K upper ROM
    (`GEOBENCH.ROM`/`GBALB.ROM`), freeing resident RAM; the ROM is also a CPC background ROM
-   that boots a `GEOBENCH <commit>` banner. A single FAT16 card image (`QA/GEOBENCH.IMG`)
-   boots on both IDE and Albireo.
+   that boots a `GEOBENCH <commit>` banner.
+10. ✅ **Albireo-only card** — the shipped card runs a single CH376 **Albireo** kernel
+   (`GBALB.BIN`) that falls back to AMSDOS floppy when no card is present. The IDE backend
+   is retired from the card (still buildable via `STORAGE=ide`; full history frozen on
+   branch `legacy-ide`).
 
 Next:
 
