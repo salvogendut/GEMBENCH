@@ -27,6 +27,9 @@ STORAGE_ALBIREO equ   0
                 ifndef SPIKE                  ; #130: -DSPIKE=1 builds a minimal storage spike -
 SPIKE           equ   0                       ; load DESKTOP.APP right after fs_init, report, hang
                 endif
+                ifndef SPIKE_STAGED           ; -DSPIKE_STAGED=1 (Albireo): stage the boot loads
+SPIKE_STAGED    equ   0                       ; (mount/GBCFG/DESKTOP), distinct border per stage, hang
+                endif
                 ifndef GB_ROM_REQ             ; #152: -DGB_ROM_REQ=1 routes the offloadable drivers
 GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present. Both the IDE and the
                 endif                          ; Albireo build can offload (floppy read + the backend).
@@ -289,6 +292,71 @@ spike_fail
                 call  SCR_SET_BORDER
                 jr    spike_hang
 spike_name      db    "DESKTOP APP"  ; #130 SPIKE: the file to test-load from the card
+                endif
+                if SPIKE_STAGED
+                ; -DSPIKE_STAGED=1 (+STORAGE_ALBIREO): the real-HW Albireo loads /GEOBENCH/GBCFG.BIN
+                ; first and it FAILED (v1 magenta). This v2 isolates WHY the file OPEN fails by
+                ; trying three FILE_OPEN forms and reporting which one succeeds (never reboots):
+                ;   RED     = mount failed
+                ;   WHITE   = absolute open "/GEOBENCH/GBCFG.BIN" works (the trim fix) -> if the
+                ;             fix card still rebooted, the failure is the banked READ, not the open
+                ;   GREEN   = cd "/GEOBENCH" then open "GBCFG.BIN" works -> stateful-subdir fix
+                ;   MAGENTA = neither opened -> deeper
+                call  input_init
+                di
+                call  mem_detect
+                ei
+                call  bank_normal
+                call  alb_ensure_mount        ; mount
+                ld    bc,#0606               ; RED
+                jp    nc,sts_show
+                ; --- form 1: absolute "/GEOBENCH/GBCFG.BIN" (the trimmed path the fix card uses) ---
+                ld    hl,sts_abs
+                call  sts_setname
+                call  sts_fopen
+                ld    bc,#1A1A               ; WHITE = absolute open works
+                jr    z,sts_show
+                ; --- form 2: cd "/GEOBENCH" then open "GBCFG.BIN" relative (stateful subdir) ---
+                call  sts_close
+                ld    hl,sts_dir             ; SET_FILE_NAME "/GEOBENCH" + FILE_OPEN (enter dir)
+                call  sts_setname
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint            ; ERR_OPEN_DIR/SUCCESS - either means we're in it
+                ld    hl,sts_rel             ; SET_FILE_NAME "GBCFG.BIN" (relative) + FILE_OPEN
+                call  sts_setname
+                call  sts_fopen
+                ld    bc,#1212               ; GREEN = cd-first opens it (stateful-subdir fix)
+                jr    z,sts_show
+                ld    bc,#0808               ; MAGENTA = none of the three opened
+sts_show        call  SCR_SET_BORDER
+sts_hang        jr    sts_hang
+; sts_setname: HL -> NUL-terminated string -> SET_FILE_NAME it.
+sts_setname     ld    a,ALBC_SETNAME
+                call  alb_sendcmd
+sts_sn_lp       ld    a,(hl)
+                out   (c),a
+                or    a
+                ret   z
+                inc   hl
+                jr    sts_sn_lp
+; sts_fopen: FILE_OPEN the already-set name. ZF set = ALB_INT_SUCCESS (opened).
+sts_fopen       ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                ret
+; sts_close: FILE_CLOSE (reset handle between attempts).
+sts_close       ld    a,ALBC_FILECLOSE
+                call  alb_sendcmd
+                xor   a
+                out   (c),a
+                call  alb_waitint
+                ret
+sts_cfg11       db    "GBCFG   BIN"          ; 11-byte 8.3 for alb_setname_req
+sts_abs         db    "/GEOBENCH/GBCFG.BIN",0
+sts_dir         db    "/GEOBENCH",0
+sts_rel         db    "GBCFG.BIN",0
                 endif
                 call  input_init             ; enable the SymbiFace mouse if present
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
@@ -3052,7 +3120,7 @@ kern_end                                        ; GBKERN.BIN = #8000..kern_end o
 ; kernel is caught here, not in the field. (Reclaim, or move scratch out, to fix.)
 HIMEM           equ   #A288        ; UniDOS HIMEM (stack top); see docs/AMSDOS notes
 STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the stack (#95)
-                if SPIKE                     ; #130: the throwaway spike hangs early (tiny stack)
+                if SPIKE|SPIKE_STAGED        ; #130: the throwaway spike hangs early (tiny stack)
                 else
                 assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big - reclaim resident bytes (see #104)"
                 endif

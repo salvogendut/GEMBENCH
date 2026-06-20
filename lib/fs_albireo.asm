@@ -129,6 +129,12 @@ alb_ensure_mount
                 or    a
                 scf
                 ret   nz
+                call  alb_mount_plain         ; GEOBENCH is loaded BY UniDOS, which ALREADY
+                jr    c,aem_ok                 ; SET_USB_MODE+DISK_MOUNT'd the card. Try a plain
+                                               ; DISK_MOUNT in the CURRENT mode first - no bus
+                                               ; reset - so we don't reset a card UniDOS just set
+                                               ; up (a real-HW reboot 1984 never shows: it mounts
+                                               ; regardless of mode). Cold boot: fall through.
                 ld    e,ALB_USBMODE_USB        ; #132: a USB (UMS) drive needs USB-HOST mode, not
                 ld    d,1                       ; SD; mode 6 resets the bus -> wait for re-attach
                 call  alb_try_mount
@@ -144,6 +150,20 @@ aem_ok
                 ret
 aem_fail
                 or    a
+                ret
+
+; alb_mount_plain: DISK_MOUNT in whatever USB mode the chip is already in (no SET_USB_MODE,
+; no bus reset). CF set = mounted. Used to re-use UniDOS's existing mount on the boot handoff.
+alb_mount_plain
+                ld    a,ALBC_DISKMOUNT
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    z,amp_ok
+                or    a                          ; NC = not mounted in the current mode
+                ret
+amp_ok
+                scf
                 ret
 
 ; alb_try_mount: E = SET_USB_MODE byte; D != 0 if that mode resets the USB bus (then we
@@ -184,15 +204,37 @@ atm_fail
 fsalb_dir_first
                 call  alb_ensure_mount
                 jr    nc,alb_scan_end
-                ld    a,ALBC_SETNAME             ; SET_FILE_NAME <path>/* (#104: current
-                call  alb_sendcmd                ; dir - "/*" at root, "/GAMES/*" in a subdir)
-                call  alb_emit_path
+                ld    a,ALBC_SETNAME             ; try ABSOLUTE first: SET_FILE_NAME <path>/* + OPEN
+                call  alb_sendcmd                ; ("/*" at root, "/GEOBENCH/*" in a subdir) - works
+                call  alb_emit_path              ; on the stateless 1984 CH376 and at root
                 ld    a,'/'
                 out   (c),a
                 ld    a,'*'
                 out   (c),a
                 xor   a
                 out   (c),a                      ; NUL terminator
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_DISKRD             ; an entry staged? (absolute worked)
+                jr    z,alb_scan_eval
+                ld    a,(alb_path)               ; absolute gave nothing - a REAL (stateful) CH376
+                or    a                           ; can't open an absolute SUBDIR wildcard. At root
+                jr    z,alb_scan_eval             ; there's no subdir to enter -> truly empty/done
+                ld    a,ALBC_SETNAME             ; cd into alb_path (SET_FILE_NAME the dir + OPEN) ...
+                call  alb_sendcmd
+                call  alb_emit_path              ; "/GEOBENCH"
+                xor   a
+                out   (c),a
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint                ; enter the dir (ERR_OPEN_DIR/SUCCESS)
+                ld    a,ALBC_SETNAME             ; ... then enumerate "*" RELATIVE to it
+                call  alb_sendcmd
+                ld    a,'*'
+                out   (c),a
+                xor   a
+                out   (c),a
                 ld    a,ALBC_FILEOPEN
                 call  alb_sendcmd
                 call  alb_waitint
@@ -257,11 +299,7 @@ ade_skip
 fsalb_load_file
                 call  alb_ensure_mount
                 jp    nc,alf_nf                   ; jp: alf_nf is out of jr range (#110)
-                call  alb_setname_req
-                ld    a,ALBC_FILEOPEN
-                call  alb_sendcmd
-                call  alb_waitint
-                cp    ALB_INT_SUCCESS
+                call  alb_open_req                ; absolute, else cd-into-dir + relative (#real-HW)
                 jp    nz,alf_nf                   ; missing / is a directory
                 ld    a,ALBC_BYTEREAD
                 call  alb_sendcmd
@@ -448,16 +486,72 @@ alb_setname_req
                 call  alb_emit_path               ; <path> prefix (#104 subdirs)
                 ld    a,'/'
                 out   (c),a
-                ld    hl,fs_req_name
-                ld    a,8
-                call  alb_outira                  ; 8 name chars
-                ld    a,'.'
-                out   (c),a
-                ld    a,3
-                call  alb_outira                  ; 3 extension chars
+                call  alb_emit_83                 ; trimmed 8.3 name
                 xor   a
                 out   (c),a                        ; NUL terminator
                 ret
+
+; alb_emit_83: stream fs_req_name to the open DATA port as a TRIMMED 8.3 name ("GBCFG.BIN",
+; not "GBCFG   .BIN") - padding spaces break FILE_OPEN on real HW (1984 tolerates them). D is
+; the counter (B is the I/O port high byte #FE!). BC (port) preserved.
+alb_emit_83
+                ld    hl,fs_req_name
+                ld    d,8
+ae83_nm         ld    a,(hl)
+                cp    ' '
+                jr    z,ae83_ext
+                out   (c),a
+                inc   hl
+                dec   d
+                jr    nz,ae83_nm
+ae83_ext        ld    hl,fs_req_name+8            ; extension at offset 8; omit "." if blank
+                ld    a,(hl)
+                cp    ' '
+                ret   z
+                ld    a,'.'
+                out   (c),a
+                ld    d,3
+ae83_e1         ld    a,(hl)
+                cp    ' '
+                ret   z
+                out   (c),a
+                inc   hl
+                dec   d
+                jr    nz,ae83_e1
+                ret
+
+; alb_open_req: FILE_OPEN fs_req_name in directory alb_path. Tries the ABSOLUTE path first
+; ("/GEOBENCH/GBCFG.BIN") - works on the stateless 1984 CH376, on root files, and on flat cards;
+; a REAL (stateful) CH376 can't resolve an absolute SUBDIR path, so on failure it cd's into
+; alb_path (SET_FILE_NAME the dir + FILE_OPEN) and re-opens the name RELATIVE. ZF set = opened.
+alb_open_req
+                call  alb_setname_req             ; absolute "/<path>/NAME.EXT"
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                ret   z                            ; opened (emulator / root file / flat card)
+                ld    a,(alb_path)                 ; absolute failed: at root there is no subdir to
+                or    a                             ; enter, so it is genuinely missing (ZF clear)
+                ret   z
+                ld    a,ALBC_SETNAME               ; stateful CH376: cd into alb_path ...
+                call  alb_sendcmd
+                call  alb_emit_path               ; "/GEOBENCH"
+                xor   a
+                out   (c),a
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint                 ; enter the dir (ERR_OPEN_DIR/SUCCESS)
+                ld    a,ALBC_SETNAME               ; ... then open the name RELATIVE to it
+                call  alb_sendcmd
+                call  alb_emit_83                 ; "NAME.EXT" (no path, no leading '/')
+                xor   a
+                out   (c),a
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                ret                                ; ZF = opened
 
 ; alb_emit_path: stream alb_path (NUL-terminated current dir) to the DATA port for
 ; use inside a SET_FILE_NAME. "" at root emits nothing. B/C (port) preserved.
