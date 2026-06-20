@@ -30,8 +30,9 @@ __pycache__/
 # QA/GEOBENCH.DSK), so re-include it despite the *.BIN/*.DSK/*.RAW ignores above.
 # Regenerate with `bash tools/build_kernel.sh`.
 !QA/**
-# ...except the 32MB card image: it is rebuilt (and byte-churns) on every build, so it
-# is a local build artifact, not committed. Build it with tools/build_card_img.sh.
+# ...except the 32MB card images: they are rebuilt (and byte-churn) on every build, so
+# they are local build artifacts, not committed. Build with tools/build_card_img.sh.
 QA/GEOBENCH.IMG
+QA/GEOBENCH-M4.IMG
 rom/GEOBENCH.ROM
 rom/GBALB.ROM

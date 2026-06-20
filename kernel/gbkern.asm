@@ -24,11 +24,18 @@
                 ifndef STORAGE_ALBIREO
 STORAGE_ALBIREO equ   0
                 endif
+                ifndef STORAGE_M4             ; #174: -DSTORAGE_M4=1 = the M4-board SD backend
+STORAGE_M4      equ   0                       ; (raw-sector route, reuses the FAT core). Mutually
+                endif                          ; exclusive with the IDE/Albireo backends.
+                assert STORAGE_ALBIREO+STORAGE_M4<=1,"pick ONE drive-0 backend (albireo XOR m4 XOR ide)"
                 ifndef SPIKE                  ; #130: -DSPIKE=1 builds a minimal storage spike -
 SPIKE           equ   0                       ; load DESKTOP.APP right after fs_init, report, hang
                 endif
                 ifndef SPIKE_STAGED           ; -DSPIKE_STAGED=1 (Albireo): stage the boot loads
 SPIKE_STAGED    equ   0                       ; (mount/GBCFG/DESKTOP), distinct border per stage, hang
+                endif
+                ifndef SPIKE_M4               ; #174: -DSPIKE_M4=1 (M4): stage present/55AA/GBCFG-load,
+SPIKE_M4        equ   0                       ; distinct border per stage, hang (de-risk the transport)
                 endif
                 ifndef GB_ROM_REQ             ; #152: -DGB_ROM_REQ=1 routes the offloadable drivers
 GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present. Both the IDE and the
@@ -357,6 +364,51 @@ sts_cfg11       db    "GBCFG   BIN"          ; 11-byte 8.3 for alb_setname_req
 sts_abs         db    "/GEOBENCH/GBCFG.BIN",0
 sts_dir         db    "/GEOBENCH",0
 sts_rel         db    "GBCFG.BIN",0
+                endif
+                if SPIKE_M4
+                ; -DSPIKE_M4=1 (+STORAGE_M4): de-risk the M4 raw-sector transport before trusting
+                ; the FAT core over it. Reads LBA 0 via C_SDREAD, then loads /GEOBENCH/GBCFG.BIN.
+                ;   RED     = M4 returned a read error (transport / SD-level failure)
+                ;   MAGENTA = read returned but no #55AA boot sig (bus-bypass read garbled)
+                ;   GREEN   = LBA0 ok but GBCFG.BIN load failed (mount/dir/read over M4)
+                ;   WHITE   = GBCFG.BIN loaded -> the whole FAT read path works over the M4
+                call  input_init             ; faithful context: the same setup the real boot runs
+                di                            ; between fs_init and its first load
+                call  mem_detect
+                ei
+                call  bank_normal
+                xor   a                       ; --- stage A: raw read LBA 0 (the MBR) ---
+                ld    (lba_tmp),a
+                ld    (lba_tmp+1),a
+                ld    (lba_tmp+2),a
+                ld    (lba_tmp+3),a
+                call  fsm4_read_sector        ; A = status, fs_secbuf = LBA 0
+                or    a
+                ld    bc,#0606               ; RED = M4 read error
+                jr    nz,m4s_show
+                ld    a,(fs_secbuf+510)       ; #55 #AA boot signature
+                cp    #55
+                ld    bc,#0808               ; MAGENTA = bus-bypass read garbled (no #55AA)
+                jr    nz,m4s_show
+                ld    a,(fs_secbuf+511)
+                cp    #AA
+                ld    bc,#0808
+                jr    nz,m4s_show
+                ld    hl,m4s_cfg             ; --- stage B: load /GEOBENCH/GBCFG.BIN over the FAT core ---
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#3F00
+                ld    (fs_load_max),hl
+                ld    hl,#4000               ; plain low buffer (no bank paging)
+                ld    (fs_load_dst),hl
+                call  fs_load_sys
+                ld    bc,#1212               ; GREEN = LBA0 ok but GBCFG load failed
+                jr    nc,m4s_show
+                ld    bc,#1A1A               ; WHITE = the whole FAT read path works over the M4
+m4s_show        call  SCR_SET_BORDER
+m4s_hang        jr    m4s_hang
+m4s_cfg         db    "GBCFG   BIN"
                 endif
                 call  input_init             ; enable the SymbiFace mouse if present
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
@@ -1608,9 +1660,17 @@ k_drive_poll
                 set   3,c                          ; bit3 = Disk C is an Albireo SD/USB card
                 jr    kdp_a                          ; (so the desktop can pick the SD icon, #104)
                 else
+                if STORAGE_M4                      ; #174: M4 -> Disk C (bit2) + SD card icon (bit3)
+                call  fsm4_present
+                jr    nc,kdp_a
+                set   2,c
+                set   3,c
+                jr    kdp_a
+                else
                 call  fs_ide_present               ; IDE -> Disk C (bit2)
                 jr    nc,kdp_a
                 set   2,c
+                endif
                 endif
 kdp_a
                 push  bc
@@ -3107,7 +3167,11 @@ md_count        db    0
                 if STORAGE_ALBIREO
                 include "../lib/fs_albireo.asm"
                 else
+                if STORAGE_M4                  ; #174: M4 raw-sector backend (FAT core + M4 driver)
+                include "../lib/fs_m4.asm"
+                else
                 include "../lib/fs_ide_fat.asm"
+                endif
                 endif
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
@@ -3121,7 +3185,7 @@ kern_end                                        ; GBKERN.BIN = #8000..kern_end o
 ; kernel is caught here, not in the field. (Reclaim, or move scratch out, to fix.)
 HIMEM           equ   #A288        ; UniDOS HIMEM (stack top); see docs/AMSDOS notes
 STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the stack (#95)
-                if SPIKE|SPIKE_STAGED        ; #130: the throwaway spike hangs early (tiny stack)
+                if SPIKE|SPIKE_STAGED|SPIKE_M4 ; #130: the throwaway spike hangs early (tiny stack)
                 else
                 assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big - reclaim resident bytes (see #104)"
                 endif

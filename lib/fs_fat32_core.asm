@@ -19,6 +19,13 @@
                 ifndef FAT16_ONLY
 FAT16_ONLY      equ   0
                 endif
+; STORAGE_M4 (#174): when set, this build's fs_read_sector calls the M4 driver
+; (lib/fs_m4.asm) instead of the in-RAM IDE ATA code. Defaulted here so the
+; standalone gbfat.asm write-module assembly (no STORAGE_M4 on the command line)
+; still parses the dispatch below.
+                ifndef STORAGE_M4
+STORAGE_M4      equ   0
+                endif
 
 ; fs_mount: MBR/partition probe + FAT32 BPB -> fs_fat_lba, fs_data_lba, fs_spc,
 ; fs_clshift, fs_numfat, fs_dir_clus (root cluster). No directory scan.
@@ -316,6 +323,9 @@ fs_read_sector
                 ret   z
                 jp    gb_rom_call             ; reads lba_tmp -> fs_secbuf from the ROM copy
                 else
+                if STORAGE_M4                 ; #174: M4 build reads sectors via the M4 driver
+                jp    fsm4_read_sector
+                else
                 ld    de,0                     ; wait BSY=0 before commanding
 frs_bsy
                 ld    bc,FS_IDE_STAT
@@ -375,6 +385,7 @@ frs_read
                 or    e
                 jr    nz,frs_read
                 ret
+                endif                          ; STORAGE_M4 (#174: else = the in-RAM IDE ATA body)
                 endif                          ; GB_ROM (in-RAM driver only in non-ROM builds, #152)
 
 ; fs_detect_part: fs_secbuf holds LBA 0. Set fs_part_lba (32-bit) to the first

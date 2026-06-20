@@ -110,6 +110,17 @@ tools/build_card_img.sh QA/CARD QA/GEOBENCH.IMG \
     || echo "  (QA/GEOBENCH.IMG skipped - needs sfdisk + mkfs.fat + mtools)"
 echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: Albireo card; QA/GEOBENCH.DSK: floppy (RUN\"GB)"
 
+# M4-board SD card (#174): its own boot universe (M4ROM is the DOS, GB.BAS RUN"GBM4),
+# so it gets a SEPARATE card image with the SAME /GEOBENCH payload. The M4 kernel uses
+# the raw-sector route (C_SDREAD feeds the shared FAT core), so the card image is the
+# same partitioned FAT16 build_card_img.sh produces.
+echo "Building the M4 card kernel + image -> QA/GEOBENCH-M4.IMG"
+build_variant GBM4 "-DSTORAGE_M4=1"
+KERNEL=GBM4 tools/stage_dist.sh QA/CARD-M4         # GB.BAS=RUN"GBM4 + GBM4.BIN + /GEOBENCH
+tools/build_card_img.sh QA/CARD-M4 QA/GEOBENCH-M4.IMG \
+    || echo "  (QA/GEOBENCH-M4.IMG skipped - needs sfdisk + mkfs.fat + mtools)"
+echo "  QA/CARD-M4: loose files; QA/GEOBENCH-M4.IMG: M4 card (flash + RUN\"GB)"
+
 # Leave build/ as the STORAGE-selected variant (default Albireo) so the --disk-a
 # test harness sees a predictable build/gbkern.dsk + build/GBKERN.RAW.
 rm -f build/gbkern.dsk

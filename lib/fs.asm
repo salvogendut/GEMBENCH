@@ -27,12 +27,21 @@ D0_LOAD         equ   fsalb_load_file
 D0_SAVE         equ   fsalb_save_file
 D0_DELETE       equ   fsalb_delete_file
                 else
+                if STORAGE_M4                  ; #174: M4 board, raw-sector route - reuses the
+D0_PRESENT      equ   fsm4_present            ; fside_* FAT dir/load (M4 only swaps fs_read_sector).
+D0_FIRST        equ   fside_dir_first         ; Read-only for now: save/delete fall back to the
+D0_NEXT         equ   fside_dir_next          ; no-op stub (C_SDWRITE writes are a later phase).
+D0_LOAD         equ   fside_load_file
+D0_SAVE         equ   fs_load_none
+D0_DELETE       equ   fs_load_none
+                else
 D0_PRESENT      equ   fs_ide_present
 D0_FIRST        equ   fside_dir_first
 D0_NEXT         equ   fside_dir_next
 D0_LOAD         equ   fside_load_file
 D0_SAVE         equ   fside_save_file
 D0_DELETE       equ   fside_delete_file
+                endif
                 endif
 
 ; fs_init: pick the boot drive once, before any directory call. If the drive-0

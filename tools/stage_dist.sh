@@ -1,29 +1,32 @@
 #!/usr/bin/env bash
-# stage_dist.sh <outdir>: stage the GEOBENCH card distribution (Albireo, #134 + #136).
+# stage_dist.sh <outdir>: stage a GEOBENCH card distribution (#134 + #136).
+# KERNEL=GBALB (default) | GBM4 picks which kernel + loader the card boots:
+#   GBALB - Albireo (CH376) card; falls back to floppy A when no card is present.
+#   GBM4  - M4-board SD card (#174); raw-sector backend, also falls back to floppy.
 # On-card layout:
-#   GB.BAS       - BASIC loader: RUN"GBALB (machine-code loader is impossible under
-#                  UniDOS, see memory geobench-loader-136, hence BASIC)
-#   GBALB.BIN    - Albireo (CH376) kernel; real 128-byte AMSDOS header, exec 0x8000.
-#                  Falls back to floppy (drive A) when no CH376 card is present.
+#   GB.BAS       - BASIC loader: RUN"<KERNEL> (machine-code loader is impossible
+#                  under UniDOS/M4ROM, see memory geobench-loader-136, hence BASIC)
+#   <KERNEL>.BIN - the kernel; real 128-byte AMSDOS header, exec 0x8000.
 #   GEOBENCH.CFG - config (root; read before the kernel enters /GEOBENCH)
 #   GEOBENCH/    - everything the kernel loads at boot (apps/modules/fonts/icons/cursor)
-# Boot: RUN"GB -> RUN"GBALB -> the kernel reads /GEOBENCH. IDE is retired (frozen on
-# branch legacy-ide; still buildable via STORAGE=ide but not shipped). Needs build/GBALB.RAW.
+# Boot: RUN"GB -> RUN"<KERNEL> -> the kernel reads /GEOBENCH. IDE is retired (frozen
+# on branch legacy-ide; still buildable via STORAGE=ide but not shipped). Needs
+# build/<KERNEL>.RAW.
 #   * <app>.APP / GBCFG/GBFAT/FLOPPYSV.BIN - HEADERLESS raw images (kernel loads them)
 #   * GB.BAS / GEOBENCH.CFG - written with CR+LF line endings (the CPC requires them)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 OUT="${1:?usage: tools/stage_dist.sh <outdir>}"
+KERNEL="${KERNEL:-GBALB}"             # GBALB (Albireo) | GBM4 (M4 board)
 SYS="$OUT/GEOBENCH"                  # everything the kernel loads lives here
 mkdir -p "$SYS"
 
-# --- root: the loader, the Albireo kernel, the config -------------------------
-# IDE is retired (frozen on branch legacy-ide). One kernel ships now: GBALB (Albireo
-# CH376), which also drives a floppy when no card is present - so GB.BAS just RUN"s it.
-# (The IDE backend source stays buildable via STORAGE=ide, just not shipped.)
-printf '10 RUN"GBALB\r\n' > "$OUT/GB.BAS"
-python3 tools/amsdos_header.py build/GBALB.RAW "$OUT/GBALB.BIN" GBALB BIN 0x8000
+# --- root: the loader, the selected kernel, the config ------------------------
+# GB.BAS RUN"s the kernel by name; the kernel reads /GEOBENCH. The kernel also drives
+# a floppy when no card is present. (The IDE backend stays buildable via STORAGE=ide.)
+printf '10 RUN"%s\r\n' "$KERNEL" > "$OUT/GB.BAS"
+python3 tools/amsdos_header.py "build/$KERNEL.RAW" "$OUT/$KERNEL.BIN" "$KERNEL" BIN 0x8000
 printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\n' \
     > "$OUT/GEOBENCH.CFG"
 
