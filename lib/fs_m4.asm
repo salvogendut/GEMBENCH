@@ -20,24 +20,36 @@
 ;   C_SDREAD response: #E803 = status (0=OK), #E804.. = 512 sector bytes.
 ; ---------------------------------------------------------------------------
 
-M4_DATA         equ   #FECE        ; DATAPORT  (B=#FE high byte triggers the M4 decode)
-M4_ACK          equ   #FC00        ; ACKPORT   (B=#FC high byte = execute the staged command)
-M4_RESP         equ   #E800        ; response bus-bypass base (visible while slot 6 is paged)
-M4_ROMNUM       equ   6            ; M4ROM expansion slot (1984 M4_ROM_SLOT; auto-loaded)
+M4_DATA         equ   #FE00        ; DATAPORT  (exact port M4ROM uses, low byte #00 matters on HW)
+M4_ACK          equ   #FC00        ; ACKPORT   (write = execute; the board holds the bus until done)
+M4_RESP         equ   #E800        ; rom_response buffer (mapped while M4ROM/slot 6 is selected)
+M4_ROMNUM       equ   6            ; M4ROM expansion slot (auto-loaded by the M4 firmware)
 M4C_SDREAD      equ   #14          ; C_SDREAD command low byte (high byte always #43)
 
 ; fsm4_read_sector: the fs_read_sector body for STORAGE_M4. Reads the 24/32-bit LBA
 ; staged in lba_tmp into fs_secbuf via one C_SDREAD. Returns A = M4 status (0 = OK);
 ; the FAT core ignores the return (it trusts fs_secbuf), matching the IDE primitive.
+;
+; Mirrors M4ROM's own command flow EXACTLY (M4ROM.s, Duke): M4ROM executes FROM slot 6,
+; so the M4 board sees its ROM selected the whole time - the emulator ignores the slot,
+; but real hardware only services the DATAPORT/ACKPORT + maps rom_response while slot 6
+; is the active upper ROM. So we select slot 6 across the WHOLE transaction (send + ack +
+; read), write the leading #00 lead byte M4ROM writes (NOT a length), and let the ACKPORT
+; OUT block - the board asserts a bus wait-state until the SD read finishes, so no software
+; poll/NMI is needed (M4ROM reads rom_response immediately after the strobe, with no wait).
 fsm4_read_sector
-                di                            ; an ISR must not see slot 6 paged over #C000 screen
-                ld    bc,M4_DATA              ; --- stream the C_SDREAD packet to the DATAPORT ---
-                ld    a,7
-                out   (c),a                  ; [0] count (header marker; length is not validated)
+                di                            ; no IRQ/NMI may see slot 6 paged over #C000 mid-read
+                ld    bc,#7F85               ; upper ROM ON + lower ROM OFF (GEOBENCH steady state,
+                out   (c),c                  ;  keeps low RAM lba_tmp/fs_secbuf visible - #152 lesson)
+                ld    bc,#DF00
+                ld    a,M4_ROMNUM
+                out   (c),a                  ; select M4ROM (slot 6) for the whole command
+                ld    bc,M4_DATA             ; --- stream the C_SDREAD packet to the DATAPORT ---
+                out   (c),c                  ; [0] #00 lead byte (M4ROM writes this, not a length)
                 ld    a,M4C_SDREAD
                 out   (c),a                  ; [1] cmd lo
                 ld    a,#43
-                out   (c),a                  ; [2] cmd hi (the #43 sentinel the M4 scans for)
+                out   (c),a                  ; [2] cmd hi
                 ld    a,(lba_tmp)
                 out   (c),a                  ; [3] LBA 7-0
                 ld    a,(lba_tmp+1)
@@ -48,16 +60,11 @@ fsm4_read_sector
                 out   (c),a                  ; [6] LBA 31-24
                 ld    a,1
                 out   (c),a                  ; [7] sector count = 1
-                ld    bc,M4_ACK              ; --- strobe ACK: the M4 runs C_SDREAD now ---
-                out   (c),c                  ; (any value)
-                ld    bc,#7F85               ; upper ROM ON + lower ROM OFF (matches steady state,
-                out   (c),c                  ;  keeps low RAM lba_tmp/fs_secbuf visible - #152 lesson)
-                ld    bc,#DF00
-                ld    a,M4_ROMNUM
-                out   (c),a                  ; select M4ROM -> #E800.. now reads the M4 response
-                ld    a,(M4_RESP+3)          ; status byte
+                ld    bc,M4_ACK              ; --- strobe ACK: BLOCKS (board bus-hold) until done ---
+                out   (c),c                  ; (value #00 = C, as M4ROM does)
+                ld    a,(M4_RESP+3)          ; response status (ready now - the strobe blocked)
                 push  af
-                ld    hl,M4_RESP+4           ; copy the 512 sector bytes out of the bus window
+                ld    hl,M4_RESP+4           ; copy the 512 sector bytes out of the response buffer
                 ld    de,fs_secbuf
                 ld    bc,512
                 ldir
