@@ -7,26 +7,30 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 
 ## Build orchestration
 
-- **`build_kernel.sh`** — the one-shot build. Assembles both kernel variants
-  (`GBIDE`, `GBALB`), packs the apps, and stages the whole distribution into `QA/`:
-  the loose card files (`QA/CARD/`), the floppy (`QA/GEOBENCH.DSK`), and the card
-  image (`QA/GEOBENCH.IMG`). `FAT16=1` and `EXTRA_RASM=...` tune the variant
-  (e.g. `EXTRA_RASM="-DGB_ROM_REQ=1"` for the ROM-offload kernel).
+- **`build_kernel.sh`** — the one-shot build. Assembles the shipped `GBALB` (Albireo)
+  kernel, packs the apps, and stages the whole distribution into `QA/`: the loose card
+  files (`QA/CARD/`), the floppy (`QA/GEOBENCH.DSK`), and the card image
+  (`QA/GEOBENCH.IMG`). `STORAGE=ide` builds the retired IDE backend instead (still in
+  the tree for recovery/tests; history frozen on branch `legacy-ide`). `FAT16=1` and
+  `EXTRA_RASM=...` tune the variant (e.g. `EXTRA_RASM="-DGB_ROM_REQ=1"` for the
+  ROM-offload kernel).
 - **`build_rom.sh`** — builds the 16K upper ROMs that offload the low-level drivers
-  and carry the cold-boot banner: `rom/GEOBENCH.ROM` (IDE) and `rom/GBALB.ROM`
-  (Albireo). Bakes the git commit into the banner (`rom/gitcommit.inc`, generated).
-- **`stage_dist.sh <out>`** — stages the unified card distribution (GB.BAS loader +
-  both kernels + the `GEOBENCH/` payload) into a directory.
+  and carry the cold-boot banner: `rom/GBALB.ROM` (Albireo) and `rom/GEOBENCH.ROM`
+  (the dormant IDE backend). Bakes the git commit into the banner
+  (`rom/gitcommit.inc`, generated).
+- **`stage_dist.sh <out>`** — stages the Albireo card distribution (GB.BAS loader →
+  `RUN"GBALB` + `GBALB.BIN` + the `GEOBENCH/` payload) into a directory.
 - **`build_capp.sh <app_dir> <out.RAW>`** — builds a single C app against `libgb`,
   for iterating on one app.
-- **`deploy_ide.sh`** — copy the staged distribution onto a real/emulated IDE image.
+- **`deploy_ide.sh`** — copy the staged distribution onto a real/emulated IDE image
+  (for the dormant IDE backend).
 
 ## Card / disk images
 
 - **`build_card_img.sh [CARD] [IMG]`** — builds a partitioned **FAT16 card image**
-  (`QA/GEOBENCH.IMG` by default) from the staged `QA/CARD/`. One image boots on
-  **both** the SYMBiFACE IDE (reads the MBR partition) and the Albireo CH376
-  (auto-detects the FAT). Called by `build_kernel.sh`.
+  (`QA/GEOBENCH.IMG` by default) from the staged `QA/CARD/`, for the Albireo CH376
+  (auto-detects the FAT). The plain FAT16 partition is also readable by an IDE build
+  (`STORAGE=ide`). Called by `build_kernel.sh`.
 - **`build_ide_img.sh`** — older IDE-only image helper.
 
 ## Paged kernel modules
