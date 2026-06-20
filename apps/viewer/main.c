@@ -65,8 +65,11 @@ static unsigned char pic_wb;
 static unsigned int  pic_h;                            /* 16-bit: tall pictures exceed 255 (#166) */
 static unsigned int  pic_off;
 static unsigned char rmin_w = MIN_W, rmin_h = MIN_H;   /* live resize floor (= picture size) */
-static unsigned char banked;                           /* 1 = the .PIC is in a borrowed bank (#164) */
+static unsigned char banked;                           /* the borrowed bank (0 = in-page), #164 */
 static unsigned char scroll_y;                         /* top visible picture row (#166 scroll) */
+#define PIC_PAGE_K (*(volatile unsigned char *)0x130B) /* the kernel's single "active pic bank";
+                                                          re-select OURS before each blit/close so
+                                                          a second Viewer window can't steal it (#164) */
 #define PIC_WB_K  (*(volatile unsigned char *)0x130C)  /* kernel-parsed header for the banked .PIC */
 #define PIC_H_K   (*(volatile unsigned int  *)0x130D)  /* 16-bit height */
 #define PIC_OFF_K (*(volatile unsigned char *)0x130F)
@@ -105,8 +108,9 @@ static void parse_pic(void)
 static void bank_or_parse(void)
 {
     scroll_y = 0;                                  /* a fresh file starts at the top (#166) */
-    gb_pic_close();
-    banked = gb_pic_open();
+    if (banked) { PIC_PAGE_K = banked; gb_pic_close(); banked = 0; }  /* free OUR old bank only -
+                                                      PIC_PAGE may hold another window's (#164) */
+    banked = gb_pic_open();                        /* open sets PIC_PAGE to the new bank itself */
     if (banked) {                                  /* in a bank: read the kernel-parsed header */
         pic_wb = PIC_WB_K; pic_h = PIC_H_K; pic_off = PIC_OFF_K;
         pic_floor();
@@ -147,7 +151,7 @@ static void draw_pic(void)
     } else { x = (unsigned char)(win_x + 2 + (sb ? SB_W : 0)); y = TX_Y0; }   /* right of the bar */
     r = pic_h - scroll_y; rows = (r > vh) ? vh : (unsigned char)r;
     src = pic_off + (unsigned int)scroll_y * pic_wb;          /* scrolled window into the bitmap */
-    if (banked) gb_pic_blit(x, y, pic_wb, rows, src);
+    if (banked) { PIC_PAGE_K = banked; gb_pic_blit(x, y, pic_wb, rows, src); }  /* our bank (#164) */
     else if (src + (unsigned int)pic_wb * rows <= filen)
         gb_restorerect(x, y, pic_wb, rows, (unsigned char *)filebuf + src);
     if (sb) {                                      /* vertical scrollbar at the LEFT edge (#166) */
@@ -201,7 +205,7 @@ static void v_frame(void)
     if (gb_doc_frame()) gb_restore_parent();   /* a menu ran -> repaint */
 }
 
-static void v_close(void) { if (gb_doc_close()) { gb_pic_close(); gb_wm_close(); } }
+static void v_close(void) { if (gb_doc_close()) { if (banked) PIC_PAGE_K = banked; gb_pic_close(); gb_wm_close(); } }
 static void v_event(void) { gb_doc_event(); }
 
 /* on_drag: a title-bar press - move the window (#146 slice 2). */
