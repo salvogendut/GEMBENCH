@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# stage_dist.sh <outdir>: stage the UNIFIED GEOBENCH card distribution (#134 + #136).
-# One image works on any machine. On-card layout:
-#   GB.BAS       - BASIC loader: probes the bus and RUN"s the right per-card kernel
-#   GBIDE.BIN    - IDE (SYMBiFACE/Cyboard) kernel   } real 128-byte AMSDOS header,
-#   GBALB.BIN    - Albireo (CH376) kernel           } exec 0x8000
+# stage_dist.sh <outdir>: stage the GEOBENCH card distribution (Albireo, #134 + #136).
+# On-card layout:
+#   GB.BAS       - BASIC loader: RUN"GBALB (machine-code loader is impossible under
+#                  UniDOS, see memory geobench-loader-136, hence BASIC)
+#   GBALB.BIN    - Albireo (CH376) kernel; real 128-byte AMSDOS header, exec 0x8000.
+#                  Falls back to floppy (drive A) when no CH376 card is present.
 #   GEOBENCH.CFG - config (root; read before the kernel enters /GEOBENCH)
 #   GEOBENCH/    - everything the kernel loads at boot (apps/modules/fonts/icons/cursor)
-# Boot: RUN"GB -> GB.BAS detects IDE/Albireo -> RUN"GBIDE/GBALB -> the kernel reads
-# /GEOBENCH (IDE walks the FAT subdir; Albireo prefixes alb_path). A machine-code
-# loader is impossible under UniDOS (see memory geobench-loader-136), hence BASIC.
-# Needs build/GBIDE.RAW + build/GBALB.RAW (captured by build_kernel.sh per variant).
+# Boot: RUN"GB -> RUN"GBALB -> the kernel reads /GEOBENCH. IDE is retired (frozen on
+# branch legacy-ide; still buildable via STORAGE=ide but not shipped). Needs build/GBALB.RAW.
 #   * <app>.APP / GBCFG/GBFAT/FLOPPYSV.BIN - HEADERLESS raw images (kernel loads them)
 #   * GB.BAS / GEOBENCH.CFG - written with CR+LF line endings (the CPC requires them)
 set -euo pipefail
@@ -19,10 +18,11 @@ OUT="${1:?usage: tools/stage_dist.sh <outdir>}"
 SYS="$OUT/GEOBENCH"                  # everything the kernel loads lives here
 mkdir -p "$SYS"
 
-# --- root: the loader, both per-card kernels, the config ----------------------
-printf '10 OUT &FD0B,&55:IF INP(&FD0B)<>&55 THEN 40\r\n20 OUT &FD0B,&AA:IF INP(&FD0B)<>&AA THEN 40\r\n30 RUN"GBIDE\r\n40 OUT &FE81,6:OUT &FE80,&57:IF INP(&FE80)=&A8 THEN RUN"GBALB\r\n50 RUN"GBIDE\r\n' \
-    > "$OUT/GB.BAS"
-python3 tools/amsdos_header.py build/GBIDE.RAW "$OUT/GBIDE.BIN" GBIDE BIN 0x8000
+# --- root: the loader, the Albireo kernel, the config -------------------------
+# IDE is retired (frozen on branch legacy-ide). One kernel ships now: GBALB (Albireo
+# CH376), which also drives a floppy when no card is present - so GB.BAS just RUN"s it.
+# (The IDE backend source stays buildable via STORAGE=ide, just not shipped.)
+printf '10 RUN"GBALB\r\n' > "$OUT/GB.BAS"
 python3 tools/amsdos_header.py build/GBALB.RAW "$OUT/GBALB.BIN" GBALB BIN 0x8000
 printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\n' \
     > "$OUT/GEOBENCH.CFG"

@@ -10,13 +10,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."          # repo root
 RASM="${RASM:-rasm}"
 
-# Every card gets its own kernel + QA subdir (below). STORAGE only picks which
-# variant is left in build/ for the dev harness (--disk-a / deploy_ide.sh):
-# "ide" (default) or "albireo". The backends are mutually exclusive per build, so
-# the IDE FAT32 core stays off an Albireo kernel (#104).
-STORAGE_FLAG=""
-if [ "${STORAGE:-ide}" = "albireo" ]; then
-    STORAGE_FLAG="-DSTORAGE_ALBIREO=1"
+# The card ships the Albireo kernel only (IDE is retired - frozen on branch
+# legacy-ide). STORAGE picks the backend left in build/ for the dev harness
+# (--disk-a): "albireo" (default) or "ide" (the dormant legacy backend, still
+# buildable for recovery/tests). Backends are mutually exclusive per build (#104).
+STORAGE_FLAG="-DSTORAGE_ALBIREO=1"
+if [ "${STORAGE:-albireo}" = "ide" ]; then
+    STORAGE_FLAG=""
 fi
 
 # FAT16=1: build the IDE kernel FAT16-only (drops the FAT32 read branches, ~81 B
@@ -89,12 +89,12 @@ build_variant() {                                # $1 = kernel name, $2 = rasm -
     cp build/GBKERN.RAW "build/$1.RAW"           # capture this card's kernel for the unified stage
 }
 rm -rf QA; mkdir -p QA
-echo "Building both card kernels + the unified card distribution -> QA/"
-build_variant GBIDE "$FAT16_FLAG"
-cp build/gbkern.dsk QA/GEOBENCH.DSK               # one bootable floppy image
-# Add a GB.BAS loader so the floppy also boots via RUN"GB (-> RUN"GBKERN; one kernel,
-# no card to detect). Must be a HEADERLESS ASCII file - RASM's DSK save adds an AMSDOS
-# header, so use iDSK (-t 0). Graceful: without iDSK the floppy still boots via RUN"GBKERN.
+echo "Building the Albireo card kernel + the card distribution -> QA/"
+build_variant GBALB "-DSTORAGE_ALBIREO=1"
+cp build/gbkern.dsk QA/GEOBENCH.DSK               # bootable floppy image (the GBALB kernel)
+# Add a GB.BAS loader so the floppy also boots via RUN"GB (-> RUN"GBKERN). Must be a
+# HEADERLESS ASCII file - RASM's DSK save adds an AMSDOS header, so use iDSK (-t 0).
+# Graceful: without iDSK the floppy still boots via RUN"GBKERN.
 IDSK="${IDSK:-$HOME/Dev/cpc-mastering/idsk}"
 if [ -x "$IDSK" ]; then
     printf '10 RUN"GBKERN\r\n' > build/GB.BAS
@@ -104,17 +104,16 @@ if [ -x "$IDSK" ]; then
 else
     echo "  (no iDSK at \$IDSK - floppy boots via RUN\"GBKERN; set IDSK= to add the GB.BAS loader)"
 fi
-build_variant GBALB "-DSTORAGE_ALBIREO=1"
-tools/stage_dist.sh QA/CARD                       # unified: GB.BAS + GBIDE.BIN + GBALB.BIN + /GEOBENCH
-# A ready-to-flash card image (partitioned FAT16) usable on BOTH the IDE and the Albireo.
+tools/stage_dist.sh QA/CARD                       # GB.BAS + GBALB.BIN + /GEOBENCH
+# A ready-to-flash card image (partitioned FAT16) for the Albireo.
 tools/build_card_img.sh QA/CARD QA/GEOBENCH.IMG \
     || echo "  (QA/GEOBENCH.IMG skipped - needs sfdisk + mkfs.fat + mtools)"
-echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: IDE/Albireo card; QA/GEOBENCH.DSK: floppy (RUN\"GB)"
+echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: Albireo card; QA/GEOBENCH.DSK: floppy (RUN\"GB)"
 
-# Leave build/ as the STORAGE-selected variant (default IDE) so the --disk-a test
-# harness and deploy_ide.sh see a predictable build/gbkern.dsk + build/GBKERN.RAW.
+# Leave build/ as the STORAGE-selected variant (default Albireo) so the --disk-a
+# test harness sees a predictable build/gbkern.dsk + build/GBKERN.RAW.
 rm -f build/gbkern.dsk
 "$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG ${FAT16_FLAG:+$FAT16_FLAG} >/dev/null
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 "$RASM" kernel/pack_apps2.asm -eo >/dev/null     # 3rd pass: VIEWER + FILEMGR -> .dsk (#142)
-echo "Built QA/CARD (unified card deploy) + QA/GEOBENCH.DSK (floppy); build/ = ${STORAGE:-ide} variant"
+echo "Built QA/CARD (Albireo card deploy) + QA/GEOBENCH.DSK (floppy); build/ = ${STORAGE:-albireo} variant"
