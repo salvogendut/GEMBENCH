@@ -366,39 +366,37 @@ sts_dir         db    "/GEOBENCH",0
 sts_rel         db    "GBCFG.BIN",0
                 endif
                 if SPIKE_M4
-                ; -DSPIKE_M4=1 (+STORAGE_M4): de-risk the M4 FILE-API path on real HW before the
-                ; real boot CALLs into the loaded data. Probes present + loads /GBENCH/GBCFG.BIN,
-                ; one distinct border per outcome, then HANGS (never reboots). A reboot here (no
-                ; stable border) means a crash DURING the file ops; a solid colour pins the stage.
-                ;   CYAN  = reached the spike (kernel booted this far) - shown before any file op
-                ;   RED   = fsm4_present failed (M4 file API / SD not responding)
-                ;   GREEN = present ok but GBCFG.BIN load failed (open/read over the file API)
-                ;   WHITE = GBCFG.BIN loaded -> the whole file-level read path works on real HW
-                call  input_init             ; faithful context: the same setup the real boot runs
-                di                            ; between fs_init and its first load
+                ; -DSPIKE_M4=1 (+STORAGE_M4): de-risk the M4 file-API DIRECTORY NAV on real HW
+                ; (the symptom: enter /GBENCH -> empty, then root -> empty too). Lists root, then
+                ; cd's into /GBENCH and lists it, then goes back to root and lists again - one
+                ; distinct border per outcome, then HANGS (never reboots) so the colour pins it.
+                ;   RED     = root listing failed (fsm4_present)
+                ;   MAGENTA = /GBENCH came back empty (the cd-into-subdir is still corrupting state)
+                ;   GREEN   = root empty AFTER the subdir nav (corruption persists across cd back)
+                ;   WHITE   = root + /GBENCH + back-to-root all list -> dir nav is solid on real HW
+                call  input_init
+                di
                 call  mem_detect
                 ei
                 call  bank_normal
-                ld    bc,#1818               ; CYAN-ish (firmware 24): we reached the spike
-                call  SCR_SET_BORDER
-                call  fsm4_present            ; stage 1: does the M4 file API respond?
-                ld    bc,#0606               ; RED = no
-                jr    nc,m4s_show
-                ld    hl,m4s_cfg             ; stage 2: load /GBENCH/GBCFG.BIN over the file API
-                ld    de,fs_req_name
-                ld    bc,11
+                call  fsm4_present            ; stage 1: list root
+                ld    bc,#0606               ; RED
+                jp    nc,m4s_show
+                ld    hl,m4_sysdir           ; stage 2: m4_path = "/GBENCH", list it (cd-rebuild)
+                ld    de,m4_path
+                ld    bc,8
                 ldir
-                ld    hl,#3F00
-                ld    (fs_load_max),hl
-                ld    hl,#4000               ; plain low buffer (no bank paging)
-                ld    (fs_load_dst),hl
-                call  fs_load_sys
-                ld    bc,#1212               ; GREEN = present ok but GBCFG load failed
-                jr    nc,m4s_show
-                ld    bc,#1A1A               ; WHITE = full file-level read path works on real HW
+                call  fsm4_dir_first
+                ld    bc,#0808               ; MAGENTA = /GBENCH empty
+                jp    nc,m4s_show
+                xor   a                       ; stage 3: m4_path = "" (root), list again
+                ld    (m4_path),a
+                call  fsm4_dir_first
+                ld    bc,#1212               ; GREEN = root empty after subdir nav
+                jp    nc,m4s_show
+                ld    bc,#1A1A               ; WHITE = all dir nav works on real HW
 m4s_show        call  SCR_SET_BORDER
 m4s_hang        jr    m4s_hang
-m4s_cfg         db    "GBCFG   BIN"
                 endif
                 call  input_init             ; enable the SymbiFace mouse if present
                 di                            ; probe RAM BEFORE PAGE_DATA is filled

@@ -112,25 +112,51 @@ me83_e1         ld    a,(hl)
                 jr    nz,me83_e1
                 ret
 
-; m4_cd_path: C_CD to m4_path (absolute). "" -> "/". No result read (the emulator
-; doesn't echo C_CD's status; we trust it and let the following C_READDIR reflect reality).
+; m4_cd_path: set the M4's current directory to m4_path, REBUILT from the root: a
+; C_CD "/" then a relative C_CD for each "/<component>". A real M4 doesn't reliably
+; C_CD an ABSOLUTE subdir path (C_CD "/GBENCH" corrupts its dir state so every later
+; listing - even root - comes back empty), whereas root + relative components is solid.
+; This mirrors the Albireo cd-first fix; the emulator tolerated the absolute form.
+; (No result read - the emulator doesn't echo C_CD's status.)
 m4_cd_path
+                call  m4_cd_root             ; C_CD "/"
+                ld    hl,m4_path
+mcd_comp        ld    a,(hl)
+                or    a
+                ret   z                       ; end of path -> cwd is rebuilt
+                inc   hl                       ; skip the '/'
+                call  m4_io_begin            ; C_CD <component> (relative)
+                call  m4_lead
+                ld    a,M4C_CD
+                out   (c),a
+                ld    a,#43
+                out   (c),a
+mcd_emit        ld    a,(hl)
+                or    a
+                jr    z,mcd_emit_done
+                cp    '/'
+                jr    z,mcd_emit_done
+                out   (c),a
+                inc   hl
+                jr    mcd_emit
+mcd_emit_done   xor   a
+                out   (c),a                  ; NUL terminator
+                call  m4_go
+                call  m4_io_end
+                jr    mcd_comp                 ; next "/<component>"
+
+; m4_cd_root: C_CD "/" (reset to the root directory).
+m4_cd_root
                 call  m4_io_begin
                 call  m4_lead
                 ld    a,M4C_CD
                 out   (c),a
                 ld    a,#43
                 out   (c),a
-                ld    a,(m4_path)            ; root? emit a bare "/"
-                or    a
-                jr    nz,mcd_abs
                 ld    a,'/'
                 out   (c),a
-                jr    mcd_nul
-mcd_abs         ld    hl,m4_path             ; else emit the absolute path
-                call  m4_emit_str
-mcd_nul         xor   a
-                out   (c),a                  ; NUL terminator
+                xor   a
+                out   (c),a
                 call  m4_go
                 jp    m4_io_end
 
