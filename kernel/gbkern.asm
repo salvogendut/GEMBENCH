@@ -366,75 +366,55 @@ sts_dir         db    "/GEOBENCH",0
 sts_rel         db    "GBCFG.BIN",0
                 endif
                 if SPIKE_M4
-                ; -DSPIKE_M4=1 (+STORAGE_M4): pin WHY /GBENCH lists empty on real HW. Lists root,
-                ; cd's into /GBENCH, then asks the M4 (C_GETPATH) what its current dir actually is,
-                ; then lists /GBENCH. Distinct border per outcome, then HANGS (never reboots).
-                ;   RED     = root listing failed (fsm4_present)
-                ;   YELLOW  = after cd into GBENCH, C_GETPATH does NOT report "/G..." -> the C_CD
-                ;             into the subdir did not take (the cd is the bug)
-                ;   MAGENTA = cwd IS /GBENCH but C_READDIR returns nothing (the readdir is the bug)
-                ;   WHITE   = cwd is /GBENCH and it lists -> dir nav works on real HW
+                ; -DSPIKE_M4=1 (+STORAGE_M4): does sending commands the M4ROM way - with the real
+                ; SIZE byte first (m4_cmd/m4_send) instead of a #00 lead byte - make a SUBDIR list?
+                ; Sends C_CD "/", C_CD "GBENCH", C_DIRSETARGS "*", C_READDIR all M4ROM-framed, then
+                ; checks the listing. Hangs (never reboots).
+                ;   MAGENTA = /GBENCH still empty even with M4ROM's exact framing (size byte not it)
+                ;   WHITE   = /GBENCH lists -> the size byte was it (rewrite the backend to use it)
                 call  input_init
                 di
                 call  mem_detect
                 ei
                 call  bank_normal
-                xor   a                       ; stage 1: list root
-                ld    (m4_path),a
-                call  fsm4_dir_first
-                ld    bc,#0606               ; RED
-                jp    nc,m4s_show
-                ld    hl,m4_sysdir           ; m4_path = "/GBENCH"
-                ld    de,m4_path
-                ld    bc,8
-                ldir
-                call  m4_cd_path             ; stage 2: cd into /GBENCH (root + relative component)
-                call  m4_io_begin            ; ...then C_GETPATH to read the M4's real current dir
-                call  m4_lead
-                ld    a,#13                   ; C_GETPATH lo
-                out   (c),a
-                ld    a,#43
-                out   (c),a
-                call  m4_go
-                ld    a,(#E804)              ; response +3 = '/', +4 = first path char
-                ld    e,a                     ; (E survives m4_io_end)
-                call  m4_io_end
-                ld    a,e
-                cp    'G'                      ; cwd == "/G..." (i.e. /GBENCH)?
-                ld    bc,#1818               ; YELLOW = cd into GBENCH did not take
-                jp    nz,m4s_show
-                ; stage 3: cwd IS /GBENCH. C_DIRSETARGS + C_READDIR under ONE slot-6 window (no
-                ; page-out between them) - M4ROM runs from slot 6 and never pages out mid-listing;
-                ; a subdir's open-dir handle may not survive my page-out (root's is static).
-                call  m4_io_begin
-                call  m4_lead                 ; C_DIRSETARGS "*"
-                ld    a,#25
-                out   (c),a
-                ld    a,#43
-                out   (c),a
-                ld    a,'*'
-                out   (c),a
+                ld    a,M4C_CD               ; C_CD "/"
+                call  m4_cmd
+                ld    a,'/'
+                call  m4_pb
                 xor   a
-                out   (c),a
-                call  m4_go
-                call  m4_lead                 ; C_READDIR (same window)
-                ld    a,#06
-                out   (c),a
-                ld    a,#43
-                out   (c),a
+                call  m4_pb
+                call  m4_send
+                call  m4_io_end
+                ld    a,M4C_CD               ; C_CD "GBENCH"
+                call  m4_cmd
+                ld    de,m4s_gbench
+                call  m4_pstr
+                call  m4_send
+                call  m4_io_end
+                ld    a,#25                   ; C_DIRSETARGS "*"
+                call  m4_cmd
+                ld    a,'*'
+                call  m4_pb
+                xor   a
+                call  m4_pb
+                call  m4_send
+                call  m4_io_end
+                ld    a,#06                   ; C_READDIR
+                call  m4_cmd
                 ld    a,11
-                out   (c),a
-                call  m4_go
-                ld    a,(M4_RESP)            ; #E800+0 == 2 means end-of-directory (empty)
+                call  m4_pb
+                call  m4_send
+                ld    a,(M4_RESP)            ; #E800+0 == 2 means empty/end-of-directory
                 ld    e,a
                 call  m4_io_end
                 ld    a,e
                 cp    2
-                ld    bc,#0808               ; MAGENTA = subdir still empty in one window
+                ld    bc,#0808               ; MAGENTA = still empty with M4ROM framing
                 jp    z,m4s_show
-                ld    bc,#1A1A               ; WHITE = one-window listing works (paging was it)
+                ld    bc,#1A1A               ; WHITE = M4ROM framing (the size byte) fixed it
 m4s_show        call  SCR_SET_BORDER
 m4s_hang        jr    m4s_hang
+m4s_gbench      db    "GBENCH",0
                 endif
                 call  input_init             ; enable the SymbiFace mouse if present
                 di                            ; probe RAM BEFORE PAGE_DATA is filled

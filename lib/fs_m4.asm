@@ -76,6 +76,61 @@ m4_go
                 ld    bc,M4_ACK
                 out   (c),c
                 ret
+
+; --- M4ROM-faithful buffered command send (#174) -----------------------------
+; M4ROM (M4ROM.s send_command) builds the packet in a buffer with buf[0] = the SIZE
+; (count of bytes after it) and sends size+1 bytes via OUTI, THEN strobes ACK. We
+; were sending a #00 lead byte instead; for the file/root commands that worked, but
+; the real M4 may need the true size for the directory state. These helpers mirror
+; M4ROM exactly: build the command, then m4_send writes [size][cmd_lo][#43][params].
+;
+; m4_cmd: A = cmd_lo. Begin a command in m4_cmdbuf -> buf[1]=cmd_lo, buf[2]=#43.
+;         Returns HL = buf+3 (the parameter write pointer).
+m4_cmd
+                ld    (m4_cmdbuf+1),a
+                ld    a,#43
+                ld    (m4_cmdbuf+2),a
+                ld    hl,m4_cmdbuf+3
+                ret
+; m4_pb: append A to (HL), advance HL.
+m4_pb           ld    (hl),a
+                inc   hl
+                ret
+; m4_pstr: append the NUL-terminated string at DE to (HL), INCLUDING the NUL (M4ROM strcpy's
+; the path with its terminator). HL advanced past the NUL.
+m4_pstr         ld    a,(de)
+                ld    (hl),a
+                inc   hl
+                inc   de
+                or    a
+                jr    nz,m4_pstr
+                ret
+; m4_send: HL = end-of-buffer pointer. Page in M4ROM (slot 6) and send the packet exactly as
+; M4ROM does - buf[0] = size (= HL-(buf+1)), then OUTI size+1 bytes, then strobe ACK. Slot 6 is
+; left paged so the caller can read the response from #E800, then call m4_io_end.
+m4_send
+                ld    de,m4_cmdbuf+1
+                or    a
+                sbc   hl,de                    ; HL = size (bytes after buf[0])
+                ld    a,l
+                ld    (m4_cmdbuf),a            ; buf[0] = size
+                di
+                ld    bc,#7F85               ; slot 6 / upper ROM on (steady state)
+                out   (c),c
+                ld    bc,#DF00
+                ld    a,M4_ROMNUM
+                out   (c),a
+                ld    a,(m4_cmdbuf)
+                inc   a                        ; size+1 bytes total (incl. the size byte)
+                ld    hl,m4_cmdbuf
+                ld    bc,M4_DATA             ; B=#FE, C=#00
+ms_loop         inc   b                        ; keep the port high byte #FE across OUTI
+                outi
+                dec   a
+                jr    nz,ms_loop
+                ld    bc,M4_ACK
+                out   (c),c                  ; strobe
+                ret
 ; m4_emit_str: stream the NUL-terminated string at HL to DATAPORT (BC=#FE00), NUL not sent.
 m4_emit_str
                 ld    a,(hl)
@@ -460,6 +515,7 @@ m4_path         defs  M4_PATH_MAX  ; current dir as an M4 path (zero-init = root
 m4_fd           defb  0            ; the open file's descriptor
 m4_status       defb  0            ; last C_READ2 status
 m4_actual       defw  0            ; last C_READ2 byte count
+m4_cmdbuf       defs  80           ; M4ROM-style command buffer ([0]=size, then cmd+params)
 
 ; Shared directory-context state the kernel manipulates generically (k_chdir/k_back,
 ; cross-drive copy). The M4 tracks the current dir by path and ignores fs_dir_clus -
