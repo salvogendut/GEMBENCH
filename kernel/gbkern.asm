@@ -43,10 +43,12 @@ GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present.
                 if GB_ROM_REQ
 GB_ROM          equ   1
                 endif
-; #156: the window maximize/restore + close-X title-bar gadgets are resident chrome, so they
-; only build where there is headroom - the GB_ROM (offloaded) kernels, or the smaller Albireo
-; kernel. The plain no-ROM IDE kernel is full, so it keeps the simple close box.
-                if GB_ROM_REQ | STORAGE_ALBIREO
+; #156: the window maximize/restore + close-X title-bar gadgets AND the banked picture buffer
+; (#164: lets the Viewer open .PICs larger than its 8K in-page buffer) are resident chrome, so
+; they only build where there is headroom - the GB_ROM (offloaded) kernels, the smaller Albireo
+; kernel, or the M4 file-level kernel (#174, ~786 B free). The plain no-ROM IDE kernel is full,
+; so it keeps the simple close box + the in-page picture buffer.
+                if GB_ROM_REQ | STORAGE_ALBIREO | STORAGE_M4
 WM_GADGETS      equ   1
                 endif
 WM_MAXREQ       equ   #1309        ; #156: 1 = the maximize gadget was clicked; gb_doc_frame toggles
