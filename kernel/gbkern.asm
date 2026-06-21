@@ -366,35 +366,47 @@ sts_dir         db    "/GEOBENCH",0
 sts_rel         db    "GBCFG.BIN",0
                 endif
                 if SPIKE_M4
-                ; -DSPIKE_M4=1 (+STORAGE_M4): de-risk the M4 file-API DIRECTORY NAV on real HW
-                ; (the symptom: enter /GBENCH -> empty, then root -> empty too). Lists root, then
-                ; cd's into /GBENCH and lists it, then goes back to root and lists again - one
-                ; distinct border per outcome, then HANGS (never reboots) so the colour pins it.
+                ; -DSPIKE_M4=1 (+STORAGE_M4): pin WHY /GBENCH lists empty on real HW. Lists root,
+                ; cd's into /GBENCH, then asks the M4 (C_GETPATH) what its current dir actually is,
+                ; then lists /GBENCH. Distinct border per outcome, then HANGS (never reboots).
                 ;   RED     = root listing failed (fsm4_present)
-                ;   MAGENTA = /GBENCH came back empty (the cd-into-subdir is still corrupting state)
-                ;   GREEN   = root empty AFTER the subdir nav (corruption persists across cd back)
-                ;   WHITE   = root + /GBENCH + back-to-root all list -> dir nav is solid on real HW
+                ;   YELLOW  = after cd into GBENCH, C_GETPATH does NOT report "/G..." -> the C_CD
+                ;             into the subdir did not take (the cd is the bug)
+                ;   MAGENTA = cwd IS /GBENCH but C_READDIR returns nothing (the readdir is the bug)
+                ;   WHITE   = cwd is /GBENCH and it lists -> dir nav works on real HW
                 call  input_init
                 di
                 call  mem_detect
                 ei
                 call  bank_normal
-                call  fsm4_present            ; stage 1: list root
+                xor   a                       ; stage 1: list root
+                ld    (m4_path),a
+                call  fsm4_dir_first
                 ld    bc,#0606               ; RED
                 jp    nc,m4s_show
-                ld    hl,m4_sysdir           ; stage 2: m4_path = "/GBENCH", list it (cd-rebuild)
+                ld    hl,m4_sysdir           ; m4_path = "/GBENCH"
                 ld    de,m4_path
                 ld    bc,8
                 ldir
-                call  fsm4_dir_first
-                ld    bc,#0808               ; MAGENTA = /GBENCH empty
+                call  m4_cd_path             ; stage 2: cd into /GBENCH (root + relative component)
+                call  m4_io_begin            ; ...then C_GETPATH to read the M4's real current dir
+                call  m4_lead
+                ld    a,#13                   ; C_GETPATH lo
+                out   (c),a
+                ld    a,#43
+                out   (c),a
+                call  m4_go
+                ld    a,(#E804)              ; response +3 = '/', +4 = first path char
+                ld    e,a                     ; (E survives m4_io_end)
+                call  m4_io_end
+                ld    a,e
+                cp    'G'                      ; cwd == "/G..." (i.e. /GBENCH)?
+                ld    bc,#1818               ; YELLOW = cd into GBENCH did not take
+                jp    nz,m4s_show
+                call  fsm4_dir_first          ; stage 3: list /GBENCH
+                ld    bc,#0808               ; MAGENTA = cwd ok but readdir empty
                 jp    nc,m4s_show
-                xor   a                       ; stage 3: m4_path = "" (root), list again
-                ld    (m4_path),a
-                call  fsm4_dir_first
-                ld    bc,#1212               ; GREEN = root empty after subdir nav
-                jp    nc,m4s_show
-                ld    bc,#1A1A               ; WHITE = all dir nav works on real HW
+                ld    bc,#1A1A               ; WHITE = dir nav works on real HW
 m4s_show        call  SCR_SET_BORDER
 m4s_hang        jr    m4s_hang
                 endif
