@@ -1449,6 +1449,9 @@ k_chdir
                 if STORAGE_ALBIREO
                 jp    fsalb_chdir
                 else
+                if STORAGE_M4                    ; #174: M4 is path-based like Albireo
+                jp    fsm4_chdir
+                else
                 ld    a,(fs_dir_sp)
                 cp    4                          ; DIRSTACK depth
                 ret   nc
@@ -1469,13 +1472,17 @@ k_chdir
                 ld    bc,4
                 ldir
                 ret
-                endif
+                endif                            ; STORAGE_M4
+                endif                            ; STORAGE_ALBIREO
 
 ; k_back (GB_BACK): go to the parent directory (no-op at the top). IDE pops the dir
-; cluster stack; Albireo (#104) truncates its path string at the last '/'.
+; cluster stack; Albireo/M4 (#104/#174) truncate their path string at the last '/'.
 k_back
                 if STORAGE_ALBIREO
                 jp    fsalb_back
+                else
+                if STORAGE_M4
+                jp    fsm4_back
                 else
                 ld    a,(fs_dir_sp)
                 or    a
@@ -1492,7 +1499,8 @@ k_back
                 ld    bc,4
                 ldir
                 ret
-                endif
+                endif                            ; STORAGE_M4
+                endif                            ; STORAGE_ALBIREO
 
 ; k_entname (GB_ENTNAME): HL = the last-enumerated entry's raw 11-byte 8.3 name
 ; (space-padded, no dot) so an app can show the extension (gb_dir* return name-only).
