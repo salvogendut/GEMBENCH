@@ -403,10 +403,24 @@ sts_rel         db    "GBCFG.BIN",0
                 cp    'G'                      ; cwd == "/G..." (i.e. /GBENCH)?
                 ld    bc,#1818               ; YELLOW = cd into GBENCH did not take
                 jp    nz,m4s_show
-                call  fsm4_dir_first          ; stage 3: list /GBENCH
-                ld    bc,#0808               ; MAGENTA = cwd ok but readdir empty
+                ; stage 3: cwd IS /GBENCH. List it DIRECTLY - C_DIRSETARGS + C_READDIR, with NO
+                ; re-cd (fsm4_dir_first re-runs m4_cd_path every time; M4ROM cd's once then lists).
+                call  m4_io_begin            ; C_DIRSETARGS "*" on the current dir
+                call  m4_lead
+                ld    a,#25
+                out   (c),a
+                ld    a,#43
+                out   (c),a
+                ld    a,'*'
+                out   (c),a
+                xor   a
+                out   (c),a
+                call  m4_go
+                call  m4_io_end
+                call  fsm4_dir_next           ; C_READDIR + decode (lists the current cwd)
+                ld    bc,#0808               ; MAGENTA = subdir readdir empty even without re-cd
                 jp    nc,m4s_show
-                ld    bc,#1A1A               ; WHITE = dir nav works on real HW
+                ld    bc,#1A1A               ; WHITE = listing the cwd directly works (re-cd was it)
 m4s_show        call  SCR_SET_BORDER
 m4s_hang        jr    m4s_hang
                 endif
