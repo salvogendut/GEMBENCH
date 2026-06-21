@@ -221,35 +221,26 @@ m4_cd_root
 fsm4_present
                 jp    fsm4_dir_first
 
-; fsm4_dir_first: cd to m4_path, set the wildcard filter, return the first entry.
+; fsm4_dir_first: cd to m4_path, open the dir iterator, return the first entry. Sent the
+; M4ROM way (m4_send + size byte) with an EMPTY filter - M4ROM's |dir/cat sends just a NUL,
+; and sending "*" instead breaks SUBDIR enumeration on real M4 hardware (the emulator
+; tolerated it; root happened to work either way). Confirmed on real HW (#174).
 fsm4_dir_first
                 call  m4_cd_path
-                call  m4_io_begin            ; C_DIRSETARGS "*" (reset the iterator)
-                call  m4_lead
-                ld    a,M4C_DIRARGS
-                out   (c),a
-                ld    a,#43
-                out   (c),a
-                ld    a,'*'
-                out   (c),a
+                ld    a,M4C_DIRARGS           ; C_DIRSETARGS, EMPTY filter (just the NUL byte)
+                call  m4_cmd
                 xor   a
-                out   (c),a
-                call  m4_go
+                call  m4_pb
+                call  m4_send
                 call  m4_io_end
                 jr    fsm4_dir_next
 
 ; fsm4_dir_next: C_READDIR one entry; decode into fs_ent_*. Skips nothing extra (the
 ; M4 already drops '.'/'..'). CF set = entry ready, NC = end of directory.
 fsm4_dir_next
-                call  m4_io_begin
-                call  m4_lead
-                ld    a,M4C_READDIR
-                out   (c),a
-                ld    a,#43
-                out   (c),a
-                ld    a,11                    ; max display name length (8.3)
-                out   (c),a
-                call  m4_go
+                ld    a,M4C_READDIR           ; C_READDIR with NO args (M4ROM-exact; a maxlen
+                call  m4_cmd                  ; byte breaks subdir enumeration on real HW, #174)
+                call  m4_send
                 ld    a,(M4_RESP)            ; length byte: == 2 means end-of-directory
                 cp    2
                 jr    z,mdn_end
