@@ -249,11 +249,15 @@ mlf_slash       ld    a,'/'
                 ld    (fs_ent_size),hl
                 ld    (fs_ent_size+2),hl
 mlf_loop
-                call  m4_read_chunk          ; C_READ2 -> copy actual bytes, advance; A = status
+                call  m4_read_chunk          ; C_READ2 -> copy actual bytes, advance
                 jr    nc,mlf_toobig          ; NC = chunk would overflow fs_load_max
-                cp    #14                     ; status #14 (=20, M4_ERR_EOF) = last chunk
-                jr    z,mlf_done
-                jr    mlf_loop
+                ; EOF = a PARTIAL chunk (actual < #0800). Detect it by the SIZE field, NOT the
+                ; status byte: the emulator reports EOF status #14 but M4ROM/real HW use #20
+                ; (cp #20 in M4ROM.s) - reading past EOF on real HW returns garbage and reboots.
+                ld    a,(m4_actual+1)        ; actual-size high byte (#0800 -> #08)
+                cp    #08
+                jr    c,mlf_done             ; actual < #0800 -> last chunk
+                jr    mlf_loop               ; actual == #0800 -> more data follows
 mlf_done
                 call  m4_close_fd
                 scf

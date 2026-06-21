@@ -366,35 +366,25 @@ sts_dir         db    "/GEOBENCH",0
 sts_rel         db    "GBCFG.BIN",0
                 endif
                 if SPIKE_M4
-                ; -DSPIKE_M4=1 (+STORAGE_M4): de-risk the M4 raw-sector transport before trusting
-                ; the FAT core over it. Reads LBA 0 via C_SDREAD, then loads /GEOBENCH/GBCFG.BIN.
-                ;   RED     = M4 returned a read error (transport / SD-level failure)
-                ;   MAGENTA = read returned but no #55AA boot sig (bus-bypass read garbled)
-                ;   GREEN   = LBA0 ok but GBCFG.BIN load failed (mount/dir/read over M4)
-                ;   WHITE   = GBCFG.BIN loaded -> the whole FAT read path works over the M4
+                ; -DSPIKE_M4=1 (+STORAGE_M4): de-risk the M4 FILE-API path on real HW before the
+                ; real boot CALLs into the loaded data. Probes present + loads /GBENCH/GBCFG.BIN,
+                ; one distinct border per outcome, then HANGS (never reboots). A reboot here (no
+                ; stable border) means a crash DURING the file ops; a solid colour pins the stage.
+                ;   CYAN  = reached the spike (kernel booted this far) - shown before any file op
+                ;   RED   = fsm4_present failed (M4 file API / SD not responding)
+                ;   GREEN = present ok but GBCFG.BIN load failed (open/read over the file API)
+                ;   WHITE = GBCFG.BIN loaded -> the whole file-level read path works on real HW
                 call  input_init             ; faithful context: the same setup the real boot runs
                 di                            ; between fs_init and its first load
                 call  mem_detect
                 ei
                 call  bank_normal
-                xor   a                       ; --- stage A: raw read LBA 0 (the MBR) ---
-                ld    (lba_tmp),a
-                ld    (lba_tmp+1),a
-                ld    (lba_tmp+2),a
-                ld    (lba_tmp+3),a
-                call  fsm4_read_sector        ; A = status, fs_secbuf = LBA 0
-                or    a
-                ld    bc,#0606               ; RED = M4 read error
-                jr    nz,m4s_show
-                ld    a,(fs_secbuf+510)       ; #55 #AA boot signature
-                cp    #55
-                ld    bc,#0808               ; MAGENTA = bus-bypass read garbled (no #55AA)
-                jr    nz,m4s_show
-                ld    a,(fs_secbuf+511)
-                cp    #AA
-                ld    bc,#0808
-                jr    nz,m4s_show
-                ld    hl,m4s_cfg             ; --- stage B: load /GEOBENCH/GBCFG.BIN over the FAT core ---
+                ld    bc,#1818               ; CYAN-ish (firmware 24): we reached the spike
+                call  SCR_SET_BORDER
+                call  fsm4_present            ; stage 1: does the M4 file API respond?
+                ld    bc,#0606               ; RED = no
+                jr    nc,m4s_show
+                ld    hl,m4s_cfg             ; stage 2: load /GBENCH/GBCFG.BIN over the file API
                 ld    de,fs_req_name
                 ld    bc,11
                 ldir
@@ -403,9 +393,9 @@ sts_rel         db    "GBCFG.BIN",0
                 ld    hl,#4000               ; plain low buffer (no bank paging)
                 ld    (fs_load_dst),hl
                 call  fs_load_sys
-                ld    bc,#1212               ; GREEN = LBA0 ok but GBCFG load failed
+                ld    bc,#1212               ; GREEN = present ok but GBCFG load failed
                 jr    nc,m4s_show
-                ld    bc,#1A1A               ; WHITE = the whole FAT read path works over the M4
+                ld    bc,#1A1A               ; WHITE = full file-level read path works on real HW
 m4s_show        call  SCR_SET_BORDER
 m4s_hang        jr    m4s_hang
 m4s_cfg         db    "GBCFG   BIN"
