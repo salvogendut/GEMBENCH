@@ -377,44 +377,30 @@ sts_rel         db    "GBCFG.BIN",0
                 call  mem_detect
                 ei
                 call  bank_normal
-                ld    a,M4C_CD               ; C_CD "/"
+                ld    hl,m4_sysdir           ; cwd -> /GBENCH (m4_cd_path; cd is confirmed working)
+                ld    de,m4_path
+                ld    bc,8
+                ldir
+                call  m4_cd_path
+                ld    a,#25                   ; C_DIRSETARGS - EMPTY filter, M4ROM-exact [25][43][00]
                 call  m4_cmd
-                ld    a,'/'
-                call  m4_pb
                 xor   a
-                call  m4_pb
+                call  m4_pb                   ; the single NUL filter byte (not "*")
                 call  m4_send
                 call  m4_io_end
-                ld    a,M4C_CD               ; C_CD "GBENCH"
+                ld    a,#06                   ; C_READDIR - NO args, M4ROM-exact [06][43] (no maxlen)
                 call  m4_cmd
-                ld    de,m4s_gbench
-                call  m4_pstr
-                call  m4_send
-                call  m4_io_end
-                ld    a,#25                   ; C_DIRSETARGS "*"
-                call  m4_cmd
-                ld    a,'*'
-                call  m4_pb
-                xor   a
-                call  m4_pb
-                call  m4_send
-                call  m4_io_end
-                ld    a,#06                   ; C_READDIR
-                call  m4_cmd
-                ld    a,11
-                call  m4_pb
                 call  m4_send
                 ld    a,(M4_RESP)            ; #E800+0 == 2 means empty/end-of-directory
                 ld    e,a
                 call  m4_io_end
                 ld    a,e
                 cp    2
-                ld    bc,#0808               ; MAGENTA = still empty with M4ROM framing
+                ld    bc,#0808               ; MAGENTA = still empty with M4ROM's exact list commands
                 jp    z,m4s_show
-                ld    bc,#1A1A               ; WHITE = M4ROM framing (the size byte) fixed it
+                ld    bc,#1A1A               ; WHITE = empty-filter + no-arg C_READDIR was it
 m4s_show        call  SCR_SET_BORDER
 m4s_hang        jr    m4s_hang
-m4s_gbench      db    "GBENCH",0
                 endif
                 call  input_init             ; enable the SymbiFace mouse if present
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
