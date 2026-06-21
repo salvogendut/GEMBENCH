@@ -401,7 +401,7 @@ fs_sysdir_leave
                 ld    bc,ALB_PATH_MAX
                 ldir
                 ret
-alb_sysdir      db    "/GEOBENCH",0
+alb_sysdir      db    "/GBENCH",0
 alb_sysdir_end
 alb_path_save   defs  ALB_PATH_MAX
                 endif                          ; IN_GBROM (sysdir hooks resident-only)

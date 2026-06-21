@@ -357,7 +357,8 @@ fs_sysdir_leave
                 ld    bc,M4_PATH_MAX
                 ldir
                 ret
-m4_sysdir       db    "/GEOBENCH",0
+m4_sysdir       db    "/GBENCH",0   ; #174: <=7 chars so the M4's '>'-prefixed dir listing
+                                     ; round-trips it (an 8-char dir name loses its last char)
 m4_sysdir_end
 m4_path_save    defs  M4_PATH_MAX
 

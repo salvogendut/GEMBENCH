@@ -10,9 +10,9 @@
 #   GBM4.BIN     - M4-board SD kernel (#174, raw-sector C_SDREAD backend).
 #   GBALB.BIN    - Albireo (CH376) kernel. Both: real 128-byte AMSDOS header, exec 0x8000;
 #                  both fall back to floppy A when no card is present.
-#   GEOBENCH.CFG - config (root; read before the kernel enters /GEOBENCH)
-#   GEOBENCH/    - everything the kernel loads at boot (apps/modules/fonts/icons/cursor)
-# Boot: RUN"GB -> (detect) -> RUN"GBM4 | RUN"GBALB -> the kernel reads /GEOBENCH. IDE is
+#   GEOBENCH.CFG - config (root; read before the kernel enters /GBENCH)
+#   GBENCH/      - everything the kernel loads at boot (apps/modules/fonts/icons/cursor)
+# Boot: RUN"GB -> (detect) -> RUN"GBM4 | RUN"GBALB -> the kernel reads /GBENCH. IDE is
 # retired (frozen on branch legacy-ide; still buildable via STORAGE=ide but not shipped).
 # Needs build/GBM4.RAW + build/GBALB.RAW.
 #   * <app>.APP / GBCFG/GBFAT/FLOPPYSV.BIN - HEADERLESS raw images (kernel loads them)
@@ -22,7 +22,8 @@ cd "$(dirname "$0")/.."
 RASM="${RASM:-rasm}"
 
 OUT="${1:?usage: tools/stage_dist.sh <outdir>}"
-SYS="$OUT/GEOBENCH"                  # everything the kernel loads lives here
+SYS="$OUT/GBENCH"                    # the system folder (#174: <=7 chars so the M4's
+                                     # '>'-prefixed dir listing round-trips it; was /GEOBENCH)
 mkdir -p "$SYS"
 
 # --- root: the detecting loader, BOTH kernels, the config ---------------------
@@ -51,7 +52,7 @@ python3 tools/amsdos_header.py build/GBALB.RAW "$OUT/GBALB.BIN" GBALB BIN 0x8000
 printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\n' \
     > "$OUT/GEOBENCH.CFG"
 
-# --- /GEOBENCH: apps, modules, assets -----------------------------------------
+# --- /GBENCH: apps, modules, assets -------------------------------------------
 for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS; do
     cp "build/$a.RAW" "$SYS/$a.APP"
 done

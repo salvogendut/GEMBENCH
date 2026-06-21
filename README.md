@@ -162,7 +162,7 @@ can grab them ready-built):
 - **`QA/CARD/`** — the loose card distribution. Copy its contents onto an M4 **or** Albireo
   card. The card root holds the detecting loader `GB.BAS`, **both** kernels `GBM4.BIN` +
   `GBALB.BIN`, and `GEOBENCH.CFG` — everything else the kernel loads at boot lives in a
-  `GEOBENCH/` subfolder.
+  `GBENCH/` subfolder (≤7 chars so the M4's directory listing round-trips the name).
 - **`QA/GEOBENCH.IMG`** — a ready-to-flash **unified card image**: a partitioned FAT16 disk
   that boots on both the M4 (which mounts the FAT) and the Albireo CH376 (auto-detects it).
   Built by `tools/build_card_img.sh`; a 32 MB local artifact, rebuilt every build and not
