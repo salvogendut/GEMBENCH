@@ -24,11 +24,18 @@
                 ifndef STORAGE_ALBIREO
 STORAGE_ALBIREO equ   0
                 endif
+                ifndef STORAGE_M4             ; #174: -DSTORAGE_M4=1 = the M4-board SD backend
+STORAGE_M4      equ   0                       ; (raw-sector route, reuses the FAT core). Mutually
+                endif                          ; exclusive with the IDE/Albireo backends.
+                assert STORAGE_ALBIREO+STORAGE_M4<=1,"pick ONE drive-0 backend (albireo XOR m4 XOR ide)"
                 ifndef SPIKE                  ; #130: -DSPIKE=1 builds a minimal storage spike -
 SPIKE           equ   0                       ; load DESKTOP.APP right after fs_init, report, hang
                 endif
                 ifndef SPIKE_STAGED           ; -DSPIKE_STAGED=1 (Albireo): stage the boot loads
 SPIKE_STAGED    equ   0                       ; (mount/GBCFG/DESKTOP), distinct border per stage, hang
+                endif
+                ifndef SPIKE_M4               ; #174: -DSPIKE_M4=1 (M4): stage present/55AA/GBCFG-load,
+SPIKE_M4        equ   0                       ; distinct border per stage, hang (de-risk the transport)
                 endif
                 ifndef GB_ROM_REQ             ; #152: -DGB_ROM_REQ=1 routes the offloadable drivers
 GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present. Both the IDE and the
@@ -357,6 +364,43 @@ sts_cfg11       db    "GBCFG   BIN"          ; 11-byte 8.3 for alb_setname_req
 sts_abs         db    "/GEOBENCH/GBCFG.BIN",0
 sts_dir         db    "/GEOBENCH",0
 sts_rel         db    "GBCFG.BIN",0
+                endif
+                if SPIKE_M4
+                ; -DSPIKE_M4=1 (+STORAGE_M4): does sending commands the M4ROM way - with the real
+                ; SIZE byte first (m4_cmd/m4_send) instead of a #00 lead byte - make a SUBDIR list?
+                ; Sends C_CD "/", C_CD "GBENCH", C_DIRSETARGS "*", C_READDIR all M4ROM-framed, then
+                ; checks the listing. Hangs (never reboots).
+                ;   MAGENTA = /GBENCH still empty even with M4ROM's exact framing (size byte not it)
+                ;   WHITE   = /GBENCH lists -> the size byte was it (rewrite the backend to use it)
+                call  input_init
+                di
+                call  mem_detect
+                ei
+                call  bank_normal
+                ld    hl,m4_sysdir           ; cwd -> /GBENCH (m4_cd_path; cd is confirmed working)
+                ld    de,m4_path
+                ld    bc,8
+                ldir
+                call  m4_cd_path
+                ld    a,#25                   ; C_DIRSETARGS - EMPTY filter, M4ROM-exact [25][43][00]
+                call  m4_cmd
+                xor   a
+                call  m4_pb                   ; the single NUL filter byte (not "*")
+                call  m4_send
+                call  m4_io_end
+                ld    a,#06                   ; C_READDIR - NO args, M4ROM-exact [06][43] (no maxlen)
+                call  m4_cmd
+                call  m4_send
+                ld    a,(M4_RESP)            ; #E800+0 == 2 means empty/end-of-directory
+                ld    e,a
+                call  m4_io_end
+                ld    a,e
+                cp    2
+                ld    bc,#0808               ; MAGENTA = still empty with M4ROM's exact list commands
+                jp    z,m4s_show
+                ld    bc,#1A1A               ; WHITE = empty-filter + no-arg C_READDIR was it
+m4s_show        call  SCR_SET_BORDER
+m4s_hang        jr    m4s_hang
                 endif
                 call  input_init             ; enable the SymbiFace mouse if present
                 di                            ; probe RAM BEFORE PAGE_DATA is filled
@@ -1397,6 +1441,9 @@ k_chdir
                 if STORAGE_ALBIREO
                 jp    fsalb_chdir
                 else
+                if STORAGE_M4                    ; #174: M4 is path-based like Albireo
+                jp    fsm4_chdir
+                else
                 ld    a,(fs_dir_sp)
                 cp    4                          ; DIRSTACK depth
                 ret   nc
@@ -1417,13 +1464,17 @@ k_chdir
                 ld    bc,4
                 ldir
                 ret
-                endif
+                endif                            ; STORAGE_M4
+                endif                            ; STORAGE_ALBIREO
 
 ; k_back (GB_BACK): go to the parent directory (no-op at the top). IDE pops the dir
-; cluster stack; Albireo (#104) truncates its path string at the last '/'.
+; cluster stack; Albireo/M4 (#104/#174) truncate their path string at the last '/'.
 k_back
                 if STORAGE_ALBIREO
                 jp    fsalb_back
+                else
+                if STORAGE_M4
+                jp    fsm4_back
                 else
                 ld    a,(fs_dir_sp)
                 or    a
@@ -1440,7 +1491,8 @@ k_back
                 ld    bc,4
                 ldir
                 ret
-                endif
+                endif                            ; STORAGE_M4
+                endif                            ; STORAGE_ALBIREO
 
 ; k_entname (GB_ENTNAME): HL = the last-enumerated entry's raw 11-byte 8.3 name
 ; (space-padded, no dot) so an app can show the extension (gb_dir* return name-only).
@@ -1608,9 +1660,17 @@ k_drive_poll
                 set   3,c                          ; bit3 = Disk C is an Albireo SD/USB card
                 jr    kdp_a                          ; (so the desktop can pick the SD icon, #104)
                 else
+                if STORAGE_M4                      ; #174: M4 -> Disk C (bit2) + SD card icon (bit3)
+                call  fsm4_present
+                jr    nc,kdp_a
+                set   2,c
+                set   3,c
+                jr    kdp_a
+                else
                 call  fs_ide_present               ; IDE -> Disk C (bit2)
                 jr    nc,kdp_a
                 set   2,c
+                endif
                 endif
 kdp_a
                 push  bc
@@ -3107,7 +3167,11 @@ md_count        db    0
                 if STORAGE_ALBIREO
                 include "../lib/fs_albireo.asm"
                 else
+                if STORAGE_M4                  ; #174: M4 raw-sector backend (FAT core + M4 driver)
+                include "../lib/fs_m4.asm"
+                else
                 include "../lib/fs_ide_fat.asm"
+                endif
                 endif
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
@@ -3121,7 +3185,7 @@ kern_end                                        ; GBKERN.BIN = #8000..kern_end o
 ; kernel is caught here, not in the field. (Reclaim, or move scratch out, to fix.)
 HIMEM           equ   #A288        ; UniDOS HIMEM (stack top); see docs/AMSDOS notes
 STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the stack (#95)
-                if SPIKE|SPIKE_STAGED        ; #130: the throwaway spike hangs early (tiny stack)
+                if SPIKE|SPIKE_STAGED|SPIKE_M4 ; #130: the throwaway spike hangs early (tiny stack)
                 else
                 assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big - reclaim resident bytes (see #104)"
                 endif

@@ -133,7 +133,8 @@ fsr_loop        jr    nc,fsr_done
 fsr_next        call  fside_dir_next
                 jr    fsr_loop
 fsr_done        ret
-sys_dirname     db    "GEOBENCH   "
+sys_dirname     db    "GBENCH     "  ; #174: 11-byte 8.3 ("GBENCH"+5 spaces); the system
+                                      ; folder is /GBENCH now (<=7 chars for the M4 listing)
 
 ; fs_sysdir_enter / fs_sysdir_leave (#134): briefly make the FAT dir the /GEOBENCH
 ; system dir for one system load, then restore the File Manager's browse dir.
