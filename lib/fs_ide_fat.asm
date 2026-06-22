@@ -1,4 +1,8 @@
 ; ---------------------------------------------------------------------------
+; *** ARCHIVED (2026-06-22) *** - frozen, not built by tools/build_kernel.sh.
+; The shipped product is Albireo + floppy. The IDE backend is preserved for
+; reference/recovery (build: STORAGE=ide tools/build_kernel.sh). See docs/ARCHIVED.md.
+; ---------------------------------------------------------------------------
 ; lib/fs_ide_fat.asm - storage backend: FAT32 over the SYMBiFACE II / Cyboard
 ; IDE interface. Reads the volume straight off the IDE controller. Selected by
 ; lib/fs.asm when an IDE is present.
