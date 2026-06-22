@@ -1,8 +1,7 @@
 # Custom icon sets
 
 Drop tracked `.IST` icon-set files here and they are **automatically copied onto
-every card** (the unified `QA/GEOBENCH.IMG` via `stage_dist.sh`, and the IDE
-image via `build_ide_img.sh`). Unlike `build/DEFAULT.IST` — a gitignored build
+the card** (`QA/GEOBENCH.IMG` via `stage_dist.sh`). Unlike `build/DEFAULT.IST` — a gitignored build
 artifact that `packicons.py` regenerates from `lib/icon_*.asm` on every build —
 files here are version-controlled and the build never overwrites them.
 

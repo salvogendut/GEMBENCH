@@ -134,14 +134,13 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
   jump table). The desktop launches the file manager, which opens each file in its
   app (Notepad, ICONED, Paint, Viewer, ...); an app returns to its caller by `return`.
 - **Storage backends.** A dispatcher (`lib/fs.asm`) selects the card backend at
-  build time, and the shipped card carries **two** kernels: a CH376 **Albireo**
-  (`GBALB`) and an **M4 board** (`GBM4`, raw-sector `C_SDREAD`). The `GB.BAS` loader
-  **detects the hardware** (asks the firmware whether M4ROM's RSX is installed, via
-  `KL_FIND_COMMAND`) and `RUN"`s the right one — so **one card boots on both an M4 and
-  an Albireo machine**. Either kernel falls back to AMSDOS-over-**floppy** when no card
-  is present. The FAT16/FAT32 **IDE** backend (SYMBiFACE/Cyboard) is retired from the
-  shipped card but still in the tree, buildable via `STORAGE=ide` for recovery/tests,
-  with its full kernel history frozen on branch `legacy-ide`. These screen-independent
+  build time. The shipped card runs the CH376 **Albireo** kernel (`GBALB`), which also
+  carries the AMSDOS-over-**floppy** fallback (it boots floppy drive A when no card is
+  present). The **M4 board** (`GBM4`) and FAT16/FAT32 **IDE** (SYMBiFACE/Cyboard)
+  backends are **archived** — frozen in the tree but not built or shipped (see
+  [`docs/ARCHIVED.md`](docs/ARCHIVED.md); M4 is parked on an unresolved >8 KB-picture
+  blank on real hardware, IDE was superseded by Albireo for real CPC cards). Rebuild
+  either for recovery with `-DSTORAGE_M4=1` / `STORAGE=ide`. These screen-independent
   drivers can be **offloaded to a loadable upper ROM** (`GEOBENCH.ROM`) to free
   resident `#8000` RAM — see *Optional: the GEOBENCH ROM* below.
 
@@ -159,20 +158,18 @@ bash tools/build_kernel.sh
 This stages these outputs (the loose files and the floppy are committed under `QA/`, so you
 can grab them ready-built):
 
-- **`QA/CARD/`** — the loose card distribution. Copy its contents onto an M4 **or** Albireo
-  card. The card root holds the detecting loader `GB.BAS`, **both** kernels `GBM4.BIN` +
-  `GBALB.BIN`, and `GEOBENCH.CFG` — everything else the kernel loads at boot lives in a
-  `GBENCH/` subfolder (≤7 chars so the M4's directory listing round-trips the name).
-- **`QA/GEOBENCH.IMG`** — a ready-to-flash **unified card image**: a partitioned FAT16 disk
-  that boots on both the M4 (which mounts the FAT) and the Albireo CH376 (auto-detects it).
-  Built by `tools/build_card_img.sh`; a 32 MB local artifact, rebuilt every build and not
-  committed. (Plain FAT16, so an IDE build (`STORAGE=ide`) can read the same card too.)
+- **`QA/CARD/`** — the loose card distribution. Copy its contents onto an Albireo
+  card. The card root holds the loader `GB.BAS`, the kernel `GBALB.BIN`, and
+  `GEOBENCH.CFG` — everything else the kernel loads at boot lives in a `GBENCH/`
+  subfolder.
+- **`QA/GEOBENCH.IMG`** — a ready-to-flash **Albireo card image**: a partitioned FAT16
+  disk the CH376 auto-detects. Built by `tools/build_card_img.sh`; a 32 MB local
+  artifact, rebuilt every build and not committed.
 - **`QA/GEOBENCH.DSK`** — a single bootable floppy image.
 
-Boot with **`RUN"GB`** on any machine: the loader `GB.BAS` POKEs a tiny detector, asks the
-firmware (`KL_FIND_COMMAND`) whether the M4 ROM is present, and `RUN"`s `GBM4` on an M4 board
-or `GBALB` otherwise — each then drives its card or falls back to the AMSDOS floppy. On a
-floppy you can also `RUN"GBKERN` directly.
+Boot with **`RUN"GB`**: the loader `GB.BAS` is a one-line `RUN"GBALB` (on a floppy it
+runs `RUN"GBKERN`), which then drives the Albireo card or falls back to the AMSDOS
+floppy. On a floppy you can also `RUN"GBKERN` directly.
 
 ```bash
 1984 --memory=128 --disk-a=QA/GEOBENCH.DSK --autostart=GB     # floppy in an emulator
@@ -180,8 +177,8 @@ floppy you can also `RUN"GBKERN` directly.
 
 ### Optional: the GEOBENCH ROM
 
-`tools/build_rom.sh` builds a 16K upper ROM per card — `rom/GEOBENCH.ROM` (IDE) and
-`rom/GBALB.ROM` (Albireo) — that does two things:
+`tools/build_rom.sh` builds a 16K upper ROM — `rom/GBALB.ROM` (Albireo) is the shipped
+one (`rom/GEOBENCH.ROM` is the archived IDE variant) — that does two things:
 
 - **Offloads the low-level drivers.** The screen-independent storage drivers (FAT
   read/write, the AMSDOS floppy reader, the IDE backend and the CH376/Albireo backend) run
@@ -233,9 +230,10 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
   plugs into the joystick port and reports as a joystick (movement + buttons), so
   the same pointer path drives it (either fire button clicks). A **SYMBiFACE II /
   Cyboard PS/2 mouse** can be added for machines that have one.
-- Albireo (CH376) card or AMSDOS floppy storage (IDE is retired from the shipped card,
-  still buildable via `STORAGE=ide`). Networking via Net4CPC (W5100S) is a possible
-  future extension — see the related `n4c-nettools` project.
+- Albireo (CH376) card or AMSDOS floppy storage (the M4 and IDE backends are archived
+  — frozen in-tree, not shipped; see [`docs/ARCHIVED.md`](docs/ARCHIVED.md)). Networking
+  via Net4CPC (W5100S) is a possible future extension — see the related `n4c-nettools`
+  project.
 
 ## Goals
 
@@ -339,12 +337,12 @@ Done:
    read/write, AMSDOS floppy, IDE, CH376/Albireo) run from a 16K upper ROM
    (`GEOBENCH.ROM`/`GBALB.ROM`), freeing resident RAM; the ROM is also a CPC background ROM
    that boots a `GEOBENCH <commit>` banner.
-10. ✅ **Unified M4 + Albireo card (#174)** — one card carries both the CH376 **Albireo**
-   (`GBALB.BIN`) and the **M4 board** (`GBM4.BIN`, raw-sector `C_SDREAD`) kernels; the
-   `GB.BAS` loader detects the hardware (`KL_FIND_COMMAND` for M4ROM's RSX) and runs the
-   right one, so one image boots on both machines. Either falls back to AMSDOS floppy. The
-   IDE backend is retired from the card (still buildable via `STORAGE=ide`; full history
-   frozen on branch `legacy-ide`).
+10. ✅ **M4 board SD support (#174)** — a file-level CH376-style backend (`GBM4.BIN`) booted
+   GEOBENCH on the M4 board, with a `GB.BAS` loader that detected the hardware
+   (`KL_FIND_COMMAND` for M4ROM's RSX) to pick the kernel. **Now archived** (frozen in-tree,
+   not shipped): a >8 KB-picture blank on real M4 hardware — an M4ROM interrupt/timing
+   divergence the emulator can't reproduce — is unresolved, so the shipped card is Albireo +
+   floppy only. See [`docs/ARCHIVED.md`](docs/ARCHIVED.md).
 
 Next:
 
