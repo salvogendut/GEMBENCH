@@ -74,13 +74,11 @@ tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel modu
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
 tools/build_uimod.sh build/GBUI.RAW                # paged dialog module (#142) -> build/GBUI.RAW
-# One UNIFIED card distribution (#136): the apps/modules/assets above are shared and
-# only the kernel differs, so we assemble each card's kernel, capture its raw image,
-# and stage ONE QA/CARD/ holding the BASIC loader GB.BAS + both per-card kernels
-# (GBIDE.BIN, GBALB.BIN). RUN"GB probes the bus and RUN"s the right one -> one image
-# works on any card. Plus a single bootable floppy image QA/GEOBENCH.DSK (any kernel
-# falls back to floppy when no card is present). Add a card with another build_variant
-# + a probe line in stage_dist's GB.BAS when its backend lands.
+# Card distribution: the apps/modules/assets above are shared; we assemble the Albireo
+# kernel, capture its raw image, and stage QA/CARD/ holding the BASIC loader GB.BAS +
+# the kernel (GBALB.BIN). Plus a bootable floppy image QA/GEOBENCH.DSK (the same kernel
+# falls back to floppy when no card is present). The M4 + IDE backends are ARCHIVED
+# (frozen in-tree, not built or shipped) - see docs/ARCHIVED.md.
 build_variant() {                                # $1 = kernel name, $2 = rasm -D flag
     rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
     "$RASM" kernel/gbkern.asm -eo $2 ${EXTRA_RASM:-} # incbins apps + font + icons -> .dsk + RAW
@@ -89,10 +87,10 @@ build_variant() {                                # $1 = kernel name, $2 = rasm -
     cp build/GBKERN.RAW "build/$1.RAW"           # capture this card's kernel for the unified stage
 }
 rm -rf QA; mkdir -p QA
-# ONE unified card (#174): build BOTH kernels, then stage a single QA/CARD that holds
-# GBM4.BIN + GBALB.BIN + a GB.BAS that detects the hardware (M4ROM in slot 6) and RUN"s
-# the right one. So one image flashes onto an M4 OR an Albireo machine.
-echo "Building both card kernels (GBALB + GBM4) + the unified card -> QA/"
+# Build the Albireo card kernel + stage QA/CARD (GBALB.BIN + a GB.BAS that RUN"s it).
+# M4 + IDE are archived (frozen in-tree, not shipped); to build either for recovery,
+# pass -DSTORAGE_M4=1 (or STORAGE=ide) to rasm by hand - see docs/ARCHIVED.md.
+echo "Building the Albireo card kernel (GBALB) + the card -> QA/"
 build_variant GBALB "-DSTORAGE_ALBIREO=1"
 cp build/gbkern.dsk QA/GEOBENCH.DSK               # bootable floppy image (the GBALB kernel)
 # Add a GB.BAS loader so the floppy also boots via RUN"GB (-> RUN"GBKERN). Must be a
@@ -107,12 +105,11 @@ if [ -x "$IDSK" ]; then
 else
     echo "  (no iDSK at \$IDSK - floppy boots via RUN\"GBKERN; set IDSK= to add the GB.BAS loader)"
 fi
-build_variant GBM4 "-DSTORAGE_M4=1"               # the second kernel for the unified card
-tools/stage_dist.sh QA/CARD                       # detecting GB.BAS + GBM4.BIN + GBALB.BIN + /GEOBENCH
-# A ready-to-flash card image (partitioned FAT16) - boots on M4 and Albireo alike.
+tools/stage_dist.sh QA/CARD                       # GB.BAS (RUN"GBALB) + GBALB.BIN + /GBENCH
+# A ready-to-flash card image (partitioned FAT16) for the Albireo CH376 card.
 tools/build_card_img.sh QA/CARD QA/GEOBENCH.IMG \
     || echo "  (QA/GEOBENCH.IMG skipped - needs sfdisk + mkfs.fat + mtools)"
-echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: unified card (M4 + Albireo); QA/GEOBENCH.DSK: floppy (RUN\"GB)"
+echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: Albireo card; QA/GEOBENCH.DSK: floppy (RUN\"GB)"
 
 # Leave build/ as the STORAGE-selected variant (default Albireo) so the --disk-a
 # test harness sees a predictable build/gbkern.dsk + build/GBKERN.RAW.

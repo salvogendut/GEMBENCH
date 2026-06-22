@@ -7,34 +7,34 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 
 ## Build orchestration
 
-- **`build_kernel.sh`** — the one-shot build. Assembles **both** shipped kernels
-  (`GBALB` Albireo + `GBM4` M4 board), packs the apps, and stages one unified
-  distribution into `QA/`: the loose card files (`QA/CARD/`), the floppy
-  (`QA/GEOBENCH.DSK`), and the card image (`QA/GEOBENCH.IMG`). `STORAGE=ide` builds the
-  retired IDE backend instead (still in the tree for recovery/tests; history frozen on
-  branch `legacy-ide`). `FAT16=1` and `EXTRA_RASM=...` tune the variant (e.g.
-  `EXTRA_RASM="-DGB_ROM_REQ=1"` for the ROM-offload kernel).
-- **`m4detect.asm`** — the tiny BASIC-callable detector embedded in the unified `GB.BAS`:
-  asks the firmware (`KL_FIND_COMMAND`) whether the M4 ROM's RSX is installed, so the
-  loader can `RUN"GBM4` on an M4 board or `RUN"GBALB` otherwise. Assembled by `stage_dist.sh`.
+- **`build_kernel.sh`** — the one-shot build. Assembles the shipped **`GBALB`** (Albireo)
+  kernel, packs the apps, and stages the distribution into `QA/`: the loose card files
+  (`QA/CARD/`), the floppy (`QA/GEOBENCH.DSK`), and the card image (`QA/GEOBENCH.IMG`).
+  The M4 and IDE backends are archived (frozen, not built — see `docs/ARCHIVED.md`);
+  rebuild for recovery with `EXTRA_RASM="-DSTORAGE_M4=1"` or `STORAGE=ide`. `FAT16=1` and
+  `EXTRA_RASM=...` tune the variant (e.g. `EXTRA_RASM="-DGB_ROM_REQ=1"` for the
+  ROM-offload kernel).
+- **`m4detect.asm`** — *(archived, #174)* a tiny BASIC-callable detector that asked the
+  firmware (`KL_FIND_COMMAND`) whether the M4 ROM's RSX was installed, so the old unified
+  `GB.BAS` could pick `GBM4` vs `GBALB`. Unused now the card is Albireo-only; kept for a
+  possible M4 revival.
 - **`build_rom.sh`** — builds the 16K upper ROMs that offload the low-level drivers
-  and carry the cold-boot banner: `rom/GBALB.ROM` (Albireo) and `rom/GEOBENCH.ROM`
-  (the dormant IDE backend). Bakes the git commit into the banner
+  and carry the cold-boot banner: `rom/GBALB.ROM` (Albireo, shipped) and `rom/GEOBENCH.ROM`
+  (the archived IDE backend). Bakes the git commit into the banner
   (`rom/gitcommit.inc`, generated).
-- **`stage_dist.sh <out>`** — stages the unified card distribution (the detecting GB.BAS
-  loader + `GBM4.BIN` + `GBALB.BIN` + the `GEOBENCH/` payload) into a directory.
+- **`stage_dist.sh <out>`** — stages the Albireo card distribution (the `RUN"GBALB`
+  `GB.BAS` loader + `GBALB.BIN` + the `GEOBENCH/` payload) into a directory.
 - **`build_capp.sh <app_dir> <out.RAW>`** — builds a single C app against `libgb`,
   for iterating on one app.
-- **`deploy_ide.sh`** — copy the staged distribution onto a real/emulated IDE image
-  (for the dormant IDE backend).
+- **`deploy_ide.sh`** — *(archived)* copy the staged distribution onto a real/emulated IDE
+  image (for the frozen IDE backend).
 
 ## Card / disk images
 
 - **`build_card_img.sh [CARD] [IMG]`** — builds a partitioned **FAT16 card image**
-  (`QA/GEOBENCH.IMG` by default) from the staged `QA/CARD/`. One image boots on both the
-  M4 board (mounts the FAT) and the Albireo CH376 (auto-detects it); a plain IDE build
-  (`STORAGE=ide`) reads it too. Called by `build_kernel.sh`.
-- **`build_ide_img.sh`** — older IDE-only image helper.
+  (`QA/GEOBENCH.IMG` by default) from the staged `QA/CARD/` for the Albireo CH376
+  (auto-detects the FAT partition). Called by `build_kernel.sh`.
+- **`build_ide_img.sh`** — *(archived)* older IDE-only image helper.
 
 ## Paged kernel modules
 

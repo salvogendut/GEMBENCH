@@ -1,4 +1,10 @@
 ; ---------------------------------------------------------------------------
+; *** ARCHIVED (2026-06-22) *** - frozen, not built by tools/build_kernel.sh.
+; The shipped product is Albireo + floppy; M4 is preserved here for reference and
+; possible revival, but the >8K-picture blank-on-real-HW bug is unresolved (the
+; emulator can't reproduce M4ROM's interrupt/timing divergences). To build for
+; recovery: rasm kernel/gbkern.asm -DSTORAGE_M4=1. See docs/ARCHIVED.md.
+; ---------------------------------------------------------------------------
 ; lib/fs_m4.asm - storage backend: FAT over the M4 board (file-level, #174).
 ;
 ; Like the Albireo CH376 (fs_albireo.asm), the M4 firmware owns the filesystem -
