@@ -131,18 +131,22 @@ def main():
         for r in rows:
             f.write("                db    " + ",".join(f"#{b:02X}" for b in r) + "\n")
 
-    # .SPR binary mode (#65): the kernel loads a cursor as a disk file into low RAM.
-    # Emit the 2 pre-shifted phases the kernel uses (shifts 0 and 2), in the buffer
-    # order d0, m0, d2, m2 (each out_bytes*th bytes). Requires out_bytes*th == 64.
+    # .SPR binary mode (#65): the kernel loads a cursor as a disk file into low RAM and
+    # composites it with  screen = (bg AND mask) OR data, reading one advancing pointer
+    # (lib/cursor.asm cc_col: `and (hl)` / `inc hl` / `or (hl)`). So mask and data must
+    # be INTERLEAVED per byte (mask,data,mask,data...), with the 2 pre-shifted phases
+    # (shift 0 then shift 2) laid out back to back - exactly like lib/cursor_data.asm
+    # (-> DEFAULT.SPR). The old d0,m0,d2,m2 BLOCK order garbled every png2spr cursor.
     if out_asm.lower().endswith(".spr"):
         blob = bytearray()
-        for rows in (shifts_data[0], shifts_mask[0], shifts_data[2], shifts_mask[2]):
-            for r in rows:
-                blob += bytes(r)
+        for s in (0, 2):                         # phase0 (shift 0) then phase2 (shift 2)
+            for y in range(th):
+                for b in range(out_bytes):       # interleave mask,data per byte column
+                    blob += bytes((shifts_mask[s][y][b], shifts_data[s][y][b]))
         with open(out_asm, "wb") as f:
             f.write(blob)
-        print(f"{in_png}: cursor .SPR {tw}x{th} -> {len(blob)} bytes (2 phases), "
-              f"hotspot {hot}, label {label}")
+        print(f"{in_png}: cursor .SPR {tw}x{th} -> {len(blob)} bytes "
+              f"(2 interleaved phases), hotspot {hot}, label {label}")
         return
 
     with open(out_asm, "w") as f:

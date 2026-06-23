@@ -52,6 +52,30 @@ static void copy_val(const char *p, const char *e, char *dst, unsigned char max)
     dst[n] = 0;
 }
 
+/* parse_inks: read up to 5 comma-separated decimal ink numbers (0-26) from the value
+ * at [p,e) into out[0..4] (the 4 Mode-1 pens + the border), clamping each to 26. A
+ * missing field keeps out's seeded default, so a short "INKS=2" only changes pen 0.
+ * Stops at CR/LF/NUL. */
+static void parse_inks(const char *p, const char *e, unsigned char *out)
+{
+    unsigned char i;
+    for (i = 0; i < 5; ++i) {
+        unsigned int v = 0;
+        unsigned char got = 0;
+        while (p < e && *p >= '0' && *p <= '9') {
+            v = v * 10 + (unsigned int)(*p - '0');
+            got = 1;
+            ++p;
+        }
+        if (got)
+            out[i] = (unsigned char)(v > 26 ? 26 : v);
+        if (p >= e || is_eol(*p))
+            break;
+        if (*p == ',')
+            ++p;
+    }
+}
+
 void gb_make_83(const char *stem, const char *ext, char *dst)
 {
     unsigned char i = 0;
@@ -87,7 +111,8 @@ void gb_fmt_mem(unsigned int kb, char *dst)
 }
 
 void gb_cfg_parse(const char *buf, unsigned int len,
-                  char *icons_out, char *font_out, char *cursor_out)
+                  char *icons_out, char *font_out, char *cursor_out,
+                  unsigned char *inks_out)
 {
     const char *p = buf;
     const char *e = buf + len;
@@ -111,6 +136,8 @@ void gb_cfg_parse(const char *buf, unsigned int len,
             copy_val(v, e, font_out, GB_CFG_VAL_MAX);
         else if ((v = match_key(p, e, "CURSOR=")) != 0)
             copy_val(v, e, cursor_out, GB_CFG_VAL_MAX);
+        else if ((v = match_key(p, e, "INKS=")) != 0)
+            parse_inks(v, e, inks_out);
 
         while (p < e && !is_eol(*p))  /* advance to the end of this line */
             ++p;

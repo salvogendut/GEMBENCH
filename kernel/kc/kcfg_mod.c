@@ -26,6 +26,7 @@
 #define KCFG_MEMKB     (*(unsigned int *)0x1218)   /* in:  total RAM in KB */
 #define KCFG_MEMSTR    ((char *)0x121A)            /* out: "<decimal>K" string */
 #define KCFG_CURSORNAME ((char *)0x1221)           /* out: CURSOR filename (11-byte 8.3) */
+#define KCFG_INKS      ((unsigned char *)0x122C)   /* out: 4 pen inks + border (INKS=) */
 
 static void set_default(char *stem)     /* "DEFAULT" + NUL */
 {
@@ -42,7 +43,10 @@ void main(void)
     set_default(icons);                 /* absent keys keep the default */
     set_default(font);
     set_default(cursor);
-    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor);
+    KCFG_INKS[0] = 1;  KCFG_INKS[1] = 26;   /* default palette: blue/white/black/red, */
+    KCFG_INKS[2] = 0;  KCFG_INKS[3] = 6;    /* blue border (matches set_palette's seed) */
+    KCFG_INKS[4] = 1;
+    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, KCFG_INKS);
     gb_make_83(icons,  "IST", KCFG_ICONNAME);
     gb_make_83(font,   "FNT", KCFG_FONTNAME);
     gb_make_83(cursor, "SPR", KCFG_CURSORNAME);

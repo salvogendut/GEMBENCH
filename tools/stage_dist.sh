@@ -34,7 +34,7 @@ printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\n' \
     > "$OUT/GEOBENCH.CFG"
 
 # --- /GBENCH: apps, modules, assets -------------------------------------------
-for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS; do
+for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS; do
     cp "build/$a.RAW" "$SYS/$a.APP"
 done
 cp build/GBCFG.RAW "$SYS/GBCFG.BIN"

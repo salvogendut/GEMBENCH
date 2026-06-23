@@ -89,6 +89,7 @@ KCFG_FONTNAME   equ   #120D        ; 11-byte 8.3 font filename, built by the mod
 KCFG_MEMKB      equ   #1218        ; word: total RAM in KB (kernel -> module)
 KCFG_MEMSTR     equ   #121A        ; "<decimal>K" top-bar string (module -> kernel)
 KCFG_CURSORNAME equ   #1221        ; 11-byte 8.3 cursor filename (CURSOR=), built by module
+KCFG_INKS       equ   #122C        ; 5 bytes: the 4 Mode-1 pen inks + border (INKS=), built by module
 ; CLOCK.APP support (#72): a tiny time read-out (kept minimal - the BCD->binary
 ; conversion lives in the C app; the clock draws its hands by calling the firmware
 ; graphics directly, so no resident line primitive is needed).
@@ -266,7 +267,11 @@ kernel_main
                 call  disarm_joy_keys        ; joystick keys must not feed the char
                                               ; buffer, or moving the pointer floods
                                               ; gb_getkey (the keyboard is the joystick)
-                call  set_palette            ; GEOBENCH 4-pen palette
+                ld    hl,pal_def             ; seed the default inks so the first set_palette
+                ld    de,KCFG_INKS           ; has values (the GBCFG module rewrites KCFG_INKS
+                ld    bc,5                    ; from INKS= later, then we re-apply the palette)
+                ldir
+                call  set_palette            ; GEOBENCH 4-pen palette (reads KCFG_INKS)
                 call  fs_init                ; pick storage backend (floppy here)
                 ifdef GB_ROM                  ; #152: detect GEOBENCH.ROM before the first read
                 call  gb_rom_probe
@@ -423,6 +428,7 @@ m4s_hang        jr    m4s_hang
                 call  cfg_boot               ; parse GEOBENCH.CFG (C module) ->
                                              ; KCFG_ICONS / KCFG_FONT (before the
                                              ; font/icon loaders consume them)
+                call  set_palette            ; re-apply now KCFG_INKS holds INKS= (#129)
                 call  font_init              ; load the font into PAGE_DATA
                 call  icon_init              ; load the icon set into PAGE_DATA
                 call  cursor_init            ; load the cursor sprite into low RAM (#65)
@@ -492,25 +498,34 @@ INK_DESKTOP     equ   1            ; blue  -> pen 0 (paper / backdrop)
 INK_LIGHT       equ   26           ; white -> pen 1 (text)
 INK_DARK        equ   0            ; black -> pen 2 (outlines / title bar)
 INK_ACCENT      equ   6            ; red   -> pen 3 (accents)
+pal_def         db    INK_DESKTOP,INK_LIGHT,INK_DARK,INK_ACCENT,INK_DESKTOP  ; default INKS= seed (+border)
+; set_palette: apply the 4 Mode-1 pens from KCFG_INKS (INKS=, or the defaults seeded
+; above). Each ink is reloaded from memory per pen so it survives SCR_SET_INK's clobber.
+; Called once early (defaults) and again after the GBCFG module parses INKS= (#129).
 set_palette
+                ld    a,(KCFG_INKS+0)
+                ld    b,a
+                ld    c,a
                 ld    a,0
-                ld    b,INK_DESKTOP
-                ld    c,INK_DESKTOP
-                call  SCR_SET_INK
+                call  SCR_SET_INK            ; pen 0 (paper / backdrop)
+                ld    a,(KCFG_INKS+1)
+                ld    b,a
+                ld    c,a
                 ld    a,1
-                ld    b,INK_LIGHT
-                ld    c,INK_LIGHT
-                call  SCR_SET_INK
+                call  SCR_SET_INK            ; pen 1 (text)
+                ld    a,(KCFG_INKS+2)
+                ld    b,a
+                ld    c,a
                 ld    a,2
-                ld    b,INK_DARK
-                ld    c,INK_DARK
-                call  SCR_SET_INK
+                call  SCR_SET_INK            ; pen 2 (outlines / title bar)
+                ld    a,(KCFG_INKS+3)
+                ld    b,a
+                ld    c,a
                 ld    a,3
-                ld    b,INK_ACCENT
-                ld    c,INK_ACCENT
-                call  SCR_SET_INK
-                ld    b,INK_DESKTOP
-                ld    c,INK_DESKTOP
+                call  SCR_SET_INK            ; pen 3 (accents)
+                ld    a,(KCFG_INKS+4)        ; border = its own ink (INKS= 5th value)
+                ld    b,a
+                ld    c,a
                 jp    SCR_SET_BORDER
 
 ; --- input + cursor services ---------------------------------------------
