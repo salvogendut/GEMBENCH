@@ -150,6 +150,9 @@ APP_BUSY        equ   #1440        ; WM_MAXWIN busy flags (0 free / 1 busy), par
 MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the focused
                                    ; managed window's live x,y,w,h here before each hook
                                    ; so the app reads its rect with gb_wm_x/y/w/h
+; #188: relocated resident scratch pool #1450..#148F (free gap #144C..CUR_LOW #1500).
+; gtd_scratch #1450 (49B), cb_tdir #1481 (4B), launch_arg #1485 (11B) live here so they
+; cost 0 resident image bytes. Do not reuse this range for other low-RAM data.
 MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
@@ -776,7 +779,7 @@ gtd_cloop
                 xor   a                        ; truncate + terminate
                 ld    (de),a
                 ret
-gtd_scratch     defs  49
+gtd_scratch     equ   #1450        ; #188: relocated to low RAM (was resident defs 49)
 
 ; --- gb_open_window: draw a window frame + title -------------------------
 ; B = x (byte col), C = y (line), D = w (bytes), E = h (lines), HL = title.
@@ -1823,7 +1826,7 @@ k_copy_end
                 ldir
                 ret
 cb_tdrv         db    0
-cb_tdir         defs  4
+cb_tdir         equ   #1481        ; #188: relocated to low RAM (was resident defs 4)
 
 ; k_fs_delete (GB_FSDELETE, #62): HL = 11-byte 8.3 name in the caller page. Delete
 ; that file from the current directory (free clusters + clear the dir entry) via
@@ -2907,7 +2910,7 @@ menu_clear
 ; the app the FM names, via GB_WMLAUNCHAS. The old resident app_for_ext + its name
 ; tables were removed to reclaim space - the kernel->C migration that funds the
 ; .APP launch model, #70.)
-launch_arg      defs  11
+launch_arg      equ   #1485        ; #188: relocated to low RAM (was resident defs 11)
 
 ; k_icon (GB_ICON): blit a full icon. A = slot, B = x, C = y. Reads the bitmap
 ; from the .IST in PAGE_DATA, so swap pages around it.
