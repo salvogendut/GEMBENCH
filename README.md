@@ -77,7 +77,11 @@ What works today:
   icons are a normal `.IST` set, editable in ICONED.
 - **Viewer** — open any file to peek at it: word-wrapped text, or a `.PIC` image
   rendered to a window sized to the picture. File > Load opens another file, View >
-  Fullscreen maximises. Draggable, resizeable.
+  Fullscreen maximises. Draggable, resizeable. A large picture (over ~8.5 KB, i.e.
+  bigger than the in-window buffer) is loaded into a borrowed 16 KB RAM bank, so on a
+  bare 128K machine — where the desktop, file manager and viewer already use every
+  app bank — a big image shows an empty window; a 256K+ expansion (any spare bank)
+  displays it. Small pictures always work.
 - **Clock** — an analog clock window (Dallas RTC, else software); View > Fullscreen
   rescales the face to the whole screen, an Options menu sets the time / toggles seconds.
 - **Settings** — a control panel for `GEOBENCH.CFG`: pick the **font** (`.FNT`),
