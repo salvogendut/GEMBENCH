@@ -7,9 +7,10 @@
  * gibberish, so this doubles as a quick "peek" at anything on the disk. */
 #include "gb.h"
 
-#define VIEW_MAX  8704    /* in-page buffer = 17 sectors (#166: trimmed for the scroll code).
-                             Pictures use the banked buffer on GBALB/ROM (#164); this is the text +
-                             plain-GBIDE picture fallback, now capped ~8.5K (below a 200x200 .PIC). */
+#define VIEW_MAX  8192    /* in-page buffer = 16 sectors. Pictures use the banked buffer on
+                             GBALB/ROM (#164) - so where a spare bank exists this is just the
+                             TEXT buffer; it's the picture fallback only with no free bank (bare
+                             128K). Trimmed a sector to make room for fullscreen image cycling. */
 #define TX_COL    (unsigned char)(win_x + 2)
 #define TX_Y0     (unsigned char)(win_y + 12)
 #define LINE_H    11
@@ -192,8 +193,92 @@ static void v_draw(void)
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#146) */
 }
 
+static void v_fullscreen(unsigned char on);    /* defined below */
+
+/* --- fullscreen image cycling: Space / Right = next, Left = previous (#viewer) -------
+   In fullscreen there's no menu bar, so the viewer reads the keys itself. The current
+   directory is enumerated for .PIC files; the chosen one is re-pointed via gb_set_name
+   (the window's file arg, which gb_pic_open reads) and reloaded by bank_or_parse. */
+static void copy11(char *d, const char *s) { unsigned char i; for (i = 0; i < 11; i++) d[i] = s[i]; }
+static unsigned char is_pic_name(const char *n) { return (unsigned char)(n[8]=='P' && n[9]=='I' && n[10]=='C'); }
+static unsigned char eq11(const char *a, const char *b)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++) if (a[i] != b[i]) return 0;
+    return 1;
+}
+
+/* read_lr: matrix state of the Left/Right cursor keys -> lr_bits (bit0 left, bit1 right).
+   The firmware keys are disarmed (the joystick floods them), so read them directly with
+   KM_TEST_KEY (&BB1E): key 8 = Left, key 1 = Right - same approach as Notepad's caret nav. */
+static unsigned char lr_bits;
+static void read_lr(void) __naked
+{
+__asm
+    xor  a
+    ld   (_lr_bits), a
+    ld   a, #8             ; cursor Left = key 8
+    call #0xBB1E
+    jr   z, 1$
+    ld   a, (_lr_bits)
+    or   #0x01
+    ld   (_lr_bits), a
+1$: ld   a, #1             ; cursor Right = key 1
+    call #0xBB1E
+    jr   z, 2$
+    ld   a, (_lr_bits)
+    or   #0x02
+    ld   (_lr_bits), a
+2$: ret
+__endasm;
+}
+
+/* cycle to the next (dir>0) / previous (dir<0) .PIC in the current directory, wrapping. */
+static void cycle(signed char dir)
+{
+    char cur[11], first[11], last[11], prevn[11], nextn[11], target[11];
+    unsigned char have_first = 0, have_prev = 0, have_next = 0, seen = 0;
+    char *p;
+    gb_get_name(cur);                          /* this window's current file (11-byte arg) */
+    p = gb_dir1();
+    while (p) {
+        char *e = gb_entname();
+        if (is_pic_name(e)) {
+            if (!have_first) { copy11(first, e); have_first = 1; }
+            copy11(last, e);
+            if (seen) { if (!have_next) { copy11(nextn, e); have_next = 1; } }
+            else if (eq11(e, cur)) seen = 1;
+            else { copy11(prevn, e); have_prev = 1; }
+        }
+        p = gb_dirn();
+    }
+    if (!have_first) return;                    /* no pictures in this directory */
+    if (dir > 0) copy11(target, have_next ? nextn : first);   /* next, wrap to first */
+    else         copy11(target, have_prev ? prevn : last);    /* prev, wrap to last */
+    if (eq11(target, cur)) return;              /* only one image -> nothing to do */
+    gb_set_name(target);                        /* re-point the window arg gb_pic_open reads */
+    bank_or_parse();                            /* reload the picture */
+    fmt83(vtitle, target);
+    gb_curhide(); v_draw(); gb_curshow();        /* repaint OUR fullscreen content directly (blue
+                                                    fill + the new image) - NOT gb_restore_parent,
+                                                    which would flash the desktop/windows behind us */
+}
+
+/* fullscreen key handler: F exits, Space/Right advance, Left goes back (debounced). */
+static unsigned char cyc_cool;
+static void fs_nav(void)
+{
+    unsigned char c = gb_getkey();
+    if ((c | 0x20) == 'f') { v_fullscreen(0); gb_restore_parent(); return; }   /* exit fullscreen */
+    if (cyc_cool) { cyc_cool--; return; }       /* debounce a recent step */
+    if (c == ' ') { cycle(1); cyc_cool = 10; return; }
+    read_lr();
+    if (lr_bits & 0x02)      { cycle(1);  cyc_cool = 10; }   /* Right -> next */
+    else if (lr_bits & 0x01) { cycle(-1); cyc_cool = 10; }   /* Left  -> previous */
+}
+
 /* on_frame: size the window to a picture on the first frame (deferred from main so the
-   resize runs after the WM services the window), then run pending menus. */
+   resize runs after the WM services the window), then run pending menus / fullscreen keys. */
 static void v_frame(void)
 {
     if (!opened) {
@@ -202,7 +287,8 @@ static void v_frame(void)
         gb_restore_parent();          /* repaint at the new size */
         return;
     }
-    if (gb_doc_frame()) gb_restore_parent();   /* a menu ran -> repaint */
+    if (*WM_FS) { fs_nav(); return; }           /* fullscreen: cycle images with Space / arrows */
+    if (gb_doc_frame()) gb_restore_parent();    /* windowed: a menu ran (or the 'F' shortcut) */
 }
 
 static void v_close(void) { if (gb_doc_close()) { if (banked) PIC_PAGE_K = banked; gb_pic_close(); gb_wm_close(); } }
