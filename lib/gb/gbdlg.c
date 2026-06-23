@@ -12,9 +12,9 @@
  * dlg_modal flag, so an app's on_event can ignore top-bar clicks meanwhile
  * (re-clicking the menu title then just closes the popup via click-away instead of
  * re-arming the menu). A custom app dialog (e.g. NOTEPAD's "Save changes?") brackets
- * itself with gb_modal_set(1)/(0) for the same effect. gb_popup leaves the cursor
- * SHOWN and its box erased to the backdrop; the caller repaints its window after
- * (its own draw brackets gb_curhide/gb_curshow).
+ * itself with gb_modal_set(1)/(0) for the same effect. gb_popup saves-under its box
+ * and restores it on close (#191), so the close is seamless and the caller repaints
+ * only if the menu ACTION changed its content (its own draw brackets gb_curhide/show).
  *
  * Plug-in recipe for a new app: put a menu def in your gb_win_t.menu + an on_event
  * that sets a "want_menu" flag when a title is clicked AND !gb_modal(); in on_frame,
@@ -46,6 +46,15 @@ static void pop_row(unsigned char x, unsigned char y,
     else     gb_textbw ((unsigned char)(x + 1), ty, label);
 }
 
+/* #191: save-under buffer for a TRANSPARENT close. The popup saves the screen it
+ * covers on open and restores it on close, so a menu leaves the screen pixel-identical
+ * - no hole to repair, nothing repainted underneath, no flash. Sized for the menu
+ * dropdowns (File/Edit/View/System, <=8 short items); a taller popup (the file picker's
+ * full directory list) doesn't fit and falls back to the old erase + damaged-repaint,
+ * whose caller repaints behind it anyway. Lives in the paged GBUI module's data. */
+#define POP_BUFSZ 2048
+static unsigned char pop_under[POP_BUFSZ];
+
 /* gb_popup: THE GEOBENCH dropdown menu - one implementation every menu uses (the
  * desktop's System menu and every app's title menus), so they all look and behave
  * the same. A framed black-on-white list at (col,line), auto-sized to the longest
@@ -53,11 +62,13 @@ static void pop_row(unsigned char x, unsigned char y,
  * selects it, a click away or ESC cancels. Returns the clicked row, or 0xFF if
  * cancelled. Raises gb_modal() while up (so a caller's on_event ignores top-bar
  * clicks - re-clicking the menu title then closes the menu instead of re-arming
- * it). Leaves the box erased to the backdrop; the caller repaints behind. */
+ * it). Saves-under + restores its box so the close is seamless (#191); only a popup
+ * too tall to buffer falls back to erasing the box for the caller to repaint. */
 unsigned char gb_popup(unsigned char x, unsigned char y,
                        const char *const *labels, unsigned char n)
 {
     unsigned char i, flags, sel = 0xFF, esc = 0, w, c, longest = 0, hot = 0xFF, over;
+    unsigned char saved;
     unsigned char boxh = (unsigned char)(n * 10 + 4);
 
     for (i = 0; i < n; i++) {               /* width = longest label + padding */
@@ -68,6 +79,8 @@ unsigned char gb_popup(unsigned char x, unsigned char y,
     dlg_modal = 1;
     dlg_close = 0;
     gb_curhide();
+    saved = (unsigned char)((unsigned int)w * boxh <= POP_BUFSZ);   /* #191: small enough to save-under? */
+    if (saved) gb_saverect(x, y, w, boxh, pop_under);
     gb_fill(x, y, w, boxh, 1);              /* white box + black frame */
     gb_frame(x, y, w, boxh, 2);
     for (i = 0; i < n; i++)
@@ -99,24 +112,28 @@ unsigned char gb_popup(unsigned char x, unsigned char y,
     while (gb_poll() & (GB_QUIT | GB_CLICK)) ;
     (void)esc;
     gb_curhide();
-    gb_fill(x, y, w, boxh, 0);              /* erase to backdrop; caller redraws */
-    gb_curshow();
-    /* #153: limit the caller's gb_restore_parent to the damage = this box UNION the
-       focused window, instead of a whole-screen repaint (the desktop flash). The
-       box must be in the damage because it overhangs whatever was behind it; the
-       window must be in it because the menu action changed the window's content.
-       (The desktop's own System menu reads a stale rect here, but it already did a
-       full paint() before - so this is no worse, and app menus stop flashing.) */
-    {
-        unsigned char wx = gb_wm_x(), wy = gb_wm_y();
-        unsigned char wr = (unsigned char)(wx + gb_wm_w());
-        unsigned char wb = (unsigned char)(wy + gb_wm_h());
-        unsigned char br = (unsigned char)(x + w), bb = (unsigned char)(y + boxh);
-        unsigned char lx = (x < wx) ? x : wx;
-        unsigned char ty = (y < wy) ? y : wy;
-        unsigned char rx = (br > wr) ? br : wr;
-        unsigned char by = (bb > wb) ? bb : wb;
-        gb_wm_damage(lx, ty, (unsigned char)(rx - lx), (unsigned char)(by - ty));
+    if (saved) {
+        /* #191: put back exactly what the menu covered - no hole, nothing repainted
+           underneath, no flash. The caller repaints only if its CONTENT changed. */
+        gb_restorerect(x, y, w, boxh, pop_under);
+        gb_curshow();
+    } else {
+        /* fallback (a popup too tall to buffer, e.g. the file picker's full list):
+           the old erase-to-backdrop + damage-clipped repaint - the caller repaints
+           behind it. Damage = this box UNION the focused window (#153). */
+        gb_fill(x, y, w, boxh, 0);
+        gb_curshow();
+        {
+            unsigned char wx = gb_wm_x(), wy = gb_wm_y();
+            unsigned char wr = (unsigned char)(wx + gb_wm_w());
+            unsigned char wb = (unsigned char)(wy + gb_wm_h());
+            unsigned char br = (unsigned char)(x + w), bb = (unsigned char)(y + boxh);
+            unsigned char lx = (x < wx) ? x : wx;
+            unsigned char ty = (y < wy) ? y : wy;
+            unsigned char rx = (br > wr) ? br : wr;
+            unsigned char by = (bb > wb) ? bb : wb;
+            gb_wm_damage(lx, ty, (unsigned char)(rx - lx), (unsigned char)(by - ty));
+        }
     }
     return sel;
 }

@@ -15,6 +15,7 @@
         .globl  _gb_textrev
         .globl  _gb_window
         .globl  _gb_restorerect
+        .globl  _gb_saverect
         .globl  _gb_mxp
         .globl  _gb_clip_set
         .globl  _gb_clip_get
@@ -145,6 +146,22 @@ _gb_window:
         ld      e, h
         pop     hl              ; title
         call    0x800F          ; GB_WINDOW
+        ld      hl, (sv_ret)
+        jp      (hl)
+
+;; void gb_saverect(u8 x, u8 y, u8 wbytes, u8 h, void *buf);
+;;   save a wbytes x h screen rectangle at (x,y) into buf. Same arg shape as
+;;   gb_restorerect (#191: the dropdown menu save-under). Bracket with curhide/show.
+_gb_saverect:
+        ld      b, a
+        ld      c, l
+        pop     hl
+        ld      (sv_ret), hl
+        pop     hl              ; L=wbytes, H=h
+        ld      d, l
+        ld      e, h
+        pop     hl              ; buf
+        call    0x8036          ; GB_SAVERECT
         ld      hl, (sv_ret)
         jp      (hl)
 

@@ -630,10 +630,19 @@ static void n_frame(void)
     sync_rect();
     win_title();                                 /* keep wtitle fresh for the WM title draw */
 
-    if (gb_doc_frame()) {                         /* a File/Edit menu/dialog ran (#142) */
-        keycool = 4;                              /* flush the dialog click's buffered keys */
-        gb_restore_parent();                      /* repaint frame + content over the popup */
-        return;
+    {
+        unsigned char r = gb_doc_frame();         /* a File/Edit menu/dialog ran (#142) */
+        if (r) {
+            keycool = 4;                          /* flush the dialog click's buffered keys */
+            if (r == 2) {                         /* #191: Edit changed the text (Paste/Select All) -
+                                                     the menu saved-under, so just redraw the body,
+                                                     smoothly, with the frame untouched (no flash) */
+                gb_curhide(); draw(); gb_curshow();
+            } else {                              /* File/View action (or a fallback picker): full repaint */
+                gb_restore_parent();
+            }
+            return;
+        }
     }
 
     if (gb_flags() & GB_FIRE) keycool = 4;        /* fire held -> flush its 'Z'/'X' */
