@@ -253,6 +253,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_wm_managed           ; GB_WMMANAGED   #80B1 register a kernel-managed window (#146)
                 jp    k_wm_damage            ; GB_WMDAMAGE    #80B4 set the repaint clip = a damage rect (#153)
                 jp    k_backdrop             ; GB_BACKDROP    #80B7 fill a rect with the desktop backdrop (#128)
+                jp    k_reload               ; GB_RELOAD      #80BA re-apply font/icons/cursor/backdrop (#185)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -435,10 +436,7 @@ m4s_hang        jr    m4s_hang
                                              ; KCFG_ICONS / KCFG_FONT (before the
                                              ; font/icon loaders consume them)
                 call  set_palette            ; re-apply now KCFG_INKS holds INKS= (#129)
-                call  font_init              ; load the font into PAGE_DATA
-                call  icon_init              ; load the icon set into PAGE_DATA
-                call  cursor_init            ; load the cursor sprite into low RAM (#65)
-                call  backdrop_init          ; load the BACKDROP= tile into low RAM (#128)
+                call  assets_load            ; font + icons + cursor + backdrop (also GB_RELOAD, #185)
                 call  clock_init             ; detect RTC + seed the software clock (#77:
                                               ; the desktop draws the bar, not the kernel)
                 ld    hl,WM_NWIN            ; clear WM low-RAM state (counts, focus, table
@@ -963,7 +961,9 @@ fe_end
                 xor   a
                 ld    (de),a
                 ret
-dir_namebuf     defs  14
+dir_namebuf     equ   #12E9        ; 14-byte dir-name scratch, relocated to low RAM (always
+                                   ; mapped) to reclaim resident space for GB_RELOAD (#185).
+                                   ; Sits in the free #12E9..#12F6 block below APP_HANDLER.
 
 ; --- k_icon_half (GB_ICONHALF): half-height (middle-band) blit of icon A=slot at
 ; B=x, C=y. The file->slot mapping now lives in the File Manager (#103); the kernel
@@ -1191,6 +1191,26 @@ backdrop_init
                 ld    a,1
                 ld    (BD_SOLID),a           ; missing file -> solid fallback
                 ret
+
+; assets_load: (re)load the font, icon set, cursor and backdrop tile from the names in
+; the transfer area. Run at boot, and again by GB_RELOAD when the Settings app changes
+; one of them (it writes the new name to the transfer area first) - so they apply with
+; no reboot (#185).
+assets_load
+                call  font_init
+                call  icon_init
+                call  cursor_init
+                jp    backdrop_init
+
+; k_reload (GB_RELOAD #185): re-apply the assets at runtime, preserving the caller's
+; page (the loaders page in PAGE_DATA). The Settings app populates the transfer area,
+; calls this, then repaints. (Colours already apply live, so set_palette is not redone.)
+k_reload
+                ld    a,(bank_cur)
+                push  af
+                call  assets_load
+                pop   af
+                jp    bank_set
 
 ; k_backdrop (GB_BACKDROP): fill a rectangle with the desktop backdrop. B=x C=y D=w E=h.
 ; Solid (BD_SOLID) -> a plain pen-0 fill (== the old gb_fill(...,0)); else tile BD_TILE.

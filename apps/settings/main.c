@@ -48,15 +48,17 @@ typedef struct {
     const char *key;       /* e.g. "FONT=" */
     const char *ext;       /* e.g. "FNT" (raw 3-char, matched against the 8.3 name) */
     unsigned char min_icons;  /* IST: min header count to be a usable set; 0 = no check */
+    unsigned int  tfr;     /* kernel transfer-area addr for the 8.3 name (gb_reload, #185) */
 } setting_t;
 
 static const setting_t rows[] = {
-    { "Font",   "FONT=",     "FNT", 0 },
-    { "Icons",  "ICONS=",    "IST", MIN_IST_ICONS },
-    { "Cursor", "CURSOR=",   "SPR", 0 },
-    { "Backdrop","BACKDROP=","BDP", 0 },   /* lists .BDP tiles + a synthetic SOLID (#128) */
+    { "Font",   "FONT=",     "FNT", 0,             0x120D },  /* KCFG_FONTNAME */
+    { "Icons",  "ICONS=",    "IST", MIN_IST_ICONS, 0x1202 },  /* KCFG_ICONNAME */
+    { "Cursor", "CURSOR=",   "SPR", 0,             0x1221 },  /* KCFG_CURSORNAME */
+    { "Backdrop","BACKDROP=","BDP", 0,             0x1231 },  /* KCFG_BDPNAME (+ BD_SOLID #1290) */
 };
 #define NROWS 4
+#define BD_SOLID_ADDR 0x1290   /* kernel BD_SOLID flag */
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
    512-byte sectors, so a smaller buffer would overflow into the globals after it). */
@@ -418,6 +420,24 @@ static void colours_dialog(void)
 
 /* ---- interaction ------------------------------------------------------------- */
 
+/* live_apply: write the chosen 8.3 name into the kernel transfer area for row r and
+   call gb_reload, so the font/icon set/cursor/backdrop change shows with no reboot
+   (#185). For the backdrop, also set BD_SOLID. */
+static void live_apply(unsigned char r, const char *name)
+{
+    char *dst = (char *)rows[r].tfr;
+    const char *ext = rows[r].ext;
+    unsigned char i = 0;
+    while (i < 8 && name[i]) { dst[i] = name[i]; i++; }
+    while (i < 8) dst[i++] = ' ';
+    dst[8] = ext[0]; dst[9] = ext[1]; dst[10] = ext[2];
+    if (ext[0] == 'B')                       /* backdrop: BD_SOLID = (name == "SOLID") */
+        *(unsigned char *)BD_SOLID_ADDR =
+            (unsigned char)(name[0]=='S' && name[1]=='O' && name[2]=='L' &&
+                            name[3]=='I' && name[4]=='D' && name[5]==0);
+    gb_reload();
+}
+
 /* open_picker: list the files for row r and let the user pick one; write it to the
    config and repaint. */
 static void open_picker(unsigned char r)
@@ -435,8 +455,13 @@ static void open_picker(unsigned char r)
     }
     sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(r), list, n);
     gb_curhide();
-    if (sel != 0xFF) cfg_set(rows[r].key, list[sel]);
-    s_draw();                                /* popup erased to the backdrop: repaint */
+    if (sel != 0xFF) {
+        cfg_set(rows[r].key, list[sel]);     /* persist to GEOBENCH.CFG */
+        live_apply(r, list[sel]);            /* ...and apply now, no reboot (#185) */
+        gb_wm_damage(0, 0, 80, 200);         /* assets changed everywhere -> full repaint */
+        gb_restore_parent();                 /* desktop + windows redraw with the new assets */
+    }
+    s_draw();                                /* repaint our content (new font/value) */
     gb_curshow();
 }
 
