@@ -112,7 +112,7 @@ void gb_fmt_mem(unsigned int kb, char *dst)
 
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out, char *cursor_out,
-                  unsigned char *inks_out)
+                  char *backdrop_out, unsigned char *inks_out)
 {
     const char *p = buf;
     const char *e = buf + len;
@@ -136,6 +136,8 @@ void gb_cfg_parse(const char *buf, unsigned int len,
             copy_val(v, e, font_out, GB_CFG_VAL_MAX);
         else if ((v = match_key(p, e, "CURSOR=")) != 0)
             copy_val(v, e, cursor_out, GB_CFG_VAL_MAX);
+        else if ((v = match_key(p, e, "BACKDROP=")) != 0)
+            copy_val(v, e, backdrop_out, GB_CFG_VAL_MAX);
         else if ((v = match_key(p, e, "INKS=")) != 0)
             parse_inks(v, e, inks_out);
 

@@ -90,9 +90,41 @@ bl_loop
                 ld    e,l
                 ld    hl,(bm_src)            ; HL = source row
                 ld    a,(bm_w)
-                ld    c,a
-                ld    b,0
-                ldir                          ; copy one row
+                ld    (bl_cnt),a
+                ; Composite one row with pen 0 transparent, so the desktop backdrop shows
+                ; through an icon's background (#128). Per byte: mask has BOTH Mode-1 bit
+                ; planes set for every non-pen-0 pixel; screen = (screen AND ~mask) OR icon.
+                ; On a solid background this is identical to a plain copy.
+bl_byte
+                ld    a,(hl)                  ; icon byte
+                ld    c,a                      ; C = icon (kept for the final OR)
+                and   #0F                      ; bit1 plane (low nibble)
+                ld    b,a
+                ld    a,c
+                rrca
+                rrca
+                rrca
+                rrca
+                and   #0F                      ; bit0 plane (high nibble -> low)
+                or    b                        ; per-pixel opaque (low nibble)
+                ld    b,a
+                rlca
+                rlca
+                rlca
+                rlca                           ; opaque << 4 (high nibble)
+                or    b                        ; mask = both planes set where opaque
+                cpl                            ; ~mask
+                ld    b,a
+                ld    a,(de)                  ; screen byte
+                and   b                        ; keep background where transparent
+                or    c                        ; add the icon's opaque pixels
+                ld    (de),a
+                inc   hl
+                inc   de
+                ld    a,(bl_cnt)
+                dec   a
+                ld    (bl_cnt),a
+                jr    nz,bl_byte
                 ld    (bm_src),hl            ; advance source past this row
                 ld    a,(bl_y)
                 inc   a
@@ -135,6 +167,71 @@ fbk_row
                 ld    (fb_rows),a
                 jr    nz,fbk_loop
                 ret
+
+; fill_pattern: like fill_block, but fills with the 16x16 backdrop tile at BD_TILE
+; (16 rows x 4 Mode-1 bytes) instead of a constant, phased off ABSOLUTE screen x,y so
+; adjacent fills line up (the desktop backdrop + every WM damage-repair use it). The
+; tile byte for screen (x,y) is BD_TILE[(y & 15)*4 + (x & 3)]. Same clip as fill_block.
+fill_pattern
+                call  clip_fb_copy           ; fbw_* = fb_* clipped to the clip rect
+                ret   c                        ; fully outside -> nothing to fill
+                ld    a,(fbw_h)
+                ld    (fb_rows),a
+                ld    a,(fbw_y)
+                ld    (fb_cy),a
+fp_row
+                ; tile offset = (fb_cy & 15)*4 + (fbw_x & 3); saved across scr_addr.
+                ld    a,(fb_cy)
+                and   15
+                add   a,a
+                add   a,a
+                ld    c,a
+                ld    a,(fbw_x)
+                and   3
+                add   a,c
+                ld    (fp_off),a
+                ld    a,(fbw_x)              ; HL = screen addr for (fbw_x, fb_cy)
+                ld    d,a
+                ld    a,(fb_cy)
+                ld    e,a
+                call  scr_addr
+                ; DE = tile byte ptr = BD_TILE + offset. The row base (BD_TILE 4-aligned +
+                ; a *4 offset) has low 2 bits 0, and a tile row never crosses a 256-byte
+                ; page, so the column phase wraps by masking E's low 2 bits.
+                ld    a,(fp_off)
+                ld    e,a
+                ld    d,0
+                push  hl
+                ld    hl,BD_TILE
+                add   hl,de
+                ld    d,h
+                ld    e,l                      ; DE = tile ptr
+                pop   hl                       ; HL = screen
+                ld    a,(fbw_w)
+                ld    b,a                      ; B = byte count
+fp_col
+                ld    a,(de)                  ; tile byte -> screen byte
+                ld    (hl),a
+                inc   hl
+                inc   e                        ; advance the tile ptr; wrap every 4 bytes
+                ld    a,e
+                and   3
+                jr    nz,fp_nw
+                dec   e
+                dec   e
+                dec   e
+                dec   e                        ; back to the start of this 4-byte tile row
+fp_nw
+                djnz  fp_col
+                ld    a,(fb_cy)
+                inc   a
+                ld    (fb_cy),a
+                ld    a,(fb_rows)
+                dec   a
+                ld    (fb_rows),a
+                jr    nz,fp_row
+                ret
+fp_off          defb  0                        ; tile offset for the current row (scratch)
 
 ; clip_fb_copy: fbw_* = intersection of fb_* (x,y,w,h) with the clip rect. CF set
 ; if the intersection is empty. Leaves fb_* untouched. Clobbers A,B,C,D,E,H,L.
@@ -331,6 +428,7 @@ bm_w            db    0            ; width in bytes
 bm_h            db    0            ; height in rows
 bl_rows         db    0
 bl_y            db    0
+bl_cnt          db    0            ; blit_bitmap column counter (transparent composite, #128)
 
 ; --- fill_block parameters / scratch -------------------------------------
 fb_x            db    0            ; x in bytes

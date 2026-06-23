@@ -27,6 +27,8 @@
 #define KCFG_MEMSTR    ((char *)0x121A)            /* out: "<decimal>K" string */
 #define KCFG_CURSORNAME ((char *)0x1221)           /* out: CURSOR filename (11-byte 8.3) */
 #define KCFG_INKS      ((unsigned char *)0x122C)   /* out: 4 pen inks + border (INKS=) */
+#define KCFG_BDPNAME   ((char *)0x1231)            /* out: BACKDROP tile filename (11-byte 8.3) */
+#define KCFG_BD_SOLID  (*(unsigned char *)0x1290)  /* out: 1 = solid desktop (BACKDROP=SOLID/absent) */
 
 static void set_default(char *stem)     /* "DEFAULT" + NUL */
 {
@@ -39,16 +41,23 @@ void main(void)
     char icons[9];
     char font[9];
     char cursor[9];
+    char backdrop[9];
 
     set_default(icons);                 /* absent keys keep the default */
     set_default(font);
     set_default(cursor);
+    backdrop[0] = 'S'; backdrop[1] = 'O'; backdrop[2] = 'L'; backdrop[3] = 'I';
+    backdrop[4] = 'D'; backdrop[5] = 0;     /* BACKDROP default = SOLID (plain desktop) */
     KCFG_INKS[0] = 1;  KCFG_INKS[1] = 26;   /* default palette: blue/white/black/red, */
     KCFG_INKS[2] = 0;  KCFG_INKS[3] = 6;    /* blue border (matches set_palette's seed) */
     KCFG_INKS[4] = 1;
-    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, KCFG_INKS);
-    gb_make_83(icons,  "IST", KCFG_ICONNAME);
-    gb_make_83(font,   "FNT", KCFG_FONTNAME);
-    gb_make_83(cursor, "SPR", KCFG_CURSORNAME);
+    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, backdrop, KCFG_INKS);
+    gb_make_83(icons,    "IST", KCFG_ICONNAME);
+    gb_make_83(font,     "FNT", KCFG_FONTNAME);
+    gb_make_83(cursor,   "SPR", KCFG_CURSORNAME);
+    gb_make_83(backdrop, "BDP", KCFG_BDPNAME);
+    /* tell the kernel whether to load a tile: SOLID (the default) = plain desktop. */
+    KCFG_BD_SOLID = (backdrop[0] == 'S' && backdrop[1] == 'O' && backdrop[2] == 'L' &&
+                     backdrop[3] == 'I' && backdrop[4] == 'D' && backdrop[5] == 0) ? 1 : 0;
     gb_fmt_mem(KCFG_MEMKB, KCFG_MEMSTR);    /* top-bar RAM string */
 }

@@ -30,7 +30,7 @@
 #define DEF_H     116          /* lines (room for the 5-pen colours editor) */
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   13           /* value column offset from the window's left (byte cols) */
-#define COLOUR_ROW 3           /* the "Colours..." line sits below the 3 picker rows */
+#define COLOUR_ROW NROWS       /* the "Colours..." line sits below the picker rows */
 
 static unsigned char win_x, win_y, win_w, win_h;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
@@ -51,11 +51,12 @@ typedef struct {
 } setting_t;
 
 static const setting_t rows[] = {
-    { "Font",   "FONT=",   "FNT", 0 },
-    { "Icons",  "ICONS=",  "IST", MIN_IST_ICONS },
-    { "Cursor", "CURSOR=", "SPR", 0 },
+    { "Font",   "FONT=",     "FNT", 0 },
+    { "Icons",  "ICONS=",    "IST", MIN_IST_ICONS },
+    { "Cursor", "CURSOR=",   "SPR", 0 },
+    { "Backdrop","BACKDROP=","BDP", 0 },   /* lists .BDP tiles + a synthetic SOLID (#128) */
 };
-#define NROWS 3
+#define NROWS 4
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
    512-byte sectors, so a smaller buffer would overflow into the globals after it). */
@@ -421,16 +422,20 @@ static void colours_dialog(void)
    config and repaint. */
 static void open_picker(unsigned char r)
 {
-    unsigned char sel;
+    const char *list[MAXST + 1];
+    unsigned char sel, i, n = 0, isbd;
+    isbd = (unsigned char)(rows[r].ext[0] == 'B' && rows[r].ext[1] == 'D' && rows[r].ext[2] == 'P');
     enumerate(rows[r].ext, rows[r].min_icons);
-    if (nstem == 0) {
+    if (isbd) list[n++] = "SOLID";           /* the Backdrop list leads with SOLID (no tile) */
+    for (i = 0; i < nstem; i++) list[n++] = stems[i];
+    if (n == 0) {
         gb_alert("No files found", "in /GBENCH.");
         s_draw();
         return;
     }
-    sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(r), stems, nstem);
+    sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(r), list, n);
     gb_curhide();
-    if (sel != 0xFF) cfg_set(rows[r].key, stems[sel]);
+    if (sel != 0xFF) cfg_set(rows[r].key, list[sel]);
     s_draw();                                /* popup erased to the backdrop: repaint */
     gb_curshow();
 }

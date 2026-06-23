@@ -17,12 +17,14 @@ static void check(const char *name, const char *cfg, unsigned int len,
     char icons[GB_CFG_VAL_MAX + 1];
     char font[GB_CFG_VAL_MAX + 1];
     char cursor[GB_CFG_VAL_MAX + 1];
+    char backdrop[GB_CFG_VAL_MAX + 1];
     unsigned char inks[5] = { 1, 26, 0, 6, 1 };
     strcpy(icons, "DEFAULT");
     strcpy(font, "DEFAULT");
     strcpy(cursor, "DEFAULT");
+    strcpy(backdrop, "SOLID");
 
-    gb_cfg_parse(cfg, len, icons, font, cursor, inks);
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, inks);
 
     if (strcmp(icons, want_icons) != 0 || strcmp(font, want_font) != 0) {
         printf("FAIL %-28s icons=\"%s\" (want \"%s\")  font=\"%s\" (want \"%s\")\n",
@@ -40,9 +42,10 @@ static void checkcur(const char *name, const char *cfg, unsigned int len,
                      const char *want_cursor)
 {
     char icons[GB_CFG_VAL_MAX + 1], font[GB_CFG_VAL_MAX + 1], cursor[GB_CFG_VAL_MAX + 1];
+    char backdrop[GB_CFG_VAL_MAX + 1];
     unsigned char inks[5] = { 1, 26, 0, 6, 1 };
-    strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT");
-    gb_cfg_parse(cfg, len, icons, font, cursor, inks);
+    strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT"); strcpy(backdrop, "SOLID");
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, inks);
     if (strcmp(cursor, want_cursor) != 0) {
         printf("FAIL %-28s cursor=\"%s\" (want \"%s\")\n", name, cursor, want_cursor);
         ++failures;
@@ -52,6 +55,23 @@ static void checkcur(const char *name, const char *cfg, unsigned int len,
 }
 #define CHECKCUR(name, lit, wc) checkcur((name), (lit), (unsigned)sizeof(lit) - 1, (wc))
 
+/* Parse and check the BACKDROP= value (defaults to "SOLID" when absent). */
+static void checkbd(const char *name, const char *cfg, unsigned int len, const char *want)
+{
+    char icons[GB_CFG_VAL_MAX + 1], font[GB_CFG_VAL_MAX + 1], cursor[GB_CFG_VAL_MAX + 1];
+    char backdrop[GB_CFG_VAL_MAX + 1];
+    unsigned char inks[5] = { 1, 26, 0, 6, 1 };
+    strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT"); strcpy(backdrop, "SOLID");
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, inks);
+    if (strcmp(backdrop, want) != 0) {
+        printf("FAIL %-28s backdrop=\"%s\" (want \"%s\")\n", name, backdrop, want);
+        ++failures;
+    } else {
+        printf("ok   %-28s backdrop=\"%s\"\n", name, backdrop);
+    }
+}
+#define CHECKBD(name, lit, w) checkbd((name), (lit), (unsigned)sizeof(lit) - 1, (w))
+
 /* Parse and check the 5 INKS= values (4 pens + border; seeded to 1,26,0,6,1 when
  * absent). */
 static void checkinks(const char *name, const char *cfg, unsigned int len,
@@ -59,9 +79,10 @@ static void checkinks(const char *name, const char *cfg, unsigned int len,
                       unsigned char a, unsigned char b)
 {
     char icons[GB_CFG_VAL_MAX + 1], font[GB_CFG_VAL_MAX + 1], cursor[GB_CFG_VAL_MAX + 1];
+    char backdrop[GB_CFG_VAL_MAX + 1];
     unsigned char inks[5] = { 1, 26, 0, 6, 1 };
-    strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT");
-    gb_cfg_parse(cfg, len, icons, font, cursor, inks);
+    strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT"); strcpy(backdrop, "SOLID");
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, inks);
     if (inks[0] != d || inks[1] != l || inks[2] != k || inks[3] != a || inks[4] != b) {
         printf("FAIL %-28s inks=%u,%u,%u,%u,%u (want %u,%u,%u,%u,%u)\n", name,
                inks[0], inks[1], inks[2], inks[3], inks[4], d, l, k, a, b);
@@ -128,6 +149,10 @@ int main(void)
     CHECKINKS("inks partial",      "INKS=5\r\n",                    5, 26, 0, 6, 1);
     CHECKINKS("inks four fields",  "INKS=9,11,2,3\r\n",             9, 11, 2, 3, 1);
     CHECKINKS("inks with others",  "FONT=F\r\nINKS=1,2,3,4,7\r\nICONS=I\r\n", 1, 2, 3, 4, 7);
+
+    CHECKBD("backdrop absent",     "ICONS=X\r\n",                   "SOLID");
+    CHECKBD("backdrop set",        "BACKDROP=WAVES\r\n",            "WAVES");
+    CHECKBD("backdrop with others","FONT=F\r\nBACKDROP=DOTS\r\nINKS=1,2,3,4,5\r\n", "DOTS");
 
     check83("make83 default",  "DEFAULT", "FNT", "DEFAULT FNT");
     check83("make83 cursor",   "FANCY",   "SPR", "FANCY   SPR");

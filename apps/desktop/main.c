@@ -78,14 +78,19 @@ static void drive_poll(void)
 
 static void draw_icon(unsigned char i)
 {
-    gb_icon(ic_slot[i], ic_x[i], ic_y[i]);
-    gb_text(ic_x[i], ic_y[i] + 34, ic_lbl[i]);
+    const char *l = ic_lbl[i];
+    unsigned char n = 0;
+    while (l[n]) n++;                            /* label length, in chars */
+    gb_icon(ic_slot[i], ic_x[i], ic_y[i]);      /* pen-0 transparent: backdrop shows through (#128) */
+    gb_fill(ic_x[i], (unsigned char)(ic_y[i] + 34),  /* a solid plate so the name stays readable */
+            (unsigned char)((n * 3 + 1) / 2), 8, 0); /* over any backdrop pattern (n chars * 1.5 cols) */
+    gb_text(ic_x[i], (unsigned char)(ic_y[i] + 34), l);
 }
 
 static void paint(void)
 {
     unsigned char i;
-    gb_fill(0, 8, 80, 192, 0);                 /* backdrop, below the top bar */
+    gb_backdrop(0, 8, 80, 192);                /* backdrop (pattern or solid), below the top bar (#128) */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
     if (sel_idx != NONE && ic_present[sel_idx])    /* red selection frame (#153) */
@@ -104,7 +109,7 @@ static void select_icon(unsigned char icon)
     if (sel_idx == icon) return;
     gb_curhide();
     if (sel_idx != NONE && ic_present[sel_idx]) {
-        gb_frame(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H, 0);   /* erase old frame */
+        gb_backdrop(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H);   /* erase old frame to backdrop (#128) */
         draw_icon(sel_idx);                                       /* restore the glyph edge */
     }
     if (icon != NONE)
@@ -207,7 +212,7 @@ static void dragstart(unsigned char idx, unsigned char mx, unsigned char my)
     grab_dy = my - out_y;
     drag_active = 1;
     gb_curhide();
-    gb_fill(out_x, out_y, IC_W + 2, BOX_H, 0); /* erase icon + label */
+    gb_backdrop(out_x, out_y, IC_W + 2, BOX_H); /* erase icon + label to the backdrop (#128) */
     gb_frame(out_x, out_y, IC_W, IC_H, 3);     /* red outline */
     gb_curshow();
 }
@@ -222,7 +227,7 @@ static void dragmove(unsigned char mx, unsigned char my)
     if (ny > YMAX) ny = YMAX;
     if (nx == out_x && ny == out_y) return;    /* nothing moved */
     gb_curhide();
-    gb_frame(out_x, out_y, IC_W, IC_H, 0);     /* erase old outline */
+    gb_backdrop(out_x, out_y, IC_W, IC_H);     /* erase old outline to the backdrop (#128) */
     out_x = nx;
     out_y = ny;
     gb_frame(out_x, out_y, IC_W, IC_H, 3);     /* draw new outline */
