@@ -50,8 +50,9 @@ all co-resident windows under the kernel window manager:
 
 What works today:
 
-- **Desktop** — backdrop, top bar (RAM probe + clock), draggable labelled icons,
-  a System menu (Ram Usage / Refresh Media / Tidy Icons / Exit to DOS).
+- **Desktop** — backdrop, top bar (RAM probe + clock), draggable labelled icons
+  (incl. a **Settings** gear), a System menu (Ram Usage / Refresh Media / Tidy
+  Icons / Settings / Exit to DOS).
 - **File manager** — double-click the Disk icon to open a window listing the
   drive; a type icon + name per file (**list** or **icon** view), entries **sorted
   by type then alphabetically**, a **scrolling** list, click to select, double-click
@@ -72,6 +73,11 @@ What works today:
   Fullscreen maximises. Draggable, resizeable.
 - **Clock** — an analog clock window (Dallas RTC, else software); View > Fullscreen
   rescales the face to the whole screen, an Options menu sets the time / toggles seconds.
+- **Settings** — a control panel for `GEOBENCH.CFG`: pick the **font** (`.FNT`),
+  **icon set** (`.IST`) and **cursor** (`.SPR`) from the system folder (font/icons/
+  cursor apply on the next boot), and a **Colours** editor for the 4 Mode-1 pens +
+  the screen border (`INKS=`) with a **live** preview — `-`/`+` recolours the whole
+  desktop instantly, Save persists it. Launches from the System menu or the gear icon.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),
@@ -308,7 +314,8 @@ geobench/
 │   ├── paint/         #   Mode-1 paint app (toolchest, palette, .PIC files)
 │   ├── xaos/          #   fixed-point Mandelbrot generator (.PIC export)
 │   ├── viewer/        #   text + .PIC image viewer
-│   └── clock/         #   analog clock window
+│   ├── clock/         #   analog clock window
+│   └── settings/      #   control panel: font/icons/cursor + desktop colours (INKS=)
 ├── rom/               # GEOBENCH.ROM: the offloaded low-level drivers + boot banner,
 │                      #   as a 16K loadable upper ROM (built per card by build_rom.sh)
 ├── assets/            # icon/cursor/paint source PNGs + sample files (WELCOME.TXT)
@@ -328,7 +335,8 @@ Done:
 5. ✅ **Apps in C** — the whole app layer moved from assembly to C over `libgb`.
 6. ✅ **Storage write layer** — FAT16/FAT32 + Albireo read/write (save/delete/copy).
 7. ✅ **Apps** — Notepad (editor), ICONED (icon/cursor editor), Paint (`.PIC`),
-   Clock, plus the image/text Viewer.
+   Clock, the image/text Viewer, and a **Settings** control panel (font / icon set /
+   cursor + a live desktop-colours editor).
 8. ✅ **Unified menu system (`gb_doc`)** — one File / Edit / View menu framework for
    every app (New/Load/Save/Save As, a shared cross-app clipboard, **Fullscreen**, a
    navigable Open/Save dialog in a paged module); the desktop's System menu and the
@@ -350,7 +358,8 @@ Next:
   screen (Fullscreen already centers the canvas + tools).
 - **Launching legacy `.BIN`/`.BAS`** software (see above).
 - **Drawers/folders** and richer desktop arrangement.
-- **Settings** app for `GEOBENCH.CFG` (icon set / font / cursor).
+- **Settings** follow-ups — patterned **backdrops** and a **screensaver** (the
+  `Settings` app already covers font / icon set / cursor and desktop colours).
 
 ## License
 

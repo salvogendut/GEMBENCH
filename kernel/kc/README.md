@@ -16,7 +16,7 @@ the module pointers.
 
 | File | Replaces | Role |
 |------|----------|------|
-| `kcfg.c` | `lib/config.asm` (`cfg_parse`/`cfg_keymatch`/`cfg_copyval`) | Parse `GEOBENCH.CFG` KEY=VALUE text into the `ICONS=`/`FONT=` set names. |
+| `kcfg.c` | `lib/config.asm` (`cfg_parse`/`cfg_keymatch`/`cfg_copyval`) | Parse `GEOBENCH.CFG` KEY=VALUE text into the `ICONS=`/`FONT=`/`CURSOR=` set names + the `INKS=` palette (4 pens + border, 5 inks). |
 
 ## Why C costs more here
 
