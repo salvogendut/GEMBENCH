@@ -41,7 +41,8 @@
 #define ICON_GEAR 25         /* ... the Settings gear (#129) */
 static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, 66, 66, 66 };  /* right col x=66: fits the
                                                                          8-char "Settings" label (#129) */
-static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 160, 97 };
+static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 150, 97 };  /* trash y=150: its label
+                                                                          clears the bottom border */
 static unsigned char ic_slot[N_ICONS] = { ICON_IDE, 0, 0, 2, 3, ICON_GEAR };  /* C,flp,flp,clk,trash,gear */
 static const char *const ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash","Settings" };
 static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0, 0 };  /* opens the file mgr */
@@ -277,7 +278,7 @@ static void tidy_icons(void)
         if (ic_present[i]) { ic_x[i] = 0; ic_y[i] = DRIVE_TOP + n * DRIVE_STEP; n++; }
     ic_x[IDX_CLOCK] = 66; ic_y[IDX_CLOCK] = 35;     /* the boot positions (see ic_x/ic_y) */
     ic_x[IDX_SETTINGS] = 66; ic_y[IDX_SETTINGS] = 97;
-    ic_x[IDX_TRASH] = 66; ic_y[IDX_TRASH] = 160;
+    ic_x[IDX_TRASH] = 66; ic_y[IDX_TRASH] = 150;
     gb_curhide();
     gb_restore_parent();
 }
