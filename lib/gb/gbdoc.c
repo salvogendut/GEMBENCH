@@ -288,11 +288,12 @@ unsigned char gb_doc_frame(void)
     if (!g_want) return 0;
     t = (unsigned char)(g_want - 1);
     g_want = 0;
-    sel = gb_popup(g_col[t], 8, g_items[t], g_nitems[t]);
-    if (sel != 0xFF) {
-        if (g_handler[t]) g_handler[t](sel);         /* File / Edit / View / app menu */
-    }
-    return 1;
+    sel = gb_popup(g_col[t], 8, g_items[t], g_nitems[t]);   /* #191: save-unders -> a seamless close */
+    if (sel == 0xFF) return 0;                   /* cancelled: the menu restored the screen, nothing changed */
+    if (g_handler[t]) g_handler[t](sel);         /* File / Edit / View / app menu */
+    if (g_handler[t] == edit_action)             /* Edit only touched the window CONTENT (frame intact): */
+        return (sel == 1) ? 0 : 2;               /*   Copy = nothing to redraw; Select All / Paste = body */
+    return 3;                                    /* File / View / app action: full window repaint */
 }
 
 /* gb_doc_close: the window close gadget was hit - offer to save first. 1 = go

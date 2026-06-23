@@ -40,6 +40,10 @@ unsigned char gb_drag_window(unsigned char *x, unsigned char *y,
  * with gb_curhide/gb_curshow. Used for the PAINT canvas + tool icons. */
 void gb_restorerect(unsigned char x, unsigned char y,
                     unsigned char wbytes, unsigned char h, const void *buf);
+/* gb_saverect: save a wbytes x h Mode-1 screen rectangle at (x,y) into buf (the
+ * inverse of gb_restorerect). Bracket with gb_curhide/gb_curshow. (#191 menu save-under) */
+void gb_saverect(unsigned char x, unsigned char y,
+                 unsigned char wbytes, unsigned char h, void *buf);
 void gb_fill(unsigned char col, unsigned char line,      /* filled rectangle     */
              unsigned char w, unsigned char h, unsigned char pen);
 /* gb_backdrop: fill a rectangle with the desktop backdrop (#128) - the BACKDROP= tile
@@ -203,7 +207,11 @@ unsigned char gb_doc_modified(void);       /* is it dirty? (e.g. for a "*" in th
 const char   *gb_doc_name(void);           /* the current file's 11-byte 8.3 name */
 unsigned char gb_doc_close(void);          /* on the close gadget: confirm-if-dirty; 1=close ok */
 unsigned char gb_doc_event(void);          /* in on_event: 1 if the framework handled it */
-unsigned char gb_doc_frame(void);          /* in on_frame: ran a menu? (1 -> repaint window) */
+unsigned char gb_doc_frame(void);          /* in on_frame: ran a menu? 0 = no, or Copy/cancel (the
+                                            * menu saved-under, nothing to repaint); 2 = Edit content
+                                            * change (redraw your body); 3 = File/View action (full
+                                            * repaint via gb_restore_parent). `if (gb_doc_frame())
+                                            * gb_restore_parent();` stays correct for non-Edit apps. */
 
 /* Shared clipboard (#142): a system buffer that survives app switches, so copy in
  * one app and paste in another. An app's on_copy fills it; on_paste reads it. */
