@@ -30,7 +30,7 @@ mkdir -p "$SYS"
 # GBM4 vs GBALB; with M4 frozen out (docs/ARCHIVED.md) the loader is a one-liner.
 printf '10 RUN"GBALB\r\n' > "$OUT/GB.BAS"
 python3 tools/amsdos_header.py build/GBALB.RAW "$OUT/GBALB.BIN" GBALB BIN 0x8000
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\n' \
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\n' \
     > "$OUT/GEOBENCH.CFG"
 
 # --- /GBENCH: apps, modules, assets -------------------------------------------
@@ -43,6 +43,9 @@ cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.BIN"   # #135: paged AMSDOS/floppy write mo
 cp build/GBUI.RAW "$SYS/GBUI.BIN"           # #142: paged dialog (popup/prompt/file-picker) module
 cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST build/PAINT.IST \
    build/DEFAULT.SPR build/HAND.SPR "$SYS/"
+for bdp in build/*.BDP; do                    # #128: backdrop tiles (BACKDROP=<name>)
+    [ -e "$bdp" ] && cp "$bdp" "$SYS/"
+done
 for ist in assets/iconsets/*.IST; do          # tracked custom icon sets (edit with
     [ -e "$ist" ] && cp "$ist" "$SYS/"         # tools/iconedit.py); select via ICONS=<name>
 done

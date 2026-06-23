@@ -42,6 +42,11 @@ void gb_restorerect(unsigned char x, unsigned char y,
                     unsigned char wbytes, unsigned char h, const void *buf);
 void gb_fill(unsigned char col, unsigned char line,      /* filled rectangle     */
              unsigned char w, unsigned char h, unsigned char pen);
+/* gb_backdrop: fill a rectangle with the desktop backdrop (#128) - the BACKDROP= tile
+ * if one is set, else a plain pen-0 fill. Use this (not gb_fill(...,0)) for every
+ * "erase to the desktop" path so the pattern stays seamless under icons/windows. */
+void gb_backdrop(unsigned char col, unsigned char line,
+                 unsigned char w, unsigned char h);
 void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline    */
               unsigned char w, unsigned char h, unsigned char pen);
 void gb_icon(unsigned char slot, unsigned char col,      /* full icon blit       */

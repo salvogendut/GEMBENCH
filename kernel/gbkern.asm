@@ -90,6 +90,9 @@ KCFG_MEMKB      equ   #1218        ; word: total RAM in KB (kernel -> module)
 KCFG_MEMSTR     equ   #121A        ; "<decimal>K" top-bar string (module -> kernel)
 KCFG_CURSORNAME equ   #1221        ; 11-byte 8.3 cursor filename (CURSOR=), built by module
 KCFG_INKS       equ   #122C        ; 5 bytes: the 4 Mode-1 pen inks + border (INKS=), built by module
+KCFG_BDPNAME    equ   #1231        ; 11-byte 8.3 backdrop tile filename (BACKDROP=), built by module
+BD_TILE         equ   #1250        ; 64 bytes: the loaded 16x16 backdrop tile (.BDP), or unused if solid
+BD_SOLID        equ   #1290        ; 1 = plain pen-0 backdrop (BACKDROP=SOLID / absent / missing file)
 ; CLOCK.APP support (#72): a tiny time read-out (kept minimal - the BCD->binary
 ; conversion lives in the C app; the clock draws its hands by calling the firmware
 ; graphics directly, so no resident line primitive is needed).
@@ -249,6 +252,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_ui                   ; GB_UI          #80AE run the paged dialog module -> BC=UI_RES
                 jp    k_wm_managed           ; GB_WMMANAGED   #80B1 register a kernel-managed window (#146)
                 jp    k_wm_damage            ; GB_WMDAMAGE    #80B4 set the repaint clip = a damage rect (#153)
+                jp    k_backdrop             ; GB_BACKDROP    #80B7 fill a rect with the desktop backdrop (#128)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -271,6 +275,8 @@ kernel_main
                 ld    de,KCFG_INKS           ; has values (the GBCFG module rewrites KCFG_INKS
                 ld    bc,5                    ; from INKS= later, then we re-apply the palette)
                 ldir
+                ld    a,1                     ; default to a solid backdrop until the module
+                ld    (BD_SOLID),a           ; sets BD_SOLID from BACKDROP= (#128)
                 call  set_palette            ; GEOBENCH 4-pen palette (reads KCFG_INKS)
                 call  fs_init                ; pick storage backend (floppy here)
                 ifdef GB_ROM                  ; #152: detect GEOBENCH.ROM before the first read
@@ -432,6 +438,7 @@ m4s_hang        jr    m4s_hang
                 call  font_init              ; load the font into PAGE_DATA
                 call  icon_init              ; load the icon set into PAGE_DATA
                 call  cursor_init            ; load the cursor sprite into low RAM (#65)
+                call  backdrop_init          ; load the BACKDROP= tile into low RAM (#128)
                 call  clock_init             ; detect RTC + seed the software clock (#77:
                                               ; the desktop draws the bar, not the kernel)
                 ld    hl,WM_NWIN            ; clear WM low-RAM state (counts, focus, table
@@ -1158,6 +1165,48 @@ cursor_init
                 ldir
                 ret
 def_spr         db    "DEFAULT SPR"
+
+; backdrop_init (#128): load the BACKDROP= tile (<name>.BDP, built by the GBCFG module
+; into KCFG_BDPNAME) into BD_TILE so fill_pattern can tile it. BACKDROP=SOLID (the
+; default) or a missing file leaves BD_SOLID=1 -> the plain pen-0 desktop (today's look).
+backdrop_init
+                ld    a,(BD_SOLID)           ; the GBCFG module set this (1 = solid / no tile)
+                or    a
+                ret   nz                       ; solid backdrop -> nothing to load
+                ld    hl,KCFG_BDPNAME        ; fs_req_name = <name>.BDP
+                ld    de,fs_req_name
+                call  copy11
+                ld    hl,64                   ; a tile is exactly 64 bytes
+                ld    (fs_load_max),hl
+                ld    hl,BD_TILE
+                ld    (fs_load_dst),hl
+                di
+                call  fs_load_sys            ; from /GEOBENCH on the boot drive (#134)
+                ei
+                ret   c                        ; loaded -> patterned (BD_SOLID stays 0)
+                ld    a,1
+                ld    (BD_SOLID),a           ; missing file -> solid fallback
+                ret
+
+; k_backdrop (GB_BACKDROP): fill a rectangle with the desktop backdrop. B=x C=y D=w E=h.
+; Solid (BD_SOLID) -> a plain pen-0 fill (== the old gb_fill(...,0)); else tile BD_TILE.
+k_backdrop
+                ld    a,b
+                ld    (fb_x),a
+                ld    a,c
+                ld    (fb_y),a
+                ld    a,d
+                ld    (fb_w),a
+                ld    a,e
+                ld    (fb_h),a
+                ld    a,(BD_SOLID)
+                or    a
+                jr    z,kb_pattern
+                xor   a                        ; pen 0 byte = #00 (blue paper)
+                ld    (fb_val),a
+                jp    fill_block
+kb_pattern
+                jp    fill_pattern
 
 ; --- app launch ----------------------------------------------------------
 ; launch_app: HL = 8.3 app name. Load it into the next bank page (PAGE_APP0 +

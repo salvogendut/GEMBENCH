@@ -21,6 +21,7 @@
         .globl  _gb_clip_len
         .globl  _gb_ui
         .globl  _gb_fill
+        .globl  _gb_backdrop
         .globl  _gb_frame
         .globl  _gb_icon
         .globl  _gb_icon_half
@@ -220,6 +221,20 @@ _gb_frame:
         dec     sp
         ld      a, l
         call    0x8021          ; GB_FRAME
+        ld      hl, (sv_ret)
+        jp      (hl)
+
+;; void gb_backdrop(u8 col, u8 line, u8 w, u8 h);   -> GB_BACKDROP
+;;   A=col, L=line; stack [ret][word: h<<8 | w]. -> B=col C=line D=w E=h.
+_gb_backdrop:
+        ld      b, a
+        ld      c, l
+        pop     hl
+        ld      (sv_ret), hl
+        pop     hl              ; L=w, H=h
+        ld      d, l
+        ld      e, h
+        call    0x80B7          ; GB_BACKDROP
         ld      hl, (sv_ret)
         jp      (hl)
 

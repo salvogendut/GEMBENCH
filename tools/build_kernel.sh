@@ -50,12 +50,22 @@ python3 tools/packicons.py build/DEFAULT.IST \
 python3 tools/packicons.py build/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)
+# Backdrop tiles (#128): stage every assets/backdrops tile as build/<NAME>.BDP - copy any
+# ready-made *.BDP, and convert any *.png that has no matching .BDP. Uppercased 8.3 names.
+for bdp in assets/backdrops/*.BDP; do
+    [ -e "$bdp" ] && cp "$bdp" "build/$(basename "$bdp" | tr 'a-z' 'A-Z')"
+done
+for png in assets/backdrops/*.png; do
+    [ -e "$png" ] || continue
+    name="$(basename "$png" .png | tr 'a-z' 'A-Z')"
+    [ -e "build/$name.BDP" ] || python3 tools/png2backdrop.py "$png" "build/$name.BDP"
+done
 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System menu via
                                    # the shared gb_doc menu system (#142) -> build/DESKTOP.RAW
 DATA_LOC=0x7240 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
                                    # the gb_doc-grown code + ".." entry; the ~3.1K listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
-DATA_LOC=0x5BA0 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
+DATA_LOC=0x5BB0 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
                                    # gb_doc (DOCRO=1 omits Save/Save As) so a full 10240-B buffer
                                    # (200x200 .PIC) fits. File>Load + View>Fullscreen (#142/#144)
 DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),

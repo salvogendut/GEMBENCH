@@ -212,4 +212,6 @@ cc_cols         db    0
 cur_dcols       db    cursor_arrow_w           ; on-screen sprite cols (clipped at right edge)
 cur_drows       db    cursor_arrow_h           ; on-screen sprite rows (clipped at bottom edge)
 cur_skip        db    0                        ; CUR_W - cur_dcols (sprite cols to skip per row)
-cur_bg          defs  cursor_arrow_w*cursor_arrow_h
+cur_bg          equ   #1291        ; 64-byte cursor save-under, relocated to low RAM (always
+                                   ; mapped) to reclaim resident kernel space (#128). Sits in
+                                   ; the free #1291..#12D0 block below APP_HANDLER (#1300).

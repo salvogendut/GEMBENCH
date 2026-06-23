@@ -17,16 +17,17 @@
  *
  *   icons_out  <- ICONS=   (>= GB_CFG_VAL_MAX+1 bytes)
  *   font_out   <- FONT=    (>= GB_CFG_VAL_MAX+1 bytes)
- *   cursor_out <- CURSOR=  (>= GB_CFG_VAL_MAX+1 bytes)
- *   inks_out   <- INKS=    (5 bytes: the 4 Mode-1 pens + the border, CPC hardware
- *                           inks 0-26, comma-separated "d,l,k,a,b"; a missing field
- *                           keeps the seeded default for that pen)
+ *   cursor_out   <- CURSOR=   (>= GB_CFG_VAL_MAX+1 bytes)
+ *   backdrop_out <- BACKDROP= (>= GB_CFG_VAL_MAX+1 bytes; the .BDP tile stem)
+ *   inks_out     <- INKS=     (5 bytes: the 4 Mode-1 pens + the border, CPC hardware
+ *                             inks 0-26, comma-separated "d,l,k,a,b"; a missing field
+ *                             keeps the seeded default for that pen)
  *
  * '#' at the start of a line is a comment; CR (13) and LF (10) end lines.
  */
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out, char *cursor_out,
-                  unsigned char *inks_out);
+                  char *backdrop_out, unsigned char *inks_out);
 
 /* gb_make_83: write an 11-byte AMSDOS 8.3 name into dst (8 chars space-padded +
  * the 3-char extension) from a NUL-terminated stem (<=8 chars used) and ext.
