@@ -43,10 +43,10 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
     lib/icon_viewer.asm \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
-    lib/icon_up.asm \
+    lib/icon_up.asm lib/icon_settings.asm \
     # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=.IST 15=DESKTOP 16=FILEMGR
     # 17=PAINT 18=FRACTAL 19=SD (Albireo Disk C, #104) 20=VIEWER
-    # 21=TELNET 22=NETWORK 23=SHELL 24=UP (FileMgr ".." entry, #142)
+    # 21=TELNET 22=NETWORK 23=SHELL 24=UP (FileMgr ".." entry, #142) 25=SETTINGS gear (#129)
 python3 tools/packicons.py build/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)
@@ -70,6 +70,9 @@ DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: do
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
+DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
+                                   # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
+                                   # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW

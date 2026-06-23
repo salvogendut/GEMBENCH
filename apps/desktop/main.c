@@ -28,21 +28,24 @@
 /* The desktop icons: drives (C = IDE, A/B = floppies) + Clock + Trash (#65). The
    drive icons appear only when that drive is present (gb_drives poll); Clock and
    Trash are always shown. Positions are mutable (drag updates them). */
-#define N_ICONS  5
+#define N_ICONS  6
 #define IDX_C    0            /* Disk C = IDE */
 #define IDX_A    1            /* Disk A = floppy A */
 #define IDX_B    2            /* Disk B = floppy B */
 #define IDX_CLOCK 3
 #define IDX_TRASH 4
+#define IDX_SETTINGS 5        /* the gear (#129) - opens SETTINGS.APP */
 
 #define ICON_IDE 1            /* IST slots (packicons order): Disk C as IDE ... */
 #define ICON_SD  19           /* ... vs Albireo SD/USB card (#104) */
-static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, 72, 72 };
-static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 160 };
-static unsigned char ic_slot[N_ICONS] = { ICON_IDE, 0, 0, 2, 3 };  /* C,flp,flp,clk,trash */
-static const char *const ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash" };
-static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0 };  /* opens the file mgr */
-static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };      /* drives set by poll */
+#define ICON_GEAR 25         /* ... the Settings gear (#129) */
+static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, 66, 66, 66 };  /* right col x=66: fits the
+                                                                         8-char "Settings" label (#129) */
+static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 160, 97 };
+static unsigned char ic_slot[N_ICONS] = { ICON_IDE, 0, 0, 2, 3, ICON_GEAR };  /* C,flp,flp,clk,trash,gear */
+static const char *const ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash","Settings" };
+static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0, 0 };  /* opens the file mgr */
+static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1, 1 };      /* drives set by poll */
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
 static unsigned char drag_armed, arm_mx, arm_my;   /* pressed on an icon, not yet lifted (#153) */
@@ -51,6 +54,7 @@ static unsigned char desk_active;                  /* set by on_frame -> the des
 static unsigned char dc_timer, dc_idx, held_prev;
 static unsigned char show_ram;               /* System menu footprint toggle (#74) */
 static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
+static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 
 #define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
 #define DRIVE_STEP 46         /* (BOX_H 44 + 2 gap), in detection order */
@@ -266,15 +270,16 @@ static void tidy_icons(void)
     unsigned char i, n = 0;
     for (i = 0; i < 3; i++)
         if (ic_present[i]) { ic_x[i] = 0; ic_y[i] = DRIVE_TOP + n * DRIVE_STEP; n++; }
-    ic_x[IDX_CLOCK] = 72; ic_y[IDX_CLOCK] = 35;     /* the boot positions (see ic_x/ic_y) */
-    ic_x[IDX_TRASH] = 72; ic_y[IDX_TRASH] = 160;
+    ic_x[IDX_CLOCK] = 66; ic_y[IDX_CLOCK] = 35;     /* the boot positions (see ic_x/ic_y) */
+    ic_x[IDX_SETTINGS] = 66; ic_y[IDX_SETTINGS] = 97;
+    ic_x[IDX_TRASH] = 66; ic_y[IDX_TRASH] = 160;
     gb_curhide();
     gb_restore_parent();
 }
 
 /* sys_action: the System menu handler, dispatched by the gb_doc framework (#142). */
-static const char *const sys_items[4] = {
-    "Ram Usage", "Refresh Media", "Tidy Icons", "Exit to DOS"
+static const char *const sys_items[5] = {
+    "Ram Usage", "Refresh Media", "Tidy Icons", "Settings", "Exit to DOS"
 };
 static void sys_action(unsigned char sel)
 {
@@ -294,7 +299,11 @@ static void sys_action(unsigned char sel)
         gb_restore_parent();
     } else if (sel == 2) {                     /* Tidy Icons */
         tidy_icons();
-    } else if (sel == 3) {                     /* Exit to DOS */
+    } else if (sel == 3) {                     /* Settings (#129): the control panel. Defer the
+                                                  open until AFTER gb_doc_frame's desktop repaint
+                                                  below, else paint() covers the new window. */
+        want_settings = 1;
+    } else if (sel == 4) {                     /* Exit to DOS */
         gb_exit();                              /* does not return */
     }
 }
@@ -340,7 +349,7 @@ static void on_frame(void)
     if (!menu_inited) {                          /* 1st frame: the window is now registered+focused */
         menu_inited = 1;
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
-        gb_menu_add("System", sys_items, 4, sys_action);
+        gb_menu_add("System", sys_items, 5, sys_action);
     }
     if (dc_timer) dc_timer--;
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
@@ -354,6 +363,11 @@ static void on_frame(void)
                                               (#153: a dragged icon vanished on drop). */
         paint();
         gb_curshow();
+        if (want_settings) {                  /* System>Settings: now safe to open on top (#129) */
+            want_settings = 0;
+            if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
+            else gb_wm_open("SETTINGSAPP");
+        }
         return;
     }
 
@@ -383,7 +397,7 @@ static void on_frame(void)
     if (icon == NONE) { select_icon(NONE); return; }   /* click empty space -> deselect (#153) */
 
     if (dc_timer && dc_idx == icon) {      /* second click -> open */
-        unsigned char opens = ic_drive[icon] || icon == IDX_CLOCK;
+        unsigned char opens = ic_drive[icon] || icon == IDX_CLOCK || icon == IDX_SETTINGS;
         if (opens && gb_wm_full())                           /* no free bank -> say so (#153) */
             gb_alert("Sorry, not enough RAM", "to run more apps.");
         else if (ic_drive[icon]) {                           /* browse that drive (#65): */
@@ -392,6 +406,7 @@ static void on_frame(void)
             gb_wm_open("FILEMGR APP");
         }
         else if (icon == IDX_CLOCK) { select_icon(NONE); gb_wm_open("CLOCK   APP"); } /* clock (#72) */
+        else if (icon == IDX_SETTINGS) { select_icon(NONE); gb_wm_open("SETTINGSAPP"); } /* control panel (#129) */
         dc_timer = 0;
         held_prev = 0;
     } else {                               /* first click: select + arm; the lift waits for movement (#153) */

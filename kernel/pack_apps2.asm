@@ -19,3 +19,6 @@ vwr_imgend
 app_img         incbin "../build/FILEMGR.RAW"   ; packaged on the disk as FILEMGR.APP (#45)
 app_imgend
                 save  "FILEMGR.APP",app_img,app_imgend-app_img,DSK,"build/gbkern.dsk"
+set_img         incbin "../build/SETTINGS.RAW"  ; packaged on the disk as SETTINGS.APP (#129)
+set_imgend
+                save  "SETTINGS.APP",set_img,set_imgend-set_img,DSK,"build/gbkern.dsk"
