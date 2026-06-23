@@ -298,6 +298,7 @@ static const char *win_title(void)               /* "Disk C" + path -> title_buf
 #define ICON_FRACTAL 18
 #define ICON_VIEWER 20
 #define ICON_UP 24            /* up-arrow for the ".." parent-dir entry (#142) */
+#define ICON_SETTINGS 25      /* the gear (#129) - matches the desktop Settings icon */
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -344,6 +345,7 @@ static unsigned char entry_icon(const char *name)
         if (name_is(name, "FRACTAL")) return ICON_FRACTAL;
         if (name_is(name, "XAOS"))    return ICON_FRACTAL;   /* the fractal generator (#116) */
         if (name_is(name, "VIEWER"))  return ICON_VIEWER;
+        if (name_is(name, "SETTINGS")) return ICON_SETTINGS;
         return ICON_APP;
     }
     return ICON_BINARY;
@@ -757,6 +759,12 @@ void main(void)
                                    target our window for the config read below */
     gb_doc(&fmdoc);              /* View menu (Fullscreen / Icons-List); no File (#142) */
     gb_set_drive(my_drive);
+    /* Open at the drive ROOT. The kernel's directory position is a single global
+       (fs_dir_clus / dir stack); a previously-open window may have left it in a
+       subdir, so reopening this drive would list that subdir - and with fm_path
+       empty, with no ".." to climb out. Pop back to the top (gb_back is a no-op at
+       root on both backends; DIRSTACK is 4 deep) so the listing matches fm_path. */
+    { unsigned char k; for (k = 0; k < 4; k++) gb_back(); }
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
     build_list();                /* stream + sort the directory (sets total) (#118) */
     top = 0;
