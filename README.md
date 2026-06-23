@@ -48,11 +48,18 @@ all co-resident windows under the kernel window manager:
 
 ![Multiple apps: file manager, picture viewer, clock](geobench.png)
 
+A short capture of GEOBENCH running in the 1984 emulator — the desktop, a patterned
+backdrop, dragging icons, opening apps and menus:
+
+![GEOBENCH demo](screenshots/geobench-demo.gif)
+
 What works today:
 
-- **Desktop** — backdrop, top bar (RAM probe + clock), draggable labelled icons
-  (incl. a **Settings** gear), a System menu (Ram Usage / Refresh Media / Tidy
-  Icons / Settings / Exit to DOS).
+- **Desktop** — a selectable **patterned backdrop** (a repeating 16×16 Mode-1 tile
+  via `BACKDROP=`, or a plain colour), top bar (RAM probe + clock), draggable
+  labelled icons (incl. a **Settings** gear) that erase cleanly back to the
+  pattern, a System menu (Ram Usage / Refresh Media / Tidy Icons / Settings /
+  Exit to DOS).
 - **File manager** — double-click the Disk icon to open a window listing the
   drive; a type icon + name per file (**list** or **icon** view), entries **sorted
   by type then alphabetically**, a **scrolling** list, click to select, double-click
@@ -74,10 +81,12 @@ What works today:
 - **Clock** — an analog clock window (Dallas RTC, else software); View > Fullscreen
   rescales the face to the whole screen, an Options menu sets the time / toggles seconds.
 - **Settings** — a control panel for `GEOBENCH.CFG`: pick the **font** (`.FNT`),
-  **icon set** (`.IST`) and **cursor** (`.SPR`) from the system folder (font/icons/
-  cursor apply on the next boot), and a **Colours** editor for the 4 Mode-1 pens +
+  **icon set** (`.IST`), **cursor** (`.SPR`) and **backdrop** pattern (`.BDP`, or
+  `SOLID`) from the system folder, plus a **Colours** editor for the 4 Mode-1 pens +
   the screen border (`INKS=`) with a **live** preview — `-`/`+` recolours the whole
-  desktop instantly, Save persists it. Launches from the System menu or the gear icon.
+  desktop instantly. A **Reload** action re-applies font/icons/cursor/backdrop on
+  the running desktop with no reboot; Save persists it all. The icon-set picker can
+  **filter by icon count**. Launches from the System menu or the gear icon.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),
