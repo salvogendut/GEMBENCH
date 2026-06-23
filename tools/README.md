@@ -46,8 +46,13 @@ helper they call.
 ## Asset converters
 
 - **`png2cpc.py`** — a 32×32 PNG → a CPC Mode-1 icon asm source (for `.IST` sets).
-- **`png2spr.py`** — a PNG → a `.SPR` cursor sprite.
-- **`packicons.py`** — pack icon asm sources into a `.IST` set (in slot order).
+- **`png2spr.py`** — a PNG → a `.SPR` cursor sprite (2 pre-shifted phases, mask+data
+  **interleaved** per byte to match the kernel compositor — see `lib/cursor.asm`).
+- **`packicons.py`** — pack icon asm sources into a `.IST` set (in slot order); builds
+  `build/DEFAULT.IST` fresh each build.
+- **`ist_append.py`** — append icon asm bitmap(s) to an existing (hand-tuned) `.IST`
+  set, bumping the count + shifting offsets; used to add a new slot to the tracked
+  `assets/iconsets/*.IST` sets that `packicons.py` doesn't regenerate.
 - **`packfont.py` / `genfont.py`** — pack an 8×8 asm font into a `.FNT`, or generate
   the 6×8 `DEFAULT.FNT` procedurally.
 - **`picconv.py`** — convert a PNG to a 4-colour Mode-1 `.PIC` (GUI or CLI).
