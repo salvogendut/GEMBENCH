@@ -31,13 +31,13 @@
 #define MIN_H     72
 #define TITLE_H   14
 #define LINE_H    10
-#define MAX_LINES ((win_h - TITLE_H - 13) / LINE_H)   /* visible text rows (runtime) */
+#define MAX_LINES ((win_h - TITLE_H - 15) / LINE_H)   /* visible text rows (runtime) */
 #define WRAP      ((win_w - 4) * 2 / 3)               /* chars per wrapped line (runtime) */
 #define MAXWRAP   52           /* line[] cap = max WRAP (80-col window) */
 #define MAXVIS    18           /* names[] cap = max MAX_LINES */
 /* text origin, relative to the live (draggable) window position */
 #define TX_COL    (win_x + 2)
-#define TX_Y0     (win_y + TITLE_H)
+#define TX_Y0     (win_y + TITLE_H + 2)   /* +2: a 2px gap so the title bar doesn't clip line 1 */
 
 #define K_ENTER   0x0D
 #define K_BS      0x08
