@@ -26,12 +26,14 @@
 #define TITLE_H   14
 #define DEF_X     18
 #define DEF_Y     32
-#define DEF_W     42           /* byte cols (168 px) */
-#define DEF_H     86           /* lines */
+#define DEF_W     46           /* byte cols (184 px) */
+#define DEF_H     116          /* lines (room for the 5-pen colours editor) */
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   13           /* value column offset from the window's left (byte cols) */
+#define COLOUR_ROW 3           /* the "Colours..." line sits below the 3 picker rows */
 
 static unsigned char win_x, win_y, win_w, win_h;
+static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
 
 /* MIN_IST_ICONS: the minimum icon count for an .IST to be offered as the desktop icon
    set. A desktop set must supply every slot the kernel draws (currently 26 icons, gear
@@ -253,8 +255,164 @@ static void s_draw(void)
         cfg_get(rows[r].key, val);
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(r), val);
     }
+    gb_textbw((unsigned char)(win_x + 1), row_y(COLOUR_ROW), "Colours...");
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + win_h - 10),
-              "Applies on reboot.");
+              "Font/icons: reboot.");
+}
+
+/* ---- desktop colours (INKS=) ------------------------------------------------ */
+
+/* 5 colours: the 4 Mode-1 pens + the screen border (its own CPC ink). */
+#define NPEN 5
+static const char *const pen_lbl[NPEN] = { "Paper", "Text", "Edge", "Accent", "Border" };
+static unsigned char ink_cur[NPEN], ink_orig[NPEN];
+
+/* apply a colour live: pens 0-3 via SCR SET INK (&BC32), the border via SCR SET BORDER
+   (&BC38). A palette change recolours every pixel of that pen at once, so the whole UI
+   updates with no redraw - that is the preview (and, on Save, the immediate effect). */
+static volatile unsigned char si_pen, si_ink;
+static void si_call(void) __naked
+{
+__asm
+    ld   a,(_si_ink)
+    ld   b,a
+    ld   c,a
+    ld   a,(_si_pen)
+    call 0xBC32          ; SCR SET INK (A = pen, B/C = ink)
+    ret
+__endasm;
+}
+static void sb_call(void) __naked
+{
+__asm
+    ld   a,(_si_ink)
+    ld   b,a
+    ld   c,a
+    call 0xBC38          ; SCR SET BORDER (B/C = ink)
+    ret
+__endasm;
+}
+static void apply_colour(unsigned char i, unsigned char ink)
+{
+    si_ink = ink;
+    if (i < 4) { si_pen = i; si_call(); }
+    else sb_call();
+}
+
+/* cfg_get_inks: parse INKS= into out[NPEN]; the default palette (1,26,0,6,1) when
+   absent. (cfg_get can't be reused - an INKS value can exceed its 8-char cap.) */
+static void cfg_get_inks(unsigned char *out)
+{
+    unsigned int p = cfg_keypos("INKS=");
+    unsigned char i;
+    out[0] = 1; out[1] = 26; out[2] = 0; out[3] = 6; out[4] = 1;
+    if (p == 0xFFFF) return;
+    for (i = 0; i < NPEN && p < cfglen; i++) {
+        unsigned int v = 0;
+        unsigned char got = 0;
+        while (p < cfglen && cfgbuf[p] >= '0' && cfgbuf[p] <= '9') { v = v*10 + (cfgbuf[p]-'0'); p++; got = 1; }
+        if (got) out[i] = (unsigned char)(v > 26 ? 26 : v);
+        if (p >= cfglen || cfgbuf[p] == '\r' || cfgbuf[p] == '\n') break;
+        if (cfgbuf[p] == ',') p++;
+    }
+}
+
+/* cfg_set_inks: write the 5 colours as "d,l,k,a,b" into INKS= and save. */
+static void cfg_set_inks(const unsigned char *inks)
+{
+    char s[18];
+    unsigned char i, j = 0, v;
+    for (i = 0; i < NPEN; i++) {
+        v = inks[i];
+        if (v >= 10) s[j++] = (char)('0' + v / 10);
+        s[j++] = (char)('0' + v % 10);
+        if (i < NPEN - 1) s[j++] = ',';
+    }
+    s[j] = 0;
+    cfg_set("INKS=", s);
+}
+
+static unsigned char colp_y(unsigned char i) { return (unsigned char)(win_y + TITLE_H + 13 + i * 12); }
+
+static void colp_num(unsigned char i)        /* draw pen i's ink number (00-26) */
+{
+    char t[3];
+    unsigned char v = ink_cur[i];
+    t[0] = (char)((v >= 10) ? '0' + v / 10 : ' ');
+    t[1] = (char)('0' + v % 10);
+    t[2] = 0;
+    gb_fill((unsigned char)(win_x + 13), colp_y(i), 3, 8, 1);
+    gb_textbw((unsigned char)(win_x + 13), colp_y(i), t);
+}
+
+static void colp_draw(void)
+{
+    unsigned char i, by = (unsigned char)(win_y + win_h - 11);
+    gb_fill(win_x, (unsigned char)(win_y + TITLE_H), win_w,
+            (unsigned char)(win_h - TITLE_H), 1);
+    gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + TITLE_H + 1), "Desktop colours");
+    for (i = 0; i < NPEN; i++) {
+        gb_textbw((unsigned char)(win_x + 1),  colp_y(i), pen_lbl[i]);
+        gb_textbw((unsigned char)(win_x + 11), colp_y(i), "-");
+        colp_num(i);
+        gb_textbw((unsigned char)(win_x + 17), colp_y(i), "+");
+    }
+    gb_textbw((unsigned char)(win_x + 1), by, "Save");
+    gb_textbw((unsigned char)(win_x + 8), by, "Cancel");
+}
+
+/* colours_dialog: modal 4-pen editor. Each -/+ steps a pen's CPC ink (0-26, wrapping)
+   and applies it live. Save writes INKS= and keeps the live palette (so it also takes
+   effect at once); Cancel / ESC restore the inks the dialog opened with. */
+static void colours_dialog(void)
+{
+    unsigned char i, flags = 0, done = 0;
+    cfg_get_inks(ink_cur);
+    for (i = 0; i < NPEN; i++) ink_orig[i] = ink_cur[i];
+    gb_modal_set(1);
+    gb_curhide();
+    colp_draw();
+    gb_curshow();
+    while (!done) {
+        flags = gb_poll();
+        if (flags & GB_QUIT) {                       /* ESC = cancel: restore + leave */
+            for (i = 0; i < NPEN; i++) apply_colour(i, ink_orig[i]);
+            done = 1;
+            break;
+        }
+        if (!(flags & GB_CLICK)) continue;
+        {
+            unsigned char mx = gb_mx(), my = gb_my();
+            unsigned char by = (unsigned char)(win_y + win_h - 11);
+            if (my >= by && my < by + 8) {
+                if (mx >= win_x + 1 && mx < win_x + 7) {            /* Save */
+                    cfg_set_inks(ink_cur);
+                    done = 1;
+                } else if (mx >= win_x + 8 && mx < win_x + 18) {    /* Cancel */
+                    for (i = 0; i < NPEN; i++) apply_colour(i, ink_orig[i]);
+                    done = 1;
+                }
+            } else {
+                for (i = 0; i < NPEN; i++) {
+                    unsigned char ry = colp_y(i);
+                    if (my < ry || my >= ry + 8) continue;
+                    if (mx >= win_x + 10 && mx < win_x + 13)          /* - */
+                        ink_cur[i] = (unsigned char)((ink_cur[i] == 0) ? 26 : ink_cur[i] - 1);
+                    else if (mx >= win_x + 16 && mx < win_x + 20)     /* + */
+                        ink_cur[i] = (unsigned char)((ink_cur[i] >= 26) ? 0 : ink_cur[i] + 1);
+                    else continue;
+                    apply_colour(i, ink_cur[i]);                     /* live preview */
+                    gb_curhide(); colp_num(i); gb_curshow();
+                    break;
+                }
+            }
+        }
+    }
+    if (flags & GB_QUIT) while (gb_poll() & GB_QUIT) ;   /* swallow the ESC repeat */
+    gb_modal_set(0);
+    gb_curhide();
+    s_draw();
+    gb_curshow();
 }
 
 /* ---- interaction ------------------------------------------------------------- */
@@ -289,6 +447,11 @@ static void s_click(void)
             open_picker(r);
             return;
         }
+    }
+    {
+        unsigned char ry = row_y(COLOUR_ROW);
+        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2))
+            colours_dialog();
     }
 }
 
