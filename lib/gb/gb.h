@@ -47,6 +47,11 @@ void gb_fill(unsigned char col, unsigned char line,      /* filled rectangle    
  * "erase to the desktop" path so the pattern stays seamless under icons/windows. */
 void gb_backdrop(unsigned char col, unsigned char line,
                  unsigned char w, unsigned char h);
+/* gb_reload: re-apply the font / icon set / cursor / backdrop tile from GEOBENCH.CFG
+ * at runtime (#185), so a Settings change shows without a reboot. The caller must
+ * first write the new 8.3 name(s) into the kernel transfer area (and BD_SOLID for a
+ * backdrop); then repaint. (Desktop colours already apply live, so they're not redone.) */
+void gb_reload(void);
 void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline    */
               unsigned char w, unsigned char h, unsigned char pen);
 void gb_icon(unsigned char slot, unsigned char col,      /* full icon blit       */

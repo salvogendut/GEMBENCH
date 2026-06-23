@@ -22,6 +22,7 @@
         .globl  _gb_ui
         .globl  _gb_fill
         .globl  _gb_backdrop
+        .globl  _gb_reload
         .globl  _gb_frame
         .globl  _gb_icon
         .globl  _gb_icon_half
@@ -223,6 +224,10 @@ _gb_frame:
         call    0x8021          ; GB_FRAME
         ld      hl, (sv_ret)
         jp      (hl)
+
+;; void gb_reload(void);   -> GB_RELOAD: re-apply font/icons/cursor/backdrop (#185)
+_gb_reload:
+        jp      0x80BA
 
 ;; void gb_backdrop(u8 col, u8 line, u8 w, u8 h);   -> GB_BACKDROP
 ;;   A=col, L=line; stack [ret][word: h<<8 | w]. -> B=col C=line D=w E=h.
