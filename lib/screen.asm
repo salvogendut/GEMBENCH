@@ -89,23 +89,23 @@ bl_loop
                 ld    d,h                     ; DE = dest
                 ld    e,l
                 ld    hl,(bm_src)            ; HL = source row
+                ld    a,(bm_keep)            ; C = keep-mask: #FF lets the backdrop show through
+                ld    c,a                      ; an icon's pen-0 pixels (desktop, #128); #00 = opaque
                 ld    a,(bm_w)
                 ld    (bl_cnt),a
-                ; Composite one row with pen 0 transparent, so the desktop backdrop shows
-                ; through an icon's background (#128). Per byte: mask has BOTH Mode-1 bit
-                ; planes set for every non-pen-0 pixel; screen = (screen AND ~mask) OR icon.
-                ; On a solid background this is identical to a plain copy.
+                ; Composite one row. mask has BOTH Mode-1 bit planes set for every non-pen-0
+                ; pixel; screen = (screen AND (~mask AND keep)) OR icon. keep=#00 makes this a
+                ; plain opaque copy (so the File Manager etc. are unchanged, #182).
 bl_byte
-                ld    a,(hl)                  ; icon byte
-                ld    c,a                      ; C = icon (kept for the final OR)
-                and   #0F                      ; bit1 plane (low nibble)
+                ld    a,(hl)                  ; icon byte: bit1 plane (low nibble)
+                and   #0F
                 ld    b,a
-                ld    a,c
+                ld    a,(hl)                  ; re-read: bit0 plane (high nibble -> low)
                 rrca
                 rrca
                 rrca
                 rrca
-                and   #0F                      ; bit0 plane (high nibble -> low)
+                and   #0F
                 or    b                        ; per-pixel opaque (low nibble)
                 ld    b,a
                 rlca
@@ -114,10 +114,11 @@ bl_byte
                 rlca                           ; opaque << 4 (high nibble)
                 or    b                        ; mask = both planes set where opaque
                 cpl                            ; ~mask
+                and   c                        ; & keep-mask (transparent only on the desktop)
                 ld    b,a
                 ld    a,(de)                  ; screen byte
-                and   b                        ; keep background where transparent
-                or    c                        ; add the icon's opaque pixels
+                and   b                        ; keep background where kept-transparent
+                or    (hl)                     ; add the icon's opaque pixels
                 ld    (de),a
                 inc   hl
                 inc   de
@@ -429,6 +430,7 @@ bm_h            db    0            ; height in rows
 bl_rows         db    0
 bl_y            db    0
 bl_cnt          db    0            ; blit_bitmap column counter (transparent composite, #128)
+bm_keep         db    0            ; #FF = pen-0 transparent (desktop), #00 = opaque (#182)
 
 ; --- fill_block parameters / scratch -------------------------------------
 fb_x            db    0            ; x in bytes

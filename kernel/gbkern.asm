@@ -924,7 +924,9 @@ kw_y            db    0
 kw_w            db    0
 kw_h            db    0
 kf_sy           db    0            ; kwin_frame: current title-bar stripe line
-kw_title        defs  24
+kw_title        equ   #12D1        ; 24-byte window-title scratch, relocated to low RAM (always
+                                   ; mapped) to reclaim resident space for the icon keep-mask gate
+                                   ; (#182). Sits in the free #12D1..#12E8 block below APP_HANDLER.
 
 ; --- directory enumeration services --------------------------------------
 ; Return CF set with HL -> a resident "NAME.EXT" string (0-term) for the entry,
@@ -973,6 +975,8 @@ k_icon_half
                 ld    (be_x),a
                 ld    a,c
                 ld    (be_y),a
+                xor   a                        ; half icons (File Manager list view) are opaque (#182)
+                ld    (bm_keep),a
                 call  to_data
                 ld    a,(be_slot)
                 call  icon_geom              ; sets bm_src/bm_w/bm_h/bm_x/bm_y
@@ -2893,6 +2897,11 @@ k_icon
                 ld    (gi_x),a
                 ld    a,c
                 ld    (gi_y),a
+                ld    a,(bank_cur)           ; only the desktop (PAGE_APP0) blits icons pen-0
+                sub   PAGE_APP0               ; transparent so the backdrop shows through (#182);
+                sub   1                        ; every other app draws opaque icons.
+                sbc   a,a                      ; A = #FF iff bank_cur == PAGE_APP0, else #00
+                ld    (bm_keep),a
                 call  to_data
                 ld    a,(gi_slot)
                 call  icon_full_geom
