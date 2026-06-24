@@ -39,15 +39,18 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
     lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
-    lib/icon_font.asm lib/icon_iconset.asm \
+    lib/icon_font.asm \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
     lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
     lib/icon_viewer.asm \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_settings.asm \
-    # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=.IST 15=DESKTOP 16=FILEMGR
-    # 17=PAINT 18=FRACTAL 19=SD (Albireo Disk C, #104) 20=VIEWER
-    # 21=TELNET 22=NETWORK 23=SHELL 24=UP (FileMgr ".." entry, #142) 25=SETTINGS gear (#129)
+    # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=DESKTOP 15=FILEMGR
+    # 16=PAINT 17=FRACTAL 18=SD (Albireo Disk C, #104) 19=VIEWER
+    # 20=TELNET 21=NETWORK 22=SHELL 23=UP (FileMgr ".." entry, #142) 24=SETTINGS gear (#129)
+    # NOTE (#198): icon_iconset removed - it was byte-identical to icon_app; .IST files
+    # now show the .APP icon, shrinking DEFAULT.IST by one slot (the floppy AMSDOS reader
+    # garbles the icon set above a size threshold). All slots >=14 shifted up by 1.
 python3 tools/packicons.py build/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)

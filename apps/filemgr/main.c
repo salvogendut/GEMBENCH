@@ -291,14 +291,15 @@ static const char *win_title(void)               /* "Disk C" + path -> title_buf
 #define ICON_NOTEPAD 11
 #define ICON_ICONED 12
 #define ICON_FNT 13
-#define ICON_IST 14
-#define ICON_DESKTOP 15
-#define ICON_FILEMGR 16
-#define ICON_PAINT 17
-#define ICON_FRACTAL 18
-#define ICON_VIEWER 20
-#define ICON_UP 24            /* up-arrow for the ".." parent-dir entry (#142) */
-#define ICON_SETTINGS 25      /* the gear (#129) - matches the desktop Settings icon */
+/* .IST icon-set files reuse the .APP document icon (they were byte-identical, #198):
+   the duplicate bitmap was dropped to shrink DEFAULT.IST, so every slot below shifts up 1. */
+#define ICON_DESKTOP 14
+#define ICON_FILEMGR 15
+#define ICON_PAINT 16
+#define ICON_FRACTAL 17
+#define ICON_VIEWER 19
+#define ICON_UP 23            /* up-arrow for the ".." parent-dir entry (#142) */
+#define ICON_SETTINGS 24      /* the gear (#129) - matches the desktop Settings icon */
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -334,7 +335,7 @@ static unsigned char entry_icon(const char *name)
     if (ext_eq(ext, "SCR") || ext_eq(ext, "PIC")) return ICON_PICTURE;
     if (ext_eq(ext, "TXT") || ext_eq(ext, "CFG")) return ICON_TEXT;
     if (ext_eq(ext, "FNT")) return ICON_FNT;
-    if (ext_eq(ext, "IST")) return ICON_IST;
+    if (ext_eq(ext, "IST")) return ICON_APP;   /* .IST shares the .APP icon (#198) */
     if (ext_eq(ext, "APP")) {
         if (name_is(name, "NOTEPAD")) return ICON_NOTEPAD;
         if (name_is(name, "ICONED"))  return ICON_ICONED;
@@ -363,7 +364,6 @@ static unsigned char rank_of(unsigned char ic)
         case ICON_PICTURE:  return 2;
         case ICON_TEXT:     return 3;
         case ICON_BASIC:    return 4;
-        case ICON_IST:      return 5;
         case ICON_FNT:      return 6;
         case ICON_GEOBENCH: return 7;
         default:            return 8;   /* binaries / unknown */

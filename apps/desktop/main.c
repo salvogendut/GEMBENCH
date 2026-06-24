@@ -37,8 +37,8 @@
 #define IDX_SETTINGS 5        /* the gear (#129) - opens SETTINGS.APP */
 
 #define ICON_IDE 1            /* IST slots (packicons order): Disk C as IDE ... */
-#define ICON_SD  19           /* ... vs Albireo SD/USB card (#104) */
-#define ICON_GEAR 25         /* ... the Settings gear (#129) */
+#define ICON_SD  18           /* ... vs Albireo SD/USB card (#104); slots shifted -1 (#198 dedup) */
+#define ICON_GEAR 24         /* ... the Settings gear (#129) */
 static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, 66, 66, 66 };  /* right col x=66: fits the
                                                                          8-char "Settings" label (#129) */
 static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 150, 97 };  /* trash y=150: its label
