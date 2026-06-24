@@ -68,6 +68,8 @@ static unsigned int  pic_off;
 static unsigned char rmin_w = MIN_W, rmin_h = MIN_H;   /* live resize floor (= picture size) */
 static unsigned char banked;                           /* the borrowed bank (0 = in-page), #164 */
 static unsigned char scroll_y;                         /* top visible picture row (#166 scroll) */
+static unsigned char pic_toobig;                       /* 1 = .PIC too big for the in-page buffer and
+                                                          no spare RAM bank -> show a message, not blank */
 #define PIC_PAGE_K (*(volatile unsigned char *)0x130B) /* the kernel's single "active pic bank";
                                                           re-select OURS before each blit/close so
                                                           a second Viewer window can't steal it (#164) */
@@ -80,7 +82,8 @@ static unsigned char is_pic(void)
     return (unsigned char)(filen >= 6 &&
         filebuf[0] == 'G' && filebuf[1] == 'B' && filebuf[2] == 'P' && filebuf[3] == 'C');
 }
-static unsigned char have_pic(void) { return (unsigned char)(banked || is_pic()); }
+static unsigned char is_pic_name(const char *n);   /* fwd: defined with the cycling code below */
+static unsigned char have_pic(void) { return (unsigned char)(banked || is_pic() || pic_toobig); }
 
 /* the window can't shrink below the picture (the blit has no width clip). */
 static void pic_floor(void)
@@ -112,24 +115,41 @@ static void bank_or_parse(void)
     if (banked) { PIC_PAGE_K = banked; gb_pic_close(); banked = 0; }  /* free OUR old bank only -
                                                       PIC_PAGE may hold another window's (#164) */
     banked = gb_pic_open();                        /* open sets PIC_PAGE to the new bank itself */
+    pic_toobig = 0;
     if (banked) {                                  /* in a bank: read the kernel-parsed header */
         pic_wb = PIC_WB_K; pic_h = PIC_H_K; pic_off = PIC_OFF_K;
         pic_floor();
         return;
     }
     filen = gb_fs_load(filebuf, VIEW_MAX);
-    if (is_pic()) parse_pic();
-    else { rmin_w = MIN_W; rmin_h = MIN_H; }
+    if (is_pic()) { parse_pic(); return; }         /* a .PIC small enough to load in-page */
+    {
+        char nm[11];
+        gb_get_name(nm);                           /* this window's launch name (gb_doc_name isn't
+                                                      set until gb_doc() runs, after us). The AMSDOS
+                                                      reader REFUSES a file bigger than the buffer,
+                                                      so a .PIC that loaded nothing + no spare bank
+                                                      = too big for this machine (#viewer). */
+        if (!filen && is_pic_name(nm)) {
+            pic_toobig = 1;
+            pic_wb = 26; pic_h = 32; pic_off = 0;  /* a small window just for the message */
+            pic_floor();
+            return;
+        }
+    }
+    rmin_w = MIN_W; rmin_h = MIN_H;
 }
 
 static void size_to_pic(void)   /* size the window to the picture, clamped on screen */
 {
     unsigned char x = gb_wm_x(), y = gb_wm_y(), w, h, avail = (unsigned char)(200 - y);
     unsigned int hh = pic_h + 16;
-    w = (unsigned char)(pic_wb + 3 + (pic_h > 186 ? SB_W : 0));  /* +scrollbar cols if it'll scroll */
+    h = (hh > avail) ? avail : (unsigned char)hh; if (h < MIN_H) h = MIN_H;   /* 16-bit clamp */
+    /* the scrollbar (sb_shown) appears when the content is shorter than the picture; widen for
+       it using the SAME test so a clamped window can't push the blit past its right edge. */
+    w = (unsigned char)(pic_wb + 3 + (pic_h > (unsigned int)(h - 14) ? SB_W : 0));
     if (w < MIN_W) w = MIN_W;
     if (w > (unsigned char)(80 - x)) w = (unsigned char)(80 - x);
-    h = (hh > avail) ? avail : (unsigned char)hh; if (h < MIN_H) h = MIN_H;   /* 16-bit clamp */
     gb_wm_setsize(w, h);
 }
 
@@ -142,10 +162,19 @@ static unsigned char vis_rows(void)
 /* sb_shown: 1 when the (left) scrollbar is drawn - windowed + taller than the visible area. */
 static unsigned char sb_shown(unsigned char vh) { return (unsigned char)(!*WM_FS && pic_h > vh); }
 
+/* draw_toobig: the .PIC can't fit the in-page buffer and there was no spare RAM bank, so
+   show a message instead of a blank window (#viewer). */
+static void draw_toobig(void)
+{
+    gb_text(TX_COL, TX_Y0,                           "Pic too big");
+    gb_text(TX_COL, (unsigned char)(TX_Y0 + LINE_H), "Need 256K+");
+}
+
 static void draw_pic(void)
 {
     unsigned char x, y, vh = vis_rows(), rows, sb = sb_shown(vh);
     unsigned int src, r;
+    if (pic_toobig) { draw_toobig(); return; }
     if (*WM_FS) {                                  /* fullscreen: centre (top-align if too tall) */
         x = (unsigned char)(pic_wb < 80 ? (80 - pic_wb) / 2 : 0);
         y = (unsigned char)(pic_h <= 200 ? (200 - pic_h) / 2 : 0);
