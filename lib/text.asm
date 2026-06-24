@@ -329,18 +329,21 @@ tc_x            db    0            ; text byte column (start of text)
 tc_y            db    0            ; text top line
 txt_penb        db    0
 txt_paperb      db    0
-dc_px           dw    0            ; pixel-X cursor while drawing
-dc_gp           dw    0            ; current glyph row pointer
-dc_rows         db    0
-dc_y            db    0
-br_glyph        db    0
-br_phase        db    0
-br_P            dw    0            ; glyph pixels, 16-bit shift register
-br_C            dw    0            ; coverage mask, 16-bit shift register
-br_sp           dw    0            ; screen pointer for the current byte
-br_pn           db    0
-br_cn           db    0
-br_acc          db    0
+; #196: the per-draw / per-glyph renderer scratch below is relocated to the low-RAM
+; pool (#14BC..#14CC) - all set-before-use within one text draw, label-accessed only,
+; so they cost 0 resident image bytes (freeing room for the bootsplash; gbkern.asm:153).
+dc_px           equ   #14C2        ; pixel-X cursor while drawing
+dc_gp           equ   #14C4        ; current glyph row pointer
+dc_rows         equ   #14C6
+dc_y            equ   #14C7
+br_glyph        equ   #14C8
+br_phase        equ   #14C9
+br_P            equ   #14BC        ; glyph pixels, 16-bit shift register
+br_C            equ   #14BE        ; coverage mask, 16-bit shift register
+br_sp           equ   #14C0        ; screen pointer for the current byte
+br_pn           equ   #14CA
+br_cn           equ   #14CB
+br_acc          equ   #14CC
 
 ; --- Font geometry (cached from the loaded font header) ------------------
 font_glyphs     dw    0            ; glyph data base (font buffer + 16)
