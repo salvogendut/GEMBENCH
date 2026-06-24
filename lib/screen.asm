@@ -422,24 +422,28 @@ row80
                 dw    1040,1120,1200,1280,1360,1440,1520,1600,1680,1760,1840,1920
 
 ; --- Blit parameters / scratch -------------------------------------------
-bm_src          dw    0            ; source bitmap pointer (advanced by blit)
-bm_x            db    0            ; destination x in bytes (0..79)
-bm_y            db    0            ; destination y (0..199)
-bm_w            db    0            ; width in bytes
-bm_h            db    0            ; height in rows
-bl_rows         db    0
-bl_y            db    0
-bl_cnt          db    0            ; blit_bitmap column counter (transparent composite, #128)
-bm_keep         db    0            ; #FF = pen-0 transparent (desktop), #00 = opaque (#182)
+; #196: relocated to the low-RAM scratch pool (#14A4..) - all write-before-read per
+; blit, label-accessed only, so they cost 0 resident image bytes (see gbkern.asm:153).
+bm_src          equ   #14A4        ; source bitmap pointer (advanced by blit)
+bm_x            equ   #14A6        ; destination x in bytes (0..79)
+bm_y            equ   #14A7        ; destination y (0..199)
+bm_w            equ   #14A8        ; width in bytes
+bm_h            equ   #14A9        ; height in rows
+bl_rows         equ   #14AA
+bl_y            equ   #14AB
+bl_cnt          equ   #14AC        ; blit_bitmap column counter (transparent composite, #128)
+bm_keep         equ   #14AD        ; #FF = pen-0 transparent (desktop), #00 = opaque (#182)
 
 ; --- fill_block parameters / scratch -------------------------------------
-fb_x            db    0            ; x in bytes
-fb_y            db    0            ; y line
-fb_w            db    0            ; width in bytes
-fb_h            db    0            ; height in rows
+; #196: fb_x/y/w/h relocated to low RAM (#14B8..) - set before every fill (via fill_xywh
+; or k_backdrop) and re-read on reuse, exactly as in resident RAM; label-accessed only.
+fb_x            equ   #14B8        ; x in bytes
+fb_y            equ   #14B9        ; y line
+fb_w            equ   #14BA        ; width in bytes
+fb_h            equ   #14BB        ; height in rows
 fb_val          db    0            ; Mode 1 fill byte
-fb_rows         db    0
-fb_cy           db    0
+fb_rows         equ   #14AE        ; #196: relocated to low RAM (fill loop scratch)
+fb_cy           equ   #14AF        ; #196: relocated to low RAM
 
 ; --- clip rectangle (issue #45 phase 4) ----------------------------------
 ; fill_block clips its rect to this window before drawing, so a partial repaint
@@ -450,10 +454,10 @@ clip_x          db    0            ; clip rect, byte col / line / byte-w / lines
 clip_y          db    0
 clip_w          db    80
 clip_h          db    200
-fbw_x           db    0            ; fill_block's clipped working rect (fb_* kept
-fbw_y           db    0            ; intact so callers that reuse fb_* still work)
-fbw_w           db    0
-fbw_h           db    0
+fbw_x           equ   #14B0        ; #196: fill_block's clipped working rect, relocated to low
+fbw_y           equ   #14B1        ; RAM (computed per fill from fb_* + clip; write-before-read)
+fbw_w           equ   #14B2
+fbw_h           equ   #14B3
 
 ; --- save_block / restore_block parameters / scratch ---------------------
 sb_x            db    0            ; rectangle x in bytes
@@ -461,6 +465,6 @@ sb_y            db    0            ; rectangle y
 sb_w            db    0            ; width in bytes
 sb_h            db    0            ; height in rows
 sb_buf          dw    0            ; RAM buffer pointer
-sb_rows         db    0
-sb_cy           db    0
-sb_ptr          dw    0
+sb_rows         equ   #14B4        ; #196: relocated to low RAM (save/restore loop scratch)
+sb_cy           equ   #14B5        ; #196: relocated to low RAM
+sb_ptr          equ   #14B6        ; #196: relocated to low RAM (2 bytes -> #14B6..#14B7)

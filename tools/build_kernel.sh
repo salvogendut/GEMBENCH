@@ -31,6 +31,7 @@ fi
 mkdir -p build
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 
+python3 tools/png2cpc.py assets/SPLASH.png build/SPLASH.BIN splash 96x144  # #196: bootsplash lollipop (raw Mode-1 24x144)
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
 python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
 python3 tools/packicons.py build/DEFAULT.IST \

@@ -459,7 +459,8 @@ floppysv_modname db    "FLOPPYSVBIN"          ; 8.3, space-padded
 ; #152: fixed low RAM in the GEOBENCH.ROM build (FS_RDIO_LOWRAM, in fs_rom_lowram.inc),
 ; packed right after the core state; the resident/paged builds keep the original `defs`.
                 ifndef FS_RDIO_LOWRAM
-fslf_blocks     defs  16           ; allocation block numbers of the found extent
+fslf_blocks     equ   #1490        ; #196: relocated to low RAM (was defs 16); the extent's
+                                   ; 16 allocation block numbers, rebuilt per fs_load_file (scratch)
 fslf_secs       defb  0            ; sectors left to read
 fslf_si         defb  0            ; sector index within the file
 fslf_rc         defb  0            ; record count (for the no-header size)

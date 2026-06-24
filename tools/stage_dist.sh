@@ -43,6 +43,7 @@ cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.BIN"   # #135: paged AMSDOS/floppy write mo
 cp build/GBUI.RAW "$SYS/GBUI.BIN"           # #142: paged dialog (popup/prompt/file-picker) module
 cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST build/PAINT.IST \
    build/DEFAULT.SPR build/HAND.SPR "$SYS/"
+cp build/SPLASH.BIN "$SYS/"                    # #196: bootsplash lollipop bitmap
 for bdp in build/*.BDP; do                    # #128: backdrop tiles (BACKDROP=<name>)
     [ -e "$bdp" ] && cp "$bdp" "$SYS/"
 done

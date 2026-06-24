@@ -153,6 +153,11 @@ MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the
 ; #188: relocated resident scratch pool #1450..#148F (free gap #144C..CUR_LOW #1500).
 ; gtd_scratch #1450 (49B), cb_tdir #1481 (4B), launch_arg #1485 (11B) live here so they
 ; cost 0 resident image bytes. Do not reuse this range for other low-RAM data.
+; #196: extended #1490..#14BB for the bootsplash reclaim (more write-before-read scratch
+; moved out of the resident image): fslf_blocks #1490 (16B), pm_newx #14A0 (2B), poll_byte
+; #14A2, poll_line #14A3, then screen.asm fill/blit/save scratch #14A4..#14BB (bm_*, bl_*,
+; fb_rows/cy, fbw_*, sb_rows/cy/ptr, fb_x/y/w/h), and text.asm renderer scratch
+; #14BC..#14CC (br_*, dc_*). Next free: #14CD..#14FF.
 MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
@@ -439,9 +444,13 @@ m4s_hang        jr    m4s_hang
                                              ; KCFG_ICONS / KCFG_FONT (before the
                                              ; font/icon loaders consume them)
                 call  set_palette            ; re-apply now KCFG_INKS holds INKS= (#129)
+                call  boot_splash            ; #196: lollipop + empty load bar
+                call  boot_tick              ; #196: bar 1/4 (moves before the long assets load)
                 call  assets_load            ; font + icons + cursor + backdrop (also GB_RELOAD, #185)
+                call  boot_tick              ; #196: bar 2/4
                 call  clock_init             ; detect RTC + seed the software clock (#77:
                                               ; the desktop draws the bar, not the kernel)
+                call  boot_tick              ; #196: bar 3/4
                 ld    hl,WM_NWIN            ; clear WM low-RAM state (counts, focus, table
                 ld    de,WM_NWIN+1          ; incl. alive flags, z-order)
                 ld    bc,WM_Z+WM_MAXWIN-WM_NWIN-1
@@ -452,6 +461,7 @@ m4s_hang        jr    m4s_hang
                 ld    (WM_FPREV),a           ; installs the desktop's menu
                 ld    hl,kern_end-GB_KERNEL  ; resident kernel size -> GB_KSIZE (Ram Usage)
                 ld    (GB_KSIZE),hl
+                call  boot_tick              ; #196: bar 4/4 (full) just before the desktop loads
                 ld    hl,name_desktop        ; the desktop is the first app
                 call  launch_app             ; run DESKTOP in PAGE_APP0 (the WM master loop
                                               ; runs forever; only GB_EXIT gets past here)
@@ -603,8 +613,8 @@ gp_nohold
                 ld    c,a
                 ret
 poll_lastfire   db    0
-poll_byte       db    0
-poll_line       db    0
+poll_byte       equ   #14A2        ; #196: relocated to low RAM (write-before-read scratch)
+poll_line       equ   #14A3        ; #196: relocated to low RAM
 
 ; poll_move: apply the per-frame pointer delta (in_dx/in_dy, from input_poll -
 ; joystick step and/or SymbiFace mouse) to the cursor, clamped to the screen.
@@ -622,7 +632,7 @@ poll_move
                 call  clamp398
                 ld    de,(pm_newx)
                 ret
-pm_newx         dw    0
+pm_newx         equ   #14A0        ; #196: relocated to low RAM (write-before-read scratch)
 clamp638
                 ld    de,638
                 jr    clamp_hl
@@ -1066,20 +1076,26 @@ cfg_fname       db    "GEOBENCHCFG"          ; "GEOBENCH.CFG" (8.3)
 ; run_cfgmod: load GBCFG.BIN into PAGE_APP0 and CALL it (it parses the transfer
 ; area). Mirrors launch_app's load path; runs under DI (the module needs no
 ; interrupts) with no top-bar/ESC handling - this is boot time.
-run_cfgmod
-                ld    hl,cfgmod_name
+; load_app0: HL = 11-byte 8.3 name -> map PAGE_APP0 and load /GEOBENCH/<name> into
+; APP_BASE (max #3F00). Returns with CF from fs_load_sys (set = loaded). The CALLER
+; saves/restores its page and handles DI/EI. Shared by run_cfgmod + boot_splash (#196).
+load_app0
                 ld    de,fs_req_name
                 call  copy11
-                ld    a,(bank_cur)           ; save the current page
-                push  af
-                di
                 ld    a,PAGE_APP0
                 call  bank_set
                 ld    hl,#3F00
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
-                call  fs_load_sys           ; #134: GBCFG.BIN lives in the /GEOBENCH system dir
+                jp    fs_load_sys           ; #134: system files live in the /GEOBENCH dir
+
+run_cfgmod
+                ld    a,(bank_cur)           ; save the current page
+                push  af
+                di
+                ld    hl,cfgmod_name
+                call  load_app0
                 jr    nc,rcm_done            ; module missing -> keep defaults
                 call  APP_BASE               ; crt0 _start -> main -> gb_cfg_parse
 rcm_done
@@ -1194,6 +1210,78 @@ backdrop_init
                 ld    a,1
                 ld    (BD_SOLID),a           ; missing file -> solid fallback
                 ret
+
+; --- bootsplash (#196) ----------------------------------------------------
+; A lollipop logo + a load progress bar shown during the boot's disk loads. The
+; screen is already GEOBENCH-blue (pen 0) from SCR_SET_MODE + set_palette, so the
+; lollipop's blue corners blit invisibly. The desktop's first repaint overwrites it.
+SPL_X           equ   28           ; lollipop left byte col (centred: (80-24)/2)
+SPL_Y           equ   12           ; lollipop top line
+SPL_WB          equ   24           ; width in bytes (96 px)
+SPL_H           equ   144          ; height in rows
+BAR_X           equ   16           ; progress bar left byte col
+BAR_Y           equ   170          ; progress bar top line
+BAR_WB          equ   48           ; full bar width in bytes (192 px)
+BAR_H           equ   10           ; bar height in rows
+BAR_SEG         equ   12           ; bytes per boot_tick; exactly 4 ticks fill BAR_WB
+; boot_splash: load /GEOBENCH/SPLASH.BIN into PAGE_APP0 and blit it, then draw the
+; empty (black) bar backing. Missing file -> skipped (CF clear). Called once from
+; kernel_main, after set_palette and before assets_load.
+boot_splash
+                ld    a,(bank_cur)
+                push  af
+                di
+                ld    hl,splash_name
+                call  load_app0              ; -> APP_BASE in PAGE_APP0, CF = loaded
+                jr    nc,bsp_done            ; no SPLASH.BIN -> plain blue boot
+                ld    hl,spl_dims            ; sb_x,sb_y,sb_w,sb_h are consecutive (screen.asm)
+                ld    de,sb_x
+                ld    bc,4
+                ldir
+                ld    hl,APP_BASE
+                ld    (sb_buf),hl
+                call  restore_block          ; blit the lollipop to the screen
+                ld    b,BAR_X                ; empty bar backing (pen-2 black) for contrast
+                ld    c,BAR_Y
+                ld    d,BAR_WB
+                ld    e,BAR_H
+                ld    a,#0F                  ; Mode-1 pen-2 (black) fill byte
+                ld    (fb_val),a
+                call  fill_xywh
+bsp_done
+                pop   af
+                call  bank_set
+                ei
+                ret
+splash_name     db    "SPLASH  BIN"          ; 8.3, space-padded
+spl_dims        db    SPL_X,SPL_Y,SPL_WB,SPL_H
+
+; boot_tick: advance the load bar by one red segment over the black backing, then hold
+; for BOOT_HOLD frames. Called at each kernel_main load milestone (exactly 4 times, no
+; clamp needed). The hold gives the splash a deliberate ~1.4 s minimum on fast storage
+; (Albireo SD loads near-instantly); slow floppy adds its own load time on top. Writes
+; screen RAM (#C000) only, so no bank management. bar_w starts 0 from its db (boot runs
+; once per fresh kernel load, so no reset).
+BOOT_HOLD       equ   18           ; frames held per segment (~0.36 s at 50 Hz)
+boot_tick
+                ld    a,(bar_w)
+                add   a,BAR_SEG
+                ld    (bar_w),a
+                ld    b,BAR_X
+                ld    c,BAR_Y
+                ld    d,a
+                ld    e,BAR_H
+                ld    a,#FF                  ; Mode-1 pen-3 (red) fill byte
+                ld    (fb_val),a
+                call  fill_xywh
+                ld    b,BOOT_HOLD
+bt_hold
+                push  bc
+                call  MC_WAIT_FLYBACK        ; pace to 50 Hz (firmware RAM jumpblock)
+                pop   bc
+                djnz  bt_hold
+                ret
+bar_w           db    0
 
 ; assets_load: (re)load the font, icon set, cursor and backdrop tile from the names in
 ; the transfer area. Run at boot, and again by GB_RELOAD when the Settings app changes
@@ -3323,6 +3411,8 @@ icon_imgend
                 assert icon_imgend-icon_img<=DATA_MODTOP-DATA_ICONS-#200,"DEFAULT.IST too big: would collide with the write module in PAGE_DATA - fewer icons or raise DATA_MODTOP"
 wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
 wel_imgend
+splash_img      incbin "../build/SPLASH.BIN"    ; #196: bootsplash lollipop (raw Mode-1, 24x144)
+splash_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
                 include "../lib/cursor_hand_data.asm" ; cur_hand_data..end -> HAND.SPR
                 ; Overflow apps are packaged by FURTHER rasm passes: this 64K image
@@ -3352,6 +3442,7 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "PAINT.IST",pist_img,pist_imgend-pist_img,DSK,"build/gbkern.dsk"
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
+                save  "SPLASH.BIN",splash_img,splash_imgend-splash_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
                 save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data
                 save  "HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data,DSK,"build/gbkern.dsk"
