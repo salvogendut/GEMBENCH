@@ -391,8 +391,10 @@ static void v_proc(void)
     }
 }
 
-static const gb_mwin_t vmw = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, v_proc, vtitle
+static const gb_mwin_t vmw = {            /* register SMALL (#206): main() then GROWS to the
+                                            picture/reading size, so the first paint damages only
+                                            that area instead of the near-fullscreen DEF rect. */
+    DEF_X, DEF_Y, MIN_W, MIN_H, MIN_W, MIN_H, v_proc, vtitle
 };
 /* read-only doc: File offers only Load; View offers Fullscreen (exts NULL = show all). */
 static const gb_doc_t vdoc = {
@@ -403,13 +405,18 @@ void main(void)
 {
     gb_wm_managed(&vmw);             /* register + focus FIRST, but it does NOT draw yet (#146):
                                         now gb_fs_load/gb_doc target THIS window's launch file,
-                                        and nothing is on screen while we do the slow load */
+                                        and nothing is on screen while we do the slow load. The
+                                        window is registered SMALL (MIN_W x MIN_H, #206) so the
+                                        size below only ever GROWS it - a shrink from a big
+                                        default would damage (and progressively repaint) almost
+                                        the whole screen, the "weird redraw" on open. */
     bank_or_parse();                 /* load the launch file: banked .PIC (#164) or in-page */
     loaded = 1;
-    if (have_pic()) {                /* size to the picture before the first paint */
+    if (have_pic()) {                /* size to the picture before the first paint (grows) */
         size_to_pic();
         opened = 1;                  /* already sized; v_frame's deferred resize is for File>Load */
     }
+    else gb_wm_setsize(DEF_W, DEF_H);   /* #206: text/binary - grow to a readable window */
     gb_doc(&vdoc);                   /* menus + adopt the name for the title */
     fmt83(vtitle, gb_doc_name());
     gb_restore_parent();             /* FIRST paint: content, fitted - the window appears ready */
