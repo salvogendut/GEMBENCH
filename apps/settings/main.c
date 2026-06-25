@@ -36,10 +36,13 @@ static unsigned char win_x, win_y, win_w, win_h;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
 
 /* MIN_IST_ICONS: the minimum icon count for an .IST to be offered as the desktop icon
-   set. A desktop set must supply every slot the kernel draws (currently 26 icons, gear
-   included) - a small toolchest like PAINT.IST (5 tool icons) would render out of
-   bounds. Bump this if kernel/gbkern.asm's packed icon list grows. */
-#define MIN_IST_ICONS 26
+   set. A desktop set must supply every slot the kernel draws - 25 icons since #198 dropped
+   the duplicate icon_iconset slot (DEFAULT.IST/REFINED.IST are now 25; was 26). A small
+   toolchest like PAINT.IST (5 tool icons) stays filtered out. Keep this in step with the
+   GBIS count of build/DEFAULT.IST (tools/build_kernel.sh packicons list) - if it drifts
+   ABOVE the real count, every full set is dropped and the Icons picker shows "No files
+   found" (#209). */
+#define MIN_IST_ICONS 25
 
 /* one configurable setting: a label, its GEOBENCH.CFG key (with '='), the 3-char file
    extension to list, and (for icon sets) the minimum icon count to qualify. */
