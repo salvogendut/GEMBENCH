@@ -30,8 +30,7 @@ mkdir -p "$SYS"
 # GBM4 vs GBALB; with M4 frozen out (docs/ARCHIVED.md) the loader is a one-liner.
 printf '10 RUN"GBALB\r\n' > "$OUT/GB.BAS"
 python3 tools/amsdos_header.py build/GBALB.RAW "$OUT/GBALB.BIN" GBALB BIN 0x8000
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\n' \
-    > "$OUT/GEOBENCH.CFG"
+cp build/GEOBENCH.CFG "$OUT/GEOBENCH.CFG"   # #205: one source, shared with the floppy DSK (pack_apps3)
 
 # --- /GBENCH: apps, modules, assets -------------------------------------------
 for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS; do
