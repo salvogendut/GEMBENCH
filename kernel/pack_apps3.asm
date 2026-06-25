@@ -11,6 +11,9 @@
 ;; as its own fresh 64K image into the SAME build/gbkern.dsk. Keep this list in step
 ;; with the stage_dist.sh globs when assets change.
                 org   #4000
+cfg_geobench    incbin "../build/GEOBENCH.CFG"  ; #205: default config at the floppy root - the
+cfg_geobench_e                                  ; Settings app reads/writes it (the card gets the
+                save  "GEOBENCH.CFG",cfg_geobench,cfg_geobench_e-cfg_geobench,DSK,"build/gbkern.dsk" ; same file via stage_dist.sh)
 bdp_fancy       incbin "../build/FANCY.BDP"     ; backdrop tiles (BACKDROP=<name>, #128)
 bdp_fancy_e
                 save  "FANCY.BDP",bdp_fancy,bdp_fancy_e-bdp_fancy,DSK,"build/gbkern.dsk"
