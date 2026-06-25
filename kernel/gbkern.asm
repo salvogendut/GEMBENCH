@@ -727,11 +727,11 @@ k_frame
                 ld    a,(gf_h)
                 ld    e,a
                 jp    fill_xywh
-gf_x            db    0
-gf_y            db    0
-gf_w            db    0
-gf_h            db    0
-gf_pen          db    0
+gf_x            equ   #14CD        ; #202: relocated to low RAM (was resident db) to reclaim 5
+gf_y            equ   #14CE        ; resident bytes for the backdrop_init tile-scratch fix.
+gf_w            equ   #14CF        ; gb_frame writes all five before reading them (#188 pattern).
+gf_h            equ   #14D0
+gf_pen          equ   #14D1
 
 ; --- firmware text (kernel boot messages) --------------------------------
 k_cls
@@ -1199,15 +1199,26 @@ backdrop_init
                 ld    hl,KCFG_BDPNAME        ; fs_req_name = <name>.BDP
                 ld    de,fs_req_name
                 call  copy11
-                ld    hl,64                   ; a tile is exactly 64 bytes
+                ; #202: the floppy stores the tile with a 128-byte AMSDOS header (Rc=2 -> 256
+                ; on-disk), and the AMSDOS reader grabs a whole 512-byte sector, so DON'T load
+                ; straight into the 64-byte BD_TILE (it sits right below BD_SOLID + more state).
+                ; Load into the 2KB fsam_buf dir scratch (already consumed by the entry scan;
+                ; the reader strips the header so the tile lands at fsam_buf[0]), then copy the
+                ; 64 tile bytes out. fs_load_max 512 clears the reader's Rc*128 > max guard.
+                ld    hl,512
                 ld    (fs_load_max),hl
-                ld    hl,BD_TILE
+                ld    hl,fsam_buf
                 ld    (fs_load_dst),hl
                 di
                 call  fs_load_sys            ; from /GEOBENCH on the boot drive (#134)
                 ei
-                ret   c                        ; loaded -> patterned (BD_SOLID stays 0)
-                ld    a,1
+                jr    nc,bdi_solid           ; missing / refused -> solid fallback
+                ld    hl,fsam_buf            ; copy the 64-byte tile into BD_TILE
+                ld    de,BD_TILE
+                ld    bc,64
+                ldir
+                ret                           ; loaded -> patterned (BD_SOLID stays 0)
+bdi_solid       ld    a,1
                 ld    (BD_SOLID),a           ; missing file -> solid fallback
                 ret
 
