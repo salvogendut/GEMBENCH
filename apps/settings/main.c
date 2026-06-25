@@ -29,7 +29,8 @@
 #define DEF_W     46           /* byte cols (184 px) */
 #define DEF_H     116          /* lines (room for the 5-pen colours editor) */
 #define ROW_H     12           /* per-setting row height, px */
-#define VAL_COL   13           /* value column offset from the window's left (byte cols) */
+#define VAL_COL   16           /* value column offset from the window's left (byte cols); a
+                                  gap past the longest label ("Backdrop") so value != label */
 #define COLOUR_ROW NROWS       /* the "Colours..." line sits below the picker rows */
 
 static unsigned char win_x, win_y, win_w, win_h;
