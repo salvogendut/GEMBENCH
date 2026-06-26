@@ -106,6 +106,9 @@ tools/build_capp.sh apps/fractalic build/FRACTALI.RAW # FRACTALIC screensaver (p
                                    # CARD-ONLY (too big for the floppy) -> FRACTALI.SAV via stage_dist.sh
 tools/build_capp.sh apps/starfield build/STARFLD.RAW # STARFIELD screensaver (fresh impl, inspired by
                                    # symsav-starfield): 3D stars flying toward the viewer, direct #C000 plot.
+tools/build_capp.sh apps/xroach build/XROACH.RAW  # XROACH screensaver (ported from symsav-xroach):
+                                   # 16x16 cockroaches scatter + flee a wandering "odd roach", direct
+                                   # #C000 blit. CARD-ONLY (floppy pack full) -> XROACH.SAV via stage_dist.sh
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW

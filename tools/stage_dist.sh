@@ -42,6 +42,7 @@ cp build/XMATRIX.RAW "$SYS/XMATRIX.SAV"     # Matrix digital-rain screensaver (p
 cp build/MOUNTAIN.RAW "$SYS/MOUNTAIN.SAV"   # isometric terrain screensaver (ported from symsav-mountain)
 cp build/STARFLD.RAW  "$SYS/STARFLD.SAV"    # 3D star-field screensaver (inspired by symsav-starfield)
 cp build/FRACTALI.RAW "$SYS/FRACTALI.SAV"   # fractal screensaver (ported from symsav-fractalic) - CARD ONLY
+cp build/XROACH.RAW   "$SYS/XROACH.SAV"     # cockroach screensaver (ported from symsav-xroach) - CARD ONLY
 cp build/GBCFG.RAW "$SYS/GBCFG.BIN"
 cp build/GBFAT.RAW "$SYS/GBFAT.BIN"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.BIN"   # #135: paged AMSDOS/floppy write module
