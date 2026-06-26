@@ -14,9 +14,11 @@ tools/test_iconed_codec.py for the encoding rules.
 Run:
     python3 tools/iconedit.py [file.IST | file.SPR]
 """
+import json
 import os
 import struct
 import sys
+import tempfile
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -136,6 +138,10 @@ def save_ist(path, icons):
 PEN_RGB = ["#000080", "#ffffff", "#000000", "#ff0000"]
 PEN_NAME = ["blue", "white", "black", "red"]
 
+# Copy/Paste Icon share this file so a SECOND iconedit window can paste an icon
+# copied in the first - the workflow for moving an icon between two .IST sets.
+CLIP_PATH = os.path.join(tempfile.gettempdir(), "geobench_iconedit_clip.json")
+
 # --- slot names -------------------------------------------------------------
 # The .IST format stores each icon's size but NOT its name - an icon's meaning
 # comes from its POSITION in the set, the order the desktop loads them in. These
@@ -168,7 +174,7 @@ DESKTOP_SLOTS = [
     "Network",       # 21 icon_network
     "Shell",         # 22 icon_shell
     "Up (..)",       # 23 icon_up
-    "Settings",      # 24 icon_settings
+    "Screensaver",   # 24 icon_screensaver (#221: reused the freed gear slot)
 ]
 # App toolchests carry their own order, keyed by file stem:
 TOOL_SLOTS = {
@@ -467,15 +473,33 @@ class IconEditor(tk.Tk):
         self.index = min(self.index, len(self.icons) - 1)
         self._touched()
 
+    def _clip_save(self):
+        """Share the clipboard with other iconedit windows (a temp file)."""
+        try:
+            with open(CLIP_PATH, "w") as f:
+                json.dump(self.clipboard_icon, f)
+        except OSError:
+            pass
+
+    def _clip_load(self):
+        """Pick up an icon another iconedit window may have copied since."""
+        try:
+            with open(CLIP_PATH) as f:
+                self.clipboard_icon = json.load(f)
+        except (OSError, ValueError):
+            pass
+
     def copy_icon(self):
         ic = self._cur()
         if ic is None:
             return
         self.clipboard_icon = {"w": ic["w"], "h": ic["h"],
                                "grid": [row[:] for row in ic["grid"]]}
+        self._clip_save()                            # so a second window can paste it
         self.status.config(text=f"Copied {ic['w']*4}x{ic['h']} icon")
 
     def paste_icon(self):
+        self._clip_load()                            # share across iconedit windows
         if self.clipboard_icon is None:
             messagebox.showinfo("Paste Icon", "Nothing copied yet.")
             return

@@ -299,7 +299,7 @@ static const char *win_title(void)               /* "Disk C" + path -> title_buf
 #define ICON_FRACTAL 17
 #define ICON_VIEWER 19
 #define ICON_UP 23            /* up-arrow for the ".." parent-dir entry (#142) */
-#define ICON_SETTINGS 24      /* #221: FREE slot - was the gear; Settings dropped its own icon */
+#define ICON_SCREENSAVER 24   /* #221: reused the freed gear slot for the screensaver (.SAV) icon */
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -335,6 +335,7 @@ static unsigned char entry_icon(const char *name)
     if (ext_eq(ext, "SCR") || ext_eq(ext, "PIC")) return ICON_PICTURE;
     if (ext_eq(ext, "TXT") || ext_eq(ext, "CFG")) return ICON_TEXT;
     if (ext_eq(ext, "FNT")) return ICON_FNT;
+    if (ext_eq(ext, "SAV")) return ICON_SCREENSAVER;   /* #221: screensaver modules */
     if (ext_eq(ext, "IST")) return ICON_BINARY;   /* #221: apps/data share the binary icon */
     if (ext_eq(ext, "APP")) {
         if (name_is(name, "NOTEPAD")) return ICON_NOTEPAD;
@@ -360,6 +361,7 @@ static unsigned char rank_of(unsigned char ic)
         case ICON_FOLDER:   return 0;
         case ICON_DESKTOP: case ICON_FILEMGR: case ICON_NOTEPAD: case ICON_ICONED:
         case ICON_PAINT:    case ICON_VIEWER:  case ICON_CLOCK:   case ICON_FRACTAL:
+        case ICON_SCREENSAVER:
         case ICON_APP:      return 1;
         case ICON_PICTURE:  return 2;
         case ICON_TEXT:     return 3;
