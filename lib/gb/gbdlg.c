@@ -68,46 +68,92 @@ static unsigned char pop_under[POP_BUFSZ];
  * clicks - re-clicking the menu title then closes the menu instead of re-arming
  * it). Saves-under + restores its box so the close is seamless (#191); only a popup
  * too tall to buffer falls back to erasing the box for the caller to repaint. */
+/* POP_MAXVIS: how many rows a dropdown shows at once. A longer list (the screensaver
+   Module picker once every .SAV is counted, the file picker) is capped to this and
+   SCROLLS - the box shifts up to fit on screen and the pointer drives the scroll:
+   pushing the cursor past the top/bottom visible row pages the list (the cursor keys
+   ARE the pointer on this hardware - k_getkey drops them - so this is "scroll with the
+   cursor keys"). Up/down "^"/"v" hints mark a list that has more above/below. Short
+   menus (System, File/Edit/View) are <= this, so they look and behave exactly as before. */
+#define POP_MAXVIS 10
+#define POP_SCROLL_DIV 4                     /* poll frames between scroll steps (held) */
+
+static void pop_draw(unsigned char x, unsigned char y, unsigned char w,
+                     unsigned char boxh, const char *const *labels,
+                     unsigned char top, unsigned char vis, unsigned char n)
+{
+    unsigned char i;
+    gb_fill(x, y, w, boxh, 1);              /* white box + black frame */
+    gb_frame(x, y, w, boxh, 2);
+    for (i = 0; i < vis; i++)
+        gb_textbw((unsigned char)(x + 1), (unsigned char)(y + 2 + i * 10), labels[top + i]);
+    if (top > 0)                            /* more items above */
+        gb_textbw((unsigned char)(x + w - 2), (unsigned char)(y + 2), "^");
+    if ((unsigned char)(top + vis) < n)     /* more items below */
+        gb_textbw((unsigned char)(x + w - 2),
+                  (unsigned char)(y + 2 + (vis - 1) * 10), "v");
+}
+
 unsigned char gb_popup(unsigned char x, unsigned char y,
                        const char *const *labels, unsigned char n)
 {
     unsigned char i, flags, sel = 0xFF, esc = 0, w, c, longest = 0, hot = 0xFF, over;
-    unsigned char saved;
-    unsigned char boxh = (unsigned char)(n * 10 + 4);
+    unsigned char saved, vis, top = 0, sdiv = 0, ybot;
+    unsigned char boxh;
 
     for (i = 0; i < n; i++) {               /* width = longest label + padding */
         c = 0; while (labels[i][c]) c++;
         if (c > longest) longest = c;
     }
-    w = (unsigned char)((longest * 6) / 4 + 3);   /* 6px glyphs over 4px bytes */
+    w = (unsigned char)((longest * 6) / 4 + 4);   /* 6px glyphs over 4px bytes (+1 col: scroll hint) */
+    vis = (n < POP_MAXVIS) ? n : POP_MAXVIS;      /* cap visible rows; the rest scroll */
+    boxh = (unsigned char)(vis * 10 + 4);
+    if ((unsigned char)(y + boxh) > 198)          /* shift up so the box fits on screen */
+        y = (unsigned char)(198 - boxh);
+    if (y < 8) y = 8;                             /* never under the top bar (8px tall) */
+    ybot = (unsigned char)(y + 2 + vis * 10);
+
     dlg_modal = 1;
     dlg_close = 0;
     gb_curhide();
     saved = (unsigned char)((unsigned int)w * boxh <= POP_BUFSZ);   /* #191: small enough to save-under? */
     if (saved) gb_saverect(x, y, w, boxh, pop_under);
-    gb_fill(x, y, w, boxh, 1);              /* white box + black frame */
-    gb_frame(x, y, w, boxh, 2);
-    for (i = 0; i < n; i++)
-        gb_textbw((unsigned char)(x + 1), (unsigned char)(y + 2 + i * 10), labels[i]);
+    pop_draw(x, y, w, boxh, labels, top, vis, n);
     gb_curshow();
     for (;;) {
         flags = gb_poll();
         if (dlg_close) { esc = 1; break; }           /* a title re-click asked us to close */
-        over = 0xFF;                                 /* which row is the pointer over? */
-        if (gb_my() >= (unsigned char)(y + 2) && gb_my() < (unsigned char)(y + 2 + n * 10) &&
+
+        if (n > vis) {                               /* scroll when the pointer pushes past an edge */
+            unsigned char my = gb_my();
+            if (my < (unsigned char)(y + 2) && top > 0) {
+                if (++sdiv >= POP_SCROLL_DIV) {
+                    sdiv = 0; top--; hot = 0xFF;
+                    gb_curhide(); pop_draw(x, y, w, boxh, labels, top, vis, n); gb_curshow();
+                }
+            } else if (my >= ybot && (unsigned char)(top + vis) < n) {
+                if (++sdiv >= POP_SCROLL_DIV) {
+                    sdiv = 0; top++; hot = 0xFF;
+                    gb_curhide(); pop_draw(x, y, w, boxh, labels, top, vis, n); gb_curshow();
+                }
+            } else sdiv = 0;
+        }
+
+        over = 0xFF;                                 /* which visible row is the pointer over? */
+        if (gb_my() >= (unsigned char)(y + 2) && gb_my() < ybot &&
             gb_mx() >= x && gb_mx() < (unsigned char)(x + w)) {
             unsigned char r = (unsigned char)((gb_my() - (y + 2)) / 10);
-            if (r < n) over = r;
+            if (r < vis) over = r;
         }
         if (over != hot) {                           /* move the reverse-video highlight */
             gb_curhide();
-            if (hot  != 0xFF) pop_row(x, y, labels[hot],  hot,  0);
-            if (over != 0xFF) pop_row(x, y, labels[over], over, 1);
+            if (hot  != 0xFF) pop_row(x, y, labels[top + hot],  hot,  0);
+            if (over != 0xFF) pop_row(x, y, labels[top + over], over, 1);
             gb_curshow();
             hot = over;
         }
         if (flags & GB_QUIT) { esc = 1; break; }     /* ESC closes the menu */
-        if (flags & GB_CLICK) { if (over != 0xFF) sel = over; break; }  /* row: select; away: cancel */
+        if (flags & GB_CLICK) { if (over != 0xFF) sel = (unsigned char)(top + over); break; }
     }
     dlg_modal = 0;
     /* Consume the click/ESC that ended the menu so it doesn't leak into POLL_FLAGS,

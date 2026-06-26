@@ -109,6 +109,16 @@ tools/build_capp.sh apps/starfield build/STARFLD.RAW # STARFIELD screensaver (fr
 tools/build_capp.sh apps/xroach build/XROACH.RAW  # XROACH screensaver (ported from symsav-xroach):
                                    # 16x16 cockroaches scatter + flee a wandering "odd roach", direct
                                    # #C000 blit. CARD-ONLY (floppy pack full) -> XROACH.SAV via stage_dist.sh
+tools/build_capp.sh apps/munch build/MUNCH.RAW    # MUNCH screensaver (xscreensaver port): munching
+                                   # squares XOR moire, direct #C000. CARD-ONLY -> MUNCH.SAV
+tools/build_capp.sh apps/rorschach build/RORSCH.RAW # RORSCHACH (xscreensaver port): 4-fold-symmetric
+                                   # random-walk ink-blots, direct #C000. CARD-ONLY -> RORSCH.SAV
+tools/build_capp.sh apps/truchet build/TRUCHET.RAW # TRUCHET (xscreensaver port): random diagonal-tile
+                                   # maze, direct #C000 lines. CARD-ONLY -> TRUCHET.SAV
+tools/build_capp.sh apps/ant build/ANT.RAW        # ANT (xscreensaver port): Langton's ant on an 80x50
+                                   # grid, gb_fill cells. CARD-ONLY -> ANT.SAV
+tools/build_capp.sh apps/lightning build/LIGHTN.RAW # LIGHTNING (xscreensaver port): midpoint-displacement
+                                   # forked bolts, direct #C000 lines. CARD-ONLY -> LIGHTN.SAV
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW

@@ -39,6 +39,11 @@ System → "Activate screensaver" runs it on demand. Each is a full-screen windo
 | fractalic | `FRACTALI.SAV` | Sierpinski triangle + Koch snowflake (random each cycle) — ported from `symsav-fractalic`. **Albireo card only** (too big for the floppy) |
 | starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl. **Albireo card only** (the floppy pack is at its 64K ceiling) |
 | xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the blue field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit. **Albireo card only** |
+| munch    | `MUNCH.SAV`    | "munching squares" XOR moiré sweeping a power-of-two square — ported from xscreensaver. **Albireo card only** |
+| rorschach | `RORSCH.SAV`  | 4-fold-symmetric random-walk ink-blots — ported from xscreensaver. **Albireo card only** |
+| truchet  | `TRUCHET.SAV`  | random diagonal-tile maze, re-tiled every few seconds — ported from xscreensaver. **Albireo card only** |
+| ant      | `ANT.SAV`      | Langton's ant on an 80×50 grid (4-state rule, all four pens) — inspired by xscreensaver. **Albireo card only** |
+| lightning | `LIGHTN.SAV`  | midpoint-displacement forked lightning bolts that flash and re-strike — ported from xscreensaver. **Albireo card only** |
 
 The Settings **Module** picker lists every `.SAV` in `/GBENCH`, so a new
 screensaver appears there automatically once it is built and staged.

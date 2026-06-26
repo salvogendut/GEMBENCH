@@ -43,6 +43,11 @@ cp build/MOUNTAIN.RAW "$SYS/MOUNTAIN.SAV"   # isometric terrain screensaver (por
 cp build/STARFLD.RAW  "$SYS/STARFLD.SAV"    # 3D star-field screensaver (inspired by symsav-starfield)
 cp build/FRACTALI.RAW "$SYS/FRACTALI.SAV"   # fractal screensaver (ported from symsav-fractalic) - CARD ONLY
 cp build/XROACH.RAW   "$SYS/XROACH.SAV"     # cockroach screensaver (ported from symsav-xroach) - CARD ONLY
+cp build/MUNCH.RAW    "$SYS/MUNCH.SAV"      # munching-squares screensaver (xscreensaver port) - CARD ONLY
+cp build/RORSCH.RAW   "$SYS/RORSCH.SAV"     # rorschach ink-blot screensaver (xscreensaver port) - CARD ONLY
+cp build/TRUCHET.RAW  "$SYS/TRUCHET.SAV"    # truchet-tile maze screensaver (xscreensaver port) - CARD ONLY
+cp build/ANT.RAW      "$SYS/ANT.SAV"        # Langton's-ant screensaver (xscreensaver port) - CARD ONLY
+cp build/LIGHTN.RAW   "$SYS/LIGHTN.SAV"     # fractal-lightning screensaver (xscreensaver port) - CARD ONLY
 cp build/GBCFG.RAW "$SYS/GBCFG.BIN"
 cp build/GBFAT.RAW "$SYS/GBFAT.BIN"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.BIN"   # #135: paged AMSDOS/floppy write module
