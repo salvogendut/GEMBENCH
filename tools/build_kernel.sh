@@ -95,6 +95,10 @@ DATA_LOC=0x6600 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW #
 tools/build_capp.sh apps/saver build/CIRCLE.RAW   # SAVER (#219): the test screensaver - a
                                    # full-screen blank + circle, shipped as CIRCLE.SAV. Launched by
                                    # the desktop idle timer (SAVER=<seconds>); no menu/doc framework.
+tools/build_capp.sh apps/deco  build/DECO.RAW     # DECO screensaver (ported from symsav-deco):
+                                   # recursive rectangle subdivision -> art-deco panels. -> DECO.SAV
+tools/build_capp.sh apps/xmatrix build/XMATRIX.RAW # XMATRIX screensaver (ported from symsav-xmatrix):
+                                   # Matrix digital rain, white head + red trail. -> XMATRIX.SAV
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
