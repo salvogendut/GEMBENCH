@@ -39,6 +39,7 @@ done
 cp build/CIRCLE.RAW "$SYS/CIRCLE.SAV"       # #219: the test screensaver (a .SAV, not a .APP)
 cp build/DECO.RAW   "$SYS/DECO.SAV"         # art-deco panels screensaver (ported from symsav-deco)
 cp build/XMATRIX.RAW "$SYS/XMATRIX.SAV"     # Matrix digital-rain screensaver (ported from symsav-xmatrix)
+cp build/MOUNTAIN.RAW "$SYS/MOUNTAIN.SAV"   # isometric terrain screensaver (ported from symsav-mountain)
 cp build/GBCFG.RAW "$SYS/GBCFG.BIN"
 cp build/GBFAT.RAW "$SYS/GBFAT.BIN"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.BIN"   # #135: paged AMSDOS/floppy write module
