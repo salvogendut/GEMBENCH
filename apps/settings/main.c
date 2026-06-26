@@ -65,6 +65,7 @@ static const setting_t rows[] = {
 };
 #define NROWS 5
 #define BD_SOLID_ADDR 0x1290   /* kernel BD_SOLID flag */
+#define BD_TILE_ADDR  0x1250   /* kernel BD_TILE: the loaded 16x16 backdrop tile (#216) */
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
    512-byte sectors, so a smaller buffer would overflow into the globals after it). */
@@ -263,6 +264,14 @@ static void s_draw(void)
         gb_textbw((unsigned char)(win_x + 1), row_y(r), rows[r].label);
         cfg_get(rows[r].key, val);
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(r), val);
+        if (rows[r].ext[0] == 'B') {         /* #216: preview the current backdrop tile beside */
+            unsigned char sx = (unsigned char)(win_x + 28), sy = row_y(r);  /* the value */
+            if (*(volatile unsigned char *)BD_SOLID_ADDR)
+                gb_fill(sx, sy, 4, 8, 0);    /* SOLID -> a plain pen-0 (desktop) square */
+            else
+                gb_restorerect(sx, sy, 4, 8, (const void *)BD_TILE_ADDR);   /* tile's top 8 rows */
+            gb_frame(sx, sy, 4, 8, 2);       /* outline so it shows on the white panel */
+        }
     }
     gb_textbw((unsigned char)(win_x + 1), row_y(COLOUR_ROW), "Colours...");
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + win_h - 10),
@@ -354,6 +363,17 @@ static void colp_num(unsigned char i)        /* draw pen i's ink number (00-26) 
     gb_textbw((unsigned char)(win_x + 13), colp_y(i), t);
 }
 
+/* colp_swatch: a small colour sample for pens 0-3 (#216). Filled in pen i, so a live
+   apply_colour() recolours it automatically - no redraw on -/+. Framed (pen 2) so it shows
+   even when the pen equals the white panel. The 5th row (Border) has no on-screen pen to
+   match an arbitrary border ink, so it gets no swatch (its colour is the screen edge). */
+static void colp_swatch(unsigned char i)
+{
+    if (i >= 4) return;
+    gb_fill((unsigned char)(win_x + 21), colp_y(i), 3, 8, i);
+    gb_frame((unsigned char)(win_x + 21), colp_y(i), 3, 8, 2);
+}
+
 static void colp_draw(void)
 {
     unsigned char i, by = (unsigned char)(win_y + win_h - 11);
@@ -365,6 +385,7 @@ static void colp_draw(void)
         gb_textbw((unsigned char)(win_x + 11), colp_y(i), "-");
         colp_num(i);
         gb_textbw((unsigned char)(win_x + 17), colp_y(i), "+");
+        colp_swatch(i);                          /* #216: live colour sample (pens 0-3) */
     }
     gb_textbw((unsigned char)(win_x + 1), by, "Save");
     gb_textbw((unsigned char)(win_x + 8), by, "Cancel");
