@@ -11,6 +11,9 @@ tools/test_iconed_codec.py for the encoding rules.
           We edit a single 16x16 logical grid (pen 0 = transparent) and
           regenerate d0/m0/d2/m2 on save (d2/m2 are the +2 px pre-shift).
 
+Multiple sets can be open at once, each in its own window (File > Open in New
+Window), so you can Copy/Paste Icon between two sets side by side.
+
 Run:
     python3 tools/iconedit.py [file.IST | file.SPR]
 """
@@ -191,9 +194,15 @@ PREVIEW_MARGIN = 12
 
 # ----------------------------------------------------------------------------
 
-class IconEditor(tk.Tk):
-    def __init__(self, path=None):
-        super().__init__()
+class IconEditor(tk.Toplevel):
+    # Every open editor window, so File > Open in New Window can spawn more and the
+    # app quits only when the last one closes (the real Tk root stays hidden).
+    _windows = []
+
+    def __init__(self, master, path=None):
+        super().__init__(master)
+        IconEditor._windows.append(self)
+        self.protocol("WM_DELETE_WINDOW", self.close_window)
         self.title("GEOBENCH Icon Editor")
         self.geometry("900x640")
 
@@ -227,10 +236,13 @@ class IconEditor(tk.Tk):
         m_file.add_command(label="New IST...", command=self._new_ist)
         m_file.add_command(label="New SPR", command=self._new_spr)
         m_file.add_command(label="Open...", accelerator="Ctrl+O", command=self.open_dialog)
+        m_file.add_command(label="Open in New Window...", accelerator="Ctrl+Shift+O",
+                           command=self.open_new_window)
         m_file.add_command(label="Save", accelerator="Ctrl+S", command=self.save)
         m_file.add_command(label="Save As...", command=self.save_as)
         m_file.add_separator()
-        m_file.add_command(label="Quit", command=self.destroy)
+        m_file.add_command(label="Close Window", accelerator="Ctrl+W", command=self.close_window)
+        m_file.add_command(label="Quit", command=self.quit_all)
         menubar.add_cascade(label="File", menu=m_file)
 
         m_icon = tk.Menu(menubar, tearoff=0)
@@ -321,6 +333,8 @@ class IconEditor(tk.Tk):
     def _bind_keys(self):
         self.bind("<Control-s>", lambda e: self.save())
         self.bind("<Control-o>", lambda e: self.open_dialog())
+        self.bind("<Control-O>", lambda e: self.open_new_window())   # Ctrl+Shift+O
+        self.bind("<Control-w>", lambda e: self.close_window())
         self.bind("<Control-z>", lambda e: self.undo())
         self.bind("<Control-c>", lambda e: self.copy_icon())
         self.bind("<Control-v>", lambda e: self.paste_icon())
@@ -328,6 +342,28 @@ class IconEditor(tk.Tk):
         self.bind("<Right>", lambda e: self.next_icon())
         for k in "1234":
             self.bind(k, lambda e, p=int(k) - 1: self._select_pen(p))
+
+    # -- windows -------------------------------------------------------------
+
+    def open_new_window(self):
+        """Open an icon set / cursor in a SEPARATE editor window (so you can have
+        two sets side by side and Copy/Paste Icon between them)."""
+        p = filedialog.askopenfilename(
+            title="Open in new window",
+            filetypes=[("Icon set / cursor", "*.IST *.ist *.SPR *.spr"),
+                       ("All files", "*.*")])
+        if p:
+            IconEditor(self.master, p)        # a fresh window on the shared root
+
+    def close_window(self):
+        """Close just this window; quit the app when the last one closes."""
+        IconEditor._windows.remove(self)
+        self.destroy()
+        if not IconEditor._windows:
+            self.master.destroy()             # no windows left -> end the app
+
+    def quit_all(self):
+        self.master.destroy()                 # File > Quit closes every window
 
     def _select_pen(self, p):
         self.pen.set(p)
@@ -822,8 +858,10 @@ class IconEditor(tk.Tk):
 
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else None
-    app = IconEditor(path)
-    app.mainloop()
+    root = tk.Tk()
+    root.withdraw()                      # the real root stays hidden; editors are Toplevels
+    IconEditor(root, path)               # the first window (File > Open in New Window adds more)
+    root.mainloop()
 
 
 if __name__ == "__main__":
