@@ -27,7 +27,7 @@
  */
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out, char *cursor_out,
-                  char *backdrop_out, char *wallpaper_out, unsigned char *inks_out);
+                  char *backdrop_out, unsigned char *inks_out);
 
 /* gb_make_83: write an 11-byte AMSDOS 8.3 name into dst (8 chars space-padded +
  * the 3-char extension) from a NUL-terminated stem (<=8 chars used) and ext.
