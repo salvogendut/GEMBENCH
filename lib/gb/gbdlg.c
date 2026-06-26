@@ -51,8 +51,12 @@ static void pop_row(unsigned char x, unsigned char y,
  * - no hole to repair, nothing repainted underneath, no flash. Sized for the menu
  * dropdowns (File/Edit/View/System, <=8 short items); a taller popup (the file picker's
  * full directory list) doesn't fit and falls back to the old erase + damaged-repaint,
- * whose caller repaints behind it anyway. Lives in the paged GBUI module's data. */
-#define POP_BUFSZ 2048
+ * whose caller repaints behind it anyway. Lives in the paged GBUI module's data.
+ * Sized so the System menu (its widest item "Activate screensaver" -> 33x64 = 2112 B)
+ * still saves-under: a wide menu that overflowed fell back to erase, and gb_doc_frame's
+ * cancel path doesn't repaint -> a hole in the wallpaper on close (#221). 2560 fits the
+ * 2112-B System menu with margin while the GBUI module's data still ends below #8000. */
+#define POP_BUFSZ 2560
 static unsigned char pop_under[POP_BUFSZ];
 
 /* gb_popup: THE GEOBENCH dropdown menu - one implementation every menu uses (the

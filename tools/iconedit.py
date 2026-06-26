@@ -135,6 +135,45 @@ def save_ist(path, icons):
 
 PEN_RGB = ["#000080", "#ffffff", "#000000", "#ff0000"]
 PEN_NAME = ["blue", "white", "black", "red"]
+
+# --- slot names -------------------------------------------------------------
+# The .IST format stores each icon's size but NOT its name - an icon's meaning
+# comes from its POSITION in the set, the order the desktop loads them in. These
+# tables mirror that order so the editor can label each slot. KEEP IN SYNC with
+# the packicons.py argument lists in tools/build_kernel.sh (the source of truth).
+#
+# Desktop icon sets (DEFAULT.IST, REFINED.IST, any ICONS= set) - 25 slots (#198):
+DESKTOP_SLOTS = [
+    "Floppy disk",   # 0  icon_floppy
+    "Disk C / IDE",  # 1  icon_ide
+    "Clock",         # 2  icon_clock
+    "Trash",         # 3  icon_trash
+    "GEOBENCH",      # 4  icon_geobench
+    "BASIC file",    # 5  icon_basic
+    "Binary file",   # 6  icon_binary
+    "Picture",       # 7  icon_picture
+    "Text file",     # 8  icon_text
+    "Folder",        # 9  icon_folder
+    "App (.APP)",    # 10 icon_app
+    "Notepad",       # 11 icon_notepad
+    "Icon editor",   # 12 icon_iconeditor
+    "Font (.FNT)",   # 13 icon_font
+    "Desktop",       # 14 icon_desktop
+    "File manager",  # 15 icon_filemanager
+    "Paint",         # 16 icon_paint
+    "Fractal",       # 17 icon_fractal
+    "SD card",       # 18 icon_sd
+    "Viewer",        # 19 icon_viewer
+    "Telnet",        # 20 icon_telnet
+    "Network",       # 21 icon_network
+    "Shell",         # 22 icon_shell
+    "Up (..)",       # 23 icon_up
+    "Settings",      # 24 icon_settings
+]
+# App toolchests carry their own order, keyed by file stem:
+TOOL_SLOTS = {
+    "PAINT": ["Pencil", "Square", "Circle", "Fill", "Undo"],
+}
 GRID_LINE = "#404060"
 CHECKER_A = "#bdbdbd"
 CHECKER_B = "#8a8a8a"
@@ -732,12 +771,24 @@ class IconEditor(tk.Tk):
             for x in range(pw):
                 self._draw_preview_cell(ic, x, y, geom)
 
+    def _slot_names(self):
+        """The slot-name list for the open set (None for cursors): the app-specific
+        toolchest order if known, else the desktop icon-set order."""
+        if self.mode != "IST":
+            return None
+        stem = os.path.splitext(os.path.basename(self.path))[0].upper() if self.path else ""
+        return TOOL_SLOTS.get(stem, DESKTOP_SLOTS)
+
     def _info_text(self):
         ic = self._cur()
         if ic is None:
             return "—"
-        kind = "cursor" if self.mode == "SPR" else "icon"
-        return f"{kind} {self.index + 1}/{len(self.icons)}   {ic['w']*4}x{ic['h']} px"
+        w, h, i, n = ic["w"] * 4, ic["h"], self.index, len(self.icons)
+        if self.mode == "SPR":
+            return f"cursor  ·  {w}x{h} px"
+        names = self._slot_names()
+        name = f"{names[i]}  ·  " if names and i < len(names) else ""
+        return f"slot {i}  ·  {name}{w}x{h} px  ·  {i + 1}/{n}"
 
     def _refresh_title(self):
         name = os.path.basename(self.path) if self.path else f"(untitled {self.mode or 'IST'})"

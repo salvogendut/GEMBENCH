@@ -28,25 +28,22 @@
 /* The desktop icons: drives (C = IDE, A/B = floppies) + Clock + Trash (#65). The
    drive icons appear only when that drive is present (gb_drives poll); Clock and
    Trash are always shown. Positions are mutable (drag updates them). */
-#define N_ICONS  6
+#define N_ICONS  5
 #define IDX_C    0            /* Disk C = IDE */
 #define IDX_A    1            /* Disk A = floppy A */
 #define IDX_B    2            /* Disk B = floppy B */
 #define IDX_CLOCK 3
 #define IDX_TRASH 4
-#define IDX_SETTINGS 5        /* the gear (#129) - opens SETTINGS.APP */
+/* Settings has no desktop icon (#221): reach it from the top-bar System menu. */
 
 #define ICON_IDE 1            /* IST slots (packicons order): Disk C as IDE ... */
 #define ICON_SD  18           /* ... vs Albireo SD/USB card (#104); slots shifted -1 (#198 dedup) */
-#define ICON_GEAR 24         /* ... the Settings gear (#129) */
-static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, 66, 66, 66 };  /* right col x=66: fits the
-                                                                         8-char "Settings" label (#129) */
-static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 150, 97 };  /* trash y=150: its label
-                                                                          clears the bottom border */
-static unsigned char ic_slot[N_ICONS] = { ICON_IDE, 0, 0, 2, 3, ICON_GEAR };  /* C,flp,flp,clk,trash,gear */
-static const char *const ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash","Settings" };
-static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0, 0 };  /* opens the file mgr */
-static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1, 1 };      /* drives set by poll */
+static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, 66, 66 };       /* right col x=66 */
+static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 150 };     /* trash y=150: label clears border */
+static unsigned char ic_slot[N_ICONS] = { ICON_IDE, 0, 0, 2, 3 };      /* C, flp, flp, clock, trash */
+static const char *const ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash" };
+static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0 };      /* opens the file mgr */
+static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };          /* drives set by poll */
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
 static unsigned char drag_armed, arm_mx, arm_my;   /* pressed on an icon, not yet lifted (#153) */
@@ -457,7 +454,6 @@ static void tidy_icons(void)
     for (i = 0; i < 3; i++)
         if (ic_present[i]) { ic_x[i] = 0; ic_y[i] = DRIVE_TOP + n * DRIVE_STEP; n++; }
     ic_x[IDX_CLOCK] = 66; ic_y[IDX_CLOCK] = 35;     /* the boot positions (see ic_x/ic_y) */
-    ic_x[IDX_SETTINGS] = 66; ic_y[IDX_SETTINGS] = 97;
     ic_x[IDX_TRASH] = 66; ic_y[IDX_TRASH] = 150;
     gb_curhide();
     gb_restore_parent();
@@ -592,7 +588,7 @@ static void on_frame(void)
     if (icon == NONE) { select_icon(NONE); return; }   /* click empty space -> deselect (#153) */
 
     if (dc_timer && dc_idx == icon) {      /* second click -> open */
-        unsigned char opens = ic_drive[icon] || icon == IDX_CLOCK || icon == IDX_SETTINGS;
+        unsigned char opens = ic_drive[icon] || icon == IDX_CLOCK;
         if (opens && gb_wm_full())                           /* no free bank -> say so (#153) */
             gb_alert("Sorry, not enough RAM", "to run more apps.");
         else if (ic_drive[icon]) {                           /* browse that drive (#65): */
@@ -601,7 +597,6 @@ static void on_frame(void)
             gb_wm_open("FILEMGR APP");
         }
         else if (icon == IDX_CLOCK) { select_icon(NONE); gb_wm_open("CLOCK   APP"); } /* clock (#72) */
-        else if (icon == IDX_SETTINGS) { select_icon(NONE); gb_wm_open("SETTINGSAPP"); } /* control panel (#129) */
         dc_timer = 0;
         held_prev = 0;
     } else {                               /* first click: select + arm; the lift waits for movement (#153) */

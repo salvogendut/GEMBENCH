@@ -287,7 +287,7 @@ static const char *win_title(void)               /* "Disk C" + path -> title_buf
 #define ICON_PICTURE 7
 #define ICON_TEXT 8
 #define ICON_FOLDER 9
-#define ICON_APP 10
+#define ICON_APP 10           /* #221: FREE slot - apps now show the binary icon (repurposable) */
 #define ICON_NOTEPAD 11
 #define ICON_ICONED 12
 #define ICON_FNT 13
@@ -299,7 +299,7 @@ static const char *win_title(void)               /* "Disk C" + path -> title_buf
 #define ICON_FRACTAL 17
 #define ICON_VIEWER 19
 #define ICON_UP 23            /* up-arrow for the ".." parent-dir entry (#142) */
-#define ICON_SETTINGS 24      /* the gear (#129) - matches the desktop Settings icon */
+#define ICON_SETTINGS 24      /* #221: FREE slot - was the gear; Settings dropped its own icon */
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -335,7 +335,7 @@ static unsigned char entry_icon(const char *name)
     if (ext_eq(ext, "SCR") || ext_eq(ext, "PIC")) return ICON_PICTURE;
     if (ext_eq(ext, "TXT") || ext_eq(ext, "CFG")) return ICON_TEXT;
     if (ext_eq(ext, "FNT")) return ICON_FNT;
-    if (ext_eq(ext, "IST")) return ICON_APP;   /* .IST shares the .APP icon (#198) */
+    if (ext_eq(ext, "IST")) return ICON_BINARY;   /* #221: apps/data share the binary icon */
     if (ext_eq(ext, "APP")) {
         if (name_is(name, "NOTEPAD")) return ICON_NOTEPAD;
         if (name_is(name, "ICONED"))  return ICON_ICONED;
@@ -346,8 +346,8 @@ static unsigned char entry_icon(const char *name)
         if (name_is(name, "FRACTAL")) return ICON_FRACTAL;
         if (name_is(name, "XAOS"))    return ICON_FRACTAL;   /* the fractal generator (#116) */
         if (name_is(name, "VIEWER"))  return ICON_VIEWER;
-        if (name_is(name, "SETTINGS")) return ICON_SETTINGS;
-        return ICON_APP;
+        return ICON_BINARY;   /* #221: an app with no distinctive icon is just a binary
+                                 (SETTINGS too - no more gear); frees slots 10 + 24 */
     }
     return ICON_BINARY;
 }
