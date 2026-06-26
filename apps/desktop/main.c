@@ -56,6 +56,7 @@ static unsigned char dc_timer, dc_idx, held_prev;
 static unsigned char show_ram;               /* System menu footprint toggle (#74) */
 static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
+static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 
 #define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
 #define DRIVE_STEP 46         /* (BOX_H 44 + 2 gap), in detection order */
@@ -152,6 +153,56 @@ static unsigned char enter_sys(void)
         p = gb_dirn();
     }
     return 0;
+}
+
+/* ---- screensaver idle trigger (#219) ----------------------------------------
+ * Screensavers are apps (e.g. CIRCLE.SAV) - and they are selectable. Two config keys:
+ *   SAVER=<stem>        which .SAV module to run (default CIRCLE)
+ *   SAVERTIME=<minutes> the idle timeout (0 = the idle trigger is off)
+ * bar_draw runs every frame regardless of focus (the global hook), so it counts idle
+ * frames there and launches the module when the timeout elapses - reaching every
+ * window, not just the bare desktop. */
+static char ss_name[11];           /* the configured .SAV module, 8.3 ("CIRCLE  SAV") */
+static unsigned int  ss_timeout;   /* idle frames before the saver runs (0 = off) */
+static unsigned int  ss_idle;      /* frames with no input so far */
+static unsigned char ss_lmx, ss_lmy;  /* last pointer position (a change = activity) */
+
+/* cfg_val: index just past KEY (klen chars, including '=') found at a line start in the
+ * boot config text, or KCFG_LEN if absent. Reads straight from #1000 (no transfer cell
+ * to collide), like wp_cfg_name. */
+static unsigned int cfg_val(const char *key, unsigned char klen)
+{
+    const char *t = KCFG_TEXT;
+    unsigned int len = KCFG_LEN, i;
+    unsigned char j;
+    for (i = 0; i + klen <= len; i++) {
+        if (i && t[i-1] != '\r' && t[i-1] != '\n') continue;   /* line start only */
+        for (j = 0; j < klen; j++) if (t[i+j] != key[j]) break;
+        if (j == klen) return i + klen;
+    }
+    return len;
+}
+
+/* ss_cfg_init: read SAVER=<stem> (the module, default CIRCLE) into ss_name and
+ * SAVERTIME=<minutes> into ss_timeout (frames). */
+static void ss_cfg_init(void)
+{
+    const char *t = KCFG_TEXT;
+    unsigned int len = KCFG_LEN, p, mins = 0;
+    unsigned char j;
+    p = cfg_val("SAVER=", 6);                                  /* the .SAV module stem */
+    for (j = 0; j < 8; j++) ss_name[j] = ' ';
+    for (j = 0; j < 8 && p < len && t[p] != '\r' && t[p] != '\n'; j++, p++) ss_name[j] = t[p];
+    if (ss_name[0] == ' ') {                                   /* absent/empty -> default CIRCLE */
+        ss_name[0]='C'; ss_name[1]='I'; ss_name[2]='R';
+        ss_name[3]='C'; ss_name[4]='L'; ss_name[5]='E';
+    }
+    ss_name[8] = 'S'; ss_name[9] = 'A'; ss_name[10] = 'V';
+    p = cfg_val("SAVERTIME=", 10);                             /* the idle timeout, minutes */
+    for (; p < len && t[p] >= '0' && t[p] <= '9'; p++)
+        mins = mins * 10 + (unsigned int)(t[p] - '0');
+    if (mins > 21) mins = 21;                                  /* cap: 21 min*3000 fits a word */
+    ss_timeout = mins * 3000;                                  /* minutes -> frames (60s * 50 Hz) */
 }
 
 static void wp_init(void)
@@ -277,7 +328,10 @@ static void bar_draw(void)
 {
     unsigned char msig, i;
     if (*WM_FS) { bar_wasfs = 1; return; }    /* fullscreen: the borderless window owns lines 0-7 */
-    if (bar_wasfs) { bar_wasfs = 0; bar_init = 0; }   /* just exited -> force a full bar redraw */
+    if (bar_wasfs) {                          /* just exited fullscreen (e.g. the saver closed) -> */
+        bar_wasfs = 0; bar_init = 0;          /* force a full bar redraw, and restart the idle count */
+        ss_idle = 0; ss_lmx = gb_mx(); ss_lmy = gb_my();
+    }
     if (!bar_init) {                          /* first frame: white strip + RAM size */
         gb_curhide();
         gb_fill(0, 0, 80, 8, 1);
@@ -300,6 +354,21 @@ static void bar_draw(void)
         select_icon(NONE);
     }
     desk_active = 0;                            /* consume the flag; on_frame re-sets it if focused */
+
+    /* Screensaver idle trigger (#219): any pointer move / click / fire / ESC counts as
+       activity and resets the count; otherwise, once the timeout elapses and a bank is
+       free, launch the saver app. It sets WM_FS, so next frame we bail at the top above
+       (no re-launch) until it closes. (A typed key isn't counted here - reading it would
+       steal it from the focused app - but it DOES wake the saver, which owns the input.) */
+    if (ss_timeout) {
+        unsigned char mx = gb_mx(), my = gb_my();
+        if (mx != ss_lmx || my != ss_lmy || (gb_flags() & (GB_CLICK | GB_FIRE | GB_QUIT))) {
+            ss_lmx = mx; ss_lmy = my; ss_idle = 0;
+        } else if (++ss_idle >= ss_timeout && !gb_wm_full()) {
+            ss_idle = 0;
+            gb_wm_open(ss_name);
+        }
+    }
 }
 
 static unsigned char hit_icon(unsigned char mx, unsigned char my)
@@ -395,8 +464,8 @@ static void tidy_icons(void)
 }
 
 /* sys_action: the System menu handler, dispatched by the gb_doc framework (#142). */
-static const char *const sys_items[5] = {
-    "Ram Usage", "Refresh Media", "Tidy Icons", "Settings", "Exit to DOS"
+static const char *const sys_items[6] = {
+    "Ram Usage", "Refresh Media", "Tidy Icons", "Settings", "Activate screensaver", "Exit to DOS"
 };
 static void sys_action(unsigned char sel)
 {
@@ -420,7 +489,11 @@ static void sys_action(unsigned char sel)
                                                   open until AFTER gb_doc_frame's desktop repaint
                                                   below, else paint() covers the new window. */
         want_settings = 1;
-    } else if (sel == 4) {                     /* Exit to DOS */
+    } else if (sel == 4) {                     /* Activate screensaver (#219): run it on demand,
+                                                  whatever the SAVER= idle timeout - defer the open
+                                                  past gb_doc_frame's repaint, like Settings. */
+        want_saver = 1;
+    } else if (sel == 5) {                     /* Exit to DOS */
         gb_exit();                              /* does not return */
     }
 }
@@ -466,7 +539,7 @@ static void on_frame(void)
     if (!menu_inited) {                          /* 1st frame: the window is now registered+focused */
         menu_inited = 1;
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
-        gb_menu_add("System", sys_items, 5, sys_action);
+        gb_menu_add("System", sys_items, 6, sys_action);
     }
     if (dc_timer) dc_timer--;
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
@@ -484,6 +557,11 @@ static void on_frame(void)
             want_settings = 0;
             if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
             else gb_wm_open("SETTINGSAPP");
+        }
+        if (want_saver) {                     /* System>Screensaver: launch the saver now (#219) */
+            want_saver = 0;
+            ss_idle = 0;                       /* a manual run resets the idle count */
+            if (!gb_wm_full()) gb_wm_open(ss_name);
         }
         return;
     }
@@ -548,6 +626,7 @@ void main(void)
                                                    uninitialised; bar_draw reads it every frame) */
     drive_poll();                               /* drives present at boot -> icons (#65) */
     wp_init();                                   /* #212: load the configured wallpaper */
+    ss_cfg_init();                               /* #219: read the screensaver idle timeout */
     paint();
     gb_curshow();                               /* paint() no longer shows the pointer (#153) */
     drag_active = 0;

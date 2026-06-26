@@ -27,14 +27,21 @@
 #define DEF_X     18
 #define DEF_Y     32
 #define DEF_W     46           /* byte cols (184 px) */
-#define DEF_H     128          /* lines (room for the 5 picker rows + the 5-pen colours editor) */
+#define DEF_H     150          /* lines (5 pickers + Colours + Screensaver: Module/Timeout, + editor) */
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   16           /* value column offset from the window's left (byte cols); a
                                   gap past the longest label ("Backdrop") so value != label */
 #define COLOUR_ROW NROWS       /* the "Colours..." line sits below the picker rows */
+/* the screensaver section (#219): a header, then two clickable sub-rows - the .SAV
+   module (SAVER=) and the idle timeout (SAVERTIME=). */
+#define SS_HDR_ROW (NROWS + 1) /* "Screensaver" section header (not clickable) */
+#define SS_MOD_ROW (NROWS + 2) /* "Module"  - pick which .SAV runs */
+#define SS_TM_ROW  (NROWS + 3) /* "Timeout" - the idle minutes */
 
 static unsigned char win_x, win_y, win_w, win_h;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
+static void saver_value(char *dst);       /* forward: s_draw shows the current SAVERTIME= (#219) */
+static void ss_module_value(char *dst);   /* forward: s_draw shows the current SAVER= module (#219) */
 
 /* MIN_IST_ICONS: the minimum icon count for an .IST to be offered as the desktop icon
    set. A desktop set must supply every slot the kernel draws - 25 icons since #198 dropped
@@ -274,6 +281,16 @@ static void s_draw(void)
         }
     }
     gb_textbw((unsigned char)(win_x + 1), row_y(COLOUR_ROW), "Colours...");
+    {
+        char sv[10];                          /* #219: the screensaver section */
+        gb_textbw((unsigned char)(win_x + 1), row_y(SS_HDR_ROW), "Screensaver");
+        ss_module_value(sv);                  /* Module: which .SAV */
+        gb_textbw((unsigned char)(win_x + 2),       row_y(SS_MOD_ROW), "Module");
+        gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_MOD_ROW), sv);
+        saver_value(sv);                      /* Timeout: idle minutes */
+        gb_textbw((unsigned char)(win_x + 2),       row_y(SS_TM_ROW), "Timeout");
+        gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_TM_ROW), sv);
+    }
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + win_h - 10),
               "Font/icons: reboot.");
 }
@@ -445,6 +462,86 @@ static void colours_dialog(void)
     gb_curshow();
 }
 
+/* ---- screensaver: module (SAVER=) + idle timeout (SAVERTIME=, #219) ---------- */
+
+/* ss_module_value: the current SAVER= module stem (the default CIRCLE when absent). */
+static void ss_module_value(char *dst)
+{
+    cfg_get("SAVER=", dst);
+    if (dst[0] == '-') {                       /* absent -> the default module */
+        dst[0]='C'; dst[1]='I'; dst[2]='R'; dst[3]='C';
+        dst[4]='L'; dst[5]='E'; dst[6]=0;
+    }
+}
+
+/* ss_module_dialog: list the .SAV screensavers in /GBENCH and persist the pick to
+   SAVER=. Reboot to apply (the desktop reads SAVER= at boot). */
+static void ss_module_dialog(void)
+{
+    const char *list[MAXST];
+    unsigned char sel, i, n = 0;
+    enumerate("SAV", 0);
+    for (i = 0; i < nstem; i++) list[n++] = stems[i];
+    if (n == 0) { gb_alert("No screensavers", "in /GBENCH."); s_draw(); return; }
+    sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(SS_MOD_ROW), list, n);
+    gb_curhide();
+    if (sel != 0xFF) cfg_set("SAVER=", list[sel]);
+    s_draw();
+    gb_curshow();
+}
+
+/* preset choices: a label + the MINUTES written to SAVERTIME= (0 = off). The desktop
+   reads SAVERTIME=<minutes> at boot and runs the module after that idle - so a change
+   takes effect on the next boot, like Font/Icons. */
+static const char *const saver_lbl[5]  = { "Off", "1 min", "2 min", "5 min", "10 min" };
+static const unsigned int saver_mins[5] = { 0, 1, 2, 5, 10 };
+
+/* u_dec: write the decimal of v into s (NUL-terminated); 0 -> "0". */
+static void u_dec(unsigned int v, char *s)
+{
+    char tmp[6];
+    unsigned char j = 0, k = 0;
+    if (v == 0) { s[0] = '0'; s[1] = 0; return; }
+    while (v) { tmp[k++] = (char)('0' + v % 10); v /= 10; }
+    while (k) s[j++] = tmp[--k];
+    s[j] = 0;
+}
+
+/* saver_value: the current SAVERTIME= as a friendly label - a preset name if it matches
+   one, else "<n> min" (a hand-edited non-preset minute count). */
+static void saver_value(char *dst)
+{
+    char v[10];
+    unsigned int mins = 0;
+    unsigned char i = 0, k;
+    cfg_get("SAVERTIME=", v);
+    while (v[i] >= '0' && v[i] <= '9') { mins = mins * 10 + (unsigned int)(v[i] - '0'); i++; }
+    for (i = 0; i < 5; i++)
+        if (saver_mins[i] == mins) {
+            for (k = 0; saver_lbl[i][k]; k++) dst[k] = saver_lbl[i][k];
+            dst[k] = 0;
+            return;
+        }
+    u_dec(mins, dst);                        /* non-preset -> "<n> min" */
+    for (k = 0; dst[k]; k++) ;
+    dst[k] = ' '; dst[k+1] = 'm'; dst[k+2] = 'i'; dst[k+3] = 'n'; dst[k+4] = 0;
+}
+
+/* saver_dialog: pick a timeout preset and persist it to SAVERTIME=. Reboot to apply. */
+static void saver_dialog(void)
+{
+    unsigned char sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(SS_TM_ROW),
+                                 saver_lbl, 5);
+    gb_curhide();
+    if (sel != 0xFF) {
+        char s[6];
+        u_dec(saver_mins[sel], s);
+        cfg_set("SAVERTIME=", s);
+    }
+    s_draw();
+    gb_curshow();
+}
+
 /* ---- interaction ------------------------------------------------------------- */
 
 /* live_apply: write the chosen 8.3 name into the kernel transfer area for row r and
@@ -513,8 +610,22 @@ static void s_click(void)
     }
     {
         unsigned char ry = row_y(COLOUR_ROW);
-        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2))
+        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
             colours_dialog();
+            return;
+        }
+    }
+    {
+        unsigned char ry = row_y(SS_MOD_ROW);             /* #219: screensaver module */
+        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+            ss_module_dialog();
+            return;
+        }
+    }
+    {
+        unsigned char ry = row_y(SS_TM_ROW);              /* #219: screensaver timeout */
+        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2))
+            saver_dialog();
     }
 }
 

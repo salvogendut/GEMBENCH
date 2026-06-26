@@ -35,7 +35,7 @@ python3 tools/png2cpc.py assets/SPLASH.png build/SPLASH.BIN splash 96x144  # #19
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\n' > build/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=CIRCLE\r\nSAVERTIME=2\r\n' > build/GEOBENCH.CFG
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
 python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
 python3 tools/packicons.py build/DEFAULT.IST \
@@ -68,9 +68,9 @@ for png in assets/backdrops/*.png; do
     name="$(basename "$png" .png | tr 'a-z' 'A-Z')"
     [ -e "build/$name.BDP" ] || python3 tools/png2backdrop.py "$png" "build/$name.BDP"
 done
-DATA_LOC=0x6400 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
+DATA_LOC=0x6600 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
-                                   # for the wallpaper + WALLPAPER= config parse (#212/#216).
+                                   # for the wallpaper config parse (#212/#216) + saver trigger (#219).
 DATA_LOC=0x7240 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
                                    # the gb_doc-grown code + ".." entry; the ~3.1K listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
@@ -89,9 +89,12 @@ DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: do
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
-DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
+DATA_LOC=0x6600 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
                                    # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
+tools/build_capp.sh apps/saver build/CIRCLE.RAW   # SAVER (#219): the test screensaver - a
+                                   # full-screen blank + circle, shipped as CIRCLE.SAV. Launched by
+                                   # the desktop idle timer (SAVER=<seconds>); no menu/doc framework.
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW

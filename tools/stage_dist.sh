@@ -36,6 +36,7 @@ cp build/GEOBENCH.CFG "$OUT/GEOBENCH.CFG"   # #205: one source, shared with the 
 for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS; do
     cp "build/$a.RAW" "$SYS/$a.APP"
 done
+cp build/CIRCLE.RAW "$SYS/CIRCLE.SAV"       # #219: the test screensaver (a .SAV, not a .APP)
 cp build/GBCFG.RAW "$SYS/GBCFG.BIN"
 cp build/GBFAT.RAW "$SYS/GBFAT.BIN"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.BIN"   # #135: paged AMSDOS/floppy write module
