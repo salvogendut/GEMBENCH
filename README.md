@@ -95,10 +95,10 @@ What works today:
 - **Screensavers** — self-contained apps shipped with a `.SAV` extension. The
   desktop's idle timer (global, so it fires over any app) launches the configured
   module after the timeout; any pointer move / click / key returns to the desktop.
-  Ships **CIRCLE** (random circles), **DECO** (Art-Deco panels) and **XMATRIX**
-  (binary "Matrix" rain) — the last two ported from the SymbOS `symsav-*`
-  screensavers. The Settings **Module** picker lists every `.SAV` in the system
-  folder, so new ones appear automatically.
+  Ships **CIRCLE** (random circles), **DECO** (Art-Deco panels), **XMATRIX**
+  (binary "Matrix" rain) and **MOUNTAIN** (isometric 3D terrain) — the last three
+  ported from the SymbOS `symsav-*` screensavers. The Settings **Module** picker
+  lists every `.SAV` in the system folder, so new ones appear automatically.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),

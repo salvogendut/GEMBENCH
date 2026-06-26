@@ -32,9 +32,10 @@ System → "Activate screensaver" runs it on demand. Each is a full-screen windo
 
 | Saver | Disk file | Effect |
 |-------|-----------|--------|
-| saver   | `CIRCLE.SAV`  | random circles (the first/test saver) |
-| deco    | `DECO.SAV`    | Art-Deco / Mondrian rectangle subdivision — ported from the SymbOS `symsav-deco` |
-| xmatrix | `XMATRIX.SAV` | binary "Matrix" digital rain (white head, red trail) — ported from `symsav-xmatrix` |
+| saver    | `CIRCLE.SAV`   | random circles (the first/test saver) |
+| deco     | `DECO.SAV`     | Art-Deco / Mondrian rectangle subdivision — ported from the SymbOS `symsav-deco` |
+| xmatrix  | `XMATRIX.SAV`  | binary "Matrix" digital rain (white → red → black glow) — ported from `symsav-xmatrix` |
+| mountain | `MOUNTAIN.SAV` | isometric 3D filled terrain + white wireframe — ported from `symsav-mountain` (writes the `#C000` screen directly) |
 
 The Settings **Module** picker lists every `.SAV` in `/GBENCH`, so a new
 screensaver appears there automatically once it is built and staged.

@@ -31,3 +31,6 @@ deco_imgend
 mtx_img         incbin "../build/XMATRIX.RAW"   ; Matrix digital-rain screensaver -> XMATRIX.SAV
 mtx_imgend
                 save  "XMATRIX.SAV",mtx_img,mtx_imgend-mtx_img,DSK,"build/gbkern.dsk"
+mnt_img         incbin "../build/MOUNTAIN.RAW"  ; isometric terrain screensaver -> MOUNTAIN.SAV
+mnt_imgend
+                save  "MOUNTAIN.SAV",mnt_img,mnt_imgend-mnt_img,DSK,"build/gbkern.dsk"

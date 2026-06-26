@@ -99,6 +99,8 @@ tools/build_capp.sh apps/deco  build/DECO.RAW     # DECO screensaver (ported fro
                                    # recursive rectangle subdivision -> art-deco panels. -> DECO.SAV
 tools/build_capp.sh apps/xmatrix build/XMATRIX.RAW # XMATRIX screensaver (ported from symsav-xmatrix):
                                    # Matrix digital rain, white head -> red -> black glow. -> XMATRIX.SAV
+tools/build_capp.sh apps/mountain build/MOUNTAIN.RAW # MOUNTAIN screensaver (ported from symsav-mountain):
+                                   # isometric filled terrain + white wireframe, direct #C000 plot. -> MOUNTAIN.SAV
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
