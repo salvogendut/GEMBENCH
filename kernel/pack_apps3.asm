@@ -32,9 +32,7 @@ ist_refined_e
 pic_logo        incbin "../assets/pictures/LOGO.PIC"    ; the GEOBENCH logo - 176x176, 7758 B, the
 pic_logo_e                                              ; only sample small enough to view on a bare
                 save  "LOGO.PIC",pic_logo,pic_logo_e-pic_logo,DSK,"build/gbkern.dsk" ; 128K machine (<=VIEW_MAX)
-pic_manado      incbin "../assets/pictures/MANADO.PIC"  ; bigger samples (need a spare RAM bank, 256K+)
-pic_manado_e
-                save  "MANADO.PIC",pic_manado,pic_manado_e-pic_manado,DSK,"build/gbkern.dsk"
-pic_tleung      incbin "../assets/pictures/TLEUNG.PIC"
+pic_tleung      incbin "../assets/pictures/TLEUNG.PIC"  ; bigger sample (needs a spare RAM bank, 256K+).
+                                                        ; MANADO.PIC removed (#219: freed floppy space)
 pic_tleung_e
                 save  "TLEUNG.PIC",pic_tleung,pic_tleung_e-pic_tleung,DSK,"build/gbkern.dsk"

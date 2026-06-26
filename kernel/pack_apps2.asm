@@ -22,3 +22,6 @@ app_imgend
 set_img         incbin "../build/SETTINGS.RAW"  ; packaged on the disk as SETTINGS.APP (#129)
 set_imgend
                 save  "SETTINGS.APP",set_img,set_imgend-set_img,DSK,"build/gbkern.dsk"
+sav_img         incbin "../build/CIRCLE.RAW"    ; the test screensaver -> CIRCLE.SAV (#219)
+sav_imgend
+                save  "CIRCLE.SAV",sav_img,sav_imgend-sav_img,DSK,"build/gbkern.dsk"
