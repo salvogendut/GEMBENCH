@@ -34,3 +34,5 @@ mtx_imgend
 mnt_img         incbin "../build/MOUNTAIN.RAW"  ; isometric terrain screensaver -> MOUNTAIN.SAV
 mnt_imgend
                 save  "MOUNTAIN.SAV",mnt_img,mnt_imgend-mnt_img,DSK,"build/gbkern.dsk"
+                ; STARFLD.SAV is CARD-ONLY (floppy pack is at its 64K assembly ceiling) -
+                ; staged to the Albireo card by tools/stage_dist.sh.

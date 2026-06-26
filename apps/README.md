@@ -37,6 +37,7 @@ System → "Activate screensaver" runs it on demand. Each is a full-screen windo
 | xmatrix  | `XMATRIX.SAV`  | binary "Matrix" digital rain (white → red → black glow) — ported from `symsav-xmatrix` |
 | mountain | `MOUNTAIN.SAV` | isometric 3D filled terrain + white wireframe — ported from `symsav-mountain` (writes the `#C000` screen directly) |
 | fractalic | `FRACTALI.SAV` | Sierpinski triangle + Koch snowflake (random each cycle) — ported from `symsav-fractalic`. **Albireo card only** (too big for the floppy) |
+| starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl. **Albireo card only** (the floppy pack is at its 64K ceiling) |
 
 The Settings **Module** picker lists every `.SAV` in `/GBENCH`, so a new
 screensaver appears there automatically once it is built and staged.
