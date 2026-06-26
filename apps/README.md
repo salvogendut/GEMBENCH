@@ -39,6 +39,10 @@ System → "Activate screensaver" runs it on demand. Each is a full-screen windo
 | fractalic | `FRACTALI.SAV` | Sierpinski triangle + Koch snowflake (random each cycle) — ported from `symsav-fractalic`. **Albireo card only** (too big for the floppy) |
 | starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl. **Albireo card only** (the floppy pack is at its 64K ceiling) |
 | xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the blue field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit. **Albireo card only** |
+| pyro     | `PYRO.SAV`     | fixed-point fireworks — rockets rise and burst into shrapnel showers — ported from xscreensaver. **Albireo card only** |
+| forest   | `FOREST.SAV`   | recursive fractal trees with red blossoms — ported from xscreensaver. **Albireo card only** |
+| helix    | `HELIX.SAV`    | woven harmonograph curves (sin-table) — ported from xscreensaver. **Albireo card only** |
+| catclock | `CATCLK.SAV`   | Kit-Cat Klock — embedded body bitmap (from `assets/catclockbody.png` via `tools/png2catclock.py`) with sliding pupils + real hour/minute hands from `gb_time()`. **Albireo card only** |
 | munch    | `MUNCH.SAV`    | "munching squares" XOR moiré sweeping a power-of-two square — ported from xscreensaver. **Albireo card only** |
 | rorschach | `RORSCH.SAV`  | 4-fold-symmetric random-walk ink-blots — ported from xscreensaver. **Albireo card only** |
 | truchet  | `TRUCHET.SAV`  | random diagonal-tile maze, re-tiled every few seconds — ported from xscreensaver. **Albireo card only** |

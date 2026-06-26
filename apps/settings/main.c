@@ -81,7 +81,7 @@ static unsigned int cfglen;
 
 /* the popup file list: stems of the matching files in /GBENCH. Flat buffer + a pointer
    array (a 2D char array indexed by a uchar wraps the *width at 8 bits - see the FM). */
-#define MAXST 16
+#define MAXST 24      /* max files a picker lists (savers/icons/fonts); the popup scrolls */
 #define STLEN 9
 static char stembuf[MAXST * STLEN];
 static const char *stems[MAXST];

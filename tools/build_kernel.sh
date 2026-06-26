@@ -119,6 +119,15 @@ tools/build_capp.sh apps/ant build/ANT.RAW        # ANT (xscreensaver port): Lan
                                    # grid, gb_fill cells. CARD-ONLY -> ANT.SAV
 tools/build_capp.sh apps/lightning build/LIGHTN.RAW # LIGHTNING (xscreensaver port): midpoint-displacement
                                    # forked bolts, direct #C000 lines. CARD-ONLY -> LIGHTN.SAV
+tools/build_capp.sh apps/pyro build/PYRO.RAW      # PYRO (xscreensaver port): fixed-point fireworks
+                                   # rockets + shrapnel, direct #C000. CARD-ONLY -> PYRO.SAV
+tools/build_capp.sh apps/forest build/FOREST.RAW  # FOREST (xscreensaver port): recursive fractal trees
+                                   # with red blossoms, direct #C000 lines. CARD-ONLY -> FOREST.SAV
+tools/build_capp.sh apps/helix build/HELIX.RAW    # HELIX (xscreensaver port): woven harmonograph curves
+                                   # (sin-table), direct #C000 lines. CARD-ONLY -> HELIX.SAV
+DATA_LOC=0x6700 tools/build_capp.sh apps/catclock build/CATCLK.RAW # CATCLOCK (inspired by X11 catclock):
+                                   # Kit-Cat clock - embedded body bitmap (catimg.h, from png2catclock.py) +
+                                   # moving pupils + real hour/minute hands (gb_time). CARD-ONLY -> CATCLK.SAV
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
