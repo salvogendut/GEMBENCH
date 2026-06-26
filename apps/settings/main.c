@@ -60,11 +60,11 @@ static const setting_t rows[] = {
     { "Icons",  "ICONS=",    "IST", MIN_IST_ICONS, 0x1202 },  /* KCFG_ICONNAME */
     { "Cursor", "CURSOR=",   "SPR", 0,             0x1221 },  /* KCFG_CURSORNAME */
     { "Backdrop","BACKDROP=","BDP", 0,             0x1231 },  /* KCFG_BDPNAME (+ BD_SOLID #1290) */
-    { "Wallpaper","WALLPAPER=","PIC", 0,           0x1700 },  /* KCFG_WPNAME (+ WP_NONE #170B, #212) */
+    { "Wallpaper","WALLPAPER=","PIC", 0,           0 },       /* no live tfr: the desktop reads
+                                                                 WALLPAPER= from the config (#216) */
 };
 #define NROWS 5
 #define BD_SOLID_ADDR 0x1290   /* kernel BD_SOLID flag */
-#define WP_NONE_ADDR  0x170B   /* kernel WALLPAPER-none flag (#212) */
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
    512-byte sectors, so a smaller buffer would overflow into the globals after it). */
@@ -431,22 +431,21 @@ static void colours_dialog(void)
    (#185). For the backdrop, also set BD_SOLID. */
 static void live_apply(unsigned char r, const char *name)
 {
-    char *dst = (char *)rows[r].tfr;
     const char *ext = rows[r].ext;
-    unsigned char i = 0;
-    while (i < 8 && name[i]) { dst[i] = name[i]; i++; }
-    while (i < 8) dst[i++] = ' ';
-    dst[8] = ext[0]; dst[9] = ext[1]; dst[10] = ext[2];
-    if (ext[0] == 'B')                       /* backdrop: BD_SOLID = (name == "SOLID") */
-        *(unsigned char *)BD_SOLID_ADDR =
-            (unsigned char)(name[0]=='S' && name[1]=='O' && name[2]=='L' &&
-                            name[3]=='I' && name[4]=='D' && name[5]==0);
-    if (ext[0] == 'P')                       /* wallpaper: WP_NONE = (name == "NONE") - the
-                                                desktop reads it at boot, so this applies on
-                                                the next reboot (#212) */
-        *(unsigned char *)WP_NONE_ADDR =
-            (unsigned char)(name[0]=='N' && name[1]=='O' && name[2]=='N' &&
-                            name[3]=='E' && name[4]==0);
+    /* Wallpaper (PIC) has NO live kernel transfer cell: the desktop reads WALLPAPER= from the
+       config text itself at boot (#216 - every fixed cell collided; #1700 broke the System
+       menu). cfg_set already persisted it; it applies on the next reboot. */
+    if (ext[0] != 'P') {
+        char *dst = (char *)rows[r].tfr;
+        unsigned char i = 0;
+        while (i < 8 && name[i]) { dst[i] = name[i]; i++; }
+        while (i < 8) dst[i++] = ' ';
+        dst[8] = ext[0]; dst[9] = ext[1]; dst[10] = ext[2];
+        if (ext[0] == 'B')                       /* backdrop: BD_SOLID = (name == "SOLID") */
+            *(unsigned char *)BD_SOLID_ADDR =
+                (unsigned char)(name[0]=='S' && name[1]=='O' && name[2]=='L' &&
+                                name[3]=='I' && name[4]=='D' && name[5]==0);
+    }
     gb_reload();
 }
 

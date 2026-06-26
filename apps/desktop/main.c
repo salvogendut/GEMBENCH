@@ -102,10 +102,36 @@ static unsigned char wp_wb, wp_h, wp_x, wp_y; /* picture dims + centred top-left
 static unsigned char wp_srcy;                 /* first picture row shown (centre a too-tall pic) */
 static unsigned int  wp_off;
 
-#define KCFG_WPNAME  ((const char *)0x1700)   /* WALLPAPER .PIC 8.3 name (config module); above the
-                                                 floppy cursor sector-overread (#1500..#16FF), read
-                                                 once at boot before any popup touches UI_TEXT (#212) */
-#define KCFG_WP_NONE (*(volatile unsigned char *)0x170B)  /* 1 = WALLPAPER=NONE/absent */
+/* The kernel keeps the raw GEOBENCH.CFG it loaded at boot here (for GB_RELOAD). We parse
+   WALLPAPER= straight out of it - NOT via a fixed transfer cell: every free low-RAM cell
+   collides (the dir scratch #12xx, the floppy cursor sector-overread #1500..#16FF, and the
+   GBUI dialog block #1700 - that one broke the System menu). #1000 is the one buffer that
+   stays put boot->desktop. */
+#define KCFG_TEXT ((const char *)0x1000)
+#define KCFG_LEN  (*(volatile unsigned int *)0x1200)
+
+/* wp_cfg_name: find WALLPAPER=<stem> at a line start in the config text and build the 11-byte
+   8.3 "STEM    PIC" into out. Returns 1 for a usable name; 0 if the key is absent or NONE. */
+static unsigned char wp_cfg_name(char *out)
+{
+    const char *t = KCFG_TEXT;
+    unsigned int len = KCFG_LEN, i, p;
+    unsigned char k, j;
+    for (i = 0; i + 10 <= len; i++) {
+        if (i && t[i-1] != '\r' && t[i-1] != '\n') continue;   /* line start only */
+        if (t[i]!='W'||t[i+1]!='A'||t[i+2]!='L'||t[i+3]!='L'||t[i+4]!='P'||
+            t[i+5]!='A'||t[i+6]!='P'||t[i+7]!='E'||t[i+8]!='R'||t[i+9]!='=') continue;
+        p = i + 10;
+        for (j = 0; j < 8; j++) out[j] = ' ';
+        for (j = 0; j < 8 && p < len && t[p] != '\r' && t[p] != '\n'; j++, p++) out[j] = t[p];
+        out[8] = 'P'; out[9] = 'I'; out[10] = 'C';
+        if (out[0] == ' ' ||                                    /* empty value */
+            (out[0]=='N' && out[1]=='O' && out[2]=='N' && out[3]=='E' && out[4]==' '))
+            return 0;                                           /* NONE -> no wallpaper */
+        return 1;
+    }
+    return 0;                                                   /* absent */
+}
 
 /* enter_sys: descend into the /GBENCH system folder if present (the card holds the
    assets there), so gb_pic_open finds the wallpaper. Returns 1 if we descended (pair
@@ -130,13 +156,14 @@ static unsigned char enter_sys(void)
 
 static void wp_init(void)
 {
+    char nm[11];
     unsigned char descended;
     wp_bank = 0;
-    if (KCFG_WP_NONE) return;                   /* no wallpaper configured */
+    if (!wp_cfg_name(nm)) return;               /* WALLPAPER= absent or NONE */
     /* pin to the boot drive (card else floppy A), where /GBENCH lives (mirrors Settings sel_boot) */
     gb_set_drive((gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
     descended = enter_sys();                     /* card: into /GBENCH; floppy: stays at root */
-    gb_set_name(KCFG_WPNAME);                   /* the focused (desktop) window's file arg */
+    gb_set_name(nm);                             /* the focused (desktop) window's file arg */
     wp_bank = gb_pic_open();                   /* borrow a bank + parse the GBPC header */
     if (descended) gb_back();                    /* /GBENCH -> root (depth-1, safe) */
     if (wp_bank) {

@@ -68,8 +68,9 @@ for png in assets/backdrops/*.png; do
     name="$(basename "$png" .png | tr 'a-z' 'A-Z')"
     [ -e "build/$name.BDP" ] || python3 tools/png2backdrop.py "$png" "build/$name.BDP"
 done
-DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System menu via
-                                   # the shared gb_doc menu system (#142) -> build/DESKTOP.RAW
+DATA_LOC=0x6400 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
+                                   # menu via the shared gb_doc menu system (#142). Higher data-loc
+                                   # for the wallpaper + WALLPAPER= config parse (#212/#216).
 DATA_LOC=0x7240 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
                                    # the gb_doc-grown code + ".." entry; the ~3.1K listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)

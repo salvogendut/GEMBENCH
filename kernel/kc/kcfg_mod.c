@@ -29,13 +29,10 @@
 #define KCFG_INKS      ((unsigned char *)0x122C)   /* out: 4 pen inks + border (INKS=) */
 #define KCFG_BDPNAME   ((char *)0x1231)            /* out: BACKDROP tile filename (11-byte 8.3) */
 #define KCFG_BD_SOLID  (*(unsigned char *)0x1290)  /* out: 1 = solid desktop (BACKDROP=SOLID/absent) */
-#define KCFG_WPNAME    ((char *)0x1700)            /* out: WALLPAPER .PIC filename (11-byte 8.3, #212).
-                                                      ABOVE the floppy cursor sector-overread (the
-                                                      AMSDOS .SPR load writes a full sector #1500..#16FF)
-                                                      and clear of the contested #12xx scratch. It dips
-                                                      into UI_TEXT (#1708) but only the desktop's boot-time
-                                                      wp_init reads it, before any popup writes UI_TEXT. */
-#define KCFG_WP_NONE   (*(unsigned char *)0x170B)  /* out: 1 = no wallpaper (WALLPAPER=NONE/absent) */
+/* WALLPAPER= is NOT parsed here (#212/#216): every free low-RAM transfer cell collides with
+   something (dir scratch #12xx, the floppy cursor sector-overread #1500..#16FF, the GBUI dialog
+   block #1700) - the last broke the System menu. The desktop parses WALLPAPER= itself, straight
+   from the config text the kernel keeps in KCFG_TEXT (#1000). */
 
 static void set_default(char *stem)     /* "DEFAULT" + NUL */
 {
@@ -49,29 +46,22 @@ void main(void)
     char font[9];
     char cursor[9];
     char backdrop[9];
-    char wallpaper[9];
 
     set_default(icons);                 /* absent keys keep the default */
     set_default(font);
     set_default(cursor);
     backdrop[0] = 'S'; backdrop[1] = 'O'; backdrop[2] = 'L'; backdrop[3] = 'I';
     backdrop[4] = 'D'; backdrop[5] = 0;     /* BACKDROP default = SOLID (plain desktop) */
-    wallpaper[0] = 'N'; wallpaper[1] = 'O'; wallpaper[2] = 'N'; wallpaper[3] = 'E';
-    wallpaper[4] = 0;                       /* WALLPAPER default = NONE (no picture, #212) */
     KCFG_INKS[0] = 1;  KCFG_INKS[1] = 26;   /* default palette: blue/white/black/red, */
     KCFG_INKS[2] = 0;  KCFG_INKS[3] = 6;    /* blue border (matches set_palette's seed) */
     KCFG_INKS[4] = 1;
-    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, backdrop, wallpaper, KCFG_INKS);
+    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, backdrop, KCFG_INKS);
     gb_make_83(icons,    "IST", KCFG_ICONNAME);
     gb_make_83(font,     "FNT", KCFG_FONTNAME);
     gb_make_83(cursor,   "SPR", KCFG_CURSORNAME);
     gb_make_83(backdrop, "BDP", KCFG_BDPNAME);
-    gb_make_83(wallpaper, "PIC", KCFG_WPNAME);
     /* tell the kernel whether to load a tile: SOLID (the default) = plain desktop. */
     KCFG_BD_SOLID = (backdrop[0] == 'S' && backdrop[1] == 'O' && backdrop[2] == 'L' &&
                      backdrop[3] == 'I' && backdrop[4] == 'D' && backdrop[5] == 0) ? 1 : 0;
-    /* WALLPAPER=NONE (the default) -> the desktop skips loading a picture. */
-    KCFG_WP_NONE = (wallpaper[0] == 'N' && wallpaper[1] == 'O' && wallpaper[2] == 'N' &&
-                    wallpaper[3] == 'E' && wallpaper[4] == 0) ? 1 : 0;
     gb_fmt_mem(KCFG_MEMKB, KCFG_MEMSTR);    /* top-bar RAM string */
 }
