@@ -48,6 +48,10 @@ cp build/RORSCH.RAW   "$SYS/RORSCH.SAV"     # rorschach ink-blot screensaver (xs
 cp build/TRUCHET.RAW  "$SYS/TRUCHET.SAV"    # truchet-tile maze screensaver (xscreensaver port) - CARD ONLY
 cp build/ANT.RAW      "$SYS/ANT.SAV"        # Langton's-ant screensaver (xscreensaver port) - CARD ONLY
 cp build/LIGHTN.RAW   "$SYS/LIGHTN.SAV"     # fractal-lightning screensaver (xscreensaver port) - CARD ONLY
+cp build/PYRO.RAW     "$SYS/PYRO.SAV"       # fireworks screensaver (xscreensaver port) - CARD ONLY
+cp build/FOREST.RAW   "$SYS/FOREST.SAV"     # fractal-trees screensaver (xscreensaver port) - CARD ONLY
+cp build/HELIX.RAW    "$SYS/HELIX.SAV"      # harmonograph screensaver (xscreensaver port) - CARD ONLY
+cp build/CATCLK.RAW   "$SYS/CATCLK.SAV"     # Kit-Cat clock screensaver (inspired by X11 catclock) - CARD ONLY
 cp build/GBCFG.RAW "$SYS/GBCFG.BIN"
 cp build/GBFAT.RAW "$SYS/GBFAT.BIN"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.BIN"   # #135: paged AMSDOS/floppy write module

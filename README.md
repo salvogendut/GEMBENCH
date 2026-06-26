@@ -100,9 +100,11 @@ What works today:
   several **Albireo-card-only** extras: **FRACTALI** (Sierpinski + Koch), **STARFLD**
   (3D star-field) and **XROACH** (scattering cockroaches) from the SymbOS `symsav-*`
   set, and **MUNCH** (munching squares), **RORSCH** (symmetric ink-blots), **TRUCHET**
-  (tile maze), **ANT** (Langton's ant) and **LIGHTN** (forked lightning) from
-  xscreensaver. The Settings **Module** picker lists every `.SAV` in the system folder
-  (scrolling when there are more than fit), so new ones appear automatically.
+  (tile maze), **ANT** (Langton's ant), **LIGHTN** (forked lightning), **PYRO**
+  (fireworks), **FOREST** (fractal trees) and **HELIX** (harmonograph) from
+  xscreensaver, plus **CATCLK** (a Kit-Cat Klock with sliding pupils + real
+  hour/minute hands). The Settings **Module** picker lists every `.SAV` in the system
+  folder (scrolling when there are more than fit), so new ones appear automatically.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),
