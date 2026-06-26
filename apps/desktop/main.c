@@ -250,6 +250,8 @@ static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsig
 static void paint(void)
 {
     unsigned char i;
+    ss_cfg_init();                             /* #219: re-read SAVER=/SAVERTIME= - a Settings change
+                                                  applies live (this fires when Settings closes) */
     wp_backdrop(0, 8, 80, 192);                /* backdrop: wallpaper if loaded, else tile/solid (#128) */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);

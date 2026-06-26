@@ -30,9 +30,11 @@ static const unsigned char glyph_bits[NGLYPHS][8] = {
     { 0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00 },  /* 0 */
 };
 
-/* built glyph bitmaps: NGLYPHS * (8 rows * 2 Mode-1 bytes) per pen, on the blue bg. */
-static unsigned char font_w[NGLYPHS * 16];   /* white (head) */
-static unsigned char font_r[NGLYPHS * 16];   /* red   (trail) */
+/* built glyph bitmaps: NGLYPHS * (8 rows * 2 Mode-1 bytes) per pen, on the blue bg.
+   Three glow stages give the fade white (head) -> red (mid) -> black (dim tail). */
+static unsigned char font_w[NGLYPHS * 16];   /* white (head, glow > GLOW_WHITE) */
+static unsigned char font_r[NGLYPHS * 16];   /* red   (mid,  glow 1..GLOW_WHITE) */
+static unsigned char font_k[NGLYPHS * 16];   /* black (dim tail, glow 0) */
 
 static unsigned char cg[TOTAL];    /* glyph: 0 = empty, else 1+index */
 static unsigned char cgl[TOTAL];   /* glow countdown */
@@ -68,14 +70,14 @@ static void build_font(void)
     for (g = 0; g < NGLYPHS; g++) {
         for (r = 0; r < 8; r++) {
             bits = glyph_bits[g][r];
-            for (p = 1; p <= 2; p++) {              /* pass 1 = white, pass 2 = red */
-                unsigned char pen = (p == 1) ? 1 : 3;
+            for (p = 0; p < 3; p++) {               /* 0=white, 1=red, 2=black */
+                unsigned char pen = (p == 0) ? 1 : (p == 1) ? 3 : 2;
                 unsigned char b0 = 0, b1 = 0;
                 for (i = 0; i < 4; i++)
                     if (bits & (1u << (7 - i))) b0 = put1(b0, i, pen);
                 for (i = 4; i < 8; i++)
                     if (bits & (1u << (7 - i))) b1 = put1(b1, i - 4, pen);
-                dst = (p == 1) ? font_w : font_r;
+                dst = (p == 0) ? font_w : (p == 1) ? font_r : font_k;
                 dst[g * 16 + r * 2]     = b0;
                 dst[g * 16 + r * 2 + 1] = b1;
             }
@@ -83,10 +85,12 @@ static void build_font(void)
     }
 }
 
-static void draw_cell(unsigned char cx, unsigned char cy, unsigned char g, unsigned char head)
+/* stage: 2 = white head, 1 = red mid, 0 = black dim tail. */
+static void draw_cell(unsigned char cx, unsigned char cy, unsigned char g, unsigned char stage)
 {
+    const unsigned char *f = (stage >= 2) ? font_w : (stage == 1) ? font_r : font_k;
     gb_restorerect((unsigned char)(cx * CW), (unsigned char)(cy * 8), CW, 8,
-                   (head ? font_w : font_r) + (unsigned int)g * 16);
+                   f + (unsigned int)g * 16);
 }
 
 static void anim_tick(void)
@@ -131,7 +135,8 @@ static void anim_tick(void)
             if (!cd[idx]) continue;
             cd[idx] = 0;
             if (!cg[idx]) gb_fill((unsigned char)(x * CW), (unsigned char)(y * 8), CW, 8, BG);
-            else draw_cell(x, y, (unsigned char)(cg[idx] - 1), cgl[idx] > GLOW_WHITE);
+            else draw_cell(x, y, (unsigned char)(cg[idx] - 1),
+                           cgl[idx] > GLOW_WHITE ? 2 : cgl[idx] ? 1 : 0);
         }
 }
 
