@@ -1,31 +1,49 @@
 # apps/
 
-Bundled GEOBENCH applications — programs that run on top of the kernel + desktop
-and prove the platform is real. Loaded from disk on demand (GEOS-style); not
-resident.
+Bundled GEOBENCH applications — programs that run on top of the kernel + desktop.
+Each app is a separate **SDCC `-mz80` C binary** built by `tools/build_capp.sh`
+to run in a 16 KB banked window (`#4000–#7FFF`), reaching the resident kernel only
+through the shared `lib/gb` API (`gb_fill`, `gb_wm_*`, the `gb_doc` document
+framework, the `gb_popup`/`gb_prompt` dialogs, …). Apps are loaded from disk on
+demand (GEOS-style), not resident; the kernel runs the cooperative window-manager
+loop and calls each focused window's handlers (issue #45).
 
-## Candidate first apps
+## The apps (one C source each, under `apps/<name>/main.c`)
 
-- **A file manager / disk browser** — arguably part of the desktop, but a good
-  first "real" app to exercise the API.
-- **geoPaint-style bitmap editor** — draw, save, load.
-- **geoWrite-style text editor** — proportional-font text editing.
-- **A clock / system info widget** — tiny, good for testing the app lifecycle.
+| App | Disk file | What it is |
+|-----|-----------|------------|
+| desktop  | `DESKTOP.APP`  | the root window — drive/Clock/Trash icons, drag-and-drop, the top bar + System menu, the screensaver idle trigger |
+| filemgr  | `FILEMGR.APP`  | per-drive file browser (list/icon views, type→app routing, `..`, Trash) |
+| viewer   | `VIEWER.APP`   | text / `.PIC` viewer (banked load for big pictures) |
+| notepad  | `NOTEPAD.APP`  | text editor (word-wrap, File/Edit/View, saves `.BAS` CR+LF) |
+| iconed   | `ICONED.APP`   | `.IST` icon-set / `.SPR` cursor editor |
+| paint    | `PAINT.APP`    | Mode-1 bitmap paint (toolchest, saves `.PIC`) |
+| xaos     | `XAOS.APP`     | fractal generator, exports `.PIC` |
+| clock    | `CLOCK.APP`    | analog clock widget |
+| settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours / screensaver, persisted to `GEOBENCH.CFG` |
 
-The point of the first app is less about the app itself and more about
-validating the **application API**: load from disk, get a window, handle input,
-draw, clean up, return to the desktop.
+## Screensavers (`.SAV`)
 
-## App contract (to be specified)
+A screensaver is just an app shipped with a `.SAV` extension. The desktop's
+idle timer launches the configured one (`SAVER=<module>` / `SAVERTIME=<minutes>`
+in `GEOBENCH.CFG`, set from **Settings → Screensaver**) after the idle timeout, and
+System → "Activate screensaver" runs it on demand. Each is a full-screen window
+(`WM_FS`) that animates every frame and closes on any input.
 
-Each app will be a relocatable/loadable binary that:
+| Saver | Disk file | Effect |
+|-------|-----------|--------|
+| saver   | `CIRCLE.SAV`  | random circles (the first/test saver) |
+| deco    | `DECO.SAV`    | Art-Deco / Mondrian rectangle subdivision — ported from the SymbOS `symsav-deco` |
+| xmatrix | `XMATRIX.SAV` | binary "Matrix" digital rain (white head, red trail) — ported from `symsav-xmatrix` |
 
-1. Is loaded by the kernel into an allocated memory block.
-2. Receives control plus a pointer to the system API call gate.
-3. Requests a window from the desktop / windowing layer.
-4. Runs its event loop until the user quits.
-5. Releases its resources and returns control to the desktop.
+The Settings **Module** picker lists every `.SAV` in `/GBENCH`, so a new
+screensaver appears there automatically once it is built and staged.
 
-## Status
+## App contract
 
-Not started. Blocked on the kernel app-loader and the windowing layer.
+An app's `main()` runs in its bank, draws its initial content, and registers a
+window (`gb_wm_add` for a legacy window, or `gb_wm_managed` for kernel-drawn
+chrome), then returns to the opener. The kernel's master loop then drives it:
+it polls input and calls the focused window's frame / repaint / event handlers;
+the app reads input with `gb_flags`/`gb_mx`/`gb_my` and calls `gb_wm_close` to
+quit. See `lib/gb/gb.h` for the full API.

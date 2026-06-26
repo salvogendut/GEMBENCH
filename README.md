@@ -57,9 +57,9 @@ What works today:
 
 - **Desktop** — a selectable **patterned backdrop** (a repeating 16×16 Mode-1 tile
   via `BACKDROP=`, or a plain colour), top bar (RAM probe + clock), draggable
-  labelled icons (incl. a **Settings** gear) that erase cleanly back to the
-  pattern, a System menu (Ram Usage / Refresh Media / Tidy Icons / Settings /
-  Exit to DOS).
+  labelled icons that erase cleanly back to the pattern, a System menu (Ram Usage /
+  Refresh Media / Tidy Icons / Settings / Activate screensaver / Exit to DOS).
+  Settings opens from the System menu — it no longer needs its own desktop icon.
 - **File manager** — double-click the Disk icon to open a window listing the
   drive; a type icon + name per file (**list** or **icon** view), entries **sorted
   by type then alphabetically**, a **scrolling** list, click to select, double-click
@@ -85,12 +85,20 @@ What works today:
 - **Clock** — an analog clock window (Dallas RTC, else software); View > Fullscreen
   rescales the face to the whole screen, an Options menu sets the time / toggles seconds.
 - **Settings** — a control panel for `GEOBENCH.CFG`: pick the **font** (`.FNT`),
-  **icon set** (`.IST`), **cursor** (`.SPR`) and **backdrop** pattern (`.BDP`, or
-  `SOLID`) from the system folder, plus a **Colours** editor for the 4 Mode-1 pens +
-  the screen border (`INKS=`) with a **live** preview — `-`/`+` recolours the whole
-  desktop instantly. A **Reload** action re-applies font/icons/cursor/backdrop on
-  the running desktop with no reboot; Save persists it all. The icon-set picker can
-  **filter by icon count**. Launches from the System menu or the gear icon.
+  **icon set** (`.IST`), **cursor** (`.SPR`), **backdrop** pattern (`.BDP`, or
+  `SOLID`) and a centred **wallpaper** (`.PIC`) from the system folder, a **Colours**
+  editor for the 4 Mode-1 pens + the screen border (`INKS=`) with a **live** preview
+  — `-`/`+` recolours the whole desktop instantly — and a **Screensaver** section
+  (**Module** picker + idle **Timeout**). A **Reload** action re-applies
+  font/icons/cursor/backdrop on the running desktop with no reboot; Save persists it
+  all. The icon-set picker can **filter by icon count**. Launches from the System menu.
+- **Screensavers** — self-contained apps shipped with a `.SAV` extension. The
+  desktop's idle timer (global, so it fires over any app) launches the configured
+  module after the timeout; any pointer move / click / key returns to the desktop.
+  Ships **CIRCLE** (random circles), **DECO** (Art-Deco panels) and **XMATRIX**
+  (binary "Matrix" rain) — the last two ported from the SymbOS `symsav-*`
+  screensavers. The Settings **Module** picker lists every `.SAV` in the system
+  folder, so new ones appear automatically.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),
@@ -371,8 +379,9 @@ Next:
   screen (Fullscreen already centers the canvas + tools).
 - **Launching legacy `.BIN`/`.BAS`** software (see above).
 - **Drawers/folders** and richer desktop arrangement.
-- **Settings** follow-ups — patterned **backdrops** and a **screensaver** (the
-  `Settings` app already covers font / icon set / cursor and desktop colours).
+- **Per-screensaver configuration** — the savers currently use baked-in defaults
+  (there is no per-module setup panel yet); Settings only picks the module + idle
+  timeout.
 
 ## License
 

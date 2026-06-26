@@ -25,3 +25,9 @@ set_imgend
 sav_img         incbin "../build/CIRCLE.RAW"    ; the test screensaver -> CIRCLE.SAV (#219)
 sav_imgend
                 save  "CIRCLE.SAV",sav_img,sav_imgend-sav_img,DSK,"build/gbkern.dsk"
+deco_img        incbin "../build/DECO.RAW"      ; art-deco panels screensaver -> DECO.SAV
+deco_imgend
+                save  "DECO.SAV",deco_img,deco_imgend-deco_img,DSK,"build/gbkern.dsk"
+mtx_img         incbin "../build/XMATRIX.RAW"   ; Matrix digital-rain screensaver -> XMATRIX.SAV
+mtx_imgend
+                save  "XMATRIX.SAV",mtx_img,mtx_imgend-mtx_img,DSK,"build/gbkern.dsk"
