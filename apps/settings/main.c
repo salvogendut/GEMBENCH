@@ -27,7 +27,7 @@
 #define DEF_X     18
 #define DEF_Y     32
 #define DEF_W     46           /* byte cols (184 px) */
-#define DEF_H     116          /* lines (room for the 5-pen colours editor) */
+#define DEF_H     128          /* lines (room for the 5 picker rows + the 5-pen colours editor) */
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   16           /* value column offset from the window's left (byte cols); a
                                   gap past the longest label ("Backdrop") so value != label */
@@ -60,9 +60,11 @@ static const setting_t rows[] = {
     { "Icons",  "ICONS=",    "IST", MIN_IST_ICONS, 0x1202 },  /* KCFG_ICONNAME */
     { "Cursor", "CURSOR=",   "SPR", 0,             0x1221 },  /* KCFG_CURSORNAME */
     { "Backdrop","BACKDROP=","BDP", 0,             0x1231 },  /* KCFG_BDPNAME (+ BD_SOLID #1290) */
+    { "Wallpaper","WALLPAPER=","PIC", 0,           0x1700 },  /* KCFG_WPNAME (+ WP_NONE #170B, #212) */
 };
-#define NROWS 4
+#define NROWS 5
 #define BD_SOLID_ADDR 0x1290   /* kernel BD_SOLID flag */
+#define WP_NONE_ADDR  0x170B   /* kernel WALLPAPER-none flag (#212) */
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
    512-byte sectors, so a smaller buffer would overflow into the globals after it). */
@@ -439,6 +441,12 @@ static void live_apply(unsigned char r, const char *name)
         *(unsigned char *)BD_SOLID_ADDR =
             (unsigned char)(name[0]=='S' && name[1]=='O' && name[2]=='L' &&
                             name[3]=='I' && name[4]=='D' && name[5]==0);
+    if (ext[0] == 'P')                       /* wallpaper: WP_NONE = (name == "NONE") - the
+                                                desktop reads it at boot, so this applies on
+                                                the next reboot (#212) */
+        *(unsigned char *)WP_NONE_ADDR =
+            (unsigned char)(name[0]=='N' && name[1]=='O' && name[2]=='N' &&
+                            name[3]=='E' && name[4]==0);
     gb_reload();
 }
 
@@ -447,10 +455,11 @@ static void live_apply(unsigned char r, const char *name)
 static void open_picker(unsigned char r)
 {
     const char *list[MAXST + 1];
-    unsigned char sel, i, n = 0, isbd;
-    isbd = (unsigned char)(rows[r].ext[0] == 'B' && rows[r].ext[1] == 'D' && rows[r].ext[2] == 'P');
-    enumerate(rows[r].ext, rows[r].min_icons);
-    if (isbd) list[n++] = "SOLID";           /* the Backdrop list leads with SOLID (no tile) */
+    unsigned char sel, i, n = 0;
+    const char *ext = rows[r].ext;
+    enumerate(ext, rows[r].min_icons);
+    if (ext[0] == 'B') list[n++] = "SOLID";  /* the Backdrop list leads with SOLID (no tile) */
+    else if (ext[0] == 'P') list[n++] = "NONE";  /* the Wallpaper list leads with NONE (#212) */
     for (i = 0; i < nstem; i++) list[n++] = stems[i];
     if (n == 0) {
         gb_alert("No files found", "in /GBENCH.");

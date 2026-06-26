@@ -88,10 +88,94 @@ static void draw_icon(unsigned char i)
     gb_text(ic_x[i], (unsigned char)(ic_y[i] + 34), l);
 }
 
+/* ---- centred .PIC wallpaper (#212, experiment) -------------------------------
+ * If a wallpaper picture loads into a borrowed app bank, every backdrop-erase goes
+ * through wp_backdrop: solid-fill the rect, then blit the overlapping part of the
+ * centred picture from the bank (reusing the Viewer's gb_pic_open/blit services).
+ * No bank (128K / missing file) -> plain gb_backdrop (tile or solid). */
+#define PIC_PAGE_K (*(volatile unsigned char *)0x130B)
+#define PIC_WB_K   (*(volatile unsigned char *)0x130C)
+#define PIC_H_K    (*(volatile unsigned int  *)0x130D)
+#define PIC_OFF_K  (*(volatile unsigned char *)0x130F)
+static unsigned char wp_bank;                 /* borrowed bank (0 = none) */
+static unsigned char wp_wb, wp_h, wp_x, wp_y; /* picture dims + centred top-left */
+static unsigned char wp_srcy;                 /* first picture row shown (centre a too-tall pic) */
+static unsigned int  wp_off;
+
+#define KCFG_WPNAME  ((const char *)0x1700)   /* WALLPAPER .PIC 8.3 name (config module); above the
+                                                 floppy cursor sector-overread (#1500..#16FF), read
+                                                 once at boot before any popup touches UI_TEXT (#212) */
+#define KCFG_WP_NONE (*(volatile unsigned char *)0x170B)  /* 1 = WALLPAPER=NONE/absent */
+
+/* enter_sys: descend into the /GBENCH system folder if present (the card holds the
+   assets there), so gb_pic_open finds the wallpaper. Returns 1 if we descended (pair
+   with gb_back). A flat floppy (no GBENCH dir) returns 0 -> load from the root as-is.
+   Mirrors the Settings app's enter_sys, the proven depth-1 descent (#212). */
+static unsigned char enter_sys(void)
+{
+    char *p = gb_dir1();
+    while (p) {
+        if (gb_isdir()) {
+            const char *r = gb_entname();
+            if (r[0]=='G' && r[1]=='B' && r[2]=='E' && r[3]=='N'
+                && r[4]=='C' && r[5]=='H' && r[6]==' ') {
+                gb_chdir();
+                return 1;
+            }
+        }
+        p = gb_dirn();
+    }
+    return 0;
+}
+
+static void wp_init(void)
+{
+    unsigned char descended;
+    wp_bank = 0;
+    if (KCFG_WP_NONE) return;                   /* no wallpaper configured */
+    /* pin to the boot drive (card else floppy A), where /GBENCH lives (mirrors Settings sel_boot) */
+    gb_set_drive((gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
+    descended = enter_sys();                     /* card: into /GBENCH; floppy: stays at root */
+    gb_set_name(KCFG_WPNAME);                   /* the focused (desktop) window's file arg */
+    wp_bank = gb_pic_open();                   /* borrow a bank + parse the GBPC header */
+    if (descended) gb_back();                    /* /GBENCH -> root (depth-1, safe) */
+    if (wp_bank) {
+        wp_wb = PIC_WB_K; wp_h = (unsigned char)PIC_H_K; wp_off = PIC_OFF_K;
+        wp_x = (wp_wb < 80) ? (unsigned char)((80 - wp_wb) / 2) : 0;  /* width <= 80 always */
+        if (wp_h <= 192) {                      /* fits the desktop area (lines 8..200): centre it */
+            wp_y = (unsigned char)(8 + (192 - wp_h) / 2);
+            wp_srcy = 0;
+        } else {                                /* taller than 192: pin to the top, show the middle */
+            wp_y = 8;
+            wp_srcy = (unsigned char)((wp_h - 192) / 2);
+        }
+    }
+}
+
+static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsigned char h)
+{
+    unsigned char ix, iy, rx, by, iw, ih;
+    unsigned int src;
+    if (!wp_bank) { gb_backdrop(x, y, w, h); return; }
+    gb_fill(x, y, w, h, 0);                     /* solid pen-0 first (covers the margins) */
+    ix = (x > wp_x) ? x : wp_x;                 /* rect INTERSECT picture rect */
+    rx = ((unsigned char)(x + w) < (unsigned char)(wp_x + wp_wb))
+         ? (unsigned char)(x + w) : (unsigned char)(wp_x + wp_wb);
+    iy = (y > wp_y) ? y : wp_y;
+    by = ((unsigned char)(y + h) < (unsigned char)(wp_y + wp_h))
+         ? (unsigned char)(y + h) : (unsigned char)(wp_y + wp_h);
+    if (rx <= ix || by <= iy) return;           /* no overlap -> just the solid fill */
+    iw = (unsigned char)(rx - ix); ih = (unsigned char)(by - iy);
+    src = wp_off + (unsigned int)(unsigned char)(iy - wp_y + wp_srcy) * wp_wb
+        + (unsigned char)(ix - wp_x);
+    PIC_PAGE_K = wp_bank;                       /* re-assert our bank (the Viewer shares PIC_PAGE) */
+    gb_pic_blit(ix, iy, iw, ih, src);
+}
+
 static void paint(void)
 {
     unsigned char i;
-    gb_backdrop(0, 8, 80, 192);                /* backdrop (pattern or solid), below the top bar (#128) */
+    wp_backdrop(0, 8, 80, 192);                /* backdrop: wallpaper if loaded, else tile/solid (#128) */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
     if (sel_idx != NONE && ic_present[sel_idx])    /* red selection frame (#153) */
@@ -110,7 +194,7 @@ static void select_icon(unsigned char icon)
     if (sel_idx == icon) return;
     gb_curhide();
     if (sel_idx != NONE && ic_present[sel_idx]) {
-        gb_backdrop(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H);   /* erase old frame to backdrop (#128) */
+        wp_backdrop(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H);   /* erase old frame to backdrop (#128) */
         draw_icon(sel_idx);                                       /* restore the glyph edge */
     }
     if (icon != NONE)
@@ -213,7 +297,7 @@ static void dragstart(unsigned char idx, unsigned char mx, unsigned char my)
     grab_dy = my - out_y;
     drag_active = 1;
     gb_curhide();
-    gb_backdrop(out_x, out_y, IC_W + 2, BOX_H); /* erase icon + label to the backdrop (#128) */
+    wp_backdrop(out_x, out_y, IC_W + 2, BOX_H); /* erase icon + label to the backdrop (#128) */
     gb_frame(out_x, out_y, IC_W, IC_H, 3);     /* red outline */
     gb_curshow();
 }
@@ -228,7 +312,7 @@ static void dragmove(unsigned char mx, unsigned char my)
     if (ny > YMAX) ny = YMAX;
     if (nx == out_x && ny == out_y) return;    /* nothing moved */
     gb_curhide();
-    gb_backdrop(out_x, out_y, IC_W, IC_H);     /* erase old outline to the backdrop (#128) */
+    wp_backdrop(out_x, out_y, IC_W, IC_H);     /* erase old outline to the backdrop (#128) */
     out_x = nx;
     out_y = ny;
     gb_frame(out_x, out_y, IC_W, IC_H, 3);     /* draw new outline */
@@ -436,6 +520,7 @@ void main(void)
     *WM_FS = 0;                                 /* clear the fullscreen flag at boot (low RAM is
                                                    uninitialised; bar_draw reads it every frame) */
     drive_poll();                               /* drives present at boot -> icons (#65) */
+    wp_init();                                   /* #212: load the configured wallpaper */
     paint();
     gb_curshow();                               /* paint() no longer shows the pointer (#153) */
     drag_active = 0;
