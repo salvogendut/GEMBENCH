@@ -89,7 +89,7 @@ DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: do
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
-DATA_LOC=0x6600 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
+DATA_LOC=0x6700 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
                                    # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
 tools/build_capp.sh apps/saver build/CIRCLE.RAW   # SAVER (#219): the test screensaver - a
@@ -98,7 +98,7 @@ tools/build_capp.sh apps/saver build/CIRCLE.RAW   # SAVER (#219): the test scree
 tools/build_capp.sh apps/deco  build/DECO.RAW     # DECO screensaver (ported from symsav-deco):
                                    # recursive rectangle subdivision -> art-deco panels. -> DECO.SAV
 tools/build_capp.sh apps/xmatrix build/XMATRIX.RAW # XMATRIX screensaver (ported from symsav-xmatrix):
-                                   # Matrix digital rain, white head + red trail. -> XMATRIX.SAV
+                                   # Matrix digital rain, white head -> red -> black glow. -> XMATRIX.SAV
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW

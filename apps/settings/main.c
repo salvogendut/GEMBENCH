@@ -161,6 +161,15 @@ static void cfg_set(const char *key, const char *val)
     sel_boot();
     gb_set_name("GEOBENCHCFG");
     gb_fs_save(cfgbuf, cfglen);
+    /* Keep the kernel's in-memory config copy in step with the disk, so changes the
+       desktop reads straight from it (the screensaver SAVER=/SAVERTIME=, #219) take
+       effect without a reboot - the desktop re-parses it when it repaints. */
+    {
+        char *km = (char *)0x1000;                 /* KCFG_TEXT */
+        unsigned int i;
+        for (i = 0; i < cfglen; i++) km[i] = cfgbuf[i];
+        *(volatile unsigned int *)0x1200 = cfglen; /* KCFG_LEN */
+    }
 }
 
 /* ---- /GBENCH enumeration ----------------------------------------------------- */
