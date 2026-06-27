@@ -300,6 +300,71 @@ static void m2_clear(void) __naked
     __endasm;
 }
 
+/* ---- USIFAC II serial port (the second transport) -------------------------- */
+/* Wire-level RS232 at &FBD0 (data) / &FBD1 (status: 0xFF = RX byte ready, else empty)
+ * / &FBD8 (presence: != 0xFF means a board is there). Raw byte pipe - NOT telnet, so
+ * no IAC negotiation; received bytes go straight to the ANSI/term layer. */
+static volatile unsigned char ser_io;            /* port I/O scratch (the asm reads/writes it) */
+static void ser_in_data(void) __naked
+{ __asm
+    ld bc,#0xFBD0
+    in a,(c)
+    ld (_ser_io),a
+    ret
+__endasm; }
+static void ser_out_data(void) __naked
+{ __asm
+    ld a,(_ser_io)
+    ld bc,#0xFBD0
+    out (c),a
+    ret
+__endasm; }
+static void ser_in_status(void) __naked
+{ __asm
+    ld bc,#0xFBD1
+    in a,(c)
+    ld (_ser_io),a
+    ret
+__endasm; }
+static void ser_out_ctrl(void) __naked
+{ __asm
+    ld a,(_ser_io)
+    ld bc,#0xFBD1
+    out (c),a
+    ret
+__endasm; }
+static void ser_in_exists(void) __naked
+{ __asm
+    ld bc,#0xFBD8
+    in a,(c)
+    ld (_ser_io),a
+    ret
+__endasm; }
+
+/* presence: &FBD8 != 0xFF (an absent board / no MX4 reads back 0xFF). */
+static unsigned char serial_present(void) { ser_in_exists(); return (unsigned char)(ser_io != 0xFF); }
+static void serial_ctrl(unsigned char cmd) { ser_io = cmd; ser_out_ctrl(); }
+
+/* recv: drain up to max bytes while status reads 0xFF (RX non-empty). Only call when
+ * present - an absent board reports 0xFF forever, which would flood. */
+static unsigned int serial_recv(unsigned char *buf, unsigned int max)
+{
+    unsigned int n = 0;
+    while (n < max) {
+        ser_in_status();
+        if (ser_io != 0xFF) break;       /* RX empty */
+        ser_in_data();
+        buf[n++] = ser_io;
+    }
+    return n;
+}
+static unsigned char serial_send(const unsigned char *buf, unsigned int len)
+{
+    unsigned int i;
+    for (i = 0; i < len; i++) { ser_io = buf[i]; ser_out_data(); }
+    return 1;
+}
+
 /* ---- telnet IAC ------------------------------------------------------------ */
 #define IAC  0xFF
 #define WILL 0xFB
@@ -500,6 +565,24 @@ static unsigned char rbuf[256];
 #define ACTIVE_HOLD 12          /* frames of full-speed polling after the last activity */
 static unsigned char poll_ctr, active;
 
+/* ---- transport: GBNET (TCP) or USIFAC serial; the pumps route through these ---- */
+#define TR_NET    0
+#define TR_SERIAL 1
+static unsigned char transport;
+
+static unsigned int t_recv(unsigned char *buf, unsigned int max)
+{
+    return (transport == TR_SERIAL) ? serial_recv(buf, max) : gb_net_recv(buf, max);
+}
+static unsigned char t_send(const unsigned char *buf, unsigned int len)
+{
+    return (transport == TR_SERIAL) ? serial_send(buf, len) : gb_net_send(buf, len);
+}
+static unsigned char t_connected(void)
+{
+    return (transport == TR_SERIAL) ? serial_present() : gb_net_connected();
+}
+
 static void connect_screen(void)
 {
     dlg_open("Connect to (host:port):");
@@ -539,10 +622,13 @@ static unsigned char do_connect(void)
 static unsigned int pump_recv(void)
 {
     unsigned int n, i;
-    n = gb_net_recv(rbuf, sizeof(rbuf));
+    n = t_recv(rbuf, sizeof(rbuf));
     if (n) {
-        for (i = 0; i < n; i++) telnet_byte(rbuf[i]);
-    } else if (!gb_net_connected()) {
+        for (i = 0; i < n; i++) {
+            if (transport == TR_SERIAL) term_write(rbuf[i]);   /* raw serial: ANSI only */
+            else telnet_byte(rbuf[i]);                         /* TCP: telnet IAC + ANSI */
+        }
+    } else if (!t_connected()) {
         term_write('\r'); term_write('\n');
         { const char *m = "** Disconnected - press a key **"; while (*m) term_write(*m++); }
         state = ST_DONE;
@@ -550,57 +636,70 @@ static unsigned int pump_recv(void)
     return n;
 }
 
-/* send typed keys (CR -> CRLF; local echo when the server isn't echoing).
- * Returns 1 if anything was sent this frame. */
+/* send one typed key (Enter = CR on serial, CRLF on telnet; local echo if enabled). */
+static void send_key(unsigned char k)
+{
+    if (k == 0x0D) {
+        if (local_echo) { term_write('\r'); term_write('\n'); }
+        if (transport == TR_SERIAL) { unsigned char cr = 0x0D; t_send(&cr, 1); }
+        else { unsigned char crlf[2]; crlf[0] = 0x0D; crlf[1] = 0x0A; t_send(crlf, 2); }
+    } else if (k >= 32 && k < 127) {
+        if (local_echo) term_write(k);
+        t_send(&k, 1);
+    } else if (k == 8 || k == 0x7F) {
+        unsigned char b = 0x08; t_send(&b, 1);
+    }
+}
+
+/* Returns 1 if anything was sent this frame. */
 static unsigned char pump_keys(void)
 {
     unsigned char k, sent = 0;
-    while ((k = gb_getkey()) != 0) {
-        sent = 1;
-        if (k == 0x0D) {
-            unsigned char crlf[2]; crlf[0] = 0x0D; crlf[1] = 0x0A;
-            if (local_echo) { term_write('\r'); term_write('\n'); }
-            gb_net_send(crlf, 2);
-        } else if (k >= 32 && k < 127) {
-            if (local_echo) term_write(k);
-            gb_net_send(&k, 1);
-        } else if (k == 8 || k == 0x7F) {
-            unsigned char b = 0x08;
-            gb_net_send(&b, 1);
-        }
-    }
+    while ((k = gb_getkey()) != 0) { sent = 1; send_key(k); }
     return sent;
 }
 
-/* close the network connection (the window stays open; reconnect via the menu). */
+/* end the session (the window stays open; reconnect via the menu). */
 static void close_session(void)
 {
-    if (state == ST_RUN || state == ST_DONE) gb_net_close();
+    if (transport == TR_NET && (state == ST_RUN || state == ST_DONE)) gb_net_close();
     state = ST_IDLE;
 }
 
+/* common session start (transport-agnostic); the caller does the transport-specific
+ * handshake (telnet WILL options for TCP; nothing for the raw serial pipe). */
 static void start_session(void)
 {
     state = ST_RUN;
-    iac_state = IS_NORMAL; local_echo = 1; a_state = A_IDLE;
+    a_state = A_IDLE;
     poll_ctr = 0; active = ACTIVE_HOLD;       /* full-speed for the login banner */
     term_cls();
-    send3(WILL, OPT_TTYPE);
-    send3(WILL, OPT_NAWS);
 }
 
-/* ---- the Telnet top-bar menu (#238 Phase 2) -------------------------------- */
-#define TR_NET    0
-#define TR_SERIAL 1
-static unsigned char transport;           /* TR_NET for now; Serial is a future backend */
-
+/* ---- the Telnet top-bar menu (#238) ---------------------------------------- */
+/* Connect over TCP: host:port dialog + DNS, then the telnet WILL handshake. */
 static void action_connect(void)
 {
-    if (state == ST_RUN) gb_net_close();      /* reconnect drops the old socket */
+    if (state == ST_RUN && transport == TR_NET) gb_net_close();
     gb_modal_set(1);                          /* a self-polling dialog is up */
-    if (do_connect()) start_session();
-    else state = ST_IDLE;
+    if (do_connect()) {
+        transport = TR_NET;
+        iac_state = IS_NORMAL; local_echo = 1;
+        start_session();
+        send3(WILL, OPT_TTYPE);
+        send3(WILL, OPT_NAWS);
+    } else state = ST_IDLE;
     gb_modal_set(0);
+}
+
+/* Connect over the USIFAC serial port: no host, just open the raw byte pipe. */
+static void action_connect_serial(void)
+{
+    if (!serial_present()) { gb_alert("No USIFAC serial", "board detected"); return; }
+    transport = TR_SERIAL;
+    serial_ctrl(1);                           /* clear any stale RX */
+    local_echo = 1;                           /* show keystrokes (a raw link may not echo) */
+    start_session();
 }
 
 /* ---- fullscreen Mode-2 80x25 terminal -------------------------------------- */
@@ -614,7 +713,7 @@ static void run_fullscreen(void)
     gb_curhide();
     fs_mode = 1; gcols = FS_COLS; grows = FS_ROWS;
     term_cls();
-    send_naws();                              /* re-advertise 80x25 to the server */
+    if (transport == TR_NET) send_naws();     /* re-advertise 80x25 (telnet only) */
     scr_set_mode(2);
     m2_clear();
     mark_all(); render();
@@ -623,42 +722,33 @@ static void run_fullscreen(void)
         if (gb_vsync()) leave = 1;            /* ESC held -> leave fullscreen */
         while ((k = gb_getkey()) != 0) {
             if (k == 0x1D || k == 0x1B) { leave = 1; break; }   /* Ctrl-] / ESC = exit */
-            if (k == 0x0D) {
-                unsigned char crlf[2]; crlf[0] = 0x0D; crlf[1] = 0x0A;
-                if (local_echo) { term_write('\r'); term_write('\n'); }
-                gb_net_send(crlf, 2); active = ACTIVE_HOLD;
-            } else if (k >= 32 && k < 127) {
-                if (local_echo) term_write(k);
-                gb_net_send(&k, 1); active = ACTIVE_HOLD;
-            } else if (k == 8 || k == 0x7F) {
-                unsigned char b = 0x08; gb_net_send(&b, 1);
-            }
+            send_key(k); active = ACTIVE_HOLD;
         }
         if (active) { active--; if (pump_recv()) active = ACTIVE_HOLD; }
         else if (++poll_ctr >= POLL_EVERY) { poll_ctr = 0; if (pump_recv()) active = ACTIVE_HOLD; }
-        if (state != ST_RUN) leave = 1;       /* server disconnected */
+        if (state != ST_RUN) leave = 1;       /* disconnected */
         render();
     }
     scr_set_mode(1);                          /* back to the Mode-1 desktop */
     fs_mode = 0; gcols = WIN_COLS; grows = WIN_ROWS;
-    if (state == ST_RUN) send_naws();         /* re-advertise the smaller windowed size */
+    if (state == ST_RUN && transport == TR_NET) send_naws();   /* re-advertise the windowed size */
     term_cls();                               /* the M2 screen is gone; start the window fresh */
     gb_modal_set(0);
 }
 
-/* Telnet menu: Connect / Disconnect / Fullscreen 80x25 / transport (Serial stubbed). */
+/* Telnet menu: TCP connect / serial connect / disconnect / 80x25 fullscreen. */
 static const char *const telnet_items[4] = {
-    "Connect...", "Disconnect", "Fullscreen 80x25", "Transport: Serial"
+    "Connect (net)...", "Connect serial", "Disconnect", "Fullscreen 80x25"
 };
 static void on_menu(unsigned char sel)
 {
     if (sel == 0) action_connect();
-    else if (sel == 1) close_session();
-    else if (sel == 2) {
+    else if (sel == 1) action_connect_serial();
+    else if (sel == 2) close_session();
+    else if (sel == 3) {
         if (state == ST_RUN) run_fullscreen();
         else gb_alert("Fullscreen needs", "a live connection");
     }
-    else if (sel == 3) gb_alert("Serial transport", "not available yet");
 }
 
 /* a null document just enables the gb_menu_add framework (no File/Edit/View, #142). */
