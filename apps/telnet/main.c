@@ -16,7 +16,7 @@
 #include "gb.h"
 
 /* ---- terminal grid --------------------------------------------------------- */
-#define COLS 53            /* 53 * 6px = 318px (<= 320) */
+#define COLS 52            /* 52 * 6px = 312px; inset 1 byte (4px) each side clears the frame */
 #define ROWS 22            /* fits the content below the 14px title bar (178px / 8) */
 #define SEG  48            /* gb_text caps a string at 48 chars (gtd_copy) -> two
                               segments per row; col 48 = 288px = byte 72 (4px-aligned) */
@@ -28,8 +28,14 @@
 #define WIN_Y 8
 #define WIN_W 80
 #define WIN_H 192
-#define GX    0            /* grid origin: byte column */
-#define GY    (WIN_Y + 14) /* grid origin: pixel line (below the title bar) = 22 */
+#define GX    1            /* grid origin: byte column (inset 1 byte so the left frame survives) */
+#define GY    (WIN_Y + 15) /* grid origin: pixel line, just below the 14px title bar */
+
+/* connect dialog box (a centered modal popup, NOT painted into the terminal content) */
+#define DLG_X 4
+#define DLG_Y 76
+#define DLG_W 72
+#define DLG_H 46
 
 static unsigned char grid[ROWS * COLS];
 static unsigned char dirty[ROWS];
@@ -366,8 +372,8 @@ static unsigned char edit_target(void)
     while (1) {
         if (redraw) {
             gb_curhide();
-            gb_fill(2, GY + 40, 76, 8, 0);            /* clear input line (blue) */
-            gb_text(2, GY + 40, target);
+            gb_fill(DLG_X + 2, DLG_Y + 18, DLG_W - 4, 8, 1);   /* clear input line (white) */
+            gb_textbw(DLG_X + 2, DLG_Y + 18, target);
             gb_curshow();
             redraw = 0;
         }
@@ -383,16 +389,23 @@ static unsigned char edit_target(void)
     }
 }
 
-static void msg(unsigned char line, const char *s) { gb_text(2, line, s); }  /* white on blue */
-
-/* a minimal click/key-to-dismiss error screen (avoids the GBUI dialog dependency). */
-static void err_screen(const char *a, const char *b)
+/* draw the white dialog box with a black frame + a title line. */
+static void dlg_open(const char *title)
 {
     gb_curhide();
-    gb_fill(GX, GY, WIN_W, ROWS * 8, 0);
-    msg(GY + 8, a);
-    if (b && *b) msg(GY + 24, b);
-    msg(GY + 48, "Press a key...");
+    gb_fill(DLG_X, DLG_Y, DLG_W, DLG_H, 1);          /* white interior */
+    gb_frame(DLG_X, DLG_Y, DLG_W, DLG_H, 2);         /* black frame    */
+    gb_textbw(DLG_X + 2, DLG_Y + 3, title);
+    gb_curshow();
+}
+
+/* show an error in the dialog box; click/key dismisses. */
+static void err_screen(const char *a, const char *b)
+{
+    dlg_open(a);
+    gb_curhide();
+    if (b && *b) gb_textbw(DLG_X + 2, DLG_Y + 18, b);
+    gb_textbw(DLG_X + 2, DLG_Y + 32, "Press a key...");
     gb_curshow();
     while (gb_getkey()) ;
     for (;;) {
@@ -427,10 +440,9 @@ static unsigned char poll_ctr, active;
 
 static void connect_screen(void)
 {
+    dlg_open("Connect to (host:port):");
     gb_curhide();
-    gb_fill(GX, GY, WIN_W, ROWS * 8, 0);
-    msg(GY + 8,  "Connect to (host:port):");
-    msg(GY + 24, "ENTER connects, ESC cancels");
+    gb_textbw(DLG_X + 2, DLG_Y + 32, "ENTER connect   ESC cancel");
     gb_curshow();
 }
 
@@ -448,20 +460,16 @@ static unsigned char do_connect(void)
     for (;;) {
         connect_screen();
         if (!edit_target()) return 0;
-        if (!split_target(target)) { msg(GY + 56, "Enter a host or IP"); continue; }
+        if (!split_target(target)) continue;     /* empty host: just re-prompt */
         break;
     }
-    gb_curhide();
-    gb_fill(GX, GY, WIN_W, ROWS * 8, 0);
-    msg(GY + 8, "Connecting...");
-    gb_curshow();
+    dlg_open("Connecting...");
     if (!gb_net_init(netcfg)) { err_screen("No Net4CPC chip", "Check net4cpc config"); return 0; }
     /* a dotted IP is used as-is; anything else is resolved via DNS (UDP socket 1). */
     if (!parse_dotted(hostbuf, ip)) {
+        dlg_open("Resolving...");
         gb_curhide();
-        gb_fill(GX, GY, WIN_W, ROWS * 8, 0);
-        msg(GY + 8, "Resolving");
-        msg(GY + 24, hostbuf);
+        gb_textbw(DLG_X + 2, DLG_Y + 18, hostbuf);
         gb_curshow();
         if (!gb_net_resolve(hostbuf, ip)) { err_screen("DNS lookup failed", hostbuf); return 0; }
     }
@@ -580,11 +588,9 @@ static void demo_fill(void)
 /* draw the window content (the WM already drew the frame + "Telnet" title bar). */
 static void draw_content(void)
 {
-    if (state == ST_IDLE) {
+    if (state == ST_IDLE) {                     /* blank terminal; connect via the dialog/menu */
         gb_curhide();
-        gb_fill(GX, GY, WIN_W, ROWS * 8, 0);
-        gb_text(2, GY + 8,  "GEOBENCH Telnet");
-        gb_text(2, GY + 24, "Telnet menu > Connect");
+        gb_fill(GX, GY, (unsigned char)(WIN_W - 2 * GX), ROWS * 8, 0);   /* inside the frame */
         gb_curshow();
     } else {                                   /* ST_RUN / ST_DONE: paint the grid */
         mark_all();
@@ -607,11 +613,14 @@ static void net_frame(void)
     render();
 }
 
+static unsigned char launched;                 /* auto-open the connect dialog on the 1st frame */
+
 static void t_frame(void)
 {
 #ifdef TELNET_DEMO
     if (state == ST_IDLE) { start_session(); demo_fill(); render(); return; }
 #endif
+    if (!launched) { launched = 1; action_connect(); gb_restore_parent(); return; }
     if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a Telnet-menu action ran */
     net_frame();
 }
@@ -641,6 +650,7 @@ void main(void)
 {
     state = ST_IDLE;
     transport = TR_NET;
+    launched = 0;
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */
     gb_menu_add("Telnet", telnet_items, 4, on_menu);
