@@ -1,29 +1,36 @@
-/* telnet - a windowed ANSI/VT terminal + telnet client for GEOBENCH (#238 Phase 1).
+/* telnet - an ANSI/VT terminal + telnet client for GEOBENCH (#238).
  *
- * A fullscreen terminal: a 53x25 character grid in Mode 1, fed by a TCP socket via
- * the gb_net_* API (the paged GBNET.MOD W5100 driver). It speaks enough of RFC 854
- * telnet (IAC option negotiation) to log into a server, and parses ANSI/VT100 escape
- * sequences (cursor positioning, erase, SGR) so a real BBS / shell renders.
+ * Fed by a TCP socket via the gb_net_* API (the paged GBNET.MOD W5100 driver); speaks
+ * RFC 854 telnet (IAC option negotiation) and parses ANSI/VT100 (cursor/erase/SGR), so
+ * a real BBS / MUD / shell renders. Ported from cpc-sdcc examples/telnet (main.c IAC +
+ * ansi.c + screen.c), keyboard via gb_getkey. Monochrome (white on blue).
  *
- * Ported from cpc-sdcc examples/telnet (main.c + ansi.c + screen.c), with the direct
- * Mode-2 screen writes replaced by a GEOBENCH character grid drawn through gb_textrev,
- * and the firmware keyboard replaced by gb_getkey. Monochrome for now (white on blue,
- * matching the desktop); SGR colour is parsed but not painted.
- *
- * Connect target is entered as "host:port" (dotted IP for now - DNS is a later phase).
- * ESC ends the session. Test against tools/netspike/server.py on 127.0.0.1:2323.
+ * Two views share one grid + the telnet/ANSI logic (only the renderer + dims differ):
+ *   - WINDOWED  - a screen-sized managed Mode-1 window, 52x22, drawn through gb_text;
+ *                 the System top bar carries a "Telnet" menu (Connect / Disconnect /
+ *                 Fullscreen / Transport). Connect is a modal popup; host or dotted IP,
+ *                 :port (default 23), names resolved via DNS (gb_net_resolve).
+ *   - FULLSCREEN- Telnet > Fullscreen switches to Mode 2 (640px) for a true 80x25
+ *                 terminal drawn straight to screen RAM with an 8x8 charset; a takeover
+ *                 loop runs the recv/keyboard pump until Ctrl-] / ESC / disconnect.
  */
 #include "gb.h"
+#include "charset.h"        /* 8x8 ASCII glyphs for the Mode-2 80x25 renderer */
 
 /* ---- terminal grid --------------------------------------------------------- */
-#define COLS 52            /* 52 * 6px = 312px; inset 1 byte (4px) each side clears the frame */
-#define ROWS 22            /* fits the content below the 14px title bar (178px / 8) */
-#define SEG  48            /* gb_text caps a string at 48 chars (gtd_copy) -> two
+/* The grid has two sizes: WINDOWED (Mode 1, 52x22, drawn through gb_text in the managed
+ * window) and FULLSCREEN (Mode 2, 80x25, drawn straight to screen RAM with an 8x8
+ * charset - the "proper telnet" view). COLS/ROWS are the ACTIVE dims (gcols/grows), so
+ * all the term_write/ANSI/scroll code below is size-agnostic; only the renderer differs. */
+#define WIN_COLS 52        /* 52 * 6px = 312px; inset 1 byte (4px) each side clears the frame */
+#define WIN_ROWS 22        /* fits the content below the 14px title bar (178px / 8) */
+#define FS_COLS  80        /* Mode 2: 640px / 8 = 80 cols */
+#define FS_ROWS  25        /* Mode 2: 200px / 8 = 25 rows */
+#define SEG  48            /* gb_text caps a string at 48 chars (gtd_copy) -> two windowed
                               segments per row; col 48 = 288px = byte 72 (4px-aligned) */
 
-/* the terminal lives in a screen-sized managed window; the grid sits in its content
- * area, just below the 14px title bar (#238 Phase 2 - windowed so the System top bar
- * carries the Telnet menu). */
+/* the windowed terminal lives in a screen-sized managed window; the grid sits in its
+ * content area, just below the 14px title bar (the System top bar carries the menu). */
 #define WIN_X 0
 #define WIN_Y 8
 #define WIN_W 80
@@ -37,8 +44,12 @@
 #define DLG_W 72
 #define DLG_H 46
 
-static unsigned char grid[ROWS * COLS];
-static unsigned char dirty[ROWS];
+static unsigned char gcols = WIN_COLS, grows = WIN_ROWS;   /* active grid size */
+static unsigned char fs_mode;                              /* 0 = windowed M1, 1 = fullscreen M2 */
+#define COLS gcols
+#define ROWS grows
+static unsigned char grid[FS_COLS * FS_ROWS];              /* sized for the larger (M2) grid */
+static unsigned char dirty[FS_ROWS];
 static unsigned char cur_row, cur_col;
 static unsigned char saved_row, saved_col;     /* ANSI SCP/RCP */
 
@@ -229,13 +240,64 @@ static void draw_row(unsigned char r)
     draw_seg(r, SEG, COLS, GX + 72);          /* cols 48..52 -> byte GX + 72 */
 }
 
+/* -- fullscreen (Mode 2) renderer: an 8x8 glyph straight to screen RAM. The char
+ * cell's top scan line is #C000 + row*80 + col; the 8 scan lines are 0x800 apart.
+ * #C000..#FFFF is the always-mapped screen RAM (same as the screensavers write). */
+static void render_char(unsigned char col, unsigned char row, unsigned char ch)
+{
+    unsigned int base = 0xC000u + (unsigned int)row * 80 + col;
+    const unsigned char *g = fs_charset + (unsigned int)(ch - FS_GLYPH0) * 8;
+    unsigned char i;
+    for (i = 0; i < 8; i++) {
+        *((volatile unsigned char *)base) = g[i];
+        base += 0x800u;
+    }
+}
+
+static void render_m2(void)
+{
+    unsigned char r, c;
+    for (r = 0; r < grows; r++) {
+        if (!dirty[r]) continue;
+        for (c = 0; c < gcols; c++) {
+            unsigned char ch = grid[(unsigned int)r * gcols + c];
+            render_char(c, r, (unsigned char)((ch >= 32 && ch < 127) ? ch : ' '));
+        }
+        dirty[r] = 0;
+    }
+}
+
 static void render(void)
 {
     unsigned char r;
+    if (fs_mode) { render_m2(); return; }      /* Mode 2: direct screen writes */
     gb_curhide();
     for (r = 0; r < ROWS; r++)
         if (dirty[r]) { draw_row(r); dirty[r] = 0; }
     gb_curshow();
+}
+
+/* SCR_SET_MODE: A = mode. Mode 2 = 640x200 2-colour (pens 0/1 keep the desktop's
+ * blue/white inks, so no palette change is needed); Mode 1 = back to the desktop. */
+static void scr_set_mode(unsigned char m) __naked
+{
+    (void)m;                       /* mode arrives in A (sdcccall(1) first byte arg) */
+    __asm
+        call #0xBC0E
+        ret
+    __endasm;
+}
+/* clear the whole screen RAM (#C000..#FFFF) to ink 0 */
+static void m2_clear(void) __naked
+{
+    __asm
+        ld hl,#0xC000
+        ld de,#0xC001
+        ld bc,#0x3FFF
+        ld (hl),#0
+        ldir
+        ret
+    __endasm;
 }
 
 /* ---- telnet IAC ------------------------------------------------------------ */
@@ -541,15 +603,61 @@ static void action_connect(void)
     gb_modal_set(0);
 }
 
-/* Telnet menu: Connect / Disconnect / transport select (Serial stubbed). */
+/* ---- fullscreen Mode-2 80x25 terminal -------------------------------------- */
+/* A takeover loop: switch the CPC to Mode 2 (640px) for a true 80x25 terminal and run
+ * the recv/keyboard pump here until Ctrl-] / ESC / the server disconnects, then drop
+ * back to Mode 1 and let the WM repaint the windowed view. */
+static void run_fullscreen(void)
+{
+    unsigned char k, leave = 0;
+    gb_modal_set(1);
+    gb_curhide();
+    fs_mode = 1; gcols = FS_COLS; grows = FS_ROWS;
+    term_cls();
+    send_naws();                              /* re-advertise 80x25 to the server */
+    scr_set_mode(2);
+    m2_clear();
+    mark_all(); render();
+    poll_ctr = 0; active = ACTIVE_HOLD;
+    while (!leave) {
+        if (gb_vsync()) leave = 1;            /* ESC held -> leave fullscreen */
+        while ((k = gb_getkey()) != 0) {
+            if (k == 0x1D || k == 0x1B) { leave = 1; break; }   /* Ctrl-] / ESC = exit */
+            if (k == 0x0D) {
+                unsigned char crlf[2]; crlf[0] = 0x0D; crlf[1] = 0x0A;
+                if (local_echo) { term_write('\r'); term_write('\n'); }
+                gb_net_send(crlf, 2); active = ACTIVE_HOLD;
+            } else if (k >= 32 && k < 127) {
+                if (local_echo) term_write(k);
+                gb_net_send(&k, 1); active = ACTIVE_HOLD;
+            } else if (k == 8 || k == 0x7F) {
+                unsigned char b = 0x08; gb_net_send(&b, 1);
+            }
+        }
+        if (active) { active--; if (pump_recv()) active = ACTIVE_HOLD; }
+        else if (++poll_ctr >= POLL_EVERY) { poll_ctr = 0; if (pump_recv()) active = ACTIVE_HOLD; }
+        if (state != ST_RUN) leave = 1;       /* server disconnected */
+        render();
+    }
+    scr_set_mode(1);                          /* back to the Mode-1 desktop */
+    fs_mode = 0; gcols = WIN_COLS; grows = WIN_ROWS;
+    if (state == ST_RUN) send_naws();         /* re-advertise the smaller windowed size */
+    term_cls();                               /* the M2 screen is gone; start the window fresh */
+    gb_modal_set(0);
+}
+
+/* Telnet menu: Connect / Disconnect / Fullscreen 80x25 / transport (Serial stubbed). */
 static const char *const telnet_items[4] = {
-    "Connect...", "Disconnect", "Transport: Network", "Transport: Serial"
+    "Connect...", "Disconnect", "Fullscreen 80x25", "Transport: Serial"
 };
 static void on_menu(unsigned char sel)
 {
     if (sel == 0) action_connect();
     else if (sel == 1) close_session();
-    else if (sel == 2) transport = TR_NET;
+    else if (sel == 2) {
+        if (state == ST_RUN) run_fullscreen();
+        else gb_alert("Fullscreen needs", "a live connection");
+    }
     else if (sel == 3) gb_alert("Serial transport", "not available yet");
 }
 
@@ -612,7 +720,14 @@ static unsigned char launched;                 /* auto-open the connect dialog o
 static void t_frame(void)
 {
 #ifdef TELNET_DEMO
-    if (state == ST_IDLE) { start_session(); demo_fill(); render(); return; }
+    if (state == ST_IDLE) {                 /* offline Mode-2 80x25 render check (takeover) */
+        launched = 1;
+        gb_curhide();
+        fs_mode = 1; gcols = FS_COLS; grows = FS_ROWS;
+        scr_set_mode(2); m2_clear();
+        start_session(); demo_fill(); render();
+        for (;;) gb_vsync();                /* hold the M2 screen (no WM interference) */
+    }
 #endif
     if (!launched) { launched = 1; action_connect(); gb_restore_parent(); return; }
     if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a Telnet-menu action ran */
