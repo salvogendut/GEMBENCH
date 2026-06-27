@@ -11,6 +11,7 @@
 #include "w5100.h"
 #include "net.h"
 #include "netinit.h"
+#include "dns.h"
 
 /* ---- transfer area (fixed low RAM, always mapped) ---------------------------- */
 #define GBNET_OP   (*(volatile unsigned char *)0x1490)   /* IN:  operation selector */
@@ -29,6 +30,7 @@
 #define OP_CLOSE     6
 #define OP_RXAVAIL   7
 #define OP_CONNECTED 8
+#define OP_RESOLVE   9      /* IN: hostname (NUL-term) in GBNET_BUF; OUT: 4-byte IP in GBNET_IP */
 
 void main(void)
 {
@@ -52,6 +54,15 @@ void main(void)
         GBNET_RES = 1;
     } else if (op == OP_CONNECTED) {
         GBNET_RES = net_is_connected();
+    } else if (op == OP_RESOLVE) {
+        /* DNS server was written to the chip by net_init (cfg.dns); read it back and
+         * resolve the hostname in GBNET_BUF -> 4-byte IP in GBNET_IP (UDP socket 1). */
+        unsigned char dns_srv[4];
+        dns_srv[0] = w5100_read_reg(N_DNS0);
+        dns_srv[1] = w5100_read_reg(N_DNS0 + 1);
+        dns_srv[2] = w5100_read_reg(N_DNS0 + 2);
+        dns_srv[3] = w5100_read_reg(N_DNS0 + 3);
+        GBNET_RES = (dns_resolve(dns_srv, (const char *)GBNET_BUF, GBNET_IP) == 0) ? 1 : 0;
     } else {
         GBNET_RES = 0;
     }

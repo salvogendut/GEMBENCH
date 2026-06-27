@@ -412,4 +412,5 @@ unsigned int  gb_net_recv(unsigned char *buf, unsigned int maxlen);        /* by
 void          gb_net_close(void);
 unsigned int  gb_net_rxavail(void);                        /* bytes waiting in RX */
 unsigned char gb_net_connected(void);                      /* 1 = TCP established */
+unsigned char gb_net_resolve(const char *host, unsigned char *ip4);  /* DNS A-lookup; 1 = ok */
 #endif /* GB_H */

@@ -313,24 +313,40 @@ static void telnet_byte(unsigned char c)
 /* ---- connect target entry -------------------------------------------------- */
 static unsigned char ip[4];
 static unsigned int  port;
-static char target[40];
+static char target[64];
+static char hostbuf[48];
 
-/* parse "a.b.c.d[:port]" -> ip[]/port. Returns 1 on a valid dotted quad. */
-static unsigned char parse_target(const char *s)
+/* split "host:port" -> hostbuf + port (default 23). Returns 1 if the host is non-empty. */
+static unsigned char split_target(const char *s)
+{
+    unsigned char i = 0;
+    while (s[i] && s[i] != ':' && i < sizeof(hostbuf) - 1) { hostbuf[i] = s[i]; i++; }
+    hostbuf[i] = 0;
+    if (i == 0) return 0;
+    port = 23;
+    if (s[i] == ':') {
+        unsigned int p = 0;
+        const char *q = s + i + 1;
+        while (*q >= '0' && *q <= '9') p = p * 10 + (*q++ - '0');
+        if (p) port = p;
+    }
+    return 1;
+}
+
+/* parse a bare dotted-decimal "a.b.c.d" -> out[4]. Returns 1 if it's a clean IPv4
+ * (so a non-match falls through to DNS). */
+static unsigned char parse_dotted(const char *s, unsigned char *out)
 {
     unsigned char i, v;
-    unsigned int p = 0;
     const char *q = s;
     for (i = 0; i < 4; i++) {
         if (*q < '0' || *q > '9') return 0;
         v = 0;
         while (*q >= '0' && *q <= '9') v = (unsigned char)(v * 10 + (*q++ - '0'));
-        ip[i] = v;
+        out[i] = v;
         if (i < 3) { if (*q != '.') return 0; q++; }
     }
-    if (*q == ':') { q++; while (*q >= '0' && *q <= '9') p = p * 10 + (*q++ - '0'); }
-    port = p ? p : 23;
-    return 1;
+    return (unsigned char)(*q == 0);
 }
 
 /* a small modal edit box on the connect screen; types into target[]. 1=Enter, 0=ESC. */
@@ -380,7 +396,7 @@ static void err_screen(const char *a, const char *b)
 
 /* host-socket mode ignores most of this; the chip just needs a MAC + a sane config. */
 static const unsigned char netcfg[22] = {
-    192,168,99,50,  255,255,255,0,  192,168,99,1,  192,168,99,1,
+    192,168,99,50,  255,255,255,0,  192,168,99,1,  8,8,8,8,   /* DNS = 8.8.8.8 */
     0xDE,0xAD,0xBE,0xEF,0x00,0xFF
 };
 
@@ -425,7 +441,7 @@ static unsigned char do_connect(void)
     for (;;) {
         connect_screen();
         if (!edit_target()) return 0;
-        if (!parse_target(target)) { msg(64, "Enter a dotted IP (DNS later)"); continue; }
+        if (!split_target(target)) { msg(64, "Enter a host or IP"); continue; }
         break;
     }
     gb_curhide();
@@ -433,6 +449,15 @@ static unsigned char do_connect(void)
     msg(8, "Connecting...");
     gb_curshow();
     if (!gb_net_init(netcfg)) { err_screen("No Net4CPC chip", "Check net4cpc config"); return 0; }
+    /* a dotted IP is used as-is; anything else is resolved via DNS (UDP socket 1). */
+    if (!parse_dotted(hostbuf, ip)) {
+        gb_curhide();
+        gb_fill(0, 0, 80, 200, 0);
+        msg(8, "Resolving");
+        msg(24, hostbuf);
+        gb_curshow();
+        if (!gb_net_resolve(hostbuf, ip)) { err_screen("DNS lookup failed", hostbuf); return 0; }
+    }
     if (!gb_net_open())       { err_screen("Socket open failed", ""); return 0; }
     if (!gb_net_connect(ip, port)) { err_screen("Connect failed", "Host unreachable?"); return 0; }
     return 1;
