@@ -7,8 +7,8 @@
  *
  * Ported from cpc-sdcc examples/telnet (main.c + ansi.c + screen.c), with the direct
  * Mode-2 screen writes replaced by a GEOBENCH character grid drawn through gb_textrev,
- * and the firmware keyboard replaced by gb_getkey. Monochrome for now (white on black);
- * SGR colour is parsed but not painted.
+ * and the firmware keyboard replaced by gb_getkey. Monochrome for now (white on blue,
+ * matching the desktop); SGR colour is parsed but not painted.
  *
  * Connect target is entered as "host:port" (dotted IP for now - DNS is a later phase).
  * ESC ends the session. Test against tools/netspike/server.py on 127.0.0.1:2323.
@@ -206,7 +206,7 @@ static void draw_seg(unsigned char r, unsigned char c0, unsigned char c1, unsign
         rowbuf[k++] = (ch >= 32 && ch < 127) ? (char)ch : ' ';
     }
     rowbuf[k] = 0;
-    gb_textrev(bx, (unsigned char)(r * 8), rowbuf);
+    gb_text(bx, (unsigned char)(r * 8), rowbuf);   /* white on blue (paper 0), opaque */
 }
 
 static void draw_row(unsigned char r)
@@ -342,8 +342,8 @@ static unsigned char edit_target(void)
     while (1) {
         if (redraw) {
             gb_curhide();
-            gb_fill(2, 48, 76, 8, 2);                 /* clear input line (black) */
-            gb_textrev(2, 48, target);
+            gb_fill(2, 48, 76, 8, 0);                 /* clear input line (blue) */
+            gb_text(2, 48, target);
             gb_curshow();
             redraw = 0;
         }
@@ -359,13 +359,13 @@ static unsigned char edit_target(void)
     }
 }
 
-static void msg(unsigned char line, const char *s) { gb_textrev(2, line, s); }  /* white on black */
+static void msg(unsigned char line, const char *s) { gb_text(2, line, s); }  /* white on blue */
 
 /* a minimal click/key-to-dismiss error screen (avoids the GBUI dialog dependency). */
 static void err_screen(const char *a, const char *b)
 {
     gb_curhide();
-    gb_fill(0, 0, 80, 200, 2);
+    gb_fill(0, 0, 80, 200, 0);
     msg(8, a);
     if (b && *b) msg(24, b);
     msg(48, "Press a key...");
@@ -395,7 +395,7 @@ static unsigned char rbuf[256];
 static void connect_screen(void)
 {
     gb_curhide();
-    gb_fill(0, 0, 80, 200, 2);                /* all black */
+    gb_fill(0, 0, 80, 200, 0);                /* all blue */
     msg(8,  "GEOBENCH TELNET");
     msg(24, "Connect to (host:port):");
     msg(40, "ESC cancels, ENTER connects");
@@ -420,7 +420,7 @@ static unsigned char do_connect(void)
         break;
     }
     gb_curhide();
-    gb_fill(0, 0, 80, 200, 2);
+    gb_fill(0, 0, 80, 200, 0);
     msg(8, "Connecting...");
     gb_curshow();
     if (!gb_net_init(netcfg)) { err_screen("No Net4CPC chip", "Check net4cpc config"); return 0; }
@@ -530,7 +530,7 @@ void main(void)
     state = ST_CONNECT;
     WM_FS = 1;
     gb_curhide();
-    gb_fill(0, 0, 80, 200, 2);
+    gb_fill(0, 0, 80, 200, 0);
     gb_curshow();
     gb_wm_add(&twin);
 }
