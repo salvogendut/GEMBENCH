@@ -433,7 +433,7 @@ floppysv_run
                 push  af
                 ld    a,PAGE_DATA
                 call  bank_set
-                ld    hl,floppysv_modname     ; fs_req_name = "FLOPPYSVBIN"
+                ld    hl,floppysv_modname     ; fs_req_name = "FLOPPYSVMOD"
                 ld    de,fs_req_name
                 ld    bc,11
                 ldir
@@ -452,7 +452,7 @@ fsvr_unload
                 ret   z
                 scf
                 ret
-floppysv_modname db    "FLOPPYSVBIN"          ; 8.3, space-padded
+floppysv_modname db    "FLOPPYSVMOD"          ; 8.3, space-padded
                 endif                          ; IN_GBROM (write stub resident-only)
 
 ; --- resident state (load + listing; save state lives in the module) --------

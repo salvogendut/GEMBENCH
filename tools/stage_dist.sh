@@ -12,7 +12,8 @@
 #   GBENCH/      - everything the kernel loads at boot (apps/modules/fonts/icons/cursor)
 # Boot: RUN"GB -> RUN"GBALB -> the kernel reads /GBENCH.
 # Needs build/GBALB.RAW.
-#   * <app>.APP / GBCFG/GBFAT/FLOPPYSV.BIN - HEADERLESS raw images (kernel loads them)
+#   * <app>.APP / GBCFG/GBFAT/FLOPPYSV/GBUI.MOD - HEADERLESS raw kernel modules (#234: .MOD,
+#     not .BIN, so .BIN is reserved for native runnable binaries; the kernel loads them)
 #   * GB.BAS / GEOBENCH.CFG - written with CR+LF line endings (the CPC requires them)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -52,13 +53,13 @@ cp build/PYRO.RAW     "$SYS/PYRO.SAV"       # fireworks screensaver (xscreensave
 cp build/FOREST.RAW   "$SYS/FOREST.SAV"     # fractal-trees screensaver (xscreensaver port) - CARD ONLY
 cp build/HELIX.RAW    "$SYS/HELIX.SAV"      # harmonograph screensaver (xscreensaver port) - CARD ONLY
 cp build/CATCLK.RAW   "$SYS/CATCLK.SAV"     # Kit-Cat clock screensaver (inspired by X11 catclock) - CARD ONLY
-cp build/GBCFG.RAW "$SYS/GBCFG.BIN"
-cp build/GBFAT.RAW "$SYS/GBFAT.BIN"
-cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.BIN"   # #135: paged AMSDOS/floppy write module
-cp build/GBUI.RAW "$SYS/GBUI.BIN"           # #142: paged dialog (popup/prompt/file-picker) module
+cp build/GBCFG.RAW "$SYS/GBCFG.MOD"          # #234: kernel modules use .MOD (.BIN = native runnable)
+cp build/GBFAT.RAW "$SYS/GBFAT.MOD"
+cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.MOD"   # #135: paged AMSDOS/floppy write module
+cp build/GBUI.RAW "$SYS/GBUI.MOD"           # #142: paged dialog (popup/prompt/file-picker) module
 cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST build/PAINT.IST \
    build/DEFAULT.SPR build/HAND.SPR "$SYS/"
-cp build/SPLASH.BIN "$SYS/"                    # #196: bootsplash lollipop bitmap
+cp build/SPLASH.BIN "$SYS/SPLASH.MOD"         # #196: bootsplash lollipop bitmap (.MOD, #234)
 for bdp in build/*.BDP; do                    # #128: backdrop tiles (BACKDROP=<name>)
     [ -e "$bdp" ] && cp "$bdp" "$SYS/"
 done

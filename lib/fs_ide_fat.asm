@@ -212,7 +212,7 @@ gbfat_run_paged
                 push  af
                 ld    a,PAGE_DATA
                 call  bank_set
-                ld    hl,gbfat_modname        ; fs_req_name = "GBFAT   BIN"
+                ld    hl,gbfat_modname        ; fs_req_name = "GBFAT   MOD"
                 ld    de,fs_req_name
                 ld    bc,11
                 ldir
@@ -246,7 +246,7 @@ fside_delete_file
                 ld    a,1
                 ld    (GBFAT_OP),a            ; op = delete
                 jp    gbfat_run               ; page in + load + run the module
-gbfat_modname   db    "GBFAT   BIN"          ; 8.3, space-padded
+gbfat_modname   db    "GBFAT   MOD"          ; 8.3, space-padded
 
 ; --- read-path state (shared core state lives in fs_fat32_core.asm) -------
 ; #152: fs_mounted + flf_* are ROM-only (only the read backend touches them); in the

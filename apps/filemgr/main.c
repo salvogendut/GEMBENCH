@@ -336,6 +336,7 @@ static unsigned char entry_icon(const char *name)
     if (ext_eq(ext, "TXT") || ext_eq(ext, "CFG")) return ICON_TEXT;
     if (ext_eq(ext, "FNT")) return ICON_FNT;
     if (ext_eq(ext, "SAV")) return ICON_SCREENSAVER;   /* #221: screensaver modules */
+    if (ext_eq(ext, "MOD")) return ICON_GEOBENCH;      /* #234: kernel modules = the lollipop icon */
     if (ext_eq(ext, "IST")) return ICON_BINARY;   /* #221: apps/data share the binary icon */
     if (ext_eq(ext, "APP")) {
         if (name_is(name, "NOTEPAD")) return ICON_NOTEPAD;
@@ -530,13 +531,17 @@ static void open_entry(unsigned char idx)
     }
     nsel = 0;
     e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
-    if (ext_is(e, 'A', 'P', 'P'))
-        gb_wm_open(e);                          /* run the app itself, file-less */
+    if (ext_is(e, 'A', 'P', 'P') || ext_is(e, 'S', 'A', 'V'))
+        gb_wm_open(e);                          /* #234: run the app/screensaver image itself */
     else if (ext_is(e, 'I', 'S', 'T') || ext_is(e, 'S', 'P', 'R'))
         gb_wm_launch_as("ICONED  APP");
     else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G') ||
              ext_is(e, 'B', 'A', 'S'))
         gb_wm_launch_as("NOTEPAD APP");
+    else if (ext_is(e, 'B', 'I', 'N'))          /* #234: native binary - running one means
+                                                   leaving GEOBENCH (RUN" under AMSDOS); not
+                                                   wired yet, so don't dump it in the Viewer */
+        gb_alert("Native binary", "can't run from GEOBENCH yet.");
     else
         gb_wm_launch_as("VIEWER  APP");         /* default: view it (incl. .PIC images,
                                                    #114) - PAINT edits via File > Load */
