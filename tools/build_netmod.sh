@@ -25,10 +25,12 @@ mkdir -p "$work"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$KC" -c "$KC/w5100.c"      -o "$work/w5100.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$KC" -c "$KC/net.c"        -o "$work/net.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$KC" -c "$KC/gbnet_init.c" -o "$work/gbnet_init.rel"
+"$SDCC" -mz80 --fomit-frame-pointer -I "$KC" -c "$KC/udp.c"        -o "$work/udp.rel"
+"$SDCC" -mz80 --fomit-frame-pointer -I "$KC" -c "$KC/dns.c"        -o "$work/dns.rel"
 # code at #6000 (the module load address); data above it, all below the kernel (#8000).
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x6000 --data-loc 0x7400 \
     "$work/crt0.rel" "$work/gbnet_mod.rel" "$work/w5100.rel" "$work/net.rel" \
-    "$work/gbnet_init.rel" -o "$work/mod.ihx"
+    "$work/gbnet_init.rel" "$work/udp.rel" "$work/dns.rel" -o "$work/mod.ihx"
 
 # fit guard: loaded image (code + gsinit tail) clears data-loc, data/bss ends below #8000.
 python3 - "$work/mod.map" <<'PY'

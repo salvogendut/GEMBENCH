@@ -67,3 +67,17 @@ void gb_net_close(void) { GBNET_OP = 6; gb_net(); }
 unsigned int gb_net_rxavail(void) { GBNET_OP = 7; gb_net(); return GBNET_RES2; }
 
 unsigned char gb_net_connected(void) { GBNET_OP = 8; return gb_net(); }
+
+/* gb_net_resolve: resolve a hostname to ip4[4] via DNS (UDP socket 1; uses the DNS
+ * server from gb_net_init's cfg). Returns 1 = resolved, 0 = failed. Blocks (~seconds)
+ * on a lost reply. Call after gb_net_init. */
+unsigned char gb_net_resolve(const char *host, unsigned char *ip4)
+{
+    unsigned int i = 0;
+    while (host[i] && i < GBNET_MAXIO - 1) { GBNET_BUF[i] = (unsigned char)host[i]; i++; }
+    GBNET_BUF[i] = 0;
+    GBNET_OP = 9;
+    if (!gb_net()) return 0;
+    ip4[0] = GBNET_IP[0]; ip4[1] = GBNET_IP[1]; ip4[2] = GBNET_IP[2]; ip4[3] = GBNET_IP[3];
+    return 1;
+}
