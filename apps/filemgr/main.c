@@ -298,6 +298,7 @@ static const char *win_title(void)               /* "Disk C" + path -> title_buf
 #define ICON_PAINT 16
 #define ICON_FRACTAL 17
 #define ICON_VIEWER 19
+#define ICON_TELNET 20        /* #238: the telnet terminal app */
 #define ICON_UP 23            /* up-arrow for the ".." parent-dir entry (#142) */
 #define ICON_SCREENSAVER 24   /* #221: reused the freed gear slot for the screensaver (.SAV) icon */
 
@@ -348,6 +349,7 @@ static unsigned char entry_icon(const char *name)
         if (name_is(name, "FRACTAL")) return ICON_FRACTAL;
         if (name_is(name, "XAOS"))    return ICON_FRACTAL;   /* the fractal generator (#116) */
         if (name_is(name, "VIEWER"))  return ICON_VIEWER;
+        if (name_is(name, "TELNET"))  return ICON_TELNET;   /* #238 */
         return ICON_APP;      /* a .APP with no distinctive icon uses the generic app icon
                                  (slot 10), incl. SETTINGS (its gear slot is now the saver) */
     }
@@ -362,7 +364,7 @@ static unsigned char rank_of(unsigned char ic)
         case ICON_FOLDER:   return 0;
         case ICON_DESKTOP: case ICON_FILEMGR: case ICON_NOTEPAD: case ICON_ICONED:
         case ICON_PAINT:    case ICON_VIEWER:  case ICON_CLOCK:   case ICON_FRACTAL:
-        case ICON_SCREENSAVER:
+        case ICON_SCREENSAVER: case ICON_TELNET:
         case ICON_APP:      return 1;
         case ICON_PICTURE:  return 2;
         case ICON_TEXT:     return 3;
