@@ -449,14 +449,8 @@ static void connect_screen(void)
 /* run the connect flow; returns 1 connected, 0 cancelled/failed (caller closes). */
 static unsigned char do_connect(void)
 {
-    /* default target = the local test server */
-    target[0] = 0;
-    {
-        static const char def[] = "127.0.0.1:2323";
-        unsigned char i = 0;
-        while (def[i]) { target[i] = def[i]; i++; }
-        target[i] = 0;
-    }
+    /* target starts blank (a static: empty on first launch, then it keeps the last
+     * host you typed, so reconnecting is just ENTER). Edit it in the dialog below. */
     for (;;) {
         connect_screen();
         if (!edit_target()) return 0;
