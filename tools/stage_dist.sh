@@ -37,7 +37,6 @@ cp build/GEOBENCH.CFG "$OUT/GEOBENCH.CFG"   # #205: one source, shared with the 
 for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS; do
     cp "build/$a.RAW" "$SYS/$a.APP"
 done
-cp build/NETTEST.RAW "$SYS/NETTEST.APP"     # #238: GBNET smoke test (card-only dev app; double-click to run)
 cp build/TELNET.RAW  "$SYS/TELNET.APP"      # #238: windowed ANSI/VT terminal + telnet client
 cp build/CIRCLE.RAW "$SYS/CIRCLE.SAV"       # #219: the test screensaver (a .SAV, not a .APP)
 cp build/DECO.RAW   "$SYS/DECO.SAV"         # art-deco panels screensaver (ported from symsav-deco)
