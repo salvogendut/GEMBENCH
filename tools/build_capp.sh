@@ -34,7 +34,7 @@ mkdir -p "$work"
 # scratch (it never touches IY) and firmware calls preserve the caller's IY, so
 # this stops a kernel call from wrecking an app's frame pointer (which crashed
 # the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
-"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
+"$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
 # Opt-in dialogs (#114, #142). The heavy render (popup/prompt/file-picker) now lives in
 # the paged GBUI kernel module (#142 step 1b); an app that needs ANY dialog links only
