@@ -392,6 +392,15 @@ static const unsigned char netcfg[22] = {
 static unsigned char state;
 static unsigned char rbuf[256];
 
+/* recv-poll throttle (#238): each gb_net_recv is a GBNET.MOD disk load, so polling it
+ * every frame hammers the disk on real HW. Poll every frame while data/typing flows,
+ * then drop to every POLL_EVERY frames once idle (still ~16 Hz - imperceptible to type
+ * against, far gentler on the drive). The kernel-side load-once cache would remove this
+ * need, but doesn't fit the 1-byte resident headroom. */
+#define POLL_EVERY  3
+#define ACTIVE_HOLD 12          /* frames of full-speed polling after the last activity */
+static unsigned char poll_ctr, active;
+
 static void connect_screen(void)
 {
     gb_curhide();
@@ -429,8 +438,9 @@ static unsigned char do_connect(void)
     return 1;
 }
 
-/* pull whatever the server sent this frame through the telnet+ANSI pipeline. */
-static void pump_recv(void)
+/* pull whatever the server sent this frame through the telnet+ANSI pipeline.
+ * Returns the byte count (0 = nothing this poll). */
+static unsigned int pump_recv(void)
 {
     unsigned int n, i;
     n = gb_net_recv(rbuf, sizeof(rbuf));
@@ -441,13 +451,16 @@ static void pump_recv(void)
         { const char *m = "** Disconnected - press a key **"; while (*m) term_write(*m++); }
         state = ST_DONE;
     }
+    return n;
 }
 
-/* send typed keys (CR -> CRLF; local echo when the server isn't echoing). */
-static void pump_keys(void)
+/* send typed keys (CR -> CRLF; local echo when the server isn't echoing).
+ * Returns 1 if anything was sent this frame. */
+static unsigned char pump_keys(void)
 {
-    unsigned char k;
+    unsigned char k, sent = 0;
     while ((k = gb_getkey()) != 0) {
+        sent = 1;
         if (k == 0x0D) {
             unsigned char crlf[2]; crlf[0] = 0x0D; crlf[1] = 0x0A;
             if (local_echo) { term_write('\r'); term_write('\n'); }
@@ -460,6 +473,7 @@ static void pump_keys(void)
             gb_net_send(&b, 1);
         }
     }
+    return sent;
 }
 
 static void close_session(void)
@@ -501,6 +515,7 @@ static void t_frame(void)
         if (!do_connect()) { WM_FS = 0; gb_wm_close(); return; }
         state = ST_RUN;
         iac_state = IS_NORMAL; local_echo = 1; a_state = A_IDLE;
+        poll_ctr = 0; active = ACTIVE_HOLD;     /* full-speed for the login banner */
         term_cls();
         send3(WILL, OPT_TTYPE);
         send3(WILL, OPT_NAWS);
@@ -513,8 +528,15 @@ static void t_frame(void)
         render();
         return;
     }
-    pump_recv();
-    pump_keys();
+    /* keys are always serviced (responsive typing); recv is throttled when idle */
+    if (pump_keys()) active = ACTIVE_HOLD;
+    if (active) {
+        active--;
+        if (pump_recv()) active = ACTIVE_HOLD;
+    } else if (++poll_ctr >= POLL_EVERY) {
+        poll_ctr = 0;
+        if (pump_recv()) active = ACTIVE_HOLD;
+    }
     render();
 }
 
