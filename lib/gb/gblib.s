@@ -21,6 +21,7 @@
         .globl  _gb_clip_get
         .globl  _gb_clip_len
         .globl  _gb_ui
+        .globl  _gb_net
         .globl  _gb_fill
         .globl  _gb_backdrop
         .globl  _gb_reload
@@ -206,6 +207,12 @@ _gb_clip_len:
 ;; unsigned char gb_ui(void);  -> run the paged dialog module, BC=UI_RES -> A (#142)
 _gb_ui:
         call    0x80AE          ; GB_UI
+        ld      a, c
+        ret
+
+;; unsigned char gb_net(void);  -> run the paged W5100 module, BC=GBNET_RES -> A (#238)
+_gb_net:
+        call    0x80BD          ; GB_NET
         ld      a, c
         ret
 

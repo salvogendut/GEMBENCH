@@ -54,6 +54,11 @@ if [ "${DOC:-0}" = "1" ] || [ "${DOCRO:-0}" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer $RO -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
     DLG_REL="$DLG_REL $work/gbdoc.rel"
 fi
+# NET=1 -> gbnet_stub.c (gb_net_* -> the paged GBNET W5100 module, #238)
+if [ "${NET:-0}" = "1" ]; then
+    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbnet_stub.c" -o "$work/gbnet_stub.rel"
+    DLG_REL="$DLG_REL $work/gbnet_stub.rel"
+fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE

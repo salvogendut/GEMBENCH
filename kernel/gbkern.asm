@@ -262,6 +262,7 @@ WM_FR_ARG       equ   14           ;   11-byte 8.3 file arg, captured at gb_wm_a
                 jp    k_wm_damage            ; GB_WMDAMAGE    #80B4 set the repaint clip = a damage rect (#153)
                 jp    k_backdrop             ; GB_BACKDROP    #80B7 fill a rect with the desktop backdrop (#128)
                 jp    k_reload               ; GB_RELOAD      #80BA re-apply font/icons/cursor/backdrop (#185)
+                jp    k_net                  ; GB_NET         #80BD run the paged W5100 net module -> BC=GBNET_RES (#238)
 
 ; ---------------------------------------------------------------------------
 kernel_main
@@ -1773,34 +1774,59 @@ k_clip_len
 ; loop doesn't dispatch top-bar clicks into the now-swapped-out app), CALL it to render
 ; + write UI_RES, then restore. Returns BC = UI_RES for the C trampoline. The dialog is
 ; modal: this call blocks until the user picks/cancels.
-k_ui
-                ld    a,1
-                ld    (UI_MODAL),a
+; run_data_module: the shared PAGE_DATA module loader (#238). HL = 11-byte module name.
+; Save the caller's page, map PAGE_DATA, load the named module to DATA_MODTOP (#6000)
+; from the boot drive, CALL it, restore the page. CF set = loaded (NC = missing). One
+; copy instead of three (GB_UI + GB_NET + the floppy-write stub) - reclaims the resident
+; bytes the net hook needs.
+run_data_module
                 ld    a,(bank_cur)
                 push  af
                 ld    a,PAGE_DATA
                 call  bank_set
-                ld    hl,gbui_modname         ; "GBUI    MOD" -> fs_req_name
-                ld    de,fs_req_name
+                ld    de,fs_req_name          ; HL (name) -> fs_req_name
                 ld    bc,11
                 ldir
-                ld    hl,#2000                ; module load cap (8 KB window to #8000)
+                ld    hl,#2000                ; load cap (8 KB window to #8000)
                 ld    (fs_load_max),hl
                 ld    hl,DATA_MODTOP          ; #6000
                 ld    (fs_load_dst),hl
-                call  fs_load_sys            ; GBUI.BIN -> #6000 (boot drive, preserves browse dir)
-                jr    nc,kui_done             ; missing -> leave UI_RES (caller pre-set a cancel)
-                call  DATA_MODTOP            ; run the module: render, write UI_RES
-kui_done
+                call  fs_load_sys            ; module -> #6000 (boot drive, preserves browse dir)
+                jr    nc,rdm_miss
+                call  DATA_MODTOP            ; run it
                 pop   af
                 call  bank_set
+                scf
+                ret
+rdm_miss
+                pop   af
+                call  bank_set
+                or    a                       ; NC = missing
+                ret
+
+k_ui
+                ld    a,1
+                ld    (UI_MODAL),a            ; modal: the dialog's gb_poll must not dispatch
+                ld    hl,gbui_modname         ; top-bar clicks into the swapped-out app
+                call  run_data_module
                 xor   a
                 ld    (UI_MODAL),a
-                ld    a,(UI_RES)
+                ld    a,(UI_RES)              ; missing module -> caller pre-set a cancel
                 ld    c,a
                 ld    b,0
                 ret
 gbui_modname    db    "GBUI    MOD"
+
+; k_net (GB_NET #80BD): the paged W5100 networking module (#238). The app marshalled an
+; op + args into the GBNET_* low-RAM block; run GBNET.MOD and return BC = GBNET_RES.
+k_net
+                ld    hl,gbnet_modname
+                call  run_data_module
+                ld    a,(GBNET_RES)
+                ld    c,a
+                ld    b,0
+                ret
+gbnet_modname   db    "GBNET   MOD"
 
 ; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a
 ; caller buffer. HL = dst (in the caller's page, which stays mapped through the
@@ -3010,6 +3036,8 @@ menu_clear
 ; tables were removed to reclaim space - the kernel->C migration that funds the
 ; .APP launch model, #70.)
 launch_arg      equ   #1485        ; #188: relocated to low RAM (was resident defs 11)
+GBNET_RES       equ   #1491        ; #238: GBNET.MOD result byte (the op/args/data block is
+                                   ; #1490..#149F + #2200; only k_net reads the result here)
 
 ; k_icon (GB_ICON): blit a full icon. A = slot, B = x, C = y. Reads the bitmap
 ; from the .IST in PAGE_DATA, so swap pages around it.
@@ -3410,6 +3438,8 @@ fat_img         incbin "../build/GBFAT.RAW"     ; FAT16/IDE write module, as GBF
 fat_imgend
 flsv_img        incbin "../build/FLOPPYSV.RAW"  ; AMSDOS/floppy write module, as FLOPPYSV.BIN (#135)
 flsv_imgend
+net_img         incbin "../build/GBNET.RAW"     ; W5100 networking module, as GBNET.MOD (#238)
+net_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
 font_imgend
 cfont_img       incbin "../build/CLASSIC.FNT"   ; alternate 8x8 font (FONT=CLASSIC)
@@ -3448,6 +3478,7 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "GBCFG.MOD",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.MOD",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
                 save  "FLOPPYSV.MOD",flsv_img,flsv_imgend-flsv_img,DSK,"build/gbkern.dsk"
+                save  "GBNET.MOD",net_img,net_imgend-net_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
