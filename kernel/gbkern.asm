@@ -327,9 +327,9 @@ spike_name      db    "DESKTOP APP"  ; #130 SPIKE: the file to test-load from th
                 ; first and it FAILED (v1 magenta). This v2 isolates WHY the file OPEN fails by
                 ; trying three FILE_OPEN forms and reporting which one succeeds (never reboots):
                 ;   RED     = mount failed
-                ;   WHITE   = absolute open "/GEOBENCH/GBCFG.BIN" works (the trim fix) -> if the
+                ;   WHITE   = absolute open "/GEOBENCH/GBCFG.MOD" works (the trim fix) -> if the
                 ;             fix card still rebooted, the failure is the banked READ, not the open
-                ;   GREEN   = cd "/GEOBENCH" then open "GBCFG.BIN" works -> stateful-subdir fix
+                ;   GREEN   = cd "/GEOBENCH" then open "GBCFG.MOD" works -> stateful-subdir fix
                 ;   MAGENTA = neither opened -> deeper
                 call  input_init
                 di
@@ -339,20 +339,20 @@ spike_name      db    "DESKTOP APP"  ; #130 SPIKE: the file to test-load from th
                 call  alb_ensure_mount        ; mount
                 ld    bc,#0606               ; RED
                 jp    nc,sts_show
-                ; --- form 1: absolute "/GEOBENCH/GBCFG.BIN" (the trimmed path the fix card uses) ---
+                ; --- form 1: absolute "/GEOBENCH/GBCFG.MOD" (the trimmed path the fix card uses) ---
                 ld    hl,sts_abs
                 call  sts_setname
                 call  sts_fopen
                 ld    bc,#1A1A               ; WHITE = absolute open works
                 jr    z,sts_show
-                ; --- form 2: cd "/GEOBENCH" then open "GBCFG.BIN" relative (stateful subdir) ---
+                ; --- form 2: cd "/GEOBENCH" then open "GBCFG.MOD" relative (stateful subdir) ---
                 call  sts_close
                 ld    hl,sts_dir             ; SET_FILE_NAME "/GEOBENCH" + FILE_OPEN (enter dir)
                 call  sts_setname
                 ld    a,ALBC_FILEOPEN
                 call  alb_sendcmd
                 call  alb_waitint            ; ERR_OPEN_DIR/SUCCESS - either means we're in it
-                ld    hl,sts_rel             ; SET_FILE_NAME "GBCFG.BIN" (relative) + FILE_OPEN
+                ld    hl,sts_rel             ; SET_FILE_NAME "GBCFG.MOD" (relative) + FILE_OPEN
                 call  sts_setname
                 call  sts_fopen
                 ld    bc,#1212               ; GREEN = cd-first opens it (stateful-subdir fix)
@@ -382,10 +382,10 @@ sts_close       ld    a,ALBC_FILECLOSE
                 out   (c),a
                 call  alb_waitint
                 ret
-sts_cfg11       db    "GBCFG   BIN"          ; 11-byte 8.3 for alb_setname_req
-sts_abs         db    "/GEOBENCH/GBCFG.BIN",0
+sts_cfg11       db    "GBCFG   MOD"          ; 11-byte 8.3 for alb_setname_req
+sts_abs         db    "/GEOBENCH/GBCFG.MOD",0
 sts_dir         db    "/GEOBENCH",0
-sts_rel         db    "GBCFG.BIN",0
+sts_rel         db    "GBCFG.MOD",0
                 endif
                 if SPIKE_M4
                 ; -DSPIKE_M4=1 (+STORAGE_M4): does sending commands the M4ROM way - with the real
@@ -1103,7 +1103,7 @@ rcm_done
                 call  bank_set
                 ei
                 ret
-cfgmod_name     db    "GBCFG   BIN"          ; 8.3, space-padded
+cfgmod_name     db    "GBCFG   MOD"          ; 8.3, space-padded
 
 ; --- font in PAGE_DATA ----------------------------------------------------
 ; font_init: page PAGE_DATA in, load <FONT>.FNT into it, cache the geometry.
@@ -1264,7 +1264,7 @@ bsp_done
                 call  bank_set
                 ei
                 ret
-splash_name     db    "SPLASH  BIN"          ; 8.3, space-padded
+splash_name     db    "SPLASH  MOD"          ; 8.3, space-padded
 spl_dims        db    SPL_X,SPL_Y,SPL_WB,SPL_H
 
 ; boot_tick: advance the load bar by one red segment over the black backing, then hold
@@ -1780,7 +1780,7 @@ k_ui
                 push  af
                 ld    a,PAGE_DATA
                 call  bank_set
-                ld    hl,gbui_modname         ; "GBUI    BIN" -> fs_req_name
+                ld    hl,gbui_modname         ; "GBUI    MOD" -> fs_req_name
                 ld    de,fs_req_name
                 ld    bc,11
                 ldir
@@ -1800,7 +1800,7 @@ kui_done
                 ld    c,a
                 ld    b,0
                 ret
-gbui_modname    db    "GBUI    BIN"
+gbui_modname    db    "GBUI    MOD"
 
 ; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a
 ; caller buffer. HL = dst (in the caller's page, which stays mapped through the
@@ -3445,15 +3445,15 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
-                save  "GBCFG.BIN",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
-                save  "GBFAT.BIN",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
-                save  "FLOPPYSV.BIN",flsv_img,flsv_imgend-flsv_img,DSK,"build/gbkern.dsk"
+                save  "GBCFG.MOD",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
+                save  "GBFAT.MOD",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
+                save  "FLOPPYSV.MOD",flsv_img,flsv_imgend-flsv_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "PAINT.IST",pist_img,pist_imgend-pist_img,DSK,"build/gbkern.dsk"
                 save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
-                save  "SPLASH.BIN",splash_img,splash_imgend-splash_img,DSK,"build/gbkern.dsk"
+                save  "SPLASH.MOD",splash_img,splash_imgend-splash_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
                 save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data
                 save  "HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data,DSK,"build/gbkern.dsk"
