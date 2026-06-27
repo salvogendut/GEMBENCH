@@ -22,17 +22,11 @@ app_imgend
 set_img         incbin "../build/SETTINGS.RAW"  ; packaged on the disk as SETTINGS.APP (#129)
 set_imgend
                 save  "SETTINGS.APP",set_img,set_imgend-set_img,DSK,"build/gbkern.dsk"
-sav_img         incbin "../build/CIRCLE.RAW"    ; the test screensaver -> CIRCLE.SAV (#219)
+sav_img         incbin "../build/CIRCLE.RAW"    ; the default screensaver -> CIRCLE.SAV (#219)
 sav_imgend
                 save  "CIRCLE.SAV",sav_img,sav_imgend-sav_img,DSK,"build/gbkern.dsk"
-deco_img        incbin "../build/DECO.RAW"      ; art-deco panels screensaver -> DECO.SAV
-deco_imgend
-                save  "DECO.SAV",deco_img,deco_imgend-deco_img,DSK,"build/gbkern.dsk"
-mtx_img         incbin "../build/XMATRIX.RAW"   ; Matrix digital-rain screensaver -> XMATRIX.SAV
-mtx_imgend
-                save  "XMATRIX.SAV",mtx_img,mtx_imgend-mtx_img,DSK,"build/gbkern.dsk"
-mnt_img         incbin "../build/MOUNTAIN.RAW"  ; isometric terrain screensaver -> MOUNTAIN.SAV
-mnt_imgend
-                save  "MOUNTAIN.SAV",mnt_img,mnt_imgend-mnt_img,DSK,"build/gbkern.dsk"
+                ; #238: the extra savers (DECO/XMATRIX/MOUNTAIN) are dropped from the FLOPPY to
+                ; make room for GBNET.MOD - the floppy keeps only CIRCLE. All savers stay on the
+                ; Albireo card (stage_dist.sh). The Settings Module picker only lists what's present.
                 ; STARFLD.SAV is CARD-ONLY (floppy pack is at its 64K assembly ceiling) -
                 ; staged to the Albireo card by tools/stage_dist.sh.

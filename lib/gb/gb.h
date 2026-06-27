@@ -401,4 +401,15 @@ void gb_copy_end(void);
  * desktop-owned top bar (clock, menu titles, footprint) stays live. Draw only (no
  * input / no gb_poll); use change-detection to avoid a wasteful per-frame repaint. */
 void gb_on_bar(void (*handler)(void));
+
+/* W5100 networking via the paged GBNET module (#238). Link gbnet_stub (build_capp NET=1).
+ * Socket 0, TCP. gb_net_init's cfg is 22 bytes: ip[4] mask[4] gw[4] dns[4] mac[6]. */
+unsigned char gb_net_init(const unsigned char *cfg22);     /* 1 = chip present + configured */
+unsigned char gb_net_open(void);                           /* 1 = socket opened (TCP) */
+unsigned char gb_net_connect(const unsigned char *ip, unsigned int port);  /* 1 = connected */
+unsigned char gb_net_send(const unsigned char *buf, unsigned int len);     /* 1 = ok */
+unsigned int  gb_net_recv(unsigned char *buf, unsigned int maxlen);        /* bytes received */
+void          gb_net_close(void);
+unsigned int  gb_net_rxavail(void);                        /* bytes waiting in RX */
+unsigned char gb_net_connected(void);                      /* 1 = TCP established */
 #endif /* GB_H */

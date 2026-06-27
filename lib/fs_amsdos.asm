@@ -429,24 +429,8 @@ fsamv_nlen
 ; path (from the boot drive, where modules live), CALL it, restore the caller's
 ; page. CF set = FSV_TX_RES nonzero (saved).
 floppysv_run
-                ld    a,(bank_cur)
-                push  af
-                ld    a,PAGE_DATA
-                call  bank_set
-                ld    hl,floppysv_modname     ; fs_req_name = "FLOPPYSVMOD"
-                ld    de,fs_req_name
-                ld    bc,11
-                ldir
-                ld    hl,#1000
-                ld    (fs_load_max),hl
-                ld    hl,DATA_MODTOP
-                ld    (fs_load_dst),hl
-                call  fs_load_sys
-                jr    nc,fsvr_unload
-                call  DATA_MODTOP             ; run it (reads low RAM, writes the floppy)
-fsvr_unload
-                pop   af
-                call  bank_set
+                ld    hl,floppysv_modname     ; #238: shared PAGE_DATA loader (was an inline copy)
+                call  run_data_module
                 ld    a,(FSV_TX_RES)
                 or    a
                 ret   z

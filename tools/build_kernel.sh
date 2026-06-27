@@ -68,6 +68,7 @@ for png in assets/backdrops/*.png; do
     name="$(basename "$png" .png | tr 'a-z' 'A-Z')"
     [ -e "build/$name.BDP" ] || python3 tools/png2backdrop.py "$png" "build/$name.BDP"
 done
+NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#238): GBNET.MOD smoke test
 DATA_LOC=0x6600 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216) + saver trigger (#219).
@@ -132,6 +133,7 @@ tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel modu
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
 tools/build_uimod.sh build/GBUI.RAW                # paged dialog module (#142) -> build/GBUI.RAW
+tools/build_netmod.sh build/GBNET.RAW             # W5100 networking module (#238) -> build/GBNET.RAW
 # Card distribution: the apps/modules/assets above are shared; we assemble the Albireo
 # kernel, capture its raw image, and stage QA/CARD/ holding the BASIC loader GB.BAS +
 # the kernel (GBALB.BIN). Plus a bootable floppy image QA/GEOBENCH.DSK (the same kernel
