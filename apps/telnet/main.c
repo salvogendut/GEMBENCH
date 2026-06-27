@@ -43,6 +43,13 @@
 #define DLG_Y 76
 #define DLG_W 72
 #define DLG_H 46
+/* the host:port input field: a bordered box inside the dialog, with a blinking caret */
+#define FLD_X (DLG_X + 2)      /* field frame (byte col / line) */
+#define FLD_Y (DLG_Y + 15)
+#define FLD_W (DLG_W - 4)
+#define FLD_H 13
+#define IN_X  (DLG_X + 3)      /* text origin inside the field */
+#define IN_Y  (DLG_Y + 18)
 
 static unsigned char gcols = WIN_COLS, grows = WIN_ROWS;   /* active grid size */
 static unsigned char fs_mode;                              /* 0 = windowed M1, 1 = fullscreen M2 */
@@ -490,22 +497,37 @@ static unsigned char parse_dotted(const char *s, unsigned char *out)
     return (unsigned char)(*q == 0);
 }
 
-/* a small modal edit box on the connect screen; types into target[]. 1=Enter, 0=ESC. */
+/* the caret sits just after the last typed char (~6px/char from the field origin). */
+#define CARET_X(n) ((unsigned char)(IN_X + ((unsigned int)(n) * 6) / 4))
+
+/* a modal edit field on the connect dialog: a bordered box + a blinking caret. Types
+ * into target[]; ENTER -> 1 (non-empty), ESC -> 0. */
 static unsigned char edit_target(void)
 {
-    unsigned char n = 0, fl, c, redraw = 1;
+    unsigned char n = 0, fl, c, redraw = 1, blink = 0, caret = 1;
     while (target[n]) n++;
     while (gb_getkey()) ;
+    gb_curhide();
+    gb_frame(FLD_X, FLD_Y, FLD_W, FLD_H, 2);                 /* the input field box */
+    gb_curshow();
     while (1) {
-        if (redraw) {
+        if (redraw) {                                        /* text changed: full redraw */
             gb_curhide();
-            gb_fill(DLG_X + 2, DLG_Y + 18, DLG_W - 4, 8, 1);   /* clear input line (white) */
-            gb_textbw(DLG_X + 2, DLG_Y + 18, target);
+            gb_fill(FLD_X + 1, FLD_Y + 1, FLD_W - 2, FLD_H - 2, 1);   /* clear interior */
+            gb_textbw(IN_X, IN_Y, target);
+            caret = 1; blink = 0;
+            gb_fill(CARET_X(n), IN_Y, 1, 8, 2);              /* solid caret */
             gb_curshow();
             redraw = 0;
         }
         fl = gb_poll();
         if (fl & GB_QUIT) { while (gb_poll() & GB_QUIT) ; return 0; }
+        if (++blink >= 14) {                                 /* ~0.3s caret blink */
+            blink = 0; caret ^= 1;
+            gb_curhide();
+            gb_fill(CARET_X(n), IN_Y, 1, 8, (unsigned char)(caret ? 2 : 1));
+            gb_curshow();
+        }
         while ((c = gb_getkey()) != 0) {
             if (c == 0x0D) return (unsigned char)(n > 0);
             else if ((c == 8 || c == 0x7F) && n) { target[--n] = 0; redraw = 1; }
