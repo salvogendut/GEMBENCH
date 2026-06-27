@@ -515,11 +515,11 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
 /* open_entry: a directory descends in place (gb_chdir + re-list, same window); a
    file opens a co-resident app chosen here by extension (#70 - the routing that
    used to live in the kernel's app_for_ext is now app-level C):
-     .APP             a GEOBENCH app -> run it (no file arg)
+     .APP / .SAV      a GEOBENCH app/screensaver -> run it
      .IST / .SPR      the icon/cursor editor (ICONED), with the file
-     .TXT / .CFG / .BAS   the text editor (NOTEPAD), with the file
-     anything else    the read-only VIEWER, with the file
-   (Part 3 will route native .BIN/.BAS to a "run via AMSDOS" confirm instead.) */
+     .TXT / .CFG      the text editor (NOTEPAD), with the file
+     .BIN / .BAS      AMSDOS native programs -> an info note (run them under BASIC, #236)
+     anything else    the read-only VIEWER, with the file */
 static void open_entry(unsigned char idx)
 {
     char *e;
@@ -535,13 +535,12 @@ static void open_entry(unsigned char idx)
         gb_wm_open(e);                          /* #234: run the app/screensaver image itself */
     else if (ext_is(e, 'I', 'S', 'T') || ext_is(e, 'S', 'P', 'R'))
         gb_wm_launch_as("ICONED  APP");
-    else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G') ||
-             ext_is(e, 'B', 'A', 'S'))
+    else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G'))
         gb_wm_launch_as("NOTEPAD APP");
-    else if (ext_is(e, 'B', 'I', 'N'))          /* #234: native binary - running one means
-                                                   leaving GEOBENCH (RUN" under AMSDOS); not
-                                                   wired yet, so don't dump it in the Viewer */
-        gb_alert("Native binary", "can't run from GEOBENCH yet.");
+    else if (ext_is(e, 'B', 'I', 'N') || ext_is(e, 'B', 'A', 'S'))  /* #236: AMSDOS native
+                                                   programs aren't runnable from GEOBENCH (RUN"
+                                                   under BASIC does an implicit NEW) - just say so */
+        gb_alert("AMSDOS applications need", "to be run under BASIC.");
     else
         gb_wm_launch_as("VIEWER  APP");         /* default: view it (incl. .PIC images,
                                                    #114) - PAINT edits via File > Load */
