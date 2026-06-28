@@ -55,9 +55,13 @@ python3 tools/packicons.py build/DEFAULT.IST \
     # NOTE (#198): icon_iconset removed - it was byte-identical to icon_app; .IST files
     # now show the .APP icon, shrinking DEFAULT.IST by one slot (the floppy AMSDOS reader
     # garbles the icon set above a size threshold). All slots >=14 shifted up by 1.
+# PAINT toolchest set (24x24, ICONED-editable, #114). PAINT's 16K bank caps the loaded
+# set at ~6 icons, so the built .IST holds just the 5 live tools (pencil/square/circle/
+# fill/undo, TOOL_* order), refreshed from assets/paint-tools.png (#246). The full
+# 14-tool art lives in assets/paint/*.asm for ICONED + future tools.
 python3 tools/packicons.py build/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
-    assets/paint/fill.asm assets/paint/undo.asm   # PAINT toolchest set (24x24), ICONED-editable (#114)
+    assets/paint/fill.asm assets/paint/undo.asm
 # Backdrop tiles (#128): stage every assets/backdrops tile as build/<NAME>.BDP - copy any
 # ready-made *.BDP, and convert any *.png that has no matching .BDP. Uppercased 8.3 names.
 for bdp in assets/backdrops/*.BDP; do

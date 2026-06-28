@@ -90,7 +90,9 @@ static char fbase[14];                 /* "NAME.PIC" formatted from gb_doc_name(
 static char wtitle[18];                /* fbase + " *" when modified            */
 static void fmt83(char *dst, const char *n11);   /* defined below; used by win_title */
 
-/* PAINT.IST loaded whole at startup; tools blit straight out of it. 2 sectors. */
+/* PAINT.IST loaded whole at startup; tools blit straight out of it. 2 sectors. PAINT's
+ * 16K bank (canvas + this) caps the set at ~6 icons, so the built PAINT.IST carries just
+ * the N_TOOLS PAINT uses; the full 14-tool source set lives in assets/paint/ (#246). */
 #define IST_MAX 1024
 static unsigned char ist[IST_MAX];
 static unsigned char ist_ok = 0;       /* a valid GBIS set with >=N_TOOLS icons? */
