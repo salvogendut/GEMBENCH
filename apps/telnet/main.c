@@ -59,6 +59,7 @@ static unsigned char grid[FS_COLS * FS_ROWS];              /* sized for the larg
 static unsigned char dirty[FS_ROWS];
 static unsigned char cur_row, cur_col;
 static unsigned char saved_row, saved_col;     /* ANSI SCP/RCP */
+static unsigned char pcur_row = 0xFF, pcur_col; /* last-drawn cursor cell (for erase) */
 
 static unsigned int cell(unsigned char r, unsigned char c) { return (unsigned int)r * COLS + c; }
 static void mark(unsigned char r) { if (r < ROWS) dirty[r] = 1; }
@@ -211,6 +212,14 @@ static void ansi_feed(unsigned char c)
     }
 }
 
+/* destructive backspace: step back one cell and blank it. Used both for a locally
+ * echoed keypress and for a BS/DEL received from the host (a host that sends "BS
+ * space BS" still lands correctly: the space rewrites the blank, the 2nd BS re-blanks). */
+static void bs_local(void)
+{
+    if (cur_col) { cur_col--; grid[cell(cur_row, cur_col)] = ' '; mark(cur_row); }
+}
+
 /* term_write: one display byte. ESC/CSI go to the ANSI parser; the rest land on the
  * grid at the cursor (mirrors screen.c screen_write). */
 static void term_write(unsigned char c)
@@ -218,7 +227,7 @@ static void term_write(unsigned char c)
     if (a_state != A_IDLE || c == 27 || c == 0x9B) { ansi_feed(c); return; }
     if (c == '\r') { cur_col = 0; return; }
     if (c == '\n') { newline(); return; }
-    if (c == 8)    { if (cur_col) cur_col--; return; }
+    if (c == 8 || c == 0x7F) { bs_local(); return; }   /* BS / DEL: erase prev char */
     if (c == '\t') { cur_col = (cur_col + 8) & 0xF8; if (cur_col >= COLS) cur_col = COLS - 1; return; }
     if (c == 7)    return;                    /* BEL */
     if (c < 0x20 || c >= 0x7F) return;
@@ -274,14 +283,46 @@ static void render_m2(void)
     }
 }
 
+/* -- the text cursor: a 1px underline at the bottom of the current cell, so the user
+ * can see where typing lands. Drawn by direct screen-RAM writes (gb_fill is 4px-
+ * granular; the cell pitch is 6px, so we need pixel placement). Red (pen 3) in the
+ * Mode-1 window; Mode 2 is 2-colour, so it falls back to white there. */
+static void plot_m1(unsigned int x, unsigned char y)        /* set pixel (x,y) to pen 3 (red) */
+{
+    unsigned int addr = 0xC000u + (unsigned int)(y >> 3) * 80
+                      + (unsigned int)(y & 7) * 0x800u + (x >> 2);
+    unsigned char i = (unsigned char)(x & 3);               /* M1: pen bit0 @ 7-i, bit1 @ 3-i */
+    *((volatile unsigned char *)addr) |= (unsigned char)((0x80u >> i) | (0x08u >> i));
+}
+static void draw_cursor_m1(void)
+{
+    unsigned int x0 = (unsigned int)GX * 4 + (unsigned int)cur_col * 6;
+    unsigned char y = (unsigned char)(GY + cur_row * 8 + 7);
+    unsigned char i;
+    for (i = 0; i < 6; i++) plot_m1(x0 + i, y);
+}
+static void draw_cursor_m2(void)                            /* M2: one byte = 8 white pixels */
+{
+    *((volatile unsigned char *)(0xC000u + (unsigned int)cur_row * 80 + cur_col + 7 * 0x800u)) = 0xFF;
+}
+
 static void render(void)
 {
     unsigned char r;
-    if (fs_mode) { render_m2(); return; }      /* Mode 2: direct screen writes */
-    gb_curhide();
-    for (r = 0; r < ROWS; r++)
-        if (dirty[r]) { draw_row(r); dirty[r] = 0; }
-    gb_curshow();
+    if (pcur_row != cur_row || pcur_col != cur_col) {   /* cursor moved: re-render to wipe the old one */
+        mark(pcur_row); mark(cur_row);
+    }
+    if (fs_mode) {                             /* Mode 2: direct screen writes */
+        render_m2();
+        draw_cursor_m2();
+    } else {
+        gb_curhide();
+        for (r = 0; r < ROWS; r++)
+            if (dirty[r]) { draw_row(r); dirty[r] = 0; }
+        draw_cursor_m1();
+        gb_curshow();
+    }
+    pcur_row = cur_row; pcur_col = cur_col;
 }
 
 /* SCR_SET_MODE: A = mode. Mode 2 = 640x200 2-colour (pens 0/1 keep the desktop's
@@ -592,6 +633,7 @@ static unsigned char poll_ctr, active;
 #define TR_SERIAL 1
 static unsigned char transport;
 static unsigned char want_fs;          /* the 80x25 toggle: a connect enters Mode-2 fullscreen */
+static void fs_label(void);            /* refresh the menu's [x]/[ ] checkbox */
 
 static unsigned int t_recv(unsigned char *buf, unsigned int max)
 {
@@ -670,7 +712,8 @@ static void send_key(unsigned char k)
         if (local_echo) term_write(k);
         t_send(&k, 1);
     } else if (k == 8 || k == 0x7F) {
-        unsigned char b = 0x08; t_send(&b, 1);
+        if (local_echo) bs_local();           /* erase locally when we echo */
+        { unsigned char b = 0x08; t_send(&b, 1); }   /* and tell the host */
     }
 }
 
@@ -754,7 +797,7 @@ static void run_fullscreen(void)
     }
     scr_set_mode(1);                          /* back to the Mode-1 desktop */
     fs_mode = 0; gcols = WIN_COLS; grows = WIN_ROWS;
-    want_fs = 0;                              /* exiting fullscreen turns the toggle off */
+    want_fs = 0; fs_label();                  /* exiting fullscreen turns the toggle off */
     if (state == ST_RUN && transport == TR_NET) send_naws();   /* re-advertise the windowed size */
     term_cls();                               /* the M2 screen is gone; start the window fresh */
     gb_modal_set(0);
@@ -763,9 +806,13 @@ static void run_fullscreen(void)
 /* Telnet menu: TCP connect / serial connect / disconnect / 80x25 toggle. The user drives
  * everything here (no auto-connect at launch). The 80x25 item is a toggle: when on, a
  * connect goes straight into the Mode-2 fullscreen view (exit it with Ctrl-] / ESC). */
-static const char *const telnet_items[4] = {
-    "Connect (net)...", "Connect serial", "Disconnect", "80x25 fullscreen"
+/* item [3] carries a [x]/[ ] checkbox reflecting the 80x25 toggle (refreshed before the
+ * menu opens, since gb_popup reads these label pointers live). */
+static const char *telnet_items[4] = {
+    "Connect (net)...", "Connect serial", "Disconnect", "80x25 fullscreen [ ]"
 };
+static void fs_label(void) { telnet_items[3] = want_fs ? "80x25 fullscreen [x]"
+                                                        : "80x25 fullscreen [ ]"; }
 static void on_menu(unsigned char sel)
 {
     if (sel == 0) { action_connect();         if (want_fs && state == ST_RUN) run_fullscreen(); }
@@ -773,6 +820,7 @@ static void on_menu(unsigned char sel)
     else if (sel == 2) close_session();
     else if (sel == 3) {                       /* toggle the 80x25 (Mode-2) preference */
         want_fs ^= 1;
+        fs_label();
         if (want_fs && state == ST_RUN) run_fullscreen();        /* enter now if connected */
         else gb_alert("80x25 fullscreen", want_fs ? "ON - connect to use it" : "OFF");
     }
@@ -878,6 +926,6 @@ void main(void)
     want_fs = 0;
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */
-    gb_menu_add("Telnet", telnet_items, 4, on_menu);
+    gb_menu_add("Telnet", (const char *const *)telnet_items, 4, on_menu);
     gb_restore_parent();                         /* first paint: WM chrome + draw_content */
 }
