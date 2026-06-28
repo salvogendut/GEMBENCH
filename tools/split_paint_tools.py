@@ -16,8 +16,9 @@ im = Image.open(src).convert("L")
 # box interiors (detected from the sheet's light separators): ~42px row pitch, 2 cols.
 YBANDS = [(16, 52), (58, 94), (100, 136), (142, 179), (184, 221), (226, 263), (268, 305)]
 XBANDS = [(7, 47), (54, 92)]
-# read order (row-major) -> final tool names
-NAMES = ["pencil", "text", "fill", "eraser", "circle", "spray", "line", "freehand",
+# read order (row-major) -> final tool names (#246: idx0 is the spray can, idx7 the
+# squiggle is the pencil/freehand stroke; idx5 is a separate can = bucket)
+NAMES = ["spray", "text", "fill", "eraser", "circle", "bucket", "line", "pencil",
          "boxfill", "square", "undo", "arc", "picker", "select"]
 
 i = 0
