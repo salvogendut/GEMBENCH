@@ -28,6 +28,7 @@
 #define KCFG_CURSORNAME ((char *)0x1221)           /* out: CURSOR filename (11-byte 8.3) */
 #define KCFG_INKS      ((unsigned char *)0x122C)   /* out: 4 pen inks + border (INKS=) */
 #define KCFG_BDPNAME   ((char *)0x1231)            /* out: BACKDROP tile filename (11-byte 8.3) */
+#define KCFG_BDDRIVE   (*(unsigned char *)0x123C)  /* out: 0/1/2=C/A/B, 0xFF=boot/system */
 #define KCFG_BD_SOLID  (*(unsigned char *)0x1290)  /* out: 1 = solid desktop (BACKDROP=SOLID/absent) */
 /* WALLPAPER= is NOT parsed here (#212/#216): every free low-RAM transfer cell collides with
    something (dir scratch #12xx, the floppy cursor sector-overread #1500..#16FF, the GBUI dialog
@@ -52,10 +53,12 @@ void main(void)
     set_default(cursor);
     backdrop[0] = 'S'; backdrop[1] = 'O'; backdrop[2] = 'L'; backdrop[3] = 'I';
     backdrop[4] = 'D'; backdrop[5] = 0;     /* BACKDROP default = SOLID (plain desktop) */
+    KCFG_BDDRIVE = GB_CFG_DRIVE_NONE;
     KCFG_INKS[0] = 1;  KCFG_INKS[1] = 26;   /* default palette: blue/white/black/red, */
     KCFG_INKS[2] = 0;  KCFG_INKS[3] = 6;    /* blue border (matches set_palette's seed) */
     KCFG_INKS[4] = 1;
-    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, backdrop, KCFG_INKS);
+    gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, backdrop,
+                 &KCFG_BDDRIVE, KCFG_INKS);
     gb_make_83(icons,    "IST", KCFG_ICONNAME);
     gb_make_83(font,     "FNT", KCFG_FONTNAME);
     gb_make_83(cursor,   "SPR", KCFG_CURSORNAME);

@@ -11,7 +11,8 @@
 # The default checker profile is `albireo`, matching the shipped no-ROM kernel.
 
 base          0x1000  0x11FF  kcfg_text               -             GEOBENCH.CFG text buffer
-base          0x1200  0x123B  kcfg_fields             -             parsed config outputs and memory string
+base          0x1200  0x123C  kcfg_fields             -             parsed config outputs, memory string, backdrop drive
+base          0x123D  0x123D  wm_open_flags           -             one-shot strict current-drive app open flag
 base          0x1240  0x1249  kernel_boot_time        -             GB_TIME_BUF, BOOT_SP, GB_KSIZE, BAR_HANDLER
 base          0x1250  0x128F  backdrop_tile           -             BD_TILE, loaded 16x16 Mode-1 backdrop tile
 base          0x1290  0x1290  backdrop_solid          -             BD_SOLID flag
@@ -21,6 +22,7 @@ base          0x12E9  0x12F6  dir_name_scratch        -             formatted vi
 base          0x1300  0x1308  app_event_poll          -             APP_HANDLER, GB_MSG, POLL_MX/MY/FLAGS
 base          0x1309  0x130F  wm_public_flags_pic     -             fullscreen/max flags and banked picture cells
 base          0x1310  0x1334  menu_def                -             top-bar menu copy, max 4 titles
+base          0x1335  0x1337  fs_drive_state          -             current drive, boot drive, system-load browse scratch
 base          0x1340  0x1347  repaint_handlers_legacy -             legacy repaint handler table
 base          0x1350  0x144B  wm_state                -             WM table, z-order, drag state, app page pool, MW_RECT
 base          0x1450  0x1480  text_copy_scratch       scratch_1450  gb_text string copy
@@ -28,6 +30,7 @@ base          0x1481  0x1484  copy_dir_scratch        scratch_1450  cross-drive 
 base          0x1485  0x148F  launch_arg              -             pending 11-byte app launch argument
 base          0x1490  0x149F  call_transfer_scratch   call_1490     fs read scratch / GBNET transfer selector block
 base          0x14A0  0x14D1  draw_input_scratch      scratch_14a0  pointer, screen, text, and frame scratch cells
+base          0x14D2  0x14FE  fs_request_state        -             FS dispatch vectors, current entry, request/load/save args
 base          0x1500  0x16FF  cursor_sprite           -             loaded cursor sprite and sector-overread guard
 base          0x1700  0x17FF  ui_transfer             -             GBUI request/result block
 base          0x1800  0x19FF  fs_sector_buffer        -             shared 512-byte sector buffer

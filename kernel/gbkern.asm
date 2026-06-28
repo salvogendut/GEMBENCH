@@ -1440,8 +1440,15 @@ wm_open_go
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
-                call  fs_load_sys                 ; app binary -> always the boot drive,
-                jr    nc,wmo_fail                 ; not the window's browse drive (#65)
+                ld    a,(WM_OPEN_STRICT)
+                or    a
+                jr    z,wmo_load_sys
+                xor   a
+                ld    (WM_OPEN_STRICT),a
+                call  fs_load_cur_sys             ; strict open: current drive, no boot fallback
+                jr    wmo_loaded
+wmo_load_sys    call  fs_load_sys                 ; normal app open: boot-first, browse-fallback
+wmo_loaded      jr    nc,wmo_fail
                 ei
                 call  APP_BASE                    ; main -> GB_WMADD + paint, then ret
                 di
@@ -2185,7 +2192,9 @@ kern_end                                        ; GBKERN.BIN = #8000..kern_end o
 ; silent crash). This assert turns that into a LOUD build failure so a too-big
 ; kernel is caught here, not in the field. (Reclaim, or move scratch out, to fix.)
 HIMEM           equ   #A288        ; UniDOS HIMEM (stack top); see docs/AMSDOS notes
+                ifndef STACK_RESERVE
 STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the stack (#95)
+                endif
                 if SPIKE|SPIKE_STAGED|SPIKE_M4 ; #130: the throwaway spike hangs early (tiny stack)
                 else
                 assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big - reclaim resident bytes (see #104)"

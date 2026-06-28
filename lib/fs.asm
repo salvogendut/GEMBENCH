@@ -90,10 +90,10 @@ fsd_floppy
                 ld    hl,fs_load_none          ; delete not implemented on floppy
                 ld    (fs_p_delete),hl
                 ret
-fs_cur_drive    defb  0
-fs_boot_drive   defb  0            ; #110: boot drive number; fs_load_sys loads apps/modules
+fs_cur_drive    equ   #1335
+fs_boot_drive   equ   #1336        ; #110: boot drive number; fs_load_sys loads apps/modules
                                    ; from it regardless of a window's browse drive
-fls_browse      defb  0            ; fs_load_sys scratch: browse drive to restore
+fls_browse      equ   #1337        ; fs_load_sys scratch: browse drive to restore
 
 ; fs_dir_first / fs_dir_next / fs_load_file: route to the selected backend.
 fs_dir_first
@@ -106,6 +106,15 @@ fs_dir_next
 fs_load_file
                 ld    hl,(fs_p_load)
                 jp    (hl)
+; fs_load_cur_sys: load fs_req_name from the CURRENT drive's system directory,
+; preserving the current directory and returning fs_load_file's CF.
+fs_load_cur_sys
+                call  fs_sysdir_enter
+                call  fs_load_file
+                push  af
+                call  fs_sysdir_leave
+                pop   af
+                ret
 ; fs_load_sys: like fs_load_file but loads from the BOOT drive (where the OS apps +
 ; shared modules live) regardless of the active browse drive (#65/#110) - then, if the
 ; file is NOT on the boot drive, retries on the browse drive (#250). That lets a window
@@ -115,10 +124,8 @@ fs_load_sys
                 ld    (fls_browse),a
                 ld    a,(fs_boot_drive)           ; load from the boot drive (where the app
                 call  fs_set_drive               ; binaries + GBFAT module live), NOT the
-                call  fs_sysdir_enter            ; #134: ...and from the /GEOBENCH system dir,
-                call  fs_load_file               ; not the FM's browse folder (window's browse
-                push  af                          ; drive - #110: a floppy-B window must still
-                call  fs_sysdir_leave            ; load apps off floppy A)
+                call  fs_load_cur_sys            ; #134: ...and from the /GEOBENCH system dir,
+                push  af                          ; not the FM's browse folder (window's browse
                 ld    a,(fls_browse)             ; (CF result preserved across the restores)
                 call  fs_set_drive               ; restore the browse drive
                 pop   af
@@ -164,17 +171,19 @@ fsip_absent
                 or    a
                 ret
 
-; --- state / shared per-entry output -------------------------------------
-fs_p_first      defw  D0_FIRST         ; default drive 0; fs_init rewrites on detect
-fs_p_next       defw  D0_NEXT
-fs_p_load       defw  D0_LOAD
-fs_p_save       defw  D0_SAVE
-fs_p_delete     defw  D0_DELETE
-fs_ent_name     defs  11
-fs_ent_attr     defb  0
-fs_ent_size     defs  4
-fs_req_name     defs  11           ; fs_load_file/fs_save_file: 8.3 name
-fs_load_dst     defw  0            ; fs_load_file: destination buffer
-fs_load_max     defw  #FFFF        ; fs_load_file: max bytes to read (buffer guard)
-fs_save_src     defw  0            ; fs_save_file: source buffer
-fs_save_len     defw  0            ; fs_save_file: bytes to write
+; --- fixed low-RAM state / shared per-entry output -----------------------
+; These are runtime cells, not initialized image data. fs_init/fs_set_drive fills
+; the dispatch vectors before first use; every caller sets request/load/save args.
+fs_p_first      equ   #14D2        ; dispatch vectors for the selected backend
+fs_p_next       equ   #14D4
+fs_p_load       equ   #14D6
+fs_p_save       equ   #14D8
+fs_p_delete     equ   #14DA
+fs_ent_name     equ   #14DC        ; current dir entry: 11-byte 8.3 name
+fs_ent_attr     equ   #14E7
+fs_ent_size     equ   #14E8        ; 32-bit little-endian byte size
+fs_req_name     equ   #14EC        ; fs_load_file/fs_save_file: 8.3 name
+fs_load_dst     equ   #14F7        ; fs_load_file: destination buffer
+fs_load_max     equ   #14F9        ; fs_load_file: max bytes to read (buffer guard)
+fs_save_src     equ   #14FB        ; fs_save_file: source buffer
+fs_save_len     equ   #14FD        ; fs_save_file: bytes to write

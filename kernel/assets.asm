@@ -107,10 +107,25 @@ backdrop_init
                 ld    (fs_load_max),hl
                 ld    hl,fsam_buf
                 ld    (fs_load_dst),hl
+                ld    a,(KCFG_BDDRIVE)
+                inc   a
+                jr    z,bdi_sys
+                ld    a,(fs_cur_drive)
+                push  af
+                ld    a,(KCFG_BDDRIVE)
+                call  fs_set_drive
                 di
+                call  fs_load_cur_sys
+                ei
+                ex    af,af'
+                pop   af
+                call  fs_set_drive
+                ex    af,af'
+                jr    bdi_loaded
+bdi_sys         di
                 call  fs_load_sys            ; from /GEOBENCH on the boot drive (#134)
                 ei
-                jr    nc,bdi_solid           ; missing / refused -> solid fallback
+bdi_loaded      jr    nc,bdi_solid           ; missing / refused -> solid fallback
                 ld    hl,fsam_buf            ; copy the 64-byte tile into BD_TILE
                 ld    de,BD_TILE
                 ld    bc,64

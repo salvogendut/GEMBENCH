@@ -52,6 +52,38 @@ static void copy_val(const char *p, const char *e, char *dst, unsigned char max)
     dst[n] = 0;
 }
 
+static unsigned char drive_id(char c)
+{
+    if (c == 'C') return 0;
+    if (c == 'A') return 1;
+    if (c == 'B') return 2;
+    return GB_CFG_DRIVE_NONE;
+}
+
+/* copy_path_val: media config values may be "STEM", "STEM.EXT", "D:STEM",
+ * or "D:STEM.EXT". The parser only needs the stem plus an optional drive. */
+static void copy_path_val(const char *p, const char *e, char *dst,
+                          unsigned char max, unsigned char *drive_out)
+{
+    unsigned char n = 0;
+    unsigned char d = GB_CFG_DRIVE_NONE;
+    if (p + 1 < e && p[1] == ':') {
+        d = drive_id(p[0]);
+        if (d != GB_CFG_DRIVE_NONE)
+            p += 2;
+    }
+    if (drive_out)
+        *drive_out = d;
+    while (n < max && p < e) {
+        char c = *p;
+        if (c == 0 || c == '.' || is_eol(c))
+            break;
+        dst[n++] = c;
+        ++p;
+    }
+    dst[n] = 0;
+}
+
 /* parse_inks: read up to 5 comma-separated decimal ink numbers (0-26) from the value
  * at [p,e) into out[0..4] (the 4 Mode-1 pens + the border), clamping each to 26. A
  * missing field keeps out's seeded default, so a short "INKS=2" only changes pen 0.
@@ -112,7 +144,8 @@ void gb_fmt_mem(unsigned int kb, char *dst)
 
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out, char *cursor_out,
-                  char *backdrop_out, unsigned char *inks_out)
+                  char *backdrop_out, unsigned char *backdrop_drive_out,
+                  unsigned char *inks_out)
 {
     const char *p = buf;
     const char *e = buf + len;
@@ -137,7 +170,7 @@ void gb_cfg_parse(const char *buf, unsigned int len,
         else if ((v = match_key(p, e, "CURSOR=")) != 0)
             copy_val(v, e, cursor_out, GB_CFG_VAL_MAX);
         else if ((v = match_key(p, e, "BACKDROP=")) != 0)
-            copy_val(v, e, backdrop_out, GB_CFG_VAL_MAX);
+            copy_path_val(v, e, backdrop_out, GB_CFG_VAL_MAX, backdrop_drive_out);
         else if ((v = match_key(p, e, "INKS=")) != 0)
             parse_inks(v, e, inks_out);
 

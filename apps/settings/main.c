@@ -7,6 +7,9 @@
  *     FONT=<stem>    a .FNT font set      (kernel font_init)
  *     ICONS=<stem>   a .IST icon set      (kernel icon_init)
  *     CURSOR=<stem>  a .SPR pointer sprite(kernel cursor_init)
+ *     BACKDROP=[D:]<stem>[.BDP]
+ *     WALLPAPER=[D:]<stem>[.PIC]
+ *     SAVER=[D:]<stem>[.SAV]
  * Each row shows the current value; clicking it lists the matching files in the
  * /GBENCH system folder and offers them in a popup. The kernel loads font/icons/cursor
  * only at boot, so a change takes effect on the next boot (noted in the window).
@@ -26,17 +29,21 @@
 #define TITLE_H   14
 #define DEF_X     18
 #define DEF_Y     32
-#define DEF_W     46           /* byte cols (184 px) */
+#define DEF_W     58           /* byte cols (232 px) */
 #define DEF_H     150          /* lines (5 pickers + Colours + Screensaver: Module/Timeout, + editor) */
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   16           /* value column offset from the window's left (byte cols); a
                                   gap past the longest label ("Backdrop") so value != label */
+#define DISK_COL  46           /* media disk button column */
 #define COLOUR_ROW NROWS       /* the "Colours..." line sits below the picker rows */
 /* the screensaver section (#219): a header, then two clickable sub-rows - the .SAV
    module (SAVER=) and the idle timeout (SAVERTIME=). */
 #define SS_HDR_ROW (NROWS + 1) /* "Screensaver" section header (not clickable) */
 #define SS_MOD_ROW (NROWS + 2) /* "Module"  - pick which .SAV runs */
 #define SS_TM_ROW  (NROWS + 3) /* "Timeout" - the idle minutes */
+#define ROW_BACKDROP 3
+#define ROW_WALLPAPER 4
+#define DRIVE_NONE 0xFF
 
 static unsigned char win_x, win_y, win_w, win_h;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
@@ -86,6 +93,8 @@ static unsigned int cfglen;
 static char stembuf[MAXST * STLEN];
 static const char *stems[MAXST];
 static unsigned char nstem;
+static unsigned char media_drive[2];          /* Backdrop, Wallpaper */
+static unsigned char ss_drive;                /* Screensaver module */
 
 /* sel_boot: pin the active drive to the boot drive (Disk C if a card is present, else
    floppy A), where GEOBENCH.CFG + /GBENCH live - mirrors the kernel's fs_init. Another
@@ -95,6 +104,38 @@ static void sel_boot(void)
 {
     unsigned char d = gb_drives();
     gb_set_drive((d & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
+}
+
+static unsigned char boot_drive(void)
+{
+    return (gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A;
+}
+
+static char drive_letter(unsigned char d)
+{
+    if (d == GB_DRIVE_A) return 'A';
+    if (d == GB_DRIVE_B) return 'B';
+    return 'C';
+}
+
+static unsigned char drive_bit(unsigned char d)
+{
+    if (d == GB_DRIVE_A) return GB_DRV_A;
+    if (d == GB_DRIVE_B) return GB_DRV_B;
+    return GB_DRV_C;
+}
+
+static unsigned char next_drive(unsigned char cur)
+{
+    static const unsigned char order[3] = { GB_DRIVE_A, GB_DRIVE_B, GB_DRIVE_C };
+    unsigned char mask = gb_drives();
+    unsigned char i, j;
+    for (i = 0; i < 3; i++) if (order[i] == cur) break;
+    for (j = 1; j <= 3; j++) {
+        unsigned char d = order[(unsigned char)(i + j) % 3];
+        if (mask & drive_bit(d)) return d;
+    }
+    return boot_drive();
 }
 
 /* ---- GEOBENCH.CFG read/write (generic, key includes the '=') ----------------- */
@@ -113,15 +154,37 @@ static unsigned int cfg_keypos(const char *key)
     return 0xFFFF;
 }
 
-/* cfg_get: copy KEY's value (up to 8 chars, to the line end) into dst; "-" if absent. */
+/* cfg_get: copy KEY's value (up to 14 chars, to the line end) into dst; "-" if absent. */
 static void cfg_get(const char *key, char *dst)
 {
     unsigned int p = cfg_keypos(key);
     unsigned char j = 0;
     if (p != 0xFFFF)
-        while (p < cfglen && cfgbuf[p] != '\r' && cfgbuf[p] != '\n' && j < 8)
+        while (p < cfglen && cfgbuf[p] != '\r' && cfgbuf[p] != '\n' && j < 14)
             dst[j++] = cfgbuf[p++];
     if (j == 0) dst[j++] = '-';
+    dst[j] = 0;
+}
+
+static unsigned char cfg_drive(const char *key, unsigned char fallback)
+{
+    unsigned int p = cfg_keypos(key);
+    if (p != 0xFFFF && p + 1 < cfglen && cfgbuf[p + 1] == ':') {
+        if (cfgbuf[p] == 'A') return GB_DRIVE_A;
+        if (cfgbuf[p] == 'B') return GB_DRIVE_B;
+        if (cfgbuf[p] == 'C') return GB_DRIVE_C;
+    }
+    return fallback;
+}
+
+static void cfg_path(char *dst, unsigned char drive, const char *stem, const char *ext)
+{
+    unsigned char i = 0, j = 0;
+    dst[j++] = drive_letter(drive);
+    dst[j++] = ':';
+    while (stem[i]) dst[j++] = stem[i++];
+    dst[j++] = '.';
+    dst[j++] = ext[0]; dst[j++] = ext[1]; dst[j++] = ext[2];
     dst[j] = 0;
 }
 
@@ -215,14 +278,14 @@ static unsigned char ist_count(const char *stem)
 /* enumerate: fill stems[] with the names of files in /GBENCH whose extension is `ext`.
    If min_icons is non-zero (icon sets), drop any .IST with fewer icons than that - i.e.
    the app toolchests, which can't supply every desktop slot. */
-static void enumerate(const char *ext, unsigned char min_icons)
+static void enumerate_drive(const char *ext, unsigned char min_icons, unsigned char drive)
 {
     unsigned char descended, k, i, keep;
     unsigned int off;
     char *p;
 
     nstem = 0;
-    sel_boot();
+    gb_set_drive(drive);
     descended = enter_sys();
 
     /* pass 1: collect the matching stems (NO file load here - that would disturb the
@@ -260,6 +323,11 @@ static void enumerate(const char *ext, unsigned char min_icons)
     if (descended) gb_back();                /* GBENCH -> root (depth-1, safe) */
 }
 
+static void enumerate(const char *ext, unsigned char min_icons)
+{
+    enumerate_drive(ext, min_icons, boot_drive());
+}
+
 /* ---- drawing ----------------------------------------------------------------- */
 
 static unsigned char row_y(unsigned char r)
@@ -272,7 +340,7 @@ static unsigned char row_y(unsigned char r)
 static void s_draw(void)
 {
     unsigned char r;
-    char val[10];
+    char val[16];
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
     gb_fill(win_x, (unsigned char)(win_y + TITLE_H), win_w,
             (unsigned char)(win_h - TITLE_H), 1);          /* white panel */
@@ -280,6 +348,11 @@ static void s_draw(void)
         gb_textbw((unsigned char)(win_x + 1), row_y(r), rows[r].label);
         cfg_get(rows[r].key, val);
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(r), val);
+        if (r == ROW_BACKDROP || r == ROW_WALLPAPER) {
+            char d[3];
+            d[0] = drive_letter(media_drive[r - ROW_BACKDROP]); d[1] = ':'; d[2] = 0;
+            gb_textbw((unsigned char)(win_x + DISK_COL), row_y(r), d);
+        }
         if (rows[r].ext[0] == 'B') {         /* #216: preview the current backdrop tile beside */
             unsigned char sx = (unsigned char)(win_x + 28), sy = row_y(r);  /* the value */
             if (*(volatile unsigned char *)BD_SOLID_ADDR)
@@ -291,11 +364,16 @@ static void s_draw(void)
     }
     gb_textbw((unsigned char)(win_x + 1), row_y(COLOUR_ROW), "Colours...");
     {
-        char sv[10];                          /* #219: the screensaver section */
+        char sv[16];                          /* #219: the screensaver section */
         gb_textbw((unsigned char)(win_x + 1), row_y(SS_HDR_ROW), "Screensaver");
         ss_module_value(sv);                  /* Module: which .SAV */
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_MOD_ROW), "Module");
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_MOD_ROW), sv);
+        {
+            char d[3];
+            d[0] = drive_letter(ss_drive); d[1] = ':'; d[2] = 0;
+            gb_textbw((unsigned char)(win_x + DISK_COL), row_y(SS_MOD_ROW), d);
+        }
         saver_value(sv);                      /* Timeout: idle minutes */
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_TM_ROW), "Timeout");
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_TM_ROW), sv);
@@ -473,13 +551,17 @@ static void colours_dialog(void)
 
 /* ---- screensaver: module (SAVER=) + idle timeout (SAVERTIME=, #219) ---------- */
 
-/* ss_module_value: the current SAVER= module stem (the default CIRCLE when absent). */
+/* ss_module_value: the current SAVER= module/path (the default CIRCLE when absent). */
 static void ss_module_value(char *dst)
 {
+    unsigned char i;
     cfg_get("SAVER=", dst);
     if (dst[0] == '-') {                       /* absent -> the default module */
         dst[0]='C'; dst[1]='I'; dst[2]='R'; dst[3]='C';
         dst[4]='L'; dst[5]='E'; dst[6]=0;
+    } else {
+        for (i = 0; dst[i] && i < 14; i++) ;
+        dst[i] = 0;
     }
 }
 
@@ -488,13 +570,17 @@ static void ss_module_value(char *dst)
 static void ss_module_dialog(void)
 {
     const char *list[MAXST];
+    char path[16];
     unsigned char sel, i, n = 0;
-    enumerate("SAV", 0);
+    enumerate_drive("SAV", 0, ss_drive);
     for (i = 0; i < nstem; i++) list[n++] = stems[i];
-    if (n == 0) { gb_alert("No screensavers", "in /GBENCH."); s_draw(); return; }
+    if (n == 0) { gb_alert("No screensavers", "on selected disk."); s_draw(); return; }
     sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(SS_MOD_ROW), list, n);
     gb_curhide();
-    if (sel != 0xFF) cfg_set("SAVER=", list[sel]);
+    if (sel != 0xFF) {
+        cfg_path(path, ss_drive, list[sel], "SAV");
+        cfg_set("SAVER=", path);
+    }
     s_draw();
     gb_curshow();
 }
@@ -556,7 +642,7 @@ static void saver_dialog(void)
 /* live_apply: write the chosen 8.3 name into the kernel transfer area for row r and
    call gb_reload, so the font/icon set/cursor/backdrop change shows with no reboot
    (#185). For the backdrop, also set BD_SOLID. */
-static void live_apply(unsigned char r, const char *name)
+static void live_apply(unsigned char r, const char *name, unsigned char drive)
 {
     const char *ext = rows[r].ext;
     /* Wallpaper (PIC) has NO live kernel transfer cell: the desktop reads WALLPAPER= from the
@@ -572,6 +658,8 @@ static void live_apply(unsigned char r, const char *name)
             *(unsigned char *)BD_SOLID_ADDR =
                 (unsigned char)(name[0]=='S' && name[1]=='O' && name[2]=='L' &&
                                 name[3]=='I' && name[4]=='D' && name[5]==0);
+        if (ext[0] == 'B')
+            *(unsigned char *)0x123C = drive;    /* KCFG_BDDRIVE */
     }
     gb_reload();
 }
@@ -581,9 +669,15 @@ static void live_apply(unsigned char r, const char *name)
 static void open_picker(unsigned char r)
 {
     const char *list[MAXST + 1];
+    char path[16];
     unsigned char sel, i, n = 0;
     const char *ext = rows[r].ext;
-    enumerate(ext, rows[r].min_icons);
+    unsigned char drive = (r == ROW_BACKDROP || r == ROW_WALLPAPER)
+        ? media_drive[r - ROW_BACKDROP] : boot_drive();
+    if (r == ROW_BACKDROP || r == ROW_WALLPAPER)
+        enumerate_drive(ext, rows[r].min_icons, drive);
+    else
+        enumerate(ext, rows[r].min_icons);
     if (ext[0] == 'B') list[n++] = "SOLID";  /* the Backdrop list leads with SOLID (no tile) */
     else if (ext[0] == 'P') list[n++] = "NONE";  /* the Wallpaper list leads with NONE (#212) */
     for (i = 0; i < nstem; i++) list[n++] = stems[i];
@@ -595,8 +689,18 @@ static void open_picker(unsigned char r)
     sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(r), list, n);
     gb_curhide();
     if (sel != 0xFF) {
-        cfg_set(rows[r].key, list[sel]);     /* persist to GEOBENCH.CFG */
-        live_apply(r, list[sel]);            /* ...and apply now, no reboot (#185) */
+        if ((ext[0] == 'B' && list[sel][0] == 'S' && list[sel][1] == 'O' &&
+             list[sel][2] == 'L' && list[sel][3] == 'I' && list[sel][4] == 'D' &&
+             list[sel][5] == 0) ||
+            (ext[0] == 'P' && list[sel][0] == 'N' && list[sel][1] == 'O' &&
+             list[sel][2] == 'N' && list[sel][3] == 'E' && list[sel][4] == 0)) {
+            cfg_set(rows[r].key, list[sel]); /* SOLID / NONE stay global */
+            live_apply(r, list[sel], DRIVE_NONE);
+        } else {
+            cfg_path(path, drive, list[sel], ext);
+            cfg_set(rows[r].key, path);      /* persist to GEOBENCH.CFG */
+            live_apply(r, list[sel], drive); /* ...and apply now, no reboot (#185) */
+        }
         gb_wm_damage(0, 0, 80, 200);         /* assets changed everywhere -> full repaint */
         gb_restore_parent();                 /* desktop + windows redraw with the new assets */
     }
@@ -613,6 +717,9 @@ static void s_click(void)
     for (r = 0; r < NROWS; r++) {
         unsigned char ry = row_y(r);
         if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+            if ((r == ROW_BACKDROP || r == ROW_WALLPAPER) && gb_mx() >= (unsigned char)(win_x + DISK_COL)) {
+                media_drive[r - ROW_BACKDROP] = next_drive(media_drive[r - ROW_BACKDROP]);
+            }
             open_picker(r);
             return;
         }
@@ -627,6 +734,8 @@ static void s_click(void)
     {
         unsigned char ry = row_y(SS_MOD_ROW);             /* #219: screensaver module */
         if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+            if (gb_mx() >= (unsigned char)(win_x + DISK_COL))
+                ss_drive = next_drive(ss_drive);
             ss_module_dialog();
             return;
         }
@@ -668,6 +777,9 @@ void main(void)
     sel_boot();
     gb_set_name("GEOBENCHCFG");
     cfglen = gb_fs_load(cfgbuf, sizeof(cfgbuf));   /* load the config once (0 if none) */
+    media_drive[0] = cfg_drive("BACKDROP=", boot_drive());
+    media_drive[1] = cfg_drive("WALLPAPER=", boot_drive());
+    ss_drive = cfg_drive("SAVER=", boot_drive());
     for (n = 64; n; n--) if (!gb_getkey()) break;  /* drain the launch keystrokes (#142) */
     gb_restore_parent();                            /* first paint: WM chrome + s_draw */
 }

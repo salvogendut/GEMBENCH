@@ -45,6 +45,8 @@ KCFG_MEMSTR     equ   #121A        ; "<decimal>K" top-bar string (module -> kern
 KCFG_CURSORNAME equ   #1221        ; 11-byte 8.3 cursor filename (CURSOR=), built by module
 KCFG_INKS       equ   #122C        ; 5 bytes: the 4 Mode-1 pen inks + border (INKS=), built by module
 KCFG_BDPNAME    equ   #1231        ; 11-byte 8.3 backdrop tile filename (BACKDROP=), built by module
+KCFG_BDDRIVE    equ   #123C        ; 0/1/2 = C/A/B for drive-qualified BACKDROP=, #FF = boot/system
+WM_OPEN_STRICT  equ   #123D        ; one-shot: next gb_wm_open loads from current drive's /GBENCH
 BD_TILE         equ   #1250        ; 64 bytes: the loaded 16x16 backdrop tile (.BDP), or unused if solid
 BD_SOLID        equ   #1290        ; 1 = plain pen-0 backdrop (BACKDROP=SOLID / absent / missing file)
 ; CLOCK.APP support (#72): a tiny time read-out (kept minimal - the BCD->binary
@@ -73,6 +75,7 @@ POLL_MX         equ   #1306        ; last poll: cursor byte column (mx)
 POLL_MY         equ   #1307        ; last poll: cursor line (my)
 POLL_FLAGS      equ   #1308        ; last poll: flags (bit0 click, bit1 quit, bit2 fire)
 MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *count
+                                   ; #1335..#1337: fs_cur_drive/fs_boot_drive/fls_browse
 REPAINT_HDLR    equ   #1340        ; per-depth full-repaint handlers (4 words), for
                                    ; restoring the background under a moved window (#43)
 
@@ -111,7 +114,8 @@ MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the
 ; moved out of the resident image): fslf_blocks #1490 (16B), pm_newx #14A0 (2B), poll_byte
 ; #14A2, poll_line #14A3, then screen.asm fill/blit/save scratch #14A4..#14BB (bm_*, bl_*,
 ; fb_rows/cy, fbw_*, sb_rows/cy/ptr, fb_x/y/w/h), and text.asm renderer scratch
-; #14BC..#14CC (br_*, dc_*). Next free: #14CD..#14FF.
+; #14BC..#14CC (br_*, dc_*). gf_* uses #14CD..#14D1; fs dispatch/request
+; state uses #14D2..#14FE. Next free: #14FF.
 MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
