@@ -923,7 +923,7 @@ void main(void)
 {
     state = ST_IDLE;
     transport = TR_NET;
-    want_fs = 0;
+    want_fs = 1; fs_label();                    /* 80x25 fullscreen is on by default (checked) */
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */
     gb_menu_add("Telnet", (const char *const *)telnet_items, 4, on_menu);
