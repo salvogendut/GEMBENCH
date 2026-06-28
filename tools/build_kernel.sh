@@ -194,4 +194,7 @@ rm -f build/gbkern.dsk
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 "$RASM" kernel/pack_apps2.asm -eo >/dev/null     # 3rd pass: VIEWER + FILEMGR -> .dsk (#142)
 "$RASM" kernel/pack_apps3.asm -eo >/dev/null     # 4th pass: backdrops/REFINED/pictures -> .dsk (#198)
+if [ -x "$IDSK" ]; then
+    "$IDSK" build/gbkern.dsk -i build/GB.BAS -t 0 >/dev/null 2>&1 || true
+fi
 echo "Built QA/CARD (Albireo card deploy) + QA/GEOBENCH.DSK (floppy); build/ = ${STORAGE:-albireo} variant"
