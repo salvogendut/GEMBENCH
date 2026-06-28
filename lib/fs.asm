@@ -53,10 +53,10 @@ fs_init
                 xor   a                          ; card present -> boot drive 0 (Disk C)
 fsi_set
                 ld    (fs_boot_drive),a           ; remember the boot drive NUMBER: app
-                call  fs_set_drive               ; binaries + modules always load from it
-                ret                               ; (fs_load_sys), regardless of a window's
-                                                 ; browse drive (#65/#110)
-                ; (fs_set_drive falls through below for the GB_SETDRIVE path)
+                                                 ; binaries + modules always load from it
+                                                 ; (fs_load_sys), regardless of a window's
+                                                 ; browse drive (#65/#110). A is still the
+                ; drive number -> fall straight through into fs_set_drive (saves a call+ret).
 
 ; fs_set_drive: A = drive (0 = IDE/Disk C, 1 = floppy A, 2 = floppy B). Point the
 ; backend vectors at the IDE or floppy routines (floppy: also set the FDC unit) and
@@ -106,8 +106,10 @@ fs_dir_next
 fs_load_file
                 ld    hl,(fs_p_load)
                 jp    (hl)
-; fs_load_sys: like fs_load_file but always from the BOOT drive (where app binaries
-; and the GBFAT module live), regardless of the active browse drive (#65).
+; fs_load_sys: like fs_load_file but loads from the BOOT drive (where the OS apps +
+; shared modules live) regardless of the active browse drive (#65/#110) - then, if the
+; file is NOT on the boot drive, retries on the browse drive (#250). That lets a window
+; browsing floppy B run a Companion app off B while its deps still resolve on Main/A.
 fs_load_sys
                 ld    a,(fs_cur_drive)            ; save the active browse drive
                 ld    (fls_browse),a
@@ -120,7 +122,11 @@ fs_load_sys
                 ld    a,(fls_browse)             ; (CF result preserved across the restores)
                 call  fs_set_drive               ; restore the browse drive
                 pop   af
-                ret
+                ret   c                          ; #250: loaded from the boot drive -> done; else
+                jp    fs_load_file               ; retry on the (now-current) browse drive so a
+                                                 ; Companion app in floppy B loads (boot-first,
+                                                 ; browse-fallback). Floppy sysdir is a no-op, and
+                                                 ; reusing the restore above = +3 resident bytes.
 ; fs_save_file: save fs_save_len bytes from (fs_save_src) to fs_req_name. The
 ; AMSDOS backend creates the file if absent and allocates/frees 1KB blocks as the
 ; size changes (single extent, <=16KB). CF set = saved, NC = failed (disk/dir
@@ -147,8 +153,7 @@ fs_ide_present
                 in    a,(c)
                 cp    #55
                 jr    nz,fsip_absent
-                ld    bc,#FD0B
-                ld    a,#AA
+                ld    a,#AA                       ; (BC still #FD0B from the first probe)
                 out   (c),a
                 in    a,(c)
                 cp    #AA
