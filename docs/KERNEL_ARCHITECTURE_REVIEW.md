@@ -146,7 +146,8 @@ contains many independent subsystems.
 
 Recommended split, initially with no behavior change:
 
-- `kernel/gbkern.asm`: build flags, includes, `org`, jump table, top-level boot.
+- `kernel/gbkern.asm`: build flags, includes, and top-level boot.
+- `kernel/api_table.inc`: `org GB_KERNEL` and the fixed jump table.
 - `kernel/lowram.inc`: fixed low-RAM map and asserts.
 - `kernel/api_table.inc`: ABI slot declarations and comments.
 - `kernel/boot.asm`: boot flow, exit-to-BASIC, splash, asset init.

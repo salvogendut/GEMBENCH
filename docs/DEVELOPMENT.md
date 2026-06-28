@@ -58,9 +58,10 @@ the build artifacts (`.bin` / `.dsk`) are the same.
 
 ## Static Contract Checks
 
-Low RAM below `#4000` is shared by the resident kernel, C apps, and paged
-modules. The current fixed ownership map is tracked in `kernel/lowram.tsv`.
-Before moving or adding absolute cells, run:
+The app ABI jump table is tracked in `kernel/api_table.inc` and exported to
+apps through `lib/gbapp.inc`. Low RAM below `#4000` is shared by the resident
+kernel, C apps, and paged modules; its fixed ownership map is tracked in
+`kernel/lowram.tsv`. Before moving ABI slots or adding absolute cells, run:
 
 ```bash
 python3 tools/check_abi_table.py

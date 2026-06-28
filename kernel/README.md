@@ -26,8 +26,8 @@ desktop and banked apps are running.
   CPC-vs-CPC+ and 64K-vs-128K differences stay contained.
 - Absolute low-RAM ownership is explicit in `lowram.tsv`; validate it with
   `python3 tools/check_lowram_map.py`.
-- The app ABI is the fixed jump table at `GB_KERNEL` (`#8000`). Keep
-  `../lib/gbapp.inc`, `gbkern.asm`, and `../lib/gb/gblib.s` in sync.
+- The app ABI is the fixed jump table at `GB_KERNEL` (`#8000`) in
+  `api_table.inc`. Keep `../lib/gbapp.inc` and `../lib/gb/gblib.s` in sync.
 
 ## Status
 

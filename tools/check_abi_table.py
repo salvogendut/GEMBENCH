@@ -11,7 +11,7 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-KERNEL = ROOT / "kernel" / "gbkern.asm"
+KERNEL_TABLE = ROOT / "kernel" / "api_table.inc"
 ABI_INC = ROOT / "lib" / "gbapp.inc"
 
 KERNEL_SLOT_RE = re.compile(r";\s*(GB_[A-Z0-9_]+)\s+#([0-9A-Fa-f]{4})\b")
@@ -34,8 +34,6 @@ def parse_kernel_slots(path: Path) -> list[Slot]:
             if re.search(r"\borg\s+GB_KERNEL\b", raw):
                 in_table = True
             continue
-        if raw.startswith("kernel_main"):
-            break
         match = KERNEL_SLOT_RE.search(raw)
         if match:
             slots.append(Slot(match.group(1), int(match.group(2), 16), lineno))
@@ -62,12 +60,12 @@ def parse_inc_equates(path: Path) -> tuple[int, dict[str, tuple[int, int]]]:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--kernel", type=Path, default=KERNEL)
+    parser.add_argument("--kernel-table", type=Path, default=KERNEL_TABLE)
     parser.add_argument("--abi", type=Path, default=ABI_INC)
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
-    slots = parse_kernel_slots(args.kernel)
+    slots = parse_kernel_slots(args.kernel_table)
     base, equates = parse_inc_equates(args.abi)
     errors: list[str] = []
 
@@ -75,7 +73,7 @@ def main(argv: list[str]) -> int:
         expected = base + index * 3
         if slot.address != expected:
             errors.append(
-                f"{args.kernel}:{slot.line}: {slot.name} comment says "
+                f"{args.kernel_table}:{slot.line}: {slot.name} comment says "
                 f"#{slot.address:04X}, expected #{expected:04X}"
             )
         if slot.name not in equates:
