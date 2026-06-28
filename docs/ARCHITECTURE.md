@@ -146,7 +146,18 @@ One image works on any machine. `bash tools/build_kernel.sh` stages (and ships u
   (MBR partition at sector 32) that boots on **both** backends — the SYMBiFACE IDE reads
   the partition table, the Albireo CH376 auto-detects the FAT. Rebuilt every build
   (`tools/build_card_img.sh`); a local artifact, not committed.
-- **`QA/GEOBENCH.DSK`** — a flat bootable floppy.
+- **`QA/GEOBENCH.DSK`** — the **Main** flat bootable floppy: the OS (kernel/loader/modules/
+  fonts/icons/cursor/config), the core apps (Desktop, Notepad, Clock, File Manager, Viewer,
+  Settings, Iconed), the default `CIRCLE.SAV` saver, the `LOGO.PIC` wallpaper and the
+  backdrops. Built by `kernel/gbkern.asm` + `pack_apps{,2,3}.asm` (#250).
+- **`QA/COMPANION.DSK`** — the **Companion** floppy (#250): a non-bootable DATA disk with
+  the extras — Paint, Telnet, Xaos, the full screensaver set, and the gallery pictures.
+  Built by `kernel/pack_comp{1,2,3}.asm`. It is meant for **drive B** while the Main floppy
+  stays in drive A: the kernel's system loader (`fs_load_sys`, `lib/fs.asm`) tries the boot
+  drive (A) first and **falls back to the browse drive** (B), so a Companion app launched
+  from a drive-B File Manager loads from B while its shared dependencies (`GBUI.MOD`,
+  `GBNET.MOD`, `PAINT.IST`) load from A — no duplicates on the Companion. (The Albireo card
+  is unaffected — it already ships everything on one volume.)
 
 `RUN"GB` runs `GB.BAS`, which probes the bus (an IDE register read-back, then a CH376
 `CHECK_EXIST`) and `RUN"`s the matching kernel. The kernel then loads from `/GEOBENCH`

@@ -170,6 +170,17 @@ if [ -x "$IDSK" ]; then
 else
     echo "  (no iDSK at \$IDSK - floppy boots via RUN\"GBKERN; set IDSK= to add the GB.BAS loader)"
 fi
+# Companion floppy QA/COMPANION.DSK (#250): a non-bootable DATA disk with the extras
+# (Paint/Telnet/Xaos, all screensavers, the gallery pictures). Meant for drive B - the
+# kernel loader falls back boot-drive(A) -> browse-drive(B), so these load from B while
+# their shared deps stay on Main. Three fresh 64K passes APPEND to one DSK (pass 1
+# creates it). All .RAW/.SAV are already built above; pictures are tracked assets.
+rm -f build/companion.dsk
+"$RASM" kernel/pack_comp1.asm -eo                  # apps + PENGUIN.PIC
+"$RASM" kernel/pack_comp2.asm -eo                  # TLEUNG.PIC + savers (1/2)
+"$RASM" kernel/pack_comp3.asm -eo                  # savers (2/2)
+cp build/companion.dsk QA/COMPANION.DSK
+echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Xaos + savers + pictures)"
 tools/stage_dist.sh QA/CARD                       # GB.BAS (RUN"GBALB) + GBALB.BIN + /GBENCH
 # A ready-to-flash card image (partitioned FAT16) for the Albireo CH376 card.
 tools/build_card_img.sh QA/CARD QA/GEOBENCH.IMG \

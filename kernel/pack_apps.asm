@@ -8,19 +8,15 @@
 ;;
 ;; These blobs are #4000 app images (build_capp output); the org is irrelevant - they
 ;; are only assembled so the save directive can write them to the disk catalogue.
+;;
+;; #250: PAINT.APP, XAOS.APP and PENGUIN.PIC moved OFF the Main floppy to the new
+;; Companion floppy (kernel/pack_comp*.asm -> build/companion.dsk). ICONED.APP +
+;; GBUI.MOD stay on Main (ICONED is a core editor; GBUI is the shared dialog module
+;; that every app - incl. the Companion apps - loads from the boot drive, #110/#250).
                 org   #4000
-pnt_img         incbin "../build/PAINT.RAW"     ; packaged on the disk as PAINT.APP (#114)
-pnt_imgend
-                save  "PAINT.APP",pnt_img,pnt_imgend-pnt_img,DSK,"build/gbkern.dsk"
-xao_img         incbin "../build/XAOS.RAW"      ; packaged on the disk as XAOS.APP (#116)
-xao_imgend
-                save  "XAOS.APP",xao_img,xao_imgend-xao_img,DSK,"build/gbkern.dsk"
 ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP (moved
 ied_imgend                                      ; to pass 2 - the main image filled up, #142)
                 save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"
-pen_img         incbin "../assets/pictures/PENGUIN.PIC" ; sample 200x200 picture -> PENGUIN.PIC
-pen_imgend
-                save  "PENGUIN.PIC",pen_img,pen_imgend-pen_img,DSK,"build/gbkern.dsk"
 ui_img          incbin "../build/GBUI.RAW"      ; paged dialog module -> GBUI.MOD (#142 step 1b, #234)
 ui_imgend
                 save  "GBUI.MOD",ui_img,ui_imgend-ui_img,DSK,"build/gbkern.dsk"
