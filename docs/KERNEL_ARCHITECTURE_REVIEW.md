@@ -146,8 +146,10 @@ contains many independent subsystems.
 
 Recommended split, initially with no behavior change:
 
-- `kernel/gbkern.asm`: build flags, includes, and top-level boot.
+- `kernel/gbkern.asm`: build flags and top-level include order.
 - `kernel/api_table.inc`: `org GB_KERNEL` and the fixed jump table.
+- `kernel/boot.asm`: `kernel_main`, boot spike harnesses, desktop launch, and
+  `GB_EXIT` return-to-BASIC path.
 - `kernel/lowram.inc`: fixed low-RAM equates and ROM offload low-RAM includes.
 - `kernel/lowram.tsv`: checked ownership/range manifest for those fixed cells.
 - `kernel/api_table.inc`: ABI slot declarations and comments.
