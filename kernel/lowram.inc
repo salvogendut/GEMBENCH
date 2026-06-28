@@ -127,7 +127,8 @@ CLIP_DATA       equ   #3E02        ; #3FFF (510 bytes). Non-banked low RAM above
 CLIP_CAP        equ   510          ; (which ends #3E00), so it survives app switches.
 ; Paged UI-dialog service (#142): apps marshal a request into this low-RAM block, the
 ; kernel pages in the GBUI module (#6000 in PAGE_DATA) and CALLs it; it renders the
-; dialog (popup/prompt/file-picker) and writes the result back here.
+; dialog (popup/prompt/file-picker) and writes the result back here. The file-write
+; modules reuse #1700..#1712 for their control header after modal UI returns.
 UI_OP           equ   #1700        ; op: 1 popup, 2 prompt, 3 pickfile, 4 pickdir
 UI_COL          equ   #1701        ; arg: column
 UI_LINE         equ   #1702        ; arg: line

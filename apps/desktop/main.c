@@ -586,6 +586,7 @@ static void on_frame(void)
                                               clip, so widen it back or the next op stays clipped
                                               (#153: a dragged icon vanished on drop). */
         paint();
+        bar_init = 0;                       /* menu drawing dirties line 0; repaint the full bar */
         gb_curshow();
         if (want_settings) {                  /* System>Settings: now safe to open on top (#129) */
             want_settings = 0;

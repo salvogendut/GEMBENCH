@@ -114,9 +114,9 @@ Recommended fix:
 - Generate `lib/gb/lowram.h` from it for C apps/modules.
 - Add build-time overlap checks for every configuration: shipped Albireo,
   Albireo+ROM, IDE recovery, and M4 recovery.
-- Treat overlays as first-class. For example, `#1400` and `#2200` are valid
-  module-transfer overlays because GBFAT, FLOPPYSV, and GBNET are never live at
-  the same time. The manifest should say that explicitly.
+- Treat overlays as first-class. For example, `#1700` and `#2200` are valid
+  module-transfer overlays because GBUI, GBFAT, FLOPPYSV, and GBNET are never live
+  at the same time. The manifest should say that explicitly.
 
 Important detail to verify:
 
