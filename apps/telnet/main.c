@@ -721,7 +721,7 @@ static void action_connect_serial(void)
     if (!serial_present()) { gb_alert("No USIFAC serial", "board detected"); return; }
     transport = TR_SERIAL;
     serial_ctrl(1);                           /* clear any stale RX */
-    local_echo = 1;                           /* show keystrokes (a raw link may not echo) */
+    local_echo = 0;                           /* modems/serial hosts echo - avoid double chars */
     start_session();
 }
 
