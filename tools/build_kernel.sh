@@ -31,7 +31,15 @@ fi
 mkdir -p build
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 
-python3 tools/png2cpc.py assets/SPLASH.png build/SPLASH.BIN splash 96x144  # #196: bootsplash lollipop (raw Mode-1 24x144)
+BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
+if ! git diff --quiet --ignore-submodules -- 2>/dev/null \
+    || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+    BUILD_COMMIT="${BUILD_COMMIT}-dirty"
+fi
+echo "Build id: GB $BUILD_COMMIT"
+
+python3 tools/make_bootsplash.py assets/SPLASH.png build/SPLASH_BUILD.png "$BUILD_COMMIT"
+python3 tools/png2cpc.py build/SPLASH_BUILD.png build/SPLASH.BIN splash 96x184  # #196: bootsplash + build id
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).

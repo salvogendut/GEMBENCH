@@ -142,7 +142,7 @@ bdi_solid       ld    a,1
 SPL_X           equ   28           ; lollipop left byte col (centred: (80-24)/2)
 SPL_Y           equ   12           ; lollipop top line
 SPL_WB          equ   24           ; width in bytes (96 px)
-SPL_H           equ   144          ; height in rows
+SPL_H           equ   184          ; height in rows (logo + build id below the bar)
 BAR_X           equ   16           ; progress bar left byte col
 BAR_Y           equ   170          ; progress bar top line
 BAR_WB          equ   48           ; full bar width in bytes (192 px)
