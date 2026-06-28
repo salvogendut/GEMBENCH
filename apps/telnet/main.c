@@ -591,6 +591,7 @@ static unsigned char poll_ctr, active;
 #define TR_NET    0
 #define TR_SERIAL 1
 static unsigned char transport;
+static unsigned char want_fs;          /* the 80x25 toggle: a connect enters Mode-2 fullscreen */
 
 static unsigned int t_recv(unsigned char *buf, unsigned int max)
 {
@@ -753,23 +754,27 @@ static void run_fullscreen(void)
     }
     scr_set_mode(1);                          /* back to the Mode-1 desktop */
     fs_mode = 0; gcols = WIN_COLS; grows = WIN_ROWS;
+    want_fs = 0;                              /* exiting fullscreen turns the toggle off */
     if (state == ST_RUN && transport == TR_NET) send_naws();   /* re-advertise the windowed size */
     term_cls();                               /* the M2 screen is gone; start the window fresh */
     gb_modal_set(0);
 }
 
-/* Telnet menu: TCP connect / serial connect / disconnect / 80x25 fullscreen. */
+/* Telnet menu: TCP connect / serial connect / disconnect / 80x25 toggle. The user drives
+ * everything here (no auto-connect at launch). The 80x25 item is a toggle: when on, a
+ * connect goes straight into the Mode-2 fullscreen view (exit it with Ctrl-] / ESC). */
 static const char *const telnet_items[4] = {
-    "Connect (net)...", "Connect serial", "Disconnect", "Fullscreen 80x25"
+    "Connect (net)...", "Connect serial", "Disconnect", "80x25 fullscreen"
 };
 static void on_menu(unsigned char sel)
 {
-    if (sel == 0) action_connect();
-    else if (sel == 1) action_connect_serial();
+    if (sel == 0) { action_connect();         if (want_fs && state == ST_RUN) run_fullscreen(); }
+    else if (sel == 1) { action_connect_serial(); if (want_fs && state == ST_RUN) run_fullscreen(); }
     else if (sel == 2) close_session();
-    else if (sel == 3) {
-        if (state == ST_RUN) run_fullscreen();
-        else gb_alert("Fullscreen needs", "a live connection");
+    else if (sel == 3) {                       /* toggle the 80x25 (Mode-2) preference */
+        want_fs ^= 1;
+        if (want_fs && state == ST_RUN) run_fullscreen();        /* enter now if connected */
+        else gb_alert("80x25 fullscreen", want_fs ? "ON - connect to use it" : "OFF");
     }
 }
 
@@ -802,9 +807,11 @@ static void demo_fill(void)
 /* draw the window content (the WM already drew the frame + "Telnet" title bar). */
 static void draw_content(void)
 {
-    if (state == ST_IDLE) {                     /* blank terminal; connect via the dialog/menu */
+    if (state == ST_IDLE) {                     /* idle: a hint; the user drives the menu */
         gb_curhide();
         gb_fill(GX, GY, (unsigned char)(WIN_W - 2 * GX), ROWS * 8, 0);   /* inside the frame */
+        gb_text(2, GY + 8,  "GEOBENCH Telnet");
+        gb_text(2, GY + 24, "Open the Telnet menu to begin");
         gb_curshow();
     } else {                                   /* ST_RUN / ST_DONE: paint the grid */
         mark_all();
@@ -827,13 +834,10 @@ static void net_frame(void)
     render();
 }
 
-static unsigned char launched;                 /* auto-open the connect dialog on the 1st frame */
-
 static void t_frame(void)
 {
 #ifdef TELNET_DEMO
     if (state == ST_IDLE) {                 /* offline Mode-2 80x25 render check (takeover) */
-        launched = 1;
         gb_curhide();
         fs_mode = 1; gcols = FS_COLS; grows = FS_ROWS;
         scr_set_mode(2); m2_clear();
@@ -841,7 +845,7 @@ static void t_frame(void)
         for (;;) gb_vsync();                /* hold the M2 screen (no WM interference) */
     }
 #endif
-    if (!launched) { launched = 1; action_connect(); gb_restore_parent(); return; }
+    /* idle on launch - the user drives everything from the Telnet menu (no auto-connect) */
     if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a Telnet-menu action ran */
     net_frame();
 }
@@ -871,7 +875,7 @@ void main(void)
 {
     state = ST_IDLE;
     transport = TR_NET;
-    launched = 0;
+    want_fs = 0;
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */
     gb_menu_add("Telnet", telnet_items, 4, on_menu);
