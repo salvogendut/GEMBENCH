@@ -33,6 +33,6 @@ desktop and banked apps are running.
 
 Active. The shipped default target is the no-ROM Albireo kernel, with optional
 ROM/offload and recovery storage profiles still present in source. Source-level
-contracts now live in `api_table.inc`, `lowram.inc`, and `boot.asm`; continue
-splitting `gbkern.asm` by subsystem while keeping the generated kernel image
-unchanged.
+contracts and boot/assets boundaries now live in `api_table.inc`, `lowram.inc`,
+`boot.asm`, and `assets.asm`; continue splitting `gbkern.asm` by subsystem while
+keeping the generated kernel image unchanged.

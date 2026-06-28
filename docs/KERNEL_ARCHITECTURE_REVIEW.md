@@ -152,9 +152,8 @@ Recommended split, initially with no behavior change:
   `GB_EXIT` return-to-BASIC path.
 - `kernel/lowram.inc`: fixed low-RAM equates and ROM offload low-RAM includes.
 - `kernel/lowram.tsv`: checked ownership/range manifest for those fixed cells.
-- `kernel/api_table.inc`: ABI slot declarations and comments.
-- `kernel/boot.asm`: boot flow, exit-to-BASIC, splash, asset init.
-- `kernel/assets.asm`: font/icon/cursor/backdrop loading and reload.
+- `kernel/assets.asm`: font/icon/cursor/backdrop loading, boot splash progress,
+  `GB_RELOAD`, and `GB_BACKDROP`.
 - `kernel/modules.asm`: `run_data_module`, `GB_UI`, `GB_NET`, config module runner.
 - `kernel/app_pool.asm`: page pool allocation/free.
 - `kernel/wm_core.asm`: z-order, focus, repaint, hit testing.
