@@ -597,59 +597,7 @@ ig_done
 ; (file -> icon-slot mapping moved to the File Manager, #103 - the kernel now
 ; only blits a given slot via k_icon / k_icon_half; the .IST lives in PAGE_DATA.)
 
-; --- config (C kernel module) --------------------------------------------
-; cfg_boot: seed defaults, load GEOBENCH.CFG into the transfer area, then run the
-; GBCFG C module (paged into a bank) to parse it into KCFG_ICONS / KCFG_FONT.
-; Absent file -> length 0 -> the parser is a no-op and the defaults stand.
-cfg_boot
-                ld    hl,0                    ; default: no config text (module then
-                ld    (KCFG_LEN),hl           ; emits the DEFAULT names itself)
-                ld    hl,cfg_fname           ; fs_req_name = "GEOBENCH.CFG"
-                ld    de,fs_req_name
-                call  copy11
-                ld    hl,#0200               ; cfg text buffer is 512 bytes
-                ld    (fs_load_max),hl
-                ld    hl,KCFG_TEXT
-                ld    (fs_load_dst),hl
-                call  fs_load_file
-                jr    nc,cfgb_run            ; no file -> KCFG_LEN stays 0
-                ld    hl,(fs_ent_size)        ; file <512 so the low word is the size
-                ld    (KCFG_LEN),hl
-cfgb_run
-                jp    run_cfgmod
-cfg_fname       db    "GEOBENCHCFG"          ; "GEOBENCH.CFG" (8.3)
-
-; run_cfgmod: load GBCFG.BIN into PAGE_APP0 and CALL it (it parses the transfer
-; area). Mirrors launch_app's load path; runs under DI (the module needs no
-; interrupts) with no top-bar/ESC handling - this is boot time.
-; load_app0: HL = 11-byte 8.3 name -> map PAGE_APP0 and load /GEOBENCH/<name> into
-; APP_BASE (max #3F00). Returns with CF from fs_load_sys (set = loaded). The CALLER
-; saves/restores its page and handles DI/EI. Shared by run_cfgmod + boot_splash (#196).
-load_app0
-                ld    de,fs_req_name
-                call  copy11
-                ld    a,PAGE_APP0
-                call  bank_set
-                ld    hl,#3F00
-                ld    (fs_load_max),hl
-                ld    hl,APP_BASE
-                ld    (fs_load_dst),hl
-                jp    fs_load_sys           ; #134: system files live in the /GEOBENCH dir
-
-run_cfgmod
-                ld    a,(bank_cur)           ; save the current page
-                push  af
-                di
-                ld    hl,cfgmod_name
-                call  load_app0
-                jr    nc,rcm_done            ; module missing -> keep defaults
-                call  APP_BASE               ; crt0 _start -> main -> gb_cfg_parse
-rcm_done
-                pop   af                       ; restore the caller's page
-                call  bank_set
-                ei
-                ret
-cfgmod_name     db    "GBCFG   MOD"          ; 8.3, space-padded
+                include "config_module.asm"
 
                 include "assets.asm"
 
@@ -1086,65 +1034,7 @@ k_clip_len
                 ld    bc,(CLIP_LEN)
                 ret
 
-; k_ui (GB_UI #80AE): the paged dialog service (#142). The caller has marshalled its
-; request into the low-RAM UI_* block; page in PAGE_DATA, load the GBUI module to
-; DATA_MODTOP (#6000, above font+icons), raise UI_MODAL (so the dialog's own gb_poll
-; loop doesn't dispatch top-bar clicks into the now-swapped-out app), CALL it to render
-; + write UI_RES, then restore. Returns BC = UI_RES for the C trampoline. The dialog is
-; modal: this call blocks until the user picks/cancels.
-; run_data_module: the shared PAGE_DATA module loader (#238). HL = 11-byte module name.
-; Save the caller's page, map PAGE_DATA, load the named module to DATA_MODTOP (#6000)
-; from the boot drive, CALL it, restore the page. CF set = loaded (NC = missing). One
-; copy instead of three (GB_UI + GB_NET + the floppy-write stub) - reclaims the resident
-; bytes the net hook needs.
-run_data_module
-                ld    a,(bank_cur)
-                push  af
-                ld    a,PAGE_DATA
-                call  bank_set
-                ld    de,fs_req_name          ; HL (name) -> fs_req_name
-                ld    bc,11
-                ldir
-                ld    hl,#2000                ; load cap (8 KB window to #8000)
-                ld    (fs_load_max),hl
-                ld    hl,DATA_MODTOP          ; #6000
-                ld    (fs_load_dst),hl
-                call  fs_load_sys            ; module -> #6000 (boot drive, preserves browse dir)
-                jr    nc,rdm_miss
-                call  DATA_MODTOP            ; run it
-                pop   af
-                call  bank_set
-                scf
-                ret
-rdm_miss
-                pop   af
-                call  bank_set
-                or    a                       ; NC = missing
-                ret
-
-k_ui
-                ld    a,1
-                ld    (UI_MODAL),a            ; modal: the dialog's gb_poll must not dispatch
-                ld    hl,gbui_modname         ; top-bar clicks into the swapped-out app
-                call  run_data_module
-                xor   a
-                ld    (UI_MODAL),a
-                ld    a,(UI_RES)              ; missing module -> caller pre-set a cancel
-                ld    c,a
-                ld    b,0
-                ret
-gbui_modname    db    "GBUI    MOD"
-
-; k_net (GB_NET #80BD): the paged W5100 networking module (#238). The app marshalled an
-; op + args into the GBNET_* low-RAM block; run GBNET.MOD and return BC = GBNET_RES.
-k_net
-                ld    hl,gbnet_modname
-                call  run_data_module
-                ld    a,(GBNET_RES)
-                ld    c,a
-                ld    b,0
-                ret
-gbnet_modname   db    "GBNET   MOD"
+                include "modules.asm"
 
 ; k_fsload (GB_FSLOAD): load the file the app was opened with (launch_arg) into a
 ; caller buffer. HL = dst (in the caller's page, which stays mapped through the

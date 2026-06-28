@@ -154,7 +154,8 @@ Recommended split, initially with no behavior change:
 - `kernel/lowram.tsv`: checked ownership/range manifest for those fixed cells.
 - `kernel/assets.asm`: font/icon/cursor/backdrop loading, boot splash progress,
   `GB_RELOAD`, and `GB_BACKDROP`.
-- `kernel/modules.asm`: `run_data_module`, `GB_UI`, `GB_NET`, config module runner.
+- `kernel/config_module.asm`: boot-time `GBCFG.MOD` loading and config defaults.
+- `kernel/modules.asm`: shared `run_data_module`, `GB_UI`, and `GB_NET`.
 - `kernel/app_pool.asm`: page pool allocation/free.
 - `kernel/wm_core.asm`: z-order, focus, repaint, hit testing.
 - `kernel/wm_chrome.asm`: managed-window frame/title/close/maximize handling.
