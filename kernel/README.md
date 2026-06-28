@@ -35,5 +35,6 @@ Active. The shipped default target is the no-ROM Albireo kernel, with optional
 ROM/offload and recovery storage profiles still present in source. Source-level
 contracts and boot/assets/module boundaries now live in `api_table.inc`,
 `lowram.inc`, `boot.asm`, `assets.asm`, `config_module.asm`, `modules.asm`, and
-`app_pool.asm`; input polling lives in `input_api.asm`. Continue splitting
-`gbkern.asm` by subsystem while keeping the generated kernel image unchanged.
+`app_pool.asm`; input polling lives in `input_api.asm`; clock/RTC and RAM probing
+live in `clock.asm` and `memdetect.asm`. Continue splitting `gbkern.asm` by
+subsystem while keeping the generated kernel image unchanged.
