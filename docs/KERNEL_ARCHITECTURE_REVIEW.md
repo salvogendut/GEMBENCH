@@ -148,7 +148,8 @@ Recommended split, initially with no behavior change:
 
 - `kernel/gbkern.asm`: build flags, includes, and top-level boot.
 - `kernel/api_table.inc`: `org GB_KERNEL` and the fixed jump table.
-- `kernel/lowram.inc`: fixed low-RAM map and asserts.
+- `kernel/lowram.inc`: fixed low-RAM equates and ROM offload low-RAM includes.
+- `kernel/lowram.tsv`: checked ownership/range manifest for those fixed cells.
 - `kernel/api_table.inc`: ABI slot declarations and comments.
 - `kernel/boot.asm`: boot flow, exit-to-BASIC, splash, asset init.
 - `kernel/assets.asm`: font/icon/cursor/backdrop loading and reload.
