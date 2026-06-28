@@ -19,6 +19,21 @@ MAKEBIN="$BIN/makebin"
 
 work="build/uimod"
 mkdir -p "$work"
+mkdir -p "$(dirname "$OUT")"
+. tools/build_cache.sh
+
+deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" \
+      "$GB/gbdlg.c" "$GB/gbprompt.c" "$GB/gbpick.c" "$KC/gbui_mod.c")
+stamp="$OUT.stamp"
+cache_key=$(printf '%s\n' \
+    "build_uimod.v1" \
+    "SDCC=$SDCC" \
+    "SDAS=$SDAS" \
+    "MAKEBIN=$MAKEBIN")
+if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
+    echo "Up to date $OUT ($(stat -c%s "$OUT") bytes)"
+    exit 0
+fi
 
 "$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
 "$SDAS" -o "$work/gblib.rel" "$GB/gblib.s"
@@ -51,4 +66,5 @@ PY
 "$MAKEBIN" -p "$work/mod.ihx" "$work/mod.bin"
 # makebin emits a flat image from #0000; the module lives at #6000 -> strip the low 24K.
 tail -c +24577 "$work/mod.bin" > "$OUT"
+gb_write_stamp "$stamp" "$cache_key"
 echo "Built $OUT ($(stat -c%s "$OUT") bytes)"

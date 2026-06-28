@@ -27,6 +27,49 @@ MAKEBIN="$BIN/makebin"
 
 work="build/$(basename "$APP")"
 mkdir -p "$work"
+mkdir -p "$(dirname "$OUT")"
+. tools/build_cache.sh
+
+DIALOGS_FLAG="${DIALOGS:-0}"
+PROMPT_FLAG="${PROMPT:-0}"
+PICKER_FLAG="${PICKER:-0}"
+DOC_FLAG="${DOC:-0}"
+DOCRO_FLAG="${DOCRO:-0}"
+NET_FLAG="${NET:-0}"
+
+deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" "$GB/gbwin.c")
+while IFS= read -r dep; do
+    deps+=("$dep")
+done < <(find "$APP" -type f | sort)
+if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
+    deps+=("$GB/gbui_stub.c")
+fi
+if [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
+    deps+=("$GB/gbdoc.c")
+fi
+if [ "$NET_FLAG" = "1" ]; then
+    deps+=("$GB/gbnet_stub.c")
+fi
+
+stamp="$OUT.stamp"
+cache_key=$(printf '%s\n' \
+    "build_capp.v1" \
+    "APP=$APP" \
+    "DATA_LOC=$DATA_LOC" \
+    "APPDEFS=${APPDEFS:-}" \
+    "DIALOGS=$DIALOGS_FLAG" \
+    "PROMPT=$PROMPT_FLAG" \
+    "PICKER=$PICKER_FLAG" \
+    "DOC=$DOC_FLAG" \
+    "DOCRO=$DOCRO_FLAG" \
+    "NET=$NET_FLAG" \
+    "SDCC=$SDCC" \
+    "SDAS=$SDAS" \
+    "MAKEBIN=$MAKEBIN")
+if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
+    echo "Up to date $OUT ($(stat -c%s "$OUT") bytes) from $APP"
+    exit 0
+fi
 
 "$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
 "$SDAS" -o "$work/gblib.rel" "$GB/gblib.s"
@@ -43,19 +86,19 @@ mkdir -p "$work"
 #   DIALOGS / PROMPT / PICKER  -> gbui_stub.c (the stubs)
 #   DOC=1                      -> gbdoc.c too (the document/File-menu framework)
 DLG_REL=""
-if [ "${DIALOGS:-0}" = "1" ] || [ "${PROMPT:-0}" = "1" ] || [ "${PICKER:-0}" = "1" ] || [ "${DOC:-0}" = "1" ] || [ "${DOCRO:-0}" = "1" ]; then
+if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
     DLG_REL="$work/gbui_stub.rel"
 fi
 # DOC=1 = the full document framework; DOCRO=1 = a READ-ONLY variant (-DGBDOC_RO) that
 # omits the Save/Save As path, so a viewer-style app saves that code room (#144).
-if [ "${DOC:-0}" = "1" ] || [ "${DOCRO:-0}" = "1" ]; then
-    RO=""; [ "${DOCRO:-0}" = "1" ] && RO="-DGBDOC_RO"
+if [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
+    RO=""; [ "$DOCRO_FLAG" = "1" ] && RO="-DGBDOC_RO"
     "$SDCC" -mz80 --fomit-frame-pointer $RO -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
     DLG_REL="$DLG_REL $work/gbdoc.rel"
 fi
 # NET=1 -> gbnet_stub.c (gb_net_* -> the paged GBNET W5100 module, #238)
-if [ "${NET:-0}" = "1" ]; then
+if [ "$NET_FLAG" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbnet_stub.c" -o "$work/gbnet_stub.rel"
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
 fi
@@ -90,4 +133,5 @@ PY
 
 # makebin emits a flat image from #0000; the app lives at #4000 -> strip low 16K.
 tail -c +16385 "$work/app.bin" > "$OUT"
+gb_write_stamp "$stamp" "$cache_key"
 echo "Built $OUT ($(stat -c%s "$OUT") bytes) from $APP"
