@@ -389,4 +389,4 @@ Next:
 
 ## License
 
-TBD.
+BSD 3-Clause License. See [`LICENSE`](LICENSE).
