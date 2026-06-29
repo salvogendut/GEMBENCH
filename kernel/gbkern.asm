@@ -1482,6 +1482,10 @@ k_wm_close
                 ld    a,#FF                        ; #156: force the next wm_map_focus to re-install
                 ld    (WM_FPREV),a               ; the newly-focused (desktop) menu - else the bar
                                                   ; keeps the closed window's menu title (stale "View")
+                call  wm_map_focus               ; install the new focus's handler + menu NOW,
+                                                  ; before we repaint/return. This avoids a dead
+                                                  ; top bar after closing a no-menu child that
+                                                  ; dirtied global menu state via a modal picker.
                 pop   af                           ; A = the closed window's page
                 call  wm_free_page                 ; release it (z-order already updated)
                 call  clip_set_full              ; #156: full repaint so the desktop fully restores the
