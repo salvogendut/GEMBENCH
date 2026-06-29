@@ -638,11 +638,10 @@ static void on_frame(void)
                                                     rebuild the desktop menu state so stale focus/menu
                                                     pointers cannot leave System unclickable. */
         menu_inited = 1;
-        menu_refresh = 0;
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
         gb_menu_add("System", sys_items, 6, sys_action);
     }
-    if (wp_changed()) {                          /* WALLPAPER= changed while another window was up:
+    if (menu_refresh && wp_changed()) {         /* WALLPAPER= changed while another window was up:
                                                     reload it here, outside wm_repaint_all, then
                                                     repaint once with the new desktop image. */
         wp_init();
@@ -651,8 +650,10 @@ static void on_frame(void)
         paint();
         bar_init = 0;
         gb_curshow();
+        menu_refresh = 0;
         return;
     }
+    menu_refresh = 0;
     if (dc_timer) dc_timer--;
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
        Exit to DOS to leave); ESC only closes apps launched on top of it */
