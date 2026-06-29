@@ -364,7 +364,7 @@ static void s_draw(void)
         cfg_get(rows[r].key, val);
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(r), val);
         if (rows[r].ext[0] == 'B') {         /* #216: preview the current backdrop tile beside */
-            unsigned char sx = (unsigned char)(win_x + 28), sy = row_y(r);  /* the value */
+            unsigned char sx = (unsigned char)(win_x + 42), sy = row_y(r);  /* keep clear of "A:NAME.BDP" */
             if (*(volatile unsigned char *)BD_SOLID_ADDR)
                 gb_fill(sx, sy, 4, 8, 0);    /* SOLID -> a plain pen-0 (desktop) square */
             else
@@ -645,17 +645,21 @@ static void saver_dialog(void)
 /* ---- interaction ------------------------------------------------------------- */
 
 /* live_apply: write the chosen 8.3 name into the kernel transfer area and call
-   gb_reload for the assets that are known-stable at runtime (font/icon set/cursor).
-   Backdrop and wallpaper persist to the config but apply on the next boot: the
-   live backdrop reload path is still too fragile when sourced from removable media. */
+   gb_reload. Wallpaper still applies on the next boot (the desktop reads it from
+   config text); the other assets, including the backdrop, reload immediately. */
 static void live_apply(unsigned char r, const char *name, unsigned char drive)
 {
     const char *ext = rows[r].ext;
-    if (ext[0] == 'P' || ext[0] == 'B') return;
+    if (ext[0] == 'P') return;
+    if (ext[0] == 'B') {
+        *(unsigned char *)BD_SOLID_ADDR =
+            (unsigned char)(name[0]=='S' && name[1]=='O' && name[2]=='L' &&
+                            name[3]=='I' && name[4]=='D' && name[5]==0);
+        *(unsigned char *)0x123C = (*(unsigned char *)BD_SOLID_ADDR) ? DRIVE_NONE : drive; /* KCFG_BDDRIVE */
+    }
     {
         char *dst = (char *)rows[r].tfr;
         unsigned char i = 0;
-        (void)drive;
         while (i < 8 && name[i]) { dst[i] = name[i]; i++; }
         while (i < 8) dst[i++] = ' ';
         dst[8] = ext[0]; dst[9] = ext[1]; dst[10] = ext[2];
