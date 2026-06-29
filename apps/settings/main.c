@@ -754,8 +754,10 @@ static void open_picker(unsigned char r)
             live_apply(r, media ? (list[sel] + 2) : list[sel],
                        media ? stem_drive[sel - base] : boot_drive()); /* ...and apply now, no reboot (#185) */
         }
-        gb_wm_damage(0, 0, 80, 200);         /* assets changed everywhere -> full repaint */
-        gb_restore_parent();                 /* desktop + windows redraw with the new assets */
+        /* Do not force a full ancestor repaint from inside the picker callback. A successful
+           selection used to re-enter the WM repaint stack while this managed window was still
+           unwinding its modal UI path, and that left the desktop's System menu dead afterwards.
+           Persist the choice now; the desktop/window stack repaints naturally on close. */
     }
     s_draw();                                /* repaint our content (new font/value) */
     gb_curshow();
