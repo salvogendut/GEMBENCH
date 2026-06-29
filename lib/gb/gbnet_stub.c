@@ -1,10 +1,10 @@
-/* gbnet_stub.c - app-side stubs for the paged W5100 networking module (#238).
+/* gbnet_stub.c - app-side stubs for the paged networking module (#238/#259).
  *
  * Apps that want networking link this (build_capp NET=1). Each gb_net_* call marshals an
  * op + args into the fixed low-RAM GBNET block and calls gb_net() (the GB_NET kernel
- * call), which pages in GBNET.MOD and runs the real socket driver. Mirrors gbui_stub.c.
+ * call), which pages in the backend module selected by the kernel. Mirrors gbui_stub.c.
  * Buffers cross via the #2200 low-RAM data region (shared with the file-write modules,
- * mutually exclusive). The driver is socket 0, TCP. */
+ * mutually exclusive). The app-visible driver is one TCP socket. */
 #include "gb.h"
 
 #define GBNET_OP   (*(volatile unsigned char *)0x1490)   /* op selector */

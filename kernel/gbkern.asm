@@ -18,15 +18,15 @@
 
 ; STORAGE_ALBIREO (#104): build-time drive-0 backend select. 0 (default) = the
 ; SYMBiFACE IDE FAT32 backend; 1 (pass -DSTORAGE_ALBIREO=1) = the Albireo CH376
-; backend. The two are mutually exclusive - a machine has one card or the other -
-; so only one is ever resident, which keeps the IDE FAT32 core off an Albireo
-; build (the chip does FAT itself) and the budgets comfortable on both.
+; backend. STORAGE_M4 selects the M4 board file-level backend. These are mutually
+; exclusive - only one drive-0 backend is ever resident, which keeps the IDE FAT32
+; core out of Albireo/M4 builds (those firmwares do FAT themselves).
                 ifndef STORAGE_ALBIREO
 STORAGE_ALBIREO equ   0
                 endif
-                ifndef STORAGE_M4             ; #174: -DSTORAGE_M4=1 = the M4-board SD backend
-STORAGE_M4      equ   0                       ; (raw-sector route, reuses the FAT core). Mutually
-                endif                          ; exclusive with the IDE/Albireo backends.
+                ifndef STORAGE_M4             ; #174/#259: -DSTORAGE_M4=1 = M4 file backend.
+STORAGE_M4      equ   0
+                endif
                 assert STORAGE_ALBIREO+STORAGE_M4<=1,"pick ONE drive-0 backend (albireo XOR m4 XOR ide)"
                 ifndef SPIKE                  ; #130: -DSPIKE=1 builds a minimal storage spike -
 SPIKE           equ   0                       ; load DESKTOP.APP right after fs_init, report, hang
@@ -46,7 +46,7 @@ GB_ROM          equ   1
 ; #156: the window maximize/restore + close-X title-bar gadgets AND the banked picture buffer
 ; (#164: lets the Viewer open .PICs larger than its 8K in-page buffer) are resident chrome, so
 ; they only build where there is headroom - the GB_ROM (offloaded) kernels, the smaller Albireo
-; kernel, or the M4 file-level kernel (#174, ~786 B free). The plain no-ROM IDE kernel is full,
+; kernel, or the M4 file-level kernel. The plain no-ROM IDE kernel is full,
 ; so it keeps the simple close box + the in-page picture buffer.
                 if GB_ROM_REQ | STORAGE_ALBIREO | STORAGE_M4
 WM_GADGETS      equ   1

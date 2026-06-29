@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# stage_dist.sh <outdir>: stage the GEOBENCH Albireo card (#104 + #134 + #136).
-# The shipped product is the Albireo (CH376) kernel plus the AMSDOS floppy fallback
-# baked into it (boots floppy A when no card is present). The M4 + IDE backends are
-# ARCHIVED - frozen in-tree, not built or shipped (see docs/ARCHIVED.md).
+# stage_dist.sh <outdir>: stage the GEOBENCH Albireo/M4 card (#104 + #134 + #136 + #259).
+# The shipped card contains both the Albireo (CH376) and M4 kernels. GB.BAS probes
+# M4ROM and RUN"s GBM4 on M4 hardware, otherwise GBALB.
 # On-card layout:
-#   GB.BAS       - BASIC loader: RUN"GBALB. (A machine-code loader is impossible under
-#                  UniDOS - see memory geobench-loader-136 - hence BASIC.)
+#   GB.BAS       - BASIC loader: LOAD/CALL M4DETECT, then RUN"GBM4 or RUN"GBALB.
+#                  (A machine-code loader is impossible under UniDOS - see memory
+#                  geobench-loader-136 - hence BASIC.)
+#   M4DETECT.BIN - tiny RAM probe at 0x4000; writes 1/0 to 0x4030.
 #   GBALB.BIN    - Albireo (CH376) kernel: real 128-byte AMSDOS header, exec 0x8000;
 #                  falls back to floppy A when no card is present.
+#   GBM4.BIN     - M4 board kernel: real 128-byte AMSDOS header, exec 0x8000.
 #   GEOBENCH.CFG - config (root; read before the kernel enters /GBENCH)
 #   GBENCH/      - everything the kernel loads at boot (apps/modules/fonts/icons/cursor)
-# Boot: RUN"GB -> RUN"GBALB -> the kernel reads /GBENCH.
-# Needs build/GBALB.RAW.
+# Boot: RUN"GB -> detector -> RUN"GBM4 or RUN"GBALB -> the kernel reads /GBENCH.
+# Needs build/GBALB.RAW and build/GBM4.RAW.
 #   * <app>.APP / GBCFG/GBFAT/FLOPPYSV/GBUI.MOD - HEADERLESS raw kernel modules (#234: .MOD,
 #     not .BIN, so .BIN is reserved for native runnable binaries; the kernel loads them)
 #   * GB.BAS / GEOBENCH.CFG - written with CR+LF line endings (the CPC requires them)
@@ -22,15 +24,17 @@ RASM="${RASM:-rasm}"
 OUT="${1:?usage: tools/stage_dist.sh <outdir>}"
 SYS="$OUT/GBENCH"                    # the system folder (#174: <=7 chars so the M4's
                                      # '>'-prefixed dir listing round-trips it; was /GEOBENCH)
+mkdir -p build
 mkdir -p "$SYS"
 
-# --- root: the loader, the Albireo kernel, the config -------------------------
-# GB.BAS just RUN"s the Albireo kernel. (A machine-code loader is impossible under
-# UniDOS - see memory geobench-loader-136 - hence BASIC.) ASCII with CR+LF, as the
-# CPC requires. The archived M4 card used a POKE'd m4detect.asm probe here to pick
-# GBM4 vs GBALB; with M4 frozen out (docs/ARCHIVED.md) the loader is a one-liner.
-printf '10 RUN"GBALB\r\n' > "$OUT/GB.BAS"
+# --- root: the loader, both card kernels, the config --------------------------
+# GB.BAS remains BASIC because UniDOS needs DOS active while RUN"ing the selected
+# binary. ASCII with CR+LF, as the CPC requires.
+"$RASM" tools/m4detect.asm -eo >/dev/null
+printf '10 MEMORY &3FFF\r\n20 LOAD"M4DETECT",&4000\r\n30 CALL &4000\r\n40 IF PEEK(16432)=1 THEN RUN"GBM4\r\n50 RUN"GBALB\r\n' > "$OUT/GB.BAS"
+python3 tools/amsdos_header.py build/M4DETECT.RAW "$OUT/M4DETECT.BIN" M4DETECT BIN 0x4000
 python3 tools/amsdos_header.py build/GBALB.RAW "$OUT/GBALB.BIN" GBALB BIN 0x8000
+python3 tools/amsdos_header.py build/GBM4.RAW "$OUT/GBM4.BIN" GBM4 BIN 0x8000
 cp build/GEOBENCH.CFG "$OUT/GEOBENCH.CFG"   # #205: one source, shared with the floppy DSK (pack_apps3)
 
 # --- /GBENCH: apps, modules, assets -------------------------------------------
@@ -59,6 +63,8 @@ cp build/GBFAT.RAW "$SYS/GBFAT.MOD"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.MOD"   # #135: paged AMSDOS/floppy write module
 cp build/GBUI.RAW "$SYS/GBUI.MOD"           # #142: paged dialog (popup/prompt/file-picker) module
 cp build/GBNET.RAW "$SYS/GBNET.MOD"         # #238: W5100 networking module (gb_net_* socket API)
+cp build/GBNETM4.RAW "$SYS/GBNETM4.MOD"     # #259: M4 TCP module, same gb_net_* socket API
+cp build/M4SAVE.RAW "$SYS/M4SAVE.MOD"       # #259: M4 C_OPEN/C_WRITE/C_CLOSE save module
 cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST build/PAINT.IST \
    build/DEFAULT.SPR build/HAND.SPR "$SYS/"
 cp build/SPLASH.BIN "$SYS/SPLASH.MOD"         # #196: bootsplash lollipop bitmap (.MOD, #234)

@@ -49,8 +49,10 @@ k_ui
                 ret
 gbui_modname    db    "GBUI    MOD"
 
-; k_net (GB_NET #80BD): the paged W5100 networking module (#238). The app marshalled an
-; op + args into the GBNET_* low-RAM block; run GBNET.MOD and return BC = GBNET_RES.
+; k_net (GB_NET #80BD): the paged networking module. Apps marshal an op + args
+; into the GBNET_* low-RAM block; the kernel loads the module matching the card
+; backend and returns BC = GBNET_RES. Albireo uses the W5100/Net4CPC module;
+; M4 uses the M4ROM TCP command module.
 k_net
                 ld    hl,gbnet_modname
                 call  run_data_module
@@ -58,4 +60,8 @@ k_net
                 ld    c,a
                 ld    b,0
                 ret
+                if STORAGE_M4
+gbnet_modname   db    "GBNETM4 MOD"
+                else
 gbnet_modname   db    "GBNET   MOD"
+                endif
