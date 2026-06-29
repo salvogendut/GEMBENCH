@@ -19,7 +19,8 @@ is the only storage backend still archived: its source stays in the tree, but
 
 The M4 backend is active again for boot, directory listing, load, save/create, and
 TCP networking. The same `QA/GEOBENCH.IMG` can be used by Albireo and by 1984's
-M4 image mode.
+M4 image mode. The active M4 storage and TCP paths preserve the caller's video
+mode while paging M4ROM, including Telnet's Mode 2 fullscreen terminal.
 
 Two M4 caveats remain:
 

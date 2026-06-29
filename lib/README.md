@@ -21,7 +21,7 @@ layers never poke video, storage or input registers directly.
 | `fs_albireo.asm` | CH376/Albireo backend (the chip does FAT in firmware) — the shipped card backend. |
 | `fs_ide_fat.asm` | _Archived_ — FAT16/FAT32 over SYMBiFACE/Cyboard IDE (mount + write + seam). See `docs/ARCHIVED.md`. |
 | `fs_ide_read.asm` | _Archived_ — the IDE FAT read backend (dir + load), shared by the ROM. |
-| `fs_m4.asm` | File-level FAT over the M4 board (#174/#259): directory, load, and save/create for the shared card image; delete remains pending. |
+| `fs_m4.asm` | File-level FAT over the M4 board (#174/#259): directory, load, and save/create for the shared card image; preserves the active video mode while paging M4ROM; delete remains pending. |
 | `fs_rom_seam.asm`, `fs_*_lowram.inc` | #152 ROM offload: the seam that pages `GEOBENCH.ROM` in + the fixed low-RAM addresses the resident stubs and the ROM share. |
 | `bank.asm` | Expansion-RAM paging (the `#4000–#7FFF` window). |
 | `config.asm` | _Orphaned_ — the old resident `GEOBENCH.CFG` (key=value) parser. Superseded by the paged `GBCFG.MOD` (`kernel/kc/kcfg.c`); kept in-tree only until nothing references it. |

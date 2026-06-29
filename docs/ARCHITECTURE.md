@@ -104,7 +104,9 @@ The shipped runtime targets are:
 
 - **Albireo / CH376 card** as the primary read/write storage path.
 - **M4 board** as a shared-image card path (`GBM4.BIN` on the same FAT image as
-  `GBALB.BIN`) and as a TCP networking path through M4ROM commands.
+  `GBALB.BIN`) and as a TCP networking path through M4ROM commands. M4 storage
+  and TCP calls preserve the active video mode/hint so fullscreen Mode 2 apps
+  such as Telnet are not forced back to Mode 1 while modules are loaded.
 - **AMSDOS floppy** as the fallback path and as the bootable disk-pair format.
 
 The **IDE** backend still exists in source but is not built by the default workflow.
@@ -177,6 +179,11 @@ the level of asset reload, storage, and window-manager primitives.
   `GBNET.MOD`, `PAINT.IST`) load from A — no duplicates on the Companion. (Card
   builds are unaffected — they already ship everything on one volume, including
   `GBNET.MOD` for Net4CPC and `GBNETM4.MOD` for M4 TCP.)
+
+M4 TCP is intentionally still a paged service: each `gb_net_*` call loads
+`GBNETM4.MOD` through the M4 storage backend before issuing the M4ROM network
+command. Both layers preserve the caller's active screen mode, using the shared
+`video_mode_hint` low-RAM byte when an app has taken over the display.
 
 `RUN"GB` runs `GB.BAS`. On card media it loads and calls `M4DETECT.BIN`; M4ROM
 machines `RUN"` `GBM4`, and non-M4 card machines `RUN"` `GBALB`. On floppy media
