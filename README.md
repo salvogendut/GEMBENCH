@@ -376,8 +376,9 @@ Done:
 10. ✅ **M4 board SD/TCP support (#174, #259)** — a file-level backend (`GBM4.BIN`)
    ships beside `GBALB.BIN` on the shared card image. `GB.BAS` detects M4ROM
    (`KL_FIND_COMMAND` for an M4 RSX) and selects the right kernel. M4 supports
-   directory, load, save/create, and TCP through `GBNETM4.MOD`; delete remains
-   pending for image-backed mode.
+   directory, load, save/create, and TCP through `GBNETM4.MOD`. Its storage and
+   network calls preserve the active CPC video mode, so Telnet's Mode 2 fullscreen
+   terminal survives paged module loads. Delete remains pending for image-backed mode.
 11. ✅ **Kernel source split + build cache** — the resident kernel contracts now
    live in dedicated source files with checked ABI/low-RAM maps, and the full
    build reuses unchanged app/module outputs instead of recompiling everything.

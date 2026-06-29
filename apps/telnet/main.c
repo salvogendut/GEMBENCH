@@ -635,6 +635,13 @@ static unsigned char transport;
 static unsigned char want_fs;          /* the 80x25 toggle: a connect enters Mode-2 fullscreen */
 static void fs_label(void);            /* refresh the menu's [x]/[ ] checkbox */
 
+/* Hint for paged services that must touch the Gate Array ROM/mode register.
+ * High bit = valid, low bits = active CPC screen mode. The M4 network module
+ * uses this while Telnet owns Mode 2 fullscreen, because firmware's mode shadow
+ * is not reliable across the paged-module boundary. */
+#define GB_VIDEO_MODE_HINT (*(volatile unsigned char *)0x14FF)
+#define GB_VIDEO_MODE_VALID 0x80
+
 static unsigned int t_recv(unsigned char *buf, unsigned int max)
 {
     return (transport == TR_SERIAL) ? serial_recv(buf, max) : gb_net_recv(buf, max);
@@ -777,11 +784,12 @@ static void run_fullscreen(void)
     unsigned char k, leave = 0;
     gb_modal_set(1);
     gb_curhide();
+    GB_VIDEO_MODE_HINT = (unsigned char)(GB_VIDEO_MODE_VALID | 2);
     fs_mode = 1; gcols = FS_COLS; grows = FS_ROWS;
     term_cls();
-    if (transport == TR_NET) send_naws();     /* re-advertise 80x25 (telnet only) */
     scr_set_mode(2);
     m2_clear();
+    if (transport == TR_NET) send_naws();     /* re-advertise 80x25 (telnet only) */
     mark_all(); render();
     poll_ctr = 0; active = ACTIVE_HOLD;
     while (!leave) {
@@ -795,10 +803,12 @@ static void run_fullscreen(void)
         if (state != ST_RUN) leave = 1;       /* disconnected */
         render();
     }
+    GB_VIDEO_MODE_HINT = (unsigned char)(GB_VIDEO_MODE_VALID | 1);
     scr_set_mode(1);                          /* back to the Mode-1 desktop */
     fs_mode = 0; gcols = WIN_COLS; grows = WIN_ROWS;
     want_fs = 0; fs_label();                  /* exiting fullscreen turns the toggle off */
     if (state == ST_RUN && transport == TR_NET) send_naws();   /* re-advertise the windowed size */
+    GB_VIDEO_MODE_HINT = 0;
     term_cls();                               /* the M2 screen is gone; start the window fresh */
     gb_modal_set(0);
 }

@@ -59,8 +59,16 @@ void m4_begin(void) __naked
         push    hl
         push    ix
         push    iy
+        ld      a,(#0x14FF)     ; high bit set = caller-provided video mode hint.
+        bit     7,a
+        jr      nz,00000$
+        call    #0xBC11        ; SCR_GET_MODE -> A = current screen mode.
+00000$:
+        and     #0x03
+        or      #0x84          ; upper ROM on, lower ROM off, preserve mode.
         di
-        ld      bc,#0x7F85
+        ld      b,#0x7F
+        ld      c,a
         out     (c),c
         ld      bc,#0xDF00
         ld      a,#6
