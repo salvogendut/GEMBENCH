@@ -217,7 +217,7 @@ gb_text_draw
                 call  to_data                 ; swap to the font page
                 ld    hl,gtd_scratch
                 call  draw_text
-                jp    from_data               ; restore caller's page
+                jr    from_data               ; restore caller's page
 gtd_copy                                       ; (HL) -> (DE) until NUL, cap 48
                 ld    b,48
 gtd_cloop
@@ -888,7 +888,6 @@ k_drive_poll
                 jr    nc,kdp_a
                 set   2,c
                 set   3,c                          ; bit3 = Disk C is an Albireo SD/USB card
-                jr    kdp_a                          ; (so the desktop can pick the SD icon, #104)
                 else
                 if STORAGE_M4                      ; #174: M4 -> Disk C (bit2) + SD card icon (bit3)
                 call  fsm4_present
@@ -1154,7 +1153,8 @@ k_wm_managed
                 inc   hl
                 ld    (hl),d                 ; REPAINT (entry+7,8) is garbage but the managed
                                              ; flag means wm_repaint_all skips it; MENU (entry+
-                                             ; 11,12) is set by the app's gb_doc before the loop
+                                             ; 11,12) comes from the managed descriptor's trailing
+                                             ; reserved field and starts clear until gb_doc sets it
                 ld    a,(WM_FOCUS)           ; publish MW_RECT so the app can read gb_wm_x/y/w/h
                 call  wm_entry               ; in main, but DON'T draw yet: the app loads its
                 call  mw_publish             ; content then calls gb_restore_parent for the first

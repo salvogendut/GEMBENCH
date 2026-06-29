@@ -102,7 +102,7 @@ DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: do
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
-DATA_LOC=0x6C00 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
+DATA_LOC=0x6C80 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
                                    # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
 tools/build_capp.sh apps/saver build/CIRCLE.RAW   # SAVER (#219): the test screensaver - a

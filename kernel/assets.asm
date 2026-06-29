@@ -110,6 +110,7 @@ backdrop_init
                 ld    a,(KCFG_BDDRIVE)
                 inc   a
                 jr    z,bdi_sys
+bdi_try
                 ld    a,(fs_cur_drive)
                 push  af
                 ld    a,(KCFG_BDDRIVE)

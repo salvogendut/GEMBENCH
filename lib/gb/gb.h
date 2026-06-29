@@ -294,6 +294,8 @@ typedef struct {
     unsigned char min_w, min_h;     /* min size; min_w == 0 -> not resizable */
     void (*proc)(void);             /* the window's ONE handler; switch on gb_msg.type */
     const char *title;
+    const void *reserved;           /* keep the descriptor 12 bytes wide for wm_register;
+                                       leave 0 */
 } gb_mwin_t;
 void          gb_wm_managed(const gb_mwin_t *desc);   /* register a kernel-managed window */
 unsigned char gb_wm_x(void);    /* live window rect (WM-owned) */

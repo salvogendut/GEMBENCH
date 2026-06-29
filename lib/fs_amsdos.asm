@@ -29,7 +29,7 @@ fsam_dir_first
                 call  fsam_motor_off
                 xor   a
                 ld    (fsam_idx),a
-                jp    fsam_scan
+                jr    fsam_scan
 
 ; fsam_dir_next: advance to the next valid entry.
 fsam_dir_next
@@ -169,6 +169,8 @@ fsp_have
 ; sectors are logical sectors L = B*2 and B*2+1; L -> track = L/9, physical
 ; sector = &C1 + (L mod 9).
 fsam_load_file
+                call  fsam_present                   ; missing target disk -> fail fast (NC),
+                ret   nc                            ; let the caller's fallback handle it
                 call  fsam_motor_on                  ; spin up + recalibrate
                 call  fsam_read_dir                  ; directory -> fsam_buf
 

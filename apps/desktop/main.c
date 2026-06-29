@@ -115,6 +115,14 @@ static unsigned char boot_drive(void)
     return (gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A;
 }
 
+static unsigned char drive_present(unsigned char d)
+{
+    unsigned char m = gb_drives();
+    if (d == GB_DRIVE_A) return (unsigned char)((m & GB_DRV_A) != 0);
+    if (d == GB_DRIVE_B) return (unsigned char)((m & GB_DRV_B) != 0);
+    return (unsigned char)((m & GB_DRV_C) != 0);
+}
+
 static unsigned char parse_drive(const char *t, unsigned int len, unsigned int *p)
 {
     if (*p + 1 < len && t[*p + 1] == ':') {
@@ -234,6 +242,7 @@ static void wp_init(void)
     wp_bank = 0;
     wp_drive = boot_drive();
     if (!wp_cfg_name(nm)) return;               /* WALLPAPER= absent or NONE */
+    if (!drive_present(wp_drive)) return;       /* bad qualified drive -> NONE fallback */
     old_drive = gb_get_drive();
     gb_set_drive(wp_drive);
     descended = enter_sys();                     /* card: into /GBENCH; floppy: stays at root */
@@ -257,9 +266,15 @@ static void wp_init(void)
 static void open_saver(void)
 {
     unsigned char old_drive = gb_get_drive();
-    gb_set_drive(ss_drive);
+    unsigned char drv = ss_drive;
+    const char *name = ss_name;
+    if (!drive_present(drv)) {                  /* unavailable configured drive -> safe fallback */
+        drv = boot_drive();
+        name = "CIRCLE  SAV";
+    }
+    gb_set_drive(drv);
     WM_OPEN_STRICT = 1;
-    gb_wm_open(ss_name);
+    gb_wm_open(name);
     gb_set_drive(old_drive);
 }
 
