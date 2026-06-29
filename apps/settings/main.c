@@ -686,14 +686,11 @@ static void load_backdrop_live(const char *name, unsigned char drive)
 }
 
 /* live_apply: write the chosen 8.3 name into the kernel transfer area and call
-   gb_reload. Wallpaper still applies on the next boot (the desktop reads it from
-   config text); the other assets, including the backdrop, reload immediately. */
+   gb_reload. The desktop re-reads WALLPAPER= when it regains focus after Settings
+   closes, so backdrop and wallpaper both apply without a reboot. */
 static void live_apply(unsigned char r, const char *name, unsigned char drive)
 {
     const char *ext = rows[r].ext;
-    if (boot_drive() != GB_DRIVE_C && (ext[0] == 'B' || ext[0] == 'P'))
-        return;                                 /* floppy-backed live background reloads still destabilize
-                                                   the top-bar path; persist now, apply on reboot. */
     if (ext[0] == 'P') return;
     if (ext[0] == 'B') {
         load_backdrop_live(name, drive);
