@@ -11,10 +11,11 @@ Workbench**, reimagined for 8-bit Z80 hardware.
 > **Status:** a working **banked multi-app micro-OS** for 128K+ CPCs. A resident
 > Z80 **kernel** owns the machine and exposes a fixed jump-table API; the
 > **apps are written in C** (SDCC) and run co-resident in expansion-bank pages,
-> reaching the kernel through a small `libgb`. The desktop, a scrolling file
-> manager, a text editor, an icon editor, a paint app, an image/text viewer and a
-> clock all work: double-click a drive to browse it, double-click a file to open it
-> in its app. Build with `tools/build_kernel.sh`.
+> reaching the kernel through `libgb`. The shipped target is the **Albireo card**
+> plus the **AMSDOS floppy fallback**; the tree also carries a bootable floppy
+> pair (`QA/GEOBENCH.DSK` + `QA/COMPANION.DSK`). The desktop, file manager,
+> Notepad, ICONED, Paint, Viewer, Clock, Telnet, Xaos, Settings, and the saver
+> set all build from `tools/build_kernel.sh`.
 
 ## Visual target
 
@@ -89,9 +90,11 @@ What works today:
   `SOLID`) and a centred **wallpaper** (`.PIC`) from the system folder, a **Colours**
   editor for the 4 Mode-1 pens + the screen border (`INKS=`) with a **live** preview
   — `-`/`+` recolours the whole desktop instantly — and a **Screensaver** section
-  (**Module** picker + idle **Timeout**). A **Reload** action re-applies
-  font/icons/cursor/backdrop on the running desktop with no reboot; Save persists it
-  all. The icon-set picker can **filter by icon count**. Launches from the System menu.
+  (**Module** picker + idle **Timeout**). Media settings are now stored as
+  **drive-qualified names** such as `A:DARKER` or `C:XMATRIX`, so Settings can
+  browse either floppy or Albireo content without ambiguity. Invalid media now
+  falls back safely to `SOLID` / `NONE` at boot instead of blocking startup. The
+  icon-set picker can **filter by icon count**. Launches from the System menu.
 - **Screensavers** — self-contained apps shipped with a `.SAV` extension. The
   desktop's idle timer (global, so it fires over any app) launches the configured
   module after the timeout; any pointer move / click / key returns to the desktop.
@@ -158,38 +161,41 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
   screen and the firmware stay in always-resident RAM; apps and the kernel's data
   buffers (font, icons) live in bank pages and are swapped in as needed.
 - **Resident kernel (`kernel/`, Z80 asm).** Boots the machine (Mode 1, palette,
-  RAM probe, clock, top bar), owns the storage + screen + input + cursor, and
-  exposes a **fixed jump-table API** at `#8000` (`lib/gbapp.inc` documents every
-  entry). It loads app binaries off disk into bank pages and runs them there.
+  RAM probe, clock, top bar), owns storage + screen + input + cursor, and
+  exposes a **fixed jump-table API** at `#8000`. The kernel source has now been
+  split by subsystem (`boot.asm`, `assets.asm`, `modules.asm`, `app_pool.asm`,
+  `input_api.asm`, `clock.asm`, `memdetect.asm`, `api_table.inc`,
+  `lowram.inc`) so resident responsibilities and low-RAM contracts are easier to
+  reason about without changing the generated image.
 - **Apps in C (`apps/`, SDCC).** Each app is a single `main.c` compiled to run at
   `#4000` in a bank page. It reaches the kernel only through **`libgb`**
   (`lib/gb/` — `gb.h` + asm trampolines that map the C calling convention onto the
   jump table). The desktop launches the file manager, which opens each file in its
   app (Notepad, ICONED, Paint, Viewer, ...); an app returns to its caller by `return`.
 - **Storage backends.** A dispatcher (`lib/fs.asm`) selects the card backend at
-  build time. The shipped card runs the CH376 **Albireo** kernel (`GBALB`), which also
-  carries the AMSDOS-over-**floppy** fallback (it boots floppy drive A when no card is
-  present). The **M4 board** (`GBM4`) and FAT16/FAT32 **IDE** (SYMBiFACE/Cyboard)
-  backends are **archived** — frozen in the tree but not built or shipped (see
-  [`docs/ARCHIVED.md`](docs/ARCHIVED.md); M4 is parked on an unresolved >8 KB-picture
-  blank on real hardware, IDE was superseded by Albireo for real CPC cards). Rebuild
-  either for recovery with `-DSTORAGE_M4=1` / `STORAGE=ide`. These screen-independent
-  drivers can be **offloaded to a loadable upper ROM** (`GEOBENCH.ROM`) to free
-  resident `#8000` RAM — see *Optional: the GEOBENCH ROM* below.
+  build time. The shipped path is the CH376 **Albireo** kernel (`GBALB`), which also
+  carries the AMSDOS-over-**floppy** fallback. The **M4 board** and FAT16/FAT32
+  **IDE** backends are **archived** — source kept in-tree, not built or shipped
+  by default (see [`docs/ARCHIVED.md`](docs/ARCHIVED.md)). The screen-independent
+  driver path can still be **offloaded to a loadable upper ROM** (`GBALB.ROM`)
+  to free resident `#8000` RAM — see *Optional: the GEOBENCH ROM* below.
 
 ## Building, deploying and running
 
 The kernel is assembled with **RASM**; the apps are compiled with **SDCC**
-(`sdcc`, `sdasz80`, `makebin` on `PATH`). One script builds the whole distribution
-(it needs `iDSK` to add the floppy loader — set `IDSK=` if it is not on the default
-path; without it the floppy still boots via `RUN"GBKERN`):
+(`sdcc`, `sdasz80`, `makebin` on `PATH`). In practice development happens inside
+the project distrobox, where those tools plus `mtools`/`dosfstools` already
+exist. One script builds the whole distribution; app and module helper scripts
+cache unchanged outputs, so a repeat full build does **not** rebuild every app
+unnecessarily. `iDSK` is only needed to inject the convenience `GB.BAS` loader
+into the floppy images; without it the floppy still boots via `RUN"GBKERN`:
 
 ```bash
 bash tools/build_kernel.sh
 ```
 
-This stages these outputs (the loose files and the floppy are committed under `QA/`, so you
-can grab them ready-built):
+This stages these outputs (the staged media under `QA/` are committed, so you
+can test or deploy without rebuilding first):
 
 - **`QA/CARD/`** — the loose card distribution. Copy its contents onto an Albireo
   card. The card root holds the loader `GB.BAS`, the kernel `GBALB.BIN`, and
@@ -198,11 +204,13 @@ can grab them ready-built):
 - **`QA/GEOBENCH.IMG`** — a ready-to-flash **Albireo card image**: a partitioned FAT16
   disk the CH376 auto-detects. Built by `tools/build_card_img.sh`; a 32 MB local
   artifact, rebuilt every build and not committed.
-- **`QA/GEOBENCH.DSK`** — a single bootable floppy image.
+- **`QA/GEOBENCH.DSK`** — the bootable **Main** floppy image.
+- **`QA/COMPANION.DSK`** — the **Companion** floppy with the larger apps, extra
+  savers, and sample pictures for drive B.
 
-Boot with **`RUN"GB`**: the loader `GB.BAS` is a one-line `RUN"GBALB` (on a floppy it
-runs `RUN"GBKERN`), which then drives the Albireo card or falls back to the AMSDOS
-floppy. On a floppy you can also `RUN"GBKERN` directly.
+Boot with **`RUN"GB`**: the loader `GB.BAS` is a one-line `RUN"GBALB` on the card,
+or `RUN"GBKERN` on the floppy. The kernel then drives the Albireo card or falls
+back to the AMSDOS floppy path. On a floppy you can also `RUN"GBKERN` directly.
 
 ```bash
 1984 --memory=128 --disk-a=QA/GEOBENCH.DSK --autostart=GB     # floppy in an emulator
@@ -325,7 +333,7 @@ desktop — the windowed/fullscreen choice is specifically about coaxing *legacy
 ```
 geobench/
 ├── README.md
-├── kernel/            # resident OS kernel (gbkern.asm) + the jump-table API
+├── kernel/            # resident OS kernel (entry file + split subsystem asm/includes)
 ├── lib/               # kernel libraries: screen, text/font, input, cursor,
 │   │                  #   fs (AMSDOS + FAT16), banking, icon/cursor bitmaps
 │   ├── gbapp.inc      #   the app ABI (jump-table addresses, memory model)
@@ -342,11 +350,11 @@ geobench/
 │   ├── xaos/          #   fixed-point Mandelbrot generator (.PIC export)
 │   ├── viewer/        #   text + .PIC image viewer
 │   ├── clock/         #   analog clock window
-│   └── settings/      #   control panel: font/icons/cursor + desktop colours (INKS=)
-├── rom/               # GEOBENCH.ROM: the offloaded low-level drivers + boot banner,
-│                      #   as a 16K loadable upper ROM (built per card by build_rom.sh)
+│   └── settings/      #   control panel: config/media picker + desktop colours
+├── rom/               # per-backend upper ROMs (GBALB.ROM shipped; IDE ROM archived)
+│                      #   for driver offload + the boot banner
 ├── assets/            # icon/cursor/paint source PNGs + sample files (WELCOME.TXT)
-├── docs/              # architecture, development, references
+├── docs/              # architecture, development, archive notes, review docs
 └── tools/            # host-side build/asset tooling (build_kernel.sh, build_rom.sh, ...)
 ```
 
@@ -361,9 +369,9 @@ Done:
 4. ✅ **Banked app model + app API** — separate-binary apps over a kernel API.
 5. ✅ **Apps in C** — the whole app layer moved from assembly to C over `libgb`.
 6. ✅ **Storage write layer** — FAT16/FAT32 + Albireo read/write (save/delete/copy).
-7. ✅ **Apps** — Notepad (editor), ICONED (icon/cursor editor), Paint (`.PIC`),
-   Clock, the image/text Viewer, and a **Settings** control panel (font / icon set /
-   cursor + a live desktop-colours editor).
+7. ✅ **Apps** — Notepad, ICONED, Paint, Clock, Viewer, Telnet, Xaos, and a
+   **Settings** control panel (font / icon set / cursor / drive-qualified
+   backdrop-wallpaper-saver settings + a live desktop-colours editor).
 8. ✅ **Unified menu system (`gb_doc`)** — one File / Edit / View menu framework for
    every app (New/Load/Save/Save As, a shared cross-app clipboard, **Fullscreen**, a
    navigable Open/Save dialog in a paged module); the desktop's System menu and the
@@ -378,6 +386,9 @@ Done:
    not shipped): a >8 KB-picture blank on real M4 hardware — an M4ROM interrupt/timing
    divergence the emulator can't reproduce — is unresolved, so the shipped card is Albireo +
    floppy only. See [`docs/ARCHIVED.md`](docs/ARCHIVED.md).
+11. ✅ **Kernel source split + build cache** — the resident kernel contracts now
+   live in dedicated source files with checked ABI/low-RAM maps, and the full
+   build reuses unchanged app/module outputs instead of recompiling everything.
 
 Next:
 

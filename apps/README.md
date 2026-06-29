@@ -49,8 +49,10 @@ System → "Activate screensaver" runs it on demand. Each is a full-screen windo
 | ant      | `ANT.SAV`      | Langton's ant on an 80×50 grid (4-state rule, all four pens) — inspired by xscreensaver. **Albireo card only** |
 | lightning | `LIGHTN.SAV`  | midpoint-displacement forked lightning bolts that flash and re-strike — ported from xscreensaver. **Albireo card only** |
 
-The Settings **Module** picker lists every `.SAV` in `/GBENCH`, so a new
-screensaver appears there automatically once it is built and staged.
+The Settings **Module** picker lists every `.SAV` in the system media folder for
+the selected drive, so a new screensaver appears there automatically once it is
+built and staged. Saver names in `GEOBENCH.CFG` may be drive-qualified
+(`A:XMATRIX`, `C:CATCLK`) for mixed floppy/card setups.
 
 ## App contract
 
@@ -59,4 +61,6 @@ window (`gb_wm_add` for a legacy window, or `gb_wm_managed` for kernel-drawn
 chrome), then returns to the opener. The kernel's master loop then drives it:
 it polls input and calls the focused window's frame / repaint / event handlers;
 the app reads input with `gb_flags`/`gb_mx`/`gb_my` and calls `gb_wm_close` to
-quit. See `lib/gb/gb.h` for the full API.
+quit. Settings and saver apps should keep persistent config/media policy in the
+app layer and treat the kernel as a provider of storage, WM, and reload
+primitives. See `lib/gb/gb.h` for the full API.
