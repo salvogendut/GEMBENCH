@@ -43,7 +43,6 @@
 #define ROW_BACKDROP 3
 #define ROW_WALLPAPER 4
 #define DRIVE_NONE 0xFF
-#define UI_MODAL_ADDR 0x1705
 
 static unsigned char win_x, win_y, win_w, win_h;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
@@ -110,11 +109,6 @@ static void sel_boot_root(void)
     unsigned char i;
     sel_boot();
     for (i = 0; i < 4; i++) gb_back();      /* root on FAT/path backends; no-op on floppy/root */
-}
-
-static void clear_ui_modal(void)
-{
-    *(volatile unsigned char *)UI_MODAL_ADDR = 0;
 }
 
 static unsigned char boot_drive(void)
@@ -596,7 +590,6 @@ static void ss_module_dialog(void)
     for (i = 0; i < nstem; i++) list[n++] = stems[i];
     if (n == 0) { gb_alert("No screensavers", "found."); s_draw(); return; }
     sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(SS_MOD_ROW), list, n);
-    clear_ui_modal();
     gb_curhide();
     if (sel != 0xFF) {
         cfg_path(path, stem_drive[sel], list[sel] + 2, "SAV");
@@ -648,7 +641,6 @@ static void saver_dialog(void)
 {
     unsigned char sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(SS_TM_ROW),
                                  saver_lbl, 5);
-    clear_ui_modal();
     gb_curhide();
     if (sel != 0xFF) {
         char s[6];
@@ -738,7 +730,6 @@ static void open_picker(unsigned char r)
         return;
     }
     sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(r), list, n);
-    clear_ui_modal();
     gb_curhide();
     if (sel != 0xFF) {
         if ((ext[0] == 'B' && list[sel][0] == 'S' && list[sel][1] == 'O' &&
@@ -820,7 +811,7 @@ static void s_proc(void)
     switch (gb_msg.type) {
         case GB_MSG_DRAW:  s_draw();      break;
         case GB_MSG_CLICK: s_click();     break;
-        case GB_MSG_CLOSE: clear_ui_modal(); gb_wm_close(); break;
+        case GB_MSG_CLOSE: gb_wm_close(); break;
         case GB_MSG_DRAG:  s_drag();      break;
     }
 }
