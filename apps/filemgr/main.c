@@ -625,14 +625,20 @@ static void on_event(void)
     sync_rect();
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
         unsigned int n;                   /* copy it onto THIS window's drive (#74) */
+        unsigned char ok;
         gb_set_drive(my_drive);
         gb_copy_begin();                  /* switch to the drag source drive/dir */
         gb_set_name(gb_dragname);
         n = gb_fs_load(gb_copybuf, GB_COPYMAX);
-        gb_set_drive(my_drive);           /* back to this window's drive */
+        gb_copy_end();                    /* restore this window's drive/dir before saving */
+        if (n == 0) {
+            gb_alert("Copy failed", "too large or unreadable");
+            relist();
+            return;
+        }
         gb_set_name(gb_dragname);
-        gb_fs_save(gb_copybuf, n);        /* lands in the root */
-        gb_copy_end();                    /* restore this window's drive/dir */
+        ok = gb_fs_save(gb_copybuf, n);
+        if (!ok) gb_alert("Copy failed", "disk full or read-only");
         relist();
         return;
     }

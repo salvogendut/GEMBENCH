@@ -388,11 +388,11 @@ unsigned char gb_get_drive(void);
  *   gb_copy_begin();                          // switch to the drag source
  *   gb_set_name(gb_dragname);
  *   n = gb_fs_load(gb_copybuf, GB_COPYMAX);
- *   gb_set_drive(my_drive);                    // back to this window's drive
- *   gb_set_name(gb_dragname);
- *   gb_fs_save(gb_copybuf, n);                 // lands in the root
  *   gb_copy_end();                             // restore this window's drive/dir
- * gb_copybuf is the kernel's FAT staging area (low RAM), so no app buffer is needed. */
+ *   gb_set_name(gb_dragname);
+ *   gb_fs_save(gb_copybuf, n);
+ * gb_copybuf is the kernel's FAT staging area (low RAM), so no app buffer is needed.
+ * Current save backends stage at most GB_COPYMAX bytes, so larger drops fail cleanly. */
 void gb_copy_begin(void);
 void gb_copy_end(void);
 #define gb_copybuf ((char *)0x2200)
