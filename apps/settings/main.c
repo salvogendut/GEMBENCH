@@ -655,7 +655,8 @@ static void live_apply(unsigned char r, const char *name, unsigned char drive)
         *(unsigned char *)BD_SOLID_ADDR =
             (unsigned char)(name[0]=='S' && name[1]=='O' && name[2]=='L' &&
                             name[3]=='I' && name[4]=='D' && name[5]==0);
-        *(unsigned char *)0x123C = (*(unsigned char *)BD_SOLID_ADDR) ? DRIVE_NONE : drive; /* KCFG_BDDRIVE */
+        *(unsigned char *)0x123C =
+            (*(unsigned char *)BD_SOLID_ADDR || drive == boot_drive()) ? DRIVE_NONE : drive; /* KCFG_BDDRIVE */
     }
     {
         char *dst = (char *)rows[r].tfr;
