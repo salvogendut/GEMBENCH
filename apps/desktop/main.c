@@ -185,6 +185,17 @@ static void copy11(char *dst, const char *src)
     for (i = 0; i < 11; i++) dst[i] = src[i];
 }
 
+static unsigned char wp_changed(void)
+{
+    char nm[11];
+    unsigned char drv = boot_drive();
+    unsigned char valid = wp_cfg_name(nm);
+    if (!valid) return wp_cfg_valid;
+    if (!wp_cfg_valid) return 1;
+    if (drv != wp_cfg_drive) return 1;
+    return (unsigned char)!same11(wp_name, nm);
+}
+
 /* enter_sys: descend into the /GBENCH system folder if present (the card holds the
    assets there), so gb_pic_open finds the wallpaper. Returns 1 if we descended (pair
    with gb_back). A flat floppy (no GBENCH dir) returns 0 -> load from the root as-is.
@@ -340,8 +351,6 @@ static void paint(void)
     unsigned char i;
     ss_cfg_init();                             /* #219: re-read SAVER=/SAVERTIME= - a Settings change
                                                   applies live (this fires when Settings closes) */
-    wp_init();                                /* #212: re-read WALLPAPER= so a Settings change applies
-                                                 when the desktop repaints after the window closes. */
     wp_backdrop(0, 8, 80, 192);                /* backdrop: wallpaper if loaded, else tile/solid (#128) */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
@@ -633,6 +642,17 @@ static void on_frame(void)
         menu_refresh = 0;
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
         gb_menu_add("System", sys_items, 6, sys_action);
+    }
+    if (wp_changed()) {                          /* WALLPAPER= changed while another window was up:
+                                                    reload it here, outside wm_repaint_all, then
+                                                    repaint once with the new desktop image. */
+        wp_init();
+        gb_curhide();
+        gb_wm_damage(0, 0, 80, 200);
+        paint();
+        bar_init = 0;
+        gb_curshow();
+        return;
     }
     if (dc_timer) dc_timer--;
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
