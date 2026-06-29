@@ -188,11 +188,10 @@ static void copy11(char *dst, const char *src)
 static unsigned char wp_changed(void)
 {
     char nm[11];
-    unsigned char drv = boot_drive();
     unsigned char valid = wp_cfg_name(nm);
     if (!valid) return wp_cfg_valid;
     if (!wp_cfg_valid) return 1;
-    if (drv != wp_cfg_drive) return 1;
+    if (wp_drive != wp_cfg_drive) return 1;
     return (unsigned char)!same11(wp_name, nm);
 }
 
