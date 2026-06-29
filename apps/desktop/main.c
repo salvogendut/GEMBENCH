@@ -53,6 +53,7 @@ static unsigned char desk_active;                  /* set by on_frame -> the des
 static unsigned char dc_timer, dc_idx, held_prev;
 static unsigned char show_ram;               /* System menu footprint toggle (#74) */
 static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
+static unsigned char menu_refresh;           /* refocus after a child window closes -> rebuild System */
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 
@@ -403,6 +404,8 @@ static void bar_draw(void)
         gb_wm_damage(0, 0, 80, 200);
         select_icon(NONE);
     }
+    if (!desk_active)
+        menu_refresh = 1;                     /* another window had focus this frame */
     desk_active = 0;                            /* consume the flag; on_frame re-sets it if focused */
 
     /* Screensaver idle trigger (#219): any pointer move / click / fire / ESC counts as
@@ -585,8 +588,11 @@ static void on_frame(void)
     unsigned char flags = gb_flags(), mx = gb_mx(), my = gb_my(), held, icon;
 
     desk_active = 1;                              /* the desktop is focused this frame (#153) */
-    if (!menu_inited) {                          /* 1st frame: the window is now registered+focused */
+    if (!menu_inited || menu_refresh) {          /* 1st frame OR refocus after a child window closed:
+                                                    rebuild the desktop menu state so stale focus/menu
+                                                    pointers cannot leave System unclickable. */
         menu_inited = 1;
+        menu_refresh = 0;
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
         gb_menu_add("System", sys_items, 6, sys_action);
     }
