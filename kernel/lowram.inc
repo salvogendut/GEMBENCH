@@ -111,7 +111,9 @@ MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the
 ; gtd_scratch #1450 (49B), cb_tdir #1481 (4B), launch_arg #1485 (11B) live here so they
 ; cost 0 resident image bytes. Do not reuse this range for other low-RAM data.
 ; #196: extended #1490..#14BB for the bootsplash reclaim (more write-before-read scratch
-; moved out of the resident image): fslf_blocks #1490 (16B), pm_newx #14A0 (2B), poll_byte
+; moved out of the resident image): fslf_blocks #1490 (16B). GBNET reuses the same
+; #1490..#149F transfer selector block, with #149C..#149F holding the M4 socket/state
+; across module reloads (#261). pm_newx #14A0 (2B), poll_byte
 ; #14A2, poll_line #14A3, then screen.asm fill/blit/save scratch #14A4..#14BB (bm_*, bl_*,
 ; fb_rows/cy, fbw_*, sb_rows/cy/ptr, fb_x/y/w/h), and text.asm renderer scratch
 ; #14BC..#14CC (br_*, dc_*). gf_* uses #14CD..#14D1; fs dispatch/request

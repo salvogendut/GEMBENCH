@@ -28,7 +28,7 @@ base          0x1350  0x144B  wm_state                -             WM table, z-
 base          0x1450  0x1480  text_copy_scratch       scratch_1450  gb_text string copy
 base          0x1481  0x1484  copy_dir_scratch        scratch_1450  cross-drive copy saved directory
 base          0x1485  0x148F  launch_arg              -             pending 11-byte app launch argument
-base          0x1490  0x149F  call_transfer_scratch   call_1490     fs read scratch / GBNET transfer selector block
+base          0x1490  0x149F  call_transfer_scratch   call_1490     fs read scratch / GBNET transfer selector block; M4 socket/state/rx cache at 0x149C..0x149F
 base          0x14A0  0x14D1  draw_input_scratch      scratch_14a0  pointer, screen, text, and frame scratch cells
 base          0x14D2  0x14FE  fs_request_state        -             FS dispatch vectors, current entry, request/load/save args
 base          0x1500  0x16FF  cursor_sprite           -             loaded cursor sprite and sector-overread guard
