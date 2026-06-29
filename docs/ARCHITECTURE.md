@@ -152,7 +152,10 @@ the level of asset reload, storage, and window-manager primitives.
 - **Cooperative execution only.** No preemptive multitasking.
 - **Flat-ish content layout.** Nested subdirectories deeper than one level are
   not a supported storage workflow today; see [`File_Manager_Issue.md`](File_Manager_Issue.md).
-- **Legacy AMSDOS launching** is still a roadmap item, not a supported feature.
+- **Legacy AMSDOS software is not run.** GEOBENCH does not launch ordinary
+  `.BIN`/`.BAS` programs (they assume total machine ownership); the File Manager
+  shows an info note pointing the user to BASIC. This is a non-goal, not a
+  pending feature.
 
 ## Booting and distribution
 

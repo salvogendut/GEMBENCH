@@ -285,32 +285,20 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
 - A small set of **bundled applications** to prove the platform is real.
 - A documented **application API** (the `libgb` jump table) so third parties can
   write GEOBENCH apps — in C.
-- **Launching existing software.** Because GEOBENCH sits on top of AMSDOS/UniDOS
-  rather than replacing it, the desktop should be able to run the CPC's existing
-  catalogue — pick a `.BIN` binary or a BASIC `.BAS` program and launch it, the
-  same way you would `RUN"PROG"` from BASIC today.
 
 ## Running existing AMSDOS software
 
-A core part of the "layer on top of DOS, don't replace it" philosophy (planned):
+GEOBENCH does **not** run ordinary AMSDOS `.BIN` binaries or BASIC `.BAS`
+programs. Those expect to own the whole machine under BASIC/AMSDOS, so the
+desktop does not attempt to launch or contain them: double-clicking a `.BIN` or
+`.BAS` in the File Manager shows an info note telling you to run it from BASIC
+instead (`RUN"PROG"`). GEOBENCH only runs its own apps — the C `.APP` programs and
+`.SAV` screensavers above — which cooperate with the kernel window manager.
 
-- **AMSDOS binaries (`.BIN`)** — hand the file off to the firmware loader and
-  transfer control, just as typing `RUN"GAME.BIN"` would.
-- **BASIC programs (`.BAS`)** — launched via the BASIC ROM, equivalent to
-  `RUN"PROG"`.
-
-When launching, the user chooses how the program runs:
-
-- **Fullscreen** — the program takes over the whole machine. The safe,
-  always-works mode: most CPC software assumes it **owns the machine**, so
-  GEOBENCH steps aside, hands over, and the user returns to the desktop on exit.
-- **Windowed** — where feasible, run a well-behaved program's output inside a
-  desktop window. The harder, best-effort mode; the desktop falls back to
-  fullscreen when a program can't be safely contained.
-
-GEOBENCH-native apps (the C apps above) always cooperate and run inside the
-desktop — the windowed/fullscreen choice is specifically about coaxing *legacy*
-`.BIN`/`.BAS` software into the environment.
+This was an early aspiration ("layer on top of DOS, launch the existing
+catalogue"), but coaxing software that assumes total machine ownership into a
+cooperative desktop proved out of scope, so it is a non-goal rather than a
+roadmap item.
 
 ## Non-goals (for now)
 
@@ -394,7 +382,6 @@ Next:
 
 - **Paint** follow-ups — resizable canvas and scrolling for pictures bigger than the
   screen (Fullscreen already centers the canvas + tools).
-- **Launching legacy `.BIN`/`.BAS`** software (see above).
 - **Drawers/folders** and richer desktop arrangement.
 - **Per-screensaver configuration** — the savers currently use baked-in defaults
   (there is no per-module setup panel yet); Settings only picks the module + idle

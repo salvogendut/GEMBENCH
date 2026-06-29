@@ -24,7 +24,7 @@ layers never poke video, storage or input registers directly.
 | `fs_m4.asm` | _Archived_ — file-level FAT over the M4 board (#174). Frozen, not built. See `docs/ARCHIVED.md`. |
 | `fs_rom_seam.asm`, `fs_*_lowram.inc` | #152 ROM offload: the seam that pages `GEOBENCH.ROM` in + the fixed low-RAM addresses the resident stubs and the ROM share. |
 | `bank.asm` | Expansion-RAM paging (the `#4000–#7FFF` window). |
-| `config.asm` | `GEOBENCH.CFG` (key=value) parser. |
+| `config.asm` | _Orphaned_ — the old resident `GEOBENCH.CFG` (key=value) parser. Superseded by the paged `GBCFG.MOD` (`kernel/kc/kcfg.c`); kept in-tree only until nothing references it. |
 | `icon_*.asm` | Icon bitmaps, packed into the `.IST` icon set at build time. |
 
 ## libgb (`gb/`)
@@ -36,6 +36,10 @@ The shared **C bindings** every GEOBENCH app links against:
 | `gb/gb.h` | C prototypes for the kernel API. |
 | `gb/gblib.s` | Asm trampolines mapping SDCC's calling convention onto the jump table. |
 | `gb/crt0.s` | C startup for a banked app (entry at `#4000`, initializer copy). |
+| `gb/gbdoc.c` | The `gb_doc` document framework: registers an app's buffer + new/open/save hooks and drives the shared File/Edit/View menus. |
+| `gb/gbwin.c` | Window chrome helpers an app links in (drag/resize against the kernel WM). |
+| `gb/gbdlg.c`, `gb/gbpick.c`, `gb/gbprompt.c` | Dialog/menu/file-picker/prompt renderers — compiled into the paged `GBUI.MOD`, not into every app bank. |
+| `gb/gbui_stub.c`, `gb/gbnet_stub.c` | Thin app-side stubs that call the paged `GBUI.MOD` / `GBNET.MOD` through the kernel. |
 
 ## Design constraints
 
