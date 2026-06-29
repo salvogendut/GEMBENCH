@@ -56,6 +56,23 @@ cap32 and 1984 both accept a `.dsk` slot file. Two quick paths:
 1984 has its own invocation (see `../1984/INSTALL.md` / `1984.conf.example`);
 the build artifacts (`.bin` / `.dsk`) are the same.
 
+## Static Contract Checks
+
+The app ABI jump table is tracked in `kernel/api_table.inc` and exported to
+apps through `lib/gbapp.inc`. Low RAM below `#4000` is shared by the resident
+kernel, C apps, and paged modules; its fixed ownership map is tracked in
+`kernel/lowram.tsv`. Before moving ABI slots or adding absolute cells, run:
+
+```bash
+python3 tools/check_abi_table.py
+python3 tools/check_lowram_map.py
+```
+
+The default profile is the shipped no-ROM Albireo build and should stay clean.
+`--list-profiles` shows optional profiles. The archived IDE and optional ROM
+profiles currently expose real pressure around `#1250..#12D7`; keep those
+failures visible until the ranges are actually moved or retired.
+
 ## Icon and font sets (GEOBENCH.CFG)
 
 `GEOBENCH.CFG` selects a named set: `ICONS=<name>` loads `<name>.IST`, `FONT=<name>`

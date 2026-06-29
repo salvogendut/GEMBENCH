@@ -4,7 +4,8 @@
 ; Apps are separate binaries assembled at APP_BASE, loaded into an expansion
 ; bank and entered there. They reach kernel services by CALLing fixed addresses
 ; in the resident kernel region (GB_*), which stays mapped (#8000-#BFFF) while a
-; bank is paged. An app returns to the desktop by RET, or by CALL GB_QUIT.
+; bank is paged. Windowed apps register with the WM and return from their entry;
+; older modal apps return by RET. GB_QUIT is a reserved no-op stub.
 ;
 ; Memory model (see geobench-kernel-banking): the #4000-#7FFF window holds one
 ; 16K page at a time. We carve the first expansion bank (bank 0) into pages:
@@ -38,8 +39,8 @@ DATA_MODTOP     equ   #6000        ; ceiling of the icon region in PAGE_DATA: th
 GB_KERNEL       equ   #8000        ; resident kernel base (fixed, RUN entry)
 GB_INIT         equ   GB_KERNEL+0  ; #8000  kernel boot (kernel only)
 GB_CLS          equ   GB_KERNEL+3  ; #8003  clear screen / home cursor
-GB_PRINT        equ   GB_KERNEL+6  ; #8006  HL = 0-term string -> firmware text
-GB_QUIT         equ   GB_KERNEL+9  ; #8009  app -> return to the desktop
+GB_PRINT        equ   GB_KERNEL+6  ; #8006  reserved legacy print stub
+GB_QUIT         equ   GB_KERNEL+9  ; #8009  reserved legacy quit stub
 GB_TEXT         equ   GB_KERNEL+12 ; #800C  6x8 font text: B=col C=line D=pen
                                    ;        E=paper HL=string (in the caller's page)
 GB_WINDOW       equ   GB_KERNEL+15 ; #800F  draw a window: B=x C=y D=w E=h
@@ -47,8 +48,8 @@ GB_WINDOW       equ   GB_KERNEL+15 ; #800F  draw a window: B=x C=y D=w E=h
 GB_DIR1         equ   GB_KERNEL+18 ; #8012  first dir entry -> CF set, HL=name
                                    ;        (resident, "NAME.EXT", 0-term); NC=empty
 GB_DIRN         equ   GB_KERNEL+21 ; #8015  next dir entry  -> CF set, HL=name; NC=end
-GB_BLITE        equ   GB_KERNEL+24 ; #8018  blit the current entry's type icon
-                                   ;        (half height) at B=col C=line
+GB_BLITE        equ   GB_KERNEL+24 ; #8018  reserved legacy current-entry icon
+                                   ;        slot; currently a vsync-compatible stub
 GB_CURSHOW      equ   GB_KERNEL+27 ; #801B  draw the pointer (after drawing UI)
 GB_POLL         equ   GB_KERNEL+30 ; #801E  frame-paced input poll -> B=cursor
                                    ;        byte col, C=cursor line, D bit0=click
@@ -58,9 +59,7 @@ GB_FRAME        equ   GB_KERNEL+33 ; #8021  rectangle outline: B=x C=y D=w E=h
                                    ;        A=pen (0..3)
 GB_CURHIDE      equ   GB_KERNEL+36 ; #8024  lift the pointer (before drawing under
                                    ;        it; pair with GB_CURSHOW after)
-GB_LAUNCH       equ   GB_KERNEL+39 ; #8027  launch the app for the current entry
-                                   ;        (fs_ent_name) into a free app page, run it,
-                                   ;        return when it quits
+GB_LAUNCH       equ   GB_KERNEL+39 ; #8027  reserved legacy current-entry launch stub
 GB_GETARG       equ   GB_KERNEL+42 ; #802A  -> HL = launch arg (11-byte 8.3 name
                                    ;        of the file the app was opened with)
 GB_RUN          equ   GB_KERNEL+45 ; #802D  run a named app: HL = 8.3 app name;
@@ -70,9 +69,9 @@ GB_FILL         equ   GB_KERNEL+51 ; #8033  filled rect: B=x C=y D=w E=h A=pen
 GB_SAVERECT     equ   GB_KERNEL+54 ; #8036  save a screen rect to a buffer:
                                    ;        B=x C=y D=w E=h HL=buf (w*h bytes)
 GB_RESTORERECT  equ   GB_KERNEL+57 ; #8039  restore a screen rect from a buffer
-GB_XORFRAME     equ   GB_KERNEL+60 ; #803C  XOR a 1px rect outline into the screen
-                                   ;        (rubber-band): B=x C=y D=w E=h. Draw
-                                   ;        once to show, again to erase exactly.
+GB_PICOPEN      equ   GB_KERNEL+60 ; #803C  load opened .PIC into borrowed app bank.
+                                   ;        A=bank/page on success, A=0 fallback.
+                                   ;        This reuses the old GB_XORFRAME slot.
 GB_FSLOAD       equ   GB_KERNEL+63 ; #803F  load the file this app was opened with
                                    ;        (the launch arg) into a buffer: HL=dst
                                    ;        (caller's page), DE=max bytes. -> BC =
@@ -105,15 +104,13 @@ GB_MENU         equ   GB_KERNEL+78 ; #804E  register the top-bar menu: HL = blob
 GB_SETNAME      equ   GB_KERNEL+81 ; #8051  set the current file name (launch arg):
                                    ;        HL = 11-byte 8.3 name. For New / Save As /
                                    ;        opening a picked file.
-GB_ONREPAINT    equ   GB_KERNEL+84 ; #8054  register a full-repaint handler (#43):
-                                   ;        HL = void(void) in the app page, stored
-                                   ;        at this app's nesting slot. A child calls
-                                   ;        GB_RESTPAR to repaint it behind a window.
+GB_PICBLIT      equ   GB_KERNEL+84 ; #8054  blit from the borrowed picture bank:
+                                   ;        B=x C=y D=wbytes E=h HL=source offset.
+                                   ;        This reuses the old GB_ONREPAINT slot.
 GB_RESTPAR      equ   GB_KERNEL+87 ; #8057  repaint every ancestor app bottom-up
-                                   ;        (maps each page, calls its GB_ONREPAINT
-                                   ;        handler) so a moved/closed window's area
-                                   ;        shows what was under it. Restores the
-                                   ;        caller's page; caller redraws on top.
+                                   ;        so a moved/closed window's area shows
+                                   ;        what was under it. Restores the caller's
+                                   ;        page; caller redraws on top.
 GB_WMRUN        equ   GB_KERNEL+90 ; #805A  window-manager master loop (#45): HL = a
                                    ;        descriptor { u8 x,y,w,h; on_frame(2);
                                    ;        on_repaint(2) } in the app page. Registers
@@ -123,3 +120,46 @@ GB_WMRUN        equ   GB_KERNEL+90 ; #805A  window-manager master loop (#45): HL
                                    ;        on_frame reads gb_flags/gb_mx/gb_my; the
                                    ;        poll result is published at POLL_MX #1306
                                    ;        / POLL_MY #1307 / POLL_FLAGS #1308.
+GB_WMADD        equ   GB_KERNEL+93 ; #805D  register a co-resident window: HL =
+                                   ;        descriptor in the caller page; returns
+                                   ;        to the opener after registration.
+GB_WMOPEN       equ   GB_KERNEL+96 ; #8060  open an app as a co-resident window:
+                                   ;        HL = 8.3 app name in caller page.
+GB_WMCLOSE      equ   GB_KERNEL+99 ; #8063  close/free the focused calling window.
+GB_WMSETPOS     equ   GB_KERNEL+102 ; #8066  move focused window hit rect:
+                                    ;         A=x, L=y.
+GB_PICCLOSE     equ   GB_KERNEL+105 ; #8069  release borrowed picture bank.
+                                    ;         This reuses the old GB_WMLAUNCH slot.
+GB_ISDIR        equ   GB_KERNEL+108 ; #806C  A=1 if current dir entry is a folder.
+GB_CHDIR        equ   GB_KERNEL+111 ; #806F  descend into current dir entry.
+GB_BACK         equ   GB_KERNEL+114 ; #8072  go to parent directory.
+GB_ENTNAME      equ   GB_KERNEL+117 ; #8075  HL = current raw 11-byte 8.3 name.
+GB_DRAGSTART    equ   GB_KERNEL+120 ; #8078  HL=name11; drag item until release,
+                                    ;         A=1 if dropped on another window.
+GB_FSDELETE     equ   GB_KERNEL+123 ; #807B  HL=name11; CF set if deleted.
+GB_DRIVES       equ   GB_KERNEL+126 ; #807E  A = available-drive bitmask.
+GB_SETDRIVE     equ   GB_KERNEL+129 ; #8081  A = active drive.
+GB_GETDRIVE     equ   GB_KERNEL+132 ; #8084  A = active drive.
+GB_COPYBEGIN    equ   GB_KERNEL+135 ; #8087  switch to drag source drive/context.
+GB_WMLAUNCHAS   equ   GB_KERNEL+138 ; #808A  HL = app 8.3 name; launch it with
+                                    ;         current dir entry as file arg.
+GB_TIME         equ   GB_KERNEL+141 ; #808D  refresh GB_TIME_BUF (#1240).
+GB_EXIT         equ   GB_KERNEL+144 ; #8090  leave GEOBENCH and return to AMSDOS.
+GB_COPYEND      equ   GB_KERNEL+147 ; #8093  restore target drive/context.
+GB_ONBAR        equ   GB_KERNEL+150 ; #8096  HL = desktop top-bar draw handler.
+GB_WMSETSIZE    equ   GB_KERNEL+153 ; #8099  resize focused window hit rect:
+                                    ;         A=w, L=h.
+GB_BLITEFULL    equ   GB_KERNEL+156 ; #809C  reserved legacy full-icon slot;
+                                    ;         currently a vsync-compatible stub.
+GB_ICONHALF     equ   GB_KERNEL+159 ; #809F  half-height icon blit:
+                                    ;         A=slot B=x C=y.
+GB_MXP          equ   GB_KERNEL+162 ; #80A2  HL = pointer pixel x (0..319).
+GB_CLIPSET      equ   GB_KERNEL+165 ; #80A5  HL=src, DE=len; copy to clipboard.
+GB_CLIPGET      equ   GB_KERNEL+168 ; #80A8  HL=dst, DE=max; BC=copied bytes.
+GB_CLIPLEN      equ   GB_KERNEL+171 ; #80AB  BC = clipboard length.
+GB_UI           equ   GB_KERNEL+174 ; #80AE  run paged dialog module; BC=UI_RES.
+GB_WMMANAGED    equ   GB_KERNEL+177 ; #80B1  register kernel-managed window.
+GB_WMDAMAGE     equ   GB_KERNEL+180 ; #80B4  set repaint damage rect.
+GB_BACKDROP     equ   GB_KERNEL+183 ; #80B7  fill rect with desktop backdrop.
+GB_RELOAD       equ   GB_KERNEL+186 ; #80BA  reload font/icons/cursor/backdrop.
+GB_NET          equ   GB_KERNEL+189 ; #80BD  run paged W5100 module; BC=GBNET_RES.

@@ -8,10 +8,10 @@
 ; primitives (lib/fs_amsdos_core.asm) with the resident reader - one source, two
 ; assemblies - and is self-contained otherwise: own state + the shared fixed-address
 ; low-RAM buffers, reading its inputs from the transfer area the resident stub fills:
-;   FSV_TX_LEN  (#1400, word)   bytes to write
-;   FSV_TX_NAME (#1402, 11)     8.3 name
-;   FSV_TX_RES  (#140D, byte)   result: 1 = saved, 0 = failed
-;   FSV_TX_UNIT (#140F, byte)   floppy unit (0 = A, 1 = B)
+;   FSV_TX_LEN  (#1700, word)   bytes to write
+;   FSV_TX_NAME (#1702, 11)     8.3 name
+;   FSV_TX_RES  (#170D, byte)   result: 1 = saved, 0 = failed
+;   FSV_TX_UNIT (#170F, byte)   floppy unit (0 = A, 1 = B)
 ;   FSV_TX_DATA (#2200, <=7KB)  the data, copied out of the app's page by the stub
 ;
 ; Build: tools/build_floppymod.sh -> build/FLOPPYSV.RAW, packaged as FLOPPYSV.BIN.
@@ -21,10 +21,10 @@ FLOPPYSV_ORG    equ   #6000        ; = DATA_MODTOP (must match lib/gbapp.inc)
 fsam_buf        equ   #1A00        ; shared floppy directory buffer (resident agrees)
 fs_secbuf       equ   #1800        ; shared low-RAM sector buffer
 fsam_wbuf       equ   fs_secbuf    ; the 512-byte sector being assembled
-FSV_TX_LEN      equ   #1400
-FSV_TX_NAME     equ   #1402
-FSV_TX_RES      equ   #140D
-FSV_TX_UNIT     equ   #140F
+FSV_TX_LEN      equ   #1700
+FSV_TX_NAME     equ   #1702
+FSV_TX_RES      equ   #170D
+FSV_TX_UNIT     equ   #170F
 FSV_TX_DATA     equ   #2200
 fs_req_name     equ   FSV_TX_NAME  ; the name to find/create (core's namematch uses it)
 

@@ -9,9 +9,9 @@
 ; sector buffer (fs_secbuf), reading its inputs from the transfer area the
 ; resident stub fills (reachable while this code is paged into #4000-#7FFF):
 ;
-;   GBFAT_LEN  (#1400, word)   bytes to write
-;   GBFAT_NAME (#1402, 11)     8.3 name
-;   GBFAT_RES  (#140D, byte)   result: 1 = saved, 0 = failed
+;   GBFAT_LEN  (#1700, word)   bytes to write
+;   GBFAT_NAME (#1702, 11)     8.3 name
+;   GBFAT_RES  (#170D, byte)   result: 1 = saved, 0 = failed
 ;   GBFAT_DATA (#2200, <=7KB)  the data, copied out of the app's page by the stub
 ;
 ; Build: tools/build_fatmod.sh -> build/GBFAT.RAW, packaged on the disk as
@@ -20,11 +20,11 @@
 
 GBFAT_ORG       equ   #6000        ; in PAGE_DATA, above the font+icon set (#88: the
                                    ; 15-icon set reached #534C and collided with #5000)
-GBFAT_LEN       equ   #1400
-GBFAT_NAME      equ   #1402
-GBFAT_RES       equ   #140D
-GBFAT_OP        equ   #140E        ; operation: 0 = save, 1 = delete (#62)
-GBFAT_DIR       equ   #140F        ; directory cluster (4 bytes) to operate in
+GBFAT_LEN       equ   #1700
+GBFAT_NAME      equ   #1702
+GBFAT_RES       equ   #170D
+GBFAT_OP        equ   #170E        ; operation: 0 = save, 1 = delete (#62)
+GBFAT_DIR       equ   #170F        ; directory cluster (4 bytes) to operate in
 GBFAT_DATA      equ   #2200
 
 FS_IDE_SCNT     equ   #FD0A

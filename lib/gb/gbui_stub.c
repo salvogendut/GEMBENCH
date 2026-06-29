@@ -12,10 +12,18 @@
 #define UI_COL   (*(volatile unsigned char *)0x1701)
 #define UI_LINE  (*(volatile unsigned char *)0x1702)
 #define UI_N     (*(volatile unsigned char *)0x1703)
+#define UI_MODAL (*(volatile unsigned char *)0x1705)
 #define UI_NAME  ((char *)0x1708)            /* OUT: pickfile/prompt result */
 #define UI_TEXT  ((char *)0x1718)            /* IN: packed labels / caption / exts */
 
 extern unsigned char gb_ui(void);            /* GB_UI trampoline -> UI_RES */
+
+static unsigned char run_ui(void)
+{
+    unsigned char r = gb_ui();
+    UI_MODAL = 0;                            /* defensive: a stale modal latch kills top-bar clicks */
+    return r;
+}
 
 /* pack_exts: a NULL-terminated 3-char-ext list -> UI_TEXT as "EXT\0EXT\0\0" (double-NUL
    ends it); NULL -> just the terminator (show all). */
@@ -35,7 +43,7 @@ unsigned char gb_popup(unsigned char col, unsigned char line,
     unsigned char i;
     UI_OP = 1; UI_COL = col; UI_LINE = line; UI_N = n;
     for (i = 0; i < n; i++) { s = labels[i]; while (*s) *p++ = *s++; *p++ = 0; }
-    return gb_ui();
+    return run_ui();
 }
 
 /* gb_alert: a click-to-dismiss notice. Reuses gb_popup (already paged in the module)
@@ -55,7 +63,7 @@ unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen)
     UI_OP = 2; UI_N = maxlen;
     while (*s) *p++ = *s++;
     *p = 0;
-    if (!gb_ui()) return 0;
+    if (!run_ui()) return 0;
     for (i = 0; i < maxlen && i < 16; i++) buf[i] = UI_NAME[i];
     return 1;
 }
@@ -65,7 +73,7 @@ unsigned char gb_pickfile(char *name11, const char *const *exts)
     unsigned char i;
     UI_OP = 3;
     pack_exts(exts);
-    if (!gb_ui()) return 0;
+    if (!run_ui()) return 0;
     for (i = 0; i < 11; i++) name11[i] = UI_NAME[i];
     return 1;
 }
@@ -74,7 +82,7 @@ unsigned char gb_pickdir(const char *const *exts)
 {
     UI_OP = 4;
     pack_exts(exts);
-    return gb_ui();
+    return run_ui();
 }
 
 /* Modality is now the kernel's UI_MODAL (raised only while a dialog module runs). The

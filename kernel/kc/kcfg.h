@@ -9,6 +9,7 @@
 
 /* Filename-stem cap for a parsed value (8.3 -> 8 chars), matching the asm. */
 #define GB_CFG_VAL_MAX 8
+#define GB_CFG_DRIVE_NONE 0xFF
 
 /* gb_cfg_parse: walk `len` bytes of KEY=VALUE text at `buf`. For each known key
  * found at the start of a line, copy its value (up to GB_CFG_VAL_MAX chars,
@@ -18,7 +19,9 @@
  *   icons_out  <- ICONS=   (>= GB_CFG_VAL_MAX+1 bytes)
  *   font_out   <- FONT=    (>= GB_CFG_VAL_MAX+1 bytes)
  *   cursor_out   <- CURSOR=   (>= GB_CFG_VAL_MAX+1 bytes)
- *   backdrop_out <- BACKDROP= (>= GB_CFG_VAL_MAX+1 bytes; the .BDP tile stem)
+ *   backdrop_out <- BACKDROP= (>= GB_CFG_VAL_MAX+1 bytes; the .BDP tile stem,
+ *                             accepting optional D: and .BDP)
+ *   backdrop_drive_out <- BACKDROP= drive (0=C, 1=A, 2=B, GB_CFG_DRIVE_NONE=boot/system)
  *   inks_out     <- INKS=     (5 bytes: the 4 Mode-1 pens + the border, CPC hardware
  *                             inks 0-26, comma-separated "d,l,k,a,b"; a missing field
  *                             keeps the seeded default for that pen)
@@ -27,7 +30,8 @@
  */
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out, char *cursor_out,
-                  char *backdrop_out, unsigned char *inks_out);
+                  char *backdrop_out, unsigned char *backdrop_drive_out,
+                  unsigned char *inks_out);
 
 /* gb_make_83: write an 11-byte AMSDOS 8.3 name into dst (8 chars space-padded +
  * the 3-char extension) from a NUL-terminated stem (<=8 chars used) and ext.

@@ -350,6 +350,8 @@ _gb_fs_load:
 ;; unsigned char gb_fs_save(char *buf, unsigned int len);   buf=HL, len=DE -> 1/0
 _gb_fs_save:
         call    0x8042          ; GB_FSSAVE -> CF = saved
+        xor     a               ; floppy saves reuse the GBUI transfer block at #1700
+        ld      (0x1705), a     ; and can leave UI_MODAL nonzero -> top-bar clicks die
         ld      a, #0
         ret     nc
         inc     a

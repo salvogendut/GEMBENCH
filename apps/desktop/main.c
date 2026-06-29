@@ -24,6 +24,7 @@
 #define DCLICK  75            /* double-click window, frames (gamepad-friendly, #153) */
 #define NONE    0xFF
 #define DRAGTH  2             /* press must move this far before it lifts (#153) */
+#define WM_OPEN_STRICT (*(volatile unsigned char *)0x123D)
 
 /* The desktop icons: drives (C = IDE, A/B = floppies) + Clock + Trash (#65). The
    drive icons appear only when that drive is present (gb_drives poll); Clock and
@@ -52,6 +53,7 @@ static unsigned char desk_active;                  /* set by on_frame -> the des
 static unsigned char dc_timer, dc_idx, held_prev;
 static unsigned char show_ram;               /* System menu footprint toggle (#74) */
 static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
+static unsigned char menu_refresh;           /* refocus after a child window closes -> rebuild System */
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 
@@ -99,6 +101,10 @@ static unsigned char wp_bank;                 /* borrowed bank (0 = none) */
 static unsigned char wp_wb, wp_h, wp_x, wp_y; /* picture dims + centred top-left */
 static unsigned char wp_srcy;                 /* first picture row shown (centre a too-tall pic) */
 static unsigned int  wp_off;
+static unsigned char wp_drive;
+static unsigned char wp_cfg_drive;
+static unsigned char wp_cfg_valid;            /* last parsed WALLPAPER= was a usable PIC path */
+static char wp_name[11];                      /* last parsed 8.3 wallpaper name */
 
 /* The kernel keeps the raw GEOBENCH.CFG it loaded at boot here (for GB_RELOAD). We parse
    WALLPAPER= straight out of it - NOT via a fixed transfer cell: every free low-RAM cell
@@ -108,20 +114,46 @@ static unsigned int  wp_off;
 #define KCFG_TEXT ((const char *)0x1000)
 #define KCFG_LEN  (*(volatile unsigned int *)0x1200)
 
-/* wp_cfg_name: find WALLPAPER=<stem> at a line start in the config text and build the 11-byte
-   8.3 "STEM    PIC" into out. Returns 1 for a usable name; 0 if the key is absent or NONE. */
+static unsigned char boot_drive(void)
+{
+    return (gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A;
+}
+
+static unsigned char drive_present(unsigned char d)
+{
+    unsigned char m = gb_drives();
+    if (d == GB_DRIVE_A) return (unsigned char)((m & GB_DRV_A) != 0);
+    if (d == GB_DRIVE_B) return (unsigned char)((m & GB_DRV_B) != 0);
+    return (unsigned char)((m & GB_DRV_C) != 0);
+}
+
+static unsigned char parse_drive(const char *t, unsigned int len, unsigned int *p)
+{
+    if (*p + 1 < len && t[*p + 1] == ':') {
+        if (t[*p] == 'A') { *p += 2; return GB_DRIVE_A; }
+        if (t[*p] == 'B') { *p += 2; return GB_DRIVE_B; }
+        if (t[*p] == 'C') { *p += 2; return GB_DRIVE_C; }
+    }
+    return boot_drive();
+}
+
+/* wp_cfg_name: find WALLPAPER=[D:]<stem>[.PIC] at a line start in the config text
+   and build the 11-byte 8.3 "STEM    PIC" into out. Returns 1 for a usable name;
+   0 if the key is absent or NONE. */
 static unsigned char wp_cfg_name(char *out)
 {
     const char *t = KCFG_TEXT;
     unsigned int len = KCFG_LEN, i, p;
-    unsigned char k, j;
+    unsigned char j;
     for (i = 0; i + 10 <= len; i++) {
         if (i && t[i-1] != '\r' && t[i-1] != '\n') continue;   /* line start only */
         if (t[i]!='W'||t[i+1]!='A'||t[i+2]!='L'||t[i+3]!='L'||t[i+4]!='P'||
             t[i+5]!='A'||t[i+6]!='P'||t[i+7]!='E'||t[i+8]!='R'||t[i+9]!='=') continue;
         p = i + 10;
+        wp_drive = parse_drive(t, len, &p);
         for (j = 0; j < 8; j++) out[j] = ' ';
-        for (j = 0; j < 8 && p < len && t[p] != '\r' && t[p] != '\n'; j++, p++) out[j] = t[p];
+        for (j = 0; j < 8 && p < len && t[p] != '\r' && t[p] != '\n' && t[p] != '.'; j++, p++)
+            out[j] = t[p];
         out[8] = 'P'; out[9] = 'I'; out[10] = 'C';
         if (out[0] == ' ' ||                                    /* empty value */
             (out[0]=='N' && out[1]=='O' && out[2]=='N' && out[3]=='E' && out[4]==' '))
@@ -129,6 +161,38 @@ static unsigned char wp_cfg_name(char *out)
         return 1;
     }
     return 0;                                                   /* absent */
+}
+
+static void wp_release(void)
+{
+    if (!wp_bank) return;
+    PIC_PAGE_K = wp_bank;
+    gb_pic_close();
+    wp_bank = 0;
+}
+
+static unsigned char same11(const char *a, const char *b)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++)
+        if (a[i] != b[i]) return 0;
+    return 1;
+}
+
+static void copy11(char *dst, const char *src)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++) dst[i] = src[i];
+}
+
+static unsigned char wp_changed(void)
+{
+    char nm[11];
+    unsigned char valid = wp_cfg_name(nm);
+    if (!valid) return wp_cfg_valid;
+    if (!wp_cfg_valid) return 1;
+    if (wp_drive != wp_cfg_drive) return 1;
+    return (unsigned char)!same11(wp_name, nm);
 }
 
 /* enter_sys: descend into the /GBENCH system folder if present (the card holds the
@@ -160,6 +224,7 @@ static unsigned char enter_sys(void)
  * frames there and launches the module when the timeout elapses - reaching every
  * window, not just the bare desktop. */
 static char ss_name[11];           /* the configured .SAV module, 8.3 ("CIRCLE  SAV") */
+static unsigned char ss_drive;     /* drive to load the configured saver from */
 static unsigned int  ss_timeout;   /* idle frames before the saver runs (0 = off) */
 static unsigned int  ss_idle;      /* frames with no input so far */
 static unsigned char ss_lmx, ss_lmy;  /* last pointer position (a change = activity) */
@@ -187,9 +252,13 @@ static void ss_cfg_init(void)
     const char *t = KCFG_TEXT;
     unsigned int len = KCFG_LEN, p, mins = 0;
     unsigned char j;
+    ss_drive = boot_drive();
     p = cfg_val("SAVER=", 6);                                  /* the .SAV module stem */
+    if (p < len)
+        ss_drive = parse_drive(t, len, &p);
     for (j = 0; j < 8; j++) ss_name[j] = ' ';
-    for (j = 0; j < 8 && p < len && t[p] != '\r' && t[p] != '\n'; j++, p++) ss_name[j] = t[p];
+    for (j = 0; j < 8 && p < len && t[p] != '\r' && t[p] != '\n' && t[p] != '.'; j++, p++)
+        ss_name[j] = t[p];
     if (ss_name[0] == ' ') {                                   /* absent/empty -> default CIRCLE */
         ss_name[0]='C'; ss_name[1]='I'; ss_name[2]='R';
         ss_name[3]='C'; ss_name[4]='L'; ss_name[5]='E';
@@ -205,15 +274,27 @@ static void ss_cfg_init(void)
 static void wp_init(void)
 {
     char nm[11];
-    unsigned char descended;
-    wp_bank = 0;
-    if (!wp_cfg_name(nm)) return;               /* WALLPAPER= absent or NONE */
-    /* pin to the boot drive (card else floppy A), where /GBENCH lives (mirrors Settings sel_boot) */
-    gb_set_drive((gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
+    unsigned char descended, old_drive;
+    wp_drive = boot_drive();
+    if (!wp_cfg_name(nm)) {                     /* WALLPAPER= absent or NONE */
+        wp_release();
+        wp_cfg_valid = 0;
+        return;
+    }
+    if (wp_cfg_valid && wp_cfg_drive == wp_drive && same11(wp_name, nm))
+        return;                                 /* config unchanged -> keep current bank */
+    wp_release();
+    copy11(wp_name, nm);
+    wp_cfg_drive = wp_drive;
+    wp_cfg_valid = 1;
+    if (!drive_present(wp_drive)) return;       /* bad qualified drive -> NONE fallback */
+    old_drive = gb_get_drive();
+    gb_set_drive(wp_drive);
     descended = enter_sys();                     /* card: into /GBENCH; floppy: stays at root */
     gb_set_name(nm);                             /* the focused (desktop) window's file arg */
     wp_bank = gb_pic_open();                   /* borrow a bank + parse the GBPC header */
     if (descended) gb_back();                    /* /GBENCH -> root (depth-1, safe) */
+    gb_set_drive(old_drive);
     if (wp_bank) {
         wp_wb = PIC_WB_K; wp_h = (unsigned char)PIC_H_K; wp_off = PIC_OFF_K;
         wp_x = (wp_wb < 80) ? (unsigned char)((80 - wp_wb) / 2) : 0;  /* width <= 80 always */
@@ -224,7 +305,24 @@ static void wp_init(void)
             wp_y = 8;
             wp_srcy = (unsigned char)((wp_h - 192) / 2);
         }
+    } else {
+        wp_wb = 0; wp_h = 0; wp_x = 0; wp_y = 0; wp_srcy = 0; wp_off = 0;
     }
+}
+
+static void open_saver(void)
+{
+    unsigned char old_drive = gb_get_drive();
+    unsigned char drv = ss_drive;
+    const char *name = ss_name;
+    if (!drive_present(drv)) {                  /* unavailable configured drive -> safe fallback */
+        drv = boot_drive();
+        name = "CIRCLE  SAV";
+    }
+    gb_set_drive(drv);
+    WM_OPEN_STRICT = 1;
+    gb_wm_open(name);
+    gb_set_drive(old_drive);
 }
 
 static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsigned char h)
@@ -352,6 +450,8 @@ static void bar_draw(void)
         gb_wm_damage(0, 0, 80, 200);
         select_icon(NONE);
     }
+    if (!desk_active)
+        menu_refresh = 1;                     /* another window had focus this frame */
     desk_active = 0;                            /* consume the flag; on_frame re-sets it if focused */
 
     /* Screensaver idle trigger (#219): any pointer move / click / fire / ESC counts as
@@ -365,7 +465,7 @@ static void bar_draw(void)
             ss_lmx = mx; ss_lmy = my; ss_idle = 0;
         } else if (++ss_idle >= ss_timeout && !gb_wm_full()) {
             ss_idle = 0;
-            gb_wm_open(ss_name);
+            open_saver();
         }
     }
 }
@@ -534,11 +634,29 @@ static void on_frame(void)
     unsigned char flags = gb_flags(), mx = gb_mx(), my = gb_my(), held, icon;
 
     desk_active = 1;                              /* the desktop is focused this frame (#153) */
-    if (!menu_inited) {                          /* 1st frame: the window is now registered+focused */
+    if (!menu_inited || menu_refresh) {          /* 1st frame OR refocus after a child window closed:
+                                                    rebuild the desktop menu state so stale focus/menu
+                                                    pointers cannot leave System unclickable. */
         menu_inited = 1;
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
         gb_menu_add("System", sys_items, 6, sys_action);
     }
+    if (menu_refresh && wp_changed()) {         /* WALLPAPER= changed while another window was up:
+                                                    reload it here, outside wm_repaint_all, then
+                                                    repaint once with the new desktop image. */
+        wp_init();
+        gb_doc(&deskdoc);                        /* keep the desktop menu definition fresh after the
+                                                    reload before we repaint the desktop. */
+        gb_menu_add("System", sys_items, 6, sys_action);
+        gb_curhide();
+        gb_wm_damage(0, 0, 80, 200);
+        paint();
+        bar_init = 0;
+        gb_curshow();
+        menu_refresh = 0;
+        return;
+    }
+    menu_refresh = 0;
     if (dc_timer) dc_timer--;
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
        Exit to DOS to leave); ESC only closes apps launched on top of it */
@@ -550,6 +668,7 @@ static void on_frame(void)
                                               clip, so widen it back or the next op stays clipped
                                               (#153: a dragged icon vanished on drop). */
         paint();
+        bar_init = 0;                       /* menu drawing dirties line 0; repaint the full bar */
         gb_curshow();
         if (want_settings) {                  /* System>Settings: now safe to open on top (#129) */
             want_settings = 0;
@@ -559,7 +678,7 @@ static void on_frame(void)
         if (want_saver) {                     /* System>Screensaver: launch the saver now (#219) */
             want_saver = 0;
             ss_idle = 0;                       /* a manual run resets the idle count */
-            if (!gb_wm_full()) gb_wm_open(ss_name);
+            if (!gb_wm_full()) open_saver();
         }
         return;
     }
@@ -621,6 +740,7 @@ void main(void)
 {
     *WM_FS = 0;                                 /* clear the fullscreen flag at boot (low RAM is
                                                    uninitialised; bar_draw reads it every frame) */
+    WM_OPEN_STRICT = 0;
     drive_poll();                               /* drives present at boot -> icons (#65) */
     wp_init();                                   /* #212: load the configured wallpaper */
     ss_cfg_init();                               /* #219: read the screensaver idle timeout */

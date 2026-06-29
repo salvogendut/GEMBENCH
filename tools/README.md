@@ -25,7 +25,12 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`stage_dist.sh <out>`** — stages the Albireo card distribution (the `RUN"GBALB`
   `GB.BAS` loader + `GBALB.BIN` + the `GEOBENCH/` payload) into a directory.
 - **`build_capp.sh <app_dir> <out.RAW>`** — builds a single C app against `libgb`,
-  for iterating on one app.
+  for iterating on one app. App/module helper scripts write `*.RAW.stamp` metadata
+  beside their outputs so a repeated full build can reuse unchanged binaries.
+- **`check_abi_table.py`** — verifies the `kernel/gbkern.asm` jump-table comments
+  match the exported `lib/gbapp.inc` slot addresses.
+- **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in
+  `kernel/lowram.tsv` for accidental range overlaps.
 - **`deploy_ide.sh`** — *(archived)* copy the staged distribution onto a real/emulated IDE
   image (for the frozen IDE backend).
 

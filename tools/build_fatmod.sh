@@ -8,5 +8,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 RASM="${RASM:-rasm}"
 mkdir -p build
+. tools/build_cache.sh
+
+OUT="build/GBFAT.RAW"
+deps=("$0" "tools/build_cache.sh" "kernel/modules/gbfat.asm" "lib/fs_fat32_core.asm")
+stamp="$OUT.stamp"
+cache_key=$(printf '%s\n' "build_fatmod.v1" "RASM=$RASM")
+if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
+    echo "Up to date $OUT ($(stat -c%s "$OUT") bytes)"
+    exit 0
+fi
+
 "$RASM" kernel/modules/gbfat.asm -eo
-echo "Built build/GBFAT.RAW ($(stat -c%s build/GBFAT.RAW) bytes)"
+gb_write_stamp "$stamp" "$cache_key"
+echo "Built $OUT ($(stat -c%s "$OUT") bytes)"

@@ -29,7 +29,7 @@ fsam_dir_first
                 call  fsam_motor_off
                 xor   a
                 ld    (fsam_idx),a
-                jp    fsam_scan
+                jr    fsam_scan
 
 ; fsam_dir_next: advance to the next valid entry.
 fsam_dir_next
@@ -169,6 +169,8 @@ fsp_have
 ; sectors are logical sectors L = B*2 and B*2+1; L -> track = L/9, physical
 ; sector = &C1 + (L mod 9).
 fsam_load_file
+                call  fsam_present                   ; missing target disk -> fail fast (NC),
+                ret   nc                            ; let the caller's fallback handle it
                 call  fsam_motor_on                  ; spin up + recalibrate
                 call  fsam_read_dir                  ; directory -> fsam_buf
 
@@ -391,10 +393,10 @@ fsam_ent_out    push  af
 ;   FSV_TX_LEN/NAME/RES/UNIT  the marshalling slots (reuse the gbfat area - the IDE
 ;                             write + floppy write are never live at once)
 ;   FSV_TX_DATA (<=7KB)       the staged source data
-FSV_TX_LEN      equ   #1400
-FSV_TX_NAME     equ   #1402
-FSV_TX_RES      equ   #140D
-FSV_TX_UNIT     equ   #140F
+FSV_TX_LEN      equ   #1700
+FSV_TX_NAME     equ   #1702
+FSV_TX_RES      equ   #170D
+FSV_TX_UNIT     equ   #170F
 FSV_TX_DATA     equ   #2200
 FSV_TX_MAX      equ   #1C00        ; 7 KB staging cap (matches the gbfat/IDE save cap)
 

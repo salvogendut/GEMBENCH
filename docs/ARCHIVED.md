@@ -13,10 +13,16 @@ longer builds or ships them.
   The root cause is an M4ROM interrupt/timing divergence the emulator cannot
   reproduce, so fixes can't be validated without a hardware round-trip every time.
   Several attempts (holding `di` across the long load) reboot the machine; the M4 has
-  a tight ~8365-byte resident ceiling that leaves no room to maneuver. Parked rather
-  than chased further.
+  a tight resident ceiling. Parked rather than chased further.
 - **IDE** — long since superseded by Albireo for real CPC cards (FAT16 mismatch, see
   `geobench-fat32-ide` memory); only kept as a dormant recovery/test backend.
+
+## Revisit note
+
+M4 is worth revisiting when real hardware testing is available again. As of the
+`kernel-architecture-cleanup` split work, the M4 variant still assembles within the
+resident stack-reserve limit; its blocker is the real-hardware load/timing behavior
+above, not immediate kernel size.
 
 ## What's frozen (still in-tree, unbuilt)
 

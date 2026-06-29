@@ -31,7 +31,15 @@ fi
 mkdir -p build
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 
-python3 tools/png2cpc.py assets/SPLASH.png build/SPLASH.BIN splash 96x144  # #196: bootsplash lollipop (raw Mode-1 24x144)
+BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
+if ! git diff --quiet --ignore-submodules -- 2>/dev/null \
+    || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+    BUILD_COMMIT="${BUILD_COMMIT}-dirty"
+fi
+echo "Build id: GB $BUILD_COMMIT"
+
+python3 tools/make_bootsplash.py assets/SPLASH.png build/SPLASH_BUILD.png "$BUILD_COMMIT"
+python3 tools/png2cpc.py build/SPLASH_BUILD.png build/SPLASH.BIN splash 96x184  # #196: bootsplash + build id
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).
@@ -73,13 +81,13 @@ for png in assets/backdrops/*.png; do
     [ -e "build/$name.BDP" ] || python3 tools/png2backdrop.py "$png" "build/$name.BDP"
 done
 DATA_LOC=0x6C00 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): windowed ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
-DATA_LOC=0x6600 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
+DATA_LOC=0x6900 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216) + saver trigger (#219).
 DATA_LOC=0x7240 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
                                    # the gb_doc-grown code + ".." entry; the ~3.1K listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
-DATA_LOC=0x5F00 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
+DATA_LOC=0x5F10 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
                                    # gb_doc (DOCRO=1 omits Save/Save As) so a full 10240-B buffer
                                    # (200x200 .PIC) fits. File>Load + View>Fullscreen (#142/#144)
 DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
@@ -94,7 +102,7 @@ DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: do
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
-DATA_LOC=0x6700 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
+DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
                                    # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
 tools/build_capp.sh apps/saver build/CIRCLE.RAW   # SAVER (#219): the test screensaver - a
@@ -194,4 +202,7 @@ rm -f build/gbkern.dsk
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 "$RASM" kernel/pack_apps2.asm -eo >/dev/null     # 3rd pass: VIEWER + FILEMGR -> .dsk (#142)
 "$RASM" kernel/pack_apps3.asm -eo >/dev/null     # 4th pass: backdrops/REFINED/pictures -> .dsk (#198)
+if [ -x "$IDSK" ]; then
+    "$IDSK" build/gbkern.dsk -i build/GB.BAS -t 0 >/dev/null 2>&1 || true
+fi
 echo "Built QA/CARD (Albireo card deploy) + QA/GEOBENCH.DSK (floppy); build/ = ${STORAGE:-albireo} variant"

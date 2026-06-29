@@ -19,6 +19,23 @@ MAKEBIN="$BIN/makebin"
 
 work="build/netmod"
 mkdir -p "$work"
+mkdir -p "$(dirname "$OUT")"
+. tools/build_cache.sh
+
+deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" \
+      "$KC/gbnet_mod.c" "$KC/w5100.c" "$KC/w5100.h" "$KC/net.c" "$KC/net.h" \
+      "$KC/gbnet_init.c" "$KC/netinit.h" "$KC/udp.c" "$KC/udp.h" \
+      "$KC/dns.c" "$KC/dns.h")
+stamp="$OUT.stamp"
+cache_key=$(printf '%s\n' \
+    "build_netmod.v1" \
+    "SDCC=$SDCC" \
+    "SDAS=$SDAS" \
+    "MAKEBIN=$MAKEBIN")
+if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
+    echo "Up to date $OUT ($(stat -c%s "$OUT") bytes)"
+    exit 0
+fi
 
 "$SDAS" -o "$work/crt0.rel" "$GB/crt0.s"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$KC" -c "$KC/gbnet_mod.c"  -o "$work/gbnet_mod.rel"
@@ -51,4 +68,5 @@ PY
 "$MAKEBIN" -p "$work/mod.ihx" "$work/mod.bin"
 # makebin emits a flat image from #0000; the module lives at #6000 -> strip the low 24K.
 tail -c +24577 "$work/mod.bin" > "$OUT"
+gb_write_stamp "$stamp" "$cache_key"
 echo "Built $OUT ($(stat -c%s "$OUT") bytes)"

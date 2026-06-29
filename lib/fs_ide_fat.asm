@@ -38,11 +38,11 @@ FS_IDE_DATA     equ   #FD08
 ; Paged FAT32 write module (kernel/modules/gbfat.asm). The resident stub marshals
 ; the save into this low-RAM transfer area (reachable while the module is paged
 ; into the #4000-#7FFF window), loads the module to GBFAT_LOAD, and CALLs it.
-GBFAT_LEN       equ   #1400        ; bytes to write (word)
-GBFAT_NAME      equ   #1402        ; 8.3 name (11 bytes)
-GBFAT_RES       equ   #140D        ; result: 1 = saved, 0 = failed
-GBFAT_OP        equ   #140E        ; operation: 0 = save, 1 = delete (#62)
-GBFAT_DIR       equ   #140F        ; directory cluster (4 bytes) to operate in
+GBFAT_LEN       equ   #1700        ; bytes to write (word)
+GBFAT_NAME      equ   #1702        ; 8.3 name (11 bytes)
+GBFAT_RES       equ   #170D        ; result: 1 = saved, 0 = failed
+GBFAT_OP        equ   #170E        ; operation: 0 = save, 1 = delete (#62)
+GBFAT_DIR       equ   #170F        ; directory cluster (4 bytes) to operate in
 GBFAT_DATA      equ   #2200        ; staged data (<= GBFAT_MAX bytes)
 GBFAT_MAX       equ   #1C00        ; 7 KB staging cap (fits #2200..#3DFF in low RAM)
 GBFAT_LOAD      equ   DATA_MODTOP  ; module load address, above the font+icon set in

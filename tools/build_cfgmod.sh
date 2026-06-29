@@ -20,6 +20,20 @@ MAKEBIN="$BIN/makebin"
 
 work="build/cfgmod"
 mkdir -p "$work"
+mkdir -p "$(dirname "$OUT")"
+. tools/build_cache.sh
+
+deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$KC/kcfg_mod.c" "$KC/kcfg.c" "$KC/kcfg.h")
+stamp="$OUT.stamp"
+cache_key=$(printf '%s\n' \
+    "build_cfgmod.v1" \
+    "SDCC=$SDCC" \
+    "SDAS=$SDAS" \
+    "MAKEBIN=$MAKEBIN")
+if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
+    echo "Up to date $OUT ($(stat -c%s "$OUT") bytes)"
+    exit 0
+fi
 
 "$SDAS" -o "$work/crt0.rel" "$GB/crt0.s"
 # --fomit-frame-pointer to match the app/kernel IX convention (the parser does
@@ -32,4 +46,5 @@ mkdir -p "$work"
 
 # makebin emits from #0000; the module lives at #4000 -> strip the low 16K.
 tail -c +16385 "$work/mod.bin" > "$OUT"
+gb_write_stamp "$stamp" "$cache_key"
 echo "Built $OUT ($(stat -c%s "$OUT") bytes)"
