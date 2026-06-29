@@ -21,6 +21,7 @@ loop and calls each focused window's handlers (issue #45).
 | xaos     | `XAOS.APP`     | fractal generator, exports `.PIC` |
 | clock    | `CLOCK.APP`    | analog clock widget |
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours / screensaver, persisted to `GEOBENCH.CFG` |
+| nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status for the active backend |
 
 ## Screensavers (`.SAV`)
 

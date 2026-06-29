@@ -42,6 +42,7 @@ for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS; do
     cp "build/$a.RAW" "$SYS/$a.APP"
 done
 cp build/TELNET.RAW  "$SYS/TELNET.APP"      # #238: windowed ANSI/VT terminal + telnet client
+cp build/NETTEST.RAW "$SYS/NETTEST.APP"     # #261: DNS/TCP/HTTP diagnostic for Albireo/Net4CPC and M4 backends
 cp build/CIRCLE.RAW "$SYS/CIRCLE.SAV"       # #219: the test screensaver (a .SAV, not a .APP)
 cp build/DECO.RAW   "$SYS/DECO.SAV"         # art-deco panels screensaver (ported from symsav-deco)
 cp build/XMATRIX.RAW "$SYS/XMATRIX.SAV"     # Matrix digital-rain screensaver (ported from symsav-xmatrix)

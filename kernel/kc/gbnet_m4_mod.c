@@ -13,6 +13,9 @@
 #define GBNET_IP   ((unsigned char *)0x1494)
 #define GBNET_PORT (*(volatile unsigned int  *)0x1498)
 #define GBNET_LEN  (*(volatile unsigned int  *)0x149A)
+#define GBNET_SOCK (*(volatile unsigned char *)0x149C)
+#define GBNET_STATE (*(volatile unsigned char *)0x149D)
+#define GBNET_RX   (*(volatile unsigned int  *)0x149E)
 #define GBNET_BUF  ((unsigned char *)0x2200)
 
 #define OP_INIT      1
@@ -46,9 +49,8 @@ volatile unsigned char m4_packet[256];
 volatile unsigned char m4_resp[256];
 volatile unsigned char m4_sock[16];
 volatile unsigned char m4_sock_slot;
-static unsigned char m4_socket;
 
-void m4_exec(void) __naked
+void m4_begin(void) __naked
 {
     __asm
         push    af
@@ -82,10 +84,6 @@ void m4_exec(void) __naked
         ld      bc,#0x0100
         ldir
 
-        ld      bc,#0xDF00
-        ld      a,#7
-        out     (c),a
-        ei
         pop     iy
         pop     ix
         pop     hl
@@ -96,21 +94,28 @@ void m4_exec(void) __naked
     __endasm;
 }
 
-void m4_copy_sock(void) __naked
+void m4_finish(void) __naked
+{
+    __asm
+        push    af
+        push    bc
+        ld      bc,#0xDF00
+        ld      a,#7
+        out     (c),a
+        pop     bc
+        pop     af
+        ei
+        ret
+    __endasm;
+}
+
+void m4_copy_sock_live(void) __naked
 {
     __asm
         push    af
         push    bc
         push    de
         push    hl
-        push    ix
-        push    iy
-        di
-        ld      bc,#0x7F85
-        out     (c),c
-        ld      bc,#0xDF00
-        ld      a,#6
-        out     (c),a
 
         ld      a,(_m4_sock_slot)
         add     a,a
@@ -123,12 +128,6 @@ void m4_copy_sock(void) __naked
         ld      bc,#16
         ldir
 
-        ld      bc,#0xDF00
-        ld      a,#7
-        out     (c),a
-        ei
-        pop     iy
-        pop     ix
         pop     hl
         pop     de
         pop     bc
@@ -147,19 +146,19 @@ static void pkt(unsigned int cmd, unsigned char size)
 static void copy_sock(unsigned char slot)
 {
     m4_sock_slot = slot;
-    m4_copy_sock();
+    m4_copy_sock_live();
+    GBNET_STATE = m4_sock[0];
+    GBNET_RX = (unsigned int)m4_sock[2] | ((unsigned int)m4_sock[3] << 8);
 }
 
 static unsigned char socket_alive(void)
 {
-    unsigned char s;
-    if (!m4_socket) return 0;
-    copy_sock(m4_socket);
-    s = m4_sock[0];
+    unsigned char s = GBNET_STATE;
+    if (!GBNET_SOCK) return 0;
     return (s != M4_STATUS_CLOSED && s < 240) ? 1 : 0;
 }
 
-static unsigned char wait_socket_ready(unsigned char slot, unsigned char busy_status)
+static unsigned char wait_socket_ready_live(unsigned char slot, unsigned char busy_status)
 {
     unsigned char outer = 20;
     do {
@@ -179,27 +178,31 @@ static unsigned char net_open_m4(void)
     m4_packet[3] = 0;
     m4_packet[4] = 0;
     m4_packet[5] = 6;            /* TCP */
-    m4_exec();
-    if (m4_resp[3] == 255) return 0;
-    m4_socket = m4_resp[3];
+    m4_begin();
+    if (m4_resp[3] == 255) { m4_finish(); return 0; }
+    GBNET_SOCK = m4_resp[3];
+    copy_sock(GBNET_SOCK);
+    m4_finish();
     return 1;
 }
 
 static unsigned char net_connect_m4(const unsigned char *ip, unsigned int port)
 {
     unsigned char s;
-    if (!m4_socket) return 0;
+    if (!GBNET_SOCK) return 0;
     pkt(M4C_NETCONNECT, 9);      /* cmd(2), socket, ip(4), port(2) */
-    m4_packet[3] = m4_socket;
+    m4_packet[3] = GBNET_SOCK;
     m4_packet[4] = ip[0];
     m4_packet[5] = ip[1];
     m4_packet[6] = ip[2];
     m4_packet[7] = ip[3];
     m4_packet[8] = (unsigned char)(port & 0xFF);
     m4_packet[9] = (unsigned char)(port >> 8);
-    m4_exec();
-    if (m4_resp[3] == 255) return 0;
-    s = wait_socket_ready(m4_socket, M4_STATUS_CONNECTING);
+    m4_sock_slot = GBNET_SOCK;
+    m4_begin();
+    if (m4_resp[3] == 255) { m4_finish(); return 0; }
+    s = wait_socket_ready_live(GBNET_SOCK, M4_STATUS_CONNECTING);
+    m4_finish();
     return (s == M4_STATUS_IDLE) ? 1 : 0;
 }
 
@@ -207,59 +210,63 @@ static unsigned char net_send_m4(const unsigned char *buf, unsigned int len)
 {
     unsigned int i;
     unsigned char s;
-    if (!m4_socket || len > M4_MAX_IO) return 0;
-    s = wait_socket_ready(m4_socket, M4_STATUS_SENDING);
-    if (s != M4_STATUS_IDLE) return 0;
+    if (!GBNET_SOCK || len > M4_MAX_IO) return 0;
     pkt(M4C_NETSEND, (unsigned char)(len + 5));  /* cmd, socket, len, data */
-    m4_packet[3] = m4_socket;
+    m4_packet[3] = GBNET_SOCK;
     m4_packet[4] = (unsigned char)(len & 0xFF);
     m4_packet[5] = (unsigned char)(len >> 8);
     for (i = 0; i < len; i++)
         m4_packet[6 + i] = buf[i];
-    m4_exec();
-    return (m4_resp[3] == 0) ? 1 : 0;
+    m4_sock_slot = GBNET_SOCK;
+    m4_begin();
+    s = wait_socket_ready_live(GBNET_SOCK, M4_STATUS_SENDING);
+    m4_finish();
+    return (m4_resp[3] == 0 && s == M4_STATUS_IDLE) ? 1 : 0;
 }
 
 static unsigned int net_recv_m4(unsigned char *buf, unsigned int maxlen)
 {
-    unsigned int avail, want, actual, i;
-    if (!m4_socket) return 0;
-    copy_sock(m4_socket);
-    if (m4_sock[0] == M4_STATUS_CLOSED || m4_sock[0] >= 240) return 0;
-    avail = (unsigned int)m4_sock[2] | ((unsigned int)m4_sock[3] << 8);
-    if (!avail) return 0;
+    unsigned int want, actual, i;
+    if (!GBNET_SOCK) return 0;
+    if (GBNET_STATE == M4_STATUS_CLOSED || GBNET_STATE >= 240) return 0;
     want = maxlen;
-    if (want > avail) want = avail;
     if (want > M4_MAX_IO) want = M4_MAX_IO;
     pkt(M4C_NETRECV, 5);        /* cmd(2), socket, wanted-size(2) */
-    m4_packet[3] = m4_socket;
+    m4_packet[3] = GBNET_SOCK;
     m4_packet[4] = (unsigned char)(want & 0xFF);
     m4_packet[5] = (unsigned char)(want >> 8);
-    m4_exec();
-    if (m4_resp[3] != 0) return 0;
+    m4_sock_slot = GBNET_SOCK;
+    m4_begin();
+    copy_sock(GBNET_SOCK);
+    if (m4_resp[3] != 0) { m4_finish(); return 0; }
     actual = (unsigned int)m4_resp[4] | ((unsigned int)m4_resp[5] << 8);
     if (actual > maxlen) actual = maxlen;
     if (actual > M4_MAX_IO) actual = M4_MAX_IO;
     for (i = 0; i < actual; i++)
         buf[i] = m4_resp[6 + i];
+    m4_finish();
     return actual;
 }
 
 static void net_close_m4(void)
 {
-    if (!m4_socket) return;
+    if (!GBNET_SOCK) return;
     pkt(M4C_NETCLOSE, 3);
-    m4_packet[3] = m4_socket;
-    m4_exec();
-    m4_socket = 0;
+    m4_packet[3] = GBNET_SOCK;
+    m4_sock_slot = GBNET_SOCK;
+    m4_begin();
+    copy_sock(GBNET_SOCK);
+    m4_finish();
+    GBNET_SOCK = 0;
+    GBNET_STATE = M4_STATUS_CLOSED;
+    GBNET_RX = 0;
 }
 
 static unsigned int net_rxavail_m4(void)
 {
-    if (!m4_socket) return 0;
-    copy_sock(m4_socket);
-    if (m4_sock[0] == M4_STATUS_CLOSED || m4_sock[0] >= 240) return 0;
-    return (unsigned int)m4_sock[2] | ((unsigned int)m4_sock[3] << 8);
+    if (!GBNET_SOCK) return 0;
+    if (GBNET_STATE == M4_STATUS_CLOSED || GBNET_STATE >= 240) return 0;
+    return GBNET_RX;
 }
 
 static unsigned char net_resolve_m4(const char *host, unsigned char *ip4)
@@ -273,15 +280,17 @@ static unsigned char net_resolve_m4(const char *host, unsigned char *ip4)
     for (i = 0; host[i]; i++)
         m4_packet[3 + i] = (unsigned char)host[i];
     m4_packet[3 + i] = 0;
-    m4_exec();
-    if (m4_resp[3] != 1) return 0;
-    s = wait_socket_ready(0, M4_STATUS_DNS_BUSY);
-    if (s >= 240) return 0;
+    m4_sock_slot = 0;
+    m4_begin();
+    if (m4_resp[3] != 1) { m4_finish(); return 0; }
+    s = wait_socket_ready_live(0, M4_STATUS_DNS_BUSY);
+    if (s >= 240) { m4_finish(); return 0; }
     copy_sock(0);
     ip4[0] = m4_sock[4];
     ip4[1] = m4_sock[5];
     ip4[2] = m4_sock[6];
     ip4[3] = m4_sock[7];
+    m4_finish();
     return 1;
 }
 
@@ -289,6 +298,9 @@ void main(void)
 {
     unsigned char op = GBNET_OP;
     if (op == OP_INIT) {
+        GBNET_SOCK = 0;
+        GBNET_STATE = M4_STATUS_CLOSED;
+        GBNET_RX = 0;
         GBNET_RES = 1;          /* M4 owns TCP/IP configuration. */
     } else if (op == OP_OPEN) {
         GBNET_RES = net_open_m4();
