@@ -10,6 +10,7 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`build_kernel.sh`** — the one-shot build. Assembles the shipped **`GBALB`** (Albireo)
   kernel, packs the apps, and stages the distribution into `QA/`: the loose card files
   (`QA/CARD/`), the floppy (`QA/GEOBENCH.DSK`), and the card image (`QA/GEOBENCH.IMG`).
+  It also rebuilds `QA/COMPANION.DSK` for the drive-B extras.
   The M4 and IDE backends are archived (frozen, not built — see `docs/ARCHIVED.md`);
   rebuild for recovery with `EXTRA_RASM="-DSTORAGE_M4=1"` or `STORAGE=ide`. `FAT16=1` and
   `EXTRA_RASM=...` tune the variant (e.g. `EXTRA_RASM="-DGB_ROM_REQ=1"` for the
@@ -23,12 +24,13 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   (the archived IDE backend). Bakes the git commit into the banner
   (`rom/gitcommit.inc`, generated).
 - **`stage_dist.sh <out>`** — stages the Albireo card distribution (the `RUN"GBALB`
-  `GB.BAS` loader + `GBALB.BIN` + the `GEOBENCH/` payload) into a directory.
+  `GB.BAS` loader + `GBALB.BIN` + the `GBENCH/` payload) into a directory.
 - **`build_capp.sh <app_dir> <out.RAW>`** — builds a single C app against `libgb`,
-  for iterating on one app. App/module helper scripts write `*.RAW.stamp` metadata
-  beside their outputs so a repeated full build can reuse unchanged binaries.
+  for iterating on one app. App/module helper scripts write `*.stamp` metadata
+  beside their outputs so a repeated full build can reuse unchanged binaries and
+  skip recompiling untouched apps/modules.
 - **`check_abi_table.py`** — verifies the `kernel/gbkern.asm` jump-table comments
-  match the exported `lib/gbapp.inc` slot addresses.
+  match the exported `lib/gbapp.inc` slot addresses through `kernel/api_table.inc`.
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in
   `kernel/lowram.tsv` for accidental range overlaps.
 - **`deploy_ide.sh`** — *(archived)* copy the staged distribution onto a real/emulated IDE
@@ -66,7 +68,7 @@ helper they call.
 
 ## Conventions
 
-- Output binaries (`*.BIN`, `*.RAW`, `*.dsk`, `QA/GEOBENCH.IMG`) are build artifacts
-  and gitignored — except the small staged `QA/` distribution, which is committed
-  ready-to-deploy. Regenerate everything with `build_kernel.sh`.
+- Output binaries under `build/` are local artifacts. The staged `QA/`
+  distribution is committed, including the `.dsk` media, so every shipped change
+  should rebuild those images before commit.
 - Any text/data file destined for the CPC must use **CR+LF** line endings.

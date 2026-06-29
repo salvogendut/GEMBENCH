@@ -16,6 +16,15 @@ it's the host-side workflow.
   (the driver-offload ROM) needs only `rasm`.
 - **Emulators:** see below.
 
+The intended host environment is the project distrobox:
+
+```bash
+distrobox enter my-distrobox
+```
+
+That container is where `gh`, the CPC toolchain, and the image-build
+dependencies are expected to exist.
+
 ## Emulators
 
 We develop against two emulators with distinct roles:
@@ -50,11 +59,32 @@ cap32 and 1984 both accept a `.dsk` slot file. Two quick paths:
 ../caprice32/cap32 -i bin/PROG.BIN -o 0x4000
 
 # Or boot a disk image and autorun a file:
-../caprice32/cap32 --autocmd 'RUN"PROG' build/geobench.dsk
+../caprice32/cap32 --autocmd 'RUN"GB' QA/GEOBENCH.DSK
 ```
 
-1984 has its own invocation (see `../1984/INSTALL.md` / `1984.conf.example`);
-the build artifacts (`.bin` / `.dsk`) are the same.
+1984 has its own invocation. For GEOBENCH the common paths are:
+
+```bash
+bash tools/build_kernel.sh
+../1984/1984 --config=/dev/null --6128 --memory=512 --disk-a=QA/GEOBENCH.DSK --disk-b=QA/COMPANION.DSK --autostart=GB
+../1984/1984 --config=/dev/null --6128 --memory=512 --disk-a=QA/GEOBENCH.DSK --autostart=GB --screenshot-at=2200:/tmp/boot.ppm --exit-after=2200
+```
+
+The boot splash prints the build commit below the progress bar; use that to
+cross-check media against the source tree under test.
+
+### Incremental build behavior
+
+`tools/build_kernel.sh` still stages the full distribution, but the expensive C
+app and module builds are cached. The helper scripts write `*.stamp` metadata
+next to their outputs and skip recompilation when the output, toolchain, build
+flags, and transitive source dependencies are unchanged. Re-running the full
+build should therefore:
+
+- rebuild only the touched apps/modules;
+- always rebuild the packaged media (`QA/GEOBENCH.DSK`, `QA/COMPANION.DSK`,
+  `QA/CARD/`, `QA/GEOBENCH.IMG`);
+- refresh the boot-splash build id from the current git commit.
 
 ## Static Contract Checks
 
@@ -75,12 +105,15 @@ failures visible until the ranges are actually moved or retired.
 
 ## Icon and font sets (GEOBENCH.CFG)
 
-`GEOBENCH.CFG` selects a named set: `ICONS=<name>` loads `<name>.IST`, `FONT=<name>`
-loads `<name>.FNT`; both fall back to `DEFAULT` if absent. Sets ship as files on
-the disk (and are `incbin`/`save`d onto `build/gbkern.dsk` in `kernel/gbkern.asm`).
+`GEOBENCH.CFG` selects named resources. `ICONS=<name>` loads `<name>.IST`,
+`FONT=<name>` loads `<name>.FNT`, `CURSOR=<name>` loads `<name>.SPR`,
+`BACKDROP=<drive:name|SOLID>`, `WALLPAPER=<drive:name|NONE>`, and
+`SAVER=<drive:name|NONE>` identify optional desktop media. Missing font/icon/
+cursor settings fall back to `DEFAULT`; invalid background media falls back to
+`SOLID` / `NONE` during boot so the machine still starts.
 
 Build a set, then package it (add an `incbin` + a `save "<NAME>.<EXT>",...,DSK`
-line in `gbkern.asm`, and copy it to the IDE image in the deploy step):
+line in the pack assembly or stage it into the card distribution as appropriate):
 
 - **Font** (`.FNT`): from an 8×8 `.asm` font source — `tools/packfont.py
   build/NAME.FNT lib/font.asm` (ships `CLASSIC.FNT`, the 8×8 ROM font). The 6×8
@@ -102,7 +135,7 @@ line in `gbkern.asm`, and copy it to the IDE image in the deploy step):
      edit only takes effect after `regen_icons.sh` updates those `.asm` files.
   2. **Ship a custom selectable set**: edit a set visually with
      `tools/iconedit.py assets/iconsets/MYSET.IST` (tracked, unlike `build/`), and
-     `stage_dist.sh` / `build_ide_img.sh` copy every `assets/iconsets/*.IST` onto
+     `stage_dist.sh` copies every `assets/iconsets/*.IST` onto
      the card automatically. Select it with `ICONS=MYSET` in `GEOBENCH.CFG`. See
      `assets/iconsets/README.md`.
 - **Pictures** (`.PIC`): convert a PNG to a 4-colour Mode-1 picture with

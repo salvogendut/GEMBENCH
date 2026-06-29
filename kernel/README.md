@@ -37,4 +37,11 @@ contracts and boot/assets/module boundaries now live in `api_table.inc`,
 `lowram.inc`, `boot.asm`, `assets.asm`, `config_module.asm`, `modules.asm`, and
 `app_pool.asm`; input polling lives in `input_api.asm`; clock/RTC and RAM probing
 live in `clock.asm` and `memdetect.asm`. Continue splitting `gbkern.asm` by
-subsystem while keeping the generated kernel image unchanged.
+ subsystem while keeping the generated kernel image unchanged.
+
+Current documentation anchors:
+
+- `../lib/gbapp.inc` — app-visible ABI contract.
+- `lowram.tsv` — fixed low-RAM ownership map.
+- `../docs/KERNEL_ARCHITECTURE_REVIEW.md` — architecture review and further
+  resident-size recommendations.
