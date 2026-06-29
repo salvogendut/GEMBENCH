@@ -104,6 +104,13 @@ static void sel_boot(void)
     gb_set_drive((d & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
 }
 
+static void sel_boot_root(void)
+{
+    unsigned char i;
+    sel_boot();
+    for (i = 0; i < 4; i++) gb_back();      /* root on FAT/path backends; no-op on floppy/root */
+}
+
 static unsigned char boot_drive(void)
 {
     return (gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A;
@@ -201,7 +208,7 @@ static void cfg_set(const char *key, const char *val)
         }
         for (i = 0; i < vl; i++) cfgbuf[p + i] = val[i];
     }
-    sel_boot();
+    sel_boot_root();
     gb_set_name("GEOBENCHCFG");
     gb_fs_save(cfgbuf, cfglen);
     /* Keep the kernel's in-memory config copy in step with the disk, so changes the
@@ -809,7 +816,7 @@ void main(void)
 {
     unsigned char n;
     gb_wm_managed(&smw);                            /* register FIRST (no draw), like the other apps */
-    sel_boot();
+    sel_boot_root();
     gb_set_name("GEOBENCHCFG");
     cfglen = gb_fs_load(cfgbuf, sizeof(cfgbuf));   /* load the config once (0 if none) */
     for (n = 64; n; n--) if (!gb_getkey()) break;  /* drain the launch keystrokes (#142) */
