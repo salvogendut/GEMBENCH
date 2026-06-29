@@ -117,7 +117,8 @@ MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the
 ; #14A2, poll_line #14A3, then screen.asm fill/blit/save scratch #14A4..#14BB (bm_*, bl_*,
 ; fb_rows/cy, fbw_*, sb_rows/cy/ptr, fb_x/y/w/h), and text.asm renderer scratch
 ; #14BC..#14CC (br_*, dc_*). gf_* uses #14CD..#14D1; fs dispatch/request
-; state uses #14D2..#14FE. Next free: #14FF.
+; state uses #14D2..#14FE. video_mode_hint #14FF (high bit valid) lets paged
+; modules preserve Mode 2 fullscreen when touching the Gate Array register.
 MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
