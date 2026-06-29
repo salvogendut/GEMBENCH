@@ -49,8 +49,8 @@ The system is effectively a cooperative, banked, single-machine-owner OS:
 - Apps are SDCC binaries linked against `lib/gb`.
 - Apps call fixed jump table slots directly through `lib/gb/gblib.s`.
 - Loadable modules communicate through fixed low-RAM transfer blocks.
-- Storage is dispatched through `lib/fs.asm`; the shipped path is Albireo plus
-  AMSDOS floppy fallback, while IDE and M4 remain archived but buildable.
+- Storage is dispatched through `lib/fs.asm`; the shipped path is Albireo or M4
+  plus AMSDOS floppy fallback, while IDE remains archived but buildable.
 
 This is a strong base. The architecture only needs more explicit boundaries.
 
@@ -113,7 +113,7 @@ Recommended fix:
   owner, and lifetime.
 - Generate `lib/gb/lowram.h` from it for C apps/modules.
 - Add build-time overlap checks for every configuration: shipped Albireo,
-  Albireo+ROM, IDE recovery, and M4 recovery.
+  shipped M4, Albireo+ROM, and IDE recovery.
 - Treat overlays as first-class. For example, `#1700` and `#2200` are valid
   module-transfer overlays because GBUI, GBFAT, FLOPPYSV, and GBNET are never live
   at the same time. The manifest should say that explicitly.
@@ -348,8 +348,8 @@ No behavior change.
 - Add build checks for:
   - Albireo shipped kernel;
   - Albireo + ROM;
-  - IDE recovery;
-  - M4 recovery if it should remain buildable.
+  - M4 shipped kernel;
+  - IDE recovery.
 
 ### Phase 2: Source Split
 

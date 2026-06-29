@@ -173,12 +173,13 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
   jump table). The desktop launches the file manager, which opens each file in its
   app (Notepad, ICONED, Paint, Viewer, ...); an app returns to its caller by `return`.
 - **Storage backends.** A dispatcher (`lib/fs.asm`) selects the card backend at
-  build time. The shipped path is the CH376 **Albireo** kernel (`GBALB`), which also
-  carries the AMSDOS-over-**floppy** fallback. The **M4 board** and FAT16/FAT32
-  **IDE** backends are **archived** — source kept in-tree, not built or shipped
-  by default (see [`docs/ARCHIVED.md`](docs/ARCHIVED.md)). The screen-independent
-  driver path can still be **offloaded to a loadable upper ROM** (`GBALB.ROM`)
-  to free resident `#8000` RAM — see *Optional: the GEOBENCH ROM* below.
+  build time. The shipped card builds both the CH376 **Albireo** kernel (`GBALB`)
+  and the **M4 board** kernel (`GBM4`) into one shared FAT image. Both kernels also
+  carry the AMSDOS-over-**floppy** fallback. The FAT16/FAT32 **IDE** backend is
+  archived — source kept in-tree, not built or shipped by default (see
+  [`docs/ARCHIVED.md`](docs/ARCHIVED.md)). The screen-independent driver path can
+  still be **offloaded to a loadable upper ROM** (`GBALB.ROM`) to free resident
+  `#8000` RAM — see *Optional: the GEOBENCH ROM* below.
 
 ## Building, deploying and running
 
@@ -198,19 +199,23 @@ This stages these outputs (the staged media under `QA/` are committed, so you
 can test or deploy without rebuilding first):
 
 - **`QA/CARD/`** — the loose card distribution. Copy its contents onto an Albireo
-  card. The card root holds the loader `GB.BAS`, the kernel `GBALB.BIN`, and
+  card or use it as the source for an M4 card/image. The card root holds the
+  loader `GB.BAS`, `M4DETECT.BIN`, both kernels (`GBALB.BIN`, `GBM4.BIN`), and
   `GEOBENCH.CFG` — everything else the kernel loads at boot lives in a `GBENCH/`
   subfolder.
-- **`QA/GEOBENCH.IMG`** — a ready-to-flash **Albireo card image**: a partitioned FAT16
-  disk the CH376 auto-detects. Built by `tools/build_card_img.sh`; a 32 MB local
-  artifact, rebuilt every build and not committed.
+- **`QA/GEOBENCH.IMG`** — a ready-to-flash shared **Albireo/M4 card image**: a
+  partitioned FAT16 disk the CH376 auto-detects and 1984's M4 image mode can mount.
+  Built by `tools/build_card_img.sh`; a 32 MB local artifact, rebuilt every build
+  and not committed.
 - **`QA/GEOBENCH.DSK`** — the bootable **Main** floppy image.
 - **`QA/COMPANION.DSK`** — the **Companion** floppy with the larger apps, extra
   savers, and sample pictures for drive B.
 
-Boot with **`RUN"GB`**: the loader `GB.BAS` is a one-line `RUN"GBALB` on the card,
-or `RUN"GBKERN` on the floppy. The kernel then drives the Albireo card or falls
-back to the AMSDOS floppy path. On a floppy you can also `RUN"GBKERN` directly.
+Boot with **`RUN"GB`**: the card loader `GB.BAS` loads `M4DETECT.BIN`, probes for
+M4ROM's RSX table, and then `RUN"`s `GBM4` on M4 hardware or `GBALB` otherwise. On
+the floppy, `GB.BAS` still `RUN"`s `GBKERN`. The selected kernel then drives the
+card backend or falls back to the AMSDOS floppy path. On a floppy you can also
+`RUN"GBKERN` directly.
 
 ```bash
 1984 --memory=128 --disk-a=QA/GEOBENCH.DSK --autostart=GB     # floppy in an emulator
@@ -271,10 +276,10 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
   plugs into the joystick port and reports as a joystick (movement + buttons), so
   the same pointer path drives it (either fire button clicks). A **SYMBiFACE II /
   Cyboard PS/2 mouse** can be added for machines that have one.
-- Albireo (CH376) card or AMSDOS floppy storage (the M4 and IDE backends are archived
-  — frozen in-tree, not shipped; see [`docs/ARCHIVED.md`](docs/ARCHIVED.md)). Networking
-  via Net4CPC (W5100S) is a possible future extension — see the related `n4c-nettools`
-  project.
+- Albireo (CH376), M4 board, or AMSDOS floppy storage. The IDE backend is archived
+  — frozen in-tree, not shipped; see [`docs/ARCHIVED.md`](docs/ARCHIVED.md). Telnet
+  uses Net4CPC/W5100S when running the Albireo kernel and M4ROM's TCP commands
+  when running the M4 kernel.
 
 ## Goals
 
@@ -368,12 +373,11 @@ Done:
    read/write, AMSDOS floppy, IDE, CH376/Albireo) run from a 16K upper ROM
    (`GEOBENCH.ROM`/`GBALB.ROM`), freeing resident RAM; the ROM is also a CPC background ROM
    that boots a `GEOBENCH <commit>` banner.
-10. ✅ **M4 board SD support (#174)** — a file-level CH376-style backend (`GBM4.BIN`) booted
-   GEOBENCH on the M4 board, with a `GB.BAS` loader that detected the hardware
-   (`KL_FIND_COMMAND` for M4ROM's RSX) to pick the kernel. **Now archived** (frozen in-tree,
-   not shipped): a >8 KB-picture blank on real M4 hardware — an M4ROM interrupt/timing
-   divergence the emulator can't reproduce — is unresolved, so the shipped card is Albireo +
-   floppy only. See [`docs/ARCHIVED.md`](docs/ARCHIVED.md).
+10. ✅ **M4 board SD/TCP support (#174, #259)** — a file-level backend (`GBM4.BIN`)
+   ships beside `GBALB.BIN` on the shared card image. `GB.BAS` detects M4ROM
+   (`KL_FIND_COMMAND` for an M4 RSX) and selects the right kernel. M4 supports
+   directory, load, save/create, and TCP through `GBNETM4.MOD`; delete remains
+   pending for image-backed mode.
 11. ✅ **Kernel source split + build cache** — the resident kernel contracts now
    live in dedicated source files with checked ABI/low-RAM maps, and the full
    build reuses unchanged app/module outputs instead of recompiling everything.

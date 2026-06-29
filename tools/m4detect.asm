@@ -14,7 +14,7 @@
 ;
 ; Runs from RAM at #4000 (free at loader time - the kernel only loads later at #8000).
 ; Leaves 1 (M4 present) / 0 (not) in a fixed byte the loader PEEKs. Assembled by
-; tools/stage_dist.sh; its bytes are embedded into GB.BAS as DATA.
+; tools/stage_dist.sh into M4DETECT.BIN.
 
 M4RESULT        equ   #4030        ; the loader PEEKs this (1 = M4, 0 = Albireo)
 KL_FIND_COMMAND equ   #BCD4        ; firmware: HL=name -> CF set if the RSX is installed
@@ -30,3 +30,5 @@ store           ld    (M4RESULT),a
 ; RSX command name: ASCII, the LAST character has bit 7 set (firmware name format).
 m4_rsx          defb  "HTTPGE"
                 defb  'T'+#80
+m4detect_end
+                save  "build/M4DETECT.RAW", #4000, m4detect_end-#4000

@@ -1,9 +1,6 @@
 ; ---------------------------------------------------------------------------
-; *** ARCHIVED (2026-06-22) *** - frozen, not built by tools/build_kernel.sh.
-; The shipped product is Albireo + floppy; M4 is preserved here for reference and
-; possible revival, but the >8K-picture blank-on-real-HW bug is unresolved (the
-; emulator can't reproduce M4ROM's interrupt/timing divergences). To build for
-; recovery: rasm kernel/gbkern.asm -DSTORAGE_M4=1. See docs/ARCHIVED.md.
+; Active M4 storage backend (#174/#259). The normal build now ships GBM4.BIN
+; beside GBALB.BIN on the shared FAT card image.
 ; ---------------------------------------------------------------------------
 ; lib/fs_m4.asm - storage backend: FAT over the M4 board (file-level, #174).
 ;
@@ -12,7 +9,7 @@
 ; file commands and the board walks the directory / file. So this build does NOT
 ; include fs_fat32_core.asm / fs_ide_read.asm at all - no IDE FAT core resident.
 ;
-; M4 command protocol (mirrors Duke's M4ROM.s + 1984 src/m4.c, proven on real HW):
+; M4 command protocol (mirrors Duke's M4ROM.s in ../m4rom + 1984 src/m4.c):
 ;   * write a packet [#00 lead][cmd_lo][cmd_hi=#43][params...] one byte at a time
 ;     to DATAPORT (#FE00), then strobe ACKPORT (#FC00) - the board bus-HOLDS the
 ;     OUT until the command (incl. the SD access) completes, so no poll/NMI wait.
@@ -27,7 +24,10 @@
 ;   fsm4_dir_first -> CF set = first entry in fs_ent_*, NC = empty
 ;   fsm4_dir_next  -> CF set = next entry,               NC = end of dir
 ;   fsm4_load_file -> CF set = loaded (fs_ent_size = bytes), NC = not found
-; Read-only: D0_SAVE/DELETE map to fs_load_none (C_WRITE is a later phase).
+;   fsm4_save_file -> CF set = saved, NC = failed (paged M4SAVE.MOD)
+; Delete is not wired yet: M4ROM exposes C_ERASEFILE, but 1984's M4 image-backed
+; file API does not erase FAT entries today. Keep GEOBENCH.IMG behavior consistent
+; before the dispatcher advertises delete.
 ;
 ; M4 directory model: C_READDIR enumerates the board's CURRENT directory, so each
 ; listing first C_CD's to m4_path (absolute, rebuilt from the path string every time
@@ -53,6 +53,11 @@ M4_OPENMODE     equ   #81          ; FA_READ | FA_REALMODE (dynamic fd, bypass A
 M4_READCHUNK    equ   #0800        ; bytes per C_READ2 (fits the #E800..#F3FF response window)
 
 M4_PATH_MAX     equ   64           ; current-dir path buffer ("" = root, "/GEOBENCH")
+M4SV_LEN        equ   #1700        ; M4SAVE.MOD transfer area (mirrors floppysv/gbfat)
+M4SV_NAME       equ   #1702
+M4SV_RES        equ   #170D
+M4SV_PATH       equ   #1710
+M4SV_DATA       equ   #2200
 
 ; --- transport --------------------------------------------------------------
 ; m4_io_begin: DI + select M4ROM (slot 6) so DATAPORT/ACKPORT are serviced and the
@@ -172,6 +177,20 @@ me83_e1         ld    a,(hl)
                 dec   d
                 jr    nz,me83_e1
                 ret
+
+; m4_open_path: emit the active path prefix for C_OPEN. Normal file loads use the
+; browse path; fs_load_cur_sys/fs_load_sys set m4_sysflag so modules/apps/assets
+; open from /GBENCH without copying the whole browse path away and back.
+m4_open_path
+                ld    hl,m4_path
+                ld    a,(m4_sysflag)
+                or    a
+                jr    z,mop_have
+                ld    hl,m4_sysdir
+mop_have        ld    a,(hl)
+                or    a
+                ret   z
+                jp    m4_emit_str
 
 ; m4_cd_path: set the M4's current directory to m4_path, REBUILT from the root: a
 ; C_CD "/" then a relative C_CD for each "/<component>". A real M4 doesn't reliably
@@ -306,11 +325,7 @@ fsm4_load_file
                 out   (c),a
                 ld    a,M4_OPENMODE
                 out   (c),a                  ; mode: FA_READ | dynamic fd
-                ld    a,(m4_path)            ; absolute path prefix (m4_path, "" = root)
-                or    a
-                jr    z,mlf_slash
-                ld    hl,m4_path
-                call  m4_emit_str
+                call  m4_open_path           ; path prefix (browse path or /GBENCH)
 mlf_slash       ld    a,'/'
                 out   (c),a
                 call  m4_emit_83             ; trimmed 8.3 name
@@ -366,8 +381,6 @@ m4_read_chunk
                 ld    a,#08
                 out   (c),a                  ; count hi
                 call  m4_go
-                ld    a,(M4_RESP+3)          ; status (0 = more, #20 = EOF)
-                ld    (m4_status),a
                 ld    hl,(M4_RESP+4)        ; actual bytes read this chunk
                 ld    (m4_actual),hl
                 ; guard: refuse if fs_ent_size + actual would exceed fs_load_max
@@ -401,7 +414,6 @@ mrc_ok
                 ld    (fs_ent_size+2),hl
 mrc_advance
                 call  m4_io_end
-                ld    a,(m4_status)
                 scf
                 ret
 
@@ -418,31 +430,59 @@ m4_close_fd
                 call  m4_go
                 jp    m4_io_end
 
+; --- file save --------------------------------------------------------------
+; fsm4_save_file: resident stub. Stage the caller's bytes/name/current M4 path
+; into low RAM, then load M4SAVE.MOD from /GBENCH and let that module perform the
+; C_OPEN/C_WRITE/C_CLOSE sequence. CF set = saved, NC = failed.
+fsm4_save_file
+                ld    a,(fs_save_len+1)      ; low-RAM staging cap: #2200..#3DFF
+                cp    #1C
+                jr    nc,msv_fail
+                ld    hl,(fs_save_src)
+                ld    de,M4SV_DATA
+                ld    bc,(fs_save_len)
+                ld    a,b
+                or    c
+                jr    z,msv_nodata
+                ldir
+msv_nodata      ld    hl,fs_req_name
+                ld    de,M4SV_NAME
+                ld    bc,11
+                ldir
+                ld    hl,m4_path
+                ld    de,M4SV_PATH
+                ld    bc,M4_PATH_MAX
+                ldir
+                ld    hl,(fs_save_len)
+                ld    (M4SV_LEN),hl
+                ld    hl,m4save_modname
+                call  run_data_module
+                ld    a,(M4SV_RES)
+                or    a
+                ret   z
+                scf
+                ret
+msv_fail
+                or    a
+                ret
+m4save_modname db    "M4SAVE  MOD"
+
 ; --- #134 system-dir hooks (path-based, like Albireo) -----------------------
-; The M4 is path-based: system loads run from the "/GEOBENCH" prefix regardless of
-; the File Manager's browse path. enter swaps m4_path to /GEOBENCH, leave restores it.
+; The M4 is path-based: system loads run from the "/GBENCH" prefix regardless of
+; the File Manager's browse path. A one-byte flag is enough because C_OPEN chooses
+; the prefix; directory browsing keeps using m4_path.
 fs_sys_resolve
                 ret
 fs_sysdir_enter
-                ld    hl,m4_path
-                ld    de,m4_path_save
-                ld    bc,M4_PATH_MAX
-                ldir
-                ld    hl,m4_sysdir
-                ld    de,m4_path
-                ld    bc,m4_sysdir_end-m4_sysdir
-                ldir
+                ld    a,1
+                ld    (m4_sysflag),a
                 ret
 fs_sysdir_leave
-                ld    hl,m4_path_save
-                ld    de,m4_path
-                ld    bc,M4_PATH_MAX
-                ldir
+                xor   a
+                ld    (m4_sysflag),a
                 ret
 m4_sysdir       db    "/GBENCH",0   ; #174: <=7 chars so the M4's '>'-prefixed dir listing
                                      ; round-trips it (an 8-char dir name loses its last char)
-m4_sysdir_end
-m4_path_save    defs  M4_PATH_MAX
 
 ; --- chdir / back (edit the m4_path string, like fsalb_chdir/back) -----------
 ; fsm4_chdir (k_chdir): descend into the positioned folder by appending "/<name>" to
@@ -509,8 +549,8 @@ fmb_done        ld    a,d
 
 ; --- state ------------------------------------------------------------------
 m4_path         defs  M4_PATH_MAX  ; current dir as an M4 path (zero-init = root)
+m4_sysflag      defb  0            ; nonzero while fs_load_sys opens from /GBENCH
 m4_fd           defb  0            ; the open file's descriptor
-m4_status       defb  0            ; last C_READ2 status
 m4_actual       defw  0            ; last C_READ2 byte count
 m4_cmdbuf       defs  80           ; M4ROM-style command buffer ([0]=size, then cmd+params)
 

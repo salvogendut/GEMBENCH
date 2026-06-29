@@ -8,23 +8,27 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 ## Build orchestration
 
 - **`build_kernel.sh`** — the one-shot build. Assembles the shipped **`GBALB`** (Albireo)
-  kernel, packs the apps, and stages the distribution into `QA/`: the loose card files
-  (`QA/CARD/`), the floppy (`QA/GEOBENCH.DSK`), and the card image (`QA/GEOBENCH.IMG`).
-  It also rebuilds `QA/COMPANION.DSK` for the drive-B extras.
-  The M4 and IDE backends are archived (frozen, not built — see `docs/ARCHIVED.md`);
-  rebuild for recovery with `EXTRA_RASM="-DSTORAGE_M4=1"` or `STORAGE=ide`. `FAT16=1` and
-  `EXTRA_RASM=...` tune the variant (e.g. `EXTRA_RASM="-DGB_ROM_REQ=1"` for the
-  ROM-offload kernel).
-- **`m4detect.asm`** — *(archived, #174)* a tiny BASIC-callable detector that asked the
-  firmware (`KL_FIND_COMMAND`) whether the M4 ROM's RSX was installed, so the old unified
-  `GB.BAS` could pick `GBM4` vs `GBALB`. Unused now the card is Albireo-only; kept for a
-  possible M4 revival.
+  and **`GBM4`** (M4) kernels, packs the apps, and stages the distribution into `QA/`:
+  the loose card files (`QA/CARD/`), the floppy (`QA/GEOBENCH.DSK`), the companion
+  floppy (`QA/COMPANION.DSK`), and the shared card image (`QA/GEOBENCH.IMG`).
+  The IDE backend is archived (frozen, not built — see `docs/ARCHIVED.md`);
+  rebuild it for recovery with `STORAGE=ide`. `STORAGE=m4` leaves an M4 dev-harness
+  kernel in `build/`. `FAT16=1` and `EXTRA_RASM=...` tune the variant
+  (e.g. `EXTRA_RASM="-DGB_ROM_REQ=1"` for the ROM-offload kernel).
+- **`m4detect.asm`** — a tiny BASIC-callable detector that asks the firmware
+  (`KL_FIND_COMMAND`) whether an M4 ROM RSX is installed. The staged `GB.BAS` loads
+  it as `M4DETECT.BIN` and uses its result to pick `GBM4` vs `GBALB`.
 - **`build_rom.sh`** — builds the 16K upper ROMs that offload the low-level drivers
   and carry the cold-boot banner: `rom/GBALB.ROM` (Albireo, shipped) and `rom/GEOBENCH.ROM`
   (the archived IDE backend). Bakes the git commit into the banner
   (`rom/gitcommit.inc`, generated).
-- **`stage_dist.sh <out>`** — stages the Albireo card distribution (the `RUN"GBALB`
-  `GB.BAS` loader + `GBALB.BIN` + the `GBENCH/` payload) into a directory.
+- **`build_m4netmod.sh [out.RAW]`** — builds `GBNETM4.MOD`, the M4ROM TCP command
+  backend for the shared `gb_net_*` API.
+- **`build_m4savemod.sh`** — builds `M4SAVE.MOD`, the M4ROM `C_OPEN`/`C_WRITE`/
+  `C_CLOSE` save backend loaded on demand by the M4 kernel.
+- **`stage_dist.sh <out>`** — stages the shared Albireo/M4 card distribution
+  (`GB.BAS`, `M4DETECT.BIN`, `GBALB.BIN`, `GBM4.BIN`, and the `GBENCH/` payload)
+  into a directory.
 - **`build_capp.sh <app_dir> <out.RAW>`** — builds a single C app against `libgb`,
   for iterating on one app. App/module helper scripts write `*.stamp` metadata
   beside their outputs so a repeated full build can reuse unchanged binaries and
@@ -39,16 +43,17 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 ## Card / disk images
 
 - **`build_card_img.sh [CARD] [IMG]`** — builds a partitioned **FAT16 card image**
-  (`QA/GEOBENCH.IMG` by default) from the staged `QA/CARD/` for the Albireo CH376
-  (auto-detects the FAT partition). Called by `build_kernel.sh`.
+  (`QA/GEOBENCH.IMG` by default) from the staged `QA/CARD/` for Albireo and M4
+  image mode. Called by `build_kernel.sh`.
 - **`build_ide_img.sh`** — *(archived)* older IDE-only image helper.
 
 ## Paged kernel modules
 
 Build the on-demand kernel modules (loaded into a bank and `call`ed): config
 (`build_cfgmod.sh`), FAT write (`build_fatmod.sh`), floppy write
-(`build_floppymod.sh`), dialogs/UI (`build_uimod.sh`); `build_kmod.sh` is the shared
-helper they call.
+(`build_floppymod.sh`), M4 save (`build_m4savemod.sh`), dialogs/UI
+(`build_uimod.sh`), and networking (`build_netmod.sh`, `build_m4netmod.sh`);
+`build_kmod.sh` is the shared helper used by the smaller asm/C module scripts.
 
 ## Asset converters
 

@@ -100,22 +100,20 @@ without linking against private kernel internals.
 
 ## Storage and distribution shape
 
-The shipped runtime target is:
+The shipped runtime targets are:
 
-- **Albireo / CH376 card** as the primary storage path.
+- **Albireo / CH376 card** as the primary read/write storage path.
+- **M4 board** as a shared-image card path (`GBM4.BIN` on the same FAT image as
+  `GBALB.BIN`) and as a TCP networking path through M4ROM commands.
 - **AMSDOS floppy** as the fallback path and as the bootable disk-pair format.
 
-The archived storage backends still exist in source but are not built by the
-default workflow:
-
-- **M4** is parked on an unresolved real-hardware timing/load issue.
-- **IDE** is kept as a recovery target, not a shipped one.
-
+The **IDE** backend still exists in source but is not built by the default workflow.
 See [`ARCHIVED.md`](ARCHIVED.md) for the exact support boundary.
 
 The default media layout is intentionally simple:
 
-- card: `QA/CARD/` with `GB.BAS`, `GBALB.BIN`, `GEOBENCH.CFG`, and `GBENCH/`
+- card: `QA/CARD/` with `GB.BAS`, `M4DETECT.BIN`, `GBALB.BIN`, `GBM4.BIN`,
+  `GEOBENCH.CFG`, and `GBENCH/`
 - floppy: `QA/GEOBENCH.DSK` (Main) plus `QA/COMPANION.DSK` (drive-B extras)
 
 ## Settings and media contracts
@@ -161,11 +159,11 @@ the level of asset reload, storage, and window-manager primitives.
 
 `bash tools/build_kernel.sh` stages (and ships under `QA/`):
 
-- **`QA/CARD/`** — for the Albireo card: `GB.BAS`, `GBALB.BIN`,
-  `GEOBENCH.CFG`, and a `GBENCH/` subfolder holding the kernel-loaded payload
-  (apps, modules, fonts, icons, cursor, media).
-- **`QA/GEOBENCH.IMG`** — a ready-to-flash **Albireo** FAT16 card image, rebuilt
-  by `tools/build_card_img.sh`; local artifact, not committed.
+- **`QA/CARD/`** — for the shared Albireo/M4 card: `GB.BAS`, `M4DETECT.BIN`,
+  `GBALB.BIN`, `GBM4.BIN`, `GEOBENCH.CFG`, and a `GBENCH/` subfolder holding the
+  kernel-loaded payload (apps, modules, fonts, icons, cursor, media).
+- **`QA/GEOBENCH.IMG`** — a ready-to-flash shared **Albireo/M4** FAT16 card image,
+  rebuilt by `tools/build_card_img.sh`; local artifact, not committed.
 - **`QA/GEOBENCH.DSK`** — the **Main** flat bootable floppy: the OS (kernel/loader/modules/
   fonts/icons/cursor/config), the core apps (Desktop, Notepad, Clock, File Manager, Viewer,
   Settings, Iconed), the default `CIRCLE.SAV` saver, the `LOGO.PIC` wallpaper and the
@@ -176,12 +174,14 @@ the level of asset reload, storage, and window-manager primitives.
   stays in drive A: the kernel's system loader (`fs_load_sys`, `lib/fs.asm`) tries the boot
   drive (A) first and **falls back to the browse drive** (B), so a Companion app launched
   from a drive-B File Manager loads from B while its shared dependencies (`GBUI.MOD`,
-  `GBNET.MOD`, `PAINT.IST`) load from A — no duplicates on the Companion. (The Albireo card
-  is unaffected — it already ships everything on one volume.)
+  `GBNET.MOD`, `PAINT.IST`) load from A — no duplicates on the Companion. (Card
+  builds are unaffected — they already ship everything on one volume, including
+  `GBNET.MOD` for Net4CPC and `GBNETM4.MOD` for M4 TCP.)
 
-`RUN"GB` runs `GB.BAS`. On card media it `RUN"`s `GBALB`; on floppy media it
-`RUN"`s `GBKERN`. The kernel then loads from `/GBENCH` on card media and from the
-flat root on floppies.
+`RUN"GB` runs `GB.BAS`. On card media it loads and calls `M4DETECT.BIN`; M4ROM
+machines `RUN"` `GBM4`, and non-M4 card machines `RUN"` `GBALB`. On floppy media
+it `RUN"`s `GBKERN`. The kernel then loads from `/GBENCH` on card media and from
+the flat root on floppies.
 
 The loader is **BASIC, not machine code**, on purpose: under UniDOS (CP/M-based) a
 `RUN"`-loaded binary that returns triggers a warm-boot, the firmware CAS goes to tape,

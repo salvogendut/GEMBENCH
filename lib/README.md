@@ -21,7 +21,7 @@ layers never poke video, storage or input registers directly.
 | `fs_albireo.asm` | CH376/Albireo backend (the chip does FAT in firmware) — the shipped card backend. |
 | `fs_ide_fat.asm` | _Archived_ — FAT16/FAT32 over SYMBiFACE/Cyboard IDE (mount + write + seam). See `docs/ARCHIVED.md`. |
 | `fs_ide_read.asm` | _Archived_ — the IDE FAT read backend (dir + load), shared by the ROM. |
-| `fs_m4.asm` | _Archived_ — file-level FAT over the M4 board (#174). Frozen, not built. See `docs/ARCHIVED.md`. |
+| `fs_m4.asm` | File-level FAT over the M4 board (#174/#259): directory, load, and save/create for the shared card image; delete remains pending. |
 | `fs_rom_seam.asm`, `fs_*_lowram.inc` | #152 ROM offload: the seam that pages `GEOBENCH.ROM` in + the fixed low-RAM addresses the resident stubs and the ROM share. |
 | `bank.asm` | Expansion-RAM paging (the `#4000–#7FFF` window). |
 | `config.asm` | _Orphaned_ — the old resident `GEOBENCH.CFG` (key=value) parser. Superseded by the paged `GBCFG.MOD` (`kernel/kc/kcfg.c`); kept in-tree only until nothing references it. |
@@ -39,7 +39,7 @@ The shared **C bindings** every GEOBENCH app links against:
 | `gb/gbdoc.c` | The `gb_doc` document framework: registers an app's buffer + new/open/save hooks and drives the shared File/Edit/View menus. |
 | `gb/gbwin.c` | Window chrome helpers an app links in (drag/resize against the kernel WM). |
 | `gb/gbdlg.c`, `gb/gbpick.c`, `gb/gbprompt.c` | Dialog/menu/file-picker/prompt renderers — compiled into the paged `GBUI.MOD`, not into every app bank. |
-| `gb/gbui_stub.c`, `gb/gbnet_stub.c` | Thin app-side stubs that call the paged `GBUI.MOD` / `GBNET.MOD` through the kernel. |
+| `gb/gbui_stub.c`, `gb/gbnet_stub.c` | Thin app-side stubs that call the paged `GBUI.MOD` / active network module (`GBNET.MOD` or `GBNETM4.MOD`) through the kernel. |
 
 ## Design constraints
 

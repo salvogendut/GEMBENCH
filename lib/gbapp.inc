@@ -162,4 +162,4 @@ GB_WMMANAGED    equ   GB_KERNEL+177 ; #80B1  register kernel-managed window.
 GB_WMDAMAGE     equ   GB_KERNEL+180 ; #80B4  set repaint damage rect.
 GB_BACKDROP     equ   GB_KERNEL+183 ; #80B7  fill rect with desktop backdrop.
 GB_RELOAD       equ   GB_KERNEL+186 ; #80BA  reload font/icons/cursor/backdrop.
-GB_NET          equ   GB_KERNEL+189 ; #80BD  run paged W5100 module; BC=GBNET_RES.
+GB_NET          equ   GB_KERNEL+189 ; #80BD  run active paged network module; BC=GBNET_RES.

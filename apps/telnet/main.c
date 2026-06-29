@@ -1,6 +1,6 @@
 /* telnet - an ANSI/VT terminal + telnet client for GEOBENCH (#238).
  *
- * Fed by a TCP socket via the gb_net_* API (the paged GBNET.MOD W5100 driver); speaks
+ * Fed by a TCP socket via the gb_net_* API (Net4CPC or M4 backend); speaks
  * RFC 854 telnet (IAC option negotiation) and parses ANSI/VT100 (cursor/erase/SGR), so
  * a real BBS / MUD / shell renders. Ported from cpc-sdcc examples/telnet (main.c IAC +
  * ansi.c + screen.c), keyboard via gb_getkey. Monochrome (white on blue).
@@ -619,7 +619,7 @@ static const unsigned char netcfg[22] = {
 static unsigned char state;
 static unsigned char rbuf[256];
 
-/* recv-poll throttle (#238): each gb_net_recv is a GBNET.MOD disk load, so polling it
+/* recv-poll throttle (#238/#259): each gb_net_recv is a paged module call, so polling it
  * every frame hammers the disk on real HW. Poll every frame while data/typing flows,
  * then drop to every POLL_EVERY frames once idle (still ~16 Hz - imperceptible to type
  * against, far gentler on the drive). The kernel-side load-once cache would remove this
@@ -668,7 +668,7 @@ static unsigned char do_connect(void)
         break;
     }
     dlg_open("Connecting...");
-    if (!gb_net_init(netcfg)) { err_screen("No Net4CPC chip", "Check net4cpc config"); return 0; }
+    if (!gb_net_init(netcfg)) { err_screen("Network init failed", "Check network hardware"); return 0; }
     /* a dotted IP is used as-is; anything else is resolved via DNS (UDP socket 1). */
     if (!parse_dotted(hostbuf, ip)) {
         dlg_open("Resolving...");

@@ -80,4 +80,4 @@
                 jp    k_wm_damage            ; GB_WMDAMAGE    #80B4 set the repaint clip = a damage rect (#153)
                 jp    k_backdrop             ; GB_BACKDROP    #80B7 fill a rect with the desktop backdrop (#128)
                 jp    k_reload               ; GB_RELOAD      #80BA re-apply font/icons/cursor/backdrop (#185)
-                jp    k_net                  ; GB_NET         #80BD run the paged W5100 net module -> BC=GBNET_RES (#238)
+                jp    k_net                  ; GB_NET         #80BD run active paged net module -> BC=GBNET_RES (#238/#259)

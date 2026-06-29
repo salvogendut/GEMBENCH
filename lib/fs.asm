@@ -27,12 +27,12 @@ D0_LOAD         equ   fsalb_load_file
 D0_SAVE         equ   fsalb_save_file
 D0_DELETE       equ   fsalb_delete_file
                 else
-                if STORAGE_M4                  ; #174: M4 board, FILE-LEVEL backend (the M4 firmware
-D0_PRESENT      equ   fsm4_present            ; does the FAT, like Albireo's CH376) - lib/fs_m4.asm,
-D0_FIRST        equ   fsm4_dir_first          ; no IDE FAT core. Read-only for now: save/delete
-D0_NEXT         equ   fsm4_dir_next           ; fall back to the no-op stub (C_WRITE is a later phase).
+                if STORAGE_M4                  ; #174/#259: M4 board, FILE-LEVEL backend (the M4
+D0_PRESENT      equ   fsm4_present            ; firmware does FAT, like Albireo's CH376) - lib/fs_m4.asm,
+D0_FIRST        equ   fsm4_dir_first          ; no IDE FAT core. Delete is still unsupported here
+D0_NEXT         equ   fsm4_dir_next           ; until image-backed C_ERASEFILE is validated end to end.
 D0_LOAD         equ   fsm4_load_file
-D0_SAVE         equ   fs_load_none
+D0_SAVE         equ   fsm4_save_file
 D0_DELETE       equ   fs_load_none
                 else
 D0_PRESENT      equ   fs_ide_present

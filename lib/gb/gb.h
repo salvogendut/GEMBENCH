@@ -404,8 +404,9 @@ void gb_copy_end(void);
  * input / no gb_poll); use change-detection to avoid a wasteful per-frame repaint. */
 void gb_on_bar(void (*handler)(void));
 
-/* W5100 networking via the paged GBNET module (#238). Link gbnet_stub (build_capp NET=1).
- * Socket 0, TCP. gb_net_init's cfg is 22 bytes: ip[4] mask[4] gw[4] dns[4] mac[6]. */
+/* TCP networking via the active paged network module (#238/#259). Link gbnet_stub
+ * (build_capp NET=1). Albireo/Net4CPC loads GBNET.MOD; M4 loads GBNETM4.MOD.
+ * gb_net_init's cfg is 22 bytes for Net4CPC; M4 accepts it but keeps M4ROM config. */
 unsigned char gb_net_init(const unsigned char *cfg22);     /* 1 = chip present + configured */
 unsigned char gb_net_open(void);                           /* 1 = socket opened (TCP) */
 unsigned char gb_net_connect(const unsigned char *ip, unsigned int port);  /* 1 = connected */
