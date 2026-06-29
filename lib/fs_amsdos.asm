@@ -433,12 +433,6 @@ fsamv_nlen
 floppysv_run
                 ld    hl,floppysv_modname     ; #238: shared PAGE_DATA loader (was an inline copy)
                 call  run_data_module
-                xor   a                        ; FSV_TX_* reuses the GBUI transfer block at #1700,
-                ld    (UI_MODAL),a            ; including UI_MODAL (#1705). A floppy save of
-                                              ; GEOBENCH.CFG overwrites it with filename bytes,
-                                              ; which then kills top-bar click dispatch until
-                                              ; something clears it. Saving is not a UI modal op,
-                                              ; so restore the latch here in the owning path.
                 ld    a,(FSV_TX_RES)
                 or    a
                 ret   z
