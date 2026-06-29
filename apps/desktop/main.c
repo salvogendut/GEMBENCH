@@ -641,10 +641,15 @@ static void on_frame(void)
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
         gb_menu_add("System", sys_items, 6, sys_action);
     }
-    if (menu_refresh && wp_changed()) {         /* WALLPAPER= changed while another window was up:
+    if (menu_refresh && boot_drive() == GB_DRIVE_C && wp_changed()) { /* WALLPAPER= changed while
+                                                    another window was up on card boot:
                                                     reload it here, outside wm_repaint_all, then
                                                     repaint once with the new desktop image. */
         wp_init();
+        gb_doc(&deskdoc);                        /* floppy wallpaper loads can disturb top-bar menu
+                                                    state; rebuild the desktop menu right after the
+                                                    reload so System stays clickable. */
+        gb_menu_add("System", sys_items, 6, sys_action);
         gb_curhide();
         gb_wm_damage(0, 0, 80, 200);
         paint();

@@ -691,6 +691,9 @@ static void load_backdrop_live(const char *name, unsigned char drive)
 static void live_apply(unsigned char r, const char *name, unsigned char drive)
 {
     const char *ext = rows[r].ext;
+    if (boot_drive() != GB_DRIVE_C && (ext[0] == 'B' || ext[0] == 'P'))
+        return;                                 /* floppy-backed live background reloads still destabilize
+                                                   the top-bar path; persist now, apply on reboot. */
     if (ext[0] == 'P') return;
     if (ext[0] == 'B') {
         load_backdrop_live(name, drive);
