@@ -196,7 +196,7 @@ to_data
 from_data
                 ld    a,(dp_save)
                 jp    bank_set
-dp_save         db    0
+dp_save         equ   #123E        ; low-RAM kernel scratch (see lowram.tsv)
 
 ; --- gb_text_draw: 6x8 font text service ---------------------------------
 ; B = byte col, C = line, D = pen, E = paper, HL = string (caller's page).
@@ -961,7 +961,7 @@ k_copy_end
                 ld    bc,4
                 ldir
                 ret
-cb_tdrv         db    0
+cb_tdrv         equ   #123F        ; low-RAM kernel scratch (see lowram.tsv)
 cb_tdir         equ   #1481        ; #188: relocated to low RAM (was resident defs 4)
 
 ; k_fs_delete (GB_FSDELETE, #62): HL = 11-byte 8.3 name in the caller page. Delete
@@ -984,8 +984,8 @@ k_getkey
                 ; keyboard app (Notepad redrawing on every move). While any pointing
                 ; direction is physically held, the "char" is the pointer, not
                 ; typing: drop it. KM_TEST_KEY preserves B/DE/HL.
-                ld    (kgk_char),a           ; save char in memory (KM_TEST_KEY may
-                ld    hl,kgk_dirkeys         ; corrupt HL/BC, so don't trust regs)
+                push  af                     ; save char; KM_TEST_KEY may corrupt A.
+                ld    hl,kgk_dirkeys
                 ld    b,(hl)
 kgk_test
                 inc   hl
@@ -995,14 +995,15 @@ kgk_test
                 call  KM_TEST_KEY
                 pop   bc
                 pop   hl
-                jr    nz,kgk_none            ; a direction held -> discard the char
+                jr    nz,kgk_drop            ; a direction held -> discard the char
                 djnz  kgk_test
-                ld    a,(kgk_char)           ; a genuine typed character
+                pop   af                     ; a genuine typed character
                 ret
+kgk_drop
+                pop   af
 kgk_none
                 xor   a
                 ret
-kgk_char        db    0
 kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs + fire
                                               ; (fire = the click; it also buffers a
                                               ; char, e.g. 'Z' - drop it while held)
@@ -1534,8 +1535,8 @@ k_wm_setpos
                 ld    a,(sp_y)
                 ld    (hl),a
                 ret
-sp_x            db    0
-sp_y            db    0
+sp_x            equ   #124B        ; low-RAM WM scratch (see lowram.tsv)
+sp_y            equ   #124C
 
 ; k_wm_setsize (GB_WMSETSIZE, #81): A = new w, L = new h. Resize the focused window's
 ; rect (top-left stays put). Damage clip = its (x,y) covering max(old,new) size, so the
@@ -1573,8 +1574,8 @@ kss_h
                 ld    a,(ss_h)
                 ld    (hl),a                       ; commit new h
                 ret
-ss_w            db    0
-ss_h            db    0
+ss_w            equ   #124D        ; low-RAM WM scratch (see lowram.tsv)
+ss_h            equ   #124E
 
 ; damage_axis: B = old, A = new, C = size -> D = min(old,new), E = span =
 ; max(old,new) + size - min. The 1-D damage extent of a move. Preserves HL.
@@ -1788,6 +1789,7 @@ ds_norel
                 cp    b
                 jr    z,ds_click                   ; dropped on itself -> no-op
                 ld    a,b
+                ld    (WM_FOCUS),a                 ; target owns setname/fsload/fssave
                 call  wm_entry                     ; HL = target entry
                 ld    c,(hl)                       ; C = target page (+0)
                 ld    de,WM_FR_EVENT               ; target's on_event handler
@@ -1798,12 +1800,18 @@ ds_norel
                 ld    l,a
                 ld    a,h
                 or    l
-                jr    z,ds_click                   ; no handler -> treat as a click
+                jr    nz,ds_drop
+                ld    a,(WM_DRAGSRC)
+                ld    (WM_FOCUS),a
+                jr    ds_click                      ; no handler -> treat as a click
+ds_drop
                 ld    a,GB_MSG_DROP
                 ld    (GB_MSG),a
                 ld    a,c                           ; map the target's page, call it
                 call  bank_set                      ; (it reads WM_DRAGNAME + POLL_MX/MY)
                 call  md_call
+                ld    a,(WM_DRAGSRC)
+                ld    (WM_FOCUS),a
                 ld    a,(wm_drag_pg)              ; restore the source page
                 call  bank_set
                 ld    a,1
@@ -1813,7 +1821,7 @@ ds_click
                 call  bank_set
                 xor   a
                 ret
-wm_drag_pg      db    0
+wm_drag_pg      equ   #12FF        ; low-RAM WM scratch (see lowram.tsv)
 
 ; ghost_place: sb_x/sb_y = the pointer (POLL_MX/MY), clamped so the GHOST_W x
 ; GHOST_H box stays on screen. sb_w/sb_h/sb_buf were set once when the ghost first
@@ -1844,7 +1852,7 @@ ghost_draw
                 ld    a,3
                 jp    k_frame
 
-ghost_on        db    0
+ghost_on        equ   #124A        ; low-RAM WM scratch (see lowram.tsv)
 
 ; wm_raise: A = slot -> move it to z-order top and focus it (keeps the others'
 ; relative order). Compacts WM_Z removing the slot, then re-appends it at the end.
@@ -1977,13 +1985,13 @@ we_add
                 djnz  we_add
                 ret
 
-wm_desc         dw    0            ; wm_register: descriptor ptr
-wm_slot         db    0            ; wm_register: chosen slot
-wm_open_page    db    0            ; k_wm_open: page being loaded
-wm_open_back    db    0            ; k_wm_open: caller's page to restore
-wm_hz           db    0            ; wm_hit_test: z scan index
-wm_rp_back      db    0            ; wm_repaint_all: caller's page
-wm_rp_i         db    0            ; wm_repaint_all: z index
+wm_desc         equ   #12F7        ; low-RAM WM scratch (see lowram.tsv)
+wm_slot         equ   #12F9
+wm_open_page    equ   #12FA
+wm_open_back    equ   #12FB
+wm_hz           equ   #12FC
+wm_rp_back      equ   #12FD
+wm_rp_i         equ   #12FE
 
 ; menu_dispatch: called from k_poll. If a fresh click (D bit0) landed in the
 ; kernel-owned top bar and the app registered a handler, deliver a GB_MSG_MENU
