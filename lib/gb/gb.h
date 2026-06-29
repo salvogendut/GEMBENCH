@@ -103,7 +103,7 @@ typedef struct {
 #define GB_MSG_FRAME 5   /* a focused frame, no chrome click (gb_doc_frame, tick)    */
 #define GB_MSG_CLOSE 6   /* close requested (gadget/ESC): confirm + gb_wm_close      */
 #define GB_MSG_DRAG  7   /* a title-bar press: gb_drag_window + gb_wm_setpos         */
-#define gb_dragname ((const char *)0x13BB)
+#define gb_dragname ((const char *)0x1423)  /* mirrors WM_DRAGNAME in kernel/lowram.inc */
 #define gb_msg (*(volatile gb_msg_t *)0x1302)
 void gb_on_event(void (*handler)(void));   /* register handler, 0 to clear */
 
