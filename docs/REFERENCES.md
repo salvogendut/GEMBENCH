@@ -22,17 +22,17 @@ reference resources — not dependencies, and not vendored into this repo.
   into labelled, commented modules (graphics, sound, keyboard, etc.) plus the
   original ROM image for verification.
   **Why it matters:** GEOBENCH calls the firmware for screen, keyboard, and disk.
-  This is the authoritative reference for the **TXT/GRA VDU vectors** behind the
-  windowed-mode "intercept firmware output" idea, and for the CAS/AMSDOS paths
-  used to load and launch `.BIN` software. See `ARCHITECTURE.md` → "Launching
-  legacy AMSDOS software."
+  This is the authoritative reference for the **TXT/GRA VDU vectors** and the
+  CAS/AMSDOS file paths the kernel uses. (Note: GEOBENCH does **not** launch
+  legacy `.BIN`/`.BAS` software — that is a non-goal; see `ARCHITECTURE.md` →
+  "Known architectural limits.")
 
-## Locomotive BASIC (for launching `.BAS`)
+## Locomotive BASIC
 
 - **Bread80/Amstrad-CPC-BASIC-Source** — <https://github.com/Bread80/Amstrad-CPC-BASIC-Source>
   Reverse-engineered "unassembly" of the **Amstrad CPC BASIC 1.1 ROM** (1986) in
   documented, modular Z80 assembly, with the original ROM image for verification.
-  **Why it matters:** launching `.BAS` programs means handing off to the BASIC
-  ROM (`RUN"PROG"`-equivalent). This shows how BASIC enters/exits programs and
-  manages its workspace — relevant both to launching legacy BASIC and to
-  understanding what state the desktop must preserve across a takeover.
+  **Why it matters:** GEOBENCH boots from a `RUN"GB` BASIC loader and shares the
+  machine with the BASIC ROM, so this documents how BASIC enters/exits and manages
+  its workspace — and what state the desktop must preserve. (GEOBENCH does not
+  launch `.BAS` programs itself; running them is a non-goal.)

@@ -13,9 +13,10 @@ tools/iconedit.py assets/iconsets/MYSET.IST     # tkinter editor (.IST and .SPR)
 
 `iconedit.py` opens an existing `.IST` or starts a new one; draw, then Save.
 
-A selectable desktop set must supply **every** slot the desktop draws (currently 26
-icons, including the Settings gear at slot 25) — the Settings app only lists `.IST`
-files whose header icon count is ≥ 26, so toolchests like `PAINT.IST` are excluded.
+A selectable desktop set must supply **every** slot the desktop draws (currently 25
+icons, since #198 dropped the duplicate `icon_iconset` slot) — the Settings app only
+lists `.IST` files whose header icon count is ≥ 25 (`MIN_IST_ICONS`), so toolchests
+like `PAINT.IST` are excluded.
 When a new desktop icon is added, append it to each tracked set with
 `tools/ist_append.py assets/iconsets/MYSET.IST lib/icon_<name>.asm` (`packicons.py`
 only regenerates `build/DEFAULT.IST`).

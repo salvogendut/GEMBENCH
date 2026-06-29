@@ -21,7 +21,9 @@ CPC's AMSDOS/FAT expects, and the staging copies the file under its own name.
 
 ## Size
 
-Currently the Viewer caps a picture at ~10 KB of bitmap (≈ 200×200; `PENGUIN.PIC` is the
-200×200 sample). See issue #164 for the banked buffer that lifts this toward full-screen
-320×200. The floppy image (`QA/GEOBENCH.DSK`) only carries the pictures hardcoded in
+The Viewer holds a picture up to ~10 KB of bitmap (≈ 200×200; `PENGUIN.PIC` is the
+200×200 sample) in its in-window buffer. Larger pictures load into a borrowed 16 KB
+RAM bank (#164), so on a bare 128K machine — where every app bank is already in use —
+a big image shows an empty window, while a 256K+ expansion displays it. The floppy
+image (`QA/GEOBENCH.DSK`) only carries the pictures hardcoded in
 `kernel/pack_apps.asm`; the card carries everything in this folder.
