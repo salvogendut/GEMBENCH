@@ -17,8 +17,9 @@
 ;     ROM slot 6) is the selected upper ROM. Response = [len@0][cmd_lo@1][#43@2]
 ;     [data@3..]; resp_frame sets len = (#data + 2), so #E800+0 == 2 means "no data"
 ;     (C_READDIR end-of-directory). Per-command status lives in the data area (+3..).
-;   GEOBENCH runs with the upper ROM enabled (#7F85), so each command just selects
-;   slot 6 (#DF00=6) for the whole send+ack+read, then restores AMSDOS (#DF00=7).
+;   GEOBENCH normally runs with the upper ROM enabled, so each command preserves
+;   the current video mode while paging slot 6 (#DF00=6) for send+ack+read, then
+;   restores AMSDOS (#DF00=7).
 ;
 ; Backend entry points (same shape as fsalb_*/fside_* so lib/fs.asm routes here):
 ;   fsm4_dir_first -> CF set = first entry in fs_ent_*, NC = empty
@@ -42,6 +43,8 @@ M4_DATA         equ   #FE00        ; DATAPORT  (write command bytes; lead byte t
 M4_ACK          equ   #FC00        ; ACKPORT   (strobe = execute; board bus-holds until done)
 M4_RESP         equ   #E800        ; rom_response (read while M4ROM/slot 6 is selected)
 M4_ROMNUM       equ   6            ; M4ROM expansion slot
+SCR_GET_MODE    equ   #BC11        ; firmware: A = current screen mode
+VIDEO_MODE_HINT equ   #14FF        ; bit 7 valid, bits 0..1 = caller's active mode
 
 M4C_OPEN        equ   #01          ; C_OPEN   (#4301)
 M4C_READ2       equ   #12          ; C_READ2  (#4312) - unbuffered, gives actual size + EOF
@@ -61,11 +64,26 @@ M4SV_DATA       equ   #2200
 
 ; --- transport --------------------------------------------------------------
 ; m4_io_begin: DI + select M4ROM (slot 6) so DATAPORT/ACKPORT are serviced and the
-; response window maps at #E800. Upper ROM stays enabled (#7F85 = GEOBENCH steady).
-m4_io_begin
-                di
-                ld    bc,#7F85               ; upper ROM ON + lower ROM OFF (low RAM visible)
+; response window maps at #E800. Upper ROM stays enabled, preserving Mode 2 clients.
+m4_ga_upper_on
+                push  de
+                push  hl
+                ld    a,(VIDEO_MODE_HINT)
+                bit   7,a
+                jr    nz,m4ga_have
+                call  SCR_GET_MODE
+m4ga_have       and   #03
+                or    #84                    ; upper ROM ON + lower ROM OFF
+                ld    b,#7F
+                ld    c,a
                 out   (c),c
+                pop   hl
+                pop   de
+                ret
+
+m4_io_begin
+                call  m4_ga_upper_on
+                di
                 ld    bc,#DF00
                 ld    a,M4_ROMNUM
                 out   (c),a
@@ -125,9 +143,8 @@ m4_send
                 sbc   hl,de                    ; HL = size (bytes after buf[0])
                 ld    a,l
                 ld    (m4_cmdbuf),a            ; buf[0] = size
+                call  m4_ga_upper_on
                 di
-                ld    bc,#7F85               ; slot 6 / upper ROM on (steady state)
-                out   (c),c
                 ld    bc,#DF00
                 ld    a,M4_ROMNUM
                 out   (c),a
