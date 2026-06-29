@@ -158,8 +158,10 @@ static unsigned char cfg_drive(const char *key, unsigned char fallback)
 static void cfg_path(char *dst, unsigned char drive, const char *stem, const char *ext)
 {
     unsigned char i = 0, j = 0;
-    dst[j++] = drive_letter(drive);
-    dst[j++] = ':';
+    if (drive != boot_drive()) {
+        dst[j++] = drive_letter(drive);
+        dst[j++] = ':';
+    }
     while (stem[i]) dst[j++] = stem[i++];
     dst[j++] = '.';
     dst[j++] = ext[0]; dst[j++] = ext[1]; dst[j++] = ext[2];
@@ -644,6 +646,38 @@ static void saver_dialog(void)
 
 /* ---- interaction ------------------------------------------------------------- */
 
+static void load_backdrop_live(const char *name, unsigned char drive)
+{
+    unsigned char old_drive, descended, i;
+    char nm[11];
+    unsigned int n;
+
+    if (name[0]=='S' && name[1]=='O' && name[2]=='L' &&
+        name[3]=='I' && name[4]=='D' && name[5]==0) {
+        *(unsigned char *)BD_SOLID_ADDR = 1;
+        return;
+    }
+
+    for (i = 0; i < 8; i++) nm[i] = ' ';
+    for (i = 0; i < 8 && name[i]; i++) nm[i] = name[i];
+    nm[8] = 'B'; nm[9] = 'D'; nm[10] = 'P';
+
+    old_drive = gb_get_drive();
+    gb_set_drive(drive);
+    descended = enter_sys();
+    gb_set_name(nm);
+    n = gb_fs_load(gb_copybuf, 512);
+    if (descended) gb_back();
+    gb_set_drive(old_drive);
+    if (n >= 64) {
+        for (i = 0; i < 64; i++)
+            ((char *)BD_TILE_ADDR)[i] = gb_copybuf[i];
+        *(unsigned char *)BD_SOLID_ADDR = 0;
+    } else {
+        *(unsigned char *)BD_SOLID_ADDR = 1;
+    }
+}
+
 /* live_apply: write the chosen 8.3 name into the kernel transfer area and call
    gb_reload. Wallpaper still applies on the next boot (the desktop reads it from
    config text); the other assets, including the backdrop, reload immediately. */
@@ -652,11 +686,8 @@ static void live_apply(unsigned char r, const char *name, unsigned char drive)
     const char *ext = rows[r].ext;
     if (ext[0] == 'P') return;
     if (ext[0] == 'B') {
-        *(unsigned char *)BD_SOLID_ADDR =
-            (unsigned char)(name[0]=='S' && name[1]=='O' && name[2]=='L' &&
-                            name[3]=='I' && name[4]=='D' && name[5]==0);
-        *(unsigned char *)0x123C =
-            (*(unsigned char *)BD_SOLID_ADDR || drive == boot_drive()) ? DRIVE_NONE : drive; /* KCFG_BDDRIVE */
+        load_backdrop_live(name, drive);
+        return;
     }
     {
         char *dst = (char *)rows[r].tfr;
