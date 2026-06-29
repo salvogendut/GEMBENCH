@@ -102,6 +102,9 @@ static unsigned char wp_wb, wp_h, wp_x, wp_y; /* picture dims + centred top-left
 static unsigned char wp_srcy;                 /* first picture row shown (centre a too-tall pic) */
 static unsigned int  wp_off;
 static unsigned char wp_drive;
+static unsigned char wp_cfg_drive;
+static unsigned char wp_cfg_valid;            /* last parsed WALLPAPER= was a usable PIC path */
+static char wp_name[11];                      /* last parsed 8.3 wallpaper name */
 
 /* The kernel keeps the raw GEOBENCH.CFG it loaded at boot here (for GB_RELOAD). We parse
    WALLPAPER= straight out of it - NOT via a fixed transfer cell: every free low-RAM cell
@@ -158,6 +161,28 @@ static unsigned char wp_cfg_name(char *out)
         return 1;
     }
     return 0;                                                   /* absent */
+}
+
+static void wp_release(void)
+{
+    if (!wp_bank) return;
+    PIC_PAGE_K = wp_bank;
+    gb_pic_close();
+    wp_bank = 0;
+}
+
+static unsigned char same11(const char *a, const char *b)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++)
+        if (a[i] != b[i]) return 0;
+    return 1;
+}
+
+static void copy11(char *dst, const char *src)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++) dst[i] = src[i];
 }
 
 /* enter_sys: descend into the /GBENCH system folder if present (the card holds the
@@ -240,9 +265,18 @@ static void wp_init(void)
 {
     char nm[11];
     unsigned char descended, old_drive;
-    wp_bank = 0;
     wp_drive = boot_drive();
-    if (!wp_cfg_name(nm)) return;               /* WALLPAPER= absent or NONE */
+    if (!wp_cfg_name(nm)) {                     /* WALLPAPER= absent or NONE */
+        wp_release();
+        wp_cfg_valid = 0;
+        return;
+    }
+    if (wp_cfg_valid && wp_cfg_drive == wp_drive && same11(wp_name, nm))
+        return;                                 /* config unchanged -> keep current bank */
+    wp_release();
+    copy11(wp_name, nm);
+    wp_cfg_drive = wp_drive;
+    wp_cfg_valid = 1;
     if (!drive_present(wp_drive)) return;       /* bad qualified drive -> NONE fallback */
     old_drive = gb_get_drive();
     gb_set_drive(wp_drive);
@@ -261,6 +295,8 @@ static void wp_init(void)
             wp_y = 8;
             wp_srcy = (unsigned char)((wp_h - 192) / 2);
         }
+    } else {
+        wp_wb = 0; wp_h = 0; wp_x = 0; wp_y = 0; wp_srcy = 0; wp_off = 0;
     }
 }
 
@@ -304,6 +340,8 @@ static void paint(void)
     unsigned char i;
     ss_cfg_init();                             /* #219: re-read SAVER=/SAVERTIME= - a Settings change
                                                   applies live (this fires when Settings closes) */
+    wp_init();                                /* #212: re-read WALLPAPER= so a Settings change applies
+                                                 when the desktop repaints after the window closes. */
     wp_backdrop(0, 8, 80, 192);                /* backdrop: wallpaper if loaded, else tile/solid (#128) */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
