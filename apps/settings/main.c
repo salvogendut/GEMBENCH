@@ -738,6 +738,8 @@ static void open_picker(unsigned char r)
             (ext[0] == 'P' && list[sel][0] == 'N' && list[sel][1] == 'O' &&
              list[sel][2] == 'N' && list[sel][3] == 'E' && list[sel][4] == 0)) {
             cfg_set(rows[r].key, list[sel]); /* SOLID / NONE stay global */
+            if (r == ROW_BACKDROP)
+                cfg_set("WALLPAPER=", "NONE");   /* backdrop mode: wallpaper must not mask it */
             live_apply(r, list[sel], DRIVE_NONE);
         } else {
             if (media)
@@ -745,6 +747,10 @@ static void open_picker(unsigned char r)
             else
                 cfg_path(path, boot_drive(), list[sel], ext);
             cfg_set(rows[r].key, path);      /* persist to GEOBENCH.CFG */
+            if (r == ROW_BACKDROP)
+                cfg_set("WALLPAPER=", "NONE");   /* backdrop choice wins over wallpaper */
+            else if (r == ROW_WALLPAPER)
+                cfg_set("BACKDROP=", "SOLID");   /* wallpaper overlays the desktop; keep a plain fallback */
             live_apply(r, media ? (list[sel] + 2) : list[sel],
                        media ? stem_drive[sel - base] : boot_drive()); /* ...and apply now, no reboot (#185) */
         }
