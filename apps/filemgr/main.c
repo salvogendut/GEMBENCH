@@ -84,7 +84,7 @@ static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Full
    path index through it. Capped at MAX_ENT (the shipped floppy/card directories are
    small; a larger directory shows the first MAX_ENT sorted). Also spares the FAT a
    re-stream per drawn item. */
-#define MAX_ENT 160
+#define MAX_ENT 152
 /* Flat 11-byte name records (NOT char[MAX_ENT][11]): a 2D char array indexed by an
    8-bit var makes SDCC compute the *11 offset in 8 bits, which wraps past entry 23.
    NAME_AT forces the multiply to 16-bit. */
@@ -252,7 +252,7 @@ static char *fullname(void) { return name83(gb_entname()); }
 static char fm_path[40];
 #define TITLE_MAX 23                    /* kernel title scratch is 24 bytes incl. NUL */
 static char title_buf[TITLE_MAX + 1];
-static char free_suffix[10];             /* " 178KiB", " 32MiB", or " >63MiB" */
+static char free_suffix[15];             /* " 178KiB free", " 32MiB free", or " >63MiB free" */
 
 static void path_push(const char *name)         /* append "/name" (bounds-checked) */
 {
@@ -317,11 +317,16 @@ static unsigned char make_free_suffix(void)
         append_ch(free_suffix, &i, 'i');
         append_ch(free_suffix, &i, 'B');
     }
+    append_ch(free_suffix, &i, ' ');
+    append_ch(free_suffix, &i, 'f');
+    append_ch(free_suffix, &i, 'r');
+    append_ch(free_suffix, &i, 'e');
+    append_ch(free_suffix, &i, 'e');
     free_suffix[i] = 0;
     return i;
 }
 
-static const char *win_title(void)               /* "Disk C/path 32MiB" -> title_buf */
+static const char *win_title(void)               /* "Disk C/path 32MiB free" -> title_buf */
 {
     unsigned char i = 0, j = 0, slen, body_max;
     const char *d = drive_title[my_drive];
