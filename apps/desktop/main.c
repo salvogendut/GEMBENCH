@@ -265,8 +265,11 @@ static void ss_cfg_init(void)
     }
     ss_name[8] = 'S'; ss_name[9] = 'A'; ss_name[10] = 'V';
     p = cfg_val("SAVERTIME=", 10);                             /* the idle timeout, minutes */
-    for (; p < len && t[p] >= '0' && t[p] <= '9'; p++)
-        mins = mins * 10 + (unsigned int)(t[p] - '0');
+    if (p < len && t[p] >= '0' && t[p] <= '9') {
+        mins = (unsigned int)(t[p++] - '0');                    /* first digit */
+        if (p < len && t[p] >= '0' && t[p] <= '9')              /* second digit: enough for cap=21 */
+            mins = (unsigned int)((mins << 3) + (mins << 1) + (unsigned int)(t[p] - '0'));
+    }
     if (mins > 21) mins = 21;                                  /* cap: 21 min*3000 fits a word */
     ss_timeout = mins * 3000;                                  /* minutes -> frames (60s * 50 Hz) */
 }
