@@ -327,6 +327,20 @@ mde_ext
                 ld    (fs_ent_size+2),hl
                 ret
 
+; fsm4_free_kib: run M4SAVE.MOD with the #FFFE free-space operation. The module
+; owns the M4 C_FREE command + ASCII parse so that logic does not live resident.
+fsm4_free_kib
+                ld    hl,#FFFE
+                ld    (M4SV_LEN),hl
+                ld    hl,m4save_modname
+                call  run_data_module
+                ld    a,(M4SV_RES)
+                or    a
+                ret   z
+                ld    hl,(M4SV_LEN)
+                scf
+                ret
+
 ; --- file load --------------------------------------------------------------
 ; fsm4_load_file: C_OPEN the absolute path m4_path + "/" + fs_req_name, then C_READ2
 ; #0800-byte chunks into (fs_load_dst) until EOF (status #20), guarding fs_load_max.

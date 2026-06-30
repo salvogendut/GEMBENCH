@@ -64,6 +64,8 @@ static unsigned char dc_timer;
 static unsigned char view = V_ICONS;   /* default = icon view (GEOBENCH.CFG VIEW=) */
 static unsigned char my_drive;         /* the drive this window browses (#65) */
 static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
+static unsigned char free_known;
+static unsigned int free_kib;
 
 /* GEOBENCH.CFG is loaded once at startup; the View toggle rewrites the VIEW= line
    and saves it, so the choice persists across reboots. NOTE: gb_fs_load copies in
@@ -79,9 +81,10 @@ static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Full
 
 /* Sorted listing cache (#118): the directory is streamed once into these arrays in
    raw order, then `order` is sorted by (type, name) and BOTH views + the click/open
-   path index through it. Capped at MAX_ENT (CPC dirs are small; a larger directory
-   shows the first MAX_ENT sorted). Also spares the FAT a re-stream per drawn item. */
-#define MAX_ENT 200
+   path index through it. Capped at MAX_ENT (the shipped floppy/card directories are
+   small; a larger directory shows the first MAX_ENT sorted). Also spares the FAT a
+   re-stream per drawn item. */
+#define MAX_ENT 160
 /* Flat 11-byte name records (NOT char[MAX_ENT][11]): a 2D char array indexed by an
    8-bit var makes SDCC compute the *11 offset in 8 bits, which wraps past entry 23.
    NAME_AT forces the multiply to 16-bit. */
@@ -247,7 +250,9 @@ static char *fullname(void) { return name83(gb_entname()); }
    any backend: "" = root, "/GAMES", "/GAMES/RPG". path_push on descend, path_pop
    on Back; win_title builds "<drive><path>" for gb_window. */
 static char fm_path[40];
-static char title_buf[40];
+#define TITLE_MAX 23                    /* kernel title scratch is 24 bytes incl. NUL */
+static char title_buf[TITLE_MAX + 1];
+static char free_suffix[10];             /* " 178KiB", " 32MiB", or " >63MiB" */
 
 static void path_push(const char *name)         /* append "/name" (bounds-checked) */
 {
@@ -271,13 +276,62 @@ static void path_pop(void)                       /* drop the last "/component" *
    drive root (fm_path empty -> no parent). */
 static unsigned char up_avail(void) { return (unsigned char)(fm_path[0] != 0); }
 
-static const char *win_title(void)               /* "Disk C" + path -> title_buf */
+static void append_ch(char *dst, unsigned char *i, char ch)
 {
-    unsigned char i = 0, j = 0;
+    if (*i < TITLE_MAX) dst[(*i)++] = ch;
+}
+
+static void append_small(char *dst, unsigned char *i, unsigned int v)
+{
+    unsigned char d, started = 0;
+    if (v >= 1000) { append_ch(dst, i, '1'); v -= 1000; started = 1; }
+    d = 0; while (v >= 100) { v -= 100; d++; }
+    if (started || d) { append_ch(dst, i, (char)('0' + d)); started = 1; }
+    d = 0; while (v >= 10) { v -= 10; d++; }
+    if (started || d) append_ch(dst, i, (char)('0' + d));
+    append_ch(dst, i, (char)('0' + (unsigned char)v));
+}
+
+static unsigned char make_free_suffix(void)
+{
+    unsigned char i = 0;
+    unsigned int v;
+    if (!free_known) { free_suffix[0] = 0; return 0; }
+    append_ch(free_suffix, &i, ' ');
+    if (free_kib == 0xFFFF) {
+        append_ch(free_suffix, &i, '>');
+        append_ch(free_suffix, &i, '6');
+        append_ch(free_suffix, &i, '3');
+        append_ch(free_suffix, &i, 'M');
+        append_ch(free_suffix, &i, 'i');
+        append_ch(free_suffix, &i, 'B');
+    } else if (free_kib >= 1024) {
+        v = free_kib >> 10;
+        append_small(free_suffix, &i, v);
+        append_ch(free_suffix, &i, 'M');
+        append_ch(free_suffix, &i, 'i');
+        append_ch(free_suffix, &i, 'B');
+    } else {
+        append_small(free_suffix, &i, free_kib);
+        append_ch(free_suffix, &i, 'K');
+        append_ch(free_suffix, &i, 'i');
+        append_ch(free_suffix, &i, 'B');
+    }
+    free_suffix[i] = 0;
+    return i;
+}
+
+static const char *win_title(void)               /* "Disk C/path 32MiB" -> title_buf */
+{
+    unsigned char i = 0, j = 0, slen, body_max;
     const char *d = drive_title[my_drive];
-    while (d[j]) title_buf[i++] = d[j++];
+    slen = make_free_suffix();
+    body_max = (slen < TITLE_MAX) ? (unsigned char)(TITLE_MAX - slen) : TITLE_MAX;
+    while (d[j] && i < body_max) title_buf[i++] = d[j++];
     j = 0;
-    while (fm_path[j] && i < (unsigned char)(sizeof(title_buf) - 1)) title_buf[i++] = fm_path[j++];
+    while (fm_path[j] && i < body_max) title_buf[i++] = fm_path[j++];
+    j = 0;
+    while (free_suffix[j] && i < TITLE_MAX) title_buf[i++] = free_suffix[j++];
     title_buf[i] = 0;
     return title_buf;
 }
@@ -503,6 +557,7 @@ static void fm_draw(void)
 static void relist(void)
 {
     build_list();              /* stream + sort the directory (sets total) (#118) */
+    free_known = gb_fs_free_kib(&free_kib);
     top = 0; nsel = 0;
     clamp_top();
     win_title();               /* the path changed -> refresh the title buffer (#146) */
@@ -801,6 +856,7 @@ void main(void)
     { unsigned char k; for (k = 0; k < 4; k++) gb_back(); }
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
     build_list();                /* stream + sort the directory (sets total) (#118) */
+    free_known = gb_fs_free_kib(&free_kib);
     top = 0;
     clamp_top();
     fmmw.title = win_title();    /* build "<drive><path>" before the first paint (#146) */

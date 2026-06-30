@@ -77,6 +77,7 @@ unsigned int gb_fs_load(char *buf, unsigned int max);    /* load opened file -> 
                                                          /* byte count            */
 unsigned char gb_fs_save(char *buf, unsigned int len);   /* save opened file ->   */
                                                          /* 1 ok / 0 fail         */
+unsigned char gb_fs_free_kib(unsigned int *kib);          /* free space in KiB; 1 known */
 unsigned char gb_getkey(void);        /* typed char from the keyboard, 0 if none  */
 unsigned char gb_vsync(void);         /* wait one frame -> 1 if ESC held, else 0  */
 

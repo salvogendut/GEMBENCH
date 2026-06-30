@@ -39,6 +39,7 @@
         .globl  _gb_run
         .globl  _gb_fs_load
         .globl  _gb_fs_save
+        .globl  _gb_fs_free_kib
         .globl  _gb_getkey
         .globl  _gb_vsync
         .globl  _gb_on_event
@@ -356,6 +357,24 @@ _gb_fs_save:
         xor     a               ; floppy saves reuse the GBUI transfer block at #1700
         ld      (0x1705), a     ; and can leave UI_MODAL nonzero -> top-bar clicks die
         ld      a, c
+        ret
+
+;; unsigned char gb_fs_free_kib(unsigned int *kib);
+;;   HL=out pointer; GB_FSFREE returns HL=free KiB, CF set if known.
+_gb_fs_free_kib:
+        push    hl              ; save output pointer
+        call    0x809C          ; GB_FSFREE -> HL = KiB, CF = known
+        jr      nc, gff_unknown
+        ex      de, hl          ; DE = KiB
+        pop     hl              ; HL = output pointer
+        ld      (hl), e
+        inc     hl
+        ld      (hl), d
+        ld      a, #1
+        ret
+gff_unknown:
+        pop     hl
+        xor     a
         ret
 
 ;; unsigned char gb_getkey(void);   -> typed char in A, or 0 if none

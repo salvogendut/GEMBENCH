@@ -149,8 +149,7 @@ GB_COPYEND      equ   GB_KERNEL+147 ; #8093  restore target drive/context.
 GB_ONBAR        equ   GB_KERNEL+150 ; #8096  HL = desktop top-bar draw handler.
 GB_WMSETSIZE    equ   GB_KERNEL+153 ; #8099  resize focused window hit rect:
                                     ;         A=w, L=h.
-GB_BLITEFULL    equ   GB_KERNEL+156 ; #809C  reserved legacy full-icon slot;
-                                    ;         currently a vsync-compatible stub.
+GB_FSFREE       equ   GB_KERNEL+156 ; #809C  HL = free KiB; CF set if known.
 GB_ICONHALF     equ   GB_KERNEL+159 ; #809F  half-height icon blit:
                                     ;         A=slot B=x C=y.
 GB_MXP          equ   GB_KERNEL+162 ; #80A2  HL = pointer pixel x (0..319).

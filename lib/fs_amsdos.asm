@@ -400,6 +400,10 @@ FSV_TX_UNIT     equ   #170F
 FSV_TX_DATA     equ   #2200
 FSV_TX_MAX      equ   #1C00        ; 7 KB staging cap (matches the gbfat/IDE save cap)
 
+fsam_free_mod_op
+                ld    (FSV_TX_LEN),hl
+                jp    floppysv_run
+
 ; fsam_delete_file: ask FLOPPYSV.MOD to mark matching directory extents deleted
 ; and write the directory back. FSV_TX_LEN=#FFFF is the module operation marker.
 fsam_delete_file
@@ -443,6 +447,7 @@ floppysv_run
                 ld    a,(FSV_TX_RES)
                 or    a
                 ret   z
+                ld    hl,(FSV_TX_LEN)
                 scf
                 ret
 floppysv_modname db    "FLOPPYSVMOD"          ; 8.3, space-padded
