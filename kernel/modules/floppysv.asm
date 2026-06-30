@@ -24,12 +24,15 @@ fsam_wbuf       equ   fs_secbuf    ; the 512-byte sector being assembled
 FSV_TX_LEN      equ   #1700
 FSV_TX_NAME     equ   #1702
 FSV_TX_RES      equ   #170D
+FSV_TX_ERR      equ   #170E
 FSV_TX_UNIT     equ   #170F
 FSV_TX_DATA     equ   #2200
 fs_req_name     equ   FSV_TX_NAME  ; the name to find/create (core's namematch uses it)
 
                 org   FLOPPYSV_ORG
 ; entry: pick up the unit, run the save, store the result byte, return.
+                ld    a,#10
+                ld    (FSV_TX_ERR),a
                 ld    a,(FSV_TX_UNIT)
                 ld    (fsam_unit),a
                 call  flsv_save
@@ -68,7 +71,10 @@ flsv_save
                 srl   a
                 ld    (fsv_nblk),a
                 cp    17
-                jr    nc,fsv_fail                      ; > 16 blocks -> single extent only
+                jr    c,fsv_size_ok
+                ld    a,#11
+                jr    fsv_fail_a                       ; > 16 blocks -> single extent only
+fsv_size_ok
                 ld    ix,fsam_buf                    ; find the Ex=0 entry by name
                 ld    b,64
 fsv_scan
@@ -87,7 +93,10 @@ fsv_next
                 pop   bc
                 djnz  fsv_scan
                 call  fsv_find_free_entry             ; not found -> create in a free slot
-                jr    nc,fsv_fail                      ; directory full
+                jr    c,fsv_new_entry
+                ld    a,#12
+                jr    fsv_fail_a                       ; directory full
+fsv_new_entry
                 push  ix                              ; init it: user 0, name, the rest 0
                 pop   hl
                 ld    (hl),0
@@ -107,10 +116,17 @@ fsv_fail
                 call  fsam_motor_off
                 or    a                               ; NC
                 ret
+fsv_fail_a
+                ld    (FSV_TX_ERR),a
+                jr    fsv_fail
 fsv_have
                 call  fsv_ensure_blocks               ; alloc/free 1KB blocks to fsv_nblk
-                jr    nc,fsv_fail                      ; disk full
+                jr    c,fsv_fits
+                ld    a,#13
+                jr    fsv_fail_a                       ; disk full
 fsv_fits
+                xor   a
+                ld    (FSV_TX_ERR),a
                 ld    hl,fsam_wbuf                    ; build the 128-byte header
                 ld    de,fsam_wbuf+1
                 ld    bc,127

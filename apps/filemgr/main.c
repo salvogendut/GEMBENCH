@@ -49,6 +49,10 @@
 
 #define V_LIST   0
 #define V_ICONS  1
+#define FSV_DIAG (*(volatile unsigned char *)0x170E)  /* FLOPPYSV.MOD diagnostic byte */
+
+static char saveerr[] = "save err 00";
+static const char hexdig[] = "0123456789ABCDEF";
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;
@@ -638,8 +642,17 @@ static void on_event(void)
         }
         gb_set_drive(my_drive);           /* reassert target after the source load/module path */
         gb_set_name(gb_dragname);
+        FSV_DIAG = 0xEE;                  /* unchanged after failure => writer module did not run */
         ok = gb_fs_save(gb_copybuf, n);
-        if (!ok) gb_alert("Copy failed", "disk full or read-only");
+        if (!ok) {
+            if (my_drive == GB_DRIVE_A || my_drive == GB_DRIVE_B) {
+                saveerr[9] = hexdig[FSV_DIAG >> 4];
+                saveerr[10] = hexdig[FSV_DIAG & 15];
+                gb_alert("Copy failed", saveerr);
+            } else {
+                gb_alert("Copy failed", "disk full or read-only");
+            }
+        }
         relist();
         return;
     }
