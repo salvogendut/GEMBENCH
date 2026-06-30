@@ -13,12 +13,15 @@
 base          0x1000  0x11FF  kcfg_text               -             GEOBENCH.CFG text buffer
 base          0x1200  0x123C  kcfg_fields             -             parsed config outputs, memory string, backdrop drive
 base          0x123D  0x123D  wm_open_flags           -             one-shot strict current-drive app open flag
+base          0x123E  0x123F  kernel_scratch          -             dp_save/cb_tdrv transient kernel scratch
 base          0x1240  0x1249  kernel_boot_time        -             GB_TIME_BUF, BOOT_SP, GB_KSIZE, BAR_HANDLER
+base          0x124A  0x124E  wm_transient_scratch    -             ghost_on, window move/resize temporaries
 base          0x1250  0x128F  backdrop_tile           -             BD_TILE, loaded 16x16 Mode-1 backdrop tile
 base          0x1290  0x1290  backdrop_solid          -             BD_SOLID flag
 base          0x1291  0x12D0  cursor_save_under       -             cursor save-under buffer
 base          0x12D1  0x12E8  window_title_scratch    -             copied window title
 base          0x12E9  0x12F6  dir_name_scratch        -             formatted visible directory name
+base          0x12F7  0x12FF  wm_call_scratch         -             WM descriptor/open/repaint scratch and drag source page
 base          0x1300  0x1308  app_event_poll          -             APP_HANDLER, GB_MSG, POLL_MX/MY/FLAGS
 base          0x1309  0x130F  wm_public_flags_pic     -             fullscreen/max flags and banked picture cells
 base          0x1310  0x1334  menu_def                -             top-bar menu copy, max 4 titles

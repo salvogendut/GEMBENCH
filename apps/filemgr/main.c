@@ -49,6 +49,10 @@
 
 #define V_LIST   0
 #define V_ICONS  1
+#define FSV_DIAG (*(volatile unsigned char *)0x170E)  /* FLOPPYSV.MOD diagnostic byte */
+
+static char saveerr[] = "save err 00";
+static const char hexdig[] = "0123456789ABCDEF";
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;
@@ -625,14 +629,30 @@ static void on_event(void)
     sync_rect();
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
         unsigned int n;                   /* copy it onto THIS window's drive (#74) */
+        unsigned char ok;
         gb_set_drive(my_drive);
         gb_copy_begin();                  /* switch to the drag source drive/dir */
         gb_set_name(gb_dragname);
         n = gb_fs_load(gb_copybuf, GB_COPYMAX);
-        gb_set_drive(my_drive);           /* back to this window's drive */
+        gb_copy_end();                    /* restore this window's drive/dir before saving */
+        if (n == 0) {
+            gb_alert("Copy failed", "too large or unreadable");
+            relist();
+            return;
+        }
+        gb_set_drive(my_drive);           /* reassert target after the source load/module path */
         gb_set_name(gb_dragname);
-        gb_fs_save(gb_copybuf, n);        /* lands in the root */
-        gb_copy_end();                    /* restore this window's drive/dir */
+        FSV_DIAG = 0xEE;                  /* unchanged after failure => writer module did not run */
+        ok = gb_fs_save(gb_copybuf, n);
+        if (!ok) {
+            if (my_drive == GB_DRIVE_A || my_drive == GB_DRIVE_B) {
+                saveerr[9] = hexdig[FSV_DIAG >> 4];
+                saveerr[10] = hexdig[FSV_DIAG & 15];
+                gb_alert("Copy failed", saveerr);
+            } else {
+                gb_alert("Copy failed", "disk full or read-only");
+            }
+        }
         relist();
         return;
     }
