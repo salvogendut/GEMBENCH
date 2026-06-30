@@ -48,6 +48,7 @@ M4C_OPEN        equ   #01          ; C_OPEN   (#4301)
 M4C_READ2       equ   #12          ; C_READ2  (#4312) - unbuffered, gives actual size + EOF
 M4C_CLOSE       equ   #04          ; C_CLOSE  (#4304)
 M4C_CD          equ   #08          ; C_CD     (#4308)
+M4C_TIME        equ   #24          ; C_TIME   (#4324) - "HH:MM:SS YYYY-MM-DD"
 M4C_DIRARGS     equ   #25          ; C_DIRSETARGS (#4325)
 M4C_READDIR     equ   #06          ; C_READDIR (#4306)
 M4_OPENMODE     equ   #81          ; FA_READ | FA_REALMODE (dynamic fd, bypass AMSDOS fd)
@@ -458,6 +459,70 @@ m4_close_fd
                 out   (c),a
                 call  m4_go
                 jp    m4_io_end
+
+; fsm4_seed_clock: ask M4ROM for its NTP-backed time and seed the kernel's
+; software clock. C_TIME returns ASCII at M4_RESP+3: "HH:MM:SS YYYY-MM-DD".
+fsm4_seed_clock
+                ld    a,M4C_TIME
+                call  m4_cmd
+                call  m4_send
+                ld    hl,M4_RESP+3
+                call  m4_parse_2d
+                jr    nc,m4tc_done
+                cp    24
+                jr    nc,m4tc_done
+                ld    d,a                      ; D = hour
+                ld    a,(hl)
+                cp    ':'
+                jr    nz,m4tc_done
+                inc   hl
+                call  m4_parse_2d
+                jr    nc,m4tc_done
+                cp    60
+                jr    nc,m4tc_done
+                ld    e,a                      ; E = minute
+                ld    a,(hl)
+                cp    ':'
+                jr    nz,m4tc_done
+                inc   hl
+                call  m4_parse_2d
+                jr    nc,m4tc_done
+                cp    60
+                jr    nc,m4tc_done
+                ld    (sw_sec),a
+                ld    a,d
+                ld    (sw_hour),a
+                ld    a,e
+                ld    (sw_min),a
+                xor   a
+                ld    (clk_frames),a
+m4tc_done
+                jp    m4_io_end
+
+; m4_parse_2d: HL -> two ASCII digits. Returns CF set, A = binary value,
+; HL advanced past the digits; NC if either byte is not a digit.
+m4_parse_2d
+                ld    a,(hl)
+                sub   '0'
+                cp    10
+                ret   nc
+                ld    b,a
+                inc   hl
+                ld    a,(hl)
+                sub   '0'
+                cp    10
+                ret   nc
+                ld    c,a
+                ld    a,b
+                add   a,a                     ; tens * 2
+                ld    b,a
+                add   a,a                     ; tens * 4
+                add   a,a                     ; tens * 8
+                add   a,b                     ; tens * 10
+                add   a,c
+                inc   hl
+                scf
+                ret
 
 ; --- file save --------------------------------------------------------------
 ; fsm4_save_file: resident stub. Stage the caller's bytes/name/current M4 path

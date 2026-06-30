@@ -20,10 +20,15 @@ clock_tick
                 jr    c,ct_keep
                 xor   a
                 ld    (clk_frames),a
+                if STORAGE_M4
+                call  sw_tick
+                ret
+                else
                 ld    a,(have_rtc)
                 or    a
                 call  z,sw_tick
                 ret
+                endif
 ct_keep
                 ld    (clk_frames),a
                 ret
@@ -34,8 +39,15 @@ clock_init                                      ; detect the RTC + seed the soft
                 ld    (sw_min),a
                 ld    (sw_hour),a
                 ld    (clk_frames),a
+                if STORAGE_M4
+                jp    fsm4_seed_clock
+                else
                 call  rtc_detect
                 ret
+                endif
+
+                if STORAGE_M4
+                else
 rtc_detect
                 ld    e,#5A
                 call  rtc_nvram_rw
@@ -70,6 +82,7 @@ read_rtc_reg                                   ; A = reg -> A = value
                 ld    bc,RTC_DATA
                 in    a,(c)
                 ret
+                endif
 ; (read_time / put_bcd2 / bin_to_bcd removed: the desktop formats the clock from
 ; gb_time now - #77. sw_tick stays: it advances the software clock for gb_time.)
 sw_tick
@@ -104,6 +117,8 @@ swt_sec
 ; the Dallas RTC (regs 4/2/0; binmode = reg B bit2) or the software clock (binary).
 ; The app converts BCD->binary when binmode is 0. Kept tiny (#72).
 k_time
+                if STORAGE_M4
+                else
                 ld    a,(have_rtc)
                 or    a
                 jr    z,kt_soft
@@ -122,6 +137,7 @@ k_time
                 call  read_rtc_reg
                 ld    (GB_TIME_BUF+2),a
                 ret
+                endif
 kt_soft
                 ld    a,(sw_hour)
                 ld    (GB_TIME_BUF+0),a
