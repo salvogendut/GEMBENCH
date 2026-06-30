@@ -8,7 +8,7 @@
 ; primitives (lib/fs_amsdos_core.asm) with the resident reader - one source, two
 ; assemblies - and is self-contained otherwise: own state + the shared fixed-address
 ; low-RAM buffers, reading its inputs from the transfer area the resident stub fills:
-;   FSV_TX_LEN  (#1700, word)   bytes to write
+;   FSV_TX_LEN  (#1700, word)   bytes to write, or #FFFF to delete
 ;   FSV_TX_NAME (#1702, 11)     8.3 name
 ;   FSV_TX_RES  (#170D, byte)   result: 1 = saved, 0 = failed
 ;   FSV_TX_UNIT (#170F, byte)   floppy unit (0 = A, 1 = B)
@@ -30,12 +30,20 @@ FSV_TX_DATA     equ   #2200
 fs_req_name     equ   FSV_TX_NAME  ; the name to find/create (core's namematch uses it)
 
                 org   FLOPPYSV_ORG
-; entry: pick up the unit, run the save, store the result byte, return.
+; entry: pick up the unit, run the save/delete, store the result byte, return.
                 ld    a,#10
                 ld    (FSV_TX_ERR),a
                 ld    a,(FSV_TX_UNIT)
                 ld    (fsam_unit),a
+                ld    hl,(FSV_TX_LEN)
+                ld    a,h
+                and   l
+                inc   a
+                jr    z,flsv_del_entry
                 call  flsv_save
+                jr    flsv_done
+flsv_del_entry  call  flsv_delete
+flsv_done
                 ld    a,1
                 jr    c,flsv_res
                 xor   a
@@ -234,23 +242,65 @@ fsv_dir
                 ld    (ix+15),a
                 xor   a
                 ld    (ix+12),a                        ; Ex = 0 (single extent)
-                ld    a,(fsam_track)                  ; write the directory back
+                call  fsv_write_dir
+                call  fsam_motor_off
+                scf
+                ret
+
+; flsv_delete: mark every directory extent matching fs_req_name as deleted and
+; write the AMSDOS directory back. The implicit allocation table is the surviving
+; directory entries, so clearing the extents frees the file's blocks.
+flsv_delete
+                call  fsam_motor_on
+                call  fsam_read_dir
+                xor   a
+                ld    (fsv_deleted),a
+                ld    ix,fsam_buf
+                ld    b,64
+fdl_scan
+                ld    a,(ix+0)
+                cp    #E5
+                jr    z,fdl_next
+                call  fsam_namematch
+                jr    nz,fdl_next
+                ld    (ix+0),#E5
+                ld    a,1
+                ld    (fsv_deleted),a
+fdl_next
+                push  bc
+                ld    de,32
+                add   ix,de
+                pop   bc
+                djnz  fdl_scan
+                ld    a,(fsv_deleted)
+                or    a
+                jr    z,fdl_fail
+                call  fsv_write_dir
+                call  fsam_motor_off
+                scf
+                ret
+fdl_fail
+                call  fsam_motor_off
+                or    a
+                ret
+
+; fsv_write_dir: write fsam_buf's four AMSDOS directory sectors back.
+fsv_write_dir
+                ld    a,(fsam_track)
                 call  fsam_seek
                 ld    hl,fsam_buf
                 ld    (fsam_src),hl
                 ld    a,(fsam_base)
                 ld    e,a
                 ld    b,4
-fsv_dirloop
+fwd_loop
                 push  bc
                 ld    a,(fsam_track)
                 ld    d,a
                 call  fsam_write_sector
                 pop   bc
                 inc   e
-                djnz  fsv_dirloop
-                call  fsam_motor_off
-                scf
+                djnz  fwd_loop
                 ret
 
 ; fsv_filldata: HL=dest, BC=count. Copy min(count, fsv_drem) bytes from (fsv_dptr)
@@ -439,6 +489,7 @@ fsv_dptr        defw  0            ; pointer into the source data
 fsv_drem        defw  0            ; source bytes left
 fsv_nblk        defb  0            ; 1KB blocks the file needs
 fsv_cand        defb  0            ; alloc: candidate block being tested
+fsv_deleted     defb  0            ; delete: at least one extent was removed
 
 ; ---------------------------------------------------------------------------
 ; fsam_write_sector: D=track, E=sector id. Writes 512 bytes from (fsam_src) to

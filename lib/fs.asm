@@ -29,11 +29,11 @@ D0_DELETE       equ   fsalb_delete_file
                 else
                 if STORAGE_M4                  ; #174/#259: M4 board, FILE-LEVEL backend (the M4
 D0_PRESENT      equ   fsm4_present            ; firmware does FAT, like Albireo's CH376) - lib/fs_m4.asm,
-D0_FIRST        equ   fsm4_dir_first          ; no IDE FAT core. Delete is still unsupported here
-D0_NEXT         equ   fsm4_dir_next           ; until image-backed C_ERASEFILE is validated end to end.
+D0_FIRST        equ   fsm4_dir_first          ; no IDE FAT core; firmware handles the card filesystem.
+D0_NEXT         equ   fsm4_dir_next
 D0_LOAD         equ   fsm4_load_file
 D0_SAVE         equ   fsm4_save_file
-D0_DELETE       equ   fs_load_none
+D0_DELETE       equ   fsm4_delete_file
                 else
 D0_PRESENT      equ   fs_ide_present
 D0_FIRST        equ   fside_dir_first
@@ -87,7 +87,7 @@ fsd_floppy
                 ld    (fs_p_load),hl
                 ld    hl,fsam_save_file
                 ld    (fs_p_save),hl
-                ld    hl,fs_load_none          ; delete not implemented on floppy
+                ld    hl,fsam_delete_file
                 ld    (fs_p_delete),hl
                 ret
 fs_cur_drive    equ   #1335

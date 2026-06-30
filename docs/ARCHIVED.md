@@ -22,10 +22,8 @@ TCP networking. The same `QA/GEOBENCH.IMG` can be used by Albireo and by 1984's
 M4 image mode. The active M4 storage and TCP paths preserve the caller's video
 mode while paging M4ROM, including Telnet's Mode 2 fullscreen terminal.
 
-Two M4 caveats remain:
+One M4 caveat remains:
 
-- delete is not wired yet: M4ROM exposes `C_ERASEFILE`, but 1984's image-backed
-  M4 file API supports write/create but not FAT entry erase;
 - the historical real-hardware report of blank >8 KB pictures needs to be
   revalidated on current M4ROM and current GEOBENCH.
 

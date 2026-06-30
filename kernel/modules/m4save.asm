@@ -3,11 +3,11 @@
 ;
 ; The resident M4 backend keeps listing/loading in the kernel and stages save
 ; requests into low RAM before loading this module at DATA_MODTOP (#6000). Keeping
-; C_OPEN/C_WRITE/C_CLOSE here preserves GEOBENCH.CFG persistence on M4 without
-; spending the write loop in resident kernel space.
+; C_OPEN/C_WRITE/C_CLOSE and C_ERASEFILE here preserves GEOBENCH.CFG persistence
+; and Trash delete on M4 without spending those paths in resident kernel space.
 ;
 ; Transfer area, filled by lib/fs_m4.asm:
-;   M4SV_LEN  (#1700, word)   bytes to write
+;   M4SV_LEN  (#1700, word)   bytes to write, or #FFFF to delete
 ;   M4SV_NAME (#1702, 11)     8.3 target name
 ;   M4SV_RES  (#170D, byte)   result: 1 = saved, 0 = failed
 ;   M4SV_PATH (#1710, 64)     current M4 path prefix ("" = root)
@@ -29,14 +29,21 @@ M4_ROMNUM      equ   6
 M4C_OPEN       equ   #01          ; C_OPEN  (#4301)
 M4C_WRITE      equ   #03          ; C_WRITE (#4303)
 M4C_CLOSE      equ   #04          ; C_CLOSE (#4304)
+M4C_ERASEFILE  equ   #0E          ; C_ERASEFILE (#430E)
 M4_WRITEMODE   equ   #8A          ; FA_WRITE | FA_CREATE_ALWAYS | FA_REALMODE
 M4_WRITECHUNK  equ   96           ; payload bytes per C_WRITE packet
 
                 org   M4SAVE_ORG
 
-; entry: save M4SV_LEN bytes from M4SV_DATA to M4SV_PATH/M4SV_NAME.
+; entry: save M4SV_LEN bytes from M4SV_DATA to M4SV_PATH/M4SV_NAME, or delete
+; M4SV_PATH/M4SV_NAME when M4SV_LEN == #FFFF.
                 xor   a
                 ld    (M4SV_RES),a
+                ld    hl,(M4SV_LEN)
+                ld    a,h
+                and   l
+                inc   a
+                jr    z,m4_delete
                 call  m4_open_write
                 ret   nc
                 ld    hl,M4SV_DATA
@@ -62,6 +69,34 @@ m4s_done        call  m4_close_fd
                 ld    (M4SV_RES),a
                 ret
 m4s_fail        call  m4_close_fd
+                ret
+
+; --- delete operation -------------------------------------------------------
+m4_delete
+                ld    a,M4C_ERASEFILE
+                call  m4_cmd
+                ld    de,M4SV_PATH
+                ld    a,(de)
+                or    a
+                jr    z,m4d_slash
+                call  m4_pstr
+m4d_slash       ld    a,'/'
+                call  m4_pb
+                call  m4_p83
+                xor   a
+                call  m4_pb
+                call  m4_send
+                ld    a,(M4_RESP)
+                cp    2
+                jr    z,m4d_ok
+                ld    a,(M4_RESP+3)
+                or    a
+                jr    nz,m4d_fail
+m4d_ok          call  m4_io_end
+                ld    a,1
+                ld    (M4SV_RES),a
+                ret
+m4d_fail        call  m4_io_end
                 ret
 
 ; --- command transport ------------------------------------------------------

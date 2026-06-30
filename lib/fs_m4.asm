@@ -26,9 +26,7 @@
 ;   fsm4_dir_next  -> CF set = next entry,               NC = end of dir
 ;   fsm4_load_file -> CF set = loaded (fs_ent_size = bytes), NC = not found
 ;   fsm4_save_file -> CF set = saved, NC = failed (paged M4SAVE.MOD)
-; Delete is not wired yet: M4ROM exposes C_ERASEFILE, but 1984's M4 image-backed
-; file API does not erase FAT entries today. Keep GEOBENCH.IMG behavior consistent
-; before the dispatcher advertises delete.
+;   fsm4_delete_file -> CF set = deleted, NC = failed/unsupported.
 ;
 ; M4 directory model: C_READDIR enumerates the board's CURRENT directory, so each
 ; listing first C_CD's to m4_path (absolute, rebuilt from the path string every time
@@ -450,7 +448,12 @@ m4_close_fd
 ; --- file save --------------------------------------------------------------
 ; fsm4_save_file: resident stub. Stage the caller's bytes/name/current M4 path
 ; into low RAM, then load M4SAVE.MOD from /GBENCH and let that module perform the
-; C_OPEN/C_WRITE/C_CLOSE sequence. CF set = saved, NC = failed.
+; C_OPEN/C_WRITE/C_CLOSE sequence. CF set = saved, NC = failed. Delete uses the
+; same module with M4SV_LEN=#FFFF so C_ERASEFILE stays out of the resident kernel.
+fsm4_delete_file
+                ld    hl,#FFFF
+                jr    msv_common
+
 fsm4_save_file
                 ld    a,(fs_save_len+1)      ; low-RAM staging cap: #2200..#3DFF
                 cp    #1C
@@ -462,7 +465,9 @@ fsm4_save_file
                 or    c
                 jr    z,msv_nodata
                 ldir
-msv_nodata      ld    hl,fs_req_name
+msv_nodata      ld    hl,(fs_save_len)
+msv_common      ld    (M4SV_LEN),hl
+                ld    hl,fs_req_name
                 ld    de,M4SV_NAME
                 ld    bc,11
                 ldir
@@ -470,8 +475,6 @@ msv_nodata      ld    hl,fs_req_name
                 ld    de,M4SV_PATH
                 ld    bc,M4_PATH_MAX
                 ldir
-                ld    hl,(fs_save_len)
-                ld    (M4SV_LEN),hl
                 ld    hl,m4save_modname
                 call  run_data_module
                 ld    a,(M4SV_RES)
