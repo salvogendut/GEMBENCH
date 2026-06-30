@@ -636,6 +636,7 @@ static void on_event(void)
             relist();
             return;
         }
+        gb_set_drive(my_drive);           /* reassert target after the source load/module path */
         gb_set_name(gb_dragname);
         ok = gb_fs_save(gb_copybuf, n);
         if (!ok) gb_alert("Copy failed", "disk full or read-only");
