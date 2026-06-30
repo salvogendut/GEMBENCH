@@ -34,6 +34,7 @@ D0_NEXT         equ   fsm4_dir_next
 D0_LOAD         equ   fsm4_load_file
 D0_SAVE         equ   fsm4_save_file
 D0_DELETE       equ   fsm4_delete_file
+D0_FREE         equ   fsm4_free_kib
                 else
 D0_PRESENT      equ   fs_ide_present
 D0_FIRST        equ   fside_dir_first
@@ -41,6 +42,7 @@ D0_NEXT         equ   fside_dir_next
 D0_LOAD         equ   fside_load_file
 D0_SAVE         equ   fside_save_file
 D0_DELETE       equ   fside_delete_file
+D0_FREE         equ   fs_load_none
                 endif
                 endif
 
@@ -146,13 +148,40 @@ fs_save_file
 fs_delete_file
                 ld    hl,(fs_p_delete)
                 jp    (hl)
+; fs_free_kib: return free space on the current drive. HL = KiB, CF set if known.
+; Drive 0 can use its native card/backend query. Floppies use the paged FLOPPYSV
+; helper so the AMSDOS block scan does not live resident.
+fs_free_kib
+                if STORAGE_ALBIREO
+                ld    hl,#FFFE
+                ld    a,(fsam_unit)           ; harmless for the Albireo #FFFD path
+                ld    (#170F),a               ; FSV_TX_UNIT
+                ld    a,(fs_cur_drive)
+                or    a
+                jr    nz,fsfk_go
+                dec   l                       ; #FFFE -> #FFFD (Albireo free op)
+fsfk_go
+                jp    fsam_free_mod_op
+                else
+                ld    a,(fs_cur_drive)
+                or    a
+                jp    z,D0_FREE
+                ld    hl,#FFFE
+                ld    a,(fsam_unit)           ; which floppy unit (0=A,1=B)
+                ld    (#170F),a               ; FSV_TX_UNIT
+                jp    fsam_free_mod_op
+                endif
+                if !STORAGE_ALBIREO & !STORAGE_M4
 fs_load_none
                 or    a                        ; not implemented -> NC
                 ret
+                endif
 
+                if !STORAGE_ALBIREO & !STORAGE_M4
 ; fs_ide_present: ATA register read-back test on the IDE LBA-low port. A real
 ; controller latches the value; an unconnected expansion bus does not. CF set =
-; IDE present.
+; IDE present. Only the archived IDE backend calls this; Albireo/M4 builds keep
+; it out of resident space (#268).
 fs_ide_present
                 ld    bc,#FD0B
                 ld    a,#55
@@ -170,6 +199,7 @@ fs_ide_present
 fsip_absent
                 or    a
                 ret
+                endif
 
 ; --- fixed low-RAM state / shared per-entry output -----------------------
 ; These are runtime cells, not initialized image data. fs_init/fs_set_drive fills

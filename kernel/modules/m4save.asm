@@ -29,21 +29,28 @@ M4_ROMNUM      equ   6
 M4C_OPEN       equ   #01          ; C_OPEN  (#4301)
 M4C_WRITE      equ   #03          ; C_WRITE (#4303)
 M4C_CLOSE      equ   #04          ; C_CLOSE (#4304)
+M4C_FREE       equ   #09          ; C_FREE  (#4309)
 M4C_ERASEFILE  equ   #0E          ; C_ERASEFILE (#430E)
 M4_WRITEMODE   equ   #8A          ; FA_WRITE | FA_CREATE_ALWAYS | FA_REALMODE
 M4_WRITECHUNK  equ   96           ; payload bytes per C_WRITE packet
 
                 org   M4SAVE_ORG
 
-; entry: save M4SV_LEN bytes from M4SV_DATA to M4SV_PATH/M4SV_NAME, or delete
-; M4SV_PATH/M4SV_NAME when M4SV_LEN == #FFFF.
+; entry: save M4SV_LEN bytes from M4SV_DATA to M4SV_PATH/M4SV_NAME, delete
+; M4SV_PATH/M4SV_NAME when M4SV_LEN == #FFFF, or return free KiB when #FFFE.
                 xor   a
                 ld    (M4SV_RES),a
                 ld    hl,(M4SV_LEN)
                 ld    a,h
-                and   l
-                inc   a
+                cp    #FF
+                jr    nz,m4_save
+                ld    a,l
+                cp    #FF
                 jr    z,m4_delete
+                cp    #FE
+                jr    z,m4_free
+                ret
+m4_save
                 call  m4_open_write
                 ret   nc
                 ld    hl,M4SV_DATA
@@ -97,6 +104,81 @@ m4d_ok          call  m4_io_end
                 ld    (M4SV_RES),a
                 ret
 m4d_fail        call  m4_io_end
+                ret
+
+; --- free-space operation ---------------------------------------------------
+; C_FREE returns ASCII in the response area ("NNNK free"). Parse the decimal KiB
+; value into HL, saturating at #FFFF to avoid wrapping on larger host/card volumes.
+m4_free
+                ld    a,M4C_FREE
+                call  m4_cmd
+                call  m4_send
+                ld    a,(M4_RESP)
+                cp    3
+                jr    c,m4f_fail
+                sub   2                       ; response data bytes at M4_RESP+3
+                ld    b,a
+                ld    c,0                     ; C = have seen at least one digit
+                ld    de,M4_RESP+3
+                ld    hl,0
+m4f_loop
+                ld    a,(de)
+                inc   de
+                cp    '0'
+                jr    c,m4f_nondigit
+                cp    '9'+1
+                jr    nc,m4f_nondigit
+                sub   '0'
+                push  bc
+                ld    c,a                     ; C = digit
+                ld    a,h                     ; reject HL*10+digit > #FFFF
+                cp    #19
+                jr    c,m4f_accum
+                jr    nz,m4f_sat
+                ld    a,l
+                cp    #99
+                jr    c,m4f_accum
+                jr    nz,m4f_sat
+                ld    a,c
+                cp    6
+                jr    nc,m4f_sat
+m4f_accum
+                push  de
+                ld    d,h
+                ld    e,l
+                add   hl,hl                   ; *2
+                add   hl,hl                   ; *4
+                add   hl,de                   ; *5
+                add   hl,hl                   ; *10
+                ld    e,c
+                ld    d,0
+                add   hl,de                   ; + digit
+                pop   de
+                pop   bc
+                ld    c,1
+                djnz  m4f_loop
+                jr    m4f_done
+m4f_nondigit
+                ld    a,c
+                or    a
+                jr    nz,m4f_ok               ; first nondigit after the number
+                djnz  m4f_loop                ; skip leading CR/LF
+m4f_done
+                ld    a,c
+                or    a
+                jr    z,m4f_fail
+m4f_ok
+                call  m4_io_end
+                ld    (M4SV_LEN),hl
+                ld    a,1
+                ld    (M4SV_RES),a
+                ret
+m4f_sat
+                pop   bc
+                ld    hl,#FFFF
+                jr    m4f_ok
+m4f_fail
+                call  m4_io_end
                 ret
 
 ; --- command transport ------------------------------------------------------

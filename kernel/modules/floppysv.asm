@@ -8,7 +8,8 @@
 ; primitives (lib/fs_amsdos_core.asm) with the resident reader - one source, two
 ; assemblies - and is self-contained otherwise: own state + the shared fixed-address
 ; low-RAM buffers, reading its inputs from the transfer area the resident stub fills:
-;   FSV_TX_LEN  (#1700, word)   bytes to write, or #FFFF to delete
+;   FSV_TX_LEN  (#1700, word)   bytes to write, #FFFF delete, #FFFE free floppy,
+;                              #FFFD free Albireo/CH376
 ;   FSV_TX_NAME (#1702, 11)     8.3 name
 ;   FSV_TX_RES  (#170D, byte)   result: 1 = saved, 0 = failed
 ;   FSV_TX_UNIT (#170F, byte)   floppy unit (0 = A, 1 = B)
@@ -29,20 +30,45 @@ FSV_TX_UNIT     equ   #170F
 FSV_TX_DATA     equ   #2200
 fs_req_name     equ   FSV_TX_NAME  ; the name to find/create (core's namematch uses it)
 
+ALB_CMD         equ   #FE81
+ALB_DAT         equ   #FE80
+ALBC_GETSTAT    equ   #22
+ALBC_RDDATA0    equ   #27
+ALBC_DISKQUERY  equ   #3F
+ALB_INT_SUCCESS equ   #14
+
                 org   FLOPPYSV_ORG
-; entry: pick up the unit, run the save/delete, store the result byte, return.
+; entry: pick up the unit, run the requested operation, store the result byte, return.
+; FSV_TX_LEN values:
+;   #FFFF = delete FSV_TX_NAME
+;   #FFFE = count free 1KB AMSDOS allocation blocks, returned in FSV_TX_LEN
+;   #FFFD = query Albireo/CH376 free sectors, returned as KiB in FSV_TX_LEN
+;   other = save that many bytes from FSV_TX_DATA into FSV_TX_NAME
                 ld    a,#10
                 ld    (FSV_TX_ERR),a
                 ld    a,(FSV_TX_UNIT)
                 ld    (fsam_unit),a
                 ld    hl,(FSV_TX_LEN)
                 ld    a,h
-                and   l
-                inc   a
+                cp    #FF
+                jr    nz,flsv_save_entry
+                ld    a,l
+                cp    #FF
                 jr    z,flsv_del_entry
+                cp    #FE
+                jr    z,flsv_free_entry
+                cp    #FD
+                jr    z,flsv_alb_entry
+                or    a
+                jr    flsv_done
+flsv_save_entry
                 call  flsv_save
                 jr    flsv_done
 flsv_del_entry  call  flsv_delete
+                jr    flsv_done
+flsv_free_entry call  flsv_free
+                jr    flsv_done
+flsv_alb_entry  call  flsv_alb_free
 flsv_done
                 ld    a,1
                 jr    c,flsv_res
@@ -284,6 +310,123 @@ fdl_fail
                 or    a
                 ret
 
+; flsv_free: count unused 1KB DATA-format allocation blocks. Blocks 0 and 1 are
+; the directory, so usable data blocks are 2..179. The AMSDOS allocation map is
+; implicit in every live directory extent's 16-byte block list.
+flsv_free
+                call  fsam_motor_on
+                call  fsam_read_dir
+                ld    hl,0
+                ld    (fsv_freecnt),hl
+                ld    a,2
+ffr_try
+                ld    (fsv_cand),a
+                call  fsv_block_used                  ; Z = used, NZ = free
+                jr    z,ffr_used
+                ld    hl,(fsv_freecnt)
+                inc   hl
+                ld    (fsv_freecnt),hl
+ffr_used
+                ld    a,(fsv_cand)
+                inc   a
+                cp    180
+                jr    c,ffr_try
+                ld    hl,(fsv_freecnt)
+                ld    (FSV_TX_LEN),hl
+                call  fsam_motor_off
+                scf
+                ret
+
+; flsv_alb_free: CH376 DISK_QUERY returns total sectors, free sectors, and FAT
+; type. Convert free sectors to KiB (512-byte sectors / 2), saturating at #FFFF.
+flsv_alb_free
+                ld    a,ALBC_DISKQUERY
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,afb_fail
+                ld    a,ALBC_RDDATA0
+                call  alb_sendcmd
+                in    a,(c)                      ; payload length
+                cp    9
+                jr    c,afb_fail
+                ld    a,4                         ; skip total_sectors[4]
+                call  alb_invoid
+                in    a,(c)                       ; free sector byte 0
+                ld    l,a
+                in    a,(c)                       ; free sector byte 1
+                ld    e,a
+                in    a,(c)                       ; free sector byte 2
+                ld    d,a
+                in    a,(c)                       ; free sector byte 3
+                ld    h,a
+                in    a,(c)                       ; fs_type (discard)
+                ld    a,h
+                or    a
+                jr    nz,afb_sat
+                ld    a,d
+                cp    2
+                jr    nc,afb_sat
+                ld    a,l                         ; HL = free_sectors >> 1
+                srl   a
+                ld    l,a
+                ld    a,e
+                and   1
+                jr    z,afb_low_ok
+                set   7,l
+afb_low_ok
+                ld    a,e
+                srl   a
+                ld    h,a
+                ld    a,d
+                or    a
+                jr    z,afb_ok
+                set   7,h
+afb_ok
+                ld    (FSV_TX_LEN),hl
+                scf
+                ret
+afb_sat
+                ld    hl,#FFFF
+                jr    afb_ok
+afb_fail
+                or    a
+                ret
+
+alb_sendcmd
+                ld    bc,ALB_CMD
+                out   (c),a
+                dec   c
+                ret
+
+alb_waitint
+                push  de
+                ld    de,0
+awi_loop
+                ld    bc,ALB_CMD
+                in    a,(c)
+                rla
+                jr    nc,awi_got
+                dec   de
+                ld    a,d
+                or    e
+                jr    nz,awi_loop
+awi_got
+                pop   de
+                ld    a,ALBC_GETSTAT
+                out   (c),a
+                dec   c
+                in    a,(c)
+                ret
+
+alb_invoid
+                push  af
+                in    a,(c)
+                pop   af
+                dec   a
+                jr    nz,alb_invoid
+                ret
+
 ; fsv_write_dir: write fsam_buf's four AMSDOS directory sectors back.
 fsv_write_dir
                 ld    a,(fsam_track)
@@ -490,6 +633,7 @@ fsv_drem        defw  0            ; source bytes left
 fsv_nblk        defb  0            ; 1KB blocks the file needs
 fsv_cand        defb  0            ; alloc: candidate block being tested
 fsv_deleted     defb  0            ; delete: at least one extent was removed
+fsv_freecnt     defw  0            ; free-space query: unused 1KB block count
 
 ; ---------------------------------------------------------------------------
 ; fsam_write_sector: D=track, E=sector id. Writes 512 bytes from (fsam_src) to

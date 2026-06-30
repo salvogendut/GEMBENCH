@@ -48,6 +48,7 @@ ALBC_BYTEREAD   equ   #3A
 ALBC_BYTERDGO   equ   #3B
 ALBC_BYTEWRITE  equ   #3C
 ALBC_BYTEWRGO   equ   #3D
+ALBC_DISKQUERY  equ   #3F
 
 ; CH376 status / return codes
 ALB_RET_SUCCESS equ   #51          ; SET_USB_MODE ack on the DATA port
@@ -720,6 +721,9 @@ fsalb_delete_file
                 ldir
                 ld    hl,#C024               ; ROM Albireo idx4
                 jp    gb_rom_fsam_invoke
+fsalb_free_kib
+                or    a                      ; ROM-offloaded Albireo does not expose this yet
+                ret
 ; alb_ent_out: copy the entry the ROM wrote to the transfer area (name+attr+size, 16
 ; contiguous bytes) into the resident fs_ent_* fields. Preserves the dir CF.
 alb_ent_out     push  af

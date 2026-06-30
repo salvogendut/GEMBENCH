@@ -204,7 +204,8 @@ Several old ABI slots are stubs or no longer used:
 - `GB_LAUNCH`;
 - old `GB_XORFRAME`;
 - old `GB_ONREPAINT`;
-- old `GB_BLITE` and `GB_BLITEFULL`;
+- old `GB_BLITE` (`GB_BLITEFULL`'s table slot has since been repurposed as
+  `GB_FSFREE`, a small free-space query used by File Manager);
 - old `GB_WMLAUNCH`.
 
 The slots cost only 3 bytes each, so the table itself is not the problem. The

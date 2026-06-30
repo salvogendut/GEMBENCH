@@ -69,7 +69,7 @@
                 jp    k_copy_end             ; GB_COPYEND     #8093 (restore target ctx)
                 jp    k_on_bar               ; GB_ONBAR       #8096 (HL = bar handler, #77)
                 jp    k_wm_setsize           ; GB_WMSETSIZE   #8099 (A = w, L = h, #81)
-                jp    k_vsync                ; GB_BLITEFULL   #809C (removed: mapping->FM, #103)
+                jp    fs_free_kib            ; GB_FSFREE      #809C -> HL = free KiB, CF set if known (#268)
                 jp    k_icon_half            ; GB_ICONHALF    #809F (A=slot B=x C=y, #103)
                 jp    k_mxp                  ; GB_MXP         #80A2 -> HL = pointer pixel x (#114)
                 jp    k_clip_set             ; GB_CLIPSET     #80A5 (HL=src, DE=len) shared clipboard (#142)
