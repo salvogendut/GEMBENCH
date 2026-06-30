@@ -970,9 +970,7 @@ cb_tdir         equ   #1481        ; #188: relocated to low RAM (was resident de
 k_fs_delete
                 ld    de,fs_req_name
                 call  copy11
-                di
                 call  fs_delete_file
-                ei
                 ret
 
 k_getkey

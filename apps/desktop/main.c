@@ -615,9 +615,13 @@ static void on_event(void)
 {
     if (gb_msg.type == GB_MSG_DROP) {                  /* a file dropped on the desktop (#62) */
         if (hit_icon(gb_mx(), gb_my()) == IDX_TRASH) { /* on Trash -> delete the file */
-            gb_file_delete(gb_dragname);               /* (the source window then re-lists) */
+            unsigned char ok;
+            gb_copy_begin();                           /* delete from the drag source drive/dir */
+            ok = gb_file_delete(gb_dragname);
+            gb_copy_end();
             gb_curhide();
-            gb_text(1, 10, trash_label());             /* "Trash: NAME" confirmation */
+            if (ok) gb_text(1, 10, trash_label());     /* source window re-lists after the drop */
+            else    gb_alert("Delete failed", "file was not removed");
             gb_curshow();
         }
         return;

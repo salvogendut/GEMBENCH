@@ -400,6 +400,12 @@ FSV_TX_UNIT     equ   #170F
 FSV_TX_DATA     equ   #2200
 FSV_TX_MAX      equ   #1C00        ; 7 KB staging cap (matches the gbfat/IDE save cap)
 
+; fsam_delete_file: ask FLOPPYSV.MOD to mark matching directory extents deleted
+; and write the directory back. FSV_TX_LEN=#FFFF is the module operation marker.
+fsam_delete_file
+                ld    hl,#FFFF
+                jr    fsamv_common
+
 fsam_save_file
                 ld    hl,(fs_save_len)        ; refuse > staging cap
                 ld    de,FSV_TX_MAX
@@ -417,12 +423,13 @@ fsamv_ok
                 jr    z,fsamv_nlen
                 ldir
 fsamv_nlen
+                ld    hl,(fs_save_len)
+fsamv_common
+                ld    (FSV_TX_LEN),hl
                 ld    hl,fs_req_name          ; name -> the transfer area
                 ld    de,FSV_TX_NAME
                 ld    bc,11
                 ldir
-                ld    hl,(fs_save_len)
-                ld    (FSV_TX_LEN),hl
                 ld    a,(fsam_unit)           ; which floppy unit (0=A,1=B)
                 ld    (FSV_TX_UNIT),a
                 ; fall through to load + run the module
