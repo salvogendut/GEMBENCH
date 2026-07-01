@@ -1227,7 +1227,6 @@ wm_chrome_frame
                 ld    a,(POLL_FLAGS)
                 bit   1,a                     ; GB_QUIT
                 jp    nz,mw_do_close          ; (jp: mwf_max grew the block past jr range)
-                ld    a,(POLL_FLAGS)
                 bit   0,a                     ; GB_CLICK
                 ret   z
                 ld    a,(POLL_MY)            ; my - win_y in title band?
@@ -1655,9 +1654,9 @@ wm_focus_click
                 ret   z
                 ld    a,c
                 call  wm_raise                     ; bring it to the front
-                ld    a,(WM_FOCUS)               ; damage = the raised window's rect
+                ld    a,c                          ; damage = the raised window's rect
                 call  wm_set_clip
-                jp    wm_repaint_all               ; restack the screen (clipped)
+                jp    wm_repaint_top               ; opaque top window: avoid repainting layers through it
 
 ; wm_hit_test: -> A = slot of the top-most window whose rect contains the pointer
 ; (POLL_MX, POLL_MY), scanning z-order top->bottom; CF set if none.
@@ -1867,6 +1866,14 @@ wm_raise
 ; gb_curhide) and ends with gb_curshow, so the cursor stays correct with no double
 ; save-under here. WM_Z[0] is always the desktop, so its full paint runs first.
 wm_repaint_all
+                xor   a
+                jr    wra_seed
+; wm_repaint_top: repaint only the current z-top. Used after click-to-focus raises an
+; opaque managed window; redrawing lower layers first makes the stack visibly flash.
+wm_repaint_top
+                ld    a,(WM_NWIN)
+                dec   a
+wra_seed        ld    (wm_rp_i),a
                 ld    a,(bank_cur)
                 ld    (wm_rp_back),a
                 ld    a,(cur_supp)              ; #148: hide the pointer before the repaint so it
@@ -1878,8 +1885,6 @@ wm_repaint_all
                                                   ; chrome a window drew earlier this pass (the XAOS
                                                   ; title hole, on File>New AND drag). Bracket ONCE.
                 di                                ; Skip during a DnD ghost (cur_supp owns the screen)
-                xor   a
-                ld    (wm_rp_i),a
 wra_l           ld    a,(wm_rp_i)
                 ld    hl,WM_NWIN
                 cp    (hl)

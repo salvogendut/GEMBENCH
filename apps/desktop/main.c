@@ -97,6 +97,10 @@ static void draw_icon(unsigned char i)
 #define PIC_WB_K   (*(volatile unsigned char *)0x130C)
 #define PIC_H_K    (*(volatile unsigned int  *)0x130D)
 #define PIC_OFF_K  (*(volatile unsigned char *)0x130F)
+#define CLIP_X_K   (*(volatile unsigned char *)0x1338)
+#define CLIP_Y_K   (*(volatile unsigned char *)0x1339)
+#define CLIP_W_K   (*(volatile unsigned char *)0x133A)
+#define CLIP_H_K   (*(volatile unsigned char *)0x133B)
 static unsigned char wp_bank;                 /* borrowed bank (0 = none) */
 static unsigned char wp_wb, wp_h, wp_x, wp_y; /* picture dims + centred top-left */
 static unsigned char wp_srcy;                 /* first picture row shown (centre a too-tall pic) */
@@ -330,22 +334,46 @@ static void open_saver(void)
 
 static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsigned char h)
 {
-    unsigned char ix, iy, rx, by, iw, ih;
+    unsigned char ix, iy, rx, by, iw, ih, ex, ey, px2, py2, cx, cy, cr, cb, row;
     unsigned int src;
     if (!wp_bank) { gb_backdrop(x, y, w, h); return; }
-    gb_fill(x, y, w, h, 0);                     /* solid pen-0 first (covers the margins) */
+    ex = (unsigned char)(x + w); ey = (unsigned char)(y + h);
+    cx = CLIP_X_K; cy = CLIP_Y_K;
+    cr = (unsigned char)(cx + CLIP_W_K); cb = (unsigned char)(cy + CLIP_H_K);
+    if (x < cx) x = cx;
+    if (y < cy) y = cy;
+    if (ex > cr) ex = cr;
+    if (ey > cb) ey = cb;
+    if (ex <= x || ey <= y) return;
+    w = (unsigned char)(ex - x); h = (unsigned char)(ey - y);
+    px2 = (unsigned char)(wp_x + wp_wb); py2 = (unsigned char)(wp_y + wp_h);
     ix = (x > wp_x) ? x : wp_x;                 /* rect INTERSECT picture rect */
-    rx = ((unsigned char)(x + w) < (unsigned char)(wp_x + wp_wb))
-         ? (unsigned char)(x + w) : (unsigned char)(wp_x + wp_wb);
+    rx = (ex < px2) ? ex : px2;
     iy = (y > wp_y) ? y : wp_y;
-    by = ((unsigned char)(y + h) < (unsigned char)(wp_y + wp_h))
-         ? (unsigned char)(y + h) : (unsigned char)(wp_y + wp_h);
-    if (rx <= ix || by <= iy) return;           /* no overlap -> just the solid fill */
+    by = (ey < py2) ? ey : py2;
+    if (rx <= ix || by <= iy) {                 /* no picture overlap -> solid margin */
+        gb_fill(x, y, w, h, 0);
+        return;
+    }
+    /* Do not clear through the wallpaper before re-blitting it: full desktop
+       repaints would visibly blank the logo for several frames. Fill only the
+       margins that are outside the centred picture. */
+    if (iy > y)  gb_fill(x, y, w, (unsigned char)(iy - y), 0);
+    if (by < ey) gb_fill(x, by, w, (unsigned char)(ey - by), 0);
+    if (ix > x)  gb_fill(x, iy, (unsigned char)(ix - x), (unsigned char)(by - iy), 0);
+    if (rx < ex) gb_fill(rx, iy, (unsigned char)(ex - rx), (unsigned char)(by - iy), 0);
     iw = (unsigned char)(rx - ix); ih = (unsigned char)(by - iy);
     src = wp_off + (unsigned int)(unsigned char)(iy - wp_y + wp_srcy) * wp_wb
         + (unsigned char)(ix - wp_x);
     PIC_PAGE_K = wp_bank;                       /* re-assert our bank (the Viewer shares PIC_PAGE) */
-    gb_pic_blit(ix, iy, iw, ih, src);
+    if (iw == wp_wb || ih == 1) {
+        gb_pic_blit(ix, iy, iw, ih, src);
+    } else {
+        for (row = 0; row < ih; row++) {        /* raw PICBLIT has no source stride argument */
+            gb_pic_blit(ix, (unsigned char)(iy + row), iw, 1, src);
+            src += wp_wb;
+        }
+    }
 }
 
 static void paint(void)
@@ -751,6 +779,7 @@ void main(void)
     drive_poll();                               /* drives present at boot -> icons (#65) */
     wp_init();                                   /* #212: load the configured wallpaper */
     ss_cfg_init();                               /* #219: read the screensaver idle timeout */
+    gb_wm_damage(0, 0, 80, 200);                 /* initialise the shared repaint clip before paint() */
     paint();
     gb_curshow();                               /* paint() no longer shows the pointer (#153) */
     drag_active = 0;

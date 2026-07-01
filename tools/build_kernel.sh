@@ -87,11 +87,12 @@ for png in assets/backdrops/*.png; do
 done
 DATA_LOC=0x6C00 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): windowed ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
-DATA_LOC=0x6900 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
+DATA_LOC=0x6C80 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
-                                   # for the wallpaper config parse (#212/#216) + saver trigger (#219).
-DATA_LOC=0x74E0 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
-                                   # the gb_doc-grown code + ".." entry; the ~2.5K listing cache
+                                   # for the wallpaper config parse (#212/#216), saver trigger (#219),
+                                   # and clip-aware wallpaper repaint path.
+DATA_LOC=0x75D0 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
+                                   # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
 DATA_LOC=0x5F20 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
                                    # gb_doc (DOCRO=1 omits Save/Save As) so a full 10240-B buffer
