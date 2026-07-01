@@ -450,10 +450,10 @@ fb_cy           equ   #14AF        ; #196: relocated to low RAM
 ; (a moved/closed window's damage area) only erases inside that area - the rest of
 ; the screen is untouched, so unchanged windows/icons don't flicker. Default =
 ; whole screen (no clipping). The WM narrows it around a repaint, then resets it.
-clip_x          db    0            ; clip rect, byte col / line / byte-w / lines
-clip_y          db    0
-clip_w          db    80
-clip_h          db    200
+clip_x          equ   #1338        ; clip rect, byte col / line / byte-w / lines
+clip_y          equ   #1339
+clip_w          equ   #133A
+clip_h          equ   #133B
 fbw_x           equ   #14B0        ; #196: fill_block's clipped working rect, relocated to low
 fbw_y           equ   #14B1        ; RAM (computed per fill from fb_* + clip; write-before-read)
 fbw_w           equ   #14B2

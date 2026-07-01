@@ -84,7 +84,7 @@ static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Full
    path index through it. Capped at MAX_ENT (the shipped floppy/card directories are
    small; a larger directory shows the first MAX_ENT sorted). Also spares the FAT a
    re-stream per drawn item. */
-#define MAX_ENT 152
+#define MAX_ENT 128
 /* Flat 11-byte name records (NOT char[MAX_ENT][11]): a 2D char array indexed by an
    8-bit var makes SDCC compute the *11 offset in 8 bits, which wraps past entry 23.
    NAME_AT forces the multiply to 16-bit. */
@@ -477,14 +477,12 @@ static void build_list(void)
 static void draw_list_view(void)
 {
     unsigned char i, y, p, raw, up = up_avail();
+    unsigned char dt = disp_total();
     for (i = 0; i < LVIS; i++) {                   /* draw from the sorted cache (#118) */
         p = (unsigned char)(top + i);
-        if (p >= disp_total()) break;
         y = CT_Y + i * ROW_H;
-        gb_frame(CT_X, y, CT_W, 17, 0);            /* erase any stale selection frame first (#153) */
-        gb_fill((unsigned char)(CT_X + 9), (unsigned char)(y + 1), (unsigned char)(CT_W - 9), 15, 0);
-                                                   /* clear the name area so a shorter name can't
-                                                      keep the tail of the previous one (#203) */
+        gb_fill(CT_X, y, CT_W, ROW_H, 0);          /* clear stale rows/icons after scroll/repaint */
+        if (p >= dt) continue;
         if (up && p == 0) {                        /* the ".." parent-dir entry (#142) */
             gb_icon(ICON_UP, CT_X, y + 1);         /* 16px icon - fits the row at full height */
             gb_text(CT_X + 9, y + 6, "..");
@@ -505,27 +503,50 @@ static void draw_icons_view(void)
     unsigned int dt = disp_total();
     for (r = 0; r < IVIS; r++) {
         for (c = 0; c < ICOLS; c++) {
-            if (idx >= dt) return;
             cx = CT_X + c * CELL_W;
             cy = CT_Y + r * CELL_H;
-            gb_frame(cx, cy, CELL_W, CELL_H - 1, 0);             /* erase any stale frame first (#153) */
-            gb_fill(cx, (unsigned char)(cy + 33), CELL_W, 10, 0);/* clear the label band so a shorter
-                                                                    name can't keep the tail of the
-                                                                    previous one on scroll (#203) */
-            if (up && idx == 0) {                                /* the ".." entry (#142) */
-                gb_icon(ICON_UP, (unsigned char)(cx + (CELL_W - 4) / 2),  /* 16px, centered */
-                        (unsigned char)(cy + 9));                        /* in the 32px band */
-                gb_text((unsigned char)(cx + (CELL_W - 3) / 2), cy + 34, "..");  /* centered */
-            } else {
-                raw = order[(unsigned char)(idx - up)];
-                gb_icon(icons[raw], cx + (CELL_W - 8) / 2, cy + 1);   /* full icon (#103) */
-                draw_name(cx, cy + 34, name83(NAME_AT(raw)));         /* name below the icon */
+            gb_fill(cx, cy, CELL_W, CELL_H - 1, 0);             /* clear whole cell before repaint */
+            if (idx < dt) {
+                if (up && idx == 0) {                            /* the ".." entry (#142) */
+                    gb_icon(ICON_UP, (unsigned char)(cx + (CELL_W - 4) / 2),  /* 16px, centered */
+                            (unsigned char)(cy + 9));                    /* in the 32px band */
+                    gb_text((unsigned char)(cx + (CELL_W - 3) / 2), cy + 34, "..");  /* centered */
+                } else {
+                    raw = order[(unsigned char)(idx - up)];
+                    gb_icon(icons[raw], cx + (CELL_W - 8) / 2, cy + 1);   /* full icon (#103) */
+                    draw_name(cx, cy + 34, name83(NAME_AT(raw)));         /* name below the icon */
+                }
+                if (nsel == (unsigned char)(idx + 1))
+                    gb_frame(cx, cy, CELL_W, CELL_H - 1, 3);
             }
-            if (nsel == (unsigned char)(idx + 1))
-                gb_frame(cx, cy, CELL_W, CELL_H - 1, 3);
             idx++;
         }
     }
+}
+
+static void draw(void);
+
+static void sel_frame(unsigned char pos, unsigned char pen)
+{
+    unsigned char line = 0, x, y;
+    if (!pos || view != V_ICONS) return;
+    pos--;
+    while (pos >= ICOLS) { pos -= ICOLS; line++; }
+    if (line < top || line >= top + IVIS) return;
+    x = (unsigned char)(CT_X + pos * CELL_W);
+    y = (unsigned char)(CT_Y + (line - top) * CELL_H);
+    gb_frame(x, y, CELL_W, CELL_H - 1, pen);
+}
+
+static void select_entry(unsigned char pos)
+{
+    if (nsel == pos) return;
+    if (view != V_ICONS) { nsel = pos; draw(); return; }
+    gb_curhide();
+    sel_frame(nsel, 0);
+    nsel = pos;
+    sel_frame(nsel, 3);
+    gb_curshow();
 }
 
 /* draw_body: the window CONTENT (scrollbar + listing + grip); the WM drew the frame (#146). */
@@ -796,7 +817,7 @@ static void fm_click(void)
         if (idx >= disp_total()) return;
         if (up_avail() && idx == 0) {        /* the ".." entry: double-click ascends (#142) */
             if (dc_timer && dc_idx == idx) { go_up(); dc_timer = 0; }
-            else { nsel = idx + 1; dc_idx = idx; dc_timer = DCLICK; draw(); }
+            else { select_entry(idx + 1); dc_idx = idx; dc_timer = DCLICK; }
             return;
         }
         idx = (unsigned char)(idx - up_avail());   /* display position -> sorted real index */
@@ -811,10 +832,9 @@ static void fm_click(void)
             open_entry(idx);
             dc_timer = 0;
         } else {                              /* single click -> select */
-            nsel = (unsigned char)(idx + up_avail() + 1);
+            select_entry((unsigned char)(idx + up_avail() + 1));
             dc_idx = (unsigned char)(idx + up_avail());
             dc_timer = DCLICK;
-            draw();
         }
     }
 }
