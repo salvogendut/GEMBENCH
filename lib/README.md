@@ -24,7 +24,6 @@ layers never poke video, storage or input registers directly.
 | `fs_m4.asm` | File-level FAT over the M4 board (#174/#259): directory, load, save/create, and delete for the shared card image; preserves the active video mode while paging M4ROM. |
 | `fs_rom_seam.asm`, `fs_*_lowram.inc` | #152 ROM offload: the seam that pages `GEOBENCH.ROM` in + the fixed low-RAM addresses the resident stubs and the ROM share. |
 | `bank.asm` | Expansion-RAM paging (the `#4000–#7FFF` window). |
-| `config.asm` | _Orphaned_ — the old resident `GEOBENCH.CFG` (key=value) parser. Superseded by the paged `GBCFG.MOD` (`kernel/kc/kcfg.c`); kept in-tree only until nothing references it. |
 | `icon_*.asm` | Icon bitmaps, packed into the `.IST` icon set at build time. |
 
 ## libgb (`gb/`)
