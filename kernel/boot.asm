@@ -184,6 +184,10 @@ m4s_hang        jr    m4s_hang
                                              ; KCFG_ICONS / KCFG_FONT (before the
                                              ; font/icon loaders consume them)
                 call  set_palette            ; re-apply now KCFG_INKS holds INKS= (#129)
+                call  clip_set_full          ; #273 moved the clip rect to bare low RAM
+                                             ; (#1338): it boots 0 -> every fill clips to
+                                             ; nothing, eating the splash bar. Set it FULL
+                                             ; before the first fill.
                 call  boot_splash            ; #196: lollipop + empty load bar
                 call  boot_tick              ; #196: bar 1/4 (moves before the long assets load)
                 call  assets_load            ; font + icons + cursor + backdrop (also GB_RELOAD, #185)
