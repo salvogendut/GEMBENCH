@@ -290,10 +290,26 @@ unsigned char gb_doc_frame(void)
     g_want = 0;
     sel = gb_popup(g_col[t], 8, g_items[t], g_nitems[t]);   /* #191: save-unders -> a seamless close */
     if (sel == 0xFF) return 0;                   /* cancelled: the menu restored the screen, nothing changed */
+    /* #279: a menu action changes only THIS (focused, top) window - the popup already restored its
+       own save-under, so nothing else on screen moved. Clamp the follow-up gb_restore_parent to the
+       focused window so it doesn't blank the desktop backdrop + repaint every other window. Set this
+       BEFORE the handler so one that opens a wider dialog (the file picker) or resizes the window
+       (View>Fullscreen) overrides it with its own damage. (Read-only viewers have no content-only
+       action - Load/Fullscreen set their own damage - so the clamp is omitted there to save space.) */
+#ifndef GBDOC_RO
+    gb_wm_damage(gb_wm_x(), gb_wm_y(), gb_wm_w(), gb_wm_h());
+#endif
     if (g_handler[t]) g_handler[t](sel);         /* File / Edit / View / app menu */
-    if (g_handler[t] == edit_action)             /* Edit only touched the window CONTENT (frame intact): */
-        return (sel == 1) ? 0 : 2;               /*   Copy = nothing to redraw; Select All / Paste = body */
-    return 3;                                    /* File / View / app action: full window repaint */
+    if (g_handler[t] == edit_action) {           /* Edit only touched the window CONTENT (frame intact): */
+        if (sel == 1) {                          /* Copy: nothing drawn -> undo the clamp */
+#ifndef GBDOC_RO
+            gb_wm_damage(0, 0, 80, 200);
+#endif
+            return 0;
+        }
+        return 2;                                /*   Select All / Paste = window body */
+    }
+    return 3;                                    /* File / View / app action: window repaint */
 }
 
 /* gb_doc_close: the window close gadget was hit - offer to save first. 1 = go
