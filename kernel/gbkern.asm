@@ -180,7 +180,7 @@ k_cls
                 ld    a,1
                 jp    SCR_SET_MODE            ; mode 1 clears; returns to caller
 k_noop                                         ; shared no-op for dead ABI slots (#148):
-                ret                            ; GB_PRINT/QUIT/LAUNCH/XORFRAME/ONREPAINT/WMLAUNCH/ONEVENT
+                ret                            ; GB_PRINT/QUIT/LAUNCH/XORFRAME/ONREPAINT/WMLAUNCH
 k_ret0          xor   a                        ; shared "return 0" (e.g. GB_PICOPEN when a kernel
                 ret                            ; has no banked-picture support, #164)
 
@@ -1006,13 +1006,19 @@ kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs +
                                               ; (fire = the click; it also buffers a
                                               ; char, e.g. 'Z' - drop it while held)
 
-; k_vsync (GB_VSYNC): retired (#274) - apps are frame-paced by the WM loop (on_frame
-; runs once per k_poll) rather than driving their own gb_vsync loop. The GB_VSYNC and
-; GB_BLITE slots -> the shared k_ret0 ("no ESC" A=0 return); addresses stay fixed.
+; k_vsync (GB_VSYNC): no longer used - apps are frame-paced by the WM loop (on_frame
+; runs once per k_poll) rather than driving their own gb_vsync loop. Stubbed to a
+; sane "no ESC" return; ABI slot kept so the jump-table address stays fixed.
+k_vsync
+                xor   a
+                ret
 
-; k_onevent (GB_ONEVENT): retired (#274) - no caller left; apps register their handler
-; via the gb_win_t descriptor (wm_register/k_wm_managed write APP_HANDLER through
-; wm_map_focus). The slot -> k_noop; the APP_HANDLER cell itself stays core WM state.
+; k_onevent (GB_ONEVENT): register the calling app's event handler. HL = handler
+; address (a void(void) C function in the app's page), 0 to unregister. The
+; kernel calls it from menu_dispatch with a message in GB_MSG.
+k_onevent
+                ld    (APP_HANDLER),hl
+                ret
 
 ; k_onrepaint (GB_ONREPAINT): now a no-op kept for ABI. Under the window manager
 ; an app's repaint handler lives in its gb_win_t (on_repaint); the old per-depth
