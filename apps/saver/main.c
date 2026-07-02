@@ -19,19 +19,20 @@
  * frame. 1 = a borderless window owns lines 0-7, so the bar suppresses itself. */
 #define WM_FS (*(volatile unsigned char *)0x130A)
 
-#define CLEAR_EVERY 180    /* frames between full clears (~3.6s) so it never saturates */
+#define CLEAR_EVERY 60     /* circles between full clears; small radius + frequent clears keep
+                              the screen sparse so it reads as popping circles, never bands (#281) */
 
 static unsigned char lmx, lmy;   /* pointer position at launch - a change = wake */
 static unsigned char armed;      /* 0 until one clean frame: swallows the launch click */
-static unsigned int  rng;        /* PRNG state (xorshift16) */
+static unsigned int  rng;        /* PRNG state (16-bit LCG) */
 static unsigned int  tick;       /* frames since the last clear */
 
-/* rnd: 16-bit xorshift PRNG - a different stream each launch (seeded from the clock). */
+/* rnd: 16-bit LCG (full 65536 period). The old xorshift16 fell into short cycles for some clock
+   seeds, so the reduced values collapsed onto a few lines and circles stacked into solid bands
+   (#281). The LCG's HIGH byte is the well-distributed part - callers take rnd() >> 8. */
 static unsigned int rnd(void)
 {
-    rng ^= (unsigned int)(rng << 7);
-    rng ^= (unsigned int)(rng >> 9);
-    rng ^= (unsigned int)(rng << 8);
+    rng = (unsigned int)(rng * 25173u + 13849u);
     return rng;
 }
 
@@ -72,10 +73,15 @@ static void draw_circle(int cxb, int cy, unsigned char R, unsigned char pen)
 /* step: one frame of animation - a fresh random circle, and a periodic clear. */
 static void step(void)
 {
-    unsigned char R   = (unsigned char)(3 + rnd() % 22);   /* 3..24 px */
-    unsigned char cxb = (unsigned char)(rnd() % 80);       /* random column */
-    unsigned char cy  = (unsigned char)(rnd() % 200);      /* random line */
-    unsigned char pen = (unsigned char)(1 + rnd() % 3);    /* pens 1..3 (not the bg) */
+    /* Every value takes the PRNG's HIGH byte, mapped with (h * N) >> 8 (uniform onto 0..N-1).
+       Radius is capped small (3..6): with the old 3..24 range the big discs overlapped into
+       solid full-width bands, so the saver looked like sliding blocks, not popping circles
+       (#281). Deriving R from the low bits used to correlate size with cy, stacking the big
+       ones on one line - taking the high byte here keeps size independent of position. */
+    unsigned char R   = (unsigned char)(3 + (((rnd() >> 8) * 4u) >> 8));   /* 3..6 px  */
+    unsigned char cxb = (unsigned char)(((rnd() >> 8) * 80u) >> 8);        /* 0..79 col */
+    unsigned char cy  = (unsigned char)(((rnd() >> 8) * 200u) >> 8);       /* 0..199 line */
+    unsigned char pen = (unsigned char)(1 + (((rnd() >> 8) * 3u) >> 8));   /* pens 1..3 (not bg) */
     draw_circle((int)cxb, (int)cy, R, pen);
     if (++tick >= CLEAR_EVERY) { tick = 0; gb_fill(0, 0, 80, 200, 0); }
 }
