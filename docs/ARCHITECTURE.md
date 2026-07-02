@@ -168,7 +168,7 @@ the level of asset reload, storage, and window-manager primitives.
   rebuilt by `tools/build_card_img.sh`; local artifact, not committed.
 - **`QA/GEOBENCH.DSK`** — the **Main** flat bootable floppy: the OS (kernel/loader/modules/
   fonts/icons/cursor/config), the core apps (Desktop, Notepad, Clock, File Manager, Viewer,
-  Settings, Iconed), the default `CIRCLE.SAV` saver, the `LOGO.PIC` wallpaper and the
+  Settings, Iconed), the default `SQUARES.SAV` saver, the `LOGO.PIC` wallpaper and the
   backdrops. Built by `kernel/gbkern.asm` + `pack_apps{,2,3}.asm` (#250).
 - **`QA/COMPANION.DSK`** — the **Companion** floppy (#250): a non-bootable DATA disk with
   the extras — Paint, Telnet, Xaos, the full screensaver set, and the gallery pictures.
