@@ -18,9 +18,9 @@
 #define IC_W    8             /* icon width  (byte cols) = 32 px */
 #define IC_H    32            /* icon height (lines)             */
 #define BOX_H   44            /* icon + label box (hit-test/lift) */
-#define XMAX    (80 - IC_W)   /* drag clamps */
+#define XMAX    (GB_COLS - IC_W)   /* drag clamps */
 #define YMIN    9
-#define YMAX    (200 - BOX_H)
+#define YMAX    (GB_LINES - BOX_H)
 #define DCLICK  75            /* double-click window, frames (gamepad-friendly, #153) */
 #define NONE    0xFF
 #define DRAGTH  2             /* press must move this far before it lifts (#153) */
@@ -304,13 +304,13 @@ static void wp_init(void)
     gb_set_drive(old_drive);
     if (wp_bank) {
         wp_wb = PIC_WB_K; wp_h = (unsigned char)PIC_H_K; wp_off = PIC_OFF_K;
-        wp_x = (wp_wb < 80) ? (unsigned char)((80 - wp_wb) / 2) : 0;  /* width <= 80 always */
-        if (wp_h <= 192) {                      /* fits the desktop area (lines 8..200): centre it */
-            wp_y = (unsigned char)(8 + (192 - wp_h) / 2);
+        wp_x = (wp_wb < GB_COLS) ? (unsigned char)((GB_COLS - wp_wb) / 2) : 0;
+        if (wp_h <= GB_LINES - 8) {             /* fits the desktop area below the bar: centre it */
+            wp_y = (unsigned char)(8 + ((GB_LINES - 8) - wp_h) / 2);
             wp_srcy = 0;
-        } else {                                /* taller than 192: pin to the top, show the middle */
+        } else {                                /* taller than the area: pin top, show the middle */
             wp_y = 8;
-            wp_srcy = (unsigned char)((wp_h - 192) / 2);
+            wp_srcy = (unsigned char)((wp_h - (GB_LINES - 8)) / 2);
         }
     } else {
         wp_wb = 0; wp_h = 0; wp_x = 0; wp_y = 0; wp_srcy = 0; wp_off = 0;
@@ -381,7 +381,7 @@ static void paint(void)
     unsigned char i;
     ss_cfg_init();                             /* #219: re-read SAVER=/SAVERTIME= - a Settings change
                                                   applies live (this fires when Settings closes) */
-    wp_backdrop(0, 8, 80, 192);                /* backdrop: wallpaper if loaded, else tile/solid (#128) */
+    wp_backdrop(0, 8, GB_COLS, GB_LINES - 8);                /* backdrop: wallpaper if loaded, else tile/solid (#128) */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
     if (sel_idx != NONE && ic_present[sel_idx])    /* red selection frame (#153) */
@@ -418,7 +418,7 @@ static void select_icon(unsigned char icon)
 #define KCFG_MEMSTR ((const char *)0x121A)
 #define MENU_DEF    ((volatile unsigned char *)0x1310)
 #define WM_FS       ((volatile unsigned char *)0x130A)   /* 1 = a window is fullscreen (kernel) */
-#define CLK_COL     68            /* clock column (matches the old kernel bar) */
+#define CLK_COL     (GB_COLS - 12)  /* clock column (matches the old kernel bar) */
 
 static unsigned char bar_init, bar_min, bar_msig, bar_wasfs;
 
@@ -462,7 +462,7 @@ static void bar_draw(void)
     }
     if (!bar_init) {                          /* first frame: white strip + RAM size */
         gb_curhide();
-        gb_fill(0, 0, 80, 8, 1);
+        gb_fill(0, 0, GB_COLS, 8, 1);
         gb_textbw(1, 0, KCFG_MEMSTR);
         gb_curshow();
         bar_init = 1; bar_min = 0xFF; bar_msig = 0xFF;
@@ -478,7 +478,7 @@ static void bar_draw(void)
        did NOT run this frame, a window has focus, so clear a left-over selection
        (reset the clip first so the erase isn't clipped to some window's rect, #153). */
     if (!desk_active && sel_idx != NONE) {
-        gb_wm_damage(0, 0, 80, 200);
+        gb_wm_damage(0, 0, GB_COLS, GB_LINES);
         select_icon(NONE);
     }
     if (!desk_active)
@@ -560,7 +560,7 @@ static void drop(void)
    registers an empty document (no File/Edit/View) and adds one "System" title with
    gb_menu_add, so its dropdown renders with the same framed/reverse-video hover look
    as every app's menus - one menu path for the whole UI. */
-#define FP_COL    54          /* Ram-Usage footprint column - left of the clock (CLK_COL 68) */
+#define FP_COL    (GB_COLS - 26) /* Ram-Usage footprint column - left of the clock */
 static const gb_doc_t deskdoc = { 0 };        /* no document -> gb_doc adds no titles */
 
 /* draw_footprint: the resident kernel size on the top bar, left of the clock, as
@@ -602,7 +602,7 @@ static void sys_action(unsigned char sel)
                                                   persists - nothing else touches the bar) */
         show_ram ^= 1;
         gb_curhide();
-        gb_wm_damage(0, 0, 80, 200);           /* the footprint lives in the bar, outside the
+        gb_wm_damage(0, 0, GB_COLS, GB_LINES);           /* the footprint lives in the bar, outside the
                                                   System dropdown's damage clip - widen first
                                                   or the draw is clipped away (#153) */
         if (show_ram) draw_footprint();
@@ -684,7 +684,7 @@ static void on_frame(void)
                                                     reload before we repaint the desktop. */
         gb_menu_add("System", sys_items, 6, sys_action);
         gb_curhide();
-        gb_wm_damage(0, 0, 80, 200);
+        gb_wm_damage(0, 0, GB_COLS, GB_LINES);
         paint();
         bar_init = 0;
         gb_curshow();
@@ -698,7 +698,7 @@ static void on_frame(void)
 
     if (gb_doc_frame()) {                  /* a System menu opened/ran (#142) */
         gb_curhide();
-        gb_wm_damage(0, 0, 80, 200);       /* gb_popup left a narrow damage clip; the desktop
+        gb_wm_damage(0, 0, GB_COLS, GB_LINES);       /* gb_popup left a narrow damage clip; the desktop
                                               repaints fully here and paint() doesn't reset the
                                               clip, so widen it back or the next op stays clipped
                                               (#153: a dragged icon vanished on drop). */
@@ -769,7 +769,7 @@ static void on_frame(void)
    full paint() (restacked behind any window), on_event = file-drop + the System menu.
    menu = 0: the gb_doc framework installs the "System" title dynamically (#142). Its
    rect spans the screen so it is the bottom catch-all for click-to-focus. */
-static const gb_win_t deskwin = { 0, 8, 80, 192, on_frame, paint, on_event, 0 };
+static const gb_win_t deskwin = { 0, 8, GB_COLS, GB_LINES - 8, on_frame, paint, on_event, 0 };
 
 void main(void)
 {
@@ -779,7 +779,7 @@ void main(void)
     drive_poll();                               /* drives present at boot -> icons (#65) */
     wp_init();                                   /* #212: load the configured wallpaper */
     ss_cfg_init();                               /* #219: read the screensaver idle timeout */
-    gb_wm_damage(0, 0, 80, 200);                 /* initialise the shared repaint clip before paint() */
+    gb_wm_damage(0, 0, GB_COLS, GB_LINES);                 /* initialise the shared repaint clip before paint() */
     paint();
     gb_curshow();                               /* paint() no longer shows the pointer (#153) */
     drag_active = 0;

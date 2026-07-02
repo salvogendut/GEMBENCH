@@ -22,11 +22,28 @@
 
 APP_BASE        equ   #4000        ; the #4000-#7FFF paging window
 
+                ifndef PLATFORM_MSX
 PAGE_DATA       equ   #C4          ; bank 0, block 0 -> kernel data buffers
 PAGE_APP0       equ   #C5          ; bank 0, block 1 -> the desktop (always APP_PAGES[0])
+                endif
                                    ; Further app pages are no longer fixed constants: the
                                    ; kernel builds a pool (APP_PAGES) across every detected
                                    ; bank at boot - see app_pool_init / wm_alloc_page (#84).
+; LD_A_PAGE_DATA: A = the PAGE_DATA page value. On the CPC that is the build-time
+; gate-array constant; on the MSX2 target (#287) DOS 2 hands out mapper segments at
+; runtime, so the allocated segment number is read from a page-3 glue cell
+; (MSX_PAGE_DATA, lib/msx/glue.inc). Shared code (to_data, run_data_module, the
+; asset loaders) uses this macro instead of `ld a,PAGE_DATA`.
+                ifdef PLATFORM_MSX
+                macro LD_A_PAGE_DATA
+                ld    a,(MSX_PAGE_DATA)
+                mend
+                else
+                macro LD_A_PAGE_DATA
+                ld    a,PAGE_DATA
+                mend
+                endif
+
 DATA_BUF        equ   #4000        ; base of the kernel data buffers (in PAGE_DATA)
 DATA_FONT       equ   DATA_BUF     ; font set lives at the start of PAGE_DATA
 DATA_ICONS      equ   #4400        ; icon set (.IST) follows the font in PAGE_DATA

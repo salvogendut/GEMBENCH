@@ -14,7 +14,7 @@
 run_data_module
                 ld    a,(bank_cur)
                 push  af
-                ld    a,PAGE_DATA
+                LD_A_PAGE_DATA
                 call  bank_set
                 ld    de,fs_req_name          ; HL (name) -> fs_req_name
                 ld    bc,11

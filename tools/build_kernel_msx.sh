@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# tools/build_kernel_msx.sh - build the MSX2 target (#287): the GBMSX.COM
+# kernel + the M1 app/asset set, staged into QA/MSX and packed into the
+# bootable Nextor image QA/GBMSX.IMG.
+#
+# Kept separate from tools/build_kernel.sh (that script is CPC-DSK-entangled
+# and wipes its own QA outputs); the shared pieces (apps via build_capp.sh,
+# GBCFG via build_cfgmod.sh, the Python asset tools) are reused, with
+# -DGB_MSX2 / --platform msx2 selecting the MSX encodings.
+#
+#   bash tools/build_kernel_msx.sh
+#   MSX_SHOTS="20 30 45" tools/run_msx.sh      # then verify in openMSX
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+RASM="${RASM:-rasm}"
+command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
+command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
+
+mkdir -p build/msx QA/MSX/GBENCH
+
+# --- the M1 C apps, compiled with the MSX geometry -------------------------
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
+
+# --- the shared config-parser module (platform-neutral C over low RAM) -----
+tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
+
+# --- assets ------------------------------------------------------------------
+python3 tools/genfont.py build/msx/DEFAULT.FNT           # 1bpp glyphs: shared format
+python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
+    lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
+    lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
+    lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
+    lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
+    lib/icon_font.asm \
+    lib/icon_desktop.asm lib/icon_filemanager.asm \
+    lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
+    lib/icon_viewer.asm \
+    lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
+    lib/icon_up.asm lib/icon_screensaver.asm
+python3 tools/png2spr.py --platform msx2 assets/pointer.png build/msx/DEFAULT.SPR cursor
+
+# --- the kernel + the .COM stub ---------------------------------------------
+( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 ${EXTRA_RASM:-} )
+( cd build/msx && "$RASM" ../../kernel/msx_stub.asm )
+[ -s build/msx/GBMSX.COM ] || { echo "ERROR: GBMSX.COM not produced" >&2; exit 1; }
+
+# --- stage QA/MSX --------------------------------------------------------------
+cp build/msx/GBMSX.COM QA/MSX/
+printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
+printf 'FONT=DEFAULT\r\nICONS=DEFAULT\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=NONE\r\nSAVER=NONE\r\nSAVERTIME=2\r\n' > QA/MSX/GEOBENCH.CFG
+cp build/msx/DESKTOP.RAW QA/MSX/GBENCH/DESKTOP.APP
+cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
+cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/
+cp build/msx/DEFAULT.IST QA/MSX/GBENCH/
+cp build/msx/DEFAULT.SPR QA/MSX/GBENCH/
+
+# --- bootable Nextor image ------------------------------------------------------
+bash tools/build_msx_img.sh QA/MSX QA/GBMSX.IMG
+
+echo "MSX2 target built: QA/MSX (staged) + QA/GBMSX.IMG (bootable Nextor image)"
