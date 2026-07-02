@@ -1349,6 +1349,14 @@ wm_loop
                 call  k_poll                      ; on_event, so a top-bar click reaches
                 call  wm_focus_click             ; the right app. then route the click.
                 call  wm_map_focus               ; focus may have changed
+                call  clip_set_full              ; #281: each window's frame starts from a full clip.
+                                                 ; A direct-drawing full-screen app (a .SAV saver) never
+                                                 ; goes through wm_repaint_all (which restores the clip),
+                                                 ; so without this it inherits the stale damage clip the
+                                                 ; desktop bar / a menu action left (#153/#279) - and
+                                                 ; clip_fb_copy's 8-bit maths turns that into full-width
+                                                 ; fill bands. Managed windows set their own damage
+                                                 ; in-frame, so a full default here is harmless.
                 ld    a,(WM_FOCUS)               ; call the focused window's on_frame
                 call  wm_entry                   ; HL = entry
                 push  hl                          ; #146: managed window -> kernel router
