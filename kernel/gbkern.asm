@@ -1327,11 +1327,11 @@ mwf_max         ld    a,(WM_FOCUS)
                 inc   hl
                 ld    a,(hl)
                 ld    (wm_sav_w),a
-                ld    (hl),80
+                ld    (hl),SCR_COLS
                 inc   hl
                 ld    a,(hl)
                 ld    (wm_sav_h),a
-                ld    (hl),192
+                ld    (hl),SCR_LINES-8
                 jr    mwf_max_paint
 mwf_unmax       res   2,(hl)
                 pop   hl                      ; HL = entry; restore the saved geometry
@@ -1879,14 +1879,14 @@ wm_drag_pg      equ   #12FF        ; low-RAM WM scratch (see lowram.tsv)
 ; during the drag), so erase = restore_block and draw = save_block + outline.
 ghost_place
                 ld    a,(POLL_MX)
-                cp    80-GHOST_W+1
+                cp    SCR_COLS-GHOST_W+1
                 jr    c,gpl_x
-                ld    a,80-GHOST_W
+                ld    a,SCR_COLS-GHOST_W
 gpl_x           ld    (sb_x),a
                 ld    a,(POLL_MY)
-                cp    200-GHOST_H+1
+                cp    SCR_LINES-GHOST_H+1
                 jr    c,gpl_y
-                ld    a,200-GHOST_H
+                ld    a,SCR_LINES-GHOST_H
 gpl_y           ld    (sb_y),a
                 ret
 
@@ -2007,7 +2007,7 @@ k_wm_damage
 clip_set_full
                 ld    bc,0                       ; clip_x = 0, clip_y = 0
                 ld    (clip_x),bc
-                ld    de,#C850                   ; clip_w = 80 (#50), clip_h = 200 (#C8)
+                ld    de,(SCR_LINES*256)|SCR_COLS ; clip_w / clip_h = the full screen
                 ld    (clip_w),de
                 ret
 

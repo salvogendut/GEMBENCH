@@ -48,9 +48,11 @@ VDP_PAL         equ   #9A          ; palette data pairs (after R#16)
 VDP_IND         equ   #9B          ; indirect register data (after R#17)
 
 ; Screen 6 (G5): 512x212, 4 colours, 2bpp linear -> 128 bytes/line, page 0 at
-; VRAM #0000. Sprite tables as set up by CHGMOD 6:
-SPR_PATTERN     equ   #F000        ; sprite pattern generator table
-SPR_COLOUR      equ   #F800        ; sprite colour table (mode 2: 16 bytes/sprite)
-SPR_ATTR        equ   #FA00        ; sprite attribute table
+; VRAM #0000 (ends #69FF). Sprite tables as CHGMOD 6 actually sets them
+; (verified from R#5=#EF/R#6=#0F/R#11=0 in openMSX - the classic SCREEN 5/6
+; BASIC layout, NOT the #Fxxx region):
+SPR_PATTERN     equ   #7800        ; sprite pattern generator table (R#6 = #0F)
+SPR_COLOUR     equ   #7400        ; sprite colour table (mode 2: attr - 512)
+SPR_ATTR        equ   #7600        ; sprite attribute table
 
 MSX_KEY_ESC     equ   2            ; ESC = keyboard matrix row 7, bit 2

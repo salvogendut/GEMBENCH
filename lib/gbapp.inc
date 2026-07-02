@@ -22,6 +22,16 @@
 
 APP_BASE        equ   #4000        ; the #4000-#7FFF paging window
 
+; Screen extents (#287): byte columns / lines per platform - the asm-side
+; counterpart of gb.h's GB_COLS/GB_LINES. CPC values keep the image identical.
+                ifdef PLATFORM_MSX
+SCR_COLS        equ   128          ; MSX2 Screen 6: 512px / 4 per byte
+SCR_LINES       equ   212
+                else
+SCR_COLS        equ   80           ; CPC Mode 1: 320px / 4 per byte
+SCR_LINES       equ   200
+                endif
+
                 ifndef PLATFORM_MSX
 PAGE_DATA       equ   #C4          ; bank 0, block 0 -> kernel data buffers
 PAGE_APP0       equ   #C5          ; bank 0, block 1 -> the desktop (always APP_PAGES[0])

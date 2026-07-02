@@ -8,19 +8,8 @@
 ; SP = MSX_STACK_TOP. GB_EXIT unwinds all of that and _TERMs back to the
 ; DOS prompt.
 
-; dbg_border: A = pen pattern for R#7 (breadcrumb trail while bringing up M1)
-dbg_border
-                di
-                out   (VDP_CTRL),a
-                ld    a,7|#80
-                out   (VDP_CTRL),a
-                ei
-                ret
-
 kernel_main
                 ld    (BOOT_SP),sp           ; entry SP, for GB_EXIT's longjmp
-                ld    a,%0101                 ; border: pen1 stripe = kernel entered
-                call  dbg_border
                 ld    hl,0                    ; empty the shared clipboard (#142)
                 ld    (CLIP_LEN),hl
                 call  msx_video_init         ; 212 lines, 16x16 sprites, parked pointer
@@ -32,18 +21,12 @@ kernel_main
                 ld    (BD_SOLID),a
                 call  set_palette
                 call  k_cls                   ; pen-0 desktop while loading
-                ld    a,%1010                 ; border: pen2 = video init done
-                call  dbg_border
                 call  fs_init
                 call  input_init
                 call  msx_mem_init           ; PAGE_DATA segment + KCFG_MEMKB
-                ld    a,%1111                 ; border: pen3 = mem init done
-                call  dbg_border
                 call  cfg_boot               ; parse GEOBENCH.CFG (paged C module)
                 call  set_palette            ; re-apply now KCFG_INKS holds INKS=
                 call  clip_set_full          ; boot clip rect = full screen (#273)
-                ld    a,%0101                 ; border: back to pen1 = cfg done
-                call  dbg_border
                 call  assets_load            ; font + icons + cursor + backdrop
                 call  clock_init
                 ld    hl,WM_NWIN            ; clear WM low-RAM state
@@ -56,8 +39,6 @@ kernel_main
                 ld    (WM_FPREV),a
                 ld    hl,kern_end-GB_KERNEL
                 ld    (GB_KSIZE),hl
-                xor   a                       ; border: pen0 = launching the desktop
-                call  dbg_border
                 ld    hl,name_desktop
                 call  launch_app             ; the WM master loop never returns
 km_finish                                      ; reached by k_exit's longjmp
@@ -171,7 +152,10 @@ mfs_free
 
 ; msx_wait_tick: pace to the frame interrupt - wait for MSX_TICK to change
 ; (the H.TIMI handler in the page-3 glue increments it every VBLANK).
+; PRESERVES DE/HL like the CPC's MC_WAIT_FLYBACK - k_poll carries the pointer
+; target through this call (the M1 "pointer pinned to the bottom" bug).
 msx_wait_tick
+                push  hl
                 ld    a,(MSX_TICK)
 mwt_wait
                 ei
@@ -179,4 +163,5 @@ mwt_wait
                 ld    hl,MSX_TICK
                 cp    (hl)
                 jr    z,mwt_wait
+                pop   hl
                 ret

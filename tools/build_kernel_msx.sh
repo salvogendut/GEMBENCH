@@ -24,6 +24,7 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build
 
 # --- the shared config-parser module (platform-neutral C over low RAM) -----
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
+tools/build_uimod.sh                             # -> build/GBUI.RAW (dialogs/menus)
 
 # --- assets ------------------------------------------------------------------
 python3 tools/genfont.py build/msx/DEFAULT.FNT           # 1bpp glyphs: shared format
@@ -51,6 +52,7 @@ printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
 printf 'FONT=DEFAULT\r\nICONS=DEFAULT\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=NONE\r\nSAVER=NONE\r\nSAVERTIME=2\r\n' > QA/MSX/GEOBENCH.CFG
 cp build/msx/DESKTOP.RAW QA/MSX/GBENCH/DESKTOP.APP
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
+cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
 cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/
 cp build/msx/DEFAULT.IST QA/MSX/GBENCH/
 cp build/msx/DEFAULT.SPR QA/MSX/GBENCH/

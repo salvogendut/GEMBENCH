@@ -143,12 +143,14 @@ def main():
     # 16x16 pattern layout = 16 bytes left 8-px column (rows 0..15), then 16
     # bytes right column; bit7 = leftmost pixel of the column.
     if platform == 'msx2':
-        def plane(pens):
+        def rows_of(pens):
             rows = [[0] * 16 for _ in range(16)]
             for y in range(min(th, 16)):
                 for x in range(min(tw, 16)):
                     if grid[y][x] in pens:
                         rows[y][x] = 1
+            return rows
+        def pack(rows):
             blob = bytearray()
             for col in (0, 8):
                 for y in range(16):
@@ -158,9 +160,24 @@ def main():
                             b |= 0x80 >> i
                     blob.append(b)
             return blob
+        fill = rows_of({1, 3})
+        outline = rows_of({2})
+        # If the art has no explicit outline pixels, synthesise one: the
+        # 1-pixel dilated border of the fill, so the pointer stays visible
+        # over light surfaces (a white arrow on the white top bar vanishes).
+        if not any(any(r) for r in outline):
+            for y in range(16):
+                for x in range(16):
+                    if fill[y][x]:
+                        continue
+                    for dy in (-1, 0, 1):
+                        for dx in (-1, 0, 1):
+                            ny, nx = y + dy, x + dx
+                            if 0 <= ny < 16 and 0 <= nx < 16 and fill[ny][nx]:
+                                outline[y][x] = 1
         blob = bytearray((hot[0], hot[1]))
-        blob += plane({2})          # outline = black pixels
-        blob += plane({1, 3})       # fill = white/red pixels
+        blob += pack(outline)       # outline plane (black, sprite 0)
+        blob += pack(fill)          # fill plane (white, sprite 1)
         with open(out_asm, "wb") as f:
             f.write(blob)
         print(f"{in_png}: MSX2 sprite cursor -> {len(blob)} bytes "
