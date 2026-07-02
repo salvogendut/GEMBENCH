@@ -13,7 +13,7 @@
                 jp    gb_open_window         ; GB_WINDOW #800F
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012
                 jp    gb_fs_dir_next         ; GB_DIRN   #8015
-                jp    k_vsync                ; GB_BLITE  #8018 (removed: mapping->FM, #103)
+                jp    k_ret0                 ; GB_BLITE  #8018 (removed: mapping->FM, #103; -> shared A=0 ret, #274)
                 jp    cursor_show            ; GB_CURSHOW #801B (was jp k_curshow; #148)
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
@@ -33,8 +33,8 @@
                 jp    k_fsload               ; GB_FSLOAD      #803F
                 jp    k_fssave               ; GB_FSSAVE      #8042
                 jp    k_getkey               ; GB_GETKEY      #8045
-                jp    k_vsync                ; GB_VSYNC       #8048
-                jp    k_onevent              ; GB_ONEVENT     #804B
+                jp    k_ret0                 ; GB_VSYNC       #8048 (retired: WM-paced; -> shared A=0 ret, #274)
+                jp    k_noop                 ; GB_ONEVENT     #804B (dead stub -> shared ret, #274)
                 jp    k_menu                 ; GB_MENU        #804E
                 jp    k_setname              ; GB_SETNAME     #8051
                 ifdef WM_GADGETS
