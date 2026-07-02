@@ -793,8 +793,7 @@ static void run_fullscreen(void)
     mark_all(); render();
     poll_ctr = 0; active = ACTIVE_HOLD;
     while (!leave) {
-        /* (#274: the old gb_vsync() ESC test was a retired no-op - always "no ESC";
-         * Ctrl-]/ESC below is the real exit, and the loop is recv-throttled.) */
+        if (gb_vsync()) leave = 1;            /* ESC held -> leave fullscreen */
         while ((k = gb_getkey()) != 0) {
             if (k == 0x1D || k == 0x1B) { leave = 1; break; }   /* Ctrl-] / ESC = exit */
             send_key(k); active = ACTIVE_HOLD;
@@ -901,7 +900,7 @@ static void t_frame(void)
         fs_mode = 1; gcols = FS_COLS; grows = FS_ROWS;
         scr_set_mode(2); m2_clear();
         start_session(); demo_fill(); render();
-        for (;;) ;                          /* hold the M2 screen (no WM interference) */
+        for (;;) gb_vsync();                /* hold the M2 screen (no WM interference) */
     }
 #endif
     /* idle on launch - the user drives everything from the Telnet menu (no auto-connect) */

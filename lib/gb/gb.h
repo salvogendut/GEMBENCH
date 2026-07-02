@@ -71,18 +71,20 @@ unsigned int  gb_mxp(void);           /* pointer PIXEL x 0-319 (pixel-accurate, 
 unsigned char gb_flags(void);         /* last poll's flags (for gb_wm_run apps)   */
 char *gb_dir1(void);                  /* first dir entry -> "NAME.EXT", 0 at end  */
 char *gb_dirn(void);                  /* next dir entry  -> "NAME.EXT", 0 at end  */
+void gb_launch(void);                 /* launch the current dir entry             */
+void gb_run(const char *name);        /* run a named app, return when it quits    */
 unsigned int gb_fs_load(char *buf, unsigned int max);    /* load opened file ->   */
                                                          /* byte count            */
 unsigned char gb_fs_save(char *buf, unsigned int len);   /* save opened file ->   */
                                                          /* 1 ok / 0 fail         */
 unsigned char gb_fs_free_kib(unsigned int *kib);          /* free space in KiB; 1 known */
 unsigned char gb_getkey(void);        /* typed char from the keyboard, 0 if none  */
+unsigned char gb_vsync(void);         /* wait one frame -> 1 if ESC held, else 0  */
 
-/* Event callback (issue #32): the kernel calls the window's registered handler when
- * an event it owns occurs - e.g. a click in the top bar (GB_MSG_MENU). Registration
- * is via the gb_win_t on_event / gb_mwin_t proc descriptor fields (#274 retired the
- * old gb_on_event setter). The handler is invoked during gb_poll, reads the message
- * from gb_msg, and must return promptly (do not call gb_poll from it).
+/* Event callback (issue #32): the kernel calls a registered handler when an
+ * event it owns occurs - currently a click in the top bar (GB_MSG_MENU). The
+ * handler is invoked during gb_poll (so call gb_poll in your loop), reads the
+ * message from gb_msg, and must return promptly (do not call gb_poll from it).
  * The message lives at a fixed low-RAM address shared with the kernel. */
 typedef struct {
     unsigned char type;   /* GB_MSG_* */
@@ -104,10 +106,11 @@ typedef struct {
 #define GB_MSG_DRAG  7   /* a title-bar press: gb_drag_window + gb_wm_setpos         */
 #define gb_dragname ((const char *)0x1423)  /* mirrors WM_DRAGNAME in kernel/lowram.inc */
 #define gb_msg (*(volatile gb_msg_t *)0x1302)
+void gb_on_event(void (*handler)(void));   /* register handler, 0 to clear */
 
 /* Top-bar menu (issue #34). The app registers menu titles the kernel draws in
  * the bar (persisting across clock ticks); a click on the bar arrives via the
- * window's on_event handler as GB_MSG_MENU with p0 = the clicked byte column, so the
+ * gb_on_event callback as GB_MSG_MENU with p0 = the clicked byte column, so the
  * app maps the column to its title and draws its own dropdown. def layout:
  *   byte 0: title count (<=4)
  *   then per title: byte col, then an 8-byte NUL/space-padded label
@@ -116,7 +119,7 @@ void gb_menu(const void *def);
 
 /* Shared modal dialogs (#114, lib/gb/gbwin.c) - the File-menu building blocks every
  * menu-driven app reuses. Recipe for a new app:
- *   - put a menu def in your gb_win_t.menu + an on_event handler that, when a
+ *   - put a menu def in your gb_win_t.menu + a gb_on_event handler that, when a
  *     title is clicked, sets a "want_menu" flag IF !gb_modal() (so a click during a
  *     dialog is ignored);
  *   - in on_frame, when want_menu, call gb_popup(titleCol, 8, items, n), dispatch
