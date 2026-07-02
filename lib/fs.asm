@@ -2,11 +2,11 @@
 ; lib/fs.asm - storage backend dispatcher.
 ;
 ; GEOBENCH talks to a generic filesystem interface (fs_dir_first/fs_dir_next)
-; and never knows which storage it is reading. At startup fs_init probes for the
-; SYMBiFACE II / Cyboard IDE and selects a backend:
-;   IDE present  -> lib/fs_ide_fat.asm   (FAT16 over IDE, fside_*)
-;   otherwise    -> lib/fs_amsdos.asm    (AMSDOS directory over the floppy, fsam_*)
-; so the desktop runs on a plain floppy-only CPC as well as an IDE-equipped one.
+; and never knows which storage it is reading. The drive-0 ("hard") backend is
+; picked at BUILD time (STORAGE_ALBIREO -> lib/fs_albireo.asm, STORAGE_M4 ->
+; lib/fs_m4.asm, else the archived IDE lib/fs_ide_fat.asm); at boot fs_init
+; probes for that card and falls back to the AMSDOS floppy backend
+; (lib/fs_amsdos.asm, fsam_*), so the desktop also runs on a floppy-only CPC.
 ;
 ; Interface (filled by whichever backend is active):
 ;   fs_dir_first -> CF set = first entry ready in fs_ent_*, NC = directory empty

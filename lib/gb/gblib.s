@@ -35,14 +35,10 @@
         .globl  _gb_my
         .globl  _gb_dir1
         .globl  _gb_dirn
-        .globl  _gb_launch
-        .globl  _gb_run
         .globl  _gb_fs_load
         .globl  _gb_fs_save
         .globl  _gb_fs_free_kib
         .globl  _gb_getkey
-        .globl  _gb_vsync
-        .globl  _gb_on_event
         .globl  _gb_menu
         .globl  _gb_set_name
         .globl  _gb_get_name
@@ -333,14 +329,6 @@ gd_none:
         ld      de, #0
         ret
 
-;; void gb_launch(void);   launch the current dir entry; returns when it quits
-_gb_launch:
-        jp      0x8027          ; GB_LAUNCH
-
-;; void gb_run(const char *name);   name in HL
-_gb_run:
-        jp      0x802D          ; GB_RUN
-
 ;; unsigned int gb_fs_load(char *buf, unsigned int max);   buf=HL, max=DE -> count
 _gb_fs_load:
         call    0x803F          ; GB_FSLOAD -> BC = byte count
@@ -380,14 +368,6 @@ gff_unknown:
 ;; unsigned char gb_getkey(void);   -> typed char in A, or 0 if none
 _gb_getkey:
         jp      0x8045          ; GB_GETKEY (returns the char in A)
-
-;; void gb_vsync(void);   wait one frame (50 Hz), no pointer/clock side effects
-_gb_vsync:
-        jp      0x8048          ; GB_VSYNC
-
-;; void gb_on_event(void (*handler)(void));   handler ptr in HL -> kernel stores it
-_gb_on_event:
-        jp      0x804B          ; GB_ONEVENT
 
 ;; void gb_menu(const void *def);   def ptr in HL -> kernel copies + draws the bar
 _gb_menu:
