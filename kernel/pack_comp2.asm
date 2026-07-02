@@ -6,9 +6,9 @@
 tle_img         incbin "../assets/pictures/TLEUNG.PIC"  ; sample picture -> TLEUNG.PIC
 tle_imgend
                 save  "TLEUNG.PIC",tle_img,tle_imgend-tle_img,DSK,"build/companion.dsk"
-cir_img         incbin "../build/CIRCLE.RAW"    ; CIRCLE.SAV (#219) - also kept on Main as the
+cir_img         incbin "../build/SQUARES.RAW"   ; SQUARES.SAV (#219/#281) - also on Main as the
 cir_imgend                                      ; default idle saver; here so FM-B/Settings list all
-                save  "CIRCLE.SAV",cir_img,cir_imgend-cir_img,DSK,"build/companion.dsk"
+                save  "SQUARES.SAV",cir_img,cir_imgend-cir_img,DSK,"build/companion.dsk"
 dec_img         incbin "../build/DECO.RAW"      ; art-deco panels
 dec_imgend
                 save  "DECO.SAV",dec_img,dec_imgend-dec_img,DSK,"build/companion.dsk"

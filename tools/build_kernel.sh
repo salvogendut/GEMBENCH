@@ -48,7 +48,7 @@ python3 tools/png2cpc.py build/SPLASH_BUILD.png build/SPLASH.BIN splash 96x184  
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=CIRCLE\r\nSAVERTIME=2\r\n' > build/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\n' > build/GEOBENCH.CFG
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
 python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
 python3 tools/packicons.py build/DEFAULT.IST \
@@ -112,8 +112,8 @@ DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
 DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
                                    # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
-tools/build_capp.sh apps/saver build/CIRCLE.RAW   # SAVER (#219): the test screensaver - a
-                                   # full-screen blank + circle, shipped as CIRCLE.SAV. Launched by
+tools/build_capp.sh apps/saver build/SQUARES.RAW  # SAVER (#219/#281): random squares - a
+                                   # full-screen blank + squares, shipped as SQUARES.SAV. Launched by
                                    # the desktop idle timer (SAVER=<seconds>); no menu/doc framework.
 tools/build_capp.sh apps/deco  build/DECO.RAW     # DECO screensaver (ported from symsav-deco):
                                    # recursive rectangle subdivision -> art-deco panels. -> DECO.SAV

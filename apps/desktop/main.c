@@ -221,13 +221,13 @@ static unsigned char enter_sys(void)
 }
 
 /* ---- screensaver idle trigger (#219) ----------------------------------------
- * Screensavers are apps (e.g. CIRCLE.SAV) - and they are selectable. Two config keys:
- *   SAVER=<stem>        which .SAV module to run (default CIRCLE)
+ * Screensavers are apps (e.g. SQUARES.SAV) - and they are selectable. Two config keys:
+ *   SAVER=<stem>        which .SAV module to run (default SQUARES)
  *   SAVERTIME=<minutes> the idle timeout (0 = the idle trigger is off)
  * bar_draw runs every frame regardless of focus (the global hook), so it counts idle
  * frames there and launches the module when the timeout elapses - reaching every
  * window, not just the bare desktop. */
-static char ss_name[11];           /* the configured .SAV module, 8.3 ("CIRCLE  SAV") */
+static char ss_name[11];           /* the configured .SAV module, 8.3 ("SQUARES SAV") */
 static unsigned char ss_drive;     /* drive to load the configured saver from */
 static unsigned int  ss_timeout;   /* idle frames before the saver runs (0 = off) */
 static unsigned int  ss_idle;      /* frames with no input so far */
@@ -249,7 +249,7 @@ static unsigned int cfg_val(const char *key, unsigned char klen)
     return len;
 }
 
-/* ss_cfg_init: read SAVER=<stem> (the module, default CIRCLE) into ss_name and
+/* ss_cfg_init: read SAVER=<stem> (the module, default SQUARES) into ss_name and
  * SAVERTIME=<minutes> into ss_timeout (frames). */
 static void ss_cfg_init(void)
 {
@@ -263,9 +263,9 @@ static void ss_cfg_init(void)
     for (j = 0; j < 8; j++) ss_name[j] = ' ';
     for (j = 0; j < 8 && p < len && t[p] != '\r' && t[p] != '\n' && t[p] != '.'; j++, p++)
         ss_name[j] = t[p];
-    if (ss_name[0] == ' ') {                                   /* absent/empty -> default CIRCLE */
-        ss_name[0]='C'; ss_name[1]='I'; ss_name[2]='R';
-        ss_name[3]='C'; ss_name[4]='L'; ss_name[5]='E';
+    if (ss_name[0] == ' ') {                                   /* absent/empty -> default SQUARES */
+        ss_name[0]='S'; ss_name[1]='Q'; ss_name[2]='U';
+        ss_name[3]='A'; ss_name[4]='R'; ss_name[5]='E'; ss_name[6]='S';
     }
     ss_name[8] = 'S'; ss_name[9] = 'A'; ss_name[10] = 'V';
     p = cfg_val("SAVERTIME=", 10);                             /* the idle timeout, minutes */
@@ -324,7 +324,7 @@ static void open_saver(void)
     const char *name = ss_name;
     if (!drive_present(drv)) {                  /* unavailable configured drive -> safe fallback */
         drv = boot_drive();
-        name = "CIRCLE  SAV";
+        name = "SQUARES SAV";
     }
     gb_set_drive(drv);
     WM_OPEN_STRICT = 1;
