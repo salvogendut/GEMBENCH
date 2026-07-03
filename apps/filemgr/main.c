@@ -684,14 +684,14 @@ static void fm_fullscreen(unsigned char on)
 {
     if (on) {
         fs_px = win_x; fs_py = win_y; fs_pw = win_w; fs_ph = win_h;
-        win_x = 0; win_y = 8; win_w = 80; win_h = 192;
+        win_x = 0; win_y = 8; win_w = GB_COLS; win_h = GB_LINES - 8;
     } else {
         win_x = fs_px; win_y = fs_py; win_w = fs_pw; win_h = fs_ph;
     }
     gb_wm_setpos(win_x, win_y);
     gb_wm_setsize(win_w, win_h);
     clamp_top();                          /* a taller window shows more rows */
-    gb_wm_damage(0, 8, 80, 192);          /* repaint ONCE in on_frame over the FULL toggle area (like
+    gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8); /* repaint ONCE in on_frame over the FULL toggle area (like
                                              every other app): a restore shrinks+moves the window, and
                                              setsize's clip doesn't cover the area the maximized window
                                              vacated - leaving a ghost scrollbar/listing behind (#156) */

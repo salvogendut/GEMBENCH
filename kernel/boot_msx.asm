@@ -39,6 +39,10 @@ kernel_main
                 ld    (WM_FPREV),a
                 ld    hl,kern_end-GB_KERNEL
                 ld    (GB_KSIZE),hl
+                ifdef GB_FSTEST              ; #287: deterministic BDOS write-path self-test.
+                call  msx_fstest             ; save GBTEST.TXT, then _TERM so the host can
+                jp    km_finish              ; mount the image and check it - no desktop.
+                endif
                 ld    hl,name_desktop
                 call  launch_app             ; the WM master loop never returns
 km_finish                                      ; reached by k_exit's longjmp
@@ -53,6 +57,27 @@ km_finish                                      ; reached by k_exit's longjmp
                 call  msx_bios
                 ld    c,_TERM0               ; clean exit to COMMAND2
                 jp    BDOS
+
+                ifdef GB_FSTEST
+; msx_fstest (#287): exercise the BDOS write path exactly as gb_fs_save/the
+; Notepad save would - fs_save_file creates GBTEST.TXT in the CWD (root) with a
+; known payload; then fs_delete_file removes a scratch file to prove _DELETE.
+; The host build script mounts the image afterward and checks the content.
+msx_fstest
+                ld    hl,fstest_name         ; fs_req_name = "GBTEST  TXT"
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,fstest_data         ; save the payload
+                ld    (fs_save_src),hl
+                ld    hl,fstest_len
+                ld    (fs_save_len),hl
+                call  fs_save_file
+                ret
+fstest_name     db    "GBTEST  TXT"
+fstest_data     db    "GEOBENCH MSX2 write path OK",13,10
+fstest_len      equ   $-fstest_data
+                endif
 
 ; k_exit (GB_EXIT): longjmp out of the nested WM call chain, then unwind.
 k_exit

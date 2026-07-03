@@ -82,7 +82,7 @@ fs_dir_first
                 ei
                 push  ix
                 ld    c,_FFIRST
-                ld    de,fsmx_star           ; "*" in the current directory
+                ld    de,fsmx_star           ; "*.*" = every entry in the current dir
                 ld    b,FS_ATTR_DIRS
                 ld    ix,fsmx_fib
                 call  BDOS
@@ -208,11 +208,82 @@ fs_load_sys
                 pop   af
                 ret
 
-; --- write ops: M2 ------------------------------------------------------------
+; --- write ops ----------------------------------------------------------------
+; fs_save_file: write fs_save_len bytes from (fs_save_src) to fs_req_name in
+; the current directory. _CREATE truncates an existing file (the CPC contract
+; only promised overwrite-in-place; BDOS handles grow/shrink). CF set = saved.
 fs_save_file
+                ei
+                push  ix
+                call  fsmx_name_to_path
+                ld    c,_CREATE
+                ld    de,fsmx_path
+                xor   a                       ; open mode 0 (read/write)
+                ld    b,a                     ; attributes 0
+                call  BDOS
+                or    a
+                jr    nz,fsave_fail
+                ld    a,b
+                ld    (fsmx_handle),a
+                ld    c,_WRITE
+                ld    de,(fs_save_src)
+                ld    hl,(fs_save_len)
+                call  BDOS
+                or    a
+                jr    nz,fsave_closefail
+                ld    a,(fsmx_handle)
+                ld    b,a
+                ld    c,_DCLOSE
+                call  BDOS
+                or    a
+                jr    nz,fsave_fail
+                pop   ix
+                scf
+                ret
+fsave_closefail
+                ld    a,(fsmx_handle)
+                ld    b,a
+                ld    c,_DCLOSE
+                call  BDOS
+fsave_fail
+                pop   ix
+                or    a
+                ret
+
+; fs_delete_file: delete fs_req_name from the current directory. CF = deleted.
 fs_delete_file
+                ei
+                push  ix
+                call  fsmx_name_to_path
+                ld    c,_DELETE
+                ld    de,fsmx_path
+                call  BDOS
+                pop   ix
+                sub   1                       ; A=0 (no error) -> CF set
+                ret
+
+; fs_free_kib: HL = free KiB on the current drive, CF set (known).
+; _ALLOC: A = sectors/cluster (power of 2), BC = sector size (512),
+; HL = free clusters -> KiB = free * spc / 2, clamped to #FFFF.
 fs_free_kib
-                or    a                       ; not implemented yet -> NC
+                ei
+                push  ix
+                ld    c,_ALLOC
+                ld    e,0                     ; current drive
+                call  BDOS
+                ld    e,a                     ; E = sectors per cluster
+ffk_lp          ld    a,e
+                cp    2
+                jr    c,ffk_half              ; E == 1 -> final /2
+                add   hl,hl                   ; KiB *= 2 per remaining spc doubling
+                jr    nc,ffk_ok
+                ld    hl,#FFFF                ; overflow -> clamp
+ffk_ok          srl   e
+                jr    ffk_lp
+ffk_half        srl   h                       ; /2: two 512-byte sectors per KiB
+                rr    l
+                pop   ix
+                scf
                 ret
 
 ; --- GB_CHDIR / GB_BACK --------------------------------------------------------
@@ -276,7 +347,7 @@ fnp_term
                 ret
 
 ; --- state ------------------------------------------------------------------------
-fsmx_star       db    "*",0
+fsmx_star       db    "*.*",0                 ; "*" alone matches only ext-less names
 fsmx_sysdir     db    92,"GBENCH",0           ; "\GBENCH" (the staged system folder)
 fsmx_root       db    92,0                    ; "\" (root)
 fsmx_dotdot     db    "..",0

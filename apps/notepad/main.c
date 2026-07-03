@@ -33,7 +33,11 @@
 #define LINE_H    10
 #define MAX_LINES ((win_h - TITLE_H - 15) / LINE_H)   /* visible text rows (runtime) */
 #define WRAP      ((win_w - 4) * 2 / 3)               /* chars per wrapped line (runtime) */
+#ifdef GB_MSX2
+#define MAXWRAP   84           /* line[] cap = max WRAP on the 128-col MSX window */
+#else
 #define MAXWRAP   52           /* line[] cap = max WRAP (80-col window) */
+#endif
 #define MAXVIS    18           /* names[] cap = max MAX_LINES */
 /* text origin, relative to the live (draggable) window position */
 #define TX_COL    (win_x + 2)
@@ -367,9 +371,9 @@ static void paste_clip(void);
  * repaints the desktop we vacated. */
 static void np_fullscreen(unsigned char on)
 {
-    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(80, 192); }
+    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(GB_COLS, GB_LINES - 8); }
     else    { gb_wm_setpos(DEF_X, DEF_Y); gb_wm_setsize(DEF_W, DEF_H); }
-    gb_wm_damage(0, 8, 80, 192);         /* repaint ONCE in on_frame, clipped to the toggle area;
+    gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8); /* repaint ONCE in on_frame, clipped to the toggle area;
                                             repainting here too double-paints (the flicker, #153) */
 }
 

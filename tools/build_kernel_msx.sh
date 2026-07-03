@@ -19,8 +19,10 @@ command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
 mkdir -p build/msx QA/MSX/GBENCH
 
-# --- the M1 C apps, compiled with the MSX geometry -------------------------
+# --- the C apps, compiled with the MSX geometry ------------------------------
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 
 # --- the shared config-parser module (platform-neutral C over low RAM) -----
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
@@ -42,15 +44,22 @@ python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
 python3 tools/png2spr.py --platform msx2 assets/pointer.png build/msx/DEFAULT.SPR cursor
 
 # --- the kernel + the .COM stub ---------------------------------------------
-( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 ${EXTRA_RASM:-} )
+# RASM exits 0 even on assembly errors, so stale outputs would silently ship:
+# remove them first and require fresh files after each pass.
+rm -f build/msx/GBKERNM.RAW build/msx/GBMSX.COM
+( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -s -o gbkernm ${EXTRA_RASM:-} )
+[ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: GBKERNM.RAW not produced (rasm errors above)" >&2; exit 1; }
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm )
-[ -s build/msx/GBMSX.COM ] || { echo "ERROR: GBMSX.COM not produced" >&2; exit 1; }
+[ -s build/msx/GBMSX.COM ] || { echo "ERROR: GBMSX.COM not produced (rasm errors above)" >&2; exit 1; }
 
 # --- stage QA/MSX --------------------------------------------------------------
 cp build/msx/GBMSX.COM QA/MSX/
 printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
-printf 'FONT=DEFAULT\r\nICONS=DEFAULT\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=NONE\r\nSAVER=NONE\r\nSAVERTIME=2\r\n' > QA/MSX/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=DEFAULT\r\nCURSOR=DEFAULT\r\nVIEW=LIST\r\nBACKDROP=SOLID\r\nWALLPAPER=NONE\r\nSAVER=NONE\r\nSAVERTIME=2\r\n' > QA/MSX/GEOBENCH.CFG
 cp build/msx/DESKTOP.RAW QA/MSX/GBENCH/DESKTOP.APP
+cp build/msx/FILEMGR.RAW QA/MSX/GBENCH/FILEMGR.APP
+cp build/msx/NOTEPAD.RAW QA/MSX/GBENCH/NOTEPAD.APP
+cp assets/WELCOME.TXT    QA/MSX/WELCOME.TXT
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
 cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
 cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/

@@ -14,6 +14,7 @@ _ALLOC          equ   #1B          ; get allocation info (free space)
 _FFIRST         equ   #40          ; find first entry -> FIB at IX
 _FNEXT          equ   #41          ; find next entry (FIB from _FFIRST)
 _DOPEN          equ   #43          ; open file handle: DE=ASCIIZ, A=mode
+_CREATE         equ   #44          ; create/truncate: DE=ASCIIZ, A=mode, B=attr
 _DCLOSE         equ   #45          ; close file handle: B=handle
 _READ           equ   #48          ; read: B=handle DE=buf HL=count -> HL=actual
 _WRITE          equ   #49          ; write: B=handle DE=buf HL=count
