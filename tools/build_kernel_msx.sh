@@ -43,6 +43,8 @@ APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/truchet build/msx/TRUCHET.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/lightning build/msx/LIGHTN.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/pyro build/msx/PYRO.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/helix build/msx/HELIX.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/xroach build/msx/XROACH.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/catclock build/msx/CATCLK.RAW
 
 # --- the shared config-parser module (platform-neutral C over low RAM) -----
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
@@ -103,6 +105,8 @@ cp build/msx/TRUCHET.RAW QA/MSX/GBENCH/TRUCHET.SAV
 cp build/msx/LIGHTN.RAW QA/MSX/GBENCH/LIGHTN.SAV
 cp build/msx/PYRO.RAW QA/MSX/GBENCH/PYRO.SAV
 cp build/msx/HELIX.RAW QA/MSX/GBENCH/HELIX.SAV
+cp build/msx/XROACH.RAW   QA/MSX/GBENCH/XROACH.SAV
+cp build/msx/CATCLK.RAW   QA/MSX/GBENCH/CATCLK.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
 python3 tools/pic_to_msx.py assets/pictures/PENGUIN.PIC QA/MSX/PENGUIN.PIC
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
