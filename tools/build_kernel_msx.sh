@@ -80,7 +80,7 @@ rm -f build/msx/GBKERNM.RAW build/msx/GBMSX.COM
 # --- stage QA/MSX --------------------------------------------------------------
 cp build/msx/GBMSX.COM QA/MSX/
 printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
-printf 'FONT=DEFAULT\r\nICONS=DEFAULT\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=NONE\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\n' > QA/MSX/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\n' > QA/MSX/GEOBENCH.CFG
 cp build/msx/DESKTOP.RAW  QA/MSX/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/GBENCH/FILEMGR.APP
 cp build/msx/NOTEPAD.RAW  QA/MSX/GBENCH/NOTEPAD.APP
@@ -108,12 +108,38 @@ cp build/msx/HELIX.RAW QA/MSX/GBENCH/HELIX.SAV
 cp build/msx/XROACH.RAW   QA/MSX/GBENCH/XROACH.SAV
 cp build/msx/CATCLK.RAW   QA/MSX/GBENCH/CATCLK.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
-python3 tools/pic_to_msx.py assets/pictures/PENGUIN.PIC QA/MSX/PENGUIN.PIC
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
 cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
 cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/
 cp build/msx/DEFAULT.IST QA/MSX/GBENCH/
 cp build/msx/DEFAULT.SPR QA/MSX/GBENCH/
+
+# --- drop-in assets: everything under assets/{backdrops,iconsets,pictures} gets
+# transcoded to Screen 6 and packaged automatically, mirroring the CPC build's
+# globs (build_kernel.sh / stage_dist.sh) so a file dropped in ships on BOTH
+# distros. Names are uppercased 8.3. (#287)
+for bdp in assets/backdrops/*.BDP; do            # backdrop tiles (BACKDROP=<name>)
+    [ -e "$bdp" ] || continue
+    name=$(basename "$bdp" .BDP | tr a-z A-Z)
+    python3 tools/bdp_to_msx.py "$bdp" "QA/MSX/GBENCH/$name.BDP"
+done
+for png in assets/backdrops/*.png; do            # ... or a source PNG with no .BDP
+    [ -e "$png" ] || continue
+    name=$(basename "$png" .png | tr a-z A-Z)
+    [ -e "QA/MSX/GBENCH/$name.BDP" ] || \
+        python3 tools/png2backdrop.py --platform msx2 "$png" "QA/MSX/GBENCH/$name.BDP"
+done
+for ist in assets/iconsets/*.IST; do             # icon sets (ICONS=<name>)
+    [ -e "$ist" ] || continue
+    name=$(basename "$ist" .IST | tr a-z A-Z)
+    python3 tools/ist_to_msx.py "$ist" "QA/MSX/GBENCH/$name.IST"
+done
+for pic in assets/pictures/*.PIC; do             # pictures: root (viewable on Disk C)
+    [ -e "$pic" ] || continue                    # + GBENCH (WALLPAPER=<name>)
+    name=$(basename "$pic" .PIC | tr a-z A-Z)
+    python3 tools/pic_to_msx.py "$pic" "QA/MSX/$name.PIC"
+    cp "QA/MSX/$name.PIC" "QA/MSX/GBENCH/$name.PIC"
+done
 
 # --- bootable Nextor image ------------------------------------------------------
 bash tools/build_msx_img.sh QA/MSX QA/GBMSX.IMG
