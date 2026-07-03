@@ -83,18 +83,33 @@ static unsigned char u_valid, u_cx, u_cy, u_pen;  /* single-level undo of last p
 static void fmt83(char *dst, const char *n11);   /* both defined below; used by draw() */
 static const char *win_title(void);
 
-/* ---- Mode-1 pixel packing (pixel i: bit0 @ 7-i, bit1 @ 3-i) ------------------ */
+/* ---- pixel packing for the .IST byte format (#287) --------------------------
+ * CPC Mode 1: pixel i has bit0 @ 7-i, bit1 @ 3-i.  MSX Screen 6: the 2-bit pen
+ * of pixel i sits in bits (7-2i),(6-2i). The .IST bytes are transcoded to
+ * Screen-6 packing at build (packicons --platform msx2), so ICONED must read /
+ * write them in the same encoding. (set_pixel assumes the target bits are 0,
+ * as its callers pre-clear the byte / start from a blank cell.) */
 
 static unsigned char dec_pixel(unsigned char b, unsigned char i)
 {
+#ifdef GB_MSX2
+    unsigned char sh = (unsigned char)(6 - (i << 1));
+    return (unsigned char)((b >> sh) & 3);
+#else
     return (unsigned char)(((b >> (7 - i)) & 1) | (((b >> (3 - i)) & 1) << 1));
+#endif
 }
 
 static unsigned char set_pixel(unsigned char b, unsigned char i, unsigned char pen)
 {
+#ifdef GB_MSX2
+    b |= (unsigned char)((pen & 3) << (6 - (i << 1)));
+    return b;
+#else
     if (pen & 1) b |= (unsigned char)(1 << (7 - i));
     if (pen & 2) b |= (unsigned char)(1 << (3 - i));
     return b;
+#endif
 }
 
 /* gget/gset: read/write a single pen in the packed grid (4 pixels/byte). */
@@ -356,9 +371,9 @@ static void recalc_origin(void)
 /* ie_fullscreen: View > Fullscreen - cover the screen (grid + panel recenter) and back. */
 static void ie_fullscreen(unsigned char on)
 {
-    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(80, 192); }
+    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(GB_COLS, GB_LINES - 8); }
     else    { gb_wm_setpos(DEF_X, DEF_Y); gb_wm_setsize(WIN_W, WIN_H); }
-    gb_wm_damage(0, 8, 80, 192);  /* repaint ONCE in on_frame, clipped to the toggle area;
+    gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8); /* repaint ONCE in on_frame, clipped to the toggle area;
                                      repainting here too double-paints (the flicker, #153) */
 }
 

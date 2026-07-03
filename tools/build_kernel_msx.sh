@@ -24,6 +24,8 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build
 APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
+APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
 
@@ -63,6 +65,8 @@ cp build/msx/DESKTOP.RAW  QA/MSX/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/GBENCH/FILEMGR.APP
 cp build/msx/NOTEPAD.RAW  QA/MSX/GBENCH/NOTEPAD.APP
 cp build/msx/SETTINGS.RAW QA/MSX/GBENCH/SETTINGS.APP
+cp build/msx/XAOS.RAW     QA/MSX/GBENCH/XAOS.APP
+cp build/msx/ICONED.RAW   QA/MSX/GBENCH/ICONED.APP
 cp build/msx/SQUARES.RAW  QA/MSX/GBENCH/SQUARES.SAV
 cp build/msx/ANT.RAW      QA/MSX/GBENCH/ANT.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
