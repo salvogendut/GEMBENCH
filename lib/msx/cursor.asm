@@ -29,18 +29,19 @@ ca_pat          outi
                 ; Screen 6 (G5) quirk: a sprite colour nibble is TWO 2-bit pen
                 ; fields - the renderer emits palette[c>>2] then palette[c&3]
                 ; per sprite pixel (verified in the V9938 rasterizer). So both
-                ; halves must name the same pen: outline = %1010 (pen 2 black),
-                ; fill = %0101 (pen 1 white); the pointer follows INKS= like
-                ; the rest of the UI.
-                ld    hl,SPR_COLOUR          ; sprite 0 lines = pen-2 pair (outline)
+                ; halves must name the same pen. To match the CPC pointer (a red
+                ; arrow with a white border): border = %0101 (pen 1 white),
+                ; fill = %1111 (pen 3 red); both follow INKS= like the rest of
+                ; the UI. Sprite 0 (border) has priority over sprite 1 (fill).
+                ld    hl,SPR_COLOUR          ; sprite 0 lines = pen-1 pair (white border)
                 call  vdp_setwr16
                 di
                 ld    b,16
-                ld    a,%1010
+                ld    a,%0101
 ca_c0           out   (VDP_DATA),a
                 djnz  ca_c0
-                ld    b,16                    ; sprite 1 lines = pen-1 pair (fill)
-                ld    a,%0101
+                ld    b,16                    ; sprite 1 lines = pen-3 pair (red fill)
+                ld    a,%1111
 ca_c1           out   (VDP_DATA),a
                 djnz  ca_c1
                 ei
