@@ -8,7 +8,13 @@ A graphical desktop environment for the **Amstrad CPC** and the **MSX2** — a
 hybrid clone that borrows the best ideas from **Commodore GEOS** (C64/C128) and
 the **Amiga Workbench**, reimagined for 8-bit Z80 hardware.
 
-![Multiple apps: file manager, picture viewer, clock](geobench.png)
+![The GEOBENCH desktop on the Amstrad CPC — file manager, picture viewer, clock](geobench.png)
+
+*The GEOBENCH desktop on the **Amstrad CPC** — file manager, picture viewer and clock.*
+
+![The GEOBENCH desktop on the MSX2](screenshots/MSX2-desktop.png)
+
+*The same desktop on the **MSX2** (V9938 Screen 6).*
 
 A resident Z80 **kernel** owns the machine and exposes a fixed jump-table API; the
 **apps are written in C** (SDCC) and run co-resident in expansion-bank pages,
