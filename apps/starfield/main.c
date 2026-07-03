@@ -32,6 +32,42 @@ static unsigned int  rng;
    Black (0) makes the border vanish into the star-field; on exit we restore the
    desktop's configured border so the screen looks untouched. */
 static volatile unsigned char brd_ink;
+
+static unsigned int rnd(void)
+{
+    rng ^= (unsigned int)(rng << 7);
+    rng ^= (unsigned int)(rng >> 9);
+    rng ^= (unsigned int)(rng << 8);
+    return rng;
+}
+
+/* plot_dot: one star pixel. CPC writes the #C000 Mode-1 screen and drives the
+   firmware SET-BORDER (&BC38). MSX2 has no memory-mapped screen or that firmware,
+   so it plots via a zero-length GB_LINE (V9938 point) and skips the border; the
+   320x200 star coords scale up to fill the 512x212 Screen 6. (#287) */
+#ifdef GB_MSX2
+#define GLINE_X0  (*(volatile unsigned int  *)0xC030)
+#define GLINE_Y0  (*(volatile unsigned int  *)0xC032)
+#define GLINE_X1  (*(volatile unsigned int  *)0xC034)
+#define GLINE_Y1  (*(volatile unsigned int  *)0xC036)
+#define GLINE_PEN (*(volatile unsigned char *)0xC038)
+static void fw_line(void) __naked
+{
+__asm
+    call 0x8009
+    ret
+__endasm;
+}
+static int sclx(int v) { v = v * 8 / 5;   return v < 0 ? 0 : v > GB_XPIX - 1  ? GB_XPIX - 1  : v; }
+static int scly(int v) { v = v * 53 / 50; return v < 0 ? 0 : v > GB_LINES - 1 ? GB_LINES - 1 : v; }
+static void plot_dot(int sx, int sy, unsigned char ink)
+{
+    unsigned int mx = (unsigned int)sclx(sx), my = (unsigned int)scly(sy);
+    GLINE_X0 = mx; GLINE_Y0 = my; GLINE_X1 = mx; GLINE_Y1 = my;
+    GLINE_PEN = ink; fw_line();
+}
+static void set_border(void) { (void)brd_ink; }
+#else
 static void set_border(void) __naked
 {
 __asm
@@ -42,17 +78,7 @@ __asm
     ret
 __endasm;
 }
-
-static unsigned int rnd(void)
-{
-    rng ^= (unsigned int)(rng << 7);
-    rng ^= (unsigned int)(rng >> 9);
-    rng ^= (unsigned int)(rng << 8);
-    return rng;
-}
-
-/* plot one Mode-1 pixel straight into #C000 (clips off-screen). */
-static void vram_pixel(int sx, int sy, unsigned char ink)
+static void plot_dot(int sx, int sy, unsigned char ink)
 {
     unsigned char *p, pos, lo, hi, b;
     if (sx < 0 || sx >= 320 || sy < 0 || sy >= 200) return;
@@ -66,6 +92,7 @@ static void vram_pixel(int sx, int sy, unsigned char ink)
     if (ink & 2) b |= hi;
     *p = b;
 }
+#endif
 
 /* spawn star i far away with a random direction. */
 static void spawn(unsigned char i)
@@ -80,7 +107,7 @@ static void star_tick(void)
     unsigned char i, col;
     int sx, sy;
     for (i = 0; i < NSTARS; i++) {
-        vram_pixel(px[i], py[i], BG);              /* erase the old position */
+        plot_dot(px[i], py[i], BG);              /* erase the old position */
         z[i] -= SPEED;                             /* approach */
         if (z[i] <= ZMIN) spawn(i);
         sx = 160 + (x[i] * FOCAL) / z[i];          /* perspective projection */
@@ -91,14 +118,14 @@ static void star_tick(void)
             sy = 100 + (y[i] * FOCAL) / z[i];
         }
         col = (z[i] > 170) ? 0 : (z[i] > 85) ? 3 : 1;   /* blue far, red mid, white near */
-        vram_pixel(sx, sy, col);
+        plot_dot(sx, sy, col);
         px[i] = sx; py[i] = sy;
     }
 }
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, BG);
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
 }
 
 static void ss_frame(void)
@@ -120,7 +147,7 @@ static void ss_frame(void)
     star_tick();
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {

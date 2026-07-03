@@ -37,6 +37,36 @@ static unsigned int rnd(void)
 }
 
 static volatile unsigned char brd_ink;
+
+/* Drawing primitive. CPC: Bresenham to the #C000 Mode-1 screen + a firmware
+   SET-BORDER. MSX2: the V9938 hardware LINE command (GB_LINE #8009, as the clock
+   uses); the tree works in the 320x200 space, so scale each endpoint to fill the
+   512x212 Screen 6 (both 4:3, so proportions hold). MSX has no #BC38 SET-BORDER
+   firmware, so that's a no-op there (like ANT). (#287) */
+#ifdef GB_MSX2
+#define GLINE_X0  (*(volatile unsigned int  *)0xC030)
+#define GLINE_Y0  (*(volatile unsigned int  *)0xC032)
+#define GLINE_X1  (*(volatile unsigned int  *)0xC034)
+#define GLINE_Y1  (*(volatile unsigned int  *)0xC036)
+#define GLINE_PEN (*(volatile unsigned char *)0xC038)
+static void fw_line(void) __naked
+{
+__asm
+    call 0x8009
+    ret
+__endasm;
+}
+static int sclx(int v) { v = v * 8 / 5;   return v < 0 ? 0 : v > GB_XPIX - 1  ? GB_XPIX - 1  : v; }
+static int scly(int v) { v = v * 53 / 50; return v < 0 ? 0 : v > GB_LINES - 1 ? GB_LINES - 1 : v; }
+static void draw_line(int x0, int y0, int x1, int y1, unsigned char ink)
+{
+    GLINE_X0 = (unsigned int)sclx(x0); GLINE_Y0 = (unsigned int)scly(y0);
+    GLINE_X1 = (unsigned int)sclx(x1); GLINE_Y1 = (unsigned int)scly(y1);
+    GLINE_PEN = ink; fw_line();
+}
+static void plot_dot(int x, int y, unsigned char ink) { draw_line(x, y, x, y, ink); }
+static void set_border(void) { (void)brd_ink; }
+#else
 static void set_border(void) __naked
 {
 __asm
@@ -47,8 +77,7 @@ __asm
     ret
 __endasm;
 }
-
-static void vram_pixel(int sx, int sy, unsigned char ink)
+static void plot_dot(int sx, int sy, unsigned char ink)
 {
     unsigned char *p, pos, lo, hi, b;
     if (sx < 0 || sx >= 320 || sy < 0 || sy >= 200) return;
@@ -62,8 +91,7 @@ static void vram_pixel(int sx, int sy, unsigned char ink)
     if (ink & 2) b |= hi;
     *p = b;
 }
-
-static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
+static void draw_line(int x0, int y0, int x1, int y1, unsigned char ink)
 {
     long dx, dy, sx, sy, err, e2;
     if (x0 < -999 || x0 > 999 || y0 < -999 || y0 > 999 ||
@@ -74,21 +102,22 @@ static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
     sy = (y0 < y1) ? 1 : -1;
     err = dx - dy;
     for (;;) {
-        vram_pixel(x0, y0, ink);
+        plot_dot(x0, y0, ink);
         if (x0 == x1 && y0 == y1) break;
         e2 = err + err;
         if (e2 > -dy) { err -= dy; x0 += sx; }
         if (e2 <  dx) { err += dx; y0 += sy; }
     }
 }
+#endif
 
 static void blossom(int x, int y)
 {
     unsigned char k;
     for (k = 0; k < 5; k++) {
         int dx = (int)(rnd() % 9) - 4, dy = (int)(rnd() % 9) - 4;
-        vram_pixel(x + dx, y + dy, LEAF);
-        vram_pixel(x + dx + 1, y + dy, LEAF);
+        plot_dot(x + dx, y + dy, LEAF);
+        plot_dot(x + dx + 1, y + dy, LEAF);
     }
 }
 
@@ -99,7 +128,7 @@ static void branch(int x, int y, int ang, int len, int thick)
     int b = y - (len * CS(ang)) / 64;
     int w, pdx = CS(ang), pdy = -SN(ang);          /* perpendicular for thickness */
     for (w = -(thick / 2); w <= thick / 2; w++)
-        vram_line(x + (w * pdx) / 64, y + (w * pdy) / 64,
+        draw_line(x + (w * pdx) / 64, y + (w * pdy) / 64,
                   a + (w * pdx) / 64, b + (w * pdy) / 64, WOOD);
     if (thick > 2) {
         branch(a, b, (ang * 4) / 5 + (int)(rnd() % 3) - 1, (len * 2) / 3, (thick * 2) / 3);
@@ -120,7 +149,7 @@ static void grow_forest(void)
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, BG);
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
 }
 
 static void ss_frame(void)
@@ -145,7 +174,7 @@ static void ss_frame(void)
     hold = HOLD;
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {
