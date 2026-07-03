@@ -47,6 +47,25 @@ dos_ok
                 ld    c,_TERM0
                 jp    BDOS
 tpa_ok
+                ; command line: GBMSX /M enables the GTPAD mouse poll. The DOS
+                ; tail at #0080 is length-prefixed; scan it for 'M'/'m'.
+                xor   a
+                ld    (MSX_MOUSE),a
+                ld    hl,#0080
+                ld    b,(hl)                  ; tail length
+                inc   b
+                dec   b
+                jr    z,cmd_done
+cmd_scan        inc   hl
+                ld    a,(hl)
+                and   #DF                     ; uppercase
+                cp    'M'
+                jr    nz,cmd_next
+                ld    a,1
+                ld    (MSX_MOUSE),a
+                jr    cmd_done
+cmd_next        djnz  cmd_scan
+cmd_done
                 xor   a                       ; 2. mapper support jump table
                 ld    de,#0402
                 ld    hl,0

@@ -39,8 +39,10 @@
 
 #define ICON_IDE 1            /* IST slots (packicons order): Disk C as IDE ... */
 #define ICON_SD  18           /* ... vs Albireo SD/USB card (#104); slots shifted -1 (#198 dedup) */
-static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, 66, 66 };       /* right col x=66 */
-static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, 150 };     /* trash y=150: label clears border */
+#define IC_RCOL (GB_COLS - 14)  /* right icon column: 66 on the CPC, 114 on the MSX (#287) */
+#define IC_BOTY (GB_LINES - 50) /* bottom row: label clears the border (150 CPC / 162 MSX) */
+static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, IC_RCOL, IC_RCOL };
+static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, IC_BOTY };
 static unsigned char ic_slot[N_ICONS] = { ICON_IDE, 0, 0, 2, 3 };      /* C, flp, flp, clock, trash */
 static const char *const ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash" };
 static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0 };      /* opens the file mgr */
@@ -586,8 +588,8 @@ static void tidy_icons(void)
     unsigned char i, n = 0;
     for (i = 0; i < 3; i++)
         if (ic_present[i]) { ic_x[i] = 0; ic_y[i] = DRIVE_TOP + n * DRIVE_STEP; n++; }
-    ic_x[IDX_CLOCK] = 66; ic_y[IDX_CLOCK] = 35;     /* the boot positions (see ic_x/ic_y) */
-    ic_x[IDX_TRASH] = 66; ic_y[IDX_TRASH] = 150;
+    ic_x[IDX_CLOCK] = IC_RCOL; ic_y[IDX_CLOCK] = 35; /* the boot positions (see ic_x/ic_y) */
+    ic_x[IDX_TRASH] = IC_RCOL; ic_y[IDX_TRASH] = IC_BOTY;
     gb_curhide();
     gb_restore_parent();
 }

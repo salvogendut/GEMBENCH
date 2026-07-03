@@ -82,6 +82,9 @@ input_poll
 ; buttons arrive as joystick triggers, which read_trig already merges. With no
 ; mouse plugged the offsets read 0, so this is a no-op on joystick setups.
 read_mouse
+                ld    a,(MSX_MOUSE)          ; opt-in (GBMSX /M): an EMPTY joystick port
+                or    a                       ; reads as constant GTPAD offsets and drags
+                ret   z                       ; the pointer into a corner (#287)
                 ld    a,12                    ; presence + latch
                 ld    ix,GTPAD
                 call  msx_bios
