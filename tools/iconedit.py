@@ -15,7 +15,11 @@ Multiple sets can be open at once, each in its own window (File > Open in New
 Window), so you can Copy/Paste Icon between two sets side by side.
 
 Run:
-    python3 tools/iconedit.py [file.IST | file.SPR]
+    python3 tools/iconedit.py [--platform msx2] [file.IST | file.SPR]
+
+--platform msx2 edits V9938 Screen-6 icon sets (round-trips byte-for-byte with
+packicons.py --platform msx2). Cursors (.SPR) are CPC-only here - MSX cursors are
+hardware sprites; build them with png2spr.py --platform msx2.
 """
 import json
 import os
@@ -25,12 +29,21 @@ import tempfile
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-# --- Mode 1 pixel packing (matches png2spr / png2cpc) -----------------------
+# --- pixel packing: CPC Mode 1 (default) or MSX2 Screen 6 (--platform msx2) --
+# Both pack 4 pixels per byte; only the bit layout differs. PLATFORM is set by
+# main() and switches the .IST codec so the editor round-trips MSX icon sets
+# byte-for-byte with `packicons.py --platform msx2`. (Cursors stay CPC-only -
+# MSX cursors are V9938 hardware sprites, a different format; use png2spr.)
+PLATFORM = 'cpc'
 
 def decode_pixel(b, i):
+    if PLATFORM == 'msx2':
+        return (b >> (6 - 2 * i)) & 3          # Screen 6: pen in bits 7-2i, 6-2i
     return ((b >> (7 - i)) & 1) | (((b >> (3 - i)) & 1) << 1)
 
 def set_pixel(b, i, pen):
+    if PLATFORM == 'msx2':
+        return (b & ~(3 << (6 - 2 * i))) | ((pen & 3) << (6 - 2 * i))
     if pen & 1:
         b |= 1 << (7 - i)
     if pen & 2:
@@ -417,6 +430,10 @@ class IconEditor(tk.Toplevel):
                 self.icons = load_ist(path)
                 self.mode = "IST"
             elif ext == ".spr":
+                if PLATFORM == 'msx2':
+                    raise ValueError("MSX2 cursors are V9938 hardware sprites, not "
+                                     ".SPR bitmaps - build them with png2spr.py "
+                                     "--platform msx2 from a PNG.")
                 data = open(path, "rb").read()
                 if len(data) != 4 * PHASE:
                     raise ValueError(f"{path}: expected {4*PHASE} bytes, got {len(data)}")
@@ -857,7 +874,11 @@ class IconEditor(tk.Toplevel):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else None
+    global PLATFORM
+    argv = sys.argv[1:]
+    if len(argv) >= 2 and argv[0] == '--platform':
+        PLATFORM, argv = argv[1], argv[2:]
+    path = argv[0] if argv else None
     root = tk.Tk()
     root.withdraw()                      # the real root stays hidden; editors are Toplevels
     IconEditor(root, path)               # the first window (File > Open in New Window adds more)

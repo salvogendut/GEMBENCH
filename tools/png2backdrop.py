@@ -6,13 +6,27 @@ and windows (the GEOS/Workbench dither look). Each pixel is quantised to one of
 the 4 desktop pens (blue paper / white / black / red) and packed Mode-1 (4 px per
 byte). Output is a raw 64-byte file: 16 rows x 4 bytes, no header.
 
-    tools/png2backdrop.py <in.png> <out.BDP>
+    tools/png2backdrop.py [--platform msx2] <in.png> <out.BDP>
 
 The kernel loads the .BDP into a low-RAM tile buffer at boot (BACKDROP=<name>) and
 fill_pattern repeats it, phased off absolute screen x,y so adjacent fills line up.
+--platform msx2 emits V9938 Screen-6 packing instead of CPC Mode 1 (same 4px/byte
+geometry, so the 64-byte tile is unchanged in size).
 """
 import sys
 from PIL import Image
+
+
+def mode1_to_screen6(data):
+    """CPC Mode-1 bytes -> V9938 Screen-6 bytes (pixel i's pen in bits 7-2i,6-2i)."""
+    out = bytearray()
+    for byte in data:
+        s6 = 0
+        for i in range(4):
+            pen = ((byte >> (7 - i)) & 1) | (((byte >> (3 - i)) & 1) << 1)
+            s6 |= pen << (6 - 2 * i)
+        out.append(s6)
+    return bytes(out)
 
 # The desktop pens, by their default ink colour. A pixel maps to the nearest one.
 PENS = [((0, 0, 170), 0),        # pen 0: blue (paper / backdrop)
@@ -45,10 +59,14 @@ def mode1_byte(pens4):
 
 
 def main():
-    if len(sys.argv) != 3:
+    argv = sys.argv[1:]
+    platform = 'cpc'
+    if len(argv) >= 2 and argv[0] == '--platform':
+        platform, argv = argv[1], argv[2:]
+    if len(argv) != 2:
         print(__doc__)
         sys.exit(2)
-    in_png, out_bdp = sys.argv[1], sys.argv[2]
+    in_png, out_bdp = argv
     img = Image.open(in_png).convert("RGB")
     if img.size != (TILE, TILE):
         img = img.resize((TILE, TILE), Image.NEAREST)   # tolerate other sizes
@@ -59,9 +77,11 @@ def main():
         for bx in range(0, TILE, 4):                    # 4 px -> 1 Mode-1 byte
             pens4 = [nearest_pen(px[bx + i, y]) for i in range(4)]
             blob.append(mode1_byte(pens4))
+    if platform == 'msx2':
+        blob = bytearray(mode1_to_screen6(blob))
     with open(out_bdp, "wb") as f:
         f.write(blob)
-    print(f"{in_png}: backdrop .BDP {TILE}x{TILE} -> {len(blob)} bytes ({out_bdp})")
+    print(f"{in_png}: backdrop .BDP {TILE}x{TILE} ({platform}) -> {len(blob)} bytes ({out_bdp})")
 
 
 if __name__ == "__main__":
