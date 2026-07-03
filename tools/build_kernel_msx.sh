@@ -26,6 +26,7 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x5F20 DOCRO=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
 
@@ -67,9 +68,11 @@ cp build/msx/NOTEPAD.RAW  QA/MSX/GBENCH/NOTEPAD.APP
 cp build/msx/SETTINGS.RAW QA/MSX/GBENCH/SETTINGS.APP
 cp build/msx/XAOS.RAW     QA/MSX/GBENCH/XAOS.APP
 cp build/msx/ICONED.RAW   QA/MSX/GBENCH/ICONED.APP
+cp build/msx/VIEWER.RAW   QA/MSX/GBENCH/VIEWER.APP
 cp build/msx/SQUARES.RAW  QA/MSX/GBENCH/SQUARES.SAV
 cp build/msx/ANT.RAW      QA/MSX/GBENCH/ANT.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
+python3 tools/pic_to_msx.py assets/pictures/PENGUIN.PIC QA/MSX/PENGUIN.PIC
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
 cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
 cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/

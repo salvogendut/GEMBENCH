@@ -546,11 +546,13 @@ cpc2grb
 ; --- msx_video_init: post-CHGMOD screen setup (called once from boot) --------
 ; 212-line mode (R#9 LN), 16x16 sprites (R#1 SI), park the pointer sprites and
 ; terminate the sprite scan. The stub already ran CHGMOD 6 via the BIOS.
-; MSX2 VDP register mirrors are RGnSAV = #F3DF + n (R#0 = #F3DF).
+; MSX2 VDP register mirrors: R#0-R#7 at RGnSAV = #F3DF + n, but R#8-R#23 at
+; #FFE7 + (n-8) - two separate tables. (Using #F3E8 for R#9 set its DC bit,
+; which blacks the screen + halts the CPU on real hardware, #287.)
 msx_video_init
-                ld    a,(#F3E8)               ; RG9SAV: current R#9 mirror
+                ld    a,(#FFE8)               ; RG9SAV: current R#9 mirror
                 or    #80                     ; LN = 212 lines
-                ld    (#F3E8),a
+                ld    (#FFE8),a
                 ld    c,9
                 call  vdp_reg
                 ld    a,(#F3E0)               ; RG1SAV: current R#1 mirror
