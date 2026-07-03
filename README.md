@@ -296,6 +296,12 @@ platforms**: the resident kernel assembles from the same `kernel/` sources under
 `-DGB_MSX2` — the platform differences live in the kernel's video/input/storage
 back-ends, not in the apps.
 
+GEOBENCH on real MSX2 hardware (a 1chipMSX / "1chipbook", 4080K detected): the
+desktop with the File Manager, the Viewer showing `PENGUIN.PIC`, and the analog
+Clock — all co-resident under the kernel window manager on a V9938 Screen 6.
+
+![GEOBENCH on MSX2 hardware](screenshots/msx_1chipbook.jpg)
+
 - **Runs under MSX-DOS 2 / Nextor** as a plain `GBMSX.COM` executable — no custom
   boot ROM. Storage goes through BDOS file calls, so anything Nextor mounts
   (Sunrise IDE, SD interfaces, …) works.
