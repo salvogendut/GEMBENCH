@@ -221,6 +221,88 @@ bt_hold
 bar_w           db    0
                 endif                          ; (ifndef PLATFORM_MSX around the bootsplash)
 
+; --- bootsplash, MSX2 (#287) ----------------------------------------------
+; The MSX counterpart of the CPC bootsplash: the same lollipop + build-id
+; (SPLASH.MOD, now Screen-6 art) blitted centred, plus a 4-tick load bar. The
+; screen is already pen-0 blue (msx_video_init + set_palette); the desktop's
+; first repaint clears it. Uses the shared VRAM primitives restore_block /
+; fill_block / pen_to_byte and the retrace-paced wait msx_wait_tick, so no CPC
+; #C000 screen or firmware pacing is involved.
+                ifdef PLATFORM_MSX
+SPL_X           equ   52           ; lollipop left byte col (centred: (128-24)/2)
+SPL_Y           equ   12
+SPL_WB          equ   24           ; 96 px
+SPL_H           equ   184
+BAR_X           equ   40           ; load bar left byte col (centred: (128-48)/2)
+BAR_Y           equ   170
+BAR_WB          equ   48           ; 192 px full bar
+BAR_H           equ   10
+BAR_SEG         equ   12           ; 4 ticks fill BAR_WB
+BOOT_HOLD       equ   18           ; frames held per tick (~0.36 s at 50 Hz)
+; boot_splash: load SPLASH.MOD to APP_BASE, blit it, draw the black bar backing.
+; Caller-of-load_app0 rule: save/restore the page + DI/EI here (like run_cfgmod).
+boot_splash
+                ld    a,(bank_cur)
+                push  af
+                di
+                ld    hl,splash_name
+                call  load_app0              ; SPLASH.MOD -> APP_BASE, CF = loaded
+                jr    nc,bsp_done            ; missing -> plain blue boot
+                ld    a,SPL_X
+                ld    (sb_x),a
+                ld    a,SPL_Y
+                ld    (sb_y),a
+                ld    a,SPL_WB
+                ld    (sb_w),a
+                ld    a,SPL_H
+                ld    (sb_h),a
+                ld    hl,APP_BASE
+                ld    (sb_buf),hl
+                call  restore_block          ; blit the lollipop to VRAM
+                ld    b,BAR_WB               ; empty bar backing, pen 2 (black)
+                ld    a,2
+                call  bsp_bar
+bsp_done
+                pop   af
+                call  bank_set
+                ei
+                ret
+splash_name     db    "SPLASH  MOD"          ; 8.3, space-padded
+
+; bsp_bar: A = pen, B = width in bytes -> fill (BAR_X, BAR_Y, B, BAR_H) via fill_block.
+bsp_bar
+                push  bc
+                call  pen_to_byte            ; A = pen -> Screen-6 fill byte
+                ld    (fb_val),a
+                pop   bc
+                ld    a,BAR_X
+                ld    (fb_x),a
+                ld    a,BAR_Y
+                ld    (fb_y),a
+                ld    a,b
+                ld    (fb_w),a
+                ld    a,BAR_H
+                ld    (fb_h),a
+                jp    fill_block
+
+; boot_tick: advance the load bar one red segment, then hold BOOT_HOLD frames.
+boot_tick
+                ld    a,(bar_w)
+                add   a,BAR_SEG
+                ld    (bar_w),a
+                ld    b,a
+                ld    a,3                     ; pen 3 (red)
+                call  bsp_bar
+                ld    b,BOOT_HOLD
+bt_hold
+                push  bc
+                call  msx_wait_tick          ; pace to one true video frame (S#2 VR)
+                pop   bc
+                djnz  bt_hold
+                ret
+bar_w           db    0
+                endif                          ; (ifdef PLATFORM_MSX bootsplash)
+
 ; assets_load: (re)load the font, icon set, cursor and backdrop tile from the names in
 ; the transfer area. Run at boot, and again by GB_RELOAD when the Settings app changes
 ; one of them (it writes the new name to the transfer area first) - so they apply with
