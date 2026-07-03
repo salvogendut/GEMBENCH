@@ -48,6 +48,16 @@ if [ -n "${MSX_SHOTS:-}" ]; then
     echo "headless run: screenshots at ${MSX_SHOTS}s -> build/msx/msx-t*.png"
 elif [ -n "${MSX_SCRIPT:-}" ]; then
     ARGS+=(-script "$MSX_SCRIPT")
+else
+    # Interactive: fast-forward the ~18s Nextor boot, then drop to real 50Hz.
+    # The switch is on a WALL-CLOCK timer ("after realtime"), NOT a breakpoint on
+    # a kernel address - the kernel grows and any hardcoded k_poll address goes
+    # stale, leaving the run stuck at fast-forward (pointer leaps, saver fires in
+    # seconds). ~4s of wall-clock throttle-off is well past the boot.
+    SCRIPT=$(mktemp --suffix=.tcl)
+    trap 'rm -f "$SCRIPT"' EXIT
+    printf 'set throttle off\nafter realtime %s { set throttle on }\n' "${MSX_FF:-4}" > "$SCRIPT"
+    ARGS+=(-script "$SCRIPT")
 fi
 
 exec openmsx "${ARGS[@]}"
