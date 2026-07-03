@@ -12,9 +12,11 @@
 
 #define WM_FS (*(volatile unsigned char *)0x130A)   /* app-side full-screen flag */
 
-/* The screen, in GEOBENCH units: byte columns (x/w, 4px each) and lines (y/h). */
-#define SCR_W   80
-#define SCR_H   200
+/* The screen, in GEOBENCH units: byte columns (x/w, 4px each) and lines (y/h).
+   Derived from the platform geometry so the layout fills the MSX2 512x212 screen
+   as well as the CPC 320x200 one (#287). */
+#define SCR_W   GB_COLS
+#define SCR_H   GB_LINES
 #define BX      1        /* panel border, byte columns (4px) */
 #define BY      4        /* panel border, lines */
 #define MIN_W   5        /* stop splitting below this (byte cols) */
@@ -125,7 +127,7 @@ static void ss_frame(void)
     hold = HOLD;
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, SCR_W, SCR_H, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {

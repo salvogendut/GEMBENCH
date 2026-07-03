@@ -46,8 +46,33 @@ static unsigned int rnd(void)
     return rng;
 }
 
-/* vram_pixel: plot one Mode-1 pixel straight into the #C000 screen.
-   addr = #C000 + (y>>3)*80 + (y&7)*#800 + (x>>2); pen bits 0x80>>pos / 0x08>>pos. */
+/* Line/span primitive. CPC: Bresenham straight to the #C000 Mode-1 screen. MSX2:
+   the V9938 hardware LINE command (GB_LINE #8009), the same path the clock uses -
+   proj_sx/proj_sy already emit 512x212 screen coords there, so a filled span is a
+   horizontal hardware line and a wire edge a diagonal one (no per-pixel VDP). (#287) */
+#ifdef GB_MSX2
+#define GLINE_X0  (*(volatile unsigned int  *)0xC030)
+#define GLINE_Y0  (*(volatile unsigned int  *)0xC032)
+#define GLINE_X1  (*(volatile unsigned int  *)0xC034)
+#define GLINE_Y1  (*(volatile unsigned int  *)0xC036)
+#define GLINE_PEN (*(volatile unsigned char *)0xC038)
+static void fw_line(void) __naked
+{
+__asm
+    call 0x8009
+    ret
+__endasm;
+}
+static int clampx(int v) { return v < 0 ? 0 : v > GB_XPIX - 1 ? GB_XPIX - 1 : v; }
+static int clampy(int v) { return v < 0 ? 0 : v > GB_LINES - 1 ? GB_LINES - 1 : v; }
+static void draw_line(int x0, int y0, int x1, int y1, unsigned char ink)
+{
+    GLINE_X0 = (unsigned int)clampx(x0); GLINE_Y0 = (unsigned int)clampy(y0);
+    GLINE_X1 = (unsigned int)clampx(x1); GLINE_Y1 = (unsigned int)clampy(y1);
+    GLINE_PEN = ink; fw_line();
+}
+#define plot_span(xl, xr, y, ink) draw_line((xl), (y), (xr), (y), (ink))
+#else
 static void vram_pixel(int x, int y, unsigned char ink)
 {
     unsigned char *p, pos, lo, hi, b;
@@ -62,8 +87,7 @@ static void vram_pixel(int x, int y, unsigned char ink)
     if (ink & 2) b |= hi;
     *p = b;
 }
-
-static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
+static void draw_line(int x0, int y0, int x1, int y1, unsigned char ink)
 {
     int dx, dy, sx, sy, err, e2;
     dx = x1 - x0; if (dx < 0) dx = -dx;
@@ -79,6 +103,8 @@ static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
         if (e2 <  dx) { err += dx; y0 += sy; }
     }
 }
+#define plot_span(xl, xr, y, ink) do { int _x; for (_x = (xl); _x <= (xr); _x++) vram_pixel(_x, (y), (ink)); } while (0)
+#endif
 
 /* edge_x: if edge (ax,ay)-(bx,by) crosses scanline y (half-open [ay,by)), widen
    the [*xl,*xr] span by the crossing x. */
@@ -96,18 +122,18 @@ static void edge_x(int ax, int ay, int bx, int by, int y, int *xl, int *xr)
 static void fill_quad(int x0, int y0, int x1, int y1, int x2, int y2,
                       int x3, int y3, unsigned char ink)
 {
-    int ymin, ymax, y, x, xl, xr;
+    int ymin, ymax, y, xl, xr;
     ymin = y0; if (y1 < ymin) ymin = y1; if (y2 < ymin) ymin = y2; if (y3 < ymin) ymin = y3;
     ymax = y0; if (y1 > ymax) ymax = y1; if (y2 > ymax) ymax = y2; if (y3 > ymax) ymax = y3;
     if (ymin < 0) ymin = 0;
-    if (ymax > 199) ymax = 199;
+    if (ymax > GB_LINES - 1) ymax = GB_LINES - 1;
     for (y = ymin; y <= ymax; y++) {
         xl = 9999; xr = -9999;
         edge_x(x0, y0, x1, y1, y, &xl, &xr);
         edge_x(x1, y1, x2, y2, y, &xl, &xr);
         edge_x(x2, y2, x3, y3, y, &xl, &xr);
         edge_x(x3, y3, x0, y0, y, &xl, &xr);
-        for (x = xl; x <= xr; x++) vram_pixel(x, y, ink);
+        if (xr >= xl) plot_span(xl, xr, y, ink);
     }
 }
 
@@ -140,9 +166,16 @@ static void init_terrain(void)
         }
 }
 
-/* isometric projection (screen 320x200): same formula as the original. */
+/* isometric projection: the original 320x200 formula, scaled up on MSX2 to fill the
+   512x212 Screen 6 (x*512/320, y*212/200) - both are 4:3 displays, so the terrain
+   keeps its proportions and just gets bigger. CPC is unchanged. (#287) */
+#ifdef GB_MSX2
+static int proj_sx(int gx, int gy) { return ((gx * 640 / 60) - (gy * 400 / 60) / 2 + 80) * 8 / 5; }
+static int proj_sy(int gy, int hv) { return ((gy * 400 / 60) - hv + YOFF) * 53 / 50; }
+#else
 static int proj_sx(int gx, int gy) { return (gx * 640 / 60) - (gy * 400 / 60) / 2 + 80; }
 static int proj_sy(int gy, int hv) { return (gy * 400 / 60) - hv + YOFF; }
+#endif
 
 static void draw_terrain_cell(int cx, int cy)
 {
@@ -155,10 +188,10 @@ static void draw_terrain_cell(int cx, int cy)
     avg = (h[cx][cy] + h[cx + 1][cy] + h[cx][cy + 1] + h[cx + 1][cy + 1]) / 4;
     fill = (avg >= TH_MID) ? COL_FILL_HI : COL_FILL_LO;
     fill_quad(x0, y0, x1, y1, x2, y2, x3, y3, fill);     /* red/black fill ... */
-    vram_line(x0, y0, x1, y1, COL_WIRE);                 /* ... white wireframe edges */
-    vram_line(x1, y1, x2, y2, COL_WIRE);
-    vram_line(x2, y2, x3, y3, COL_WIRE);
-    vram_line(x3, y3, x0, y0, COL_WIRE);
+    draw_line(x0, y0, x1, y1, COL_WIRE);                 /* ... white wireframe edges */
+    draw_line(x1, y1, x2, y2, COL_WIRE);
+    draw_line(x2, y2, x3, y3, COL_WIRE);
+    draw_line(x3, y3, x0, y0, COL_WIRE);
 }
 
 static void anim_tick(void)
@@ -174,7 +207,7 @@ static void anim_tick(void)
     } else if (anim_stage == 1) {           /* hold the finished landscape */
         if (--stage_timer <= 0) anim_stage = 2;
     } else {                                /* regenerate */
-        gb_fill(0, 0, 80, 200, COL_BG);
+        gb_fill(0, 0, GB_COLS, GB_LINES, COL_BG);
         init_terrain();
         draw_x = 0; draw_y = 0; anim_stage = 0;
     }
@@ -182,7 +215,7 @@ static void anim_tick(void)
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, COL_BG);         /* blue sky */
+    gb_fill(0, 0, GB_COLS, GB_LINES, COL_BG);         /* blue sky */
     draw_x = 0; draw_y = 0; anim_stage = 0;
 }
 
@@ -203,7 +236,7 @@ static void ss_frame(void)
     anim_tick();
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {
