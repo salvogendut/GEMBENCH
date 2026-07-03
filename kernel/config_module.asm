@@ -31,7 +31,11 @@ cfg_fname       db    "GEOBENCHCFG"          ; "GEOBENCH.CFG" (8.3)
 load_app0
                 ld    de,fs_req_name
                 call  copy11
+                ifdef PLATFORM_MSX
+                ld    a,(MSX_TPASEG)          ; #287: APP_PAGES[0] = the TPA page-1 segment
+                else
                 ld    a,PAGE_APP0
+                endif
                 call  bank_set
                 ld    hl,#3F00
                 ld    (fs_load_max),hl

@@ -22,11 +22,38 @@
 
 APP_BASE        equ   #4000        ; the #4000-#7FFF paging window
 
+; Screen extents (#287): byte columns / lines per platform - the asm-side
+; counterpart of gb.h's GB_COLS/GB_LINES. CPC values keep the image identical.
+                ifdef PLATFORM_MSX
+SCR_COLS        equ   128          ; MSX2 Screen 6: 512px / 4 per byte
+SCR_LINES       equ   212
+                else
+SCR_COLS        equ   80           ; CPC Mode 1: 320px / 4 per byte
+SCR_LINES       equ   200
+                endif
+
+                ifndef PLATFORM_MSX
 PAGE_DATA       equ   #C4          ; bank 0, block 0 -> kernel data buffers
 PAGE_APP0       equ   #C5          ; bank 0, block 1 -> the desktop (always APP_PAGES[0])
+                endif
                                    ; Further app pages are no longer fixed constants: the
                                    ; kernel builds a pool (APP_PAGES) across every detected
                                    ; bank at boot - see app_pool_init / wm_alloc_page (#84).
+; LD_A_PAGE_DATA: A = the PAGE_DATA page value. On the CPC that is the build-time
+; gate-array constant; on the MSX2 target (#287) DOS 2 hands out mapper segments at
+; runtime, so the allocated segment number is read from a page-3 glue cell
+; (MSX_PAGE_DATA, lib/msx/glue.inc). Shared code (to_data, run_data_module, the
+; asset loaders) uses this macro instead of `ld a,PAGE_DATA`.
+                ifdef PLATFORM_MSX
+                macro LD_A_PAGE_DATA
+                ld    a,(MSX_PAGE_DATA)
+                mend
+                else
+                macro LD_A_PAGE_DATA
+                ld    a,PAGE_DATA
+                mend
+                endif
+
 DATA_BUF        equ   #4000        ; base of the kernel data buffers (in PAGE_DATA)
 DATA_FONT       equ   DATA_BUF     ; font set lives at the start of PAGE_DATA
 DATA_ICONS      equ   #4400        ; icon set (.IST) follows the font in PAGE_DATA
@@ -39,8 +66,12 @@ DATA_MODTOP     equ   #6000        ; ceiling of the icon region in PAGE_DATA: th
 GB_KERNEL       equ   #8000        ; resident kernel base (fixed, RUN entry)
 GB_INIT         equ   GB_KERNEL+0  ; #8000  kernel boot (kernel only)
 GB_CLS          equ   GB_KERNEL+3  ; #8003  clear screen / home cursor
-GB_PRINT        equ   GB_KERNEL+6  ; #8006  reserved legacy print stub
-GB_QUIT         equ   GB_KERNEL+9  ; #8009  reserved legacy quit stub
+GB_SETINK       equ   GB_KERNEL+6  ; #8006  set a palette colour live: A=pen (0-3, or
+                                   ;        4=border), B/C=CPC ink number. CPC -> SCR_SET_INK/
+                                   ;        BORDER; MSX -> V9938 palette (#287, was GB_PRINT)
+GB_LINE         equ   GB_KERNEL+9  ; #8009  draw a line (MSX: V9938 LINE command from the
+                                   ;        GLINE_* glue cells; inert on CPC - CLOCK uses
+                                   ;        GRA_* firmware there). #287 (was GB_QUIT)
 GB_TEXT         equ   GB_KERNEL+12 ; #800C  6x8 font text: B=col C=line D=pen
                                    ;        E=paper HL=string (in the caller's page)
 GB_WINDOW       equ   GB_KERNEL+15 ; #800F  draw a window: B=x C=y D=w E=h

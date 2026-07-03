@@ -7,6 +7,21 @@
 #ifndef GB_H
 #define GB_H
 
+/* Screen geometry (#287): byte columns / lines / pixel width per platform.
+ * CPC Mode 1 = 320x200 (80 byte cols), MSX2 Screen 6 = 512x212 (128 byte
+ * cols) - both 4 colours at 4 pixels per byte, so only the extents differ.
+ * Apps use these instead of 80/200/320 literals; the CPC values keep every
+ * existing binary byte-identical. */
+#ifdef GB_MSX2
+#define GB_COLS  128 /* screen width in byte columns */
+#define GB_LINES 212 /* screen height in lines */
+#define GB_XPIX  512 /* screen width in pixels (gb_mxp() range) */
+#else
+#define GB_COLS  80
+#define GB_LINES 200
+#define GB_XPIX  320
+#endif
+
 /* poll flag bits (the D byte from GB_POLL) */
 #define GB_CLICK 0x01 /* fresh press this frame */
 #define GB_QUIT  0x02 /* ESC pressed */

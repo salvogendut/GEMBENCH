@@ -67,9 +67,33 @@ static const signed char COS64[60] = {
      20, 26, 32, 38, 43, 48, 52, 55, 58, 61, 63, 64
 };
 
-/* --- firmware graphics line (the kernel has no line primitive) --------------- */
+/* --- line primitive ----------------------------------------------------------
+ * CPC: the firmware graphics VDU (the kernel has no line primitive there).
+ * MSX: GB_LINE (#8009) runs the V9938 LINE command from the GLINE_* page-3
+ * glue cells - screen pixel coords straight through, no conversion (#287). */
 static volatile unsigned int fx0, fy0, fx1, fy1;
 static volatile unsigned char fpen;
+#ifdef GB_MSX2
+#define GLINE_X0  (*(volatile unsigned int  *)0xC030)
+#define GLINE_Y0  (*(volatile unsigned int  *)0xC032)
+#define GLINE_X1  (*(volatile unsigned int  *)0xC034)
+#define GLINE_Y1  (*(volatile unsigned int  *)0xC036)
+#define GLINE_PEN (*(volatile unsigned char *)0xC038)
+static void fw_line(void) __naked
+{
+__asm
+    call 0x8009          ; GB_LINE (V9938 LINE from the GLINE_* cells)
+    ret
+__endasm;
+}
+static void line(int x0, int y0, int x1, int y1, unsigned char pen)
+{
+    GLINE_X0 = (unsigned int)x0; GLINE_Y0 = (unsigned int)y0;
+    GLINE_X1 = (unsigned int)x1; GLINE_Y1 = (unsigned int)y1;
+    GLINE_PEN = pen;
+    fw_line();
+}
+#else
 static void fw_line(void) __naked
 {
 __asm
@@ -93,9 +117,13 @@ static void line(int x0, int y0, int x1, int y1, unsigned char pen)
     fpen = pen;
     fw_line();
 }
+#endif
 
 /* --- RTC write (Set time), straight to the Dallas registers via inline asm ----- */
 static volatile unsigned char rtc_reg, rtc_val;
+#ifdef GB_MSX2
+static void rtc_poke(void) { (void)rtc_reg; (void)rtc_val; }  /* MSX: soft clock only (M4: BIOS RTC) */
+#else
 static void rtc_poke(void) __naked
 {
 __asm
@@ -108,6 +136,7 @@ __asm
     ret
 __endasm;
 }
+#endif
 static void set_rtc(unsigned char reg, unsigned char val) { rtc_reg = reg; rtc_val = val; rtc_poke(); }
 
 /* the kernel hands us raw RTC registers; convert BCD -> binary unless it's binary */
@@ -285,12 +314,12 @@ static void clk_fullscreen(unsigned char on)
 {
     if (on) {
         fs_px = gb_wm_x(); fs_py = gb_wm_y(); fs_pw = gb_wm_w(); fs_ph = gb_wm_h();
-        gb_wm_setpos(0, 8); gb_wm_setsize(80, 192);
+        gb_wm_setpos(0, 8); gb_wm_setsize(GB_COLS, GB_LINES - 8);
     } else {
         gb_wm_setpos(fs_px, fs_py); gb_wm_setsize(fs_pw, fs_ph);
     }
     have_prev = 0;                               /* face rescaled: no stale hands */
-    gb_wm_damage(0, 8, 80, 192);                 /* repaint ONCE in on_frame, clipped to the toggle
+    gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8);   /* repaint ONCE in on_frame, clipped to the toggle
                                                     area; repainting here too flickers (#153) */
 }
 

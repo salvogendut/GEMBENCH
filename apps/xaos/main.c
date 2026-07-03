@@ -149,13 +149,23 @@ static unsigned char pen_of(unsigned char it)
     return 1;                           /* near the edge: white */
 }
 
-/* ---- Mode-1 pixel packing (pixel i: bit0 @ 7-i, bit1 @ 3-i) ------------------ */
+/* ---- pixel packing: set pixel i (0..3) of a byte to pen p (#287) ----
+ * CPC Mode 1: bit0 @ 7-i, bit1 @ 3-i.  MSX Screen 6: the 2-bit pen sits in
+ * bits (7-2i),(6-2i) - leftmost pixel in bits 7,6. The canvas is blitted raw
+ * with gb_restorerect, so it must carry the platform's screen encoding. */
 static unsigned char set_pixel(unsigned char b, unsigned char i, unsigned char p)
 {
+#ifdef GB_MSX2
+    unsigned char sh = (unsigned char)(6 - (i << 1));   /* low bit of the pen field */
+    b &= (unsigned char)~(3 << sh);
+    b |= (unsigned char)((p & 3) << sh);
+    return b;
+#else
     b &= (unsigned char)~((1 << (7 - i)) | (1 << (3 - i)));
     if (p & 1) b |= (unsigned char)(1 << (7 - i));
     if (p & 2) b |= (unsigned char)(1 << (3 - i));
     return b;
+#endif
 }
 
 static void blit_row(unsigned char row)

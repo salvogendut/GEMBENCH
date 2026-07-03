@@ -303,7 +303,7 @@ unsigned char gb_doc_frame(void)
     if (g_handler[t] == edit_action) {           /* Edit only touched the window CONTENT (frame intact): */
         if (sel == 1) {                          /* Copy: nothing drawn -> undo the clamp */
 #ifndef GBDOC_RO
-            gb_wm_damage(0, 0, 80, 200);
+            gb_wm_damage(0, 0, GB_COLS, GB_LINES);
 #endif
             return 0;
         }

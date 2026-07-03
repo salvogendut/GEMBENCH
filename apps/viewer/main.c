@@ -142,21 +142,21 @@ static void bank_or_parse(void)
 
 static void size_to_pic(void)   /* size the window to the picture, clamped on screen */
 {
-    unsigned char x = gb_wm_x(), y = gb_wm_y(), w, h, avail = (unsigned char)(200 - y);
+    unsigned char x = gb_wm_x(), y = gb_wm_y(), w, h, avail = (unsigned char)(GB_LINES - y);
     unsigned int hh = pic_h + 16;
     h = (hh > avail) ? avail : (unsigned char)hh; if (h < MIN_H) h = MIN_H;   /* 16-bit clamp */
     /* the scrollbar (sb_shown) appears when the content is shorter than the picture; widen for
        it using the SAME test so a clamped window can't push the blit past its right edge. */
     w = (unsigned char)(pic_wb + 3 + (pic_h > (unsigned int)(h - 14) ? SB_W : 0));
     if (w < MIN_W) w = MIN_W;
-    if (w > (unsigned char)(80 - x)) w = (unsigned char)(80 - x);
+    if (w > (unsigned char)(GB_COLS - x)) w = (unsigned char)(GB_COLS - x);
     gb_wm_setsize(w, h);
 }
 
 /* visible picture rows: the window content height (windowed) or the whole screen. */
 static unsigned char vis_rows(void)
 {
-    return (unsigned char)(*WM_FS ? 200 : win_h - 14);
+    return (unsigned char)(*WM_FS ? GB_LINES : win_h - 14);
 }
 
 /* sb_shown: 1 when the (left) scrollbar is drawn - windowed + taller than the visible area. */
@@ -176,8 +176,8 @@ static void draw_pic(void)
     unsigned int src, r;
     if (pic_toobig) { draw_toobig(); return; }
     if (*WM_FS) {                                  /* fullscreen: centre (top-align if too tall) */
-        x = (unsigned char)(pic_wb < 80 ? (80 - pic_wb) / 2 : 0);
-        y = (unsigned char)(pic_h <= 200 ? (200 - pic_h) / 2 : 0);
+        x = (unsigned char)(pic_wb < GB_COLS ? (GB_COLS - pic_wb) / 2 : 0);
+        y = (unsigned char)(pic_h <= GB_LINES ? (GB_LINES - pic_h) / 2 : 0);
     } else { x = (unsigned char)(win_x + 2 + (sb ? SB_W : 0)); y = TX_Y0; }   /* right of the bar */
     r = pic_h - scroll_y; rows = (r > vh) ? vh : (unsigned char)r;
     src = pic_off + (unsigned int)scroll_y * pic_wb;          /* scrolled window into the bitmap */
@@ -212,7 +212,7 @@ static void v_draw(void)
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
     if (*WM_FS) {                               /* true fullscreen: blue backdrop, centred image,
                                                    no chrome/grip (the WM drops the frame+title) */
-        gb_fill(0, 0, 80, 200, 0);              /* pen 0 = desktop blue, whole screen */
+        gb_fill(0, 0, GB_COLS, GB_LINES, 0);    /* pen 0 = desktop blue, whole screen */
         if (loaded && have_pic()) draw_pic();
         return;
     }
@@ -241,6 +241,30 @@ static unsigned char eq11(const char *a, const char *b)
    The firmware keys are disarmed (the joystick floods them), so read them directly with
    KM_TEST_KEY (&BB1E): key 8 = Left, key 1 = Right - same approach as Notepad's caret nav. */
 static unsigned char lr_bits;
+#ifdef GB_MSX2
+/* MSX: read cursor Left/Right from the BIOS NEWKEY matrix (row 8, updated by the
+ * interrupt; bit4=Left, bit7=Right, active-low) - no CALSLT needed (#287). */
+static void read_lr(void) __naked
+{
+__asm
+    xor  a
+    ld   (_lr_bits), a
+    ld   a, (0xFBED)       ; NEWKEY row 8
+    bit  4, a              ; Left held? (bit clear = pressed)
+    jr   nz, 1$
+    ld   a, (_lr_bits)
+    or   #0x01
+    ld   (_lr_bits), a
+1$: ld   a, (0xFBED)
+    bit  7, a              ; Right held?
+    jr   nz, 2$
+    ld   a, (_lr_bits)
+    or   #0x02
+    ld   (_lr_bits), a
+2$: ret
+__endasm;
+}
+#else
 static void read_lr(void) __naked
 {
 __asm
@@ -261,6 +285,7 @@ __asm
 2$: ret
 __endasm;
 }
+#endif
 
 /* cycle to the next (dir>0) / previous (dir<0) .PIC in the current directory, wrapping. */
 static void cycle(signed char dir)
@@ -360,11 +385,11 @@ static void v_fullscreen(unsigned char on)
     static unsigned char px, py, pw, ph;
     if (on) {
         px = gb_wm_x(); py = gb_wm_y(); pw = gb_wm_w(); ph = gb_wm_h();
-        gb_wm_setpos(0, 0); gb_wm_setsize(80, 200); *WM_FS = 1;
+        gb_wm_setpos(0, 0); gb_wm_setsize(GB_COLS, GB_LINES); *WM_FS = 1;
     } else {
         *WM_FS = 0; gb_wm_setpos(px, py); gb_wm_setsize(pw, ph);
     }
-    gb_wm_damage(0, 0, 80, 200);   /* repaint the whole screen ONCE in the frame handler (the
+    gb_wm_damage(0, 0, GB_COLS, GB_LINES); /* repaint the whole screen ONCE in the frame handler (the
                                       toggle changes the entire screen); v_draw does the paint */
 }
 

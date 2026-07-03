@@ -168,7 +168,8 @@ build_variant() {                                # $1 = kernel name, $2 = rasm -
     "$RASM" kernel/pack_apps3.asm -eo            # 4th pass: backdrops/REFINED/pictures -> same .dsk (#198)
     cp build/GBKERN.RAW "build/$1.RAW"           # capture this card's kernel for the unified stage
 }
-rm -rf QA; mkdir -p QA
+# Clean only the CPC outputs - QA/MSX (the MSX2 target, #287) survives a CPC build.
+rm -rf QA/CARD QA/GEOBENCH.DSK QA/COMPANION.DSK QA/GEOBENCH.IMG; mkdir -p QA
 # Build both card kernels. QA/GEOBENCH.DSK keeps the Albireo/floppy-capable kernel
 # because that is the normal floppy boot image; QA/CARD and QA/GEOBENCH.IMG carry both.
 echo "Building the Albireo (GBALB) and M4 (GBM4) card kernels + the shared card -> QA/"

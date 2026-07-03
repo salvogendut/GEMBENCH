@@ -8,7 +8,7 @@
 ; The 8.3 filename was built by the GBCFG module (KCFG_FONTNAME); just copy it.
 font_init
                 di
-                ld    a,PAGE_DATA
+                LD_A_PAGE_DATA
                 call  bank_set
                 ld    hl,KCFG_FONTNAME       ; fs_req_name = the config font name
                 ld    de,fs_req_name
@@ -42,7 +42,7 @@ load_or_default                                ; HL = default 8.3 name (11 bytes
 ; icon_init: load <ICONS>.IST into PAGE_DATA at DATA_ICONS.
 icon_init
                 di
-                ld    a,PAGE_DATA
+                LD_A_PAGE_DATA
                 call  bank_set
                 ld    hl,KCFG_ICONNAME       ; fs_req_name = the config icon name
                 ld    de,fs_req_name
@@ -78,13 +78,23 @@ cursor_init
                 di
                 call  load_or_default
                 ei
+                ifdef PLATFORM_MSX            ; #287: (re)upload the loaded sprite to VDP
+                jr    nc,ci_blank             ; pattern/colour VRAM (lib/msx/cursor.asm)
+                jp    cursor_apply
+ci_blank
+                else
                 ret   c
+                endif
                 ld    hl,CUR_LOW             ; missing -> blank the sprite buffer
                 ld    de,CUR_LOW+1
                 ld    bc,255
                 ld    (hl),0
                 ldir
+                ifdef PLATFORM_MSX
+                jp    cursor_apply            ; blank pattern = invisible pointer, never garbage
+                else
                 ret
+                endif
 def_spr         db    "DEFAULT SPR"
 
 ; backdrop_init (#128): load the BACKDROP= tile (<name>.BDP, built by the GBCFG module
@@ -140,6 +150,8 @@ bdi_solid       ld    a,1
 ; A lollipop logo + a load progress bar shown during the boot's disk loads. The
 ; screen is already GEOBENCH-blue (pen 0) from SCR_SET_MODE + set_palette, so the
 ; lollipop's blue corners blit invisibly. The desktop's first repaint overwrites it.
+                ifndef PLATFORM_MSX           ; (#287: the MSX boot skips the splash for now -
+                                              ;  SPLASH.MOD is Mode-1 art + CPC frame pacing)
 SPL_X           equ   28           ; lollipop left byte col (centred: (80-24)/2)
 SPL_Y           equ   12           ; lollipop top line
 SPL_WB          equ   24           ; width in bytes (96 px)
@@ -207,6 +219,7 @@ bt_hold
                 djnz  bt_hold
                 ret
 bar_w           db    0
+                endif                          ; (ifndef PLATFORM_MSX around the bootsplash)
 
 ; assets_load: (re)load the font, icon set, cursor and backdrop tile from the names in
 ; the transfer area. Run at boot, and again by GB_RELOAD when the Settings app changes

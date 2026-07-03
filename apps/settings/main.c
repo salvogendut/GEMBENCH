@@ -407,6 +407,22 @@ static unsigned char ink_cur[NPEN], ink_orig[NPEN];
    (&BC38). A palette change recolours every pixel of that pen at once, so the whole UI
    updates with no redraw - that is the preview (and, on Save, the immediate effect). */
 static volatile unsigned char si_pen, si_ink;
+#ifdef GB_MSX2
+/* MSX: GB_SETINK (#8006) maps the CPC ink to the V9938 palette (kernel #287).
+ * Called via inline asm - a gb.h/libgb binding would relink and bloat every
+ * CPC app past its budget, so only Settings (this app) reaches the slot. */
+static void si_call(void) __naked
+{
+__asm
+    ld   a,(_si_ink)
+    ld   b,a
+    ld   c,a
+    ld   a,(_si_pen)
+    call 0x8006          ; GB_SETINK (A = pen 0-4, B/C = CPC ink)
+    ret
+__endasm;
+}
+#else
 static void si_call(void) __naked
 {
 __asm
@@ -428,11 +444,17 @@ __asm
     ret
 __endasm;
 }
+#endif
 static void apply_colour(unsigned char i, unsigned char ink)
 {
     si_ink = ink;
+#ifdef GB_MSX2
+    si_pen = i;                 /* pen 0-3, or 4 = border - GB_SETINK handles both */
+    si_call();
+#else
     if (i < 4) { si_pen = i; si_call(); }
     else sb_call();
+#endif
 }
 
 /* cfg_get_inks: parse INKS= into out[NPEN]; the default palette (1,26,0,6,1) when

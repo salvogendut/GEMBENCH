@@ -20,8 +20,8 @@ unsigned char gb_drag_window(unsigned char *x, unsigned char *y,
     unsigned char ox = *x, oy = *y;
     unsigned char gdx = (unsigned char)(gb_mx() - ox);   /* grab offset in window */
     unsigned char gdy = (unsigned char)(gb_my() - oy);
-    unsigned char xmax = (unsigned char)(80 - w);        /* screen = 80 x 200 */
-    unsigned char ymax = (unsigned char)(200 - h);
+    unsigned char xmax = (unsigned char)(GB_COLS - w);    /* screen extents (#287) */
+    unsigned char ymax = (unsigned char)(GB_LINES - h);
     unsigned char nx, ny, mx, my, f, lifted = 0;
 
     for (;;) {
@@ -89,8 +89,8 @@ unsigned char gb_drag_resize(unsigned char x, unsigned char y,
                              unsigned char minw, unsigned char minh)
 {
     unsigned char ow = *w, oh = *h, nw, nh, mx, my, f, lifted = 0;
-    unsigned char wmax = (unsigned char)(80 - x);
-    unsigned char hmax = (unsigned char)(200 - y);
+    unsigned char wmax = (unsigned char)(GB_COLS - x);
+    unsigned char hmax = (unsigned char)(GB_LINES - y);
 
     for (;;) {
         f = gb_poll();

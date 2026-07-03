@@ -35,6 +35,10 @@ __pycache__/
 QA/GEOBENCH.IMG
 rom/GEOBENCH.ROM
 rom/GBALB.ROM
+# MSX2 target (issue #287): fetched third-party system files + the rebuilt
+# 32MB Nextor image are local artifacts (tools/fetch_msx_deps.sh recreates them)
+QA/MSXDEPS/
+QA/GBMSX.IMG
 
 # Raw 1984 emulator screen captures are kept locally only; commit just the
 # curated/optimised GIFs under screenshots/.

@@ -7,7 +7,8 @@
 ; WM_MAXWIN entries or RAM runs out. Sets APP_NPAGES; zeroes APP_BUSY. So the
 ; desktop (first claim) always lands in APP_PAGES[0] = PAGE_APP0 = #C5, and a
 ; plain 128K machine yields exactly 3 pages (desktop + 2), as before.
-app_pool_init
+                ifndef PLATFORM_MSX           ; (the MSX pool is built from DOS 2 mapper
+app_pool_init                                  ;  segments - see kernel/boot_msx.asm, #287)
                 ld    hl,APP_PAGES
                 ld    (hl),#C5               ; bank 0 block 1
                 inc   hl
@@ -52,6 +53,7 @@ api_done        ld    a,c
                 ret
 api_end         db    0
 md_banks        db    0
+                endif                          ; (ifndef PLATFORM_MSX around app_pool_init)
 
 ; wm_alloc_page: claim the lowest free app page -> A = its port value, or 0 if all
 ; APP_NPAGES pages are in use. wm_free_page: A = the port value to release. The pool
