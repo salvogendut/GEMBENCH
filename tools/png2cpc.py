@@ -21,7 +21,10 @@ Output is a RASM-includable .asm file: a label, <label>_w (width in BYTES),
 <label>_h (height in rows), and the row-major encoded bytes.
 
 Usage:
-    tools/png2cpc.py <in.png> <out.asm> <label> [WxH]
+    tools/png2cpc.py [--platform msx2] <in.png> <out.asm> <label> [WxH]
+
+--platform msx2 emits V9938 Screen-6 packing instead of CPC Mode 1 (same 4px/byte
+geometry).
 
 If WxH is given the image is resized (Lanczos) to that size first, so a large
 source art file can be reduced to icon size in one step. Width must end up a
@@ -63,15 +66,28 @@ def encode_byte(pens4):
     return byte
 
 
+def mode1_to_screen6(byte):
+    """CPC Mode-1 byte -> V9938 Screen-6 byte (pixel i's pen in bits 7-2i,6-2i)."""
+    s6 = 0
+    for i in range(4):
+        pen = ((byte >> (7 - i)) & 1) | (((byte >> (3 - i)) & 1) << 1)
+        s6 |= pen << (6 - 2 * i)
+    return s6
+
+
 def main():
-    if len(sys.argv) not in (4, 5):
+    argv = sys.argv[1:]
+    platform = 'cpc'
+    if len(argv) >= 2 and argv[0] == '--platform':
+        platform, argv = argv[1], argv[2:]
+    if len(argv) not in (3, 4):
         print(__doc__)
         sys.exit(2)
-    in_png, out_asm, label = sys.argv[1], sys.argv[2], sys.argv[3]
+    in_png, out_asm, label = argv[0], argv[1], argv[2]
 
     img = Image.open(in_png).convert("RGB")
-    if len(sys.argv) == 5:
-        tw, th = (int(v) for v in sys.argv[4].lower().split("x"))
+    if len(argv) == 4:
+        tw, th = (int(v) for v in argv[3].lower().split("x"))
         img = img.resize((tw, th), Image.LANCZOS)
     w, h = img.size
     if w % 4 != 0:
@@ -92,6 +108,9 @@ def main():
                 used[pen] = used.get(pen, 0) + 1
             row.append(encode_byte(pens))
         rows.append(row)
+
+    if platform == 'msx2':
+        rows = [[mode1_to_screen6(b) for b in row] for row in rows]
 
     if out_asm.lower().endswith(".bin"):
         # Raw row-major Mode-1 bytes (no header) - what restore_block blits directly.
