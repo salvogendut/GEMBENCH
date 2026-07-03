@@ -7,6 +7,7 @@
  * holds, blanks, and strikes again. Integer Bresenham lines straight to #C000; coords stay
  * on-screen so no overflow. Card-only (the floppy pack is full). */
 #include "gb.h"
+#include "../savdraw.h"
 
 #define WM_FS (*(volatile unsigned char *)0x130A)
 #define KCFG_BORDER (*(volatile unsigned char *)0x1230)
@@ -31,6 +32,9 @@ static unsigned int rnd(void)
 }
 
 static volatile unsigned char brd_ink;
+#ifdef GB_MSX2
+static void set_border(void) { (void)brd_ink; }
+#else
 static void set_border(void) __naked
 {
 __asm
@@ -41,7 +45,9 @@ __asm
     ret
 __endasm;
 }
+#endif
 
+#ifndef GB_MSX2
 static void vram_pixel(int sx, int sy, unsigned char ink)
 {
     unsigned char *p, pos, lo, hi, b;
@@ -75,6 +81,7 @@ static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
         if (e2 <  dx) { err += dx; y0 += sy; }
     }
 }
+#endif
 
 static int xs[NPTS], ys[NPTS];
 static int fxs[FPTS], fys[FPTS];
@@ -123,7 +130,7 @@ static void draw_bolt(unsigned char ink)
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, BG);
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
 }
 
 static void ss_frame(void)
@@ -155,7 +162,7 @@ static void ss_frame(void)
     }
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {

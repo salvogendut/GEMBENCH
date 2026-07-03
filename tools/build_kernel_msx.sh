@@ -36,6 +36,13 @@ APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/xmatrix build/msx/XMATRIX.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/mountain build/msx/MOUNTAIN.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/forest build/msx/FOREST.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/starfield build/msx/STARFLD.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/fractalic build/msx/FRACTALI.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/munch build/msx/MUNCH.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/rorschach build/msx/RORSCH.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/truchet build/msx/TRUCHET.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/lightning build/msx/LIGHTN.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/pyro build/msx/PYRO.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/helix build/msx/HELIX.RAW
 
 # --- the shared config-parser module (platform-neutral C over low RAM) -----
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
@@ -89,6 +96,13 @@ cp build/msx/XMATRIX.RAW  QA/MSX/GBENCH/XMATRIX.SAV
 cp build/msx/MOUNTAIN.RAW QA/MSX/GBENCH/MOUNTAIN.SAV
 cp build/msx/FOREST.RAW   QA/MSX/GBENCH/FOREST.SAV
 cp build/msx/STARFLD.RAW  QA/MSX/GBENCH/STARFLD.SAV
+cp build/msx/FRACTALI.RAW QA/MSX/GBENCH/FRACTALI.SAV
+cp build/msx/MUNCH.RAW QA/MSX/GBENCH/MUNCH.SAV
+cp build/msx/RORSCH.RAW QA/MSX/GBENCH/RORSCH.SAV
+cp build/msx/TRUCHET.RAW QA/MSX/GBENCH/TRUCHET.SAV
+cp build/msx/LIGHTN.RAW QA/MSX/GBENCH/LIGHTN.SAV
+cp build/msx/PYRO.RAW QA/MSX/GBENCH/PYRO.SAV
+cp build/msx/HELIX.RAW QA/MSX/GBENCH/HELIX.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
 python3 tools/pic_to_msx.py assets/pictures/PENGUIN.PIC QA/MSX/PENGUIN.PIC
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
