@@ -1,0 +1,92 @@
+# Features — where GEOBENCH is now
+
+The current GEOBENCH desktop running on the Amstrad CPC (1984 emulator): a Mode 1
+backdrop, a top bar showing total RAM and a clock, and draggable multicolour
+bitmap icons (Disk, Clock, Trash) driven by a joystick (or AMX mouse) / keyboard pointer.
+
+![Current status](../initial.png)
+
+The ICONED icon/cursor editor open on a `.IST` set (magnified canvas, pen palette,
+Prev/Next, UNDO) over a File Manager window — all co-resident under the kernel WM:
+
+![ICONED editor + file manager](../iconed.png)
+
+Several apps running at once: the File Manager (sorted listing), the Viewer showing
+`PENGUIN.PIC` (a photo converted with `tools/picconv.py`), and the analog Clock —
+all co-resident windows under the kernel window manager:
+
+![Multiple apps: file manager, picture viewer, clock](../geobench.png)
+
+A short capture of GEOBENCH running in the 1984 emulator — the desktop, a patterned
+backdrop, dragging icons, opening apps and menus:
+
+![GEOBENCH demo](../screenshots/geobench-demo.gif)
+
+## What works today
+
+- **Desktop** — a selectable **patterned backdrop** (a repeating 16×16 Mode-1 tile
+  via `BACKDROP=`, or a plain colour), top bar (RAM probe + clock), draggable
+  labelled icons that erase cleanly back to the pattern, a System menu (Ram Usage /
+  Refresh Media / Tidy Icons / Settings / Activate screensaver / Exit to DOS).
+  Settings opens from the System menu — it no longer needs its own desktop icon.
+- **File manager** — double-click the Disk icon to open a window listing the
+  drive; a type icon + name per file (**list** or **icon** view), entries **sorted
+  by type then alphabetically**, a **scrolling** list, click to select, double-click
+  to open (routed to the right app by a type→app table). A **`..` entry** (with an
+  up-arrow icon) goes up a directory; a **View** menu toggles list/icons and
+  maximises the window. Multi-drive, drag-and-drop, a Trash.
+- **Notepad** — a text editor: type/edit, word-wrap, click or cursor keys to place
+  the caret, **File / Edit / View** menus (New/Load/Save/Save As, copy/paste,
+  Fullscreen). Saves `.BAS` with CR+LF so CPC BASIC can load them.
+- **ICONED** — an icon/cursor editor for `.IST` sets and `.SPR` cursors (magnified
+  canvas, pen palette, Prev/Next, undo, New/Load/Save/Save As, View > Fullscreen).
+- **Paint** — a Mode-1 paint app: a canvas + toolchest (pencil, square, circle,
+  flood fill, undo), a 4-ink palette and pencil width, New/Load/Save to the `.PIC`
+  format (a versioned bitmap with its own size + palette), View > Fullscreen. Tool
+  icons are a normal `.IST` set, editable in ICONED.
+- **Viewer** — open any file to peek at it: word-wrapped text, or a `.PIC` image
+  rendered to a window sized to the picture. File > Load opens another file, View >
+  Fullscreen maximises. Draggable, resizeable. A large picture (over ~8.5 KB, i.e.
+  bigger than the in-window buffer) is loaded into a borrowed 16 KB RAM bank, so on a
+  bare 128K machine — where the desktop, file manager and viewer already use every
+  app bank — a big image shows an empty window; a 256K+ expansion (any spare bank)
+  displays it. Small pictures always work.
+- **Clock** — an analog clock window (Dallas RTC, else software); View > Fullscreen
+  rescales the face to the whole screen, an Options menu sets the time / toggles seconds.
+- **Settings** — a control panel for `GEOBENCH.CFG`: pick the **font** (`.FNT`),
+  **icon set** (`.IST`), **cursor** (`.SPR`), **backdrop** pattern (`.BDP`, or
+  `SOLID`) and a centred **wallpaper** (`.PIC`) from the system folder, a **Colours**
+  editor for the 4 Mode-1 pens + the screen border (`INKS=`) with a **live** preview
+  — `-`/`+` recolours the whole desktop instantly — and a **Screensaver** section
+  (**Module** picker + idle **Timeout**). Media settings are stored as
+  **drive-qualified names** such as `A:DARKER` or `C:XMATRIX`, so Settings can
+  browse either floppy or Albireo content without ambiguity. Invalid media
+  falls back safely to `SOLID` / `NONE` at boot instead of blocking startup. The
+  icon-set picker can **filter by icon count**. Launches from the System menu.
+- **Screensavers** — self-contained apps shipped with a `.SAV` extension. The
+  desktop's idle timer (global, so it fires over any app) launches the configured
+  module after the timeout; any pointer move / click / key returns to the desktop.
+  Ships **SQUARES** (random squares), **DECO** (Art-Deco panels), **XMATRIX**
+  (binary "Matrix" rain) and **MOUNTAIN** (isometric 3D terrain) on both disks, plus
+  several **Albireo-card-only** extras: **FRACTALI** (Sierpinski + Koch), **STARFLD**
+  (3D star-field) and **XROACH** (scattering cockroaches) from the SymbOS `symsav-*`
+  set, and **MUNCH** (munching squares), **RORSCH** (symmetric ink-blots), **TRUCHET**
+  (tile maze), **ANT** (Langton's ant), **LIGHTN** (forked lightning), **PYRO**
+  (fireworks), **FOREST** (fractal trees) and **HELIX** (harmonograph) from
+  xscreensaver, plus **CATCLK** (a Kit-Cat Klock with sliding pupils + real
+  hour/minute hands). The Settings **Module** picker lists every `.SAV` in the system
+  folder (scrolling when there are more than fit), so new ones appear automatically.
+  All 16 savers are also ported to the [MSX2 target](MSX2.md).
+- **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
+  from one place: it registers a small "document" (its buffer + new/open/save hooks)
+  and the framework supplies a standard **File** menu (New / Load / Save / Save As),
+  an **Edit** menu (Select All / Copy / Paste over a **shared cross-app clipboard**)
+  and a **View** menu (**Fullscreen** + app-specific entries), plus a navigable
+  Open/Save file dialog. Apps carry no menu or dialog code; even the desktop's
+  **System** menu and the clock's **Options** menu render through the same path. The
+  heavy dialog renderer lives in a **paged kernel module**, so it isn't duplicated
+  into every bank.
+- **Banked app model** — the desktop and every app are separate binaries, paged
+  into expansion-bank slots and run co-resident with the kernel; shared window
+  chrome (drag/resize) lives in `libgb`.
+- **Hybrid implementation** — the kernel is Z80 assembly; **every app is C**.
