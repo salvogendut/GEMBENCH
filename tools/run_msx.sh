@@ -18,6 +18,7 @@
 #                                               emu-time seconds into build/msx/
 #                                               (throttle off, exits after last)
 #   MSX_RAM=stock tools/run_msx.sh              no 512K expansion
+#   OPENMSX="openmsx-nightly" tools/run_msx.sh  override emulator command
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -29,17 +30,18 @@ EXT=(-ext SunriseIDE_Nextor)
 [ "${MSX_RAM:-512k}" != stock ] && EXT+=(-ext ram512k)
 
 ARGS=(-machine "$MACHINE" "${EXT[@]}" -hda "$IMG")
+SCRIPT=
 
 if [ -n "${MSX_SHOTS:-}" ]; then
     mkdir -p build/msx
-    SCRIPT=$(mktemp --suffix=.tcl)
+    SCRIPT=$(mktemp -p build/msx --suffix=.tcl)
     trap 'rm -f "$SCRIPT"' EXIT
     {
         echo 'set throttle off'
         last=0
         for t in $MSX_SHOTS; do last=$t; done
         for t in $MSX_SHOTS; do
-            action="catch { screenshot $PWD/build/msx/msx-t$t.png }"
+            action="catch { screenshot -raw $PWD/build/msx/msx-t$t.png }"
             [ "$t" = "$last" ] && action="$action ; exit"
             echo "after time $t { $action }"
         done
@@ -54,10 +56,29 @@ else
     # a kernel address - the kernel grows and any hardcoded k_poll address goes
     # stale, leaving the run stuck at fast-forward (pointer leaps, saver fires in
     # seconds). ~4s of wall-clock throttle-off is well past the boot.
-    SCRIPT=$(mktemp --suffix=.tcl)
+    # mktemp under build/msx, not /tmp: the Flatpak sandbox only sees $HOME.
+    mkdir -p build/msx
+    SCRIPT=$(mktemp -p build/msx --suffix=.tcl)
     trap 'rm -f "$SCRIPT"' EXIT
     printf 'set throttle off\nafter realtime %s { set throttle on }\n' "${MSX_FF:-4}" > "$SCRIPT"
     ARGS+=(-script "$SCRIPT")
 fi
 
-exec openmsx "${ARGS[@]}"
+if [ -n "${OPENMSX:-}" ]; then
+    # shellcheck disable=SC2206
+    OPENMSX_CMD=($OPENMSX)
+elif command -v openmsx >/dev/null 2>&1; then
+    OPENMSX_CMD=(openmsx)
+elif command -v flatpak >/dev/null 2>&1 && flatpak info org.openmsx.openMSX >/dev/null 2>&1; then
+    OPENMSX_CMD=(flatpak run --command=openmsx org.openmsx.openMSX)
+else
+    echo "ERROR: openMSX not found (install openmsx or Flatpak org.openmsx.openMSX)" >&2
+    exit 1
+fi
+
+if [ -n "$SCRIPT" ]; then
+    "${OPENMSX_CMD[@]}" "${ARGS[@]}"
+    exit $?
+fi
+
+exec "${OPENMSX_CMD[@]}" "${ARGS[@]}"

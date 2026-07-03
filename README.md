@@ -4,18 +4,21 @@
 
 # GEOBENCH
 
-A graphical desktop environment for the **Amstrad CPC** — a hybrid clone that
-borrows the best ideas from **Commodore GEOS** (C64/C128) and the **Amiga
-Workbench**, reimagined for 8-bit Z80 hardware.
+A graphical desktop environment for the **Amstrad CPC** and the **MSX2** — a
+hybrid clone that borrows the best ideas from **Commodore GEOS** (C64/C128) and
+the **Amiga Workbench**, reimagined for 8-bit Z80 hardware.
 
-> **Status:** a working **banked multi-app micro-OS** for 128K+ CPCs. A resident
-> Z80 **kernel** owns the machine and exposes a fixed jump-table API; the
-> **apps are written in C** (SDCC) and run co-resident in expansion-bank pages,
-> reaching the kernel through `libgb`. The shipped target is the **Albireo card**
-> plus the **AMSDOS floppy fallback**; the tree also carries a bootable floppy
-> pair (`QA/GEOBENCH.DSK` + `QA/COMPANION.DSK`). The desktop, file manager,
-> Notepad, ICONED, Paint, Viewer, Clock, Telnet, Xaos, Settings, and the saver
-> set all build from `tools/build_kernel.sh`.
+> **Status:** a working **banked multi-app micro-OS** for 128K+ CPCs, now also
+> building a full **MSX2 target**. A resident Z80 **kernel** owns the machine and
+> exposes a fixed jump-table API; the **apps are written in C** (SDCC) and run
+> co-resident in expansion-bank pages, reaching the kernel through `libgb`. The
+> shipped CPC target is the **Albireo card** plus the **AMSDOS floppy fallback**;
+> the tree also carries a bootable floppy pair (`QA/GEOBENCH.DSK` +
+> `QA/COMPANION.DSK`). The desktop, file manager, Notepad, ICONED, Paint, Viewer,
+> Clock, Telnet, Xaos, Settings, and the saver set all build from
+> `tools/build_kernel.sh`. The **MSX2 port** (issue #287) boots the same kernel
+> and app set (minus Telnet) under **MSX-DOS 2 / Nextor** on a V9938 in
+> **Screen 6** — see [The MSX2 target](#the-msx2-target).
 
 ## Visual target
 
@@ -280,6 +283,44 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
   — frozen in-tree, not shipped; see [`docs/ARCHIVED.md`](docs/ARCHIVED.md). Telnet
   uses Net4CPC/W5100S when running the Albireo kernel and M4ROM's TCP commands
   when running the M4 kernel.
+- **MSX2** (V9938, 128K VRAM) running **MSX-DOS 2 / Nextor** — see
+  [The MSX2 target](#the-msx2-target) below. Stock 128K RAM boots the desktop;
+  a memory-mapper expansion (512K typical) is recommended for multiple app
+  windows.
+
+## The MSX2 target
+
+The same OS, cross-built for the MSX2 (issue #287). It is **one source tree, two
+platforms**: the resident kernel assembles from the same `kernel/` sources under
+`-DPLATFORM_MSX`, and the apps compile from the same `main.c` files under
+`-DGB_MSX2` — the platform differences live in the kernel's video/input/storage
+back-ends, not in the apps.
+
+- **Runs under MSX-DOS 2 / Nextor** as a plain `GBMSX.COM` executable — no custom
+  boot ROM. Storage goes through BDOS file calls, so anything Nextor mounts
+  (Sunrise IDE, SD interfaces, …) works.
+- **Video:** V9938 **Screen 6** (512×212, 4 colours) — the closest analogue of the
+  CPC's Mode 1 — with a **hardware sprite pointer** and VDP-command drawing
+  (`GB_SETINK` palette mapping, `GB_LINE`).
+- **Input:** joystick / keyboard pointer, plus the standard **MSX mouse** (GTPAD).
+  The clock is 50/60 Hz aware.
+- **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
+  Viewer (with a Screen-6 `.PIC` pipeline), XAOS, Clock, and screensavers
+  (SQUARES, ANT). Telnet is CPC-only for now (its network hardware is
+  CPC-specific).
+
+Build and test in **openMSX** (emulating a Philips NMS 8250 with the Sunrise IDE
+Nextor extension and a 512K RAM expansion):
+
+```bash
+bash tools/fetch_msx_deps.sh       # one-time: Nextor system files + NMS 8250 ROMs
+bash tools/build_kernel_msx.sh     # GBMSX.COM + QA/MSX staging + bootable QA/GBMSX.IMG
+tools/run_msx.sh                   # interactive session
+MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
+```
+
+`run_msx.sh` uses a native `openmsx` from `$PATH`, the Flatpak
+(`org.openmsx.openMSX`) as a fallback, or an explicit `OPENMSX="…"` override.
 
 ## Goals
 
@@ -382,6 +423,10 @@ Done:
 11. ✅ **Kernel source split + build cache** — the resident kernel contracts now
    live in dedicated source files with checked ABI/low-RAM maps, and the full
    build reuses unchanged app/module outputs instead of recompiling everything.
+12. ✅ **MSX2 port (#287)** — the kernel and app set cross-build to a second
+   platform: `GBMSX.COM` under MSX-DOS 2 / Nextor, V9938 Screen 6, hardware
+   sprite pointer, MSX mouse, and an openMSX test harness
+   (`tools/build_kernel_msx.sh` + `tools/run_msx.sh`).
 
 Next:
 
