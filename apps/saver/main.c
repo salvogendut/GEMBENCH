@@ -21,6 +21,9 @@
 
 static unsigned char lmx, lmy;   /* pointer position at launch - a change = wake */
 static unsigned char armed;      /* 0 until one clean frame: swallows the launch click */
+#ifdef GB_MSX2
+static unsigned char settle;     /* MSX: frames left to keep draining the launch Space */
+#endif
 static unsigned int  rng;        /* PRNG state (16-bit LCG) */
 static unsigned char tick;       /* squares since the last clear */
 
@@ -62,8 +65,20 @@ static void ss_frame(void)
         if (!(f & (GB_CLICK | GB_FIRE | GB_QUIT))) {
             lmx = gb_mx(); lmy = gb_my();                /* re-baseline the pointer */
             armed = 1;
+#ifdef GB_MSX2
+            settle = 8;                                  /* on MSX the fire IS the Space bar,
+                              which also feeds a char into the BIOS keyboard buffer AFTER this
+                              drain - keep draining it for a few frames or it wakes us at once. */
+#endif
         }
-    } else if (gb_getkey() ||                            /* a typed key */
+    }
+#ifdef GB_MSX2
+    else if (settle) {                                   /* still swallowing the launch Space */
+        settle--;
+        while (gb_getkey()) ;
+    }
+#endif
+    else if (gb_getkey() ||                              /* a typed key */
                (f & (GB_CLICK | GB_FIRE | GB_QUIT)) ||   /* a click / fire / ESC */
                gb_mx() != lmx || gb_my() != lmy) {       /* the pointer moved */
         WM_FS = 0;                                       /* let the top bar redraw */
