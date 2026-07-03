@@ -205,18 +205,34 @@ mfs_free
                 ld    hl,(MSX_FRESEG)
                 jp    jp_hl
 
-; msx_wait_tick: pace to the frame interrupt - wait for MSX_TICK to change
-; (the H.TIMI handler in the page-3 glue increments it every VBLANK).
+; msx_wait_tick: pace k_poll to ONE true video frame by waiting for a vertical-
+; retrace edge on the VDP status flag (S#2 bit6 VR), NOT the H.TIMI tick. Under
+; this machine + Nextor the BIOS frame interrupt STORMS (~8x/frame), so a tick-
+; counted wait let k_poll run ~8x too fast: the pointer's acceleration ramp
+; maxed out instantly (uncontrollable leaps) and the idle/saver timer counted 8x
+; fast (saver in ~9s). The VR flag toggles exactly once per frame regardless of
+; the interrupt rate. Brief DI so the R#15 select + poll don't race the BIOS ISR
+; (which needs R#15=0/S#0); R#15 restored to 0 before EI, so the one pending
+; frame interrupt acks S#0 cleanly - which also tames the storm.
 ; PRESERVES DE/HL like the CPC's MC_WAIT_FLYBACK - k_poll carries the pointer
-; target through this call (the M1 "pointer pinned to the bottom" bug).
+; target through this call (the M1 "pointer pinned to the bottom" bug). #287
 msx_wait_tick
                 push  hl
-                ld    a,(MSX_TICK)
-mwt_wait
+                di
+                ld    a,2                     ; select status register S#2 (VR flag)
+                out   (VDP_CTRL),a
+                ld    a,15|#80
+                out   (VDP_CTRL),a
+mwt_indisp      in    a,(VDP_CTRL)            ; wait until out of retrace (VR = 0)
+                and   #40
+                jr    nz,mwt_indisp
+mwt_retrace     in    a,(VDP_CTRL)            ; then wait for retrace to begin (VR 0->1)
+                and   #40
+                jr    z,mwt_retrace
+                xor   a                        ; restore R#15 = 0 (S#0, the ISR default)
+                out   (VDP_CTRL),a
+                ld    a,15|#80
+                out   (VDP_CTRL),a
                 ei
-                halt
-                ld    hl,MSX_TICK
-                cp    (hl)
-                jr    z,mwt_wait
                 pop   hl
                 ret
