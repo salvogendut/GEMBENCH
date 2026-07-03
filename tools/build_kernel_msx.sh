@@ -66,9 +66,16 @@ python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
 python3 tools/packicons.py --platform msx2 build/msx/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm
-# 11x13 art (smaller than the 14x16 default) so the sprite-pointer matches the CPC
-# pointer's apparent size - Screen 6's tall/narrow pixels otherwise render it bigger.
-python3 tools/png2spr.py --platform msx2 assets/pointer.png build/msx/DEFAULT.SPR cursor 11x13
+# The MSX pointer (66-byte V9938 hardware sprite). A hand-edited assets/pointer.SPR
+# wins - edit it with `tools/iconedit.py --platform msx2 assets/pointer.SPR` (white
+# = outline, red = fill); otherwise generate it from the PNG art. 11x13 art (smaller
+# than the 14x16 default) matches the CPC pointer's apparent size - Screen 6's
+# tall/narrow pixels otherwise render it bigger.
+if [ -f assets/pointer.SPR ]; then
+    cp assets/pointer.SPR build/msx/DEFAULT.SPR
+else
+    python3 tools/png2spr.py --platform msx2 assets/pointer.png build/msx/DEFAULT.SPR cursor 11x13
+fi
 
 # Bootsplash (#196/#287): the CPC lollipop + build id, transcoded to Screen 6. The
 # MSX kernel does not incbin it (that is CPC-only) - boot_splash loads SPLASH.MOD

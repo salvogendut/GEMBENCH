@@ -18,8 +18,10 @@ Run:
     python3 tools/iconedit.py [--platform msx2] [file.IST | file.SPR]
 
 --platform msx2 edits V9938 Screen-6 icon sets (round-trips byte-for-byte with
-packicons.py --platform msx2). Cursors (.SPR) are CPC-only here - MSX cursors are
-hardware sprites; build them with png2spr.py --platform msx2.
+packicons.py --platform msx2) AND the MSX2 hardware-sprite cursor (.SPR, 66 bytes,
+round-trips with png2spr.py --platform msx2): paint pen 1 (white) for the outline,
+pen 3 (red) for the fill, pen 0 to erase. Without --platform msx2, .SPR is a CPC
+Mode-1 masked cursor instead.
 """
 import json
 import os
@@ -32,8 +34,8 @@ from tkinter import filedialog, messagebox, ttk
 # --- pixel packing: CPC Mode 1 (default) or MSX2 Screen 6 (--platform msx2) --
 # Both pack 4 pixels per byte; only the bit layout differs. PLATFORM is set by
 # main() and switches the .IST codec so the editor round-trips MSX icon sets
-# byte-for-byte with `packicons.py --platform msx2`. (Cursors stay CPC-only -
-# MSX cursors are V9938 hardware sprites, a different format; use png2spr.)
+# byte-for-byte with `packicons.py --platform msx2`. (MSX .SPR cursors use their
+# own V9938 hardware-sprite codec below - decode_msx_sprite/encode_msx_sprite.)
 PLATFORM = 'cpc'
 
 def decode_pixel(b, i):
@@ -110,6 +112,56 @@ def encode_cursor_file(grid):
     d0, m0 = encode_cursor_phase(grid, 0)
     d2, m2 = encode_cursor_phase(grid, 2)
     return d0 + m0 + d2 + m2
+
+# --- MSX2 .SPR: V9938 hardware-sprite cursor (66 bytes) ---------------------
+# +0 hotspot_x, +1 hotspot_y, +2..33 outline plane, +34..65 fill plane. Each
+# plane is a 16x16 sprite pattern: 16 bytes for the left 8-px column (rows 0..15,
+# bit7 = leftmost pixel), then 16 bytes for the right column - byte-for-byte
+# compatible with png2spr.py --platform msx2. We edit it as a 16x16 pen grid:
+# pen 1 (white) = outline, pen 3 (red) = fill, pen 0 = transparent, matching the
+# two sprite-plane colours in lib/msx/cursor.asm.
+MSX_SPR_LEN = 66
+MSPR_OUTLINE_PEN = 1
+MSPR_FILL_PEN = 3
+
+def _msx_unpack(plane):          # 32 bytes -> 16x16 [0/1] rows
+    rows = [[0] * 16 for _ in range(16)]
+    idx = 0
+    for col in (0, 8):
+        for y in range(16):
+            b = plane[idx]; idx += 1
+            for i in range(8):
+                if b & (0x80 >> i):
+                    rows[y][col + i] = 1
+    return rows
+
+def _msx_pack(rows):             # 16x16 [0/1] rows -> 32 bytes
+    blob = bytearray()
+    for col in (0, 8):
+        for y in range(16):
+            b = 0
+            for i in range(8):
+                if rows[y][col + i]:
+                    b |= 0x80 >> i
+            blob.append(b)
+    return blob
+
+def decode_msx_sprite(data):     # 66 bytes -> (16x16 pen grid, (hx, hy))
+    outline = _msx_unpack(data[2:34])
+    fill = _msx_unpack(data[34:66])
+    grid = [[0] * 16 for _ in range(16)]
+    for y in range(16):
+        for x in range(16):
+            if outline[y][x]:
+                grid[y][x] = MSPR_OUTLINE_PEN
+            elif fill[y][x]:
+                grid[y][x] = MSPR_FILL_PEN
+    return grid, (data[0], data[1])
+
+def encode_msx_sprite(grid, hot):
+    outline = [[1 if grid[y][x] == MSPR_OUTLINE_PEN else 0 for x in range(16)] for y in range(16)]
+    fill = [[1 if grid[y][x] == MSPR_FILL_PEN else 0 for x in range(16)] for y in range(16)]
+    return bytes(bytearray((hot[0], hot[1])) + _msx_pack(outline) + _msx_pack(fill))
 
 # --- .IST set load/save -----------------------------------------------------
 
@@ -221,7 +273,8 @@ class IconEditor(tk.Toplevel):
 
         self.icons = []         # list of {"w","h","grid"}
         self.path = None
-        self.mode = None        # "IST" or "SPR"
+        self.mode = None        # "IST", "SPR" (CPC cursor) or "MSPR" (MSX2 cursor)
+        self.msx_hotspot = (1, 0)   # hotspot for a "MSPR" sprite (x, y)
         self.index = 0
         self.scale = 24
         self.preview_scale = PREVIEW_SCALE
@@ -408,7 +461,8 @@ class IconEditor(tk.Toplevel):
         self.icons = [{"w": CUR_W, "h": CUR_H,
                        "grid": [[0] * (CUR_W * 4) for _ in range(CUR_H)]}]
         self.path = None
-        self.mode = "SPR"
+        self.mode = "MSPR" if PLATFORM == 'msx2' else "SPR"
+        self.msx_hotspot = (1, 0)
         self.index = 0
         self.dirty = False
         self.undo_stack.clear()
@@ -430,16 +484,20 @@ class IconEditor(tk.Toplevel):
                 self.icons = load_ist(path)
                 self.mode = "IST"
             elif ext == ".spr":
-                if PLATFORM == 'msx2':
-                    raise ValueError("MSX2 cursors are V9938 hardware sprites, not "
-                                     ".SPR bitmaps - build them with png2spr.py "
-                                     "--platform msx2 from a PNG.")
                 data = open(path, "rb").read()
-                if len(data) != 4 * PHASE:
-                    raise ValueError(f"{path}: expected {4*PHASE} bytes, got {len(data)}")
-                self.icons = [{"w": CUR_W, "h": CUR_H,
-                               "grid": decode_cursor_phase0(data)}]
-                self.mode = "SPR"
+                if PLATFORM == 'msx2':
+                    if len(data) != MSX_SPR_LEN:
+                        raise ValueError(f"{path}: expected {MSX_SPR_LEN} bytes "
+                                         f"(MSX2 sprite), got {len(data)}")
+                    grid, self.msx_hotspot = decode_msx_sprite(data)
+                    self.icons = [{"w": 4, "h": 16, "grid": grid}]
+                    self.mode = "MSPR"
+                else:
+                    if len(data) != 4 * PHASE:
+                        raise ValueError(f"{path}: expected {4*PHASE} bytes, got {len(data)}")
+                    self.icons = [{"w": CUR_W, "h": CUR_H,
+                                   "grid": decode_cursor_phase0(data)}]
+                    self.mode = "SPR"
             else:
                 raise ValueError(f"unknown extension: {ext}")
         except Exception as e:
@@ -458,6 +516,9 @@ class IconEditor(tk.Toplevel):
         try:
             if self.mode == "IST":
                 save_ist(self.path, self.icons)
+            elif self.mode == "MSPR":
+                with open(self.path, "wb") as f:
+                    f.write(encode_msx_sprite(self.icons[0]["grid"], self.msx_hotspot))
             else:
                 with open(self.path, "wb") as f:
                     f.write(encode_cursor_file(self.icons[0]["grid"]))
