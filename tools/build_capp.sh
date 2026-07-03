@@ -77,8 +77,12 @@ fi
 # scratch (it never touches IY) and firmware calls preserve the caller's IY, so
 # this stops a kernel call from wrecking an app's frame pointer (which crashed
 # the notepad's return - SDCC's epilogue is `ld sp,<fp>`).
+# APPDEFS (e.g. -DGB_MSX2) MUST reach every libgb C unit, not just main.c: gb.h
+# derives GB_COLS/GB_LINES/GB_XPIX from it, and gbwin.c/gbdoc.c clamp window
+# drag/resize + fullscreen to those extents. Omitting it built libgb with the
+# CPC 320x200 extents, so on MSX windows would not drag past x=320 (#287).
 "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
-"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
+"$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
 # Opt-in dialogs (#114, #142). The heavy render (popup/prompt/file-picker) now lives in
 # the paged GBUI kernel module (#142 step 1b); an app that needs ANY dialog links only
 # the tiny marshalling stub gbui_stub.c (gb_popup/gb_prompt/gb_pickfile/gb_pickdir ->
@@ -87,19 +91,19 @@ fi
 #   DOC=1                      -> gbdoc.c too (the document/File-menu framework)
 DLG_REL=""
 if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
+    "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
     DLG_REL="$work/gbui_stub.rel"
 fi
 # DOC=1 = the full document framework; DOCRO=1 = a READ-ONLY variant (-DGBDOC_RO) that
 # omits the Save/Save As path, so a viewer-style app saves that code room (#144).
 if [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
     RO=""; [ "$DOCRO_FLAG" = "1" ] && RO="-DGBDOC_RO"
-    "$SDCC" -mz80 --fomit-frame-pointer $RO -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
+    "$SDCC" -mz80 --fomit-frame-pointer $RO ${APPDEFS:-} -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
     DLG_REL="$DLG_REL $work/gbdoc.rel"
 fi
 # NET=1 -> gbnet_stub.c (gb_net_* -> the paged GBNET W5100 module, #238)
 if [ "$NET_FLAG" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbnet_stub.c" -o "$work/gbnet_stub.rel"
+    "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbnet_stub.c" -o "$work/gbnet_stub.rel"
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
