@@ -30,8 +30,12 @@ kernel_main
                 call  cfg_boot               ; parse GEOBENCH.CFG (paged C module)
                 call  set_palette            ; re-apply now KCFG_INKS holds INKS=
                 call  clip_set_full          ; boot clip rect = full screen (#273)
+                call  boot_splash            ; #196: lollipop + empty load bar
+                call  boot_tick              ; #196: bar 1/4 (before the long assets load)
                 call  assets_load            ; font + icons + cursor + backdrop
+                call  boot_tick              ; #196: bar 2/4
                 call  clock_init
+                call  boot_tick              ; #196: bar 3/4
                 ld    hl,WM_NWIN            ; clear WM low-RAM state
                 ld    de,WM_NWIN+1
                 ld    bc,WM_Z+WM_MAXWIN-WM_NWIN-1
@@ -73,6 +77,7 @@ gft_band        push  bc
                 jr    c,gft_band
 gft_hang        jr    gft_hang
                 endif
+                call  boot_tick              ; #196: bar 4/4 (full) just before the desktop loads
                 ld    hl,name_desktop
                 call  launch_app             ; the WM master loop never returns
 km_finish                                      ; reached by k_exit's longjmp
