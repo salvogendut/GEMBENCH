@@ -406,6 +406,77 @@ rs_row          outi
                 jr    nz,rs_loop2
                 ret
 
+; --- k_line (GB_LINE #8009, #287): draw a line via the V9938 LINE command ----
+; Endpoints + pen come from the GLINE_* glue cells (screen pixels, top-left
+; origin) - the clock's inline asm fills them. The command block: DX/DY = the
+; start point, NX = the long (major) axis distance, NY = the short one, ARG
+; bit2 = DIX (1 = leftward), bit3 = DIY (1 = upward), bit0 = MAJ (1 = Y major).
+k_line
+                ld    hl,(GLINE_X0)
+                ld    (vc_dx),hl
+                ld    hl,(GLINE_Y0)
+                ld    (vc_dy),hl
+                xor   a
+                ld    (vc_arg),a
+                ; DE = |dx|, sets DIX if x1 < x0
+                ld    hl,(GLINE_X1)
+                ld    de,(GLINE_X0)
+                or    a
+                sbc   hl,de
+                jr    nc,kl_dxok
+                ld    a,(vc_arg)
+                or    #04                     ; DIX = leftward
+                ld    (vc_arg),a
+                ex    de,hl                   ; negate HL
+                ld    hl,0
+                or    a
+                sbc   hl,de
+kl_dxok
+                ex    de,hl                   ; DE = |dx|
+                ; HL = |dy|, sets DIY if y1 < y0
+                ld    hl,(GLINE_Y1)
+                push  de
+                ld    de,(GLINE_Y0)
+                or    a
+                sbc   hl,de
+                pop   de
+                jr    nc,kl_dyok
+                push  de
+                ex    de,hl
+                ld    hl,0
+                or    a
+                sbc   hl,de
+                pop   de
+                ld    a,(vc_arg)
+                or    #08                     ; DIY = upward
+                ld    (vc_arg),a
+kl_dyok
+                ; major axis: NX = max(|dx|,|dy|), NY = min; MAJ set if Y major
+                push  hl                      ; save |dy|
+                or    a
+                sbc   hl,de                   ; |dy| - |dx|
+                pop   hl
+                jr    c,kl_xmajor             ; |dy| < |dx| -> X major
+                ld    a,(vc_arg)
+                or    #01                     ; MAJ = Y is the major axis
+                ld    (vc_arg),a
+                ld    (vc_nx),hl              ; NX = |dy| (long)
+                ex    de,hl
+                ld    (vc_ny),hl              ; NY = |dx| (short)
+                jr    kl_go
+kl_xmajor
+                ex    de,hl
+                ld    (vc_nx),hl              ; NX = |dx| (long)
+                ex    de,hl
+                ld    (vc_ny),hl              ; NY = |dy| (short)
+kl_go
+                ld    a,(GLINE_PEN)
+                and   3
+                ld    (vc_clr),a              ; LINE colour = the 2-bit pen value
+                ld    a,#70                   ; LINE command, IMP logical op
+                ld    (vc_cmd),a
+                jp    vdp_hmmv                ; same R#17-indirect block streamer
+
 ; --- k_cls (GB_CLS): clear the whole bitmap to pen 0 -------------------------
 k_cls
                 ld    hl,0

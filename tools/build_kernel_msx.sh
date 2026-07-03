@@ -27,6 +27,8 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings 
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x5F20 DOCRO=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/msx/PAINT.RAW
+APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
 
@@ -47,6 +49,9 @@ python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
     lib/icon_viewer.asm \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_screensaver.asm
+python3 tools/packicons.py --platform msx2 build/msx/PAINT.IST \
+    assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
+    assets/paint/fill.asm assets/paint/undo.asm
 python3 tools/png2spr.py --platform msx2 assets/pointer.png build/msx/DEFAULT.SPR cursor
 
 # --- the kernel + the .COM stub ---------------------------------------------
@@ -69,6 +74,9 @@ cp build/msx/SETTINGS.RAW QA/MSX/GBENCH/SETTINGS.APP
 cp build/msx/XAOS.RAW     QA/MSX/GBENCH/XAOS.APP
 cp build/msx/ICONED.RAW   QA/MSX/GBENCH/ICONED.APP
 cp build/msx/VIEWER.RAW   QA/MSX/GBENCH/VIEWER.APP
+cp build/msx/PAINT.RAW    QA/MSX/GBENCH/PAINT.APP
+cp build/msx/PAINT.IST    QA/MSX/GBENCH/PAINT.IST
+cp build/msx/CLOCK.RAW    QA/MSX/GBENCH/CLOCK.APP
 cp build/msx/SQUARES.RAW  QA/MSX/GBENCH/SQUARES.SAV
 cp build/msx/ANT.RAW      QA/MSX/GBENCH/ANT.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT

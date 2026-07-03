@@ -45,6 +45,8 @@ msx_esc_held
                 and   1<<MSX_KEY_ESC
                 ret
 
+; GTPAD ids for a mouse in joystick port 1: 12 = presence/latch (also snapshots
+; the counters), 13 = X offset since the last latch, 14 = Y offset (signed).
 input_init
                 xor   a
                 ld    (in_accel),a
@@ -67,11 +69,57 @@ input_poll
                 ld    a,1                     ; trigger 1 = joystick 1 button
                 call  read_trig
                 call  joy_to_delta
+                call  read_mouse             ; MSX standard mouse (GTPAD, port 1)
                 call  msx_esc_held
                 ret   z
                 ld    a,1
                 ld    (in_quit),a
                 ret
+
+; read_mouse: latch the mouse counters (GTPAD 12), then add the X/Y offsets
+; into in_dx/in_dy (x2: mouse counts ~ pixels, the pointer space is 2 units/px;
+; Y sign flips - mouse-down is positive, cursor_y grows upward). A mouse's
+; buttons arrive as joystick triggers, which read_trig already merges. With no
+; mouse plugged the offsets read 0, so this is a no-op on joystick setups.
+read_mouse
+                ld    a,12                    ; presence + latch
+                ld    ix,GTPAD
+                call  msx_bios
+                or    a
+                ret   z                       ; no mouse in port 1
+                ld    a,13                    ; X offset since last latch (signed byte)
+                ld    ix,GTPAD
+                call  msx_bios
+                or    a
+                jr    z,rm_y
+                ld    e,a                     ; sign-extend into DE, then x2
+                add   a,a
+                sbc   a,a
+                ld    d,a
+                sla   e
+                rl    d
+                ld    hl,in_dx
+                call  add_de_to
+rm_y
+                ld    a,14                    ; Y offset (positive = down)
+                ld    ix,GTPAD
+                call  msx_bios
+                or    a
+                ret   z
+                ld    e,a                     ; sign-extend, negate (flip), x2
+                add   a,a
+                sbc   a,a
+                ld    d,a
+                xor   a                       ; DE = -DE
+                sub   e
+                ld    e,a
+                ld    a,0
+                sbc   a,d
+                ld    d,a
+                sla   e
+                rl    d
+                ld    hl,in_dy
+                jp    add_de_to
 
 ; read_stick: A = stick id -> merge its direction (0..8) into in_joy_dirs.
 read_stick

@@ -22,6 +22,11 @@ MSX_TOTSEG      equ   #C019        ; byte: primary-mapper total segments
 MSX_FREESEG     equ   #C01A        ; byte: primary-mapper free segments at entry
 MSX_HOOKSAVE    equ   #C01B        ; 5 bytes: original H.TIMI content (restored on exit)
 MSX_PAGE_DATA   equ   #C020        ; byte: the allocated PAGE_DATA mapper segment
+GLINE_X0        equ   #C030        ; GB_LINE marshal block (#287): x0,y0,x1,y1 words
+GLINE_Y0        equ   #C032        ; (screen pixels, top-left origin) + pen byte.
+GLINE_X1        equ   #C034        ; Page-3 cells so the clock's inline asm can fill
+GLINE_Y1        equ   #C036        ; them whatever segment its window has mapped.
+GLINE_PEN       equ   #C038
 MSX_ROWBUF      equ   #C080        ; 128-byte row buffer for VRAM read-modify-write
 MSX_BDSTRIP     equ   #C100        ; 16 x 128-byte pre-rendered backdrop tile strip
                                    ; (#C100..#C8FF; fill_pattern streams rows from it)

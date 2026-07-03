@@ -33,6 +33,7 @@ CHGMOD          equ   #005F        ; A = screen mode
 INITXT          equ   #006C        ; init 40-col text mode (exit path)
 GTSTCK          equ   #00D5        ; A = stick id (0 kbd, 1/2 joy) -> A = 0..8
 GTTRIG          equ   #00D8        ; A = trigger id (0 space, 1..4) -> A = 0/FF
+GTPAD           equ   #00DB        ; A = pad function -> A (12/13/14 = mouse latch/X/Y)
 CHSNS           equ   #009C        ; ZF clear if a key is waiting
 CHGET           equ   #009F        ; A = next char (blocking - gate with CHSNS)
 SNSMAT          equ   #0141        ; A = keyboard matrix row -> A = bits (0=held)

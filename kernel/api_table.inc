@@ -15,7 +15,14 @@
                                              ; kernel is full, and Settings drives SCR_SET_INK
                                              ; directly there (no handler needed). #287
                 endif
-                jp    k_noop                 ; GB_QUIT  #8009 (dead stub -> shared ret, #148)
+                ifdef PLATFORM_MSX
+                jp    k_line                 ; GB_LINE #8009 (was GB_QUIT): draw a line from
+                                             ; the GLINE_* glue cells (V9938 LINE cmd). #287
+                else
+                jp    k_noop                 ; GB_LINE slot inert on CPC - the resident kernel
+                                             ; is full; CLOCK drives GRA_* firmware directly
+                                             ; there. #287 (was GB_QUIT dead stub, #148)
+                endif
                 jp    gb_text_draw           ; GB_TEXT   #800C
                 jp    gb_open_window         ; GB_WINDOW #800F
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012

@@ -4,12 +4,11 @@
 ; once per 50 frames from k_poll, and GB_TIME reports it as already-binary.
 ; The MSX's own RTC (ports #B4/#B5) joins in a later milestone.
 
-TICKS_PER_SEC   equ   50
-
 clock_tick
                 ld    a,(clk_frames)
                 inc   a
-                cp    TICKS_PER_SEC
+                ld    hl,msx_tps              ; 50 (PAL) or 60 (NTSC), set at clock_init
+                cp    (hl)
                 jr    c,ct_keep
                 xor   a
                 ld    (clk_frames),a
@@ -26,7 +25,15 @@ clock_init
                 ld    (sw_hour),a
                 ld    (clk_frames),a
                 ld    (have_rtc),a
+                ld    a,(#FFE8)               ; RG9SAV: R#9 NT bit1 = 1 -> PAL/50Hz
+                and   #02
+                ld    a,50
+                jr    nz,ci_tps
+                ld    a,60                    ; NTSC machine -> 60 ticks per second
+ci_tps
+                ld    (msx_tps),a
                 ret
+msx_tps         db    50
 
 sw_tick
                 ld    a,(sw_sec)

@@ -36,7 +36,11 @@
 #define WIN_W     (CANVAS_WB + 15)      /* canvas + toolchest, in bytes          */
 #define WIN_H     (TITLE_H + CANVAS_H + 4)
 
+#ifdef GB_MSX2
+#define WHITE_BYTE 0x55                 /* 4 px of pen 1 (white), Screen-6 packing */
+#else
 #define WHITE_BYTE 0xF0                 /* 4 px of pen 1 (white) - the blank canvas */
+#endif
 
 /* ---- tools (PAINT.IST icon order: pencil,square,circle,fill,undo) ----------- */
 #define TOOL_PENCIL 0
@@ -102,10 +106,17 @@ static unsigned char ist_ok = 0;       /* a valid GBIS set with >=N_TOOLS icons?
    pen blends (e.g. pen 2 over white pen 1 -> pen 3 red). */
 static unsigned char set_pixel(unsigned char b, unsigned char i, unsigned char p)
 {
+#ifdef GB_MSX2
+    unsigned char sh = (unsigned char)(6 - (i << 1));   /* Screen 6: pen in bits 7-2i,6-2i */
+    b &= (unsigned char)~(3 << sh);
+    b |= (unsigned char)((p & 3) << sh);
+    return b;
+#else
     b &= (unsigned char)~((1 << (7 - i)) | (1 << (3 - i)));
     if (p & 1) b |= (unsigned char)(1 << (7 - i));
     if (p & 2) b |= (unsigned char)(1 << (3 - i));
     return b;
+#endif
 }
 
 static void canvas_clear(void)         /* New: blank to white (pen 1) */
@@ -220,7 +231,11 @@ static void do_undo(void)               /* swap canvas <-> snapshot (so Undo red
 static unsigned char get_pen(unsigned char x, unsigned char y)
 {
     unsigned char b = canvas[(unsigned int)y * CANVAS_WB + (x >> 2)], i = (unsigned char)(x & 3);
+#ifdef GB_MSX2
+    return (unsigned char)((b >> (6 - (i << 1))) & 3);
+#else
     return (unsigned char)(((b >> (7 - i)) & 1) | (((b >> (3 - i)) & 1) << 1));
+#endif
 }
 static void cpix(unsigned char x, unsigned char y)            /* in-bounds set (fill) */
 {
@@ -350,9 +365,9 @@ static void sync_rect(void)
 /* p_fullscreen: View > Fullscreen - cover the screen (canvas + tools recenter) and back. */
 static void p_fullscreen(unsigned char on)
 {
-    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(80, 192); }
+    if (on) { gb_wm_setpos(0, 8); gb_wm_setsize(GB_COLS, GB_LINES - 8); }
     else    { gb_wm_setpos(DEF_X, DEF_Y); gb_wm_setsize(WIN_W, WIN_H); }
-    gb_wm_damage(0, 8, 80, 192);  /* repaint ONCE in on_frame, clipped to the toggle area;
+    gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8); /* repaint ONCE in on_frame, clipped to the toggle area;
                                      repainting here too double-paints (the flicker, #153) */
 }
 
@@ -436,7 +451,11 @@ static unsigned int p_save(void)
 {
     picbuf[0] = 'G'; picbuf[1] = 'B'; picbuf[2] = 'P'; picbuf[3] = 'C';
     picbuf[4] = 2;                       /* version */
+#ifdef GB_MSX2
+    picbuf[5] = 6;                       /* mode 6 = V9938 Screen 6 packing (#287) */
+#else
     picbuf[5] = 1;                       /* mode 1 (4 colours) */
+#endif
     picbuf[6] = CANVAS_W; picbuf[7] = 0; /* width_px  = 100 */
     picbuf[8] = CANVAS_H; picbuf[9] = 0; /* height_px = 100 */
     picbuf[10] = pic_inks[0]; picbuf[11] = pic_inks[1];
