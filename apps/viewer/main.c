@@ -16,6 +16,12 @@
 #define LINE_H    11
 #define MAX_LINES ((win_h - 16) / LINE_H)
 #define WRAP      ((win_w - 9) * 2 / 3)
+/* line[] holds WRAP chars + a NUL. On the CPC's 80-col screen WRAP <= 47, so 48
+   fits; but MSX2 Screen 6 reaches GB_COLS=128, where WRAP reaches (128-9)*2/3 =
+   79 - which overran this 48-byte buffer and corrupted memory, hanging the viewer
+   the instant it drew text (#287). The viewer's page has no room to grow line[],
+   so render() hard-caps the wrap at MAXWRAP-1 instead (MSX text wraps a little
+   narrower than the window, but never overflows). */
 #define MAXWRAP   48
 
 #define DEF_X     2
@@ -57,7 +63,7 @@ static void render(unsigned int n)
         if (c == '\n') { line[col] = 0; gb_text(TX_COL, TX_Y0 + row * LINE_H, line); row++; col = 0; continue; }
         if (c < 32) continue;
         line[col++] = c;
-        if (col == WRAP) { line[col] = 0; gb_text(TX_COL, TX_Y0 + row * LINE_H, line); row++; col = 0; }
+        if (col == WRAP || col >= MAXWRAP - 1) { line[col] = 0; gb_text(TX_COL, TX_Y0 + row * LINE_H, line); row++; col = 0; }
     }
     if (col > 0 && row < MAX_LINES) { line[col] = 0; gb_text(TX_COL, TX_Y0 + row * LINE_H, line); }
 }
