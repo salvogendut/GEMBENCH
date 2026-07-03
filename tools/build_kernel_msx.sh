@@ -66,7 +66,9 @@ python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
 python3 tools/packicons.py --platform msx2 build/msx/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm
-python3 tools/png2spr.py --platform msx2 assets/pointer.png build/msx/DEFAULT.SPR cursor
+# 11x13 art (smaller than the 14x16 default) so the sprite-pointer matches the CPC
+# pointer's apparent size - Screen 6's tall/narrow pixels otherwise render it bigger.
+python3 tools/png2spr.py --platform msx2 assets/pointer.png build/msx/DEFAULT.SPR cursor 11x13
 
 # --- the kernel + the .COM stub ---------------------------------------------
 # RASM exits 0 even on assembly errors, so stale outputs would silently ship:

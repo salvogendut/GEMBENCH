@@ -9,7 +9,11 @@
 #include "../savdraw.h"
 
 #define WM_FS (*(volatile unsigned char *)0x130A)
-#define KCFG_BORDER (*(volatile unsigned char *)0x1230)
+#ifdef GB_MSX2
+#define KCFG_BORDER (*(volatile unsigned char *)0x122C) /* MSX: border==paper==palette[0] (INKS[0]) */
+#else
+#define KCFG_BORDER (*(volatile unsigned char *)0x1230) /* CPC: desktop's border ink (INKS= 5th) */
+#endif
 #define KCFG_INK(p) (((volatile unsigned char *)0x122C)[(p)])
 
 #define BG     2          /* black night sky */
@@ -38,7 +42,16 @@ static unsigned int rnd(void)
 
 static volatile unsigned char brd_ink;
 #ifdef GB_MSX2
-static void set_border(void) { (void)brd_ink; }
+static void set_border(void) __naked
+{
+__asm
+    ld   a,(_brd_ink)     ; A = the border ink number
+    ld   b,a              ; B = ink (GB_SETINK arg)
+    xor  a                ; A = 0 = pen 0; on Screen 6 the border/backdrop = palette[0]
+    call 0x8006           ; GB_SETINK -> set palette[0] (blacks or restores the border)
+    ret
+__endasm;
+}
 #else
 static void set_border(void) __naked
 {
