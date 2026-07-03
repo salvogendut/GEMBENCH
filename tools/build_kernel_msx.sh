@@ -33,6 +33,7 @@ APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/deco build/msx/DECO.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/xmatrix build/msx/XMATRIX.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/mountain build/msx/MOUNTAIN.RAW
 
 # --- the shared config-parser module (platform-neutral C over low RAM) -----
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
@@ -83,6 +84,7 @@ cp build/msx/SQUARES.RAW  QA/MSX/GBENCH/SQUARES.SAV
 cp build/msx/ANT.RAW      QA/MSX/GBENCH/ANT.SAV
 cp build/msx/DECO.RAW     QA/MSX/GBENCH/DECO.SAV
 cp build/msx/XMATRIX.RAW  QA/MSX/GBENCH/XMATRIX.SAV
+cp build/msx/MOUNTAIN.RAW QA/MSX/GBENCH/MOUNTAIN.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
 python3 tools/pic_to_msx.py assets/pictures/PENGUIN.PIC QA/MSX/PENGUIN.PIC
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
