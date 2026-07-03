@@ -12,6 +12,9 @@ kernel_main
                 ld    (BOOT_SP),sp           ; entry SP, for GB_EXIT's longjmp
                 ld    hl,0                    ; empty the shared clipboard (#142)
                 ld    (CLIP_LEN),hl
+                xor   a                       ; UI_MODAL boots as TPA garbage under DOS
+                ld    (UI_MODAL),a           ; (menu_dispatch would swallow EVERY top-bar
+                                              ; click as "a dialog is up", #287)
                 call  msx_video_init         ; 212 lines, 16x16 sprites, parked pointer
                 ld    hl,pal_def             ; seed the default inks (GBCFG may rewrite
                 ld    de,KCFG_INKS           ; KCFG_INKS from INKS= later)
