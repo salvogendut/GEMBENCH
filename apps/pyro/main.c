@@ -6,6 +6,7 @@
  * point - no float - plotted straight to the #C000 Mode-1 screen on a black night sky.
  * Card-only (the floppy pack is full). */
 #include "gb.h"
+#include "../savdraw.h"
 
 #define WM_FS (*(volatile unsigned char *)0x130A)
 #define KCFG_BORDER (*(volatile unsigned char *)0x1230)
@@ -36,6 +37,9 @@ static unsigned int rnd(void)
 }
 
 static volatile unsigned char brd_ink;
+#ifdef GB_MSX2
+static void set_border(void) { (void)brd_ink; }
+#else
 static void set_border(void) __naked
 {
 __asm
@@ -46,7 +50,9 @@ __asm
     ret
 __endasm;
 }
+#endif
 
+#ifndef GB_MSX2
 static void vram_pixel(int sx, int sy, unsigned char ink)
 {
     unsigned char *p, pos, lo, hi, b;
@@ -61,6 +67,7 @@ static void vram_pixel(int sx, int sy, unsigned char ink)
     if (ink & 2) b |= hi;
     *p = b;
 }
+#endif
 
 typedef struct {
     int x, y, dx, dy;          /* fixed-point <<FP */
@@ -138,7 +145,7 @@ static void step(void)
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, BG);
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
 }
 
 static void ss_frame(void)
@@ -160,7 +167,7 @@ static void ss_frame(void)
     step();
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {

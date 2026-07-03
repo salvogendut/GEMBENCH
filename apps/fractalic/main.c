@@ -14,6 +14,7 @@
  * type is always random (the user asked for a random pick each cycle). This is the
  * biggest saver, so it ships on the Albireo card only (the floppy is too tight). */
 #include "gb.h"
+#include "../savdraw.h"
 
 #define WM_FS (*(volatile unsigned char *)0x130A)
 
@@ -47,6 +48,7 @@ static unsigned int rnd(void)
 }
 
 /* plot one Mode-1 pixel straight into #C000 (same as mountain). */
+#ifndef GB_MSX2
 static void vram_pixel(int x, int y, unsigned char ink)
 {
     unsigned char *p, pos, lo, hi, b;
@@ -81,6 +83,7 @@ static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
         if (e2 <  dx) { err += dx; y0 += sy; }
     }
 }
+#endif
 
 /* ---- Sierpinski (chaos game) -------------------------------------------- */
 static const unsigned char sier_ink[3] = { 3, 2, 1 };   /* red, black, white */
@@ -176,7 +179,7 @@ static void anim_tick(void)
         if (--anim_timer <= 0) anim_stage = 2;
     } else {
         frac_type = ftypes[rnd() % 2];                  /* a new random fractal */
-        gb_fill(0, 0, 80, 200, BG);
+        gb_fill(0, 0, GB_COLS, GB_LINES, BG);
         fractal_init();
         anim_stage = 0;
     }
@@ -184,7 +187,7 @@ static void anim_tick(void)
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, BG);
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
     anim_stage = 0;
     fractal_init();
 }
@@ -206,7 +209,7 @@ static void ss_frame(void)
     anim_tick();
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {
