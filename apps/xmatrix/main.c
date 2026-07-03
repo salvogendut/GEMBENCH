@@ -14,10 +14,10 @@
 
 #define WM_FS (*(volatile unsigned char *)0x130A)
 
-#define GW    40        /* grid: 40 cols (320/8) x 25 rows (200/8) */
-#define GH    25
-#define TOTAL (GW * GH)
 #define CW    2         /* a cell is 2 byte columns (8px) x 8 lines */
+#define GW    (GB_COLS / CW)   /* grid cols: 40 on CPC (320/8), 64 on MSX2 (512/8), #287 */
+#define GH    (GB_LINES / 8)   /* grid rows: 25 on CPC (200/8), 26 on MSX2 (208/8) */
+#define TOTAL (GW * GH)
 #define GLOW_MAX   6
 #define GLOW_WHITE 3    /* glow > this = white head, else red trail */
 #define NGLYPHS    2
@@ -142,7 +142,7 @@ static void anim_tick(void)
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, BG);                  /* blue screen */
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);        /* blue screen */
 }
 
 static void ss_frame(void)
@@ -162,7 +162,7 @@ static void ss_frame(void)
     if (phase ^= 1) anim_tick();                 /* ~25 fps - every other frame */
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {
