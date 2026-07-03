@@ -23,6 +23,9 @@ mkdir -p build/msx QA/MSX/GBENCH
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
+APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
 
 # --- the shared config-parser module (platform-neutral C over low RAM) -----
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
@@ -55,11 +58,14 @@ rm -f build/msx/GBKERNM.RAW build/msx/GBMSX.COM
 # --- stage QA/MSX --------------------------------------------------------------
 cp build/msx/GBMSX.COM QA/MSX/
 printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
-printf 'FONT=DEFAULT\r\nICONS=DEFAULT\r\nCURSOR=DEFAULT\r\nVIEW=LIST\r\nBACKDROP=SOLID\r\nWALLPAPER=NONE\r\nSAVER=NONE\r\nSAVERTIME=2\r\n' > QA/MSX/GEOBENCH.CFG
-cp build/msx/DESKTOP.RAW QA/MSX/GBENCH/DESKTOP.APP
-cp build/msx/FILEMGR.RAW QA/MSX/GBENCH/FILEMGR.APP
-cp build/msx/NOTEPAD.RAW QA/MSX/GBENCH/NOTEPAD.APP
-cp assets/WELCOME.TXT    QA/MSX/WELCOME.TXT
+printf 'FONT=DEFAULT\r\nICONS=DEFAULT\r\nCURSOR=DEFAULT\r\nVIEW=LIST\r\nBACKDROP=SOLID\r\nWALLPAPER=NONE\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\n' > QA/MSX/GEOBENCH.CFG
+cp build/msx/DESKTOP.RAW  QA/MSX/GBENCH/DESKTOP.APP
+cp build/msx/FILEMGR.RAW  QA/MSX/GBENCH/FILEMGR.APP
+cp build/msx/NOTEPAD.RAW  QA/MSX/GBENCH/NOTEPAD.APP
+cp build/msx/SETTINGS.RAW QA/MSX/GBENCH/SETTINGS.APP
+cp build/msx/SQUARES.RAW  QA/MSX/GBENCH/SQUARES.SAV
+cp build/msx/ANT.RAW      QA/MSX/GBENCH/ANT.SAV
+cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
 cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
 cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/

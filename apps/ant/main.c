@@ -13,8 +13,13 @@
 #define KCFG_INK(p) (((volatile unsigned char *)0x122C)[(p)])
 
 #define BG    0          /* blue background = cell state 0 */
-#define COLS  80
+#ifdef GB_MSX2
+#define COLS  128        /* 128 byte-cols x 53 rows of 4-line cells = 512x212 */
+#define ROWS  53
+#else
+#define COLS  80         /* 80 byte-cols x 50 rows of 4-line cells = 320x200 */
 #define ROWS  50
+#endif
 #define STEPS 40         /* ant steps per frame */
 #define RESET 24000u     /* steps before a fresh grid */
 
@@ -30,6 +35,9 @@ static unsigned int rnd(void)
 }
 
 static volatile unsigned char brd_ink;
+#ifdef GB_MSX2
+static void set_border(void) { (void)brd_ink; }   /* MSX: border unchanged during ANT */
+#else
 static void set_border(void) __naked
 {
 __asm
@@ -40,6 +48,7 @@ __asm
     ret
 __endasm;
 }
+#endif
 
 /* flat grid + 16-bit index: a [ROWS][COLS] array indexed by a uchar would wrap the
    *COLS offset at 8 bits (the SDCC 2D-array gotcha) - keep it flat. */
@@ -54,7 +63,7 @@ static void clear_grid(void)
 {
     unsigned int i;
     for (i = 0; i < COLS * ROWS; i++) grid[i] = 0;
-    gb_fill(0, 0, 80, 200, BG);
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
     acx = COLS / 2; acy = ROWS / 2; adir = 0;
     steps = 0;
 }
@@ -78,7 +87,7 @@ static void ant_step(void)
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, BG);
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
 }
 
 static void ss_frame(void)
@@ -101,7 +110,7 @@ static void ss_frame(void)
     if ((steps += STEPS) >= RESET) clear_grid();
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {

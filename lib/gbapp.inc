@@ -66,7 +66,9 @@ DATA_MODTOP     equ   #6000        ; ceiling of the icon region in PAGE_DATA: th
 GB_KERNEL       equ   #8000        ; resident kernel base (fixed, RUN entry)
 GB_INIT         equ   GB_KERNEL+0  ; #8000  kernel boot (kernel only)
 GB_CLS          equ   GB_KERNEL+3  ; #8003  clear screen / home cursor
-GB_PRINT        equ   GB_KERNEL+6  ; #8006  reserved legacy print stub
+GB_SETINK       equ   GB_KERNEL+6  ; #8006  set a palette colour live: A=pen (0-3, or
+                                   ;        4=border), B/C=CPC ink number. CPC -> SCR_SET_INK/
+                                   ;        BORDER; MSX -> V9938 palette (#287, was GB_PRINT)
 GB_QUIT         equ   GB_KERNEL+9  ; #8009  reserved legacy quit stub
 GB_TEXT         equ   GB_KERNEL+12 ; #800C  6x8 font text: B=col C=line D=pen
                                    ;        E=paper HL=string (in the caller's page)

@@ -465,26 +465,36 @@ sp_pen
                 ld    a,#07
                 out   (VDP_PAL),a            ;     G=7
                 ei
-                ; border: R#7 = matching pen replicated into both 2-bit fields
-                ld    a,(KCFG_INKS+4)
-                ld    e,a
-                ld    hl,KCFG_INKS
-                ld    b,4
-                ld    c,0
-sp_bloop        ld    a,(hl)
-                cp    e
-                jr    z,sp_bfound
-                inc   hl
-                inc   c
-                djnz  sp_bloop
-                ld    c,0                     ; no pen matches -> pen 0
-sp_bfound
-                ld    a,c
-                add   a,a
-                add   a,a
-                or    c                       ; pen * 5 = both fields
+                ; Border: in Graphic 5 (Screen 6) the ACTIVE pen-0 pixels AND the
+                ; overscan border both take the colour that R#7 points at - they
+                ; are NOT palette[0] directly. So R#7 must select palette entry 0,
+                ; making pen-0 fills and the border show Paper (palette[0]). Any
+                ; other R#7 turns the whole pen-0 backdrop that colour (the "red
+                ; desktop" bug, #287). The INKS= border value can't be shown
+                ; independently on this VDP mode, so it's folded into Paper.
+                xor   a                        ; R#7 = 0 -> backdrop/border = palette[0]
                 ld    c,7
                 jp    vdp_reg
+
+; k_setink (GB_SETINK #8006, #287): A = pen (0-3, or 4 = border), B = CPC ink.
+; Live colour change for Settings' preview. Pens 0-3 write their palette entry;
+; pen 4 (border) is a no-op here - the Screen 6 border tracks Paper (see above).
+k_setink
+                cp    4
+                ret   nc                       ; border: not independently settable in G5
+                push  bc                      ; A = pen = palette index
+                ld    c,16
+                call  vdp_reg
+                pop   bc
+                ld    a,b                     ; B = ink number
+                call  ink_to_grb
+                di
+                ld    a,e
+                out   (VDP_PAL),a
+                ld    a,d
+                out   (VDP_PAL),a
+                ei
+                ret
 
 ; ink_to_grb: A = CPC firmware ink number (0..26) -> DE: E = (R<<4)|B, D = G.
 ink_to_grb
@@ -536,10 +546,11 @@ cpc2grb
 ; --- msx_video_init: post-CHGMOD screen setup (called once from boot) --------
 ; 212-line mode (R#9 LN), 16x16 sprites (R#1 SI), park the pointer sprites and
 ; terminate the sprite scan. The stub already ran CHGMOD 6 via the BIOS.
+; MSX2 VDP register mirrors are RGnSAV = #F3DF + n (R#0 = #F3DF).
 msx_video_init
-                ld    a,(#FFE8)               ; RG9SAV: current R#9 mirror
+                ld    a,(#F3E8)               ; RG9SAV: current R#9 mirror
                 or    #80                     ; LN = 212 lines
-                ld    (#FFE8),a
+                ld    (#F3E8),a
                 ld    c,9
                 call  vdp_reg
                 ld    a,(#F3E0)               ; RG1SAV: current R#1 mirror

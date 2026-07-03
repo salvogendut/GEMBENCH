@@ -111,7 +111,9 @@ set_palette
                 ld    b,a
                 ld    c,a
                 jp    SCR_SET_BORDER
-                endif                          ; (MSX set_palette lives in lib/msx/screen.asm)
+                endif                          ; (MSX set_palette + k_setink live in lib/msx/screen.asm)
+; (No CPC k_setink: the resident kernel is full - GB_SETINK is an MSX-only slot,
+;  and CPC Settings drives SCR_SET_INK/BORDER directly. #287)
 
                 ifdef PLATFORM_MSX
                 include "input_api_msx.asm"

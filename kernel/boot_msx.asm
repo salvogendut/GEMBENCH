@@ -43,6 +43,33 @@ kernel_main
                 call  msx_fstest             ; save GBTEST.TXT, then _TERM so the host can
                 jp    km_finish              ; mount the image and check it - no desktop.
                 endif
+                ifdef GB_FILLTEST            ; #287: fill 4 bands pens 0-3 via k_fill, hang.
+                ld    b,0                     ; B = pen
+gft_band        push  bc
+                ld    a,b                     ; pen
+                push  af
+                ld    c,b                     ; y = pen*48
+                ld    a,b
+                add   a,a
+                add   a,a
+                add   a,a                     ; *8
+                ld    e,a
+                add   a,a                     ; *16
+                add   a,a                     ; *32... want *48 = *32 + *16
+                add   a,e                     ; a = pen*48
+                ld    c,a                     ; C = y
+                ld    b,0                     ; B = x
+                ld    d,128                   ; D = w (full width)
+                ld    e,48                    ; E = h
+                pop   af                      ; A = pen
+                call  k_fill
+                pop   bc
+                inc   b
+                ld    a,b
+                cp    4
+                jr    c,gft_band
+gft_hang        jr    gft_hang
+                endif
                 ld    hl,name_desktop
                 call  launch_app             ; the WM master loop never returns
 km_finish                                      ; reached by k_exit's longjmp

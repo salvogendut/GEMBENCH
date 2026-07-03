@@ -38,16 +38,16 @@ static void step(void)
 {
     unsigned char w   = (unsigned char)(2 + rr(9));            /* 2..10 bytes = 8..40 px wide */
     unsigned char h   = (unsigned char)((w * 10) / 3);         /* visually square height */
-    unsigned char x   = rr((unsigned char)(80 - w));           /* fits horizontally */
-    unsigned char y   = rr((unsigned char)(200 - h));          /* fits vertically */
+    unsigned char x   = rr((unsigned char)(GB_COLS - w));       /* fits horizontally */
+    unsigned char y   = rr((unsigned char)(GB_LINES - h));      /* fits vertically */
     unsigned char pen = (unsigned char)(1 + rr(3));            /* pens 1..3 (not the bg) */
     gb_fill(x, y, w, h, pen);
-    if (++tick >= CLEAR_EVERY) { tick = 0; gb_fill(0, 0, 80, 200, 0); }
+    if (++tick >= CLEAR_EVERY) { tick = 0; gb_fill(0, 0, GB_COLS, GB_LINES, 0); }
 }
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, 0);   /* blank to pen 0; step() fills it in */
+    gb_fill(0, 0, GB_COLS, GB_LINES, 0);   /* blank to pen 0; step() fills it in */
     tick = 0;
 }
 
@@ -73,7 +73,7 @@ static void ss_frame(void)
     step();
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {
