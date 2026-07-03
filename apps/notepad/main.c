@@ -456,6 +456,14 @@ static unsigned char cursor_over(void)
    directly so the keys stay globally disarmed (no char-buffer flood) yet still reach
    us. Only A + arr_bits cross each call, so a KM_TEST_KEY register clobber can't
    corrupt the accumulator. */
+#ifdef GB_MSX2
+/* MSX2 has no CPC firmware: #BB1E is not KM_TEST_KEY there, and calling it wrote an
+   invalid i8255 PPI mode that HUNG the machine the instant a text app tried to read
+   the cursor keys (#287). On MSX the cursor keys ARE the pointer (GTSTCK 0) anyway,
+   so arrow-key caret nav doesn't belong here - the caret is placed by click (see the
+   "Click text to place caret" status line). Report no arrows. */
+static void read_arrows(void) { arr_bits = 0; }
+#else
 static void read_arrows(void) __naked
 {
 __asm
@@ -488,6 +496,7 @@ __asm
 4$: ret
 __endasm;
 }
+#endif
 
 /* move_caret: step the insertion point one cell in a direction. Up/Down keep the
    display column via the wrap-aware pos_of/idx_of; Left/Right walk the buffer. */
