@@ -53,6 +53,9 @@ static unsigned int rnd(void)
 /* SCR SET BORDER (&BC38): drive the CPC border to the hardware ink in brd_ink. On start
    we match the blue background; on exit we restore the desktop's configured border. */
 static volatile unsigned char brd_ink;
+#ifdef GB_MSX2
+static void set_border(void) { (void)brd_ink; }   /* no #BC38 on MSX (like ANT) */
+#else
 static void set_border(void) __naked
 {
 __asm
@@ -63,6 +66,7 @@ __asm
     ret
 __endasm;
 }
+#endif
 
 /* ---- Sprite ASCII art ('.' = background, '3' = roach body) -------------------- */
 
@@ -99,6 +103,34 @@ static const unsigned char dir_spr[8] = { 0, 0, 1, 2, 2, 2, 3, 0 };  /* dir -> s
 /* Encode one heading's ASCII art into a 64-byte Mode-1 buffer in the given pen. The
    blue (pen 0) background leaves a byte clear; a body pixel sets the lo plane (pen&1)
    and/or hi plane (pen&2), matching #C000 plane layout (lo=0x80>>p, hi=0x08>>p). */
+#ifdef GB_MSX2
+/* MSX2 Screen 6 (#287): the sprite is a 4x16-byte bitmap in Screen-6 packing (each
+   byte = 4 pixels x 2 bits, pixel p at bits 6-2p). Blit it with gb_restorerect and
+   erase with gb_fill; the 320x200 roach field is centred in the 512x212 screen. */
+#define SAV_OFFX 24   /* byte cols: (128-80)/2 -> centre 320px in 512px */
+#define SAV_OFFY 6    /* lines:    (212-200)/2 */
+static void build_sprite(unsigned char *dst, const char *const *art, unsigned char ink)
+{
+    unsigned char row, col, p, b;
+    for (row = 0; row < 16; row++) {
+        for (col = 0; col < 4; col++) {
+            b = 0;                              /* pen 0 background */
+            for (p = 0; p < 4; p++)
+                if (art[row][(col << 2) + p] == '3')
+                    b |= (unsigned char)(ink << (6 - 2 * p));
+            dst[row * 4 + col] = b;
+        }
+    }
+}
+static void xr_blit(int x, int y, const unsigned char *spr)
+{
+    gb_restorerect((unsigned char)((x >> 2) + SAV_OFFX), (unsigned char)(y + SAV_OFFY), 4, 16, spr);
+}
+static void xr_erase(int x, int y)
+{
+    gb_fill((unsigned char)((x >> 2) + SAV_OFFX), (unsigned char)(y + SAV_OFFY), 4, 16, 0);
+}
+#else
 static void build_sprite(unsigned char *dst, const char *const *art, unsigned char ink)
 {
     unsigned char row, col, p, b;
@@ -141,6 +173,7 @@ static void xr_erase(int x, int y)
         for (c = 0; c < 4; c++) p[c] = 0;       /* pen 0 background */
     }
 }
+#endif
 
 /* ---- Roach state + AI -------------------------------------------------------- */
 
@@ -254,7 +287,7 @@ static unsigned int  reset_ctr;
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, BG);
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
 }
 
 static void ss_frame(void)
@@ -280,7 +313,7 @@ static void ss_frame(void)
     }
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {

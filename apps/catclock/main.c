@@ -37,6 +37,55 @@ static unsigned int rnd(void)
 }
 
 static volatile unsigned char brd_ink;
+
+/* The cat clock draws a FIXED-size 320x200 image (the cat body bitmap) plus hands
+   and pupils, so unlike the other savers it must NOT scale on MSX (scaled hands
+   would miss the unscaled dial). Instead it draws everything at native size,
+   centred in the 512x212 screen by a constant offset, and transcodes the Mode-1
+   cat bytes to Screen-6 on the fly. (#287) */
+#ifdef GB_MSX2
+#define SAV_OFFX    24    /* byte cols: (128-80)/2 -> centre the 320px image */
+#define SAV_OFFX_PX 96    /* = SAV_OFFX * 4, in pixels */
+#define SAV_OFFY    6     /* lines: (212-200)/2 */
+#define GLINE_X0  (*(volatile unsigned int  *)0xC030)
+#define GLINE_Y0  (*(volatile unsigned int  *)0xC032)
+#define GLINE_X1  (*(volatile unsigned int  *)0xC034)
+#define GLINE_Y1  (*(volatile unsigned int  *)0xC036)
+#define GLINE_PEN (*(volatile unsigned char *)0xC038)
+static void fw_line(void) __naked
+{
+__asm
+    call 0x8009
+    ret
+__endasm;
+}
+static void set_border(void) { (void)brd_ink; }
+static void vram_pixel(int sx, int sy, unsigned char ink)
+{
+    unsigned int mx, my;
+    if (sx < 0 || sx >= 320 || sy < 0 || sy >= 200) return;
+    mx = (unsigned int)(sx + SAV_OFFX_PX); my = (unsigned int)(sy + SAV_OFFY);
+    GLINE_X0 = mx; GLINE_Y0 = my; GLINE_X1 = mx; GLINE_Y1 = my;
+    GLINE_PEN = ink; fw_line();
+}
+static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
+{
+    GLINE_X0 = (unsigned int)(x0 + SAV_OFFX_PX); GLINE_Y0 = (unsigned int)(y0 + SAV_OFFY);
+    GLINE_X1 = (unsigned int)(x1 + SAV_OFFX_PX); GLINE_Y1 = (unsigned int)(y1 + SAV_OFFY);
+    GLINE_PEN = ink; fw_line();
+}
+/* one CPC Mode-1 byte (lo plane = pen&1 at 0x80>>p, hi plane = pen&2 at 0x08>>p)
+   -> one Screen-6 byte (4 pixels x 2 bits, pixel p at bits 6-2p). */
+static unsigned char m1_to_s6(unsigned char m)
+{
+    unsigned char s = 0, p, pen;
+    for (p = 0; p < 4; p++) {
+        pen = (unsigned char)(((m >> (7 - p)) & 1) | (((m >> (3 - p)) & 1) << 1));
+        s |= (unsigned char)(pen << (6 - 2 * p));
+    }
+    return s;
+}
+#else
 static void set_border(void) __naked
 {
 __asm
@@ -81,6 +130,7 @@ static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
         if (e2 <  dx) { err += dx; y0 += sy; }
     }
 }
+#endif
 
 static void fill_disc(int cx, int cy, int r, unsigned char ink)
 {
@@ -92,7 +142,24 @@ static void fill_disc(int cx, int cy, int r, unsigned char ink)
     }
 }
 
-/* blit a byte-column / row sub-rectangle of the cat bitmap straight to #C000. */
+/* blit a byte-column / row sub-rectangle of the cat bitmap. CPC writes the packed
+   Mode-1 bytes straight to #C000; MSX transcodes each row to Screen-6 and blits it
+   with gb_restorerect, centred by the saver offset. */
+#ifdef GB_MSX2
+static unsigned char catrow[CAT_BPR];   /* one transcoded Screen-6 row */
+static void blit(unsigned char c0, unsigned char c1, int r0, int r1)
+{
+    int y;
+    unsigned char c, n;
+    for (y = r0; y <= r1; y++) {
+        const unsigned char *src = &cat_img[y * CAT_BPR];
+        n = 0;
+        for (c = c0; c <= c1; c++) catrow[n++] = m1_to_s6(src[c]);
+        gb_restorerect((unsigned char)(CAT_X0COL + c0 + SAV_OFFX),
+                       (unsigned char)(y + SAV_OFFY), n, 1, catrow);
+    }
+}
+#else
 static void blit(unsigned char c0, unsigned char c1, int r0, int r1)
 {
     int y;
@@ -106,6 +173,7 @@ static void blit(unsigned char c0, unsigned char c1, int r0, int r1)
         }
     }
 }
+#endif
 
 static void hand(int pos, int len)
 {
@@ -134,7 +202,7 @@ static unsigned char last_sec = 0xFF, last_min = 0xFF;
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, 80, 200, BG);
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
     blit(0, CAT_BPR - 1, 0, CAT_H - 1);     /* the cat body */
     last_sec = last_min = 0xFF;             /* force hands + pupils to draw */
 }
@@ -163,7 +231,7 @@ static void ss_frame(void)
     }
 }
 
-static const gb_win_t sswin = { 0, 0, 80, 200, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
 
 void main(void)
 {
