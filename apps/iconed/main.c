@@ -9,11 +9,12 @@
  * Two file types, told apart by content (no filename needed):
  *   .IST icon set  - "GBIS" header, a directory, then each icon's bitmap. Edited in
  *                    place (never resized); Prev/Next walk the set.
- *   .SPR cursor    - 256 bytes = d0,m0,d2,m2 (a 16x16 masked sprite in two pre-
- *                    shifted phases). We edit phase 0 and regenerate phase 2 (the
- *                    +2px shift the kernel uses for sub-byte positioning) on Save.
- * The Mode-1 bit packing / mask / shift math matches tools/packicons.py +
- * tools/png2spr.py and is round-trip-checked by tools/test_iconed_codec.py.
+ *   .SPR cursor    - on CPC, 256 bytes: two pre-shifted phases (shift 0, shift 2)
+ *                    with mask,data INTERLEAVED per column (we edit phase 0 and
+ *                    regenerate both). On MSX2, a 66-byte V9938 hardware sprite
+ *                    (hotspot + outline + fill planes). Both match png2spr.py.
+ * The bit packing / mask / shift math matches tools/packicons.py + tools/png2spr.py
+ * and is round-trip-checked by tools/test_iconed_codec.py.
  *
  * #146: a kernel-MANAGED window like Notepad - the WM owns the frame/title/close/drag;
  * main() registers (gb_wm_managed), loads the file, paints once via gb_restore_parent. The
@@ -58,6 +59,11 @@
 #define CUR_W     4            /* cursor: 4 bytes/row x 16 rows, phase = 64 bytes */
 #define CUR_H     16
 #define PHASE     64
+#ifdef GB_MSX2
+#define CURSOR_LEN 66          /* MSX2: V9938 hardware sprite (hotspot + 2 planes) */
+#else
+#define CURSOR_LEN 256         /* CPC: 2 interleaved, pre-shifted masked phases */
+#endif
 
 #define M_ICON    0
 #define M_CURSOR  1
@@ -163,26 +169,72 @@ static void encode_icon(unsigned char k)   /* current grid -> buf at icon k */
         }
 }
 
-/* ---- .SPR cursor (16x16, masked, two pre-shifted phases) -------------------- */
+/* ---- .SPR cursor ----------------------------------------------------------- */
+#ifdef GB_MSX2
+/* MSX2: a 66-byte V9938 hardware-sprite cursor - +0/+1 hotspot, +2..33 outline
+ * plane, +34..65 fill plane. Each plane is a 16x16 pattern: 16 bytes for the left
+ * 8-px column (rows 0..15, bit7 = leftmost), then 16 for the right. Grid convention
+ * matches iconedit.py --platform msx2 / lib/msx/cursor.asm: pen 1 (white) = outline,
+ * pen 3 (red) = fill, pen 0 = transparent. */
+static unsigned char cur_hx, cur_hy;       /* hotspot, preserved across an edit */
 
-static void decode_cursor(void)            /* phase 0 (d0 @0, m0 @PHASE) -> grid */
+static void decode_cursor(void)
+{
+    unsigned char y, x, idx, bit;
+    u_valid = 0;
+    gw = 16; gh = 16;
+    cur_hx = buf[0]; cur_hy = buf[1];
+    for (y = 0; y < 16; y++)
+        for (x = 0; x < 16; x++) {
+            idx = (unsigned char)((x < 8 ? 0 : 16) + y);
+            bit = (unsigned char)(0x80 >> (x & 7));
+            gset(y, x, (buf[2 + idx] & bit) ? 1 :          /* outline -> pen 1 */
+                       (buf[34 + idx] & bit) ? 3 : 0);     /* fill -> pen 3     */
+        }
+}
+
+static void encode_cursor(void)
+{
+    unsigned char y, x, idx, bit, pen;
+    unsigned int i;
+    for (i = 0; i < CURSOR_LEN; i++) buf[i] = 0;
+    buf[0] = cur_hx; buf[1] = cur_hy;
+    for (y = 0; y < 16; y++)
+        for (x = 0; x < 16; x++) {
+            pen = gget(y, x);
+            idx = (unsigned char)((x < 8 ? 0 : 16) + y);
+            bit = (unsigned char)(0x80 >> (x & 7));
+            if (pen == 1)      buf[2 + idx]  |= bit;       /* outline plane */
+            else if (pen == 3) buf[34 + idx] |= bit;       /* fill plane    */
+        }
+}
+#else
+/* CPC: 256 bytes = two pre-shifted phases (shift 0, shift 2) back to back, each
+ * CUR_H rows of CUR_W byte-columns with mask,data INTERLEAVED per column (the
+ * kernel composites bg AND mask OR data over one advancing pointer). We edit
+ * phase 0's unshifted grid and regenerate both phases. Matches png2spr.py +
+ * lib/cursor_data.asm (the old d0,m0,d2,m2 block order garbled the cursor). */
+static void decode_cursor(void)
 {
     unsigned char y, bx, i, d, m;
+    unsigned int off;
     u_valid = 0;
     gw = 16; gh = 16;
     for (y = 0; y < CUR_H; y++)
         for (bx = 0; bx < CUR_W; bx++) {
-            d = buf[(unsigned int)y * CUR_W + bx];
-            m = buf[PHASE + (unsigned int)y * CUR_W + bx];
+            off = (unsigned int)y * (CUR_W * 2) + bx * 2;  /* phase 0: mask, data */
+            m = buf[off];
+            d = buf[off + 1];
             for (i = 0; i < 4; i++)
                 gset(y, (unsigned char)(bx * 4 + i), ((m >> (7 - i)) & 1) ? 0 : dec_pixel(d, i));
         }
 }
 
-static void enc_cursor_phase(unsigned char shift, unsigned int db, unsigned int mb)
+static void enc_cursor_phase(unsigned char shift, unsigned int base)
 {
     unsigned char y, bx, i, d, m, pen;
     int x;
+    unsigned int off;
     for (y = 0; y < CUR_H; y++)
         for (bx = 0; bx < CUR_W; bx++) {
             d = 0; m = 0;
@@ -192,16 +244,18 @@ static void enc_cursor_phase(unsigned char shift, unsigned int db, unsigned int 
                 if (pen == 0) m = set_pixel(m, i, 3);   /* transparent: mask both bits */
                 else          d = set_pixel(d, i, pen);
             }
-            buf[db + (unsigned int)y * CUR_W + bx] = d;
-            buf[mb + (unsigned int)y * CUR_W + bx] = m;
+            off = base + (unsigned int)y * (CUR_W * 2) + bx * 2;
+            buf[off]     = m;                     /* interleaved: mask, then data */
+            buf[off + 1] = d;
         }
 }
 
 static void encode_cursor(void)
 {
-    enc_cursor_phase(0, 0,         PHASE);          /* d0, m0 */
-    enc_cursor_phase(2, 2 * PHASE, 3 * PHASE);      /* d2, m2 (the +2px phase) */
+    enc_cursor_phase(0, 0);                         /* phase 0 (shift 0)          */
+    enc_cursor_phase(2, 2 * PHASE);                 /* phase 1 (shift 2) @ +128   */
 }
+#endif
 
 /* sniff: classify the loaded buffer and decode the first item. */
 static void sniff(void)
@@ -211,7 +265,7 @@ static void sniff(void)
         mode = M_ICON; count = buf[5]; idx = 0;
         if (count == 0) { mode = M_NONE; return; }
         decode_icon(0);
-    } else if (filelen == 256) {
+    } else if (filelen == CURSOR_LEN) {
         mode = M_CURSOR; count = 1; idx = 0;
         decode_cursor();
     } else {
@@ -357,7 +411,7 @@ static void ie_open(unsigned int len) { filelen = len; sniff(); }
 static unsigned int ie_save(void)
 {
     if (mode == M_ICON)   { encode_icon(idx); return filelen; }
-    if (mode == M_CURSOR) { encode_cursor();  return 256; }
+    if (mode == M_CURSOR) { encode_cursor();  return CURSOR_LEN; }
     return 0;
 }
 
