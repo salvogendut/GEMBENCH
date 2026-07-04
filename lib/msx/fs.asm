@@ -32,6 +32,7 @@ fs_init
                 xor   a
                 ld    (fs_boot_drive),a
                 ld    (fs_cur_drive),a
+                ld    (FS_XFLAGS),a           ; chunked-copy flags start clear (normal loads/saves)
                 ret
 
 ; fs_set_drive: A = drive. Recorded only (drive letters arrive with M2+).
@@ -164,6 +165,27 @@ fs_load_file
                 jr    nz,fsload_miss
                 ld    a,b
                 ld    (fsmx_handle),a
+                ld    a,(FS_XFLAGS)          ; chunked copy? read a chunk from FS_LOAD_OFS,
+                and   1                       ; no too-big probe (the caller loops to EOF)
+                jr    z,fsload_whole
+                call  fsmx_seek_ofs          ; seek handle to FS_LOAD_OFS (from start)
+                ld    a,(fsmx_handle)
+                ld    b,a
+                ld    c,_READ
+                ld    de,(fs_load_dst)
+                ld    hl,(fs_load_max)
+                call  BDOS
+                ld    (fs_ent_size),hl       ; actual chunk bytes read
+                ld    hl,0
+                ld    (fs_ent_size+2),hl
+                ld    a,(fsmx_handle)
+                ld    b,a
+                ld    c,_DCLOSE
+                call  BDOS
+                pop   ix
+                scf
+                ret
+fsload_whole
                 ld    c,_READ
                 ld    de,(fs_load_dst)
                 ld    hl,(fs_load_max)
@@ -216,6 +238,9 @@ fs_save_file
                 ei
                 push  ix
                 call  fsmx_name_to_path
+                ld    a,(FS_XFLAGS)
+                and   2                       ; append mode? open existing + seek to end
+                jr    nz,fsave_append
                 ld    c,_CREATE
                 ld    de,fsmx_path
                 xor   a                       ; open mode 0 (read/write)
@@ -225,6 +250,25 @@ fs_save_file
                 jr    nz,fsave_fail
                 ld    a,b
                 ld    (fsmx_handle),a
+                jr    fsave_do
+fsave_append
+                ld    c,_DOPEN
+                ld    de,fsmx_path
+                xor   a                       ; mode 0 = read+write
+                call  BDOS
+                or    a
+                jr    nz,fsave_fail
+                ld    a,b
+                ld    (fsmx_handle),a
+                ld    b,a                     ; B = handle; seek to end (method 2, offset 0)
+                ld    a,2
+                ld    de,0
+                ld    hl,0
+                ld    c,_SEEK
+                call  BDOS
+fsave_do
+                ld    a,(fsmx_handle)         ; BDOS clobbers B on the seek; reload the handle
+                ld    b,a
                 ld    c,_WRITE
                 ld    de,(fs_save_src)
                 ld    hl,(fs_save_len)
@@ -310,6 +354,21 @@ fsmx_back
                 pop   ix
                 ret
 
+; fsmx_seek_ofs: seek fsmx_handle to the 24-bit FS_LOAD_OFS, from the start (method 0).
+fsmx_seek_ofs
+                ld    a,(FS_LOAD_OFS)
+                ld    l,a
+                ld    a,(FS_LOAD_OFS+1)
+                ld    h,a                     ; HL = low word of the offset
+                ld    a,(FS_LOAD_OFS+2)
+                ld    e,a
+                ld    d,0                     ; DE = high word (24-bit, so D=0)
+                ld    a,(fsmx_handle)
+                ld    b,a
+                ld    a,0                     ; method 0 = from start
+                ld    c,_SEEK
+                jp    BDOS                    ; tail-call: BDOS returns to our caller
+
 ; --- name conversion ------------------------------------------------------------
 ; fsmx_name_to_path: fs_req_name (11 bytes, space padded) -> fsmx_path ASCIIZ.
 fsmx_name_to_path
@@ -371,3 +430,7 @@ fs_load_dst     equ   #14F7
 fs_load_max     equ   #14F9
 fs_save_src     equ   #14FB
 fs_save_len     equ   #14FD
+; chunked-copy cells (the #144C..#144F free gap, shared with the CPC dispatcher):
+FS_LOAD_OFS     equ   #144C        ; 24-bit read offset (used when FS_XFLAGS bit0 set)
+FS_XFLAGS       equ   #144F        ; bit0 = chunk-read (read from offset, no too-big),
+                                    ; bit1 = append-write (open existing + seek to end)

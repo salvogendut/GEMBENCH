@@ -50,6 +50,10 @@
 #define V_LIST   0
 #define V_ICONS  1
 #define FSV_DIAG (*(volatile unsigned char *)0x170E)  /* FLOPPYSV.MOD diagnostic byte */
+/* Chunked-copy transfer cells (the #144C..#144F free low-RAM gap; the fs backend reads them).
+   FS_LOAD_OFS = 24-bit read offset; FS_XFLAGS bit0 = chunk-read, bit1 = append-write. */
+#define FS_LOAD_OFS ((volatile unsigned char *)0x144C)
+#define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
 
 static char saveerr[] = "save err 00";
 static const char hexdig[] = "0123456789ABCDEF";
@@ -84,7 +88,7 @@ static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Full
    path index through it. Capped at MAX_ENT (the shipped floppy/card directories are
    small; a larger directory shows the first MAX_ENT sorted). Also spares the FAT a
    re-stream per drawn item. */
-#define MAX_ENT 128
+#define MAX_ENT 104
 /* Flat 11-byte name records (NOT char[MAX_ENT][11]): a 2D char array indexed by an
    8-bit var makes SDCC compute the *11 offset in 8 bits, which wraps past entry 23.
    NAME_AT forces the multiply to 16-bit. */
@@ -705,35 +709,61 @@ static const gb_doc_t fmdoc = {          /* no document -> no File menu, just Vi
     0, 0, fm_fullscreen, fm_view_items, fm_view
 };
 
+/* copy_file: copy gb_dragname from the drag-source drive/dir onto my_drive in
+   <=GB_COPYMAX chunks, so any size works. Each pass reads a chunk at the running
+   offset (FS_XFLAGS chunk-read) and appends it to the dest (FS_XFLAGS append after
+   the first), looping until a short read marks EOF. gb_copy_begin/end swap the
+   drive+dir context per chunk, so same- and cross-drive both work. On backends that
+   don't yet honour the chunk flags (CPC card/floppy - Phase B/C) a >GB_COPYMAX file
+   just fails the first load, exactly as before. Returns 1 ok, 0 on any failure. */
+static unsigned char copy_file(void)
+{
+    unsigned int   ofs_lo = 0;                  /* 24-bit offset as 16-bit low + 8-bit high */
+    unsigned char  ofs_hi = 0;                  /* (cheaper codegen than a 32-bit long)      */
+    unsigned int   got;
+    unsigned char  first = 1;
+
+    for (;;) {
+        gb_set_drive(my_drive);                 /* so copy_end restores to our drive */
+        gb_copy_begin();                        /* -> drag source drive/dir */
+        gb_set_name(gb_dragname);
+        FS_LOAD_OFS[0] = (unsigned char)ofs_lo;
+        FS_LOAD_OFS[1] = (unsigned char)(ofs_lo >> 8);
+        FS_LOAD_OFS[2] = ofs_hi;
+        FS_XFLAGS = 0x01;                       /* chunk-read from the offset */
+        got = gb_fs_load(gb_copybuf, GB_COPYMAX);
+        gb_copy_end();                          /* -> our drive/dir */
+        if (got == 0) { FS_XFLAGS = 0; return (unsigned char)!first; }  /* EOF ok / empty fail */
+        gb_set_drive(my_drive);
+        gb_set_name(gb_dragname);
+        FS_XFLAGS = first ? 0x00 : 0x02;        /* create on the first chunk, append after */
+        FSV_DIAG = 0xEE;                         /* floppy diag: unchanged => writer didn't run */
+        if (!gb_fs_save(gb_copybuf, got)) { FS_XFLAGS = 0; return 0; }
+        {
+            unsigned int n = (unsigned int)(ofs_lo + got);
+            if (n < ofs_lo) ofs_hi++;           /* 16-bit carry into bits 16-23 */
+            ofs_lo = n;
+        }
+        first = 0;
+        if (got < GB_COPYMAX) break;            /* short read = EOF */
+    }
+    FS_XFLAGS = 0;
+    return 1;
+}
+
 /* on_event: a file dropped here from another window is copied onto our drive (#65);
    a top-bar menu click goes to the framework's View handler (#142). */
 static void on_event(void)
 {
     sync_rect();
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
-        unsigned int n;                   /* copy it onto THIS window's drive (#74) */
-        unsigned char ok;
-        gb_set_drive(my_drive);
-        gb_copy_begin();                  /* switch to the drag source drive/dir */
-        gb_set_name(gb_dragname);
-        n = gb_fs_load(gb_copybuf, GB_COPYMAX);
-        gb_copy_end();                    /* restore this window's drive/dir before saving */
-        if (n == 0) {
-            gb_alert("Copy failed", "too large or unreadable");
-            relist();
-            return;
-        }
-        gb_set_drive(my_drive);           /* reassert target after the source load/module path */
-        gb_set_name(gb_dragname);
-        FSV_DIAG = 0xEE;                  /* unchanged after failure => writer module did not run */
-        ok = gb_fs_save(gb_copybuf, n);
-        if (!ok) {
+        if (!copy_file()) {               /* copy it onto THIS window's drive, any size (#74) */
             if (my_drive == GB_DRIVE_A || my_drive == GB_DRIVE_B) {
                 saveerr[9] = hexdig[FSV_DIAG >> 4];
                 saveerr[10] = hexdig[FSV_DIAG & 15];
                 gb_alert("Copy failed", saveerr);
             } else {
-                gb_alert("Copy failed", "disk full or read-only");
+                gb_alert("Copy failed", "too big or disk full");
             }
         }
         relist();

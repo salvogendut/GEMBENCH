@@ -50,6 +50,10 @@ kernel_main
                 call  msx_fstest             ; save GBTEST.TXT, then _TERM so the host can
                 jp    km_finish              ; mount the image and check it - no desktop.
                 endif
+                ifdef GB_COPYTEST            ; chunked-copy self-test (any-size DnD, Phase A):
+                call  msx_copytest           ; BIG.PIC -> COPYOUT.TST via the REAL fs_load_file
+                jp    km_finish              ; (chunk-read) + fs_save_file (append); host compares.
+                endif
                 ifdef GB_FILLTEST            ; #287: fill 4 bands pens 0-3 via k_fill, hang.
                 ld    b,0                     ; B = pen
 gft_band        push  bc
@@ -112,6 +116,91 @@ msx_fstest
 fstest_name     db    "GBTEST  TXT"
 fstest_data     db    "GEOBENCH MSX2 write path OK",13,10
 fstest_len      equ   $-fstest_data
+                endif
+
+                ifdef GB_COPYTEST
+; msx_copytest: copy BIG.PIC -> COPYOUT.TST in <=GB_COPYMAX chunks, driving the real
+; fs_load_file (chunk-read at FS_LOAD_OFS) + fs_save_file (append) - the exact BDOS
+; sequence apps/filemgr/main.c copy_file runs. The host mounts the image and byte-
+; compares COPYOUT.TST against BIG.PIC.
+CTC_BUF          equ   #2200          ; chunk buffer (module_data, free at boot)
+CTC_MAX          equ   #1C00          ; GB_COPYMAX
+CTC_OFS          equ   #144C          ; FS_LOAD_OFS
+CTC_FLAGS        equ   #144F          ; FS_XFLAGS
+msx_copytest
+                xor   a
+                ld    (ct_ofs),a
+                ld    (ct_ofs+1),a
+                ld    (ct_ofs+2),a
+                ld    a,1
+                ld    (ct_first),a
+ct_loop
+                ld    hl,ct_src              ; fs_req_name = source
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    a,(ct_ofs)             ; FS_LOAD_OFS = running offset (24-bit)
+                ld    (CTC_OFS),a
+                ld    a,(ct_ofs+1)
+                ld    (CTC_OFS+1),a
+                ld    a,(ct_ofs+2)
+                ld    (CTC_OFS+2),a
+                ld    a,1                     ; FS_XFLAGS bit0 = chunk-read
+                ld    (CTC_FLAGS),a
+                ld    hl,CTC_BUF
+                ld    (fs_load_dst),hl
+                ld    hl,CTC_MAX
+                ld    (fs_load_max),hl
+                call  fs_load_file
+                ld    hl,(fs_ent_size)       ; got = bytes read
+                ld    (ct_got),hl
+                ld    a,h
+                or    l
+                jp    z,ct_done              ; 0 = EOF
+                ld    hl,ct_dst              ; fs_req_name = dest
+                ld    de,fs_req_name
+                ld    bc,11
+                ldir
+                ld    a,(ct_first)
+                or    a
+                jr    nz,ct_create           ; first chunk -> create/truncate
+                ld    a,2                     ; else append (FS_XFLAGS bit1)
+                jr    ct_setx
+ct_create
+                xor   a
+ct_setx
+                ld    (CTC_FLAGS),a
+                ld    hl,CTC_BUF
+                ld    (fs_save_src),hl
+                ld    hl,(ct_got)
+                ld    (fs_save_len),hl
+                call  fs_save_file
+                xor   a
+                ld    (ct_first),a
+                ld    hl,(ct_ofs)             ; ct_ofs += got (24-bit)
+                ld    de,(ct_got)
+                add   hl,de
+                ld    (ct_ofs),hl
+                jr    nc,ct_nocarry
+                ld    a,(ct_ofs+2)
+                inc   a
+                ld    (ct_ofs+2),a
+ct_nocarry
+                ld    hl,(ct_got)            ; short read (< CTC_MAX) = last chunk
+                ld    de,CTC_MAX
+                or    a
+                sbc   hl,de
+                jp    c,ct_done
+                jp    ct_loop
+ct_done
+                xor   a
+                ld    (CTC_FLAGS),a           ; leave the flags clear
+                ret
+ct_src          db    "BIG     PIC"
+ct_dst          db    "COPYOUT TST"
+ct_ofs          ds    3
+ct_got          dw    0
+ct_first        db    0
                 endif
 
 ; k_exit (GB_EXIT): longjmp out of the nested WM call chain, then unwind.
