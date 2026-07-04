@@ -59,60 +59,78 @@ def test_ist(path):
         assert re == orig, f"{path}: icon {k} round-trip mismatch"
     print(f"OK  {path}: {count} icons decode/re-encode identically")
 
-# --- .SPR cursor: 16x16, file = d0,m0,d2,m2 (each W*H bytes); phase2 = +2 px ---
+# --- .SPR cursor -------------------------------------------------------------
+# CPC: 256 bytes = two pre-shifted phases (shift 0, shift 2), each 128 bytes with
+# mask,data INTERLEAVED per byte-column. MSX2: a 66-byte V9938 hardware sprite
+# (hotspot + outline plane + fill plane). Both match tools/png2spr.py.
+CUR_W = 4   # byte-columns per row
+CUR_H = 16  # rows
+CPC_PHASE = CUR_H * CUR_W * 2   # 128 bytes/phase (mask,data interleaved)
 
-CUR_W = 4   # bytes (cursor_arrow_w)
-CUR_H = 16  # rows  (cursor_arrow_h)
-PHASE = CUR_W * CUR_H  # 64
-
-def decode_cursor(data, di, mi):
-    """data[di:], mask[mi:] (one phase) -> grid: 0 = transparent, else pen 1..3."""
+def decode_cursor(data):
+    """CPC phase 0 -> grid: 0 = transparent, else pen 1..3."""
     grid = [[0] * (CUR_W * 4) for _ in range(CUR_H)]
     for y in range(CUR_H):
         for bx in range(CUR_W):
-            d = data[di + y * CUR_W + bx]
-            m = data[mi + y * CUR_W + bx]
+            off = y * (CUR_W * 2) + bx * 2      # phase 0: mask, data
+            m, d = data[off], data[off + 1]
             for i in range(4):
-                if (m >> (7 - i)) & 1:        # mask bit set -> transparent
-                    grid[y][bx * 4 + i] = 0
-                else:
-                    grid[y][bx * 4 + i] = decode_pixel(d, i)
+                grid[y][bx * 4 + i] = 0 if (m >> (7 - i)) & 1 else decode_pixel(d, i)
     return grid
 
-def encode_cursor_phase(grid, shift):
-    """grid (16 wide) -> (data, mask) for the given +shift px, dropping x+shift>=16."""
-    dout = bytearray(PHASE)
-    mout = bytearray(PHASE)
+def encode_phase(grid, shift):
+    """grid -> one interleaved 128-byte phase at the given +shift px."""
+    out = bytearray()
     for y in range(CUR_H):
         for bx in range(CUR_W):
-            d = 0
-            m = 0
+            d = m = 0
             for i in range(4):
-                x = bx * 4 + i - shift     # source pixel for this output column
+                x = bx * 4 + i - shift
                 pen = grid[y][x] if 0 <= x < CUR_W * 4 else 0
-                if pen == 0:               # transparent -> mask both bits, data 0
+                if pen == 0:
                     m = set_pixel(m, i, 3)
                 else:
                     d = set_pixel(d, i, pen)
-            dout[y * CUR_W + bx] = d
-            mout[y * CUR_W + bx] = m
-    return bytes(dout), bytes(mout)
+            out += bytes((m, d))
+    return bytes(out)
 
 def test_spr(path):
     data = open(path, "rb").read()
-    assert len(data) == 4 * PHASE, f"{path}: expected {4*PHASE} bytes, got {len(data)}"
-    grid = decode_cursor(data, 0, PHASE)                 # phase 0: d0 @0, m0 @64
-    d0, m0 = encode_cursor_phase(grid, 0)
-    d2, m2 = encode_cursor_phase(grid, 2)
-    assert d0 == data[0:PHASE],            f"{path}: d0 mismatch"
-    assert m0 == data[PHASE:2*PHASE],      f"{path}: m0 mismatch"
-    assert d2 == data[2*PHASE:3*PHASE],    f"{path}: d2 regen mismatch"
-    assert m2 == data[3*PHASE:4*PHASE],    f"{path}: m2 regen mismatch"
-    print(f"OK  {path}: phase0 round-trips and d2/m2 regenerate from +2px shift")
+    assert len(data) == 2 * CPC_PHASE, f"{path}: expected {2*CPC_PHASE} bytes, got {len(data)}"
+    grid = decode_cursor(data)
+    assert encode_phase(grid, 0) == data[0:CPC_PHASE],           f"{path}: phase 0 mismatch"
+    assert encode_phase(grid, 2) == data[CPC_PHASE:2*CPC_PHASE], f"{path}: phase 2 (+2px) regen mismatch"
+    print(f"OK  {path}: phase 0 round-trips and phase 2 regenerates from +2px shift")
+
+def test_msx_spr(path):
+    """MSX2 66-byte sprite: decode both planes to a grid, re-encode, byte-identical."""
+    data = open(path, "rb").read()
+    assert len(data) == 66, f"{path}: expected 66 bytes, got {len(data)}"
+    grid = [[0] * 16 for _ in range(16)]
+    for y in range(16):
+        for x in range(16):
+            idx = (0 if x < 8 else 16) + y
+            bit = 0x80 >> (x & 7)
+            grid[y][x] = 1 if data[2 + idx] & bit else (3 if data[34 + idx] & bit else 0)
+    out = bytearray(66)
+    out[0], out[1] = data[0], data[1]
+    for y in range(16):
+        for x in range(16):
+            idx = (0 if x < 8 else 16) + y
+            bit = 0x80 >> (x & 7)
+            if grid[y][x] == 1:
+                out[2 + idx] |= bit
+            elif grid[y][x] == 3:
+                out[34 + idx] |= bit
+    assert bytes(out) == data, f"{path}: MSX2 sprite round-trip mismatch"
+    print(f"OK  {path}: MSX2 hardware-sprite round-trips (outline + fill planes)")
 
 if __name__ == "__main__":
+    import os
     test_ist("build/DEFAULT.IST")
     test_ist("build/MIXED.IST")   # also v2 (mixed icon sizes -> exercises per-icon w/h)
     test_spr("build/DEFAULT.SPR")
+    if os.path.exists("build/msx/DEFAULT.SPR"):
+        test_msx_spr("build/msx/DEFAULT.SPR")
     test_spr("build/HAND.SPR")
     print("All ICONED codec round-trip checks passed.")
