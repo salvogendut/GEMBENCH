@@ -71,47 +71,56 @@ def encode_icon(grid, wbytes, h):
             out[y * wbytes + bx] = b
     return bytes(out)
 
-# --- .SPR cursor (16x16, file = d0 m0 d2 m2) --------------------------------
-
-CUR_W = 4         # bytes
+# --- .SPR cursor: CPC Mode-1 masked, pre-shifted (256 bytes) ----------------
+# Layout matches png2spr.py + lib/cursor_data.asm (-> DEFAULT.SPR): two phases
+# (shift 0, then shift 2) back to back, each CUR_H rows of CUR_W byte-columns with
+# mask,data INTERLEAVED per column - the kernel composites (bg AND mask) OR data
+# reading one advancing pointer. We edit phase 0's unshifted 16x16 grid and
+# regenerate both phases on save. (The old d0,m0,d2,m2 block order garbled it.)
+CUR_W = 4         # byte-columns per row
 CUR_H = 16
-PHASE = CUR_W * CUR_H   # 64
+CPC_SPR_LEN = 2 * CUR_H * CUR_W * 2   # 256: 2 phases x rows x cols x (mask,data)
+
+def _m1_decode(b, i):     # CPC Mode-1: pixel i (0..3) of byte b -> pen 0..3
+    return ((b >> (7 - i)) & 1) | (((b >> (3 - i)) & 1) << 1)
+
+def _m1_set(b, i, pen):
+    if pen & 1:
+        b |= 1 << (7 - i)
+    if pen & 2:
+        b |= 1 << (3 - i)
+    return b
 
 def decode_cursor_phase0(data):
-    """Return a 16x16 grid where 0 = transparent, 1..3 = pen."""
+    """Phase 0 of a CPC .SPR -> 16x16 grid (0 = transparent, 1..3 = pen)."""
     grid = [[0] * (CUR_W * 4) for _ in range(CUR_H)]
     for y in range(CUR_H):
         for bx in range(CUR_W):
-            d = data[y * CUR_W + bx]
-            m = data[PHASE + y * CUR_W + bx]
+            off = y * (CUR_W * 2) + bx * 2      # phase 0, row y, col bx: mask,data
+            m, d = data[off], data[off + 1]
             for i in range(4):
                 if (m >> (7 - i)) & 1:
-                    grid[y][bx * 4 + i] = 0
+                    grid[y][bx * 4 + i] = 0     # mask bit set = transparent
                 else:
-                    grid[y][bx * 4 + i] = decode_pixel(d, i)
+                    grid[y][bx * 4 + i] = _m1_decode(d, i)
     return grid
 
-def encode_cursor_phase(grid, shift):
-    dout = bytearray(PHASE)
-    mout = bytearray(PHASE)
-    for y in range(CUR_H):
-        for bx in range(CUR_W):
-            d = m = 0
-            for i in range(4):
-                x = bx * 4 + i - shift
-                pen = grid[y][x] if 0 <= x < CUR_W * 4 else 0
-                if pen == 0:
-                    m = set_pixel(m, i, 3)
-                else:
-                    d = set_pixel(d, i, pen)
-            dout[y * CUR_W + bx] = d
-            mout[y * CUR_W + bx] = m
-    return bytes(dout), bytes(mout)
-
 def encode_cursor_file(grid):
-    d0, m0 = encode_cursor_phase(grid, 0)
-    d2, m2 = encode_cursor_phase(grid, 2)
-    return d0 + m0 + d2 + m2
+    """16x16 grid -> 256-byte CPC .SPR: 2 interleaved, pre-shifted phases."""
+    blob = bytearray()
+    for shift in (0, 2):
+        for y in range(CUR_H):
+            for bx in range(CUR_W):
+                d = m = 0
+                for i in range(4):
+                    x = bx * 4 + i - shift
+                    pen = grid[y][x] if 0 <= x < CUR_W * 4 else 0
+                    if pen == 0:
+                        m = _m1_set(m, i, 3)    # both mask bits = transparent
+                    else:
+                        d = _m1_set(d, i, pen)
+                blob += bytes((m, d))           # mask, data interleaved
+    return bytes(blob)
 
 # --- MSX2 .SPR: V9938 hardware-sprite cursor (66 bytes) ---------------------
 # +0 hotspot_x, +1 hotspot_y, +2..33 outline plane, +34..65 fill plane. Each
@@ -492,13 +501,13 @@ class IconEditor(tk.Toplevel):
                     grid, self.msx_hotspot = decode_msx_sprite(data)
                     self.icons = [{"w": 4, "h": 16, "grid": grid}]
                     self.mode = "MSPR"
-                elif len(data) == 4 * PHASE:
+                elif len(data) == CPC_SPR_LEN:
                     self.icons = [{"w": CUR_W, "h": CUR_H,
                                    "grid": decode_cursor_phase0(data)}]
                     self.mode = "SPR"
                 else:
                     raise ValueError(f"{path}: not a cursor .SPR (expected "
-                                     f"{MSX_SPR_LEN} bytes for MSX2 or {4*PHASE} "
+                                     f"{MSX_SPR_LEN} bytes for MSX2 or {CPC_SPR_LEN} "
                                      f"for CPC, got {len(data)})")
             else:
                 raise ValueError(f"unknown extension: {ext}")
