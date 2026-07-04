@@ -38,7 +38,7 @@ python3 tools/amsdos_header.py build/GBM4.RAW "$OUT/GBM4.BIN" GBM4 BIN 0x8000
 cp build/GEOBENCH.CFG "$OUT/GEOBENCH.CFG"   # #205: one source, shared with the floppy DSK (pack_apps3)
 
 # --- /GBENCH: apps, modules, assets -------------------------------------------
-for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS; do
+for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS DISKUTIL; do
     cp "build/$a.RAW" "$SYS/$a.APP"
 done
 cp build/TELNET.RAW  "$SYS/TELNET.APP"      # #238: windowed ANSI/VT terminal + telnet client

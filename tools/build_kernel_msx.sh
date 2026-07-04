@@ -21,9 +21,10 @@ mkdir -p build/msx QA/MSX/GBENCH
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7640 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
+APPDEFS="-DGB_MSX2" DIALOGS=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x5F20 DOCRO=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
@@ -101,6 +102,7 @@ cp build/msx/DESKTOP.RAW  QA/MSX/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/GBENCH/FILEMGR.APP
 cp build/msx/NOTEPAD.RAW  QA/MSX/GBENCH/NOTEPAD.APP
 cp build/msx/SETTINGS.RAW QA/MSX/GBENCH/SETTINGS.APP
+cp build/msx/DISKUTIL.RAW QA/MSX/GBENCH/DISKUTIL.APP
 cp build/msx/XAOS.RAW     QA/MSX/GBENCH/XAOS.APP
 cp build/msx/ICONED.RAW   QA/MSX/GBENCH/ICONED.APP
 cp build/msx/VIEWER.RAW   QA/MSX/GBENCH/VIEWER.APP
