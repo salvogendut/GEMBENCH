@@ -343,6 +343,7 @@ static const char *win_title(void)               /* "Disk C/path 32MiB free" -> 
 
 /* DEFAULT.IST slot order (matches the packicons line in tools/build_kernel.sh).
    The file -> icon mapping lives here now, not in the kernel (#103). */
+#define ICON_FLOPPY 0         /* floppy drive icon (first packicons entry); DISKUTIL.APP reuses it */
 #define ICON_CLOCK 2
 #define ICON_GEOBENCH 4
 #define ICON_BASIC 5
@@ -413,6 +414,7 @@ static unsigned char entry_icon(const char *name)
         if (name_is(name, "XAOS"))    return ICON_FRACTAL;   /* the fractal generator (#116) */
         if (name_is(name, "VIEWER"))  return ICON_VIEWER;
         if (name_is(name, "TELNET"))  return ICON_TELNET;   /* #238 */
+        if (name_is(name, "DISKUTIL")) return ICON_FLOPPY;  /* the floppy formatter */
         return ICON_APP;      /* a .APP with no distinctive icon uses the generic app icon
                                  (slot 10), incl. SETTINGS (its gear slot is now the saver) */
     }
