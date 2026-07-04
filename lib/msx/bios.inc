@@ -18,6 +18,7 @@ _CREATE         equ   #44          ; create/truncate: DE=ASCIIZ, A=mode, B=attr
 _DCLOSE         equ   #45          ; close file handle: B=handle
 _READ           equ   #48          ; read: B=handle DE=buf HL=count -> HL=actual
 _WRITE          equ   #49          ; write: B=handle DE=buf HL=count
+_SEEK           equ   #4A          ; seek: B=handle A=method(0=start,2=end) DE:HL=offset
 _DELETE         equ   #4D          ; delete: DE=ASCIIZ
 _GETCD          equ   #59          ; get current directory: B=drive DE=64B buf
 _CHDIR          equ   #5A          ; change current directory: DE=ASCIIZ
