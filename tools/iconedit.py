@@ -484,20 +484,22 @@ class IconEditor(tk.Toplevel):
                 self.icons = load_ist(path)
                 self.mode = "IST"
             elif ext == ".spr":
+                # Auto-detect the cursor kind by size (unambiguous): 66 bytes = an
+                # MSX2 V9938 hardware sprite, 256 = a CPC Mode-1 masked cursor. No
+                # --platform flag needed to open the right one.
                 data = open(path, "rb").read()
-                if PLATFORM == 'msx2':
-                    if len(data) != MSX_SPR_LEN:
-                        raise ValueError(f"{path}: expected {MSX_SPR_LEN} bytes "
-                                         f"(MSX2 sprite), got {len(data)}")
+                if len(data) == MSX_SPR_LEN:
                     grid, self.msx_hotspot = decode_msx_sprite(data)
                     self.icons = [{"w": 4, "h": 16, "grid": grid}]
                     self.mode = "MSPR"
-                else:
-                    if len(data) != 4 * PHASE:
-                        raise ValueError(f"{path}: expected {4*PHASE} bytes, got {len(data)}")
+                elif len(data) == 4 * PHASE:
                     self.icons = [{"w": CUR_W, "h": CUR_H,
                                    "grid": decode_cursor_phase0(data)}]
                     self.mode = "SPR"
+                else:
+                    raise ValueError(f"{path}: not a cursor .SPR (expected "
+                                     f"{MSX_SPR_LEN} bytes for MSX2 or {4*PHASE} "
+                                     f"for CPC, got {len(data)})")
             else:
                 raise ValueError(f"unknown extension: {ext}")
         except Exception as e:
