@@ -29,22 +29,26 @@ targets **two platforms**: the CPC (Albireo card + AMSDOS floppy) and the
 
 ## Quick start
 
-Builds happen inside the project distrobox (RASM + SDCC + `mtools` on `PATH`). The
-staged media under `QA/` are committed, so you can run without building first.
+The ready-to-run media is committed under `QA/` — no build needed. Copy it to real
+hardware, or use the disk images in an emulator.
 
-```bash
-# Amstrad CPC — build + run the floppy in the 1984 emulator
-bash tools/build_kernel.sh
-1984 --memory=128 --disk-a=QA/GEOBENCH.DSK --autostart=GB
+### Amstrad CPC
 
-# MSX2 — build + run in openMSX
-bash tools/fetch_msx_deps.sh       # one-time: Nextor + NMS 8250 ROMs
-bash tools/build_kernel_msx.sh
-tools/run_msx.sh
-```
+- **Albireo / M4 card** — copy the **contents of [`QA/CARD/`](QA/CARD)** onto the
+  root of the card (an Albireo SD card, or an M4 card). On the CPC type `RUN"GB` —
+  the loader detects the board and boots the right kernel.
+- **Floppy** — write **`QA/GEOBENCH.DSK`** (the main disk) and
+  **`QA/COMPANION.DSK`** (the larger apps, extra savers and sample pictures, for
+  drive B) to two 3″ disks, or open the `.DSK` images in a CPC emulator (Caprice32,
+  WinAPE, …). Boot with `RUN"GB` (or `RUN"GBKERN`).
 
-Boot with `RUN"GB`. Full details — card images, the M4 board, the optional ROM —
-are in [docs/BUILDING.md](docs/BUILDING.md).
+### MSX2
+
+- Copy the **contents of [`QA/MSX/`](QA/MSX)** onto storage your MSX-DOS 2 / Nextor
+  setup mounts (SD, IDE, …) and run **`GBMSX.COM`** — or use it in an emulator such
+  as openMSX (see [docs/MSX2.md](docs/MSX2.md)).
+
+Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.md).
 
 ## Documentation
 
