@@ -1,7 +1,11 @@
 # Building, deploying and running
 
-This covers the **Amstrad CPC** build. For the MSX2 build, see
-[The MSX2 target](MSX2.md).
+The **Amstrad CPC** build is below; the **MSX2** build is in
+[Building for MSX2](#building-for-msx2). Both share the RASM kernel + SDCC apps
+and happen inside the project distrobox (RASM, SDCC, `mtools`/`dosfstools` on
+`PATH`).
+
+## Amstrad CPC
 
 The kernel is assembled with **RASM**; the apps are compiled with **SDCC**
 (`sdcc`, `sdasz80`, `makebin` on `PATH`). In practice development happens inside
@@ -59,3 +63,53 @@ one (`rom/GEOBENCH.ROM` is the archived IDE variant) — that does two things:
   prints a `GEOBENCH <commit>` banner at cold boot (like M4 or SymbOS) before BASIC's prompt.
 
 Flash the matching ROM into a free upper-ROM slot.
+
+## Building for MSX2
+
+The same kernel and app sources cross-build for the MSX2 (`-DPLATFORM_MSX` for the
+kernel, `-DGB_MSX2` for the apps). See [The MSX2 target](MSX2.md) for the runtime
+design; this is the build.
+
+```bash
+bash tools/fetch_msx_deps.sh       # one-time: Nextor system files + NMS 8250 ROMs
+bash tools/build_kernel_msx.sh     # the whole MSX2 distribution
+tools/run_msx.sh                   # boot it in openMSX (interactive)
+MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
+```
+
+`build_kernel_msx.sh` produces:
+
+- **`QA/MSX/`** — the loose MSX distribution (committed): `GBMSX.COM`, an
+  `AUTOEXEC.BAT` that runs it, `GEOBENCH.CFG`, the `GBENCH/` system folder
+  (fonts/icons/cursor/modules/apps/savers) and the sample pictures.
+- **`QA/GBMSX.IMG`** — a bootable 32 MB **FAT16 hard-disk image** (a local
+  artifact, git-ignored like the CPC card image). `tools/build_msx_img.sh` fills
+  it from `QA/MSX` plus the Nextor system files, so Nextor's Sunrise IDE driver
+  boots it straight to the desktop.
+
+**Assets are packaged automatically.** Anything dropped into `assets/iconsets`,
+`assets/backdrops` or `assets/pictures` is transcoded from CPC Mode 1 to V9938
+Screen 6 and staged for both root (viewable) and `GBENCH/` (selectable via
+`ICONS=`/`BACKDROP=`/`WALLPAPER=`) — the tools take a `--platform msx2` flag
+(`packicons`, `png2spr`, `picconv`, `png2backdrop`, `png2cpc`) or are dedicated
+transcoders (`pic_to_msx`, `ist_to_msx`, `bdp_to_msx`). The mouse pointer is a
+V9938 hardware sprite: a hand-edited **`assets/pointer.SPR`** (edit it with
+`tools/iconedit.py --platform msx2 assets/pointer.SPR`) is preferred over
+generating it from `assets/pointer.png`.
+
+### Deploying
+
+Copy the contents of **`QA/MSX/`** onto storage your MSX-DOS 2 / Nextor setup
+mounts (an SD card, IDE disk, …) and run **`GBMSX.COM`** (the `AUTOEXEC.BAT` runs
+it for you) — or write the whole `QA/GBMSX.IMG` to the device. It needs **MSX-DOS
+2** (mapper support); a bare MSX2 with only Disk BASIC / MSX-DOS 1 won't run it.
+
+### Boot floppy (experimental)
+
+`tools/build_msx_floppy.sh` assembles a single bootable **720 KB MSX-DOS 2 floppy**
+(`QA/GBMSX.DSK`) — MSX floppies are big enough that the whole ~612 KB distro fits
+on one disk. It carries third-party MSX-DOS 2 files (`MSXDOS2.SYS`, `COMMAND2.COM`)
+so, like `QA/GBMSX.IMG`, it is a local artifact. **Status:** it boots MSX-DOS 2 and
+GEOBENCH starts, but the display currently stays blanked under a floppy DOS2 setup
+(the disk ROM holds the screen off during floppy access) — under investigation; the
+IDE/SD image (`QA/GBMSX.IMG`) is the working path for now.
