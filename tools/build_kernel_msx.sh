@@ -21,7 +21,7 @@ mkdir -p build/msx QA/MSX/GBENCH
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7718 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7740 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
@@ -78,12 +78,15 @@ else
     python3 tools/png2spr.py --platform msx2 assets/pointer.png build/msx/DEFAULT.SPR cursor 11x13
 fi
 
-# Bootsplash (#196/#287): the CPC lollipop + build id, transcoded to Screen 6. The
-# MSX kernel does not incbin it (that is CPC-only) - boot_splash loads SPLASH.MOD
-# from disk, so we just stage the Screen-6 bitmap.
+# Bootsplash (#196/#287): the CPC lollipop, transcoded to Screen 6. The MSX
+# kernel does not incbin it (that is CPC-only) - boot_splash loads SPLASH.MOD
+# from disk, so we just stage the Screen-6 bitmap. DEBUG=TRUE selects the
+# SPLASHD.MOD variant with the build id.
 BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
-python3 tools/make_bootsplash.py assets/SPLASH.png build/msx/SPLASH_BUILD.png "$BUILD_COMMIT"
+python3 tools/make_bootsplash.py assets/SPLASH.png build/msx/SPLASH_BUILD.png "$BUILD_COMMIT" GEOBENCH
 python3 tools/png2cpc.py --platform msx2 build/msx/SPLASH_BUILD.png build/msx/SPLASH.BIN splash 96x184
+python3 tools/make_bootsplash.py assets/SPLASH.png build/msx/SPLASHD_BUILD.png "$BUILD_COMMIT"
+python3 tools/png2cpc.py --platform msx2 build/msx/SPLASHD_BUILD.png build/msx/SPLASHD.BIN splash 96x184
 
 # --- the kernel + the .COM stub ---------------------------------------------
 # RASM exits 0 even on assembly errors, so stale outputs would silently ship:
@@ -129,6 +132,7 @@ cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
 cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
 cp build/msx/SPLASH.BIN  QA/MSX/GBENCH/SPLASH.MOD
+cp build/msx/SPLASHD.BIN QA/MSX/GBENCH/SPLASHD.MOD
 cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/
 cp build/msx/DEFAULT.IST QA/MSX/GBENCH/
 cp build/msx/DEFAULT.SPR QA/MSX/GBENCH/

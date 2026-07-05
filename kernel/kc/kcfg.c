@@ -108,6 +108,15 @@ static void parse_inks(const char *p, const char *e, unsigned char *out)
     }
 }
 
+static unsigned char value_is_true(const char *p, const char *e)
+{
+    if (e - p < 4)
+        return 0;
+    if (p[0] != 'T' || p[1] != 'R' || p[2] != 'U' || p[3] != 'E')
+        return 0;
+    return (p + 4 == e || p[4] == 0 || is_eol(p[4])) ? 1 : 0;
+}
+
 void gb_make_83(const char *stem, const char *ext, char *dst)
 {
     unsigned char i = 0;
@@ -145,7 +154,7 @@ void gb_fmt_mem(unsigned int kb, char *dst)
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out, char *cursor_out,
                   char *backdrop_out, unsigned char *backdrop_drive_out,
-                  unsigned char *inks_out)
+                  unsigned char *inks_out, unsigned char *debug_out)
 {
     const char *p = buf;
     const char *e = buf + len;
@@ -173,6 +182,8 @@ void gb_cfg_parse(const char *buf, unsigned int len,
             copy_path_val(v, e, backdrop_out, GB_CFG_VAL_MAX, backdrop_drive_out);
         else if ((v = match_key(p, e, "INKS=")) != 0)
             parse_inks(v, e, inks_out);
+        else if ((v = match_key(p, e, "DEBUG=")) != 0 && debug_out)
+            *debug_out = value_is_true(v, e);
 
         while (p < e && !is_eol(*p))  /* advance to the end of this line */
             ++p;

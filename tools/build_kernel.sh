@@ -43,8 +43,10 @@ if ! git diff --quiet --ignore-submodules -- 2>/dev/null \
 fi
 echo "Build id: GB $BUILD_COMMIT"
 
-python3 tools/make_bootsplash.py assets/SPLASH.png build/SPLASH_BUILD.png "$BUILD_COMMIT"
-python3 tools/png2cpc.py build/SPLASH_BUILD.png build/SPLASH.BIN splash 96x184  # #196: bootsplash + build id
+python3 tools/make_bootsplash.py assets/SPLASH.png build/SPLASH_BUILD.png "$BUILD_COMMIT" GEOBENCH
+python3 tools/png2cpc.py build/SPLASH_BUILD.png build/SPLASH.BIN splash 96x184
+python3 tools/make_bootsplash.py assets/SPLASH.png build/SPLASHD_BUILD.png "$BUILD_COMMIT"
+python3 tools/png2cpc.py build/SPLASHD_BUILD.png build/SPLASHD.BIN splash 96x184  # DEBUG=TRUE bootsplash with build id
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).

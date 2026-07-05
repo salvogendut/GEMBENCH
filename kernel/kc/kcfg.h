@@ -25,13 +25,14 @@
  *   inks_out     <- INKS=     (5 bytes: the 4 Mode-1 pens + the border, CPC hardware
  *                             inks 0-26, comma-separated "d,l,k,a,b"; a missing field
  *                             keeps the seeded default for that pen)
+ *   debug_out    <- DEBUG=TRUE (1 only for that exact value, 0 for any other DEBUG=)
  *
  * '#' at the start of a line is a comment; CR (13) and LF (10) end lines.
  */
 void gb_cfg_parse(const char *buf, unsigned int len,
                   char *icons_out, char *font_out, char *cursor_out,
                   char *backdrop_out, unsigned char *backdrop_drive_out,
-                  unsigned char *inks_out);
+                  unsigned char *inks_out, unsigned char *debug_out);
 
 /* gb_make_83: write an 11-byte AMSDOS 8.3 name into dst (8 chars space-padded +
  * the 3-char extension) from a NUL-terminated stem (<=8 chars used) and ext.

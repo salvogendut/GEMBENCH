@@ -155,22 +155,23 @@ bdi_solid       ld    a,1
 SPL_X           equ   28           ; lollipop left byte col (centred: (80-24)/2)
 SPL_Y           equ   12           ; lollipop top line
 SPL_WB          equ   24           ; width in bytes (96 px)
-SPL_H           equ   184          ; height in rows (logo + build id below the bar)
+SPL_H           equ   184          ; height in rows (logo + label below the bar)
 BAR_X           equ   16           ; progress bar left byte col
 BAR_Y           equ   170          ; progress bar top line
 BAR_WB          equ   48           ; full bar width in bytes (192 px)
 BAR_H           equ   10           ; bar height in rows
 BAR_SEG         equ   12           ; bytes per boot_tick; exactly 4 ticks fill BAR_WB
-; boot_splash: load /GEOBENCH/SPLASH.BIN into PAGE_APP0 and blit it, then draw the
-; empty (black) bar backing. Missing file -> skipped (CF clear). Called once from
-; kernel_main, after set_palette and before assets_load.
+; boot_splash: load the splash bitmap selected by GBCFG.MOD (fs_req_name holds
+; SPLASH.MOD or DEBUG=TRUE's SPLASHD.MOD), blit it, then draw the empty black bar
+; backing. Missing file -> skipped (CF clear). Called once from kernel_main, after
+; set_palette and before assets_load.
 boot_splash
                 ld    a,(bank_cur)
                 push  af
                 di
-                ld    hl,splash_name
+                ld    hl,fs_req_name
                 call  load_app0              ; -> APP_BASE in PAGE_APP0, CF = loaded
-                jr    nc,bsp_done            ; no SPLASH.BIN -> plain blue boot
+                jr    nc,bsp_done            ; no splash bitmap -> plain blue boot
                 ld    hl,spl_dims            ; sb_x,sb_y,sb_w,sb_h are consecutive (screen.asm)
                 ld    de,sb_x
                 ld    bc,4
@@ -190,7 +191,6 @@ bsp_done
                 call  bank_set
                 ei
                 ret
-splash_name     db    "SPLASH  MOD"          ; 8.3, space-padded
 spl_dims        db    SPL_X,SPL_Y,SPL_WB,SPL_H
 
 ; boot_tick: advance the load bar by one red segment over the black backing, then hold
@@ -222,8 +222,8 @@ bar_w           db    0
                 endif                          ; (ifndef PLATFORM_MSX around the bootsplash)
 
 ; --- bootsplash, MSX2 (#287) ----------------------------------------------
-; The MSX counterpart of the CPC bootsplash: the same lollipop + build-id
-; (SPLASH.MOD, now Screen-6 art) blitted centred, plus a 4-tick load bar. The
+; The MSX counterpart of the CPC bootsplash: the same lollipop + label
+; (SPLASH*.MOD, now Screen-6 art) blitted centred, plus a 4-tick load bar. The
 ; screen is already pen-0 blue (msx_video_init + set_palette); the desktop's
 ; first repaint clears it. Uses the shared VRAM primitives restore_block /
 ; fill_block / pen_to_byte and the retrace-paced wait msx_wait_tick, so no CPC
@@ -239,14 +239,15 @@ BAR_WB          equ   48           ; 192 px full bar
 BAR_H           equ   10
 BAR_SEG         equ   12           ; 4 ticks fill BAR_WB
 BOOT_HOLD       equ   18           ; frames held per tick (~0.36 s at 50 Hz)
-; boot_splash: load SPLASH.MOD to APP_BASE, blit it, draw the black bar backing.
+; boot_splash: load the splash bitmap selected by GBCFG.MOD to APP_BASE, blit it,
+; draw the black bar backing.
 ; Caller-of-load_app0 rule: save/restore the page + DI/EI here (like run_cfgmod).
 boot_splash
                 ld    a,(bank_cur)
                 push  af
                 di
-                ld    hl,splash_name
-                call  load_app0              ; SPLASH.MOD -> APP_BASE, CF = loaded
+                ld    hl,fs_req_name
+                call  load_app0              ; selected splash -> APP_BASE, CF = loaded
                 jr    nc,bsp_done            ; missing -> plain blue boot
                 ld    a,SPL_X
                 ld    (sb_x),a
@@ -267,7 +268,6 @@ bsp_done
                 call  bank_set
                 ei
                 ret
-splash_name     db    "SPLASH  MOD"          ; 8.3, space-padded
 
 ; bsp_bar: A = pen, B = width in bytes -> fill (BAR_X, BAR_Y, B, BAR_H) via fill_block.
 bsp_bar
