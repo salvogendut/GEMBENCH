@@ -2319,8 +2319,6 @@ cfg_img         incbin "../build/GBCFG.RAW"     ; config-parser C module, as GBC
 cfg_imgend
 fat_img         incbin "../build/GBFAT.RAW"     ; FAT16/IDE write module, as GBFAT.BIN
 fat_imgend
-flsv_img        incbin "../build/FLOPPYSV.RAW"  ; AMSDOS/floppy write module, as FLOPPYSV.BIN (#135)
-flsv_imgend
 net_img         incbin "../build/GBNET.RAW"     ; W5100 networking module, as GBNET.MOD (#238)
 net_imgend
 font_img        incbin "../build/DEFAULT.FNT"   ; packaged on the disk as DEFAULT.FNT
@@ -2360,7 +2358,6 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.MOD",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.MOD",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
-                save  "FLOPPYSV.MOD",flsv_img,flsv_imgend-flsv_img,DSK,"build/gbkern.dsk"
                 save  "GBNET.MOD",net_img,net_imgend-net_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"

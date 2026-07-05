@@ -183,7 +183,9 @@ fslf_scan
                 ld    a,(ix+12)                      ; first extent only
                 or    a
                 jr    nz,fslf_next
+                push  bc
                 call  fsam_namematch
+                pop   bc
                 jr    z,fslf_found
 fslf_next
                 push  bc
@@ -197,21 +199,13 @@ fslf_toobig
                 ret
 
 fslf_found
-                ld    a,(ix+15)                      ; on-disk bytes = Rc*128 > buffer?
-                ld    l,a
-                ld    h,0
-                add   hl,hl
-                add   hl,hl
-                add   hl,hl
-                add   hl,hl
-                add   hl,hl
-                add   hl,hl
-                add   hl,hl                           ; Rc * 128
-                ld    de,(fs_load_max)
-                ex    de,hl
-                or    a
-                sbc   hl,de                           ; max - Rc*128
-                jr    c,fslf_toobig                   ; Rc*128 > max -> refuse
+                ld    hl,FS_XFLAGS
+                bit   0,(hl)
+                jr    z,fslf_whole                   ; bit0 clear -> normal whole-file load
+                dec   (hl)                           ; clear bit0; avoid recursive module load
+                ld    hl,#FFFC
+                jp    fsamv_common                   ; paged module handles chunked copy reads
+fslf_whole
                 push  ix                              ; copy 16 block numbers out
                 pop   hl
                 ld    de,16
@@ -219,14 +213,19 @@ fslf_found
                 ld    de,fslf_blocks
                 ld    bc,16
                 ldir
+                ld    a,(ix+15)                      ; on-disk bytes = Rc*128 > buffer?
+                call  fslf_rc_bytes
+                ld    de,(fs_load_max)
+                ex    de,hl
+                or    a
+                sbc   hl,de                           ; max - Rc*128
+                jr    c,fslf_toobig                   ; Rc*128 > max -> refuse
                 ld    a,(ix+15)                      ; Rc records -> sectors = ceil(Rc/4)
                 add   a,3
                 rrca                                  ; /4 (Rc<=128 so bit7 clear after +3)
                 rrca
                 and   #3F
                 ld    (fslf_secs),a
-                ld    a,(ix+15)                      ; remember Rc for the no-header size
-                ld    (fslf_rc),a
 
                 ld    hl,(fs_load_dst)
                 ld    (fsam_dst),hl                  ; fsam_read_sector advances this
@@ -240,40 +239,7 @@ fslf_rd
                 jr    z,fslf_done
                 dec   a
                 ld    (fslf_secs),a
-
-                ld    a,(fslf_si)                    ; block index = si / 2
-                srl   a
-                ld    e,a
-                ld    d,0
-                ld    hl,fslf_blocks
-                add   hl,de
-                ld    l,(hl)                          ; L = block*2 + (si & 1)
-                ld    h,0
-                add   hl,hl
-                ld    a,(fslf_si)
-                and   1
-                or    l
-                ld    l,a
-                call  fsam_div9                       ; HL/9 -> B=track, A=remainder
-                ld    c,a                             ; remainder
-                ld    a,b                             ; track changed? seek
-                ld    e,a                             ; keep track in E
-                ld    a,(fslf_curtrk)
-                cp    e
-                jr    z,fslf_noseek
-                ld    a,e
-                ld    (fslf_curtrk),a
-                push  bc
-                ld    a,e
-                call  fsam_seek
-                pop   bc
-fslf_noseek
-                ld    a,(fslf_curtrk)
-                ld    d,a                             ; D = track
-                ld    a,#C1
-                add   a,c
-                ld    e,a                             ; E = physical sector
-                call  fsam_read_sector
+                call  fslf_read_sector
 
                 ld    a,(fslf_si)
                 inc   a
@@ -324,7 +290,53 @@ fslf_nc
                 ldir
                 jr    fslf_ok
 fslf_nohdr
-                ld    a,(fslf_rc)                    ; no header: size = Rc * 128
+                ld    a,(ix+15)                      ; no header: size = Rc * 128
+                call  fslf_rc_bytes
+                ld    (fs_ent_size),hl
+                ld    hl,0
+                ld    (fs_ent_size+2),hl
+fslf_ok
+                scf
+                ret
+
+; fslf_read_sector: read fslf_si's sector from fslf_blocks into (fsam_dst).
+fslf_read_sector
+                ld    a,(fslf_si)                    ; block index = si / 2
+                srl   a
+                ld    e,a
+                ld    d,0
+                ld    hl,fslf_blocks
+                add   hl,de
+                ld    l,(hl)                          ; L = block*2 + (si & 1)
+                ld    h,0
+                add   hl,hl
+                ld    a,(fslf_si)
+                and   1
+                or    l
+                ld    l,a
+                call  fsam_div9                       ; HL/9 -> B=track, A=remainder
+                ld    c,a                             ; remainder
+                ld    a,b                             ; track changed? seek
+                ld    e,a                             ; keep track in E
+                ld    a,(fslf_curtrk)
+                cp    e
+                jr    z,fslfr_noseek
+                ld    a,e
+                ld    (fslf_curtrk),a
+                push  bc
+                ld    a,e
+                call  fsam_seek
+                pop   bc
+fslfr_noseek
+                ld    a,(fslf_curtrk)
+                ld    d,a                             ; D = track
+                ld    a,#C1
+                add   a,c
+                ld    e,a                             ; E = physical sector
+                jp    fsam_read_sector
+
+; fslf_rc_bytes: A = record count -> HL = A * 128.
+fslf_rc_bytes
                 ld    l,a
                 ld    h,0
                 add   hl,hl
@@ -333,12 +345,7 @@ fslf_nohdr
                 add   hl,hl
                 add   hl,hl
                 add   hl,hl
-                add   hl,hl                           ; *128
-                ld    (fs_ent_size),hl
-                ld    hl,0
-                ld    (fs_ent_size+2),hl
-fslf_ok
-                scf
+                add   hl,hl
                 ret
 
                 else                          ; #152 GB_ROM resident: thin ROM-call stubs
@@ -353,7 +360,10 @@ fsam_dir_next   ld    hl,#C00F               ; ROM idx3
                 jr    fsam_ent_out
 fsam_present    ld    hl,#C015               ; ROM idx5 (presence probe; no entry output)
                 jp    gb_rom_fsam_invoke
-fsam_load_file  ld    hl,fs_req_name          ; marshal inputs into the transfer area
+fsam_load_file  ld    a,(FS_XFLAGS)
+                and   1
+                jp    nz,fsam_load_chunk_mod
+                ld    hl,fs_req_name          ; marshal inputs into the transfer area
                 ld    de,FSAM_IO_REQ
                 ld    bc,11
                 ldir
@@ -404,6 +414,14 @@ fsam_free_mod_op
                 ld    (FSV_TX_LEN),hl
                 jp    floppysv_run
 
+                ifdef GB_ROM_STUBS
+fsam_load_chunk_mod
+                xor   a
+                ld    (FS_XFLAGS),a
+                ld    hl,#FFFC
+                jp    fsamv_common
+                endif
+
 ; fsam_delete_file: ask FLOPPYSV.MOD to mark matching directory extents deleted
 ; and write the directory back. FSV_TX_LEN=#FFFF is the module operation marker.
 fsam_delete_file
@@ -412,7 +430,7 @@ fsam_delete_file
 
 fsam_save_file
                 ld    hl,(fs_save_len)        ; refuse > staging cap
-                ld    de,FSV_TX_MAX
+                ld    de,FSV_TX_MAX+1
                 or    a
                 sbc   hl,de
                 jr    c,fsamv_ok
@@ -432,8 +450,7 @@ fsamv_common
                 ld    (FSV_TX_LEN),hl
                 ld    hl,fs_req_name          ; name -> the transfer area
                 ld    de,FSV_TX_NAME
-                ld    bc,11
-                ldir
+                call  copy11
                 ld    a,(fsam_unit)           ; which floppy unit (0=A,1=B)
                 ld    (FSV_TX_UNIT),a
                 ; fall through to load + run the module
@@ -445,10 +462,9 @@ floppysv_run
                 ld    hl,floppysv_modname     ; #238: shared PAGE_DATA loader (was an inline copy)
                 call  run_data_module
                 ld    a,(FSV_TX_RES)
-                or    a
-                ret   z
+                rra
+                ret   nc
                 ld    hl,(FSV_TX_LEN)
-                scf
                 ret
 floppysv_modname db    "FLOPPYSVMOD"          ; 8.3, space-padded
                 endif                          ; IN_GBROM (write stub resident-only)
@@ -461,7 +477,6 @@ fslf_blocks     equ   #1490        ; #196: relocated to low RAM (was defs 16); t
                                    ; 16 allocation block numbers, rebuilt per fs_load_file (scratch)
 fslf_secs       defb  0            ; sectors left to read
 fslf_si         defb  0            ; sector index within the file
-fslf_rc         defb  0            ; record count (for the no-header size)
 fslf_curtrk     defb  0            ; track the head is currently on
 fsam_idx        defb  0            ; directory-listing cursor
                 endif
