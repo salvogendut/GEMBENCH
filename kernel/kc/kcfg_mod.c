@@ -30,6 +30,7 @@
 #define KCFG_BDPNAME   ((char *)0x1231)            /* out: BACKDROP tile filename (11-byte 8.3) */
 #define KCFG_BDDRIVE   (*(unsigned char *)0x123C)  /* out: 0/1/2=C/A/B, 0xFF=boot/system */
 #define KCFG_BD_SOLID  (*(unsigned char *)0x1290)  /* out: 1 = solid desktop (BACKDROP=SOLID/absent) */
+#define FS_REQ_NAME    ((char *)0x14EC)            /* out: boot_splash consumes this filename */
 /* WALLPAPER= is NOT parsed here (#212/#216): every free low-RAM transfer cell collides with
    something (dir scratch #12xx, the floppy cursor sector-overread #1500..#16FF, the GBUI dialog
    block #1700) - the last broke the System menu. The desktop parses WALLPAPER= itself, straight
@@ -47,6 +48,7 @@ void main(void)
     char font[9];
     char cursor[9];
     char backdrop[9];
+    unsigned char debug = 0;
 
     set_default(icons);                 /* absent keys keep the default */
     set_default(font);
@@ -58,11 +60,12 @@ void main(void)
     KCFG_INKS[2] = 0;  KCFG_INKS[3] = 6;    /* blue border (matches set_palette's seed) */
     KCFG_INKS[4] = 1;
     gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, backdrop,
-                 &KCFG_BDDRIVE, KCFG_INKS);
+                 &KCFG_BDDRIVE, KCFG_INKS, &debug);
     gb_make_83(icons,    "IST", KCFG_ICONNAME);
     gb_make_83(font,     "FNT", KCFG_FONTNAME);
     gb_make_83(cursor,   "SPR", KCFG_CURSORNAME);
     gb_make_83(backdrop, "BDP", KCFG_BDPNAME);
+    gb_make_83(debug ? "SPLASHD" : "SPLASH", "MOD", FS_REQ_NAME);
     /* tell the kernel whether to load a tile: SOLID (the default) = plain desktop. */
     KCFG_BD_SOLID = (backdrop[0] == 'S' && backdrop[1] == 'O' && backdrop[2] == 'L' &&
                      backdrop[3] == 'I' && backdrop[4] == 'D' && backdrop[5] == 0) ? 1 : 0;

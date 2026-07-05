@@ -69,6 +69,7 @@ cp build/M4SAVE.RAW "$SYS/M4SAVE.MOD"       # #259: M4 C_OPEN/C_WRITE/C_CLOSE sa
 cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST build/PAINT.IST \
    build/DEFAULT.SPR build/HAND.SPR "$SYS/"
 cp build/SPLASH.BIN "$SYS/SPLASH.MOD"         # #196: bootsplash lollipop bitmap (.MOD, #234)
+cp build/SPLASHD.BIN "$SYS/SPLASHD.MOD"       # DEBUG=TRUE variant with the build id
 for bdp in build/*.BDP; do                    # #128: backdrop tiles (BACKDROP=<name>)
     [ -e "$bdp" ] && cp "$bdp" "$SYS/"
 done

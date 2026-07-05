@@ -19,6 +19,8 @@
 #define DEF_Y    26
 #define DEF_W    56            /* default size; the window is resizeable (#81) */
 #define DEF_H    158           /* taller default so full icons still show ~3 rows (#88) */
+#define CASCADE_X 4
+#define CASCADE_Y 4
 #define MIN_W    24            /* min size keeps the title + a couple of rows usable */
 #define MIN_H    62
 #define TITLE_H  14
@@ -566,6 +568,7 @@ static void draw_body(void)
     else                 draw_list_view();
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip, bottom-right (#81) */
 }
+
 /* draw: interactive content redraw (manages the cursor) - the scroll/select paths use it
    to refresh the listing without a full-stack repaint or a title change. */
 static void draw(void)
@@ -677,9 +680,7 @@ static void fm_view(unsigned char item)
         top = 0; nsel = 0;
         clamp_top();
         gb_curhide();
-        gb_fill(CT_X, CT_Y, CT_W, CT_H, 0);   /* clear the old layout: icons<->list use a
-                                                 different grid, so the new one must paint on
-                                                 a blank content rect, not over the old (#153) */
+        gb_fill(CT_X, CT_Y, CT_W, CT_H, 0);   /* icons<->list must repaint over a blank content rect */
         draw_body();
         gb_curshow();
     }
@@ -899,8 +900,8 @@ void main(void)
 {
     nsel = 0; dc_timer = 0;
     my_drive = gb_get_drive();   /* the drive the desktop opened us on (#65) */
-    win_x = DEF_X + my_drive * 8;   /* cascade so two drive windows don't fully overlap */
-    win_y = DEF_Y + my_drive * 14;
+    win_x = DEF_X + my_drive * CASCADE_X;   /* cascade drive windows, but keep Disk B on-screen */
+    win_y = DEF_Y + my_drive * CASCADE_Y;
     fmmw.x = win_x;              /* register the window at the cascaded position */
     fmmw.y = win_y;
     gb_wm_managed(&fmmw);        /* register first (no draw, focus) so gb_set_name/fs_load
@@ -919,5 +920,7 @@ void main(void)
     top = 0;
     clamp_top();
     fmmw.title = win_title();    /* build "<drive><path>" before the first paint (#146) */
+    gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8); /* opening one FM can expose older stacked FM
+                                                  windows outside the new window's damage rect */
     gb_restore_parent();         /* first paint: WM chrome + fm_draw */
 }

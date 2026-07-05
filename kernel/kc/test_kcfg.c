@@ -24,7 +24,7 @@ static void check(const char *name, const char *cfg, unsigned int len,
     strcpy(cursor, "DEFAULT");
     strcpy(backdrop, "SOLID");
 
-    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, 0, inks);
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, 0, inks, 0);
 
     if (strcmp(icons, want_icons) != 0 || strcmp(font, want_font) != 0) {
         printf("FAIL %-28s icons=\"%s\" (want \"%s\")  font=\"%s\" (want \"%s\")\n",
@@ -45,7 +45,7 @@ static void checkcur(const char *name, const char *cfg, unsigned int len,
     char backdrop[GB_CFG_VAL_MAX + 1];
     unsigned char inks[5] = { 1, 26, 0, 6, 1 };
     strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT"); strcpy(backdrop, "SOLID");
-    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, 0, inks);
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, 0, inks, 0);
     if (strcmp(cursor, want_cursor) != 0) {
         printf("FAIL %-28s cursor=\"%s\" (want \"%s\")\n", name, cursor, want_cursor);
         ++failures;
@@ -62,7 +62,7 @@ static void checkbd(const char *name, const char *cfg, unsigned int len, const c
     char backdrop[GB_CFG_VAL_MAX + 1];
     unsigned char inks[5] = { 1, 26, 0, 6, 1 };
     strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT"); strcpy(backdrop, "SOLID");
-    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, 0, inks);
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, 0, inks, 0);
     if (strcmp(backdrop, want) != 0) {
         printf("FAIL %-28s backdrop=\"%s\" (want \"%s\")\n", name, backdrop, want);
         ++failures;
@@ -80,7 +80,7 @@ static void checkbdpath(const char *name, const char *cfg, unsigned int len,
     unsigned char drive = GB_CFG_DRIVE_NONE;
     unsigned char inks[5] = { 1, 26, 0, 6, 1 };
     strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT"); strcpy(backdrop, "SOLID");
-    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, &drive, inks);
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, &drive, inks, 0);
     if (strcmp(backdrop, want) != 0 || drive != want_drive) {
         printf("FAIL %-28s backdrop=\"%s\" drive=%u (want \"%s\" drive=%u)\n",
                name, backdrop, drive, want, want_drive);
@@ -101,7 +101,7 @@ static void checkinks(const char *name, const char *cfg, unsigned int len,
     char backdrop[GB_CFG_VAL_MAX + 1];
     unsigned char inks[5] = { 1, 26, 0, 6, 1 };
     strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT"); strcpy(backdrop, "SOLID");
-    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, 0, inks);
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, 0, inks, 0);
     if (inks[0] != d || inks[1] != l || inks[2] != k || inks[3] != a || inks[4] != b) {
         printf("FAIL %-28s inks=%u,%u,%u,%u,%u (want %u,%u,%u,%u,%u)\n", name,
                inks[0], inks[1], inks[2], inks[3], inks[4], d, l, k, a, b);
@@ -112,6 +112,25 @@ static void checkinks(const char *name, const char *cfg, unsigned int len,
     }
 }
 #define CHECKINKS(name, lit, d, l, k, a, b) checkinks((name), (lit), (unsigned)sizeof(lit) - 1, (d), (l), (k), (a), (b))
+
+/* Parse and check DEBUG=TRUE. Only the exact uppercase TRUE value enables it. */
+static void checkdebug(const char *name, const char *cfg, unsigned int len,
+                       unsigned char want)
+{
+    char icons[GB_CFG_VAL_MAX + 1], font[GB_CFG_VAL_MAX + 1], cursor[GB_CFG_VAL_MAX + 1];
+    char backdrop[GB_CFG_VAL_MAX + 1];
+    unsigned char inks[5] = { 1, 26, 0, 6, 1 };
+    unsigned char debug = 0;
+    strcpy(icons, "DEFAULT"); strcpy(font, "DEFAULT"); strcpy(cursor, "DEFAULT"); strcpy(backdrop, "SOLID");
+    gb_cfg_parse(cfg, len, icons, font, cursor, backdrop, 0, inks, &debug);
+    if (debug != want) {
+        printf("FAIL %-28s debug=%u (want %u)\n", name, debug, want);
+        ++failures;
+    } else {
+        printf("ok   %-28s debug=%u\n", name, debug);
+    }
+}
+#define CHECKDEBUG(name, lit, w) checkdebug((name), (lit), (unsigned)sizeof(lit) - 1, (w))
 
 /* gb_make_83 builds an 11-byte 8.3 name; compare against an explicit literal
  * (which includes the space padding). */
@@ -168,6 +187,11 @@ int main(void)
     CHECKINKS("inks partial",      "INKS=5\r\n",                    5, 26, 0, 6, 1);
     CHECKINKS("inks four fields",  "INKS=9,11,2,3\r\n",             9, 11, 2, 3, 1);
     CHECKINKS("inks with others",  "FONT=F\r\nINKS=1,2,3,4,7\r\nICONS=I\r\n", 1, 2, 3, 4, 7);
+
+    CHECKDEBUG("debug absent",     "ICONS=X\r\n",                   0);
+    CHECKDEBUG("debug true",       "DEBUG=TRUE\r\n",                1);
+    CHECKDEBUG("debug false",      "DEBUG=FALSE\r\n",               0);
+    CHECKDEBUG("debug exact true", "DEBUG=TRUEISH\r\n",             0);
 
     CHECKBD("backdrop absent",     "ICONS=X\r\n",                   "SOLID");
     CHECKBD("backdrop set",        "BACKDROP=WAVES\r\n",            "WAVES");
