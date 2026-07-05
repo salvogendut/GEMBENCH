@@ -28,6 +28,7 @@ base          0x1310  0x1334  menu_def                -             top-bar menu
 base          0x1335  0x1337  fs_drive_state          -             current drive, boot drive, system-load browse scratch
 base          0x1338  0x133B  repaint_clip            -             WM damage clip (x,y,w,h), also read by desktop wallpaper blits
 base          0x1340  0x1347  repaint_handlers_legacy -             legacy repaint handler table
+base          0x1348  0x134A  pic_loader_state        -             second picture bank plus transient chunk-loader offset
 base          0x1350  0x144B  wm_state                -             WM table, z-order, drag state, app page pool, MW_RECT
 base          0x144C  0x144F  fs_copy_xfer            -             chunked copy: FS_LOAD_OFS (24-bit) + FS_XFLAGS (chunk-read/append/chunk-save)
 base          0x1450  0x1480  text_copy_scratch       scratch_1450  gb_text string copy

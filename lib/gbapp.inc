@@ -93,8 +93,7 @@ GB_CURHIDE      equ   GB_KERNEL+36 ; #8024  lift the pointer (before drawing und
 GB_LAUNCH       equ   GB_KERNEL+39 ; #8027  reserved legacy current-entry launch stub
 GB_GETARG       equ   GB_KERNEL+42 ; #802A  -> HL = launch arg (11-byte 8.3 name
                                    ;        of the file the app was opened with)
-GB_RUN          equ   GB_KERNEL+45 ; #802D  run a named app: HL = 8.3 app name;
-                                   ;        runs in the next bank page, returns on quit
+GB_RUN          equ   GB_KERNEL+45 ; #802D  reserved legacy modal-run slot (no-op)
 GB_ICON         equ   GB_KERNEL+48 ; #8030  full icon blit: A=slot B=x C=y
 GB_FILL         equ   GB_KERNEL+51 ; #8033  filled rect: B=x C=y D=w E=h A=pen
 GB_SAVERECT     equ   GB_KERNEL+54 ; #8036  save a screen rect to a buffer:

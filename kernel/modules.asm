@@ -7,15 +7,23 @@
 ; + write UI_RES, then restore. Returns BC = UI_RES for the C trampoline. The dialog is
 ; modal: this call blocks until the user picks/cancels.
 ; run_data_module: the shared PAGE_DATA module loader (#238). HL = 11-byte module name.
-; Save the caller's page, map PAGE_DATA, load the named module to DATA_MODTOP (#6000)
-; from the boot drive, CALL it, restore the page. CF set = loaded (NC = missing). One
-; copy instead of three (GB_UI + GB_NET + the floppy-write stub) - reclaims the resident
+; Save the caller's page and fs_load_* request, map PAGE_DATA, load the named module
+; to DATA_MODTOP (#6000) from the boot drive, restore fs_load_* for the module's own
+; operation, CALL it, restore the page. CF set = loaded (NC = missing). One copy
+; instead of three (GB_UI + GB_NET + the floppy-write stub) - reclaims the resident
 ; bytes the net hook needs.
 run_data_module
+                ex    de,hl                    ; keep the module-name pointer while HL
+                                               ; saves the caller's fs_load_* request.
                 ld    a,(bank_cur)
                 push  af
+                ld    hl,(fs_load_max)
+                push  hl
+                ld    hl,(fs_load_dst)
+                push  hl
                 LD_A_PAGE_DATA
                 call  bank_set
+                ex    de,hl
                 ld    de,fs_req_name          ; HL (name) -> fs_req_name
                 ld    bc,11
                 ldir
@@ -24,6 +32,10 @@ run_data_module
                 ld    hl,DATA_MODTOP          ; #6000
                 ld    (fs_load_dst),hl
                 call  fs_load_sys            ; module -> #6000 (boot drive, preserves browse dir)
+                pop   de
+                ld    (fs_load_dst),de
+                pop   de
+                ld    (fs_load_max),de
                 jr    nc,rdm_miss
                 call  DATA_MODTOP            ; run it
                 pop   af

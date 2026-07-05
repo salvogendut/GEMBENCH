@@ -82,8 +82,7 @@ gft_band        push  bc
 gft_hang        jr    gft_hang
                 endif
                 call  boot_tick              ; #196: bar 4/4 (full) just before the desktop loads
-                ld    hl,name_desktop
-                call  launch_app             ; the WM master loop never returns
+                call  boot_desktop           ; the WM master loop never returns
 km_finish                                      ; reached by k_exit's longjmp
                 di
                 ld    hl,MSX_HOOKSAVE        ; restore the original H.TIMI hook

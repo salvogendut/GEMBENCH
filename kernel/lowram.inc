@@ -11,6 +11,8 @@ PIC_PAGE        equ   #130B        ; #164 banked Viewer picture buffer: the borr
 PIC_WB          equ   #130C        ; (0 = none) + the parsed .PIC header the Viewer reads back:
 PIC_H           equ   #130D        ; width in bytes, height in rows (16-bit #130D/E - tall pics
 PIC_OFF         equ   #130F        ; exceed 255, #166), and the bitmap offset (6 v1 / 14 v2).
+PIC_PAGE2       equ   #1348        ; optional second picture bank for .PIC files >16K.
+PIC_OFS         equ   #1349        ; transient k_pic_open chunk loader state.
 
                 ifdef GB_ROM                  ; #152: the floppy read backend (fs_amsdos) is offloaded
 FS_RDIO_LOWRAM  equ   1                       ; to GEOBENCH.ROM; its scratch state must live in fixed

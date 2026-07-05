@@ -111,6 +111,28 @@ fs_dir_next
 fs_load_file
                 ld    hl,(fs_p_load)
                 jp    (hl)
+; fs_chunk_to_dst: CPC chunk-read modules stage data in the low-RAM module buffer (#2200).
+; If the caller requested a different fs_load_dst, copy the returned chunk there while the
+; caller's page is mapped. HL = bytes read. Returns CF set, fs_ent_size = HL.
+fs_chunk_to_dst
+                ld    (fs_ent_size),hl
+                ld    b,h
+                ld    c,l
+                ld    hl,0
+                ld    (fs_ent_size+2),hl
+                ld    a,b
+                or    c
+                jr    z,fsctd_done
+                ld    hl,(fs_load_dst)
+                ld    de,#2200
+                or    a
+                sbc   hl,de
+                jr    z,fsctd_done
+                ld    de,(fs_load_dst)
+                ld    hl,#2200
+                ldir
+fsctd_done     scf
+                ret
 ; fs_load_cur_sys: load fs_req_name from the CURRENT drive's system directory,
 ; preserving the current directory and returning fs_load_file's CF.
 fs_load_cur_sys

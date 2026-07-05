@@ -539,11 +539,7 @@ fsm4_load_chunk_mod
                 call  msv_common
                 ret   nc
                 ld    hl,(M4SV_LEN)
-                ld    (fs_ent_size),hl
-                ld    hl,0
-                ld    (fs_ent_size+2),hl
-                scf
-                ret
+                jp    fs_chunk_to_dst
 
 fsm4_delete_file
                 ld    hl,#FFFF

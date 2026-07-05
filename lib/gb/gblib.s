@@ -387,12 +387,12 @@ _gb_get_name:
         ldir
         ret
 
-;; unsigned char gb_pic_open(void);   #164: load the opened file into a borrowed bank + parse
-;; the .PIC header -> A=1 (PIC_WB/PIC_H/PIC_OFF set) or A=0 (no bank / not a pic -> in-page).
+;; unsigned char gb_pic_open(void);   #164: load the opened file into borrowed bank(s) + parse
+;; the .PIC header -> A=first bank (PIC_WB/PIC_H/PIC_OFF set) or A=0 (no bank / not a pic).
 _gb_pic_open:
         jp      0x803c          ; GB_PICOPEN (was the dead GB_XORFRAME stub)
 ;; void gb_pic_blit(u8 x, u8 y, u8 wbytes, u8 h, u16 src_off);   blit a region of the picture
-;; bank to the screen. Same arg shape as gb_restorerect, last word = src_off not a buffer.
+;; bank(s) to the screen. Same arg shape as gb_restorerect, last word = src_off not a buffer.
 _gb_pic_blit:
         ld      b, a
         ld      c, l
@@ -405,7 +405,7 @@ _gb_pic_blit:
         call    0x8054          ; GB_PICBLIT (was the dead GB_ONREPAINT stub)
         ld      hl, (sv_ret)
         jp      (hl)
-;; void gb_pic_close(void);   release the borrowed picture bank.
+;; void gb_pic_close(void);   release the borrowed picture bank(s).
 _gb_pic_close:
         jp      0x8069          ; GB_PICCLOSE (was the dead GB_WMLAUNCH stub)
 

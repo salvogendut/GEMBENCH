@@ -22,7 +22,7 @@
 _start::
         call    gsinit
         call    _main
-        ret                     ; back to the kernel's launch_app
+        ret                     ; back to the kernel entry that called this app
 
         ;; zero_region: HL = start, BC = length -> fill with 0. (Self-propagating
         ;; ldir: set the first byte, then copy it forward.)

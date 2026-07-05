@@ -23,8 +23,8 @@ cfgb_run
 cfg_fname       db    "GEOBENCHCFG"          ; "GEOBENCH.CFG" (8.3)
 
 ; run_cfgmod: load GBCFG.BIN into PAGE_APP0 and CALL it (it parses the transfer
-; area). Mirrors launch_app's load path; runs under DI (the module needs no
-; interrupts) with no top-bar/ESC handling - this is boot time.
+; area). Runs under DI (the module needs no interrupts) with no top-bar/ESC
+; handling - this is boot time.
 ; load_app0: HL = 11-byte 8.3 name -> map PAGE_APP0 and load /GEOBENCH/<name> into
 ; APP_BASE (max #3F00). Returns with CF from fs_load_sys (set = loaded). The CALLER
 ; saves/restores its page and handles DI/EI. Shared by run_cfgmod + boot_splash (#196).

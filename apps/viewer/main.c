@@ -7,10 +7,11 @@
  * gibberish, so this doubles as a quick "peek" at anything on the disk. */
 #include "gb.h"
 
-#define VIEW_MAX  8192    /* in-page buffer = 16 sectors. Pictures use the banked buffer on
+#define VIEW_MAX  6000    /* in-page text/fallback buffer. Pictures use
+                             the banked buffer on
                              GBALB/ROM (#164) - so where a spare bank exists this is just the
                              TEXT buffer; it's the picture fallback only with no free bank (bare
-                             128K). Trimmed a sector to make room for fullscreen image cycling. */
+                             128K). */
 #define TX_COL    (unsigned char)(win_x + 2)
 #define TX_Y0     (unsigned char)(win_y + 12)
 #define LINE_H    11
@@ -32,6 +33,7 @@
 #define MIN_H     72
 #define WM_FS     ((volatile unsigned char *)0x130A)   /* 1 = fullscreen (kernel sets it) */
 #define SB_W      3       /* scrollbar width, byte cols (#166) */
+#define HSB_H     7       /* horizontal scrollbar height, pixel lines */
 
 static char filebuf[VIEW_MAX];
 static char line[MAXWRAP];
@@ -73,15 +75,21 @@ static unsigned int  pic_h;                            /* 16-bit: tall pictures 
 static unsigned int  pic_off;
 static unsigned char rmin_w = MIN_W, rmin_h = MIN_H;   /* live resize floor (= picture size) */
 static unsigned char banked;                           /* the borrowed bank (0 = in-page), #164 */
+static unsigned char banked2;                          /* optional second bank for .PIC files >16K */
 static unsigned char scroll_y;                         /* top visible picture row (#166 scroll) */
+static unsigned char scroll_x;                         /* left visible picture byte column */
+static unsigned char view_x, view_y, view_w, view_h, view_vsb, view_hsb;
+static unsigned char hbar_x, hbar_y, hbar_w;
 static unsigned char pic_toobig;                       /* 1 = .PIC too big for the in-page buffer and
                                                           no spare RAM bank -> show a message, not blank */
 #define PIC_PAGE_K (*(volatile unsigned char *)0x130B) /* the kernel's single "active pic bank";
                                                           re-select OURS before each blit/close so
                                                           a second Viewer window can't steal it (#164) */
+#define PIC_PAGE2_K (*(volatile unsigned char *)0x1348)
 #define PIC_WB_K  (*(volatile unsigned char *)0x130C)  /* kernel-parsed header for the banked .PIC */
 #define PIC_H_K   (*(volatile unsigned int  *)0x130D)  /* 16-bit height */
 #define PIC_OFF_K (*(volatile unsigned char *)0x130F)
+#define UI_MODAL_K (*(volatile unsigned char *)0x1705)
 
 static unsigned char is_pic(void)
 {
@@ -91,12 +99,12 @@ static unsigned char is_pic(void)
 static unsigned char is_pic_name(const char *n);   /* fwd: defined with the cycling code below */
 static unsigned char have_pic(void) { return (unsigned char)(banked || is_pic() || pic_toobig); }
 
-/* the window can't shrink below the picture (the blit has no width clip). */
+/* Pictures can be larger than the visible content area; resize stays free and the
+   scrollbars expose the rest. */
 static void pic_floor(void)
 {
-    rmin_w = (unsigned char)(pic_wb + 3 + (pic_h > 186 ? SB_W : 0));   /* +scrollbar cols if tall */
-    if (rmin_w < MIN_W) rmin_w = MIN_W;
-    rmin_h = MIN_H;                                /* tall pics scroll, so allow a small window */
+    rmin_w = MIN_W;
+    rmin_h = MIN_H;
 }
 static void parse_pic(void)
 {
@@ -118,11 +126,15 @@ static void parse_pic(void)
 static void bank_or_parse(void)
 {
     scroll_y = 0;                                  /* a fresh file starts at the top (#166) */
-    if (banked) { PIC_PAGE_K = banked; gb_pic_close(); banked = 0; }  /* free OUR old bank only -
+    scroll_x = 0;
+    if (banked) { PIC_PAGE_K = banked; PIC_PAGE2_K = banked2; gb_pic_close(); banked = banked2 = 0; }  /* free OUR old bank only -
                                                       PIC_PAGE may hold another window's (#164) */
     banked = gb_pic_open();                        /* open sets PIC_PAGE to the new bank itself */
+    UI_MODAL_K = 0;                                 /* picture loaders reuse #1700; keep menus live */
+    banked2 = 0;
     pic_toobig = 0;
     if (banked) {                                  /* in a bank: read the kernel-parsed header */
+        banked2 = PIC_PAGE2_K;
         pic_wb = PIC_WB_K; pic_h = PIC_H_K; pic_off = PIC_OFF_K;
         pic_floor();
         return;
@@ -148,67 +160,164 @@ static void bank_or_parse(void)
 
 static void size_to_pic(void)   /* size the window to the picture, clamped on screen */
 {
-    unsigned char x = gb_wm_x(), y = gb_wm_y(), w, h, avail = (unsigned char)(GB_LINES - y);
-    unsigned int hh = pic_h + 16;
-    h = (hh > avail) ? avail : (unsigned char)hh; if (h < MIN_H) h = MIN_H;   /* 16-bit clamp */
-    /* the scrollbar (sb_shown) appears when the content is shorter than the picture; widen for
-       it using the SAME test so a clamped window can't push the blit past its right edge. */
-    w = (unsigned char)(pic_wb + 3 + (pic_h > (unsigned int)(h - 14) ? SB_W : 0));
-    if (w < MIN_W) w = MIN_W;
-    if (w > (unsigned char)(GB_COLS - x)) w = (unsigned char)(GB_COLS - x);
+    unsigned char x = gb_wm_x(), y = gb_wm_y(), w = MIN_W, h = MIN_H;
+    unsigned char max_w, max_h, need_v = 0, need_h = 0, i, off, vh, vw;
+    unsigned int want_w, want_h;
+    if ((unsigned int)pic_wb + 3 > (unsigned char)(GB_COLS - x) ||
+        pic_h + 16 > (unsigned char)(GB_LINES - y)) {
+        x = 0; y = 8;                              /* move once to the roomy origin, then clamp
+                                                       width/height independently. */
+        gb_wm_setpos(x, y);
+    }
+    max_w = (unsigned char)(GB_COLS - x);
+    max_h = (unsigned char)(GB_LINES - y);
+    for (i = 0; i < 3; i++) {
+        want_h = pic_h + 16 + (need_h ? HSB_H : 0);
+        h = (want_h > max_h) ? max_h : (unsigned char)want_h;
+        if (h < MIN_H) h = (MIN_H < max_h) ? MIN_H : max_h;
+        vh = (h > (unsigned char)(14 + (need_h ? HSB_H : 0))) ?
+             (unsigned char)(h - 14 - (need_h ? HSB_H : 0)) : 0;
+        need_v = (unsigned char)(pic_h > vh);
+        want_w = (unsigned int)pic_wb + 3 + (need_v ? SB_W : 0);
+        w = (want_w > max_w) ? max_w : (unsigned char)want_w;
+        if (w < MIN_W) w = (MIN_W < max_w) ? MIN_W : max_w;
+        off = (unsigned char)(2 + (need_v ? SB_W : 0));
+        vw = (w > off + 1) ? (unsigned char)(w - off - 1) : 0;
+        need_h = (unsigned char)(pic_wb > vw);
+    }
     gb_wm_setsize(w, h);
 }
 
-/* visible picture rows: the window content height (windowed) or the whole screen. */
-static unsigned char vis_rows(void)
+static void calc_view(void)
 {
-    return (unsigned char)(*WM_FS ? GB_LINES : win_h - 14);
+    unsigned char i, off, vh, vw;
+    if (*WM_FS) {
+        view_vsb = view_hsb = 0;
+        hbar_w = 0;
+        view_x = (unsigned char)(pic_wb < GB_COLS ? (GB_COLS - pic_wb) / 2 : 0);
+        view_y = (unsigned char)(pic_h <= GB_LINES ? (GB_LINES - pic_h) / 2 : 0);
+        view_w = (unsigned char)(GB_COLS - view_x);
+        view_h = (unsigned char)(GB_LINES - view_y);
+        return;
+    }
+    view_vsb = view_hsb = 0;
+    for (i = 0; i < 2; i++) {
+        vh = (win_h > (unsigned char)(14 + (view_hsb ? HSB_H : 0))) ?
+             (unsigned char)(win_h - 14 - (view_hsb ? HSB_H : 0)) : 0;
+        view_vsb = (unsigned char)(pic_h > vh);
+        off = (unsigned char)(2 + (view_vsb ? SB_W : 0));
+        vw = (win_w > off + 1) ? (unsigned char)(win_w - off - 1) : 0;
+        view_hsb = (unsigned char)(pic_wb > vw);
+    }
+    view_x = (unsigned char)(win_x + off);
+    view_y = TX_Y0;
+    view_w = vw;
+    view_h = vh;
+    if (pic_h <= view_h) scroll_y = 0;
+    else if (scroll_y > (unsigned char)(pic_h - view_h)) scroll_y = (unsigned char)(pic_h - view_h);
+    if (pic_wb <= view_w) scroll_x = 0;
+    else if (scroll_x > (unsigned char)(pic_wb - view_w)) scroll_x = (unsigned char)(pic_wb - view_w);
+    if (view_hsb && win_w > (unsigned char)(3 + (view_vsb ? SB_W : 0) + GRIP_W)) {
+        hbar_x = (unsigned char)(win_x + 1 + (view_vsb ? SB_W : 0));
+        hbar_y = (unsigned char)(win_y + win_h - HSB_H);
+        hbar_w = (unsigned char)(win_w - 3 - (view_vsb ? SB_W : 0) - GRIP_W);
+    } else hbar_w = 0;
 }
-
-/* sb_shown: 1 when the (left) scrollbar is drawn - windowed + taller than the visible area. */
-static unsigned char sb_shown(unsigned char vh) { return (unsigned char)(!*WM_FS && pic_h > vh); }
 
 /* draw_toobig: the .PIC can't fit the in-page buffer and there was no spare RAM bank, so
    show a message instead of a blank window (#viewer). */
 static void draw_toobig(void)
 {
-    gb_text(TX_COL, TX_Y0,                           "Pic too big");
-    gb_text(TX_COL, (unsigned char)(TX_Y0 + LINE_H), "Need 256K+");
+    gb_text(TX_COL, TX_Y0,                           "Pic not loaded");
+    gb_text(TX_COL, (unsigned char)(TX_Y0 + LINE_H), "Need banks/<32K");
+}
+
+static void blit_pic(unsigned char x, unsigned char y, unsigned char w,
+                     unsigned char rows, unsigned int src)
+{
+    unsigned char r = 0;
+    if (!w || !rows) return;
+    if (w == pic_wb && !banked2) {
+        if (banked) { PIC_PAGE_K = banked; PIC_PAGE2_K = 0; gb_pic_blit(x, y, w, rows, src); }
+        else if (src + (unsigned int)w * rows <= filen)
+            gb_restorerect(x, y, w, rows, (unsigned char *)filebuf + src);
+        return;
+    }
+    while (r < rows) {
+        if (banked) {
+            PIC_PAGE_K = banked;
+            PIC_PAGE2_K = banked2;
+            gb_pic_blit(x, (unsigned char)(y + r), w, 1, src);
+        } else if (src + w <= filen) {
+            gb_restorerect(x, (unsigned char)(y + r), w, 1, (unsigned char *)filebuf + src);
+        }
+        src += pic_wb;
+        r++;
+    }
 }
 
 static void draw_pic(void)
 {
-    unsigned char x, y, vh = vis_rows(), rows, sb = sb_shown(vh);
+    unsigned char rows, draw_w;
     unsigned int src, r;
     if (pic_toobig) { draw_toobig(); return; }
-    if (*WM_FS) {                                  /* fullscreen: centre (top-align if too tall) */
-        x = (unsigned char)(pic_wb < GB_COLS ? (GB_COLS - pic_wb) / 2 : 0);
-        y = (unsigned char)(pic_h <= GB_LINES ? (GB_LINES - pic_h) / 2 : 0);
-    } else { x = (unsigned char)(win_x + 2 + (sb ? SB_W : 0)); y = TX_Y0; }   /* right of the bar */
-    r = pic_h - scroll_y; rows = (r > vh) ? vh : (unsigned char)r;
-    src = pic_off + (unsigned int)scroll_y * pic_wb;          /* scrolled window into the bitmap */
-    if (banked) { PIC_PAGE_K = banked; gb_pic_blit(x, y, pic_wb, rows, src); }  /* our bank (#164) */
-    else if (src + (unsigned int)pic_wb * rows <= filen)
-        gb_restorerect(x, y, pic_wb, rows, (unsigned char *)filebuf + src);
-    if (sb) {                                      /* vertical scrollbar at the LEFT edge (#166) */
-        unsigned char th = (unsigned char)((unsigned int)vh * vh / pic_h); if (th < 4) th = 4;
-        unsigned char ty = (unsigned char)(TX_Y0 + (unsigned int)scroll_y * (vh - th) / (pic_h - vh));
-        gb_fill((unsigned char)(win_x + 1), TX_Y0, SB_W, vh, 1);          /* white track */
-        gb_fill((unsigned char)(win_x + 2), ty, 1, th, 3);               /* red thumb */
+    calc_view();
+    if (!view_w || !view_h) return;
+    draw_w = (pic_wb - scroll_x > view_w) ? view_w : (unsigned char)(pic_wb - scroll_x);
+    r = pic_h - scroll_y; rows = (r > view_h) ? view_h : (unsigned char)r;
+    src = pic_off + (unsigned int)scroll_y * pic_wb + scroll_x;   /* scrolled window into bitmap */
+    blit_pic(view_x, view_y, draw_w, rows, src);
+    if (view_vsb) {                                      /* vertical scrollbar at the LEFT edge (#166) */
+        unsigned char th = (unsigned char)((unsigned int)view_h * view_h / pic_h); if (th < 4) th = 4;
+        if (th > view_h) th = view_h;
+        {
+            unsigned char ty = (unsigned char)(TX_Y0 + (unsigned int)scroll_y * (view_h - th) / (pic_h - view_h));
+            gb_fill((unsigned char)(win_x + 1), TX_Y0, SB_W, view_h, 1);  /* white track */
+            gb_fill((unsigned char)(win_x + 2), ty, 1, th, 3);           /* red thumb */
+        }
+    }
+    if (view_hsb && hbar_w) {
+        unsigned char th, thumb_x;
+        th = (unsigned char)((unsigned int)view_w * hbar_w / pic_wb); if (th < 4) th = 4;
+        if (th > hbar_w) th = hbar_w;
+        thumb_x = (unsigned char)(hbar_x + (unsigned int)scroll_x * (hbar_w - th) / (pic_wb - view_w));
+        gb_fill(hbar_x, hbar_y, hbar_w, (unsigned char)(HSB_H - 1), 1);
+        gb_fill(thumb_x, (unsigned char)(hbar_y + 2), th, 2, 3);
     }
 }
 
 /* sb_drag: while the fire is held, map the pointer Y onto scroll_y and repaint. */
-static void sb_drag(unsigned char vh)
+static void sb_drag(void)
 {
-    unsigned char th = (unsigned char)((unsigned int)vh * vh / pic_h); if (th < 4) th = 4;
+    unsigned char th = (unsigned char)((unsigned int)view_h * view_h / pic_h); if (th < 4) th = 4;
     unsigned char half = (unsigned char)(th / 2), ny;
-    unsigned int max = pic_h - vh, my, v;
+    unsigned int max = pic_h - view_h, my, v;
+    if (th > view_h) th = view_h;
+    if (view_h <= th) return;
     while (gb_poll() & GB_FIRE) {
         my = gb_my();
         if (my < (unsigned int)(TX_Y0 + half)) ny = 0;
-        else { v = ((my - TX_Y0 - half) * max) / (vh - th); ny = (v > max) ? (unsigned char)max : (unsigned char)v; }
+        else { v = ((my - TX_Y0 - half) * max) / (view_h - th); ny = (v > max) ? (unsigned char)max : (unsigned char)v; }
         if (ny != scroll_y) { scroll_y = ny; gb_curhide(); draw_pic(); gb_curshow(); }
+    }
+}
+
+static void hsb_drag(void)
+{
+    unsigned char th, half, nx;
+    unsigned int max, mx, v;
+    calc_view();
+    if (!view_hsb || !hbar_w || pic_wb <= view_w) return;
+    th = (unsigned char)((unsigned int)view_w * hbar_w / pic_wb); if (th < 4) th = 4;
+    if (th > hbar_w) th = hbar_w;
+    if (hbar_w <= th) return;
+    half = (unsigned char)(th / 2);
+    max = pic_wb - view_w;
+    while (gb_poll() & GB_FIRE) {
+        mx = gb_mx();
+        if (mx < (unsigned int)(hbar_x + half)) nx = 0;
+        else { v = ((mx - hbar_x - half) * max) / (hbar_w - th); nx = (v > max) ? (unsigned char)max : (unsigned char)v; }
+        if (nx != scroll_x) { scroll_x = nx; gb_curhide(); draw_pic(); gb_curshow(); }
     }
 }
 
@@ -351,7 +460,7 @@ static void v_frame(void)
     if (gb_doc_frame()) gb_restore_parent();    /* windowed: a menu ran (or the 'F' shortcut) */
 }
 
-static void v_close(void) { if (gb_doc_close()) { if (banked) PIC_PAGE_K = banked; gb_pic_close(); gb_wm_close(); } }
+static void v_close(void) { if (gb_doc_close()) { if (banked) { PIC_PAGE_K = banked; PIC_PAGE2_K = banked2; gb_pic_close(); } gb_wm_close(); } }
 static void v_event(void) { gb_doc_event(); }
 
 /* on_drag: a title-bar press - move the window (#146 slice 2). */
@@ -367,14 +476,21 @@ static void v_drag(void)
 /* on_click: a content-area press - only the resize grip matters to the viewer. */
 static void v_click(void)
 {
-    unsigned char w = gb_wm_w(), h = gb_wm_h(), vh;
+    unsigned char w = gb_wm_w(), h = gb_wm_h();
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = w; win_h = h;   /* draw_pic/TX_Y0 read these */
-    vh = vis_rows();
-    if (have_pic() && pic_h > vh && gb_mx() >= (unsigned char)(win_x + 1)
+    if (have_pic()) calc_view();
+    if (have_pic() && view_vsb && gb_mx() >= (unsigned char)(win_x + 1)
         && gb_mx() < (unsigned char)(win_x + 1 + SB_W)
-        && gb_my() >= TX_Y0 && gb_my() < (unsigned char)(TX_Y0 + vh)) {
-        sb_drag(vh);                               /* drag the LEFT scrollbar (#166) */
+        && gb_my() >= TX_Y0 && gb_my() < (unsigned char)(TX_Y0 + view_h)) {
+        sb_drag();                                 /* drag the LEFT scrollbar (#166) */
         return;
+    }
+    if (have_pic() && view_hsb && hbar_w) {
+        if (gb_mx() >= hbar_x && gb_mx() < (unsigned char)(hbar_x + hbar_w)
+            && gb_my() >= hbar_y && gb_my() < (unsigned char)(hbar_y + HSB_H)) {
+            hsb_drag();
+            return;
+        }
     }
     if (gb_in_grip(win_x, win_y, w, h, gb_mx(), gb_my()))
         if (gb_drag_resize(win_x, win_y, &w, &h, rmin_w, rmin_h)) {

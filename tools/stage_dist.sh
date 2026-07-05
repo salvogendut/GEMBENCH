@@ -3,6 +3,7 @@
 # The shipped card contains both the Albireo (CH376) and M4 kernels. GB.BAS probes
 # M4ROM and RUN"s GBM4 on M4 hardware, otherwise GBALB.
 # On-card layout:
+#   AUTOEXEC.BAS - M4ROM cold-boot hook; tokenized BASIC that RUN"s GB.BAS.
 #   GB.BAS       - BASIC loader: LOAD/CALL M4DETECT, then RUN"GBM4 or RUN"GBALB.
 #                  (A machine-code loader is impossible under UniDOS - see memory
 #                  geobench-loader-136 - hence BASIC.)
@@ -29,8 +30,10 @@ mkdir -p "$SYS"
 
 # --- root: the loader, both card kernels, the config --------------------------
 # GB.BAS remains BASIC because UniDOS needs DOS active while RUN"ing the selected
-# binary. ASCII with CR+LF, as the CPC requires.
+# binary. ASCII with CR+LF, as the CPC requires. AUTOEXEC.BAS must be tokenized:
+# M4ROM's cold-boot loader reads ASCII but does not execute it.
 "$RASM" tools/m4detect.asm -eo >/dev/null
+python3 tools/make_autoexec_bas.py "$OUT/AUTOEXEC.BAS"
 printf '10 MEMORY &3FFF\r\n20 LOAD"M4DETECT",&4000\r\n30 CALL &4000\r\n40 IF PEEK(16432)=1 THEN RUN"GBM4\r\n50 RUN"GBALB\r\n' > "$OUT/GB.BAS"
 python3 tools/amsdos_header.py build/M4DETECT.RAW "$OUT/M4DETECT.BIN" M4DETECT BIN 0x4000
 python3 tools/amsdos_header.py build/GBALB.RAW "$OUT/GBALB.BIN" GBALB BIN 0x8000

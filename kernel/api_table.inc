@@ -34,7 +34,7 @@
                 jp    cursor_erase           ; GB_CURHIDE #8024
                 jp    k_noop                 ; GB_LAUNCH  #8027 (dead stub -> shared ret, #148)
                 jp    focus_arg_ptr          ; GB_GETARG  #802A (k_getarg collapsed, #148)
-                jp    launch_app             ; GB_RUN     #802D (k_run collapsed, #148)
+                jp    k_noop                 ; GB_RUN     #802D reserved legacy modal-run slot
                 jp    k_icon                 ; GB_ICON    #8030
                 jp    k_fill                 ; GB_FILL    #8033
                 jp    k_saverect             ; GB_SAVERECT    #8036
