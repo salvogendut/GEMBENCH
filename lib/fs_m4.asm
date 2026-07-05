@@ -347,6 +347,9 @@ fsm4_free_kib
 ; #0800-byte chunks into (fs_load_dst) until EOF (status #20), guarding fs_load_max.
 ; fs_ent_size := bytes read. CF set = loaded, NC = not found / too big.
 fsm4_load_file
+                ld    a,(FS_XFLAGS)
+                and   1
+                jp    nz,fsm4_load_chunk_mod
                 call  m4_io_begin            ; --- C_OPEN <mode><path> ---
                 call  m4_lead
                 ld    a,M4C_OPEN
@@ -529,13 +532,28 @@ m4_parse_2d
 ; into low RAM, then load M4SAVE.MOD from /GBENCH and let that module perform the
 ; C_OPEN/C_WRITE/C_CLOSE sequence. CF set = saved, NC = failed. Delete uses the
 ; same module with M4SV_LEN=#FFFF so C_ERASEFILE stays out of the resident kernel.
+fsm4_load_chunk_mod
+                xor   a
+                ld    (FS_XFLAGS),a
+                ld    hl,#FFFC
+                call  msv_common
+                ret   nc
+                ld    hl,(M4SV_LEN)
+                ld    (fs_ent_size),hl
+                ld    hl,0
+                ld    (fs_ent_size+2),hl
+                scf
+                ret
+
 fsm4_delete_file
                 ld    hl,#FFFF
                 jr    msv_common
 
 fsm4_save_file
-                ld    a,(fs_save_len+1)      ; low-RAM staging cap: #2200..#3DFF
-                cp    #1C
+                ld    hl,(fs_save_len)       ; low-RAM staging cap: #2200..#3DFF
+                ld    de,#1C01
+                or    a
+                sbc   hl,de
                 jr    nc,msv_fail
                 ld    hl,(fs_save_src)
                 ld    de,M4SV_DATA

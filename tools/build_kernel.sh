@@ -91,7 +91,7 @@ DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKT
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
                                    # and clip-aware wallpaper repaint path.
-DATA_LOC=0x7718 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
+DATA_LOC=0x7740 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
 DATA_LOC=0x5F20 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
@@ -166,6 +166,7 @@ tools/build_m4savemod.sh                          # M4 file save module (#259) -
 build_variant() {                                # $1 = kernel name, $2 = rasm -D flag
     rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
     "$RASM" kernel/gbkern.asm -eo $2 ${EXTRA_RASM:-} # incbins apps + font + icons -> .dsk + RAW
+    "$RASM" kernel/pack_modules.asm -eo          # paged modules that no longer fit gbkern.asm
     "$RASM" kernel/pack_apps.asm -eo             # 2nd pass: overflow apps -> same .dsk (#114)
     "$RASM" kernel/pack_apps2.asm -eo            # 3rd pass: VIEWER + FILEMGR -> same .dsk (#142)
     "$RASM" kernel/pack_apps3.asm -eo            # 4th pass: backdrops/REFINED/pictures -> same .dsk (#198)
@@ -212,6 +213,7 @@ echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: Albireo/M4 card; QA/GEOBENCH.DSK:
 # test harness sees a predictable build/gbkern.dsk + build/GBKERN.RAW.
 rm -f build/gbkern.dsk
 "$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG ${FAT16_FLAG:+$FAT16_FLAG} >/dev/null
+"$RASM" kernel/pack_modules.asm -eo >/dev/null  # paged modules that no longer fit gbkern.asm
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 "$RASM" kernel/pack_apps2.asm -eo >/dev/null     # 3rd pass: VIEWER + FILEMGR -> .dsk (#142)
 "$RASM" kernel/pack_apps3.asm -eo >/dev/null     # 4th pass: backdrops/REFINED/pictures -> .dsk (#198)

@@ -51,7 +51,8 @@
 #define V_ICONS  1
 #define FSV_DIAG (*(volatile unsigned char *)0x170E)  /* FLOPPYSV.MOD diagnostic byte */
 /* Chunked-copy transfer cells (the #144C..#144F free low-RAM gap; the fs backend reads them).
-   FS_LOAD_OFS = 24-bit read offset; FS_XFLAGS bit0 = chunk-read, bit1 = append-write. */
+   FS_LOAD_OFS = 24-bit read offset; FS_XFLAGS bit0 = chunk-read, bit1 = append-write,
+   bit2 = chunk-save (backend may clamp stale full-file lengths to the staging chunk). */
 #define FS_LOAD_OFS ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
 
@@ -710,12 +711,12 @@ static const gb_doc_t fmdoc = {          /* no document -> no File menu, just Vi
 };
 
 /* copy_file: copy gb_dragname from the drag-source drive/dir onto my_drive in
-   <=GB_COPYMAX chunks, so any size works. Each pass reads a chunk at the running
-   offset (FS_XFLAGS chunk-read) and appends it to the dest (FS_XFLAGS append after
-   the first), looping until a short read marks EOF. gb_copy_begin/end swap the
-   drive+dir context per chunk, so same- and cross-drive both work. On backends that
-   don't yet honour the chunk flags (CPC card/floppy - Phase B/C) a >GB_COPYMAX file
-   just fails the first load, exactly as before. Returns 1 ok, 0 on any failure. */
+   <=GB_COPYMAX chunks. Each pass reads a chunk at the running offset (FS_XFLAGS
+   chunk-read) and appends it to the dest (FS_XFLAGS append after the first),
+   looping until a short read marks EOF. gb_copy_begin/end swap the drive+dir
+   context per chunk, so same- and cross-drive both work. The app offset is 24-bit;
+   CPC floppy files are still capped by the headed AMSDOS format/backing module.
+   Returns 1 ok, 0 on any failure. */
 static unsigned char copy_file(void)
 {
     unsigned int   ofs_lo = 0;                  /* 24-bit offset as 16-bit low + 8-bit high */
@@ -734,9 +735,10 @@ static unsigned char copy_file(void)
         got = gb_fs_load(gb_copybuf, GB_COPYMAX);
         gb_copy_end();                          /* -> our drive/dir */
         if (got == 0) { FS_XFLAGS = 0; return (unsigned char)!first; }  /* EOF ok / empty fail */
+        if (got > GB_COPYMAX) got = GB_COPYMAX;  /* defensive: never save past the staging chunk */
         gb_set_drive(my_drive);
         gb_set_name(gb_dragname);
-        FS_XFLAGS = first ? 0x00 : 0x02;        /* create on the first chunk, append after */
+        FS_XFLAGS = first ? 0x04 : 0x06;        /* chunk-save create first, append after */
         FSV_DIAG = 0xEE;                         /* floppy diag: unchanged => writer didn't run */
         if (!gb_fs_save(gb_copybuf, got)) { FS_XFLAGS = 0; return 0; }
         {

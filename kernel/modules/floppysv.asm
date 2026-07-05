@@ -9,10 +9,12 @@
 ; assemblies - and is self-contained otherwise: own state + the shared fixed-address
 ; low-RAM buffers, reading its inputs from the transfer area the resident stub fills:
 ;   FSV_TX_LEN  (#1700, word)   bytes to write, #FFFF delete, #FFFE free floppy,
-;                              #FFFD free Albireo/CH376
+;                              #FFFD free Albireo/CH376, #FFFC read chunk
 ;   FSV_TX_NAME (#1702, 11)     8.3 name
 ;   FSV_TX_RES  (#170D, byte)   result: 1 = saved, 0 = failed
 ;   FSV_TX_UNIT (#170F, byte)   floppy unit (0 = A, 1 = B)
+;                              #FF = Albireo/CH376 append/write operation
+;   FSV_TX_PATH (#1710, 64)     card path prefix for Albireo/CH376 operations
 ;   FSV_TX_DATA (#2200, <=7KB)  the data, copied out of the app's page by the stub
 ;
 ; Build: tools/build_floppymod.sh -> build/FLOPPYSV.RAW, packaged as FLOPPYSV.BIN.
@@ -27,15 +29,33 @@ FSV_TX_NAME     equ   #1702
 FSV_TX_RES      equ   #170D
 FSV_TX_ERR      equ   #170E
 FSV_TX_UNIT     equ   #170F
+FSV_TX_PATH     equ   #1710
 FSV_TX_DATA     equ   #2200
+FSV_TX_MAX      equ   #1C00
+FS_LOAD_OFS     equ   #144C        ; 24-bit read offset for #FFFC chunk-read op
+FS_XFLAGS       equ   #144F        ; bit1 = append-write, bit2 = chunk-save marker
+fs_ent_size     equ   #14E8
 fs_req_name     equ   FSV_TX_NAME  ; the name to find/create (core's namematch uses it)
 
 ALB_CMD         equ   #FE81
 ALB_DAT         equ   #FE80
 ALBC_GETSTAT    equ   #22
 ALBC_RDDATA0    equ   #27
+ALBC_WRREQ      equ   #2D
+ALBC_SETNAME    equ   #2F
+ALBC_FILEOPEN   equ   #32
+ALBC_FILEERASE  equ   #35
+ALBC_FILECLOSE  equ   #36
+ALBC_DIRINFO    equ   #37
+ALBC_BYTELOC    equ   #39
+ALBC_BYTEREAD   equ   #3A
+ALBC_BYTERDGO   equ   #3B
+ALBC_BYTEWRITE  equ   #3C
+ALBC_BYTEWRGO   equ   #3D
 ALBC_DISKQUERY  equ   #3F
 ALB_INT_SUCCESS equ   #14
+ALB_INT_DISKRD  equ   #1D
+ALB_INT_DISKWR  equ   #1E
 
                 org   FLOPPYSV_ORG
 ; entry: pick up the unit, run the requested operation, store the result byte, return.
@@ -43,6 +63,9 @@ ALB_INT_SUCCESS equ   #14
 ;   #FFFF = delete FSV_TX_NAME
 ;   #FFFE = count free 1KB AMSDOS allocation blocks, returned in FSV_TX_LEN
 ;   #FFFD = query Albireo/CH376 free sectors, returned as KiB in FSV_TX_LEN
+;   #FFFC = read chunk at FS_LOAD_OFS into FSV_TX_DATA, length in FSV_TX_LEN
+;   #FFFB = read Albireo/CH376 chunk at FS_LOAD_OFS into FSV_TX_DATA
+;   #FFFA = delete Albireo/CH376 file
 ;   other = save that many bytes from FSV_TX_DATA into FSV_TX_NAME
                 ld    a,#10
                 ld    (FSV_TX_ERR),a
@@ -59,16 +82,41 @@ ALB_INT_SUCCESS equ   #14
                 jr    z,flsv_free_entry
                 cp    #FD
                 jr    z,flsv_alb_entry
+                cp    #FC
+                jr    z,flsv_read_entry
+                cp    #FB
+                jr    z,flsv_alb_read_entry
+                cp    #FA
+                jr    z,flsv_alb_del_entry
                 or    a
                 jr    flsv_done
 flsv_save_entry
-                call  flsv_save
+                ld    a,(FSV_TX_UNIT)
+                cp    #FF
+                jr    z,flsv_alb_write_entry
+                ld    a,(FS_XFLAGS)
+                and   2
+                jr    z,flsv_save_full
+                call  flsv_append
+                jr    flsv_done
+flsv_save_full  call  flsv_save
                 jr    flsv_done
 flsv_del_entry  call  flsv_delete
                 jr    flsv_done
 flsv_free_entry call  flsv_free
                 jr    flsv_done
 flsv_alb_entry  call  flsv_alb_free
+                jr    flsv_done
+flsv_read_entry call  flsv_read_chunk
+                jr    flsv_done
+flsv_alb_read_entry
+                call  flsv_alb_read
+                jr    flsv_done
+flsv_alb_write_entry
+                call  flsv_alb_append
+                jr    flsv_done
+flsv_alb_del_entry
+                call  flsv_alb_delete
 flsv_done
                 ld    a,1
                 jr    c,flsv_res
@@ -78,14 +126,15 @@ flsv_res
                 ret
 
 ; ---------------------------------------------------------------------------
-; flsv_save: overwrite fs_req_name (must already exist, single extent) with
-; fs_save_len bytes from FSV_TX_DATA. Writes a 128-byte AMSDOS header + the data
-; into the file's existing allocation blocks, updates the record count, and writes
-; the directory back. CF set = saved; NC = not found, or won't fit the current
-; allocation (no block allocation / file creation yet).
+; flsv_save: create/overwrite fs_req_name with the first copy chunk from
+; FSV_TX_DATA. Writes a 128-byte AMSDOS header + data into a single CP/M extent;
+; later chunks use flsv_append to grow additional extents.
 flsv_save
                 call  fsam_motor_on
                 call  fsam_read_dir                  ; directory -> fsam_buf
+                ld    a,1                            ; overwrite starts fresh: remove stale
+                ld    (fsv_extcnt),a                 ; higher extents from an older copy
+                call  fsv_delete_high_extents
                 ld    hl,(FSV_TX_LEN)                ; Rc = ceil((128+len)/128)
                 ld    de,128
                 add   hl,de
@@ -118,7 +167,9 @@ fsv_scan
                 ld    a,(ix+12)
                 or    a
                 jr    nz,fsv_next
+                push  bc
                 call  fsam_namematch
+                pop   bc
                 jr    z,fsv_have                       ; existing file -> reuse the entry
 fsv_next
                 push  bc
@@ -287,7 +338,9 @@ fdl_scan
                 ld    a,(ix+0)
                 cp    #E5
                 jr    z,fdl_next
+                push  bc
                 call  fsam_namematch
+                pop   bc
                 jr    nz,fdl_next
                 ld    (ix+0),#E5
                 ld    a,1
@@ -306,6 +359,287 @@ fdl_next
                 scf
                 ret
 fdl_fail
+                call  fsam_motor_off
+                or    a
+                ret
+
+; flsv_read_chunk: read a logical payload slice from an existing headed AMSDOS
+; file, spanning CP/M extents as needed. FS_LOAD_OFS is the logical offset after
+; the AMSDOS header; returned bytes land in FSV_TX_DATA and the count is written
+; back to FSV_TX_LEN.
+flsv_read_chunk
+                call  fsam_motor_on
+                call  fsam_read_dir
+                ld    ix,fsam_buf
+                ld    b,64
+frc_scan
+                ld    a,(ix+0)
+                cp    #E5
+                jr    z,frc_next
+                ld    a,(ix+12)
+                or    a
+                jr    nz,frc_next
+                push  bc
+                call  fsam_namematch
+                pop   bc
+                jr    z,frc_have
+frc_next
+                push  bc
+                ld    de,32
+                add   ix,de
+                pop   bc
+                djnz  frc_scan
+                ld    a,#16
+                jp    frc_fail_a
+frc_have
+                ld    a,(FS_LOAD_OFS+2)
+                or    a
+                jp    nz,frc_empty
+                ld    a,#FF
+                ld    (fsv_curtrk),a
+                xor   a
+                call  fsv_read_abs_sector_idx
+                jp    nc,frc_bad_extent
+                call  fsv_header_len
+                jr    nc,frc_nohdr
+                ld    (fsv_newlen),hl                 ; logical payload length
+                ld    hl,128
+                ld    (fsv_oldlen),hl                 ; physical header bias
+                jr    frc_len_ok
+frc_nohdr
+                ld    a,(ix+15)
+                call  fsv_rc_bytes
+                ld    (fsv_newlen),hl
+                ld    hl,0
+                ld    (fsv_oldlen),hl
+frc_len_ok
+                ld    hl,(FS_LOAD_OFS)                ; EOF if offset >= length
+                ld    de,(fsv_newlen)
+                or    a
+                sbc   hl,de
+                jp    nc,frc_empty
+
+                ld    hl,(fsv_newlen)                 ; take = min(max, len - offset)
+                ld    de,(FS_LOAD_OFS)
+                or    a
+                sbc   hl,de
+                ld    de,FSV_TX_MAX
+                push  hl
+                or    a
+                sbc   hl,de
+                pop   hl
+                jr    c,frc_take_avail
+                ex    de,hl
+frc_take_avail
+                ld    (FSV_TX_LEN),hl
+                ld    (fsv_drem),hl
+                ld    hl,(FS_LOAD_OFS)                ; physical = logical + bias
+                ld    de,(fsv_oldlen)
+                add   hl,de
+                ld    (fsv_phys),hl
+                ld    hl,FSV_TX_DATA
+                ld    (fsv_dptr),hl
+frc_loop
+                ld    hl,(fsv_drem)
+                ld    a,h
+                or    l
+                jr    z,frc_done
+                ld    a,(fsv_phys+1)                  ; sector index = phys / 512
+                srl   a
+                call  fsv_read_abs_sector_idx
+                jp    nc,frc_bad_extent
+                ld    hl,(fsv_phys)                   ; sector offset = phys & 511
+                ld    a,h
+                and   1
+                ld    h,a
+                ld    (fsv_off),hl
+                ld    de,512
+                ex    de,hl
+                or    a
+                sbc   hl,de                           ; room = 512 - offset
+                ld    de,(fsv_drem)
+                push  hl
+                or    a
+                sbc   hl,de
+                pop   hl
+                jr    c,frc_take_room
+                ex    de,hl
+frc_take_room
+                ld    (fsv_take),hl
+                ld    hl,fsam_wbuf
+                ld    de,(fsv_off)
+                add   hl,de
+                ld    de,(fsv_dptr)
+                ld    bc,(fsv_take)
+                ldir
+                ld    (fsv_dptr),de
+                ld    hl,(fsv_phys)
+                ld    de,(fsv_take)
+                add   hl,de
+                ld    (fsv_phys),hl
+                ld    hl,(fsv_drem)
+                or    a
+                sbc   hl,de
+                ld    (fsv_drem),hl
+                jr    frc_loop
+frc_done
+                ld    hl,(FSV_TX_LEN)
+                ld    (fs_ent_size),hl
+                ld    hl,0
+                ld    (fs_ent_size+2),hl
+                call  fsam_motor_off
+                scf
+                ret
+frc_empty
+                ld    hl,0
+                ld    (FSV_TX_LEN),hl
+                ld    (fs_ent_size),hl
+                ld    (fs_ent_size+2),hl
+                call  fsam_motor_off
+                scf
+                ret
+frc_fail_a
+                ld    (FSV_TX_ERR),a
+                call  fsam_motor_off
+                or    a
+                ret
+frc_bad_extent
+                ld    a,#17
+                jr    frc_fail_a
+
+; flsv_append: append FSV_TX_LEN bytes from FSV_TX_DATA to an existing headed
+; AMSDOS file, creating/updating CP/M extents as the file grows. This is the CPC
+; side of file-manager chunked copy: the first chunk uses flsv_save/create, later
+; chunks use this path.
+flsv_append
+                call  fsam_motor_on
+                call  fsam_read_dir
+                ld    ix,fsam_buf                    ; find the existing Ex=0 entry
+                ld    b,64
+fav_scan
+                ld    a,(ix+0)
+                cp    #E5
+                jr    z,fav_next
+                ld    a,(ix+12)
+                or    a
+                jr    nz,fav_next
+                push  bc
+                call  fsam_namematch
+                pop   bc
+                jr    z,fav_have
+fav_next
+                push  bc
+                ld    de,32
+                add   ix,de
+                pop   bc
+                djnz  fav_scan
+                ld    a,#14
+                jp    fav_fail_a                      ; append target missing
+fav_have
+                ld    a,#FF
+                ld    (fsv_curtrk),a
+                xor   a
+                ld    hl,fsam_wbuf
+                ld    (fsam_dst),hl
+                call  fsv_read_sector_idx             ; sector 0 -> header buffer
+                call  fsv_header_len                  ; HL = old logical length
+                jp    nc,fav_fail_hdr
+                ld    (fsv_oldlen),hl
+                ld    de,(FSV_TX_LEN)
+                add   hl,de
+                jp    c,fav_fail_big
+                ld    (fsv_newlen),hl
+
+                ld    hl,(fsv_newlen)
+                call  fsv_prepare_extents
+                jp    nc,fav_fail_a
+
+                ld    hl,(fsv_newlen)                  ; update header length fields
+                ld    (fsam_wbuf+24),hl
+                ld    (fsam_wbuf+64),hl
+                call  fsv_store_header_sum
+                xor   a
+                call  fsv_write_abs_sector_idx         ; rewrite sector 0/header
+                jp    nc,fav_fail_extent
+
+                ld    hl,(fsv_oldlen)                  ; append starts at 128 + old length
+                ld    de,128
+                add   hl,de
+                ld    (fsv_phys),hl
+                ld    hl,FSV_TX_DATA
+                ld    (fsv_dptr),hl
+                ld    hl,(FSV_TX_LEN)
+                ld    (fsv_drem),hl
+fav_loop
+                ld    hl,(fsv_drem)
+                ld    a,h
+                or    l
+                jr    z,fav_commit
+                ld    a,(fsv_phys+1)                   ; sector index = phys / 512
+                srl   a
+                ld    (fsv_si),a
+                ld    hl,(fsv_phys)                    ; sector offset = phys & 511
+                ld    a,h
+                and   1
+                ld    h,a
+                ld    (fsv_off),hl
+                ld    a,h
+                or    l
+                jr    nz,fav_read_partial              ; non-zero offset: preserve prefix
+                call  fsv_clear_wbuf                   ; new sector: deterministic zero padding
+                jr    fav_have_sector
+fav_read_partial
+                ld    hl,fsam_wbuf
+                ld    (fsam_dst),hl
+                ld    a,(fsv_si)
+                call  fsv_read_abs_sector_idx
+                jp    nc,fav_fail_extent
+fav_have_sector
+                ld    hl,(fsv_off)                     ; room = 512 - offset
+                ld    de,512
+                ex    de,hl
+                or    a
+                sbc   hl,de
+                ld    de,(fsv_drem)
+                push  hl
+                or    a
+                sbc   hl,de
+                pop   hl
+                jr    c,fav_take_room                  ; room < remaining
+                ex    de,hl                            ; else take remaining
+fav_take_room
+                ld    (fsv_take),hl
+                ld    hl,fsam_wbuf
+                ld    de,(fsv_off)
+                add   hl,de
+                ld    bc,(fsv_take)
+                call  fsv_filldata
+                ld    a,(fsv_si)
+                call  fsv_write_abs_sector_idx
+                jp    nc,fav_fail_extent
+                ld    hl,(fsv_phys)
+                ld    de,(fsv_take)
+                add   hl,de
+                ld    (fsv_phys),hl
+                jr    fav_loop
+fav_commit
+                call  fsv_write_dir
+                call  fsam_motor_off
+                scf
+                ret
+fav_fail_hdr
+                ld    a,#15
+                jr    fav_fail_a
+fav_fail_big
+                ld    a,#11
+                jr    fav_fail_a
+fav_fail_full
+                ld    a,#13
+                jr    fav_fail_a
+fav_fail_extent
+                ld    a,#17
+fav_fail_a
+                ld    (FSV_TX_ERR),a
                 call  fsam_motor_off
                 or    a
                 ret
@@ -393,6 +727,293 @@ afb_fail
                 or    a
                 ret
 
+; flsv_alb_read: read up to FSV_TX_MAX bytes from an Albireo/CH376 file at
+; FS_LOAD_OFS. This is the card-source half of File Manager chunked copy.
+flsv_alb_read
+                call  alb_open_tx
+                jr    nc,far_fail
+                call  alb_seek_load_ofs
+                jr    nc,far_fail_close
+                ld    hl,FSV_TX_DATA
+                ld    (fsv_dptr),hl
+                ld    hl,FSV_TX_MAX
+                ld    (fsv_drem),hl
+                ld    hl,0
+                ld    (FSV_TX_LEN),hl
+                ld    a,ALBC_BYTEREAD
+                call  alb_sendcmd
+                xor   a
+                out   (c),a
+                ld    a,#1C
+                out   (c),a
+                call  alb_waitint
+far_loop
+                push  af
+                ld    a,ALBC_RDDATA0
+                call  alb_sendcmd
+                in    a,(c)
+                or    a
+                jr    z,far_done_pop
+                ld    e,a
+                ld    d,0
+                ld    hl,(fsv_dptr)
+                call  alb_inira
+                ld    (fsv_dptr),hl
+                ld    hl,(FSV_TX_LEN)
+                add   hl,de
+                ld    (FSV_TX_LEN),hl
+                ld    hl,(fsv_drem)
+                or    a
+                sbc   hl,de
+                ld    (fsv_drem),hl
+                ld    a,h
+                or    l
+                jr    z,far_done_pop
+                pop   af
+                cp    ALB_INT_SUCCESS
+                jr    z,far_done
+                cp    ALB_INT_DISKRD
+                jr    nz,far_fail_close
+                ld    a,ALBC_BYTERDGO
+                call  alb_sendcmd
+                call  alb_waitint
+                jr    far_loop
+far_done_pop
+                pop   af
+far_done
+                call  alb_close0
+                ld    hl,(FSV_TX_LEN)
+                ld    (fs_ent_size),hl
+                scf
+                ret
+far_fail_close
+                call  alb_close0
+far_fail
+                or    a
+                ret
+
+; flsv_alb_append: append staged chunk bytes to an existing Albireo/CH376 file.
+; The first copy chunk uses the resident FILE_CREATE path; later chunks enter here.
+flsv_alb_append
+                call  alb_open_tx
+                jr    nc,faa_fail
+                call  alb_dir_size
+                jr    nc,faa_fail_close
+                call  alb_seek_size
+                jr    nc,faa_fail_close
+                ld    a,ALBC_BYTEWRITE
+                call  alb_sendcmd
+                ld    hl,(FSV_TX_LEN)
+                ld    a,l
+                out   (c),a
+                ld    a,h
+                out   (c),a
+                ld    hl,FSV_TX_DATA
+                ld    (fsv_dptr),hl
+                call  alb_waitint
+faa_loop
+                cp    ALB_INT_SUCCESS
+                jr    z,faa_close_ok
+                cp    ALB_INT_DISKWR
+                jr    nz,faa_fail_close
+                ld    a,ALBC_WRREQ
+                call  alb_sendcmd
+                in    a,(c)
+                or    a
+                jr    z,faa_go
+                ld    hl,(fsv_dptr)
+                call  alb_outira
+                ld    (fsv_dptr),hl
+faa_go
+                ld    a,ALBC_BYTEWRGO
+                call  alb_sendcmd
+                call  alb_waitint
+                jr    faa_loop
+faa_close_ok
+                call  alb_close1
+                scf
+                ret
+faa_fail_close
+                call  alb_close0
+faa_fail
+                or    a
+                ret
+
+flsv_alb_delete
+                call  alb_setname_tx
+                ld    a,ALBC_FILEERASE
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,fad_fail
+                scf
+                ret
+fad_fail
+                or    a
+                ret
+
+alb_open_tx
+                call  alb_setname_tx
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    z,aot_ok
+                ld    a,(FSV_TX_PATH)
+                or    a
+                jr    z,aot_fail
+                ld    a,ALBC_SETNAME
+                call  alb_sendcmd
+                call  alb_emit_path_tx
+                xor   a
+                out   (c),a
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint
+                ld    a,ALBC_SETNAME
+                call  alb_sendcmd
+                call  alb_emit_83_tx
+                xor   a
+                out   (c),a
+                ld    a,ALBC_FILEOPEN
+                call  alb_sendcmd
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    z,aot_ok
+aot_fail
+                or    a
+                ret
+aot_ok
+                scf
+                ret
+
+alb_setname_tx
+                ld    a,ALBC_SETNAME
+                call  alb_sendcmd
+                call  alb_emit_path_tx
+                ld    a,'/'
+                out   (c),a
+                call  alb_emit_83_tx
+                xor   a
+                out   (c),a
+                ret
+
+alb_emit_path_tx
+                ld    hl,FSV_TX_PATH
+aepx_loop
+                ld    a,(hl)
+                or    a
+                ret   z
+                inc   b
+                outi
+                jr    aepx_loop
+
+alb_emit_83_tx
+                ld    hl,FSV_TX_NAME
+                ld    d,8
+ae8x_nm
+                ld    a,(hl)
+                cp    ' '
+                jr    z,ae8x_ext
+                out   (c),a
+                inc   hl
+                dec   d
+                jr    nz,ae8x_nm
+ae8x_ext
+                ld    hl,FSV_TX_NAME+8
+                ld    a,(hl)
+                cp    ' '
+                ret   z
+                ld    a,'.'
+                out   (c),a
+                ld    d,3
+ae8x_e1
+                ld    a,(hl)
+                cp    ' '
+                ret   z
+                out   (c),a
+                inc   hl
+                dec   d
+                jr    nz,ae8x_e1
+                ret
+
+alb_seek_load_ofs
+                ld    a,ALBC_BYTELOC
+                call  alb_sendcmd
+                ld    a,(FS_LOAD_OFS)
+                out   (c),a
+                ld    a,(FS_LOAD_OFS+1)
+                out   (c),a
+                ld    a,(FS_LOAD_OFS+2)
+                out   (c),a
+                xor   a
+                out   (c),a
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,asl_fail
+                scf
+                ret
+asl_fail
+                or    a
+                ret
+
+alb_dir_size
+                ld    a,ALBC_DIRINFO
+                call  alb_sendcmd
+                xor   a
+                out   (c),a
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,ads_fail
+                ld    a,ALBC_RDDATA0
+                call  alb_sendcmd
+                in    a,(c)
+                cp    32
+                jr    nz,ads_fail
+                ld    a,28
+                call  alb_invoid
+                ld    hl,fsv_phys
+                ld    a,4
+                call  alb_inira
+                scf
+                ret
+ads_fail
+                or    a
+                ret
+
+alb_seek_size
+                ld    a,ALBC_BYTELOC
+                call  alb_sendcmd
+                ld    hl,fsv_phys
+                ld    d,4
+ass_loop
+                ld    a,(hl)
+                out   (c),a
+                inc   hl
+                dec   d
+                jr    nz,ass_loop
+                call  alb_waitint
+                cp    ALB_INT_SUCCESS
+                jr    nz,ass_fail
+                scf
+                ret
+ass_fail
+                or    a
+                ret
+
+alb_close0
+                xor   a
+                jr    alb_close
+alb_close1
+                ld    a,1
+alb_close
+                ld    e,a
+                ld    a,ALBC_FILECLOSE
+                call  alb_sendcmd
+                out   (c),e
+                call  alb_waitint
+                ret
+
 alb_sendcmd
                 ld    bc,ALB_CMD
                 out   (c),a
@@ -419,12 +1040,430 @@ awi_got
                 in    a,(c)
                 ret
 
+alb_inira
+                ini
+                inc   b
+                dec   a
+                jr    nz,alb_inira
+                ret
+
+alb_outira
+                inc   b
+                outi
+                dec   a
+                jr    nz,alb_outira
+                ret
+
 alb_invoid
                 push  af
                 in    a,(c)
                 pop   af
                 dec   a
                 jr    nz,alb_invoid
+                ret
+
+; fsv_header_len: validate fsam_wbuf as an AMSDOS header. CF set and HL =
+; logical length on success, NC if the checksum does not match.
+fsv_header_len
+                ld    hl,fsam_wbuf
+                ld    de,0
+                ld    b,67
+fhl_sum
+                ld    a,(hl)
+                add   a,e
+                ld    e,a
+                jr    nc,fhl_nc
+                inc   d
+fhl_nc
+                inc   hl
+                djnz  fhl_sum
+                ld    hl,fsam_wbuf+67
+                ld    a,(hl)
+                cp    e
+                jr    nz,fhl_bad
+                inc   hl
+                ld    a,(hl)
+                cp    d
+                jr    nz,fhl_bad
+                ld    hl,(fsam_wbuf+24)
+                scf
+                ret
+fhl_bad
+                or    a
+                ret
+
+; fsv_store_header_sum: recompute the AMSDOS header checksum in fsam_wbuf.
+fsv_store_header_sum
+                ld    hl,fsam_wbuf
+                ld    de,0
+                ld    b,67
+fsh_sum
+                ld    a,(hl)
+                add   a,e
+                ld    e,a
+                jr    nc,fsh_nc
+                inc   d
+fsh_nc
+                inc   hl
+                djnz  fsh_sum
+                ex    de,hl
+                ld    (fsam_wbuf+67),hl
+                ret
+
+; fsv_entry_sector_de: fsv_si + IX block list -> D=track, E=sector id, seeking
+; as needed. Shared by the append read/modify/write path.
+fsv_entry_sector_de
+                ld    a,(fsv_si)
+                srl   a
+                ld    e,a
+                ld    d,0
+                push  ix
+                pop   hl
+                ld    bc,16
+                add   hl,bc
+                add   hl,de
+                ld    l,(hl)
+                ld    h,0
+                add   hl,hl
+                ld    a,(fsv_si)
+                and   1
+                or    l
+                ld    l,a
+                call  fsam_div9
+                ld    c,a
+                ld    a,b
+                ld    e,a
+                ld    a,(fsv_curtrk)
+                cp    e
+                jr    z,fes_noseek
+                ld    a,e
+                ld    (fsv_curtrk),a
+                push  bc
+                ld    a,e
+                call  fsam_seek
+                pop   bc
+fes_noseek
+                ld    a,(fsv_curtrk)
+                ld    d,a
+                ld    a,#C1
+                add   a,c
+                ld    e,a
+                ret
+
+; A = sector index within the file extent.
+fsv_read_sector_idx
+                ld    (fsv_si),a
+                call  fsv_entry_sector_de
+                ld    hl,fsam_wbuf
+                ld    (fsam_dst),hl
+                jp    fsam_read_sector
+
+; A = sector index within the file extent.
+fsv_write_sector_idx
+                ld    (fsv_si),a
+                call  fsv_entry_sector_de
+                ld    hl,fsam_wbuf
+                ld    (fsam_src),hl
+                jp    fsam_write_sector
+
+; A = absolute sector index in the physical AMSDOS stream -> D=track, E=sector id.
+; This path is used by chunk read/append across extents. Compute the CP/M block
+; index directly, then select Extent = block/16 and block-list slot = block&15.
+fsv_abs_sector_de
+                ld    c,a
+                and   1
+                ld    (fsv_absbit),a
+                ld    a,c
+                srl   a
+                ld    (fsv_absblk),a
+                srl   a
+                srl   a
+                srl   a
+                srl   a
+                call  fsv_find_extent
+                ret   nc
+                ld    a,(fsv_absblk)
+                and   #0F
+                ld    e,a
+                ld    d,0
+                push  ix
+                pop   hl
+                ld    bc,16
+                add   hl,bc
+                add   hl,de
+                ld    l,(hl)
+                ld    h,0
+                add   hl,hl
+                ld    a,(fsv_absbit)
+                or    l
+                ld    l,a
+                call  fsam_div9
+                ld    c,a
+                ld    a,b
+                ld    e,a
+                ld    a,(fsv_curtrk)
+                cp    e
+                jr    z,fas_noseek
+                ld    a,e
+                ld    (fsv_curtrk),a
+                push  bc
+                ld    a,e
+                call  fsam_seek
+                pop   bc
+fas_noseek
+                ld    a,(fsv_curtrk)
+                ld    d,a
+                ld    a,#C1
+                add   a,c
+                ld    e,a
+                scf
+                ret
+
+fsv_read_abs_sector_idx
+                call  fsv_abs_sector_de
+                ret   nc
+                ld    hl,fsam_wbuf
+                ld    (fsam_dst),hl
+                call  fsam_read_sector
+                scf
+                ret
+
+fsv_write_abs_sector_idx
+                call  fsv_abs_sector_de
+                ret   nc
+                ld    hl,fsam_wbuf
+                ld    (fsam_src),hl
+                call  fsam_write_sector
+                scf
+                ret
+
+; fsv_prepare_extents: HL = new logical payload length. Build/update enough
+; CP/M directory extents to hold the 128-byte AMSDOS header plus payload.
+; Returns CF set on success; NC with A = FSV_TX_ERR code on failure.
+fsv_prepare_extents
+                ld    de,128
+                add   hl,de
+                jp    c,fpe_big
+                ld    a,l                         ; total records = ceil(physical / 128)
+                and   #7F
+                ld    c,a
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    a,c
+                or    a
+                jr    z,fpe_recs_ok
+                inc   hl
+fpe_recs_ok
+                ld    (fsv_recs),hl
+                ld    de,127                      ; extent count = ceil(records / 128)
+                add   hl,de
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    a,l
+                or    a
+                jr    nz,fpe_ext_ok
+                inc   a
+fpe_ext_ok
+                ld    (fsv_extcnt),a
+                call  fsv_delete_high_extents
+                xor   a
+                ld    (fsv_extno),a
+fpe_loop
+                ld    a,(fsv_extno)
+                ld    b,a
+                ld    hl,(fsv_recs)
+fpe_rem
+                ld    a,b
+                or    a
+                jr    z,fpe_have_rem
+                ld    de,128
+                or    a
+                sbc   hl,de
+                dec   b
+                jr    fpe_rem
+fpe_have_rem
+                ld    de,129
+                push  hl
+                or    a
+                sbc   hl,de
+                pop   hl
+                jr    c,fpe_partial
+                ld    a,128
+                jr    fpe_have_rc
+fpe_partial
+                ld    a,l
+fpe_have_rc
+                ld    (fsam_rc),a
+                ld    a,(fsv_extno)
+                call  fsv_find_extent
+                jr    c,fpe_have_ext
+                ld    a,(fsv_extno)
+                call  fsv_create_extent
+                ret   nc
+fpe_have_ext
+                ld    a,(fsv_extno)
+                ld    (ix+12),a
+                xor   a
+                ld    (ix+13),a
+                ld    (ix+14),a
+                ld    a,(fsam_rc)
+                ld    (ix+15),a
+                add   a,7
+                srl   a
+                srl   a
+                srl   a
+                ld    (fsv_nblk),a
+                call  fsv_ensure_blocks
+                jr    nc,fpe_full
+                ld    a,(fsv_extno)
+                inc   a
+                ld    (fsv_extno),a
+                ld    hl,fsv_extcnt
+                cp    (hl)
+                jr    c,fpe_loop
+                scf
+                ret
+fpe_big
+                ld    a,#11
+                or    a
+                ret
+fpe_full
+                ld    a,#13
+                or    a
+                ret
+
+; A = extent number. CF set with IX -> matching live entry.
+fsv_find_extent
+                ld    (fsv_extno),a
+                ld    ix,fsam_buf
+                ld    b,64
+ffe2_scan
+                ld    a,(ix+0)
+                cp    #E5
+                jr    z,ffe2_next
+                ld    a,(ix+14)
+                or    a
+                jr    nz,ffe2_next
+                ld    a,(ix+12)
+                ld    hl,fsv_extno
+                cp    (hl)
+                jr    nz,ffe2_next
+                push  bc
+                call  fsam_namematch
+                pop   bc
+                jr    z,ffe2_have
+ffe2_next
+                push  bc
+                ld    de,32
+                add   ix,de
+                pop   bc
+                djnz  ffe2_scan
+                or    a
+                ret
+ffe2_have
+                scf
+                ret
+
+; A = extent number. Create a zeroed directory entry with FSV_TX_NAME.
+fsv_create_extent
+                ld    (fsv_extno),a
+                call  fsv_find_free_entry
+                jr    nc,fce_noslot
+                push  ix
+                pop   hl
+                ld    (hl),0
+                push  ix
+                pop   de
+                inc   de
+                ld    bc,31
+                ldir
+                ld    hl,fs_req_name
+                push  ix
+                pop   de
+                inc   de
+                ld    bc,11
+                ldir
+                ld    a,(fsv_extno)
+                ld    (ix+12),a
+                xor   a
+                ld    (ix+13),a
+                ld    (ix+14),a
+                scf
+                ret
+fce_noslot
+                ld    a,#12
+                or    a
+                ret
+
+; Delete matching directory entries whose Ex is >= fsv_extcnt. Used when a file
+; shrinks or a fresh first chunk overwrites an older multi-extent copy.
+fsv_delete_high_extents
+                ld    ix,fsam_buf
+                ld    b,64
+fdh_scan
+                ld    a,(ix+0)
+                cp    #E5
+                jr    z,fdh_next
+                push  bc
+                call  fsam_namematch
+                pop   bc
+                jr    nz,fdh_next
+                ld    a,(ix+12)
+                ld    hl,fsv_extcnt
+                cp    (hl)
+                jr    c,fdh_next
+                ld    (ix+0),#E5
+fdh_next
+                push  bc
+                ld    de,32
+                add   ix,de
+                pop   bc
+                djnz  fdh_scan
+                ret
+
+fsv_clear_wbuf
+                ld    hl,fsam_wbuf
+                ld    de,fsam_wbuf+1
+                ld    bc,511
+                ld    (hl),0
+                ldir
+                ret
+
+; A = AMSDOS record count -> HL = bytes.
+fsv_rc_bytes
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
                 ret
 
 ; fsv_write_dir: write fsam_buf's four AMSDOS directory sectors back.
@@ -631,9 +1670,19 @@ fsv_curtrk      defb  0            ; track the head is on
 fsv_dptr        defw  0            ; pointer into the source data
 fsv_drem        defw  0            ; source bytes left
 fsv_nblk        defb  0            ; 1KB blocks the file needs
+fsv_oldlen      defw  0            ; append: previous logical length
+fsv_newlen      defw  0            ; append: new logical length
+fsv_phys        defw  0            ; append: physical stream offset (header + data)
+fsv_off         defw  0            ; append: offset within current 512-byte sector
+fsv_take        defw  0            ; append: bytes to overlay in current sector
+fsv_recs        defw  0            ; multi-extent: total CP/M records needed
+fsv_extcnt      defb  0            ; multi-extent: number of directory extents needed
+fsv_extno       defb  0            ; multi-extent: current Extent number
 fsv_cand        defb  0            ; alloc: candidate block being tested
 fsv_deleted     defb  0            ; delete: at least one extent was removed
 fsv_freecnt     defw  0            ; free-space query: unused 1KB block count
+fsv_absblk      defb  0            ; absolute sector helper: CP/M block index
+fsv_absbit      defb  0            ; absolute sector helper: sector within 1KB block
 
 ; ---------------------------------------------------------------------------
 ; fsam_write_sector: D=track, E=sector id. Writes 512 bytes from (fsam_src) to

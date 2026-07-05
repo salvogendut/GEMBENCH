@@ -17,3 +17,4 @@ alb_path        equ   #1293        ; CH376 current dir, NUL-terminated, 64 bytes
 fsalb_mounted   equ   #12D3        ; 1 once SET_USB_MODE + DISK_MOUNT has run (set by the ROM)
 ALB_IO_SRC      equ   #12D4        ; save: source pointer in the caller's app page (2)
 ALB_IO_SLEN     equ   #12D6        ; save: byte count (2)  -> ends #12D7, gap free to #12FF
+alb_sysflag     equ   #12D8        ; nonzero while system loads use /GBENCH instead of alb_path

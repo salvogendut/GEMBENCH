@@ -396,16 +396,11 @@ void gb_set_drive(unsigned char d);
 unsigned char gb_get_drive(void);
 
 /* Cross-drive copy (#65 phase 3; orchestration moved app-side in #74). On a
- * GB_MSG_DROP, the drop-target window copies the dragged file (name = gb_dragname)
- * from its source drive/dir to its own drive's root, via the shared staging buffer:
- *   gb_copy_begin();                          // switch to the drag source
- *   gb_set_name(gb_dragname);
- *   n = gb_fs_load(gb_copybuf, GB_COPYMAX);
- *   gb_copy_end();                             // restore this window's drive/dir
- *   gb_set_name(gb_dragname);
- *   gb_fs_save(gb_copybuf, n);
- * gb_copybuf is the kernel's FAT staging area (low RAM), so no app buffer is needed.
- * Current save backends stage at most GB_COPYMAX bytes, so larger drops fail cleanly. */
+ * GB_MSG_DROP, the File Manager copies the dragged file (name = gb_dragname)
+ * through gb_copybuf in GB_COPYMAX-sized chunks. It sets FS_LOAD_OFS/FS_XFLAGS
+ * before gb_fs_load/gb_fs_save so card backends can read at an offset and append
+ * later chunks without an app buffer. CPC floppies use the FLOPPYSV module for
+ * the same chunk protocol, within the headed AMSDOS file-size ceiling. */
 void gb_copy_begin(void);
 void gb_copy_end(void);
 #define gb_copybuf ((char *)0x2200)

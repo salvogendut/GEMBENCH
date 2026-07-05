@@ -29,7 +29,7 @@ base          0x1335  0x1337  fs_drive_state          -             current driv
 base          0x1338  0x133B  repaint_clip            -             WM damage clip (x,y,w,h), also read by desktop wallpaper blits
 base          0x1340  0x1347  repaint_handlers_legacy -             legacy repaint handler table
 base          0x1350  0x144B  wm_state                -             WM table, z-order, drag state, app page pool, MW_RECT
-base          0x144C  0x144F  fs_copy_xfer            -             chunked copy: FS_LOAD_OFS (24-bit) + FS_XFLAGS (chunk/append)
+base          0x144C  0x144F  fs_copy_xfer            -             chunked copy: FS_LOAD_OFS (24-bit) + FS_XFLAGS (chunk-read/append/chunk-save)
 base          0x1450  0x1480  text_copy_scratch       scratch_1450  gb_text string copy
 base          0x1481  0x1484  copy_dir_scratch        scratch_1450  cross-drive copy saved directory
 base          0x1485  0x148F  launch_arg              -             pending 11-byte app launch argument
@@ -39,7 +39,8 @@ base          0x14D2  0x14FE  fs_request_state        -             FS dispatch 
 base          0x14FF  0x14FF  video_mode_hint         -             high bit valid, low bits screen mode; paged modules preserve fullscreen Mode 2
 base          0x1500  0x16FF  cursor_sprite           -             loaded cursor sprite and sector-overread guard
 base          0x1700  0x17FF  ui_transfer             modal_1700    GBUI request/result block
-base          0x1700  0x1712  module_control_header   modal_1700    GBFAT/FLOPPYSV control header; never live during GBUI
+base          0x1700  0x1712  module_control_header   modal_1700    GBFAT/FLOPPYSV/M4SAVE control header; never live during GBUI
+base          0x1710  0x174F  module_path_buffer      modal_1700    M4SAVE/FLOPPYSV card path prefix; never live during GBUI
 base          0x1800  0x19FF  fs_sector_buffer        -             shared 512-byte sector buffer
 base          0x1A00  0x21FF  fs_directory_buffer     fs_1c00       floppy directory buffer; IDE ROM state may overlay #1C00
 base          0x2200  0x3DFF  module_data_buffer      module_data   GBFAT/FLOPPYSV/GBNET bulk transfer data
@@ -54,5 +55,5 @@ ide           0x1250  0x1253  ide_lba_tmp             -             fs_fat32_cor
 rom,albireo_rom,ide_rom 0x1254  0x1254  gb_rom_num              -             selected GEOBENCH.ROM slot
 rom,albireo_rom,ide_rom 0x1256  0x126A  fsam_read_state         -             ROM floppy read backend state
 rom,albireo_rom,ide_rom 0x1270  0x1292  fsam_io_transfer        -             ROM storage I/O transfer area
-albireo_rom   0x1293  0x12D7  albireo_rom_state       -             CH376 path, mount flag, save args
+albireo_rom   0x1293  0x12D8  albireo_rom_state       -             CH376 path, mount flag, save args, system-load flag
 ide_rom       0x1C00  0x1C6F  ide_fat_rom_state       fs_1c00       FAT core/write/read state, overlaps fs_directory_buffer by design

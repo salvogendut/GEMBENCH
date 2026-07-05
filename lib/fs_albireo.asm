@@ -44,6 +44,7 @@ ALBC_ENUMGO     equ   #33
 ALBC_FILECREATE equ   #34
 ALBC_FILEERASE  equ   #35
 ALBC_FILECLOSE  equ   #36
+ALBC_BYTELOC    equ   #39
 ALBC_BYTEREAD   equ   #3A
 ALBC_BYTERDGO   equ   #3B
 ALBC_BYTEWRITE  equ   #3C
@@ -298,6 +299,9 @@ ade_skip
 ; (a zero-length chunk with status SUCCESS). fs_ent_size := bytes read.
 ; CF set = loaded, NC = not found.
 fsalb_load_file
+                ld    a,(FS_XFLAGS)
+                rra
+                jp    c,fsalb_load_chunk_mod
                 call  alb_ensure_mount
                 jp    nc,alf_nf                   ; jp: alf_nf is out of jr range (#110)
                 call  alb_open_req                ; absolute, else cd-into-dir + relative (#real-HW)
@@ -381,31 +385,24 @@ ALB_PATH_MAX    equ   64           ; CH376 current-dir path buffer size (defined
 ; #134 system-dir hooks (Albireo). The CH376 is path-based: system loads run from
 ; the "/GEOBENCH" path prefix, regardless of the File Manager's browse path. No
 ; resolve needed (alb_emit_path prefixes alb_path onto every SET_FILE_NAME);
-; enter swaps alb_path to /GEOBENCH and leave restores the browse path. These edit
-; the alb_path string only (no CH376 I/O), so they stay resident, never in the ROM.
+; enter marks system-load mode and leave clears it. alb_path itself remains the
+; browse path, so module loads cannot clobber the File Manager's card directory.
                 ifndef IN_GBROM
 fs_sys_resolve
                 ret
 fs_sysdir_enter
-                ld    hl,alb_path                 ; save the active browse path
-                ld    de,alb_path_save
-                ld    bc,ALB_PATH_MAX
-                ldir
-                ld    hl,alb_sysdir               ; alb_path = "/GEOBENCH"
-                ld    de,alb_path
-                ld    bc,alb_sysdir_end-alb_sysdir
-                ldir
+                ld    a,1
+                ld    (alb_sysflag),a
                 ret
 fs_sysdir_leave
-                ld    hl,alb_path_save            ; restore the browse path
-                ld    de,alb_path
-                ld    bc,ALB_PATH_MAX
-                ldir
+                xor   a
+                ld    (alb_sysflag),a
                 ret
-alb_sysdir      db    "/GBENCH",0
-alb_sysdir_end
-alb_path_save   defs  ALB_PATH_MAX
                 endif                          ; IN_GBROM (sysdir hooks resident-only)
+alb_sysdir      db    "/GBENCH",0
+                ifndef FS_ALB_LOWRAM
+alb_sysflag     defb  0
+                endif
 
                 ifndef GB_ROM_STUBS
 ; ---------------------------------------------------------------------------
@@ -415,6 +412,9 @@ alb_path_save   defs  ALB_PATH_MAX
 ; meters each round via WR_REQ_DATA, so there's no low-RAM staging or size cap.
 ; CF set = saved, NC = failed.
 fsalb_save_file
+                ld    a,(FS_XFLAGS)
+                and   2
+                jp    nz,fsalb_append_mod
                 call  alb_ensure_mount
                 jr    nc,asv_fail
                 call  alb_setname_req
@@ -459,24 +459,52 @@ asv_fail
                 or    a
                 ret
 
+ALBSV_TX_LEN    equ   #1700
+ALBSV_TX_NAME   equ   #1702
+ALBSV_TX_RES    equ   #170D
+ALBSV_TX_UNIT   equ   #170F
+ALBSV_TX_PATH   equ   #1710
+ALBSV_TX_DATA   equ   #2200
+ALBSV_TX_MAX    equ   #1C00
+
+fsalb_load_chunk_mod
+                xor   a
+                ld    (FS_XFLAGS),a
+                ld    hl,#FFFB
+                call  albsv_common
+                ret   nc
+                ld    (fs_ent_size),hl
+                scf
+                ret
+
+fsalb_append_mod
+                ld    hl,(fs_save_src)
+                ld    de,ALBSV_TX_DATA
+                ld    bc,(fs_save_len)
+                ldir
+                ld    hl,(fs_save_len)
+                jp    albsv_common
+
+albsv_common
+                ld    (ALBSV_TX_LEN),hl
+                ld    hl,fs_req_name
+                ld    de,ALBSV_TX_NAME
+                call  copy11
+                ld    hl,alb_path
+                ld    de,ALBSV_TX_PATH
+                ld    bc,ALB_PATH_MAX
+                ldir
+                ld    a,#FF
+                ld    (ALBSV_TX_UNIT),a
+                jp    floppysv_run
+
 ; fsalb_delete_file: erase fs_req_name. FILE_ERASE opens-then-deletes a closed
 ; file, so SET_FILE_NAME + FILE_ERASE is enough. CF set = deleted, NC = failed.
 ; NOTE: 1984's fat.c returns DISK_ERR for FILE_ERASE, so this can't be verified in
 ; the emulator - it works on real CH376 hardware.
 fsalb_delete_file
-                call  alb_ensure_mount
-                jr    nc,adl_fail
-                call  alb_setname_req
-                ld    a,ALBC_FILEERASE
-                call  alb_sendcmd
-                call  alb_waitint
-                cp    ALB_INT_SUCCESS
-                jr    nz,adl_fail
-                scf
-                ret
-adl_fail
-                or    a
-                ret
+                ld    hl,#FFFA
+                jp    albsv_common
 
 ; ---------------------------------------------------------------------------
 ; alb_setname_req: SET_FILE_NAME from the 11-byte packed 8.3 fs_req_name, sent
@@ -532,7 +560,8 @@ alb_open_req
                 call  alb_waitint
                 cp    ALB_INT_SUCCESS
                 ret   z                            ; opened (emulator / root file / flat card)
-                ld    a,(alb_path)                 ; absolute failed: at root there is no subdir to
+                call  alb_path_hl
+                ld    a,(hl)                       ; absolute failed: at root there is no subdir to
                 or    a                             ; enter, so it is genuinely missing (ZF clear)
                 ret   z
                 ld    a,ALBC_SETNAME               ; stateful CH376: cd into alb_path ...
@@ -557,7 +586,7 @@ alb_open_req
 ; alb_emit_path: stream alb_path (NUL-terminated current dir) to the DATA port for
 ; use inside a SET_FILE_NAME. "" at root emits nothing. B/C (port) preserved.
 alb_emit_path
-                ld    hl,alb_path
+                call  alb_path_hl
 aep_loop
                 ld    a,(hl)
                 or    a
@@ -565,6 +594,14 @@ aep_loop
                 inc   b
                 outi                               ; out (c),(hl); hl++; b restored
                 jr    aep_loop
+
+alb_path_hl
+                ld    hl,alb_path
+                ld    a,(alb_sysflag)
+                or    a
+                ret   z
+                ld    hl,alb_sysdir
+                ret
                 endif                          ; GB_ROM_STUBS (save + delete + setname + emit)
 
 ; ---------------------------------------------------------------------------

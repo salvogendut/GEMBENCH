@@ -16,6 +16,9 @@
 ;   fs_ent_size   4 bytes  (little-endian)
 ; ---------------------------------------------------------------------------
 
+FS_LOAD_OFS     equ   #144C        ; 24-bit chunked-copy read offset
+FS_XFLAGS       equ   #144F        ; bit0 = chunk-read, bit1 = append-write, bit2 = chunk-save
+
 ; Drive-0 backend entry points, resolved at build time (#104). Drive 0 is the
 ; "hard" volume: the Albireo CH376 card (STORAGE_ALBIREO=1) or the SYMBiFACE IDE
 ; (default). The rest of fs.asm is backend-agnostic - it only uses these aliases.

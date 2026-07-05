@@ -163,7 +163,7 @@ fs_sysdir_leave
 ; path, and CALL it. CF set = saved. Files larger than GBFAT_MAX are refused.
 fside_save_file
                 ld    hl,(fs_save_len)        ; refuse > GBFAT_MAX (staging buffer)
-                ld    de,GBFAT_MAX
+                ld    de,GBFAT_MAX+1
                 or    a
                 sbc   hl,de
                 jr    nc,fsvm_fail

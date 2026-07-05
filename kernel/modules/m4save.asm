@@ -7,7 +7,8 @@
 ; and Trash delete on M4 without spending those paths in resident kernel space.
 ;
 ; Transfer area, filled by lib/fs_m4.asm:
-;   M4SV_LEN  (#1700, word)   bytes to write, or #FFFF to delete
+;   M4SV_LEN  (#1700, word)   bytes to write, #FFFF delete, #FFFE free,
+;                              or #FFFC read chunk
 ;   M4SV_NAME (#1702, 11)     8.3 target name
 ;   M4SV_RES  (#170D, byte)   result: 1 = saved, 0 = failed
 ;   M4SV_PATH (#1710, 64)     current M4 path prefix ("" = root)
@@ -29,15 +30,25 @@ M4_ROMNUM      equ   6
 M4C_OPEN       equ   #01          ; C_OPEN  (#4301)
 M4C_WRITE      equ   #03          ; C_WRITE (#4303)
 M4C_CLOSE      equ   #04          ; C_CLOSE (#4304)
+M4C_SEEK       equ   #05          ; C_SEEK  (#4305)
+M4C_READ2      equ   #12          ; C_READ2 (#4312)
 M4C_FREE       equ   #09          ; C_FREE  (#4309)
 M4C_ERASEFILE  equ   #0E          ; C_ERASEFILE (#430E)
+M4C_FSIZE      equ   #11          ; C_FSIZE (#4311)
+M4_READMODE    equ   #81          ; FA_READ | FA_REALMODE
 M4_WRITEMODE   equ   #8A          ; FA_WRITE | FA_CREATE_ALWAYS | FA_REALMODE
+M4_APPENDMODE  equ   #92          ; FA_WRITE | FA_OPEN_ALWAYS | FA_REALMODE
 M4_WRITECHUNK  equ   96           ; payload bytes per C_WRITE packet
+M4_READCHUNK   equ   #0800
+M4SV_MAX       equ   #1C00
+FS_LOAD_OFS    equ   #144C        ; 24-bit chunked-copy read offset
+FS_XFLAGS      equ   #144F        ; bit1 = append-write, bit2 = chunk-save marker
 
                 org   M4SAVE_ORG
 
 ; entry: save M4SV_LEN bytes from M4SV_DATA to M4SV_PATH/M4SV_NAME, delete
-; M4SV_PATH/M4SV_NAME when M4SV_LEN == #FFFF, or return free KiB when #FFFE.
+; M4SV_PATH/M4SV_NAME when M4SV_LEN == #FFFF, return free KiB when #FFFE,
+; or read a chunk at FS_LOAD_OFS when M4SV_LEN == #FFFC.
                 xor   a
                 ld    (M4SV_RES),a
                 ld    hl,(M4SV_LEN)
@@ -49,6 +60,8 @@ M4_WRITECHUNK  equ   96           ; payload bytes per C_WRITE packet
                 jr    z,m4_delete
                 cp    #FE
                 jr    z,m4_free
+                cp    #FC
+                jp    z,m4_read
                 ret
 m4_save
                 call  m4_open_write
@@ -181,6 +194,47 @@ m4f_fail
                 call  m4_io_end
                 ret
 
+; --- read operation ---------------------------------------------------------
+m4_read
+                call  m4_open_read
+                ret   nc
+                call  m4_seek_load_ofs
+                jr    nc,m4r_fail_close
+                ld    hl,M4SV_DATA
+                ld    (m4_src),hl
+                ld    hl,M4SV_MAX
+                ld    (m4_left),hl
+                ld    hl,0
+                ld    (M4SV_LEN),hl
+m4r_loop        ld    hl,(m4_left)
+                ld    a,h
+                or    l
+                jr    z,m4r_done
+                ld    de,M4_READCHUNK
+                push  hl
+                or    a
+                sbc   hl,de
+                pop   hl
+                jr    c,m4r_have
+                ld    hl,M4_READCHUNK
+m4r_have        push  hl
+                call  m4_read_count
+                pop   de
+                jr    nc,m4r_fail_close
+                ld    a,h
+                or    l
+                jr    z,m4r_done
+                or    a
+                sbc   hl,de
+                jr    c,m4r_done
+                jr    m4r_loop
+m4r_done        call  m4_close_fd
+                ld    a,1
+                ld    (M4SV_RES),a
+                ret
+m4r_fail_close  call  m4_close_fd
+                ret
+
 ; --- command transport ------------------------------------------------------
 m4_io_end
                 ld    bc,#DF00
@@ -260,10 +314,43 @@ m4snd_loop      inc   b
                 ret
 
 ; --- save operations --------------------------------------------------------
+m4_open_read
+                ld    a,M4C_OPEN
+                call  m4_cmd
+                ld    a,M4_READMODE
+                call  m4_pb
+                ld    de,M4SV_PATH
+                ld    a,(de)
+                or    a
+                jr    z,m4or_slash
+                call  m4_pstr
+m4or_slash      ld    a,'/'
+                call  m4_pb
+                call  m4_p83
+                xor   a
+                call  m4_pb
+                call  m4_send
+                ld    a,(M4_RESP+4)
+                or    a
+                jr    nz,m4or_fail
+                ld    a,(M4_RESP+3)
+                ld    (m4_fd),a
+                call  m4_io_end
+                scf
+                ret
+m4or_fail       call  m4_io_end
+                or    a
+                ret
+
 m4_open_write
                 ld    a,M4C_OPEN
                 call  m4_cmd
+                ld    a,(FS_XFLAGS)
+                and   2
                 ld    a,M4_WRITEMODE
+                jr    z,m4ow_mode
+                ld    a,M4_APPENDMODE
+m4ow_mode
                 call  m4_pb
                 ld    de,M4SV_PATH
                 ld    a,(de)
@@ -282,10 +369,68 @@ m4ow_slash      ld    a,'/'
                 ld    a,(M4_RESP+3)
                 ld    (m4_fd),a
                 call  m4_io_end
+                ld    a,(FS_XFLAGS)
+                and   2
+                jr    z,m4ow_ok
+                call  m4_seek_eof
+                jr    c,m4ow_ok
+                call  m4_close_fd
+                or    a
+                ret
+m4ow_ok
                 scf
                 ret
 m4ow_fail       call  m4_io_end
                 or    a
+                ret
+
+m4_seek_eof
+                ld    a,M4C_FSIZE
+                call  m4_cmd
+                ld    a,(m4_fd)
+                call  m4_pb
+                call  m4_send
+                ld    a,M4C_SEEK
+                call  m4_cmd
+                ld    a,(m4_fd)
+                call  m4_pb
+                ld    de,M4_RESP+3
+                ld    b,4
+m4se_ofs        ld    a,(de)
+                call  m4_pb
+                inc   de
+                djnz  m4se_ofs
+                call  m4_send
+                ld    a,(M4_RESP+3)
+                push  af
+                call  m4_io_end
+                pop   af
+                or    a
+                ret   nz
+                scf
+                ret
+
+m4_seek_load_ofs
+                ld    a,M4C_SEEK
+                call  m4_cmd
+                ld    a,(m4_fd)
+                call  m4_pb
+                ld    a,(FS_LOAD_OFS)
+                call  m4_pb
+                ld    a,(FS_LOAD_OFS+1)
+                call  m4_pb
+                ld    a,(FS_LOAD_OFS+2)
+                call  m4_pb
+                xor   a
+                call  m4_pb
+                call  m4_send
+                ld    a,(M4_RESP+3)
+                push  af
+                call  m4_io_end
+                pop   af
+                or    a
+                ret   nz
+                scf
                 ret
 
 m4_write_chunk
@@ -318,6 +463,41 @@ m4wc_copy       ld    a,(de)
                 ret
 m4wc_fail       call  m4_io_end
                 or    a
+                ret
+
+m4_read_count
+                push  hl
+                ld    a,M4C_READ2
+                call  m4_cmd
+                ld    a,(m4_fd)
+                call  m4_pb
+                pop   hl
+                ld    a,l
+                call  m4_pb
+                ld    a,h
+                call  m4_pb
+                call  m4_send
+                ld    hl,(M4_RESP+4)
+                push  hl
+                ld    a,h
+                or    l
+                jr    z,m4rc_done
+                ld    bc,(M4_RESP+4)
+                ld    hl,M4_RESP+8
+                ld    de,(m4_src)
+                ldir
+                ld    (m4_src),de
+                ld    hl,(M4SV_LEN)
+                ld    de,(M4_RESP+4)
+                add   hl,de
+                ld    (M4SV_LEN),hl
+                ld    hl,(m4_left)
+                or    a
+                sbc   hl,de
+                ld    (m4_left),hl
+m4rc_done      call  m4_io_end
+                pop   hl
+                scf
                 ret
 
 m4_close_fd
