@@ -707,6 +707,8 @@ kpo_v1          ld    a,(#4004)             ; v1: byte width, then height, bitma
                 ld    (PIC_OFF),a
 kpo_ok          pop   af                       ; restore the Viewer's page
                 call  bank_set
+                xor   a
+                ld    (FS_XFLAGS),a           ; chunked picture loads must not poison later app/file loads
                 ld    a,(PIC_PAGE)             ; return the borrowed bank (nonzero = truthy), so each
                 ret                            ; Viewer window keeps its own and re-selects PIC_PAGE
                                                ; before blit/close (#164 two-window fix)

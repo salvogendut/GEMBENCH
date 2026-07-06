@@ -58,7 +58,7 @@ fs_sysdir_enter
                 ld    de,fsmx_sysdir
                 call  BDOS
                 pop   ix
-                ret
+                jp    fsmx_restore_page
 
 ; fs_sysdir_leave: _CHDIR back to the saved CWD (root-relative path).
 fs_sysdir_leave
@@ -75,7 +75,7 @@ fsl_cd
                 ld    c,_CHDIR
                 call  BDOS
                 pop   ix
-                ret
+                jp    fsmx_restore_page
 
 ; --- directory enumeration ---------------------------------------------------
 ; fs_dir_first / fs_dir_next -> CF set = entry ready in fs_ent_*, NC = done.
@@ -88,6 +88,7 @@ fs_dir_first
                 ld    ix,fsmx_fib
                 call  BDOS
                 pop   ix
+                call  fsmx_restore_page
                 or    a
                 jr    z,fsd_fill
                 or    a                       ; error -> NC
@@ -99,6 +100,7 @@ fs_dir_next
                 ld    ix,fsmx_fib
                 call  BDOS
                 pop   ix
+                call  fsmx_restore_page
                 or    a
                 jr    z,fsd_fill
                 or    a
@@ -162,60 +164,105 @@ fs_load_file
                 ld    a,1                     ; open mode: no write
                 call  BDOS
                 or    a
-                jr    nz,fsload_miss
+                jp    nz,fsload_miss
                 ld    a,b
                 ld    (fsmx_handle),a
                 ld    a,(FS_XFLAGS)          ; chunked copy? read a chunk from FS_LOAD_OFS,
                 and   1                       ; no too-big probe (the caller loops to EOF)
-                jr    z,fsload_whole
+                jr    z,fsload_start
                 call  fsmx_seek_ofs          ; seek handle to FS_LOAD_OFS (from start)
+fsload_start
+                ld    hl,(fs_load_dst)
+                ld    (fsmx_dst),hl
+                ld    hl,(fs_load_max)
+                ld    (fsmx_rem),hl
+                ld    hl,0
+                ld    (fsmx_total),hl
+fsload_loop
+                ld    hl,(fsmx_rem)
+                ld    a,h
+                or    l
+                jr    z,fsload_maxed
+                ld    a,h
+                cp    2
+                jr    c,fsload_short
+                ld    hl,FSMX_BUFSZ
+fsload_short
+                ld    (fsmx_chunk),hl
                 ld    a,(fsmx_handle)
                 ld    b,a
                 ld    c,_READ
-                ld    de,(fs_load_dst)
-                ld    hl,(fs_load_max)
+                ld    de,FSMX_IOBUF
+                ld    hl,(fsmx_chunk)
                 call  BDOS
-                ld    (fs_ent_size),hl       ; actual chunk bytes read
-                ld    hl,0
-                ld    (fs_ent_size+2),hl
-                ld    a,(fsmx_handle)
-                ld    b,a
-                ld    c,_DCLOSE
-                call  BDOS
-                pop   ix
-                scf
-                ret
-fsload_whole
-                ld    c,_READ
-                ld    de,(fs_load_dst)
-                ld    hl,(fs_load_max)
-                call  BDOS
-                ld    (fs_ent_size),hl       ; byte count (max 16K -> low word)
-                ld    hl,0
-                ld    (fs_ent_size+2),hl
+                or    a
+                jr    nz,fsload_readfail
+                ld    (fsmx_actual),hl
+                ld    a,h
+                or    l
+                jr    z,fsload_success       ; EOF
+                push  hl
+                call  fsmx_restore_page      ; copy from resident buffer into the mapped caller page
+                pop   bc
+                ld    hl,FSMX_IOBUF
+                ld    de,(fsmx_dst)
+                ldir
+                ld    hl,(fsmx_dst)
+                ld    de,(fsmx_actual)
+                add   hl,de
+                ld    (fsmx_dst),hl
+                ld    hl,(fsmx_total)
+                ld    de,(fsmx_actual)
+                add   hl,de
+                ld    (fsmx_total),hl
+                ld    hl,(fsmx_rem)
+                ld    de,(fsmx_actual)
+                or    a
+                sbc   hl,de
+                ld    (fsmx_rem),hl
+                ld    hl,(fsmx_actual)
+                ld    de,(fsmx_chunk)
+                or    a
+                sbc   hl,de
+                jr    nz,fsload_success      ; short read -> EOF
+                jr    fsload_loop
+fsload_maxed
+                ld    a,(FS_XFLAGS)
+                and   1
+                jr    nz,fsload_success      ; chunked caller loops to EOF; no too-big probe
                 ld    a,(fsmx_handle)        ; probe: 1 more byte readable = too big
                 ld    b,a
                 ld    c,_READ
                 ld    de,fsmx_probe
                 ld    hl,1
                 call  BDOS
+                or    a
+                jr    nz,fsload_readfail
                 ld    a,h
                 or    l
                 jr    nz,fsload_toobig
+fsload_success
+                ld    hl,(fsmx_total)
+                ld    (fs_ent_size),hl
+                ld    hl,0
+                ld    (fs_ent_size+2),hl
                 ld    a,(fsmx_handle)
                 ld    b,a
                 ld    c,_DCLOSE
                 call  BDOS
                 pop   ix
+                call  fsmx_restore_page
                 scf
                 ret
 fsload_toobig
+fsload_readfail
                 ld    a,(fsmx_handle)
                 ld    b,a
                 ld    c,_DCLOSE
                 call  BDOS
 fsload_miss
                 pop   ix
+                call  fsmx_restore_page
                 or    a
                 ret
 
@@ -267,6 +314,7 @@ fsave_append
                 ld    c,_SEEK
                 call  BDOS
 fsave_do
+                call  fsmx_restore_page      ; ensure _WRITE below reads the mapped app page
                 ld    a,(fsmx_handle)         ; BDOS clobbers B on the seek; reload the handle
                 ld    b,a
                 ld    c,_WRITE
@@ -282,6 +330,7 @@ fsave_do
                 or    a
                 jr    nz,fsave_fail
                 pop   ix
+                call  fsmx_restore_page
                 scf
                 ret
 fsave_closefail
@@ -291,6 +340,7 @@ fsave_closefail
                 call  BDOS
 fsave_fail
                 pop   ix
+                call  fsmx_restore_page
                 or    a
                 ret
 
@@ -303,6 +353,7 @@ fs_delete_file
                 ld    de,fsmx_path
                 call  BDOS
                 pop   ix
+                call  fsmx_restore_page
                 sub   1                       ; A=0 (no error) -> CF set
                 ret
 
@@ -327,6 +378,7 @@ ffk_ok          srl   e
 ffk_half        srl   h                       ; /2: two 512-byte sectors per KiB
                 rr    l
                 pop   ix
+                call  fsmx_restore_page
                 scf
                 ret
 
@@ -342,7 +394,7 @@ fsmx_chdir
                 ld    de,fsmx_path
                 call  BDOS
                 pop   ix
-                ret
+                jp    fsmx_restore_page
 
 ; fsmx_back: up one level.
 fsmx_back
@@ -352,6 +404,17 @@ fsmx_back
                 ld    de,fsmx_dotdot
                 call  BDOS
                 pop   ix
+                jp    fsmx_restore_page
+
+; BDOS/Nextor may restore page 1 to the process TPA segment on return, even when
+; GEOBENCH entered DOS with another mapper segment selected. Re-assert the kernel's
+; page shadow before returning to app/kernel code that expects APP_BASE to still be
+; the caller's mapped segment.
+fsmx_restore_page
+                push  af
+                ld    a,(bank_cur)
+                call  bank_set
+                pop   af
                 ret
 
 ; fsmx_seek_ofs: seek fsmx_handle to the 24-bit FS_LOAD_OFS, from the start (method 0).
@@ -367,7 +430,8 @@ fsmx_seek_ofs
                 ld    b,a
                 ld    a,0                     ; method 0 = from start
                 ld    c,_SEEK
-                jp    BDOS                    ; tail-call: BDOS returns to our caller
+                call  BDOS
+                jp    fsmx_restore_page
 
 ; --- name conversion ------------------------------------------------------------
 ; fsmx_name_to_path: fs_req_name (11 bytes, space padded) -> fsmx_path ASCIIZ.
@@ -406,12 +470,19 @@ fnp_term
                 ret
 
 ; --- state ------------------------------------------------------------------------
+FSMX_IOBUF      equ   #1800                    ; resident 512-byte sector buffer
+FSMX_BUFSZ      equ   #0200
 fsmx_star       db    "*.*",0                 ; "*" alone matches only ext-less names
 fsmx_sysdir     db    92,"GBENCH",0           ; "\GBENCH" (the staged system folder)
 fsmx_root       db    92,0                    ; "\" (root)
 fsmx_dotdot     db    "..",0
 fsmx_handle     db    0
 fsmx_probe      db    0
+fsmx_dst        dw    0
+fsmx_rem        dw    0
+fsmx_chunk      dw    0
+fsmx_actual     dw    0
+fsmx_total      dw    0
 fsmx_cwdsl      db    92                      ; "\" prefix, falls into the CWD buffer
 fsmx_cwd        ds    64                      ; _GETCD result (no leading slash)
 fsmx_path       ds    16                      ; "FILENAME.EXT",0
