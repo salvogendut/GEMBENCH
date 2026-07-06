@@ -247,18 +247,26 @@ void gb_set_name(const char *name11);
  * space-padded 8.3, no dot) into dst - e.g. to show it in a title bar. */
 void gb_get_name(char *dst11);
 
-/* Banked picture buffer (#164, kernels with WM_GADGETS only). gb_pic_open loads the opened
- * file into borrowed app-pool bank(s) so the Viewer can show a .PIC larger than its own 16K
- * page; it returns the first borrowed BANK (nonzero, header parsed: read PIC_WB/PIC_H/PIC_OFF
- * at 0x130C-0x130F) or 0 (no free bank / not a .PIC / unsupported kernel) -> fall back to the
- * in-page buffer. PIC_PAGE (0x130B) and optional PIC_PAGE2 (0x1348) are single kernel globals,
- * so a caller that may have more than one banked picture open at once (two Viewer windows)
- * must store both and write them back before each gb_pic_blit/gb_pic_close. gb_pic_blit blits
- * a wbytes x h region from offset src_off in the banked picture to the screen; gb_pic_close
- * frees the bank(s). The cursor is handled by the WM during on_draw. */
+/* Banked picture buffer (#164/#288, kernels with WM_GADGETS only). gb_pic_open loads the
+ * opened file into borrowed app-pool bank(s) so Viewer/Paint can handle a .PIC larger than
+ * their own 16K page; it returns the first borrowed BANK (nonzero, header parsed: read
+ * PIC_WB/PIC_H/PIC_OFF at 0x130C-0x130F) or 0 (no free bank / not a .PIC / unsupported
+ * kernel) -> fall back to the in-page buffer. PIC_PAGE (0x130B) and optional PIC_PAGE2
+ * (0x1348) are single kernel globals, so a caller that may have more than one banked
+ * picture open at once must store both and write them back before each gb_pic_blit,
+ * gb_pic_edit, or gb_pic_close. gb_pic_blit blits a wbytes x h region from offset src_off
+ * in the banked picture to the screen; gb_pic_edit moves a Paint 100x100 tile or copies
+ * an arbitrary non-crossing save chunk to an app/low-RAM buffer;
+ * gb_pic_close frees the bank(s). The cursor is handled by the WM during on_draw. */
+#define GB_PICEDIT_GET  0
+#define GB_PICEDIT_PUT  1
+#define GB_PICEDIT_CHUNK 2
+#define gb_pic_edit_buf (*(volatile unsigned int *)0x134B)
+#define gb_pic_edit_off (*(volatile unsigned int *)0x134D)
 unsigned char gb_pic_open(void);
 void gb_pic_blit(unsigned char x, unsigned char y, unsigned char wbytes,
                  unsigned char h, unsigned int src_off);
+unsigned char gb_pic_edit(unsigned char op);
 void gb_pic_close(void);
 void gb_restore_parent(void);                /* repaint ancestor apps behind us */
 void gb_wm_damage(unsigned char x, unsigned char y,

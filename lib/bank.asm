@@ -44,5 +44,3 @@ bank_set
 bank_normal
                 ld    a,#C0
                 jr    bank_set
-
-bank_cur        db    #C0          ; shadow of the current #4000-#7FFF paging

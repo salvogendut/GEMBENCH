@@ -32,5 +32,3 @@ jp_hl           jp    (hl)
 bank_normal
                 ld    a,(MSX_TPASEG)
                 jr    bank_set
-
-bank_cur        db    0            ; shadow of the current page-1 segment

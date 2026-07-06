@@ -4,7 +4,8 @@
 ; stays ahead of the CRTC beam (#cursor-tear). Relocated out of the kernel (#65):
 ; assembled above kern_end, saved as DEFAULT.SPR, loaded into low RAM at CUR_LOW at
 ; boot. Layout at CUR_LOW: phase0 (shift 0) @ +0, phase2 (shift 2) @ +#80; each is
-; cursor_arrow_w*cursor_arrow_h*2 = 128 bytes. See lib/cursor_arrow.asm.
+; cursor_arrow_w*cursor_arrow_h*2 = 128 bytes. The second 256 bytes carry the CPC
+; PICEDIT low-RAM helper at #1600. See lib/cursor_arrow.asm.
 cur_spr_data
                 db    #BB,#40,#FF,#00,#FF,#00,#FF,#00      ; phase0 (shift 0) mask,data
                 db    #99,#60,#FF,#00,#FF,#00,#FF,#00
@@ -38,4 +39,5 @@ cur_spr_data
                 db    #FF,#00,#FF,#00,#00,#F6,#FF,#00
                 db    #FF,#00,#FF,#00,#00,#F6,#FF,#00
                 db    #FF,#00,#FF,#00,#99,#60,#FF,#00
+                incbin "../build/PICEDITL.RAW"
 cur_spr_end

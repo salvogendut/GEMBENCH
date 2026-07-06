@@ -19,16 +19,26 @@ command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
 mkdir -p build/msx QA/MSX/GBENCH
 
+GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
+if [ -f "$GB_PAINT_DIR/src/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
+    PAINT_APP_DIR="$GB_PAINT_DIR/src"
+    PAINT_ASSET_DIR="$GB_PAINT_DIR/assets/paint"
+else
+    echo "ERROR: GB-PAINT checkout not found at $GB_PAINT_DIR" >&2
+    echo "Set GB_PAINT_DIR=/path/to/GB-PAINT or clone it next to geobench." >&2
+    exit 1
+fi
+
 # --- the C apps, compiled with the MSX geometry ------------------------------
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7740 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7750 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/msx/PAINT.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
@@ -65,8 +75,9 @@ python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_screensaver.asm
 python3 tools/packicons.py --platform msx2 build/msx/PAINT.IST \
-    assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
-    assets/paint/fill.asm assets/paint/undo.asm
+    "$PAINT_ASSET_DIR/pencil.asm" "$PAINT_ASSET_DIR/square.asm" "$PAINT_ASSET_DIR/circle.asm" \
+    "$PAINT_ASSET_DIR/fill.asm" "$PAINT_ASSET_DIR/undo.asm"
+"$RASM" kernel/modules/picedit_low.asm >/dev/null
 # The MSX pointer (66-byte V9938 hardware sprite). A hand-edited assets/pointer.SPR
 # wins - edit it with `tools/iconedit.py --platform msx2 assets/pointer.SPR` (white
 # = outline, red = fill); otherwise generate it from the PNG art. 11x13 art (smaller

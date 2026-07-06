@@ -10,6 +10,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."          # repo root
 RASM="${RASM:-rasm}"
 
+GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
+if [ -f "$GB_PAINT_DIR/src/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
+    PAINT_APP_DIR="$GB_PAINT_DIR/src"
+    PAINT_ASSET_DIR="$GB_PAINT_DIR/assets/paint"
+else
+    echo "ERROR: GB-PAINT checkout not found at $GB_PAINT_DIR" >&2
+    echo "Set GB_PAINT_DIR=/path/to/GB-PAINT or clone it next to geobench." >&2
+    exit 1
+fi
+
 # The card ships both Albireo and M4 kernels in QA/CARD and QA/GEOBENCH.IMG.
 # STORAGE only picks the backend left in build/ for the dev harness (--disk-a):
 # "albireo" (default), "m4", or "ide" (the dormant legacy backend, still buildable
@@ -72,11 +82,12 @@ python3 tools/packicons.py build/DEFAULT.IST \
     # garbles the icon set above a size threshold). All slots >=14 shifted up by 1.
 # PAINT toolchest set (24x24, ICONED-editable, #114). PAINT's 16K bank caps the loaded
 # set at ~6 icons, so the built .IST holds just the 5 live tools (pencil/square/circle/
-# fill/undo, TOOL_* order), refreshed from assets/paint-tools.png (#246). The full
-# 14-tool art lives in assets/paint/*.asm for ICONED + future tools.
+# fill/undo, TOOL_* order), refreshed from the GB-PAINT tool assets (#246).
+# The full tool art now lives in the sibling GB-PAINT repository.
 python3 tools/packicons.py build/PAINT.IST \
-    assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
-    assets/paint/fill.asm assets/paint/undo.asm
+    "$PAINT_ASSET_DIR/pencil.asm" "$PAINT_ASSET_DIR/square.asm" "$PAINT_ASSET_DIR/circle.asm" \
+    "$PAINT_ASSET_DIR/fill.asm" "$PAINT_ASSET_DIR/undo.asm"
+"$RASM" kernel/modules/picedit_low.asm >/dev/null
 # Backdrop tiles (#128): stage every assets/backdrops tile as build/<NAME>.BDP - copy any
 # ready-made *.BDP, and convert any *.png that has no matching .BDP. Uppercased 8.3 names.
 for bdp in assets/backdrops/*.BDP; do
@@ -93,7 +104,7 @@ DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKT
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
                                    # and clip-aware wallpaper repaint path.
-DATA_LOC=0x7740 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
+DATA_LOC=0x7750 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
 DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
@@ -108,7 +119,7 @@ DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED:
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
 DOC=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
                                    # via the shared gb_doc menu system (#142) -> build/CLOCK.RAW
-DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/PAINT.RAW # PAINT: doc framework (#142)
+DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: custom File/Edit/View menus + picker
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)

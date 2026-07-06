@@ -44,6 +44,7 @@
         .globl  _gb_get_name
         .globl  _gb_pic_open
         .globl  _gb_pic_blit
+        .globl  _gb_pic_edit
         .globl  _gb_pic_close
         .globl  _gb_restore_parent
         .globl  _gb_wm_damage
@@ -405,6 +406,10 @@ _gb_pic_blit:
         call    0x8054          ; GB_PICBLIT (was the dead GB_ONREPAINT stub)
         ld      hl, (sv_ret)
         jp      (hl)
+;; unsigned char gb_pic_edit(unsigned char op);  op in A:
+;;   0=get tile to gb_pic_edit_buf, 1=put tile back, 2=copy save chunk to gb_pic_edit_buf.
+_gb_pic_edit:
+        jp      0x8048          ; GB_PICEDIT (retired GB_VSYNC slot)
 ;; void gb_pic_close(void);   release the borrowed picture bank(s).
 _gb_pic_close:
         jp      0x8069          ; GB_PICCLOSE (was the dead GB_WMLAUNCH stub)
