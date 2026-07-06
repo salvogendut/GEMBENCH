@@ -24,8 +24,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   (`rom/gitcommit.inc`, generated).
 - **`build_m4netmod.sh [out.RAW]`** — builds `GBNETM4.MOD`, the M4ROM TCP command
   backend for the shared `gb_net_*` API.
-- **`build_m4savemod.sh`** — builds `M4SAVE.MOD`, the M4ROM `C_OPEN`/`C_WRITE`/
-  `C_CLOSE` save backend loaded on demand by the M4 kernel.
+- **`build_m4savemod.sh`** — builds `M4SAVE.MOD`, the M4ROM save/delete/free-space
+  and chunked-read backend loaded on demand by the M4 kernel.
 - **`stage_dist.sh <out>`** — stages the shared Albireo/M4 card distribution
   (`GB.BAS`, `M4DETECT.BIN`, `GBALB.BIN`, `GBM4.BIN`, and the `GBENCH/` payload)
   into a directory.

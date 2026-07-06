@@ -1,8 +1,9 @@
 # Pictures
 
-Drop GEOBENCH `.PIC` files here and they are **copied onto every card** (the unified
-`QA/GEOBENCH.IMG` and the loose `QA/CARD/` tree via `stage_dist.sh`) at build time —
-they show up in the Viewer.
+Drop GEOBENCH `.PIC` files here and they are staged for the card and MSX
+distributions at build time. The CPC card tree copies them into `QA/CARD/GBENCH/`
+via `stage_dist.sh`; the MSX build transcodes them to Screen 6 and places copies in
+both `QA/MSX/` and `QA/MSX/GBENCH/`. They show up in the Viewer.
 
 ## Make a .PIC from an image
 
@@ -22,8 +23,8 @@ CPC's AMSDOS/FAT expects, and the staging copies the file under its own name.
 ## Size
 
 The Viewer holds a picture up to ~10 KB of bitmap (≈ 200×200; `PENGUIN.PIC` is the
-200×200 sample) in its in-window buffer. Larger pictures load into a borrowed 16 KB
-RAM bank (#164), so on a bare 128K machine — where every app bank is already in use —
-a big image shows an empty window, while a 256K+ expansion displays it. The floppy
-image (`QA/GEOBENCH.DSK`) only carries the pictures hardcoded in
-`kernel/pack_apps.asm`; the card carries everything in this folder.
+200×200 sample) in its in-window buffer. Larger pictures load into borrowed 16 KB
+RAM bank pages, so 256K+ is the practical target for large images and multiple
+picture windows. The Main CPC boot floppy carries only its hand-packed core
+picture set; `QA/COMPANION.DSK`, the card distribution, and the MSX distribution
+carry the gallery pictures from this folder.

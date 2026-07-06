@@ -8,10 +8,12 @@
    select, scroll, open by type.
 4. ✅ **Banked app model + app API** — separate-binary apps over a kernel API.
 5. ✅ **Apps in C** — the whole app layer moved from assembly to C over `libgb`.
-6. ✅ **Storage write layer** — FAT16/FAT32 + Albireo read/write (save/delete/copy).
-7. ✅ **Apps** — Notepad, ICONED, Paint, Clock, Viewer, Telnet, Xaos, and a
+6. ✅ **Storage write layer** — Albireo, M4 and floppy read/write paths support
+   save/delete/copy; the archived IDE/FAT backend remains buildable for recovery.
+7. ✅ **Apps** — Notepad, ICONED, Paint, Clock, Viewer, Xaos, Diskutil, and a
    **Settings** control panel (font / icon set / cursor / drive-qualified
-   backdrop-wallpaper-saver settings + a live desktop-colours editor).
+   backdrop-wallpaper-saver settings + a live desktop-colours editor). The CPC
+   distro also ships Telnet and Nettest.
 8. ✅ **Unified menu system (`gb_doc`)** — one File / Edit / View menu framework for
    every app (New/Load/Save/Save As, a shared cross-app clipboard, **Fullscreen**, a
    navigable Open/Save dialog in a paged module); the desktop's System menu and the
@@ -23,9 +25,10 @@
 10. ✅ **M4 board SD/TCP support (#174, #259)** — a file-level backend (`GBM4.BIN`)
    ships beside `GBALB.BIN` on the shared card image. `GB.BAS` detects M4ROM
    (`KL_FIND_COMMAND` for an M4 RSX) and selects the right kernel. M4 supports
-   directory, load, save/create, and TCP through `GBNETM4.MOD`. Its storage and
+   directory, load, save/create, delete, free-space queries, and TCP through
+   `M4SAVE.MOD` / `GBNETM4.MOD`. Its storage and
    network calls preserve the active CPC video mode, so Telnet's Mode 2 fullscreen
-   terminal survives paged module loads. Delete remains pending for image-backed mode.
+   terminal survives paged module loads.
 11. ✅ **Kernel source split + build cache** — the resident kernel contracts now
    live in dedicated source files with checked ABI/low-RAM maps, and the full
    build reuses unchanged app/module outputs instead of recompiling everything.

@@ -66,17 +66,17 @@ backdrop, dragging icons, opening apps and menus:
 - **Screensavers** — self-contained apps shipped with a `.SAV` extension. The
   desktop's idle timer (global, so it fires over any app) launches the configured
   module after the timeout; any pointer move / click / key returns to the desktop.
-  Ships **SQUARES** (random squares), **DECO** (Art-Deco panels), **XMATRIX**
-  (binary "Matrix" rain) and **MOUNTAIN** (isometric 3D terrain) on both disks, plus
-  several **Albireo-card-only** extras: **FRACTALI** (Sierpinski + Koch), **STARFLD**
-  (3D star-field) and **XROACH** (scattering cockroaches) from the SymbOS `symsav-*`
-  set, and **MUNCH** (munching squares), **RORSCH** (symmetric ink-blots), **TRUCHET**
-  (tile maze), **ANT** (Langton's ant), **LIGHTN** (forked lightning), **PYRO**
-  (fireworks), **FOREST** (fractal trees) and **HELIX** (harmonograph) from
-  xscreensaver, plus **CATCLK** (a Kit-Cat Klock with sliding pupils + real
-  hour/minute hands). The Settings **Module** picker lists every `.SAV` in the system
-  folder (scrolling when there are more than fit), so new ones appear automatically.
-  All 16 savers are also ported to the [MSX2 target](MSX2.md).
+  The Main CPC boot floppy carries the default **SQUARES** saver; the Companion
+  floppy, the Albireo/M4 card distribution, and the MSX2 distribution carry the
+  full set: **SQUARES** (random squares), **DECO** (Art-Deco panels), **XMATRIX**
+  (binary "Matrix" rain), **MOUNTAIN** (isometric 3D terrain), **FRACTALI**
+  (Sierpinski + Koch), **STARFLD** (3D star-field), **XROACH** (scattering
+  cockroaches), **MUNCH** (munching squares), **RORSCH** (symmetric ink-blots),
+  **TRUCHET** (tile maze), **ANT** (Langton's ant), **LIGHTN** (forked lightning),
+  **PYRO** (fireworks), **FOREST** (fractal trees), **HELIX** (harmonograph), and
+  **CATCLK** (a Kit-Cat Klock with sliding pupils + real hour/minute hands). The
+  Settings **Module** picker lists every `.SAV` in the system folder (scrolling
+  when there are more than fit), so new ones appear automatically.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),
