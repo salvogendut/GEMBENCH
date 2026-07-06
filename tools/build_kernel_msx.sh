@@ -28,6 +28,13 @@ else
     echo "Set GB_PAINT_DIR=/path/to/GB-PAINT or clone it next to geobench." >&2
     exit 1
 fi
+GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
+if [ ! -f "$GB_BASIC_DIR/Makefile" ] || [ ! -d "$GB_BASIC_DIR/apps/basic" ]; then
+    echo "ERROR: GB-BASIC checkout not found at $GB_BASIC_DIR" >&2
+    echo "Set GB_BASIC_DIR=/path/to/GB-BASIC or clone it next to geobench." >&2
+    exit 1
+fi
+GEOBENCH_ROOT="$(pwd)"
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
@@ -99,6 +106,9 @@ python3 tools/png2cpc.py --platform msx2 build/msx/SPLASH_BUILD.png build/msx/SP
 python3 tools/make_bootsplash.py assets/SPLASH.png build/msx/SPLASHD_BUILD.png "$BUILD_COMMIT"
 python3 tools/png2cpc.py --platform msx2 build/msx/SPLASHD_BUILD.png build/msx/SPLASHD.BIN splash 96x184
 
+echo "Building GB-BASIC MSX payload from $GB_BASIC_DIR"
+make -C "$GB_BASIC_DIR" raws-msx GEOBENCH="$GEOBENCH_ROOT"
+
 # --- the kernel + the .COM stub ---------------------------------------------
 # RASM exits 0 even on assembly errors, so stale outputs would silently ship:
 # remove them first and require fresh files after each pass.
@@ -122,6 +132,16 @@ cp build/msx/ICONED.RAW   QA/MSX/GBENCH/ICONED.APP
 cp build/msx/VIEWER.RAW   QA/MSX/GBENCH/VIEWER.APP
 cp build/msx/PAINT.RAW    QA/MSX/GBENCH/PAINT.APP
 cp build/msx/PAINT.IST    QA/MSX/GBENCH/PAINT.IST
+for f in "$GB_BASIC_DIR/build/msx/BASIC.RAW" "$GB_BASIC_DIR/build/msx/BASRUN.RAW" "$GB_BASIC_DIR/build/msx/BASRUN2.BIN"; do
+    [ -s "$f" ] || { echo "ERROR: missing GB-BASIC MSX payload $f (run make -C \"$GB_BASIC_DIR\" raws-msx)" >&2; exit 1; }
+done
+cp "$GB_BASIC_DIR/build/msx/BASIC.RAW"   QA/MSX/GBENCH/BASIC.APP
+cp "$GB_BASIC_DIR/build/msx/BASRUN.RAW"  QA/MSX/GBENCH/BASRUN.APP
+cp "$GB_BASIC_DIR/build/msx/BASRUN2.BIN" QA/MSX/GBENCH/BASRUN2.BIN
+for bas in "$GB_BASIC_DIR"/examples/*.BAS; do
+    [ -e "$bas" ] || continue
+    sed 's/$/\r/' "$bas" > "QA/MSX/GBENCH/$(basename "$bas")"
+done
 cp build/msx/CLOCK.RAW    QA/MSX/GBENCH/CLOCK.APP
 cp build/msx/SQUARES.RAW  QA/MSX/GBENCH/SQUARES.SAV
 cp build/msx/ANT.RAW      QA/MSX/GBENCH/ANT.SAV

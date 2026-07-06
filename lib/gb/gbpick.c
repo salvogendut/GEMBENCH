@@ -19,8 +19,15 @@
                                     the low cap; a scrolling list is a later step) */
 
 static char          store[PICK_MAX][14];   /* display labels: "NAME.EXT" / "NAME/" */
+static char          rawname[PICK_MAX][11]; /* exact raw 8.3 name behind each row    */
 static unsigned char isdir_f[PICK_MAX];     /* parallel: is entry i a directory?    */
 static const char *const *g_exts;           /* current extension filter (NULL = all) */
+
+static void copy11(char *d, const char *s)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++) d[i] = s[i];
+}
 
 /* name_disp: raw 11-byte 8.3 name -> "NAME.EXT" (file) or "NAME/" (folder), into dst. */
 static void name_disp(char *dst, const char *raw, unsigned char dir)
@@ -72,7 +79,8 @@ static unsigned char pick(unsigned char savemode, char *out11)
         while (p && nreal < PICK_MAX) {
             if (shown()) {
                 isdir_f[nreal] = gb_isdir();
-                name_disp(store[nreal], gb_entname(), isdir_f[nreal]);
+                copy11(rawname[nreal], gb_entname());
+                name_disp(store[nreal], rawname[nreal], isdir_f[nreal]);
                 nreal++;
             }
             p = gb_dirn();
@@ -89,8 +97,7 @@ static unsigned char pick(unsigned char savemode, char *out11)
         i = (unsigned char)(sel - base);                /* shown-entry index */
         if (isdir_f[i]) { seek_to(i); gb_chdir(); continue; }   /* descend */
         if (savemode) continue;                         /* a file in Save mode -> ignore */
-        seek_to(i);                                     /* Open: select this file */
-        if (out11) { p = gb_entname(); for (i = 0; i < 11; i++) out11[i] = p[i]; }
+        if (out11) copy11(out11, rawname[i]);           /* Open: return the clicked row's exact file */
         return 1;
     }
 }

@@ -19,6 +19,13 @@ else
     echo "Set GB_PAINT_DIR=/path/to/GB-PAINT or clone it next to geobench." >&2
     exit 1
 fi
+GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
+if [ ! -f "$GB_BASIC_DIR/Makefile" ] || [ ! -d "$GB_BASIC_DIR/apps/basic" ]; then
+    echo "ERROR: GB-BASIC checkout not found at $GB_BASIC_DIR" >&2
+    echo "Set GB_BASIC_DIR=/path/to/GB-BASIC or clone it next to geobench." >&2
+    exit 1
+fi
+GEOBENCH_ROOT="$(pwd)"
 
 # The card ships both Albireo and M4 kernels in QA/CARD and QA/GEOBENCH.IMG.
 # STORAGE only picks the backend left in build/ for the dev harness (--disk-a):
@@ -217,7 +224,9 @@ rm -f build/companion.dsk
 "$RASM" kernel/pack_comp3.asm -eo                  # savers (2/2)
 cp build/companion.dsk QA/COMPANION.DSK
 echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Xaos + savers + pictures)"
-tools/stage_dist.sh QA/CARD                       # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH
+echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
+make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
+GB_BASIC_DIR="$GB_BASIC_DIR" tools/stage_dist.sh QA/CARD # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH
 # A ready-to-flash card image (partitioned FAT16) for the Albireo CH376 card and M4 image mode.
 tools/build_card_img.sh QA/CARD QA/GEOBENCH.IMG \
     || echo "  (QA/GEOBENCH.IMG skipped - needs sfdisk + mkfs.fat + mtools)"
