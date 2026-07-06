@@ -279,6 +279,7 @@ fill_block
                 ld    (vc_cmd),a
                 jp    vdp_hmmv
 
+                if BACKDROP_TILE
 ; --- fill_pattern: like fill_block but from the 16x16 BD_TILE ---------------
 ; Builds each row in MSX_ROWBUF from the tile at absolute phase (the tile byte
 ; for (x,y) is BD_TILE[(y&15)*4 + (x&3)]), then streams it out.
@@ -340,6 +341,7 @@ fp_out          outi
                 ld    (fb_rows),a
                 jr    nz,fp_row
                 ret
+                endif
 
                 include "../screen_clip.asm"  ; clip_fb_copy + rect_cull (shared, #287)
 

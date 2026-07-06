@@ -43,6 +43,7 @@ M4_READCHUNK   equ   #0800
 M4SV_MAX       equ   #1C00
 FS_LOAD_OFS    equ   #144C        ; 24-bit chunked-copy read offset
 FS_XFLAGS      equ   #144F        ; bit1 = append-write, bit2 = chunk-save marker
+fs_load_max    equ   #14F9
 
                 org   M4SAVE_ORG
 
@@ -202,7 +203,7 @@ m4_read
                 jr    nc,m4r_fail_close
                 ld    hl,M4SV_DATA
                 ld    (m4_src),hl
-                ld    hl,M4SV_MAX
+                ld    hl,(fs_load_max)
                 ld    (m4_left),hl
                 ld    hl,0
                 ld    (M4SV_LEN),hl
@@ -466,15 +467,15 @@ m4wc_fail       call  m4_io_end
                 ret
 
 m4_read_count
-                push  hl
+                ld    e,l
+                ld    d,h
                 ld    a,M4C_READ2
                 call  m4_cmd
                 ld    a,(m4_fd)
                 call  m4_pb
-                pop   hl
-                ld    a,l
+                ld    a,e
                 call  m4_pb
-                ld    a,h
+                ld    a,d
                 call  m4_pb
                 call  m4_send
                 ld    hl,(M4_RESP+4)

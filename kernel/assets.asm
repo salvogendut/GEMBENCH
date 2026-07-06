@@ -101,6 +101,7 @@ def_spr         db    "DEFAULT SPR"
 ; into KCFG_BDPNAME) into BD_TILE so fill_pattern can tile it. BACKDROP=SOLID (the
 ; default) or a missing file leaves BD_SOLID=1 -> the plain pen-0 desktop (today's look).
 backdrop_init
+                if BACKDROP_TILE
                 ld    a,(BD_SOLID)           ; the GBCFG module set this (1 = solid / no tile)
                 or    a
                 ret   nz                       ; solid backdrop -> nothing to load
@@ -145,6 +146,9 @@ bdi_loaded      jr    nc,bdi_solid           ; missing / refused -> solid fallba
 bdi_solid       ld    a,1
                 ld    (BD_SOLID),a           ; missing file -> solid fallback
                 ret
+                else
+                ret
+                endif
 
 ; --- bootsplash (#196) ----------------------------------------------------
 ; A lollipop logo + a load progress bar shown during the boot's disk loads. The
@@ -326,6 +330,7 @@ k_reload
 ; k_backdrop (GB_BACKDROP): fill a rectangle with the desktop backdrop. B=x C=y D=w E=h.
 ; Solid (BD_SOLID) -> a plain pen-0 fill (== the old gb_fill(...,0)); else tile BD_TILE.
 k_backdrop
+                if BACKDROP_TILE
                 ld    a,b
                 ld    (fb_x),a
                 ld    a,c
@@ -342,3 +347,7 @@ k_backdrop
                 jp    fill_block
 kb_pattern
                 jp    fill_pattern
+                else
+                xor   a
+                jp    k_fill
+                endif

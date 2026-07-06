@@ -35,6 +35,7 @@ FSV_TX_MAX      equ   #1C00
 FS_LOAD_OFS     equ   #144C        ; 24-bit read offset for #FFFC chunk-read op
 FS_XFLAGS       equ   #144F        ; bit1 = append-write, bit2 = chunk-save marker
 fs_ent_size     equ   #14E8
+fs_load_max     equ   #14F9
 fs_req_name     equ   FSV_TX_NAME  ; the name to find/create (core's namematch uses it)
 
 ALB_CMD         equ   #FE81
@@ -423,7 +424,7 @@ frc_len_ok
                 ld    de,(FS_LOAD_OFS)
                 or    a
                 sbc   hl,de
-                ld    de,FSV_TX_MAX
+                ld    de,(fs_load_max)
                 push  hl
                 or    a
                 sbc   hl,de
@@ -727,7 +728,7 @@ afb_fail
                 or    a
                 ret
 
-; flsv_alb_read: read up to FSV_TX_MAX bytes from an Albireo/CH376 file at
+; flsv_alb_read: read up to fs_load_max bytes from an Albireo/CH376 file at
 ; FS_LOAD_OFS. This is the card-source half of File Manager chunked copy.
 flsv_alb_read
                 call  alb_open_tx
@@ -736,7 +737,7 @@ flsv_alb_read
                 jr    nc,far_fail_close
                 ld    hl,FSV_TX_DATA
                 ld    (fsv_dptr),hl
-                ld    hl,FSV_TX_MAX
+                ld    hl,(fs_load_max)
                 ld    (fsv_drem),hl
                 ld    hl,0
                 ld    (FSV_TX_LEN),hl

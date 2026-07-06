@@ -473,9 +473,7 @@ fsalb_load_chunk_mod
                 ld    hl,#FFFB
                 call  albsv_common
                 ret   nc
-                ld    (fs_ent_size),hl
-                scf
-                ret
+                jp    fs_chunk_to_dst
 
 fsalb_append_mod
                 ld    hl,(fs_save_src)

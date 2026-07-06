@@ -57,7 +57,7 @@ md_banks        db    0
 
 ; wm_alloc_page: claim the lowest free app page -> A = its port value, or 0 if all
 ; APP_NPAGES pages are in use. wm_free_page: A = the port value to release. The pool
-; serves both co-resident WM windows (wm_open_go) and modal launch_app calls.
+; serves co-resident WM windows and the initial desktop boot page.
 wm_alloc_page
                 ld    a,(APP_NPAGES)
                 or    a

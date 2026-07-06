@@ -96,6 +96,7 @@ static void draw_icon(unsigned char i)
  * centred picture from the bank (reusing the Viewer's gb_pic_open/blit services).
  * No bank (128K / missing file) -> plain gb_backdrop (tile or solid). */
 #define PIC_PAGE_K (*(volatile unsigned char *)0x130B)
+#define PIC_PAGE2_K (*(volatile unsigned char *)0x1348)
 #define PIC_WB_K   (*(volatile unsigned char *)0x130C)
 #define PIC_H_K    (*(volatile unsigned int  *)0x130D)
 #define PIC_OFF_K  (*(volatile unsigned char *)0x130F)
@@ -103,9 +104,12 @@ static void draw_icon(unsigned char i)
 #define CLIP_Y_K   (*(volatile unsigned char *)0x1339)
 #define CLIP_W_K   (*(volatile unsigned char *)0x133A)
 #define CLIP_H_K   (*(volatile unsigned char *)0x133B)
+#define UI_MODAL_K (*(volatile unsigned char *)0x1705)
 static unsigned char wp_bank;                 /* borrowed bank (0 = none) */
-static unsigned char wp_wb, wp_h, wp_x, wp_y; /* picture dims + centred top-left */
-static unsigned char wp_srcy;                 /* first picture row shown (centre a too-tall pic) */
+static unsigned char wp_bank2;                /* optional second wallpaper picture bank */
+static unsigned char wp_wb, wp_x, wp_y;       /* picture width + centred top-left */
+static unsigned int  wp_h;                    /* picture height; large .PIC files exceed 255 rows */
+static unsigned int  wp_srcy;                 /* first picture row shown (centre a too-tall pic) */
 static unsigned int  wp_off;
 static unsigned char wp_drive;
 static unsigned char wp_cfg_drive;
@@ -173,8 +177,9 @@ static void wp_release(void)
 {
     if (!wp_bank) return;
     PIC_PAGE_K = wp_bank;
+    PIC_PAGE2_K = wp_bank2;
     gb_pic_close();
-    wp_bank = 0;
+    wp_bank = wp_bank2 = 0;
 }
 
 static unsigned char same11(const char *a, const char *b)
@@ -302,20 +307,23 @@ static void wp_init(void)
     descended = enter_sys();                     /* card: into /GBENCH; floppy: stays at root */
     gb_set_name(nm);                             /* the focused (desktop) window's file arg */
     wp_bank = gb_pic_open();                   /* borrow a bank + parse the GBPC header */
+    UI_MODAL_K = 0;                              /* picture loaders reuse #1700; keep menus live */
+    wp_bank2 = 0;
     if (descended) gb_back();                    /* /GBENCH -> root (depth-1, safe) */
     gb_set_drive(old_drive);
     if (wp_bank) {
-        wp_wb = PIC_WB_K; wp_h = (unsigned char)PIC_H_K; wp_off = PIC_OFF_K;
+        wp_bank2 = PIC_PAGE2_K;
+        wp_wb = PIC_WB_K; wp_h = PIC_H_K; wp_off = PIC_OFF_K;
         wp_x = (wp_wb < GB_COLS) ? (unsigned char)((GB_COLS - wp_wb) / 2) : 0;
         if (wp_h <= GB_LINES - 8) {             /* fits the desktop area below the bar: centre it */
             wp_y = (unsigned char)(8 + ((GB_LINES - 8) - wp_h) / 2);
             wp_srcy = 0;
         } else {                                /* taller than the area: pin top, show the middle */
             wp_y = 8;
-            wp_srcy = (unsigned char)((wp_h - (GB_LINES - 8)) / 2);
+            wp_srcy = (wp_h - (GB_LINES - 8)) / 2;
         }
     } else {
-        wp_wb = 0; wp_h = 0; wp_x = 0; wp_y = 0; wp_srcy = 0; wp_off = 0;
+        wp_wb = 0; wp_h = 0; wp_x = 0; wp_y = 0; wp_srcy = 0; wp_off = 0; wp_bank2 = 0;
     }
 }
 
@@ -348,7 +356,9 @@ static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsig
     if (ey > cb) ey = cb;
     if (ex <= x || ey <= y) return;
     w = (unsigned char)(ex - x); h = (unsigned char)(ey - y);
-    px2 = (unsigned char)(wp_x + wp_wb); py2 = (unsigned char)(wp_y + wp_h);
+    px2 = (unsigned char)(wp_x + wp_wb);
+    py2 = (wp_h > (unsigned int)(GB_LINES - wp_y)) ? GB_LINES
+                                                    : (unsigned char)(wp_y + (unsigned char)wp_h);
     ix = (x > wp_x) ? x : wp_x;                 /* rect INTERSECT picture rect */
     rx = (ex < px2) ? ex : px2;
     iy = (y > wp_y) ? y : wp_y;
@@ -365,10 +375,11 @@ static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsig
     if (ix > x)  gb_fill(x, iy, (unsigned char)(ix - x), (unsigned char)(by - iy), 0);
     if (rx < ex) gb_fill(rx, iy, (unsigned char)(ex - rx), (unsigned char)(by - iy), 0);
     iw = (unsigned char)(rx - ix); ih = (unsigned char)(by - iy);
-    src = wp_off + (unsigned int)(unsigned char)(iy - wp_y + wp_srcy) * wp_wb
+    src = wp_off + (unsigned int)(iy - wp_y + wp_srcy) * wp_wb
         + (unsigned char)(ix - wp_x);
     PIC_PAGE_K = wp_bank;                       /* re-assert our bank (the Viewer shares PIC_PAGE) */
-    if (iw == wp_wb || ih == 1) {
+    PIC_PAGE2_K = wp_bank2;
+    if ((iw == wp_wb && !wp_bank2) || ih == 1) {
         gb_pic_blit(ix, iy, iw, ih, src);
     } else {
         for (row = 0; row < ih; row++) {        /* raw PICBLIT has no source stride argument */

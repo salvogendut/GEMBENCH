@@ -169,6 +169,7 @@ fbk_row
                 jr    nz,fbk_loop
                 ret
 
+                if BACKDROP_TILE
 ; fill_pattern: like fill_block, but fills with the 16x16 backdrop tile at BD_TILE
 ; (16 rows x 4 Mode-1 bytes) instead of a constant, phased off ABSOLUTE screen x,y so
 ; adjacent fills line up (the desktop backdrop + every WM damage-repair use it). The
@@ -232,6 +233,7 @@ fp_nw
                 ld    (fb_rows),a
                 jr    nz,fp_row
                 ret
+                endif
 fp_off          defb  0                        ; tile offset for the current row (scratch)
 
                 include "screen_clip.asm"    ; clip_fb_copy + rect_cull (shared with lib/msx/, #287)

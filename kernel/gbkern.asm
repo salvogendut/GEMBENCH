@@ -64,6 +64,13 @@ WM_GADGETS      equ   1                        ; (no resident storage drivers)
 WM_GADGETS      equ   1
                 endif
                 endif
+                ifndef BACKDROP_TILE           ; CPC resident headroom is tight; keep tiled
+                ifdef PLATFORM_MSX             ; .BDP backdrops on MSX, but CPC uses solid
+BACKDROP_TILE   equ   1                        ; backdrop + optional wallpaper.
+                else
+BACKDROP_TILE   equ   0
+                endif
+                endif
                 include "lowram.inc"
 
                 include "api_table.inc"
@@ -526,31 +533,24 @@ ig_done
 
                 include "assets.asm"
 
-; --- app launch ----------------------------------------------------------
-; launch_app: HL = 8.3 app name. Load it into the next bank page (PAGE_APP0 +
-; launch depth) and run it; restore the caller's page when it quits. Apps nest
-; (desktop -> filemgr -> viewer); the caller's page is kept on the stack so any
-; depth restores correctly.
-launch_app
-                ld    de,fs_req_name         ; name -> fs_req_name (HL in caller page)
+; --- desktop boot loader -------------------------------------------------
+; The old GB_RUN modal/nested app launcher is now a reserved no-op slot. Boot only needs to
+; load DESKTOP.APP once; later apps are opened by the co-resident WM path (GB_WMOPEN).
+boot_desktop
+                ld    hl,name_desktop
+                ld    de,fs_req_name
                 call  copy11
-                call  wm_alloc_page          ; grab a free bank page (not depth-based,
-                or    a                       ; so it never collides with a co-resident
-                ret   z                       ; WM window) -> A=page, 0 = none free
-                ld    c,a                      ; C = target page
-                push  bc                       ; save target page to free on return
-                ld    a,(bank_cur)           ; save caller's page (per depth) on stack
+                call  wm_alloc_page
+                or    a
+                ret   z
+                ld    c,a
+                ld    a,(bank_cur)
                 push  af
-                ld    hl,(APP_HANDLER)       ; save the parent's event handler and clear
-                push  hl                       ; it, so a top-bar click during the child
-                ld    hl,0                     ; cannot call the parent's handler (whose
-                ld    (APP_HANDLER),hl        ; page is not mapped while the child runs)
-                ld    a,(MENU_DEF)           ; save & clear the parent's menu so the
-                push  af                       ; child starts with a clean top bar
                 xor   a
                 ld    (MENU_DEF),a
-                ld    hl,launch_depth
-                inc   (hl)
+                ld    h,a
+                ld    l,a
+                ld    (APP_HANDLER),hl
                 di
                 ld    a,c
                 call  bank_set
@@ -558,70 +558,115 @@ launch_app
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
-                call  fs_load_sys           ; #134: app binaries live in the /GEOBENCH system dir
-                jr    nc,la_done             ; missing -> just unwind
+                call  fs_load_sys             ; #134: app binaries live in the /GEOBENCH system dir
+                jr    nc,bd_done
                 ei
                 call  APP_BASE
                 di
-la_done
-                ld    hl,launch_depth
-                dec   (hl)
-                pop   af                       ; restore the parent's menu count
-                ld    (MENU_DEF),a
-                pop   hl                       ; restore the parent's event handler
-                ld    (APP_HANDLER),hl
-                pop   af                       ; caller's page
+bd_done         pop   af
                 call  bank_set
-                pop   bc                       ; target page -> release it
                 ld    a,c
                 call  wm_free_page
-                                              ; (#77: the desktop redraws the bar via its
-                                              ; always-run handler, no draw_topbar here)
-                ld    a,(WM_NWIN)            ; if WM windows are live underneath (a modal
-                or    a                       ; app launched from one), repaint them so
-                call  nz,wm_repaint_all      ; the modal app's screen area is restored
                 ei
-la_escwait                                     ; if the app quit on ESC, wait for the
-                ifdef PLATFORM_MSX             ; key to be released before the parent
-                call  msx_esc_held             ; runs - else the same press quits it too,
-                jr    nz,la_escwait            ; cascading all the way back to BASIC/DOS
-                else
-                ld    a,66
-                call  KM_TEST_KEY
-                jr    nz,la_escwait
-                endif
                 ret
-launch_depth    db    0
 
                 ifdef WM_GADGETS
 ; --- #164 banked Viewer picture buffer ------------------------------------------------------
-; Mirrors launch_app's load-into-a-bank: borrow a free app-pool page, map it at #4000, load the
-; opened file into it, blit from it with restore_block (which reads its sb_buf in the #4000
-; window). Lets the Viewer show a .PIC bigger than its own 16K page (up to a full-screen 320x200).
+; Borrow one or two free app-pool pages, map them at #4000, stream the opened .PIC into them
+; through the low-RAM module buffer, then blit from them with restore_block (which reads its
+; sb_buf in the #4000 window). Lets the Viewer show .PIC files bigger than its own 16K page.
 ;
-; k_pic_open (GB_PICOPEN): load the opened file into a borrowed bank + parse the .PIC header.
-; -> A=1 with PIC_WB/PIC_H/PIC_OFF set if it's a .PIC loaded OK; A=0 (no free bank, or not a
+PIC_CHUNK       equ   #1C00
+
+; k_pic_open (GB_PICOPEN): load the opened file into borrowed bank(s) + parse the .PIC header.
+; -> A=bank with PIC_WB/PIC_H/PIC_OFF set if it's a .PIC loaded OK; A=0 (no free bank, or not a
 ; .PIC - the bank is released) so the Viewer falls back to its in-page buffer.
 k_pic_open
+                xor   a
+                ld    (PIC_PAGE2),a
                 call  wm_alloc_page          ; A = a free app-pool page, or 0 = none free
                 or    a
                 ret   z                        ; -> A=0, caller uses its in-page buffer
                 ld    (PIC_PAGE),a
                 ld    a,(bank_cur)            ; save the Viewer's page
                 push  af
-                ld    a,(PIC_PAGE)
-                call  bank_set               ; map the picture bank at #4000
-                ld    hl,#3F00
-                ld    (fs_load_max),hl
-                ld    hl,#4000
-                ld    (fs_load_dst),hl
-                call  focus_arg_ptr          ; fs_req_name = the focused window's file arg (as
-                ld    de,fs_req_name         ; k_fsload does - else fs_load_file loads a stale name)
+                ld    hl,0
+                ld    (PIC_OFS),hl
+kpo_loop        call  focus_arg_ptr          ; fs_req_name = the focused window's file arg each
+                ld    de,fs_req_name         ; chunk; data-module loads overwrite fs_req_name.
                 call  copy11
+                ld    hl,(PIC_OFS)
+                bit   7,h
+                jp    nz,kpo_fail            ; <32K: two 16K picture banks
+                ld    a,l
+                ld    (FS_LOAD_OFS),a
+                ld    a,h
+                ld    (FS_LOAD_OFS+1),a
+                xor   a
+                ld    (FS_LOAD_OFS+2),a
+                ld    a,1
+                ld    (FS_XFLAGS),a
+                bit   6,h
+                jr    nz,kpo_page2
+                ld    a,(PIC_PAGE)
+                call  bank_set
+                ld    hl,#4000
+                ld    de,(PIC_OFS)
+                or    a
+                sbc   hl,de                   ; room in first bank
+                push  hl
+                ld    hl,(PIC_OFS)
+                ld    de,#4000
+                add   hl,de                   ; destination #4000+offset
+                jr    kpo_have_dst
+kpo_page2       ld    a,(PIC_PAGE2)
+                or    a
+                jr    nz,kpo_have2
+                call  wm_alloc_page
+                or    a
+                jp    z,kpo_fail
+                ld    (PIC_PAGE2),a
+kpo_have2       call  bank_set
+                ld    hl,#8000
+                ld    de,(PIC_OFS)
+                or    a
+                sbc   hl,de                   ; room in second bank
+                push  hl
+                ld    hl,(PIC_OFS)            ; offset #4000..#7FFF maps directly in bank 2
+kpo_have_dst    ld    (fs_load_dst),hl
+                pop   hl
+                ld    de,PIC_CHUNK
+                push  hl
+                or    a
+                sbc   hl,de
+                pop   hl
+                jr    c,kpo_setmax
+                ld    hl,PIC_CHUNK
+kpo_setmax      ld    (fs_load_max),hl
                 di
-                call  fs_load_file           ; load the opened file into the bank (#4000..)
+                call  fs_load_file           ; chunk-read into the mapped picture bank
                 ei
-                jr    nc,kpo_fail            ; not found
+                jp    nc,kpo_fail            ; not found / too big
+                ld    hl,(fs_ent_size)
+                ld    a,h
+                or    l
+                jr    nz,kpo_got
+                ld    hl,(PIC_OFS)           ; EOF is OK after at least one chunk; empty is not
+                ld    a,h
+                or    l
+                jr    z,kpo_fail
+                jr    kpo_done_load
+kpo_got         ld    b,h
+                ld    c,l
+                ld    de,(PIC_OFS)
+                add   hl,de
+                ld    (PIC_OFS),hl
+                ld    hl,(fs_load_max)
+                or    a
+                sbc   hl,bc
+                jp    z,kpo_loop             ; full chunk: there may be more
+kpo_done_load   ld    a,(PIC_PAGE)
+                call  bank_set               ; parse the header from the first picture bank
                 ld    a,(#4000)              ; validate the "GBPC" magic
                 cp    'G'
                 jr    nz,kpo_fail
@@ -667,14 +712,22 @@ kpo_ok          pop   af                       ; restore the Viewer's page
                                                ; before blit/close (#164 two-window fix)
 kpo_fail        pop   af                       ; restore the Viewer's page, release the bank
                 call  bank_set
-                ld    a,(PIC_PAGE)
+                xor   a
+                ld    (FS_XFLAGS),a
+                ld    a,(PIC_PAGE2)
+                or    a
+                jr    z,kpo_fail_1
+                call  wm_free_page
+                xor   a
+                ld    (PIC_PAGE2),a
+kpo_fail_1      ld    a,(PIC_PAGE)
                 call  wm_free_page
                 xor   a
                 ld    (PIC_PAGE),a
                 ret
 
 ; k_pic_blit (GB_PICBLIT): B=x C=y D=wbytes E=h HL=src_off. Map the picture bank and blit the
-; region (#4000+src_off ..) to the screen at (x,y) via restore_block, then restore the page.
+; region to the screen at (x,y) via restore_block, then restore the page.
 ; The cursor is already down (the WM's cur_paintlock holds during the Viewer's on_draw).
 k_pic_blit
                 ld    a,b
@@ -685,21 +738,34 @@ k_pic_blit
                 ld    (sb_w),a
                 ld    a,e
                 ld    (sb_h),a
-                ld    bc,#4000
-                add   hl,bc                   ; HL = #4000 + src_off (in the bank window)
-                ld    (sb_buf),hl
                 ld    a,(bank_cur)
                 push  af
+                bit   6,h
+                jr    nz,kpb_page2
+                ld    bc,#4000
+                add   hl,bc                   ; HL = #4000 + src_off in the first bank
+                ld    (sb_buf),hl
                 ld    a,(PIC_PAGE)
-                call  bank_set
+                jr    kpb_map
+kpb_page2       ld    a,(PIC_PAGE2)
+                or    a
+                jr    z,kpb_done
+                ld    (sb_buf),hl             ; src_off #4000..#7FFF maps directly in bank 2
+kpb_map         call  bank_set
                 call  restore_block          ; reads sb_buf (#4000..bank), writes the screen
-                pop   af
+kpb_done        pop   af
                 call  bank_set
                 ret
 
-; k_pic_close (GB_PICCLOSE): release the borrowed picture bank.
+; k_pic_close (GB_PICCLOSE): release the borrowed picture bank(s).
 k_pic_close
-                ld    a,(PIC_PAGE)
+                ld    a,(PIC_PAGE2)
+                or    a
+                jr    z,kpc_first
+                call  wm_free_page
+                xor   a
+                ld    (PIC_PAGE2),a
+kpc_first       ld    a,(PIC_PAGE)
                 or    a
                 ret   z
                 call  wm_free_page
@@ -710,8 +776,7 @@ k_pic_close
 
                 include "app_pool.asm"
 
-; GB_RUN (HL = 8.3 name in the caller's page): the slot jumps straight to
-; launch_app (k_run wrapper collapsed, #148).
+; GB_RUN is a reserved legacy modal-run slot; live apps use GB_WMOPEN/GB_WMLAUNCHAS.
 
 ; k_launch (GB_LAUNCH): the old MODAL open-the-current-entry. Superseded by the
 ; co-resident open path and no longer called by any app; the slot -> k_noop (#148).
@@ -2082,7 +2147,7 @@ md_call         jp    (hl)
 ; k_menu (GB_MENU): register the calling app's top-bar menu. HL = a blob in the
 ; app page: count, then per title { col (byte), 8-byte NUL/space-padded label }.
 ; Copied into resident MENU_DEF; the desktop's bar handler watches MENU_DEF and
-; redraws the titles when it changes (#77). launch_app clears it for a child app.
+; redraws the titles when it changes (#77).
 k_menu                                          ; HL = def ptr in the focused app's page.
                 ; Also record it as the focused window's menu, so a later focus change
                 ; re-installs it instead of clearing the bar (#142: gb_menu must persist

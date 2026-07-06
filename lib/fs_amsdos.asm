@@ -203,8 +203,9 @@ fslf_found
                 bit   0,(hl)
                 jr    z,fslf_whole                   ; bit0 clear -> normal whole-file load
                 dec   (hl)                           ; clear bit0; avoid recursive module load
-                ld    hl,#FFFC
-                jp    fsamv_common                   ; paged module handles chunked copy reads
+                call  fsam_motor_off                 ; close this read pass before the paged
+                                                     ; chunk module reloads from the same disk.
+                jp    fsam_load_chunk_mod            ; paged module handles chunked copy reads
 fslf_whole
                 push  ix                              ; copy 16 block numbers out
                 pop   hl
@@ -414,13 +415,14 @@ fsam_free_mod_op
                 ld    (FSV_TX_LEN),hl
                 jp    floppysv_run
 
-                ifdef GB_ROM_STUBS
 fsam_load_chunk_mod
                 xor   a
                 ld    (FS_XFLAGS),a
                 ld    hl,#FFFC
-                jp    fsamv_common
-                endif
+                call  fsamv_common
+                ret   nc
+                ld    hl,(FSV_TX_LEN)
+                jp    fs_chunk_to_dst
 
 ; fsam_delete_file: ask FLOPPYSV.MOD to mark matching directory extents deleted
 ; and write the directory back. FSV_TX_LEN=#FFFF is the module operation marker.

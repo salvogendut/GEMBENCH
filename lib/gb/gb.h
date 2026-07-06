@@ -248,14 +248,14 @@ void gb_set_name(const char *name11);
 void gb_get_name(char *dst11);
 
 /* Banked picture buffer (#164, kernels with WM_GADGETS only). gb_pic_open loads the opened
- * file into a borrowed app-pool bank so the Viewer can show a .PIC larger than its own 16K
- * page; it returns the borrowed BANK (nonzero, header parsed: read PIC_WB/PIC_H/PIC_OFF at
- * 0x130C-0x130E) or 0 (no free bank / not a .PIC / unsupported kernel) -> fall back to the
- * in-page buffer. PIC_PAGE (0x130B) is a single kernel global, so a caller that may have more
- * than one banked picture open at once (two Viewer windows) must store the returned bank and
- * write it back to 0x130B before each gb_pic_blit/gb_pic_close. gb_pic_blit blits a wbytes x h
- * region from offset src_off in the bank to the screen; gb_pic_close frees the bank. The cursor
- * is handled by the WM during on_draw. */
+ * file into borrowed app-pool bank(s) so the Viewer can show a .PIC larger than its own 16K
+ * page; it returns the first borrowed BANK (nonzero, header parsed: read PIC_WB/PIC_H/PIC_OFF
+ * at 0x130C-0x130F) or 0 (no free bank / not a .PIC / unsupported kernel) -> fall back to the
+ * in-page buffer. PIC_PAGE (0x130B) and optional PIC_PAGE2 (0x1348) are single kernel globals,
+ * so a caller that may have more than one banked picture open at once (two Viewer windows)
+ * must store both and write them back before each gb_pic_blit/gb_pic_close. gb_pic_blit blits
+ * a wbytes x h region from offset src_off in the banked picture to the screen; gb_pic_close
+ * frees the bank(s). The cursor is handled by the WM during on_draw. */
 unsigned char gb_pic_open(void);
 void gb_pic_blit(unsigned char x, unsigned char y, unsigned char wbytes,
                  unsigned char h, unsigned int src_off);

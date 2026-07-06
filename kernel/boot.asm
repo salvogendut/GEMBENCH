@@ -206,9 +206,8 @@ m4s_hang        jr    m4s_hang
                 ld    hl,kern_end-GB_KERNEL  ; resident kernel size -> GB_KSIZE (Ram Usage)
                 ld    (GB_KSIZE),hl
                 call  boot_tick              ; #196: bar 4/4 (full) just before the desktop loads
-                ld    hl,name_desktop        ; the desktop is the first app
-                call  launch_app             ; run DESKTOP in PAGE_APP0 (the WM master loop
-                                              ; runs forever; only GB_EXIT gets past here)
+                call  boot_desktop           ; run DESKTOP in a borrowed page (the WM master loop
+                                             ; runs forever; only GB_EXIT gets past here)
 km_finish                                      ; reached by k_exit's longjmp
                 ei
                 ld    a,2                     ; back to BASIC's 80-col mode
