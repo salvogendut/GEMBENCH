@@ -229,7 +229,7 @@ static void do_load(void)
 {
     char nm[11];
     unsigned int len;
-    if (!confirm_save()) return;
+    if (!(g_doc->flags & GB_DOC_LOAD_NOCONFIRM) && !confirm_save()) return;
     if (!gb_pickfile(nm, g_doc->exts)) return;     /* filtered to the app's file types */
     set_name(nm);                                  /* chosen file -> current file */
     len = gb_fs_load(g_doc->buf, g_doc->bufmax);   /* targets the navigated directory */

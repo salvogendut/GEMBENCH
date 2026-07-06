@@ -21,6 +21,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RASM="${RASM:-rasm}"
+GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
 
 OUT="${1:?usage: tools/stage_dist.sh <outdir>}"
 SYS="$OUT/GBENCH"                    # the system folder (#174: <=7 chars so the M4's
@@ -46,6 +47,16 @@ for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS DISKUTI
 done
 cp build/TELNET.RAW  "$SYS/TELNET.APP"      # #238: windowed ANSI/VT terminal + telnet client
 cp build/NETTEST.RAW "$SYS/NETTEST.APP"     # #261: DNS/TCP/HTTP diagnostic for Albireo/Net4CPC and M4 backends
+for f in "$GB_BASIC_DIR/build/BASIC.RAW" "$GB_BASIC_DIR/build/BASRUN.RAW" "$GB_BASIC_DIR/build/BASRUN2.BIN"; do
+    [ -s "$f" ] || { echo "ERROR: missing GB-BASIC payload $f (run make -C \"$GB_BASIC_DIR\" raws)" >&2; exit 1; }
+done
+cp "$GB_BASIC_DIR/build/BASIC.RAW"   "$SYS/BASIC.APP"   # GB-BASIC editor (external repo)
+cp "$GB_BASIC_DIR/build/BASRUN.RAW"  "$SYS/BASRUN.APP"  # GB-BASIC runtime
+cp "$GB_BASIC_DIR/build/BASRUN2.BIN" "$SYS/BASRUN2.BIN" # GB-BASIC float/graphics low-RAM overlay
+for bas in "$GB_BASIC_DIR"/examples/*.BAS; do           # examples next to BASIC/BASRUN
+    [ -e "$bas" ] || continue
+    sed 's/$/\r/' "$bas" > "$SYS/$(basename "$bas")"
+done
 cp build/SQUARES.RAW "$SYS/SQUARES.SAV"     # #219/#281: the default screensaver (a .SAV, not a .APP)
 cp build/DECO.RAW   "$SYS/DECO.SAV"         # art-deco panels screensaver (ported from symsav-deco)
 cp build/XMATRIX.RAW "$SYS/XMATRIX.SAV"     # Matrix digital-rain screensaver (ported from symsav-xmatrix)

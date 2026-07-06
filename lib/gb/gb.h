@@ -176,6 +176,8 @@ unsigned char gb_pickdir(const char *const *exts);
  *   on_open(len)     buf now holds a `len`-byte file just loaded - parse it
  *   on_save() -> len fill buf with the document, return the byte count to write
  * Mark edits with gb_doc_dirty() so New / Load / close can offer to save first.
+ * Apps can set GB_DOC_LOAD_NOCONFIRM when LOAD should behave like BASIC LOAD:
+ * discard the current contents and leave the newly loaded file clean.
  *
  * Recipe: call gb_doc(&doc) before gb_wm_run; in your on_event call
  * gb_doc_event() first (returns 1 if the framework consumed the event); in your
@@ -213,7 +215,9 @@ typedef struct {
     void         (*on_fullscreen)(unsigned char on);
     const char *const *view_items;
     void         (*on_view)(unsigned char item);
+    unsigned char flags;
 } gb_doc_t;
+#define GB_DOC_LOAD_NOCONFIRM 0x01
 void          gb_doc(const gb_doc_t *d);   /* register; adds the standard File (+Edit) menu */
 void          gb_doc_dirty(void);          /* mark the document modified */
 unsigned char gb_doc_modified(void);       /* is it dirty? (e.g. for a "*" in the title) */
