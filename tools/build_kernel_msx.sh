@@ -21,14 +21,14 @@ mkdir -p build/msx QA/MSX/GBENCH
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7740 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7750 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x6300 DOC=1 tools/build_capp.sh apps/paint build/msx/PAINT.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh apps/paint build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
@@ -67,6 +67,7 @@ python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
 python3 tools/packicons.py --platform msx2 build/msx/PAINT.IST \
     assets/paint/pencil.asm assets/paint/square.asm assets/paint/circle.asm \
     assets/paint/fill.asm assets/paint/undo.asm
+"$RASM" kernel/modules/picedit_low.asm >/dev/null
 # The MSX pointer (66-byte V9938 hardware sprite). A hand-edited assets/pointer.SPR
 # wins - edit it with `tools/iconedit.py --platform msx2 assets/pointer.SPR` (white
 # = outline, red = fill); otherwise generate it from the PNG art. 11x13 art (smaller

@@ -759,6 +759,229 @@ kpb_done        pop   af
                 call  bank_set
                 ret
 
+                ifdef PLATFORM_MSX
+; k_pic_edit (GB_PICEDIT, #288): Paint edits a 100x100 byte-aligned tile of a banked
+; .PIC. A=0 copies the tile at PIC_EDIT_OFF into PIC_EDIT_BUF, A=1 writes PIC_EDIT_BUF
+; back to that tile, and A=2 copies fs_save_len bytes from PIC_EDIT_OFF to PIC_EDIT_BUF
+; for Paint's app-side chunk-save loop.
+; The app supplies PIC_PAGE/PIC_PAGE2 before each call, like gb_pic_blit/gb_pic_close.
+PIC_TILE_WB     equ   25
+PIC_TILE_H      equ   100
+PIC_TILE_SZ     equ   PIC_TILE_WB*PIC_TILE_H
+PIC_TMP         equ   #2200
+k_pic_edit
+                cp    2
+                jp    z,kpe_chunk
+                cp    1
+                jp    z,kpe_put
+                or    a
+                jp    z,kpe_get
+                xor   a
+                ret
+
+kpe_get         ld    a,(PIC_PAGE)
+                or    a
+                ret   z
+                ld    a,(bank_cur)
+                push  af
+                call  kpe_pic_to_tmp
+                ld    c,a
+                pop   af
+                call  bank_set
+                ld    a,c
+                or    a
+                ret   z
+                ld    hl,PIC_TMP
+                ld    de,(PIC_EDIT_BUF)
+                ld    bc,PIC_TILE_SZ
+                ldir
+                ld    a,1
+                ret
+
+kpe_put         ld    a,(PIC_PAGE)
+                or    a
+                ret   z
+                ld    hl,(PIC_EDIT_BUF)
+                ld    de,PIC_TMP
+                ld    bc,PIC_TILE_SZ
+                ldir
+                ld    a,(bank_cur)
+                push  af
+                call  kpe_tmp_to_pic
+                ld    c,a
+                pop   af
+                call  bank_set
+                ld    a,c
+                ret
+
+kpe_chunk       ld    a,(PIC_PAGE)
+                or    a
+                ret   z
+                ld    a,(bank_cur)
+                push  af
+                ld    hl,(PIC_EDIT_OFF)
+                ld    de,(PIC_EDIT_BUF)
+                ld    bc,(fs_save_len)
+                call  kpe_seg_get16
+                ld    c,a
+                pop   af
+                call  bank_set
+                ld    a,c
+                ret
+
+; Copy the 100x100 tile from the banked .PIC into PIC_TMP. PIC_EDIT_OFF is used as
+; a row cursor and may be clobbered; the app resets it before each request.
+kpe_pic_to_tmp  ld    de,PIC_TMP
+                ld    b,PIC_TILE_H
+kpt_row         push  bc
+                ld    hl,(PIC_EDIT_OFF)
+                ld    c,PIC_TILE_WB
+                call  kpe_row_get
+                or    a
+                jr    z,kpt_fail
+                pop   bc
+                push  bc
+                ld    hl,(PIC_EDIT_OFF)
+                ld    a,(PIC_WB)
+                ld    c,a
+                ld    b,0
+                add   hl,bc
+                ld    (PIC_EDIT_OFF),hl
+                pop   bc
+                djnz  kpt_row
+                ld    a,1
+                ret
+kpt_fail        pop   bc
+                xor   a
+                ret
+
+; Copy PIC_TMP back into the banked .PIC tile.
+kpe_tmp_to_pic  ld    de,PIC_TMP
+                ld    b,PIC_TILE_H
+kpp_row         push  bc
+                ld    hl,(PIC_EDIT_OFF)
+                ld    c,PIC_TILE_WB
+                call  kpe_row_put
+                or    a
+                jr    z,kpp_fail
+                pop   bc
+                push  bc
+                ld    hl,(PIC_EDIT_OFF)
+                ld    a,(PIC_WB)
+                ld    c,a
+                ld    b,0
+                add   hl,bc
+                ld    (PIC_EDIT_OFF),hl
+                pop   bc
+                djnz  kpp_row
+                ld    a,1
+                ret
+kpp_fail        pop   bc
+                xor   a
+                ret
+
+; Row helpers split the rare case where a 25-byte tile row straddles the first/second
+; picture bank boundary. Input: HL=picture offset, DE=low-RAM tile pointer, C=count.
+; Return: A=1/0, DE advanced through the low-RAM tile on success.
+kpe_row_get     ld    a,h
+                cp    #3F
+                jr    nz,kpe_seg_get
+                ld    a,l
+                add   a,c
+                jr    nc,kpe_seg_get
+                ld    a,l
+                cpl
+                inc   a                         ; first part = #4000 - offset
+                ld    b,a
+                ld    a,c
+                sub   b                         ; second part
+                push  af
+                ld    c,b
+                call  kpe_seg_get
+                or    a
+                jr    z,kprg_fail
+                pop   af
+                ld    c,a
+                ld    hl,#4000
+                jr    kpe_seg_get
+kprg_fail       pop   af
+                xor   a
+                ret
+
+kpe_row_put     ld    a,h
+                cp    #3F
+                jr    nz,kpe_seg_put
+                ld    a,l
+                add   a,c
+                jr    nc,kpe_seg_put
+                ld    a,l
+                cpl
+                inc   a
+                ld    b,a
+                ld    a,c
+                sub   b
+                push  af
+                ld    c,b
+                call  kpe_seg_put
+                or    a
+                jr    z,kprp_fail
+                pop   af
+                ld    c,a
+                ld    hl,#4000
+                jr    kpe_seg_put
+kprp_fail       pop   af
+                xor   a
+                ret
+
+; Copy one non-crossing segment from the banked .PIC to low RAM. Input:
+; HL=picture offset, DE=destination, BC=count. A=1 on success.
+kpe_seg_get     ld    b,0
+kpe_seg_get16   bit   6,h
+                jr    nz,kpeg_second
+                ld    a,(PIC_PAGE)
+                or    a
+                ret   z
+                push  bc
+                ld    bc,#4000
+                add   hl,bc
+                pop   bc
+                jr    kpeg_map
+kpeg_second     ld    a,(PIC_PAGE2)
+                or    a
+                ret   z
+kpeg_map        push  bc
+                call  bank_set
+                pop   bc
+                ldir
+                ld    a,1
+                ret
+
+; Copy one non-crossing segment from low RAM to the banked .PIC. Input:
+; HL=picture offset, DE=source, C=count. A=1 on success, DE=source advanced.
+kpe_seg_put     ld    b,0
+                bit   6,h
+                jr    nz,kpep_second
+                ld    a,(PIC_PAGE)
+                or    a
+                ret   z
+                push  bc
+                ld    bc,#4000
+                add   hl,bc
+                pop   bc
+                jr    kpep_map
+kpep_second     ld    a,(PIC_PAGE2)
+                or    a
+                ret   z
+kpep_map        push  bc
+                call  bank_set
+                pop   bc
+                ex    de,hl
+                ldir
+                ex    de,hl                    ; DE = low-RAM source advanced
+                ld    a,1
+                ret
+                endif                            ; PLATFORM_MSX resident PICEDIT
+
 ; k_pic_close (GB_PICCLOSE): release the borrowed picture bank(s).
 k_pic_close
                 ld    a,(PIC_PAGE2)
@@ -1122,9 +1345,9 @@ kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs +
                                               ; (fire = the click; it also buffers a
                                               ; char, e.g. 'Z' - drop it while held)
 
-; k_vsync (GB_VSYNC): retired (#274) - apps are frame-paced by the WM loop (on_frame
-; runs once per k_poll) rather than driving their own gb_vsync loop. The GB_VSYNC and
-; GB_BLITE slots -> the shared k_ret0 ("no ESC" A=0 return); addresses stay fixed.
+; k_vsync (old GB_VSYNC): retired (#274) - apps are frame-paced by the WM loop.
+; The #8048 ABI slot is now GB_PICEDIT under WM_GADGETS (#288); GB_BLITE remains
+; the shared k_ret0 ("no ESC" A=0 return). Addresses stay fixed.
 
 ; k_onevent (GB_ONEVENT): retired (#274) - no caller left; apps register their handler
 ; via the gb_win_t descriptor (wm_register/k_wm_managed write APP_HANDLER through

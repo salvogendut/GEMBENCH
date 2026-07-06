@@ -115,10 +115,11 @@ GB_FSSAVE       equ   GB_KERNEL+66 ; #8042  save the file this app was opened wi
 GB_GETKEY       equ   GB_KERNEL+69 ; #8045  -> A = a typed character from the
                                    ;        keyboard buffer, or 0 if none waiting.
                                    ;        Non-blocking; IRQs must be on.
-GB_VSYNC        equ   GB_KERNEL+72 ; #8048  wait for the frame flyback (50 Hz pace,
-                                   ;        no pointer/clock) -> A = 1 if ESC is held
-                                   ;        else 0. For keyboard apps that drive
-                                   ;        their own loop instead of GB_POLL.
+GB_PICEDIT      equ   GB_KERNEL+72 ; #8048  banked .PIC tile edit/save service (#288;
+                                   ;        retired GB_VSYNC slot). A=0 get 100x100
+                                   ;        tile into PIC_EDIT_BUF, A=1 put tile back,
+                                   ;        A=2 copy fs_save_len bytes to PIC_EDIT_BUF.
+                                   ;        -> A=1 success, A=0 unsupported/failure.
 GB_ONEVENT      equ   GB_KERNEL+75 ; #804B  register an event handler: HL = address
                                    ;        of a void(void) function in the app, 0 to
                                    ;        clear. The kernel CALLs it during GB_POLL

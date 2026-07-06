@@ -4,6 +4,11 @@
 ; validate with tools/check_abi_table.py.
 
                 org   GB_KERNEL
+                ifdef PLATFORM_MSX
+PICEDIT_ENTRY   equ   k_pic_edit
+                else
+PICEDIT_ENTRY   equ   PICEDIT_BASE
+                endif
 ; --- fixed API jump table (order is the ABI; see lib/gbapp.inc) -----------
                 jp    kernel_main            ; GB_INIT  #8000
                 jp    k_cls                  ; GB_CLS   #8003
@@ -47,7 +52,11 @@
                 jp    k_fsload               ; GB_FSLOAD      #803F
                 jp    k_fssave               ; GB_FSSAVE      #8042
                 jp    k_getkey               ; GB_GETKEY      #8045
-                jp    k_ret0                 ; GB_VSYNC       #8048 (retired: WM-paced; -> shared A=0 ret, #274)
+                ifdef WM_GADGETS
+                jp    PICEDIT_ENTRY          ; GB_PICEDIT     #8048 (#288; retired GB_VSYNC slot)
+                else
+                jp    k_ret0                 ; no banked picture support -> A=0
+                endif
                 jp    k_noop                 ; GB_ONEVENT     #804B (dead stub -> shared ret, #274)
                 jp    k_menu                 ; GB_MENU        #804E
                 jp    k_setname              ; GB_SETNAME     #8051

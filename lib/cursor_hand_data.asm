@@ -5,7 +5,8 @@
 ; lib/cursor_data.asm. Assembled above kern_end (not resident) and saved as
 ; HAND.SPR; the kernel loads it into low RAM at boot when GEOBENCH.CFG has
 ; CURSOR=HAND (#65). Layout at CUR_LOW: phase0 (shift 0) @ +0, phase2 (shift
-; 2) @ +#80; each cursor_arrow_w*cursor_arrow_h*2 = 128 bytes. See lib/cursor_arrow.asm.
+; 2) @ +#80; each cursor_arrow_w*cursor_arrow_h*2 = 128 bytes. The second 256
+; bytes carry the CPC PICEDIT low-RAM helper at #1600. See lib/cursor_arrow.asm.
 cur_hand_data
                 db    #EE,#10,#77,#80,#FF,#00,#FF,#00      ; phase0 (shift 0) mask,data
                 db    #EE,#11,#77,#88,#FF,#00,#FF,#00
@@ -39,4 +40,5 @@ cur_hand_data
                 db    #FF,#00,#88,#77,#00,#FF,#77,#88
                 db    #FF,#00,#88,#73,#00,#FF,#77,#80
                 db    #FF,#00,#88,#70,#00,#F0,#77,#80
+                incbin "../build/PICEDITL.RAW"
 cur_hand_end

@@ -12,7 +12,10 @@ PIC_WB          equ   #130C        ; (0 = none) + the parsed .PIC header the Vie
 PIC_H           equ   #130D        ; width in bytes, height in rows (16-bit #130D/E - tall pics
 PIC_OFF         equ   #130F        ; exceed 255, #166), and the bitmap offset (6 v1 / 14 v2).
 PIC_PAGE2       equ   #1348        ; optional second picture bank for .PIC files >16K.
-PIC_OFS         equ   #1349        ; transient k_pic_open chunk loader state.
+PIC_OFS         equ   #1349        ; transient k_pic_open chunk loader state; after open, file size.
+PIC_EDIT_BUF    equ   #134B        ; GB_PICEDIT: app-side 100x100 tile buffer pointer.
+PIC_EDIT_OFF    equ   #134D        ; GB_PICEDIT: source/destination bitmap offset in the banked .PIC.
+BANK_CUR        equ   #134F        ; shadow of the current #4000-#7FFF page; low so PICEDITL can update it.
 
                 ifdef GB_ROM                  ; #152: the floppy read backend (fs_amsdos) is offloaded
 FS_RDIO_LOWRAM  equ   1                       ; to GEOBENCH.ROM; its scratch state must live in fixed
@@ -127,6 +130,7 @@ GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbu
 CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT.SPR is
                                    ; loaded here at boot so the bitmaps aren't resident
                                    ; (256B used; 512 reserved to #16FF for the sector copy)
+PICEDIT_BASE    equ   #1600        ; CPC GB_PICEDIT helper, appended to shipped .SPR files.
 CLIP_LEN        equ   #3E00        ; shared clipboard (#142): word = length, data #3E02..
 CLIP_DATA       equ   #3E02        ; #3FFF (510 bytes). Non-banked low RAM above gb_copybuf
 CLIP_CAP        equ   510          ; (which ends #3E00), so it survives app switches.
