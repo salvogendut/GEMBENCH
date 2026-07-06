@@ -1,9 +1,10 @@
 # netspike — Net4CPC (W5100S) round-trip test harness (#238 Phase 0)
 
 A throwaway-but-kept harness that proved the GEOBENCH networking path end to end
-before building `GBNET.MOD`. It builds a tiny CPC binary against the **cpc-sdcc**
-C W5100 driver (`~/Dev/cpc-sdcc/src`: `w5100.c`/`net.c`/`netinit.c`), connects to a
-local TCP server, and prints the reply — all headless in the 1984 emulator.
+before the current `GBNET.MOD` implementation. It builds a tiny CPC binary against
+the **cpc-sdcc** C W5100 driver (`~/Dev/cpc-sdcc/src`: `w5100.c`/`net.c`/
+`netinit.c`), connects to a local TCP server, and prints the reply — all headless
+in the 1984 emulator.
 
 ## Result (proven)
 The CPC connects to `127.0.0.1:2323`, sends `hi`, and receives the server's banner
@@ -29,6 +30,6 @@ Then view `tools/netspike/spike.ppm`.
 - The server and emulator must run in the **same shell** (a backgrounded server dies
   when its launching shell exits).
 
-## Next
-Step 1 wraps this proven driver into `GBNET.MOD` (paged C module) + a `gb_net_*`
-app API. See issue #238.
+## Status
+The production path now lives in `GBNET.MOD` plus the `gb_net_*` app API. Keep this
+directory as a historical spike and as a small independent Net4CPC transport test.

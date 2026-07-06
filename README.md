@@ -22,10 +22,11 @@ reaching the kernel through `libgb`. It's a graphical layer on top of an existin
 DOS (AMSDOS / UniDOS / MSX-DOS 2), not a replacement OS — smaller scope than
 [SymbOS](https://www.symbos.de), different goal.
 
-The desktop, file manager, Notepad, ICONED, Paint, Viewer, Clock, Telnet, Xaos,
-Settings and a set of screensavers all build from one script. The same source tree
-targets **two platforms**: the CPC (Albireo card + AMSDOS floppy) and the
-[MSX2](docs/MSX2.md) (MSX-DOS 2 / Nextor, V9938 Screen 6).
+The desktop, file manager, Notepad, ICONED, Paint, Viewer, Clock, Xaos, Settings
+and the screensavers build for both targets from the same source tree. The CPC
+distribution also ships the Telnet client and network diagnostic apps. Targets:
+the CPC (Albireo/M4 card + AMSDOS floppy) and the [MSX2](docs/MSX2.md)
+(MSX-DOS 2 / Nextor, V9938 Screen 6).
 
 ## Quick start
 
@@ -63,10 +64,11 @@ Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.
 
 ## Where it's going
 
-The core desktop, windowing, file manager, C app model and a suite of bundled apps
-all work on both platforms. Next up: a single canonical asset format shared across
-CPC and MSX, resizable Paint canvases, drawers/folders, and per-screensaver
-configuration. See the [roadmap](docs/ROADMAP.md) for the full list.
+The core desktop, windowing, file manager, C app model and most bundled apps work
+on both platforms; the network apps remain CPC-only for now. Next up: a single
+canonical asset format shared across CPC and MSX, resizable Paint canvases,
+drawers/folders, and per-screensaver configuration. See the
+[roadmap](docs/ROADMAP.md) for the full list.
 
 ## License
 

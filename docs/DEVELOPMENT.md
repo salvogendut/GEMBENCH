@@ -70,8 +70,9 @@ bash tools/build_kernel.sh
 ../1984/1984 --config=/dev/null --6128 --memory=512 --disk-a=QA/GEOBENCH.DSK --autostart=GB --screenshot-at=2200:/tmp/boot.ppm --exit-after=2200
 ```
 
-The boot splash prints the build commit below the progress bar; use that to
-cross-check media against the source tree under test.
+The boot splash prints the build commit below the progress bar only when
+`DEBUG=TRUE` is set in `GEOBENCH.CFG`; normal media show `GEOBENCH` there. Use the
+debug splash to cross-check media against the source tree under test.
 
 ### Incremental build behavior
 

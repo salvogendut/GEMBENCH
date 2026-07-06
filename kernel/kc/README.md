@@ -7,11 +7,11 @@ hot-path compositor. What *can* move to C is the branchy **logic**, and the
 resident region around `#8000` is tight, so that logic lives in **paged bank
 modules** the nucleus loads and calls through the trampoline — the SymbOS model.
 
-This directory holds those modules. Each is pure logic: no I/O, no firmware
-calls, no globals if avoidable. The nucleus owns memory and devices and hands
-the module pointers (or a fixed low-RAM transfer area). The modules are loaded
-into a bank page and `call`ed exactly like an app; only one is live at a time, so
-several share the same low-RAM transfer/buffer overlays.
+This directory holds the C-built modules. Most are pure policy/logic over fixed
+low-RAM transfer areas, while the network modules deliberately contain hardware or
+firmware-facing driver code that is too bulky to keep resident. The modules are
+loaded into a bank page and `call`ed exactly like an app; only one is live at a
+time, so several share the same low-RAM transfer/buffer overlays.
 
 ## Modules
 
@@ -71,10 +71,7 @@ Boot flow for the config module lives in `kernel/config_module.asm` (split out o
 
 ## Follow-ups
 
-- **DEFAULT fallback** when a configured `.FNT`/`.IST` is missing (a bad value
-  loads nothing and draws garbage). Deferred because the retry costs resident
-  bytes; it pairs with trimming the nucleus.
-- Retire `lib/config.asm` once nothing else references it (it is already
-  orphaned — `GBCFG.MOD` is the live parser).
 - Continue moving branchy policy into paged modules following this pattern, per
   `docs/KERNEL_ARCHITECTURE_REVIEW.md`.
+- Keep module transfer blocks documented in `kernel/lowram.tsv` as more services
+  move out of the resident nucleus.

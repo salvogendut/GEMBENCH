@@ -2,10 +2,17 @@
 
 Date: 2026-06-28
 
+> Historical review: this file is kept as the architectural audit trail from the
+> 2026-06-28 cleanup pass. Several items called out below have since been
+> implemented or partially implemented; use `docs/ARCHITECTURE.md`,
+> `kernel/README.md`, `kernel/lowram.tsv`, and `lib/gbapp.inc` as the current
+> contracts.
+
 This review focuses on the resident kernel architecture, size pressure, and
-modularity. It is based on the current tree: `kernel/gbkern.asm`,
-`lib/gbapp.inc`, `lib/gb/gblib.s`, `lib/gb/gb.h`, the storage libraries, and the
-loadable kernel modules under `kernel/kc/` and `kernel/modules/`.
+modularity. It was based on the tree as it stood on the date above:
+`kernel/gbkern.asm`, `lib/gbapp.inc`, `lib/gb/gblib.s`, `lib/gb/gb.h`, the
+storage libraries, and the loadable kernel modules under `kernel/kc/` and
+`kernel/modules/`.
 
 ## Executive Summary
 
@@ -291,22 +298,14 @@ Recommended fix:
 This will not shrink the resident image, but it reduces accidental coupling and
 makes adding/removing modules safer.
 
-### 9. Documentation is stale in key places
+### 9. Documentation was stale in key places
 
-Examples:
-
-- `kernel/README.md` still says "Not started."
-- `lib/gbapp.inc` describes an earlier ABI and omits many live slots.
-- `kernel/kc/README.md` still refers to older sizes and a few older transfer cells.
-- `docs/ARCHITECTURE.md` is broadly useful but contains forward-looking and
-  historical sections mixed with current behavior.
-
-Recommended fix:
-
-- Update `kernel/README.md` into a concise current map.
-- Regenerate or rewrite `lib/gbapp.inc` from the live ABI.
-- Move old design records into `docs/dev/` and keep `docs/ARCHITECTURE.md` as
-  "current behavior only."
+Several examples from the original review have since been addressed: the kernel
+README now describes the active source split, `lib/gbapp.inc` lists the live ABI
+through `GB_NET`, and `tools/check_abi_table.py` validates the table. The remaining
+rule is operational rather than architectural: keep `docs/ARCHITECTURE.md` as the
+current-behavior document and keep older design records clearly marked as
+historical.
 
 ## Concrete Size-Reduction Opportunities
 

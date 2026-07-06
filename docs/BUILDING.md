@@ -19,6 +19,9 @@ into the floppy images; without it the floppy still boots via `RUN"GBKERN`:
 bash tools/build_kernel.sh
 ```
 
+The repository also has a thin top-level Makefile: `make cpc`, `make msx`,
+`make all`, and `make check` wrap the same scripts and static checks.
+
 This stages these outputs (the staged media under `QA/` are committed, so you
 can test or deploy without rebuilding first):
 
@@ -108,8 +111,9 @@ it for you) — or write the whole `QA/GBMSX.IMG` to the device. It needs **MSX-
 
 `tools/build_msx_floppy.sh` assembles a single bootable **720 KB MSX-DOS 2 floppy**
 (`QA/GBMSX.DSK`) — MSX floppies are big enough that the whole ~612 KB distro fits
-on one disk. It carries third-party MSX-DOS 2 files (`MSXDOS2.SYS`, `COMMAND2.COM`)
-so, like `QA/GBMSX.IMG`, it is a local artifact. **Status:** it boots MSX-DOS 2 and
-GEOBENCH starts, but the display currently stays blanked under a floppy DOS2 setup
-(the disk ROM holds the screen off during floppy access) — under investigation; the
-IDE/SD image (`QA/GBMSX.IMG`) is the working path for now.
+on one disk. It carries third-party MSX-DOS 2 files (`MSXDOS2.SYS`, `COMMAND2.COM`),
+so treat it as an optional generated test artifact; it may appear untracked after
+running the builder. **Status:** it boots MSX-DOS 2 and GEOBENCH starts, but the
+display currently stays blanked under a floppy DOS2 setup (the disk ROM holds the
+screen off during floppy access) — under investigation; the IDE/SD image
+(`QA/GBMSX.IMG`) is the working path for now.

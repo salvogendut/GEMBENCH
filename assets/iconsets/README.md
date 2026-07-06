@@ -1,9 +1,11 @@
 # Custom icon sets
 
-Drop tracked `.IST` icon-set files here and they are **automatically copied onto
-the card** (`QA/GEOBENCH.IMG` via `stage_dist.sh`). Unlike `build/DEFAULT.IST` — a gitignored build
-artifact that `packicons.py` regenerates from `lib/icon_*.asm` on every build —
-files here are version-controlled and the build never overwrites them.
+Drop tracked `.IST` icon-set files here and they are automatically staged for the
+CPC card and MSX distributions. The CPC build copies them into `QA/CARD/GBENCH/`
+via `stage_dist.sh`; the MSX build transcodes them to Screen 6 in
+`QA/MSX/GBENCH/`. Unlike `build/DEFAULT.IST` — a gitignored build artifact that
+`packicons.py` regenerates from `lib/icon_*.asm` on every build — files here are
+version-controlled and the build never overwrites them.
 
 ## Make / edit a set
 
@@ -29,7 +31,7 @@ Select the set in the boot config `GEOBENCH.CFG` (written by `stage_dist.sh`):
 ICONS=MYSET
 ```
 
-The kernel loads `MYSET.IST` from the card at boot and falls back to
+The kernel loads `MYSET.IST` from the system folder at boot and falls back to
 `DEFAULT.IST` if it is missing.
 
 ## Changing the DEFAULT icons instead

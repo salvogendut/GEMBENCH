@@ -21,7 +21,8 @@ loop and calls each focused window's handlers (issue #45).
 | xaos     | `XAOS.APP`     | fractal generator, exports `.PIC` |
 | clock    | `CLOCK.APP`    | analog clock widget |
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours / screensaver, persisted to `GEOBENCH.CFG` |
-| nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status for the active backend |
+| telnet   | `TELNET.APP`   | CPC-only Telnet/ANSI terminal using Net4CPC or M4 TCP |
+| nettest  | `NETTEST.APP`  | CPC-only network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status for the active backend |
 
 ## Screensavers (`.SAV`)
 
@@ -31,24 +32,27 @@ in `GEOBENCH.CFG`, set from **Settings → Screensaver**) after the idle timeout
 System → "Activate screensaver" runs it on demand. Each is a full-screen window
 (`WM_FS`) that animates every frame and closes on any input.
 
+The Main CPC boot floppy carries `SQUARES.SAV`; `QA/COMPANION.DSK`, the
+Albireo/M4 card distribution, and the MSX2 distribution carry all 16 savers.
+
 | Saver | Disk file | Effect |
 |-------|-----------|--------|
-| saver    | `CIRCLE.SAV`   | random circles (the first/test saver) |
+| saver    | `SQUARES.SAV`  | random squares (the default saver) |
 | deco     | `DECO.SAV`     | Art-Deco / Mondrian rectangle subdivision — ported from the SymbOS `symsav-deco` |
 | xmatrix  | `XMATRIX.SAV`  | binary "Matrix" digital rain (white → red → black glow) — ported from `symsav-xmatrix` |
 | mountain | `MOUNTAIN.SAV` | isometric 3D filled terrain + white wireframe — ported from `symsav-mountain` (writes the `#C000` screen directly) |
-| fractalic | `FRACTALI.SAV` | Sierpinski triangle + Koch snowflake (random each cycle) — ported from `symsav-fractalic`. **Albireo card only** (too big for the floppy) |
-| starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl. **Albireo card only** (the floppy pack is at its 64K ceiling) |
-| xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the blue field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit. **Albireo card only** |
-| pyro     | `PYRO.SAV`     | fixed-point fireworks — rockets rise and burst into shrapnel showers — ported from xscreensaver. **Albireo card only** |
-| forest   | `FOREST.SAV`   | recursive fractal trees with red blossoms — ported from xscreensaver. **Albireo card only** |
-| helix    | `HELIX.SAV`    | woven harmonograph curves (sin-table) — ported from xscreensaver. **Albireo card only** |
-| catclock | `CATCLK.SAV`   | Kit-Cat Klock — embedded body bitmap (from `assets/catclockbody.png` via `tools/png2catclock.py`) with sliding pupils + real hour/minute hands from `gb_time()`. **Albireo card only** |
-| munch    | `MUNCH.SAV`    | "munching squares" XOR moiré sweeping a power-of-two square — ported from xscreensaver. **Albireo card only** |
-| rorschach | `RORSCH.SAV`  | 4-fold-symmetric random-walk ink-blots — ported from xscreensaver. **Albireo card only** |
-| truchet  | `TRUCHET.SAV`  | random diagonal-tile maze, re-tiled every few seconds — ported from xscreensaver. **Albireo card only** |
-| ant      | `ANT.SAV`      | Langton's ant on an 80×50 grid (4-state rule, all four pens) — inspired by xscreensaver. **Albireo card only** |
-| lightning | `LIGHTN.SAV`  | midpoint-displacement forked lightning bolts that flash and re-strike — ported from xscreensaver. **Albireo card only** |
+| fractalic | `FRACTALI.SAV` | Sierpinski triangle + Koch snowflake (random each cycle) — ported from `symsav-fractalic` |
+| starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl |
+| xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the blue field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit |
+| pyro     | `PYRO.SAV`     | fixed-point fireworks — rockets rise and burst into shrapnel showers — ported from xscreensaver |
+| forest   | `FOREST.SAV`   | recursive fractal trees with red blossoms — ported from xscreensaver |
+| helix    | `HELIX.SAV`    | woven harmonograph curves (sin-table) — ported from xscreensaver |
+| catclock | `CATCLK.SAV`   | Kit-Cat Klock — embedded body bitmap (from `assets/catclockbody.png` via `tools/png2catclock.py`) with sliding pupils + real hour/minute hands from `gb_time()` |
+| munch    | `MUNCH.SAV`    | "munching squares" XOR moiré sweeping a power-of-two square — ported from xscreensaver |
+| rorschach | `RORSCH.SAV`  | 4-fold-symmetric random-walk ink-blots — ported from xscreensaver |
+| truchet  | `TRUCHET.SAV`  | random diagonal-tile maze, re-tiled every few seconds — ported from xscreensaver |
+| ant      | `ANT.SAV`      | Langton's ant on an 80×50 grid (4-state rule, all four pens) — inspired by xscreensaver |
+| lightning | `LIGHTN.SAV`  | midpoint-displacement forked lightning bolts that flash and re-strike — ported from xscreensaver |
 
 The Settings **Module** picker lists every `.SAV` in the system media folder for
 the selected drive, so a new screensaver appears there automatically once it is
