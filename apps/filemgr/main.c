@@ -351,6 +351,7 @@ static const char *win_title(void)               /* "Disk C/path 32MiB free" -> 
 /* DEFAULT.IST slot order (matches the packicons line in tools/build_kernel.sh).
    The file -> icon mapping lives here now, not in the kernel (#103). */
 #define ICON_FLOPPY 0         /* floppy drive icon (first packicons entry); DISKUTIL.APP reuses it */
+#define ICON_FLOWCHART 1      /* flowchart glyph (was the IDE disk slot); BASIC.APP uses it */
 #define ICON_CLOCK 2
 #define ICON_GEOBENCH 4
 #define ICON_BASIC 5
@@ -422,6 +423,7 @@ static unsigned char entry_icon(const char *name)
         if (name_is(name, "VIEWER"))  return ICON_VIEWER;
         if (name_is(name, "TELNET"))  return ICON_TELNET;   /* #238 */
         if (name_is(name, "DISKUTIL")) return ICON_FLOPPY;  /* the floppy formatter */
+        if (name_is(name, "BASIC"))   return ICON_FLOWCHART; /* GB-BASIC uses the flowchart icon */
         return ICON_APP;      /* a .APP with no distinctive icon uses the generic app icon
                                  (slot 10), incl. SETTINGS (its gear slot is now the saver) */
     }
@@ -436,7 +438,7 @@ static unsigned char rank_of(unsigned char ic)
         case ICON_FOLDER:   return 0;
         case ICON_DESKTOP: case ICON_FILEMGR: case ICON_NOTEPAD: case ICON_ICONED:
         case ICON_PAINT:    case ICON_VIEWER:  case ICON_CLOCK:   case ICON_FRACTAL:
-        case ICON_SCREENSAVER: case ICON_TELNET:
+        case ICON_SCREENSAVER: case ICON_TELNET: case ICON_FLOWCHART:
         case ICON_APP:      return 1;
         case ICON_PICTURE:  return 2;
         case ICON_TEXT:     return 3;
@@ -615,7 +617,8 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
      .APP / .SAV      a GEOBENCH app/screensaver -> run it
      .IST / .SPR      the icon/cursor editor (ICONED), with the file
      .TXT / .CFG      the text editor (NOTEPAD), with the file
-     .BIN / .BAS      AMSDOS native programs -> an info note (run them under BASIC, #236)
+     .BAS             a GB-BASIC program -> opens in BASIC.APP
+     .BIN             a native binary -> an info note (exec unimplemented, #236)
      anything else    the read-only VIEWER, with the file */
 static void open_entry(unsigned char idx)
 {
@@ -634,10 +637,11 @@ static void open_entry(unsigned char idx)
         gb_wm_launch_as("ICONED  APP");
     else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G'))
         gb_wm_launch_as("NOTEPAD APP");
-    else if (ext_is(e, 'B', 'I', 'N') || ext_is(e, 'B', 'A', 'S'))  /* #236: AMSDOS native
-                                                   programs aren't runnable from GEOBENCH (RUN"
-                                                   under BASIC does an implicit NEW) - just say so */
-        gb_alert("AMSDOS applications need", "to be run under BASIC.");
+    else if (ext_is(e, 'B', 'A', 'S'))          /* GB-BASIC programs open in BASIC.APP */
+        gb_wm_launch_as("BASIC   APP");
+    else if (ext_is(e, 'B', 'I', 'N'))          /* #236: native binaries aren't runnable
+                                                   from GEOBENCH (exec unimplemented) - say so */
+        gb_alert("Binary programs cannot", "be run from GEOBENCH.");
     else
         gb_wm_launch_as("VIEWER  APP");         /* default: view it (incl. .PIC images,
                                                    #114) - PAINT edits via File > Load */
