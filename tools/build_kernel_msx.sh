@@ -38,7 +38,7 @@ GEOBENCH_ROOT="$(pwd)"
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7750 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7780 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
@@ -71,7 +71,7 @@ tools/build_uimod.sh                             # -> build/GBUI.RAW (dialogs/me
 # --- assets ------------------------------------------------------------------
 python3 tools/genfont.py build/msx/DEFAULT.FNT           # 1bpp glyphs: shared format
 python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
-    lib/icon_floppy.asm lib/icon_ide.asm lib/icon_clock.asm lib/icon_trash.asm \
+    lib/icon_floppy.asm lib/icon_flowchart.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
     lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
