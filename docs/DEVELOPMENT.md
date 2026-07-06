@@ -129,7 +129,8 @@ line in the pack assembly or stage it into the card distribution as appropriate)
   1. **Change the DEFAULT set** (the icons shown out of the box): edit the source
      `assets/<name>.png` in any image editor (keep the 4-colour desktop palette),
      then run **`tools/regen_icons.sh`** — it re-runs `png2cpc` for every committed
-     `lib/icon_*.asm` / `assets/paint/*.asm` from its recorded source PNG + size.
+     `lib/icon_*.asm` from its recorded source PNG + size. Paint-specific tool
+     icons now live in the separate GB-PAINT repository.
      Rebuild (`tools/build_kernel.sh`) and `packicons` repacks `build/DEFAULT.IST`.
      Note: the build does **not** auto-convert `assets/` — `build/DEFAULT.IST` is a
      gitignored artifact regenerated from the committed `lib/icon_*.asm`, so a PNG
