@@ -271,6 +271,119 @@ fst_done:
         ld a,12
         ld (#0F00),a
 
+        ; --- fs WRITE tests (#331 Phase 5b): create, delete, and a
+        ; chunked multi-extent copy (2KB chunks through FS_LOAD_OFS +
+        ; append) - the host extracts the results from the .dsk after.
+        ld hl,n_save            ; 1. create PCWSAVE.TST
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld hl,msg_wr
+        ld (fs_save_src),hl
+        ld hl,msg_wr_len
+        ld (fs_save_len),hl
+        xor a
+        ld (FS_XFLAGS),a
+        call fs_save_file
+        jp nc,wt_fail
+        ld hl,n_del             ; 2. create then delete PCWDEL.TST
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld hl,msg_wr
+        ld (fs_save_src),hl
+        ld hl,msg_wr_len
+        ld (fs_save_len),hl
+        call fs_save_file
+        jp nc,wt_fail
+        ld hl,n_del
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        call fs_delete_file
+        jp nc,wt_fail
+        ld hl,0                 ; 3. chunked copy BIGTEST.BIN -> COPYOUT.BIN
+        ld (ctofs),hl
+        ld a,1
+        ld (ctfirst),a
+ct_loop:
+        ld hl,n_big
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld hl,(ctofs)
+        ld (FS_LOAD_OFS),hl
+        xor a
+        ld (FS_LOAD_OFS+2),a
+        ld a,1                  ; chunk-read
+        ld (FS_XFLAGS),a
+        ld hl,#6000
+        ld (fs_load_dst),hl
+        ld hl,2048
+        ld (fs_load_max),hl
+        call fs_load_file
+        jp nc,wt_fail
+        ld hl,(fs_ent_size)
+        ld (ctgot),hl
+        ld a,h
+        or l
+        jr z,ct_done            ; EOF
+        ld hl,n_out
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld a,(ctfirst)
+        or a
+        jr nz,ct_create
+        ld a,2                  ; append
+        jr ct_fl
+ct_create:
+        xor a                   ; create/truncate
+ct_fl:
+        ld (FS_XFLAGS),a
+        ld hl,#6000
+        ld (fs_save_src),hl
+        ld hl,(ctgot)
+        ld (fs_save_len),hl
+        call fs_save_file
+        jp nc,wt_fail
+        xor a
+        ld (ctfirst),a
+        ld hl,(ctofs)
+        ld de,(ctgot)
+        add hl,de
+        ld (ctofs),hl
+        ld hl,(ctgot)           ; short chunk = final
+        ld de,2048
+        or a
+        sbc hl,de
+        jr c,ct_done
+        jp ct_loop
+ct_done:
+        ld b,3
+        ld c,0
+        call set_text_pens
+        ld a,64
+        ld (tc_x),a
+        ld a,232
+        ld (tc_y),a
+        ld hl,wt_okmsg
+        call draw_text
+        jr wt_end
+wt_fail:
+        ld b,2
+        ld c,3
+        call set_text_pens
+        ld a,64
+        ld (tc_x),a
+        ld a,232
+        ld (tc_y),a
+        ld hl,wt_badmsg
+        call draw_text
+wt_end:
+        ld a,13
+        ld (#0F00),a
+
         ; --- typing test: k_getkey -> append + redraw. input_poll runs
         ; every pass, proving the input layer's slot-3 keyboard remap
         ; coexists with drawing. Keys arrive via 1985 --paste-event.
@@ -340,6 +453,17 @@ typebuf:        ds 32
 fst_name:       ds 12
 fst_y:          db 0
 fst_hello:      db "HELLO   TXT"
+n_save:         db "PCWSAVE TST"
+n_del:          db "PCWDEL  TST"
+n_big:          db "BIGTEST BIN"
+n_out:          db "COPYOUT BIN"
+msg_wr:         db "PCW write path OK",13,10
+msg_wr_len      equ $-msg_wr
+wt_okmsg:       db "WRITE OK",0
+wt_badmsg:      db "WRITE FAIL",0
+ctofs:          dw 0
+ctgot:          dw 0
+ctfirst:        db 0
 
 ; --- test data ----------------------------------------------------------
 ; 16x16px checker tile, GB pens 0/3 (renders cyan/magenta)

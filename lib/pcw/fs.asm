@@ -236,6 +236,23 @@ fscs_rcnc
 fs_load_file
                 ld    hl,#FFFF
                 ld    (fsp_cslsn),hl
+                ld    a,(FS_XFLAGS)           ; latch + clear the chunk-read flag
+                and   1
+                ld    (fslf_chunk),a
+                xor   a
+                ld    (FS_XFLAGS),a
+                ld    (fslf_done),a
+                ld    (fslf_skip),a
+                ld    (fslf_skip+1),a
+                ld    (fslf_skip+2),a
+                ld    a,(fslf_chunk)
+                or    a
+                jr    z,flf_ck
+                ld    hl,(FS_LOAD_OFS)        ; 24-bit skip-into-the-file offset
+                ld    (fslf_skip),hl
+                ld    a,(FS_LOAD_OFS+2)
+                ld    (fslf_skip+2),a
+flf_ck
                 xor   a
                 ld    (fslf_ext),a
                 ld    hl,0
@@ -297,6 +314,9 @@ flf_scan
                 xor   a
                 ld    (fslf_ai),a
 flf_blk
+                ld    a,(fslf_done)           ; chunk complete?
+                or    a
+                jp    nz,flf_done
                 ld    hl,(fslf_ebyt)          ; extent exhausted?
                 ld    a,h
                 or    l
@@ -360,40 +380,118 @@ flf_done
                 scf
                 ret
 
-; flf_copysec: HL = lsn -> copy min(512, extent bytes left) to the running
-; destination. NC = read error or the buffer cap was hit (too big).
+; flf_copysec: HL = lsn of the sector holding n = min(512, ebyt) extent
+; bytes. Honors the chunk-read skip (sectors wholly inside the skip are not
+; even read); chunk mode stops cleanly when the buffer fills (fslf_done),
+; plain mode refuses a file bigger than the buffer (NC).
 flf_copysec
-                call  fsp_rdsec
-                ret   nc
-                ld    hl,(fslf_ebyt)          ; BC = n = min(512, ebyt)
+                push  hl                      ; n = min(512, ebyt); ebyt -= n
+                ld    hl,(fslf_ebyt)
                 ld    de,512
                 or    a
                 sbc   hl,de
-                jr    nc,flf_full
-                ld    hl,(fslf_ebyt)          ; short tail
+                jr    nc,fcs_full
+                ld    hl,(fslf_ebyt)
+                ld    (fcs_n),hl
+                ld    hl,0
+                jr    fcs_have
+fcs_full
+                ld    de,512
+                ld    (fcs_n),de
+fcs_have
+                ld    (fslf_ebyt),hl
+                pop   hl
+                ld    a,(fslf_skip+2)         ; skip >= n? (n <= 512, any high
+                or    a                        ; byte means yes)
+                jr    nz,fcs_skipsec
+                ld    de,(fslf_skip)
+                ld    a,d
+                or    e
+                jr    z,fcs_copy
+                push  hl                       ; skip16 >= n -> whole-sector skip
+                ex    de,hl
+                ld    de,(fcs_n)
+                or    a
+                sbc   hl,de
+                pop   hl
+                jr    c,fcs_copy               ; skip < n: read + partial copy
+fcs_skipsec
+                push  hl                       ; whole sector inside the skip:
+                ld    hl,(fslf_skip)           ; skip -= n, no I/O at all
+                ld    de,(fcs_n)
+                or    a
+                sbc   hl,de
+                ld    (fslf_skip),hl
+                jr    nc,fcs_sknc
+                ld    a,(fslf_skip+2)
+                dec   a
+                ld    (fslf_skip+2),a
+fcs_sknc
+                pop   hl
+                scf
+                ret
+fcs_copy
+                ld    de,(fslf_skip)           ; ofs = skip (0..511), then clear
+                ld    (fcs_ofs),de
+                xor   a
+                ld    (fslf_skip),a
+                ld    (fslf_skip+1),a
+                call  fsp_rdsec
+                ret   nc
+                ld    hl,(fcs_n)               ; m = n - ofs
+                ld    de,(fcs_ofs)
+                or    a
+                sbc   hl,de
+                ld    (fcs_m),hl
+                ld    a,(fslf_chunk)
+                or    a
+                jr    nz,fcs_capchunk
+                ld    hl,(fslf_rem)            ; plain: m > rem = too big -> NC
+                ld    de,(fcs_m)
+                or    a
+                sbc   hl,de
+                jr    nc,fcs_go
+                or    a
+                ret
+fcs_capchunk
+                ld    hl,(fcs_m)               ; chunk: m = min(m, rem)
+                ld    de,(fslf_rem)
+                or    a
+                sbc   hl,de
+                jr    c,fcs_go
+                ld    hl,(fslf_rem)
+                ld    (fcs_m),hl
+fcs_go
+                ld    hl,(fcs_m)
+                ld    a,h
+                or    l
+                jr    z,fcs_donechk
                 ld    b,h
                 ld    c,l
-                ld    hl,0
-                jr    flf_havelen
-flf_full
-                ld    bc,512                  ; HL already = ebyt - 512
-flf_havelen
-                ld    (fslf_ebyt),hl
-                ld    hl,(fslf_rem)           ; buffer cap: rem -= n; over = too big
+                ld    hl,(fslf_rem)            ; rem -= m, total += m
                 or    a
                 sbc   hl,bc
-                jr    nc,flf_capok
-                or    a                       ; NC = fail (buffer overrun refused)
-                ret
-flf_capok
                 ld    (fslf_rem),hl
                 ld    hl,(fslf_total)
                 add   hl,bc
                 ld    (fslf_total),hl
-                ld    hl,fs_secbuf
+                ld    hl,fs_secbuf             ; copy from buf + ofs
+                ld    de,(fcs_ofs)
+                add   hl,de
                 ld    de,(fslf_dst)
                 ldir
                 ld    (fslf_dst),de
+fcs_donechk
+                ld    a,(fslf_chunk)           ; chunk buffer full -> clean stop
+                or    a
+                jr    z,fcs_ok
+                ld    hl,(fslf_rem)
+                ld    a,h
+                or    l
+                jr    nz,fcs_ok
+                ld    a,1
+                ld    (fslf_done),a
+fcs_ok
                 scf
                 ret
 
@@ -402,11 +500,429 @@ fs_load_cur_sys
 fs_load_sys
                 jp    fs_load_file
 
-; --- write ops: Phase 5 -------------------------------------------------------
-fs_save_file
+; --- write ops (#331 Phase 5b) --------------------------------------------------
+
+; fs_delete_file: free every extent entry of fs_req_name (user 0). CF = deleted.
 fs_delete_file
+                ld    hl,#FFFF
+                ld    (fsp_cslsn),hl
+                xor   a
+                ld    (fscs_e),a
+                ld    (fsdl_hit),a
+fdl_loop
+                ld    a,(fscs_e)
+                ld    hl,fsp_drm
+                cp    (hl)
+                jr    nc,fdl_done
+                inc   a
+                ld    (fscs_e),a
+                dec   a
+                call  fsp_getent
+                jr    nc,fdl_fail
+                ld    a,(hl)
+                or    a                        ; only user-0 files are ours
+                jr    nz,fdl_loop
+                ld    de,fs_req_name
+                call  fsp_name_match
+                jr    nz,fdl_loop
+                ld    (hl),#E5                 ; free this extent's entry
+                ld    hl,(fsp_cslsn)           ; the dir sector back to disc
+                call  fsp_wrsec
+                jr    nc,fdl_fail
+                ld    a,1
+                ld    (fsdl_hit),a
+                jr    fdl_loop
+fdl_done
+                ld    a,(fsdl_hit)
+                or    a
+                jr    z,fdl_fail
+                scf
+                ret
+fdl_fail
                 or    a
                 ret
+
+; fs_save_file: write fs_save_len bytes from (fs_save_src) to fs_req_name.
+; FS_XFLAGS bit1 = append to the existing file (else create/truncate). CF ok.
+; CP/M sizes are 128-byte records: the final record is #1A-padded, so sizes
+; round up to the next record (the shared contract already treats fs sizes
+; as advisory - loaders read the content's own headers).
+fs_save_file
+                ld    hl,#FFFF
+                ld    (fsp_cslsn),hl
+                ld    a,(FS_XFLAGS)
+                and   2                        ; bit1 = append; latch + clear
+                ld    (fsv_app),a
+                xor   a
+                ld    (FS_XFLAGS),a
+                ld    hl,(fs_save_src)
+                ld    (fsv_src),hl
+                ld    hl,(fs_save_len)
+                ld    (fsv_rem),hl
+                ld    a,#FF
+                ld    (fsv_slot),a
+                ld    a,(fsv_app)
+                or    a
+                jp    nz,fsv_append
+                call  fs_delete_file           ; create/truncate: drop any old file
+                call  fsw_bitmap
+                xor   a
+                ld    (fsv_ext),a
+fsv_newext
+                xor   a                        ; fresh extent: rc = 0, no blocks
+                ld    (fsv_rc),a
+                ld    hl,fsv_al
+                ld    de,fsv_al+1
+                ld    bc,15
+                ld    (hl),a
+                ldir
+fsv_recloop
+                ld    hl,(fsv_rem)
+                ld    a,h
+                or    l
+                jp    z,fsv_flush              ; all data written -> final entry
+                ld    a,(fsv_rc)
+                cp    128
+                jr    c,fsv_haveroom
+                call  fsv_flush                ; extent full: entry out, next one
+                ret   nc
+                ld    a,(fsv_ext)
+                inc   a
+                ld    (fsv_ext),a
+                jr    fsv_newext
+fsv_haveroom
+                call  fsv_putrec               ; one 128-byte record
+                ret   nc
+                jr    fsv_recloop
+
+fsv_append
+                call  fsw_bitmap
+                xor   a                        ; find the LAST extent of the file
+                ld    (fsv_ext),a
+                ld    (fscs_e),a
+                ld    (fsdl_hit),a
+fap_scan
+                ld    a,(fscs_e)
+                ld    hl,fsp_drm
+                cp    (hl)
+                jr    nc,fap_scanned
+                inc   a
+                ld    (fscs_e),a
+                dec   a
+                call  fsp_getent
+                jr    nc,fap_scanned
+                ld    a,(hl)
+                or    a
+                jr    nz,fap_scan
+                ld    de,fs_req_name
+                call  fsp_name_match
+                jr    nz,fap_scan
+                push  hl                       ; EX >= best so far? take it
+                ld    de,12
+                add   hl,de
+                ld    a,(hl)
+                and   #1F
+                ld    b,a
+                ld    a,(fsdl_hit)             ; first hit always wins
+                or    a
+                jr    z,fap_take
+                ld    a,b
+                ld    hl,fsv_ext
+                cp    (hl)
+                jr    c,fap_skip
+fap_take
+                ld    a,1
+                ld    (fsdl_hit),a
+                ld    a,b
+                ld    (fsv_ext),a
+                ld    a,(fscs_e)
+                dec   a
+                ld    (fsv_slot),a
+fap_skip
+                pop   hl
+                jr    fap_scan
+fap_scanned
+                ld    a,(fsdl_hit)
+                or    a
+                jr    nz,fap_found
+                xor   a                        ; no such file: append = create
+                ld    (fsv_ext),a
+                ld    a,#FF
+                ld    (fsv_slot),a
+                jp    fsv_newext
+fap_found
+                ld    a,(fsv_slot)             ; reload rc + ALs from that entry
+                call  fsp_getent
+                jr    nc,fsv_fail
+                push  hl
+                ld    de,15
+                add   hl,de
+                ld    a,(hl)
+                ld    (fsv_rc),a
+                pop   hl
+                ld    de,16
+                add   hl,de
+                ld    de,fsv_al
+                ld    bc,16
+                ldir
+                jp    fsv_recloop
+fsv_fail
+                or    a
+                ret
+
+; fsv_putrec: write the record at index fsv_rc from (fsv_src): allocate its
+; block if needed, read-modify-write the sector, #1A-pad a short tail. CF ok.
+fsv_putrec
+                ld    a,(fsv_rc)               ; block index within extent = rc/8
+                srl   a
+                srl   a
+                srl   a
+                ld    e,a
+                ld    d,0
+                ld    hl,fsv_al
+                add   hl,de
+                ld    a,(hl)
+                or    a
+                jr    nz,fpr_haveblk
+                push  hl
+                call  fsw_alloc                ; claim a free block
+                pop   hl
+                ret   nc                       ; disc full
+                ld    (hl),a
+fpr_haveblk
+                ld    l,a                      ; lsn = block*2 (+1 for records 4-7)
+                ld    h,0
+                add   hl,hl
+                ld    a,(fsv_rc)
+                and   4
+                jr    z,fpr_s0
+                inc   hl
+fpr_s0
+                push  hl                       ; RMW: a fresh block reads whatever
+                call  fsp_rdsec                ; the format left - harmless, the
+                pop   hl                       ; record overwrites its 128 bytes
+                jr    c,fpr_havebuf
+                push  hl                       ; unreadable (shouldn't happen on a
+                ld    hl,fs_secbuf             ; formatted disc): zero the buffer
+                ld    de,fs_secbuf+1           ; and claim the cache slot
+                ld    bc,511
+                ld    (hl),0
+                ldir
+                pop   hl
+                ld    (fsp_cslsn),hl
+fpr_havebuf
+                push  hl                       ; keep the lsn for the write-back
+                ld    a,(fsv_rc)               ; soff = (rc & 3) * 128
+                and   3
+                ld    l,a
+                ld    h,0
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                add   hl,hl
+                ld    de,fs_secbuf
+                add   hl,de
+                ex    de,hl                    ; DE = record home in the buffer
+                ld    hl,(fsv_rem)             ; BC = n = min(128, rem)
+                ld    bc,128
+                or    a
+                sbc   hl,bc
+                jr    nc,fpr_lenok
+                ld    hl,(fsv_rem)
+                ld    b,h
+                ld    c,l
+                ld    hl,0
+fpr_lenok
+                ld    (fsv_rem),hl
+                push  bc
+                ld    hl,(fsv_src)             ; the record's data
+                ldir
+                ld    (fsv_src),hl
+                pop   bc
+                ld    a,128                    ; #1A-pad a short final record
+                sub   c
+                jr    z,fpr_wr
+                ld    b,a
+fpr_padl
+                ld    a,#1A
+                ld    (de),a
+                inc   de
+                djnz  fpr_padl
+fpr_wr
+                pop   hl                       ; the sector back to disc
+                call  fsp_wrsec
+                ret   nc
+                ld    a,(fsv_rc)
+                inc   a
+                ld    (fsv_rc),a
+                scf
+                ret
+
+; fsv_flush: write this extent's directory entry - update slot fsv_slot when
+; set (append's first flush), else claim a free (#E5) slot. CF ok.
+fsv_flush
+                ld    a,(fsv_slot)
+                cp    #FF
+                jr    nz,ffl_fill
+                xor   a                        ; find a free directory slot
+                ld    (fscs_e),a
+ffl_scan
+                ld    a,(fscs_e)
+                ld    hl,fsp_drm
+                cp    (hl)
+                jr    nc,ffl_full
+                inc   a
+                ld    (fscs_e),a
+                dec   a
+                ld    c,a
+                call  fsp_getent
+                ret   nc
+                ld    a,(hl)
+                cp    #E5
+                jr    nz,ffl_scan
+                ld    a,c
+ffl_fill
+                call  fsp_getent
+                ret   nc
+                ld    (hl),0                   ; user 0
+                inc   hl
+                ex    de,hl
+                ld    hl,fs_req_name           ; +1..11 name
+                ld    bc,11
+                ldir
+                ld    a,(fsv_ext)              ; +12 EX
+                ld    (de),a
+                inc   de
+                xor   a                        ; +13 S1, +14 S2
+                ld    (de),a
+                inc   de
+                ld    (de),a
+                inc   de
+                ld    a,(fsv_rc)               ; +15 RC
+                ld    (de),a
+                inc   de
+                ld    hl,fsv_al                ; +16..31 AL
+                ld    bc,16
+                ldir
+                ld    hl,(fsp_cslsn)           ; the dir sector back to disc
+                call  fsp_wrsec
+                ret   nc
+                ld    a,#FF                    ; the slot is consumed
+                ld    (fsv_slot),a
+                scf
+                ret
+ffl_full
+                or    a
+                ret
+
+; --- block allocation ------------------------------------------------------------
+
+; fsw_bitmap: build the used-block bitmap from the directory (every user's
+; files count - foreign blocks must not be clobbered).
+fsw_bitmap
+                ld    hl,fsw_bmap
+                ld    de,fsw_bmap+1
+                ld    bc,21
+                ld    (hl),0
+                ldir
+                ld    a,(fsp_dirblks)          ; the directory's own blocks
+                ld    b,a
+                ld    c,0
+fwb_dir
+                push  bc
+                ld    a,c
+                call  fsw_setbit
+                pop   bc
+                inc   c
+                djnz  fwb_dir
+                xor   a
+                ld    (fscs_e),a
+fwb_loop
+                ld    a,(fscs_e)
+                ld    hl,fsp_drm
+                cp    (hl)
+                ret   nc
+                inc   a
+                ld    (fscs_e),a
+                dec   a
+                call  fsp_getent
+                ret   nc
+                ld    a,(hl)
+                cp    #E5
+                jr    z,fwb_loop
+                ld    de,16
+                add   hl,de
+                ld    b,16
+fwb_als
+                ld    a,(hl)
+                or    a
+                jr    z,fwb_next
+                push  hl
+                push  bc
+                call  fsw_setbit
+                pop   bc
+                pop   hl
+fwb_next
+                inc   hl
+                djnz  fwb_als
+                jr    fwb_loop
+
+; fsw_setbit: A = block number -> mark used. Clobbers A,BC,DE,HL.
+fsw_setbit
+                call  fsw_bitpos
+                or    (hl)
+                ld    (hl),a
+                ret
+
+; fsw_bitpos: A = block -> HL = bitmap byte, A = its bit mask.
+fsw_bitpos
+                ld    c,a
+                srl   a
+                srl   a
+                srl   a
+                ld    e,a
+                ld    d,0
+                ld    hl,fsw_bmap
+                add   hl,de
+                ld    a,c
+                and   7
+                ld    b,a
+                ld    a,1
+                inc   b
+fbp_sh
+                dec   b
+                ret   z
+                add   a,a
+                jr    fbp_sh
+
+; fsw_alloc: find + claim a free block -> A. CF ok, NC = disc full.
+fsw_alloc
+                ld    a,(fsp_nblocks)          ; <= 175, fits a byte
+                ld    b,a
+                ld    c,0
+fwa_loop
+                ld    a,c
+                push  bc
+                call  fsw_bitpos
+                and   (hl)
+                pop   bc
+                jr    z,fwa_take
+                inc   c
+                djnz  fwa_loop
+                or    a
+                ret
+fwa_take
+                ld    a,c
+                push  bc
+                call  fsw_setbit
+                pop   bc
+                ld    a,c
+                scf
+                ret
+
 
 ; fs_free_kib: HL = free KiB (1K blocks), CF set. Free = total - dir - used.
 fs_free_kib
@@ -474,31 +990,50 @@ fsp_rdsec
                 ret
 frs_load
                 ld    (fsp_cslsn),hl
-                ld    a,(fsp_offtrk)          ; track = OFF + lsn/9, sec = 1 + lsn%9
-                ld    d,a
-frs_div
-                ld    a,h
-                or    a
-                jr    nz,frs_sub
-                ld    a,l
-                cp    9
-                jr    c,frs_have
-frs_sub
-                ld    bc,9
-                or    a
-                sbc   hl,bc
-                inc   d
-                jr    frs_div
-frs_have
-                ld    a,l
-                inc   a
-                ld    e,a
+                call  fsp_lsn2ts
                 ld    hl,fs_secbuf
                 call  pcwfdc_read
                 ret   c
                 ld    hl,#FFFF                ; failed: nothing cached
                 ld    (fsp_cslsn),hl
                 or    a
+                ret
+
+; fsp_wrsec: write fs_secbuf to data-area lsn HL (the cache stays valid -
+; the buffer now matches the disc). CF ok.
+fsp_wrsec
+                ld    (fsp_cslsn),hl
+                call  fsp_lsn2ts
+                ld    hl,fs_secbuf
+                call  pcwfdc_write
+                ret   c
+                ld    hl,#FFFF
+                ld    (fsp_cslsn),hl
+                or    a
+                ret
+
+; fsp_lsn2ts: HL = data-area lsn -> D = track (OFF + lsn/9), E = sector
+; (1 + lsn%9). Clobbers A, BC, HL.
+fsp_lsn2ts
+                ld    a,(fsp_offtrk)
+                ld    d,a
+fl2_div
+                ld    a,h
+                or    a
+                jr    nz,fl2_sub
+                ld    a,l
+                cp    9
+                jr    c,fl2_have
+fl2_sub
+                ld    bc,9
+                or    a
+                sbc   hl,bc
+                inc   d
+                jr    fl2_div
+fl2_have
+                ld    a,l
+                inc   a
+                ld    e,a
                 ret
 
 ; fsp_getent: A = directory entry index -> HL = its 32 bytes in fs_secbuf.
@@ -570,6 +1105,21 @@ fslf_rem        dw    0
 fslf_dst        dw    0
 fslf_total      dw    0
 fsff_used       dw    0
+fsdl_hit        db    0
+fslf_chunk      db    0
+fslf_done       db    0
+fslf_skip       ds    3
+fcs_n           dw    0
+fcs_m           dw    0
+fcs_ofs         dw    0
+fsv_src         dw    0
+fsv_rem         dw    0
+fsv_rc          db    0
+fsv_ext         db    0
+fsv_app         db    0
+fsv_slot        db    0
+fsv_al          ds    16
+fsw_bmap        ds    22
 fslf_blocks     equ   #1490        ; 16-byte extent AL copy (documented low-RAM home)
 fs_dir_clus     ds    4            ; dummy: k_copy_begin/end context swap expects it
 
