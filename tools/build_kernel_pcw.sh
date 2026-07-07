@@ -32,6 +32,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x6C00 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 # savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a
 # PCW plot path first (follow-up)
 APPDEFS="-DGB_PCW" tools/build_capp.sh apps/saver build/pcw/SQUARES.RAW
@@ -107,11 +108,12 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
-# --- COMPANION.DSK: pictures, backdrops, spare assets (plain data disc) ------
+# --- COMPANION.DSK: pictures, TELNET, backdrops, spare assets (plain data disc)
+# CF2 is tight; LOGO.PIC is skipped below so serial/PerryFi TELNET.APP fits.
 COMP_ADDS=()
 for pic in assets/pictures/*.PIC; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    case "$name" in BIG|TLEUNG) continue;; esac   # the 16K test pic + overflow
+    case "$name" in BIG|TLEUNG|LOGO) continue;; esac   # test/overflow pics; LOGO makes room for TELNET.APP
 
     python3 tools/pic_to_msx.py "$pic" "build/pcw/$name.PIC"
     COMP_ADDS+=(--add "build/pcw/$name.PIC=$name.PIC")
@@ -123,6 +125,7 @@ for bdp in assets/backdrops/*.BDP; do
 done
 python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     "${COMP_ADDS[@]}" \
+    --add build/pcw/TELNET.RAW=TELNET.APP \
     --add assets/WELCOME.TXT=WELCOME.TXT \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT
 

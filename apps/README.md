@@ -21,7 +21,7 @@ loop and calls each focused window's handlers (issue #45).
 | xaos     | `XAOS.APP`     | fractal generator, exports `.PIC` |
 | clock    | `CLOCK.APP`    | analog clock widget |
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours / screensaver, persisted to `GEOBENCH.CFG` |
-| telnet   | `TELNET.APP`   | CPC-only Telnet/ANSI terminal using Net4CPC or M4 TCP |
+| telnet   | `TELNET.APP`   | ANSI/Telnet terminal: CPC TCP via Net4CPC/M4 plus serial; PCW serial/PerryFi on the companion disk |
 | nettest  | `NETTEST.APP`  | CPC-only network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status for the active backend |
 
 ## Screensavers (`.SAV`)
