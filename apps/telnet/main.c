@@ -31,6 +31,9 @@
 #if TELNET_HAS_FULLSCREEN
 #include "charset.h"        /* 8x8 ASCII glyphs for the Mode-2 80x25 renderer */
 #endif
+#ifdef GB_PCW
+#include "charset4.h"       /* 4x8 glyphs for the PCW direct renderer (#350) */
+#endif
 
 /* ---- terminal grid --------------------------------------------------------- */
 /* The grid has two sizes: WINDOWED (Mode 1, 52x22, drawn through gb_text in the managed
@@ -38,14 +41,19 @@
  * charset - the "proper telnet" view). COLS/ROWS are the ACTIVE dims (gcols/grows), so
  * all the term_write/ANSI/scroll code below is size-agnostic; only the renderer differs. */
 #ifdef GB_PCW
-#define WIN_COLS 58        /* 58 * 6px = 348px; fits the PCW CGA2 360px desktop */
-#define WIN_ROWS 27        /* 23 + 27*8 = 239, inside the 248-line PCW desktop */
+#define WIN_COLS 80        /* 4x8 font: 80 * 4px = 320px of the 360px CGA2 desktop */
+#define WIN_ROWS 25        /* 24 + 25*8 = 224, inside the 248-line PCW desktop */
 #else
 #define WIN_COLS 52        /* 52 * 6px = 312px; inset 1 byte (4px) each side clears the frame */
 #define WIN_ROWS 22        /* fits the content below the 14px title bar (178px / 8) */
 #endif
+#ifdef GB_PCW
+#define FS_COLS  90        /* WM_FS fullscreen: 90 byte cols * 4px = the whole 360px */
+#define FS_ROWS  31        /* 31 * 8 = 248 lines = the whole desktop */
+#else
 #define FS_COLS  80        /* Mode 2: 640px / 8 = 80 cols */
 #define FS_ROWS  25        /* Mode 2: 200px / 8 = 25 rows */
+#endif
 #if WIN_COLS > FS_COLS
 #define GRID_MAX_COLS WIN_COLS
 #else
@@ -70,8 +78,14 @@
 #define WIN_W 80
 #define WIN_H 192
 #endif
+#ifdef GB_PCW
+#define GX    5            /* grid origin: byte column (centers 80 of the 90 byte cols) */
+#define GY    24           /* grid origin: pixel line - MUST be cellrow-aligned (mult of
+                              8): the PCW renderer maps one text row to one char cellrow */
+#else
 #define GX    1            /* grid origin: byte column (inset 1 byte so the left frame survives) */
 #define GY    (WIN_Y + 15) /* grid origin: pixel line, just below the 14px title bar */
+#endif
 
 /* connect dialog box (a centered modal popup, NOT painted into the terminal content) */
 #define DLG_X 4
@@ -272,6 +286,58 @@ static void term_write(unsigned char c)
 }
 
 /* ---- rendering ------------------------------------------------------------- */
+#ifdef GB_PCW
+/* -- 4x8 direct-framebuffer renderer (#350). The PCW char-cell layout puts a
+ * cell's 8 scan-line bytes CONTIGUOUS: byte(x,y) = cellrow*1024 + x*8 + (y&7),
+ * so one glyph = 8 sequential writes. The framebuffer is phys blocks 4/5,
+ * mapped into slot 3 per drawn cellrow (map-before-use, like the driver); text
+ * rows are cellrow-aligned (GY multiple of 8). White (pen 1) on black (pen 2):
+ * a glyph line's 4-bit pattern indexes lut4 for the CGA2 hardware byte. */
+static unsigned char lut4[16];                /* glyph nibble -> CGA2 byte */
+static unsigned char gx_org = GX;             /* live grid origin: byte col */
+static unsigned char gy_cell = GY >> 3;       /*                   cellrow  */
+
+static void bank3(unsigned char b) __naked
+{
+    (void)b;                       /* block arrives in A (sdcccall(1)) */
+    __asm
+        out (0xF3), a
+        ret
+    __endasm;
+}
+
+static void lut4_init(void)
+{
+    unsigned char n, i, v;
+    for (n = 0; n < 16; n++) {
+        v = 0;
+        for (i = 0; i < 4; i++)
+            if (n & (unsigned char)(8 >> i))
+                v |= (unsigned char)(0xC0 >> (i << 1));   /* pen 1 = both bits */
+        lut4[n] = v;
+    }
+}
+
+static void draw_row(unsigned char r)
+{
+    unsigned char cellrow = (unsigned char)(gy_cell + r);
+    volatile unsigned char *dst = (volatile unsigned char *)
+        (0xC000u + ((unsigned int)(cellrow & 15) << 10) + ((unsigned int)gx_org << 3));
+    unsigned char c;
+    bank3((unsigned char)(0x84 + (cellrow >> 4)));
+    for (c = 0; c < COLS; c++) {
+        unsigned char ch = grid[cell(r, c)];
+        const unsigned char *g;
+        if (ch < 32 || ch >= 127) ch = ' ';
+        g = fs4_charset + ((unsigned int)(ch - 32) << 3);
+        dst[0] = lut4[g[0]]; dst[1] = lut4[g[1]];
+        dst[2] = lut4[g[2]]; dst[3] = lut4[g[3]];
+        dst[4] = lut4[g[4]]; dst[5] = lut4[g[5]];
+        dst[6] = lut4[g[6]]; dst[7] = lut4[g[7]];
+        dst += 8;
+    }
+}
+#else
 static char rowbuf[SEG + 1];
 
 static void draw_seg(unsigned char r, unsigned char c0, unsigned char c1, unsigned char bx)
@@ -290,6 +356,7 @@ static void draw_row(unsigned char r)
     draw_seg(r, 0, SEG, GX);                  /* cols 0..47  -> byte GX      */
     draw_seg(r, SEG, COLS, GX + 72);          /* cols 48..52 -> byte GX + 72 */
 }
+#endif
 
 #if TELNET_HAS_FULLSCREEN
 /* -- fullscreen (Mode 2) renderer: an 8x8 glyph straight to screen RAM. The char
@@ -325,11 +392,14 @@ static void render_m2(void)
  * granular; the cell pitch is 6px, so we need pixel placement). Red (pen 3) in the
  * Mode-1 window; Mode 2 is 2-colour, so it falls back to white there. */
 #ifdef GB_PCW
-static void draw_cursor_m1(void)
+static void draw_cursor_m1(void)      /* white underline in the cell's last line */
 {
-    unsigned char x = (unsigned char)(GX + ((unsigned int)cur_col * 6) / 4);
-    unsigned char y = (unsigned char)(GY + cur_row * 8 + 7);
-    gb_fill(x, y, 2, 1, 3);
+    unsigned char cellrow = (unsigned char)(gy_cell + cur_row);
+    volatile unsigned char *dst = (volatile unsigned char *)
+        (0xC000u + ((unsigned int)(cellrow & 15) << 10)
+         + (((unsigned int)gx_org + cur_col) << 3) + 7);
+    bank3((unsigned char)(0x84 + (cellrow >> 4)));
+    *dst = 0xFF;
 }
 #else
 static void plot_m1(unsigned int x, unsigned char y)        /* set pixel (x,y) to pen 3 (red) */
@@ -376,6 +446,32 @@ static void render(void)
 #endif
     pcur_row = cur_row; pcur_col = cur_col;
 }
+
+#ifdef GB_PCW
+/* -- PCW fullscreen (#350): the viewer-style WM_FS borderless window, no video
+ * mode involved - the same 4x8 renderer just grows to 90x31 at origin (0,0).
+ * Enter/exit from the Telnet menu; Ctrl-] / ESC exits (fullscreen hides the
+ * top bar, so the menu is unreachable inside). */
+#define WM_FS ((volatile unsigned char *)0x130A)
+static unsigned char pcwfs;
+static void fs_label(void);
+static void pcw_fs_set(unsigned char on)
+{
+    static unsigned char px, py, pw, ph;
+    if (on == pcwfs) return;
+    pcwfs = on;
+    if (on) {
+        px = gb_wm_x(); py = gb_wm_y(); pw = gb_wm_w(); ph = gb_wm_h();
+        gb_wm_setpos(0, 0); gb_wm_setsize(GB_COLS, GB_LINES); *WM_FS = 1;
+        gcols = FS_COLS; grows = FS_ROWS; gx_org = 0; gy_cell = 0;
+    } else {
+        *WM_FS = 0; gb_wm_setpos(px, py); gb_wm_setsize(pw, ph);
+        gcols = WIN_COLS; grows = WIN_ROWS; gx_org = GX; gy_cell = GY >> 3;
+    }
+    term_cls();                     /* the grid geometry changed: start fresh */
+    gb_wm_damage(0, 0, GB_COLS, GB_LINES);
+}
+#endif
 
 #if TELNET_HAS_FULLSCREEN
 /* SCR_SET_MODE: A = mode. Mode 2 = 640x200 2-colour (pens 0/1 keep the desktop's
@@ -926,7 +1022,14 @@ static void send_key(unsigned char k)
 static unsigned char pump_keys(void)
 {
     unsigned char k, sent = 0;
-    while ((k = gb_getkey()) != 0) { sent = 1; send_key(k); }
+    while ((k = gb_getkey()) != 0) {
+#ifdef GB_PCW
+        if (pcwfs && (k == 0x1D || k == 0x1B)) {   /* Ctrl-] / ESC leave fullscreen */
+            pcw_fs_set(0); fs_label(); continue;
+        }
+#endif
+        sent = 1; send_key(k);
+    }
     return sent;
 }
 
@@ -1043,14 +1146,16 @@ static void on_menu(unsigned char sel)
     }
 }
 #else
-static const char *telnet_items[2] = {
-    "Connect serial", "Disconnect"
+static const char *telnet_items[3] = {
+    "Connect serial", "Disconnect", "Fullscreen 90x31 [ ]"
 };
-static void fs_label(void) { }
+static void fs_label(void) { telnet_items[2] = pcwfs ? "Fullscreen 90x31 [x]"
+                                                     : "Fullscreen 90x31 [ ]"; }
 static void on_menu(unsigned char sel)
 {
     if (sel == 0) action_connect_serial();
     else if (sel == 1) close_session();
+    else if (sel == 2) { pcw_fs_set((unsigned char)!pcwfs); fs_label(); }
 }
 #endif
 
@@ -1058,7 +1163,7 @@ static void on_menu(unsigned char sel)
 static const gb_doc_t telnetdoc = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 
 /* ---- window callbacks (kernel-managed window) ------------------------------ */
-#if defined(TELNET_DEMO) && TELNET_HAS_FULLSCREEN
+#if defined(TELNET_DEMO) && (TELNET_HAS_FULLSCREEN || defined(GB_PCW))
 /* offline render check (no net): drive term_write with a pattern that exercises the
  * full 53-col width (incl. the cols-48..52 second segment), wrap, and a scroll. */
 static void demo_fill(void)
@@ -1090,6 +1195,13 @@ static void draw_content(void)
         gb_text(2, GY + 24, "Open the Telnet menu to begin");
         gb_curshow();
     } else {                                   /* ST_RUN / ST_DONE: paint the grid */
+#ifdef GB_PCW
+        gb_curhide();                          /* black margins around the grid */
+        if (pcwfs) gb_fill(0, 0, GB_COLS, GB_LINES, 2);
+        else gb_fill(1, (unsigned char)(WIN_Y + 15), GB_COLS - 2,
+                     (unsigned char)(GB_LINES - WIN_Y - 17), 2);
+        gb_curshow();
+#endif
         mark_all();
         render();
     }
@@ -1119,6 +1231,28 @@ static void t_frame(void)
         scr_set_mode(2); m2_clear();
         start_session(); demo_fill(); render();
         for (;;) ;                          /* hold the M2 screen (no WM interference) */
+    }
+#endif
+#if defined(TELNET_DEMO) && defined(GB_PCW)
+    if (state == ST_IDLE) {                 /* offline 4x8 render check (see demo_fill) */
+        static unsigned char demo_ran;
+        if (!demo_ran) {
+            demo_ran = 1;
+#ifndef TELNET_DEMO_WINDOWED
+            pcw_fs_set(1); fs_label();      /* 90x31; windowed build keeps 80x25 */
+            gb_curhide();
+            gb_fill(0, 0, GB_COLS, GB_LINES, 2);
+#endif
+            start_session(); demo_fill(); render();
+            for (;;) ;                      /* hold the grid for the screenshot */
+        }
+    }
+#endif
+#ifdef GB_PCW
+    if (pcwfs && state != ST_RUN) {         /* fullscreen hides the top bar: keys exit */
+        unsigned char k;
+        while ((k = gb_getkey()) != 0)
+            if (k == 0x1D || k == 0x1B) { pcw_fs_set(0); fs_label(); }
     }
 #endif
     /* idle on launch - the user drives everything from the Telnet menu (no auto-connect) */
@@ -1159,12 +1293,15 @@ void main(void)
     transport = TR_SERIAL;
     want_fs = 0; fs_label();
 #endif
+#ifdef GB_PCW
+    lut4_init();
+#endif
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */
 #if TELNET_HAS_NET
     gb_menu_add("Telnet", (const char *const *)telnet_items, 4, on_menu);
 #else
-    gb_menu_add("Telnet", (const char *const *)telnet_items, 2, on_menu);
+    gb_menu_add("Telnet", (const char *const *)telnet_items, 3, on_menu);
 #endif
     gb_restore_parent();                         /* first paint: WM chrome + draw_content */
 }
