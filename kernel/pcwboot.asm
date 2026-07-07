@@ -50,6 +50,9 @@ ld_entry: dw #1000              ; [12] entry address        (patched)
 entry:
         di
         ld sp,#F000             ; stack just below this sector
+        ld a,#0F                ; BEACON A: fine stripes = "boot code runs"
+        call beacon             ; (real-HW diagnosis, #331: the pattern on
+                                ; screen tells which stage died)
         ld a,4
         out (#F8),a             ; route FDC interrupt: disabled (poll)
         ld a,9
@@ -72,7 +75,7 @@ entry:
 sec_loop:
         ld a,(ld_secs)          ; remaining sectors
         or a
-        jr z,go
+        jp z,go
         dec a
         ld (ld_secs),a
         ld a,3                  ; attempts per sector (real drives can
@@ -112,12 +115,28 @@ rx:
 
         jr sec_next
 rx_bad:
-        call fdc_drain          ; failed: drain, leave dest as it was,
-        ld a,(retry)            ; and re-read the same sector
+        call fdc_drain          ; failed: drain, re-home + re-seek (real
+        ld hl,cmd_init+3        ; mechanics may need it), leave dest as it
+        ld b,2                  ; was, and re-read the same sector
+        call fdc_send           ; (cmd_init+3 = the RECALIBRATE pair)
+        call wait_seek
+        ld a,(cur_trk)
+        or a
+        jr z,rb_home
+        ld (sk_trk),a
+        ld hl,cmd_seek
+        ld b,3
+        call fdc_send
+        call wait_seek
+rb_home:
+        ld a,(retry)
         dec a
         ld (retry),a
-        jr nz,sec_try
-        jp 0                    ; hard failure: restart the whole boot
+        jp nz,sec_try
+        ld a,#03                ; BEACON C: sparse stripes = "reads failed";
+        call beacon             ; freeze with the evidence on screen instead
+bc_halt:
+        jr bc_halt              ; of blink-looping through reboots
 sec_next:
         ld a,(cur_r)            ; advance sector; past R=9 -> next track
         inc a
@@ -137,9 +156,49 @@ same_trk:
         jp sec_loop
 
 go:
+        ld a,#FF                ; BEACON B: solid lit = "kernel loaded, jumping"
+        call beacon             ; (the kernel's own video init repaints at once)
         ld hl,(ld_entry)        ; motor stays on - the kernel starts reading
                                 ; system files immediately (fs_init re-inits FDC)
         jp (hl)
+
+; ---- beacon: whole-screen pattern with NO disk I/O ----------------------
+; Minimal roller table at phys #4200 (512-aligned, slot-1 identity RAM):
+; every scanline points at the SAME 8-line cellrow at phys #4400 (roller
+; word = #2200 | line), so filling 720 bytes paints the whole display.
+beacon:
+        ld c,a                  ; C = pattern byte
+        ld hl,#4200             ; 256 roller words
+        ld b,0
+        ld e,0                  ; line counter
+bk_tab:
+        ld a,e
+        and 7
+        ld (hl),a               ; low byte = line (word base #2200)
+        inc hl
+        ld a,#22
+        ld (hl),a
+        inc hl
+        inc e
+        djnz bk_tab
+        ld hl,#4400             ; the shared cellrow
+        ld de,720
+bk_fill:
+        ld (hl),c
+        inc hl
+        dec de
+        ld a,d
+        or e
+        jr nz,bk_fill
+        ld a,#21                ; roller base = phys #4200
+        out (#F5),a
+        xor a
+        out (#F6),a             ; scroll 0
+        ld a,#40
+        out (#F7),a             ; screen enable, normal video
+        ld a,7
+        out (#F8),a             ; display on
+        ret
 
 ; ---- FDC helpers -------------------------------------------------------
 
