@@ -101,14 +101,17 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
   the default —, ANT, DECO, XMATRIX) + fonts, icon sets, pointer, splash,
   GEOBENCH.CFG.
 - **COMPANION.DSK** (data): the picture gallery, backdrop tiles,
-  CLASSIC.FNT, WELCOME.TXT.
+  TELNET.APP (serial/PerryFi only), CLASSIC.FNT, WELCOME.TXT. `LOGO.PIC`
+  is omitted on PCW to keep enough CF2 space for TELNET.APP.
 
 ## Not (yet) on the PCW
 
 - The direct-`#C000` savers (PYRO, HELIX, STARFLD, …) — they poke the CPC
   framebuffer; each needs a PCW plot path.
 - DISKUTIL (needs a PCW FORMAT TRACK backend), PAINT and GB-BASIC (their
-  repos need `-DGB_PCW` targets), TELNET (CPC network hardware).
+  repos need `-DGB_PCW` targets).
+- TELNET network mode — PCW currently ships the serial/PerryFi transport;
+  direct network-module support is a later target.
 - CF2DD 720K media (2K blocks, 16-bit allocation entries) — drive B
   currently expects CF2-format discs.
 
