@@ -540,10 +540,27 @@ fcs_ok
                 scf
                 ret
 
-; fs_load_cur_sys / fs_load_sys: flat filesystem - plain loads.
+; fs_load_cur_sys: system load from the CURRENT drive (flat fs: plain load).
 fs_load_cur_sys
-fs_load_sys
                 jp    fs_load_file
+
+; fs_load_sys: like fs_load_file but from the BOOT drive (where the OS apps
+; and modules live) regardless of the active browse drive, with a browse-
+; drive retry - the exact CPC contract (lib/fs.asm #65/#110/#250). Without
+; this, opening Disk B tried to load FILEMGR.APP from COMPANION.DSK: one
+; LED flash and no window (#331 bug report).
+fs_load_sys
+                ld    a,(fs_cur_drive)         ; save the active browse drive
+                ld    (fls_browse),a
+                ld    a,(fs_boot_drive)
+                call  fs_set_drive             ; boot drive (remounts if needed)
+                call  fs_load_file
+                push  af
+                ld    a,(fls_browse)
+                call  fs_set_drive             ; restore the browse drive
+                pop   af
+                ret   c                        ; loaded from boot -> done
+                jp    fs_load_file             ; else retry on the browse drive
 
 ; --- write ops (#331 Phase 5b) --------------------------------------------------
 

@@ -37,11 +37,19 @@ for line in open(symf):
         syms[int(parts[1][1:], 16)] = parts[0]
 code_end = min((a for a in syms if syms[a] in ('BD_TILE', 'GLYPH')), default=len(data)+0x2000) - 0x2000
 bad = 0
+addrs = sorted(syms)
+import bisect
 for off in range(code_end - 2):
-    if data[off] == 0xCD:                       # CALL nn (may be an operand byte:
-        tgt = data[off+1] | (data[off+2] << 8)  # only in-image non-symbol targets
-        if 0x2000 <= tgt < 0x2000 + len(data) and tgt not in syms:
-            print(f'PHASE ERROR: call at {0x2000+off:#06x} -> {tgt:#06x} matches no symbol')
+    if data[off] == 0xCD:                       # CALL nn - but 0xCD also appears
+        tgt = data[off+1] | (data[off+2] << 8)  # as jp/jr operand bytes, so only
+        if not (0x2000 <= tgt < 0x2000 + len(data)) or tgt in syms:
+            continue                            # flag SMALL drifts off a real
+        i = bisect.bisect_left(addrs, tgt)      # symbol (the actual RASM phase-
+        near = min((abs(addrs[j]-tgt) for j in (i-1, i) if 0 <= j < len(addrs)),
+                   default=99)                  # bug signature); random operand
+        if near <= 8:                           # bytes point nowhere near one
+            print(f'PHASE ERROR: call at {0x2000+off:#06x} -> {tgt:#06x} '
+                  f'is {near} bytes off a symbol')
             bad += 1
 sys.exit(1 if bad else 0)
 EOF
@@ -52,10 +60,15 @@ python3 tools/mkpcwdsk.py build/pcwspike.dsk \
     --boot build/pcwboot.bin --sys build/pcwspike.bin --load 0x2000 \
     --add build/HELLO.TXT --add assets/WELCOME.TXT --add build/DEFAULT.FNT \
     --add build/BIGTEST.BIN
+printf 'A file that lives on drive B\r\n' > build/BFILE.TXT
+python3 tools/mkpcwdsk.py build/pcwb.dsk --add build/BFILE.TXT
+sed 's/ext_second_drive        = false/ext_second_drive        = true/' \
+    debug/1985-pcw.conf > build/1985-pcw-2drive.conf
 
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
-    --config debug/1985-pcw.conf \
+    --config build/1985-pcw-2drive.conf \
     --disk-a build/pcwspike.dsk \
+    --disk-b build/pcwb.dsk \
     --unthrottled \
     --paste-event "3200:hello pcw 42" \
     --screenshot-at 3600:build/pcwspike.ppm \
