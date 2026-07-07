@@ -1,0 +1,488 @@
+; ---------------------------------------------------------------------------
+; lib/pcw/screen.asm - GEOBENCH roller-RAM/CGA2 driver for the PCW target (#331).
+;
+; The PCW counterpart of lib/screen.asm / lib/msx/screen.asm: same entry
+; points, same low-RAM parameter cells (bm_*, fb_*, sb_*, clip_*), so every
+; caller in the shared kernel body compiles unchanged. See lib/pcw/glue.inc
+; for the surface: 90 byte-cols x 248 lines, Screen-6-style 2bpp packing
+; shown through the emulator's CGA2 palette, framebuffer in physical blocks
+; 4-5 reached through the CPU slot-3 window.
+;
+;   - bitmaps/assets stay in GB pen space (identical bytes to the MSX build);
+;     every byte is permuted to the CGA2 hardware pens on its way to the
+;     screen: screen = ((gb & #55)<<1) | ((~gb & #AA)>>1)
+;   - fill bytes (fb_val) arrive ALREADY permuted - pen_to_byte here returns
+;     hardware-space bytes, and fills write them raw
+;   - save_block/restore_block round-trip raw screen (hardware-space) bytes
+;   - pcw_addr maps the right framebuffer block into slot 3 per row; nothing
+;     may rely on slot 3 surviving a call (input remaps it for the keyboard)
+;   - runs fully DI, so the window swaps can't be interleaved
+; ---------------------------------------------------------------------------
+
+; ---------------------------------------------------------------------------
+; pcw_addr: D = xbyte, E = y -> HL = CPU address in the slot-3 window, with
+; the right framebuffer block mapped. Clobbers A, BC.
+;   cellrow r = y>>3: block = 4 + (r>>4), HL = #C000 + (r&15)*1024 + D*8 + (y&7)
+pcw_addr
+                ld    a,e
+                rrca
+                rrca
+                rrca
+                and   #1F                     ; A = cellrow 0..31
+                cp    16
+                ld    c,PCW_BLK_SCR0
+                jr    c,pa_blk
+                ld    c,PCW_BLK_SCR1
+pa_blk
+                ld    b,a                     ; B = cellrow
+                ld    a,c
+                out   (PCW_BANK3),a           ; map the framebuffer block
+                ld    a,b
+                and   15
+                add   a,a
+                add   a,a                     ; (r & 15) * 4 -> high-byte offset
+                or    #C0
+                ld    h,a
+                ld    a,e
+                and   7
+                ld    l,a                     ; HL = cellrow base + line
+                ld    b,0                     ; BC = xbyte * 8
+                ld    c,d
+                sla   c
+                rl    b
+                sla   c
+                rl    b
+                sla   c
+                rl    b
+                add   hl,bc
+                ret
+
+; ---------------------------------------------------------------------------
+; pcw_perm: A = GB-pen-space byte -> A = CGA2 hardware-space byte.
+; Per 2-bit field: hw.b1 = gb.b0, hw.b0 = NOT gb.b1 (the pen map 0->1 1->3
+; 2->0 3->2). Clobbers B, C.
+pcw_perm
+                ld    c,a
+                and   #55
+                add   a,a                     ; (gb & #55) << 1
+                ld    b,a
+                ld    a,c
+                cpl
+                and   #AA
+                rrca                          ; (~gb & #AA) >> 1 (bit0 is clear)
+                or    b
+                ret
+
+; --- pen_to_byte: A = GB pen (0..3) -> A = solid hardware byte ---------------
+; (pens 0..3 -> #55 cyan, #FF white, #00 black, #AA magenta.) Clobbers A, E
+; only - the same contract as the MSX driver's pen_to_byte.
+pen_to_byte
+                and   3
+                ld    e,a
+                cpl
+                and   2
+                rrca                          ; A = h0 = NOT pen.b1
+                srl   e                       ; CF = pen.b0
+                jr    nc,ptb_h1
+                or    2                       ; h1 = pen.b0
+ptb_h1
+                ld    e,a                     ; A = hw pen; byte = hw * #55
+                add   a,a
+                add   a,a
+                or    e                       ; * 5 (both fields of a nibble)
+                ld    e,a
+                add   a,a
+                add   a,a
+                add   a,a
+                add   a,a
+                or    e                       ; * #11 -> all four 2-bit fields
+                ret
+
+; ---------------------------------------------------------------------------
+; blit_bitmap: copy a bm_w x bm_h byte bitmap at (bm_x, bm_y) to the screen,
+; permuting each byte. bm_src is row-major GB-pen-space (MSX-format) bytes.
+; bm_keep=#FF composites transparently: GB pen-0 fields keep the background.
+blit_bitmap
+                ld    a,(bm_x)               ; cull if fully outside the clip rect
+                ld    b,a
+                ld    a,(bm_y)
+                ld    c,a
+                ld    a,(bm_w)
+                ld    d,a
+                ld    a,(bm_h)
+                ld    e,a
+                call  rect_cull
+                ret   c
+                ld    a,(bm_h)
+                ld    (bl_rows),a
+                ld    a,(bm_y)
+                ld    (bl_y),a
+bl_loop
+                ld    a,(bm_x)               ; HL = screen dest (stride 8/byte)
+                ld    d,a
+                ld    a,(bl_y)
+                ld    e,a
+                call  pcw_addr
+                ld    de,(bm_src)            ; DE = source row (stride 1)
+                ld    a,(bm_w)
+                ld    (bl_cnt),a
+                ld    a,(bm_keep)            ; pick the row loop once per row
+                or    a
+                jr    nz,bl_tbyte
+bl_obyte
+                ; --- opaque: permute and write --------------------------------
+                ld    a,(de)
+                call  pcw_perm
+                ld    (hl),a
+                inc   de
+                ld    bc,8                    ; x-neighbours are 8 bytes apart
+                add   hl,bc
+                ld    a,(bl_cnt)
+                dec   a
+                ld    (bl_cnt),a
+                jr    nz,bl_obyte
+                jr    bl_next
+bl_tbyte
+                ; --- transparent: GB pen-0 fields keep the background ---------
+                ; mask = 11 in every non-pen-0 field of the GB-space icon byte;
+                ; screen = (screen & ~mask) | (perm(icon) & mask). The mask is
+                ; computed on GB bytes (pen 0 = 00) but selects 2-bit FIELDS, so
+                ; it applies unchanged to the permuted hardware bytes.
+                ld    a,(de)
+                ld    c,a
+                srl   a
+                or    c
+                and   #55
+                ld    c,a
+                add   a,a
+                or    c                        ; A = opaque-field mask
+                cpl                            ; A = ~mask
+                ld    c,a
+                ld    a,(hl)                  ; screen byte (hardware space)
+                and   c                        ; A = kept background bits
+                push  af
+                ld    a,c
+                cpl                            ; back to mask
+                push  af
+                ld    a,(de)
+                call  pcw_perm                ; A = perm(icon); clobbers B,C
+                pop   bc                       ; B = mask
+                and   b                        ; icon bits in opaque fields only
+                pop   bc                       ; B = kept background (pushed AF)
+                or    b
+                ld    (hl),a
+                inc   de
+                ld    bc,8
+                add   hl,bc
+                ld    a,(bl_cnt)
+                dec   a
+                ld    (bl_cnt),a
+                jr    nz,bl_tbyte
+bl_next
+                ld    (bm_src),de            ; advance source past this row
+                ld    a,(bl_y)
+                inc   a
+                ld    (bl_y),a
+                ld    a,(bl_rows)
+                dec   a
+                ld    (bl_rows),a
+                jr    nz,bl_loop
+                ret
+
+; ---------------------------------------------------------------------------
+; fill_block: fill an fb_w x fb_h byte rectangle at (fb_x, fb_y) with fb_val.
+; fb_val is a hardware-space byte (from pen_to_byte).
+fill_block
+                call  clip_fb_copy           ; fbw_* = fb_* clipped to the clip rect
+                ret   c
+                ld    a,(fbw_h)
+                ld    (fb_rows),a
+                ld    a,(fbw_y)
+                ld    (fb_cy),a
+fbk_loop
+                ld    a,(fbw_x)
+                ld    d,a
+                ld    a,(fb_cy)
+                ld    e,a
+                call  pcw_addr
+                ld    a,(fbw_w)
+                ld    b,a
+                ld    a,(fb_val)
+                ld    c,a
+                ld    de,8                    ; x-neighbours are 8 bytes apart
+fbk_row
+                ld    (hl),c
+                add   hl,de
+                djnz  fbk_row
+                ld    a,(fb_cy)
+                inc   a
+                ld    (fb_cy),a
+                ld    a,(fb_rows)
+                dec   a
+                ld    (fb_rows),a
+                jr    nz,fbk_loop
+                ret
+
+                if BACKDROP_TILE
+; fill_pattern: like fill_block but from the 16x16 BD_TILE (GB-pen-space bytes,
+; permuted on write), phased off absolute screen x,y. Tile byte for (x,y) is
+; BD_TILE[(y & 15)*4 + (x & 3)].
+fill_pattern
+                call  clip_fb_copy
+                ret   c
+                ld    a,(fbw_h)
+                ld    (fb_rows),a
+                ld    a,(fbw_y)
+                ld    (fb_cy),a
+fp_row
+                ld    a,(fb_cy)              ; tile offset for this row
+                and   15
+                add   a,a
+                add   a,a
+                ld    c,a
+                ld    a,(fbw_x)
+                and   3
+                add   a,c
+                ld    (fp_off),a
+                ld    a,(fbw_x)
+                ld    d,a
+                ld    a,(fb_cy)
+                ld    e,a
+                call  pcw_addr
+                ld    a,(fp_off)             ; DE = tile ptr (row never crosses a page)
+                ld    e,a
+                ld    d,0
+                push  hl
+                ld    hl,BD_TILE
+                add   hl,de
+                ld    d,h
+                ld    e,l
+                pop   hl
+                ld    a,(fbw_w)
+                ld    (fp_cnt),a
+fp_col
+                ld    a,(de)                 ; tile byte -> permute -> screen
+                call  pcw_perm
+                ld    (hl),a
+                ld    bc,8                    ; x-neighbours are 8 bytes apart
+                add   hl,bc
+                inc   e                       ; advance tile ptr; wrap every 4 bytes
+                ld    a,e
+                and   3
+                jr    nz,fp_nw
+                dec   e
+                dec   e
+                dec   e
+                dec   e
+fp_nw
+                ld    a,(fp_cnt)
+                dec   a
+                ld    (fp_cnt),a
+                jr    nz,fp_col
+                ld    a,(fb_cy)
+                inc   a
+                ld    (fb_cy),a
+                ld    a,(fb_rows)
+                dec   a
+                ld    (fb_rows),a
+                jr    nz,fp_row
+                ret
+fp_off          db    0
+fp_cnt          db    0
+                endif
+
+                include "../screen_clip.asm"  ; clip_fb_copy + rect_cull (shared)
+
+; ---------------------------------------------------------------------------
+; save_block / restore_block: copy a sb_w x sb_h byte rectangle at (sb_x, sb_y)
+; between the screen and a RAM buffer (sb_buf). Raw hardware-space bytes -
+; no permuting, and the buffer must NOT live in slot 3 (#C000+).
+save_block
+                ld    a,(sb_h)
+                ld    (sb_rows),a
+                ld    a,(sb_y)
+                ld    (sb_cy),a
+                ld    hl,(sb_buf)
+                ld    (sb_ptr),hl
+sv_loop
+                ld    a,(sb_x)
+                ld    d,a
+                ld    a,(sb_cy)
+                ld    e,a
+                call  pcw_addr               ; HL = screen (source, stride 8)
+                ld    de,(sb_ptr)
+                ld    a,(sb_w)
+                ld    b,a
+sv_row
+                ld    a,(hl)
+                ld    (de),a
+                inc   de
+                ld    a,l                     ; HL += 8 (B is the counter)
+                add   a,8
+                ld    l,a
+                jr    nc,sv_nc
+                inc   h
+sv_nc
+                djnz  sv_row
+                ld    (sb_ptr),de
+                ld    a,(sb_cy)
+                inc   a
+                ld    (sb_cy),a
+                ld    a,(sb_rows)
+                dec   a
+                ld    (sb_rows),a
+                jr    nz,sv_loop
+                ret
+
+restore_block
+                ld    a,(sb_h)
+                ld    (sb_rows),a
+                ld    a,(sb_y)
+                ld    (sb_cy),a
+                ld    hl,(sb_buf)
+                ld    (sb_ptr),hl
+rs_loop2
+                ld    a,(sb_x)
+                ld    d,a
+                ld    a,(sb_cy)
+                ld    e,a
+                call  pcw_addr               ; HL = screen (dest, stride 8)
+                ld    de,(sb_ptr)
+                ld    a,(sb_w)
+                ld    b,a
+rs_row
+                ld    a,(de)
+                ld    (hl),a
+                inc   de
+                ld    a,l                     ; HL += 8 (B is the counter)
+                add   a,8
+                ld    l,a
+                jr    nc,rs_nc
+                inc   h
+rs_nc
+                djnz  rs_row
+                ld    (sb_ptr),de
+                ld    a,(sb_cy)
+                inc   a
+                ld    (sb_cy),a
+                ld    a,(sb_rows)
+                dec   a
+                ld    (sb_rows),a
+                jr    nz,rs_loop2
+                ret
+
+; --- k_cls: clear the whole desktop to pen 0 --------------------------------
+k_cls
+                xor   a
+                call  pen_to_byte
+                ld    (fb_val),a
+                xor   a
+                ld    (fb_x),a
+                ld    (fb_y),a
+                ld    a,PCW_COLS
+                ld    (fb_w),a
+                ld    a,PCW_LINES
+                ld    (fb_h),a
+                jp    fill_block
+
+; --- set_palette: fixed CGA2 palette - nothing to program --------------------
+set_palette
+                ret
+
+; ---------------------------------------------------------------------------
+; pcw_video_init: build the roller table, paint the letterbox strip, clear
+; the desktop, and turn the display on. Called once at boot (display starts
+; disabled, so no garbage is shown while this runs).
+;
+; Roller word for line y: cellrow r = y>>3 lives at phys A = #10000 + r*1024,
+; word = ((A'>>1) & #FFF8) | (y&7) with A' = A + (y&7). Since A is 1K-aligned:
+; word = (#8000 + r*512) | (y&7)  (A>>1: bit16 -> bit15, r*1024 -> r*512).
+; Lines 248-255 point at cellrow 31 (the static letterbox strip).
+pcw_video_init
+                ld    hl,PCW_RTABLE
+                ld    de,#8000                ; cellrow 0 word base (A=#10000 -> #8000)
+                ld    b,32                    ; 32 cellrows (31 = letterbox)
+vi_cell
+                ld    c,0                     ; line within cell
+vi_line
+                ld    a,e
+                or    c                       ; low byte | line
+                ld    (hl),a
+                inc   hl
+                ld    a,d
+                ld    (hl),a
+                inc   hl
+                inc   c
+                ld    a,c
+                cp    8
+                jr    c,vi_line
+                inc   d                       ; next cellrow: word base += 512
+                inc   d
+                djnz  vi_cell
+                ; letterbox strip: cellrow 31 = solid black (hardware pen 0)
+                ld    a,PCW_BLK_SCR1
+                out   (PCW_BANK3),a
+                ld    hl,#C000+15*1024        ; cellrow 31 in the slot-3 window
+                ld    de,720
+vi_strip
+                ld    (hl),0
+                inc   hl
+                dec   de
+                ld    a,d
+                or    e
+                jr    nz,vi_strip
+                ; full-screen clip + clear, then enable the display
+                xor   a
+                ld    (clip_x),a
+                ld    (clip_y),a
+                ld    a,PCW_COLS
+                ld    (clip_w),a
+                ld    a,PCW_LINES
+                ld    (clip_h),a
+                call  k_cls
+                ld    a,PCW_RTREG
+                out   (PCW_ROLLER),a          ; roller table at phys #3E00
+                xor   a
+                out   (PCW_SCROLL),a          ; vertical scroll 0
+                ld    a,#40
+                out   (PCW_DISPCTL),a         ; screen enable, normal video
+                ld    a,7
+                out   (PCW_SYSCTL),a          ; display enable on
+                ret
+
+; --- parameter / scratch cells: same low-RAM homes as the CPC/MSX drivers ----
+bm_src          equ   #14A4        ; source bitmap pointer (advanced by blit)
+bm_x            equ   #14A6        ; destination x in bytes (0..89)
+bm_y            equ   #14A7        ; destination y (0..247)
+bm_w            equ   #14A8        ; width in bytes
+bm_h            equ   #14A9        ; height in rows
+bl_rows         equ   #14AA
+bl_y            equ   #14AB
+bl_cnt          equ   #14AC
+bm_keep         equ   #14AD        ; #FF = pen-0 transparent (desktop), #00 = opaque
+
+fb_x            equ   #14B8
+fb_y            equ   #14B9
+fb_w            equ   #14BA
+fb_h            equ   #14BB
+fb_val          db    0            ; hardware-space fill byte (from pen_to_byte)
+fb_rows         equ   #14AE
+fb_cy           equ   #14AF
+
+clip_x          equ   #1338        ; clip rect (shared contract addresses)
+clip_y          equ   #1339
+clip_w          equ   #133A
+clip_h          equ   #133B
+fbw_x           equ   #14B0
+fbw_y           equ   #14B1
+fbw_w           equ   #14B2
+fbw_h           equ   #14B3
+
+sb_x            db    0
+sb_y            db    0
+sb_w            db    0
+sb_h            db    0
+sb_buf          dw    0
+sb_rows         equ   #14B4
+sb_cy           equ   #14B5
+sb_ptr          equ   #14B6
