@@ -4,6 +4,10 @@ The third GEOBENCH platform: the same kernel body, window manager, and C
 apps as the CPC and MSX2 targets, running on the Amstrad PCW — a machine
 with no ROM, no firmware, and (natively) no colour.
 
+**Runs on real hardware**: verified booting a physical PCW 8256 from a
+Gotek (FlashFloppy) serving `QA/PCW/GEOBENCH.DSK`. On real machines the
+display is the native 1bpp monochrome (see the colour section below).
+
 ```
 bash tools/build_kernel_pcw.sh          # -> QA/PCW/GEOBENCH.DSK + COMPANION.DSK
 ~/Dev/1985/1985 --config debug/1985-pcw.conf --disk-a QA/PCW/GEOBENCH.DSK
@@ -108,15 +112,63 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
 - CF2DD 720K media (2K blocks, 16-bit allocation entries) — drive B
   currently expects CF2-format discs.
 
+## The real uPD765 (rules the emulator does not enforce)
+
+The first Gotek boots on a physical 8256 failed even though the emulator
+was flawless. The root causes were found by diffing our FDC code against
+a CP/M 3 boot sector and the MCU bootstrap — both proven on that machine
+(#344). If you touch any FDC code, these are load-bearing:
+
+- **MSR settle**: after every command byte written to, or result byte
+  read from, the data register, the real chip's main status register
+  stays stale for ~12µs. Follow each such access with an `EX (SP),HL`
+  ×4 chain before polling MSR again — otherwise the stale RQM
+  double-feeds command bytes and every command is corrupt.
+- **Seek/recalibrate completion**: wait for the ASIC's live FDC INTRQ
+  mirror (port `#F8` read, bit 5), then acknowledge with **one** SENSE
+  INTERRUPT. Never hammer SENSE INT while a seek is stepping.
+- **Read/write shape**: TC clear (`#F8` cmd 6) before the command;
+  READ `#66` (MFM+SK) / WRITE `#45` with **EOT = 9** so the chip streams
+  into the inter-sector gap; TC set (cmd 5) right after the payload
+  bytes; then wait INTRQ and read the full result set. `EN` alone in
+  ST0 is TC-normal — only `ST0 & #88` (invalid/ready-change IC, NR) is
+  fatal.
+- The transfer loops must beat the **~32µs MFM byte window**: `INI`/`OUTI`
+  with the count in B (2 × 256 per sector), two `ADD A,A` + `JP P` for
+  the EXM test — the machine's own bootstrap loop shape.
+- The **emulator proves nothing about FDC timing or handshakes** — it
+  updates MSR instantly and enforces no byte window. Validate FDC changes
+  against real hardware, or at minimum against the byte-for-byte shape of
+  a boot sector known to work there.
+
+### Boot diagnosis beacons
+
+The boot sector paints its progress on the real screen with zero disk
+I/O (a minimal roller table pointing every scanline at one shared row):
+
+| Pattern | Meaning |
+|---|---|
+| nothing (unchanged from power-on) | boot code never ran: checksum/entry/image serving |
+| fine vertical stripes, stuck | FDC init / recalibrate / seek hangs |
+| sparse stripes, frozen | sector reads hard-failed; **ST0/ST1/ST2 are painted as three rows of 8 bit-blocks** (bit 7 leftmost, lit = 1) — photograph and decode |
+| solid lit / dither texture | kernel loaded and alive |
+
 ## Gotchas (hard-won)
 
-- The FDC transfers **one sector per READ/WRITE command** in this polled
-  non-DMA setup — never use multi-sector commands.
 - Anything that hardcodes byte `#00` as "pen 0" is wrong here (the
-  permuted pen 0 is `#55`) — route fills through `pen_to_byte`.
+  permuted pen 0 is `#55`) — route fills through `pen_to_byte`. The same
+  goes for `#F0`/`#0F` Mode-1 literals (see `KWB_*` in `gbkern.asm`).
+- App code with `#ifdef GB_MSX2 … #else` platform arms: the `#else` side
+  often calls **CPC firmware vectors** (`#BBxx`/`#BCxx`), which on the
+  PCW are bytes inside the kernel — instant garbage execution. Grep for
+  `0xBB`/`0xBC`/`0xFD1` before staging any app, and give PCW the
+  MSX-safe arm (or its own).
 - Nothing may assume the slot-3 window persists across calls; map before
   use. The stack must never live in `#C000`–`#FFFF`.
 - RASM once emitted a phase-inconsistent binary (a CALL kept a stale
   pass-1 target); `tools/pcwspike/build.sh` cross-checks CALL targets
   against the symbol table. If PCW code crashes inexplicably after a
   small edit, suspect this first.
+- Drive B is the 80-track mechanism: CF2 media in it is double-stepped
+  (`pcwfdc_setunit` handles it). Reading the wrong track there returns
+  the disc spec masquerading as a directory entry.

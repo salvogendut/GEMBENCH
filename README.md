@@ -54,10 +54,12 @@ hardware, or use the disk images in an emulator.
 
 ### Amstrad PCW
 
-- Boot **`QA/PCW/GEOBENCH.DSK`** in the [1985 emulator](docs/PCW.md) with
-  `video_mode = cga2` and the DK'tronics board enabled (`debug/1985-pcw.conf`);
-  **`QA/PCW/COMPANION.DSK`** (pictures, backdrops) goes in drive B. No CP/M is
-  needed — the disc boots GEOBENCH directly (see [docs/PCW.md](docs/PCW.md)).
+- Boot **`QA/PCW/GEOBENCH.DSK`** on a real PCW 8256/8512 (e.g. from a Gotek) or
+  in the [1985 emulator](docs/PCW.md) with `video_mode = cga2` and the
+  DK'tronics board enabled (`debug/1985-pcw.conf`); **`QA/PCW/COMPANION.DSK`**
+  (pictures, backdrops) goes in drive B. No CP/M is needed — the disc boots
+  GEOBENCH directly. Real machines show the native 1bpp monochrome; the CGA2
+  colours are an emulator feature (see [docs/PCW.md](docs/PCW.md)).
 
 Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.md).
 
