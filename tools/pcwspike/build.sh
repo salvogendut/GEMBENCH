@@ -12,6 +12,8 @@ RASM="${RASM:-rasm}"
 E1985="${E1985:-$HOME/Dev/1985/1985}"
 mkdir -p build
 
+python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font for the text test
+
 # rasm exits 0 on assembly errors - remove outputs first, assert after
 rm -f build/pcwboot.bin build/pcwspike.bin
 "$RASM" kernel/pcwboot.asm
@@ -33,19 +35,19 @@ for line in open(symf):
     parts = line.split()
     if len(parts) >= 2 and parts[1].startswith('#'):
         syms[int(parts[1][1:], 16)] = parts[0]
-code_end = min((a for a in syms if syms[a] in ('BD_TILE', 'GLYPH')), default=len(data)+0x1000) - 0x1000
+code_end = min((a for a in syms if syms[a] in ('BD_TILE', 'GLYPH')), default=len(data)+0x2000) - 0x2000
 bad = 0
 for off in range(code_end - 2):
     if data[off] == 0xCD:                       # CALL nn
         tgt = data[off+1] | (data[off+2] << 8)
-        if 0x1000 <= tgt < 0x1000 + len(data) and tgt not in syms:
+        if 0x1000 <= tgt < 0x2000 + len(data) and tgt not in syms:
             print(f'PHASE ERROR: call at {0x1000+off:#06x} -> {tgt:#06x} matches no symbol')
             bad += 1
 sys.exit(1 if bad else 0)
 EOF
 
 python3 tools/mkpcwdsk.py build/pcwspike.dsk \
-    --boot build/pcwboot.bin --sys build/pcwspike.bin --load 0x1000
+    --boot build/pcwboot.bin --sys build/pcwspike.bin --load 0x2000
 
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
     --config debug/1985-pcw.conf \

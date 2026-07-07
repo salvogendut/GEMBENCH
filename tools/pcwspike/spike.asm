@@ -1,11 +1,12 @@
 ; -----------------------------------------------------------------------
 ; spike.asm - PCW driver testbench payload (#331 Phase 2)
 ;
-; Loaded at #1000 by kernel/pcwboot.asm from GEOBENCH.DSK's reserved
-; tracks. Exercises lib/pcw/screen.asm - the real GEOBENCH PCW video
-; driver - end to end, headless. Expected screenshot:
+; Loaded at #2000 by kernel/pcwboot.asm from GEOBENCH.DSK's reserved
+; tracks. Exercises the real GEOBENCH PCW video stack - lib/pcw/
+; screen.asm + text.asm + cursor.asm - end to end, headless. Expected
+; screenshot:
 ;
-;   cyan desktop (k_cls, GB pen 0), letterbox black strip at the bottom
+;   cyan desktop (k_cls, GB pen 0), black letterbox strip at the bottom
 ;   three rects: white / black / magenta          (fill_block pens 1,2,3)
 ;   a cyan/magenta 16px checker field             (fill_pattern, BD_TILE)
 ;   a test glyph blitted TRANSPARENT over the checker (pen-0 shows it)
@@ -13,14 +14,22 @@
 ;   a black bar crossing y=120..135               (block 4/5 boundary)
 ;   a small magenta patch ONLY inside a clip window (clip honored)
 ;   NO magenta at the save/restore spot           (round trip works)
+;   two text lines: black-on-white + white-on-desktop (6x8 font)
+;   the test pointer over the checker (transparent corners show it),
+;   and NO trace at its first position over the white rect (erase works)
+;
+; Debug beacons (survive the payload reload on a crash-reboot):
+;   #0F00 = last stage completed   #0F01 = boot-cycle count
 ;
 ; NOTE: the stack must NOT live in slot 3 (#C000+) - the driver remaps
 ; that window per drawing row. SP sits below #8000 instead.
 ; -----------------------------------------------------------------------
 
 BACKDROP_TILE   equ   1
+CUR_LOW         equ   testspr
 
-                org #1000
+                org #2000    ; clear of the low-RAM contracts the drivers use
+                             ; (cur_bg #1291, clip #1338, scratch #14xx)
 
                 include "../../lib/pcw/glue.inc"
 
@@ -112,7 +121,7 @@ entry:
         ld (sb_w),a
         ld a,16
         ld (sb_h),a
-        ld hl,#2000
+        ld hl,#1600             ; scratch buffer outside the payload
         ld (sb_buf),hl
         ld a,5
         ld (#0F00),a
@@ -149,9 +158,54 @@ entry:
         ld (clip_w),a
         ld a,PCW_LINES
         ld (clip_h),a
-
         ld a,9
         ld (#0F00),a
+
+        ; --- text: black-on-white box, then white on the desktop -------
+        ld hl,fontblob
+        call font_apply_header
+        ld a,1                  ; white box behind the first line
+        ld bc,#06B2             ; x=6 y=178
+        ld de,#2E0C             ; w=46 h=12
+        call fill_t
+        ld b,2                  ; black text on white paper
+        ld c,1
+        call set_text_pens
+        ld a,7
+        ld (tc_x),a
+        ld a,180
+        ld (tc_y),a
+        ld hl,msg1
+        call draw_text
+        ld b,1                  ; white text on the cyan desktop
+        ld c,0
+        call set_text_pens
+        ld a,8
+        ld (tc_x),a
+        ld a,196
+        ld (tc_y),a
+        ld hl,msg2
+        call draw_text
+        ld a,10
+        ld (#0F00),a
+
+        ; --- pointer: show over the white rect, then move over the -----
+        ; checker; the first spot must be restored perfectly
+        ld hl,testspr           ; alias phase2 = phase0 (static test)
+        ld de,testspr+128
+        ld bc,128
+        ldir
+        ld de,60                ; first: over the white rect (px 30, line 25)
+        ld (cursor_x),de
+        ld hl,444               ; y = (247-25)*2
+        ld (cursor_y),hl
+        call cursor_show
+        ld de,80                ; then: over the checker (px 40, line 80)
+        ld hl,334               ; y = (247-80)*2
+        call cursor_move_to
+        ld a,11
+        ld (#0F00),a
+
 hang:   jr hang
 
 ; fill_t: A = pen, B = x, C = y, D = w, E = h -> fill_block
@@ -172,8 +226,11 @@ fill_t:
         ld (fb_h),a
         jp fill_block
 
-; --- the GEOBENCH PCW video driver under test --------------------------
+; --- the GEOBENCH PCW video stack under test ---------------------------
                 include "../../lib/pcw/screen.asm"
+                include "../../lib/pcw/text.asm"
+                include "../../lib/cursor_arrow.asm"
+                include "../../lib/pcw/cursor.asm"
 
 ; --- test data ----------------------------------------------------------
 ; 16x16px checker tile, GB pens 0/3 (renders cyan/magenta)
@@ -215,5 +272,33 @@ glyph:
         db #0A,#AA,#AA,#A0
         db #00,#AA,#AA,#00
 
+; test pointer sprite, phase 0: interleaved (mask,data) pairs in HARDWARE
+; space - black-bordered white 16x16 box with transparent corner bytes.
+; (mask #FF,data #00) = keep background; (#00,#00) = black; (#00,#FF) = white.
+testspr:
+        db #FF,#00, #00,#00, #00,#00, #FF,#00   ; row 0: corners transparent
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #00,#00, #00,#FF, #00,#FF, #00,#00
+        db #FF,#00, #00,#00, #00,#00, #FF,#00   ; row 15
+        ds 128                                   ; phase-2 copy (filled at run time)
+
+msg1:   db "GEOBENCH PCW",0
+msg2:   db "the quick brown fox 0123",0
+
+fontblob:
+        incbin "../../build/DEFAULT.FNT"
+
 spike_end:
-        save"build/pcwspike.bin",#1000,spike_end-entry
+        save"build/pcwspike.bin",#2000,spike_end-entry
