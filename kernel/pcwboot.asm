@@ -75,6 +75,9 @@ sec_loop:
         jr z,go
         dec a
         ld (ld_secs),a
+        ld a,3                  ; attempts per sector (real drives can
+        ld (retry),a            ; drop a revolution; the emulator never)
+sec_try:
         ld a,(cur_trk)
         ld (rd_c),a             ; command C = physical track
         ld a,(cur_r)
@@ -85,28 +88,37 @@ sec_loop:
         ld b,9
         call fdc_send
         ld hl,(dest)
-        ld de,512
         ld c,1                  ; FDC data register for INI
-rx:                             ; ---- polled non-DMA execution phase ----
+        ld d,2                  ; 512 bytes = 2 x 256, count in B: the
+rx_half:                        ; loop must beat the ~32us MFM byte
+        ld b,0                  ; window on real hardware (boot-ROM form)
+rx:
         in a,(0)                ; main status register
         add a,a                 ; bit7 RQM -> carry
         jr nc,rx
         add a,a                 ; bit6 DIO
         add a,a                 ; bit5 EXM -> carry
-        jr nc,rx_end            ; execution over early = FDC gave up
-        ini                     ; (HL) <- data reg, HL++
-        dec de
-        ld a,d
-        or e
+        jr nc,rx_bad            ; result phase early = overrun/miss
+        ini                     ; (HL) <- data reg, HL++, B--
         jr nz,rx
+        dec d
+        jr nz,rx_half
         ld a,5                  ; all bytes in: pulse terminal count so
         out (#F8),a             ; the FDC ends the command cleanly
         ld a,6
         out (#F8),a
-rx_end:
-        ld (dest),hl
         call fdc_drain          ; swallow the 7 result bytes
+        ld (dest),hl            ; commit the sector
 
+        jr sec_next
+rx_bad:
+        call fdc_drain          ; failed: drain, leave dest as it was,
+        ld a,(retry)            ; and re-read the same sector
+        dec a
+        ld (retry),a
+        jr nz,sec_try
+        jp 0                    ; hard failure: restart the whole boot
+sec_next:
         ld a,(cur_r)            ; advance sector; past R=9 -> next track
         inc a
         cp 10
@@ -122,7 +134,7 @@ rx_end:
         ld a,1                  ; restart at R=1
 same_trk:
         ld (cur_r),a
-        jr sec_loop
+        jp sec_loop
 
 go:
         ld hl,(ld_entry)        ; motor stays on - the kernel starts reading
@@ -204,6 +216,7 @@ rd_eot: db 9                    ;   EOT = last sector
 cur_trk: db 0
 cur_r:   db 2
 dest:    dw 0
+retry:   db 0
 
 boot_end:
         assert boot_end-spec <= 512
