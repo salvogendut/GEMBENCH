@@ -52,18 +52,56 @@ fdc_recal
                 ret
 
 ; pcwfdc_setunit: A = drive unit (0/1) -> select it in every command and
-; force a fresh seek. Drive B is the 80-track CF2DD mechanism: a 40-track
-; CF2 disc in it is DOUBLE-STEPPED (media track = head/2), so unit 1
-; seeks NCN = 2*track. The READ/WRITE C field stays the media track.
+; force a fresh seek. Unit 1's stepping depends on the MECHANISM: an
+; 8512-style 80-track CF2DD drive DOUBLE-STEPS 40-track CF2 media (seek
+; NCN = 2*track; the READ/WRITE C field stays the media track), but a
+; Gotek or a 40-track bolt-on B maps tracks 1:1. pcwfdc_detect measures
+; which one is attached; until it has run, assume the classic CF2DD.
 pcwfdc_setunit
                 ld    (fdc_unit),a
-                ld    (fdc_dbl),a             ; unit 1 = the DD drive: double-step
                 ld    (fdc_cmd_rcal+1),a
                 ld    (fdc_cmd_seek+1),a
                 ld    (fdc_rd_u),a
                 ld    (fdc_wr_u),a
+                or    a                       ; unit 0 never double-steps
+                jr    z,psu_dbl
+                ld    a,(fdc_dbl_b)           ; unit 1 = the measured B mode
+psu_dbl
+                ld    (fdc_dbl),a
                 ld    a,#FF
                 ld    (fdc_track),a
+                ret
+
+; pcwfdc_detect: unit 1 selected -> measure the B mechanism's stepping.
+; Seek PHYSICAL track 2 and ask READ ID for the on-media cylinder:
+;   C = 2  the drive maps tracks 1:1 (Gotek / 40-track mechanism)
+;   C = 1  an 80-track CF2DD mechanism double-stepping 40-track media
+; (an 80-track CF2DD disc also answers C = 2 = 1:1, which is right).
+; Any failure keeps the current mode. Leaves the head position unknown.
+pcwfdc_detect
+                ld    a,2
+                ld    (fdc_sk_trk),a
+                ld    hl,fdc_cmd_seek
+                ld    b,3
+                call  fdc_send
+                call  fdc_wait_seek
+                ld    hl,fdc_cmd_rdid
+                ld    b,2
+                call  fdc_send
+                call  fdc_result              ; fdc_st: ST0 ST1 ST2 C H R N
+                and   #C8                     ; abnormal / not ready: keep mode
+                jr    nz,pfd_home
+                ld    a,(fdc_st+3)            ; C under physical track 2
+                cp    2
+                ld    a,1
+                jr    nz,pfd_set              ; C=1: double-step mechanism
+                dec   a                       ; C=2: 1:1
+pfd_set
+                ld    (fdc_dbl),a
+                ld    (fdc_dbl_b),a
+pfd_home
+                ld    a,#FF                   ; the head sits on a physical,
+                ld    (fdc_track),a           ; not a media, track: re-seek
                 ret
 
 ; fdc_ncn: the media track fdr_trk -> A = the physical seek target.
@@ -343,9 +381,12 @@ fdc_wr_r        db    1
                 db    #2A                     ; GPL
                 db    #FF                     ; DTL
 
+fdc_cmd_rdid    db    #4A,#01                 ; READ ID, MFM, unit 1
+
 fdc_track       db    #FF                     ; head position shadow (#FF = unknown)
 fdc_unit        db    0                       ; selected drive unit (0 = A, 1 = B)
 fdc_dbl         db    0                       ; 1 = double-step (CF2 in the DD drive)
+fdc_dbl_b       db    1                       ; unit 1's measured stepping mode
 fdr_trk         db    0
 fdr_sec         db    0
 fdr_dst         dw    0

@@ -43,6 +43,8 @@ entry:
         ld (#0F01),a
         ld a,0
         ld (#0F00),a            ; debug: stage beacon
+        ld (#0F02),a            ; drive-B stepping mode (host-asserted)
+        ld (#0F03),a            ; drive-B stage verdict (host-asserted)
 
         call pcw_video_init     ; roller table + cls + display on
         ld a,1
@@ -424,6 +426,8 @@ wt_end:
         ; while the browse drive is B, then restore the browse drive)
         ld a,2
         call fs_set_drive       ; mount B (COMPANION-style data disc)
+        ld a,(fdc_dbl)          ; expose the measured stepping mode and the
+        ld (#0F02),a            ; stage verdict to the host harness (SNA)
         call fs_dir_first
         jp nc,db_fail           ; B must list something...
         ld hl,fs_ent_name       ; ...and it must be the REAL file, not the
@@ -449,6 +453,8 @@ db_ncmp:
         ld a,(fs_cur_drive)     ; and the browse drive must survive
         cp 2
         jp nz,db_fail
+        ld a,#B0                ; B-stage verdict: pass
+        ld (#0F03),a
         ld b,3
         ld c,0
         call set_text_pens
@@ -460,6 +466,8 @@ db_ncmp:
         call draw_text
         jr db_end
 db_fail:
+        ld a,#BE                ; B-stage verdict: fail
+        ld (#0F03),a
         ld b,2
         ld c,3
         call set_text_pens

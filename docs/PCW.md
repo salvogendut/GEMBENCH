@@ -174,6 +174,12 @@ I/O (a minimal roller table pointing every scanline at one shared row):
   pass-1 target); `tools/pcwspike/build.sh` cross-checks CALL targets
   against the symbol table. If PCW code crashes inexplicably after a
   small edit, suspect this first.
-- Drive B is the 80-track mechanism: CF2 media in it is double-stepped
-  (`pcwfdc_setunit` handles it). Reading the wrong track there returns
-  the disc spec masquerading as a directory entry.
+- Drive B's stepping depends on the MECHANISM, not the media: an
+  8512-style 80-track CF2DD drive double-steps CF2 discs, but a Gotek
+  (or a 40-track bolt-on B) maps tracks 1:1 — hardcoding either breaks
+  the other (real-HW symptom: B mounts but lists empty, because track-0
+  reads are identical both ways and only the directory diverges).
+  `pcwfdc_detect` measures it at mount: seek physical track 2, READ ID,
+  and let the on-media cylinder answer (C=1 → double-step, C=2 → 1:1).
+  The spike harness tests both via a 43-track B image (1985's AUTO
+  heuristic serves >42-track images 1:1, a stand-in for the Gotek).

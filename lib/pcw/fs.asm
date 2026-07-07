@@ -103,6 +103,8 @@ fsd_have
                 ret   z                        ; same unit: keep the mount
                 ld    (hl),a
                 call  pcwfdc_setunit
+                dec   c                       ; switching to B: measure the
+                call  z,pcwfdc_detect         ; mechanism's stepping first
                 jp    fsp_mount               ; a different disc: fresh geometry
 
 ; fspc_probe_b: k_drive_poll backend -> A = drive bits (bit0 = floppy A,
