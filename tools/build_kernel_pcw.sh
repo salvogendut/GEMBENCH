@@ -73,6 +73,8 @@ import sys
 d = open(sys.argv[1], 'rb').read()
 open(sys.argv[2], 'wb').write(bytes(((b & 0x55) << 1) | (((b ^ 0xFF) & 0xAA) >> 1) for b in d))
 PY
+python3 tools/pic_to_pcw.py assets/pictures/LOGO.PIC build/pcw/LOGO.PIC
+python3 tools/pic_to_pcw.py assets/pictures/TLEUNG.PIC build/pcw/TLEUNG.PIC
 
 # --- the kernel + the boot sector ---------------------------------------------
 rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
@@ -82,7 +84,7 @@ rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
 [ -s build/pcwboot.bin ] || { echo "ERROR: pcwboot.bin not produced" >&2; exit 1; }
 
 # --- the bootable disc -----------------------------------------------------------
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\n' > build/pcw/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\n' > build/pcw/GEOBENCH.CFG
 python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
     --add build/pcw/GEOBENCH.CFG=GEOBENCH.CFG \
@@ -105,17 +107,20 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/ANT.RAW=ANT.SAV \
     --add build/pcw/DECO.RAW=DECO.SAV \
     --add build/pcw/XMATRIX.RAW=XMATRIX.SAV \
+    --add build/pcw/LOGO.PIC=LOGO.PIC \
+    --add build/pcw/TLEUNG.PIC=TLEUNG.PIC \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
 # --- COMPANION.DSK: pictures, TELNET, backdrops, spare assets (plain data disc)
-# CF2 is tight; LOGO.PIC is skipped below so serial/PerryFi TELNET.APP fits.
+# CF2 is tight; LOGO.PIC and TLEUNG.PIC live on the boot disk and are skipped
+# below so serial/PerryFi TELNET.APP fits here.
 COMP_ADDS=()
 for pic in assets/pictures/*.PIC; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    case "$name" in BIG|TLEUNG|LOGO) continue;; esac   # test/overflow pics; LOGO makes room for TELNET.APP
+    case "$name" in BIG|TLEUNG|LOGO) continue;; esac
 
-    python3 tools/pic_to_msx.py "$pic" "build/pcw/$name.PIC"
+    python3 tools/pic_to_pcw.py "$pic" "build/pcw/$name.PIC"
     COMP_ADDS+=(--add "build/pcw/$name.PIC=$name.PIC")
 done
 for bdp in assets/backdrops/*.BDP; do

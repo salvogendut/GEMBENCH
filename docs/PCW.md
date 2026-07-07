@@ -51,11 +51,12 @@ hold 256) with the last 8 scanlines as a static letterbox strip.
 The CGA2 palette is fixed (black/cyan/magenta/white). The driver
 (`lib/pcw/screen.asm`) permutes GEOBENCH pens on the way to the screen —
 pen 0 blue→cyan, 1 white→white, 2 black→black, 3 red→magenta, which is the
-bit transform `screen = ((gb&#55)<<1) | ((~gb&#AA)>>1)` — so **assets stay
-in the MSX Screen-6 encoding** and the whole MSX transcoder chain
-(`packicons/ist_to_msx/pic_to_msx/bdp_to_msx --platform msx2`) is reused
-verbatim. Only save-block-format blobs (the splash) and the pointer
-(`png2spr --platform pcw`) are pre-permuted to hardware pens at build time.
+bit transform `screen = ((gb & #55)<<1) | ((~gb & #AA)>>1)`. Most assets
+stay in GB pen-space / MSX Screen-6-style bytes and are permuted by the PCW
+driver on write (`packicons`, `ist_to_msx`, `bdp_to_msx`). Raw-restore assets
+are the exception: the splash, pointer, and staged `.PIC` files are
+pre-permuted to CGA2 hardware-space at build time (`pic_to_pcw.py` for
+pictures), because `restore_block` copies those bytes straight to the screen.
 
 **On real hardware the CGA2 mode does not exist**: a real PCW shows the
 same bitmap as monochrome with fine stripe textures. The port targets the
@@ -99,10 +100,11 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
 - **GEOBENCH.DSK** (bootable): kernel + DESKTOP, FILEMGR, NOTEPAD,
   SETTINGS, VIEWER, CLOCK, XAOS, ICONED + the portable savers (SQUARES —
   the default —, ANT, DECO, XMATRIX) + fonts, icon sets, pointer, splash,
-  GEOBENCH.CFG.
+  `LOGO.PIC` (default wallpaper), `TLEUNG.PIC`, GEOBENCH.CFG.
 - **COMPANION.DSK** (data): the picture gallery, backdrop tiles,
   TELNET.APP (serial/PerryFi only), CLASSIC.FNT, WELCOME.TXT. `LOGO.PIC`
-  is omitted on PCW to keep enough CF2 space for TELNET.APP.
+  and `TLEUNG.PIC` live on the boot disk, so they are omitted here to keep
+  enough CF2 space for TELNET.APP.
 
 ## Not (yet) on the PCW
 
