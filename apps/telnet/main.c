@@ -31,21 +31,20 @@
 #if TELNET_HAS_FULLSCREEN
 #include "charset.h"        /* 8x8 ASCII glyphs for the Mode-2 80x25 renderer */
 #endif
-#ifdef GB_PCW
-#include "charset4.h"       /* 4x8 glyphs for the PCW direct renderer (#350) */
-#endif
+#include "charset4.h"       /* 4x8 glyphs for the windowed direct renderers (#350/#351) */
 
 /* ---- terminal grid --------------------------------------------------------- */
-/* The grid has two sizes: WINDOWED (Mode 1, 52x22, drawn through gb_text in the managed
- * window) and FULLSCREEN (Mode 2, 80x25, drawn straight to screen RAM with an 8x8
- * charset - the "proper telnet" view). COLS/ROWS are the ACTIVE dims (gcols/grows), so
- * all the term_write/ANSI/scroll code below is size-agnostic; only the renderer differs. */
+/* The grid has two sizes: WINDOWED (4x8 charset drawn straight to screen RAM - both
+ * Mode 1 and PCW CGA2 pack 4 px/byte, so one glyph line is ONE byte) and FULLSCREEN
+ * (CPC: Mode 2 80x25 with the 8x8 charset; PCW: WM_FS 90x31 with the same 4x8).
+ * COLS/ROWS are the ACTIVE dims (gcols/grows), so all the term_write/ANSI/scroll code
+ * below is size-agnostic; only the renderer differs. */
 #ifdef GB_PCW
 #define WIN_COLS 80        /* 4x8 font: 80 * 4px = 320px of the 360px CGA2 desktop */
 #define WIN_ROWS 25        /* 24 + 25*8 = 224, inside the 248-line PCW desktop */
 #else
-#define WIN_COLS 52        /* 52 * 6px = 312px; inset 1 byte (4px) each side clears the frame */
-#define WIN_ROWS 22        /* fits the content below the 14px title bar (178px / 8) */
+#define WIN_COLS 78        /* 4x8 font: 78 * 4px = 312px, inset 1 byte each side (#351) */
+#define WIN_ROWS 22        /* 24 + 22*8 = 200 = the exact bottom of the Mode-1 screen */
 #endif
 #ifdef GB_PCW
 #define FS_COLS  90        /* WM_FS fullscreen: 90 byte cols * 4px = the whole 360px */
@@ -64,9 +63,6 @@
 #else
 #define GRID_MAX_ROWS FS_ROWS
 #endif
-#define SEG  48            /* gb_text caps a string at 48 chars (gtd_copy) -> two windowed
-                              segments per row; col 48 = 288px = byte 72 (4px-aligned) */
-
 /* the windowed terminal lives in a screen-sized managed window; the grid sits in its
  * content area, just below the 14px title bar (the System top bar carries the menu). */
 #define WIN_X 0
@@ -84,7 +80,8 @@
                               8): the PCW renderer maps one text row to one char cellrow */
 #else
 #define GX    1            /* grid origin: byte column (inset 1 byte so the left frame survives) */
-#define GY    (WIN_Y + 15) /* grid origin: pixel line, just below the 14px title bar */
+#define GY    24           /* grid origin: pixel line - MUST be CRTC-char-row-aligned (mult
+                              of 8): the Mode-1 renderer maps one text row to one char row */
 #endif
 
 /* connect dialog box (a centered modal popup, NOT painted into the terminal content) */
@@ -338,23 +335,28 @@ static void draw_row(unsigned char r)
     }
 }
 #else
-static char rowbuf[SEG + 1];
-
-static void draw_seg(unsigned char r, unsigned char c0, unsigned char c1, unsigned char bx)
-{
-    unsigned char c, k = 0;
-    for (c = c0; c < c1; c++) {
-        unsigned char ch = grid[cell(r, c)];
-        rowbuf[k++] = (ch >= 32 && ch < 127) ? (char)ch : ' ';
-    }
-    rowbuf[k] = 0;
-    gb_text(bx, (unsigned char)(GY + r * 8), rowbuf);   /* white on blue (paper 0), opaque */
-}
-
+/* -- 4x8 direct Mode-1 renderer (#351). One glyph line = ONE byte (4 px/byte);
+ * white (pen 1, high nibble) on black (pen 2, low nibble), so the screen byte is
+ * just (n << 4) | (~n & 0x0F) - no lookup table. Text rows are CRTC-char-row
+ * aligned (GY multiple of 8): the cell's top line is #C000 + charrow*80 + col
+ * and the 8 scan lines are 0x800 apart. #C000 is always mapped on the CPC. */
+#define M1B(n) ((unsigned char)(((n) << 4) | (~(n) & 0x0F)))
 static void draw_row(unsigned char r)
 {
-    draw_seg(r, 0, SEG, GX);                  /* cols 0..47  -> byte GX      */
-    draw_seg(r, SEG, COLS, GX + 72);          /* cols 48..52 -> byte GX + 72 */
+    volatile unsigned char *base = (volatile unsigned char *)
+        (0xC000u + (unsigned int)((GY >> 3) + r) * 80 + GX);
+    unsigned char c;
+    for (c = 0; c < COLS; c++) {
+        unsigned char ch = grid[cell(r, c)];
+        const unsigned char *g;
+        volatile unsigned char *p = base + c;
+        if (ch < 32 || ch >= 127) ch = ' ';
+        g = fs4_charset + ((unsigned int)(ch - 32) << 3);
+        p[0x0000] = M1B(g[0]); p[0x0800] = M1B(g[1]);
+        p[0x1000] = M1B(g[2]); p[0x1800] = M1B(g[3]);
+        p[0x2000] = M1B(g[4]); p[0x2800] = M1B(g[5]);
+        p[0x3000] = M1B(g[6]); p[0x3800] = M1B(g[7]);
+    }
 }
 #endif
 
@@ -402,19 +404,11 @@ static void draw_cursor_m1(void)      /* white underline in the cell's last line
     *dst = 0xFF;
 }
 #else
-static void plot_m1(unsigned int x, unsigned char y)        /* set pixel (x,y) to pen 3 (red) */
+static void draw_cursor_m1(void)      /* red underline in the cell's last line */
 {
-    unsigned int addr = 0xC000u + (unsigned int)(y >> 3) * 80
-                      + (unsigned int)(y & 7) * 0x800u + (x >> 2);
-    unsigned char i = (unsigned char)(x & 3);               /* M1: pen bit0 @ 7-i, bit1 @ 3-i */
-    *((volatile unsigned char *)addr) |= (unsigned char)((0x80u >> i) | (0x08u >> i));
-}
-static void draw_cursor_m1(void)
-{
-    unsigned int x0 = (unsigned int)GX * 4 + (unsigned int)cur_col * 6;
-    unsigned char y = (unsigned char)(GY + cur_row * 8 + 7);
-    unsigned char i;
-    for (i = 0; i < 6; i++) plot_m1(x0 + i, y);
+    *((volatile unsigned char *)
+      (0xC000u + (unsigned int)((GY >> 3) + cur_row) * 80 + GX + cur_col
+       + 0x3800u)) = 0xFF;            /* 4 px of pen 3 */
 }
 #endif
 #if TELNET_HAS_FULLSCREEN
@@ -1201,6 +1195,13 @@ static void draw_content(void)
         else gb_fill(1, (unsigned char)(WIN_Y + 15), GB_COLS - 2,
                      (unsigned char)(GB_LINES - WIN_Y - 17), 2);
         gb_curshow();
+#else
+        if (!fs_mode) {                        /* black margins around the grid (#351) */
+            gb_curhide();
+            gb_fill(GX, (unsigned char)(WIN_Y + 15), GB_COLS - 2 * GX,
+                    (unsigned char)(GB_LINES - WIN_Y - 15), 2);
+            gb_curshow();
+        }
 #endif
         mark_all();
         render();
@@ -1224,13 +1225,22 @@ static void net_frame(void)
 
 static void t_frame(void)
 {
-#if defined(TELNET_DEMO) && TELNET_HAS_FULLSCREEN
+#if defined(TELNET_DEMO) && TELNET_HAS_FULLSCREEN && !defined(TELNET_DEMO_WINDOWED)
     if (state == ST_IDLE) {                 /* offline Mode-2 80x25 render check (takeover) */
         gb_curhide();
         fs_mode = 1; gcols = FS_COLS; grows = FS_ROWS;
         scr_set_mode(2); m2_clear();
         start_session(); demo_fill(); render();
         for (;;) ;                          /* hold the M2 screen (no WM interference) */
+    }
+#endif
+#if defined(TELNET_DEMO) && defined(TELNET_DEMO_WINDOWED) && !defined(GB_PCW)
+    if (state == ST_IDLE) {                 /* offline windowed 4x8 render check (#351) */
+        gb_curhide();
+        gb_fill(GX, (unsigned char)(WIN_Y + 15), GB_COLS - 2 * GX,
+                (unsigned char)(GB_LINES - WIN_Y - 15), 2);
+        start_session(); demo_fill(); render();
+        for (;;) ;                          /* hold the grid for the screenshot */
     }
 #endif
 #if defined(TELNET_DEMO) && defined(GB_PCW)
