@@ -115,35 +115,31 @@ fdo_onspot
                 ld    hl,fdc_cmd_read
                 ld    b,9
                 call  fdc_send
-                ld    hl,(fdr_dst)            ; polled transfer of 512 bytes
-                ld    de,512
-                ld    c,1
+                ld    hl,(fdr_dst)            ; polled transfer of 512 bytes -
+                ld    c,1                     ; count in B (2 x 256): the loop
+                ld    d,2                     ; must beat the ~32us MFM byte
+fdo_half                                      ; window on real hardware
+                ld    b,0
 fdo_rx
                 in    a,(0)
                 add   a,a                     ; RQM -> carry
                 jr    nc,fdo_rx
                 add   a,a                     ; DIO
                 add   a,a                     ; EXM -> carry
-                jr    nc,fdo_end              ; result phase early = short read
+                jr    nc,fdo_bad              ; result phase early = overrun/miss
                 ini
-                dec   de
-                ld    a,d
-                or    e
                 jr    nz,fdo_rx
+                dec   d
+                jr    nz,fdo_half
                 ld    a,5                     ; all bytes in: pulse terminal count
                 out   (PCW_SYSCTL),a
                 ld    a,6
                 out   (PCW_SYSCTL),a
-fdo_end
-                push  de
-                call  fdc_drain               ; swallow the result bytes
-                pop   de
-                ld    a,d                     ; success = every byte arrived
-                or    e
-                jr    nz,fdo_fail
+                call  fdc_drain
                 scf
                 ret
-fdo_fail
+fdo_bad
+                call  fdc_drain               ; swallow the error result
                 or    a
                 ret
 
@@ -190,35 +186,31 @@ fdw_onspot
                 ld    hl,fdc_cmd_write
                 ld    b,9
                 call  fdc_send
-                ld    hl,(fdr_dst)            ; polled transfer of 512 bytes OUT
-                ld    de,512
-                ld    c,1
+                ld    hl,(fdr_dst)            ; polled transfer of 512 bytes OUT -
+                ld    c,1                     ; same tight 2 x 256 form as the
+                ld    d,2                     ; read (real-hardware byte window)
+fdw_half
+                ld    b,0
 fdw_tx
                 in    a,(0)
                 add   a,a                     ; RQM -> carry
                 jr    nc,fdw_tx
                 add   a,a                     ; DIO (0 = FDC wants data)
                 add   a,a                     ; EXM -> carry
-                jr    nc,fdw_end              ; result phase early = aborted
+                jr    nc,fdw_bad              ; result phase early = aborted
                 outi
-                dec   de
-                ld    a,d
-                or    e
                 jr    nz,fdw_tx
+                dec   d
+                jr    nz,fdw_half
                 ld    a,5                     ; all bytes out: pulse terminal count
                 out   (PCW_SYSCTL),a
                 ld    a,6
                 out   (PCW_SYSCTL),a
-fdw_end
-                push  de
                 call  fdc_drain
-                pop   de
-                ld    a,d                     ; success = every byte delivered
-                or    e
-                jr    nz,fdw_fail
                 scf
                 ret
-fdw_fail
+fdw_bad
+                call  fdc_drain
                 or    a
                 ret
 
