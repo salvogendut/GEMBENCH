@@ -174,6 +174,12 @@ I/O (a minimal roller table pointing every scanline at one shared row):
   pass-1 target); `tools/pcwspike/build.sh` cross-checks CALL targets
   against the symbol table. If PCW code crashes inexplicably after a
   small edit, suspect this first.
+- CPS8256 serial baud: the 8253 PIT is clocked at **2 MHz** and the DART
+  divides by 16, so **baud = 125000 / count** — 9600 is count 13 (9615),
+  per Joyce's `JoyceCPS.cxx` (written against the real device). Not the
+  PC-style 1.8432 MHz crystal: count 12 is 10417 baud = framing garbage
+  on real hardware, and the 1985 emulator stores the count without
+  timing it, so it cannot catch a wrong divisor.
 - Drive B's stepping depends on the MECHANISM, not the media: an
   8512-style 80-track CF2DD drive double-steps CF2 discs, but a Gotek
   (or a 40-track bolt-on B) maps tracks 1:1 — hardcoding either breaks
