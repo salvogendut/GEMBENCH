@@ -38,15 +38,29 @@ fdc_recal
                 ret
 
 ; pcwfdc_setunit: A = drive unit (0/1) -> select it in every command and
-; force a fresh seek.
+; force a fresh seek. Drive B is the 80-track CF2DD mechanism: a 40-track
+; CF2 disc in it is DOUBLE-STEPPED (media track = head/2, like the real
+; XBIOS and 1985's disk_media_track), so unit 1 seeks NCN = 2*track.
+; RECALIBRATE homes to 0 either way; the READ/WRITE C field stays the
+; media track (that is what the sector headers carry).
 pcwfdc_setunit
                 ld    (fdc_unit),a
+                ld    (fdc_dbl),a             ; unit 1 = the DD drive: double-step
                 ld    (fdc_cmd_rcal+1),a
                 ld    (fdc_cmd_seek+1),a
                 ld    (fdc_rd_u),a
                 ld    (fdc_wr_u),a
                 ld    a,#FF
                 ld    (fdc_track),a
+                ret
+
+; fdc_ncn: the media track fdr_trk -> A = the physical seek target.
+fdc_ncn
+                ld    a,(fdc_dbl)
+                or    a
+                ld    a,(fdr_trk)
+                ret   z
+                add   a,a
                 ret
 
 ; pcwfdc_read: D = track, E = sector R, HL = 512-byte destination.
@@ -84,7 +98,7 @@ fdr_once
                 ld    hl,fdr_trk
                 cp    (hl)
                 jr    z,fdo_onspot
-                ld    a,(fdr_trk)
+                call  fdc_ncn                 ; media -> physical (drive B x2)
                 ld    (fdc_sk_trk),a
                 ld    hl,fdc_cmd_seek
                 ld    b,3
@@ -159,7 +173,7 @@ fdw_once
                 ld    hl,fdr_trk
                 cp    (hl)
                 jr    z,fdw_onspot
-                ld    a,(fdr_trk)
+                call  fdc_ncn                 ; media -> physical (drive B x2)
                 ld    (fdc_sk_trk),a
                 ld    hl,fdc_cmd_seek
                 ld    b,3
@@ -289,6 +303,7 @@ fdc_wr_eot      db    1
 
 fdc_track       db    #FF                     ; head position shadow (#FF = unknown)
 fdc_unit        db    0                       ; selected drive unit (0 = A, 1 = B)
+fdc_dbl         db    0                       ; 1 = double-step (CF2 in the DD drive)
 fdr_trk         db    0
 fdr_sec         db    0
 fdr_dst         dw    0
