@@ -11,10 +11,10 @@
 ; transfers pace on the MSR RQM bit.
 ;
 ;   pcwfdc_init                     SPECIFY (ND=1) + motor + recalibrate
-;   pcwfdc_read  D=track E=sector(1..9) HL=512-byte dest -> CF set = ok
+;   pcwfdc_read  D=track E=sector(1..9) HL=512-byte dest  -> CF set = ok
+;   pcwfdc_write D=track E=sector(1..9) HL=512-byte src   -> CF set = ok
 ;
-; The motor is turned on at init and left running (the desktop reads
-; assets continuously at boot; an idle-off can come with the write path).
+; The motor is turned on at init and left running.
 ; ---------------------------------------------------------------------------
 
 pcwfdc_init
@@ -112,6 +112,81 @@ fdo_fail
                 or    a
                 ret
 
+; pcwfdc_write: D = track, E = sector R, HL = 512-byte source.
+; CF set = sector written. Three attempts, recalibrating between them.
+pcwfdc_write
+                ld    (fdr_dst),hl
+                ld    a,d
+                ld    (fdr_trk),a
+                ld    a,e
+                ld    (fdr_sec),a
+                ld    b,3
+fdw_try
+                push  bc
+                call  fdw_once
+                pop   bc
+                ret   c
+                push  bc
+                call  fdc_recal
+                pop   bc
+                djnz  fdw_try
+                or    a
+                ret
+
+fdw_once
+                ld    a,(fdc_track)           ; seek only when the head moves
+                ld    hl,fdr_trk
+                cp    (hl)
+                jr    z,fdw_onspot
+                ld    a,(fdr_trk)
+                ld    (fdc_sk_trk),a
+                ld    hl,fdc_cmd_seek
+                ld    b,3
+                call  fdc_send
+                call  fdc_wait_seek
+                ld    a,(fdr_trk)
+                ld    (fdc_track),a
+fdw_onspot
+                ld    a,(fdr_trk)             ; WRITE DATA, R = EOT = the sector
+                ld    (fdc_wr_c),a
+                ld    a,(fdr_sec)
+                ld    (fdc_wr_r),a
+                ld    (fdc_wr_eot),a
+                ld    hl,fdc_cmd_write
+                ld    b,9
+                call  fdc_send
+                ld    hl,(fdr_dst)            ; polled transfer of 512 bytes OUT
+                ld    de,512
+                ld    c,1
+fdw_tx
+                in    a,(0)
+                add   a,a                     ; RQM -> carry
+                jr    nc,fdw_tx
+                add   a,a                     ; DIO (0 = FDC wants data)
+                add   a,a                     ; EXM -> carry
+                jr    nc,fdw_end              ; result phase early = aborted
+                outi
+                dec   de
+                ld    a,d
+                or    e
+                jr    nz,fdw_tx
+                ld    a,5                     ; all bytes out: pulse terminal count
+                out   (PCW_SYSCTL),a
+                ld    a,6
+                out   (PCW_SYSCTL),a
+fdw_end
+                push  de
+                call  fdc_drain
+                pop   de
+                ld    a,d                     ; success = every byte delivered
+                or    e
+                jr    nz,fdw_fail
+                scf
+                ret
+fdw_fail
+                or    a
+                ret
+
 ; --- primitives (as proven in kernel/pcwboot.asm) -----------------------------
 
 ; send B command bytes from (HL), waiting for RQM before each
@@ -179,6 +254,15 @@ fdc_rd_c        db    0
 fdc_rd_r        db    1
                 db    #02                     ; N = 512
 fdc_rd_eot      db    1
+                db    #2A                     ; GPL
+                db    #FF                     ; DTL
+fdc_cmd_write   db    #45                     ; WRITE DATA, MFM
+                db    #00                     ; unit 0 head 0
+fdc_wr_c        db    0
+                db    #00                     ; H
+fdc_wr_r        db    1
+                db    #02                     ; N = 512
+fdc_wr_eot      db    1
                 db    #2A                     ; GPL
                 db    #FF                     ; DTL
 

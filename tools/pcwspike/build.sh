@@ -38,28 +38,88 @@ for line in open(symf):
 code_end = min((a for a in syms if syms[a] in ('BD_TILE', 'GLYPH')), default=len(data)+0x2000) - 0x2000
 bad = 0
 for off in range(code_end - 2):
-    if data[off] == 0xCD:                       # CALL nn
-        tgt = data[off+1] | (data[off+2] << 8)
-        if 0x1000 <= tgt < 0x2000 + len(data) and tgt not in syms:
-            print(f'PHASE ERROR: call at {0x1000+off:#06x} -> {tgt:#06x} matches no symbol')
+    if data[off] == 0xCD:                       # CALL nn (may be an operand byte:
+        tgt = data[off+1] | (data[off+2] << 8)  # only in-image non-symbol targets
+        if 0x2000 <= tgt < 0x2000 + len(data) and tgt not in syms:
+            print(f'PHASE ERROR: call at {0x2000+off:#06x} -> {tgt:#06x} matches no symbol')
             bad += 1
 sys.exit(1 if bad else 0)
 EOF
 
 printf 'CP/M FS READ OK\r\n' > build/HELLO.TXT
+python3 -c "open('build/BIGTEST.BIN','wb').write(bytes((i*7+13)&255 for i in range(20000)))"
 python3 tools/mkpcwdsk.py build/pcwspike.dsk \
     --boot build/pcwboot.bin --sys build/pcwspike.bin --load 0x2000 \
-    --add build/HELLO.TXT --add assets/WELCOME.TXT --add build/DEFAULT.FNT
+    --add build/HELLO.TXT --add assets/WELCOME.TXT --add build/DEFAULT.FNT \
+    --add build/BIGTEST.BIN
 
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
     --config debug/1985-pcw.conf \
     --disk-a build/pcwspike.dsk \
-    --paste-event "700:hello pcw 42" \
-    --screenshot-at 1000:build/pcwspike.ppm \
-    --exit-after 1050
+    --unthrottled \
+    --paste-event "3200:hello pcw 42" \
+    --screenshot-at 3600:build/pcwspike.ppm \
+    --exit-after 3700
 
 python3 - <<'EOF'
 from PIL import Image
 Image.open('build/pcwspike.ppm').save('build/pcwspike.png')
 print('build/pcwspike.png written')
+EOF
+
+# --- host-side verification of the write path (#331 Phase 5b) -----------
+# The emulator wrote back build/pcwspike.dsk; extract the spike's outputs
+# from the CP/M fs and byte-compare.
+python3 - <<'EOF'
+import sys
+data = open('build/pcwspike.dsk','rb').read()
+SPT, SS = 9, 512
+tracks = data[0x30]
+tsize = 256 + SPT*SS
+def sector(t, r):
+    off = 256 + t*tsize
+    for i in range(SPT):
+        si = off + 0x18 + i*8
+        if data[si+2] == r:
+            return data[off+256+i*SS: off+256+(i+1)*SS]
+    raise KeyError((t, r))
+spec = sector(0, 1)
+OFF, dirblk = spec[5], spec[7]
+def lsn(n):
+    return sector(OFF + n//SPT, 1 + n%SPT)
+dirdata = b''.join(lsn(i) for i in range(dirblk*2))
+def extract(n83):
+    exts = {}
+    for e in range(0, len(dirdata), 32):
+        ent = dirdata[e:e+32]
+        if ent[0] != 0: continue
+        if bytes(c & 0x7F for c in ent[1:12]) != n83: continue
+        exts[ent[12] & 0x1F] = ent
+    if not exts: return None
+    out = bytearray()
+    for ex in sorted(exts):
+        ent = exts[ex]
+        recs = ent[15]
+        n = recs * 128
+        for al in ent[16:32]:
+            if al == 0 or n <= 0: break
+            blk = lsn(al*2) + lsn(al*2+1)
+            take = min(1024, n)
+            out += blk[:take]
+            n -= take
+    return bytes(out)
+big = open('build/BIGTEST.BIN','rb').read()
+save = extract(b'PCWSAVE TST')
+copy = extract(b'COPYOUT BIN')
+dele = extract(b'PCWDEL  TST')
+ok = True
+if not save or not save.startswith(b'PCW write path OK'):
+    print('FAIL: PCWSAVE.TST wrong/missing'); ok = False
+if dele is not None:
+    print('FAIL: PCWDEL.TST still present'); ok = False
+if not copy or copy[:len(big)] != big:
+    print(f'FAIL: COPYOUT.BIN mismatch (got {len(copy) if copy else 0})'); ok = False
+if ok:
+    print(f'fs write verification OK: save + delete + {len(big)}-byte chunked copy')
+sys.exit(0 if ok else 1)
 EOF
