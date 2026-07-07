@@ -113,8 +113,9 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
 # --- COMPANION.DSK: pictures, TELNET, backdrops, spare assets (plain data disc)
-# CF2 is tight; LOGO.PIC and TLEUNG.PIC live on the boot disk and are skipped
-# below so serial/PerryFi TELNET.APP fits here.
+# CF2 is tight; LOGO.PIC, TLEUNG.PIC and CLASSIC.FNT live on the boot disk and
+# are skipped below so serial/PerryFi TELNET.APP (with its 80x25/90x31
+# renderer, #350) fits here.
 COMP_ADDS=()
 for pic in assets/pictures/*.PIC; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
@@ -131,7 +132,6 @@ done
 python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     "${COMP_ADDS[@]}" \
     --add build/pcw/TELNET.RAW=TELNET.APP \
-    --add assets/WELCOME.TXT=WELCOME.TXT \
-    --add build/pcw/CLASSIC.FNT=CLASSIC.FNT
+    --add assets/WELCOME.TXT=WELCOME.TXT
 
 echo "PCW target built: QA/PCW/GEOBENCH.DSK (bootable CF2) + QA/PCW/COMPANION.DSK"
