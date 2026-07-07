@@ -17,9 +17,15 @@
 #define GB_LINES 212 /* screen height in lines */
 #define GB_XPIX  512 /* screen width in pixels (gb_mxp() range) */
 #else
+#ifdef GB_PCW
+#define GB_COLS  90  /* PCW CGA2: 360x248 (#331) */
+#define GB_LINES 248
+#define GB_XPIX  360
+#else
 #define GB_COLS  80
 #define GB_LINES 200
 #define GB_XPIX  320
+#endif
 #endif
 
 /* poll flag bits (the D byte from GB_POLL) */

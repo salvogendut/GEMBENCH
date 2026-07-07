@@ -573,6 +573,8 @@ fsff_used       dw    0
 fslf_blocks     equ   #1490        ; 16-byte extent AL copy (documented low-RAM home)
 fs_dir_clus     ds    4            ; dummy: k_copy_begin/end context swap expects it
 
+FS_LOAD_OFS     equ   #144C        ; chunked-copy cells (#144): the kernel writes
+FS_XFLAGS       equ   #144F        ; them; this backend honors them in Phase 5
 fls_browse      equ   #1337
 fs_cur_drive    equ   #1335
 fs_boot_drive   equ   #1336

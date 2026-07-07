@@ -155,7 +155,7 @@ bdi_solid       ld    a,1
 ; screen is already GEOBENCH-blue (pen 0) from SCR_SET_MODE + set_palette, so the
 ; lollipop's blue corners blit invisibly. The desktop's first repaint overwrites it.
                 ifndef PLATFORM_MSX           ; (#287: the MSX boot skips the splash for now -
-                                              ;  SPLASH.MOD is Mode-1 art + CPC frame pacing)
+                ifndef PLATFORM_PCW           ;  SPLASH.MOD is Mode-1 art + CPC frame pacing)
 SPL_X           equ   28           ; lollipop left byte col (centred: (80-24)/2)
 SPL_Y           equ   12           ; lollipop top line
 SPL_WB          equ   24           ; width in bytes (96 px)
@@ -223,7 +223,83 @@ bt_hold
                 djnz  bt_hold
                 ret
 bar_w           db    0
+                endif                          ; (ifndef PLATFORM_PCW around the bootsplash)
                 endif                          ; (ifndef PLATFORM_MSX around the bootsplash)
+
+; --- bootsplash, PCW (#331) -------------------------------------------------
+; The MSX splash flow on the PCW driver: SPLASH.MOD is Screen-6-packed art
+; that build_kernel_pcw.sh pre-permutes to CGA2 hardware space (restore_block
+; writes raw bytes). Pacing = the frame flyback.
+                ifdef PLATFORM_PCW
+SPL_X           equ   33           ; lollipop left byte col (centred: (90-24)/2)
+SPL_Y           equ   12
+SPL_WB          equ   24           ; 96 px
+SPL_H           equ   184
+BAR_X           equ   21           ; load bar left byte col (centred: (90-48)/2)
+BAR_Y           equ   170
+BAR_WB          equ   48           ; 192 px full bar
+BAR_H           equ   10
+BAR_SEG         equ   12           ; 4 ticks fill BAR_WB
+BOOT_HOLD       equ   18           ; frames held per tick (~0.36 s at 50 Hz)
+boot_splash
+                ld    a,(bank_cur)
+                push  af
+                di
+                ld    hl,fs_req_name
+                call  load_app0              ; selected splash -> APP_BASE, CF = loaded
+                jr    nc,bsp_done            ; missing -> plain boot
+                ld    a,SPL_X
+                ld    (sb_x),a
+                ld    a,SPL_Y
+                ld    (sb_y),a
+                ld    a,SPL_WB
+                ld    (sb_w),a
+                ld    a,SPL_H
+                ld    (sb_h),a
+                ld    hl,APP_BASE
+                ld    (sb_buf),hl
+                call  restore_block          ; blit the lollipop
+                ld    b,BAR_WB               ; empty bar backing, pen 2 (black)
+                ld    a,2
+                call  bsp_bar
+bsp_done
+                pop   af
+                call  bank_set
+                ret
+
+; bsp_bar: A = pen, B = width in bytes -> fill (BAR_X, BAR_Y, B, BAR_H).
+bsp_bar
+                push  bc
+                call  pen_to_byte
+                ld    (fb_val),a
+                pop   bc
+                ld    a,BAR_X
+                ld    (fb_x),a
+                ld    a,BAR_Y
+                ld    (fb_y),a
+                ld    a,b
+                ld    (fb_w),a
+                ld    a,BAR_H
+                ld    (fb_h),a
+                jp    fill_block
+
+; boot_tick: advance the load bar one red segment, then hold BOOT_HOLD frames.
+boot_tick
+                ld    a,(bar_w)
+                add   a,BAR_SEG
+                ld    (bar_w),a
+                ld    b,a
+                ld    a,3                     ; pen 3 (red -> magenta)
+                call  bsp_bar
+                ld    b,BOOT_HOLD
+bt_hold
+                push  bc
+                call  pcw_wait_frame
+                pop   bc
+                djnz  bt_hold
+                ret
+bar_w           db    0
+                endif                          ; (ifdef PLATFORM_PCW bootsplash)
 
 ; --- bootsplash, MSX2 (#287) ----------------------------------------------
 ; The MSX counterpart of the CPC bootsplash: the same lollipop + label
@@ -342,8 +418,9 @@ k_backdrop
                 ld    a,(BD_SOLID)
                 or    a
                 jr    z,kb_pattern
-                xor   a                        ; pen 0 byte = #00 (blue paper)
-                ld    (fb_val),a
+                xor   a                        ; pen 0 (blue paper) - through
+                call  pen_to_byte              ; pen_to_byte: the PCW's CGA2 pen 0
+                ld    (fb_val),a               ; byte is #55, not #00 (#331)
                 jp    fill_block
 kb_pattern
                 jp    fill_pattern

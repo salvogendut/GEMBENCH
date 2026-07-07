@@ -22,7 +22,11 @@
                 include "../lib/msx/bios.inc"
                 include "../lib/msx/glue.inc"
                 else
+                ifdef PLATFORM_PCW
+                include "../lib/pcw/glue.inc"
+                else
                 include "../lib/firmware.inc"
+                endif
                 endif
 
 ; STORAGE_ALBIREO (#104): build-time drive-0 backend select. 0 (default) = the
@@ -60,15 +64,23 @@ GB_ROM          equ   1
                 ifdef PLATFORM_MSX             ; #287: the MSX2 kernel always has headroom
 WM_GADGETS      equ   1                        ; (no resident storage drivers)
                 else
+                ifdef PLATFORM_PCW             ; #331: the fresh PCW kernel likewise
+WM_GADGETS      equ   1
+                else
                 if GB_ROM_REQ | STORAGE_ALBIREO | STORAGE_M4
 WM_GADGETS      equ   1
                 endif
                 endif
+                endif
                 ifndef BACKDROP_TILE           ; CPC resident headroom is tight; keep tiled
-                ifdef PLATFORM_MSX             ; .BDP backdrops on MSX, but CPC uses solid
-BACKDROP_TILE   equ   1                        ; backdrop + optional wallpaper.
+                ifdef PLATFORM_MSX             ; .BDP backdrops on MSX+PCW, but CPC uses
+BACKDROP_TILE   equ   1                        ; solid backdrop + optional wallpaper.
+                else
+                ifdef PLATFORM_PCW
+BACKDROP_TILE   equ   1
                 else
 BACKDROP_TILE   equ   0
+                endif
                 endif
                 endif
                 include "lowram.inc"
@@ -78,7 +90,11 @@ BACKDROP_TILE   equ   0
                 ifdef PLATFORM_MSX
                 include "boot_msx.asm"
                 else
+                ifdef PLATFORM_PCW
+                include "boot_pcw.asm"
+                else
                 include "boot.asm"
+                endif
                 endif
 
 ; --- palette -------------------------------------------------------------
@@ -93,6 +109,8 @@ pal_def         db    INK_DESKTOP,INK_LIGHT,INK_DARK,INK_ACCENT,INK_DESKTOP  ; d
 ; KCFG_INKS stays in CPC firmware ink numbers on BOTH platforms (the canonical config
 ; colour space, #287); the MSX driver (lib/msx/screen.asm) maps them to V9938 GRB.
                 ifndef PLATFORM_MSX
+                ifndef PLATFORM_PCW            ; (#331: the PCW palette is fixed CGA2 -
+                                               ;  set_palette is a stub in lib/pcw/screen.asm)
 set_palette
                 ld    a,(KCFG_INKS+0)
                 ld    b,a
@@ -118,6 +136,7 @@ set_palette
                 ld    b,a
                 ld    c,a
                 jp    SCR_SET_BORDER
+                endif
                 endif                          ; (MSX set_palette + k_setink live in lib/msx/screen.asm)
 ; (No CPC k_setink: the resident kernel is full - GB_SETINK is an MSX-only slot,
 ;  and CPC Settings drives SCR_SET_INK/BORDER directly. #287)
@@ -125,7 +144,11 @@ set_palette
                 ifdef PLATFORM_MSX
                 include "input_api_msx.asm"
                 else
+                ifdef PLATFORM_PCW
+                include "input_api_pcw.asm"
+                else
                 include "input_api.asm"
+                endif
                 endif
 
 ; fill_xywh: B=x C=y D=w E=h -> set fb_* then fill_block (fb_val preset). Shared
@@ -211,9 +234,11 @@ gf_pen          equ   #14D1
 
 ; --- firmware text (kernel boot messages) --------------------------------
                 ifndef PLATFORM_MSX
+                ifndef PLATFORM_PCW            ; (PCW k_cls lives in lib/pcw/screen.asm)
 k_cls
                 ld    a,1
                 jp    SCR_SET_MODE            ; mode 1 clears; returns to caller
+                endif
                 endif                          ; (MSX k_cls lives in lib/msx/screen.asm)
 k_noop                                         ; shared no-op for dead ABI slots (#148):
                 ret                            ; GB_PRINT/QUIT/LAUNCH/XORFRAME/ONREPAINT/WMLAUNCH/ONEVENT
@@ -1028,6 +1053,9 @@ k_chdir
                 ifdef PLATFORM_MSX
                 jp    fsmx_chdir               ; #287: BDOS _CHDIR into the entry
                 else
+                ifdef PLATFORM_PCW
+                ret                              ; #331: CP/M is flat - no directories
+                else
                 if STORAGE_ALBIREO
                 jp    fsalb_chdir
                 else
@@ -1056,6 +1084,7 @@ k_chdir
                 ret
                 endif                            ; STORAGE_M4
                 endif                            ; STORAGE_ALBIREO
+                endif                            ; PLATFORM_PCW
                 endif                            ; PLATFORM_MSX
 
 ; k_back (GB_BACK): go to the parent directory (no-op at the top). IDE pops the dir
@@ -1063,6 +1092,9 @@ k_chdir
 k_back
                 ifdef PLATFORM_MSX
                 jp    fsmx_back                  ; #287: BDOS _CHDIR ".."
+                else
+                ifdef PLATFORM_PCW
+                ret                              ; #331: CP/M is flat - no directories
                 else
                 if STORAGE_ALBIREO
                 jp    fsalb_back
@@ -1087,6 +1119,7 @@ k_back
                 ret
                 endif                            ; STORAGE_M4
                 endif                            ; STORAGE_ALBIREO
+                endif                            ; PLATFORM_PCW
                 endif                            ; PLATFORM_MSX
 
 ; k_entname (GB_ENTNAME): HL = the last-enumerated entry's raw 11-byte 8.3 name
@@ -1218,6 +1251,10 @@ k_drive_poll
                 ld    a,%00001100                  ; #287: Disk C present + SD-card icon;
                 ret                                ;  DOS drive letters come later (M2+)
                 else
+                ifdef PLATFORM_PCW
+                ld    a,%00000001                  ; #331: floppy A only (B: is Phase 6)
+                ret
+                else
                 ld    c,0                          ; result bits
                 if STORAGE_ALBIREO
                 call  fsalb_present                ; Albireo -> Disk C (bit2) + SD flag (bit3)
@@ -1258,6 +1295,7 @@ kdp_done
                 ld    (fsam_unit),a
                 ld    a,c
                 ret
+                endif                               ; (PLATFORM_PCW drive poll)
                 endif                               ; (PLATFORM_MSX drive poll)
 
 ; k_get_drive (GB_GETDRIVE, #65): A = the current active drive (0=IDE/C, 1=A, 2=B).
@@ -1311,6 +1349,7 @@ k_fs_delete
                 ret
 
                 ifndef PLATFORM_MSX           ; (MSX k_getkey lives in lib/msx/input.asm)
+                ifndef PLATFORM_PCW           ; (PCW k_getkey lives in lib/pcw/input.asm)
 k_getkey
                 call  KM_READ_CHAR           ; CF + A = char, or NC = none. (Apps frame
                 jr    nc,kgk_none            ; on IY now, so KM_READ_CHAR clobbering IX
@@ -1340,6 +1379,7 @@ kgk_drop
 kgk_none
                 xor   a
                 ret
+                endif
                 endif                          ; (ifndef PLATFORM_MSX around k_getkey)
 kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs + fire
                                               ; (fire = the click; it also buffers a
@@ -2534,6 +2574,19 @@ k_mxp
                 include "../lib/msx/fs.asm"     ; MSX-DOS 2 BDOS backend
                 include "../lib/msx/bank.asm"   ; mapper-segment paging (PUT_P1)
                 else
+                ifdef PLATFORM_PCW
+                include "clock_pcw.asm"        ; software clock (poll-paced, #331)
+                include "clock_state.inc"
+
+                include "../lib/pcw/screen.asm" ; roller-RAM/CGA2 driver (+ shared clip)
+                include "../lib/pcw/text.asm"
+                include "../lib/cursor_arrow.asm"
+                include "../lib/pcw/cursor.asm" ; software pointer (save-under composite)
+                include "../lib/pcw/input.asm"
+                include "../lib/pcw/fdc.asm"    ; polled uPD765
+                include "../lib/pcw/fs.asm"     ; CP/M 2.2 backend
+                include "../lib/pcw/bank.asm"   ; slot-1 block paging
+                else
                 include "clock.asm"
                 include "memdetect.asm"
                 include "clock_state.inc"
@@ -2559,6 +2612,7 @@ k_mxp
                 endif
                 include "../lib/fs_amsdos.asm"
                 include "../lib/bank.asm"
+                endif                          ; (PLATFORM_PCW platform-include swap, #331)
                 endif                          ; (PLATFORM_MSX platform-include swap, #287)
 kern_end                                        ; GBKERN.BIN = #8000..kern_end only.
 
@@ -2568,6 +2622,13 @@ kern_end                                        ; GBKERN.BIN = #8000..kern_end o
 ; at #F380 down, far above). The stub (kernel/msx_stub.asm) incbins this image.
                 assert kern_end<=#C000,"GBKERN(MSX) too big - past the #C000 page-3 glue"
                 save  "GBKERNM.RAW",GB_KERNEL,kern_end-GB_KERNEL
+                else
+                ifdef PLATFORM_PCW
+; --- PCW STABILITY GUARD + output (#331) ------------------------------------------
+; The PCW kernel and its stack share physical block 2: SP starts at #C000 and grows
+; down toward kern_end. Keep at least 512 bytes between them.
+                assert kern_end<=#BE00,"GBKERN(PCW) too big - into the #C000-down stack"
+                save  "GBKERNP.RAW",GB_KERNEL,kern_end-GB_KERNEL
                 else
 ; --- STABILITY GUARD: the resident kernel must not eat the stack -----------------
 ; The CPC runs on the UniDOS stack, which grows DOWN from HIMEM (&A288) toward
@@ -2590,12 +2651,14 @@ STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the sta
 ; write during a deep call (a Notepad save) smashed the return stack and the IDE
 ; loop ran away. Low RAM #1800+ (the retired GBFAT transfer area) is clear of both
 ; the descending stack and the resident image. Fixed addresses, not loaded data.
+                endif                          ; (PLATFORM_PCW output tail, #331)
                 endif                          ; (PLATFORM_MSX: no CPC stack guard/packaging)
 ; (shared on both platforms: fsam_buf doubles as the backdrop-tile load scratch in
 ; kernel/assets.asm, and the drag ghost saves under fs_secbuf)
 fs_secbuf       equ   #1800            ; IDE sector buffer / aliased AMSDOS write sector
 fsam_buf        equ   #1A00            ; floppy whole-directory buffer
                 ifndef PLATFORM_MSX
+                ifndef PLATFORM_PCW             ; (#331: PCW files are staged by mkpcwdsk)
                                                 ; The packaging incbins below are
                                                 ; never loaded at runtime, only read
                                                 ; by `save`. The payload outgrew a
@@ -2660,4 +2723,5 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data,DSK,"build/gbkern.dsk"
                 save  "build/HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
+                endif                          ; (ifndef PLATFORM_PCW: CPC packaging tail)
                 endif                          ; (ifndef PLATFORM_MSX: CPC packaging tail)
