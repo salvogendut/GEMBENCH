@@ -81,12 +81,17 @@ static const signed char COS64[60] = {
  * glue cells - screen pixel coords straight through, no conversion (#287). */
 static volatile unsigned int fx0, fy0, fx1, fy1;
 static volatile unsigned char fpen;
-#ifdef GB_MSX2
-#define GLINE_X0  (*(volatile unsigned int  *)0xC030)
-#define GLINE_Y0  (*(volatile unsigned int  *)0xC032)
-#define GLINE_X1  (*(volatile unsigned int  *)0xC034)
-#define GLINE_Y1  (*(volatile unsigned int  *)0xC036)
-#define GLINE_PEN (*(volatile unsigned char *)0xC038)
+#if defined(GB_MSX2) || defined(GB_PCW)
+#ifdef GB_PCW                    /* PCW: k_line Bresenham from low-RAM cells (#331) */
+#define GLINE_BASE 0x0F10
+#else                            /* MSX: V9938 LINE from the page-3 glue cells */
+#define GLINE_BASE 0xC030
+#endif
+#define GLINE_X0  (*(volatile unsigned int  *)(GLINE_BASE + 0))
+#define GLINE_Y0  (*(volatile unsigned int  *)(GLINE_BASE + 2))
+#define GLINE_X1  (*(volatile unsigned int  *)(GLINE_BASE + 4))
+#define GLINE_Y1  (*(volatile unsigned int  *)(GLINE_BASE + 6))
+#define GLINE_PEN (*(volatile unsigned char *)(GLINE_BASE + 8))
 static void fw_line(void) __naked
 {
 __asm
@@ -129,8 +134,8 @@ static void line(int x0, int y0, int x1, int y1, unsigned char pen)
 
 /* --- RTC write (Set time), straight to the Dallas registers via inline asm ----- */
 static volatile unsigned char rtc_reg, rtc_val;
-#ifdef GB_MSX2
-static void rtc_poke(void) { (void)rtc_reg; (void)rtc_val; }  /* MSX: soft clock only (M4: BIOS RTC) */
+#if defined(GB_MSX2) || defined(GB_PCW)
+static void rtc_poke(void) { (void)rtc_reg; (void)rtc_val; }  /* MSX/PCW: soft clock, no RTC ports */
 #else
 static void rtc_poke(void) __naked
 {

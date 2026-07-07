@@ -452,6 +452,169 @@ vi_strip
                 out   (PCW_SYSCTL),a          ; display enable on
                 ret
 
+
+; --- k_line (GB_LINE, #331): software Bresenham through the slot-3 window ----
+; Endpoints + pen come from the PCW_GLINE cells (screen pixels, top-left
+; origin: x 0..359, y 0..247) - the Clock's inline asm fills them, exactly
+; like the MSX GLINE_* glue. Out-of-range pixels are skipped, never plotted
+; (a stray coordinate must not hang or corrupt - the CPC saver lesson).
+k_line
+                ld    a,(PCW_GLINE+8)         ; pen -> uniform hardware byte
+                call  pen_to_byte
+                ld    (kl_hwb),a
+                ld    hl,(PCW_GLINE+0)
+                ld    (kl_x),hl
+                ld    a,(PCW_GLINE+2)
+                ld    (kl_y),a
+                ld    hl,(PCW_GLINE+4)
+                ld    (kl_x1),hl
+                ld    a,(PCW_GLINE+6)
+                ld    (kl_y1),a
+                ld    hl,(PCW_GLINE+4)        ; dx = |x1 - x0|, sx = direction
+                ld    de,(PCW_GLINE+0)
+                or    a
+                sbc   hl,de
+                ld    a,1
+                jr    nc,kl_dxok
+                ld    a,l                     ; negate HL
+                cpl
+                ld    l,a
+                ld    a,h
+                cpl
+                ld    h,a
+                inc   hl
+                xor   a                       ; sx = 0 -> step left
+kl_dxok
+                ld    (kl_sx),a
+                ld    (kl_dx),hl
+                ld    a,(PCW_GLINE+2)         ; dy = |y1 - y0|, sy = direction
+                ld    c,a
+                ld    a,(PCW_GLINE+6)
+                sub   c
+                ld    b,1
+                jr    nc,kl_dyok
+                neg
+                ld    b,0                     ; sy = 0 -> step up
+kl_dyok
+                ld    l,a
+                ld    h,0
+                ld    (kl_dy),hl
+                ld    a,b
+                ld    (kl_sy),a
+                ld    hl,(kl_dx)              ; err = dx - dy
+                ld    de,(kl_dy)
+                or    a
+                sbc   hl,de
+                ld    (kl_err),hl
+kl_loop
+                call  kl_plot
+                ld    hl,(kl_x)               ; both endpoints reached?
+                ld    de,(kl_x1)
+                or    a
+                sbc   hl,de
+                jr    nz,kl_step
+                ld    a,(kl_y)
+                ld    hl,kl_y1
+                cp    (hl)
+                ret   z
+kl_step
+                ld    hl,(kl_err)             ; e2 = 2*err
+                add   hl,hl
+                ld    (kl_e2),hl
+                ld    de,(kl_dy)              ; e2 + dy >= 0 -> step x
+                add   hl,de
+                bit   7,h
+                jr    nz,kl_ystep
+                ld    hl,(kl_err)             ; err -= dy
+                ld    de,(kl_dy)
+                or    a
+                sbc   hl,de
+                ld    (kl_err),hl
+                ld    hl,(kl_x)               ; x += sx
+                ld    a,(kl_sx)
+                or    a
+                jr    z,kl_xdec
+                inc   hl
+                jr    kl_xset
+kl_xdec
+                dec   hl
+kl_xset
+                ld    (kl_x),hl
+kl_ystep
+                ld    hl,(kl_dx)              ; dx - e2 >= 0 -> step y
+                ld    de,(kl_e2)
+                or    a
+                sbc   hl,de
+                bit   7,h
+                jr    nz,kl_loop
+                ld    hl,(kl_err)             ; err += dx
+                ld    de,(kl_dx)
+                add   hl,de
+                ld    (kl_err),hl
+                ld    a,(kl_y)                ; y += sy
+                ld    hl,kl_sy
+                bit   0,(hl)
+                jr    z,kl_ydec
+                inc   a
+                jr    kl_yset
+kl_ydec
+                dec   a
+kl_yset
+                ld    (kl_y),a
+                jr    kl_loop
+
+; kl_plot: pixel (kl_x, kl_y) in the kl_hwb pen; off-screen = skipped.
+kl_plot
+                ld    a,(kl_y)
+                cp    PCW_LINES
+                ret   nc
+                ld    hl,(kl_x)
+                ld    de,360
+                or    a
+                sbc   hl,de                   ; x >= 360 (incl. negative ints
+                ret   nc                      ; seen as huge) -> skip
+                ld    hl,(kl_x)               ; byte col = x >> 2
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    d,l
+                ld    a,(kl_y)
+                ld    e,a
+                call  pcw_addr                ; HL = the byte (block mapped)
+                ld    a,(kl_x)                ; per-pixel field by x & 3
+                and   3
+                ld    c,a
+                ld    b,0
+                push  hl
+                ld    hl,kl_keep
+                add   hl,bc
+                ld    a,(hl)
+                pop   hl
+                ld    c,a                     ; C = keep-mask (other pixels)
+                cpl
+                ld    b,a                     ; B = this pixel's field mask
+                ld    a,(hl)
+                and   c
+                ld    c,a
+                ld    a,(kl_hwb)
+                and   b
+                or    c
+                ld    (hl),a
+                ret
+kl_keep         db    %00111111,%11001111,%11110011,%11111100
+kl_hwb          db    0
+kl_x            dw    0
+kl_x1           dw    0
+kl_y            db    0
+kl_y1           db    0
+kl_sx           db    0
+kl_sy           db    0
+kl_dx           dw    0
+kl_dy           dw    0
+kl_err          dw    0
+kl_e2           dw    0
+
 ; --- parameter / scratch cells: same low-RAM homes as the CPC/MSX drivers ----
 bm_src          equ   #14A4        ; source bitmap pointer (advanced by blit)
 bm_x            equ   #14A6        ; destination x in bytes (0..89)

@@ -16,6 +16,9 @@
 #ifdef GB_MSX2
 #define COLS  128        /* 128 byte-cols x 53 rows of 4-line cells = 512x212 */
 #define ROWS  53
+#elif defined(GB_PCW)
+#define COLS  90         /* 90 byte-cols x 62 rows of 4-line cells = 360x248 */
+#define ROWS  62
 #else
 #define COLS  80         /* 80 byte-cols x 50 rows of 4-line cells = 320x200 */
 #define ROWS  50
@@ -35,8 +38,8 @@ static unsigned int rnd(void)
 }
 
 static volatile unsigned char brd_ink;
-#ifdef GB_MSX2
-static void set_border(void) { (void)brd_ink; }   /* MSX: border unchanged during ANT */
+#if defined(GB_MSX2) || defined(GB_PCW)
+static void set_border(void) { (void)brd_ink; }   /* MSX/PCW: no border to set */
 #else
 static void set_border(void) __naked
 {

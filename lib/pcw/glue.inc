@@ -64,3 +64,8 @@ PCW_COLS        equ   90           ; byte columns (360 px at 4 px/byte)
 PCW_LINES       equ   248          ; desktop lines (31 cellrows)
 
 PCW_KBDMAT      equ   #FFF0        ; keyboard matrix (block 3 in slot 3)
+
+PCW_GLINE       equ   #0F10        ; GB_LINE marshal cells (x0,y0,x1,y1 words +
+                                   ; pen byte), written by the Clock's inline
+                                   ; asm - #0F00 page is free PCW low RAM
+                                   ; (#0F00/#0F01 are the testbench beacons)

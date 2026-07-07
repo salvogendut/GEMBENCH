@@ -208,6 +208,41 @@ entry:
         ld a,11
         ld (#0F00),a
 
+        ; --- k_line: three GB_LINE-style lines via the PCW_GLINE cells --
+        ld hl,300               ; \ diagonal, pen 2 (black)
+        ld (PCW_GLINE+0),hl
+        ld hl,16
+        ld (PCW_GLINE+2),hl
+        ld hl,356
+        ld (PCW_GLINE+4),hl
+        ld hl,60
+        ld (PCW_GLINE+6),hl
+        ld a,2
+        ld (PCW_GLINE+8),a
+        call k_line
+        ld hl,356               ; / diagonal, pen 3 (magenta)
+        ld (PCW_GLINE+0),hl
+        ld hl,16
+        ld (PCW_GLINE+2),hl
+        ld hl,300
+        ld (PCW_GLINE+4),hl
+        ld hl,60
+        ld (PCW_GLINE+6),hl
+        ld a,3
+        ld (PCW_GLINE+8),a
+        call k_line
+        ld hl,300               ; horizontal, pen 1 (white)
+        ld (PCW_GLINE+0),hl
+        ld hl,38
+        ld (PCW_GLINE+2),hl
+        ld hl,356
+        ld (PCW_GLINE+4),hl
+        ld hl,38
+        ld (PCW_GLINE+6),hl
+        ld a,1
+        ld (PCW_GLINE+8),a
+        call k_line
+
         ; --- CP/M fs test: mount, list the directory, load HELLO.TXT ---
         call fs_init
         ld b,1                  ; white on cyan for the listing

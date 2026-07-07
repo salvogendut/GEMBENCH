@@ -356,7 +356,33 @@ static unsigned char eq11(const char *a, const char *b)
    The firmware keys are disarmed (the joystick floods them), so read them directly with
    KM_TEST_KEY (&BB1E): key 8 = Left, key 1 = Right - same approach as Notepad's caret nav. */
 static unsigned char lr_bits;
-#ifdef GB_MSX2
+#ifdef GB_PCW
+/* PCW: read Left/Right straight from the memory-mapped matrix (row 1 bit7 =
+ * Left, row 0 bit6 = Right, active-high) - map block 3 into the slot-3 window
+ * first, per the platform's map-before-use convention (#331). */
+static void read_lr(void) __naked
+{
+__asm
+    xor  a
+    ld   (_lr_bits), a
+    ld   a, #0x83          ; keyboard block -> slot-3 window
+    out  (0xF3), a
+    ld   a, (0xFFF1)       ; matrix row 1: bit7 = Left held
+    bit  7, a
+    jr   z, 1$
+    ld   a, (_lr_bits)
+    or   #0x01
+    ld   (_lr_bits), a
+1$: ld   a, (0xFFF0)       ; matrix row 0: bit6 = Right held
+    bit  6, a
+    jr   z, 2$
+    ld   a, (_lr_bits)
+    or   #0x02
+    ld   (_lr_bits), a
+2$: ret
+__endasm;
+}
+#elif defined(GB_MSX2)
 /* MSX: read cursor Left/Right from the BIOS NEWKEY matrix (row 8, updated by the
  * interrupt; bit4=Left, bit7=Right, active-low) - no CALSLT needed (#287). */
 static void read_lr(void) __naked

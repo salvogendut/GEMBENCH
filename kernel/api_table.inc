@@ -24,9 +24,14 @@ PICEDIT_ENTRY   equ   PICEDIT_BASE
                 jp    k_line                 ; GB_LINE #8009 (was GB_QUIT): draw a line from
                                              ; the GLINE_* glue cells (V9938 LINE cmd). #287
                 else
+                ifdef PLATFORM_PCW
+                jp    k_line                 ; GB_LINE: software Bresenham from the
+                                             ; PCW_GLINE cells (lib/pcw/screen.asm, #331)
+                else
                 jp    k_noop                 ; GB_LINE slot inert on CPC - the resident kernel
                                              ; is full; CLOCK drives GRA_* firmware directly
                                              ; there. #287 (was GB_QUIT dead stub, #148)
+                endif
                 endif
                 jp    gb_text_draw           ; GB_TEXT   #800C
                 jp    gb_open_window         ; GB_WINDOW #800F
