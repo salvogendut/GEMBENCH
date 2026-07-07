@@ -466,10 +466,14 @@ static void dart_wr(unsigned char reg, unsigned char val)
 static void serial_hw_init(void)
 {
     if (pcw_ser_inited) return;
-    /* PerryFi uses 9600 8N1. The CPS8256 PIT feeds the DART clock; 12 is
-     * the standard 1.8432MHz / 16 / 9600 divisor. */
-    ser_io = 0x36; pit_out_ctrl(); ser_io = 12; pit_out_tx(); ser_io = 0; pit_out_tx();
-    ser_io = 0x76; pit_out_ctrl(); ser_io = 12; pit_out_rx(); ser_io = 0; pit_out_rx();
+    /* PerryFi uses 9600 8N1. The CPS8256 PIT is clocked at 2MHz and the
+     * DART divides by 16, so baud = 125000 / count (Joyce's JoyceCPS.cxx,
+     * from the real device): count 13 = 9615 baud. NOT the PC-style
+     * 1.8432MHz crystal - count 12 here would be 10417 baud, which is
+     * 8.5% off and pure framing garbage on real hardware (the 1985
+     * emulator stores the count without timing it, so it can't tell). */
+    ser_io = 0x36; pit_out_ctrl(); ser_io = 13; pit_out_tx(); ser_io = 0; pit_out_tx();
+    ser_io = 0x76; pit_out_ctrl(); ser_io = 13; pit_out_rx(); ser_io = 0; pit_out_rx();
     ser_io = 0x18; ser_out_ctrl();             /* channel reset */
     dart_wr(4, 0x44);                           /* async, x16 clock, 1 stop, no parity */
     dart_wr(3, 0xC1);                           /* RX enable, 8-bit chars */
