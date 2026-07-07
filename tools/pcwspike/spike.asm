@@ -1,128 +1,219 @@
 ; -----------------------------------------------------------------------
-; spike.asm - PCW boot + video proof-of-life payload (#331 Phase 1)
+; spike.asm - PCW driver testbench payload (#331 Phase 2)
 ;
 ; Loaded at #1000 by kernel/pcwboot.asm from GEOBENCH.DSK's reserved
-; track sectors.  Proves the whole Phase-1 chain: custom boot sector ->
-; polled uPD765 load -> roller-RAM programming -> CGA-mode color.
+; tracks. Exercises lib/pcw/screen.asm - the real GEOBENCH PCW video
+; driver - end to end, headless. Expected screenshot:
 ;
-; PCW video: 720x256 1bpp via "roller RAM" - a 512-byte table of one
-; 16-bit word per scanline.  Word w -> source row address
-;     A = ((w & #E000) << 1) | ((w & #1FF8) << 1) | (w & 7)
-; i.e. w = (A>>1 & #FFF8) | (A & 7), with A3 forced 0.  Within a row
-; the 90 byte-columns step by 8 (char-cell interleave), so a "cellrow"
-; of 8 scanlines is one contiguous 720-byte run: byte(xcol,y) =
-; cellrow_base + xcol*8 + (y&7).  720 = 16*45, so cellrow strides keep
-; A3=0 and the standard layout encodes cleanly.
+;   cyan desktop (k_cls, GB pen 0), letterbox black strip at the bottom
+;   three rects: white / black / magenta          (fill_block pens 1,2,3)
+;   a cyan/magenta 16px checker field             (fill_pattern, BD_TILE)
+;   a test glyph blitted TRANSPARENT over the checker (pen-0 shows it)
+;   the same glyph OPAQUE on the desktop          (pen-0 = cyan box)
+;   a black bar crossing y=120..135               (block 4/5 boundary)
+;   a small magenta patch ONLY inside a clip window (clip honored)
+;   NO magenta at the save/restore spot           (round trip works)
 ;
-; With the 1985 emulator's video_mode=cga2 the same bitmap is shown as
-; 2bpp / 360x256 / 4 colors: pixel i of each byte = (byte>>(6-2i))&3,
-; palette 0=black 1=cyan 2=magenta 3=white - the MSX Screen 6 packing.
-;
-; Layout (physical = CPU address, identity banking at boot):
-;   #5C00  roller table (512 bytes)
-;   #6000  framebuffer, 32 cellrows x 720 = 23040 bytes (ends #B9FF)
-;
-; Pattern: four 64-line bands of solid pens 0..3, and the two middle
-; cellrows overwritten with #1B = pens 0,1,2,3 - a 4-color ramp every
-; 4 pixels that proves per-pixel CGA packing.
+; NOTE: the stack must NOT live in slot 3 (#C000+) - the driver remaps
+; that window per drawing row. SP sits below #8000 instead.
 ; -----------------------------------------------------------------------
 
-RTABLE  equ #5C00
-SCREEN  equ #6000
+BACKDROP_TILE   equ   1
 
-        org #1000
+                org #1000
+
+                include "../../lib/pcw/glue.inc"
 
 entry:
         di
-        ld sp,#F000
+        ld sp,#8000             ; NOT #F000 - slot 3 is the screen window
+        ld a,(#0F01)            ; debug: count boot cycles (survives reload)
+        inc a
+        ld (#0F01),a
+        ld a,0
+        ld (#0F00),a            ; debug: stage beacon
 
-; ---- build the roller table: word(y) = (base>>1) | (y&7) --------------
-        ld hl,RTABLE
-        ld bc,SCREEN/2          ; BC = cellrow base >> 1
-        ld d,32                 ; 32 cellrows
-rt_cell:
-        ld e,0                  ; line within cell, 0..7
-rt_line:
-        ld a,c
-        or e                    ; low word byte = (base>>1)|line
-        ld (hl),a
-        inc hl
-        ld a,b
-        ld (hl),a
-        inc hl
-        inc e
-        ld a,e
-        cp 8
-        jr c,rt_line
-        push hl
-        ld hl,360               ; next cellrow: base += 720 -> base>>1 += 360
-        add hl,bc
-        ld b,h
-        ld c,l
-        pop hl
-        dec d
-        jr nz,rt_cell
+        call pcw_video_init     ; roller table + cls + display on
+        ld a,1
+        ld (#0F00),a
 
-; ---- fill the framebuffer: 4 bands of solid pens ----------------------
-        ld hl,SCREEN
-        ld c,0                  ; cellrow counter
-fb_cell:
-        ld a,c
-        rrca
-        rrca
-        rrca
-        and 3                   ; band = cellrow>>3
-        push hl
-        ld hl,valtab
-        add a,l
-        ld l,a
-        jr nc,fb_nv
-        inc h
-fb_nv:  ld a,(hl)
-        pop hl
-        ld b,a                  ; B = fill byte
-        ld de,720
-fb_fill:
-        ld (hl),b
-        inc hl
-        dec de
-        ld a,d
-        or e
-        jr nz,fb_fill
-        inc c
-        ld a,c
-        cp 32
-        jr c,fb_cell
+        ; --- three solid rects: pens 1 / 2 / 3 -------------------------
+        ld a,1
+        ld bc,#0410             ; x=4  y=16
+        ld de,#1420             ; w=20 h=32
+        call fill_t
+        ld a,2
+        ld bc,#1E10             ; x=30
+        ld de,#1420
+        call fill_t
+        ld a,3
+        ld bc,#3810             ; x=56
+        ld de,#1420
+        call fill_t
 
-; ---- middle stripe: per-pixel 4-color ramp ----------------------------
-        ld hl,SCREEN+15*720     ; cellrows 15+16 (lines 120..135)
-        ld de,1440
-mid:    ld (hl),#1B             ; pixels = pens 0,1,2,3
-        inc hl
-        dec de
-        ld a,d
-        or e
-        jr nz,mid
+        ; --- checker field via fill_pattern ----------------------------
+        ld a,4                  ; x=4
+        ld (fb_x),a
+        ld a,64
+        ld (fb_y),a
+        ld a,60
+        ld (fb_w),a
+        ld a,48
+        ld (fb_h),a
+        ld a,2
+        ld (#0F00),a
+        call fill_pattern
+        ld a,3
+        ld (#0F00),a
 
-; ---- point the hardware at it -----------------------------------------
-        ld a,#2E                ; roller base: ((1)<<14)|(#0E<<9) = #5C00
-        out (#F5),a
+        ; --- glyph: transparent over the checker, opaque on desktop ----
+        ld a,#FF
+        ld (bm_keep),a
+        ld hl,glyph
+        ld (bm_src),hl
+        ld a,10
+        ld (bm_x),a
+        ld a,72
+        ld (bm_y),a
+        ld a,4
+        ld (bm_w),a
+        ld a,16
+        ld (bm_h),a
+        call blit_bitmap
+
         xor a
-        out (#F6),a             ; vertical scroll 0
-        ld a,#40
-        out (#F7),a             ; bit6 screen enable, bit7 normal video
-        ld a,7
-        out (#F8),a             ; display enable on
+        ld (bm_keep),a
+        ld hl,glyph
+        ld (bm_src),hl
+        ld a,40
+        ld (bm_x),a
+        ld a,72
+        ld (bm_y),a
+        ld a,4
+        ld (bm_w),a
+        ld a,16
+        ld (bm_h),a
+        call blit_bitmap
+        ld a,4
+        ld (#0F00),a
 
+        ; --- bar crossing the block 4/5 boundary (y 120..135) ----------
+        ld a,2
+        ld bc,#0478             ; x=4 y=120
+        ld de,#5010             ; w=80 h=16
+        call fill_t
+
+        ; --- save / scribble / restore: must leave no trace ------------
+        ld a,56
+        ld (sb_x),a
+        ld a,160
+        ld (sb_y),a
+        ld a,8
+        ld (sb_w),a
+        ld a,16
+        ld (sb_h),a
+        ld hl,#2000
+        ld (sb_buf),hl
+        ld a,5
+        ld (#0F00),a
+        call save_block
+        ld a,6
+        ld (#0F00),a
+        ld a,3                  ; scribble magenta over the saved area
+        ld bc,#38A0             ; x=56 y=160
+        ld de,#0810
+        call fill_t
+        ld a,7
+        ld (#0F00),a
+        call restore_block      ; and undo it
+        ld a,8
+        ld (#0F00),a
+
+        ; --- clip window: fill way past it, only the window paints -----
+        ld a,70
+        ld (clip_x),a
+        ld a,160
+        ld (clip_y),a
+        ld a,10
+        ld (clip_w),a
+        ld a,16
+        ld (clip_h),a
+        ld a,3
+        ld bc,#3C96             ; x=60 y=150
+        ld de,#1E28             ; w=30 h=40 - mostly outside the clip
+        call fill_t
+        xor a                   ; reset clip to full screen
+        ld (clip_x),a
+        ld (clip_y),a
+        ld a,PCW_COLS
+        ld (clip_w),a
+        ld a,PCW_LINES
+        ld (clip_h),a
+
+        ld a,9
+        ld (#0F00),a
 hang:   jr hang
 
-; Pad the image past 11K so it spans three tracks (T0 R2-9, T1, T2) -
-; valtab then loads from the last track, proving the boot loader's
-; multi-track SEEK + read path.  Wrong/missing later sectors = black
-; or garbage bands instead of the 4-color pattern.
-        defs 11000,#E5
+; fill_t: A = pen, B = x, C = y, D = w, E = h -> fill_block
+fill_t:
+        push de
+        push bc
+        call pen_to_byte        ; clobbers A,E only
+        ld (fb_val),a
+        pop bc
+        ld a,b
+        ld (fb_x),a
+        ld a,c
+        ld (fb_y),a
+        pop de
+        ld a,d
+        ld (fb_w),a
+        ld a,e
+        ld (fb_h),a
+        jp fill_block
 
-valtab: db #00,#55,#AA,#FF      ; solid-pen fill bytes, 4px each
+; --- the GEOBENCH PCW video driver under test --------------------------
+                include "../../lib/pcw/screen.asm"
+
+; --- test data ----------------------------------------------------------
+; 16x16px checker tile, GB pens 0/3 (renders cyan/magenta)
+BD_TILE:
+        db #00,#00,#FF,#FF
+        db #00,#00,#FF,#FF
+        db #00,#00,#FF,#FF
+        db #00,#00,#FF,#FF
+        db #00,#00,#FF,#FF
+        db #00,#00,#FF,#FF
+        db #00,#00,#FF,#FF
+        db #00,#00,#FF,#FF
+        db #FF,#FF,#00,#00
+        db #FF,#FF,#00,#00
+        db #FF,#FF,#00,#00
+        db #FF,#FF,#00,#00
+        db #FF,#FF,#00,#00
+        db #FF,#FF,#00,#00
+        db #FF,#FF,#00,#00
+        db #FF,#FF,#00,#00
+
+; 16x16px test glyph, GB pen space: pen-0 corners (transparent when
+; bm_keep=#FF), pen-2 black ring, pen-1 white fill, pen-3 red core.
+glyph:
+        db #00,#AA,#AA,#00      ; row 0:  ..RRRR..  (R = ring pen2)
+        db #0A,#AA,#AA,#A0
+        db #AA,#55,#55,#AA      ; ring around white fill
+        db #AA,#55,#55,#AA
+        db #A5,#55,#55,#5A
+        db #A5,#5F,#F5,#5A      ; pen-3 core starts
+        db #A5,#5F,#F5,#5A
+        db #A5,#55,#55,#5A
+        db #A5,#55,#55,#5A
+        db #A5,#5F,#F5,#5A
+        db #A5,#5F,#F5,#5A
+        db #A5,#55,#55,#5A
+        db #AA,#55,#55,#AA
+        db #AA,#55,#55,#AA
+        db #0A,#AA,#AA,#A0
+        db #00,#AA,#AA,#00
 
 spike_end:
         save"build/pcwspike.bin",#1000,spike_end-entry
