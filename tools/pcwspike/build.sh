@@ -52,8 +52,9 @@ python3 tools/mkpcwdsk.py build/pcwspike.dsk \
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
     --config debug/1985-pcw.conf \
     --disk-a build/pcwspike.dsk \
-    --screenshot-at 250:build/pcwspike.ppm \
-    --exit-after 300
+    --paste-event "700:hello pcw 42" \
+    --screenshot-at 1000:build/pcwspike.ppm \
+    --exit-after 1050
 
 python3 - <<'EOF'
 from PIL import Image
