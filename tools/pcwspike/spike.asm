@@ -17,6 +17,7 @@
 ;   two text lines: black-on-white + white-on-desktop (6x8 font)
 ;   the test pointer over the checker (transparent corners show it),
 ;   and NO trace at its first position over the white rect (erase works)
+;   "hello pcw 42" typed via --paste-event -> k_getkey -> draw_text
 ;
 ; Debug beacons (survive the payload reload on a crash-reboot):
 ;   #0F00 = last stage completed   #0F01 = boot-cycle count
@@ -206,7 +207,43 @@ entry:
         ld a,11
         ld (#0F00),a
 
-hang:   jr hang
+        ; --- typing test: k_getkey -> append + redraw. input_poll runs
+        ; every pass, proving the input layer's slot-3 keyboard remap
+        ; coexists with drawing. Keys arrive via 1985 --paste-event.
+        call input_init
+        ld b,2                  ; black text on the cyan desktop
+        ld c,0
+        call set_text_pens
+tloop:
+        call input_poll
+        call k_getkey
+        or a
+        jr z,tloop
+        cp 13                   ; ignore enter/del in this test
+        jr z,tloop
+        cp 127
+        jr z,tloop
+        ld c,a
+        ld hl,typebuf           ; append (cap 30 chars)
+        ld b,30
+tb_find:
+        ld a,(hl)
+        or a
+        jr z,tb_put
+        inc hl
+        djnz tb_find
+        jr tloop
+tb_put:
+        ld (hl),c
+        inc hl
+        ld (hl),0
+        ld a,4
+        ld (tc_x),a
+        ld a,214
+        ld (tc_y),a
+        ld hl,typebuf
+        call draw_text
+        jr tloop
 
 ; fill_t: A = pen, B = x, C = y, D = w, E = h -> fill_block
 fill_t:
@@ -226,11 +263,14 @@ fill_t:
         ld (fb_h),a
         jp fill_block
 
-; --- the GEOBENCH PCW video stack under test ---------------------------
+; --- the GEOBENCH PCW video + input stack under test --------------------
                 include "../../lib/pcw/screen.asm"
                 include "../../lib/pcw/text.asm"
                 include "../../lib/cursor_arrow.asm"
                 include "../../lib/pcw/cursor.asm"
+                include "../../lib/pcw/input.asm"
+
+typebuf:        ds 32
 
 ; --- test data ----------------------------------------------------------
 ; 16x16px checker tile, GB pens 0/3 (renders cyan/magenta)
