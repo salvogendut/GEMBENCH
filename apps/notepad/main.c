@@ -35,6 +35,8 @@
 #define WRAP      ((win_w - 4) * 2 / 3)               /* chars per wrapped line (runtime) */
 #ifdef GB_MSX2
 #define MAXWRAP   84           /* line[] cap = max WRAP on the 128-col MSX window */
+#elif defined(GB_PCW)
+#define MAXWRAP   58           /* line[] cap = max WRAP on the 90-col PCW window */
 #else
 #define MAXWRAP   52           /* line[] cap = max WRAP (80-col window) */
 #endif
@@ -456,8 +458,8 @@ static unsigned char cursor_over(void)
    directly so the keys stay globally disarmed (no char-buffer flood) yet still reach
    us. Only A + arr_bits cross each call, so a KM_TEST_KEY register clobber can't
    corrupt the accumulator. */
-#ifdef GB_MSX2
-/* MSX2 has no CPC firmware: #BB1E is not KM_TEST_KEY there, and calling it wrote an
+#if defined(GB_MSX2) || defined(GB_PCW)
+/* MSX2/PCW have no CPC firmware: #BB1E is not KM_TEST_KEY there, and calling it wrote an
    invalid i8255 PPI mode that HUNG the machine the instant a text app tried to read
    the cursor keys (#287). On MSX the cursor keys ARE the pointer (GTSTCK 0) anyway,
    so arrow-key caret nav doesn't belong here - the caret is placed by click (see the
