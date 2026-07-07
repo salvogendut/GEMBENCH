@@ -340,9 +340,27 @@ gb_open_window
 gad_x_str       db    "X",0
                 endif
 
-; kwin_frame: blue interior, black title bar + borders, white close gadget.
+; Window-chrome fill bytes. Raw platform bytes (NOT pen_to_byte) so the CPC
+; image stays byte-identical; the MSX look (red-striped title bars) is that
+; platform's established character. The PCW's CGA2 permutation makes the CPC
+; literals wrong there (#331: #00 is hardware BLACK - it showed as a black
+; gap line under every File Manager icon row), so it gets its own set.
+                ifdef PLATFORM_PCW
+KWB_PAPER       equ   #55           ; pen 0 (cyan interior)
+KWB_LIGHT       equ   #FF           ; pen 1 (white title base / gadgets)
+KWB_DARK        equ   #00           ; pen 2 (black stripes / squares)
+                else
+KWB_LIGHT       equ   #F0           ; CPC pen 1 (Screen-6: the MSX red look)
+KWB_DARK        equ   #0F           ; CPC pen 2
+                endif
+
+; kwin_frame: paper interior, striped title bar + borders, light close gadget.
 kwin_frame
+                ifdef PLATFORM_PCW
+                ld    a,KWB_PAPER             ; interior (pen 0)
+                else
                 xor   a                       ; interior (blue): (x, y, w, h)
+                endif
                 ld    (fb_val),a
                 ld    a,(kw_x)
                 ld    b,a
@@ -353,7 +371,7 @@ kwin_frame
                 ld    a,(kw_h)
                 ld    e,a
                 call  fill_xywh
-                ld    a,#F0                   ; title bar: white base (x, y, w, 14)
+                ld    a,KWB_LIGHT             ; title bar: light base (x, y, w, 14)
                 ld    (fb_val),a
                 ld    a,(kw_x)
                 ld    b,a
@@ -363,7 +381,7 @@ kwin_frame
                 ld    d,a
                 ld    e,14
                 call  fill_xywh
-                ld    a,#0F                   ; ... black horizontal stripes (1-line
+                ld    a,KWB_DARK              ; ... dark horizontal stripes (1-line
                 ld    (fb_val),a             ; fills, every other line; fb_x/fb_w
                 ld    a,1                     ; stay kw_x/kw_w from the fill above)
                 ld    (fb_h),a
@@ -389,7 +407,7 @@ kf_stripe       ld    a,(kf_sy)
                 ld    e,a
                 ld    a,2                     ; pen 2 = black (#0F)
                 call  k_frame
-                ld    a,#F0                   ; close gadget (white): (x+1, y+2, 2, 10)
+                ld    a,KWB_LIGHT             ; close gadget (light): (x+1, y+2, 2, 10)
                 ld    (fb_val),a
                 ld    a,(kw_x)
                 inc   a
@@ -404,7 +422,7 @@ kf_stripe       ld    a,(kf_sy)
 ; maximize gadget on the right: white box (x+w-4, y+2, 3, 10) + a centered black square.
 ; (3 bytes wide so the black square sits in the MIDDLE byte with white either side - a 2-byte
 ; box would have both edge bytes filled by k_frame, i.e. solid black. 1 byte = 4 px in mode 1.)
-                ld    a,#F0
+                ld    a,KWB_LIGHT
                 ld    (fb_val),a
                 ld    a,(kw_x)
                 ld    hl,kw_w
@@ -418,7 +436,7 @@ kf_stripe       ld    a,(kf_sy)
                 ld    d,3
                 ld    e,10
                 call  fill_xywh
-                ld    a,#0F                   ; black (pen 2) filled square in the centre byte
+                ld    a,KWB_DARK              ; dark (pen 2) filled square in the centre byte
                 ld    (fb_val),a
                 ld    a,(kf_gx)
                 inc   a                        ; centre byte (gx+1)
