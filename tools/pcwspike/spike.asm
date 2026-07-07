@@ -384,6 +384,52 @@ wt_end:
         ld a,13
         ld (#0F00),a
 
+        ; --- drive B: browse B, then a boot-first system load (#331 -----
+        ; "can't open Disk B": fs_load_sys must hit the BOOT drive even
+        ; while the browse drive is B, then restore the browse drive)
+        ld a,2
+        call fs_set_drive       ; mount B (COMPANION-style data disc)
+        call fs_dir_first
+        jp nc,db_fail           ; B must list something
+        ld hl,fst_hello         ; HELLO.TXT exists ONLY on the boot disc
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld hl,#6000
+        ld (fs_load_dst),hl
+        ld hl,512
+        ld (fs_load_max),hl
+        call fs_load_sys        ; boot-first: must load from A
+        jp nc,db_fail
+        ld a,(fs_cur_drive)     ; and the browse drive must survive
+        cp 2
+        jp nz,db_fail
+        ld b,3
+        ld c,0
+        call set_text_pens
+        ld a,4
+        ld (tc_x),a
+        ld a,232
+        ld (tc_y),a
+        ld hl,db_okmsg
+        call draw_text
+        jr db_end
+db_fail:
+        ld b,2
+        ld c,3
+        call set_text_pens
+        ld a,4
+        ld (tc_x),a
+        ld a,232
+        ld (tc_y),a
+        ld hl,db_badmsg
+        call draw_text
+db_end:
+        ld a,1                  ; back to A for the typing test
+        call fs_set_drive
+        ld a,14
+        ld (#0F00),a
+
         ; --- typing test: k_getkey -> append + redraw. input_poll runs
         ; every pass, proving the input layer's slot-3 keyboard remap
         ; coexists with drawing. Keys arrive via 1985 --paste-event.
@@ -461,6 +507,8 @@ msg_wr:         db "PCW write path OK",13,10
 msg_wr_len      equ $-msg_wr
 wt_okmsg:       db "WRITE OK",0
 wt_badmsg:      db "WRITE FAIL",0
+db_okmsg:       db "DISK B OK",0
+db_badmsg:      db "DISK B FAIL",0
 ctofs:          dw 0
 ctgot:          dw 0
 ctfirst:        db 0
