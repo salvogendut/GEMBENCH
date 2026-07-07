@@ -399,7 +399,9 @@ set_palette
 ; word = (#8000 + r*512) | (y&7)  (A>>1: bit16 -> bit15, r*1024 -> r*512).
 ; Lines 248-255 point at cellrow 31 (the static letterbox strip).
 pcw_video_init
-                ld    hl,PCW_RTABLE
+                ld    a,#80|1                 ; roller table lives in phys block 1,
+                out   (PCW_BANK1),a           ; written through slot 1 (boot-time only:
+                ld    hl,PCW_RTABLE           ; nothing else is paged this early)
                 ld    de,#8000                ; cellrow 0 word base (A=#10000 -> #8000)
                 ld    b,32                    ; 32 cellrows (31 = letterbox)
 vi_cell

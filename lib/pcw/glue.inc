@@ -7,8 +7,8 @@
 ; bit7|block). GEOBENCH runs fully DI - all timing is polled.
 ;
 ; Physical block plan (256K = blocks 0-15, 512K = 0-31):
-;   0      CPU slot 0 fixed: low-RAM contracts (#1000+), roller table #3E00
-;   1      (free / future)
+;   0      CPU slot 0 fixed: low-RAM contracts (#1000+)
+;   1      roller table at #4000 (rest reserve)
 ;   2      CPU slot 2 fixed: kernel at GB_KERNEL=#8000, stack at top
 ;   3      keyboard matrix at offset #3FF0 (CPU #FFF0 when mapped in slot 3)
 ;   4-5    framebuffer (never CPU-mapped except while drawing)
@@ -54,8 +54,11 @@ PCW_BLK_KBD     equ   #80|3        ; keyboard block for the slot-3 window
 PCW_BLK_SCR0    equ   #80|4        ; framebuffer, cellrows 0-15
 PCW_BLK_SCR1    equ   #80|5        ; framebuffer, cellrows 16-31
 
-PCW_RTABLE      equ   #3E00        ; roller table, 512 bytes in block 0
-PCW_RTREG       equ   #1F          ; #3E00 encoded for the roller base port
+PCW_RTABLE      equ   #4000        ; roller table: 512 bytes at the START of phys
+                                   ; block 1 (otherwise unused; block 0's #3E00 is
+                                   ; the kernel clipboard). Written once at video
+                                   ; init through the identity slot-1 mapping.
+PCW_RTREG       equ   #20          ; phys #4000 encoded for the roller base port
 
 PCW_COLS        equ   90           ; byte columns (360 px at 4 px/byte)
 PCW_LINES       equ   248          ; desktop lines (31 cellrows)

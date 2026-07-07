@@ -28,6 +28,7 @@
 
 BACKDROP_TILE   equ   1
 CUR_LOW         equ   testspr
+fs_secbuf       equ   #1800        ; the kernel's sector buffer home (lowram)
 
                 org #2000    ; clear of the low-RAM contracts the drivers use
                              ; (cur_bg #1291, clip #1338, scratch #14xx)
@@ -207,6 +208,69 @@ entry:
         ld a,11
         ld (#0F00),a
 
+        ; --- CP/M fs test: mount, list the directory, load HELLO.TXT ---
+        call fs_init
+        ld b,1                  ; white on cyan for the listing
+        ld c,0
+        call set_text_pens
+        ld a,20
+        ld (fst_y),a
+        call fs_dir_first
+fst_dir:
+        jr nc,fst_load
+        ld hl,fs_ent_name       ; 11 chars, not terminated - copy + NUL
+        ld de,fst_name
+        ld bc,11
+        ldir
+        xor a
+        ld (de),a
+        ld a,66
+        ld (tc_x),a
+        ld a,(fst_y)
+        ld (tc_y),a
+        ld hl,fst_name
+        call draw_text
+        ld a,(fst_y)
+        add a,9
+        ld (fst_y),a
+        call fs_dir_next
+        jr fst_dir
+fst_load:
+        ld hl,fst_hello         ; load HELLO.TXT and print its content
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld hl,#6000             ; phys block 1 upper half (table is at #4000)
+        ld (fs_load_dst),hl
+        ld hl,512
+        ld (fs_load_max),hl
+        call fs_load_file
+        jr nc,fst_done
+        ld hl,#6000             ; cut at CR / CP/M EOF pad
+        ld b,64
+fst_term:
+        ld a,(hl)
+        cp #1A
+        jr z,fst_cut
+        cp 13
+        jr z,fst_cut
+        inc hl
+        djnz fst_term
+fst_cut:
+        ld (hl),0
+        ld b,3                  ; magenta-accent text
+        ld c,0
+        call set_text_pens
+        ld a,40
+        ld (tc_x),a
+        ld a,232
+        ld (tc_y),a
+        ld hl,#6000
+        call draw_text
+fst_done:
+        ld a,12
+        ld (#0F00),a
+
         ; --- typing test: k_getkey -> append + redraw. input_poll runs
         ; every pass, proving the input layer's slot-3 keyboard remap
         ; coexists with drawing. Keys arrive via 1985 --paste-event.
@@ -269,8 +333,13 @@ fill_t:
                 include "../../lib/cursor_arrow.asm"
                 include "../../lib/pcw/cursor.asm"
                 include "../../lib/pcw/input.asm"
+                include "../../lib/pcw/fdc.asm"
+                include "../../lib/pcw/fs.asm"
 
 typebuf:        ds 32
+fst_name:       ds 12
+fst_y:          db 0
+fst_hello:      db "HELLO   TXT"
 
 ; --- test data ----------------------------------------------------------
 ; 16x16px checker tile, GB pens 0/3 (renders cyan/magenta)
