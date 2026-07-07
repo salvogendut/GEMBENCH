@@ -37,8 +37,29 @@ fdc_recal
                 ld    (fdc_track),a
                 ret
 
+; pcwfdc_setunit: A = drive unit (0/1) -> select it in every command and
+; force a fresh seek.
+pcwfdc_setunit
+                ld    (fdc_unit),a
+                ld    (fdc_cmd_rcal+1),a
+                ld    (fdc_cmd_seek+1),a
+                ld    (fdc_rd_u),a
+                ld    (fdc_wr_u),a
+                ld    a,#FF
+                ld    (fdc_track),a
+                ret
+
 ; pcwfdc_read: D = track, E = sector R, HL = 512-byte destination.
 ; CF set = sector read. Three attempts, recalibrating between them.
+; pcwfdc_read1: one attempt, no retry - for presence probes.
+pcwfdc_read1
+                ld    (fdr_dst),hl
+                ld    a,d
+                ld    (fdr_trk),a
+                ld    a,e
+                ld    (fdr_sec),a
+                ld    b,1
+                jr    fdr_try
 pcwfdc_read
                 ld    (fdr_dst),hl
                 ld    a,d
@@ -248,7 +269,7 @@ fdc_cmd_rcal    db    #07,#00                 ; RECALIBRATE unit 0
 fdc_cmd_seek    db    #0F,#00                 ; SEEK unit 0
 fdc_sk_trk      db    0
 fdc_cmd_read    db    #46                     ; READ DATA, MFM
-                db    #00                     ; unit 0 head 0
+fdc_rd_u        db    #00                     ; unit + head
 fdc_rd_c        db    0
                 db    #00                     ; H
 fdc_rd_r        db    1
@@ -257,7 +278,7 @@ fdc_rd_eot      db    1
                 db    #2A                     ; GPL
                 db    #FF                     ; DTL
 fdc_cmd_write   db    #45                     ; WRITE DATA, MFM
-                db    #00                     ; unit 0 head 0
+fdc_wr_u        db    #00                     ; unit + head
 fdc_wr_c        db    0
                 db    #00                     ; H
 fdc_wr_r        db    1
@@ -267,6 +288,7 @@ fdc_wr_eot      db    1
                 db    #FF                     ; DTL
 
 fdc_track       db    #FF                     ; head position shadow (#FF = unknown)
+fdc_unit        db    0                       ; selected drive unit (0 = A, 1 = B)
 fdr_trk         db    0
 fdr_sec         db    0
 fdr_dst         dw    0

@@ -33,6 +33,15 @@
 
 fs_init
                 call  pcwfdc_init
+                ld    a,1                     ; the PCW boots from floppy A
+                ld    (fs_cur_drive),a        ; (drive numbering: 0 = Disk C,
+                ld    (fs_boot_drive),a       ;  1 = floppy A, 2 = floppy B)
+                xor   a
+                ld    (fsp_unit),a
+                ; fall through: mount the disc in the selected unit
+
+; fsp_mount: read the disc spec of the current unit and set the geometry.
+fsp_mount
                 ld    hl,#FFFF
                 ld    (fsp_cslsn),hl
                 xor   a                       ; read the disc spec: T0/R1 raw
@@ -76,14 +85,50 @@ fsi_geom
                 srl   h
                 rr    l                       ; /2 -> 1K blocks
                 ld    (fsp_nblocks),hl
-                xor   a
-                ld    (fs_cur_drive),a
-                ld    (fs_boot_drive),a
                 scf
                 ret
 
+; fs_set_drive: A = drive (0 = Disk C: none here, treated as A; 1 = floppy A,
+; 2 = floppy B). Switching physical units re-reads the new disc's spec.
 fs_set_drive
-                ld    (fs_cur_drive),a        ; single drive for now (B: is Phase 6)
+                ld    (fs_cur_drive),a
+                ld    c,0                     ; unit 0 = floppy A (and drive-0 fallback)
+                cp    2
+                jr    nz,fsd_have
+                inc   c                        ; drive 2 = floppy B = unit 1
+fsd_have
+                ld    a,c
+                ld    hl,fsp_unit
+                cp    (hl)
+                ret   z                        ; same unit: keep the mount
+                ld    (hl),a
+                call  pcwfdc_setunit
+                jp    fsp_mount               ; a different disc: fresh geometry
+
+; fspc_probe_b: k_drive_poll backend -> A = drive bits (bit0 = floppy A,
+; always - we booted from it; bit1 = a readable disc in floppy B). One read
+; attempt, no retries: an empty drive must not stall the desktop for long.
+fspc_probe_b
+                ld    a,(fsp_unit)
+                push  af
+                ld    a,1
+                call  pcwfdc_setunit
+                xor   a
+                ld    d,a
+                ld    e,1
+                ld    hl,fs_secbuf
+                call  pcwfdc_read1
+                pop   bc                       ; B = the mounted unit (from AF)
+                push  af                       ; the probe result
+                ld    a,b
+                call  pcwfdc_setunit
+                ld    hl,#FFFF                 ; the probe trashed the cache
+                ld    (fsp_cslsn),hl
+                pop   af
+                ld    a,1
+                jr    nc,fpb_done
+                or    2
+fpb_done
                 ret
 
 fs_sys_resolve
@@ -1093,6 +1138,7 @@ fsp_dirblks     db    2
 fsp_drm         db    64
 fsp_nblocks     dw    175
 fsp_cslsn       dw    #FFFF
+fsp_unit        db    0
 fsd_idx         db    0
 fscs_e          db    0
 fscs_max        db    0
