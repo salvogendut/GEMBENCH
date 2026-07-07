@@ -390,7 +390,17 @@ wt_end:
         ld a,2
         call fs_set_drive       ; mount B (COMPANION-style data disc)
         call fs_dir_first
-        jp nc,db_fail           ; B must list something
+        jp nc,db_fail           ; B must list something...
+        ld hl,fs_ent_name       ; ...and it must be the REAL file, not the
+        ld de,db_bname          ; disc spec misread off the wrong track
+        ld b,11                 ; (#331: drive B needs double-stepping)
+db_ncmp:
+        ld a,(de)
+        cp (hl)
+        jp nz,db_fail
+        inc hl
+        inc de
+        djnz db_ncmp
         ld hl,fst_hello         ; HELLO.TXT exists ONLY on the boot disc
         ld de,fs_req_name
         ld bc,11
@@ -507,6 +517,7 @@ msg_wr:         db "PCW write path OK",13,10
 msg_wr_len      equ $-msg_wr
 wt_okmsg:       db "WRITE OK",0
 wt_badmsg:      db "WRITE FAIL",0
+db_bname:       db "BFILE   TXT"
 db_okmsg:       db "DISK B OK",0
 db_badmsg:      db "DISK B FAIL",0
 ctofs:          dw 0
