@@ -65,6 +65,37 @@ python3 tools/mkpcwdsk.py build/pcwb.dsk --add build/BFILE.TXT
 sed 's/ext_second_drive        = false/ext_second_drive        = true/' \
     debug/1985-pcw.conf > build/1985-pcw-2drive.conf
 
+# Real drive-B mechanisms differ: an 8512's B is an 80-track CF2DD that
+# double-steps CF2 media, but a Gotek (or a 40-track bolt-on B) maps
+# tracks 1:1 (#331 real-HW "Companion shows empty"). Pad a copy of the B
+# disc to 43 tracks: 1985's AUTO heuristic (track_count > 42) then serves
+# it 1:1 - a headless stand-in for the Gotek. pcwfdc_detect must measure
+# BOTH mechanisms (#0F02) and the directory must list on both (#0F03).
+python3 - <<'EOF'
+d = bytearray(open('build/pcwb.dsk','rb').read())
+ntrk, hi = d[0x30], d[0x34]
+tsize = hi*256
+blk = d[256+(ntrk-1)*tsize : 256+ntrk*tsize]
+for t in range(ntrk, 43):
+    nb = bytearray(blk)
+    nb[0x10] = t                 # Track-Info track number
+    for i in range(9):
+        nb[0x18+i*8] = t         # each sector header's C
+    d += nb
+    d[0x34+t] = hi
+d[0x30] = 43
+open('build/pcwb43.dsk','wb').write(d)
+EOF
+cp build/pcwspike.dsk build/pcwspike43.dsk    # pristine A for the second run
+
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
+    --config build/1985-pcw-2drive.conf \
+    --disk-a build/pcwspike43.dsk \
+    --disk-b build/pcwb43.dsk \
+    --unthrottled \
+    --save-sna-at 3600:build/pcwspike43.sna \
+    --exit-after 3700
+
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
     --config build/1985-pcw-2drive.conf \
     --disk-a build/pcwspike.dsk \
@@ -72,7 +103,24 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
     --unthrottled \
     --paste-event "3200:hello pcw 42" \
     --screenshot-at 3600:build/pcwspike.ppm \
+    --save-sna-at 3600:build/pcwspike.sna \
     --exit-after 3700
+
+# Drive-B stepping: assert both measured modes + both stage verdicts.
+python3 - <<'EOF'
+import sys
+def cell(path, addr):
+    return open(path, 'rb').read()[256 + addr]
+ok = True
+for path, want, label in (('build/pcwspike.sna',   1, 'CF2DD B (double-step)'),
+                          ('build/pcwspike43.sna', 0, 'Gotek-like B (1:1)')):
+    dbl, verdict = cell(path, 0x0F02), cell(path, 0x0F03)
+    good = dbl == want and verdict == 0xB0
+    print(('OK  ' if good else 'FAIL') +
+          f' {label}: dbl={dbl} (want {want}) stage={verdict:#04x} (want 0xb0)')
+    ok = ok and good
+sys.exit(0 if ok else 1)
+EOF
 
 python3 - <<'EOF'
 from PIL import Image
