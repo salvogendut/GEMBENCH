@@ -125,9 +125,8 @@ same_trk:
         jr sec_loop
 
 go:
-        ld a,#0A
-        out (#F8),a             ; motor off
-        ld hl,(ld_entry)
+        ld hl,(ld_entry)        ; motor stays on - the kernel starts reading
+                                ; system files immediately (fs_init re-inits FDC)
         jp (hl)
 
 ; ---- FDC helpers -------------------------------------------------------

@@ -184,6 +184,51 @@ def main():
               f"(2 planes), hotspot {hot}")
         return
 
+    # --platform pcw (#331): the CPC's interleaved software-cursor .SPR, but in
+    # Screen-6 packing (pixel i = 2-bit field at bits 7-2i..6-2i) with the data
+    # already permuted to CGA2 hardware pens (the composite writes raw bytes):
+    # GB pen 1 white -> 3, pen 2 black -> 0, pen 3 red -> 2. Masks are 11-per-
+    # transparent-field. Same 2-phase (shift 0/2) interleaved layout and size.
+    if platform == 'pcw':
+        HW = {1: 3, 2: 0, 3: 2}
+        def encode_row_pcw(pixels):
+            data, mask = [], []
+            for b in range(out_bytes):
+                db = mb = 0
+                for i in range(4):
+                    x = b * 4 + i
+                    pen = pixels[x] if x < span else None
+                    sh = 6 - 2 * i
+                    if pen is None:
+                        mb |= 3 << sh
+                    else:
+                        db |= HW[pen] << sh
+                data.append(db)
+                mask.append(mb)
+            return data, mask
+        shifts_data, shifts_mask = [], []
+        for s in range(4):
+            d_rows, m_rows = [], []
+            for y in range(th):
+                line = [None] * span
+                for x in range(tw):
+                    line[x + s] = grid[y][x]
+                d, m = encode_row_pcw(line)
+                d_rows.append(d)
+                m_rows.append(m)
+            shifts_data.append(d_rows)
+            shifts_mask.append(m_rows)
+        blob = bytearray()
+        for s in (0, 2):
+            for y in range(th):
+                for b in range(out_bytes):
+                    blob += bytes((shifts_mask[s][y][b], shifts_data[s][y][b]))
+        with open(out_asm, "wb") as f:
+            f.write(blob)
+        print(f"{in_png}: PCW cursor .SPR {tw}x{th} -> {len(blob)} bytes "
+              f"(2 interleaved phases, CGA2), hotspot {hot}")
+        return
+
     # .SPR binary mode (#65): the kernel loads a cursor as a disk file into low RAM and
     # composites it with  screen = (bg AND mask) OR data, reading one advancing pointer
     # (lib/cursor.asm cc_col: `and (hl)` / `inc hl` / `or (hl)`). So mask and data must

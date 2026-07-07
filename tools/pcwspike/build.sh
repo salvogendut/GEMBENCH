@@ -46,8 +46,10 @@ for off in range(code_end - 2):
 sys.exit(1 if bad else 0)
 EOF
 
+printf 'CP/M FS READ OK\r\n' > build/HELLO.TXT
 python3 tools/mkpcwdsk.py build/pcwspike.dsk \
-    --boot build/pcwboot.bin --sys build/pcwspike.bin --load 0x2000
+    --boot build/pcwboot.bin --sys build/pcwspike.bin --load 0x2000 \
+    --add build/HELLO.TXT --add assets/WELCOME.TXT --add build/DEFAULT.FNT
 
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
     --config debug/1985-pcw.conf \

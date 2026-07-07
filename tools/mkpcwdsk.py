@@ -70,6 +70,9 @@ def main():
                     help='system image load address (page-aligned, default 0x1000)')
     ap.add_argument('--entry', default=None,
                     help='system entry address (default = load address)')
+    ap.add_argument('--add', action='append', default=[], metavar='FILE[=NAME]',
+                    help='add a file to the CP/M filesystem (8.3 name from the '
+                         'basename unless =NAME overrides; repeatable)')
     args = ap.parse_args()
 
     is_dd = args.type == 'cf2dd'
@@ -121,6 +124,75 @@ def main():
     for i in range(sys_secs):
         chunk = sysimg[i * SEC_SIZE:(i + 1) * SEC_SIZE]
         secs[1 + i] = chunk + b'\xE5' * (SEC_SIZE - len(chunk))
+
+    # --- CP/M 2.2 filesystem population (--add) --------------------------
+    # Data area = tracks OFF.. as 1K blocks (2K on cf2dd); blocks 0..dirblk-1
+    # hold the directory (32-byte entries). One dir entry per 16K extent:
+    # user 0, 8.3 name, EX, RC (#80 = full extent), AL[] block numbers.
+    if args.add:
+        bls = 2048 if is_dd else 1024
+        spb = bls // SEC_SIZE                # sectors per block
+        dirblk = spec[7]
+        nblocks = (tracks * sides - off) * SPT * SEC_SIZE // bls
+        if nblocks > 256 and not is_dd:
+            sys.exit('mkpcwdsk: unexpected block count')
+
+        def put_lsn(lsn, data):
+            """write 512 bytes at data-area logical sector lsn"""
+            secs[off * SPT + lsn] = bytes(data) + b'\xE5' * (SEC_SIZE - len(data))
+
+        dirents = []
+        next_blk = dirblk                    # first free data block
+        for spec_arg in args.add:
+            path, _, name = spec_arg.partition('=')
+            if not name:
+                name = path.rsplit('/', 1)[-1]
+            base, _, ext = name.upper().partition('.')
+            n83 = (base[:8].ljust(8) + ext[:3].ljust(3)).encode()
+            with open(path, 'rb') as f:
+                data = f.read()
+            data += b'\x1A' * (-len(data) % 128)     # CP/M EOF padding
+            recs_total = len(data) // 128
+            pos = 0
+            ex = 0
+            while True:
+                recs = min(recs_total - ex * 128, 128)
+                al = []
+                for _ in range((recs * 128 + bls - 1) // bls):
+                    if next_blk >= nblocks:
+                        sys.exit(f'mkpcwdsk: disc full adding {name}')
+                    blk = next_blk
+                    next_blk += 1
+                    al.append(blk)
+                    chunk = data[pos:pos + bls]
+                    pos += len(chunk)
+                    for s in range(spb):
+                        part = chunk[s * SEC_SIZE:(s + 1) * SEC_SIZE]
+                        if part:
+                            put_lsn(blk * spb + s, part)
+                ent = bytearray(32)
+                ent[0] = 0                   # user 0
+                ent[1:12] = n83
+                ent[12] = ex
+                ent[15] = recs
+                for i, blk in enumerate(al):
+                    if is_dd:                # 16-bit ALs, 8 per extent
+                        ent[16 + i * 2] = blk & 0xFF
+                        ent[17 + i * 2] = blk >> 8
+                    else:
+                        ent[16 + i] = blk
+                dirents.append(bytes(ent))
+                if recs < 128 or ex * 128 + recs >= recs_total:
+                    break
+                ex += 1
+        maxent = dirblk * (bls // 32)
+        if len(dirents) > maxent:
+            sys.exit('mkpcwdsk: directory full')
+        dirdata = b''.join(dirents) + b'\xE5' * 32 * (maxent - len(dirents))
+        for s in range(dirblk * spb):
+            put_lsn(s, dirdata[s * SEC_SIZE:(s + 1) * SEC_SIZE])
+        print(f'  fs: {len(args.add)} files, {len(dirents)} dir entries, '
+              f'{next_blk - dirblk}/{nblocks - dirblk} blocks used')
 
     out = bytearray()
     hdr = bytearray(256)

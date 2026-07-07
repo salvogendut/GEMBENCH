@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# tools/build_kernel_pcw.sh - build the Amstrad PCW target (#331): the
+# GBKERNP.RAW kernel on its own boot sector, the core app/asset set, staged
+# into QA/PCW and packed into the bootable QA/PCW/GEOBENCH.DSK (CF2 180K).
+#
+# The PCW boots standalone (no CP/M): kernel/pcwboot.asm loads the kernel
+# from the disc's reserved tracks; system files live in the disc's CP/M 2.2
+# filesystem (read by lib/pcw/fs.asm, written at build time by mkpcwdsk.py).
+#
+# Assets reuse the MSX transcoders: PCW CGA2 packing = MSX Screen 6 packing
+# (lib/pcw/glue.inc). Only save-block-format blobs (the splash) need the
+# CGA2 hardware-pen permute, applied here at build time.
+#
+#   bash tools/build_kernel_pcw.sh
+#   SDL_VIDEODRIVER=dummy ~/Dev/1985/1985 --config debug/1985-pcw.conf \
+#       --disk-a QA/PCW/GEOBENCH.DSK --screenshot-at 600:/tmp/pcw.ppm
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+RASM="${RASM:-rasm}"
+command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
+command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
+
+mkdir -p build/pcw QA/PCW
+
+# --- the C apps, compiled with the PCW geometry (same DATA_LOCs as CPC/MSX) --
+APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x7780 DOC=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
+APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
+
+# --- shared paged C modules (platform-neutral, low-RAM marshalled) -----------
+tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
+tools/build_uimod.sh                             # -> build/GBUI.RAW
+
+# --- assets (MSX encodings = PCW encodings) -----------------------------------
+python3 tools/genfont.py build/pcw/DEFAULT.FNT
+python3 tools/packicons.py --platform msx2 build/pcw/DEFAULT.IST \
+    lib/icon_floppy.asm lib/icon_flowchart.asm lib/icon_clock.asm lib/icon_trash.asm \
+    lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
+    lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
+    lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
+    lib/icon_font.asm \
+    lib/icon_desktop.asm lib/icon_filemanager.asm \
+    lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
+    lib/icon_viewer.asm \
+    lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
+    lib/icon_up.asm lib/icon_screensaver.asm
+python3 tools/ist_to_msx.py assets/iconsets/REFINED.IST build/pcw/REFINED.IST
+
+# the pointer: interleaved software-cursor .SPR in CGA2 hardware space
+python3 tools/png2spr.py --platform pcw assets/pointer.png build/pcw/DEFAULT.SPR cursor 12x16
+
+# bootsplash: Screen-6 transcode, then the CGA2 hardware-pen permute
+# (boot_splash blits it with restore_block, which writes raw bytes)
+BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
+python3 tools/make_bootsplash.py assets/SPLASH.png build/pcw/SPLASH_BUILD.png "$BUILD_COMMIT" GEOBENCH
+python3 tools/png2cpc.py --platform msx2 build/pcw/SPLASH_BUILD.png build/pcw/SPLASH.BIN splash 96x184
+python3 - build/pcw/SPLASH.BIN build/pcw/SPLASH.MOD <<'PY'
+import sys
+d = open(sys.argv[1], 'rb').read()
+open(sys.argv[2], 'wb').write(bytes(((b & 0x55) << 1) | (((b ^ 0xFF) & 0xAA) >> 1) for b in d))
+PY
+
+# --- the kernel + the boot sector ---------------------------------------------
+rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
+( cd build/pcw && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_PCW=1 -s -o gbkernp ${EXTRA_RASM:-} )
+[ -s build/pcw/GBKERNP.RAW ] || { echo "ERROR: GBKERNP.RAW not produced (rasm errors above)" >&2; exit 1; }
+"$RASM" kernel/pcwboot.asm
+[ -s build/pcwboot.bin ] || { echo "ERROR: pcwboot.bin not produced" >&2; exit 1; }
+
+# --- the bootable disc -----------------------------------------------------------
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\n' > build/pcw/GEOBENCH.CFG
+python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
+    --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
+    --add build/pcw/GEOBENCH.CFG=GEOBENCH.CFG \
+    --add build/pcw/GBKERNP.RAW=GBKERNP.SYS \
+    --add build/GBCFG.RAW=GBCFG.MOD \
+    --add build/GBUI.RAW=GBUI.MOD \
+    --add build/pcw/SPLASH.MOD=SPLASH.MOD \
+    --add build/pcw/DEFAULT.FNT=DEFAULT.FNT \
+    --add build/pcw/DEFAULT.IST=DEFAULT.IST \
+    --add build/pcw/REFINED.IST=REFINED.IST \
+    --add build/pcw/DEFAULT.SPR=DEFAULT.SPR \
+    --add build/pcw/DESKTOP.RAW=DESKTOP.APP \
+    --add build/pcw/FILEMGR.RAW=FILEMGR.APP \
+    --add build/pcw/NOTEPAD.RAW=NOTEPAD.APP \
+    --add build/pcw/SETTINGS.RAW=SETTINGS.APP \
+    --add build/pcw/VIEWER.RAW=VIEWER.APP \
+    --add build/pcw/CLOCK.RAW=CLOCK.APP \
+    --add assets/WELCOME.TXT=WELCOME.TXT
+
+echo "PCW target built: QA/PCW/GEOBENCH.DSK (bootable CF2)"

@@ -28,13 +28,23 @@ APP_BASE        equ   #4000        ; the #4000-#7FFF paging window
 SCR_COLS        equ   128          ; MSX2 Screen 6: 512px / 4 per byte
 SCR_LINES       equ   212
                 else
+                ifdef PLATFORM_PCW
+SCR_COLS        equ   90           ; PCW CGA2: 360px / 4 per byte (#331)
+SCR_LINES       equ   248          ; 31 cellrows; scanlines 248-255 letterbox
+                else
 SCR_COLS        equ   80           ; CPC Mode 1: 320px / 4 per byte
 SCR_LINES       equ   200
                 endif
+                endif
 
+                ifdef PLATFORM_PCW
+PAGE_DATA       equ   #8E          ; phys block 14 -> kernel data buffers (#331)
+PAGE_APP0       equ   #86          ; phys block 6 -> the desktop (always APP_PAGES[0])
+                else
                 ifndef PLATFORM_MSX
 PAGE_DATA       equ   #C4          ; bank 0, block 0 -> kernel data buffers
 PAGE_APP0       equ   #C5          ; bank 0, block 1 -> the desktop (always APP_PAGES[0])
+                endif
                 endif
                                    ; Further app pages are no longer fixed constants: the
                                    ; kernel builds a pool (APP_PAGES) across every detected
