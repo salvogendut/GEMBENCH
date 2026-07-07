@@ -1252,8 +1252,7 @@ k_drive_poll
                 ret                                ;  DOS drive letters come later (M2+)
                 else
                 ifdef PLATFORM_PCW
-                ld    a,%00000001                  ; #331: floppy A only (B: is Phase 6)
-                ret
+                jp    fspc_probe_b                 ; #331: floppy A + a probed floppy B
                 else
                 ld    c,0                          ; result bits
                 if STORAGE_ALBIREO

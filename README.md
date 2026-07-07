@@ -4,9 +4,10 @@
 
 # GEOBENCH
 
-A graphical desktop environment for the **Amstrad CPC** and the **MSX2** — a
-hybrid clone that borrows the best ideas from **Commodore GEOS** (C64/C128) and
-the **Amiga Workbench**, reimagined for 8-bit Z80 hardware.
+A graphical desktop environment for the **Amstrad CPC**, the **MSX2** and the
+**Amstrad PCW** — a hybrid clone that borrows the best ideas from **Commodore
+GEOS** (C64/C128) and the **Amiga Workbench**, reimagined for 8-bit Z80
+hardware.
 
 ![The GEOBENCH desktop on the Amstrad CPC — file manager, picture viewer, clock](geobench.png)
 
@@ -23,10 +24,12 @@ DOS (AMSDOS / UniDOS / MSX-DOS 2), not a replacement OS — smaller scope than
 [SymbOS](https://www.symbos.de), different goal.
 
 The desktop, file manager, Notepad, ICONED, Paint, Viewer, Clock, Xaos, Settings
-and the screensavers build for both targets from the same source tree. The CPC
+and the screensavers build for every target from the same source tree. The CPC
 distribution also ships the Telnet client and network diagnostic apps. Targets:
-the CPC (Albireo/M4 card + AMSDOS floppy) and the [MSX2](docs/MSX2.md)
-(MSX-DOS 2 / Nextor, V9938 Screen 6).
+the CPC (Albireo/M4 card + AMSDOS floppy), the [MSX2](docs/MSX2.md)
+(MSX-DOS 2 / Nextor, V9938 Screen 6) and the [Amstrad PCW](docs/PCW.md)
+(8256/8512 — boots standalone from its own boot sector, CGA2 colour in the
+1985 emulator).
 
 ## Quick start
 
@@ -48,6 +51,13 @@ hardware, or use the disk images in an emulator.
 - Copy the **contents of [`QA/MSX/`](QA/MSX)** onto storage your MSX-DOS 2 / Nextor
   setup mounts (SD, IDE, …) and run **`GBMSX.COM`** — or use it in an emulator such
   as openMSX (see [docs/MSX2.md](docs/MSX2.md)).
+
+### Amstrad PCW
+
+- Boot **`QA/PCW/GEOBENCH.DSK`** in the [1985 emulator](docs/PCW.md) with
+  `video_mode = cga2` and the DK'tronics board enabled (`debug/1985-pcw.conf`);
+  **`QA/PCW/COMPANION.DSK`** (pictures, backdrops) goes in drive B. No CP/M is
+  needed — the disc boots GEOBENCH directly (see [docs/PCW.md](docs/PCW.md)).
 
 Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.md).
 

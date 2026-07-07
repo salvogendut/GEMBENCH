@@ -30,6 +30,14 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/
 APPDEFS="-DGB_PCW" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
+APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
+# savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a
+# PCW plot path first (follow-up)
+APPDEFS="-DGB_PCW" tools/build_capp.sh apps/saver build/pcw/SQUARES.RAW
+APPDEFS="-DGB_PCW" tools/build_capp.sh apps/ant  build/pcw/ANT.RAW
+APPDEFS="-DGB_PCW" tools/build_capp.sh apps/deco build/pcw/DECO.RAW
+APPDEFS="-DGB_PCW" tools/build_capp.sh apps/xmatrix build/pcw/XMATRIX.RAW
 
 # --- shared paged C modules (platform-neutral, low-RAM marshalled) -----------
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
@@ -37,6 +45,7 @@ tools/build_uimod.sh                             # -> build/GBUI.RAW
 
 # --- assets (MSX encodings = PCW encodings) -----------------------------------
 python3 tools/genfont.py build/pcw/DEFAULT.FNT
+python3 tools/packfont.py build/pcw/CLASSIC.FNT lib/font.asm   # 8x8 (FONT=CLASSIC)
 python3 tools/packicons.py --platform msx2 build/pcw/DEFAULT.IST \
     lib/icon_floppy.asm lib/icon_flowchart.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
@@ -72,11 +81,10 @@ rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
 [ -s build/pcwboot.bin ] || { echo "ERROR: pcwboot.bin not produced" >&2; exit 1; }
 
 # --- the bootable disc -----------------------------------------------------------
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\n' > build/pcw/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\n' > build/pcw/GEOBENCH.CFG
 python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
     --add build/pcw/GEOBENCH.CFG=GEOBENCH.CFG \
-    --add build/pcw/GBKERNP.RAW=GBKERNP.SYS \
     --add build/GBCFG.RAW=GBCFG.MOD \
     --add build/GBUI.RAW=GBUI.MOD \
     --add build/pcw/SPLASH.MOD=SPLASH.MOD \
@@ -90,6 +98,32 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/SETTINGS.RAW=SETTINGS.APP \
     --add build/pcw/VIEWER.RAW=VIEWER.APP \
     --add build/pcw/CLOCK.RAW=CLOCK.APP \
+    --add build/pcw/XAOS.RAW=XAOS.APP \
+    --add build/pcw/ICONED.RAW=ICONED.APP \
+    --add build/pcw/SQUARES.RAW=SQUARES.SAV \
+    --add build/pcw/ANT.RAW=ANT.SAV \
+    --add build/pcw/DECO.RAW=DECO.SAV \
+    --add build/pcw/XMATRIX.RAW=XMATRIX.SAV \
+    --add build/pcw/CLASSIC.FNT=CLASSIC.FNT \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
-echo "PCW target built: QA/PCW/GEOBENCH.DSK (bootable CF2)"
+# --- COMPANION.DSK: pictures, backdrops, spare assets (plain data disc) ------
+COMP_ADDS=()
+for pic in assets/pictures/*.PIC; do
+    name=$(basename "$pic" .PIC | tr a-z A-Z)
+    case "$name" in BIG|TLEUNG) continue;; esac   # the 16K test pic + overflow
+
+    python3 tools/pic_to_msx.py "$pic" "build/pcw/$name.PIC"
+    COMP_ADDS+=(--add "build/pcw/$name.PIC=$name.PIC")
+done
+for bdp in assets/backdrops/*.BDP; do
+    name=$(basename "$bdp" .BDP | tr a-z A-Z)
+    python3 tools/bdp_to_msx.py "$bdp" "build/pcw/$name.BDP"
+    COMP_ADDS+=(--add "build/pcw/$name.BDP=$name.BDP")
+done
+python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
+    "${COMP_ADDS[@]}" \
+    --add assets/WELCOME.TXT=WELCOME.TXT \
+    --add build/pcw/CLASSIC.FNT=CLASSIC.FNT
+
+echo "PCW target built: QA/PCW/GEOBENCH.DSK (bootable CF2) + QA/PCW/COMPANION.DSK"
