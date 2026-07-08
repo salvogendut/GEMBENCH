@@ -25,8 +25,12 @@
 #define STEP_CONNECT 4
 #define STEP_SEND    5
 #define STEP_RECV    6
-#define STEP_DONE    7
-#define STEP_FAIL    8
+#define STEP_NTP_DNS 7
+#define STEP_UDP_OPEN 8
+#define STEP_NTP_SEND 9
+#define STEP_NTP_RECV 10
+#define STEP_DONE    11
+#define STEP_FAIL    12
 
 static char lines[NLINES][LINELEN];
 static unsigned char step, wait, opened, drawn;
@@ -34,6 +38,9 @@ static unsigned char ip[4];
 static unsigned char rxbuf[128];
 
 static const char host[] = "example.com";
+#ifdef GB_PCW
+static const char ntp_host[] = "time.google.com";
+#endif
 static const unsigned char netcfg[22] = {
     192,168,99,50,  255,255,255,0,  192,168,99,1,  8,8,8,8,
     0xDE,0xAD,0xBE,0xEF,0x26,0x1A
@@ -52,6 +59,13 @@ static unsigned char nt_send(const unsigned char *buf, unsigned int len);
 static unsigned int nt_recv(unsigned char *buf, unsigned int max);
 static unsigned char nt_connected(void);
 static void nt_close(void);
+#ifdef GB_PCW
+static unsigned char nt_udp_open(void);
+static unsigned char nt_udp_send(const unsigned char *addr, unsigned int port,
+                                 const unsigned char *buf, unsigned int len);
+static unsigned int nt_udp_recv(unsigned char *buf, unsigned int max);
+static void nt_udp_close(void);
+#endif
 
 static void copy(char *dst, const char *src)
 {
@@ -134,6 +148,28 @@ static void log_count(unsigned char n, const char *prefix, unsigned int count)
 }
 
 #ifdef GB_PCW
+static char *put2(char *p, unsigned char v)
+{
+    *p++ = (char)('0' + v / 10);
+    *p++ = (char)('0' + v % 10);
+    *p = 0;
+    return p;
+}
+
+static void log_time(unsigned char n, unsigned char h, unsigned char m, unsigned char s)
+{
+    char t[LINELEN];
+    char *p = t;
+    copy(t, "ntp UTC: ");
+    p += 9;
+    p = put2(p, h); *p++ = ':';
+    p = put2(p, m); *p++ = ':';
+    p = put2(p, s);
+    log_line(n, t);
+}
+#endif
+
+#ifdef GB_PCW
 #define PN_END             0xC0
 #define PN_ESC             0xDB
 #define PN_ESC_END         0xDC
@@ -149,24 +185,50 @@ static void log_count(unsigned char n, const char *prefix, unsigned int count)
 #define PN_OP_TCP_OPEN     0x30
 #define PN_OP_TCP_CLOSE    0x31
 #define PN_OP_TCP_SEND     0x32
+#define PN_OP_UDP_OPEN     0x40
+#define PN_OP_UDP_CLOSE    0x41
+#define PN_OP_UDP_SEND     0x42
 #define PN_OP_ACK          0x80
 #define PN_OP_EVENT        0x81
 #define PN_OP_TCP_DATA     0x82
+#define PN_OP_UDP_DATA     0x83
 
 #define PN_STATUS_OK       0x00
 #define PN_EVT_TCP_CLOSED  0x11
 #define PN_EVT_TCP_ERROR   0x12
+#define PN_EVT_UDP_ERROR   0x20
 
 static volatile unsigned char ser_io;
 static unsigned char pcw_ser_inited;
 static unsigned char pn_seq;
 static unsigned char pn_channel;
+static unsigned char pn_udp_channel;
 static unsigned char pn_conn;
 static unsigned char pn_rxq[PN_RXQ_SIZE];
 static unsigned char pn_rx_head, pn_rx_tail;
+static unsigned char pn_udp_buf[64];
+static unsigned int pn_udp_len;
 static unsigned char pn_frame[PN_FRAME_MAX];
 static unsigned int pn_in_len;
 static unsigned char pn_in_started, pn_in_esc, pn_in_overflow;
+static volatile unsigned char soft_hour, soft_min, soft_sec;
+
+static void soft_poke(void) __naked
+{ __asm
+    ld   a, (_soft_hour)
+    ld   b, a
+    ld   a, (_soft_min)
+    ld   c, a
+    ld   a, (_soft_sec)
+    ld   d, a
+    call 0x802D          ; GB_RUN soft-clock setter on PCW
+    ret
+__endasm; }
+
+static void set_soft_time(unsigned char h, unsigned char m, unsigned char s)
+{
+    soft_hour = h; soft_min = m; soft_sec = s; soft_poke();
+}
 
 static void ser_in_data(void) __naked
 { __asm
@@ -397,12 +459,20 @@ static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
 static void pn_handle_async(unsigned char op, unsigned char channel, unsigned int len)
 {
     unsigned char event;
+    unsigned int i, n;
     if (op == PN_OP_TCP_DATA && channel == pn_channel) {
         pn_queue_data(pn_frame + 6, len);
+    } else if (op == PN_OP_UDP_DATA && channel == pn_udp_channel && len >= 6) {
+        n = len - 6;
+        if (n > sizeof(pn_udp_buf)) n = sizeof(pn_udp_buf);
+        for (i = 0; i < n; i++) pn_udp_buf[i] = pn_frame[12 + i];
+        pn_udp_len = n;
     } else if (op == PN_OP_EVENT && len) {
         event = pn_frame[6];
         if (channel == pn_channel && (event == PN_EVT_TCP_CLOSED || event == PN_EVT_TCP_ERROR))
             pn_conn = 0;
+        if (channel == pn_udp_channel && event == PN_EVT_UDP_ERROR)
+            pn_udp_channel = 0;
     }
 }
 
@@ -440,8 +510,10 @@ static unsigned char nt_init(const unsigned char *cfg)
     serial_drain();
     pn_seq = 0;
     pn_channel = 0;
+    pn_udp_channel = 0;
     pn_conn = 0;
     pn_rx_head = pn_rx_tail = 0;
+    pn_udp_len = 0;
     pn_in_len = 0;
     pn_in_started = pn_in_esc = pn_in_overflow = 0;
     out_len = sizeof(out);
@@ -533,6 +605,63 @@ static unsigned char nt_connected(void)
     return pn_conn;
 }
 
+static unsigned char nt_udp_open(void)
+{
+    unsigned char seq;
+    unsigned char payload[2];
+    unsigned char out[3];
+    unsigned int out_len = sizeof(out);
+    payload[0] = 0; payload[1] = 0;             /* local port 0 = ephemeral */
+    if (pn_udp_channel) nt_udp_close();
+    pn_udp_len = 0;
+    seq = pn_tx(PN_OP_UDP_OPEN, 0, payload, sizeof(payload));
+    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000) || out_len < 3) return 0;
+    pn_udp_channel = out[0];
+    return (unsigned char)(pn_udp_channel != 0);
+}
+
+static unsigned char nt_udp_send(const unsigned char *addr, unsigned int port,
+                                 const unsigned char *buf, unsigned int len)
+{
+    unsigned char seq;
+    unsigned char payload[6 + 48];
+    unsigned int out_len = 0, i;
+    if (!pn_udp_channel || len > 48) return 0;
+    payload[0] = addr[0]; payload[1] = addr[1]; payload[2] = addr[2]; payload[3] = addr[3];
+    payload[4] = (unsigned char)(port & 0xFF);
+    payload[5] = (unsigned char)(port >> 8);
+    for (i = 0; i < len; i++) payload[6 + i] = buf[i];
+    seq = pn_tx(PN_OP_UDP_SEND, pn_udp_channel, payload, (unsigned int)(6 + len));
+    return (unsigned char)(seq && pn_wait_ack(seq, 0, &out_len, 60000));
+}
+
+static unsigned int nt_udp_recv(unsigned char *buf, unsigned int max)
+{
+    unsigned char op, seq, channel;
+    unsigned int len, i, n;
+    if (!pn_udp_len && pn_read_frame(&op, &seq, &channel, &len, 3500)) {
+        (void)seq;
+        pn_handle_async(op, channel, len);
+    }
+    n = pn_udp_len;
+    if (n > max) n = max;
+    for (i = 0; i < n; i++) buf[i] = pn_udp_buf[i];
+    pn_udp_len = 0;
+    return n;
+}
+
+static void nt_udp_close(void)
+{
+    unsigned char seq;
+    unsigned int out_len = 0;
+    if (pn_udp_channel) {
+        seq = pn_tx(PN_OP_UDP_CLOSE, pn_udp_channel, 0, 0);
+        if (seq) (void)pn_wait_ack(seq, 0, &out_len, 8000);
+    }
+    pn_udp_channel = 0;
+    pn_udp_len = 0;
+}
+
 static void nt_close(void)
 {
     unsigned char seq;
@@ -543,6 +672,26 @@ static void nt_close(void)
     }
     pn_channel = 0;
     pn_conn = 0;
+}
+
+static unsigned char ntp_apply(const unsigned char *buf, unsigned int len)
+{
+    unsigned long sec, day;
+    unsigned char h, m, s;
+    if (len < 48) return 0;
+    sec = ((unsigned long)buf[40] << 24) |
+          ((unsigned long)buf[41] << 16) |
+          ((unsigned long)buf[42] << 8) |
+          (unsigned long)buf[43];
+    sec -= 2208988800UL;                       /* NTP epoch -> Unix epoch */
+    day = sec % 86400UL;
+    h = (unsigned char)(day / 3600UL);
+    day %= 3600UL;
+    m = (unsigned char)(day / 60UL);
+    s = (unsigned char)(day % 60UL);
+    set_soft_time(h, m, s);
+    log_time(11, h, m, s);
+    return 1;
 }
 #else
 static unsigned char nt_init(const unsigned char *cfg) { return gb_net_init(cfg); }
@@ -644,14 +793,50 @@ static void tick(void)
             log_rx(n);
             nt_close();
             opened = 0;
+#ifdef GB_PCW
+            log_line(11, "TCP PASS; ntp dns...");
+            step = STEP_NTP_DNS;
+#else
             log_line(11, "PASS");
             log_line(12, "click window to retry");
             step = STEP_DONE;
+#endif
         } else if (!nt_connected()) {
             fail("FAIL: closed with no data");
         } else if (++wait > 180) {
             fail("FAIL: recv timeout");
         }
+#ifdef GB_PCW
+    } else if (step == STEP_NTP_DNS) {
+        log_line(11, "dns time.google.com...");
+        if (!nt_resolve(ntp_host, ip)) { fail("FAIL: NTP DNS"); return; }
+        log_ip(11, "ntp ip: ");
+        step = STEP_UDP_OPEN;
+    } else if (step == STEP_UDP_OPEN) {
+        log_line(12, "udp open...");
+        if (!nt_udp_open()) { fail("FAIL: udp open"); return; }
+        log_line(12, "udp open ok");
+        step = STEP_NTP_SEND;
+    } else if (step == STEP_NTP_SEND) {
+        unsigned char i;
+        for (i = 0; i < 48; i++) rxbuf[i] = 0;
+        rxbuf[0] = 0x1B;                       /* client, NTPv3 */
+        log_line(12, "ntp send...");
+        if (!nt_udp_send(ip, 123, rxbuf, 48)) { nt_udp_close(); fail("FAIL: ntp send"); return; }
+        wait = 0;
+        step = STEP_NTP_RECV;
+    } else if (step == STEP_NTP_RECV) {
+        n = nt_udp_recv(rxbuf, sizeof(rxbuf));
+        if (n) {
+            nt_udp_close();
+            if (!ntp_apply(rxbuf, n)) { fail("FAIL: ntp parse"); return; }
+            log_line(12, "PASS; click to retry");
+            step = STEP_DONE;
+        } else if (++wait > 180) {
+            nt_udp_close();
+            fail("FAIL: ntp timeout");
+        }
+#endif
     }
 }
 

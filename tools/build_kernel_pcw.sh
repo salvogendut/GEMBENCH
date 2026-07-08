@@ -115,11 +115,12 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
 
 # --- COMPANION.DSK: pictures, TELNET, backdrops, spare assets (plain data disc)
 # CF2 is tight; LOGO.PIC, TLEUNG.PIC and CLASSIC.FNT live on the boot disk.
-# PENGUIN.PIC is skipped so TELNET.APP plus the PerryNet NETTEST.APP fit here.
+# PENGUIN.PIC/POLYMAR.PIC are skipped so TELNET.APP plus the PerryNet
+# NETTEST.APP (including the UDP/NTP probe) fit here.
 COMP_ADDS=()
 for pic in assets/pictures/*.PIC; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    case "$name" in BIG|TLEUNG|LOGO|PENGUIN) continue;; esac
+    case "$name" in BIG|TLEUNG|LOGO|PENGUIN|POLYMAR) continue;; esac
 
     python3 tools/pic_to_pcw.py "$pic" "build/pcw/$name.PIC"
     COMP_ADDS+=(--add "build/pcw/$name.PIC=$name.PIC")
