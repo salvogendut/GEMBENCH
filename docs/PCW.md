@@ -98,14 +98,20 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
 ## What ships where
 
 - **GEOBENCH.DSK** (bootable): kernel + DESKTOP, FILEMGR, NOTEPAD,
-  SETTINGS, VIEWER, CLOCK, XAOS, ICONED + the portable savers (SQUARES —
-  the default —, ANT, DECO, XMATRIX) + fonts, icon sets, pointer, splash,
-  `LOGO.PIC` (default wallpaper), `TLEUNG.PIC`, GEOBENCH.CFG.
+  SETTINGS, VIEWER, CLOCK, TIMESYNC, XAOS, ICONED + the portable savers
+  (SQUARES — the default —, ANT, DECO, XMATRIX) + fonts, icon sets, pointer,
+  splash, `LOGO.PIC` (default wallpaper), `TLEUNG.PIC`, GEOBENCH.CFG.
 - **COMPANION.DSK** (data): the picture gallery, backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
   WELCOME.TXT. `LOGO.PIC`, `TLEUNG.PIC` and `CLASSIC.FNT` live on the
   boot disk, and `PENGUIN.PIC` is omitted, to keep enough CF2 space for
   the network apps.
+
+On PCW, the desktop launches `TIMESYNC.APP` once at startup when
+`GEOBENCH.CFG` contains `TIMESERVER=x.x.x.x`. The helper uses PerryNet NTP
+over PerryFi, applies `TIMEZONE=+H` or `TIMEZONE=-H` as an offset from GMT,
+sets the software clock, then detaches. Missing PerryNet hardware or a network
+timeout leaves the desktop running normally.
 
 TELNET's terminal is **80×25 in the window and 90×28 fullscreen**
 (Telnet menu toggle; Ctrl-] or ESC exits) — a 4×8 charset

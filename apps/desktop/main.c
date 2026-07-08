@@ -58,6 +58,9 @@ static unsigned char menu_inited;            /* gb_doc/System registered on the 
 static unsigned char menu_refresh;           /* refocus after a child window closes -> rebuild System */
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
+#ifdef GB_PCW
+static unsigned char want_timesync;          /* one-shot boot NTP sync helper, if TIMESERVER= exists */
+#endif
 
 #define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
 #define DRIVE_STEP 46         /* (BOX_H 44 + 2 gap), in detection order */
@@ -730,6 +733,13 @@ static void on_frame(void)
         }
         return;
     }
+#ifdef GB_PCW
+    if (want_timesync) {
+        want_timesync = 0;
+        if (!gb_wm_full()) gb_wm_open("TIMESYNCAPP");
+        return;
+    }
+#endif
 
     held = flags & GB_FIRE;
     if (held_prev && !held) {              /* fire released */
@@ -792,6 +802,9 @@ void main(void)
     drive_poll();                               /* drives present at boot -> icons (#65) */
     wp_init();                                   /* #212: load the configured wallpaper */
     ss_cfg_init();                               /* #219: read the screensaver idle timeout */
+#ifdef GB_PCW
+    want_timesync = (cfg_val("TIMESERVER=", 11) < KCFG_LEN);
+#endif
     gb_wm_damage(0, 0, GB_COLS, GB_LINES);                 /* initialise the shared repaint clip before paint() */
     paint();
     gb_curshow();                               /* paint() no longer shows the pointer (#153) */
