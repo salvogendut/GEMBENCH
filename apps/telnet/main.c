@@ -1,14 +1,13 @@
 /* telnet - an ANSI/VT terminal + telnet client for GEOBENCH (#238).
  *
- * Fed by a TCP socket via the gb_net_* API (Net4CPC or M4 backend); speaks
+ * Fed by a TCP socket via the gb_net_* API (Net4CPC or M4 backend), or on PCW
+ * via PerryNet over the CPS8256/PerryFi serial path; speaks
  * RFC 854 telnet (IAC option negotiation) and parses ANSI/VT100 (cursor/erase/SGR), so
  * a real BBS / MUD / shell renders. Ported from cpc-sdcc examples/telnet (main.c IAC +
  * ansi.c + screen.c), keyboard via gb_getkey. Monochrome (white on blue).
  *
- * On the PCW target there is no GEOBENCH network module yet, so this builds as
- * serial-only over the CPS8256 Z80-DART (PerryFi / RS232). The TCP path stays
- * compiled for CPC, and the serial path still filters telnet IAC bytes so
- * PerryFi dial-outs to real telnet hosts render cleanly.
+ * On the PCW target there is no GEOBENCH network module yet, so the menu offers
+ * both raw serial and PerryNet TCP over the CPS8256 Z80-DART (PerryFi / RS232).
  *
  * Two views share one grid + the telnet/ANSI logic (only the renderer + dims differ):
  *   - WINDOWED  - a screen-sized managed Mode-1 window, 52x22, drawn through gb_text;
@@ -21,10 +20,12 @@
  */
 #include "gb.h"
 #ifdef GB_PCW
-#define TELNET_HAS_NET        0
+#define TELNET_HAS_NET        1
+#define TELNET_HAS_GBNET      0
 #define TELNET_HAS_FULLSCREEN 0
 #else
 #define TELNET_HAS_NET        1
+#define TELNET_HAS_GBNET      1
 #define TELNET_HAS_FULLSCREEN 1
 #endif
 
@@ -36,7 +37,7 @@
 /* ---- terminal grid --------------------------------------------------------- */
 /* The grid has two sizes: WINDOWED (4x8 charset drawn straight to screen RAM - both
  * Mode 1 and PCW CGA2 pack 4 px/byte, so one glyph line is ONE byte) and FULLSCREEN
- * (CPC: Mode 2 80x25 with the 8x8 charset; PCW: WM_FS 90x31 with the same 4x8).
+ * (CPC: Mode 2 80x25 with the 8x8 charset; PCW: WM_FS 90x28 with the same 4x8).
  * COLS/ROWS are the ACTIVE dims (gcols/grows), so all the term_write/ANSI/scroll code
  * below is size-agnostic; only the renderer differs. */
 #ifdef GB_PCW
@@ -48,7 +49,7 @@
 #endif
 #ifdef GB_PCW
 #define FS_COLS  90        /* WM_FS fullscreen: 90 byte cols * 4px = the whole 360px */
-#define FS_ROWS  31        /* 31 * 8 = 248 lines = the whole desktop */
+#define FS_ROWS  28        /* 28 * 8 = 224 lines; TELNET + PerryNet is RAM-tight */
 #else
 #define FS_COLS  80        /* Mode 2: 640px / 8 = 80 cols */
 #define FS_ROWS  25        /* Mode 2: 200px / 8 = 25 rows */
@@ -443,7 +444,7 @@ static void render(void)
 
 #ifdef GB_PCW
 /* -- PCW fullscreen (#350): the viewer-style WM_FS borderless window, no video
- * mode involved - the same 4x8 renderer just grows to 90x31 at origin (0,0).
+ * mode involved - the same 4x8 renderer just grows to 90x28 at origin (0,0).
  * Enter/exit from the Telnet menu; Ctrl-] / ESC exits (fullscreen hides the
  * top bar, so the menu is unreachable inside). */
 #define WM_FS ((volatile unsigned char *)0x130A)
@@ -669,20 +670,337 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 }
 #endif
 
+#ifdef GB_PCW
+/* ---- PerryNet over PCW serial/PerryFi -------------------------------------- */
+#define PN_END             0xC0
+#define PN_ESC             0xDB
+#define PN_ESC_END         0xDC
+#define PN_ESC_ESC         0xDD
+#define PN_VERSION         0x01
+#define PN_MAX_PAYLOAD     512
+#define PN_FRAME_MAX       520
+
+#define PN_OP_TCP_OPEN     0x30
+#define PN_OP_TCP_CLOSE    0x31
+#define PN_OP_TCP_SEND     0x32
+#define PN_OP_ACK          0x80
+#define PN_OP_EVENT        0x81
+#define PN_OP_TCP_DATA     0x82
+
+#define PN_STATUS_OK       0x00
+#define PN_EVT_TCP_CLOSED  0x11
+#define PN_EVT_TCP_ERROR   0x12
+
+static unsigned char pn_seq;
+static unsigned char pn_channel;
+static unsigned char pn_conn;
+static unsigned char pn_frame[PN_FRAME_MAX];
+static unsigned int pn_in_len;
+static unsigned int pn_data_pos, pn_data_len;
+static unsigned char pn_in_started, pn_in_esc, pn_in_overflow;
+
+static void pn_put(unsigned char b)
+{
+    serial_send(&b, 1);
+}
+
+static unsigned int pn_crc16(const unsigned char *data, unsigned int len)
+{
+    unsigned int crc = 0xFFFF;
+    unsigned int i;
+    unsigned char bit;
+    for (i = 0; i < len; i++) {
+        crc ^= (unsigned int)data[i] << 8;
+        for (bit = 0; bit < 8; bit++)
+            crc = (crc & 0x8000) ? (unsigned int)((crc << 1) ^ 0x1021)
+                                 : (unsigned int)(crc << 1);
+    }
+    return crc;
+}
+
+static void pn_slip_put(unsigned char b)
+{
+    if (b == PN_END) {
+        pn_put(PN_ESC);
+        pn_put(PN_ESC_END);
+    } else if (b == PN_ESC) {
+        pn_put(PN_ESC);
+        pn_put(PN_ESC_ESC);
+    } else {
+        pn_put(b);
+    }
+}
+
+static unsigned char pn_tx(unsigned char op, unsigned char channel,
+                           const unsigned char *payload, unsigned int len)
+{
+    unsigned int i, crc, pos = 0;
+    unsigned char seq = ++pn_seq;
+    if (len > PN_MAX_PAYLOAD) return 0;
+    pn_frame[pos++] = PN_VERSION;
+    pn_frame[pos++] = op;
+    pn_frame[pos++] = seq;
+    pn_frame[pos++] = channel;
+    pn_frame[pos++] = (unsigned char)(len & 0xFF);
+    pn_frame[pos++] = (unsigned char)(len >> 8);
+    for (i = 0; i < len; i++) pn_frame[pos++] = payload[i];
+    crc = pn_crc16(pn_frame, pos);
+    pn_frame[pos++] = (unsigned char)(crc & 0xFF);
+    pn_frame[pos++] = (unsigned char)(crc >> 8);
+    pn_put(PN_END);
+    for (i = 0; i < pos; i++) pn_slip_put(pn_frame[i]);
+    pn_put(PN_END);
+    return seq;
+}
+
+static unsigned char pn_finish_frame(unsigned char *op, unsigned char *seq,
+                                     unsigned char *channel, unsigned int *len)
+{
+    unsigned int payload_len, total, expected_crc, actual_crc;
+    if (pn_in_overflow || pn_in_len < 8) return 0;
+    if (pn_frame[0] != PN_VERSION) return 0;
+    payload_len = (unsigned int)pn_frame[4] | ((unsigned int)pn_frame[5] << 8);
+    total = 6 + payload_len + 2;
+    if (payload_len > PN_MAX_PAYLOAD || total != pn_in_len) return 0;
+    expected_crc = (unsigned int)pn_frame[total - 2] | ((unsigned int)pn_frame[total - 1] << 8);
+    actual_crc = pn_crc16(pn_frame, (unsigned int)(total - 2));
+    if (expected_crc != actual_crc) return 0;
+    *op = pn_frame[1];
+    *seq = pn_frame[2];
+    *channel = pn_frame[3];
+    *len = payload_len;
+    return 1;
+}
+
+static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
+                                   unsigned char *channel, unsigned int *len,
+                                   unsigned int spins)
+{
+    unsigned char b;
+    while (spins--) {
+        if (!serial_recv(&b, 1)) continue;
+        if (b == PN_END) {
+            if (pn_in_started && pn_in_len) {
+                if (pn_finish_frame(op, seq, channel, len)) {
+                    pn_in_len = 0;
+                    pn_in_overflow = 0;
+                    pn_in_esc = 0;
+                    return 1;
+                }
+            }
+            pn_in_started = 1;
+            pn_in_len = 0;
+            pn_in_esc = 0;
+            pn_in_overflow = 0;
+            continue;
+        }
+        if (!pn_in_started) pn_in_started = 1;
+        if (b == PN_ESC) {
+            pn_in_esc = 1;
+            continue;
+        }
+        if (pn_in_esc) {
+            if (b == PN_ESC_END) b = PN_END;
+            else if (b == PN_ESC_ESC) b = PN_ESC;
+            else { pn_in_esc = 0; continue; }
+            pn_in_esc = 0;
+        }
+        if (pn_in_len < PN_FRAME_MAX) pn_frame[pn_in_len++] = b;
+        else pn_in_overflow = 1;
+    }
+    return 0;
+}
+
+static void pn_handle_async(unsigned char op, unsigned char channel, unsigned int len)
+{
+    unsigned char event;
+    if (op == PN_OP_TCP_DATA && channel == pn_channel) {
+        pn_data_pos = 0;
+        pn_data_len = len;
+    } else if (op == PN_OP_EVENT && len) {
+        event = pn_frame[6];
+        if (channel == pn_channel && (event == PN_EVT_TCP_CLOSED || event == PN_EVT_TCP_ERROR))
+            pn_conn = 0;
+    }
+}
+
+static unsigned char pn_wait_ack(unsigned char want_seq, unsigned char *out,
+                                 unsigned int *out_len, unsigned int spins)
+{
+    unsigned char op, seq, channel, status;
+    unsigned int len, n, i;
+    while (spins--) {
+        if (!pn_read_frame(&op, &seq, &channel, &len, 1)) continue;
+        if (op == PN_OP_ACK && seq == want_seq) {
+            if (!len) return 0;
+            status = pn_frame[6];
+            if (status != PN_STATUS_OK) return 0;
+            n = (unsigned int)(len - 1);
+            if (out && out_len) {
+                if (n > *out_len) n = *out_len;
+                for (i = 0; i < n; i++) out[i] = pn_frame[7 + i];
+                *out_len = n;
+            }
+            return 1;
+        }
+        if (op == PN_OP_EVENT) pn_handle_async(op, channel, len);
+    }
+    return 0;
+}
+
+static unsigned int pn_take_data(unsigned char *buf, unsigned int max)
+{
+    unsigned int n = 0;
+    while (n < max && pn_data_pos < pn_data_len) {
+        buf[n++] = pn_frame[6 + pn_data_pos];
+        pn_data_pos++;
+    }
+    if (pn_data_pos >= pn_data_len) pn_data_pos = pn_data_len = 0;
+    return n;
+}
+
+static unsigned char pn_connect(const char *host, unsigned int port)
+{
+    unsigned char seq;
+    unsigned char payload[64];
+    unsigned char out[8];
+    unsigned int host_len = 0, i, out_len;
+    while (host[host_len]) host_len++;
+    if (!host_len || host_len > 47 || port == 0) return 0;
+    if (!serial_present()) return 0;
+    serial_ctrl(1);
+    pn_seq = 0;
+    pn_channel = 0;
+    pn_conn = 0;
+    pn_data_pos = pn_data_len = 0;
+    pn_in_len = 0;
+    pn_in_started = pn_in_esc = pn_in_overflow = 0;
+
+    payload[0] = (unsigned char)host_len;
+    for (i = 0; i < host_len; i++) payload[1 + i] = (unsigned char)host[i];
+    payload[1 + host_len] = (unsigned char)(port & 0xFF);
+    payload[2 + host_len] = (unsigned char)(port >> 8);
+    payload[3 + host_len] = 1;
+    out_len = sizeof(out);
+    seq = pn_tx(PN_OP_TCP_OPEN, 0, payload, (unsigned int)(4 + host_len));
+    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000) || out_len < 1) return 0;
+    pn_channel = out[0];
+    pn_conn = (unsigned char)(pn_channel != 0);
+    return pn_conn;
+}
+
+static unsigned char pn_send(const unsigned char *buf, unsigned int len)
+{
+    if (!pn_channel || len > PN_MAX_PAYLOAD) return 0;
+    return (unsigned char)(pn_tx(PN_OP_TCP_SEND, pn_channel, buf, len) != 0);
+}
+
+static unsigned int pn_recv(unsigned char *buf, unsigned int max)
+{
+    unsigned char op, seq, channel;
+    unsigned int len, n, spins = 3500;
+    n = pn_take_data(buf, max);
+    if (n) return n;
+    while (spins--) {
+        if (!pn_read_frame(&op, &seq, &channel, &len, 1)) continue;
+        (void)seq;
+        pn_handle_async(op, channel, len);
+        n = pn_take_data(buf, max);
+        if (n) return n;
+    }
+    return 0;
+}
+
+static unsigned char pn_connected(void)
+{
+    return pn_conn;
+}
+
+static void pn_close(void)
+{
+    if (pn_channel) (void)pn_tx(PN_OP_TCP_CLOSE, pn_channel, 0, 0);
+    pn_channel = 0;
+    pn_conn = 0;
+}
+#endif
+
 /* ---- transport: GBNET (TCP) or serial; the pumps route through these -------- */
 #define TR_NET    0
 #define TR_SERIAL 1
 static unsigned char transport;
 
-static unsigned char transport_send_iac(const unsigned char *buf, unsigned int len)
+static unsigned char net_send(const unsigned char *buf, unsigned int len)
 {
-    if (transport == TR_SERIAL) return serial_send(buf, len);
-#if TELNET_HAS_NET
+#if TELNET_HAS_GBNET
     return gb_net_send(buf, len);
+#elif defined(GB_PCW)
+    return pn_send(buf, len);
 #else
     (void)buf; (void)len;
     return 0;
 #endif
+}
+
+static unsigned int net_recv(unsigned char *buf, unsigned int max)
+{
+#if TELNET_HAS_GBNET
+    return gb_net_recv(buf, max);
+#elif defined(GB_PCW)
+    return pn_recv(buf, max);
+#else
+    (void)buf; (void)max;
+    return 0;
+#endif
+}
+
+static unsigned char net_connected(void)
+{
+#if TELNET_HAS_GBNET
+    return gb_net_connected();
+#elif defined(GB_PCW)
+    return pn_connected();
+#else
+    return 0;
+#endif
+}
+
+static void net_close(void)
+{
+#if TELNET_HAS_GBNET
+    gb_net_close();
+#elif defined(GB_PCW)
+    pn_close();
+#endif
+}
+
+#ifdef GB_PCW
+#define IAC_DEFER_MAX 48
+static unsigned char rx_busy, iac_defer_len;
+static unsigned char iac_defer[IAC_DEFER_MAX];
+
+static unsigned char defer_iac_send(const unsigned char *buf, unsigned int len)
+{
+    unsigned int i;
+    if (len > IAC_DEFER_MAX - iac_defer_len) return 1;
+    for (i = 0; i < len; i++) iac_defer[iac_defer_len++] = buf[i];
+    return 1;
+}
+
+static void flush_iac_defer(void)
+{
+    if (!iac_defer_len) return;
+    net_send(iac_defer, iac_defer_len);
+    iac_defer_len = 0;
+}
+#endif
+
+static unsigned char transport_send_iac(const unsigned char *buf, unsigned int len)
+{
+    if (transport == TR_SERIAL) return serial_send(buf, len);
+#ifdef GB_PCW
+    if (rx_busy) return defer_iac_send(buf, len);
+#endif
+    return net_send(buf, len);
 }
 
 /* ---- telnet IAC ------------------------------------------------------------ */
@@ -773,17 +1091,18 @@ static void telnet_byte(unsigned char c)
 
 #if TELNET_HAS_NET
 /* ---- connect target entry -------------------------------------------------- */
+#if TELNET_HAS_GBNET
 static unsigned char ip[4];
+#endif
 static unsigned int  port;
-static char target[64];
-static char hostbuf[48];
+static char target[48];
+#define hostbuf target
 
 /* split "host:port" -> hostbuf + port (default 23). Returns 1 if the host is non-empty. */
-static unsigned char split_target(const char *s)
+static unsigned char split_target(char *s)
 {
     unsigned char i = 0;
-    while (s[i] && s[i] != ':' && i < sizeof(hostbuf) - 1) { hostbuf[i] = s[i]; i++; }
-    hostbuf[i] = 0;
+    while (s[i] && s[i] != ':' && i < sizeof(target) - 1) i++;
     if (i == 0) return 0;
     port = 23;
     if (s[i] == ':') {
@@ -791,10 +1110,12 @@ static unsigned char split_target(const char *s)
         const char *q = s + i + 1;
         while (*q >= '0' && *q <= '9') p = p * 10 + (*q++ - '0');
         if (p) port = p;
+        s[i] = 0;
     }
     return 1;
 }
 
+#if TELNET_HAS_GBNET
 /* parse a bare dotted-decimal "a.b.c.d" -> out[4]. Returns 1 if it's a clean IPv4
  * (so a non-match falls through to DNS). */
 static unsigned char parse_dotted(const char *s, unsigned char *out)
@@ -810,6 +1131,7 @@ static unsigned char parse_dotted(const char *s, unsigned char *out)
     }
     return (unsigned char)(*q == 0);
 }
+#endif
 
 /* the caret sits just after the last typed char (~6px/char from the field origin). */
 #define CARET_X(n) ((unsigned char)(IN_X + ((unsigned int)(n) * 6) / 4))
@@ -879,10 +1201,12 @@ static void err_screen(const char *a, const char *b)
 }
 
 /* host-socket mode ignores most of this; the chip just needs a MAC + a sane config. */
+#if TELNET_HAS_GBNET
 static const unsigned char netcfg[22] = {
     192,168,99,50,  255,255,255,0,  192,168,99,1,  8,8,8,8,   /* DNS = 8.8.8.8 */
     0xDE,0xAD,0xBE,0xEF,0x00,0xFF
 };
+#endif
 #endif
 
 /* ---- session state machine ------------------------------------------------- */
@@ -891,7 +1215,9 @@ static const unsigned char netcfg[22] = {
 #define ST_DONE 2          /* server disconnected; grid frozen, reconnect via the menu */
 
 static unsigned char state;
+#ifndef GB_PCW
 static unsigned char rbuf[256];
+#endif
 
 /* recv-poll throttle (#238/#259): each gb_net_recv is a paged module call, so polling it
  * every frame hammers the disk on real HW. Poll every frame while data/typing flows,
@@ -915,31 +1241,17 @@ static void fs_label(void);            /* refresh the menu's [x]/[ ] checkbox */
 static unsigned int t_recv(unsigned char *buf, unsigned int max)
 {
     if (transport == TR_SERIAL) return serial_recv(buf, max);
-#if TELNET_HAS_NET
-    return gb_net_recv(buf, max);
-#else
-    (void)buf; (void)max;
-    return 0;
-#endif
+    return net_recv(buf, max);
 }
 static unsigned char t_send(const unsigned char *buf, unsigned int len)
 {
     if (transport == TR_SERIAL) return serial_send(buf, len);
-#if TELNET_HAS_NET
-    return gb_net_send(buf, len);
-#else
-    (void)buf; (void)len;
-    return 0;
-#endif
+    return net_send(buf, len);
 }
 static unsigned char t_connected(void)
 {
     if (transport == TR_SERIAL) return serial_present();
-#if TELNET_HAS_NET
-    return gb_net_connected();
-#else
-    return 0;
-#endif
+    return net_connected();
 }
 
 #if TELNET_HAS_NET
@@ -963,6 +1275,7 @@ static unsigned char do_connect(void)
         break;
     }
     dlg_open("Connecting...");
+#if TELNET_HAS_GBNET
     if (!gb_net_init(netcfg)) { err_screen("Network init failed", "Check network hardware"); return 0; }
     /* a dotted IP is used as-is; anything else is resolved via DNS (UDP socket 1). */
     if (!parse_dotted(hostbuf, ip)) {
@@ -974,6 +1287,12 @@ static unsigned char do_connect(void)
     }
     if (!gb_net_open())       { err_screen("Socket open failed", ""); return 0; }
     if (!gb_net_connect(ip, port)) { err_screen("Connect failed", "Host unreachable?"); return 0; }
+#elif defined(GB_PCW)
+    gb_curhide();
+    gb_textbw(DLG_X + 2, DLG_Y + 18, hostbuf);
+    gb_curshow();
+    if (!pn_connect(hostbuf, port)) { err_screen("PerryNet connect failed", hostbuf); return 0; }
+#endif
     return 1;
 }
 #endif
@@ -983,11 +1302,26 @@ static unsigned char do_connect(void)
 static unsigned int pump_recv(void)
 {
     unsigned int n, i;
+#ifdef GB_PCW
+    n = t_recv(pn_frame, PN_MAX_PAYLOAD);
+#else
     n = t_recv(rbuf, sizeof(rbuf));
+#endif
     if (n) {
+#ifdef GB_PCW
+        rx_busy = 1;
+#endif
         for (i = 0; i < n; i++) {
+#ifdef GB_PCW
+            telnet_byte(pn_frame[i]);                         /* IAC/telnet + ANSI */
+#else
             telnet_byte(rbuf[i]);                              /* IAC/telnet + ANSI */
+#endif
         }
+#ifdef GB_PCW
+        rx_busy = 0;
+        flush_iac_defer();
+#endif
     } else if (!t_connected()) {
         term_write('\r'); term_write('\n');
         { const char *m = "** Disconnected - press a key **"; while (*m) term_write(*m++); }
@@ -1019,7 +1353,9 @@ static unsigned char pump_keys(void)
     while ((k = gb_getkey()) != 0) {
 #ifdef GB_PCW
         if (pcwfs && (k == 0x1D || k == 0x1B)) {   /* Ctrl-] / ESC leave fullscreen */
-            pcw_fs_set(0); fs_label(); continue;
+            pcw_fs_set(0); fs_label();
+            if (state == ST_RUN && transport == TR_NET) send_naws();
+            continue;
         }
 #endif
         sent = 1; send_key(k);
@@ -1031,7 +1367,7 @@ static unsigned char pump_keys(void)
 static void close_session(void)
 {
 #if TELNET_HAS_NET
-    if (transport == TR_NET && (state == ST_RUN || state == ST_DONE)) gb_net_close();
+    if (transport == TR_NET && (state == ST_RUN || state == ST_DONE)) net_close();
 #endif
     state = ST_IDLE;
 }
@@ -1051,14 +1387,16 @@ static void start_session(void)
 /* Connect over TCP: host:port dialog + DNS, then the telnet WILL handshake. */
 static void action_connect(void)
 {
-    if (state == ST_RUN && transport == TR_NET) gb_net_close();
+    if (transport == TR_NET && (state == ST_RUN || state == ST_DONE)) net_close();
     gb_modal_set(1);                          /* a self-polling dialog is up */
     if (do_connect()) {
         transport = TR_NET;
         iac_state = IS_NORMAL; local_echo = 1;
         start_session();
+#ifndef GB_PCW
         send3(WILL, OPT_TTYPE);
         send3(WILL, OPT_NAWS);
+#endif
     } else state = ST_IDLE;
     gb_modal_set(0);
 }
@@ -1067,6 +1405,7 @@ static void action_connect(void)
 /* Connect over the serial port: no host, just open the raw byte pipe. */
 static void action_connect_serial(void)
 {
+    if (transport == TR_NET && (state == ST_RUN || state == ST_DONE)) net_close();
     if (!serial_present()) { gb_alert("No serial", "board detected"); return; }
     transport = TR_SERIAL;
     serial_ctrl(1);                           /* clear any stale RX */
@@ -1121,7 +1460,7 @@ static void run_fullscreen(void)
  * connect goes straight into the Mode-2 fullscreen view (exit it with Ctrl-] / ESC). */
 /* item [3] carries a [x]/[ ] checkbox reflecting the 80x25 toggle (refreshed before the
  * menu opens, since gb_popup reads these label pointers live). */
-#if TELNET_HAS_NET
+#if TELNET_HAS_NET && !defined(GB_PCW)
 static const char *telnet_items[4] = {
     "Connect (net)...", "Connect serial", "Disconnect", "80x25 fullscreen [ ]"
 };
@@ -1139,12 +1478,29 @@ static void on_menu(unsigned char sel)
         else gb_alert("80x25 fullscreen", want_fs ? "ON - connect to use it" : "OFF");
     }
 }
+#elif defined(GB_PCW)
+static const char *telnet_items[4] = {
+    "Connect PerryNet...", "Connect serial", "Disconnect", "Fullscreen 90x28 [ ]"
+};
+static void fs_label(void) { telnet_items[3] = pcwfs ? "Fullscreen 90x28 [x]"
+                                                     : "Fullscreen 90x28 [ ]"; }
+static void on_menu(unsigned char sel)
+{
+    if (sel == 0) action_connect();
+    else if (sel == 1) action_connect_serial();
+    else if (sel == 2) close_session();
+    else if (sel == 3) {
+        pcw_fs_set((unsigned char)!pcwfs);
+        fs_label();
+        if (state == ST_RUN && transport == TR_NET) send_naws();
+    }
+}
 #else
 static const char *telnet_items[3] = {
-    "Connect serial", "Disconnect", "Fullscreen 90x31 [ ]"
+    "Connect serial", "Disconnect", "Fullscreen 90x28 [ ]"
 };
-static void fs_label(void) { telnet_items[2] = pcwfs ? "Fullscreen 90x31 [x]"
-                                                     : "Fullscreen 90x31 [ ]"; }
+static void fs_label(void) { telnet_items[2] = pcwfs ? "Fullscreen 90x28 [x]"
+                                                     : "Fullscreen 90x28 [ ]"; }
 static void on_menu(unsigned char sel)
 {
     if (sel == 0) action_connect_serial();
@@ -1249,7 +1605,7 @@ static void t_frame(void)
         if (!demo_ran) {
             demo_ran = 1;
 #ifndef TELNET_DEMO_WINDOWED
-            pcw_fs_set(1); fs_label();      /* 90x31; windowed build keeps 80x25 */
+            pcw_fs_set(1); fs_label();      /* 90x28; windowed build keeps 80x25 */
             gb_curhide();
             gb_fill(0, 0, GB_COLS, GB_LINES, 2);
 #endif
@@ -1266,7 +1622,14 @@ static void t_frame(void)
     }
 #endif
     /* idle on launch - the user drives everything from the Telnet menu (no auto-connect) */
-    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a Telnet-menu action ran */
+    if (gb_doc_frame()) {                 /* a Telnet-menu action ran */
+        gb_restore_parent();
+        if (state == ST_RUN) {
+            if (pump_recv()) active = ACTIVE_HOLD;
+            render();
+        }
+        return;
+    }
     net_frame();
 }
 
@@ -1279,7 +1642,7 @@ static void t_proc(void)
     case GB_MSG_CLICK: break;                              /* no in-content gesture */
     case GB_MSG_CLOSE:
 #if TELNET_HAS_NET
-        if (state == ST_RUN) gb_net_close();
+        if ((state == ST_RUN || state == ST_DONE) && transport == TR_NET) net_close();
 #endif
         gb_wm_close();
         break;
@@ -1296,7 +1659,10 @@ static const gb_mwin_t tmw = {
 void main(void)
 {
     state = ST_IDLE;
-#if TELNET_HAS_NET
+#ifdef GB_PCW
+    transport = TR_SERIAL;
+    want_fs = 0; fs_label();
+#elif TELNET_HAS_NET
     transport = TR_NET;
     want_fs = 1; fs_label();                    /* 80x25 fullscreen is on by default (checked) */
 #else
@@ -1308,7 +1674,7 @@ void main(void)
 #endif
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */
-#if TELNET_HAS_NET
+#if TELNET_HAS_NET || defined(GB_PCW)
     gb_menu_add("Telnet", (const char *const *)telnet_items, 4, on_menu);
 #else
     gb_menu_add("Telnet", (const char *const *)telnet_items, 3, on_menu);

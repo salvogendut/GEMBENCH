@@ -32,7 +32,8 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
-APPDEFS="-DGB_PCW" DATA_LOC=0x6C00 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x72A0 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
 # savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a
 # PCW plot path first (follow-up)
 APPDEFS="-DGB_PCW" tools/build_capp.sh apps/saver build/pcw/SQUARES.RAW
@@ -113,13 +114,12 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
 # --- COMPANION.DSK: pictures, TELNET, backdrops, spare assets (plain data disc)
-# CF2 is tight; LOGO.PIC, TLEUNG.PIC and CLASSIC.FNT live on the boot disk and
-# are skipped below so serial/PerryFi TELNET.APP (with its 80x25/90x31
-# renderer, #350) fits here.
+# CF2 is tight; LOGO.PIC, TLEUNG.PIC and CLASSIC.FNT live on the boot disk.
+# PENGUIN.PIC is skipped so TELNET.APP plus the PerryNet NETTEST.APP fit here.
 COMP_ADDS=()
 for pic in assets/pictures/*.PIC; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    case "$name" in BIG|TLEUNG|LOGO) continue;; esac
+    case "$name" in BIG|TLEUNG|LOGO|PENGUIN) continue;; esac
 
     python3 tools/pic_to_pcw.py "$pic" "build/pcw/$name.PIC"
     COMP_ADDS+=(--add "build/pcw/$name.PIC=$name.PIC")
@@ -132,6 +132,7 @@ done
 python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     "${COMP_ADDS[@]}" \
     --add build/pcw/TELNET.RAW=TELNET.APP \
+    --add build/pcw/NETTEST.RAW=NETTEST.APP \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
 echo "PCW target built: QA/PCW/GEOBENCH.DSK (bootable CF2) + QA/PCW/COMPANION.DSK"

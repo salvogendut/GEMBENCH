@@ -21,8 +21,8 @@ loop and calls each focused window's handlers (issue #45).
 | xaos     | `XAOS.APP`     | fractal generator, exports `.PIC` |
 | clock    | `CLOCK.APP`    | analog clock widget |
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours / screensaver, persisted to `GEOBENCH.CFG` |
-| telnet   | `TELNET.APP`   | ANSI/Telnet terminal (4×8 charset): CPC TCP via Net4CPC/M4 plus serial, 78×22 windowed + Mode-2 80×25 fullscreen; PCW serial/PerryFi on the companion disk, 80×25 windowed + 90×31 fullscreen |
-| nettest  | `NETTEST.APP`  | CPC-only network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status for the active backend |
+| telnet   | `TELNET.APP`   | ANSI/Telnet terminal (4x8 charset): CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
+| nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status; CPC uses the active GBNET backend, PCW uses PerryNet over PerryFi |
 
 ## Screensavers (`.SAV`)
 

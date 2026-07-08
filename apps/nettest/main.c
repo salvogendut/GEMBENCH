@@ -4,6 +4,10 @@
  *   init -> DNS example.com -> open -> connect :80 -> HTTP GET -> recv.
  * It is intentionally simple so it can validate whichever backend the kernel
  * selects (Albireo/Net4CPC or M4 native) without Telnet UI/input noise.
+ *
+ * On PCW this app has no paged GBNET module yet; it speaks the PerryNet framed
+ * protocol over the CPS8256 serial port, which is the PerryFi/PerryNet path in
+ * 1985.
  */
 #include "gb.h"
 
@@ -39,6 +43,15 @@ static const unsigned char request[] =
     "Host: example.com\r\n"
     "User-Agent: GEOBENCH-NETTEST\r\n"
     "Connection: close\r\n\r\n";
+
+static unsigned char nt_init(const unsigned char *cfg);
+static unsigned char nt_resolve(const char *name, unsigned char *out_ip);
+static unsigned char nt_open(void);
+static unsigned char nt_connect(const unsigned char *addr, unsigned int port);
+static unsigned char nt_send(const unsigned char *buf, unsigned int len);
+static unsigned int nt_recv(unsigned char *buf, unsigned int max);
+static unsigned char nt_connected(void);
+static void nt_close(void);
 
 static void copy(char *dst, const char *src)
 {
@@ -120,6 +133,428 @@ static void log_count(unsigned char n, const char *prefix, unsigned int count)
     log_line(n, t);
 }
 
+#ifdef GB_PCW
+#define PN_END             0xC0
+#define PN_ESC             0xDB
+#define PN_ESC_END         0xDC
+#define PN_ESC_ESC         0xDD
+#define PN_VERSION         0x01
+#define PN_MAX_PAYLOAD     512
+#define PN_FRAME_MAX       520
+#define PN_RXQ_SIZE        256
+
+#define PN_OP_HELLO        0x01
+#define PN_OP_WIFI_CONNECT 0x12
+#define PN_OP_DNS_RESOLVE  0x20
+#define PN_OP_TCP_OPEN     0x30
+#define PN_OP_TCP_CLOSE    0x31
+#define PN_OP_TCP_SEND     0x32
+#define PN_OP_ACK          0x80
+#define PN_OP_EVENT        0x81
+#define PN_OP_TCP_DATA     0x82
+
+#define PN_STATUS_OK       0x00
+#define PN_EVT_TCP_CLOSED  0x11
+#define PN_EVT_TCP_ERROR   0x12
+
+static volatile unsigned char ser_io;
+static unsigned char pcw_ser_inited;
+static unsigned char pn_seq;
+static unsigned char pn_channel;
+static unsigned char pn_conn;
+static unsigned char pn_rxq[PN_RXQ_SIZE];
+static unsigned char pn_rx_head, pn_rx_tail;
+static unsigned char pn_frame[PN_FRAME_MAX];
+static unsigned int pn_in_len;
+static unsigned char pn_in_started, pn_in_esc, pn_in_overflow;
+
+static void ser_in_data(void) __naked
+{ __asm
+    in a,(0xE0)
+    ld (_ser_io),a
+    ret
+__endasm; }
+static void ser_out_data(void) __naked
+{ __asm
+    ld a,(_ser_io)
+    out (0xE0),a
+    ret
+__endasm; }
+static void ser_in_status(void) __naked
+{ __asm
+    xor a
+    out (0xE1),a
+    in a,(0xE1)
+    ld (_ser_io),a
+    ret
+__endasm; }
+static void ser_out_ctrl(void) __naked
+{ __asm
+    ld a,(_ser_io)
+    out (0xE1),a
+    ret
+__endasm; }
+static void pit_out_tx(void) __naked
+{ __asm
+    ld a,(_ser_io)
+    out (0xE4),a
+    ret
+__endasm; }
+static void pit_out_rx(void) __naked
+{ __asm
+    ld a,(_ser_io)
+    out (0xE5),a
+    ret
+__endasm; }
+static void pit_out_ctrl(void) __naked
+{ __asm
+    ld a,(_ser_io)
+    out (0xE7),a
+    ret
+__endasm; }
+
+static void dart_wr(unsigned char reg, unsigned char val)
+{
+    ser_io = reg; ser_out_ctrl();
+    ser_io = val; ser_out_ctrl();
+}
+
+static void serial_hw_init(void)
+{
+    if (pcw_ser_inited) return;
+    ser_io = 0x36; pit_out_ctrl(); ser_io = 13; pit_out_tx(); ser_io = 0; pit_out_tx();
+    ser_io = 0x76; pit_out_ctrl(); ser_io = 13; pit_out_rx(); ser_io = 0; pit_out_rx();
+    ser_io = 0x18; ser_out_ctrl();
+    dart_wr(4, 0x44);
+    dart_wr(3, 0xC1);
+    dart_wr(5, 0xEA);
+    pcw_ser_inited = 1;
+}
+
+static unsigned char serial_present(void)
+{
+    serial_hw_init();
+    ser_in_status();
+    return (unsigned char)(ser_io != 0x7F && ser_io != 0xFF);
+}
+
+static void serial_put(unsigned char b)
+{
+    do { ser_in_status(); } while (!(ser_io & 0x04));
+    ser_io = b;
+    ser_out_data();
+}
+
+static unsigned int serial_recv(unsigned char *buf, unsigned int max)
+{
+    unsigned int n = 0;
+    while (n < max) {
+        ser_in_status();
+        if (!(ser_io & 0x01)) break;
+        ser_in_data();
+        buf[n++] = ser_io;
+    }
+    return n;
+}
+
+static void serial_drain(void)
+{
+    unsigned char guard = 0;
+    unsigned char b;
+    while (guard++ != 0xFF) {
+        if (!serial_recv(&b, 1)) break;
+    }
+}
+
+static unsigned int pn_crc16(const unsigned char *data, unsigned int len)
+{
+    unsigned int crc = 0xFFFF;
+    unsigned int i;
+    unsigned char bit;
+    for (i = 0; i < len; i++) {
+        crc ^= (unsigned int)data[i] << 8;
+        for (bit = 0; bit < 8; bit++)
+            crc = (crc & 0x8000) ? (unsigned int)((crc << 1) ^ 0x1021) : (unsigned int)(crc << 1);
+    }
+    return crc;
+}
+
+static void pn_slip_put(unsigned char b)
+{
+    if (b == PN_END) {
+        serial_put(PN_ESC);
+        serial_put(PN_ESC_END);
+    } else if (b == PN_ESC) {
+        serial_put(PN_ESC);
+        serial_put(PN_ESC_ESC);
+    } else {
+        serial_put(b);
+    }
+}
+
+static unsigned char pn_tx(unsigned char op, unsigned char channel,
+                           const unsigned char *payload, unsigned int len)
+{
+    unsigned int i, crc, pos = 0;
+    unsigned char seq = ++pn_seq;
+    if (len > PN_MAX_PAYLOAD) return 0;
+    pn_frame[pos++] = PN_VERSION;
+    pn_frame[pos++] = op;
+    pn_frame[pos++] = seq;
+    pn_frame[pos++] = channel;
+    pn_frame[pos++] = (unsigned char)(len & 0xFF);
+    pn_frame[pos++] = (unsigned char)(len >> 8);
+    for (i = 0; i < len; i++) pn_frame[pos++] = payload[i];
+    crc = pn_crc16(pn_frame, pos);
+    pn_frame[pos++] = (unsigned char)(crc & 0xFF);
+    pn_frame[pos++] = (unsigned char)(crc >> 8);
+    serial_put(PN_END);
+    for (i = 0; i < pos; i++) pn_slip_put(pn_frame[i]);
+    serial_put(PN_END);
+    return seq;
+}
+
+static void pn_queue_data(const unsigned char *buf, unsigned int len)
+{
+    unsigned int i;
+    unsigned char next;
+    for (i = 0; i < len; i++) {
+        next = (unsigned char)(pn_rx_head + 1);
+        if (next == pn_rx_tail) break;
+        pn_rxq[pn_rx_head] = buf[i];
+        pn_rx_head = next;
+    }
+}
+
+static unsigned int pn_take_data(unsigned char *buf, unsigned int max)
+{
+    unsigned int n = 0;
+    while (n < max && pn_rx_tail != pn_rx_head) {
+        buf[n++] = pn_rxq[pn_rx_tail];
+        pn_rx_tail = (unsigned char)(pn_rx_tail + 1);
+    }
+    return n;
+}
+
+static unsigned char pn_finish_frame(unsigned char *op, unsigned char *seq,
+                                     unsigned char *channel, unsigned int *len)
+{
+    unsigned int payload_len, total, expected_crc, actual_crc;
+    if (pn_in_overflow || pn_in_len < 8) return 0;
+    if (pn_frame[0] != PN_VERSION) return 0;
+    payload_len = (unsigned int)pn_frame[4] | ((unsigned int)pn_frame[5] << 8);
+    total = 6 + payload_len + 2;
+    if (payload_len > PN_MAX_PAYLOAD || total != pn_in_len) return 0;
+    expected_crc = (unsigned int)pn_frame[total - 2] | ((unsigned int)pn_frame[total - 1] << 8);
+    actual_crc = pn_crc16(pn_frame, (unsigned int)(total - 2));
+    if (expected_crc != actual_crc) return 0;
+    *op = pn_frame[1];
+    *seq = pn_frame[2];
+    *channel = pn_frame[3];
+    *len = payload_len;
+    return 1;
+}
+
+static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
+                                   unsigned char *channel, unsigned int *len,
+                                   unsigned int spins)
+{
+    unsigned char b;
+    while (spins--) {
+        if (!serial_recv(&b, 1)) continue;
+        if (b == PN_END) {
+            if (pn_in_started && pn_in_len) {
+                if (pn_finish_frame(op, seq, channel, len)) {
+                    pn_in_len = 0;
+                    pn_in_overflow = 0;
+                    pn_in_esc = 0;
+                    return 1;
+                }
+            }
+            pn_in_started = 1;
+            pn_in_len = 0;
+            pn_in_esc = 0;
+            pn_in_overflow = 0;
+            continue;
+        }
+        if (!pn_in_started) pn_in_started = 1;
+        if (b == PN_ESC) {
+            pn_in_esc = 1;
+            continue;
+        }
+        if (pn_in_esc) {
+            if (b == PN_ESC_END) b = PN_END;
+            else if (b == PN_ESC_ESC) b = PN_ESC;
+            else { pn_in_esc = 0; continue; }
+            pn_in_esc = 0;
+        }
+        if (pn_in_len < PN_FRAME_MAX) pn_frame[pn_in_len++] = b;
+        else pn_in_overflow = 1;
+    }
+    return 0;
+}
+
+static void pn_handle_async(unsigned char op, unsigned char channel, unsigned int len)
+{
+    unsigned char event;
+    if (op == PN_OP_TCP_DATA && channel == pn_channel) {
+        pn_queue_data(pn_frame + 6, len);
+    } else if (op == PN_OP_EVENT && len) {
+        event = pn_frame[6];
+        if (channel == pn_channel && (event == PN_EVT_TCP_CLOSED || event == PN_EVT_TCP_ERROR))
+            pn_conn = 0;
+    }
+}
+
+static unsigned char pn_wait_ack(unsigned char want_seq, unsigned char *out,
+                                 unsigned int *out_len, unsigned int spins)
+{
+    unsigned char op, seq, channel, status;
+    unsigned int len, n, i;
+    while (spins--) {
+        if (!pn_read_frame(&op, &seq, &channel, &len, 1)) continue;
+        if (op == PN_OP_ACK && seq == want_seq) {
+            if (!len) return 0;
+            status = pn_frame[6];
+            if (status != PN_STATUS_OK) return 0;
+            n = (unsigned int)(len - 1);
+            if (out && out_len) {
+                if (n > *out_len) n = *out_len;
+                for (i = 0; i < n; i++) out[i] = pn_frame[7 + i];
+                *out_len = n;
+            }
+            return 1;
+        }
+        pn_handle_async(op, channel, len);
+    }
+    return 0;
+}
+
+static unsigned char nt_init(const unsigned char *cfg)
+{
+    unsigned char seq;
+    unsigned int out_len;
+    unsigned char out[24];
+    (void)cfg;
+    if (!serial_present()) return 0;
+    serial_drain();
+    pn_seq = 0;
+    pn_channel = 0;
+    pn_conn = 0;
+    pn_rx_head = pn_rx_tail = 0;
+    pn_in_len = 0;
+    pn_in_started = pn_in_esc = pn_in_overflow = 0;
+    out_len = sizeof(out);
+    seq = pn_tx(PN_OP_HELLO, 0, 0, 0);
+    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000)) return 0;
+    seq = pn_tx(PN_OP_WIFI_CONNECT, 0, 0, 0);
+    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000)) return 0;
+    return 1;
+}
+
+static unsigned char nt_resolve(const char *name, unsigned char *out_ip)
+{
+    unsigned char seq;
+    unsigned char out[4];
+    unsigned int len = sizeof(out);
+    unsigned int n = 0;
+    while (name[n]) n++;
+    seq = pn_tx(PN_OP_DNS_RESOLVE, 0, (const unsigned char *)name, n);
+    if (!seq || !pn_wait_ack(seq, out, &len, 60000) || len < 4) return 0;
+    out_ip[0] = out[0]; out_ip[1] = out[1]; out_ip[2] = out[2]; out_ip[3] = out[3];
+    return 1;
+}
+
+static unsigned char nt_open(void)
+{
+    if (pn_channel) nt_close();
+    pn_rx_head = pn_rx_tail = 0;
+    return 1;
+}
+
+static unsigned char nt_connect(const unsigned char *addr, unsigned int port)
+{
+    char hostbuf[16];
+    char *p = hostbuf;
+    unsigned char payload[22];
+    unsigned char out[8];
+    unsigned char seq;
+    unsigned int len, host_len;
+    p = put_ip_byte(p, addr[0]); *p++ = '.';
+    p = put_ip_byte(p, addr[1]); *p++ = '.';
+    p = put_ip_byte(p, addr[2]); *p++ = '.';
+    p = put_ip_byte(p, addr[3]);
+    host_len = 0;
+    while (hostbuf[host_len]) host_len++;
+    payload[0] = (unsigned char)host_len;
+    for (len = 0; len < host_len; len++) payload[1 + len] = (unsigned char)hostbuf[len];
+    payload[1 + host_len] = (unsigned char)(port & 0xFF);
+    payload[2 + host_len] = (unsigned char)(port >> 8);
+    payload[3 + host_len] = 1;
+    len = sizeof(out);
+    seq = pn_tx(PN_OP_TCP_OPEN, 0, payload, (unsigned int)(4 + host_len));
+    if (!seq || !pn_wait_ack(seq, out, &len, 60000) || len < 1) return 0;
+    pn_channel = out[0];
+    pn_conn = (unsigned char)(pn_channel != 0);
+    return pn_conn;
+}
+
+static unsigned char nt_send(const unsigned char *buf, unsigned int len)
+{
+    unsigned char seq;
+    unsigned int out_len = 0;
+    unsigned int chunk;
+    if (!pn_channel) return 0;
+    while (len) {
+        chunk = len > PN_MAX_PAYLOAD ? PN_MAX_PAYLOAD : len;
+        seq = pn_tx(PN_OP_TCP_SEND, pn_channel, buf, chunk);
+        if (!seq || !pn_wait_ack(seq, 0, &out_len, 60000)) return 0;
+        buf += chunk;
+        len -= chunk;
+    }
+    return 1;
+}
+
+static unsigned int nt_recv(unsigned char *buf, unsigned int max)
+{
+    unsigned char op, seq, channel;
+    unsigned int len;
+    unsigned int n = pn_take_data(buf, max);
+    if (n) return n;
+    if (pn_read_frame(&op, &seq, &channel, &len, 3500)) {
+        (void)seq;
+        pn_handle_async(op, channel, len);
+    }
+    return pn_take_data(buf, max);
+}
+
+static unsigned char nt_connected(void)
+{
+    return pn_conn;
+}
+
+static void nt_close(void)
+{
+    unsigned char seq;
+    unsigned int out_len = 0;
+    if (pn_channel) {
+        seq = pn_tx(PN_OP_TCP_CLOSE, pn_channel, 0, 0);
+        if (seq) (void)pn_wait_ack(seq, 0, &out_len, 8000);
+    }
+    pn_channel = 0;
+    pn_conn = 0;
+}
+#else
+static unsigned char nt_init(const unsigned char *cfg) { return gb_net_init(cfg); }
+static unsigned char nt_resolve(const char *name, unsigned char *out_ip) { return gb_net_resolve(name, out_ip); }
+static unsigned char nt_open(void) { return gb_net_open(); }
+static unsigned char nt_connect(const unsigned char *addr, unsigned int port) { return gb_net_connect(addr, port); }
+static unsigned char nt_send(const unsigned char *buf, unsigned int len) { return gb_net_send(buf, len); }
+static unsigned int nt_recv(unsigned char *buf, unsigned int max) { return gb_net_recv(buf, max); }
+static unsigned char nt_connected(void) { return gb_net_connected(); }
+static void nt_close(void) { gb_net_close(); }
+#endif
+
 static void log_rx(unsigned int n)
 {
     char t[LINELEN];
@@ -139,7 +574,7 @@ static void log_rx(unsigned int n)
 
 static void fail(const char *msg)
 {
-    if (opened) gb_net_close();
+    if (opened) nt_close();
     opened = 0;
     log_line(11, msg);
     log_line(12, "click window to retry");
@@ -176,43 +611,43 @@ static void tick(void)
     unsigned int n;
     if (step == STEP_INIT) {
         log_line(2, "init...");
-        if (!gb_net_init(netcfg)) { fail("FAIL: gb_net_init"); return; }
+        if (!nt_init(netcfg)) { fail("FAIL: net init"); return; }
         log_line(2, "init ok");
         step = STEP_DNS;
     } else if (step == STEP_DNS) {
         log_line(3, "dns example.com...");
-        if (!gb_net_resolve(host, ip)) { fail("FAIL: DNS"); return; }
+        if (!nt_resolve(host, ip)) { fail("FAIL: DNS"); return; }
         log_ip(3, "dns ok: ");
         step = STEP_OPEN;
     } else if (step == STEP_OPEN) {
         log_line(4, "open socket...");
-        if (!gb_net_open()) { fail("FAIL: open socket"); return; }
+        if (!nt_open()) { fail("FAIL: open socket"); return; }
         opened = 1;
         log_line(4, "open ok");
         step = STEP_CONNECT;
     } else if (step == STEP_CONNECT) {
         log_line(5, "connect port 80...");
-        if (!gb_net_connect(ip, 80)) { fail("FAIL: connect"); return; }
+        if (!nt_connect(ip, 80)) { fail("FAIL: connect"); return; }
         log_line(5, "connect ok");
         step = STEP_SEND;
     } else if (step == STEP_SEND) {
         log_line(6, "send HTTP GET...");
-        if (!gb_net_send(request, sizeof(request) - 1)) { fail("FAIL: send"); return; }
+        if (!nt_send(request, sizeof(request) - 1)) { fail("FAIL: send"); return; }
         log_line(6, "send ok");
         log_line(7, "recv...");
         wait = 0;
         step = STEP_RECV;
     } else if (step == STEP_RECV) {
-        n = gb_net_recv(rxbuf, sizeof(rxbuf));
+        n = nt_recv(rxbuf, sizeof(rxbuf));
         if (n) {
             log_count(8, "recv bytes: ", n);
             log_rx(n);
-            gb_net_close();
+            nt_close();
             opened = 0;
             log_line(11, "PASS");
             log_line(12, "click window to retry");
             step = STEP_DONE;
-        } else if (!gb_net_connected()) {
+        } else if (!nt_connected()) {
             fail("FAIL: closed with no data");
         } else if (++wait > 180) {
             fail("FAIL: recv timeout");
@@ -239,7 +674,7 @@ static void proc(void)
             if (step == STEP_DONE || step == STEP_FAIL) reset_test();
             break;
         case GB_MSG_CLOSE:
-            if (opened) gb_net_close();
+            if (opened) nt_close();
             gb_wm_close();
             break;
         case GB_MSG_DRAG:  drag(); break;
