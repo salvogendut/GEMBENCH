@@ -557,34 +557,38 @@ static void dart_wr(unsigned char reg, unsigned char val)
 static void serial_hw_init(void)
 {
     if (pcw_ser_inited) return;
-    /* PerryFi uses 9600 8N1. The CPS8256 PIT is clocked at 2MHz and the
-     * DART divides by 16, so baud = 125000 / count (Joyce's JoyceCPS.cxx,
-     * from the real device): count 13 = 9615 baud. NOT the PC-style
-     * 1.8432MHz crystal - count 12 here would be 10417 baud, which is
-     * 8.5% off and pure framing garbage on real hardware (the 1985
-     * emulator stores the count without timing it, so it can't tell). */
+    /* Direct-boot GEOBENCH cannot rely on CP/M SETSIO. Program CPS8256
+     * channel A for 9600 8N1: 2MHz PIT / 16 / 13 = 9615 baud. */
     ser_io = 0x36; pit_out_ctrl(); ser_io = 13; pit_out_tx(); ser_io = 0; pit_out_tx();
     ser_io = 0x76; pit_out_ctrl(); ser_io = 13; pit_out_rx(); ser_io = 0; pit_out_rx();
-    ser_io = 0x18; ser_out_ctrl();             /* channel reset */
-    dart_wr(4, 0x44);                           /* async, x16 clock, 1 stop, no parity */
-    dart_wr(3, 0xC1);                           /* RX enable, 8-bit chars */
-    dart_wr(5, 0xEA);                           /* TX enable, RTS/DTR, 8-bit chars */
+    ser_io = 0x18; ser_out_ctrl();
+    dart_wr(4, 0x44);
+    dart_wr(3, 0xC1);
+    dart_wr(5, 0x68);                           /* TX enable + 8-bit TX, RTS/DTR inactive */
+    dart_wr(1, 0x00);
     pcw_ser_inited = 1;
 }
 static unsigned char serial_present(void)
 {
+    serial_hw_init();
     ser_in_status();
     return (unsigned char)(ser_io != 0x7F && ser_io != 0xFF);
 }
 static void serial_ctrl(unsigned char cmd)
 {
-    unsigned char guard = 0;
+    unsigned int budget = 2048;
+    unsigned int quiet = 60000;
     (void)cmd;
     serial_hw_init();
-    while (guard++ != 0xFF) {
+    while (budget && quiet) {
         ser_in_status();
-        if (!(ser_io & 0x01)) break;
-        ser_in_data();
+        if (ser_io & 0x01) {
+            ser_in_data();
+            budget--;
+            quiet = 60000;
+        } else {
+            quiet--;
+        }
     }
 }
 static unsigned int serial_recv(unsigned char *buf, unsigned int max)
@@ -602,7 +606,13 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 {
     unsigned int i;
     for (i = 0; i < len; i++) {
-        do { ser_in_status(); } while (!(ser_io & 0x04));
+        unsigned int guard = 60000;
+        unsigned char ready = 0;
+        while (guard--) {
+            ser_in_status();
+            if (ser_io & 0x04) { ready = 1; break; }
+        }
+        if (!ready) return 0;
         ser_io = buf[i];
         ser_out_data();
     }
@@ -677,30 +687,35 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_ESC_END         0xDC
 #define PN_ESC_ESC         0xDD
 #define PN_VERSION         0x01
+#ifdef GB_PCW
+#define PN_MAX_PAYLOAD     256
+#else
 #define PN_MAX_PAYLOAD     512
-#define PN_FRAME_MAX       520
-/* Per UI tick: drain ready bytes only, then yield so the PCW pointer/key path
- * stays responsive while a TCP session is idle. */
-#define PN_RECV_BYTES      768
-#define PN_RECV_FRAMES     8
+#endif
+#define PN_FRAME_MAX       (6 + PN_MAX_PAYLOAD + 2)
+#define PN_PULL_CHUNK      32
+#define PN_ACK_SPINS       12000
 
 #define PN_OP_TCP_OPEN     0x30
 #define PN_OP_TCP_CLOSE    0x31
 #define PN_OP_TCP_SEND     0x32
+#define PN_OP_TCP_RECV     0x35
 #define PN_OP_ACK          0x80
 #define PN_OP_EVENT        0x81
 #define PN_OP_TCP_DATA     0x82
 
 #define PN_STATUS_OK       0x00
+#define PN_STATUS_BAD_CHANNEL 0x04
+#define PN_STATUS_IO_ERROR 0x08
 #define PN_EVT_TCP_CLOSED  0x11
 #define PN_EVT_TCP_ERROR   0x12
 
 static unsigned char pn_seq;
 static unsigned char pn_channel;
 static unsigned char pn_conn;
+static unsigned char pn_last_status;
 static unsigned char pn_frame[PN_FRAME_MAX];
 static unsigned int pn_in_len;
-static unsigned int pn_data_pos, pn_data_len;
 static unsigned char pn_in_started, pn_in_esc, pn_in_overflow;
 
 static void pn_put(unsigned char b)
@@ -781,8 +796,10 @@ static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
                                    unsigned int spins)
 {
     unsigned char b;
+    const unsigned int idle_spins = spins;
     while (spins--) {
-        if (!serial_recv(&b, 1)) break;
+        if (!serial_recv(&b, 1)) continue;
+        spins = idle_spins;
         if (b == PN_END) {
             if (pn_in_started && pn_in_len) {
                 if (pn_finish_frame(op, seq, channel, len)) {
@@ -818,10 +835,7 @@ static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
 static void pn_handle_async(unsigned char op, unsigned char channel, unsigned int len)
 {
     unsigned char event;
-    if (op == PN_OP_TCP_DATA && channel == pn_channel) {
-        pn_data_pos = 0;
-        pn_data_len = len;
-    } else if (op == PN_OP_EVENT && len) {
+    if (op == PN_OP_EVENT && len) {
         event = pn_frame[6];
         if (channel == pn_channel && (event == PN_EVT_TCP_CLOSED || event == PN_EVT_TCP_ERROR))
             pn_conn = 0;
@@ -833,11 +847,13 @@ static unsigned char pn_wait_ack(unsigned char want_seq, unsigned char *out,
 {
     unsigned char op, seq, channel, status;
     unsigned int len, n, i;
+    pn_last_status = 0xFF;
     while (spins--) {
         if (!pn_read_frame(&op, &seq, &channel, &len, 1)) continue;
         if (op == PN_OP_ACK && seq == want_seq) {
             if (!len) return 0;
             status = pn_frame[6];
+            pn_last_status = status;
             if (status != PN_STATUS_OK) return 0;
             n = (unsigned int)(len - 1);
             if (out && out_len) {
@@ -850,17 +866,6 @@ static unsigned char pn_wait_ack(unsigned char want_seq, unsigned char *out,
         if (op == PN_OP_EVENT) pn_handle_async(op, channel, len);
     }
     return 0;
-}
-
-static unsigned int pn_take_data(unsigned char *buf, unsigned int max)
-{
-    unsigned int n = 0;
-    while (n < max && pn_data_pos < pn_data_len) {
-        buf[n++] = pn_frame[6 + pn_data_pos];
-        pn_data_pos++;
-    }
-    if (pn_data_pos >= pn_data_len) pn_data_pos = pn_data_len = 0;
-    return n;
 }
 
 static unsigned char pn_connect(const char *host, unsigned int port)
@@ -876,7 +881,7 @@ static unsigned char pn_connect(const char *host, unsigned int port)
     pn_seq = 0;
     pn_channel = 0;
     pn_conn = 0;
-    pn_data_pos = pn_data_len = 0;
+    pn_last_status = 0xFF;
     pn_in_len = 0;
     pn_in_started = pn_in_esc = pn_in_overflow = 0;
 
@@ -884,7 +889,7 @@ static unsigned char pn_connect(const char *host, unsigned int port)
     for (i = 0; i < host_len; i++) payload[1 + i] = (unsigned char)host[i];
     payload[1 + host_len] = (unsigned char)(port & 0xFF);
     payload[2 + host_len] = (unsigned char)(port >> 8);
-    payload[3 + host_len] = 1;
+    payload[3 + host_len] = 3; /* TCP_NODELAY + host-pulled RX */
     out_len = sizeof(out);
     seq = pn_tx(PN_OP_TCP_OPEN, 0, payload, (unsigned int)(4 + host_len));
     if (!seq || !pn_wait_ack(seq, out, &out_len, 60000) || out_len < 1) return 0;
@@ -901,19 +906,20 @@ static unsigned char pn_send(const unsigned char *buf, unsigned int len)
 
 static unsigned int pn_recv(unsigned char *buf, unsigned int max)
 {
-    unsigned char op, seq, channel;
-    unsigned int len, n;
-    unsigned char frames = PN_RECV_FRAMES;
-    n = pn_take_data(buf, max);
-    if (n) return n;
-    while (frames--) {
-        if (!pn_read_frame(&op, &seq, &channel, &len, PN_RECV_BYTES)) break;
-        (void)seq;
-        pn_handle_async(op, channel, len);
-        n = pn_take_data(buf, max);
-        if (n) return n;
+    unsigned char seq, req[2];
+    unsigned int out_len;
+    if (!pn_channel || !pn_conn || !max) return 0;
+    if (max > PN_PULL_CHUNK) max = PN_PULL_CHUNK;
+    req[0] = (unsigned char)(max & 0xFF);
+    req[1] = (unsigned char)(max >> 8);
+    out_len = max;
+    seq = pn_tx(PN_OP_TCP_RECV, pn_channel, req, 2);
+    if (!seq || !pn_wait_ack(seq, buf, &out_len, PN_ACK_SPINS)) {
+        if (pn_last_status == PN_STATUS_BAD_CHANNEL || pn_last_status == PN_STATUS_IO_ERROR)
+            pn_conn = 0;
+        return 0;
     }
-    return 0;
+    return out_len;
 }
 
 static unsigned char pn_connected(void)
@@ -979,7 +985,7 @@ static void net_close(void)
 }
 
 #ifdef GB_PCW
-#define IAC_DEFER_MAX 48
+#define IAC_DEFER_MAX 32
 static unsigned char rx_busy, iac_defer_len;
 static unsigned char iac_defer[IAC_DEFER_MAX];
 
@@ -1074,7 +1080,7 @@ static void telnet_byte(unsigned char c)
         else if (iac_cmd == WILL)                  { send3(DONT, c); }
         else if (iac_cmd == DO) {
             if (c == OPT_NAWS)       { send3(WILL, c); send_naws(); }
-            else if (c == OPT_TTYPE) { /* already offered WILL TTYPE */ }
+            else if (c == OPT_TTYPE) { send3(WILL, c); }
             else if (c == OPT_SGA)   { send3(WILL, c); }
             else                       send3(WONT, c);
         }
@@ -1398,7 +1404,9 @@ static void action_connect(void)
         transport = TR_NET;
         iac_state = IS_NORMAL; local_echo = 1;
         start_session();
-#ifndef GB_PCW
+#ifdef GB_PCW
+        if (pump_recv()) active = ACTIVE_HOLD;
+#else
         send3(WILL, OPT_TTYPE);
         send3(WILL, OPT_NAWS);
 #endif

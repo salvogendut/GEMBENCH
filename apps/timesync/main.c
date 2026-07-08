@@ -1,8 +1,8 @@
-/* TIMESYNC.APP - background PCW desktop NTP sync over PerryNet.
+/* TIMESYNC.APP - background PCW desktop time sync over PerryNet.
  *
  * Launched by the desktop when GEOBENCH.CFG has TIMESERVER=x.x.x.x. It registers
- * a zero-sized legacy window so the WM gives it an app page, performs a bounded
- * per-frame PerryNet UDP/NTP exchange, sets the software clock, then detaches.
+ * a zero-sized legacy window so the WM gives it an app page, asks PerryNet for
+ * the firmware-maintained UTC clock, sets the software clock, then detaches.
  */
 #include "gb.h"
 
@@ -19,19 +19,24 @@
 
 #define PN_OP_HELLO        0x01
 #define PN_OP_WIFI_CONNECT 0x12
+#define PN_OP_WIFI_STATUS  0x14
+#define PN_OP_DNS_RESOLVE  0x20
 #define PN_OP_UDP_OPEN     0x40
 #define PN_OP_UDP_CLOSE    0x41
 #define PN_OP_UDP_SEND     0x42
+#define PN_OP_TIME_GET     0x60
 #define PN_OP_ACK          0x80
 #define PN_OP_EVENT        0x81
 #define PN_OP_UDP_DATA     0x83
 
 #define PN_STATUS_OK       0x00
+#define PN_EVT_WIFI_UP     0x02
+#define PN_EVT_WIFI_DOWN   0x03
 #define PN_EVT_UDP_ERROR   0x20
 
-#define BYTE_BUDGET        96
-#define ACK_TIMEOUT        25
-#define NTP_TIMEOUT        250
+#define BYTE_BUDGET        512
+#define ACK_TIMEOUT        150
+#define NTP_TIMEOUT        750
 
 #define WM_NWIN            (*(volatile unsigned char *)0x1350)
 #define WM_FOCUS           (*(volatile unsigned char *)0x1351)
@@ -48,6 +53,10 @@ enum {
     TS_START = 0,
     TS_WAIT_HELLO,
     TS_WAIT_WIFI,
+    TS_WIFI_READY,
+    TS_WAIT_WIFI_STATUS,
+    TS_WAIT_DNS,
+    TS_WAIT_TIME,
     TS_WAIT_UDP_OPEN,
     TS_WAIT_SEND,
     TS_WAIT_NTP
@@ -56,9 +65,10 @@ enum {
 static volatile unsigned char ser_io;
 static volatile unsigned char soft_hour, soft_min, soft_sec;
 static unsigned char server_ip[4];
-static unsigned char tz_hours, tz_neg;
-static unsigned char pn_seq, pn_udp_channel, wait_seq, state;
-static unsigned int wait_frames, last_ack_len;
+static unsigned char tz_hours, tz_neg, server_is_ip;
+static unsigned char pn_seq, pn_udp_channel, wait_seq, state, pn_wifi_up, wifi_connect_sent;
+static unsigned int wait_frames, wifi_wait_frames, last_ack_len;
+static char server_name[64];
 static unsigned char pn_frame[PN_FRAME_MAX];
 static unsigned int pn_in_len;
 static unsigned char pn_in_started, pn_in_esc, pn_in_overflow;
@@ -135,12 +145,15 @@ static void dart_wr(unsigned char reg, unsigned char val)
 
 static void serial_hw_init(void)
 {
+    /* Direct-boot GEOBENCH cannot rely on CP/M SETSIO. Program CPS8256
+     * channel A for 9600 8N1: 2MHz PIT / 16 / 13 = 9615 baud. */
     ser_io = 0x36; pit_out_ctrl(); ser_io = 13; pit_out_tx(); ser_io = 0; pit_out_tx();
     ser_io = 0x76; pit_out_ctrl(); ser_io = 13; pit_out_rx(); ser_io = 0; pit_out_rx();
     ser_io = 0x18; ser_out_ctrl();
     dart_wr(4, 0x44);
     dart_wr(3, 0xC1);
-    dart_wr(5, 0xEA);
+    dart_wr(5, 0x68);           /* TX enable + 8-bit TX, RTS/DTR inactive */
+    dart_wr(1, 0x00);
 }
 
 static unsigned char serial_present(void)
@@ -150,11 +163,18 @@ static unsigned char serial_present(void)
     return (unsigned char)(ser_io != 0x7F && ser_io != 0xFF);
 }
 
-static void serial_put(unsigned char b)
+static unsigned char serial_put(unsigned char b)
 {
-    do { ser_in_status(); } while (!(ser_io & 0x04));
-    ser_io = b;
-    ser_out_data();
+    unsigned int guard = 60000;
+    while (guard--) {
+        ser_in_status();
+        if (ser_io & 0x04) {
+            ser_io = b;
+            ser_out_data();
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static unsigned char serial_recv(unsigned char *b)
@@ -168,9 +188,16 @@ static unsigned char serial_recv(unsigned char *b)
 
 static void serial_drain(void)
 {
-    unsigned char guard = 0, b;
-    while (guard++ != 0xFF) {
-        if (!serial_recv(&b)) break;
+    unsigned char b;
+    unsigned int budget = 2048;
+    unsigned int quiet = 60000;
+    while (budget && quiet) {
+        if (serial_recv(&b)) {
+            budget--;
+            quiet = 60000;
+        } else {
+            quiet--;
+        }
     }
 }
 
@@ -188,17 +215,16 @@ static unsigned int pn_crc16(const unsigned char *data, unsigned int len)
     return crc;
 }
 
-static void pn_slip_put(unsigned char b)
+static unsigned char pn_slip_put(unsigned char b)
 {
     if (b == PN_END) {
-        serial_put(PN_ESC);
-        serial_put(PN_ESC_END);
+        if (!serial_put(PN_ESC)) return 0;
+        return serial_put(PN_ESC_END);
     } else if (b == PN_ESC) {
-        serial_put(PN_ESC);
-        serial_put(PN_ESC_ESC);
-    } else {
-        serial_put(b);
+        if (!serial_put(PN_ESC)) return 0;
+        return serial_put(PN_ESC_ESC);
     }
+    return serial_put(b);
 }
 
 static unsigned char pn_tx(unsigned char op, unsigned char channel,
@@ -217,9 +243,11 @@ static unsigned char pn_tx(unsigned char op, unsigned char channel,
     crc = pn_crc16(pn_frame, pos);
     pn_frame[pos++] = (unsigned char)(crc & 0xFF);
     pn_frame[pos++] = (unsigned char)(crc >> 8);
-    serial_put(PN_END);
-    for (i = 0; i < pos; i++) pn_slip_put(pn_frame[i]);
-    serial_put(PN_END);
+    if (!serial_put(PN_END)) return 0;
+    for (i = 0; i < pos; i++) {
+        if (!pn_slip_put(pn_frame[i])) return 0;
+    }
+    if (!serial_put(PN_END)) return 0;
     return seq;
 }
 
@@ -247,8 +275,14 @@ static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
 {
     unsigned char b;
     unsigned int budget = BYTE_BUDGET;
+    unsigned int idle = 64;
     while (budget--) {
-        if (!serial_recv(&b)) break;
+        if (!serial_recv(&b)) {
+            if (pn_in_started && pn_in_len) continue;
+            if (idle--) continue;
+            break;
+        }
+        idle = 1024;
         if (b == PN_END) {
             if (pn_in_started && pn_in_len) {
                 if (pn_finish_frame(op, seq, channel, len)) {
@@ -293,6 +327,10 @@ static unsigned char ack_step(void)
             last_ack_len = len - 1;
             return 1;
         }
+        if (op == PN_OP_EVENT && channel == 0 && len) {
+            if (pn_frame[6] == PN_EVT_WIFI_UP) pn_wifi_up = 1;
+            else if (pn_frame[6] == PN_EVT_WIFI_DOWN) pn_wifi_up = 0;
+        }
         if (op == PN_OP_EVENT && channel == pn_udp_channel && len && pn_frame[6] == PN_EVT_UDP_ERROR)
             return 2;
     }
@@ -332,16 +370,27 @@ static unsigned char parse_num(unsigned int *p, unsigned char *out)
 static unsigned char cfg_read(void)
 {
     const char *t = KCFG_TEXT;
-    unsigned int len = KCFG_LEN, p;
-    unsigned char i;
+    unsigned int len = KCFG_LEN, p, q;
+    unsigned char i, n;
     p = cfg_val("TIMESERVER=", 11);
     if (p >= len) return 0;
+    q = p;
+    server_is_ip = 1;
     for (i = 0; i < 4; i++) {
-        if (!parse_num(&p, &server_ip[i])) return 0;
+        if (!parse_num(&q, &server_ip[i])) { server_is_ip = 0; break; }
         if (i < 3) {
-            if (p >= len || t[p] != '.') return 0;
-            p++;
+            if (q >= len || t[q] != '.') { server_is_ip = 0; break; }
+            q++;
         }
+    }
+    if (server_is_ip && q < len && t[q] != '\r' && t[q] != '\n')
+        server_is_ip = 0;
+    if (!server_is_ip) {
+        n = 0;
+        while (p < len && t[p] != '\r' && t[p] != '\n' && n < sizeof(server_name) - 1)
+            server_name[n++] = t[p++];
+        server_name[n] = 0;
+        if (!n) return 0;
     }
     tz_hours = 0;
     tz_neg = 0;
@@ -376,6 +425,22 @@ static void apply_ntp_time(const unsigned char *buf)
     set_soft_time(h, m, s);
 }
 
+static void apply_unix_time(unsigned long sec)
+{
+    unsigned long day;
+    unsigned char h, m, s, n;
+    day = sec % 86400UL;
+    h = (unsigned char)(day / 3600UL);
+    day %= 3600UL;
+    m = (unsigned char)(day / 60UL);
+    s = (unsigned char)(day % 60UL);
+    for (n = 0; n < tz_hours; n++) {
+        if (tz_neg) h = h ? (unsigned char)(h - 1) : 23;
+        else { h++; if (h == 24) h = 0; }
+    }
+    set_soft_time(h, m, s);
+}
+
 static void close_now(void)
 {
     unsigned char slot, page, n, i, j;
@@ -384,7 +449,8 @@ static void close_now(void)
         (void)pn_tx(PN_OP_UDP_CLOSE, pn_udp_channel, 0, 0);
     pn_udp_channel = 0;
 
-    /* This helper never paints, so detach without the normal full close repaint. */
+    /* Zero-sized background helper: detach without gb_wm_close(), whose repaint
+     * path can run through the helper's bank and reboot-loop 1985 after NTP. */
     slot = WM_FOCUS;
     if (!slot) return;
     entry = WM_TABLE + (unsigned int)slot * WM_ESZ;
@@ -424,15 +490,33 @@ static void send_wait(unsigned char op, unsigned char channel,
     state = next;
 }
 
+static void open_udp_wait(void)
+{
+    unsigned char payload[2];
+    payload[0] = 0; payload[1] = 0;
+    send_wait(PN_OP_UDP_OPEN, 0, payload, 2, TS_WAIT_UDP_OPEN);
+}
+
+static void server_ready_wait(void)
+{
+    unsigned int len = 0;
+    if (server_is_ip) { open_udp_wait(); return; }
+    while (server_name[len]) len++;
+    send_wait(PN_OP_DNS_RESOLVE, 0, (const unsigned char *)server_name, len, TS_WAIT_DNS);
+}
+
 static void ts_frame(void)
 {
-    unsigned char r, op, seq, channel, payload[6];
+    unsigned char r, op, seq, channel;
     unsigned int len;
     if (state == TS_START) {
         if (!cfg_read() || !serial_present()) { close_now(); return; }
         serial_drain();
         pn_seq = 0;
         pn_udp_channel = 0;
+        pn_wifi_up = 0;
+        wifi_connect_sent = 0;
+        wifi_wait_frames = 0;
         pn_in_len = 0;
         pn_in_started = pn_in_esc = pn_in_overflow = 0;
         send_wait(PN_OP_HELLO, 0, 0, 0, TS_WAIT_HELLO);
@@ -440,15 +524,56 @@ static void ts_frame(void)
     }
     if (state == TS_WAIT_HELLO) {
         r = ack_step();
-        if (r == 1) send_wait(PN_OP_WIFI_CONNECT, 0, 0, 0, TS_WAIT_WIFI);
+        if (r == 1) send_wait(PN_OP_TIME_GET, 0, 0, 0, TS_WAIT_TIME);
         else if (r == 2) close_now();
+        return;
+    }
+    if (state == TS_WAIT_TIME) {
+        r = ack_step();
+        if (r == 1) {
+            if (last_ack_len >= 5 && pn_frame[7]) {
+                apply_unix_time(((unsigned long)pn_frame[8]) |
+                                ((unsigned long)pn_frame[9] << 8) |
+                                ((unsigned long)pn_frame[10] << 16) |
+                                ((unsigned long)pn_frame[11] << 24));
+            }
+            close_now();
+        } else if (r == 2) close_now();
         return;
     }
     if (state == TS_WAIT_WIFI) {
         r = ack_step();
         if (r == 1) {
-            payload[0] = 0; payload[1] = 0;
-            send_wait(PN_OP_UDP_OPEN, 0, payload, 2, TS_WAIT_UDP_OPEN);
+            wifi_wait_frames = 0;
+            state = TS_WIFI_READY;
+        } else if (r) close_now();
+        return;
+    }
+    if (state == TS_WIFI_READY) {
+        if (pn_wifi_up) { server_ready_wait(); return; }
+        if (++wifi_wait_frames == 10 && !wifi_connect_sent) {
+            wifi_connect_sent = 1;
+            send_wait(PN_OP_WIFI_CONNECT, 0, 0, 0, TS_WAIT_WIFI);
+            return;
+        }
+        if (wifi_wait_frames > 750) { close_now(); return; }
+        send_wait(PN_OP_WIFI_STATUS, 0, 0, 0, TS_WAIT_WIFI_STATUS);
+        return;
+    }
+    if (state == TS_WAIT_WIFI_STATUS) {
+        r = ack_step();
+        if (r == 1) {
+            if (last_ack_len >= 2 && pn_frame[8]) server_ready_wait();
+            else state = TS_WIFI_READY;
+        } else if (r == 2) close_now();
+        return;
+    }
+    if (state == TS_WAIT_DNS) {
+        r = ack_step();
+        if (r == 1 && last_ack_len >= 4) {
+            server_ip[0] = pn_frame[7]; server_ip[1] = pn_frame[8];
+            server_ip[2] = pn_frame[9]; server_ip[3] = pn_frame[10];
+            open_udp_wait();
         } else if (r) close_now();
         return;
     }

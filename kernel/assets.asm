@@ -289,8 +289,7 @@ boot_tick
                 add   a,BAR_SEG
                 ld    (bar_w),a
                 ld    b,a
-                ld    a,3                     ; pen 3 (red -> magenta)
-                call  bsp_bar
+                call  bsp_bar_check           ; magenta/black checker over the backing
                 ld    b,BOOT_HOLD
 bt_hold
                 push  bc
@@ -298,7 +297,53 @@ bt_hold
                 pop   bc
                 djnz  bt_hold
                 ret
+
+; bsp_bar_check: B = width in bytes -> checker-fill (BAR_X, BAR_Y, B, BAR_H).
+; Raw PCW hardware bytes: #AA = pen 3 (magenta), #00 = pen 2 (black).
+bsp_bar_check
+                ld    a,b
+                or    a
+                ret   z
+                ld    (bsp_ck_w),a
+                ld    a,BAR_Y
+                ld    (bsp_ck_y),a
+                ld    a,BAR_H
+                ld    (bsp_ck_rows),a
+bbck_row
+                ld    a,BAR_X
+                ld    d,a
+                ld    a,(bsp_ck_y)
+                ld    e,a
+                call  pcw_addr
+                ld    a,(bsp_ck_w)
+                ld    b,a
+                ld    a,(bsp_ck_y)            ; two scanlines per checker row
+                and   2
+                ld    c,#00
+                jr    z,bbck_have
+                ld    c,#AA
+bbck_have
+                ld    de,8                    ; x-neighbours are 8 bytes apart
+bbck_col
+                ld    (hl),c
+                ld    a,c
+                xor   #AA
+                ld    c,a
+                add   hl,de
+                djnz  bbck_col
+                ld    a,(bsp_ck_y)
+                inc   a
+                ld    (bsp_ck_y),a
+                ld    a,(bsp_ck_rows)
+                dec   a
+                ld    (bsp_ck_rows),a
+                jr    nz,bbck_row
+                ret
+
 bar_w           db    0
+bsp_ck_w        db    0
+bsp_ck_y        db    0
+bsp_ck_rows     db    0
                 endif                          ; (ifdef PLATFORM_PCW bootsplash)
 
 ; --- bootsplash, MSX2 (#287) ----------------------------------------------

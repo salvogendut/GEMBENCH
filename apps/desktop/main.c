@@ -59,7 +59,9 @@ static unsigned char menu_refresh;           /* refocus after a child window clo
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 #ifdef GB_PCW
-static unsigned char want_timesync;          /* one-shot boot NTP sync helper, if TIMESERVER= exists */
+static unsigned char want_timesync;          /* boot time helper enabled when TIMESERVER= exists */
+static unsigned int timesync_delay;          /* let real PerryNet hardware finish booting first */
+static unsigned char timesync_tries;         /* retry if firmware SNTP was not ready yet */
 #endif
 
 #define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
@@ -436,7 +438,7 @@ static void select_icon(unsigned char icon)
 #define WM_FS       ((volatile unsigned char *)0x130A)   /* 1 = a window is fullscreen (kernel) */
 #define CLK_COL     (GB_COLS - 12)  /* clock column (matches the old kernel bar) */
 
-static unsigned char bar_init, bar_min, bar_msig, bar_wasfs;
+static unsigned char bar_init, bar_hour, bar_min, bar_msig, bar_wasfs;
 
 static unsigned char bin(unsigned char v)   /* raw RTC reg -> binary (gb_time) */
 {
@@ -460,11 +462,10 @@ static void bar_menu(void)
     gb_curshow();
 }
 
-static void bar_clock(void)
+static void bar_clock(unsigned char h, unsigned char m)
 {
     char t[6];
-    gb_time();
-    put2(t, bin(gb_hour)); t[2] = ':'; put2(t + 3, bin(gb_min)); t[5] = 0;
+    put2(t, bin(h)); t[2] = ':'; put2(t + 3, bin(m)); t[5] = 0;
     gb_curhide(); gb_textbw(CLK_COL, 0, t); gb_curshow();
 }
 
@@ -481,13 +482,17 @@ static void bar_draw(void)
         gb_fill(0, 0, GB_COLS, 8, 1);
         gb_textbw(1, 0, KCFG_MEMSTR);
         gb_curshow();
-        bar_init = 1; bar_min = 0xFF; bar_msig = 0xFF;
+        bar_init = 1; bar_hour = 0xFF; bar_min = 0xFF; bar_msig = 0xFF;
     }
     msig = 0;                                  /* menu titles: redraw when MENU_DEF changes */
     for (i = 0; i < (unsigned char)(MENU_DEF[0] * 9 + 1) && i < 40; i++) msig += MENU_DEF[i];
     if (msig != bar_msig) { bar_msig = msig; bar_menu(); }
-    gb_time();                                 /* clock: redraw when the minute changes */
-    if (bin(gb_min) != bar_min) { bar_min = bin(gb_min); bar_clock(); }
+    gb_time();                                 /* clock: redraw when the displayed time changes */
+    if (gb_hour != bar_hour || gb_min != bar_min) {
+        bar_hour = gb_hour;
+        bar_min = gb_min;
+        bar_clock(gb_hour, gb_min);
+    }
     /* The desktop loses focus when a window is clicked, and its on_frame stops
        running - but this bar hook runs every frame in the desktop's page regardless
        of focus. on_frame (above) sets desk_active when the desktop is focused; if it
@@ -734,10 +739,14 @@ static void on_frame(void)
         return;
     }
 #ifdef GB_PCW
-    if (want_timesync) {
-        want_timesync = 0;
-        if (!gb_wm_full()) gb_wm_open("TIMESYNCAPP");
-        return;
+    if (timesync_tries) {
+        if (timesync_delay) timesync_delay--;
+        else if (!gb_wm_full()) {
+            timesync_tries--;
+            gb_wm_open("TIMESYNCAPP");
+            if (timesync_tries) timesync_delay = 750;
+            return;
+        }
     }
 #endif
 
@@ -804,6 +813,8 @@ void main(void)
     ss_cfg_init();                               /* #219: read the screensaver idle timeout */
 #ifdef GB_PCW
     want_timesync = (cfg_val("TIMESERVER=", 11) < KCFG_LEN);
+    timesync_delay = 250;                      /* Wemos D1/PerryNet is slower than direct PCW boot */
+    timesync_tries = want_timesync ? 3 : 0;
 #endif
     gb_wm_damage(0, 0, GB_COLS, GB_LINES);                 /* initialise the shared repaint clip before paint() */
     paint();
