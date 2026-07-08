@@ -679,6 +679,10 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_VERSION         0x01
 #define PN_MAX_PAYLOAD     512
 #define PN_FRAME_MAX       520
+/* Per UI tick: drain ready bytes only, then yield so the PCW pointer/key path
+ * stays responsive while a TCP session is idle. */
+#define PN_RECV_BYTES      768
+#define PN_RECV_FRAMES     8
 
 #define PN_OP_TCP_OPEN     0x30
 #define PN_OP_TCP_CLOSE    0x31
@@ -778,7 +782,7 @@ static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
 {
     unsigned char b;
     while (spins--) {
-        if (!serial_recv(&b, 1)) continue;
+        if (!serial_recv(&b, 1)) break;
         if (b == PN_END) {
             if (pn_in_started && pn_in_len) {
                 if (pn_finish_frame(op, seq, channel, len)) {
@@ -898,11 +902,12 @@ static unsigned char pn_send(const unsigned char *buf, unsigned int len)
 static unsigned int pn_recv(unsigned char *buf, unsigned int max)
 {
     unsigned char op, seq, channel;
-    unsigned int len, n, spins = 3500;
+    unsigned int len, n;
+    unsigned char frames = PN_RECV_FRAMES;
     n = pn_take_data(buf, max);
     if (n) return n;
-    while (spins--) {
-        if (!pn_read_frame(&op, &seq, &channel, &len, 1)) continue;
+    while (frames--) {
+        if (!pn_read_frame(&op, &seq, &channel, &len, PN_RECV_BYTES)) break;
         (void)seq;
         pn_handle_async(op, channel, len);
         n = pn_take_data(buf, max);
