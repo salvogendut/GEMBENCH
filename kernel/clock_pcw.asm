@@ -66,3 +66,24 @@ k_time
                 ld    a,4
                 ld    (GB_TIME_BUF+3),a
                 ret
+
+; k_settime (GB_RUN on PCW): set the software clock from binary B=hour C=min D=sec.
+k_settime
+                ld    a,b
+                cp    24
+                ret   nc
+                ld    a,c
+                cp    60
+                ret   nc
+                ld    a,d
+                cp    60
+                ret   nc
+                ld    a,b
+                ld    (sw_hour),a
+                ld    a,c
+                ld    (sw_min),a
+                ld    a,d
+                ld    (sw_sec),a
+                xor   a
+                ld    (clk_frames),a
+                ret

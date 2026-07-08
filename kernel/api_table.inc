@@ -44,7 +44,15 @@ PICEDIT_ENTRY   equ   PICEDIT_BASE
                 jp    cursor_erase           ; GB_CURHIDE #8024
                 jp    k_noop                 ; GB_LAUNCH  #8027 (dead stub -> shared ret, #148)
                 jp    focus_arg_ptr          ; GB_GETARG  #802A (k_getarg collapsed, #148)
+                ifdef PLATFORM_MSX
+                jp    k_settime              ; MSX software-clock setter in the GB_RUN slot
+                else
+                ifdef PLATFORM_PCW
+                jp    k_settime              ; PCW software-clock setter in the GB_RUN slot
+                else
                 jp    k_noop                 ; GB_RUN     #802D reserved legacy modal-run slot
+                endif
+                endif
                 jp    k_icon                 ; GB_ICON    #8030
                 jp    k_fill                 ; GB_FILL    #8033
                 jp    k_saverect             ; GB_SAVERECT    #8036

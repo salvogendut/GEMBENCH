@@ -152,6 +152,27 @@ __endasm;
 #endif
 static void set_rtc(unsigned char reg, unsigned char val) { rtc_reg = reg; rtc_val = val; rtc_poke(); }
 
+#if defined(GB_MSX2) || defined(GB_PCW)
+static volatile unsigned char soft_hour, soft_min, soft_sec;
+static void soft_poke(void) __naked
+{
+__asm
+    ld   a, (_soft_hour)
+    ld   b, a
+    ld   a, (_soft_min)
+    ld   c, a
+    ld   a, (_soft_sec)
+    ld   d, a
+    call 0x802D          ; GB_RUN soft-clock setter on MSX/PCW
+    ret
+__endasm;
+}
+static void set_soft_time(unsigned char h, unsigned char m, unsigned char s)
+{
+    soft_hour = h; soft_min = m; soft_sec = s; soft_poke();
+}
+#endif
+
 /* the kernel hands us raw RTC registers; convert BCD -> binary unless it's binary */
 static unsigned char bin(unsigned char v)
 {
@@ -278,7 +299,7 @@ static void draw_field(unsigned char x, unsigned char y, unsigned char v)
 }
 static unsigned char set_time_dialog(void)
 {
-    unsigned char flags, done = 0, ok = 0;
+    unsigned char flags = 0, done = 0, ok = 0;
     unsigned char x = win_x + 3, y = win_y + 34, w = 22, h = 44;
     unsigned char hx = x + 4, mx = x + 13, ay = y + 6;
 
@@ -320,10 +341,14 @@ static unsigned char set_time_dialog(void)
     gb_fill(x, y, w, h, 0);
     gb_curshow();
     if (ok) {
+#if defined(GB_MSX2) || defined(GB_PCW)
+        set_soft_time(hh, mm, 0);
+#else
         gb_time();                       /* refresh binmode before writing */
         set_rtc(4, tobcd(hh));           /* hours  */
         set_rtc(2, tobcd(mm));           /* minutes */
         set_rtc(0, tobcd(0));            /* seconds */
+#endif
     }
     return ok;
 }
