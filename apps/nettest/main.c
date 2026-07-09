@@ -59,6 +59,7 @@ static unsigned char nt_send(const unsigned char *buf, unsigned int len);
 static unsigned int nt_recv(unsigned char *buf, unsigned int max);
 static unsigned char nt_connected(void);
 static void nt_close(void);
+static void log_rx(unsigned int n);
 #ifdef GB_PCW
 static unsigned char nt_udp_open(void);
 static unsigned char nt_udp_send(const unsigned char *addr, unsigned int port,
@@ -148,6 +149,15 @@ static void log_count(unsigned char n, const char *prefix, unsigned int count)
 }
 
 #ifdef GB_PCW
+static char *put_hex2(char *p, unsigned char v)
+{
+    static const char h[] = "0123456789ABCDEF";
+    *p++ = h[(v >> 4) & 15];
+    *p++ = h[v & 15];
+    *p = 0;
+    return p;
+}
+
 static char *put2(char *p, unsigned char v)
 {
     *p++ = (char)('0' + v / 10);
@@ -181,6 +191,7 @@ static void log_time(unsigned char n, unsigned char h, unsigned char m, unsigned
 
 #define PN_OP_HELLO        0x01
 #define PN_OP_WIFI_CONNECT 0x12
+#define PN_OP_WIFI_STATUS  0x14
 #define PN_OP_DNS_RESOLVE  0x20
 #define PN_OP_TCP_OPEN     0x30
 #define PN_OP_TCP_CLOSE    0x31
@@ -194,15 +205,19 @@ static void log_time(unsigned char n, unsigned char h, unsigned char m, unsigned
 #define PN_OP_UDP_DATA     0x83
 
 #define PN_STATUS_OK       0x00
+#define PN_EVT_WIFI_UP     0x02
+#define PN_EVT_WIFI_DOWN   0x03
 #define PN_EVT_TCP_CLOSED  0x11
 #define PN_EVT_TCP_ERROR   0x12
 #define PN_EVT_UDP_ERROR   0x20
 
 static volatile unsigned char ser_io;
 static unsigned char pcw_ser_inited;
+static unsigned int pcw_serial_divisor = 13;
 static unsigned char pn_seq;
 static unsigned char pn_channel;
 static unsigned char pn_udp_channel;
+static unsigned char pn_wifi_up;
 static unsigned char pn_conn;
 static unsigned char pn_rxq[PN_RXQ_SIZE];
 static unsigned char pn_rx_head, pn_rx_tail;
@@ -211,7 +226,112 @@ static unsigned int pn_udp_len;
 static unsigned char pn_frame[PN_FRAME_MAX];
 static unsigned int pn_in_len;
 static unsigned char pn_in_started, pn_in_esc, pn_in_overflow;
+static unsigned int pn_diag_rx_bytes;
+static unsigned char pn_diag_bad_frames;
+static unsigned char pn_diag_last_rr0;
+static unsigned char pn_diag_last_op;
+static unsigned char pn_diag_last_seq;
+static unsigned char pn_diag_last_status;
+static unsigned char pn_diag_ack_fail;
+static unsigned char pn_diag_tx_timeout;
 static volatile unsigned char soft_hour, soft_min, soft_sec;
+
+#define PN_ACK_TIMEOUT 1
+#define PN_ACK_EMPTY   2
+#define PN_ACK_STATUS  3
+#define SERIAL_TX_SPINS 60000
+
+static void pn_diag_reset(void)
+{
+    pn_diag_rx_bytes = 0;
+    pn_diag_bad_frames = 0;
+    pn_diag_last_rr0 = 0;
+    pn_diag_last_op = 0xFF;
+    pn_diag_last_seq = 0;
+    pn_diag_last_status = 0xFF;
+    pn_diag_ack_fail = 0;
+    pn_diag_tx_timeout = 0;
+}
+
+static void log_pn_diag(unsigned char n)
+{
+    char t[LINELEN];
+    char *p = t;
+    copy(t, "rr0=");
+    p += 4;
+    p = put_hex2(p, pn_diag_last_rr0);
+    copy(p, " rx=");
+    p += 4;
+    p = put_dec(p, pn_diag_rx_bytes);
+    copy(p, " bad=");
+    p += 5;
+    put_dec(p, pn_diag_bad_frames);
+    log_line(n, t);
+}
+
+static void log_pn_probe(unsigned char n, const char *label)
+{
+    char t[LINELEN];
+    char *p = t;
+    unsigned char i = 0;
+    while (label[i] && p < t + LINELEN - 1) *p++ = label[i++];
+    copy(p, " rr0=");
+    p += 5;
+    p = put_hex2(p, pn_diag_last_rr0);
+    copy(p, " rx=");
+    p += 4;
+    p = put_dec(p, pn_diag_rx_bytes);
+    if (pn_diag_tx_timeout) copy(p, " tx");
+    log_line(n, t);
+}
+
+static void log_pn_last(unsigned char n)
+{
+    char t[LINELEN];
+    char *p = t;
+    copy(t, "last op=");
+    p += 8;
+    p = put_hex2(p, pn_diag_last_op);
+    copy(p, " seq=");
+    p += 5;
+    p = put_hex2(p, pn_diag_last_seq);
+    copy(p, " st=");
+    p += 4;
+    put_hex2(p, pn_diag_last_status);
+    log_line(n, t);
+}
+
+static void log_wifi_status(unsigned char n, unsigned char status, unsigned char connected)
+{
+    char t[LINELEN];
+    char *p = t;
+    copy(t, "wifi st=");
+    p += 8;
+    p = put_hex2(p, status);
+    copy(p, " conn=");
+    p += 6;
+    *p++ = connected ? '1' : '0';
+    *p = 0;
+    log_line(n, t);
+}
+
+static void log_pn_ack_fail(const char *stage)
+{
+    char t[LINELEN];
+    char *p = t;
+    unsigned char i = 0;
+    copy(t, "init ");
+    p += 5;
+    while (stage[i] && p < t + LINELEN - 1) *p++ = stage[i++];
+    copy(p, ": ");
+    p += 2;
+    if (pn_diag_ack_fail == PN_ACK_STATUS) copy(p, "bad status");
+    else if (pn_diag_ack_fail == PN_ACK_EMPTY) copy(p, "empty ack");
+    else copy(p, "timeout");
+    log_line(3, t);
+    log_pn_diag(4);
+    log_pn_last(5);
+}
 
 static void soft_poke(void) __naked
 { __asm
@@ -284,12 +404,19 @@ static void dart_wr(unsigned char reg, unsigned char val)
 static void serial_hw_init(void)
 {
     if (pcw_ser_inited) return;
-    ser_io = 0x36; pit_out_ctrl(); ser_io = 13; pit_out_tx(); ser_io = 0; pit_out_tx();
-    ser_io = 0x76; pit_out_ctrl(); ser_io = 13; pit_out_rx(); ser_io = 0; pit_out_rx();
+    /* Direct-boot GEOBENCH cannot rely on CP/M SETSIO. Program CPS8256
+     * channel A for 8N1. Baud is 2MHz PIT / 16 / divisor. */
+    ser_io = 0x36; pit_out_ctrl();
+    ser_io = (unsigned char)(pcw_serial_divisor & 0xFF); pit_out_tx();
+    ser_io = (unsigned char)(pcw_serial_divisor >> 8); pit_out_tx();
+    ser_io = 0x76; pit_out_ctrl();
+    ser_io = (unsigned char)(pcw_serial_divisor & 0xFF); pit_out_rx();
+    ser_io = (unsigned char)(pcw_serial_divisor >> 8); pit_out_rx();
     ser_io = 0x18; ser_out_ctrl();
     dart_wr(4, 0x44);
     dart_wr(3, 0xC1);
-    dart_wr(5, 0xEA);
+    dart_wr(5, 0x68);                 /* TX enable + 8-bit TX, RTS/DTR inactive */
+    dart_wr(1, 0x00);
     pcw_ser_inited = 1;
 }
 
@@ -300,11 +427,20 @@ static unsigned char serial_present(void)
     return (unsigned char)(ser_io != 0x7F && ser_io != 0xFF);
 }
 
-static void serial_put(unsigned char b)
+static unsigned char serial_put(unsigned char b)
 {
-    do { ser_in_status(); } while (!(ser_io & 0x04));
-    ser_io = b;
-    ser_out_data();
+    unsigned int guard = SERIAL_TX_SPINS;
+    while (guard--) {
+        ser_in_status();
+        pn_diag_last_rr0 = ser_io;
+        if (ser_io & 0x04) {
+            ser_io = b;
+            ser_out_data();
+            return 1;
+        }
+    }
+    pn_diag_tx_timeout = 1;
+    return 0;
 }
 
 static unsigned int serial_recv(unsigned char *buf, unsigned int max)
@@ -312,19 +448,35 @@ static unsigned int serial_recv(unsigned char *buf, unsigned int max)
     unsigned int n = 0;
     while (n < max) {
         ser_in_status();
+        pn_diag_last_rr0 = ser_io;
         if (!(ser_io & 0x01)) break;
         ser_in_data();
         buf[n++] = ser_io;
+        pn_diag_rx_bytes++;
     }
     return n;
 }
 
+static unsigned int serial_probe_rx(unsigned int spins)
+{
+    unsigned char b;
+    unsigned int before = pn_diag_rx_bytes;
+    while (spins--) serial_recv(&b, 1);
+    return (unsigned int)(pn_diag_rx_bytes - before);
+}
+
 static void serial_drain(void)
 {
-    unsigned char guard = 0;
     unsigned char b;
-    while (guard++ != 0xFF) {
-        if (!serial_recv(&b, 1)) break;
+    unsigned int budget = 2048;
+    unsigned int quiet = 60000;
+    while (budget && quiet) {
+        if (serial_recv(&b, 1)) {
+            budget--;
+            quiet = 60000;
+        } else {
+            quiet--;
+        }
     }
 }
 
@@ -341,17 +493,16 @@ static unsigned int pn_crc16(const unsigned char *data, unsigned int len)
     return crc;
 }
 
-static void pn_slip_put(unsigned char b)
+static unsigned char pn_slip_put(unsigned char b)
 {
     if (b == PN_END) {
-        serial_put(PN_ESC);
-        serial_put(PN_ESC_END);
+        if (!serial_put(PN_ESC)) return 0;
+        return serial_put(PN_ESC_END);
     } else if (b == PN_ESC) {
-        serial_put(PN_ESC);
-        serial_put(PN_ESC_ESC);
-    } else {
-        serial_put(b);
+        if (!serial_put(PN_ESC)) return 0;
+        return serial_put(PN_ESC_ESC);
     }
+    return serial_put(b);
 }
 
 static unsigned char pn_tx(unsigned char op, unsigned char channel,
@@ -370,9 +521,11 @@ static unsigned char pn_tx(unsigned char op, unsigned char channel,
     crc = pn_crc16(pn_frame, pos);
     pn_frame[pos++] = (unsigned char)(crc & 0xFF);
     pn_frame[pos++] = (unsigned char)(crc >> 8);
-    serial_put(PN_END);
-    for (i = 0; i < pos; i++) pn_slip_put(pn_frame[i]);
-    serial_put(PN_END);
+    if (!serial_put(PN_END)) return 0;
+    for (i = 0; i < pos; i++) {
+        if (!pn_slip_put(pn_frame[i])) return 0;
+    }
+    if (!serial_put(PN_END)) return 0;
     return seq;
 }
 
@@ -432,6 +585,7 @@ static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
                     pn_in_esc = 0;
                     return 1;
                 }
+                pn_diag_bad_frames++;
             }
             pn_in_started = 1;
             pn_in_len = 0;
@@ -469,10 +623,24 @@ static void pn_handle_async(unsigned char op, unsigned char channel, unsigned in
         pn_udp_len = n;
     } else if (op == PN_OP_EVENT && len) {
         event = pn_frame[6];
+        if (channel == 0 && event == PN_EVT_WIFI_UP) pn_wifi_up = 1;
+        if (channel == 0 && event == PN_EVT_WIFI_DOWN) pn_wifi_up = 0;
         if (channel == pn_channel && (event == PN_EVT_TCP_CLOSED || event == PN_EVT_TCP_ERROR))
             pn_conn = 0;
         if (channel == pn_udp_channel && event == PN_EVT_UDP_ERROR)
             pn_udp_channel = 0;
+    }
+}
+
+static void pn_wait_async(unsigned int spins)
+{
+    unsigned char op, seq, channel;
+    unsigned int len;
+    while (spins--) {
+        if (!pn_read_frame(&op, &seq, &channel, &len, 1)) continue;
+        pn_diag_last_op = op;
+        pn_diag_last_seq = seq;
+        pn_handle_async(op, channel, len);
     }
 }
 
@@ -481,12 +649,16 @@ static unsigned char pn_wait_ack(unsigned char want_seq, unsigned char *out,
 {
     unsigned char op, seq, channel, status;
     unsigned int len, n, i;
+    pn_diag_ack_fail = 0;
     while (spins--) {
         if (!pn_read_frame(&op, &seq, &channel, &len, 1)) continue;
+        pn_diag_last_op = op;
+        pn_diag_last_seq = seq;
         if (op == PN_OP_ACK && seq == want_seq) {
-            if (!len) return 0;
+            if (!len) { pn_diag_ack_fail = PN_ACK_EMPTY; return 0; }
             status = pn_frame[6];
-            if (status != PN_STATUS_OK) return 0;
+            pn_diag_last_status = status;
+            if (status != PN_STATUS_OK) { pn_diag_ack_fail = PN_ACK_STATUS; return 0; }
             n = (unsigned int)(len - 1);
             if (out && out_len) {
                 if (n > *out_len) n = *out_len;
@@ -497,6 +669,7 @@ static unsigned char pn_wait_ack(unsigned char want_seq, unsigned char *out,
         }
         pn_handle_async(op, channel, len);
     }
+    pn_diag_ack_fail = PN_ACK_TIMEOUT;
     return 0;
 }
 
@@ -505,23 +678,71 @@ static unsigned char nt_init(const unsigned char *cfg)
     unsigned char seq;
     unsigned int out_len;
     unsigned char out[24];
+    unsigned char tries, wifi_status = 0xFF, wifi_connected = 0;
     (void)cfg;
-    if (!serial_present()) return 0;
+    pn_diag_reset();
+    log_line(6, "serial: pcw9600 setup");
+    serial_hw_init();
+    serial_probe_rx(60000);
+    log_pn_probe(7, "idle");
+    if (!serial_present()) {
+        log_line(3, "serial: not present");
+        log_pn_diag(4);
+        return 0;
+    }
     serial_drain();
+    pn_diag_reset();
     pn_seq = 0;
     pn_channel = 0;
     pn_udp_channel = 0;
+    pn_wifi_up = 0;
     pn_conn = 0;
     pn_rx_head = pn_rx_tail = 0;
     pn_udp_len = 0;
     pn_in_len = 0;
     pn_in_started = pn_in_esc = pn_in_overflow = 0;
     out_len = sizeof(out);
+    log_line(3, "HELLO...");
     seq = pn_tx(PN_OP_HELLO, 0, 0, 0);
-    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000)) return 0;
+    if (!seq) { log_line(3, "init HELLO: tx fail"); log_pn_diag(4); return 0; }
+    if (!pn_wait_ack(seq, out, &out_len, 60000)) { log_pn_ack_fail("HELLO"); return 0; }
+    log_line(3, "HELLO ok");
+    pn_diag_reset();
+    log_line(4, "WIFI_STATUS...");
+    out_len = sizeof(out);
+    seq = pn_tx(PN_OP_WIFI_STATUS, 0, 0, 0);
+    if (!seq) { log_line(4, "WIFI_STATUS tx fail"); log_pn_diag(5); return 0; }
+    if (!pn_wait_ack(seq, out, &out_len, 60000)) { log_pn_ack_fail("WSTAT"); return 0; }
+    if (out_len >= 2) {
+        wifi_status = out[0];
+        wifi_connected = out[1];
+        if (wifi_connected) { log_line(4, "WIFI already up"); return 1; }
+    }
+    log_line(4, "WIFI_CONNECT...");
+    out_len = sizeof(out);
     seq = pn_tx(PN_OP_WIFI_CONNECT, 0, 0, 0);
-    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000)) return 0;
-    return 1;
+    if (!seq) { log_line(4, "init WIFI: tx fail"); log_pn_diag(5); return 0; }
+    if (!pn_wait_ack(seq, out, &out_len, 60000)) { log_pn_ack_fail("WIFI"); return 0; }
+    log_line(4, "WIFI_CONNECT ok");
+    log_line(5, "WIFI wait...");
+    for (tries = 0; tries < 60; tries++) {
+        if (pn_wifi_up) { log_line(5, "WIFI ready event"); return 1; }
+        out_len = sizeof(out);
+        seq = pn_tx(PN_OP_WIFI_STATUS, 0, 0, 0);
+        if (!seq) { log_line(5, "WIFI_STATUS tx fail"); log_pn_diag(6); return 0; }
+        if (!pn_wait_ack(seq, out, &out_len, 60000)) { log_pn_ack_fail("WSTAT"); return 0; }
+        if (out_len >= 2) {
+            wifi_status = out[0];
+            wifi_connected = out[1];
+            if (wifi_connected) { log_line(5, "WIFI ready"); return 1; }
+            log_wifi_status(6, wifi_status, wifi_connected);
+        }
+        pn_wait_async(120000);
+    }
+    log_line(5, "WIFI wait timeout");
+    log_wifi_status(6, wifi_status, wifi_connected);
+    log_pn_last(7);
+    return 0;
 }
 
 static unsigned char nt_resolve(const char *name, unsigned char *out_ip)
@@ -532,7 +753,14 @@ static unsigned char nt_resolve(const char *name, unsigned char *out_ip)
     unsigned int n = 0;
     while (name[n]) n++;
     seq = pn_tx(PN_OP_DNS_RESOLVE, 0, (const unsigned char *)name, n);
-    if (!seq || !pn_wait_ack(seq, out, &len, 60000) || len < 4) return 0;
+    if (!seq) { log_line(3, "DNS tx fail"); log_pn_diag(4); return 0; }
+    if (!pn_wait_ack(seq, out, &len, 60000)) { log_pn_ack_fail("DNS"); return 0; }
+    if (len < 4) {
+        log_line(3, "DNS short ack");
+        log_pn_diag(4);
+        log_pn_last(5);
+        return 0;
+    }
     out_ip[0] = out[0]; out_ip[1] = out[1]; out_ip[2] = out[2]; out_ip[3] = out[3];
     return 1;
 }

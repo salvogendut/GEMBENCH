@@ -107,11 +107,14 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
   boot disk, and `PENGUIN.PIC` is omitted, to keep enough CF2 space for
   the network apps.
 
-On PCW, the desktop launches `TIMESYNC.APP` once at startup when
-`GEOBENCH.CFG` contains `TIMESERVER=x.x.x.x`. The helper uses PerryNet NTP
-over PerryFi, applies `TIMEZONE=+H` or `TIMEZONE=-H` as an offset from GMT,
-sets the software clock, then detaches. Missing PerryNet hardware or a network
-timeout leaves the desktop running normally.
+On PCW, the desktop launches `TIMESYNC.APP` at startup when
+`GEOBENCH.CFG` contains a non-empty `TIMESERVER=` line. The helper asks PerryNet
+for the firmware-maintained UTC clock with `TIME_GET`, applies `TIMEZONE=+H` or
+`TIMEZONE=-H` as an offset from GMT, sets the software clock, then detaches.
+PerryNet initializes that clock with SNTP after WiFi comes up; if the firmware
+clock is not valid yet, GEOBENCH leaves the desktop running normally and makes
+a bounded number of later lightweight `TIME_GET` retries instead of blocking
+boot.
 
 TELNET's terminal is **80×25 in the window and 90×28 fullscreen**
 (Telnet menu toggle; Ctrl-] or ESC exits) — a 4×8 charset
@@ -127,8 +130,10 @@ window — no video-mode switch, so it looks the same on real hardware.
   framebuffer; each needs a PCW plot path.
 - DISKUTIL (needs a PCW FORMAT TRACK backend), PAINT and GB-BASIC (their
   repos need `-DGB_PCW` targets).
-- TELNET uses PerryNet/PerryFi directly for TCP sessions on PCW; a shared
-  direct network-module backend remains a later target.
+- TELNET uses PerryNet/PerryFi directly for TCP sessions on PCW. It opens
+  PerryNet sockets in host-pulled receive mode (`TCP_RECV`) so banner data is
+  only transmitted while TELNET is actively polling serial; a shared direct
+  network-module backend remains a later target.
 - CF2DD 720K media (2K blocks, 16-bit allocation entries) — drive B
   currently expects CF2-format discs.
 
@@ -195,6 +200,10 @@ I/O (a minimal roller table pointing every scanline at one shared row):
   PC-style 1.8432 MHz crystal: count 12 is 10417 baud = framing garbage
   on real hardware, and the 1985 emulator stores the count without
   timing it, so it cannot catch a wrong divisor.
+- CPS8256 serial modem-control: GEOBENCH's direct-boot setup uses DART WR5
+  `0x68` (TX enable + 8-bit TX, RTS/DTR inactive). Real PerryFi hardware
+  answered `AT` at 9600 with this value, while WR5 `0xEA` (RTS/DTR asserted)
+  did not.
 - Drive B's stepping depends on the MECHANISM, not the media: an
   8512-style 80-track CF2DD drive double-steps CF2 discs, but a Gotek
   (or a 40-track bolt-on B) maps tracks 1:1 — hardcoding either breaks
