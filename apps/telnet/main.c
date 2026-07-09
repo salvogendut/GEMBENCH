@@ -693,7 +693,7 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_MAX_PAYLOAD     512
 #endif
 #define PN_FRAME_MAX       (6 + PN_MAX_PAYLOAD + 2)
-#define PN_PULL_CHUNK      32
+#define PN_PULL_CHUNK      128
 #define PN_ACK_SPINS       12000
 
 #define PN_OP_TCP_OPEN     0x30
