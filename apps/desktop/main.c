@@ -59,7 +59,7 @@ static unsigned char menu_refresh;           /* refocus after a child window clo
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 #ifdef GB_PCW
-static unsigned char want_timesync;          /* boot time helper enabled when TIMESERVER= exists */
+static unsigned char want_timesync;          /* boot time helper enabled when TIMESYNC=true */
 static unsigned int timesync_delay;          /* let real PerryNet hardware finish booting first */
 static unsigned char timesync_tries;         /* one visible boot sync attempt */
 #endif
@@ -806,12 +806,16 @@ static const gb_win_t deskwin = { 0, 8, GB_COLS, GB_LINES - 8, on_frame, paint, 
 
 void main(void)
 {
+#ifdef GB_PCW
+    unsigned int p;
+#endif
     *WM_FS = 0;                                 /* clear the fullscreen flag at boot (low RAM is
                                                    uninitialised; bar_draw reads it every frame) */
     WM_OPEN_STRICT = 0;
     drive_poll();                               /* drives present at boot -> icons (#65) */
 #ifdef GB_PCW
-    want_timesync = (cfg_val("TIMESERVER=", 11) < KCFG_LEN);
+    p = cfg_val("TIMESYNC=", 9);
+    want_timesync = (unsigned char)(p < KCFG_LEN && KCFG_TEXT[p] == 't');
     timesync_delay = 250;                      /* start visibly, then let TIMESYNC wait for PerryNet */
     timesync_tries = want_timesync ? 1 : 0;
 #endif
