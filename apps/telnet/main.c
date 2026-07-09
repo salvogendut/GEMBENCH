@@ -671,6 +671,36 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 }
 #endif
 
+static const unsigned char serial_esc_seq[3] = { '+', '+', '+' };
+static const unsigned char serial_ath_cmd[4] = { 'A', 'T', 'H', '\r' };
+
+static void serial_guard_spin(void) __naked
+{
+__asm
+    ld b,#3
+2$:
+    ld de,#0
+1$:
+    dec de
+    ld a,d
+    or e
+    jr nz,1$
+    djnz 2$
+    ret
+__endasm;
+}
+
+static void serial_modem_hangup(void)
+{
+    if (!serial_present()) return;
+    serial_guard_spin();                    /* Hayes escape guard before "+++" */
+    serial_send(serial_esc_seq, sizeof(serial_esc_seq));
+    serial_guard_spin();                    /* command-mode guard after escape */
+    serial_send(serial_ath_cmd, sizeof(serial_ath_cmd));
+    serial_guard_spin();
+    serial_ctrl(1);                         /* drain stale RX / reset board-side state */
+}
+
 #ifdef GB_PCW
 /* ---- PerryNet over PCW serial/PerryFi -------------------------------------- */
 #define PN_END             0xC0
@@ -1428,6 +1458,7 @@ static void close_session(void)
 #if TELNET_HAS_NET
     if (transport == TR_NET && (state == ST_RUN || state == ST_DONE)) net_close();
 #endif
+    if (transport == TR_SERIAL && (state == ST_RUN || state == ST_DONE)) serial_modem_hangup();
     state = ST_IDLE;
 }
 
@@ -1446,7 +1477,7 @@ static void start_session(void)
 /* Connect over TCP: host:port dialog + DNS, then the telnet WILL handshake. */
 static void action_connect(void)
 {
-    if (transport == TR_NET && (state == ST_RUN || state == ST_DONE)) net_close();
+    if (state == ST_RUN || state == ST_DONE) close_session();
     gb_modal_set(1);                          /* a self-polling dialog is up */
     if (do_connect()) {
         transport = TR_NET;
@@ -1468,7 +1499,7 @@ static void action_connect(void)
 /* Connect over the serial port: no host, just open the raw byte pipe. */
 static void action_connect_serial(void)
 {
-    if (transport == TR_NET && (state == ST_RUN || state == ST_DONE)) net_close();
+    if (state == ST_RUN || state == ST_DONE) close_session();
     if (!serial_present()) { gb_alert("No serial", "board detected"); return; }
     transport = TR_SERIAL;
     serial_ctrl(1);                           /* clear any stale RX */
@@ -1710,9 +1741,7 @@ static void t_proc(void)
     case GB_MSG_FRAME: t_frame();      break;
     case GB_MSG_CLICK: break;                              /* no in-content gesture */
     case GB_MSG_CLOSE:
-#if TELNET_HAS_NET
-        if ((state == ST_RUN || state == ST_DONE) && transport == TR_NET) net_close();
-#endif
+        close_session();
         gb_wm_close();
         break;
     case GB_MSG_DRAG:  break;                              /* screen-sized: not movable */
