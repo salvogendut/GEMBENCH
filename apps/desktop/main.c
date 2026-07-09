@@ -717,6 +717,18 @@ static void on_frame(void)
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
        Exit to DOS to leave); ESC only closes apps launched on top of it */
 
+#ifdef GB_PCW
+    if (timesync_tries) {
+        if (timesync_delay) timesync_delay--;
+        else if (!gb_wm_full()) {
+            timesync_tries--;
+            gb_wm_open("TIMESYNCAPP");
+            if (timesync_tries) timesync_delay = 750;
+            return;
+        }
+    }
+#endif
+
     if (gb_doc_frame()) {                  /* a System menu opened/ran (#142) */
         gb_curhide();
         gb_wm_damage(0, 0, GB_COLS, GB_LINES);       /* gb_popup left a narrow damage clip; the desktop
@@ -738,17 +750,6 @@ static void on_frame(void)
         }
         return;
     }
-#ifdef GB_PCW
-    if (timesync_tries) {
-        if (timesync_delay) timesync_delay--;
-        else if (!gb_wm_full()) {
-            timesync_tries--;
-            gb_wm_open("TIMESYNCAPP");
-            if (timesync_tries) timesync_delay = 750;
-            return;
-        }
-    }
-#endif
 
     held = flags & GB_FIRE;
     if (held_prev && !held) {              /* fire released */
@@ -809,13 +810,13 @@ void main(void)
                                                    uninitialised; bar_draw reads it every frame) */
     WM_OPEN_STRICT = 0;
     drive_poll();                               /* drives present at boot -> icons (#65) */
-    wp_init();                                   /* #212: load the configured wallpaper */
-    ss_cfg_init();                               /* #219: read the screensaver idle timeout */
 #ifdef GB_PCW
     want_timesync = (cfg_val("TIMESERVER=", 11) < KCFG_LEN);
-    timesync_delay = 1500;                     /* Wemos D1/PerryNet needs time for WiFi/SNTP at power-up */
+    timesync_delay = 250;                      /* start visibly, then let TIMESYNC wait for PerryNet */
     timesync_tries = want_timesync ? 1 : 0;
 #endif
+    ss_cfg_init();                               /* #219: read the screensaver idle timeout */
+    wp_init();                                   /* #212: load the configured wallpaper */
     gb_wm_damage(0, 0, GB_COLS, GB_LINES);                 /* initialise the shared repaint clip before paint() */
     paint();
     gb_curshow();                               /* paint() no longer shows the pointer (#153) */

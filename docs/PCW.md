@@ -108,13 +108,13 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
   the network apps.
 
 On PCW, the desktop launches `TIMESYNC.APP` at startup when
-`GEOBENCH.CFG` contains `TIMESERVER=<host-or-ip>`. The helper asks PerryNet for
-the firmware-maintained UTC clock with `TIME_GET`, applies `TIMEZONE=+H` or
+`GEOBENCH.CFG` contains a non-empty `TIMESERVER=` line. The helper asks PerryNet
+for the firmware-maintained UTC clock with `TIME_GET`, applies `TIMEZONE=+H` or
 `TIMEZONE=-H` as an offset from GMT, sets the software clock, then detaches.
 PerryNet initializes that clock with SNTP after WiFi comes up; if the firmware
 clock is not valid yet, GEOBENCH leaves the desktop running normally and makes
-a small bounded number of later lightweight `TIME_GET` retries instead of
-blocking boot.
+a bounded number of later lightweight `TIME_GET` retries instead of blocking
+boot.
 
 TELNET's terminal is **80×25 in the window and 90×28 fullscreen**
 (Telnet menu toggle; Ctrl-] or ESC exits) — a 4×8 charset
