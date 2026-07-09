@@ -785,10 +785,8 @@ static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
                                    unsigned int spins)
 {
     unsigned char b;
-    const unsigned int idle_spins = spins;
     while (spins--) {
         if (!serial_recv(&b, 1)) continue;
-        spins = idle_spins;
         if (b == PN_END) {
             if (pn_in_started && pn_in_len) {
                 if (pn_finish_frame(op, seq, channel, len)) {
@@ -873,12 +871,12 @@ __endasm;
 static unsigned char pn_uart_set(unsigned char fast)
 {
     unsigned char payload[5], seq;
-    payload[0] = fast ? 0x00 : 0x80;          /* 38400 or 9600, little-endian */
-    payload[1] = fast ? 0x96 : 0x25;
+    payload[0] = fast ? 0x00 : 0x80;          /* 19200 or 9600, little-endian */
+    payload[1] = fast ? 0x4B : 0x25;
     payload[2] = payload[3] = payload[4] = 0; /* no RTS/CTS, do not save */
     seq = pn_tx(PN_OP_UART_SET, 0, payload, 5);
     if (!seq || !pn_wait_ack(seq, 0, 0, 60000)) return 0;
-    serial_set_divisor(fast ? 3 : 13);        /* PerryNet maps 38400 to 41667 */
+    serial_set_divisor(fast ? 7 : 13);        /* PerryFi/PerryNet maps 19200 to 17857 */
     pn_uart_settle();
     pn_in_len = 0;
     pn_in_started = pn_in_esc = pn_in_overflow = 0;
