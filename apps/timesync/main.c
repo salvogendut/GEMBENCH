@@ -1,8 +1,8 @@
 /* TIMESYNC.APP - background PCW desktop time sync over PerryNet.
  *
  * Launched by the desktop when GEOBENCH.CFG has TIMESERVER=x.x.x.x. It registers
- * a zero-sized legacy window so the WM gives it an app page, asks PerryNet for
- * the firmware-maintained UTC clock, sets the software clock, then detaches.
+ * a small status popup, asks PerryNet for the firmware-maintained UTC clock,
+ * sets the software clock, then detaches.
  */
 #include "gb.h"
 
@@ -59,15 +59,25 @@ enum {
     TS_WAIT_TIME,
     TS_WAIT_UDP_OPEN,
     TS_WAIT_SEND,
-    TS_WAIT_NTP
+    TS_WAIT_NTP,
+    TS_DONE
 };
+
+#define POP_W 34
+#define POP_H 42
+#define POP_X ((GB_COLS - POP_W) / 2)
+#define POP_Y 86
+#define POP_TEXT_X (POP_X + 4)
+#define POP_STATUS_Y (POP_Y + 25)
 
 static volatile unsigned char ser_io;
 static volatile unsigned char soft_hour, soft_min, soft_sec;
 static unsigned char server_ip[4];
 static unsigned char tz_hours, tz_neg, server_is_ip;
 static unsigned char pn_seq, pn_udp_channel, wait_seq, state, pn_wifi_up, wifi_connect_sent;
+static unsigned char popup_drawn, status_dirty, close_delay;
 static unsigned int wait_frames, wifi_wait_frames, last_ack_len;
+static const char *status_text;
 static char server_name[64];
 static unsigned char pn_frame[PN_FRAME_MAX];
 static unsigned int pn_in_len;
@@ -135,6 +145,46 @@ __endasm; }
 static void set_soft_time(unsigned char h, unsigned char m, unsigned char s)
 {
     soft_hour = h; soft_min = m; soft_sec = s; soft_poke();
+}
+
+static void status_set(const char *s)
+{
+    status_text = s;
+    status_dirty = 1;
+}
+
+static void draw_status(void)
+{
+    gb_fill((unsigned char)(POP_X + 2), POP_STATUS_Y, (unsigned char)(POP_W - 4), 8, 1);
+    gb_textbw(POP_TEXT_X, POP_STATUS_Y, status_text);
+}
+
+static void ts_paint(void)
+{
+    gb_fill(POP_X, POP_Y, POP_W, POP_H, 1);
+    gb_frame(POP_X, POP_Y, POP_W, POP_H, 2);
+    gb_textbw(POP_TEXT_X, (unsigned char)(POP_Y + 7), "SYNCING CLOCK");
+    gb_fill((unsigned char)(POP_X + 2), (unsigned char)(POP_Y + 19),
+            (unsigned char)(POP_W - 4), 1, 2);
+    draw_status();
+    popup_drawn = 1;
+    status_dirty = 0;
+}
+
+static void paint_dirty_status(void)
+{
+    if (!popup_drawn || !status_dirty) return;
+    gb_curhide();
+    draw_status();
+    gb_curshow();
+    status_dirty = 0;
+}
+
+static void finish(const char *s)
+{
+    status_set(s);
+    close_delay = 35;
+    state = TS_DONE;
 }
 
 static void dart_wr(unsigned char reg, unsigned char val)
@@ -469,6 +519,9 @@ static void close_now(void)
     WM_FOCUS = WM_Z[j - 1];
     WM_FPREV = 0xFF;
 
+    gb_wm_damage(POP_X, POP_Y, POP_W, POP_H);
+    gb_restore_parent();
+
     n = APP_NPAGES;
     if (n > 8) n = 8;
     for (i = 0; i < n; i++) {
@@ -484,7 +537,7 @@ static void send_wait(unsigned char op, unsigned char channel,
                       unsigned char next)
 {
     wait_seq = pn_tx(op, channel, payload, len);
-    if (!wait_seq) { close_now(); return; }
+        if (!wait_seq) { finish("SERIAL TIMEOUT"); return; }
     wait_frames = 0;
     last_ack_len = 0;
     state = next;
@@ -494,6 +547,7 @@ static void open_udp_wait(void)
 {
     unsigned char payload[2];
     payload[0] = 0; payload[1] = 0;
+    status_set("OPENING UDP");
     send_wait(PN_OP_UDP_OPEN, 0, payload, 2, TS_WAIT_UDP_OPEN);
 }
 
@@ -502,6 +556,7 @@ static void server_ready_wait(void)
     unsigned int len = 0;
     if (server_is_ip) { open_udp_wait(); return; }
     while (server_name[len]) len++;
+    status_set("RESOLVING HOST");
     send_wait(PN_OP_DNS_RESOLVE, 0, (const unsigned char *)server_name, len, TS_WAIT_DNS);
 }
 
@@ -509,8 +564,15 @@ static void ts_frame(void)
 {
     unsigned char r, op, seq, channel;
     unsigned int len;
+    paint_dirty_status();
+    if (state == TS_DONE) {
+        if (close_delay) close_delay--;
+        else close_now();
+        return;
+    }
     if (state == TS_START) {
-        if (!cfg_read() || !serial_present()) { close_now(); return; }
+        if (!cfg_read()) { finish("NO TIME CONFIG"); return; }
+        if (!serial_present()) { finish("NO PERRYNET"); return; }
         serial_drain();
         pn_seq = 0;
         pn_udp_channel = 0;
@@ -519,13 +581,16 @@ static void ts_frame(void)
         wifi_wait_frames = 0;
         pn_in_len = 0;
         pn_in_started = pn_in_esc = pn_in_overflow = 0;
+        status_set("CONTACTING PERRYNET");
         send_wait(PN_OP_HELLO, 0, 0, 0, TS_WAIT_HELLO);
         return;
     }
     if (state == TS_WAIT_HELLO) {
         r = ack_step();
-        if (r == 1) send_wait(PN_OP_TIME_GET, 0, 0, 0, TS_WAIT_TIME);
-        else if (r == 2) close_now();
+        if (r == 1) {
+            status_set("READING CLOCK");
+            send_wait(PN_OP_TIME_GET, 0, 0, 0, TS_WAIT_TIME);
+        } else if (r == 2) finish("PERRYNET TIMEOUT");
         return;
     }
     if (state == TS_WAIT_TIME) {
@@ -536,9 +601,11 @@ static void ts_frame(void)
                                 ((unsigned long)pn_frame[9] << 8) |
                                 ((unsigned long)pn_frame[10] << 16) |
                                 ((unsigned long)pn_frame[11] << 24));
+                finish("CLOCK SYNCED");
+            } else {
+                finish("CLOCK NOT READY");
             }
-            close_now();
-        } else if (r == 2) close_now();
+        } else if (r == 2) finish("CLOCK TIMEOUT");
         return;
     }
     if (state == TS_WAIT_WIFI) {
@@ -546,17 +613,19 @@ static void ts_frame(void)
         if (r == 1) {
             wifi_wait_frames = 0;
             state = TS_WIFI_READY;
-        } else if (r) close_now();
+        } else if (r) finish("WIFI TIMEOUT");
         return;
     }
     if (state == TS_WIFI_READY) {
         if (pn_wifi_up) { server_ready_wait(); return; }
         if (++wifi_wait_frames == 10 && !wifi_connect_sent) {
             wifi_connect_sent = 1;
+            status_set("STARTING WIFI");
             send_wait(PN_OP_WIFI_CONNECT, 0, 0, 0, TS_WAIT_WIFI);
             return;
         }
-        if (wifi_wait_frames > 750) { close_now(); return; }
+        if (wifi_wait_frames > 750) { finish("WIFI TIMEOUT"); return; }
+        status_set("WAITING FOR WIFI");
         send_wait(PN_OP_WIFI_STATUS, 0, 0, 0, TS_WAIT_WIFI_STATUS);
         return;
     }
@@ -565,7 +634,7 @@ static void ts_frame(void)
         if (r == 1) {
             if (last_ack_len >= 2 && pn_frame[8]) server_ready_wait();
             else state = TS_WIFI_READY;
-        } else if (r == 2) close_now();
+        } else if (r == 2) finish("WIFI TIMEOUT");
         return;
     }
     if (state == TS_WAIT_DNS) {
@@ -574,7 +643,7 @@ static void ts_frame(void)
             server_ip[0] = pn_frame[7]; server_ip[1] = pn_frame[8];
             server_ip[2] = pn_frame[9]; server_ip[3] = pn_frame[10];
             open_udp_wait();
-        } else if (r) close_now();
+        } else if (r) finish("DNS TIMEOUT");
         return;
     }
     if (state == TS_WAIT_UDP_OPEN) {
@@ -587,14 +656,15 @@ static void ts_frame(void)
             for (len = 0; len < sizeof(ntp); len++) ntp[len] = 0;
             ntp[0] = 0x1B;
             for (len = 0; len < sizeof(ntp); len++) udp_payload[6 + len] = ntp[len];
+            status_set("REQUESTING NTP");
             send_wait(PN_OP_UDP_SEND, pn_udp_channel, udp_payload, sizeof(udp_payload), TS_WAIT_SEND);
-        } else if (r) close_now();
+        } else if (r) finish("UDP TIMEOUT");
         return;
     }
     if (state == TS_WAIT_SEND) {
         r = ack_step();
-        if (r == 1) { wait_frames = 0; state = TS_WAIT_NTP; }
-        else if (r == 2) close_now();
+        if (r == 1) { status_set("WAITING FOR NTP"); wait_frames = 0; state = TS_WAIT_NTP; }
+        else if (r == 2) finish("NTP SEND FAILED");
         return;
     }
     if (state == TS_WAIT_NTP) {
@@ -602,24 +672,28 @@ static void ts_frame(void)
             (void)seq;
             if (op == PN_OP_UDP_DATA && channel == pn_udp_channel && len >= 54) {
                 apply_ntp_time(pn_frame + 12);
-                close_now();
+                finish("CLOCK SYNCED");
                 return;
             }
             if (op == PN_OP_EVENT && channel == pn_udp_channel && len && pn_frame[6] == PN_EVT_UDP_ERROR) {
-                close_now();
+                finish("NTP ERROR");
                 return;
             }
         }
-        if (++wait_frames > NTP_TIMEOUT) close_now();
+        if (++wait_frames > NTP_TIMEOUT) finish("NTP TIMEOUT");
         return;
     }
 }
 
-static void ts_paint(void) { }
-static const gb_win_t tswin = { 0, 0, 0, 0, ts_frame, ts_paint, 0, 0 };
+static const gb_win_t tswin = { 0, 8, GB_COLS, GB_LINES - 8, ts_frame, ts_paint, 0, 0 };
 
 void main(void)
 {
     state = TS_START;
+    status_text = "STARTING";
+    status_dirty = 0;
+    popup_drawn = 0;
     gb_wm_add(&tswin);
+    gb_wm_damage(POP_X, POP_Y, POP_W, POP_H);
+    gb_restore_parent();
 }
