@@ -107,14 +107,28 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
   boot disk, and `PENGUIN.PIC` is omitted, to keep enough CF2 space for
   the network apps.
 
-On PCW, the desktop launches `TIMESYNC.APP` at startup when
-`GEOBENCH.CFG` contains a non-empty `TIMESERVER=` line. The helper asks PerryNet
-for the firmware-maintained UTC clock with `TIME_GET`, applies `TIMEZONE=+H` or
-`TIMEZONE=-H` as an offset from GMT, sets the software clock, then detaches.
-PerryNet initializes that clock with SNTP after WiFi comes up; if the firmware
-clock is not valid yet, GEOBENCH leaves the desktop running normally and makes
-a bounded number of later lightweight `TIME_GET` retries instead of blocking
-boot.
+## PCW Time Sync With PerryFi / PerryNet
+
+On real PCW hardware, automatic desktop time sync needs a PerryFi card running
+the PerryNet firmware. Configure WiFi in PerryNet first, then enable sync in the
+GEOBENCH boot config:
+
+```text
+TIMESYNC=true
+TIMEZONE=+2
+```
+
+`TIMESYNC=true` makes the desktop launch `TIMESYNC.APP` at startup.
+`TIMEZONE=` is a whole-hour offset from UTC; use `TIMEZONE=+2` for CEST,
+`TIMEZONE=+1` for CET, or another `+H` / `-H` value for your local time. There
+is no daylight-saving rule engine in GEOBENCH yet, so the offset is explicit.
+
+`TIMESYNC.APP` asks PerryNet for its firmware-maintained UTC clock with
+`TIME_GET`, applies the configured `TIMEZONE=` offset, sets the GEOBENCH
+software clock, then detaches. PerryNet initializes that clock with SNTP after
+WiFi comes up; if the firmware clock is not valid yet, GEOBENCH leaves the
+desktop running normally and makes a bounded number of later lightweight
+`TIME_GET` retries instead of blocking boot.
 
 TELNET's terminal is **80×25 in the window and 90×28 fullscreen**
 (Telnet menu toggle; Ctrl-] or ESC exits) — a 4×8 charset

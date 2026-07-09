@@ -1,6 +1,6 @@
 /* TIMESYNC.APP - background PCW desktop time sync over PerryNet.
  *
- * Launched by the desktop when GEOBENCH.CFG has TIMESERVER=x.x.x.x. It registers
+ * Launched by the desktop when GEOBENCH.CFG has TIMESYNC=true. It registers
  * a small status popup, asks PerryNet for the firmware-maintained UTC clock,
  * sets the software clock, then detaches.
  */
@@ -411,6 +411,15 @@ static unsigned int cfg_val(const char *key, unsigned char klen)
     return len;
 }
 
+static unsigned char cfg_bool(const char *key, unsigned char klen)
+{
+    const char *t = KCFG_TEXT;
+    unsigned int len = KCFG_LEN, p = cfg_val(key, klen);
+    if (p >= len) return 0;
+    return (unsigned char)(t[p] == '1' || t[p] == 'T' || t[p] == 't' ||
+                           t[p] == 'Y' || t[p] == 'y');
+}
+
 static unsigned char parse_num(unsigned int *p, unsigned char *out)
 {
     const char *t = KCFG_TEXT;
@@ -431,9 +440,7 @@ static unsigned char cfg_read(void)
 {
     const char *t = KCFG_TEXT;
     unsigned int len = KCFG_LEN, p;
-    p = cfg_val("TIMESERVER=", 11);
-    if (p >= len) return 0;
-    if (t[p] == '\r' || t[p] == '\n') return 0;
+    if (!cfg_bool("TIMESYNC=", 9)) return 0;
     tz_hours = 0;
     tz_neg = 0;
     p = cfg_val("TIMEZONE=", 9);

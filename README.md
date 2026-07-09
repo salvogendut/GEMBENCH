@@ -60,6 +60,10 @@ hardware, or use the disk images in an emulator.
   (pictures, backdrops) goes in drive B. No CP/M is needed — the disc boots
   GEOBENCH directly. Real machines show the native 1bpp monochrome; the CGA2
   colours are an emulator feature (see [docs/PCW.md](docs/PCW.md)).
+- On real PCW hardware, automatic desktop time sync uses a PerryFi card running
+  PerryNet firmware. Enable it with `TIMESYNC=true` and set the local whole-hour
+  UTC offset with `TIMEZONE=+H` or `TIMEZONE=-H` in `GEOBENCH.CFG`; see
+  [docs/PCW.md](docs/PCW.md).
 
 Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.md).
 
