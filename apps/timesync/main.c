@@ -29,15 +29,19 @@
 #define PN_OP_UDP_DATA     0x83
 
 #define PN_STATUS_OK       0x00
+#define PN_STATUS_BAD_OPCODE 0x02
+#define PN_STATUS_BAD_LENGTH 0x03
+#define PN_STATUS_BUSY     0x0A
 #define PN_EVT_WIFI_UP     0x02
 #define PN_EVT_WIFI_DOWN   0x03
 #define PN_EVT_UDP_ERROR   0x20
 
 #define BYTE_BUDGET        512
-#define ACK_TIMEOUT        300
+#define ACK_TIMEOUT        180
 #define NTP_TIMEOUT        750
-#define TIME_RETRIES       5
-#define TIME_RETRY_DELAY   120
+#define TIME_ATTEMPTS      3
+#define TIME_RETRY_DELAY   80
+#define TIME_MAX_FRAMES    700
 
 #define WM_NWIN            (*(volatile unsigned char *)0x1350)
 #define WM_FOCUS           (*(volatile unsigned char *)0x1351)
@@ -75,8 +79,9 @@ static volatile unsigned char soft_hour, soft_min, soft_sec;
 static unsigned char server_ip[4];
 static unsigned char tz_hours, tz_neg, server_is_ip;
 static unsigned char pn_seq, pn_udp_channel, wait_seq, state, pn_wifi_up, wifi_connect_sent;
-static unsigned char popup_drawn, status_dirty, close_delay, time_retries, retry_delay;
-static unsigned int wait_frames, wifi_wait_frames, last_ack_len;
+static unsigned char ack_status;
+static unsigned char popup_drawn, status_dirty, close_delay, time_attempts, retry_delay;
+static unsigned int wait_frames, wifi_wait_frames, last_ack_len, life_frames;
 static const char *status_text;
 static char server_name[64];
 static unsigned char pn_frame[PN_FRAME_MAX];
@@ -371,8 +376,9 @@ static unsigned char ack_step(void)
     unsigned int len;
     if (pn_read_frame(&op, &seq, &channel, &len)) {
         if (op == PN_OP_ACK && seq == wait_seq) {
-            if (!len) return 2;
+            if (!len) { ack_status = 0xFE; return 2; }
             status = pn_frame[6];
+            ack_status = status;
             if (status != PN_STATUS_OK) return 2;
             last_ack_len = len - 1;
             return 1;
@@ -384,7 +390,7 @@ static unsigned char ack_step(void)
         if (op == PN_OP_EVENT && channel == pn_udp_channel && len && pn_frame[6] == PN_EVT_UDP_ERROR)
             return 2;
     }
-    if (++wait_frames > ACK_TIMEOUT) return 2;
+    if (++wait_frames > ACK_TIMEOUT) { ack_status = 0xFF; return 2; }
     return 0;
 }
 
@@ -540,6 +546,7 @@ static void send_wait(unsigned char op, unsigned char channel,
     if (!wait_seq) { finish("SERIAL TIMEOUT"); return; }
     wait_frames = 0;
     last_ack_len = 0;
+    ack_status = 0xFF;
     state = next;
 }
 
@@ -562,6 +569,8 @@ static void server_ready_wait(void)
 
 static void time_get_wait(void)
 {
+    if (!time_attempts) { finish("CLOCK TIMEOUT"); return; }
+    time_attempts--;
     status_set("READING CLOCK");
     send_wait(PN_OP_TIME_GET, 0, 0, 0, TS_WAIT_TIME);
 }
@@ -576,6 +585,10 @@ static void ts_frame(void)
         else close_now();
         return;
     }
+    if (++life_frames > TIME_MAX_FRAMES) {
+        finish("CLOCK TIMEOUT");
+        return;
+    }
     if (state == TS_START) {
         if (!cfg_read()) { finish("NO TIME CONFIG"); return; }
         if (!serial_present()) { finish("NO PERRYNET"); return; }
@@ -584,8 +597,9 @@ static void ts_frame(void)
         pn_udp_channel = 0;
         pn_wifi_up = 0;
         wifi_connect_sent = 0;
-        time_retries = TIME_RETRIES;
+        time_attempts = TIME_ATTEMPTS;
         retry_delay = 0;
+        life_frames = 0;
         wifi_wait_frames = 0;
         pn_in_len = 0;
         pn_in_started = pn_in_esc = pn_in_overflow = 0;
@@ -607,15 +621,17 @@ static void ts_frame(void)
                                 ((unsigned long)pn_frame[11] << 24));
                 finish("CLOCK SYNCED");
             } else {
-                if (time_retries) {
-                    time_retries--;
+                if (time_attempts) {
                     status_set("WAITING FOR TIME");
                     retry_delay = TIME_RETRY_DELAY;
                 } else finish("CLOCK NOT READY");
             }
         } else if (r == 2) {
-            if (time_retries) {
-                time_retries--;
+            if (ack_status == PN_STATUS_BAD_OPCODE) { finish("BAD OPCODE"); return; }
+            if (ack_status == PN_STATUS_BAD_LENGTH) { finish("BAD LENGTH"); return; }
+            if (ack_status == PN_STATUS_BUSY) { finish("PERRYNET BUSY"); return; }
+            if (ack_status != 0xFF) { finish("TIME CMD ERROR"); return; }
+            if (time_attempts) {
                 status_set("WAITING PERRYNET");
                 retry_delay = TIME_RETRY_DELAY;
             } else finish("CLOCK TIMEOUT");
@@ -707,6 +723,7 @@ void main(void)
     status_text = "STARTING";
     status_dirty = 0;
     popup_drawn = 0;
+    life_frames = 0;
     gb_wm_add(&tswin);
     gb_wm_damage(POP_X, POP_Y, POP_W, POP_H);
     gb_restore_parent();

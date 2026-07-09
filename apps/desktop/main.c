@@ -61,7 +61,7 @@ static unsigned char want_saver;             /* System>Activate screensaver: ope
 #ifdef GB_PCW
 static unsigned char want_timesync;          /* boot time helper enabled when TIMESERVER= exists */
 static unsigned int timesync_delay;          /* let real PerryNet hardware finish booting first */
-static unsigned char timesync_tries;         /* retry if firmware SNTP was not ready yet */
+static unsigned char timesync_tries;         /* one visible boot sync attempt */
 #endif
 
 #define DRIVE_TOP  20         /* drive icons stack down the left column, packed */
@@ -814,7 +814,7 @@ void main(void)
 #ifdef GB_PCW
     want_timesync = (cfg_val("TIMESERVER=", 11) < KCFG_LEN);
     timesync_delay = 250;                      /* Wemos D1/PerryNet is slower than direct PCW boot */
-    timesync_tries = want_timesync ? 3 : 0;
+    timesync_tries = want_timesync ? 1 : 0;
 #endif
     gb_wm_damage(0, 0, GB_COLS, GB_LINES);                 /* initialise the shared repaint clip before paint() */
     paint();
