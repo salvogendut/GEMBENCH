@@ -813,7 +813,7 @@ void main(void)
     ss_cfg_init();                               /* #219: read the screensaver idle timeout */
 #ifdef GB_PCW
     want_timesync = (cfg_val("TIMESERVER=", 11) < KCFG_LEN);
-    timesync_delay = 250;                      /* Wemos D1/PerryNet is slower than direct PCW boot */
+    timesync_delay = 1500;                     /* Wemos D1/PerryNet needs time for WiFi/SNTP at power-up */
     timesync_tries = want_timesync ? 1 : 0;
 #endif
     gb_wm_damage(0, 0, GB_COLS, GB_LINES);                 /* initialise the shared repaint clip before paint() */
