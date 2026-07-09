@@ -554,13 +554,17 @@ static void dart_wr(unsigned char reg, unsigned char val)
     ser_io = reg; ser_out_ctrl();
     ser_io = val; ser_out_ctrl();
 }
+static void serial_set_divisor(unsigned char div)
+{
+    ser_io = 0x36; pit_out_ctrl(); ser_io = div; pit_out_tx(); ser_io = 0; pit_out_tx();
+    ser_io = 0x76; pit_out_ctrl(); ser_io = div; pit_out_rx(); ser_io = 0; pit_out_rx();
+}
 static void serial_hw_init(void)
 {
     if (pcw_ser_inited) return;
     /* Direct-boot GEOBENCH cannot rely on CP/M SETSIO. Program CPS8256
      * channel A for 9600 8N1: 2MHz PIT / 16 / 13 = 9615 baud. */
-    ser_io = 0x36; pit_out_ctrl(); ser_io = 13; pit_out_tx(); ser_io = 0; pit_out_tx();
-    ser_io = 0x76; pit_out_ctrl(); ser_io = 13; pit_out_rx(); ser_io = 0; pit_out_rx();
+    serial_set_divisor(13);
     ser_io = 0x18; ser_out_ctrl();
     dart_wr(4, 0x44);
     dart_wr(3, 0xC1);
@@ -700,6 +704,7 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_OP_TCP_CLOSE    0x31
 #define PN_OP_TCP_SEND     0x32
 #define PN_OP_TCP_RECV     0x35
+#define PN_OP_UART_SET     0x51
 #define PN_OP_ACK          0x80
 #define PN_OP_EVENT        0x81
 #define PN_OP_TCP_DATA     0x82
@@ -713,6 +718,7 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 static unsigned char pn_seq;
 static unsigned char pn_channel;
 static unsigned char pn_conn;
+static unsigned char pn_fast_uart;
 static unsigned char pn_last_status;
 static unsigned char pn_frame[PN_FRAME_MAX];
 static unsigned int pn_in_len;
@@ -868,6 +874,42 @@ static unsigned char pn_wait_ack(unsigned char want_seq, unsigned char *out,
     return 0;
 }
 
+static void pn_uart_settle(void) __naked
+{
+__asm
+    ld bc,#0x8000
+1$:
+    dec bc
+    ld a,b
+    or c
+    jr nz,1$
+    ret
+__endasm;
+}
+
+static unsigned char pn_uart_set(unsigned char fast)
+{
+    unsigned char payload[5], seq;
+    payload[0] = fast ? 0x00 : 0x80;          /* 19200 or 9600, little-endian */
+    payload[1] = fast ? 0x4B : 0x25;
+    payload[2] = payload[3] = payload[4] = 0; /* no RTS/CTS, do not save */
+    seq = pn_tx(PN_OP_UART_SET, 0, payload, 5);
+    if (!seq || !pn_wait_ack(seq, 0, 0, 60000)) return 0;
+    serial_set_divisor(fast ? 7 : 13);        /* PerryFi maps 19200 to 17857 */
+    pn_uart_settle();
+    pn_in_len = 0;
+    pn_in_started = pn_in_esc = pn_in_overflow = 0;
+    pn_fast_uart = fast;
+    return 1;
+}
+
+static void pn_uart_restore(void)
+{
+    if (!pn_fast_uart) return;
+    if (!pn_uart_set(0)) serial_set_divisor(13);
+    pn_fast_uart = 0;
+}
+
 static unsigned char pn_connect(const char *host, unsigned int port)
 {
     unsigned char seq;
@@ -884,6 +926,8 @@ static unsigned char pn_connect(const char *host, unsigned int port)
     pn_last_status = 0xFF;
     pn_in_len = 0;
     pn_in_started = pn_in_esc = pn_in_overflow = 0;
+    pn_fast_uart = 0;
+    if (!pn_uart_set(1)) return 0;
 
     payload[0] = (unsigned char)host_len;
     for (i = 0; i < host_len; i++) payload[1 + i] = (unsigned char)host[i];
@@ -892,9 +936,13 @@ static unsigned char pn_connect(const char *host, unsigned int port)
     payload[3 + host_len] = 3; /* TCP_NODELAY + host-pulled RX */
     out_len = sizeof(out);
     seq = pn_tx(PN_OP_TCP_OPEN, 0, payload, (unsigned int)(4 + host_len));
-    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000) || out_len < 1) return 0;
+    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000) || out_len < 1) {
+        pn_uart_restore();
+        return 0;
+    }
     pn_channel = out[0];
     pn_conn = (unsigned char)(pn_channel != 0);
+    if (!pn_conn) pn_uart_restore();
     return pn_conn;
 }
 
@@ -932,6 +980,7 @@ static void pn_close(void)
     if (pn_channel) (void)pn_tx(PN_OP_TCP_CLOSE, pn_channel, 0, 0);
     pn_channel = 0;
     pn_conn = 0;
+    pn_uart_restore();
 }
 #endif
 
