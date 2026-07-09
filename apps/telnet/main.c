@@ -289,9 +289,8 @@ static void term_write(unsigned char c)
  * cell's 8 scan-line bytes CONTIGUOUS: byte(x,y) = cellrow*1024 + x*8 + (y&7),
  * so one glyph = 8 sequential writes. The framebuffer is phys blocks 4/5,
  * mapped into slot 3 per drawn cellrow (map-before-use, like the driver); text
- * rows are cellrow-aligned (GY multiple of 8). White (pen 1) on black (pen 2):
- * a glyph line's 4-bit pattern indexes lut4 for the CGA2 hardware byte. */
-static unsigned char lut4[16];                /* glyph nibble -> CGA2 byte */
+ * rows are cellrow-aligned (GY multiple of 8). PCW builds prepack the 4-bit
+ * glyph rows to CGA2 hardware bytes in charset4.h, so the hot loop just copies. */
 static unsigned char gx_org = GX;             /* live grid origin: byte col */
 static unsigned char gy_cell = GY >> 3;       /*                   cellrow  */
 
@@ -304,34 +303,22 @@ static void bank3(unsigned char b) __naked
     __endasm;
 }
 
-static void lut4_init(void)
-{
-    unsigned char n, i, v;
-    for (n = 0; n < 16; n++) {
-        v = 0;
-        for (i = 0; i < 4; i++)
-            if (n & (unsigned char)(8 >> i))
-                v |= (unsigned char)(0xC0 >> (i << 1));   /* pen 1 = both bits */
-        lut4[n] = v;
-    }
-}
-
 static void draw_row(unsigned char r)
 {
     unsigned char cellrow = (unsigned char)(gy_cell + r);
     volatile unsigned char *dst = (volatile unsigned char *)
         (0xC000u + ((unsigned int)(cellrow & 15) << 10) + ((unsigned int)gx_org << 3));
-    unsigned char c;
+    const unsigned char *src = grid + (unsigned int)r * COLS;
+    unsigned char c = COLS;
     bank3((unsigned char)(0x84 + (cellrow >> 4)));
-    for (c = 0; c < COLS; c++) {
-        unsigned char ch = grid[cell(r, c)];
+    while (c--) {
+        unsigned char ch = *src++;
         const unsigned char *g;
-        if (ch < 32 || ch >= 127) ch = ' ';
         g = fs4_charset + ((unsigned int)(ch - 32) << 3);
-        dst[0] = lut4[g[0]]; dst[1] = lut4[g[1]];
-        dst[2] = lut4[g[2]]; dst[3] = lut4[g[3]];
-        dst[4] = lut4[g[4]]; dst[5] = lut4[g[5]];
-        dst[6] = lut4[g[6]]; dst[7] = lut4[g[7]];
+        dst[0] = g[0]; dst[1] = g[1];
+        dst[2] = g[2]; dst[3] = g[3];
+        dst[4] = g[4]; dst[5] = g[5];
+        dst[6] = g[6]; dst[7] = g[7];
         dst += 8;
     }
 }
@@ -554,13 +541,17 @@ static void dart_wr(unsigned char reg, unsigned char val)
     ser_io = reg; ser_out_ctrl();
     ser_io = val; ser_out_ctrl();
 }
+static void serial_set_divisor(unsigned char div)
+{
+    ser_io = 0x36; pit_out_ctrl(); ser_io = div; pit_out_tx(); ser_io = 0; pit_out_tx();
+    ser_io = 0x76; pit_out_ctrl(); ser_io = div; pit_out_rx(); ser_io = 0; pit_out_rx();
+}
 static void serial_hw_init(void)
 {
     if (pcw_ser_inited) return;
     /* Direct-boot GEOBENCH cannot rely on CP/M SETSIO. Program CPS8256
      * channel A for 9600 8N1: 2MHz PIT / 16 / 13 = 9615 baud. */
-    ser_io = 0x36; pit_out_ctrl(); ser_io = 13; pit_out_tx(); ser_io = 0; pit_out_tx();
-    ser_io = 0x76; pit_out_ctrl(); ser_io = 13; pit_out_rx(); ser_io = 0; pit_out_rx();
+    serial_set_divisor(13);
     ser_io = 0x18; ser_out_ctrl();
     dart_wr(4, 0x44);
     dart_wr(3, 0xC1);
@@ -687,19 +678,16 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_ESC_END         0xDC
 #define PN_ESC_ESC         0xDD
 #define PN_VERSION         0x01
-#ifdef GB_PCW
-#define PN_MAX_PAYLOAD     256
-#else
 #define PN_MAX_PAYLOAD     512
-#endif
 #define PN_FRAME_MAX       (6 + PN_MAX_PAYLOAD + 2)
-#define PN_PULL_CHUNK      32
+#define PN_PULL_CHUNK      64
 #define PN_ACK_SPINS       12000
 
 #define PN_OP_TCP_OPEN     0x30
 #define PN_OP_TCP_CLOSE    0x31
 #define PN_OP_TCP_SEND     0x32
 #define PN_OP_TCP_RECV     0x35
+#define PN_OP_UART_SET     0x51
 #define PN_OP_ACK          0x80
 #define PN_OP_EVENT        0x81
 #define PN_OP_TCP_DATA     0x82
@@ -713,6 +701,7 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 static unsigned char pn_seq;
 static unsigned char pn_channel;
 static unsigned char pn_conn;
+static unsigned char pn_fast_uart;
 static unsigned char pn_last_status;
 static unsigned char pn_frame[PN_FRAME_MAX];
 static unsigned int pn_in_len;
@@ -796,10 +785,8 @@ static unsigned char pn_read_frame(unsigned char *op, unsigned char *seq,
                                    unsigned int spins)
 {
     unsigned char b;
-    const unsigned int idle_spins = spins;
     while (spins--) {
         if (!serial_recv(&b, 1)) continue;
-        spins = idle_spins;
         if (b == PN_END) {
             if (pn_in_started && pn_in_len) {
                 if (pn_finish_frame(op, seq, channel, len)) {
@@ -868,6 +855,42 @@ static unsigned char pn_wait_ack(unsigned char want_seq, unsigned char *out,
     return 0;
 }
 
+static void pn_uart_settle(void) __naked
+{
+__asm
+    ld bc,#0x8000
+1$:
+    dec bc
+    ld a,b
+    or c
+    jr nz,1$
+    ret
+__endasm;
+}
+
+static unsigned char pn_uart_set(unsigned char fast)
+{
+    unsigned char payload[5], seq;
+    payload[0] = fast ? 0x00 : 0x80;          /* 19200 or 9600, little-endian */
+    payload[1] = fast ? 0x4B : 0x25;
+    payload[2] = payload[3] = payload[4] = 0; /* no RTS/CTS, do not save */
+    seq = pn_tx(PN_OP_UART_SET, 0, payload, 5);
+    if (!seq || !pn_wait_ack(seq, 0, 0, 60000)) return 0;
+    serial_set_divisor(fast ? 7 : 13);        /* PerryFi/PerryNet maps 19200 to 17857 */
+    pn_uart_settle();
+    pn_in_len = 0;
+    pn_in_started = pn_in_esc = pn_in_overflow = 0;
+    pn_fast_uart = fast;
+    return 1;
+}
+
+static void pn_uart_restore(void)
+{
+    if (!pn_fast_uart) return;
+    if (!pn_uart_set(0)) serial_set_divisor(13);
+    pn_fast_uart = 0;
+}
+
 static unsigned char pn_connect(const char *host, unsigned int port)
 {
     unsigned char seq;
@@ -884,6 +907,8 @@ static unsigned char pn_connect(const char *host, unsigned int port)
     pn_last_status = 0xFF;
     pn_in_len = 0;
     pn_in_started = pn_in_esc = pn_in_overflow = 0;
+    pn_fast_uart = 0;
+    if (!pn_uart_set(1)) return 0;
 
     payload[0] = (unsigned char)host_len;
     for (i = 0; i < host_len; i++) payload[1 + i] = (unsigned char)host[i];
@@ -892,9 +917,13 @@ static unsigned char pn_connect(const char *host, unsigned int port)
     payload[3 + host_len] = 3; /* TCP_NODELAY + host-pulled RX */
     out_len = sizeof(out);
     seq = pn_tx(PN_OP_TCP_OPEN, 0, payload, (unsigned int)(4 + host_len));
-    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000) || out_len < 1) return 0;
+    if (!seq || !pn_wait_ack(seq, out, &out_len, 60000) || out_len < 1) {
+        pn_uart_restore();
+        return 0;
+    }
     pn_channel = out[0];
     pn_conn = (unsigned char)(pn_channel != 0);
+    if (!pn_conn) pn_uart_restore();
     return pn_conn;
 }
 
@@ -932,6 +961,7 @@ static void pn_close(void)
     if (pn_channel) (void)pn_tx(PN_OP_TCP_CLOSE, pn_channel, 0, 0);
     pn_channel = 0;
     pn_conn = 0;
+    pn_uart_restore();
 }
 #endif
 
@@ -1341,6 +1371,24 @@ static unsigned int pump_recv(void)
     return n;
 }
 
+#ifdef GB_PCW
+static unsigned char pump_recv_burst(void)
+{
+    unsigned char got = 0, left = 2;
+    unsigned int n;
+    while (left--) {
+        n = pump_recv();
+        if (!n) break;
+        got = 1;
+        render();                    /* avoid half-second visual batches on PCW serial */
+        if (n < PN_PULL_CHUNK) break;
+    }
+    return got;
+}
+#else
+#define pump_recv_burst() pump_recv()
+#endif
+
 /* send one typed key (Enter = CR on serial, CRLF on telnet; local echo if enabled). */
 static void send_key(unsigned char k)
 {
@@ -1405,6 +1453,8 @@ static void action_connect(void)
         iac_state = IS_NORMAL; local_echo = 1;
         start_session();
 #ifdef GB_PCW
+        send3(WILL, OPT_TTYPE);
+        send3(WILL, OPT_NAWS);
         if (pump_recv()) active = ACTIVE_HOLD;
 #else
         send3(WILL, OPT_TTYPE);
@@ -1553,9 +1603,15 @@ static void draw_content(void)
 {
     if (state == ST_IDLE) {                     /* idle: a hint; the user drives the menu */
         gb_curhide();
+#ifdef GB_PCW
+        gb_fill(GX, GY, (unsigned char)(WIN_W - 2 * GX), ROWS * 8, 2);
+        gb_textrev(2, GY + 8,  "GEOBENCH Telnet");
+        gb_textrev(2, GY + 24, "Open the Telnet menu to begin");
+#else
         gb_fill(GX, GY, (unsigned char)(WIN_W - 2 * GX), ROWS * 8, 0);   /* inside the frame */
         gb_text(2, GY + 8,  "GEOBENCH Telnet");
         gb_text(2, GY + 24, "Open the Telnet menu to begin");
+#endif
         gb_curshow();
     } else {                                   /* ST_RUN / ST_DONE: paint the grid */
 #ifdef GB_PCW
@@ -1584,10 +1640,10 @@ static void net_frame(void)
     if (pump_keys()) active = ACTIVE_HOLD;
     if (active) {
         active--;
-        if (pump_recv()) active = ACTIVE_HOLD;
+        if (pump_recv_burst()) active = ACTIVE_HOLD;
     } else if (++poll_ctr >= POLL_EVERY) {
         poll_ctr = 0;
-        if (pump_recv()) active = ACTIVE_HOLD;
+        if (pump_recv_burst()) active = ACTIVE_HOLD;
     }
     render();
 }
@@ -1681,9 +1737,6 @@ void main(void)
 #else
     transport = TR_SERIAL;
     want_fs = 0; fs_label();
-#endif
-#ifdef GB_PCW
-    lut4_init();
 #endif
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */

@@ -137,6 +137,8 @@ drawn straight into the framebuffer: the PCW char-cell layout makes each
 text cell 8 *contiguous* bytes (`cellrow*1024 + col*8`), one `lut4`
 lookup per glyph line. Fullscreen is the viewer-style `WM_FS` borderless
 window — no video-mode switch, so it looks the same on real hardware.
+The faster PerryNet profile requests nominal `19200` baud; PerryFi/PerryNet
+firmware aliases that to the PCW's exact `17857` baud divisor.
 
 ## Not (yet) on the PCW
 
