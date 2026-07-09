@@ -680,7 +680,7 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_VERSION         0x01
 #define PN_MAX_PAYLOAD     512
 #define PN_FRAME_MAX       (6 + PN_MAX_PAYLOAD + 2)
-#define PN_PULL_CHUNK      511
+#define PN_PULL_CHUNK      192
 #define PN_ACK_SPINS       12000
 
 #define PN_OP_TCP_OPEN     0x30
@@ -1380,6 +1380,7 @@ static unsigned char pump_recv_burst(void)
         n = pump_recv();
         if (!n) break;
         got = 1;
+        render();                    /* avoid half-second visual batches on PCW serial */
         if (n < PN_PULL_CHUNK) break;
     }
     return got;
