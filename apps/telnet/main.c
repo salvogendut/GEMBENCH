@@ -289,9 +289,8 @@ static void term_write(unsigned char c)
  * cell's 8 scan-line bytes CONTIGUOUS: byte(x,y) = cellrow*1024 + x*8 + (y&7),
  * so one glyph = 8 sequential writes. The framebuffer is phys blocks 4/5,
  * mapped into slot 3 per drawn cellrow (map-before-use, like the driver); text
- * rows are cellrow-aligned (GY multiple of 8). White (pen 1) on black (pen 2):
- * a glyph line's 4-bit pattern indexes lut4 for the CGA2 hardware byte. */
-static unsigned char lut4[16];                /* glyph nibble -> CGA2 byte */
+ * rows are cellrow-aligned (GY multiple of 8). PCW builds prepack the 4-bit
+ * glyph rows to CGA2 hardware bytes in charset4.h, so the hot loop just copies. */
 static unsigned char gx_org = GX;             /* live grid origin: byte col */
 static unsigned char gy_cell = GY >> 3;       /*                   cellrow  */
 
@@ -304,34 +303,22 @@ static void bank3(unsigned char b) __naked
     __endasm;
 }
 
-static void lut4_init(void)
-{
-    unsigned char n, i, v;
-    for (n = 0; n < 16; n++) {
-        v = 0;
-        for (i = 0; i < 4; i++)
-            if (n & (unsigned char)(8 >> i))
-                v |= (unsigned char)(0xC0 >> (i << 1));   /* pen 1 = both bits */
-        lut4[n] = v;
-    }
-}
-
 static void draw_row(unsigned char r)
 {
     unsigned char cellrow = (unsigned char)(gy_cell + r);
     volatile unsigned char *dst = (volatile unsigned char *)
         (0xC000u + ((unsigned int)(cellrow & 15) << 10) + ((unsigned int)gx_org << 3));
-    unsigned char c;
+    const unsigned char *src = grid + (unsigned int)r * COLS;
+    unsigned char c = COLS;
     bank3((unsigned char)(0x84 + (cellrow >> 4)));
-    for (c = 0; c < COLS; c++) {
-        unsigned char ch = grid[cell(r, c)];
+    while (c--) {
+        unsigned char ch = *src++;
         const unsigned char *g;
-        if (ch < 32 || ch >= 127) ch = ' ';
         g = fs4_charset + ((unsigned int)(ch - 32) << 3);
-        dst[0] = lut4[g[0]]; dst[1] = lut4[g[1]];
-        dst[2] = lut4[g[2]]; dst[3] = lut4[g[3]];
-        dst[4] = lut4[g[4]]; dst[5] = lut4[g[5]];
-        dst[6] = lut4[g[6]]; dst[7] = lut4[g[7]];
+        dst[0] = g[0]; dst[1] = g[1];
+        dst[2] = g[2]; dst[3] = g[3];
+        dst[4] = g[4]; dst[5] = g[5];
+        dst[6] = g[6]; dst[7] = g[7];
         dst += 8;
     }
 }
@@ -697,7 +684,7 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_MAX_PAYLOAD     512
 #endif
 #define PN_FRAME_MAX       (6 + PN_MAX_PAYLOAD + 2)
-#define PN_PULL_CHUNK      128
+#define PN_PULL_CHUNK      240
 #define PN_ACK_SPINS       12000
 
 #define PN_OP_TCP_OPEN     0x30
@@ -1390,6 +1377,23 @@ static unsigned int pump_recv(void)
     return n;
 }
 
+#ifdef GB_PCW
+static unsigned char pump_recv_burst(void)
+{
+    unsigned char got = 0, left = 4;
+    unsigned int n;
+    while (left--) {
+        n = pump_recv();
+        if (!n) break;
+        got = 1;
+        if (n < PN_PULL_CHUNK) break;
+    }
+    return got;
+}
+#else
+#define pump_recv_burst() pump_recv()
+#endif
+
 /* send one typed key (Enter = CR on serial, CRLF on telnet; local echo if enabled). */
 static void send_key(unsigned char k)
 {
@@ -1602,9 +1606,15 @@ static void draw_content(void)
 {
     if (state == ST_IDLE) {                     /* idle: a hint; the user drives the menu */
         gb_curhide();
+#ifdef GB_PCW
+        gb_fill(GX, GY, (unsigned char)(WIN_W - 2 * GX), ROWS * 8, 2);
+        gb_textrev(2, GY + 8,  "GEOBENCH Telnet");
+        gb_textrev(2, GY + 24, "Open the Telnet menu to begin");
+#else
         gb_fill(GX, GY, (unsigned char)(WIN_W - 2 * GX), ROWS * 8, 0);   /* inside the frame */
         gb_text(2, GY + 8,  "GEOBENCH Telnet");
         gb_text(2, GY + 24, "Open the Telnet menu to begin");
+#endif
         gb_curshow();
     } else {                                   /* ST_RUN / ST_DONE: paint the grid */
 #ifdef GB_PCW
@@ -1633,10 +1643,10 @@ static void net_frame(void)
     if (pump_keys()) active = ACTIVE_HOLD;
     if (active) {
         active--;
-        if (pump_recv()) active = ACTIVE_HOLD;
+        if (pump_recv_burst()) active = ACTIVE_HOLD;
     } else if (++poll_ctr >= POLL_EVERY) {
         poll_ctr = 0;
-        if (pump_recv()) active = ACTIVE_HOLD;
+        if (pump_recv_burst()) active = ACTIVE_HOLD;
     }
     render();
 }
@@ -1730,9 +1740,6 @@ void main(void)
 #else
     transport = TR_SERIAL;
     want_fs = 0; fs_label();
-#endif
-#ifdef GB_PCW
-    lut4_init();
 #endif
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */
