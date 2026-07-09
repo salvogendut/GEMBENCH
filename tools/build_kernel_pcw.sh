@@ -32,7 +32,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
-APPDEFS="-DGB_PCW" DATA_LOC=0x7360 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x72C0 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
 # savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a

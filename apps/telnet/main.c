@@ -678,13 +678,9 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_ESC_END         0xDC
 #define PN_ESC_ESC         0xDD
 #define PN_VERSION         0x01
-#ifdef GB_PCW
-#define PN_MAX_PAYLOAD     256
-#else
 #define PN_MAX_PAYLOAD     512
-#endif
 #define PN_FRAME_MAX       (6 + PN_MAX_PAYLOAD + 2)
-#define PN_PULL_CHUNK      240
+#define PN_PULL_CHUNK      511
 #define PN_ACK_SPINS       12000
 
 #define PN_OP_TCP_OPEN     0x30
@@ -877,12 +873,12 @@ __endasm;
 static unsigned char pn_uart_set(unsigned char fast)
 {
     unsigned char payload[5], seq;
-    payload[0] = fast ? 0x00 : 0x80;          /* 19200 or 9600, little-endian */
-    payload[1] = fast ? 0x4B : 0x25;
+    payload[0] = fast ? 0x00 : 0x80;          /* 38400 or 9600, little-endian */
+    payload[1] = fast ? 0x96 : 0x25;
     payload[2] = payload[3] = payload[4] = 0; /* no RTS/CTS, do not save */
     seq = pn_tx(PN_OP_UART_SET, 0, payload, 5);
     if (!seq || !pn_wait_ack(seq, 0, 0, 60000)) return 0;
-    serial_set_divisor(fast ? 7 : 13);        /* PerryFi maps 19200 to 17857 */
+    serial_set_divisor(fast ? 3 : 13);        /* PerryNet maps 38400 to 41667 */
     pn_uart_settle();
     pn_in_len = 0;
     pn_in_started = pn_in_esc = pn_in_overflow = 0;
@@ -1380,7 +1376,7 @@ static unsigned int pump_recv(void)
 #ifdef GB_PCW
 static unsigned char pump_recv_burst(void)
 {
-    unsigned char got = 0, left = 4;
+    unsigned char got = 0, left = 2;
     unsigned int n;
     while (left--) {
         n = pump_recv();
