@@ -17,7 +17,6 @@
 #define PN_MAX_PAYLOAD     512
 #define PN_FRAME_MAX       520
 
-#define PN_OP_HELLO        0x01
 #define PN_OP_WIFI_CONNECT 0x12
 #define PN_OP_WIFI_STATUS  0x14
 #define PN_OP_DNS_RESOLVE  0x20
@@ -35,8 +34,10 @@
 #define PN_EVT_UDP_ERROR   0x20
 
 #define BYTE_BUDGET        512
-#define ACK_TIMEOUT        150
+#define ACK_TIMEOUT        300
 #define NTP_TIMEOUT        750
+#define TIME_RETRIES       5
+#define TIME_RETRY_DELAY   120
 
 #define WM_NWIN            (*(volatile unsigned char *)0x1350)
 #define WM_FOCUS           (*(volatile unsigned char *)0x1351)
@@ -51,7 +52,6 @@
 
 enum {
     TS_START = 0,
-    TS_WAIT_HELLO,
     TS_WAIT_WIFI,
     TS_WIFI_READY,
     TS_WAIT_WIFI_STATUS,
@@ -75,7 +75,7 @@ static volatile unsigned char soft_hour, soft_min, soft_sec;
 static unsigned char server_ip[4];
 static unsigned char tz_hours, tz_neg, server_is_ip;
 static unsigned char pn_seq, pn_udp_channel, wait_seq, state, pn_wifi_up, wifi_connect_sent;
-static unsigned char popup_drawn, status_dirty, close_delay;
+static unsigned char popup_drawn, status_dirty, close_delay, time_retries, retry_delay;
 static unsigned int wait_frames, wifi_wait_frames, last_ack_len;
 static const char *status_text;
 static char server_name[64];
@@ -537,7 +537,7 @@ static void send_wait(unsigned char op, unsigned char channel,
                       unsigned char next)
 {
     wait_seq = pn_tx(op, channel, payload, len);
-        if (!wait_seq) { finish("SERIAL TIMEOUT"); return; }
+    if (!wait_seq) { finish("SERIAL TIMEOUT"); return; }
     wait_frames = 0;
     last_ack_len = 0;
     state = next;
@@ -560,6 +560,12 @@ static void server_ready_wait(void)
     send_wait(PN_OP_DNS_RESOLVE, 0, (const unsigned char *)server_name, len, TS_WAIT_DNS);
 }
 
+static void time_get_wait(void)
+{
+    status_set("READING CLOCK");
+    send_wait(PN_OP_TIME_GET, 0, 0, 0, TS_WAIT_TIME);
+}
+
 static void ts_frame(void)
 {
     unsigned char r, op, seq, channel;
@@ -578,22 +584,20 @@ static void ts_frame(void)
         pn_udp_channel = 0;
         pn_wifi_up = 0;
         wifi_connect_sent = 0;
+        time_retries = TIME_RETRIES;
+        retry_delay = 0;
         wifi_wait_frames = 0;
         pn_in_len = 0;
         pn_in_started = pn_in_esc = pn_in_overflow = 0;
-        status_set("CONTACTING PERRYNET");
-        send_wait(PN_OP_HELLO, 0, 0, 0, TS_WAIT_HELLO);
-        return;
-    }
-    if (state == TS_WAIT_HELLO) {
-        r = ack_step();
-        if (r == 1) {
-            status_set("READING CLOCK");
-            send_wait(PN_OP_TIME_GET, 0, 0, 0, TS_WAIT_TIME);
-        } else if (r == 2) finish("PERRYNET TIMEOUT");
+        time_get_wait();
         return;
     }
     if (state == TS_WAIT_TIME) {
+        if (retry_delay) {
+            retry_delay--;
+            if (!retry_delay) time_get_wait();
+            return;
+        }
         r = ack_step();
         if (r == 1) {
             if (last_ack_len >= 5 && pn_frame[7]) {
@@ -603,9 +607,19 @@ static void ts_frame(void)
                                 ((unsigned long)pn_frame[11] << 24));
                 finish("CLOCK SYNCED");
             } else {
-                finish("CLOCK NOT READY");
+                if (time_retries) {
+                    time_retries--;
+                    status_set("WAITING FOR TIME");
+                    retry_delay = TIME_RETRY_DELAY;
+                } else finish("CLOCK NOT READY");
             }
-        } else if (r == 2) finish("CLOCK TIMEOUT");
+        } else if (r == 2) {
+            if (time_retries) {
+                time_retries--;
+                status_set("WAITING PERRYNET");
+                retry_delay = TIME_RETRY_DELAY;
+            } else finish("CLOCK TIMEOUT");
+        }
         return;
     }
     if (state == TS_WAIT_WIFI) {
