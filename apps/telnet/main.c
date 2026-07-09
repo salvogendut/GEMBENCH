@@ -680,7 +680,7 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_VERSION         0x01
 #define PN_MAX_PAYLOAD     512
 #define PN_FRAME_MAX       (6 + PN_MAX_PAYLOAD + 2)
-#define PN_PULL_CHUNK      192
+#define PN_PULL_CHUNK      64
 #define PN_ACK_SPINS       12000
 
 #define PN_OP_TCP_OPEN     0x30
@@ -1453,6 +1453,8 @@ static void action_connect(void)
         iac_state = IS_NORMAL; local_echo = 1;
         start_session();
 #ifdef GB_PCW
+        send3(WILL, OPT_TTYPE);
+        send3(WILL, OPT_NAWS);
         if (pump_recv()) active = ACTIVE_HOLD;
 #else
         send3(WILL, OPT_TTYPE);
