@@ -125,6 +125,16 @@ static void test_pre_and_entities(void)
           "preformatted text, lists and literal bad entities are stable");
 }
 
+static void test_attribute_boundaries(void)
+{
+    capture_reset();
+    feed_chunks("<a title='ignore href=bad' href='/good'>link</a>", 2);
+    capture_end();
+    check(link_begin_count == 1 && link_end_count == 1 &&
+              !strcmp(link_url, "/good") && !strcmp(visible, "link"),
+          "attribute names inside quoted values are ignored");
+}
+
 static void test_bounds_and_recovery(void)
 {
     char page[400];
@@ -169,6 +179,7 @@ int main(void)
 {
     test_document();
     test_pre_and_entities();
+    test_attribute_boundaries();
     test_bounds_and_recovery();
     test_arbitrary_bytes();
     if (failures) {
