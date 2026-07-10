@@ -120,6 +120,15 @@ should initially support:
 - disk-backed line/link spill data when a page exceeds the app bank;
 - no DOM, CSS, JavaScript, TLS, cookies or general image decoding.
 
+Issue #367 now includes a standalone prototype in `lib/gb/gbhtml.h`. It streams
+text, title text, block/line breaks, links and image `alt` text through callbacks;
+normalizes whitespace; preserves `pre`; decodes bounded basic/numeric entities;
+and skips comments, scripts and styles. Host tests feed documents at different
+chunk boundaries and cover malformed/oversized input. A minimal SDCC probe
+currently measures 4,505 bytes of code and 299 bytes of default parser state,
+before browser UI, history or networking. This fits an app page, but is a
+baseline to reduce before integrating `BROWSER.APP`, not a final footprint.
+
 This would be useful for retro-oriented sites and local services. Most modern
 public sites require HTTPS, CSS and JavaScript, so a practical optional companion
 would be a proxy that fetches HTTPS and emits the browser's small HTML subset.
@@ -136,7 +145,8 @@ TLS should not be brought onto the Z80 merely to claim HTTPS support.
    machine without changing its behaviour. **Implemented in issue #367 for
    response metadata and chunk framing; URL resolution remains in WGET.**
 4. Prototype a standalone streaming HTML parser with host-side tests based on
-   classic Contiki's callback model.
+   classic Contiki's callback model. **Implemented in issue #367; app integration
+   and parser-size optimization remain.**
 5. Build `BROWSER.APP` for CPC and PCW first. MSX can use it once an MSX network
    backend exists.
 6. Measure every addition using the produced `.RAW` size, static RAM map and real

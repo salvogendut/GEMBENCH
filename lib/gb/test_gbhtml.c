@@ -1,0 +1,180 @@
+/* Host tests for the bounded streaming HTML subset parser. */
+#include <stdio.h>
+#include <string.h>
+
+static char visible[1024];
+static char title[128];
+static char link_url[128];
+static unsigned int visible_len, title_len;
+static unsigned int link_begin_count, link_end_count;
+
+static void emit_text(unsigned char c);
+static void emit_title(unsigned char c);
+static void emit_break(unsigned char kind);
+static void link_begin(const char *url);
+static void link_end(void);
+static void image_alt(const char *alt);
+
+#define GB_HTML_EMIT_TEXT(c) emit_text(c)
+#define GB_HTML_EMIT_TITLE(c) emit_title(c)
+#define GB_HTML_EMIT_BREAK(kind) emit_break(kind)
+#define GB_HTML_LINK_BEGIN(url) link_begin(url)
+#define GB_HTML_LINK_END() link_end()
+#define GB_HTML_IMAGE_ALT(alt) image_alt(alt)
+#include "gbhtml.h"
+
+static int failures;
+
+static void check(int ok, const char *name)
+{
+    if (ok) printf("ok   %s\n", name);
+    else { printf("FAIL %s\n", name); failures++; }
+}
+
+static void emit_text(unsigned char c)
+{
+    if (visible_len + 1 < sizeof(visible)) visible[visible_len++] = (char)c;
+}
+
+static void emit_title(unsigned char c)
+{
+    if (title_len + 1 < sizeof(title)) title[title_len++] = (char)c;
+}
+
+static void emit_break(unsigned char kind)
+{
+    (void)kind;
+    if (visible_len && visible[visible_len - 1] != '\n') emit_text('\n');
+}
+
+static void link_begin(const char *url)
+{
+    link_begin_count++;
+    strncpy(link_url, url, sizeof(link_url) - 1);
+    link_url[sizeof(link_url) - 1] = 0;
+}
+
+static void link_end(void)
+{
+    link_end_count++;
+}
+
+static void image_alt(const char *alt)
+{
+    while (*alt) emit_text((unsigned char)*alt++);
+}
+
+static void capture_reset(void)
+{
+    visible_len = title_len = 0;
+    link_begin_count = link_end_count = 0;
+    visible[0] = title[0] = link_url[0] = 0;
+    gb_html_reset();
+}
+
+static void capture_end(void)
+{
+    gb_html_end();
+    visible[visible_len] = 0;
+    title[title_len] = 0;
+}
+
+static void feed_chunks(const char *text, unsigned char chunk)
+{
+    unsigned int len = (unsigned int)strlen(text), take;
+    while (len) {
+        take = len < chunk ? len : chunk;
+        gb_html_feed((const unsigned char *)text, take);
+        text += take;
+        len -= take;
+    }
+}
+
+static void test_document(void)
+{
+    const char *page =
+        "<!doctype html><html><head><title> Test &amp; Demo </title>"
+        "<style>body > p { color: red }</style></head><body>\n"
+        "<h1>Hello&nbsp;world</h1><p>Visit "
+        "<a href=/next?q=1&amp;x=2>next page</a>.</p>"
+        "<!-- ignored > text --><img src=x alt='A &lt;picture&gt;'> <br>Done"
+        "<script>if (a < b) document.write('bad');</script></body></html>";
+
+    capture_reset();
+    feed_chunks(page, 3);
+    capture_end();
+    check(!strcmp(title, "Test & Demo"),
+          "title text and entities stream across chunks");
+    check(!strcmp(visible, "Hello world\nVisit next page.\nA <picture>\nDone"),
+          "text, blocks, comments, scripts and image alt are reduced");
+    check(link_begin_count == 1 && link_end_count == 1 &&
+              !strcmp(link_url, "/next?q=1&x=2"),
+          "bounded link callbacks receive decoded href");
+}
+
+static void test_pre_and_entities(void)
+{
+    const char *page =
+        "<pre> a  b\n c</pre><ul><li>One</li>"
+        "<li>Two &bogus;</li></ul>Tail &#65; &#x42; &unfinished";
+    capture_reset();
+    feed_chunks(page, 1);
+    capture_end();
+    check(!strcmp(visible,
+                  " a  b\n c\n* One\n* Two &bogus;\nTail A B &unfinished"),
+          "preformatted text, lists and literal bad entities are stable");
+}
+
+static void test_bounds_and_recovery(void)
+{
+    char page[400];
+    unsigned int i, n = 0;
+    const char *prefix = "<a href='";
+    const char *middle = "'>linked</a><div data='";
+    const char *suffix = "'>after</div><!---->done";
+
+    while (*prefix) page[n++] = *prefix++;
+    for (i = 0; i < GB_HTML_URL_MAX + 2; i++) page[n++] = 'x';
+    while (*middle) page[n++] = *middle++;
+    for (i = 0; i < GB_HTML_TAG_MAX + 8; i++) page[n++] = 'y';
+    while (*suffix) page[n++] = *suffix++;
+    page[n] = 0;
+
+    capture_reset();
+    feed_chunks(page, 7);
+    capture_end();
+    check(link_begin_count == 0 && link_end_count == 0,
+          "oversized href is ignored without opening a link");
+    check(!strcmp(visible, "linkedafter\ndone"),
+          "oversized tags and empty comments recover at the next delimiter");
+}
+
+static void test_arbitrary_bytes(void)
+{
+    unsigned long seed = 0x1984UL;
+    unsigned int i;
+    capture_reset();
+    for (i = 0; i < 20000; i++) {
+        seed = seed * 1103515245UL + 12345UL;
+        gb_html_feed_byte((unsigned char)(seed >> 16));
+    }
+    capture_end();
+    check(gb_html_tag_len <= GB_HTML_TAG_MAX &&
+              gb_html_entity_len <= GB_HTML_ENTITY_MAX &&
+              gb_html_state <= GB_HTML_ST_COMMENT,
+          "arbitrary byte streams stay within parser bounds");
+}
+
+int main(void)
+{
+    test_document();
+    test_pre_and_entities();
+    test_bounds_and_recovery();
+    test_arbitrary_bytes();
+    if (failures) {
+        printf("\n%d HTML test(s) FAILED\n", failures);
+        return 1;
+    }
+    printf("\nall HTML tests passed\n");
+    return 0;
+}

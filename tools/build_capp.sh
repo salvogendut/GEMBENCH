@@ -44,6 +44,9 @@ done < <(find "$APP" -type f | sort)
 if grep -Rqs 'gbhttp\.h' "$APP"; then
     deps+=("$GB/gbhttp.h")
 fi
+if grep -Rqs 'gbhtml\.h' "$APP"; then
+    deps+=("$GB/gbhtml.h")
+fi
 if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
     deps+=("$GB/gbui_stub.c")
 fi
