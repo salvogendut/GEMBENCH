@@ -265,12 +265,14 @@ void gb_get_name(char *dst11);
  * (0x1348) are single kernel globals, so a caller that may have more than one banked
  * picture open at once must store both and write them back before each gb_pic_blit,
  * gb_pic_edit, or gb_pic_close. gb_pic_blit blits a wbytes x h region from offset src_off
- * in the banked picture to the screen; gb_pic_edit moves a Paint 100x100 tile or copies
- * an arbitrary non-crossing save chunk to an app/low-RAM buffer;
+ * in the banked picture to the screen; gb_pic_edit moves a Paint 100x100 tile, copies
+ * an arbitrary non-crossing save chunk to an app/low-RAM buffer, or writes a short
+ * low-RAM chunk back to the first bank (CPC/PCW Browser cache);
  * gb_pic_close frees the bank(s). The cursor is handled by the WM during on_draw. */
 #define GB_PICEDIT_GET  0
 #define GB_PICEDIT_PUT  1
 #define GB_PICEDIT_CHUNK 2
+#define GB_PICEDIT_WRITE 3
 #define gb_pic_edit_buf (*(volatile unsigned int *)0x134B)
 #define gb_pic_edit_off (*(volatile unsigned int *)0x134D)
 unsigned char gb_pic_open(void);
