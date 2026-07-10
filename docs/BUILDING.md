@@ -35,8 +35,8 @@ can test or deploy without rebuilding first):
   Built by `tools/build_card_img.sh`; a 32 MB local artifact, rebuilt every build
   and not committed.
 - **`QA/GEOBENCH.DSK`** — the bootable **Main** floppy image.
-- **`QA/COMPANION.DSK`** — the **Companion** floppy with the larger apps, extra
-  savers, and sample pictures for drive B.
+- **`QA/COMPANION.DSK`** — the **Companion** floppy with the larger apps
+  (including Telnet and WGET), extra savers, and sample pictures for drive B.
 
 Boot with **`RUN"GB`**: the card loader `GB.BAS` loads `M4DETECT.BIN`, probes for
 M4ROM's RSX table, and then `RUN"`s `GBM4` on M4 hardware or `GBALB` otherwise. On

@@ -103,7 +103,8 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
   splash, `LOGO.PIC` (default wallpaper), `TLEUNG.PIC`, GEOBENCH.CFG.
 - **COMPANION.DSK** (data): the picture gallery, backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
-  WELCOME.TXT. `LOGO.PIC`, `TLEUNG.PIC` and `CLASSIC.FNT` live on the
+  WGET.APP (HTTP downloads over PerryNet), WELCOME.TXT. `LOGO.PIC`,
+  `TLEUNG.PIC` and `CLASSIC.FNT` live on the
   boot disk, and `PENGUIN.PIC` is omitted, to keep enough CF2 space for
   the network apps.
 
@@ -140,13 +141,19 @@ window — no video-mode switch, so it looks the same on real hardware.
 The faster PerryNet profile requests nominal `19200` baud; PerryFi/PerryNet
 firmware aliases that to the PCW's exact `17857` baud divisor.
 
+`WGET.APP` uses the same PerryNet host-pulled TCP path. Enter a plain
+`http://` URL, choose floppy A or B, and select Download. The response is
+written incrementally rather than held in RAM; the destination name is derived
+from the final URL path component and converted to CP/M-compatible 8.3 form.
+HTTPS is not supported because the PCW side has no TLS implementation.
+
 ## Not (yet) on the PCW
 
 - The direct-`#C000` savers (PYRO, HELIX, STARFLD, …) — they poke the CPC
   framebuffer; each needs a PCW plot path.
 - DISKUTIL (needs a PCW FORMAT TRACK backend), PAINT and GB-BASIC (their
   repos need `-DGB_PCW` targets).
-- TELNET uses PerryNet/PerryFi directly for TCP sessions on PCW. It opens
+- TELNET and WGET use PerryNet/PerryFi directly for TCP sessions on PCW. They open
   PerryNet sockets in host-pulled receive mode (`TCP_RECV`) so banner data is
   only transmitted while TELNET is actively polling serial; a shared direct
   network-module backend remains a later target.

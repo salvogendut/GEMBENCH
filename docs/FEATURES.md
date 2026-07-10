@@ -63,6 +63,11 @@ backdrop, dragging icons, opening apps and menus:
   browse either floppy or Albireo content without ambiguity. Invalid media
   falls back safely to `SOLID` / `NONE` at boot instead of blocking startup. The
   icon-set picker can **filter by icon count**. Launches from the System menu.
+- **WGET** — enter a plain HTTP URL, select an available floppy/card drive, and
+  stream the response directly to an automatically derived 8.3 filename. The
+  CPC build uses Net4CPC or M4 TCP; the PCW build uses PerryFi/PerryNet. HTTP
+  content-length, connection-close, and chunked response bodies are supported;
+  HTTPS is intentionally out of scope without TLS.
 - **Screensavers** — self-contained apps shipped with a `.SAV` extension. The
   desktop's idle timer (global, so it fires over any app) launches the configured
   module after the timeout; any pointer move / click / key returns to the desktop.

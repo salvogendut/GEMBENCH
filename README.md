@@ -23,9 +23,9 @@ reaching the kernel through `libgb`. It's a graphical layer on top of an existin
 DOS (AMSDOS / UniDOS / MSX-DOS 2), not a replacement OS — smaller scope than
 [SymbOS](https://www.symbos.de), different goal.
 
-The desktop, file manager, Notepad, ICONED, Paint, Viewer, Clock, Xaos, Settings
-and the screensavers build for every target from the same source tree. The CPC
-distribution also ships the Telnet client and network diagnostic apps. Targets:
+The desktop and most bundled applications build for all targets from the same
+source tree. The CPC and PCW distributions also ship Telnet, network diagnostics,
+and the graphical WGET HTTP downloader; PCW networking uses PerryFi/PerryNet. Targets:
 the CPC (Albireo/M4 card + AMSDOS floppy), the [MSX2](docs/MSX2.md)
 (MSX-DOS 2 / Nextor, V9938 Screen 6) and the [Amstrad PCW](docs/PCW.md)
 (8256/8512 — boots standalone from its own boot sector, CGA2 colour in the
@@ -57,7 +57,7 @@ hardware, or use the disk images in an emulator.
 - Boot **`QA/PCW/GEOBENCH.DSK`** on a real PCW 8256/8512 (e.g. from a Gotek) or
   in the [1985 emulator](docs/PCW.md) with `video_mode = cga2` and the
   DK'tronics board enabled (`debug/1985-pcw.conf`); **`QA/PCW/COMPANION.DSK`**
-  (pictures, backdrops) goes in drive B. No CP/M is needed — the disc boots
+  (pictures, backdrops and network apps) goes in drive B. No CP/M is needed — the disc boots
   GEOBENCH directly. Real machines show the native 1bpp monochrome; the CGA2
   colours are an emulator feature (see [docs/PCW.md](docs/PCW.md)).
 - On real PCW hardware, automatic desktop time sync uses a PerryFi card running
@@ -81,7 +81,8 @@ Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.
 ## Where it's going
 
 The core desktop, windowing, file manager, C app model and most bundled apps work
-on both platforms; the network apps remain CPC-only for now. Next up: a single
+across the three targets. Network apps run on CPC and PCW; MSX networking remains
+future work. Next up: a single
 canonical asset format shared across CPC and MSX, resizable Paint canvases,
 drawers/folders, and per-screensaver configuration. See the
 [roadmap](docs/ROADMAP.md) for the full list.
