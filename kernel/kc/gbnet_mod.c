@@ -45,7 +45,7 @@ void main(void)
         GBNET_RES = (net_send(GBNET_BUF, GBNET_LEN) == 0) ? 1 : 0;
     } else if (op == OP_RECV) {
         GBNET_RES2 = net_recv(GBNET_BUF, GBNET_LEN);
-        GBNET_RES = 1;
+        GBNET_RES = net_recv_status();
     } else if (op == OP_CLOSE) {
         net_close();
         GBNET_RES = 1;

@@ -1,6 +1,8 @@
 #include "w5100.h"
 #include "net.h"
 
+static unsigned char last_recv_status = NET_RX_IDLE;
+
 /* -------------------------------------------------------------------------
  * Helpers
  * -------------------------------------------------------------------------*/
@@ -110,9 +112,19 @@ int net_send(const unsigned char *buf, unsigned int len) {
 
 unsigned int net_recv(unsigned char *buf, unsigned int maxlen) {
     unsigned int avail, actual, rd, phys_start, buf_end;
+    unsigned char socket_status;
 
     avail = read16(S0_RX_RSR0);
-    if (!avail) return 0;
+    if (!avail || !maxlen) {
+        socket_status = w5100_read_reg(S0_SR);
+        if (socket_status == SSTAT_ESTABLISHED)
+            last_recv_status = NET_RX_IDLE;
+        else if (socket_status == SSTAT_CLOSED || socket_status == SSTAT_CLOSE_WAIT)
+            last_recv_status = NET_RX_CLOSED;
+        else
+            last_recv_status = NET_RX_ERROR;
+        return 0;
+    }
 
     actual = (maxlen < avail) ? maxlen : avail;
 
@@ -134,7 +146,12 @@ unsigned int net_recv(unsigned char *buf, unsigned int maxlen) {
     w5100_write_reg(S0_CR, SCMD_RECV);
     wait_cmd_done();
 
+    last_recv_status = NET_RX_DATA;
     return actual;
+}
+
+unsigned char net_recv_status(void) {
+    return last_recv_status;
 }
 
 void net_close(void) {

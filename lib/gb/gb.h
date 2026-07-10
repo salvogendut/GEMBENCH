@@ -433,11 +433,17 @@ void gb_on_bar(void (*handler)(void));
 /* TCP networking via the active paged network module (#238/#259). Link gbnet_stub
  * (build_capp NET=1). Albireo/Net4CPC loads GBNET.MOD; M4 loads GBNETM4.MOD.
  * gb_net_init's cfg is 22 bytes for Net4CPC; M4 accepts it but keeps M4ROM config. */
+#define GB_NET_RX_DATA     1  /* receive returned one or more bytes */
+#define GB_NET_RX_IDLE     2  /* connected, but no bytes are currently ready */
+#define GB_NET_RX_CLOSED   3  /* peer/socket closed and no buffered bytes remain */
+#define GB_NET_RX_TIMEOUT  4  /* transport did not answer within its bounded wait */
+#define GB_NET_RX_ERROR    5  /* malformed response or backend I/O failure */
 unsigned char gb_net_init(const unsigned char *cfg22);     /* 1 = chip present + configured */
 unsigned char gb_net_open(void);                           /* 1 = socket opened (TCP) */
 unsigned char gb_net_connect(const unsigned char *ip, unsigned int port);  /* 1 = connected */
 unsigned char gb_net_send(const unsigned char *buf, unsigned int len);     /* 1 = ok */
 unsigned int  gb_net_recv(unsigned char *buf, unsigned int maxlen);        /* bytes received */
+unsigned char gb_net_recv_status(void);                    /* GB_NET_RX_* from last recv */
 void          gb_net_close(void);
 unsigned int  gb_net_rxavail(void);                        /* bytes waiting in RX */
 unsigned char gb_net_connected(void);                      /* 1 = TCP established */

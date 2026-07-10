@@ -82,6 +82,7 @@ static unsigned char chunk_have_digit;
 static unsigned char progress_div;
 static unsigned char socket_open;
 static unsigned char probe_pending;
+static unsigned char transport_rx_status;
 
 static const unsigned char netcfg[22] = {
     192,168,99,50, 255,255,255,0, 192,168,99,1, 8,8,8,8,
@@ -611,20 +612,27 @@ static unsigned int tr_recv(unsigned char *buf, unsigned int max)
 {
     unsigned char seq, req[2];
     unsigned int out_len;
-    if (!pn_channel || !pn_conn || !max) return 0;
+    if (!pn_channel || !pn_conn) { transport_rx_status = GB_NET_RX_CLOSED; return 0; }
+    if (!max) { transport_rx_status = GB_NET_RX_IDLE; return 0; }
     if (max > PN_PULL_CHUNK) max = PN_PULL_CHUNK;
     req[0] = (unsigned char)max; req[1] = (unsigned char)(max >> 8);
     out_len = max;
     seq = pn_tx(PN_OP_TCP_RECV, pn_channel, req, 2);
     if (!seq || !pn_wait_ack(seq, buf, &out_len, 12000)) {
-        if (pn_last_status == PN_STATUS_BAD_CHANNEL || pn_last_status == PN_STATUS_IO_ERROR)
+        if (pn_last_status == PN_STATUS_BAD_CHANNEL) {
             pn_conn = 0;
+            transport_rx_status = GB_NET_RX_CLOSED;
+        } else if (pn_last_status == 0xFF) {
+            transport_rx_status = GB_NET_RX_TIMEOUT;
+        } else {
+            if (pn_last_status == PN_STATUS_IO_ERROR) pn_conn = 0;
+            transport_rx_status = GB_NET_RX_ERROR;
+        }
         return 0;
     }
+    transport_rx_status = out_len ? GB_NET_RX_DATA : GB_NET_RX_IDLE;
     return out_len;
 }
-
-static unsigned char tr_connected(void) { return pn_conn; }
 
 static void tr_close(void)
 {
@@ -634,7 +642,7 @@ static void tr_close(void)
         seq = pn_tx(PN_OP_TCP_CLOSE, pn_channel, 0, 0);
         if (seq) (void)pn_wait_ack(seq, 0, &out_len, 8000);
     }
-    pn_channel = pn_conn = 0; pn_uart_restore();
+    pn_channel = pn_conn = 0; transport_rx_status = GB_NET_RX_CLOSED; pn_uart_restore();
 }
 #else
 static unsigned char ip[4];
@@ -666,9 +674,17 @@ static unsigned char tr_connect(void)
     return gb_net_connect(ip, port);
 }
 static unsigned char tr_send(const unsigned char *buf, unsigned int len) { return gb_net_send(buf, len); }
-static unsigned int tr_recv(unsigned char *buf, unsigned int max) { return gb_net_recv(buf, max); }
-static unsigned char tr_connected(void) { return gb_net_connected(); }
-static void tr_close(void) { if (socket_open) gb_net_close(); socket_open = 0; }
+static unsigned int tr_recv(unsigned char *buf, unsigned int max)
+{
+    unsigned int n = gb_net_recv(buf, max);
+    transport_rx_status = gb_net_recv_status();
+    return n;
+}
+static void tr_close(void)
+{
+    if (socket_open) gb_net_close();
+    socket_open = 0; transport_rx_status = GB_NET_RX_CLOSED;
+}
 #endif
 
 /* ---- HTTP and file stream ------------------------------------------------ */
@@ -914,14 +930,20 @@ static void network_tick(void)
         if (++progress_div >= 8) { progress_div = 0; if (drawn) draw_status(); }
         return;
     }
-    if (!tr_connected()) {
+    if (transport_rx_status == GB_NET_RX_CLOSED) {
         if (!header_done) fail_download("Connection closed early");
         else if (chunked) fail_download("Incomplete chunked response");
         else if (have_length && bytes_done != expected) fail_download("Incomplete download");
         else finish_download();
         return;
     }
-    if (++idle_frames > 900) fail_download("Network timeout");
+    if (transport_rx_status == GB_NET_RX_ERROR) {
+        fail_download("Network receive failed"); return;
+    }
+    if (++idle_frames > 900) {
+        fail_download(transport_rx_status == GB_NET_RX_TIMEOUT ?
+                      "Network transport timeout" : "Network timeout");
+    }
 }
 
 /* ---- GUI ----------------------------------------------------------------- */

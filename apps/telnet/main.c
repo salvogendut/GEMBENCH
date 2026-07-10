@@ -490,6 +490,7 @@ static void m2_clear(void) __naked
  * else empty) / &FBD8 (presence: != 0xFF means a board is there). */
 #endif
 static volatile unsigned char ser_io;            /* port I/O scratch (the asm reads/writes it) */
+static unsigned char net_rx_status;
 #ifdef GB_PCW
 static void ser_in_data(void) __naked
 { __asm
@@ -708,7 +709,7 @@ static void serial_modem_hangup(void)
 #define PN_ESC_END         0xDC
 #define PN_ESC_ESC         0xDD
 #define PN_VERSION         0x01
-#define PN_MAX_PAYLOAD     512
+#define PN_MAX_PAYLOAD     96  /* 64-byte RX pulls plus ACK/control headroom */
 #define PN_FRAME_MAX       (6 + PN_MAX_PAYLOAD + 2)
 #define PN_PULL_CHUNK      64
 #define PN_ACK_SPINS       12000
@@ -967,23 +968,27 @@ static unsigned int pn_recv(unsigned char *buf, unsigned int max)
 {
     unsigned char seq, req[2];
     unsigned int out_len;
-    if (!pn_channel || !pn_conn || !max) return 0;
+    if (!pn_channel || !pn_conn) { net_rx_status = GB_NET_RX_CLOSED; return 0; }
+    if (!max) { net_rx_status = GB_NET_RX_IDLE; return 0; }
     if (max > PN_PULL_CHUNK) max = PN_PULL_CHUNK;
     req[0] = (unsigned char)(max & 0xFF);
     req[1] = (unsigned char)(max >> 8);
     out_len = max;
     seq = pn_tx(PN_OP_TCP_RECV, pn_channel, req, 2);
     if (!seq || !pn_wait_ack(seq, buf, &out_len, PN_ACK_SPINS)) {
-        if (pn_last_status == PN_STATUS_BAD_CHANNEL || pn_last_status == PN_STATUS_IO_ERROR)
+        if (pn_last_status == PN_STATUS_BAD_CHANNEL) {
             pn_conn = 0;
+            net_rx_status = GB_NET_RX_CLOSED;
+        } else if (pn_last_status == 0xFF) {
+            net_rx_status = GB_NET_RX_TIMEOUT;
+        } else {
+            if (pn_last_status == PN_STATUS_IO_ERROR) pn_conn = 0;
+            net_rx_status = GB_NET_RX_ERROR;
+        }
         return 0;
     }
+    net_rx_status = out_len ? GB_NET_RX_DATA : GB_NET_RX_IDLE;
     return out_len;
-}
-
-static unsigned char pn_connected(void)
-{
-    return pn_conn;
 }
 
 static void pn_close(void)
@@ -1015,22 +1020,13 @@ static unsigned char net_send(const unsigned char *buf, unsigned int len)
 static unsigned int net_recv(unsigned char *buf, unsigned int max)
 {
 #if TELNET_HAS_GBNET
-    return gb_net_recv(buf, max);
+    unsigned int n = gb_net_recv(buf, max);
+    net_rx_status = gb_net_recv_status();
+    return n;
 #elif defined(GB_PCW)
     return pn_recv(buf, max);
 #else
     (void)buf; (void)max;
-    return 0;
-#endif
-}
-
-static unsigned char net_connected(void)
-{
-#if TELNET_HAS_GBNET
-    return gb_net_connected();
-#elif defined(GB_PCW)
-    return pn_connected();
-#else
     return 0;
 #endif
 }
@@ -1042,6 +1038,7 @@ static void net_close(void)
 #elif defined(GB_PCW)
     pn_close();
 #endif
+    net_rx_status = GB_NET_RX_CLOSED;
 }
 
 #ifdef GB_PCW
@@ -1311,7 +1308,12 @@ static void fs_label(void);            /* refresh the menu's [x]/[ ] checkbox */
 
 static unsigned int t_recv(unsigned char *buf, unsigned int max)
 {
-    if (transport == TR_SERIAL) return serial_recv(buf, max);
+    if (transport == TR_SERIAL) {
+        unsigned int n = serial_recv(buf, max);
+        net_rx_status = n ? GB_NET_RX_DATA :
+            (serial_present() ? GB_NET_RX_IDLE : GB_NET_RX_CLOSED);
+        return n;
+    }
     return net_recv(buf, max);
 }
 static unsigned char t_send(const unsigned char *buf, unsigned int len)
@@ -1319,12 +1321,6 @@ static unsigned char t_send(const unsigned char *buf, unsigned int len)
     if (transport == TR_SERIAL) return serial_send(buf, len);
     return net_send(buf, len);
 }
-static unsigned char t_connected(void)
-{
-    if (transport == TR_SERIAL) return serial_present();
-    return net_connected();
-}
-
 #if TELNET_HAS_NET
 static void connect_screen(void)
 {
@@ -1393,7 +1389,8 @@ static unsigned int pump_recv(void)
         rx_busy = 0;
         flush_iac_defer();
 #endif
-    } else if (!t_connected()) {
+    } else if (net_rx_status == GB_NET_RX_CLOSED ||
+               net_rx_status == GB_NET_RX_ERROR) {
         term_write('\r'); term_write('\n');
         { const char *m = "** Disconnected - press a key **"; while (*m) term_write(*m++); }
         state = ST_DONE;
