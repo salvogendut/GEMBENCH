@@ -103,9 +103,10 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
   splash, `LOGO.PIC` (default wallpaper), `TLEUNG.PIC`, GEOBENCH.CFG.
 - **COMPANION.DSK** (data): the picture gallery, backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
-  WGET.APP (HTTP downloads over PerryNet), DECO.SAV, WELCOME.TXT. `LOGO.PIC`,
-  `TLEUNG.PIC` and `CLASSIC.FNT` live on the boot disk. `PENGUIN.PIC` is
-  omitted to keep enough CF2 space for the apps.
+  WGET.APP and BROWSER.APP (HTTP over PerryNet), DECO.SAV, WELCOME.TXT. `LOGO.PIC`,
+  `TLEUNG.PIC` and `CLASSIC.FNT` live on the boot disk. The largest/redundant
+  pictures (`1984.PIC`, `BIG.PIC`, `PENGUIN.PIC`, `POLYMAR.PIC`) are omitted to
+  keep enough CF2 space for the apps.
 
 ## PCW Time Sync With PerryFi / PerryNet
 
@@ -140,11 +141,16 @@ window — no video-mode switch, so it looks the same on real hardware.
 The faster PerryNet profile requests nominal `19200` baud; PerryFi/PerryNet
 firmware aliases that to the PCW's exact `17857` baud divisor.
 
-`WGET.APP` uses the same PerryNet host-pulled TCP path. Enter a plain
-`http://` URL, choose floppy A or B, and select Download. The response is
-written incrementally rather than held in RAM; the destination name is derived
-from the final URL path component and converted to CP/M-compatible 8.3 form.
-HTTPS is not supported because the PCW side has no TLS implementation.
+`WGET.APP` and `BROWSER.APP` use the same PerryNet host-pulled TCP path. WGET
+downloads a plain `http://` URL to floppy A or B, writing incrementally rather
+than holding the response in RAM; the destination name is derived from the final
+URL path component and converted to CP/M-compatible 8.3 form. WGET follows up
+to four absolute or relative redirects and keeps an interrupted partial file. A
+later PCW attempt restarts that file rather than sending Range: CP/M records
+only retain a 128-byte-granular size, so an exact resume offset cannot be
+reconstructed safely. Browser follows redirects too, parses chunked HTML bodies,
+and renders text/list/link/alt text into a bounded rolling page buffer. HTTPS is
+not supported because the PCW side has no TLS implementation.
 
 ## Not (yet) on the PCW
 
@@ -152,10 +158,10 @@ HTTPS is not supported because the PCW side has no TLS implementation.
   framebuffer; each needs a PCW plot path.
 - DISKUTIL (needs a PCW FORMAT TRACK backend), PAINT and GB-BASIC (their
   repos need `-DGB_PCW` targets).
-- TELNET and WGET use PerryNet/PerryFi directly for TCP sessions on PCW. They open
-  PerryNet sockets in host-pulled receive mode (`TCP_RECV`) so banner data is
-  only transmitted while TELNET is actively polling serial; a shared direct
-  network-module backend remains a later target.
+- TELNET, WGET and Browser use PerryNet/PerryFi directly for TCP sessions on
+  PCW. They open PerryNet sockets in host-pulled receive mode (`TCP_RECV`) so
+  network data is only transmitted while the app is actively polling serial; a
+  shared direct network-module backend remains a later target.
 - CF2DD 720K media (2K blocks, 16-bit allocation entries) — drive B
   currently expects CF2-format discs.
 

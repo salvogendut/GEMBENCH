@@ -6,6 +6,12 @@
  * All functions return 0 on success, -1 on error unless noted otherwise.
  */
 
+#define NET_RX_DATA     1
+#define NET_RX_IDLE     2
+#define NET_RX_CLOSED   3
+#define NET_RX_TIMEOUT  4
+#define NET_RX_ERROR    5
+
 /* Open socket 0 in TCP mode, ready to connect. */
 int net_socket_open(void);
 
@@ -25,6 +31,9 @@ int net_send(const unsigned char *buf, unsigned int len);
  * Returns number of bytes actually received (may be 0 if nothing ready).
  */
 unsigned int net_recv(unsigned char *buf, unsigned int maxlen);
+
+/* NET_RX_* result associated with the most recent net_recv(). */
+unsigned char net_recv_status(void);
 
 /* Graceful close: DISCON then CLOSE. */
 void net_close(void);

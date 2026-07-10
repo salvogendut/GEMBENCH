@@ -6,6 +6,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 CC="${CC:-cc}"
-out="$(mktemp -d)/test_kcfg"
-"$CC" -Wall -Wextra -std=c99 -o "$out" test_kcfg.c kcfg.c
-"$out"
+tmp="$(mktemp -d)"
+"$CC" -Wall -Wextra -std=c99 -o "$tmp/test_kcfg" test_kcfg.c kcfg.c
+"$tmp/test_kcfg"
+"$CC" -Wall -Wextra -std=c99 -o "$tmp/test_dns" test_dns.c
+"$tmp/test_dns"

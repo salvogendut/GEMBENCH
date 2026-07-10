@@ -4,7 +4,7 @@
 /*
  * DNS A-record resolver.
  *
- * dns_resolve() sends a DNS query to the given server, waits up to 3000 ms
+ * dns_resolve() sends bounded, retried DNS queries to the given server, waits
  * for a TYPE A answer, and writes the 4-byte IPv4 result into result_ip.
  *
  * Parameters:
@@ -15,7 +15,7 @@
  * Returns 0 on success, negative on error:
  *   -1  chip or socket error
  *   -2  send failed
- *   -3  timeout (no response within 3000 ms)
+ *   -3  timeout (no matching response within the bounded retry budget)
  *   -4  DNS returned error / no A record in response
  */
 int dns_resolve(const unsigned char *dns_server_ip, const char *hostname,

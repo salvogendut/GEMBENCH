@@ -14,5 +14,6 @@ check:
 	python3 tools/check_lowram_map.py
 	python3 tools/check_abi_table.py
 	kernel/kc/run_tests.sh
+	lib/gb/run_tests.sh
 
 test: check

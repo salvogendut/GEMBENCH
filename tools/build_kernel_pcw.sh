@@ -32,9 +32,10 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
-APPDEFS="-DGB_PCW" DATA_LOC=0x72C0 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x7380 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
-APPDEFS="-DGB_PCW" DATA_LOC=0x7400 DIALOGS=1 tools/build_capp.sh apps/wget build/pcw/WGET.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x7900 DIALOGS=1 tools/build_capp.sh apps/wget build/pcw/WGET.RAW
+GBWIN=0 APPDEFS="-DGB_PCW" DATA_LOC=0x7A90 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/pcw/SHELL.RAW
 # savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a
@@ -119,12 +120,11 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
 
 # --- COMPANION.DSK: pictures, TELNET, backdrops, spare assets (plain data disc)
 # CF2 is tight; LOGO.PIC, TLEUNG.PIC and CLASSIC.FNT live on the boot disk.
-# PENGUIN.PIC/POLYMAR.PIC are skipped so TELNET.APP plus the PerryNet
-# NETTEST.APP (including the UDP/NTP probe) fit here.
+# The largest/redundant pictures are skipped so the PerryNet network tools fit.
 COMP_ADDS=()
 for pic in assets/pictures/*.PIC; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    case "$name" in BIG|TLEUNG|LOGO|PENGUIN|POLYMAR) continue;; esac
+    case "$name" in 1984|BIG|TLEUNG|LOGO|PENGUIN|POLYMAR) continue;; esac
 
     python3 tools/pic_to_pcw.py "$pic" "build/pcw/$name.PIC"
     COMP_ADDS+=(--add "build/pcw/$name.PIC=$name.PIC")
@@ -139,6 +139,7 @@ python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     --add build/pcw/TELNET.RAW=TELNET.APP \
     --add build/pcw/NETTEST.RAW=NETTEST.APP \
     --add build/pcw/WGET.RAW=WGET.APP \
+    --add build/pcw/BROWSER.RAW=BROWSER.APP \
     --add build/pcw/DECO.RAW=DECO.SAV \
     --add assets/WELCOME.TXT=WELCOME.TXT
 

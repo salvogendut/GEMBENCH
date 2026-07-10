@@ -38,7 +38,7 @@ The shared **C bindings** every GEOBENCH app links against:
 | `gb/gbdoc.c` | The `gb_doc` document framework: registers an app's buffer + new/open/save hooks and drives the shared File/Edit/View menus. |
 | `gb/gbwin.c` | Window chrome helpers an app links in (drag/resize against the kernel WM). |
 | `gb/gbdlg.c`, `gb/gbpick.c`, `gb/gbprompt.c` | Dialog/menu/file-picker/prompt renderers — compiled into the paged `GBUI.MOD`, not into every app bank. |
-| `gb/gbui_stub.c`, `gb/gbnet_stub.c` | Thin app-side stubs that call the paged `GBUI.MOD` / active network module (`GBNET.MOD` or `GBNETM4.MOD`) through the kernel. |
+| `gb/gbui_stub.c`, `gb/gbnet_stub.c` | Thin app-side stubs that call the paged `GBUI.MOD` / active network module (`GBNET.MOD` or `GBNETM4.MOD`) through the kernel. Networking reports data/idle/closed/timeout/error separately and keeps one bounded DNS result in the calling app. |
 
 ## Design constraints
 

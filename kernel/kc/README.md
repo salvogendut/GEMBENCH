@@ -19,8 +19,8 @@ time, so several share the same low-RAM transfer/buffer overlays.
 |------|---------|--------------|------|
 | `GBCFG.MOD` | `kcfg.c` + `kcfg_mod.c` wrapper | `tools/build_cfgmod.sh` | Parse `GEOBENCH.CFG` KEY=VALUE text into the `ICONS=`/`FONT=`/`CURSOR=` set names, the `BACKDROP=` tile name (+ its `A:`/`B:` drive prefix), the `INKS=` palette (4 pens + border), and `DEBUG=TRUE` boot-splash selection. |
 | `GBUI.MOD` | `gbui_mod.c` dispatcher + `lib/gb/gbdlg.c`, `gbprompt.c`, `gbpick.c` | `tools/build_uimod.sh` | The shared `gb_doc` dialog/menu renderer (#142): File/Edit/View menus, the Open/Save file dialog, and prompts — paged so it isn't duplicated into every app bank. |
-| `GBNET.MOD` | `gbnet_mod.c` dispatcher + `w5100.c`, `net.c`, `udp.c`, `dns.c`, `gbnet_init.c` | `tools/build_netmod.sh` | The W5100S/Net4CPC socket driver behind a one-entry op-selector (#238): init, TCP connect/send/recv, UDP, and DNS resolve, used by `TELNET.APP` on Albireo/Net4CPC systems. |
-| `GBNETM4.MOD` | `gbnet_m4_mod.c` | `tools/build_m4netmod.sh` | The M4ROM TCP command backend (#259) for the same `gb_net_*` API. It uses M4 `C_NET*` commands and `sock_info`; M4 has TCP plus host lookup, not the W5100 UDP path. It preserves the caller's active video mode/hint around M4ROM paging so fullscreen Mode 2 clients stay stable. |
+| `GBNET.MOD` | `gbnet_mod.c` dispatcher + `w5100.c`, `net.c`, `udp.c`, `dns.c`, `gbnet_init.c` | `tools/build_netmod.sh` | The W5100S/Net4CPC socket driver behind a one-entry op-selector (#238): init, TCP connect/send/recv, UDP, and bounded/retried DNS resolve. Receive calls distinguish data, idle, peer close, timeout and backend error. |
+| `GBNETM4.MOD` | `gbnet_m4_mod.c` | `tools/build_m4netmod.sh` | The M4ROM TCP command backend (#259) for the same `gb_net_*` API and receive states. It uses M4 `C_NET*` commands and `sock_info`; M4 has TCP plus host lookup, not the W5100 UDP path. It preserves the caller's active video mode/hint around M4ROM paging so fullscreen Mode 2 clients stay stable. |
 
 The `.c`/`.h` pairs `net`, `udp`, `dns`, `w5100` (plus `netinit.h`) are the
 Net4CPC stack compiled into `GBNET.MOD`; `gbnet_m4_mod.c` is intentionally
@@ -36,10 +36,11 @@ expensive; C belongs in a paged module unless the routine is tiny and cold.
 
 ## Verifying the logic
 
-`run_tests.sh` builds `kcfg.c` with the host `cc` and runs `test_kcfg.c`, which
-encodes the parser's behavior (defaults, comments, CR/LF vs LF, value cap,
+`run_tests.sh` builds the host-side config and DNS tests. `test_kcfg.c` encodes
+the config parser's behavior (defaults, comments, CR/LF vs LF, value cap,
 key-at-line-start only, empty value, repeated keys, the `A:`/`B:` drive prefix,
-and exact `DEBUG=TRUE` matching).
+and exact `DEBUG=TRUE` matching). `test_dns.c` covers query IDs, hostname bounds,
+A-record parsing, dropped-query retry, mismatched replies and bounded timeout.
 The C must pass these before the asm it replaced is retired — "prove parity, then
 delete the asm," not "rewrite and hope."
 

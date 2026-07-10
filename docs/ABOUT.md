@@ -92,8 +92,8 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
   Cyboard PS/2 mouse** can be added for machines that have one.
 - Albireo (CH376), M4 board, or AMSDOS floppy storage. The IDE backend is archived
   — frozen in-tree, not shipped; see [`ARCHIVED.md`](ARCHIVED.md). Telnet,
-  NETTEST and WGET use Net4CPC/W5100S when running the Albireo kernel and
-  M4ROM's TCP commands when running the M4 kernel.
+  NETTEST, WGET and Browser use Net4CPC/W5100S when running the Albireo kernel
+  and M4ROM's TCP commands when running the M4 kernel.
 - **MSX2** (V9938, 128K VRAM) running **MSX-DOS 2 / Nextor** — see
   [The MSX2 target](MSX2.md). Stock 128K RAM boots the desktop;
   a memory-mapper expansion (512K typical) is recommended for multiple app

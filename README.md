@@ -25,7 +25,8 @@ DOS (AMSDOS / UniDOS / MSX-DOS 2), not a replacement OS — smaller scope than
 
 The desktop, file tools and graphical Shell build for all targets from the same
 source tree. The CPC and PCW distributions also ship Telnet, network diagnostics,
-and the graphical WGET HTTP downloader; PCW networking uses PerryFi/PerryNet. Targets:
+the graphical WGET HTTP downloader, and a small streaming HTTP browser; PCW
+networking uses PerryFi/PerryNet. Targets:
 the CPC (Albireo/M4 card + AMSDOS floppy), the [MSX2](docs/MSX2.md)
 (MSX-DOS 2 / Nextor, V9938 Screen 6) and the [Amstrad PCW](docs/PCW.md)
 (8256/8512 — boots standalone from its own boot sector, CGA2 colour in the

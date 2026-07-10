@@ -28,6 +28,12 @@
 #define OP_CONNECTED 8
 #define OP_RESOLVE   9
 
+#define NET_RX_DATA     1
+#define NET_RX_IDLE     2
+#define NET_RX_CLOSED   3
+#define NET_RX_TIMEOUT  4
+#define NET_RX_ERROR    5
+
 /* ---- M4 command protocol ------------------------------------------------- */
 #define M4C_NETSOCKET  0x4331
 #define M4C_NETCONNECT 0x4332
@@ -49,6 +55,7 @@ volatile unsigned char m4_packet[256];
 volatile unsigned char m4_resp[256];
 volatile unsigned char m4_sock[16];
 volatile unsigned char m4_sock_slot;
+static unsigned char last_recv_status;
 
 void m4_begin(void) __naked
 {
@@ -235,8 +242,10 @@ static unsigned char net_send_m4(const unsigned char *buf, unsigned int len)
 static unsigned int net_recv_m4(unsigned char *buf, unsigned int maxlen)
 {
     unsigned int want, actual, i;
-    if (!GBNET_SOCK) return 0;
-    if (GBNET_STATE == M4_STATUS_CLOSED || GBNET_STATE >= 240) return 0;
+    if (!GBNET_SOCK) { last_recv_status = NET_RX_CLOSED; return 0; }
+    if (GBNET_STATE == M4_STATUS_CLOSED) { last_recv_status = NET_RX_CLOSED; return 0; }
+    if (GBNET_STATE >= 240) { last_recv_status = NET_RX_ERROR; return 0; }
+    if (!maxlen) { last_recv_status = NET_RX_IDLE; return 0; }
     want = maxlen;
     if (want > M4_MAX_IO) want = M4_MAX_IO;
     pkt(M4C_NETRECV, 5);        /* cmd(2), socket, wanted-size(2) */
@@ -246,12 +255,23 @@ static unsigned int net_recv_m4(unsigned char *buf, unsigned int maxlen)
     m4_sock_slot = GBNET_SOCK;
     m4_begin();
     copy_sock(GBNET_SOCK);
-    if (m4_resp[3] != 0) { m4_finish(); return 0; }
+    if (m4_resp[3] != 0) {
+        last_recv_status = (GBNET_STATE == M4_STATUS_CLOSED) ? NET_RX_CLOSED : NET_RX_ERROR;
+        m4_finish(); return 0;
+    }
     actual = (unsigned int)m4_resp[4] | ((unsigned int)m4_resp[5] << 8);
     if (actual > maxlen) actual = maxlen;
     if (actual > M4_MAX_IO) actual = M4_MAX_IO;
     for (i = 0; i < actual; i++)
         buf[i] = m4_resp[6 + i];
+    if (actual)
+        last_recv_status = NET_RX_DATA;
+    else if (GBNET_STATE == M4_STATUS_CLOSED)
+        last_recv_status = NET_RX_CLOSED;
+    else if (GBNET_STATE >= 240)
+        last_recv_status = NET_RX_ERROR;
+    else
+        last_recv_status = NET_RX_IDLE;
     m4_finish();
     return actual;
 }
@@ -309,6 +329,7 @@ void main(void)
         GBNET_SOCK = 0;
         GBNET_STATE = M4_STATUS_CLOSED;
         GBNET_RX = 0;
+        last_recv_status = NET_RX_IDLE;
         GBNET_RES = 1;          /* M4 owns TCP/IP configuration. */
     } else if (op == OP_OPEN) {
         GBNET_RES = net_open_m4();
@@ -318,7 +339,7 @@ void main(void)
         GBNET_RES = net_send_m4(GBNET_BUF, GBNET_LEN);
     } else if (op == OP_RECV) {
         GBNET_RES2 = net_recv_m4(GBNET_BUF, GBNET_LEN);
-        GBNET_RES = 1;
+        GBNET_RES = last_recv_status;
     } else if (op == OP_CLOSE) {
         net_close_m4();
         GBNET_RES = 1;
