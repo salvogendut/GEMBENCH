@@ -1,7 +1,8 @@
 /* BROWSER.APP - bounded, text-first streaming HTTP browser for GEOBENCH.
  *
- * Pages are parsed as they arrive and reduced to a small ring of display lines;
- * no DOM or full response is retained. CPC uses GBNET, while PCW uses PerryNet. */
+ * Pages are parsed directly into fixed-width rendered lines in one borrowed
+ * 16K page. No DOM or full HTTP response is retained. CPC uses GBNET, while
+ * PCW uses PerryNet. */
 #include "gb.h"
 
 #define URL_MAX        95
@@ -43,25 +44,32 @@
 #define SCROLL_X       1
 #define SCROLL_W       3
 #ifdef GB_PCW
-#define HIST_LINES    22
-#else
-#define HIST_LINES    18
-#endif
-
-#ifdef GB_PCW
 #define TEXT_COLS     55
 #else
 #define TEXT_COLS     48
 #endif
 #define LINE_SIZE     (TEXT_COLS + 1)
 #define VIEW_ROWS     ((GB_LINES - CONTENT_Y - 2) / 8)
-#define HISTORY_BYTES (HIST_LINES * LINE_SIZE)
+#define CACHE_LINES   255
+#define FALLBACK_LINES 8
+
+/* The cooperative app-page pool is always mapped below #4000. Browser claims
+ * one otherwise-free page for rendered lines and returns it through the normal
+ * picture-bank close service. GB_PICEDIT moves short records while that page is
+ * mapped, so no pointer into the Browser's own page crosses a bank switch. */
+#define APP_NPAGES    (*(volatile unsigned char *)0x1437)
+#define APP_PAGES     ((volatile unsigned char *)0x1438)
+#define APP_BUSY      ((volatile unsigned char *)0x1440)
+#define PIC_PAGE_K    (*(volatile unsigned char *)0x130B)
+#define PIC_PAGE2_K   (*(volatile unsigned char *)0x1348)
+#define FS_SAVE_LEN_K (*(volatile unsigned int  *)0x14FD)
 
 static char url[URL_MAX + 1];
 static char host[HOST_MAX + 1];
 static char path[PATH_MAX + 1];
 #ifdef GB_PCW
-#define PCW_BACK_OFS    HISTORY_BYTES
+#define PCW_STAGE_BYTES LINE_SIZE
+#define PCW_BACK_OFS    PCW_STAGE_BYTES
 #define PCW_FRAME_OFS   (PCW_BACK_OFS + URL_MAX + 1)
 #define PCW_LINK_OFS    (PCW_FRAME_OFS + 264)
 #define PCW_ALT_OFS     (PCW_LINK_OFS + LINK_MAX + 1)
@@ -69,12 +77,16 @@ static char path[PATH_MAX + 1];
 #define PCW_HEADER_OFS  (PCW_ENTITY_OFS + 10)
 #define PCW_NETBUF_OFS  (PCW_HEADER_OFS + HEADER_MAX + 1)
 #define PCW_REQUEST_OFS (PCW_NETBUF_OFS + NETBUF_SIZE)
+#define PCW_FALLBACK_OFS (PCW_REQUEST_OFS + REQUEST_MAX + 1)
+#define PCW_TITLE_OFS   (PCW_FALLBACK_OFS + FALLBACK_LINES * LINE_SIZE)
 #define request     ((char *)&gb_copybuf[PCW_REQUEST_OFS])
 #define header_line ((char *)&gb_copybuf[PCW_HEADER_OFS])
 #define netbuf      ((unsigned char *)&gb_copybuf[PCW_NETBUF_OFS])
 #define link_url    ((char *)&gb_copybuf[PCW_LINK_OFS])
 #define alt_text    ((char *)&gb_copybuf[PCW_ALT_OFS])
 #define entity_text ((char *)&gb_copybuf[PCW_ENTITY_OFS])
+#define fallback    (&gb_copybuf[PCW_FALLBACK_OFS])
+#define title       (&gb_copybuf[PCW_TITLE_OFS])
 #else
 static char request[REQUEST_MAX + 1];
 static char header_line[HEADER_MAX + 1];
@@ -83,22 +95,23 @@ static char link_url[LINK_MAX + 1];
 static char alt_text[ALT_MAX + 1];
 static char entity_text[10];
 #endif
-static char title[TITLE_MAX + 1];
 #ifdef GB_PCW
-/* PCW networking is direct serial I/O, so the kernel's otherwise idle transfer
- * buffer can hold the bounded page ring, Back URL, and PerryNet frame. CPC
- * GBNET uses this area for packets, so its retained state remains app-local. */
-#define history gb_copybuf
+/* PCW networking is direct serial I/O, so transient protocol state and the
+ * no-spare-bank fallback can live above the bank service's short #2200 staging
+ * record. CPC GBNET owns that area, so its fallback remains app-local. */
 #define back_url (&gb_copybuf[PCW_BACK_OFS])
 #define BROWSER_PCW_FRAME_BUFFER ((unsigned char *)&gb_copybuf[PCW_FRAME_OFS])
 #else
-static char history[HIST_LINES * LINE_SIZE];
+static char title[TITLE_MAX + 1];
+static char fallback[FALLBACK_LINES * LINE_SIZE];
 static char back_url[URL_MAX + 1];
 #endif
 static char pending[LINE_SIZE];
 /* Drawing runs after each receive burst, so the consumed network buffer can
- * double as the short, transient URL viewport without increasing app RAM. */
+ * double as the short URL viewport and borrowed-bank line staging area without
+ * increasing app RAM. */
 #define url_view ((char *)netbuf)
+#define line_buf ((char *)netbuf)
 
 static const char *status_text;
 static unsigned int port;
@@ -114,6 +127,7 @@ static unsigned char hist_start, hist_count, view_top, pending_len;
 static unsigned char dirty, drawn, caret_tick, caret_on, redraw_div;
 static unsigned char parsed_len, parsed_digit;
 static unsigned char have_page, have_back, edit_changed;
+static unsigned char cache_page, cache_full;
 
 #ifndef GB_PCW
 static const unsigned char netcfg[22] = {
@@ -159,13 +173,35 @@ static void set_status(const char *s)
 static unsigned char ring_index(unsigned char start, unsigned char rel)
 {
     unsigned char n = (unsigned char)(start + rel);
-    if (n >= HIST_LINES) n = (unsigned char)(n - HIST_LINES);
+    if (n >= FALLBACK_LINES) n = (unsigned char)(n - FALLBACK_LINES);
     return n;
+}
+
+static unsigned char alloc_cache_page(void)
+{
+    unsigned char i;
+    for (i = 0; i < APP_NPAGES; i++) {
+        if (!APP_BUSY[i]) {
+            APP_BUSY[i] = 1;
+            return APP_PAGES[i];
+        }
+    }
+    return 0;
 }
 
 static char *history_line(unsigned char rel)
 {
-    return &history[(unsigned int)ring_index(hist_start, rel) * LINE_SIZE];
+    unsigned char i;
+    if (!cache_page)
+        return &fallback[(unsigned int)ring_index(hist_start, rel) * LINE_SIZE];
+    PIC_PAGE_K = cache_page;
+    PIC_PAGE2_K = 0;
+    gb_pic_edit_buf = (unsigned int)gb_copybuf;
+    gb_pic_edit_off = (unsigned int)rel * LINE_SIZE;
+    FS_SAVE_LEN_K = LINE_SIZE;
+    if (!gb_pic_edit(GB_PICEDIT_CHUNK)) { line_buf[0] = 0; return line_buf; }
+    for (i = 0; i < LINE_SIZE; i++) line_buf[i] = gb_copybuf[i];
+    return line_buf;
 }
 
 static void scroll_bottom(void)
@@ -176,17 +212,31 @@ static void scroll_bottom(void)
 static void add_line(void)
 {
     unsigned char slot, i;
-    if (hist_count < HIST_LINES) slot = ring_index(hist_start, hist_count++);
-    else {
-        slot = hist_start;
-        hist_start = ring_index(hist_start, 1);
-        if (view_top) view_top--;
+    if (cache_page) {
+        if (hist_count < CACHE_LINES) {
+            for (i = 0; i < pending_len; i++) gb_copybuf[i] = pending[i];
+            gb_copybuf[pending_len] = 0;
+            PIC_PAGE_K = cache_page;
+            PIC_PAGE2_K = 0;
+            gb_pic_edit_buf = (unsigned int)gb_copybuf;
+            gb_pic_edit_off = (unsigned int)hist_count * LINE_SIZE;
+            FS_SAVE_LEN_K = (unsigned int)(pending_len + 1);
+            if (gb_pic_edit(GB_PICEDIT_WRITE)) hist_count++;
+            else cache_full = 1;
+        } else cache_full = 1;
+    } else {
+        if (hist_count < FALLBACK_LINES) slot = ring_index(hist_start, hist_count++);
+        else {
+            slot = hist_start;
+            hist_start = ring_index(hist_start, 1);
+            if (view_top) view_top--;
+        }
+        for (i = 0; i < pending_len; i++)
+            fallback[(unsigned int)slot * LINE_SIZE + i] = pending[i];
+        fallback[(unsigned int)slot * LINE_SIZE + pending_len] = 0;
+        scroll_bottom();
     }
-    for (i = 0; i < pending_len; i++) history[(unsigned int)slot * LINE_SIZE + i] = pending[i];
-    history[(unsigned int)slot * LINE_SIZE + pending_len] = 0;
     pending_len = 0;
-    scroll_bottom();
-    dirty = 1;
 }
 
 static void output_char(unsigned char c)
@@ -212,7 +262,6 @@ static void title_char(unsigned char c)
     if (title_len < TITLE_MAX && c >= 32 && c < 127) {
         title[title_len++] = (char)c;
         title[title_len] = 0;
-        dirty = 1;
     }
 }
 
@@ -446,7 +495,9 @@ static void finish_page(void)
     tr_close();
     state = ST_IDLE;
     have_page = 1;
-    set_status("Page complete");
+    if (cache_full) set_status("Page truncated: cache full");
+    else if (!cache_page && hist_start) set_status("Page complete: last lines only");
+    else set_status("Page complete");
 }
 
 static void fail_page(const char *s)
@@ -532,7 +583,7 @@ static void start_page(void)
 {
     if (!url[0]) { set_status("Enter an HTTP URL"); return; }
     if (!parse_url() || !build_request()) return;
-    hist_start = hist_count = view_top = pending_len = 0;
+    hist_start = hist_count = view_top = pending_len = cache_full = 0;
     title_len = 0; title[0] = 0;
     gb_html_reset();
     reset_response();
@@ -700,6 +751,7 @@ static void draw_page(void)
 
 static void scroll_page(unsigned char down)
 {
+    if (state != ST_IDLE) return;
     if (down) {
         if (view_top + VIEW_ROWS < hist_count) view_top++;
     } else if (view_top) view_top--;
@@ -788,6 +840,12 @@ static void browser_proc(void)
         case GB_MSG_CLICK: handle_click(); break;
         case GB_MSG_CLOSE:
             if (socket_open) tr_close();
+            if (cache_page) {
+                PIC_PAGE_K = cache_page;
+                PIC_PAGE2_K = 0;
+                gb_pic_close();
+                cache_page = 0;
+            }
             gb_wm_close();
             break;
         case GB_MSG_DRAG: break;
@@ -801,7 +859,8 @@ static const gb_mwin_t browser_window = {
 void main(void)
 {
     url[url_len] = 0;
-    status_text = "Ready";
+    cache_page = alloc_cache_page();
+    status_text = cache_page ? "Ready" : "Ready: limited page cache";
     editing = caret_on = dirty = 1;
     gb_wm_managed(&browser_window);
     gb_restore_parent();

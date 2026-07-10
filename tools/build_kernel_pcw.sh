@@ -35,7 +35,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/p
 APPDEFS="-DGB_PCW" DATA_LOC=0x7380 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7900 DIALOGS=1 tools/build_capp.sh apps/wget build/pcw/WGET.RAW
-GBWIN=0 APPDEFS="-DGB_PCW" DATA_LOC=0x7CC0 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
+GBWIN=0 APPDEFS="-DGB_PCW" DATA_LOC=0x7E60 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/pcw/SHELL.RAW
 # savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a
@@ -66,7 +66,9 @@ python3 tools/packicons.py --platform msx2 build/pcw/DEFAULT.IST \
 python3 tools/ist_to_msx.py assets/iconsets/REFINED.IST build/pcw/REFINED.IST
 
 # the pointer: interleaved software-cursor .SPR in CGA2 hardware space
+"$RASM" kernel/modules/picedit_low.asm -DPLATFORM_PCW=1 >/dev/null
 python3 tools/png2spr.py --platform pcw assets/pointer.png build/pcw/DEFAULT.SPR cursor 12x16
+cat build/pcw/PICEDITL.RAW >> build/pcw/DEFAULT.SPR
 
 # bootsplash: Screen-6 transcode, then the CGA2 hardware-pen permute
 # (boot_splash blits it with restore_block, which writes raw bytes)

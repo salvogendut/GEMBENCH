@@ -76,9 +76,13 @@ backdrop, dragging icons, opening apps and menus:
   `http://` URLs, follows up to four redirects, parses headers and chunked bodies
   through the shared HTTP parser, and streams HTML through a bounded text renderer
   instead of keeping a DOM. Text, headings, lists, link labels and image `alt=`
-  text are rendered into a rolling page buffer. Link targets stand out as
-  underlined rows and open when clicked, and Back retains one previous URL; CSS,
-  JavaScript, forms, images and HTTPS are not implemented.
+  text are cached as up to 255 fixed-width rendered lines in one borrowed 16K
+  page. The viewport stays at the top while the response arrives; afterward the
+  proportional scrollbar covers the retained page. A page beyond 255 lines is
+  explicitly reported as truncated. If no spare page exists, Browser reports
+  limited cache mode and retains the latest eight lines. Link targets stand out
+  as underlined rows and open when clicked, and Back retains one previous URL;
+  CSS, JavaScript, forms, images and HTTPS are not implemented.
 - **Shell** — a fullscreen command-line file shell with scrollback and familiar
   `ls`, `cd`, `pwd`, `cat`, `cp`, and `rm` commands. Paths accept A/B/C drive
   prefixes and 8.3 components; `cat` and `cp` stream files in chunks rather than

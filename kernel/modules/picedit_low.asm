@@ -1,11 +1,13 @@
-; PICEDIT low-RAM helper (#288). Loaded as the second half of shipped .SPR files
+; PICEDIT low-RAM helper (#288/#371). Loaded as the second half of shipped .SPR files
 ; at #1600, so the GB_PICEDIT ABI slot can jump here without growing the resident
 ; CPC kernel. It runs below #4000, therefore it can page picture banks into
-; #4000-#7FFF while the code and stack remain visible.
+; #4000-#7FFF while the code and stack remain visible. Operations 0/1 move Paint
+; tiles, 2 reads a short bank chunk, and 3 writes one for Browser's page cache.
 
                 org   #1600
 
 BANK_PORT       equ   #7F00
+PCW_BANK1       equ   #F1
 PIC_PAGE        equ   #130B
 PIC_WB          equ   #130C
 PIC_EDIT_BUF    equ   #134B
@@ -18,12 +20,14 @@ PIC_TILE_H      equ   100
 PIC_TILE_SZ     equ   PIC_TILE_WB*PIC_TILE_H
 
 picedit_start
-                cp    2
-                jr    z,pe_chunk
-                cp    1
-                jr    z,pe_put
                 or    a
                 jr    z,pe_get
+                dec   a
+                jr    z,pe_put
+                dec   a
+                jr    z,pe_chunk
+                dec   a
+                jr    z,pe_write
                 xor   a
                 ret
 
@@ -62,6 +66,17 @@ pe_chunk        ld    a,(BANK_CUR)
                 ld    de,(PIC_EDIT_BUF)
                 ld    bc,(fs_save_len)
                 call  pe_seg_get16
+                jr    pe_rw_done
+
+; Generic short write used by Browser's rendered-page cache (#371). The source
+; is always in low RAM and the requested range stays within the first 16K page.
+pe_write        ld    a,(BANK_CUR)
+                push  af
+                ld    hl,(PIC_EDIT_OFF)
+                ld    de,(PIC_EDIT_BUF)
+                ld    bc,(fs_save_len)
+                call  pe_seg_put
+pe_rw_done
                 ld    c,a
                 pop   af
                 call  pe_bank_set
@@ -117,16 +132,9 @@ pe_seg_get      ld    b,0
 pe_seg_get16    bit   6,h
                 jr    nz,pe_sg_2
                 ld    a,(PIC_PAGE)
-                or    a
-                ret   z
-                push  bc
-                ld    bc,#4000
-                add   hl,bc
-                pop   bc
+                set   6,h
                 jr    pe_sg_map
 pe_sg_2         ld    a,(PIC_PAGE+61)         ; PIC_PAGE2 at #1348, keeps a 2-byte load
-                or    a
-                ret   z
 pe_sg_map       push  bc
                 call  pe_bank_set
                 pop   bc
@@ -138,16 +146,9 @@ pe_seg_put      ld    b,0
                 bit   6,h
                 jr    nz,pe_sp_2
                 ld    a,(PIC_PAGE)
-                or    a
-                ret   z
-                push  bc
-                ld    bc,#4000
-                add   hl,bc
-                pop   bc
+                set   6,h
                 jr    pe_sp_map
 pe_sp_2         ld    a,(PIC_PAGE+61)         ; PIC_PAGE2 at #1348
-                or    a
-                ret   z
 pe_sp_map       push  bc
                 call  pe_bank_set
                 pop   bc
@@ -158,10 +159,18 @@ pe_sp_map       push  bc
                 ret
 
 pe_bank_set     ld    (BANK_CUR),a
+                ifdef PLATFORM_PCW
+                out   (PCW_BANK1),a
+                else
                 ld    bc,BANK_PORT
                 out   (c),a
+                endif
                 ret
 
 picedit_end
                 assert picedit_end-picedit_start<=256,"PICEDIT low helper exceeds #1600..#16FF"
+                ifdef PLATFORM_PCW
+                save  "build/pcw/PICEDITL.RAW",picedit_start,picedit_end-picedit_start
+                else
                 save  "build/PICEDITL.RAW",picedit_start,picedit_end-picedit_start
+                endif

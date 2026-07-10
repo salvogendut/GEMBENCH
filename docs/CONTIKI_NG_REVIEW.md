@@ -117,7 +117,7 @@ should initially support:
 - one current page, a small URL history and back/forward by refetching;
 - incremental layout into fixed-width display lines;
 - bounded link records containing screen position and URL;
-- disk-backed line/link spill data when a page exceeds the app bank;
+- one borrowed 16K page for bounded rendered-line/link storage;
 - no DOM, CSS, JavaScript, TLS, cookies or general image decoding.
 
 Issue #367 now includes a standalone prototype in `lib/gb/gbhtml.h`. It streams
@@ -128,9 +128,11 @@ chunk boundaries and cover malformed/oversized input. A minimal SDCC probe
 currently measures 4,505 bytes of code and 299 bytes of default parser state,
 before browser UI, history or networking. `BROWSER.APP` now composes that parser
 with the shared HTTP response parser and the existing CPC/PCW transports. It
-keeps only 22 wrapped display lines, follows bounded redirects, and renders link
-URLs and image alternatives inline. Selectable links and refetch history remain
-follow-up work.
+stores up to 255 wrapped display lines in a borrowed 16K page, keeps the viewport
+stable during reception, follows bounded redirects, renders image alternatives
+inline, opens underlined links by click, and retains one refetched Back URL.
+Pages beyond the line bound are reported as truncated; no-spare-bank systems use
+an explicit eight-line fallback.
 
 This would be useful for retro-oriented sites and local services. Most modern
 public sites require HTTPS, CSS and JavaScript, so a practical optional companion
