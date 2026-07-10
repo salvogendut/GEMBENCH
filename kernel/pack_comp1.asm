@@ -16,7 +16,7 @@
 ;; save directive can write them to the disk catalogue. Keep each pass's incbin span
 ;; below #FFFF (org #4000 -> <= ~49KB).
 ;;
-;; Pass 1: the three Companion apps + one gallery picture (~38 KB).
+;; Pass 1: the three original Companion apps + one gallery picture (~43 KB).
                 org   #4000
 pnt_img         incbin "../build/PAINT.RAW"     ; PAINT.APP (#114) - moved off Main (#250)
 pnt_imgend

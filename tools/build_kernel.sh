@@ -107,6 +107,7 @@ for png in assets/backdrops/*.png; do
 done
 DATA_LOC=0x7010 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
+DATA_LOC=0x7400 DIALOGS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363): GUI HTTP downloader; streams GBNET data to the selected drive
 DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
@@ -216,14 +217,15 @@ fi
 # Companion floppy QA/COMPANION.DSK (#250): a non-bootable DATA disk with the extras
 # (Paint/Telnet/Xaos, all screensavers, the gallery pictures). Meant for drive B - the
 # kernel loader falls back boot-drive(A) -> browse-drive(B), so these load from B while
-# their shared deps stay on Main. Three fresh 64K passes APPEND to one DSK (pass 1
+# their shared deps stay on Main. Four fresh 64K passes APPEND to one DSK (pass 1
 # creates it). All .RAW/.SAV are already built above; pictures are tracked assets.
 rm -f build/companion.dsk
 "$RASM" kernel/pack_comp1.asm -eo                  # apps + PENGUIN.PIC
 "$RASM" kernel/pack_comp2.asm -eo                  # TLEUNG.PIC + savers (1/2)
 "$RASM" kernel/pack_comp3.asm -eo                  # savers (2/2)
+"$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP
 cp build/companion.dsk QA/COMPANION.DSK
-echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Xaos + savers + pictures)"
+echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Xaos + savers + pictures)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
 GB_BASIC_DIR="$GB_BASIC_DIR" tools/stage_dist.sh QA/CARD # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH

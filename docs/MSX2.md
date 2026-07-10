@@ -22,8 +22,8 @@ Clock — all co-resident under the kernel window manager on a V9938 Screen 6.
   The clock is 50/60 Hz aware.
 - **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
   Viewer (with a Screen-6 `.PIC` pipeline), XAOS, Clock, and **all 16
-  screensavers**. Telnet is CPC-only for now (its network hardware is
-  CPC-specific).
+  screensavers**. Telnet, NETTEST and WGET are not built for MSX yet because
+  GEOBENCH does not have an MSX network transport.
 - **Assets:** the icon sets, backdrops and pictures under `assets/` are packaged
   for both platforms automatically — the build transcodes each to Screen 6, so a
   file dropped into `assets/` ships on the CPC and the MSX distro alike.
