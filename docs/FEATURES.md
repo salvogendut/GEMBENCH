@@ -72,6 +72,12 @@ backdrop, dragging icons, opening apps and menus:
   `206 Content-Range`; a server that ignores Range restarts the file safely.
   PCW downloads restart because CP/M records cannot preserve an arbitrary byte
   offset. HTTPS is intentionally out of scope without TLS.
+- **Browser** — a small fullscreen HTTP browser for CPC and PCW. It accepts plain
+  `http://` URLs, follows up to four redirects, parses headers and chunked bodies
+  through the shared HTTP parser, and streams HTML through a bounded text renderer
+  instead of keeping a DOM. Text, headings, lists, link labels and image `alt=`
+  text are rendered into a rolling page buffer; CSS, JavaScript, forms, images and
+  HTTPS are not implemented.
 - **Shell** — a fullscreen command-line file shell with scrollback and familiar
   `ls`, `cd`, `pwd`, `cat`, `cp`, and `rm` commands. Paths accept A/B/C drive
   prefixes and 8.3 components; `cat` and `cp` stream files in chunks rather than

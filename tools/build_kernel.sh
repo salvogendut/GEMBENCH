@@ -108,6 +108,7 @@ done
 DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
 DATA_LOC=0x7A50 DIALOGS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
+GBWIN=0 DATA_LOC=0x76A0 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367): fullscreen streaming text/HTML browser
 DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
 DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
@@ -224,9 +225,9 @@ rm -f build/companion.dsk
 "$RASM" kernel/pack_comp1.asm -eo                  # apps + PENGUIN.PIC
 "$RASM" kernel/pack_comp2.asm -eo                  # TLEUNG.PIC + savers (1/2)
 "$RASM" kernel/pack_comp3.asm -eo                  # savers (2/2)
-"$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP + SHELL.APP
+"$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP + BROWSER.APP + SHELL.APP
 cp build/companion.dsk QA/COMPANION.DSK
-echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Shell/Xaos + savers + pictures)"
+echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Xaos + savers + pictures)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
 GB_BASIC_DIR="$GB_BASIC_DIR" tools/stage_dist.sh QA/CARD # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH

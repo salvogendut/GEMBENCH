@@ -36,8 +36,12 @@ PICKER_FLAG="${PICKER:-0}"
 DOC_FLAG="${DOC:-0}"
 DOCRO_FLAG="${DOCRO:-0}"
 NET_FLAG="${NET:-0}"
+GBWIN_FLAG="${GBWIN:-1}"
 
-deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" "$GB/gbwin.c")
+deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h")
+if [ "$GBWIN_FLAG" = "1" ]; then
+    deps+=("$GB/gbwin.c")
+fi
 while IFS= read -r dep; do
     deps+=("$dep")
 done < <(find "$APP" -type f | sort)
@@ -69,6 +73,7 @@ cache_key=$(printf '%s\n' \
     "DOC=$DOC_FLAG" \
     "DOCRO=$DOCRO_FLAG" \
     "NET=$NET_FLAG" \
+    "GBWIN=$GBWIN_FLAG" \
     "SDCC=$SDCC" \
     "SDAS=$SDAS" \
     "MAKEBIN=$MAKEBIN")
@@ -88,7 +93,11 @@ fi
 # drag/resize + fullscreen to those extents. Omitting it built libgb with the
 # CPC 320x200 extents, so on MSX windows would not drag past x=320 (#287).
 "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
-"$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
+GBWIN_REL=""
+if [ "$GBWIN_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
+    GBWIN_REL="$work/gbwin.rel"
+fi
 # Opt-in dialogs (#114, #142). The heavy render (popup/prompt/file-picker) now lives in
 # the paged GBUI kernel module (#142 step 1b); an app that needs ANY dialog links only
 # the tiny marshalling stub gbui_stub.c (gb_popup/gb_prompt/gb_pickfile/gb_pickdir ->
@@ -113,7 +122,7 @@ if [ "$NET_FLAG" = "1" ]; then
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
-    "$work/crt0.rel" "$work/main.rel" "$work/gbwin.rel" $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
+    "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
 # AFTER the code) must end below data-loc - otherwise the RAM data area starts inside
@@ -125,10 +134,10 @@ import sys, re
 mapf, app, dloc = sys.argv[1], sys.argv[2], int(sys.argv[3], 16)
 area = {}
 for line in open(mapf):
-    m = re.match(r'^(_CODE|_DATA|_BSS|_INITIALIZED|_GSINIT|_GSFINAL|_INITIALIZER)\s+([0-9A-Fa-f]{8})\s+([0-9A-Fa-f]{8})', line)
+    m = re.match(r'^(_CODE|_HOME|_DATA|_BSS|_INITIALIZED|_GSINIT|_GSFINAL|_INITIALIZER)\s+([0-9A-Fa-f]{8})\s+([0-9A-Fa-f]{8})', line)
     if m:
         area[m.group(1)] = (int(m.group(2), 16), int(m.group(3), 16))
-LOAD = ('_CODE', '_GSINIT', '_GSFINAL', '_INITIALIZER')   # the loaded image (before data-loc)
+LOAD = ('_CODE', '_GSINIT', '_GSFINAL', '_HOME', '_INITIALIZER') # loaded image (before data-loc)
 img_end = max((area[a][0] + area[a][1]) for a in LOAD if a in area)
 top = max((s + sz) for s, sz in area.values()) if area else 0
 errs = []

@@ -103,9 +103,16 @@ static unsigned char gb_http_parse_number(const char **text,
     unsigned char digit;
     if (*s < '0' || *s > '9') return 0;
     while (*s >= '0' && *s <= '9') {
+        unsigned long twice;
         digit = (unsigned char)(*s++ - '0');
         if (v > 1677721UL || (v == 1677721UL && digit > 5)) return 0;
-        v = v * 10UL + digit;
+        /* Spell out x10 as additions. SDCC otherwise links its 227-byte
+         * _mullong helper into _HOME, wasting scarce app-page code space. */
+        twice = v + v;
+        v = twice + twice;
+        v += v;
+        v += twice;
+        v += digit;
     }
     *text = s;
     *out = v;

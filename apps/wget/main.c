@@ -262,7 +262,7 @@ static unsigned char parse_url(void)
 {
     const char *p = url;
     unsigned char n = 0;
-    unsigned long pv = 0;
+    unsigned int pv = 0;
 
     if (ci_prefix(p, "https://")) { set_status("HTTPS is not supported"); return 0; }
     if (!ci_prefix(p, "http://")) { set_status("URL must start with http://"); return 0; }
@@ -279,8 +279,11 @@ static unsigned char parse_url(void)
         if (*p < '0' || *p > '9') { set_status("Invalid port number"); return 0; }
         pv = 0;
         while (*p >= '0' && *p <= '9') {
-            pv = pv * 10UL + (unsigned long)(*p++ - '0');
-            if (pv > 65535UL) { set_status("Invalid port number"); return 0; }
+            unsigned char digit = (unsigned char)(*p++ - '0');
+            if (pv > 6553 || (pv == 6553 && digit > 5)) {
+                set_status("Invalid port number"); return 0;
+            }
+            pv = (unsigned int)(pv * 10 + digit);
         }
         if (!pv) { set_status("Invalid port number"); return 0; }
         port = (unsigned int)pv;

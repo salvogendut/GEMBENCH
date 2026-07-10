@@ -126,8 +126,11 @@ normalizes whitespace; preserves `pre`; decodes bounded basic/numeric entities;
 and skips comments, scripts and styles. Host tests feed documents at different
 chunk boundaries and cover malformed/oversized input. A minimal SDCC probe
 currently measures 4,505 bytes of code and 299 bytes of default parser state,
-before browser UI, history or networking. This fits an app page, but is a
-baseline to reduce before integrating `BROWSER.APP`, not a final footprint.
+before browser UI, history or networking. `BROWSER.APP` now composes that parser
+with the shared HTTP response parser and the existing CPC/PCW transports. It
+keeps only 22 wrapped display lines, follows bounded redirects, and renders link
+URLs and image alternatives inline. Selectable links and refetch history remain
+follow-up work.
 
 This would be useful for retro-oriented sites and local services. Most modern
 public sites require HTTPS, CSS and JavaScript, so a practical optional companion
@@ -145,10 +148,11 @@ TLS should not be brought onto the Z80 merely to claim HTTPS support.
    machine without changing its behaviour. **Implemented in issue #367 for
    response metadata and chunk framing; URL resolution remains in WGET.**
 4. Prototype a standalone streaming HTML parser with host-side tests based on
-   classic Contiki's callback model. **Implemented in issue #367; app integration
-   and parser-size optimization remain.**
-5. Build `BROWSER.APP` for CPC and PCW first. MSX can use it once an MSX network
-   backend exists.
+   classic Contiki's callback model. **Implemented in issue #367 and integrated
+   into Browser; future work is link navigation/history rather than parser
+   bring-up.**
+5. Build `BROWSER.APP` for CPC and PCW first. **Initial text-first version
+   implemented in issue #367; MSX can use it once an MSX network backend exists.**
 6. Measure every addition using the produced `.RAW` size, static RAM map and real
    transfer timing. Reject abstractions that do not reduce duplication or improve
    responsiveness.
