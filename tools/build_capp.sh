@@ -41,6 +41,9 @@ deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" "$GB/gbw
 while IFS= read -r dep; do
     deps+=("$dep")
 done < <(find "$APP" -type f | sort)
+if grep -Rqs 'gbhttp\.h' "$APP"; then
+    deps+=("$GB/gbhttp.h")
+fi
 if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
     deps+=("$GB/gbui_stub.c")
 fi

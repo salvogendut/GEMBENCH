@@ -89,7 +89,12 @@ state machines from WGET. Add these Contiki-inspired capabilities:
 
 A paged `GBHTTP.MOD` is possible later, but a shared app-side source module is the
 safer first version. It saves kernel headroom and avoids loading another module on
-every received chunk.
+every received chunk. Issue #367 now provides this first version as
+`lib/gb/gbhttp.h`: bounded response-header, `Content-Range` and chunk framing
+logic with app-bound buffers and compile-time body/error callbacks. Host tests
+exercise malformed and successful responses. Keeping the state as app-local
+scalars instead of a struct is deliberate because SDCC emits much smaller Z80
+code for direct scalar accesses.
 
 ## Browser assessment
 
@@ -128,7 +133,8 @@ TLS should not be brought onto the Z80 merely to claim HTTPS support.
 2. Add bounded redirects and validated Range continuation to WGET. **Implemented
    in issue #367 for CPC exact-length files; PCW restarts CP/M-record files.**
 3. Extract and unit-test a bounded `gb_http` parser from the proven WGET state
-   machine without changing its behaviour.
+   machine without changing its behaviour. **Implemented in issue #367 for
+   response metadata and chunk framing; URL resolution remains in WGET.**
 4. Prototype a standalone streaming HTML parser with host-side tests based on
    classic Contiki's callback model.
 5. Build `BROWSER.APP` for CPC and PCW first. MSX can use it once an MSX network

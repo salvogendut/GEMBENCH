@@ -843,92 +843,43 @@ static void fail_download(const char *s)
     if (drawn) draw_content();
 }
 
-static unsigned char parse_number(const char **text, unsigned long *out)
-{
-    const char *s = *text;
-    unsigned long v = 0;
-    unsigned char digit;
-    if (*s < '0' || *s > '9') return 0;
-    while (*s >= '0' && *s <= '9') {
-        digit = (unsigned char)(*s++ - '0');
-        if (v > 1677721UL || (v == 1677721UL && digit > 5)) return 0;
-        v = v * 10UL + digit;
-    }
-    *text = s;
-    *out = v;
-    return 1;
-}
-
-static unsigned char parse_length(const char *s, unsigned long *out)
-{
-    while (*s == ' ' || *s == '\t') s++;
-    if (!parse_number(&s, out)) return 0;
-    while (*s == ' ' || *s == '\t') s++;
-    return (unsigned char)(*s == 0);
-}
-
+/* Compile the shared parser against WGET's proven scalar layout.  Declaring a
+ * second state block here changes the CPC data map and failed runtime QA. */
+#define GB_HTTP_EXTERNAL_STATE 1
+#define GB_HTTP_EXTERNAL_HELPERS 1
+#define GB_HTTP_HEADER_LINE header_line
+#define GB_HTTP_LOCATION request
+#define GB_HTTP_LOCATION_MAX URL_MAX
+#define GB_HTTP_TRAILER_MAX HEADER_MAX
+#define GB_HTTP_INVALID_RESPONSE() fail_download("Invalid HTTP response")
+#define GB_HTTP_INVALID_STATUS() fail_download("Invalid HTTP status")
+#define GB_HTTP_BODY_WRITE(buf, len) body_write((buf), (len))
+#define GB_HTTP_FINISH() finish_download()
+#define GB_HTTP_BAD_CHUNK() fail_download("Bad chunked response")
+#define GB_HTTP_BAD_CHUNK_SIZE() fail_download("Bad chunk size")
+#define GB_HTTP_CHUNK_TOO_LARGE() fail_download("Chunk is too large")
+#define gb_http_content_length expected
+#define gb_http_chunk_left chunk_left
+#define gb_http_status_code status_code
+#define gb_http_line_len line_len
+#define gb_http_first_header first_header
+#define gb_http_have_length have_length
+#define gb_http_chunked chunked
+#define gb_http_chunk_state chunk_state
+#define gb_http_chunk_have_digit chunk_have_digit
+#define gb_http_have_location have_location
+#define gb_http_lower lower
+#define gb_http_ci_prefix ci_prefix
+#define gb_http_ci_contains ci_contains
 #ifndef GB_PCW
-static unsigned char parse_content_range(const char *s)
-{
-    while (*s == ' ' || *s == '\t') s++;
-    if (!ci_prefix(s, "bytes")) return 0;
-    s += 5;
-    while (*s == ' ' || *s == '\t') s++;
-    range_unsatisfied = 0;
-    range_total_known = 0;
-    if (*s == '*') {
-        range_unsatisfied = 1; s++;
-    } else {
-        if (!parse_number(&s, &range_start) || *s++ != '-' ||
-            !parse_number(&s, &range_total)) return 0;
-    }
-    if (*s++ != '/') return 0;
-    if (*s == '*') s++;
-    else {
-        if (!parse_number(&s, &range_total)) return 0;
-        range_total_known = 1;
-    }
-    while (*s == ' ' || *s == '\t') s++;
-    return (unsigned char)(*s == 0);
-}
+#define GB_HTTP_ENABLE_RANGE 1
+#define gb_http_range_start range_start
+#define gb_http_range_total range_total
+#define gb_http_have_content_range have_content_range
+#define gb_http_range_total_known range_total_known
+#define gb_http_range_unsatisfied range_unsatisfied
 #endif
-
-static void process_header_line(void)
-{
-    char *p = header_line;
-    header_line[line_len] = 0;
-    if (first_header) {
-        first_header = 0;
-        if (!ci_prefix(p, "HTTP/")) { fail_download("Invalid HTTP response"); return; }
-        while (*p && *p != ' ') p++;
-        while (*p == ' ') p++;
-        if (p[0] < '0' || p[0] > '9' || p[1] < '0' || p[1] > '9' || p[2] < '0' || p[2] > '9') {
-            fail_download("Invalid HTTP status"); return;
-        }
-        status_code = (unsigned int)(p[0] - '0') * 100 + (unsigned int)(p[1] - '0') * 10 + (p[2] - '0');
-    } else if (ci_prefix(p, "Content-Length:")) {
-        if (parse_length(p + 15, &expected)) have_length = 1;
-    } else if (ci_prefix(p, "Transfer-Encoding:") && ci_contains(p + 18, "chunked")) {
-        chunked = 1;
-    } else if (ci_prefix(p, "Location:")) {
-        unsigned char n = 0;
-        p += 9;
-        while (*p == ' ' || *p == '\t') p++;
-        while (p[n] && n <= URL_MAX) n++;
-        while (n && (p[n - 1] == ' ' || p[n - 1] == '\t')) n--;
-        if (!n) have_location = 0;
-        else if (n > URL_MAX) have_location = 2;
-        else {
-            unsigned char i;
-            for (i = 0; i < n; i++) request[i] = p[i];
-            request[n] = 0; have_location = 1;
-        }
-#ifndef GB_PCW
-    } else if (ci_prefix(p, "Content-Range:")) {
-        have_content_range = parse_content_range(p + 14);
-#endif
-    }
-}
+#include "gbhttp.h"
 
 static void headers_complete(void)
 {
@@ -1001,46 +952,6 @@ static void headers_complete(void)
     if (have_length && expected == 0) finish_download();
 }
 
-static unsigned char chunk_byte(unsigned char c)
-{
-    unsigned char v;
-    if (chunk_state == 0) {                    /* hexadecimal chunk-size line */
-        if (c == '\r') return 1;
-        if (c == '\n') {
-            if (!chunk_have_digit) { fail_download("Bad chunked response"); return 0; }
-            if (!chunk_left) { chunk_state = 3; line_len = 0; return 1; }
-            chunk_state = 1; return 1;
-        }
-        if (c == ';') { chunk_state = 4; return 1; }
-        if (c >= '0' && c <= '9') v = (unsigned char)(c - '0');
-        else if (lower(c) >= 'a' && lower(c) <= 'f') v = (unsigned char)(lower(c) - 'a' + 10);
-        else { fail_download("Bad chunk size"); return 0; }
-        if (chunk_left > 0x0FFFFFUL) { fail_download("Chunk is too large"); return 0; }
-        chunk_left = (chunk_left << 4) | v; chunk_have_digit = 1; return 1;
-    }
-    if (chunk_state == 4) {                    /* skip chunk extension */
-        if (c == '\n') { chunk_state = chunk_left ? 1 : 3; if (!chunk_left) line_len = 0; }
-        return 1;
-    }
-    if (chunk_state == 1) {                    /* chunk data */
-        if (!body_write(&c, 1)) return 0;
-        if (--chunk_left == 0) chunk_state = 2;
-        return 1;
-    }
-    if (chunk_state == 2) {                    /* CRLF after data */
-        if (c == '\n') { chunk_state = 0; chunk_left = 0; chunk_have_digit = 0; }
-        return 1;
-    }
-    /* trailer lines: an empty line terminates the response */
-    if (c == '\r') return 1;
-    if (c == '\n') {
-        if (!line_len) { finish_download(); return 0; }
-        line_len = 0; return 1;
-    }
-    if (line_len < HEADER_MAX) line_len++;
-    return 1;
-}
-
 static void process_rx(const unsigned char *buf, unsigned int len)
 {
     unsigned int i = 0, start;
@@ -1051,14 +962,15 @@ static void process_rx(const unsigned char *buf, unsigned int len)
             if (c == '\n') {
                 if (line_overflow) { fail_download("HTTP header is too long"); return; }
                 if (!line_len) { headers_complete(); continue; }
-                process_header_line(); line_len = 0;
+                gb_http_process_header_line();
+                line_len = 0;
                 if (state != ST_RECV) return;
             } else if (line_len < HEADER_MAX) header_line[line_len++] = (char)c;
             else line_overflow = 1;
             continue;
         }
         if (chunked) {
-            if (!chunk_byte(buf[i++])) return;
+            if (!gb_http_chunk_byte(buf[i++])) return;
             continue;
         }
         start = i;
