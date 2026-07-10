@@ -66,8 +66,12 @@ backdrop, dragging icons, opening apps and menus:
 - **WGET** — enter a plain HTTP URL, select an available floppy/card drive, and
   stream the response directly to an automatically derived 8.3 filename. The
   CPC build uses Net4CPC or M4 TCP; the PCW build uses PerryFi/PerryNet. HTTP
-  content-length, connection-close, and chunked response bodies are supported;
-  HTTPS is intentionally out of scope without TLS.
+  content-length, connection-close, chunked response bodies, and up to four
+  absolute or relative redirects are supported. On CPC, an existing partial
+  file is continued only after the server validates its exact offset with a
+  `206 Content-Range`; a server that ignores Range restarts the file safely.
+  PCW downloads restart because CP/M records cannot preserve an arbitrary byte
+  offset. HTTPS is intentionally out of scope without TLS.
 - **Shell** — a fullscreen command-line file shell with scrollback and familiar
   `ls`, `cd`, `pwd`, `cat`, `cp`, and `rm` commands. Paths accept A/B/C drive
   prefixes and 8.3 components; `cat` and `cp` stream files in chunks rather than

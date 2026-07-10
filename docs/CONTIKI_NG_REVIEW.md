@@ -122,11 +122,13 @@ TLS should not be brought onto the Z80 merely to claim HTTPS support.
 
 ## Suggested order of work
 
-1. Add precise network status and non-blocking DNS/connect operations to the
-   existing backend-neutral API.
-2. Extract and unit-test a bounded `gb_http` parser from WGET without changing
-   WGET behaviour.
-3. Add redirects and range requests to WGET as tests of the shared core.
+1. Add precise network receive status plus bounded DNS retries and caching to
+   the existing backend-neutral API. **Implemented in issue #367; DNS/connect
+   still run synchronously within their bounded calls.**
+2. Add bounded redirects and validated Range continuation to WGET. **Implemented
+   in issue #367 for CPC exact-length files; PCW restarts CP/M-record files.**
+3. Extract and unit-test a bounded `gb_http` parser from the proven WGET state
+   machine without changing its behaviour.
 4. Prototype a standalone streaming HTML parser with host-side tests based on
    classic Contiki's callback model.
 5. Build `BROWSER.APP` for CPC and PCW first. MSX can use it once an MSX network

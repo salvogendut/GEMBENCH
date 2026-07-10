@@ -9,10 +9,11 @@
 #define URL_MAX       95
 #define HOST_MAX      63
 #define PATH_MAX      95
-#define REQUEST_MAX   255
-#define NETBUF_SIZE   256
-#define FILEBUF_SIZE  1024
-#define HEADER_MAX    127
+#define REQUEST_MAX   223
+#define NETBUF_SIZE   192
+#define FILEBUF_SIZE  384
+#define HEADER_MAX    111
+#define FS_LOAD_OFS   ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS     (*(volatile unsigned char *)0x144F)
 
 #ifdef GB_PCW
@@ -37,22 +38,25 @@
 #define STATUS_Y    112
 #define PROGRESS_Y  132
 
+#define MAX_REDIRECTS 4
+
 #define ST_IDLE     0
 #define ST_INIT     1
 #define ST_RESOLVE  2
 #define ST_CONNECT  3
 #define ST_SEND     4
 #define ST_RECV     5
+#define ST_PREPARE  6
 
 static char url[URL_MAX + 1];
 static char host[HOST_MAX + 1];
 static char path[PATH_MAX + 1];
 static char request[REQUEST_MAX + 1];
 static char header_line[HEADER_MAX + 1];
-static char status_buf[40];
-static char progress_buf[40];
-static char dest_text[16];
-static char url_view[48];
+static char status_buf[24];
+static char progress_buf[28];
+static char dest_text[15];
+static char url_view[43];
 static char dest_name[11];
 static unsigned char netbuf[NETBUF_SIZE];
 static unsigned char filebuf[FILEBUF_SIZE];
@@ -63,6 +67,11 @@ static unsigned int file_used;
 static unsigned long bytes_done;
 static unsigned long expected;
 static unsigned long chunk_left;
+#ifndef GB_PCW
+static unsigned long resume_from;
+static unsigned long range_start;
+static unsigned long range_total;
+#endif
 static unsigned int status_code;
 static unsigned int idle_frames;
 static unsigned char state;
@@ -83,6 +92,13 @@ static unsigned char progress_div;
 static unsigned char socket_open;
 static unsigned char probe_pending;
 static unsigned char transport_rx_status;
+static unsigned char redirect_count;
+static unsigned char have_location;
+#ifndef GB_PCW
+static unsigned char have_content_range;
+static unsigned char range_total_known;
+static unsigned char range_unsatisfied;
+#endif
 
 static const unsigned char netcfg[22] = {
     192,168,99,50, 255,255,255,0, 192,168,99,1, 8,8,8,8,
@@ -143,6 +159,27 @@ static char *put_text(char *p, const char *s)
     return p;
 }
 
+#ifndef GB_PCW
+static void resume_decimal_add(unsigned int amount)
+{
+    while (amount--) {
+        unsigned char i = 0;
+        while (status_buf[i]) i++;
+        while (i) {
+            i--;
+            if (status_buf[i] < '9') { status_buf[i]++; break; }
+            status_buf[i] = '0';
+        }
+        if (!i && status_buf[0] == '0') {
+            unsigned char n = 0;
+            while (status_buf[n]) n++;
+            while (n) { status_buf[n] = status_buf[n - 1]; n--; }
+            status_buf[0] = '1';
+        }
+    }
+}
+#endif
+
 static unsigned int text_len(const char *s)
 {
     unsigned int n = 0;
@@ -153,6 +190,7 @@ static unsigned int text_len(const char *s)
 static void draw_status(void);
 static void draw_content(void);
 static void fail_download(const char *s);
+static void reset_response(void);
 
 static void set_status(const char *s)
 {
@@ -260,6 +298,67 @@ static unsigned char parse_url(void)
     return 1;
 }
 
+static unsigned char redirect_copy(char *dst, const char *src, unsigned char max)
+{
+    unsigned char n = 0;
+    while (*src && *src != '#') {
+        if (n >= max) return 0;
+        dst[n++] = *src++;
+    }
+    dst[n] = 0;
+    return 1;
+}
+
+/* Resolve the common Location forms without allocating another URL buffer.
+ * request[] holds the Location value after the response request has been sent;
+ * header_line[] is free once the blank line terminates the headers. */
+static unsigned char resolve_redirect(void)
+{
+    const char *loc = request;
+    const char *p;
+    const char *base_end = path;
+    unsigned char n = 0;
+
+    header_line[0] = 0;
+    if (!*loc) return 0;
+    if (ci_prefix(loc, "http://") || ci_prefix(loc, "https://")) {
+        if (!redirect_copy(url, loc, URL_MAX)) return 0;
+        return parse_url();
+    } else if (loc[0] == '/' && loc[1] == '/') {
+        url[0] = 'h'; url[1] = 't'; url[2] = 't'; url[3] = 'p'; url[4] = ':';
+        if (!redirect_copy(url + 5, loc, URL_MAX - 5)) return 0;
+        return parse_url();
+    } else if (*loc == '/') {
+        if (!redirect_copy(header_line, loc, PATH_MAX)) return 0;
+    } else if (*loc == '?') {
+        p = path;
+        while (*p && *p != '?') {
+            if (n >= PATH_MAX) return 0;
+            header_line[n++] = *p++;
+        }
+        header_line[n] = 0;
+        if (!redirect_copy(header_line + n, loc, PATH_MAX - n)) return 0;
+    } else if (*loc == '#') {
+        if (!redirect_copy(header_line, path, PATH_MAX)) return 0;
+    } else {
+        p = path;
+        while (*p && *p != '?') {
+            if (*p == '/') base_end = p + 1;
+            p++;
+        }
+        for (p = path; p < base_end; p++) {
+            if (n >= PATH_MAX) return 0;
+            header_line[n++] = *p;
+        }
+        header_line[n] = 0;
+        if (!redirect_copy(header_line + n, loc, PATH_MAX - n)) return 0;
+    }
+    for (n = 0; header_line[n]; n++) path[n] = header_line[n];
+    path[n] = 0;
+    derive_name();
+    return 1;
+}
+
 static unsigned char build_request(void)
 {
     char *p = request;
@@ -274,7 +373,15 @@ static unsigned char build_request(void)
         if (p < limit) *p++ = ':';
         p = put_dec(p, port);
     }
-    ADD_TEXT("\r\nUser-Agent: GEOBENCH-WGET/0.1\r\nAccept: */*\r\nConnection: close\r\n\r\n");
+    ADD_TEXT("\r\nUser-Agent: GEOBENCH-WGET/0.1\r\nAccept: */*");
+#ifndef GB_PCW
+    if (resume_from) {
+        ADD_TEXT("\r\nRange: bytes=");
+        ADD_TEXT(status_buf);
+        if (p < limit) *p++ = '-';
+    }
+#endif
+    ADD_TEXT("\r\nConnection: close\r\n\r\n");
     if (p >= limit) { request[REQUEST_MAX] = 0; return 0; }
     *p = 0;
     return 1;
@@ -406,8 +513,8 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_ESC_END         0xDC
 #define PN_ESC_ESC         0xDD
 #define PN_VERSION         0x01
-#define PN_MAX_PAYLOAD     512
-#define PN_FRAME_MAX       520
+#define PN_MAX_PAYLOAD     256  /* one HTTP request or one 64-byte receive ACK */
+#define PN_FRAME_MAX       (6 + PN_MAX_PAYLOAD + 2)
 #define PN_PULL_CHUNK      64
 #define PN_OP_TCP_OPEN     0x30
 #define PN_OP_TCP_CLOSE    0x31
@@ -715,6 +822,9 @@ static unsigned char body_write(const unsigned char *buf, unsigned int len)
 
 static void finish_download(void)
 {
+    if (have_length && bytes_done != expected) {
+        fail_download("Incomplete download"); return;
+    }
     if (!file_created || file_used) {
         if (!flush_file()) { fail_download("Disk write failed"); return; }
     }
@@ -724,38 +834,64 @@ static void finish_download(void)
     if (drawn) draw_content();
 }
 
-static void remove_partial(void)
-{
-    if (!file_created) return;
-    select_root(dest_drive);
-    gb_file_delete(dest_name);
-    file_created = 0;
-}
-
 static void fail_download(const char *s)
 {
-    if (socket_open || state >= ST_CONNECT) tr_close();
-    remove_partial();
+    if (socket_open) tr_close();
     FS_XFLAGS = 0;
     state = ST_IDLE; editing = 1;
     status_text = s;
     if (drawn) draw_content();
 }
 
-static unsigned char parse_length(const char *s, unsigned long *out)
+static unsigned char parse_number(const char **text, unsigned long *out)
 {
+    const char *s = *text;
     unsigned long v = 0;
     unsigned char digit;
-    while (*s == ' ' || *s == '\t') s++;
     if (*s < '0' || *s > '9') return 0;
     while (*s >= '0' && *s <= '9') {
         digit = (unsigned char)(*s++ - '0');
         if (v > 1677721UL || (v == 1677721UL && digit > 5)) return 0;
         v = v * 10UL + digit;
     }
+    *text = s;
     *out = v;
     return 1;
 }
+
+static unsigned char parse_length(const char *s, unsigned long *out)
+{
+    while (*s == ' ' || *s == '\t') s++;
+    if (!parse_number(&s, out)) return 0;
+    while (*s == ' ' || *s == '\t') s++;
+    return (unsigned char)(*s == 0);
+}
+
+#ifndef GB_PCW
+static unsigned char parse_content_range(const char *s)
+{
+    while (*s == ' ' || *s == '\t') s++;
+    if (!ci_prefix(s, "bytes")) return 0;
+    s += 5;
+    while (*s == ' ' || *s == '\t') s++;
+    range_unsatisfied = 0;
+    range_total_known = 0;
+    if (*s == '*') {
+        range_unsatisfied = 1; s++;
+    } else {
+        if (!parse_number(&s, &range_start) || *s++ != '-' ||
+            !parse_number(&s, &range_total)) return 0;
+    }
+    if (*s++ != '/') return 0;
+    if (*s == '*') s++;
+    else {
+        if (!parse_number(&s, &range_total)) return 0;
+        range_total_known = 1;
+    }
+    while (*s == ' ' || *s == '\t') s++;
+    return (unsigned char)(*s == 0);
+}
+#endif
 
 static void process_header_line(void)
 {
@@ -774,19 +910,94 @@ static void process_header_line(void)
         if (parse_length(p + 15, &expected)) have_length = 1;
     } else if (ci_prefix(p, "Transfer-Encoding:") && ci_contains(p + 18, "chunked")) {
         chunked = 1;
+    } else if (ci_prefix(p, "Location:")) {
+        unsigned char n = 0;
+        p += 9;
+        while (*p == ' ' || *p == '\t') p++;
+        while (p[n] && n <= URL_MAX) n++;
+        while (n && (p[n - 1] == ' ' || p[n - 1] == '\t')) n--;
+        if (!n) have_location = 0;
+        else if (n > URL_MAX) have_location = 2;
+        else {
+            unsigned char i;
+            for (i = 0; i < n; i++) request[i] = p[i];
+            request[n] = 0; have_location = 1;
+        }
+#ifndef GB_PCW
+    } else if (ci_prefix(p, "Content-Range:")) {
+        have_content_range = parse_content_range(p + 14);
+#endif
     }
 }
 
 static void headers_complete(void)
 {
+    unsigned char is_redirect = (unsigned char)(status_code == 301 || status_code == 302 ||
+                                                status_code == 303 || status_code == 307 ||
+                                                status_code == 308);
     header_done = 1;
+    if (is_redirect) {
+        if (have_location != 1) {
+            fail_download(have_location == 2 ? "Redirect URL is too long" :
+                                              "Redirect has no Location");
+            return;
+        }
+        if (redirect_count >= MAX_REDIRECTS) {
+            fail_download("Too many redirects"); return;
+        }
+        tr_close();
+        if (!resolve_redirect()) { fail_download("Invalid redirect URL"); return; }
+        redirect_count++;
+        reset_response();
+        state = ST_PREPARE;
+        set_status("Following redirect...");
+        if (drawn) draw_content();
+        return;
+    }
+#ifndef GB_PCW
+    if (status_code == 416 && resume_from && have_content_range &&
+        range_unsatisfied && range_total_known && range_total == resume_from) {
+        bytes_done = expected = resume_from;
+        have_length = file_created = 1;
+        finish_download();
+        return;
+    }
+#endif
     if (status_code < 200 || status_code >= 300) {
         char *p = status_buf;
         p = put_text(p, "HTTP error "); put_dec(p, status_code);
         fail_download(status_buf); return;
     }
+#ifdef GB_PCW
+    if (status_code == 206) {
+        fail_download("Unexpected partial response"); return;
+    }
+#endif
+#ifndef GB_PCW
+    if (status_code == 206) {
+        unsigned long body_length = expected;
+        if (!resume_from || !have_content_range || range_unsatisfied ||
+            !range_total_known || range_total <= resume_from ||
+            range_start != resume_from) {
+            fail_download("Invalid resume response"); return;
+        }
+        if (have_length && body_length != range_total - resume_from) {
+            fail_download("Range length mismatch"); return;
+        }
+        bytes_done = resume_from;
+        file_created = 1;
+        expected = range_total; have_length = 1;
+        set_status("Resuming download...");
+    } else {
+        /* A valid 200 means the server ignored Range. The first flush creates
+         * the destination afresh, so the old partial is not appended twice. */
+        bytes_done = 0;
+        file_created = 0;
+    }
+#endif
+    if (chunked && status_code != 206) have_length = 0;
     if (chunked) { chunk_state = 0; chunk_left = 0; chunk_have_digit = 0; }
-    set_status("Downloading...");
+    if (status_code != 206) set_status("Downloading...");
     if (have_length && expected == 0) finish_download();
 }
 
@@ -865,24 +1076,33 @@ static void process_rx(const unsigned char *buf, unsigned int len)
     }
 }
 
-static void reset_http(void)
+static void reset_response(void)
 {
     file_used = 0; bytes_done = expected = chunk_left = 0;
     status_code = 0; idle_frames = 0; line_len = 0;
     file_created = have_length = header_done = line_overflow = chunked = 0;
     first_header = 1; chunk_state = chunk_have_digit = 0;
-    progress_div = 0; socket_open = 0;
+    progress_div = 0; socket_open = have_location = 0;
+#ifndef GB_PCW
+    resume_from = range_start = range_total = 0;
+    have_content_range = range_total_known = range_unsatisfied = 0;
+    status_buf[0] = '0'; status_buf[1] = 0;
+#endif
 }
 
 static void start_download(void)
 {
     if (!url[0]) { set_status("Enter an HTTP URL"); return; }
     if (!parse_url()) return;
-    if (!build_request()) { set_status("URL is too long"); return; }
-    reset_http();
+    reset_response();
+    redirect_count = 0;
     select_root(dest_drive);
-    editing = 0; state = ST_INIT;
-    set_status("Initializing network...");
+    editing = 0; state = ST_PREPARE;
+#ifdef GB_PCW
+    set_status("Preparing download...");
+#else
+    set_status("Checking partial file...");
+#endif
 }
 
 static void cancel_download(void)
@@ -891,10 +1111,40 @@ static void cancel_download(void)
     fail_download("Download cancelled");
 }
 
+static void prepare_tick(void)
+{
+#ifndef GB_PCW
+    unsigned int got;
+    select_root(dest_drive);
+    gb_set_name(dest_name);
+    FS_LOAD_OFS[0] = (unsigned char)resume_from;
+    FS_LOAD_OFS[1] = (unsigned char)(resume_from >> 8);
+    FS_LOAD_OFS[2] = (unsigned char)(resume_from >> 16);
+    FS_XFLAGS = 0x01;
+    got = gb_fs_load(gb_copybuf, GB_COPYMAX);
+    FS_XFLAGS = 0;
+    if (got > GB_COPYMAX) got = GB_COPYMAX;
+    if (got) {
+        if (resume_from > 0xFFFFFFUL - got) {
+            fail_download("Partial file is too large"); return;
+        }
+        resume_from += got;
+        resume_decimal_add(got);
+        bytes_done = resume_from;
+        if (drawn) draw_status();
+        if (got == GB_COPYMAX) return;
+    }
+#endif
+    if (!build_request()) { fail_download("URL is too long"); return; }
+    state = ST_INIT;
+    set_status("Initializing network...");
+}
+
 static void network_tick(void)
 {
     unsigned int n = 0;
     unsigned char burst;
+    if (state == ST_PREPARE) { prepare_tick(); return; }
     if (state == ST_INIT) {
         if (!tr_init()) { fail_download("Network hardware not found"); return; }
         state = ST_RESOLVE; set_status("Resolving host..."); return;

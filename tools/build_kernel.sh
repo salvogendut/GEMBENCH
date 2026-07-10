@@ -107,7 +107,7 @@ for png in assets/backdrops/*.png; do
 done
 DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
-DATA_LOC=0x7400 DIALOGS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363): GUI HTTP downloader; streams GBNET data to the selected drive
+DATA_LOC=0x7A50 DIALOGS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
 DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
 DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc

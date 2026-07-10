@@ -144,7 +144,11 @@ firmware aliases that to the PCW's exact `17857` baud divisor.
 `http://` URL, choose floppy A or B, and select Download. The response is
 written incrementally rather than held in RAM; the destination name is derived
 from the final URL path component and converted to CP/M-compatible 8.3 form.
-HTTPS is not supported because the PCW side has no TLS implementation.
+WGET follows up to four absolute or relative redirects and keeps an interrupted
+partial file. A later PCW attempt restarts that file rather than sending Range:
+CP/M records only retain a 128-byte-granular size, so an exact resume offset
+cannot be reconstructed safely. HTTPS is not supported because the PCW side has
+no TLS implementation.
 
 ## Not (yet) on the PCW
 
