@@ -135,7 +135,11 @@ static unsigned char serial_send(const unsigned char *buf, unsigned int len)
 #define PN_EVT_TCP_ERROR       0x12
 
 static unsigned char pn_seq, pn_channel, pn_conn, pn_fast_uart, pn_last_status;
+#ifdef BROWSER_PCW_FRAME_BUFFER
+#define pn_frame BROWSER_PCW_FRAME_BUFFER
+#else
 static unsigned char pn_frame[PN_FRAME_MAX];
+#endif
 static unsigned int pn_in_len;
 static unsigned char pn_in_started, pn_in_esc, pn_in_overflow;
 
