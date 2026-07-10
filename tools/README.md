@@ -65,6 +65,8 @@ Build the on-demand kernel modules (loaded into a bank and `call`ed): config
 - **`ist_append.py`** — append icon asm bitmap(s) to an existing (hand-tuned) `.IST`
   set, bumping the count + shifting offsets; used to add a new slot to the tracked
   `assets/iconsets/*.IST` sets that `packicons.py` doesn't regenerate.
+- **`ist_replace_slot.py`** — replace one positional icon in a tracked `.IST` set
+  from an icon asm source while preserving the set's slot count and layout.
 - **`packfont.py` / `genfont.py`** — pack an 8×8 asm font into a `.FNT`, or generate
   the 6×8 `DEFAULT.FNT` procedurally.
 - **`picconv.py`** — convert a PNG to a 4-colour Mode-1 `.PIC` (GUI or CLI).

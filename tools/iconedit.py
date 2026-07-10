@@ -244,7 +244,7 @@ DESKTOP_SLOTS = [
     "Desktop",       # 14 icon_desktop
     "File manager",  # 15 icon_filemanager
     "Paint",         # 16 icon_paint
-    "Fractal",       # 17 icon_fractal
+    "Browser",       # 17 icon_browser
     "SD card",       # 18 icon_sd
     "Viewer",        # 19 icon_viewer
     "Telnet",        # 20 icon_telnet

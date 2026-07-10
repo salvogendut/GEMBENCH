@@ -77,12 +77,12 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
     lib/icon_font.asm \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
-    lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
+    lib/icon_paint.asm lib/icon_browser.asm lib/icon_sd.asm \
     lib/icon_viewer.asm \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_screensaver.asm \
     # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=DESKTOP 15=FILEMGR
-    # 16=PAINT 17=FRACTAL 18=SD (Albireo Disk C, #104) 19=VIEWER
+    # 16=PAINT 17=BROWSER 18=SD (Albireo Disk C, #104) 19=VIEWER
     # 20=TELNET 21=NETWORK 22=SHELL 23=UP (FileMgr ".." entry, #142) 24=SCREENSAVER (.SAV, #221 reused gear slot)
     # NOTE (#198): icon_iconset removed - it was byte-identical to icon_app; .IST files
     # now show the .APP icon, shrinking DEFAULT.IST by one slot (the floppy AMSDOS reader

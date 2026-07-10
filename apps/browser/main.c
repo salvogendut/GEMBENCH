@@ -544,6 +544,22 @@ static void draw_url(void)
     gb_textbw((unsigned char)(GB_COLS - 8), (unsigned char)(URL_Y + 2), "Go");
 }
 
+static void redraw_url(void)
+{
+    gb_curhide();
+    draw_url();
+    gb_curshow();
+}
+
+static void redraw_caret(void)
+{
+    make_url_view();
+    gb_curhide();
+    gb_fill((unsigned char)(4 + ((unsigned int)text_len(url_view) * 3) / 2),
+            (unsigned char)(URL_Y + 10), 2, 1, caret_on ? 3 : 1);
+    gb_curshow();
+}
+
 static void draw_scrollbar(void)
 {
     unsigned char area = (unsigned char)(VIEW_ROWS * 8), th, ty;
@@ -590,7 +606,9 @@ static void handle_click(void)
     unsigned char x = gb_mx(), y = gb_my();
     if (y >= URL_Y && y < URL_Y + URL_H) {
         if (x >= GB_COLS - 10) { if (state == ST_IDLE) start_page(); }
-        else if (state == ST_IDLE) { editing = 1; caret_on = 1; dirty = 1; }
+        else if (state == ST_IDLE) {
+            editing = 1; caret_on = 1; caret_tick = 0; redraw_url();
+        }
         return;
     }
     if (x < SCROLL_X + SCROLL_W && y >= CONTENT_Y &&
@@ -608,22 +626,26 @@ static void handle_keys(void)
             continue;
         }
         if (!editing) {
-            if (c == 'g' || c == 'G') { editing = 1; caret_on = 1; dirty = 1; }
+            if (c == 'g' || c == 'G') {
+                editing = 1; caret_on = 1; caret_tick = 0; redraw_url();
+            }
             else if (c == 0x10) scroll_page(0);
             else if (c == 0x0E) scroll_page(1);
             continue;
         }
         if (c == 0x0D) { start_page(); return; }
-        if (c == 0x1B) { editing = 0; caret_on = 0; dirty = 1; return; }
+        if (c == 0x1B) {
+            editing = 0; caret_on = 0; caret_tick = 0; redraw_url(); return;
+        }
         if ((c == 8 || c == 0x7F) && url_len) {
             url[--url_len] = 0; changed = 1;
         } else if (c >= 32 && c < 127 && url_len < URL_MAX) {
             url[url_len++] = (char)c; url[url_len] = 0; changed = 1;
         }
     }
-    if (changed) { caret_tick = 0; caret_on = 1; dirty = 1; }
+    if (changed) { caret_tick = 0; caret_on = 1; redraw_url(); }
     else if (editing && ++caret_tick >= 18) {
-        caret_tick = 0; caret_on ^= 1; dirty = 1;
+        caret_tick = 0; caret_on ^= 1; redraw_caret();
     }
 }
 
