@@ -149,8 +149,9 @@ to four absolute or relative redirects and keeps an interrupted partial file. A
 later PCW attempt restarts that file rather than sending Range: CP/M records
 only retain a 128-byte-granular size, so an exact resume offset cannot be
 reconstructed safely. Browser follows redirects too, parses chunked HTML bodies,
-and renders text/list/link/alt text into a bounded rolling page buffer. HTTPS is
-not supported because the PCW side has no TLS implementation.
+renders text/list/link/alt text into a bounded rolling page buffer, opens
+underlined link rows when clicked, and retains one previous URL for Back. HTTPS
+is not supported because the PCW side has no TLS implementation.
 
 ## Not (yet) on the PCW
 

@@ -149,8 +149,8 @@ TLS should not be brought onto the Z80 merely to claim HTTPS support.
    response metadata and chunk framing; URL resolution remains in WGET.**
 4. Prototype a standalone streaming HTML parser with host-side tests based on
    classic Contiki's callback model. **Implemented in issue #367 and integrated
-   into Browser; future work is link navigation/history rather than parser
-   bring-up.**
+   into Browser. Browser now renders bounded link rows with click navigation and
+   keeps one previous URL for Back; richer history remains future work.**
 5. Build `BROWSER.APP` for CPC and PCW first. **Initial text-first version
    implemented in issue #367; MSX can use it once an MSX network backend exists.**
 6. Measure every addition using the produced `.RAW` size, static RAM map and real

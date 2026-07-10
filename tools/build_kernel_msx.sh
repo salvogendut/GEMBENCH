@@ -78,7 +78,7 @@ python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
     lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
     lib/icon_font.asm \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
-    lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
+    lib/icon_paint.asm lib/icon_browser.asm lib/icon_sd.asm \
     lib/icon_viewer.asm \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_screensaver.asm

@@ -22,6 +22,11 @@ like `PAINT.IST` are excluded.
 When a new desktop icon is added, append it to each tracked set with
 `tools/ist_append.py assets/iconsets/MYSET.IST lib/icon_<name>.asm` (`packicons.py`
 only regenerates `build/DEFAULT.IST`).
+When an existing slot changes meaning, replace that slot in every tracked set:
+
+```
+tools/ist_replace_slot.py assets/iconsets/MYSET.IST 17 lib/icon_browser.asm
+```
 
 ## Use it on the desktop
 

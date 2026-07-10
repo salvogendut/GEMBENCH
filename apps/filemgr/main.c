@@ -368,7 +368,7 @@ static const char *win_title(void)               /* "Disk C/path 32MiB free" -> 
 #define ICON_DESKTOP 14
 #define ICON_FILEMGR 15
 #define ICON_PAINT 16
-#define ICON_FRACTAL 17
+#define ICON_BROWSER 17
 #define ICON_VIEWER 19
 #define ICON_TELNET 20        /* #238: the telnet terminal app */
 #define ICON_SHELL 22         /* #365: command shell */
@@ -419,8 +419,7 @@ static unsigned char entry_icon(const char *name)
         if (name_is(name, "DESKTOP")) return ICON_DESKTOP;
         if (name_is(name, "FILEMGR")) return ICON_FILEMGR;
         if (name_is(name, "PAINT"))   return ICON_PAINT;
-        if (name_is(name, "FRACTAL")) return ICON_FRACTAL;
-        if (name_is(name, "XAOS"))    return ICON_FRACTAL;   /* the fractal generator (#116) */
+        if (name_is(name, "BROWSER")) return ICON_BROWSER;
         if (name_is(name, "VIEWER"))  return ICON_VIEWER;
         if (name_is(name, "TELNET"))  return ICON_TELNET;   /* #238 */
         if (name_is(name, "SHELL"))   return ICON_SHELL;
@@ -439,7 +438,7 @@ static unsigned char rank_of(unsigned char ic)
     switch (ic) {
         case ICON_FOLDER:   return 0;
         case ICON_DESKTOP: case ICON_FILEMGR: case ICON_NOTEPAD: case ICON_ICONED:
-        case ICON_PAINT:    case ICON_VIEWER:  case ICON_CLOCK:   case ICON_FRACTAL:
+        case ICON_PAINT:    case ICON_VIEWER:  case ICON_CLOCK:   case ICON_BROWSER:
         case ICON_SCREENSAVER: case ICON_TELNET: case ICON_FLOWCHART:
         case ICON_APP:      return 1;
         case ICON_PICTURE:  return 2;

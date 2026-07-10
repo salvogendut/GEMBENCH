@@ -77,12 +77,12 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
     lib/icon_font.asm \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
-    lib/icon_paint.asm lib/icon_fractal.asm lib/icon_sd.asm \
+    lib/icon_paint.asm lib/icon_browser.asm lib/icon_sd.asm \
     lib/icon_viewer.asm \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_screensaver.asm \
     # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=DESKTOP 15=FILEMGR
-    # 16=PAINT 17=FRACTAL 18=SD (Albireo Disk C, #104) 19=VIEWER
+    # 16=PAINT 17=BROWSER 18=SD (Albireo Disk C, #104) 19=VIEWER
     # 20=TELNET 21=NETWORK 22=SHELL 23=UP (FileMgr ".." entry, #142) 24=SCREENSAVER (.SAV, #221 reused gear slot)
     # NOTE (#198): icon_iconset removed - it was byte-identical to icon_app; .IST files
     # now show the .APP icon, shrinking DEFAULT.IST by one slot (the floppy AMSDOS reader
@@ -108,7 +108,7 @@ done
 DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
 DATA_LOC=0x7A50 DIALOGS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
-GBWIN=0 DATA_LOC=0x76A0 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367): fullscreen streaming text/HTML browser
+GBWIN=0 DATA_LOC=0x7820 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367): fullscreen streaming text/HTML browser
 DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
 DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
