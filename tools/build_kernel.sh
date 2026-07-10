@@ -108,11 +108,12 @@ done
 DATA_LOC=0x7010 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
 DATA_LOC=0x7400 DIALOGS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363): GUI HTTP downloader; streams GBNET data to the selected drive
+DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
 DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
                                    # and clip-aware wallpaper repaint path.
-DATA_LOC=0x7780 DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: data-loc above
+DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split includes the SHELL icon mapping
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
 DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
@@ -223,9 +224,9 @@ rm -f build/companion.dsk
 "$RASM" kernel/pack_comp1.asm -eo                  # apps + PENGUIN.PIC
 "$RASM" kernel/pack_comp2.asm -eo                  # TLEUNG.PIC + savers (1/2)
 "$RASM" kernel/pack_comp3.asm -eo                  # savers (2/2)
-"$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP
+"$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP + SHELL.APP
 cp build/companion.dsk QA/COMPANION.DSK
-echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Xaos + savers + pictures)"
+echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Shell/Xaos + savers + pictures)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
 GB_BASIC_DIR="$GB_BASIC_DIR" tools/stage_dist.sh QA/CARD # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH

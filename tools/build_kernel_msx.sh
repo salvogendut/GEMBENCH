@@ -38,7 +38,7 @@ GEOBENCH_ROOT="$(pwd)"
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7780 DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
@@ -47,6 +47,7 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/deco build/msx/DECO.RAW
@@ -132,6 +133,7 @@ cp build/msx/ICONED.RAW   QA/MSX/GBENCH/ICONED.APP
 cp build/msx/VIEWER.RAW   QA/MSX/GBENCH/VIEWER.APP
 cp build/msx/PAINT.RAW    QA/MSX/GBENCH/PAINT.APP
 cp build/msx/PAINT.IST    QA/MSX/GBENCH/PAINT.IST
+cp build/msx/SHELL.RAW    QA/MSX/GBENCH/SHELL.APP
 for f in "$GB_BASIC_DIR/build/msx/BASIC.RAW" "$GB_BASIC_DIR/build/msx/BASRUN.RAW" "$GB_BASIC_DIR/build/msx/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC MSX payload $f (run make -C \"$GB_BASIC_DIR\" raws-msx)" >&2; exit 1; }
 done

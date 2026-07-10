@@ -25,7 +25,7 @@ mkdir -p build/pcw QA/PCW
 
 # --- the C apps, compiled with the PCW geometry (same DATA_LOCs as CPC/MSX) --
 APPDEFS="-DGB_PCW" DATA_LOC=0x6D20 DOC=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
-APPDEFS="-DGB_PCW" DATA_LOC=0x7780 DOC=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
@@ -36,6 +36,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x72C0 DOC=1 tools/build_capp.sh apps/telnet build/p
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 DIALOGS=1 tools/build_capp.sh apps/wget build/pcw/WGET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/pcw/SHELL.RAW
 # savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a
 # PCW plot path first (follow-up)
 APPDEFS="-DGB_PCW" tools/build_capp.sh apps/saver build/pcw/SQUARES.RAW
@@ -107,9 +108,9 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/TIMESYNC.RAW=TIMESYNC.APP \
     --add build/pcw/XAOS.RAW=XAOS.APP \
     --add build/pcw/ICONED.RAW=ICONED.APP \
+    --add build/pcw/SHELL.RAW=SHELL.APP \
     --add build/pcw/SQUARES.RAW=SQUARES.SAV \
     --add build/pcw/ANT.RAW=ANT.SAV \
-    --add build/pcw/DECO.RAW=DECO.SAV \
     --add build/pcw/XMATRIX.RAW=XMATRIX.SAV \
     --add build/pcw/LOGO.PIC=LOGO.PIC \
     --add build/pcw/TLEUNG.PIC=TLEUNG.PIC \
@@ -138,6 +139,7 @@ python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     --add build/pcw/TELNET.RAW=TELNET.APP \
     --add build/pcw/NETTEST.RAW=NETTEST.APP \
     --add build/pcw/WGET.RAW=WGET.APP \
+    --add build/pcw/DECO.RAW=DECO.SAV \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
 echo "PCW target built: QA/PCW/GEOBENCH.DSK (bootable CF2) + QA/PCW/COMPANION.DSK"

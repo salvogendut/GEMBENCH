@@ -24,6 +24,7 @@ loop and calls each focused window's handlers (issue #45).
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal (4x8 charset): CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
 | nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status; CPC uses the active GBNET backend, PCW uses PerryNet over PerryFi |
 | wget     | `WGET.APP`     | GUI HTTP downloader: enter a plain `http://` URL, select an available drive, and stream the response to an automatically derived 8.3 filename; CPC uses GBNET, PCW uses PerryNet |
+| shell    | `SHELL.APP`    | fullscreen command shell with `ls`, `cd`, `pwd`, `cat`, `cp`, `rm`, `clear`, `help`, and `exit`; supports A/B/C paths and streamed arbitrary-size file copies |
 | timesync | `TIMESYNC.APP` | PCW desktop helper — reads PerryNet's firmware clock with `TIME_GET` when `TIMESYNC=true`, then applies `TIMEZONE=+/-H` |
 
 ## Screensavers (`.SAV`)

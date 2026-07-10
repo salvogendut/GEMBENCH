@@ -371,6 +371,7 @@ static const char *win_title(void)               /* "Disk C/path 32MiB free" -> 
 #define ICON_FRACTAL 17
 #define ICON_VIEWER 19
 #define ICON_TELNET 20        /* #238: the telnet terminal app */
+#define ICON_SHELL 22         /* #365: command shell */
 #define ICON_UP 23            /* up-arrow for the ".." parent-dir entry (#142) */
 #define ICON_SCREENSAVER 24   /* #221: reused the freed gear slot for the screensaver (.SAV) icon */
 
@@ -422,6 +423,7 @@ static unsigned char entry_icon(const char *name)
         if (name_is(name, "XAOS"))    return ICON_FRACTAL;   /* the fractal generator (#116) */
         if (name_is(name, "VIEWER"))  return ICON_VIEWER;
         if (name_is(name, "TELNET"))  return ICON_TELNET;   /* #238 */
+        if (name_is(name, "SHELL"))   return ICON_SHELL;
         if (name_is(name, "DISKUTIL")) return ICON_FLOPPY;  /* the floppy formatter */
         if (name_is(name, "BASIC"))   return ICON_FLOWCHART; /* GB-BASIC uses the flowchart icon */
         return ICON_APP;      /* a .APP with no distinctive icon uses the generic app icon

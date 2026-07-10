@@ -98,15 +98,14 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
 ## What ships where
 
 - **GEOBENCH.DSK** (bootable): kernel + DESKTOP, FILEMGR, NOTEPAD,
-  SETTINGS, VIEWER, CLOCK, TIMESYNC, XAOS, ICONED + the portable savers
-  (SQUARES — the default —, ANT, DECO, XMATRIX) + fonts, icon sets, pointer,
+  SETTINGS, VIEWER, CLOCK, TIMESYNC, XAOS, ICONED, SHELL + the portable savers
+  (SQUARES — the default —, ANT, XMATRIX) + fonts, icon sets, pointer,
   splash, `LOGO.PIC` (default wallpaper), `TLEUNG.PIC`, GEOBENCH.CFG.
 - **COMPANION.DSK** (data): the picture gallery, backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
-  WGET.APP (HTTP downloads over PerryNet), WELCOME.TXT. `LOGO.PIC`,
-  `TLEUNG.PIC` and `CLASSIC.FNT` live on the
-  boot disk, and `PENGUIN.PIC` is omitted, to keep enough CF2 space for
-  the network apps.
+  WGET.APP (HTTP downloads over PerryNet), DECO.SAV, WELCOME.TXT. `LOGO.PIC`,
+  `TLEUNG.PIC` and `CLASSIC.FNT` live on the boot disk. `PENGUIN.PIC` is
+  omitted to keep enough CF2 space for the apps.
 
 ## PCW Time Sync With PerryFi / PerryNet
 

@@ -23,7 +23,7 @@ reaching the kernel through `libgb`. It's a graphical layer on top of an existin
 DOS (AMSDOS / UniDOS / MSX-DOS 2), not a replacement OS — smaller scope than
 [SymbOS](https://www.symbos.de), different goal.
 
-The desktop and most bundled applications build for all targets from the same
+The desktop, file tools and graphical Shell build for all targets from the same
 source tree. The CPC and PCW distributions also ship Telnet, network diagnostics,
 and the graphical WGET HTTP downloader; PCW networking uses PerryFi/PerryNet. Targets:
 the CPC (Albireo/M4 card + AMSDOS floppy), the [MSX2](docs/MSX2.md)
