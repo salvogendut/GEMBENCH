@@ -68,6 +68,10 @@ backdrop, dragging icons, opening apps and menus:
   CPC build uses Net4CPC or M4 TCP; the PCW build uses PerryFi/PerryNet. HTTP
   content-length, connection-close, and chunked response bodies are supported;
   HTTPS is intentionally out of scope without TLS.
+- **Shell** — a fullscreen command-line file shell with scrollback and familiar
+  `ls`, `cd`, `pwd`, `cat`, `cp`, and `rm` commands. Paths accept A/B/C drive
+  prefixes and 8.3 components; `cat` and `cp` stream files in chunks rather than
+  limiting operations to the app's free RAM.
 - **Screensavers** — self-contained apps shipped with a `.SAV` extension. The
   desktop's idle timer (global, so it fires over any app) launches the configured
   module after the timeout; any pointer move / click / key returns to the desktop.

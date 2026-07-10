@@ -48,6 +48,7 @@ done
 cp build/TELNET.RAW  "$SYS/TELNET.APP"      # #238: windowed ANSI/VT terminal + telnet client
 cp build/NETTEST.RAW "$SYS/NETTEST.APP"     # #261: DNS/TCP/HTTP diagnostic for Albireo/Net4CPC and M4 backends
 cp build/WGET.RAW    "$SYS/WGET.APP"        # #363: streaming HTTP downloader for any writable drive
+cp build/SHELL.RAW   "$SYS/SHELL.APP"       # #365: command-line file shell
 for f in "$GB_BASIC_DIR/build/BASIC.RAW" "$GB_BASIC_DIR/build/BASRUN.RAW" "$GB_BASIC_DIR/build/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC payload $f (run make -C \"$GB_BASIC_DIR\" raws)" >&2; exit 1; }
 done
