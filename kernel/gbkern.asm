@@ -597,7 +597,7 @@ boot_desktop
                 di
                 ld    a,c
                 call  bank_set
-                ld    hl,#3F00
+                ld    hl,#3F00                    ; keep sector/record padding below app data RAM
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
