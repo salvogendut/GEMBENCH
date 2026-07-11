@@ -47,7 +47,7 @@ kernel_main
                 ld    de,fs_req_name
                 ld    bc,11
                 ldir
-                ld    hl,#3F00
+                ld    hl,APP_LOAD_MAX
                 ld    (fs_load_max),hl
                 ld    hl,#4000               ; plain low buffer (no bank paging)
                 ld    (fs_load_dst),hl

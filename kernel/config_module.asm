@@ -26,7 +26,7 @@ cfg_fname       db    "GEOBENCHCFG"          ; "GEOBENCH.CFG" (8.3)
 ; area). Runs under DI (the module needs no interrupts) with no top-bar/ESC
 ; handling - this is boot time.
 ; load_app0: HL = 11-byte 8.3 name -> map PAGE_APP0 and load /GEOBENCH/<name> into
-; APP_BASE (max #3F00). Returns with CF from fs_load_sys (set = loaded). The CALLER
+; APP_BASE (max APP_LOAD_MAX). Returns with CF from fs_load_sys (set = loaded). The CALLER
 ; saves/restores its page and handles DI/EI. Shared by run_cfgmod + boot_splash (#196).
 load_app0
                 ld    de,fs_req_name
@@ -37,7 +37,7 @@ load_app0
                 ld    a,PAGE_APP0
                 endif
                 call  bank_set
-                ld    hl,#3F00
+                ld    hl,APP_LOAD_MAX
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl

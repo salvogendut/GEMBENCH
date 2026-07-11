@@ -8,10 +8,9 @@
 #define URL_MAX        95
 #define HOST_MAX       63
 #define PATH_MAX       95
-/* URL_MAX caps host + port + path at 88 characters. The fixed request text is
- * 108, so 199 leaves three bytes beyond the longest possible HTTP/1.0 request. */
-#define REQUEST_MAX   199
+#define REQUEST_MAX   240
 #define HEADER_MAX    111
+/* Increase request length for explicit headers; keep parser headers compact. */
 #ifdef GB_PCW
 #define NETBUF_SIZE    64
 #else
@@ -52,7 +51,7 @@
 #define LINE_SIZE     (TEXT_COLS + 1)
 #define VIEW_ROWS     ((GB_LINES - CONTENT_Y - 2) / 8)
 #define CACHE_LINES   255
-#define FALLBACK_LINES 8
+#define FALLBACK_LINES 7
 
 /* The cooperative app-page pool is always mapped below #4000. Browser claims
  * one otherwise-free page for rendered lines and returns it through the normal
@@ -72,7 +71,8 @@
  * helper temporarily replaces the Browser app bank. */
 #define BUI_LOCAL_BUF ((unsigned char *)0x2900)
 #define BUI_STAGE     ((char *)0x2B00)
-#define BUI_STAGE_CAP 0x0D00
+/* Divides a 16K page exactly, so a flush never straddles borrowed banks. */
+#define BUI_STAGE_CAP 0x0800
 #define BUI_PAGES     ((volatile unsigned char *)0x3900)
 #define BUI_NPAGES    (*(volatile unsigned char *)0x3904)
 #define BUI_TAIL      (*(volatile unsigned int  *)0x3905)
@@ -94,6 +94,8 @@
 #define BUI_LOCAL_PAGE 0x04
 #define BUI_PROXY_ON 0x08
 #define BUI_SAVE_WORKER 0x10
+#define RECEIVE_PAUSE_FLOW 0x01
+#define RECEIVE_PAUSE_FLUSH 0x02
 
 #define UI_OP         (*(volatile unsigned char *)0x1700)
 #define UI_N          (*(volatile unsigned char *)0x1703)
@@ -250,16 +252,15 @@ static void source_reset(void)
     BUI_LOCAL_OFS[0] = BUI_LOCAL_OFS[1] = BUI_LOCAL_OFS[2] = 0;
 }
 
-static void source_flush(void)
-{
-    if (BUI_STAGE_LEN) (void)web_op(6);
-}
-
 static void source_byte(unsigned char c)
 {
     if (BUI_FLAGS & BUI_SOURCE_FULL) return;
+    if (BUI_STAGE_LEN >= BUI_STAGE_CAP) {
+        receive_paused |= RECEIVE_PAUSE_FLUSH;
+        return;
+    }
     BUI_STAGE[BUI_STAGE_LEN++] = (char)c;
-    if (BUI_STAGE_LEN == BUI_STAGE_CAP) source_flush();
+    if (BUI_STAGE_LEN == BUI_STAGE_CAP) receive_paused |= RECEIVE_PAUSE_FLUSH;
 }
 
 static void persist_proxy(void)
@@ -289,6 +290,11 @@ static unsigned char alloc_cache_page(void)
         }
     }
     return 0;
+}
+
+static void source_flush(void)
+{
+    if (BUI_STAGE_LEN) (void)web_op(6);
 }
 
 static char *history_line(unsigned char rel)
@@ -343,7 +349,7 @@ static void add_line(void)
         !(BUI_CTRL & BUI_CAPTURE_ALL)) {
         line_budget--;
         if (!line_budget) {
-            receive_paused = 1;
+            receive_paused |= RECEIVE_PAUSE_FLOW;
             set_status(cache_full ? "Page cache is full" : "Scroll down for more");
         }
     }
@@ -426,13 +432,13 @@ static void fail_page(const char *s);
 #define GB_HTTP_LOCATION          request
 #define GB_HTTP_LOCATION_MAX      URL_MAX
 #define GB_HTTP_TRAILER_MAX       HEADER_MAX
-#define GB_HTTP_INVALID_RESPONSE() fail_page("Invalid HTTP response")
-#define GB_HTTP_INVALID_STATUS()   fail_page("Invalid HTTP status")
+#define GB_HTTP_INVALID_RESPONSE() fail_page("Bad HTTP response")
+#define GB_HTTP_INVALID_STATUS()   fail_page("Bad HTTP status")
 #define GB_HTTP_BODY_WRITE(b, n)   body_write((b), (n))
 #define GB_HTTP_FINISH()           finish_page()
-#define GB_HTTP_BAD_CHUNK()        fail_page("Bad chunked response")
+#define GB_HTTP_BAD_CHUNK()        fail_page("Bad chunk")
 #define GB_HTTP_BAD_CHUNK_SIZE()   fail_page("Bad chunk size")
-#define GB_HTTP_CHUNK_TOO_LARGE()  fail_page("Chunk is too large")
+#define GB_HTTP_CHUNK_TOO_LARGE()  fail_page("Chunk too large")
 #include "gbhttp.h"
 
 #define BROWSER_TR_HOST ((BUI_CTRL & BUI_PROXY_ON) ? BUI_PROXY_HOST : host)
@@ -476,8 +482,8 @@ static unsigned char compose_url(void)
 static unsigned char parse_url(void)
 {
     parsed_p = url;
-    if (ci_prefix(parsed_p, "https://")) { set_status("HTTPS is not supported"); return 0; }
-    if (!ci_prefix(parsed_p, "http://")) { set_status("URL must start with http://"); return 0; }
+    if (ci_prefix(parsed_p, "https://")) { set_status("HTTPS unsupported"); return 0; }
+    if (!ci_prefix(parsed_p, "http://")) { set_status("Use http://"); return 0; }
     parsed_p += 7;
     parsed_dst = host;
     parsed_len = 0;
@@ -489,7 +495,7 @@ static unsigned char parse_url(void)
     *parsed_dst = 0;
     if (!parsed_len || (*parsed_p && *parsed_p != '/' && *parsed_p != ':' &&
                         *parsed_p != '?' && *parsed_p != '#')) {
-        set_status("Host name is too long"); return 0;
+        set_status("Host too long"); return 0;
     }
     port = 80;
     if (*parsed_p == ':') {
@@ -526,7 +532,7 @@ static unsigned char parse_url(void)
         }
     }
     *parsed_dst = 0;
-    if (*parsed_p && *parsed_p != '#') { set_status("URL path is too long"); return 0; }
+    if (*parsed_p && *parsed_p != '#') { set_status("Path too long"); return 0; }
     return 1;
 }
 
@@ -535,7 +541,7 @@ static unsigned char parse_url(void)
 static unsigned char apply_proxy(void)
 {
     if (web_op(11)) return 1;
-    set_status("Invalid HTTP proxy URL");
+    set_status("Invalid proxy");
     return 0;
 }
 
@@ -601,7 +607,7 @@ static unsigned char build_request(void)
     ADD_TEXT("GET "); ADD_TEXT(BUI_PROXY[0] ? url : path);
     ADD_TEXT(" HTTP/1.0\r\nHost: "); ADD_TEXT(host);
     if (port != 80) { if (p < limit) *p++ = ':'; p = put_dec(p, port); }
-    ADD_TEXT("\r\nUser-Agent: GEOBENCH-BROWSER/0.1\r\nAccept: text/html,text/plain\r\nConnection: close\r\n\r\n");
+    ADD_TEXT("\r\nUser-Agent: GB/1\r\nConnection: close\r\n\r\n");
     if (p >= limit) { request[REQUEST_MAX] = 0; return 0; }
     *p = 0;
     return 1;
@@ -618,7 +624,6 @@ static void reset_response(void)
 
 static void finish_page(void)
 {
-    source_flush();
     if (socket_open) tr_close();
     state = ST_IDLE;
     receive_paused = 0;
@@ -626,8 +631,8 @@ static void finish_page(void)
     if (pending_len) add_line();
     if (view_top && view_top + VIEW_ROWS > hist_count) view_top--;
     have_page = 1;
-    if (BUI_FLAGS & BUI_SOURCE_FULL) set_status("Offline copy too large");
-    else if (cache_full) set_status("Page truncated: cache full");
+    if (BUI_FLAGS & BUI_SOURCE_FULL) set_status("Source cache full");
+    else if (cache_full) set_status("Page cache full");
     else if (!cache_page && hist_start) set_status("Last lines only");
     else set_status("Page complete");
 }
@@ -647,18 +652,29 @@ static void headers_complete(void)
         gb_http_status_code == 307 || gb_http_status_code == 308);
     header_done = 1;
     if (redirect) {
+        const char *redir_err = 0;
+        const char *prev_status = status_text;
         if (gb_http_have_location != 1) {
-            fail_page(gb_http_have_location == 2 ? "Redirect URL is too long" :
-                                                  "Redirect has no Location");
+            fail_page(gb_http_have_location == 2 ? "Redirect too long" :
+                                                  "Redirect missing");
             return;
         }
-        if (redirect_count >= MAX_REDIRECTS) { fail_page("Too many redirects"); return; }
+        if (redirect_count >= MAX_REDIRECTS) { fail_page("Redirect limit"); return; }
         tr_close();
         if ((BUI_CTRL & BUI_PROXY_ON) && !parse_url()) {
-            fail_page("Invalid redirect base"); return;
+            fail_page("Bad redirect base"); return;
         }
-        if (!resolve_redirect() || !build_request() || !apply_proxy()) {
-            fail_page("Bad redirect"); return;
+        hist_start = hist_count = view_top = pending_len = cache_full = 0;
+        have_page = 0;
+        receive_paused = 0;
+        line_budget = cache_page ? VIEW_ROWS : FALLBACK_LINES;
+        title_len = 0; title[0] = 0;
+        if (!resolve_redirect()) redir_err = (status_text != prev_status ? status_text : "Bad redirect");
+        else if (!build_request()) redir_err = "Bad redirect";
+        else if (!apply_proxy()) redir_err = "Bad redirect";
+        if (redir_err) {
+            fail_page(redir_err);
+            return;
         }
         redirect_count++;
         reset_response();
@@ -667,7 +683,7 @@ static void headers_complete(void)
         return;
     }
     if (gb_http_status_code < 200 || gb_http_status_code >= 300) {
-        fail_page("HTTP request failed"); return;
+        fail_page("HTTP failed"); return;
     }
     if (gb_http_chunked) {
         gb_http_have_length = 0;
@@ -687,7 +703,11 @@ static void process_rx(void)
             c = netbuf[rx_pos++];
             if (c == '\r') continue;
             if (c == '\n') {
-                if (line_overflow) { fail_page("HTTP header is too long"); return; }
+                if (line_overflow) {
+                    line_overflow = 0;
+                    gb_http_line_len = 0;
+                    continue;
+                }
                 if (!gb_http_line_len) { headers_complete(); continue; }
                 gb_http_process_header_line();
                 gb_http_line_len = 0;
@@ -712,7 +732,7 @@ static void process_rx(void)
 
 static void start_page(void)
 {
-    if (!url[0]) { set_status("Enter an HTTP URL"); return; }
+    if (!url[0]) { set_status("Enter URL"); return; }
     if (!parse_url() || !build_request() || !apply_proxy()) return;
     source_reset();
     BUI_CTRL &= BUI_PROXY_ON;
@@ -740,7 +760,7 @@ static void go_back(void)
 static void open_link(const char *href)
 {
     if (state != ST_IDLE) return;
-    if (ci_prefix(href, "https://")) { set_status("HTTPS is not supported"); return; }
+    if (ci_prefix(href, "https://")) { set_status("HTTPS unsupported"); return; }
     if ((BUI_CTRL & BUI_LOCAL_PAGE) && !ci_prefix(href, "http://")) {
         set_status("No local link"); return;
     }
@@ -798,22 +818,22 @@ static void network_tick(void)
     unsigned char burst;
     if (state == ST_FILE) { local_tick(); return; }
     if (state == ST_INIT) {
-        if (!tr_init()) { fail_page("No network hardware"); return; }
+        if (!tr_init()) { fail_page("No network"); return; }
         state = ST_RESOLVE; set_status("Resolving..."); return;
     }
     if (state == ST_RESOLVE) {
-        if (!tr_resolve()) { fail_page("DNS lookup failed"); return; }
+        if (!tr_resolve()) { fail_page("DNS failed"); return; }
         state = ST_CONNECT; set_status("Connecting..."); return;
     }
     if (state == ST_CONNECT) {
-        if (!tr_connect()) { fail_page("Connection failed"); return; }
-        socket_open = 1; state = ST_SEND; set_status("Sending request..."); return;
+        if (!tr_connect()) { fail_page("Connect failed"); return; }
+        socket_open = 1; state = ST_SEND; set_status("Sending..."); return;
     }
     if (state == ST_SEND) {
         if (!tr_send((const unsigned char *)request, text_len(request))) {
-            fail_page("Request failed"); return;
+            fail_page("Send failed"); return;
         }
-        state = ST_RECV; idle_frames = 0; set_status("Waiting for response..."); return;
+        state = ST_RECV; idle_frames = 0; set_status("Waiting..."); return;
     }
     if (state != ST_RECV) return;
     if (receive_paused) return;
@@ -837,12 +857,12 @@ static void network_tick(void)
     }
     if (state != ST_RECV || n) return;
     if (transport_rx_status == GB_NET_RX_CLOSED) {
-        if (!header_done) fail_page("Connection closed early");
-        else if (gb_http_chunked) fail_page("Incomplete chunked response");
+        if (!header_done) fail_page("Closed early");
+        else if (gb_http_chunked) fail_page("Incomplete chunk");
         else if (gb_http_have_length && bytes_done != gb_http_content_length)
             fail_page("Incomplete page");
         else finish_page();
-    } else if (transport_rx_status == GB_NET_RX_ERROR) fail_page("Network receive failed");
+    } else if (transport_rx_status == GB_NET_RX_ERROR) fail_page("Receive failed");
     else if (++idle_frames > 900) fail_page(transport_rx_status == GB_NET_RX_TIMEOUT ?
                                             "Transport timeout" : "Network timeout");
 }
@@ -852,13 +872,13 @@ static void save_source(void)
     source_flush();
     BUI_CTRL &= (unsigned char)~BUI_SAVE_PENDING;
     if ((BUI_FLAGS & BUI_SOURCE_FULL) || !BUI_NPAGES) {
-        set_status("Offline source full"); return;
+        set_status("Source cache full"); return;
     }
     UI_OP = 8; UI_RES = 0;
     if (gb_ui() != BUI_ACT_SAVETO) { dirty = 1; return; }
     BUI_SAVE_RESULT = 0;
     BUI_CTRL |= BUI_SAVE_WORKER;
-    set_status("Saving offline page...");
+    set_status("Saving...");
     gb_wm_open("BRSAVE  APP");
 }
 
@@ -877,7 +897,7 @@ static void run_menu(void)
         if (state == ST_RECV || state == ST_FILE) {
             BUI_CTRL |= BUI_CAPTURE_ALL | BUI_SAVE_PENDING;
             receive_paused = 0; line_budget = 0;
-            set_status("Completing page...");
+            set_status("Completing...");
         } else if (have_page) save_source();
         else set_status("No page to save");
     } else if (action == BUI_ACT_PROXY) {
@@ -932,7 +952,7 @@ static void redraw_caret(void)
 static void draw_scrollbar(void)
 {
     unsigned char area = (unsigned char)(VIEW_ROWS * 8), th, ty, total = hist_count;
-    if (receive_paused && !cache_full && total < CACHE_LINES - VIEW_ROWS)
+    if ((receive_paused & RECEIVE_PAUSE_FLOW) && !cache_full && total < CACHE_LINES - VIEW_ROWS)
         total = (unsigned char)(total + VIEW_ROWS);
     gb_fill(SCROLL_X, CONTENT_Y, SCROLL_W, area, 1);
     if (total <= VIEW_ROWS) { th = area; ty = CONTENT_Y; }
@@ -976,16 +996,21 @@ static void draw_page(void)
 
 static void scroll_page(unsigned char down)
 {
+    unsigned char max_top;
     if (down) {
-        if (view_top + VIEW_ROWS < hist_count) view_top++;
-        else if ((state == ST_RECV || state == ST_FILE) && receive_paused && !cache_full) {
-            view_top++;
-            line_budget = 1;
-            receive_paused = 0;
+        if (view_top + VIEW_ROWS < hist_count) {
+            max_top = (unsigned char)(hist_count - VIEW_ROWS);
+            view_top = (unsigned char)(max_top - view_top > 3 ? view_top + 3 : max_top);
+        }
+        else if ((state == ST_RECV || state == ST_FILE) &&
+                 (receive_paused & RECEIVE_PAUSE_FLOW) && !cache_full) {
+            view_top = (unsigned char)(view_top + 3);
+            line_budget = 3;
+            receive_paused &= (unsigned char)~RECEIVE_PAUSE_FLOW;
             set_status("Receiving page...");
             return;
         }
-    } else if (view_top) view_top--;
+    } else if (view_top) view_top = (unsigned char)(view_top > 3 ? view_top - 3 : 0);
     dirty = 1;
 }
 
@@ -995,7 +1020,8 @@ static void handle_click(void)
     if (y >= URL_Y && y < URL_Y + URL_H) {
         if (x >= BACK_X) go_back();
         else if (x >= GO_X) { if (state == ST_IDLE) start_page(); }
-        else if (x < 2 + URL_FIELD_W && state == ST_IDLE) {
+        else if (x < 2 + URL_FIELD_W) {
+            if (state != ST_IDLE) fail_page("Cancelled");
             editing = 1; caret_on = 1; caret_tick = 0; redraw_url();
         }
         return;
@@ -1018,9 +1044,14 @@ static void handle_keys(void)
     unsigned char c, count = 8, changed = 0;
     while (count-- && (c = gb_getkey()) != 0) {
         if (state != ST_IDLE) {
-            if (c == 0x1B) fail_page("Request cancelled");
-            else if (receive_paused && c == 0x10) scroll_page(0);
-            else if (receive_paused && c == 0x0E) scroll_page(1);
+            if (c == 'g' || c == 'G') {
+                fail_page("Cancelled");
+                editing = 1; caret_on = 1; caret_tick = 0; redraw_url();
+                continue;
+            }
+            if (c == 0x1B) fail_page("Cancelled");
+            else if ((receive_paused & RECEIVE_PAUSE_FLOW) && c == 0x10) scroll_page(0);
+            else if ((receive_paused & RECEIVE_PAUSE_FLOW) && c == 0x0E) scroll_page(1);
             continue;
         }
         if (!editing) {
@@ -1058,15 +1089,19 @@ static void handle_keys(void)
 
 static void frame_tick(void)
 {
+    if (receive_paused & RECEIVE_PAUSE_FLUSH) {
+        source_flush();
+        receive_paused &= (unsigned char)~RECEIVE_PAUSE_FLUSH;
+    }
     if ((BUI_CTRL & BUI_SAVE_WORKER) && BUI_SAVE_RESULT) {
         BUI_CTRL &= (unsigned char)~BUI_SAVE_WORKER;
-        set_status(BUI_SAVE_RESULT == 1 ? "Offline page saved" : "Offline save failed");
+        set_status(BUI_SAVE_RESULT == 1 ? "Page saved" : "Save failed");
     }
     run_menu();
     handle_keys();
     network_tick();
     if (state == ST_IDLE && (BUI_CTRL & BUI_SAVE_PENDING)) save_source();
-    if (dirty && (state == ST_IDLE || receive_paused || ++redraw_div >= 6)) {
+    if (dirty && (state == ST_IDLE || (receive_paused & RECEIVE_PAUSE_FLOW) || ++redraw_div >= 6)) {
         gb_curhide(); draw_page(); gb_curshow();
     }
 }

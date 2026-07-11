@@ -597,7 +597,7 @@ boot_desktop
                 di
                 ld    a,c
                 call  bank_set
-                ld    hl,#3F00
+                ld    hl,APP_LOAD_MAX             ; keep sector/record padding below app data RAM
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl
@@ -1836,7 +1836,7 @@ wm_open_go
                 di
                 ld    a,(wm_open_page)
                 call  bank_set
-                ld    hl,#3F00
+                ld    hl,APP_LOAD_MAX
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
                 ld    (fs_load_dst),hl

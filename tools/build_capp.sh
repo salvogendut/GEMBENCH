@@ -14,6 +14,8 @@ cd "$(dirname "$0")/.."
 APP="${1:-apps/clock}"
 OUT="${2:-build/CLOCK.RAW}"
 GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.s)
+GBLIB_SRC="${GBLIB_SRC:-$GB/gblib.s}"
+LOAD_LIMIT="${LOAD_LIMIT:-0x7F00}"
 # DATA_LOC: where this app's data starts (code is #4000.. below it, data ..#7FFF
 # above). The default 0x6200 is a 50/50 split; a code-heavy/data-light app (NOTEPAD)
 # can pass a higher value to trade its spare data room for code room. Per-app so a
@@ -38,7 +40,7 @@ DOCRO_FLAG="${DOCRO:-0}"
 NET_FLAG="${NET:-0}"
 GBWIN_FLAG="${GBWIN:-1}"
 
-deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h")
+deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
 if [ "$GBWIN_FLAG" = "1" ]; then
     deps+=("$GB/gbwin.c")
 fi
@@ -74,6 +76,8 @@ cache_key=$(printf '%s\n' \
     "DOCRO=$DOCRO_FLAG" \
     "NET=$NET_FLAG" \
     "GBWIN=$GBWIN_FLAG" \
+    "GBLIB_SRC=$GBLIB_SRC" \
+    "LOAD_LIMIT=$LOAD_LIMIT" \
     "SDCC=$SDCC" \
     "SDAS=$SDAS" \
     "MAKEBIN=$MAKEBIN")
@@ -83,7 +87,7 @@ if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
 fi
 
 "$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
-"$SDAS" -o "$work/gblib.rel" "$GB/gblib.s"
+"$SDAS" -o "$work/gblib.rel" "$GBLIB_SRC"
 # --fomit-frame-pointer: frame on IY, not IX. The kernel/fs code uses IX as a
 # scratch (it never touches IY) and firmware calls preserve the caller's IY, so
 # this stops a kernel call from wrecking an app's frame pointer (which crashed
@@ -128,10 +132,12 @@ fi
 # AFTER the code) must end below data-loc - otherwise the RAM data area starts inside
 # it and gsinit zeroes its own code as it runs -> instant reboot (bit NOTEPAD: a
 # _CODE-only check passed while _GSINIT overlapped _DATA). And data+bss must end below
-# the kernel (#8000). Turn either overflow into a loud build failure.
-python3 - "$work/app.map" "$APP" "$DATA_LOC" <<'PY'
+# the kernel (#8000). LOAD_LIMIT mirrors the target's app loader ceiling; it is
+# #7F00 by default and #7F80 only for PCW Browser's record-rounded image.
+python3 - "$work/app.map" "$APP" "$DATA_LOC" "$LOAD_LIMIT" <<'PY'
 import sys, re
-mapf, app, dloc = sys.argv[1], sys.argv[2], int(sys.argv[3], 16)
+mapf, app = sys.argv[1], sys.argv[2]
+dloc, load_limit = int(sys.argv[3], 16), int(sys.argv[4], 16)
 area = {}
 for line in open(mapf):
     m = re.match(r'^(_CODE|_HOME|_DATA|_BSS|_INITIALIZED|_GSINIT|_GSFINAL|_INITIALIZER)\s+([0-9A-Fa-f]{8})\s+([0-9A-Fa-f]{8})', line)
@@ -142,6 +148,7 @@ img_end = max((area[a][0] + area[a][1]) for a in LOAD if a in area)
 top = max((s + sz) for s, sz in area.values()) if area else 0
 errs = []
 if img_end > dloc:  errs.append('loaded image ends 0x%04X > data-loc 0x%04X (gsinit/data overlap)' % (img_end, dloc))
+if img_end > load_limit: errs.append('loaded image ends 0x%04X > app loader limit 0x%04X' % (img_end, load_limit))
 if top > 0x8000:    errs.append('data/bss ends 0x%04X > kernel 0x8000' % top)
 if errs:
     sys.stderr.write('FIT ERROR (%s): %s - shrink it or raise DATA_LOC\n' % (app, '; '.join(errs)))
