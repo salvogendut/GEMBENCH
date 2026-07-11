@@ -67,7 +67,7 @@ python3 tools/png2cpc.py build/SPLASHD_BUILD.png build/SPLASHD.BIN splash 96x184
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\n' > build/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nPROXY=\r\n' > build/GEOBENCH.CFG
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
 python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
 python3 tools/packicons.py build/DEFAULT.IST \
@@ -108,7 +108,8 @@ done
 DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
 DATA_LOC=0x7A50 DIALOGS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
-GBWIN=0 DATA_LOC=0x79B0 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371): fullscreen browser + borrowed-bank page cache
+GBWIN=0 DATA_LOC=0x79E0 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371/#373): demand stream + offline/proxy menus
+DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/BRSAVE.RAW # transient Browser .HTM source writer
 DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
 DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
@@ -179,6 +180,7 @@ tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel modu
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
 tools/build_uimod.sh build/GBUI.RAW                # paged dialog module (#142) -> build/GBUI.RAW
+tools/build_webmod.sh build/GBWEB.RAW              # Browser source/config helper (#373)
 tools/build_netmod.sh build/GBNET.RAW             # W5100 networking module (#238) -> build/GBNET.RAW
 tools/build_m4netmod.sh build/GBNETM4.RAW         # M4 TCP networking module (#259) -> build/GBNETM4.RAW
 tools/build_m4savemod.sh                          # M4 file save module (#259) -> build/M4SAVE.RAW

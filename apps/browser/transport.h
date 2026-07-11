@@ -1,6 +1,10 @@
 /* Browser transport: GBNET on CPC, PerryNet binary protocol on PCW.
  * The including unit provides host, port, socket_open, transport_rx_status,
  * and (on CPC) netcfg. */
+#ifndef BROWSER_TR_HOST
+#define BROWSER_TR_HOST host
+#define BROWSER_TR_PORT port
+#endif
 #ifdef GB_PCW
 static volatile unsigned char ser_io;
 static unsigned char pcw_ser_inited;
@@ -299,13 +303,14 @@ static unsigned char tr_connect(void)
 {
     unsigned char payload[HOST_MAX + 5], out[8], seq, n = 0;
     unsigned int out_len = sizeof(out);
-    while (host[n]) n++;
+    while (BROWSER_TR_HOST[n]) n++;
     pn_seq = pn_channel = pn_conn = pn_fast_uart = 0;
     pn_in_len = 0; pn_in_started = pn_in_esc = pn_in_overflow = 0;
     if (!pn_uart_set(1)) return 0;
     payload[0] = n;
-    { unsigned char i; for (i = 0; i < n; i++) payload[i + 1] = (unsigned char)host[i]; }
-    payload[n + 1] = (unsigned char)port; payload[n + 2] = (unsigned char)(port >> 8);
+    { unsigned char i; for (i = 0; i < n; i++) payload[i + 1] = (unsigned char)BROWSER_TR_HOST[i]; }
+    payload[n + 1] = (unsigned char)BROWSER_TR_PORT;
+    payload[n + 2] = (unsigned char)(BROWSER_TR_PORT >> 8);
     payload[n + 3] = 3;
     seq = pn_tx(PN_OP_TCP_OPEN, 0, payload, (unsigned int)(n + 4));
     if (!seq || !pn_wait_ack(seq, out, &out_len, 60000) || out_len < 1) {
@@ -357,6 +362,7 @@ static void tr_close(void)
         if (seq) (void)pn_wait_ack(seq, 0, &out_len, 8000);
     }
     pn_channel = pn_conn = 0;
+    socket_open = 0;
     transport_rx_status = GB_NET_RX_CLOSED;
     pn_uart_restore();
 }
@@ -386,14 +392,14 @@ static unsigned char parse_ip(const char *s, unsigned char *out)
 static unsigned char tr_init(void) { return gb_net_init(netcfg); }
 static unsigned char tr_resolve(void)
 {
-    if (parse_ip(host, ip)) return 1;
-    return gb_net_resolve(host, ip);
+    if (parse_ip(BROWSER_TR_HOST, ip)) return 1;
+    return gb_net_resolve(BROWSER_TR_HOST, ip);
 }
 static unsigned char tr_connect(void)
 {
     if (!gb_net_open()) return 0;
     socket_open = 1;
-    return gb_net_connect(ip, port);
+    return gb_net_connect(ip, BROWSER_TR_PORT);
 }
 static unsigned char tr_send(const unsigned char *buf, unsigned int len)
 {

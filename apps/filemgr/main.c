@@ -58,9 +58,6 @@
 #define FS_LOAD_OFS ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
 
-static char saveerr[] = "save err 00";
-static const char hexdig[] = "0123456789ABCDEF";
-
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;
 static unsigned char total;       /* number of files on the disk          */
@@ -407,7 +404,7 @@ static unsigned char entry_icon(const char *name)
     ext_of(name, ext);
     if (ext_eq(ext, "BAS")) return ICON_BASIC;
     if (ext_eq(ext, "SCR") || ext_eq(ext, "PIC")) return ICON_PICTURE;
-    if (ext_eq(ext, "TXT") || ext_eq(ext, "CFG")) return ICON_TEXT;
+    if (ext_eq(ext, "TXT") || ext_eq(ext, "CFG") || ext_eq(ext, "HTM")) return ICON_TEXT;
     if (ext_eq(ext, "FNT")) return ICON_FNT;
     if (ext_eq(ext, "SAV")) return ICON_SCREENSAVER;   /* #221: screensaver modules */
     if (ext_eq(ext, "MOD")) return ICON_GEOBENCH;      /* #234: kernel modules = the lollipop icon */
@@ -618,6 +615,7 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
      .APP / .SAV      a GEOBENCH app/screensaver -> run it
      .IST / .SPR      the icon/cursor editor (ICONED), with the file
      .TXT / .CFG      the text editor (NOTEPAD), with the file
+     .HTM             an offline page -> BROWSER.APP (CPC/PCW)
      .BAS             a GB-BASIC program -> opens in BASIC.APP
      .BIN             a native binary -> an info note (exec unimplemented, #236)
      anything else    the read-only VIEWER, with the file */
@@ -638,6 +636,10 @@ static void open_entry(unsigned char idx)
         gb_wm_launch_as("ICONED  APP");
     else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G'))
         gb_wm_launch_as("NOTEPAD APP");
+#ifndef GB_MSX2
+    else if (ext_is(e, 'H', 'T', 'M'))
+        gb_wm_launch_as("BROWSER APP");
+#endif
     else if (ext_is(e, 'B', 'A', 'S'))          /* GB-BASIC programs open in BASIC.APP */
         gb_wm_launch_as("BASIC   APP");
     else if (ext_is(e, 'B', 'I', 'N'))          /* #236: native binaries aren't runnable
@@ -767,9 +769,7 @@ static void on_event(void)
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
         if (!copy_file()) {               /* copy it onto THIS window's drive, any size (#74) */
             if (my_drive == GB_DRIVE_A || my_drive == GB_DRIVE_B) {
-                saveerr[9] = hexdig[FSV_DIAG >> 4];
-                saveerr[10] = hexdig[FSV_DIAG & 15];
-                gb_alert("Copy failed", saveerr);
+                gb_alert("Copy failed", "floppy write error");
             } else {
                 gb_alert("Copy failed", "too big or disk full");
             }

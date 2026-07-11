@@ -35,6 +35,8 @@ backdrop, dragging icons, opening apps and menus:
   to open (routed to the right app by a type→app table). A **`..` entry** (with an
   up-arrow icon) goes up a directory; a **View** menu toggles list/icons and
   maximises the window. Multi-drive, drag-and-drop, a Trash.
+  Offline `.HTM` files use the normal text-file icon and open directly in
+  Browser when double-clicked on CPC or PCW.
 - **Notepad** — a text editor: type/edit, word-wrap, click or cursor keys to place
   the caret, **File / Edit / View** menus (New/Load/Save/Save As, copy/paste,
   Fullscreen). Saves `.BAS` with CR+LF so CPC BASIC can load them.
@@ -75,14 +77,22 @@ backdrop, dragging icons, opening apps and menus:
 - **Browser** — a small fullscreen HTTP browser for CPC and PCW. It accepts plain
   `http://` URLs, follows up to four redirects, parses headers and chunked bodies
   through the shared HTTP parser, and streams HTML through a bounded text renderer
-  instead of keeping a DOM. Text, headings, lists, link labels and image `alt=`
-  text are cached as up to 255 fixed-width rendered lines in one borrowed 16K
-  page. The viewport stays at the top while the response arrives; afterward the
-  proportional scrollbar covers the retained page. A page beyond 255 lines is
-  explicitly reported as truncated. If no spare page exists, Browser reports
-  limited cache mode and retains the latest eight lines. Link targets stand out
+  instead of keeping a DOM. Text, headings, lists and link labels are cached as
+  up to 255 fixed-width rendered lines in one borrowed 16K
+  page. Browser renders the first viewport, pauses the open TCP stream, and
+  resumes from the exact retained byte only when the user scrolls downward;
+  cached lines remain available immediately when scrolling upward. The
+  proportional scrollbar includes a continuation segment while more data is
+  available. Reaching the 255-line bound is explicitly reported as truncated.
+  If no spare page exists, Browser reports limited cache mode and retains the
+  latest eight lines. Link targets stand out
   as underlined rows and open when clicked, and Back retains one previous URL;
-  CSS, JavaScript, forms, images and HTTPS are not implemented.
+  CSS, JavaScript, forms, images and HTTPS are not implemented. The File menu
+  loads and saves offline `.HTM` source files; Save As always produces an 8.3
+  `.HTM` name. Settings configures an optional HTTP proxy and writes `PROXY=` in
+  `GEOBENCH.CFG`; Direct clears it. Source capture uses up to three available
+  borrowed pages (48 KiB) while reserving a page for the save worker, and the
+  proxy itself must use plain HTTP.
 - **Shell** — a fullscreen command-line file shell with scrollback and familiar
   `ls`, `cd`, `pwd`, `cat`, `cp`, and `rm` commands. Paths accept A/B/C drive
   prefixes and 8.3 components; `cat` and `cp` stream files in chunks rather than
