@@ -14,6 +14,7 @@ cd "$(dirname "$0")/.."
 APP="${1:-apps/clock}"
 OUT="${2:-build/CLOCK.RAW}"
 GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.s)
+GBLIB_SRC="${GBLIB_SRC:-$GB/gblib.s}"
 # DATA_LOC: where this app's data starts (code is #4000.. below it, data ..#7FFF
 # above). The default 0x6200 is a 50/50 split; a code-heavy/data-light app (NOTEPAD)
 # can pass a higher value to trade its spare data room for code room. Per-app so a
@@ -38,7 +39,7 @@ DOCRO_FLAG="${DOCRO:-0}"
 NET_FLAG="${NET:-0}"
 GBWIN_FLAG="${GBWIN:-1}"
 
-deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h")
+deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
 if [ "$GBWIN_FLAG" = "1" ]; then
     deps+=("$GB/gbwin.c")
 fi
@@ -74,6 +75,7 @@ cache_key=$(printf '%s\n' \
     "DOCRO=$DOCRO_FLAG" \
     "NET=$NET_FLAG" \
     "GBWIN=$GBWIN_FLAG" \
+    "GBLIB_SRC=$GBLIB_SRC" \
     "SDCC=$SDCC" \
     "SDAS=$SDAS" \
     "MAKEBIN=$MAKEBIN")
@@ -83,7 +85,7 @@ if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
 fi
 
 "$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
-"$SDAS" -o "$work/gblib.rel" "$GB/gblib.s"
+"$SDAS" -o "$work/gblib.rel" "$GBLIB_SRC"
 # --fomit-frame-pointer: frame on IY, not IX. The kernel/fs code uses IX as a
 # scratch (it never touches IY) and firmware calls preserve the caller's IY, so
 # this stops a kernel call from wrecking an app's frame pointer (which crashed

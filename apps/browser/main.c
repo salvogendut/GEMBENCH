@@ -71,7 +71,8 @@
  * helper temporarily replaces the Browser app bank. */
 #define BUI_LOCAL_BUF ((unsigned char *)0x2900)
 #define BUI_STAGE     ((char *)0x2B00)
-#define BUI_STAGE_CAP 0x0D00
+/* Divides a 16K page exactly, so a flush never straddles borrowed banks. */
+#define BUI_STAGE_CAP 0x0800
 #define BUI_PAGES     ((volatile unsigned char *)0x3900)
 #define BUI_NPAGES    (*(volatile unsigned char *)0x3904)
 #define BUI_TAIL      (*(volatile unsigned int  *)0x3905)
@@ -251,11 +252,6 @@ static void source_reset(void)
     BUI_LOCAL_OFS[0] = BUI_LOCAL_OFS[1] = BUI_LOCAL_OFS[2] = 0;
 }
 
-static void source_flush(void)
-{
-    if (BUI_STAGE_LEN) (void)web_op(6);
-}
-
 static void source_byte(unsigned char c)
 {
     if (BUI_FLAGS & BUI_SOURCE_FULL) return;
@@ -294,6 +290,31 @@ static unsigned char alloc_cache_page(void)
         }
     }
     return 0;
+}
+
+static void source_flush(void)
+{
+    unsigned char page;
+    /* Stay in the Browser bank: paging GBWEB here used to lose the caller page
+     * during large responses on CPC and PCW. */
+    if (!BUI_STAGE_LEN || (BUI_FLAGS & BUI_SOURCE_FULL)) return;
+    if (!BUI_NPAGES || BUI_TAIL == 0x4000) {
+        if (BUI_NPAGES >= 3 || !(page = alloc_cache_page())) {
+            BUI_FLAGS |= BUI_SOURCE_FULL;
+            BUI_STAGE_LEN = 0;
+            return;
+        }
+        BUI_PAGES[BUI_NPAGES++] = page;
+        BUI_TAIL = 0;
+    }
+    PIC_PAGE_K = BUI_PAGES[BUI_NPAGES - 1];
+    PIC_PAGE2_K = 0;
+    gb_pic_edit_buf = (unsigned int)BUI_STAGE;
+    gb_pic_edit_off = BUI_TAIL;
+    FS_SAVE_LEN_K = BUI_STAGE_LEN;
+    if (gb_pic_edit(GB_PICEDIT_WRITE)) BUI_TAIL += BUI_STAGE_LEN;
+    else BUI_FLAGS |= BUI_SOURCE_FULL;
+    BUI_STAGE_LEN = 0;
 }
 
 static char *history_line(unsigned char rel)
@@ -606,10 +627,7 @@ static unsigned char build_request(void)
     ADD_TEXT("GET "); ADD_TEXT(BUI_PROXY[0] ? url : path);
     ADD_TEXT(" HTTP/1.0\r\nHost: "); ADD_TEXT(host);
     if (port != 80) { if (p < limit) *p++ = ':'; p = put_dec(p, port); }
-    ADD_TEXT("\r\nUser-Agent: GB/1\r\n");
-    ADD_TEXT("Accept: text/html,text/plain,*/*;q=0.8\r\n");
-    ADD_TEXT("Accept-Encoding: identity\r\n");
-    ADD_TEXT("Connection: close\r\n\r\n");
+    ADD_TEXT("\r\nUser-Agent: GB/1\r\nConnection: close\r\n\r\n");
     if (p >= limit) { request[REQUEST_MAX] = 0; return 0; }
     *p = 0;
     return 1;
@@ -700,7 +718,7 @@ static void headers_complete(void)
 static void process_rx(void)
 {
     unsigned char c;
-    while (rx_pos < rx_len && state == ST_RECV && !(receive_paused & RECEIVE_PAUSE_FLOW)) {
+    while (rx_pos < rx_len && state == ST_RECV && !receive_paused) {
         if (!header_done) {
             c = netbuf[rx_pos++];
             if (c == '\r') continue;
@@ -805,12 +823,12 @@ static void start_local(void)
 static void local_tick(void)
 {
     unsigned char c;
-    if (state != ST_FILE || (receive_paused & RECEIVE_PAUSE_FLOW)) return;
-    while (BUI_LOCAL_POS < BUI_LOCAL_LEN && !(receive_paused & RECEIVE_PAUSE_FLOW)) {
+    if (state != ST_FILE || receive_paused) return;
+    while (BUI_LOCAL_POS < BUI_LOCAL_LEN && !receive_paused) {
         c = BUI_LOCAL_BUF[BUI_LOCAL_POS++];
         body_write(&c, 1);
     }
-    if ((receive_paused & RECEIVE_PAUSE_FLOW) || BUI_LOCAL_POS < BUI_LOCAL_LEN) return;
+    if (receive_paused || BUI_LOCAL_POS < BUI_LOCAL_LEN) return;
     if (!web_op(10)) finish_page();
 }
 
@@ -838,10 +856,10 @@ static void network_tick(void)
         state = ST_RECV; idle_frames = 0; set_status("Waiting..."); return;
     }
     if (state != ST_RECV) return;
-    if (receive_paused & RECEIVE_PAUSE_FLOW) return;
+    if (receive_paused) return;
     if (rx_pos < rx_len) {
         process_rx();
-        if (state != ST_RECV || (receive_paused & RECEIVE_PAUSE_FLOW)) return;
+        if (state != ST_RECV || receive_paused) return;
     }
 #ifdef GB_PCW
     burst = 4;
@@ -855,7 +873,7 @@ static void network_tick(void)
         rx_len = (unsigned char)n;
         rx_pos = 0;
         process_rx();
-        if (receive_paused & RECEIVE_PAUSE_FLOW) return;
+        if (receive_paused) return;
     }
     if (state != ST_RECV || n) return;
     if (transport_rx_status == GB_NET_RX_CLOSED) {
@@ -1018,7 +1036,8 @@ static void handle_click(void)
     if (y >= URL_Y && y < URL_Y + URL_H) {
         if (x >= BACK_X) go_back();
         else if (x >= GO_X) { if (state == ST_IDLE) start_page(); }
-        else if (x < 2 + URL_FIELD_W && state == ST_IDLE) {
+        else if (x < 2 + URL_FIELD_W) {
+            if (state != ST_IDLE) fail_page("Cancelled");
             editing = 1; caret_on = 1; caret_tick = 0; redraw_url();
         }
         return;
@@ -1041,6 +1060,11 @@ static void handle_keys(void)
     unsigned char c, count = 8, changed = 0;
     while (count-- && (c = gb_getkey()) != 0) {
         if (state != ST_IDLE) {
+            if (c == 'g' || c == 'G') {
+                fail_page("Cancelled");
+                editing = 1; caret_on = 1; caret_tick = 0; redraw_url();
+                continue;
+            }
             if (c == 0x1B) fail_page("Cancelled");
             else if ((receive_paused & RECEIVE_PAUSE_FLOW) && c == 0x10) scroll_page(0);
             else if ((receive_paused & RECEIVE_PAUSE_FLOW) && c == 0x0E) scroll_page(1);
