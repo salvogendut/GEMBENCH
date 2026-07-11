@@ -345,14 +345,6 @@ static void add_line(void)
         scroll_bottom();
     }
     pending_len = 0;
-    if ((state == ST_RECV || state == ST_FILE) && line_budget &&
-        !(BUI_CTRL & BUI_CAPTURE_ALL)) {
-        line_budget--;
-        if (!line_budget) {
-            receive_paused |= RECEIVE_PAUSE_FLOW;
-            set_status(cache_full ? "Page cache is full" : "Scroll down for more");
-        }
-    }
 }
 
 static void output_char(unsigned char c)
@@ -667,7 +659,7 @@ static void headers_complete(void)
         hist_start = hist_count = view_top = pending_len = cache_full = 0;
         have_page = 0;
         receive_paused = 0;
-        line_budget = cache_page ? VIEW_ROWS : FALLBACK_LINES;
+        line_budget = cache_page ? 0 : FALLBACK_LINES;
         title_len = 0; title[0] = 0;
         if (!resolve_redirect()) redir_err = (status_text != prev_status ? status_text : "Bad redirect");
         else if (!build_request()) redir_err = "Bad redirect";
@@ -738,7 +730,7 @@ static void start_page(void)
     BUI_CTRL &= BUI_PROXY_ON;
     hist_start = hist_count = view_top = pending_len = cache_full = 0;
     receive_paused = 0;
-    line_budget = cache_page ? VIEW_ROWS : FALLBACK_LINES;
+    line_budget = cache_page ? 0 : FALLBACK_LINES;
     title_len = 0; title[0] = 0;
     gb_html_reset();
     reset_response();
@@ -791,7 +783,7 @@ static void start_local(void)
     url[n] = 0; url_len = n;
     hist_start = hist_count = view_top = pending_len = cache_full = 0;
     receive_paused = 0;
-    line_budget = cache_page ? VIEW_ROWS : FALLBACK_LINES;
+    line_budget = cache_page ? 0 : FALLBACK_LINES;
     title_len = 0; title[0] = 0;
     bytes_done = 0;
     gb_html_reset();
