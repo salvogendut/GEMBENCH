@@ -14,7 +14,8 @@ work="build/webmod"
 mkdir -p "$work" "$(dirname "$OUT")"
 . tools/build_cache.sh
 
-deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" "$SRC")
+deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" \
+      "$GB/gbform.h" "$GB/gburl.h" "$SRC")
 stamp="$OUT.stamp"
 cache_key=$(printf '%s\n' "build_webmod.v1" "SDCC=$SDCC" "SDAS=$SDAS" "MAKEBIN=$MAKEBIN")
 if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then

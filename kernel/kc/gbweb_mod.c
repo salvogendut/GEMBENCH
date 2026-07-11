@@ -6,6 +6,7 @@
 #include "gb.h"
 
 #define UI_OP          (*(volatile unsigned char *)0x1700)
+#define UI_N           (*(volatile unsigned char *)0x1703)
 #define UI_RES         (*(volatile unsigned char *)0x1704)
 #define UI_NAME        ((char *)0x1708)
 #define BUI_STAGE      ((char *)0x2B00)
@@ -21,13 +22,35 @@
 #define BUI_PROXY      ((char *)0x3920)
 #define BUI_PROXY_HOST ((char *)0x3980)
 #define BUI_PROXY_PORT (*(volatile unsigned int *)0x39C0)
+#define BUI_FORM_ACTION ((char *)0x39D0)
+#define BUI_FORM_NAME   ((char *)0x3A00)
+#define BUI_FORM_VALUE  ((char *)0x3A18)
+#define BUI_FORM_URL    ((char *)0x3A48)
+#define BUI_FORM_ACTIVE (*(volatile unsigned char *)0x3AA8)
 #define BUI_PROXY_MAX  95
 #define BUI_SOURCE_FULL 0x01
 #define BUI_PROXY_ON   0x08
 #define BUI_LOCAL_EOF  0x20
 #define BUI_LOCAL_BUF  ((char *)0x2900)
+#define BUI_URL_BASE   ((char *)0x2900)
+#define BUI_URL_LINK   ((char *)0x2960)
+#define BUI_URL_RESULT ((char *)0x29C0)
 #define FS_LOAD_OFS    ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS      (*(volatile unsigned char *)0x144F)
+
+#define GB_FORM_EXTERNAL_STORAGE 1
+#define GB_FORM_ACTION BUI_FORM_ACTION
+#define GB_FORM_NAME   BUI_FORM_NAME
+#define GB_FORM_VALUE  BUI_FORM_VALUE
+#define GB_FORM_URL    BUI_FORM_URL
+#define GB_FORM_ACTIVE BUI_FORM_ACTIVE
+#include "gbform.h"
+
+#define GB_URL_EXTERNAL_STORAGE 1
+#define GB_URL_BASE   BUI_URL_BASE
+#define GB_URL_LINK   BUI_URL_LINK
+#define GB_URL_RESULT BUI_URL_RESULT
+#include "gburl.h"
 
 #define APP_NPAGES     (*(volatile unsigned char *)0x1437)
 #define APP_PAGES      ((volatile unsigned char *)0x1438)
@@ -87,6 +110,7 @@ static void source_free(void)
     }
     BUI_TAIL = BUI_STAGE_LEN = 0;
     BUI_FLAGS = 0;
+    BUI_FORM_ACTIVE = 0;
 }
 
 static unsigned char key_at(const char *p)
@@ -131,6 +155,15 @@ static void cfg_proxy(void)
         for (i = 0; i < vl; i++) cfg[pos + i] = value[i];
     }
     *(volatile unsigned int *)0x1200 = len;
+}
+
+static void save_cfg(void)
+{
+    unsigned char i, d = gb_drives();
+    gb_set_drive((d & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
+    for (i = 0; i < 4; i++) gb_back();
+    gb_set_name("GEOBENCHCFG");
+    gb_fs_save((char *)0x1000, *(volatile unsigned int *)0x1200);
 }
 
 static void load_proxy(void)
@@ -232,10 +265,14 @@ void main(void)
     UI_RES = 1;
     if (UI_OP == 6) source_put();
     else if (UI_OP == 7) source_free();
-    else if (UI_OP == 9) cfg_proxy();
+    else if (UI_OP == 9) { cfg_proxy(); save_cfg(); }
     else if (UI_OP == 10) local_read();
     else if (UI_OP == 11) UI_RES = parse_proxy();
     else if (UI_OP == 12) load_proxy();
     else if (UI_OP == 13) UI_RES = launch_file();
+    else if (UI_OP == 14)
+        UI_RES = gb_form_process(UI_N, *(const char **)UI_NAME);
+    else if (UI_OP == 15) UI_RES = gb_form_build_url();
+    else if (UI_OP == 18) UI_RES = gb_url_resolve();
     else UI_RES = 0;
 }

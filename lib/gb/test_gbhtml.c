@@ -5,8 +5,10 @@
 static char visible[1024];
 static char title[128];
 static char link_url[128];
+static char form_attrs[128], first_input_attrs[128], second_input_attrs[128];
 static unsigned int visible_len, title_len;
 static unsigned int link_begin_count, link_end_count;
+static unsigned int form_count, input_count, form_close_count;
 
 static void emit_text(unsigned char c);
 static void emit_title(unsigned char c);
@@ -14,6 +16,7 @@ static void emit_break(unsigned char kind);
 static void link_begin(const char *url);
 static void link_end(void);
 static void image_alt(const char *alt);
+static void form_tag(unsigned char kind, unsigned char attr_start);
 
 #define GB_HTML_EMIT_TEXT(c) emit_text(c)
 #define GB_HTML_EMIT_TITLE(c) emit_title(c)
@@ -21,6 +24,7 @@ static void image_alt(const char *alt);
 #define GB_HTML_LINK_BEGIN(url) link_begin(url)
 #define GB_HTML_LINK_END() link_end()
 #define GB_HTML_IMAGE_ALT(alt) image_alt(alt)
+#define GB_HTML_FORM_TAG(kind, attrs) form_tag(kind, attrs)
 #include "gbhtml.h"
 
 static int failures;
@@ -64,11 +68,26 @@ static void image_alt(const char *alt)
     while (*alt) emit_text((unsigned char)*alt++);
 }
 
+static void form_tag(unsigned char kind, unsigned char attr_start)
+{
+    const char *attrs = gb_html_tag_buffer + attr_start;
+    if (kind == GB_HTML_FORM_OPEN) {
+        form_count++;
+        strcpy(form_attrs, attrs);
+    } else if (kind == GB_HTML_FORM_INPUT) {
+        if (!input_count) strcpy(first_input_attrs, attrs);
+        else if (input_count == 1) strcpy(second_input_attrs, attrs);
+        input_count++;
+    } else if (kind == GB_HTML_FORM_CLOSE) form_close_count++;
+}
+
 static void capture_reset(void)
 {
     visible_len = title_len = 0;
     link_begin_count = link_end_count = 0;
+    form_count = input_count = form_close_count = 0;
     visible[0] = title[0] = link_url[0] = 0;
+    form_attrs[0] = first_input_attrs[0] = second_input_attrs[0] = 0;
     gb_html_reset();
 }
 
@@ -159,6 +178,25 @@ static void test_bounds_and_recovery(void)
           "oversized tags and empty comments recover at the next delimiter");
 }
 
+static void test_form_tags(void)
+{
+    capture_reset();
+    feed_chunks("<form action='/' method='GET'><input type=text name=q value='retro'>"
+                "<input type=submit value='Find'></form>", 2);
+    capture_end();
+    check(form_count == 1 && input_count == 2 && form_close_count == 1 &&
+              strstr(form_attrs, "action='/'") &&
+              strstr(first_input_attrs, "name=q") &&
+              strstr(second_input_attrs, "type=submit"),
+          "form and input tags stream through bounded raw callbacks");
+
+    capture_reset();
+    feed_chunks("<form action='/post' method=post><input name=q><input type=submit></form>", 3);
+    capture_end();
+    check(form_count == 1 && input_count == 2 && form_close_count == 1,
+          "raw form callbacks remain stable across chunk boundaries");
+}
+
 static void test_arbitrary_bytes(void)
 {
     unsigned long seed = 0x1984UL;
@@ -181,6 +219,7 @@ int main(void)
     test_pre_and_entities();
     test_attribute_boundaries();
     test_bounds_and_recovery();
+    test_form_tags();
     test_arbitrary_bytes();
     if (failures) {
         printf("\n%d HTML test(s) FAILED\n", failures);

@@ -43,6 +43,13 @@
 #ifndef GB_HTML_IMAGE_ALT
 #define GB_HTML_IMAGE_ALT(alt) ((void)0)
 #endif
+#ifndef GB_HTML_FORM_TAG
+#define GB_HTML_FORM_TAG(kind, attr_start) ((void)0)
+#endif
+
+#define GB_HTML_FORM_CLOSE 0
+#define GB_HTML_FORM_OPEN  1
+#define GB_HTML_FORM_INPUT 2
 
 #ifndef GB_HTML_EXTERNAL_STORAGE
 static char gb_html_tag_buffer[GB_HTML_TAG_MAX + 1];
@@ -326,7 +333,13 @@ static void gb_html_process_tag(void)
         } else if (gb_html_equal(gb_html_tag_buffer + name, len, "pre")) {
             gb_html_in_pre = 0;
             gb_html_emit_break(GB_HTML_BREAK_BLOCK);
-        } else if (gb_html_block_tag(gb_html_tag_buffer + name, len)) {
+        }
+#ifndef GB_HTML_NO_FORM_CLOSE
+        else if (gb_html_equal(gb_html_tag_buffer + name, len, "form")) {
+            GB_HTML_FORM_TAG(GB_HTML_FORM_CLOSE, i);
+        }
+#endif
+        else if (gb_html_block_tag(gb_html_tag_buffer + name, len)) {
             gb_html_emit_break(GB_HTML_BREAK_BLOCK);
         }
         return;
@@ -359,6 +372,14 @@ static void gb_html_process_tag(void)
         if (self_close && gb_html_in_link) {
             GB_HTML_LINK_END(); gb_html_in_link = 0;
         }
+        return;
+    }
+    if (gb_html_equal(gb_html_tag_buffer + name, len, "form")) {
+        GB_HTML_FORM_TAG(GB_HTML_FORM_OPEN, i);
+        return;
+    }
+    if (gb_html_equal(gb_html_tag_buffer + name, len, "input")) {
+        GB_HTML_FORM_TAG(GB_HTML_FORM_INPUT, i);
         return;
     }
 #ifndef GB_HTML_NO_IMAGE_ALT
