@@ -128,11 +128,13 @@ chunk boundaries and cover malformed/oversized input. A minimal SDCC probe
 currently measures 4,505 bytes of code and 299 bytes of default parser state,
 before browser UI, history or networking. `BROWSER.APP` now composes that parser
 with the shared HTTP response parser and the existing CPC/PCW transports. It
-stores up to 255 wrapped display lines in a borrowed 16K page, keeps the viewport
-stable during reception, follows bounded redirects, renders image alternatives
-inline, opens underlined links by click, and retains one refetched Back URL.
-Pages beyond the line bound are reported as truncated; no-spare-bank systems use
-an explicit eight-line fallback.
+stores up to 255 wrapped display lines in a borrowed 16K page, pauses its TCP
+stream after laying out one viewport, and resumes from retained receive-buffer
+state only as the user scrolls down. It follows bounded redirects, opens
+underlined links by click, and retains one refetched Back URL. The Browser build
+disables image-alt rendering, numeric-entity decoding and attribute-entity
+decoding to remain within its 16K PCW bank. Reaching the line bound is reported
+as truncated; no-spare-bank systems use an explicit eight-line fallback.
 
 This would be useful for retro-oriented sites and local services. Most modern
 public sites require HTTPS, CSS and JavaScript, so a practical optional companion

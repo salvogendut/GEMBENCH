@@ -26,6 +26,68 @@
 #define UI_OP_PROMPT   2
 #define UI_OP_PICKFILE 3
 #define UI_OP_PICKDIR  4
+#define UI_OP_BROWSER  5
+#define UI_OP_BSAVE_AS 8
+
+/* Browser's low-RAM transfer block. The non-visual source/config operations
+ * live in GBWEB.MOD; this dialog module only needs their status and proxy text. */
+#define BUI_NPAGES     (*(volatile unsigned char *)0x3904)
+#define BUI_FLAGS      (*(volatile unsigned char *)0x3909)
+#define BUI_PROXY      ((char *)0x3920)
+#define BUI_SAVE_NAME  ((char *)0x39C2)
+#define BUI_PROXY_MAX  95
+#define BUI_SOURCE_FULL 0x01
+
+#define BUI_ACT_NONE   0
+#define BUI_ACT_LOAD   1
+#define BUI_ACT_SAVE   2
+#define BUI_ACT_PROXY  3
+#define BUI_ACT_SAVETO 4
+
+static const char *const browser_file[] = { "Load", "Save" };
+static const char *const browser_settings[] = { "Proxy...", "Direct" };
+static const char *const html_exts[] = { "HTM", 0 };
+
+static void browser_to_83(const char *src)
+{
+    unsigned char i = 0, j;
+    for (j = 0; j < 11; j++) UI_NAME[j] = ' ';
+    for (j = 0; j < 8 && src[i] && src[i] != '.'; j++) UI_NAME[j] = src[i++];
+    UI_NAME[8] = 'H'; UI_NAME[9] = 'T'; UI_NAME[10] = 'M';
+}
+
+static void browser_menu(void)
+{
+    unsigned char sel;
+    UI_RES = BUI_ACT_NONE;
+    if (UI_N == 1) {
+        sel = gb_popup(10, 8, browser_file, 2);
+        if (sel == 0 && gb_pickfile(UI_NAME, html_exts)) UI_RES = BUI_ACT_LOAD;
+        else if (sel == 1) UI_RES = BUI_ACT_SAVE;
+    } else {
+        sel = gb_popup(17, 8, browser_settings, 2);
+        if (sel == 0) {
+            if (gb_prompt("HTTP proxy:", BUI_PROXY, 0x80 | BUI_PROXY_MAX))
+                UI_RES = BUI_ACT_PROXY;
+        } else if (sel == 1) {
+            BUI_PROXY[0] = 0;
+            UI_RES = BUI_ACT_PROXY;
+        }
+    }
+}
+
+static void browser_save_as(void)
+{
+    char *name = (char *)0x1708;
+    unsigned char i;
+    UI_RES = BUI_ACT_NONE;
+    if (!BUI_NPAGES || (BUI_FLAGS & BUI_SOURCE_FULL)) return;
+    if (!gb_pickdir(html_exts)) return;
+    if (!gb_prompt("Save HTML as:", name, 12)) return;
+    browser_to_83(name);
+    for (i = 0; i < 11; i++) BUI_SAVE_NAME[i] = UI_NAME[i];
+    UI_RES = BUI_ACT_SAVETO;
+}
 
 void main(void)
 {
@@ -51,5 +113,9 @@ void main(void)
         exts[ne] = 0;
         if (UI_OP == UI_OP_PICKFILE) UI_RES = gb_pickfile(UI_NAME, exts);   /* name -> UI_NAME */
         else                         UI_RES = gb_pickdir(exts);
+    } else if (UI_OP == UI_OP_BROWSER) {
+        browser_menu();
+    } else if (UI_OP == UI_OP_BSAVE_AS) {
+        browser_save_as();
     }
 }

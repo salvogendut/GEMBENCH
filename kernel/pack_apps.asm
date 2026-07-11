@@ -20,3 +20,6 @@ ied_imgend                                      ; to pass 2 - the main image fil
 ui_img          incbin "../build/GBUI.RAW"      ; paged dialog module -> GBUI.MOD (#142 step 1b, #234)
 ui_imgend
                 save  "GBUI.MOD",ui_img,ui_imgend-ui_img,DSK,"build/gbkern.dsk"
+brsave_img      incbin "../build/BRSAVE.RAW"
+brsave_imgend
+                save  "BRSAVE.APP",brsave_img,brsave_imgend-brsave_img,DSK,"build/gbkern.dsk"

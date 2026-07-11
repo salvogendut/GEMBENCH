@@ -35,7 +35,8 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/p
 APPDEFS="-DGB_PCW" DATA_LOC=0x7380 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7900 DIALOGS=1 tools/build_capp.sh apps/wget build/pcw/WGET.RAW
-GBWIN=0 APPDEFS="-DGB_PCW" DATA_LOC=0x7E60 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
+GBWIN=0 APPDEFS="-DGB_PCW" DATA_LOC=0x7FA4 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/pcw/BRSAVE.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/pcw/SHELL.RAW
 # savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a
@@ -48,6 +49,7 @@ APPDEFS="-DGB_PCW" tools/build_capp.sh apps/xmatrix build/pcw/XMATRIX.RAW
 # --- shared paged C modules (platform-neutral, low-RAM marshalled) -----------
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
 tools/build_uimod.sh                             # -> build/GBUI.RAW
+tools/build_webmod.sh                            # -> build/GBWEB.RAW
 
 # --- assets (MSX encodings = PCW encodings) -----------------------------------
 python3 tools/genfont.py build/pcw/DEFAULT.FNT
@@ -91,12 +93,13 @@ rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
 [ -s build/pcwboot.bin ] || { echo "ERROR: pcwboot.bin not produced" >&2; exit 1; }
 
 # --- the bootable disc -----------------------------------------------------------
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nTIMESYNC=true\r\nTIMEZONE=+2\r\n' > build/pcw/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nTIMESYNC=true\r\nTIMEZONE=+2\r\nPROXY=\r\n' > build/pcw/GEOBENCH.CFG
 python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
     --add build/pcw/GEOBENCH.CFG=GEOBENCH.CFG \
     --add build/GBCFG.RAW=GBCFG.MOD \
     --add build/GBUI.RAW=GBUI.MOD \
+    --add build/GBWEB.RAW=GBWEB.MOD \
     --add build/pcw/SPLASH.MOD=SPLASH.MOD \
     --add build/pcw/DEFAULT.FNT=DEFAULT.FNT \
     --add build/pcw/DEFAULT.IST=DEFAULT.IST \
@@ -109,12 +112,13 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/VIEWER.RAW=VIEWER.APP \
     --add build/pcw/CLOCK.RAW=CLOCK.APP \
     --add build/pcw/TIMESYNC.RAW=TIMESYNC.APP \
-    --add build/pcw/XAOS.RAW=XAOS.APP \
     --add build/pcw/ICONED.RAW=ICONED.APP \
     --add build/pcw/SHELL.RAW=SHELL.APP \
+    --add build/pcw/BRSAVE.RAW=BRSAVE.APP \
     --add build/pcw/SQUARES.RAW=SQUARES.SAV \
     --add build/pcw/ANT.RAW=ANT.SAV \
     --add build/pcw/XMATRIX.RAW=XMATRIX.SAV \
+    --add build/pcw/DECO.RAW=DECO.SAV \
     --add build/pcw/LOGO.PIC=LOGO.PIC \
     --add build/pcw/TLEUNG.PIC=TLEUNG.PIC \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT \
@@ -142,7 +146,7 @@ python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     --add build/pcw/NETTEST.RAW=NETTEST.APP \
     --add build/pcw/WGET.RAW=WGET.APP \
     --add build/pcw/BROWSER.RAW=BROWSER.APP \
-    --add build/pcw/DECO.RAW=DECO.SAV \
+    --add build/pcw/XAOS.RAW=XAOS.APP \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
 echo "PCW target built: QA/PCW/GEOBENCH.DSK (bootable CF2) + QA/PCW/COMPANION.DSK"

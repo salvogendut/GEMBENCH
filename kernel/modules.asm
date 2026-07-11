@@ -49,15 +49,18 @@ rdm_miss
                 ret
 
 k_ui
-                ld    a,1
-                ld    (UI_MODAL),a            ; modal: the dialog's gb_poll must not dispatch
-                ld    hl,gbui_modname         ; top-bar clicks into the swapped-out app
+                ld    hl,UI_MODAL             ; modal: the dialog's gb_poll must not dispatch
+                inc   (hl)
+                rlca                          ; A bit 7 selects the Browser helper name that
+                ld    hl,gbui_modname         ; BROWSER.APP placed in low RAM. Normal gb_ui
+                jr    nc,kui_run               ; calls enter with A=0 (gblib enforces that).
+                ld    hl,#3914
+kui_run
                 call  run_data_module
-                xor   a
-                ld    (UI_MODAL),a
+                ld    hl,UI_MODAL
+                dec   (hl)
                 ld    a,(UI_RES)              ; missing module -> caller pre-set a cancel
                 ld    c,a
-                ld    b,0
                 ret
 gbui_modname    db    "GBUI    MOD"
 
@@ -70,7 +73,6 @@ k_net
                 call  run_data_module
                 ld    a,(GBNET_RES)
                 ld    c,a
-                ld    b,0
                 ret
                 if STORAGE_M4
 gbnet_modname   db    "GBNETM4 MOD"

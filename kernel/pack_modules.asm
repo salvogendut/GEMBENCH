@@ -8,5 +8,8 @@ flsv_img        incbin "../build/FLOPPYSV.RAW"
 flsv_imgend
 splashd_img     incbin "../build/SPLASHD.BIN"     ; DEBUG=TRUE bootsplash with build id
 splashd_imgend
+gbweb_img       incbin "../build/GBWEB.RAW"
+gbweb_imgend
                 save  "FLOPPYSV.MOD",flsv_img,flsv_imgend-flsv_img,DSK,"build/gbkern.dsk"
                 save  "SPLASHD.MOD",splashd_img,splashd_imgend-splashd_img,DSK,"build/gbkern.dsk"
+                save  "GBWEB.MOD",gbweb_img,gbweb_imgend-gbweb_img,DSK,"build/gbkern.dsk"

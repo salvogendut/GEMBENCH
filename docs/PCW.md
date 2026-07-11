@@ -98,12 +98,13 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
 ## What ships where
 
 - **GEOBENCH.DSK** (bootable): kernel + DESKTOP, FILEMGR, NOTEPAD,
-  SETTINGS, VIEWER, CLOCK, TIMESYNC, XAOS, ICONED, SHELL + the portable savers
-  (SQUARES — the default —, ANT, XMATRIX) + fonts, icon sets, pointer,
-  splash, `LOGO.PIC` (default wallpaper), `TLEUNG.PIC`, GEOBENCH.CFG.
+  SETTINGS, VIEWER, CLOCK, TIMESYNC, ICONED, SHELL + the portable savers
+  (SQUARES — the default —, ANT, XMATRIX, DECO) + fonts, icon sets, pointer,
+  splash, Browser's `GBWEB.MOD`/`BRSAVE.APP` helpers, `LOGO.PIC` (default
+  wallpaper), `TLEUNG.PIC`, GEOBENCH.CFG.
 - **COMPANION.DSK** (data): the picture gallery, backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
-  WGET.APP and BROWSER.APP (HTTP over PerryNet), DECO.SAV, WELCOME.TXT. `LOGO.PIC`,
+  WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, WELCOME.TXT. `LOGO.PIC`,
   `TLEUNG.PIC` and `CLASSIC.FNT` live on the boot disk. The largest/redundant
   pictures (`1984.PIC`, `BIG.PIC`, `PENGUIN.PIC`, `POLYMAR.PIC`) are omitted to
   keep enough CF2 space for the apps.
@@ -149,12 +150,16 @@ to four absolute or relative redirects and keeps an interrupted partial file. A
 later PCW attempt restarts that file rather than sending Range: CP/M records
 only retain a 128-byte-granular size, so an exact resume offset cannot be
 reconstructed safely. Browser follows redirects too, parses chunked HTML bodies,
-renders text/list/link/alt text into a borrowed 16K page holding up to 255
-fixed-width lines. It keeps the viewport stable during reception, then exposes
-the retained page through a proportional scrollbar; pages beyond that bound are
-reported as truncated. Underlined link rows open when clicked, and one previous
-URL is retained for Back. HTTPS is not supported because the PCW side has no TLS
-implementation.
+renders text/list/link text into a borrowed 16K page holding up to 255
+fixed-width lines. It renders one viewport, pauses the open PerryNet TCP stream,
+and resumes from the retained receive byte as the user scrolls down; cached lines
+remain available for upward scrolling. The proportional scrollbar shows that
+continuation is available, and reaching the line bound is reported as truncated.
+Underlined link rows open when clicked, and one previous URL is retained for
+Back. Its File menu loads and saves offline `.HTM` files, and File Manager opens
+those files in Browser with the text-file icon. The Settings menu persists an
+optional plain-HTTP proxy as `PROXY=` in `GEOBENCH.CFG`; selecting Direct clears
+it. HTTPS is not supported because the PCW side has no TLS implementation.
 
 ## Not (yet) on the PCW
 

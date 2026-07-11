@@ -37,7 +37,8 @@ can test or deploy without rebuilding first):
 - **`QA/GEOBENCH.DSK`** — the bootable **Main** floppy image.
 - **`QA/COMPANION.DSK`** — the **Companion** floppy with the larger apps
   (including Telnet, WGET, Browser and Shell), extra savers, and sample pictures
-  for drive B.
+  for drive B. Browser's `GBWEB.MOD` and `BRSAVE.APP` helpers remain on the Main
+  disk so File/Settings operations still work after a drive-B file picker.
 
 Boot with **`RUN"GB`**: the card loader `GB.BAS` loads `M4DETECT.BIN`, probes for
 M4ROM's RSX table, and then `RUN"`s `GBM4` on M4 hardware or `GBALB` otherwise. On

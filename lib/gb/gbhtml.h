@@ -170,103 +170,105 @@ static void gb_html_emit_char(unsigned char c)
 static unsigned char gb_html_entity_value(const char *text, unsigned char len,
                                           unsigned char *value)
 {
-    unsigned int v = 0;
-    unsigned char i = 0, base = 10, digit, have = 0;
+#ifndef GB_HTML_NAMED_ENTITIES_ONLY
+    unsigned char v = 0, i = 1, digit;
+#endif
     if (gb_html_equal(text, len, "amp")) { *value = '&'; return 1; }
     if (gb_html_equal(text, len, "lt")) { *value = '<'; return 1; }
     if (gb_html_equal(text, len, "gt")) { *value = '>'; return 1; }
     if (gb_html_equal(text, len, "quot")) { *value = '"'; return 1; }
     if (gb_html_equal(text, len, "apos")) { *value = '\''; return 1; }
     if (gb_html_equal(text, len, "nbsp")) { *value = ' '; return 1; }
-    if (!len || text[0] != '#') return 0;
-    i = 1;
-    if (i < len && (text[i] == 'x' || text[i] == 'X')) { base = 16; i++; }
-    while (i < len) {
-        unsigned char c = (unsigned char)text[i++];
-        if (c >= '0' && c <= '9') digit = (unsigned char)(c - '0');
-        else if (base == 16 && gb_html_lower(c) >= 'a' &&
-                 gb_html_lower(c) <= 'f')
-            digit = (unsigned char)(gb_html_lower(c) - 'a' + 10);
-        else return 0;
-        if (digit >= base) return 0;
-        if (base == 16) {
+#ifdef GB_HTML_NAMED_ENTITIES_ONLY
+    return 0;
+#else
+    if (len < 2 || text[0] != '#') return 0;
+    if (text[1] == 'x' || text[1] == 'X') {
+        if (++i >= len) return 0;
+        while (i < len) {
+            unsigned char c = gb_html_lower((unsigned char)text[i++]);
+            if (c >= '0' && c <= '9') digit = (unsigned char)(c - '0');
+            else if (c >= 'a' && c <= 'f') digit = (unsigned char)(c - 'a' + 10);
+            else return 0;
             if (v > 15) return 0;
-            v = (unsigned int)((v << 4) + digit);
-        } else {
-            if (v > 25 || (v == 25 && digit > 5)) return 0;
-            v = (unsigned int)(v * 10 + digit);
+            v = (unsigned char)((v << 4) + digit);
         }
-        have = 1;
+    } else {
+        while (i < len) {
+            unsigned char c = (unsigned char)text[i++];
+            if (c < '0' || c > '9') return 0;
+            digit = (unsigned char)(c - '0');
+            if (v > 25 || (v == 25 && digit > 5)) return 0;
+            v = (unsigned char)((v << 3) + (v << 1) + digit);
+        }
     }
-    if (!have || !v) return 0;
-    *value = (unsigned char)v;
+    if (!v) return 0;
+    *value = v;
     return 1;
+#endif
 }
 
+#ifndef GB_HTML_RAW_ATTRS
 static unsigned char gb_html_decode_attr(char *text, unsigned char len)
 {
-    unsigned char in = 0, out = 0, end, value;
-    while (in < len) {
-        if (text[in] == '&') {
-            end = (unsigned char)(in + 1);
-            while (end < len && text[end] != ';' &&
-                   (unsigned char)(end - in) <= GB_HTML_ENTITY_MAX) end++;
-            if (end < len && text[end] == ';' &&
-                gb_html_entity_value(text + in + 1,
-                                     (unsigned char)(end - in - 1), &value)) {
-                text[out++] = (char)value;
-                in = (unsigned char)(end + 1);
+    char *src = text, *dst = text, *limit = text + len, *end;
+    unsigned char value;
+    while (src < limit) {
+        if (*src == '&') {
+            end = src + 1;
+            while (end < limit && *end != ';' && end - src <= GB_HTML_ENTITY_MAX) end++;
+            if (end < limit && *end == ';' &&
+                gb_html_entity_value(src + 1, (unsigned char)(end - src - 1), &value)) {
+                *dst++ = (char)value;
+                src = end + 1;
                 continue;
             }
         }
-        text[out++] = text[in++];
+        *dst++ = *src++;
     }
-    text[out] = 0;
-    return out;
+    *dst = 0;
+    return (unsigned char)(dst - text);
 }
+#endif
 
 static unsigned char gb_html_attr(unsigned char start, const char *wanted,
                                   char *out, unsigned char max)
 {
-    unsigned char i = start, name, name_len, value, len, quote, match;
-    while (i < gb_html_tag_len) {
-        while (i < gb_html_tag_len &&
-               (gb_html_space((unsigned char)gb_html_tag_buffer[i]) ||
-                gb_html_tag_buffer[i] == '/')) i++;
-        name = i;
-        while (i < gb_html_tag_len &&
-               gb_html_name_char((unsigned char)gb_html_tag_buffer[i])) i++;
-        name_len = (unsigned char)(i - name);
-        if (!name_len) { i++; continue; }
-        match = gb_html_equal(gb_html_tag_buffer + name, name_len, wanted);
-        while (i < gb_html_tag_len &&
-               gb_html_space((unsigned char)gb_html_tag_buffer[i])) i++;
-        if (i >= gb_html_tag_len || gb_html_tag_buffer[i] != '=') {
+    char *p = gb_html_tag_buffer + start;
+    char *end = gb_html_tag_buffer + gb_html_tag_len;
+    char *name, *value;
+    unsigned char name_len, len, quote, match;
+    while (p < end) {
+        while (p < end && (gb_html_space((unsigned char)*p) || *p == '/')) p++;
+        name = p;
+        while (p < end && gb_html_name_char((unsigned char)*p)) p++;
+        name_len = (unsigned char)(p - name);
+        if (!name_len) { p++; continue; }
+        match = gb_html_equal(name, name_len, wanted);
+        while (p < end && gb_html_space((unsigned char)*p)) p++;
+        if (p >= end || *p != '=') {
             if (match) return 0;
             continue;
         }
-        i++;
-        while (i < gb_html_tag_len &&
-               gb_html_space((unsigned char)gb_html_tag_buffer[i])) i++;
+        p++;
+        while (p < end && gb_html_space((unsigned char)*p)) p++;
         quote = 0;
-        if (i < gb_html_tag_len &&
-            (gb_html_tag_buffer[i] == '\'' || gb_html_tag_buffer[i] == '"'))
-            quote = (unsigned char)gb_html_tag_buffer[i++];
-        value = i;
-        if (quote) while (i < gb_html_tag_len &&
-                         (unsigned char)gb_html_tag_buffer[i] != quote) i++;
-        else while (i < gb_html_tag_len &&
-                    !gb_html_space((unsigned char)gb_html_tag_buffer[i])) i++;
-        len = (unsigned char)(i - value);
-        if (!quote && len && i == gb_html_tag_len &&
-            gb_html_tag_buffer[i - 1] == '/') len--;
-        if (quote && i < gb_html_tag_len) i++;
+        if (p < end && (*p == '\'' || *p == '"')) quote = (unsigned char)*p++;
+        value = p;
+        if (quote) while (p < end && (unsigned char)*p != quote) p++;
+        else while (p < end && !gb_html_space((unsigned char)*p)) p++;
+        len = (unsigned char)(p - value);
+        if (!quote && len && p == end && p[-1] == '/') len--;
+        if (quote && p < end) p++;
         if (match) {
-            unsigned char n;
             if (len > max) return 2;
-            for (n = 0; n < len; n++) out[n] = gb_html_tag_buffer[value + n];
-            out[len] = 0;
+            char *dst = out;
+            while (len--) *dst++ = *value++;
+            *dst = 0;
+            len = (unsigned char)(dst - out);
+#ifndef GB_HTML_RAW_ATTRS
             gb_html_decode_attr(out, len);
+#endif
             return 1;
         }
     }
@@ -282,6 +284,7 @@ static unsigned char gb_html_block_tag(const char *name, unsigned char len)
                            name[1] >= '1' && name[1] <= '6');
 }
 
+#ifndef GB_HTML_NO_IMAGE_ALT
 static void gb_html_emit_alt(const char *value)
 {
     if (*value) {
@@ -292,6 +295,7 @@ static void gb_html_emit_alt(const char *value)
         gb_html_pending_space = 0;
     }
 }
+#endif
 
 static void gb_html_process_tag(void)
 {
@@ -357,11 +361,13 @@ static void gb_html_process_tag(void)
         }
         return;
     }
+#ifndef GB_HTML_NO_IMAGE_ALT
     if (gb_html_equal(gb_html_tag_buffer + name, len, "img")) {
         attr = gb_html_attr(i, "alt", gb_html_alt_buffer, GB_HTML_ALT_MAX);
         if (attr == 1) gb_html_emit_alt(gb_html_alt_buffer);
         return;
     }
+#endif
     if (gb_html_block_tag(gb_html_tag_buffer + name, len)) {
         gb_html_emit_break(GB_HTML_BREAK_BLOCK);
         if (gb_html_equal(gb_html_tag_buffer + name, len, "li")) {

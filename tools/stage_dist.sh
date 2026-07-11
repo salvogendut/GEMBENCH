@@ -49,6 +49,7 @@ cp build/TELNET.RAW  "$SYS/TELNET.APP"      # #238: windowed ANSI/VT terminal + 
 cp build/NETTEST.RAW "$SYS/NETTEST.APP"     # #261: DNS/TCP/HTTP diagnostic for Albireo/Net4CPC and M4 backends
 cp build/WGET.RAW    "$SYS/WGET.APP"        # #363: streaming HTTP downloader for any writable drive
 cp build/BROWSER.RAW "$SYS/BROWSER.APP"     # #367: streaming text-first HTTP browser
+cp build/BRSAVE.RAW  "$SYS/BRSAVE.APP"      # #373: Browser offline .HTM save worker
 cp build/SHELL.RAW   "$SYS/SHELL.APP"       # #365: command-line file shell
 for f in "$GB_BASIC_DIR/build/BASIC.RAW" "$GB_BASIC_DIR/build/BASRUN.RAW" "$GB_BASIC_DIR/build/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC payload $f (run make -C \"$GB_BASIC_DIR\" raws)" >&2; exit 1; }
@@ -80,6 +81,7 @@ cp build/GBCFG.RAW "$SYS/GBCFG.MOD"          # #234: kernel modules use .MOD (.B
 cp build/GBFAT.RAW "$SYS/GBFAT.MOD"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.MOD"   # #135: paged AMSDOS/floppy write module
 cp build/GBUI.RAW "$SYS/GBUI.MOD"           # #142: paged dialog (popup/prompt/file-picker) module
+cp build/GBWEB.RAW "$SYS/GBWEB.MOD"         # #373: Browser source cache + proxy config helper
 cp build/GBNET.RAW "$SYS/GBNET.MOD"         # #238: W5100 networking module (gb_net_* socket API)
 cp build/GBNETM4.RAW "$SYS/GBNETM4.MOD"     # #259: M4 TCP module, same gb_net_* socket API
 cp build/M4SAVE.RAW "$SYS/M4SAVE.MOD"       # #259: M4 C_OPEN/C_WRITE/C_CLOSE save module

@@ -204,6 +204,7 @@ _gb_clip_len:
 
 ;; unsigned char gb_ui(void);  -> run the paged dialog module, BC=UI_RES -> A (#142)
 _gb_ui:
+        xor     a               ; normal GBUI.MOD selector (bit 7 clear)
         call    0x80AE          ; GB_UI
         ld      a, c
         ret
