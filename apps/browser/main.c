@@ -21,6 +21,8 @@
 #define ALT_MAX        23
 #define MAX_REDIRECTS   4
 #define LINK_MARK       1
+#define FORM_MARK       2
+#define FORM_CONT_MARK  3
 
 #define ST_IDLE       0
 #define ST_INIT       1
@@ -37,6 +39,10 @@
 #define GO_W           8
 #define BACK_X        (GB_COLS - 12)
 #define BACK_W        10
+#define FORM_BUTTON_W 14
+#define FORM_BUTTON_X (GB_COLS - FORM_BUTTON_W)
+#define FORM_FIELD_W  (FORM_BUTTON_X - TEXT_X - 1)
+#define FORM_H         16
 #define STATUS_Y      42
 #define TITLE_Y       51
 #define CONTENT_Y     62
@@ -70,6 +76,9 @@
  * of gb_copybuf; these blocks sit above it and remain visible while a paged
  * helper temporarily replaces the Browser app bank. */
 #define BUI_LOCAL_BUF ((unsigned char *)0x2900)
+#define BUI_URL_BASE   ((char *)0x2900)
+#define BUI_URL_LINK   ((char *)0x2960)
+#define BUI_URL_RESULT ((char *)0x29C0)
 #define BUI_STAGE     ((char *)0x2B00)
 /* Divides a 16K page exactly, so a flush never straddles borrowed banks. */
 #define BUI_STAGE_CAP 0x0800
@@ -88,6 +97,10 @@
 #define BUI_PROXY     ((char *)0x3920)
 #define BUI_PROXY_HOST ((char *)0x3980)
 #define BUI_PROXY_PORT (*(volatile unsigned int *)0x39C0)
+#define BUI_FORM_VALUE  ((char *)0x3A18)
+#define BUI_FORM_URL    ((char *)0x3A48)
+#define BUI_FORM_ROW    (*(volatile unsigned char *)0x3AA9)
+#define BUI_FORM_VALUE_MAX 47
 #define BUI_SOURCE_FULL 0x01
 #define BUI_CAPTURE_ALL 0x01
 #define BUI_SAVE_PENDING 0x02
@@ -146,15 +159,18 @@ __endasm;
 #define path        (&gb_copybuf[PCW_PATH_OFS])
 #define pending     (&gb_copybuf[PCW_PENDING_OFS])
 #else
-static char url[URL_MAX + 1];
-static char host[HOST_MAX + 1];
-static char path[PATH_MAX + 1];
-static char request[REQUEST_MAX + 1];
-static char header_line[HEADER_MAX + 1];
-static unsigned char netbuf[NETBUF_SIZE];
-static char link_url[LINK_MAX + 1];
-static char alt_text[ALT_MAX + 1];
-static char entity_text[10];
+/* GBNET transfers at most 1024 bytes through #2200. Keep the Browser's
+ * persistent transient state in the otherwise-unused upper part of the shared
+ * module-data region so the CPC app bank has room for the HTML form parser. */
+#define request     ((char *)0x3300)          /* 241 bytes */
+#define header_line ((char *)0x3400)          /* 112 bytes */
+#define netbuf      ((unsigned char *)0x3470) /* 128 bytes */
+#define link_url    ((char *)0x34F0)          /* 48 bytes */
+#define alt_text    ((char *)0x3520)          /* 24 bytes */
+#define entity_text ((char *)0x3538)          /* 10 bytes */
+#define url         ((char *)0x3542)          /* 96 bytes */
+#define host        ((char *)0x35A2)          /* 64 bytes */
+#define path        ((char *)0x35E2)          /* 96 bytes */
 #endif
 #ifdef GB_PCW
 /* PCW networking is direct serial I/O, so transient protocol state and the
@@ -163,10 +179,10 @@ static char entity_text[10];
 #define back_url (&gb_copybuf[PCW_BACK_OFS])
 #define BROWSER_PCW_FRAME_BUFFER ((unsigned char *)&gb_copybuf[PCW_FRAME_OFS])
 #else
-static char title[TITLE_MAX + 1];
-static char fallback[FALLBACK_LINES * LINE_SIZE];
-static char back_url[URL_MAX + 1];
-static char pending[LINE_SIZE];
+#define title       ((char *)0x3642) /* 32 bytes */
+#define back_url    ((char *)0x3662) /* 96 bytes */
+#define pending     ((char *)0x36C2) /* 49 bytes */
+#define fallback    ((char *)0x3700) /* 343 bytes, ends at #3856 */
 #endif
 /* Drawing runs after each receive burst, so the consumed network buffer can
  * double as the short URL viewport and borrowed-bank line staging area without
@@ -190,6 +206,52 @@ static unsigned char parsed_len, parsed_digit;
 static unsigned char have_page, have_back, edit_changed;
 static unsigned char cache_page, cache_full;
 static unsigned char rx_len, rx_pos, receive_paused, line_budget;
+
+#ifdef GB_PCW
+static unsigned char read_down_key(void) __naked
+{
+__asm
+    ld a,#0x83
+    out (0xF3),a
+    ld a,(0xFFFA)
+    and #0x40
+    ret
+__endasm;
+}
+#else
+static unsigned char read_down_key(void) __naked
+{
+__asm
+    ld a,#2
+    call #0xBB1E
+    jr z,1$
+    ld a,#1
+    ret
+1$:
+    xor a
+    ret
+__endasm;
+}
+#endif
+
+/* caret_tick is idle while no field is being edited, so it also provides the
+ * Browser-local initial delay and held-key repeat without growing BSS. */
+static unsigned char down_key_event(void)
+{
+    if (!read_down_key()) {
+        caret_tick = 0;
+        return 0;
+    }
+    if (!caret_tick) {
+        caret_tick = 12;
+        return 1;
+    }
+    if (!--caret_tick) {
+        caret_tick = 4;
+        return 1;
+    }
+    return 0;
+}
 
 #ifndef GB_PCW
 static const unsigned char netcfg[22] = {
@@ -261,16 +323,6 @@ static void source_byte(unsigned char c)
     }
     BUI_STAGE[BUI_STAGE_LEN++] = (char)c;
     if (BUI_STAGE_LEN == BUI_STAGE_CAP) receive_paused |= RECEIVE_PAUSE_FLUSH;
-}
-
-static void persist_proxy(void)
-{
-    unsigned char i, d = gb_drives();
-    (void)web_op(9);                         /* update the live KCFG text */
-    gb_set_drive((d & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
-    for (i = 0; i < 4; i++) gb_back();
-    gb_set_name("GEOBENCHCFG");
-    gb_fs_save((char *)0x1000, *(volatile unsigned int *)0x1200);
 }
 
 static unsigned char ring_index(unsigned char start, unsigned char rel)
@@ -384,9 +436,19 @@ static void link_begin(const char *href)
 
 static void link_end(void) { output_break(1); }
 
-static void image_alt(const char *alt)
+static void form_tag(unsigned char kind, unsigned char attr_start)
 {
-    output_char('['); output_text(alt); output_char(']');
+    UI_N = kind;
+    *(const char **)UI_NAME = header_line + attr_start;
+    if (web_op(14)) {
+        output_break(1);
+        pending[0] = FORM_MARK;
+        pending_len = 1;
+        add_line();
+        pending[0] = FORM_CONT_MARK;
+        pending_len = 1;
+        add_line();
+    }
 }
 
 #define GB_HTML_TAG_MAX          HEADER_MAX
@@ -399,13 +461,14 @@ static void image_alt(const char *alt)
 #define GB_HTML_ENTITY_BUFFER    entity_text
 #define GB_HTML_RAW_ATTRS        1
 #define GB_HTML_NO_IMAGE_ALT     1
+#define GB_HTML_NO_FORM_CLOSE    1
 #define GB_HTML_NAMED_ENTITIES_ONLY 1
 #define GB_HTML_EMIT_TEXT(c)     output_char(c)
 #define GB_HTML_EMIT_TITLE(c)    title_char(c)
 #define GB_HTML_EMIT_BREAK(k)    output_break(k)
 #define GB_HTML_LINK_BEGIN(u)    link_begin(u)
 #define GB_HTML_LINK_END()       link_end()
-#define GB_HTML_IMAGE_ALT(a)     image_alt(a)
+#define GB_HTML_FORM_TAG(k, a)   form_tag(k, a)
 #include "gbhtml.h"
 
 static unsigned char body_write(const unsigned char *buf, unsigned int len)
@@ -449,26 +512,6 @@ static char *put_dec(char *p, unsigned int v)
     }
     *p = 0;
     return p;
-}
-
-static unsigned char compose_url(void)
-{
-    const char *s;
-    unsigned char n = 0;
-#define APPEND_TEXT(t) do { s = (t); while (*s) { if (n >= URL_MAX) return 0; url[n++] = *s++; } } while (0)
-    APPEND_TEXT("http://");
-    APPEND_TEXT(host);
-    if (port != 80) {
-        if (n >= URL_MAX) return 0;
-        url[n++] = ':';
-        put_dec(alt_text, port);
-        APPEND_TEXT(alt_text);
-    }
-    APPEND_TEXT(path);
-    url[n] = 0;
-    url_len = n;
-    return 1;
-#undef APPEND_TEXT
 }
 
 static unsigned char parse_url(void)
@@ -537,58 +580,14 @@ static unsigned char apply_proxy(void)
     return 0;
 }
 
-static unsigned char copy_redirect(char *dst, const char *src, unsigned char max)
+static unsigned char resolve_redirect(const char *location)
 {
-    unsigned char n = 0;
-    while (*src && *src != '#') {
-        if (n >= max) return 0;
-        dst[n++] = *src++;
-    }
-    dst[n] = 0;
-    return 1;
-}
-
-static unsigned char resolve_redirect(void)
-{
-    const char *loc = request;
-    const char *p, *base_end = path;
-    unsigned char n = 0;
-    header_line[0] = 0;
-    if (!*loc) return 0;
-    if (ci_prefix(loc, "http://") || ci_prefix(loc, "https://")) {
-        if (!copy_redirect(url, loc, URL_MAX)) return 0;
-        url_len = (unsigned char)text_len(url);
-        return parse_url();
-    }
-    if (loc[0] == '/' && loc[1] == '/') {
-        url[0] = 'h'; url[1] = 't'; url[2] = 't'; url[3] = 'p'; url[4] = ':';
-        if (!copy_redirect(url + 5, loc, URL_MAX - 5)) return 0;
-        url_len = (unsigned char)text_len(url);
-        return parse_url();
-    }
-    if (*loc == '/') {
-        if (!copy_redirect(header_line, loc, PATH_MAX)) return 0;
-    } else if (*loc == '?') {
-        p = path;
-        while (*p && *p != '?') {
-            if (n >= PATH_MAX) return 0;
-            header_line[n++] = *p++;
-        }
-        header_line[n] = 0;
-        if (!copy_redirect(header_line + n, loc, PATH_MAX - n)) return 0;
-    } else {
-        p = path;
-        while (*p && *p != '?') { if (*p == '/') base_end = p + 1; p++; }
-        for (p = path; p < base_end; p++) {
-            if (n >= PATH_MAX) return 0;
-            header_line[n++] = *p;
-        }
-        header_line[n] = 0;
-        if (!copy_redirect(header_line + n, loc, PATH_MAX - n)) return 0;
-    }
-    for (n = 0; header_line[n]; n++) path[n] = header_line[n];
-    path[n] = 0;
-    return compose_url();
+    copy_url(BUI_URL_BASE, url);
+    copy_url(BUI_URL_LINK, location);
+    if (!web_op(18)) return 0;
+    copy_url(url, BUI_URL_RESULT);
+    url_len = (unsigned char)text_len(url);
+    return parse_url();
 }
 
 static unsigned char build_request(void)
@@ -661,7 +660,7 @@ static void headers_complete(void)
         receive_paused = 0;
         line_budget = cache_page ? 0 : FALLBACK_LINES;
         title_len = 0; title[0] = 0;
-        if (!resolve_redirect()) redir_err = (status_text != prev_status ? status_text : "Bad redirect");
+        if (!resolve_redirect(request)) redir_err = (status_text != prev_status ? status_text : "Bad redirect");
         else if (!build_request()) redir_err = "Bad redirect";
         else if (!apply_proxy()) redir_err = "Bad redirect";
         if (redir_err) {
@@ -757,7 +756,7 @@ static void open_link(const char *href)
         set_status("No local link"); return;
     }
     copy_url(back_url, url);
-    if (!copy_redirect(request, href, URL_MAX) || !resolve_redirect()) {
+    if (!resolve_redirect(href)) {
         copy_url(url, back_url);
         url_len = (unsigned char)text_len(url);
         parse_url();
@@ -766,6 +765,13 @@ static void open_link(const char *href)
     }
     have_back = 1;
     start_page();
+}
+
+static void submit_form(void)
+{
+    if (state != ST_IDLE) return;
+    editing = caret_on = 0;
+    if (web_op(15)) open_link(BUI_FORM_URL);
 }
 
 static void start_local(void)
@@ -893,7 +899,7 @@ static void run_menu(void)
         } else if (have_page) save_source();
         else set_status("No page to save");
     } else if (action == BUI_ACT_PROXY) {
-        persist_proxy();
+        (void)web_op(9);
         set_status(BUI_PROXY[0] ? "HTTP proxy enabled" : "Direct enabled");
     }
     dirty = 1;
@@ -912,9 +918,9 @@ static void draw_url(void)
 {
     make_url_view();
     gb_fill(2, URL_Y, URL_FIELD_W, URL_H, 1);
-    gb_frame(2, URL_Y, URL_FIELD_W, URL_H, editing ? 3 : 2);
+    gb_frame(2, URL_Y, URL_FIELD_W, URL_H, editing == 1 ? 3 : 2);
     gb_textbw(4, (unsigned char)(URL_Y + 2), url_view);
-    if (editing && caret_on)
+    if (editing == 1 && caret_on)
         gb_fill((unsigned char)(4 + ((unsigned int)text_len(url_view) * 3) / 2),
                 (unsigned char)(URL_Y + 10), 2, 1, 3);
     gb_fill(GO_X, URL_Y, GO_W, URL_H, 1);
@@ -941,6 +947,32 @@ static void redraw_caret(void)
     gb_curshow();
 }
 
+static void draw_form(unsigned char y)
+{
+    char *text = BUI_FORM_VALUE;
+    unsigned char len = (unsigned char)text_len(text);
+    unsigned char max = (unsigned char)(((FORM_FIELD_W - 4) * 2) / 3);
+    unsigned char bottom = (unsigned char)(CONTENT_Y + VIEW_ROWS * 8);
+    unsigned char h = y + FORM_H <= bottom ? FORM_H : (unsigned char)(bottom - y);
+    unsigned char text_y = h == FORM_H ? (unsigned char)(y + 4) : y;
+    if (len > max) text += len - max;
+    gb_fill(TEXT_X, y, FORM_FIELD_W, h, 1);
+    gb_frame(TEXT_X, y, FORM_FIELD_W, h, editing == 2 ? 3 : 2);
+    gb_textbw((unsigned char)(TEXT_X + 2), text_y, text);
+    if (editing == 2 && caret_on)
+        gb_fill((unsigned char)(TEXT_X + 2 + ((unsigned int)text_len(text) * 3) / 2),
+                (unsigned char)(text_y + 1), 1, 6, 3);
+    gb_fill(FORM_BUTTON_X, y, FORM_BUTTON_W, h, 0);
+    gb_textrev((unsigned char)(FORM_BUTTON_X + 2), text_y, "Search");
+}
+
+static void redraw_form(void)
+{
+    gb_curhide();
+    draw_form(BUI_FORM_ROW);
+    gb_curshow();
+}
+
 static void draw_scrollbar(void)
 {
     unsigned char area = (unsigned char)(VIEW_ROWS * 8), th, ty, total = hist_count;
@@ -960,7 +992,7 @@ static void draw_scrollbar(void)
 
 static void draw_page(void)
 {
-    unsigned char row, rel, y, w;
+    unsigned char row, rel, y, w, mark;
     char *line;
     gb_fill(0, 24, GB_COLS, (unsigned char)(GB_LINES - 24), 0);
     draw_url();
@@ -974,7 +1006,13 @@ static void draw_page(void)
         if (rel >= hist_count) break;
         y = (unsigned char)(CONTENT_Y + row * 8);
         line = history_line(rel);
-        if ((unsigned char)line[0] == LINK_MARK) {
+        mark = (unsigned char)line[0];
+        if (mark == FORM_MARK) {
+            if (editing == 2) BUI_FORM_ROW = y;
+            draw_form(y);
+        } else if (mark == FORM_CONT_MARK) {
+            /* The second row is reserved by the form above it. */
+        } else if (mark == LINK_MARK) {
             line++;
             w = (unsigned char)(((unsigned int)text_len(line) * 3 + 1) / 2);
             if (w > GB_COLS - TEXT_X) w = (unsigned char)(GB_COLS - TEXT_X);
@@ -1009,12 +1047,14 @@ static void scroll_page(unsigned char down)
 static void handle_click(void)
 {
     unsigned char x = gb_mx(), y = gb_my();
+    unsigned char mark, form_y;
+    char *line;
     if (y >= URL_Y && y < URL_Y + URL_H) {
         if (x >= BACK_X) go_back();
         else if (x >= GO_X) { if (state == ST_IDLE) start_page(); }
         else if (x < 2 + URL_FIELD_W) {
             if (state != ST_IDLE) fail_page("Cancelled");
-            editing = 1; caret_on = 1; caret_tick = 0; redraw_url();
+            editing = 1; caret_on = 1; caret_tick = 0; dirty = 1; redraw_url();
         }
         return;
     }
@@ -1025,15 +1065,36 @@ static void handle_click(void)
     }
     if (y >= CONTENT_Y && y < CONTENT_Y + VIEW_ROWS * 8) {
         unsigned char rel = (unsigned char)(view_top + (y - CONTENT_Y) / 8);
-        if (rel < hist_count && (unsigned char)history_line(rel)[0] == LINK_MARK) {
-            open_link(history_line(rel) + 1);
+        if (rel < hist_count) {
+            form_y = (unsigned char)(CONTENT_Y + ((y - CONTENT_Y) / 8) * 8);
+            line = history_line(rel);
+            mark = (unsigned char)line[0];
+            if (mark == FORM_CONT_MARK && rel > view_top) {
+                line = history_line((unsigned char)(rel - 1));
+                if ((unsigned char)line[0] == FORM_MARK) {
+                    mark = FORM_MARK;
+                    form_y = (unsigned char)(form_y - 8);
+                }
+            }
+            if (mark == FORM_MARK) {
+                if (x >= TEXT_X && x < FORM_BUTTON_X - 1) {
+                    editing = 2; caret_on = 1; caret_tick = 0;
+                    BUI_FORM_ROW = form_y;
+                    dirty = 1; redraw_form();
+                } else if (x >= FORM_BUTTON_X) submit_form();
+            } else if (mark == LINK_MARK) {
+                open_link(line + 1);
+            }
         }
     }
 }
 
 static void handle_keys(void)
 {
-    unsigned char c, count = 8, changed = 0;
+    unsigned char c, count = 8, changed = 0, n;
+    if (!editing && down_key_event() &&
+        (state == ST_IDLE || (receive_paused & RECEIVE_PAUSE_FLOW)))
+        scroll_page(1);
     while (count-- && (c = gb_getkey()) != 0) {
         if (state != ST_IDLE) {
             if (c == 'g' || c == 'G') {
@@ -1055,6 +1116,19 @@ static void handle_keys(void)
             else if (c == 0x0E) scroll_page(1);
             continue;
         }
+        if (editing == 2) {
+            if (c == 0x0D) { submit_form(); return; }
+            if (c == 0x1B) {
+                editing = caret_on = 0; caret_tick = 0; redraw_form(); return;
+            }
+            n = (unsigned char)text_len(BUI_FORM_VALUE);
+            if ((c == 8 || c == 0x7F) && n) {
+                BUI_FORM_VALUE[n - 1] = 0; changed = 1;
+            } else if (c >= 32 && c < 127 && n < BUI_FORM_VALUE_MAX) {
+                BUI_FORM_VALUE[n++] = (char)c; BUI_FORM_VALUE[n] = 0; changed = 1;
+            }
+            continue;
+        }
         if (c == 0x0D) { start_page(); return; }
         if (c == 0x1B) {
             editing = 0; caret_on = 0; caret_tick = 0; redraw_url(); return;
@@ -1073,9 +1147,13 @@ static void handle_keys(void)
             url[url_len++] = (char)c; url[url_len] = 0; changed = 1;
         }
     }
-    if (changed) { caret_tick = 0; caret_on = 1; redraw_url(); }
+    if (changed) {
+        caret_tick = 0; caret_on = 1;
+        if (editing == 2) redraw_form(); else redraw_url();
+    }
     else if (editing && ++caret_tick >= 18) {
-        caret_tick = 0; caret_on ^= 1; redraw_caret();
+        caret_tick = 0; caret_on ^= 1;
+        if (editing == 2) redraw_form(); else redraw_caret();
     }
 }
 

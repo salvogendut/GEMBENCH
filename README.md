@@ -17,6 +17,11 @@ hardware.
 
 *The same desktop on the **MSX2** (V9938 Screen 6).*
 
+![The GEOBENCH desktop on the Amstrad PCW](screenshots/PCW-desktop.png)
+
+*The standalone **Amstrad PCW** port, shown in the 1985 emulator's monochrome
+green display mode.*
+
 A resident Z80 **kernel** owns the machine and exposes a fixed jump-table API; the
 **apps are written in C** (SDCC) and run co-resident in expansion-bank pages,
 reaching the kernel through `libgb`. It's a graphical layer on top of an existing
@@ -25,8 +30,17 @@ DOS (AMSDOS / UniDOS / MSX-DOS 2), not a replacement OS — smaller scope than
 
 The desktop, file tools and graphical Shell build for all targets from the same
 source tree. The CPC and PCW distributions also ship Telnet, network diagnostics,
-the graphical WGET HTTP downloader, and a small streaming HTTP browser; PCW
-networking uses PerryFi/PerryNet. Targets:
+the graphical WGET HTTP downloader, and a working streaming HTTP browser with
+links and GET search forms; PCW networking uses PerryFi/PerryNet.
+
+<p align="center">
+  <img src="screenshots/CPC-Browser.png" alt="GEOBENCH Browser running on the Amstrad CPC" width="48%">
+  <img src="screenshots/PCW-browser.png" alt="GEOBENCH Browser running on the Amstrad PCW" width="48%">
+</p>
+
+*The GEOBENCH Browser on the **Amstrad CPC** (left) and **Amstrad PCW** (right).*
+
+Targets:
 the CPC (Albireo/M4 card + AMSDOS floppy), the [MSX2](docs/MSX2.md)
 (MSX-DOS 2 / Nextor, V9938 Screen 6) and the [Amstrad PCW](docs/PCW.md)
 (8256/8512 — boots standalone from its own boot sector, CGA2 colour in the

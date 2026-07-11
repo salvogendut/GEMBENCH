@@ -121,11 +121,11 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/DECO.RAW=DECO.SAV \
     --add build/pcw/LOGO.PIC=LOGO.PIC \
     --add build/pcw/TLEUNG.PIC=TLEUNG.PIC \
-    --add build/pcw/CLASSIC.FNT=CLASSIC.FNT \
-    --add assets/WELCOME.TXT=WELCOME.TXT
+    --add build/pcw/CLASSIC.FNT=CLASSIC.FNT
 
 # --- COMPANION.DSK: pictures, TELNET, backdrops, spare assets (plain data disc)
-# CF2 is tight; LOGO.PIC, TLEUNG.PIC and CLASSIC.FNT live on the boot disk.
+# CF2 is tight; LOGO.PIC, TLEUNG.PIC and CLASSIC.FNT live on the boot disk,
+# while the duplicated WELCOME.TXT lives on Companion only.
 # The largest/redundant pictures are skipped so the PerryNet network tools fit.
 COMP_ADDS=()
 for pic in assets/pictures/*.PIC; do

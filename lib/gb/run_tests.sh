@@ -9,3 +9,7 @@ trap 'rm -rf "$tmp"' EXIT
 "$tmp/test_gbhttp"
 "$CC" -Wall -Wextra -std=c99 -o "$tmp/test_gbhtml" test_gbhtml.c
 "$tmp/test_gbhtml"
+"$CC" -Wall -Wextra -std=c99 -o "$tmp/test_gbform" test_gbform.c
+"$tmp/test_gbform"
+"$CC" -Wall -Wextra -std=c99 -o "$tmp/test_gburl" test_gburl.c
+"$tmp/test_gburl"
