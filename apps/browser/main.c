@@ -8,10 +8,9 @@
 #define URL_MAX        95
 #define HOST_MAX       63
 #define PATH_MAX       95
-/* URL_MAX caps host + port + path at 88 characters. The fixed request text is
- * 108, so 199 leaves three bytes beyond the longest possible HTTP/1.0 request. */
-#define REQUEST_MAX   199
+#define REQUEST_MAX   240
 #define HEADER_MAX    111
+/* Increase request length for explicit headers; keep parser headers compact. */
 #ifdef GB_PCW
 #define NETBUF_SIZE    64
 #else
@@ -52,7 +51,7 @@
 #define LINE_SIZE     (TEXT_COLS + 1)
 #define VIEW_ROWS     ((GB_LINES - CONTENT_Y - 2) / 8)
 #define CACHE_LINES   255
-#define FALLBACK_LINES 8
+#define FALLBACK_LINES 7
 
 /* The cooperative app-page pool is always mapped below #4000. Browser claims
  * one otherwise-free page for rendered lines and returns it through the normal
@@ -94,6 +93,7 @@
 #define BUI_LOCAL_PAGE 0x04
 #define BUI_PROXY_ON 0x08
 #define BUI_SAVE_WORKER 0x10
+#define RECEIVE_PAUSE_FLOW 0x01
 #define RECEIVE_PAUSE_FLUSH 0x02
 
 #define UI_OP         (*(volatile unsigned char *)0x1700)
@@ -259,6 +259,10 @@ static void source_flush(void)
 static void source_byte(unsigned char c)
 {
     if (BUI_FLAGS & BUI_SOURCE_FULL) return;
+    if (BUI_STAGE_LEN >= BUI_STAGE_CAP) {
+        receive_paused |= RECEIVE_PAUSE_FLUSH;
+        return;
+    }
     BUI_STAGE[BUI_STAGE_LEN++] = (char)c;
     if (BUI_STAGE_LEN == BUI_STAGE_CAP) receive_paused |= RECEIVE_PAUSE_FLUSH;
 }
@@ -344,7 +348,7 @@ static void add_line(void)
         !(BUI_CTRL & BUI_CAPTURE_ALL)) {
         line_budget--;
         if (!line_budget) {
-            receive_paused = 1;
+            receive_paused |= RECEIVE_PAUSE_FLOW;
             set_status(cache_full ? "Page cache is full" : "Scroll down for more");
         }
     }
@@ -602,7 +606,10 @@ static unsigned char build_request(void)
     ADD_TEXT("GET "); ADD_TEXT(BUI_PROXY[0] ? url : path);
     ADD_TEXT(" HTTP/1.0\r\nHost: "); ADD_TEXT(host);
     if (port != 80) { if (p < limit) *p++ = ':'; p = put_dec(p, port); }
-    ADD_TEXT("\r\nUser-Agent: GB/1\r\nConnection: close\r\n\r\n");
+    ADD_TEXT("\r\nUser-Agent: GB/1\r\n");
+    ADD_TEXT("Accept: text/html,text/plain,*/*;q=0.8\r\n");
+    ADD_TEXT("Accept-Encoding: identity\r\n");
+    ADD_TEXT("Connection: close\r\n\r\n");
     if (p >= limit) { request[REQUEST_MAX] = 0; return 0; }
     *p = 0;
     return 1;
@@ -693,7 +700,7 @@ static void headers_complete(void)
 static void process_rx(void)
 {
     unsigned char c;
-    while (rx_pos < rx_len && state == ST_RECV && !receive_paused) {
+    while (rx_pos < rx_len && state == ST_RECV && !(receive_paused & RECEIVE_PAUSE_FLOW)) {
         if (!header_done) {
             c = netbuf[rx_pos++];
             if (c == '\r') continue;
@@ -798,12 +805,12 @@ static void start_local(void)
 static void local_tick(void)
 {
     unsigned char c;
-    if (state != ST_FILE || receive_paused) return;
-    while (BUI_LOCAL_POS < BUI_LOCAL_LEN && !receive_paused) {
+    if (state != ST_FILE || (receive_paused & RECEIVE_PAUSE_FLOW)) return;
+    while (BUI_LOCAL_POS < BUI_LOCAL_LEN && !(receive_paused & RECEIVE_PAUSE_FLOW)) {
         c = BUI_LOCAL_BUF[BUI_LOCAL_POS++];
         body_write(&c, 1);
     }
-    if (receive_paused || BUI_LOCAL_POS < BUI_LOCAL_LEN) return;
+    if ((receive_paused & RECEIVE_PAUSE_FLOW) || BUI_LOCAL_POS < BUI_LOCAL_LEN) return;
     if (!web_op(10)) finish_page();
 }
 
@@ -831,10 +838,10 @@ static void network_tick(void)
         state = ST_RECV; idle_frames = 0; set_status("Waiting..."); return;
     }
     if (state != ST_RECV) return;
-    if (receive_paused) return;
+    if (receive_paused & RECEIVE_PAUSE_FLOW) return;
     if (rx_pos < rx_len) {
         process_rx();
-        if (state != ST_RECV || receive_paused) return;
+        if (state != ST_RECV || (receive_paused & RECEIVE_PAUSE_FLOW)) return;
     }
 #ifdef GB_PCW
     burst = 4;
@@ -848,7 +855,7 @@ static void network_tick(void)
         rx_len = (unsigned char)n;
         rx_pos = 0;
         process_rx();
-        if (receive_paused) return;
+        if (receive_paused & RECEIVE_PAUSE_FLOW) return;
     }
     if (state != ST_RECV || n) return;
     if (transport_rx_status == GB_NET_RX_CLOSED) {
@@ -947,7 +954,7 @@ static void redraw_caret(void)
 static void draw_scrollbar(void)
 {
     unsigned char area = (unsigned char)(VIEW_ROWS * 8), th, ty, total = hist_count;
-    if (receive_paused && !cache_full && total < CACHE_LINES - VIEW_ROWS)
+    if ((receive_paused & RECEIVE_PAUSE_FLOW) && !cache_full && total < CACHE_LINES - VIEW_ROWS)
         total = (unsigned char)(total + VIEW_ROWS);
     gb_fill(SCROLL_X, CONTENT_Y, SCROLL_W, area, 1);
     if (total <= VIEW_ROWS) { th = area; ty = CONTENT_Y; }
@@ -993,10 +1000,11 @@ static void scroll_page(unsigned char down)
 {
     if (down) {
         if (view_top + VIEW_ROWS < hist_count) view_top++;
-        else if ((state == ST_RECV || state == ST_FILE) && receive_paused && !cache_full) {
+        else if ((state == ST_RECV || state == ST_FILE) &&
+                 (receive_paused & RECEIVE_PAUSE_FLOW) && !cache_full) {
             view_top++;
             line_budget = 1;
-            receive_paused = 0;
+            receive_paused &= (unsigned char)~RECEIVE_PAUSE_FLOW;
             set_status("Receiving page...");
             return;
         }
@@ -1034,8 +1042,8 @@ static void handle_keys(void)
     while (count-- && (c = gb_getkey()) != 0) {
         if (state != ST_IDLE) {
             if (c == 0x1B) fail_page("Cancelled");
-            else if (receive_paused && c == 0x10) scroll_page(0);
-            else if (receive_paused && c == 0x0E) scroll_page(1);
+            else if ((receive_paused & RECEIVE_PAUSE_FLOW) && c == 0x10) scroll_page(0);
+            else if ((receive_paused & RECEIVE_PAUSE_FLOW) && c == 0x0E) scroll_page(1);
             continue;
         }
         if (!editing) {
@@ -1085,7 +1093,7 @@ static void frame_tick(void)
     handle_keys();
     network_tick();
     if (state == ST_IDLE && (BUI_CTRL & BUI_SAVE_PENDING)) save_source();
-    if (dirty && (state == ST_IDLE || receive_paused || ++redraw_div >= 6)) {
+    if (dirty && (state == ST_IDLE || (receive_paused & RECEIVE_PAUSE_FLOW) || ++redraw_div >= 6)) {
         gb_curhide(); draw_page(); gb_curshow();
     }
 }
