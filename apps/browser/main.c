@@ -687,7 +687,11 @@ static void process_rx(void)
             c = netbuf[rx_pos++];
             if (c == '\r') continue;
             if (c == '\n') {
-                if (line_overflow) { fail_page("Header too long"); return; }
+                if (line_overflow) {
+                    line_overflow = 0;
+                    gb_http_line_len = 0;
+                    continue;
+                }
                 if (!gb_http_line_len) { headers_complete(); continue; }
                 gb_http_process_header_line();
                 gb_http_line_len = 0;
@@ -1111,7 +1115,10 @@ void main(void)
     copy_url(BUI_MODNAME, "GBWEB   MOD");
     (void)web_op(12);
     url[url_len] = 0;
+    cache_page = 0;
+#ifdef GB_PCW
     cache_page = alloc_cache_page();
+#endif
     status_text = cache_page ? "Ready" : "Ready: limited page cache";
     editing = dirty = 1;
     gb_wm_managed(&browser_window);
