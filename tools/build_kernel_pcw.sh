@@ -35,7 +35,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/p
 APPDEFS="-DGB_PCW" DATA_LOC=0x7380 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7900 DIALOGS=1 tools/build_capp.sh apps/wget build/pcw/WGET.RAW
-GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APPDEFS="-DGB_PCW" DATA_LOC=0x7FA4 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
+GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s LOAD_LIMIT=0x7F80 APPDEFS="-DGB_PCW" DATA_LOC=0x7FA4 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/pcw/BRSAVE.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/pcw/SHELL.RAW

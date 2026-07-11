@@ -2,8 +2,18 @@
 ;; assembly object, so using the general gblib.s would spend scarce app-bank
 ;; space on API trampolines that Browser never calls.
         .module gblib_browser
+        .globl  _gb_cls
         .globl  _gb_text
+        .globl  _gb_textk
         .globl  _gb_textbw
+        .globl  _gb_textrev
+        .globl  _gb_window
+        .globl  _gb_restorerect
+        .globl  _gb_saverect
+        .globl  _gb_mxp
+        .globl  _gb_clip_set
+        .globl  _gb_clip_get
+        .globl  _gb_clip_len
         .globl  _gb_ui
         .globl  _gb_net
         .globl  _gb_fill
@@ -31,10 +41,23 @@ sv_ret: .ds     2
 
         .area   _CODE
 
+_gb_cls:
+        jp      0x8003
+
 _gb_text:
         ld      b, a
         ld      c, l
         ld      d, #1
+        ld      e, #0
+        pop     hl
+        ex      (sp), hl
+        call    0x800C
+        ret
+
+_gb_textk:
+        ld      b, a
+        ld      c, l
+        ld      d, #2
         ld      e, #0
         pop     hl
         ex      (sp), hl
@@ -49,6 +72,73 @@ _gb_textbw:
         pop     hl
         ex      (sp), hl
         call    0x800C
+        ret
+
+_gb_textrev:
+        ld      b, a
+        ld      c, l
+        ld      d, #1
+        ld      e, #2
+        pop     hl
+        ex      (sp), hl
+        call    0x800C
+        ret
+
+_gb_window:
+        ld      b, a
+        ld      c, l
+        pop     hl
+        ld      (sv_ret), hl
+        pop     hl
+        ld      d, l
+        ld      e, h
+        pop     hl
+        call    0x800F
+        ld      hl, (sv_ret)
+        jp      (hl)
+
+_gb_saverect:
+        ld      b, a
+        ld      c, l
+        pop     hl
+        ld      (sv_ret), hl
+        pop     hl
+        ld      d, l
+        ld      e, h
+        pop     hl
+        call    0x8036
+        ld      hl, (sv_ret)
+        jp      (hl)
+
+_gb_restorerect:
+        ld      b, a
+        ld      c, l
+        pop     hl
+        ld      (sv_ret), hl
+        pop     hl
+        ld      d, l
+        ld      e, h
+        pop     hl
+        call    0x8039
+        ld      hl, (sv_ret)
+        jp      (hl)
+
+_gb_mxp:
+        call    0x80A2
+        ex      de, hl
+        ret
+
+_gb_clip_set:
+        jp      0x80A5
+_gb_clip_get:
+        call    0x80A8
+        ld      d, b
+        ld      e, c
+        ret
+_gb_clip_len:
+        call    0x80AB
+        ld      d, b
+        ld      e, c
         ret
 
 _gb_ui:

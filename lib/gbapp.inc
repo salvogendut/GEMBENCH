@@ -21,6 +21,11 @@
 ; ---------------------------------------------------------------------------
 
 APP_BASE        equ   #4000        ; the #4000-#7FFF paging window
+                ifdef PLATFORM_PCW
+APP_LOAD_MAX    equ   #3F80        ; CP/M record-rounded Browser ends at #7F80
+                else
+APP_LOAD_MAX    equ   #3F00        ; keep CPC/MSX app loads below #7F00
+                endif
 
 ; Screen extents (#287): byte columns / lines per platform - the asm-side
 ; counterpart of gb.h's GB_COLS/GB_LINES. CPC values keep the image identical.

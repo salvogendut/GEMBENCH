@@ -294,27 +294,7 @@ static unsigned char alloc_cache_page(void)
 
 static void source_flush(void)
 {
-    unsigned char page;
-    /* Stay in the Browser bank: paging GBWEB here used to lose the caller page
-     * during large responses on CPC and PCW. */
-    if (!BUI_STAGE_LEN || (BUI_FLAGS & BUI_SOURCE_FULL)) return;
-    if (!BUI_NPAGES || BUI_TAIL == 0x4000) {
-        if (BUI_NPAGES >= 3 || !(page = alloc_cache_page())) {
-            BUI_FLAGS |= BUI_SOURCE_FULL;
-            BUI_STAGE_LEN = 0;
-            return;
-        }
-        BUI_PAGES[BUI_NPAGES++] = page;
-        BUI_TAIL = 0;
-    }
-    PIC_PAGE_K = BUI_PAGES[BUI_NPAGES - 1];
-    PIC_PAGE2_K = 0;
-    gb_pic_edit_buf = (unsigned int)BUI_STAGE;
-    gb_pic_edit_off = BUI_TAIL;
-    FS_SAVE_LEN_K = BUI_STAGE_LEN;
-    if (gb_pic_edit(GB_PICEDIT_WRITE)) BUI_TAIL += BUI_STAGE_LEN;
-    else BUI_FLAGS |= BUI_SOURCE_FULL;
-    BUI_STAGE_LEN = 0;
+    if (BUI_STAGE_LEN) (void)web_op(6);
 }
 
 static char *history_line(unsigned char rel)
@@ -1016,17 +996,21 @@ static void draw_page(void)
 
 static void scroll_page(unsigned char down)
 {
+    unsigned char max_top;
     if (down) {
-        if (view_top + VIEW_ROWS < hist_count) view_top++;
+        if (view_top + VIEW_ROWS < hist_count) {
+            max_top = (unsigned char)(hist_count - VIEW_ROWS);
+            view_top = (unsigned char)(max_top - view_top > 3 ? view_top + 3 : max_top);
+        }
         else if ((state == ST_RECV || state == ST_FILE) &&
                  (receive_paused & RECEIVE_PAUSE_FLOW) && !cache_full) {
-            view_top++;
-            line_budget = 1;
+            view_top = (unsigned char)(view_top + 3);
+            line_budget = 3;
             receive_paused &= (unsigned char)~RECEIVE_PAUSE_FLOW;
             set_status("Receiving page...");
             return;
         }
-    } else if (view_top) view_top--;
+    } else if (view_top) view_top = (unsigned char)(view_top > 3 ? view_top - 3 : 0);
     dirty = 1;
 }
 
@@ -1158,10 +1142,7 @@ void main(void)
     copy_url(BUI_MODNAME, "GBWEB   MOD");
     (void)web_op(12);
     url[url_len] = 0;
-    cache_page = 0;
-#ifdef GB_PCW
     cache_page = alloc_cache_page();
-#endif
     status_text = cache_page ? "Ready" : "Ready: limited page cache";
     editing = dirty = 1;
     gb_wm_managed(&browser_window);

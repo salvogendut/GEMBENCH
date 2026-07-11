@@ -34,10 +34,10 @@ picedit_start
 pe_get          ld    a,(BANK_CUR)
                 push  af
                 call  pe_pic_to_tmp
-                ld    c,a
+                ld    d,a
                 pop   af
                 call  pe_bank_set
-                ld    a,c
+                ld    a,d
                 or    a
                 ret   z
                 ld    hl,PIC_TMP
@@ -54,10 +54,10 @@ pe_put          ld    hl,(PIC_EDIT_BUF)
                 ld    a,(BANK_CUR)
                 push  af
                 call  pe_tmp_to_pic
-                ld    c,a
+                ld    d,a
                 pop   af
                 call  pe_bank_set
-                ld    a,c
+                ld    a,d
                 ret
 
 pe_chunk        ld    a,(BANK_CUR)
@@ -68,19 +68,19 @@ pe_chunk        ld    a,(BANK_CUR)
                 call  pe_seg_get16
                 jr    pe_rw_done
 
-; Generic short write used by Browser's rendered-page cache (#371). The source
-; is always in low RAM and the requested range stays within the first 16K page.
+; Generic write used by Browser's rendered-page and source caches (#371/#373).
+; The source is always in low RAM and the requested range stays in one 16K page.
 pe_write        ld    a,(BANK_CUR)
                 push  af
                 ld    hl,(PIC_EDIT_OFF)
                 ld    de,(PIC_EDIT_BUF)
                 ld    bc,(fs_save_len)
-                call  pe_seg_put
+                call  pe_seg_put16
 pe_rw_done
-                ld    c,a
+                ld    d,a
                 pop   af
                 call  pe_bank_set
-                ld    a,c
+                ld    a,d
                 ret
 
 pe_pic_to_tmp   ld    de,PIC_TMP
@@ -143,6 +143,7 @@ pe_sg_map       push  bc
                 ret
 
 pe_seg_put      ld    b,0
+pe_seg_put16
                 bit   6,h
                 jr    nz,pe_sp_2
                 ld    a,(PIC_PAGE)
