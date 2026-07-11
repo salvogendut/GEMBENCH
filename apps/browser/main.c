@@ -647,6 +647,8 @@ static void headers_complete(void)
         gb_http_status_code == 307 || gb_http_status_code == 308);
     header_done = 1;
     if (redirect) {
+        const char *redir_err = 0;
+        const char *prev_status = status_text;
         if (gb_http_have_location != 1) {
             fail_page(gb_http_have_location == 2 ? "Redirect too long" :
                                                   "Redirect missing");
@@ -657,8 +659,17 @@ static void headers_complete(void)
         if ((BUI_CTRL & BUI_PROXY_ON) && !parse_url()) {
             fail_page("Bad redirect base"); return;
         }
-        if (!resolve_redirect() || !build_request() || !apply_proxy()) {
-            fail_page("Bad redirect"); return;
+        hist_start = hist_count = view_top = pending_len = cache_full = 0;
+        have_page = 0;
+        receive_paused = 0;
+        line_budget = cache_page ? VIEW_ROWS : FALLBACK_LINES;
+        title_len = 0; title[0] = 0;
+        if (!resolve_redirect()) redir_err = (status_text != prev_status ? status_text : "Bad redirect");
+        else if (!build_request()) redir_err = "Bad redirect";
+        else if (!apply_proxy()) redir_err = "Bad redirect";
+        if (redir_err) {
+            fail_page(redir_err);
+            return;
         }
         redirect_count++;
         reset_response();
