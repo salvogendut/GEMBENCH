@@ -84,7 +84,7 @@ build should therefore:
 
 - rebuild only the touched apps/modules;
 - always rebuild the packaged media (`QA/GEOBENCH.DSK`, `QA/COMPANION.DSK`,
-  `QA/CARD/`, `QA/GEOBENCH.IMG`);
+  `QA/MEDIA.DSK`, `QA/CARD/`, `QA/GEOBENCH.IMG`);
 - refresh the boot-splash build id from the current git commit.
 
 ## Static Contract Checks

@@ -1,11 +1,9 @@
 ;; pack_apps3.asm - FOURTH-pass .dsk packaging: sync the floppy distribution with
 ;; the Albireo card (#198 follow-up).
 ;;
-;; The card is staged by tools/stage_dist.sh, which GLOBS the backdrop tiles
-;; (build/*.BDP), the tracked custom icon sets (assets/iconsets/*.IST) and the sample
-;; pictures (assets/pictures/*.PIC). The floppy DSK is this hand-written save list, so
-;; those assets never made it onto the floppy - BACKDROP=/ICONS= silently fell back and
-;; only PENGUIN.PIC was viewable. This pass adds them (BIG.PIC omitted by request).
+;; The card is staged by tools/stage_dist.sh, which globs backdrop tiles and custom
+;; icon sets. The Main floppy keeps the same boot assets plus only LOGO.PIC for its
+;; default wallpaper; the complete gallery is generated separately as MEDIA.DSK.
 ;;
 ;; Like pack_apps/pack_apps2: RASM's DSK save APPENDS across invocations, so this runs
 ;; as its own fresh 64K image into the SAME build/gbkern.dsk. Keep this list in step
@@ -29,10 +27,6 @@ bdp_waves2_e
 ist_refined     incbin "../assets/iconsets/REFINED.IST" ; ICONS=REFINED custom set (6324 B, #198)
 ist_refined_e
                 save  "REFINED.IST",ist_refined,ist_refined_e-ist_refined,DSK,"build/gbkern.dsk"
-pic_logo        incbin "../assets/pictures/LOGO.PIC"    ; the GEOBENCH logo - 176x176, 7758 B, the
-pic_logo_e                                              ; only sample small enough to view on a bare
-                save  "LOGO.PIC",pic_logo,pic_logo_e-pic_logo,DSK,"build/gbkern.dsk" ; 128K machine (<=VIEW_MAX)
-                ; MANADO.PIC + TLEUNG.PIC are NOT packed on the floppy (256K+ samples, unviewable on
-                ; a 128K machine) to make room for the DECO/XMATRIX screensavers (#219 family). TLEUNG.PIC
-                ; still ships on the Albireo card (stage_dist.sh globs assets/pictures/*.PIC); MANADO.PIC
-                ; was deleted from the repo entirely.
+pic_logo        incbin "../assets/pictures/LOGO.PIC"    ; boot wallpaper; all pictures also ship
+pic_logo_e                                              ; on MEDIA.DSK and card/MSX PICS folders
+                save  "LOGO.PIC",pic_logo,pic_logo_e-pic_logo,DSK,"build/gbkern.dsk"

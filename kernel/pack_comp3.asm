@@ -1,4 +1,4 @@
-;; pack_comp3.asm - COMPANION floppy, pass 3 of 3 (#250). See pack_comp1.asm header.
+;; pack_comp3.asm - COMPANION floppy, pass 3 of 4 (#250). See pack_comp1.asm header.
 ;;
 ;; Pass 3: the rest of the screensaver set (the xscreensaver ports + CATCLK, ~42 KB).
                 org   #4000

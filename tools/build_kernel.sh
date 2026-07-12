@@ -195,11 +195,11 @@ build_variant() {                                # $1 = kernel name, $2 = rasm -
     "$RASM" kernel/pack_modules.asm -eo          # paged modules that no longer fit gbkern.asm
     "$RASM" kernel/pack_apps.asm -eo             # 2nd pass: overflow apps -> same .dsk (#114)
     "$RASM" kernel/pack_apps2.asm -eo            # 3rd pass: VIEWER + FILEMGR -> same .dsk (#142)
-    "$RASM" kernel/pack_apps3.asm -eo            # 4th pass: backdrops/REFINED/pictures -> same .dsk (#198)
+    "$RASM" kernel/pack_apps3.asm -eo            # 4th pass: backdrops/REFINED/LOGO -> same .dsk (#198/#379)
     cp build/GBKERN.RAW "build/$1.RAW"           # capture this card's kernel for the unified stage
 }
 # Clean only the CPC outputs - QA/MSX (the MSX2 target, #287) survives a CPC build.
-rm -rf QA/CARD QA/GEOBENCH.DSK QA/COMPANION.DSK QA/GEOBENCH.IMG; mkdir -p QA
+rm -rf QA/CARD QA/GEOBENCH.DSK QA/COMPANION.DSK QA/MEDIA.DSK QA/GEOBENCH.IMG; mkdir -p QA
 # Build both card kernels. QA/GEOBENCH.DSK keeps the Albireo/floppy-capable kernel
 # because that is the normal floppy boot image; QA/CARD and QA/GEOBENCH.IMG carry both.
 echo "Building the Albireo (GBALB) and M4 (GBM4) card kernels + the shared card -> QA/"
@@ -219,17 +219,23 @@ else
     echo "  (no iDSK at \$IDSK - floppy boots via RUN\"GBKERN; set IDSK= to add the GB.BAS loader)"
 fi
 # Companion floppy QA/COMPANION.DSK (#250): a non-bootable DATA disk with the extras
-# (Paint/Telnet/Xaos, all screensavers, the gallery pictures). Meant for drive B - the
+# (Paint/Telnet/Xaos and all screensavers). Meant for drive B - the
 # kernel loader falls back boot-drive(A) -> browse-drive(B), so these load from B while
 # their shared deps stay on Main. Four fresh 64K passes APPEND to one DSK (pass 1
-# creates it). All .RAW/.SAV are already built above; pictures are tracked assets.
+# creates it). All .RAW/.SAV are already built above.
 rm -f build/companion.dsk
-"$RASM" kernel/pack_comp1.asm -eo                  # apps + PENGUIN.PIC
-"$RASM" kernel/pack_comp2.asm -eo                  # TLEUNG.PIC + savers (1/2)
+"$RASM" kernel/pack_comp1.asm -eo                  # apps
+"$RASM" kernel/pack_comp2.asm -eo                  # savers (1/2)
 "$RASM" kernel/pack_comp3.asm -eo                  # savers (2/2)
 "$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP + BROWSER.APP + SHELL.APP
 cp build/companion.dsk QA/COMPANION.DSK
-echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Xaos + savers + pictures)"
+echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Xaos + savers)"
+MEDIA_ADDS=()
+for pic in assets/pictures/*.PIC; do
+    [ -e "$pic" ] && MEDIA_ADDS+=(--add "$pic")
+done
+python3 tools/mkcpcmedia.py QA/MEDIA.DSK "${MEDIA_ADDS[@]}"
+echo "  + QA/MEDIA.DSK (complete picture gallery; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
@@ -237,7 +243,7 @@ GB_BASIC_DIR="$GB_BASIC_DIR" tools/stage_dist.sh QA/CARD # GB.BAS auto-detect + 
 # A ready-to-flash card image (partitioned FAT16) for the Albireo CH376 card and M4 image mode.
 tools/build_card_img.sh QA/CARD QA/GEOBENCH.IMG \
     || echo "  (QA/GEOBENCH.IMG skipped - needs sfdisk + mkfs.fat + mtools)"
-echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: Albireo/M4 card; QA/GEOBENCH.DSK: floppy (RUN\"GB)"
+echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: Albireo/M4 card; QA/GEOBENCH.DSK + QA/MEDIA.DSK: floppies"
 
 # Leave build/ as the STORAGE-selected variant (default Albireo) so the --disk-a
 # test harness sees a predictable build/gbkern.dsk + build/GBKERN.RAW.
@@ -246,8 +252,8 @@ rm -f build/gbkern.dsk
 "$RASM" kernel/pack_modules.asm -eo >/dev/null  # paged modules that no longer fit gbkern.asm
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 "$RASM" kernel/pack_apps2.asm -eo >/dev/null     # 3rd pass: VIEWER + FILEMGR -> .dsk (#142)
-"$RASM" kernel/pack_apps3.asm -eo >/dev/null     # 4th pass: backdrops/REFINED/pictures -> .dsk (#198)
+"$RASM" kernel/pack_apps3.asm -eo >/dev/null     # 4th pass: backdrops/REFINED/LOGO -> .dsk (#198/#379)
 if [ -x "$IDSK" ]; then
     "$IDSK" build/gbkern.dsk -i build/GB.BAS -t 0 >/dev/null 2>&1 || true
 fi
-echo "Built QA/CARD + QA/GEOBENCH.IMG (Albireo/M4 card deploy) + QA/GEOBENCH.DSK (floppy); build/ = ${STORAGE:-albireo} variant"
+echo "Built QA/CARD + QA/GEOBENCH.IMG (Albireo/M4 card deploy) + CPC floppy set; build/ = ${STORAGE:-albireo} variant"

@@ -10,7 +10,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`build_kernel.sh`** — the one-shot build. Assembles the shipped **`GBALB`** (Albireo)
   and **`GBM4`** (M4) kernels, packs the apps, and stages the distribution into `QA/`:
   the loose card files (`QA/CARD/`), the floppy (`QA/GEOBENCH.DSK`), the companion
-  floppy (`QA/COMPANION.DSK`), and the shared card image (`QA/GEOBENCH.IMG`).
+  floppy (`QA/COMPANION.DSK`), the gallery disk (`QA/MEDIA.DSK`), and the shared
+  card image (`QA/GEOBENCH.IMG`).
   The IDE backend is archived (frozen, not built — see `docs/ARCHIVED.md`);
   rebuild it for recovery with `STORAGE=ide`. `STORAGE=m4` leaves an M4 dev-harness
   kernel in `build/`. `FAT16=1` and `EXTRA_RASM=...` tune the variant
@@ -45,6 +46,10 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`build_card_img.sh [CARD] [IMG]`** — builds a partitioned **FAT16 card image**
   (`QA/GEOBENCH.IMG` by default) from the staged `QA/CARD/` for Albireo and M4
   image mode. Called by `build_kernel.sh`.
+- **`mkcpcmedia.py OUT.dsk --add FILE ...`** — builds the extended 80-track,
+  single-sided AMSDOS DATA image used for the CPC picture gallery.
+- **`mkpcwdsk.py`** — builds bootable or data PCW CF2/CF2DD images, including
+  `QA/PCW/MEDIA.DSK`.
 - **`build_ide_img.sh`** — *(archived)* older IDE-only image helper.
 
 ## Paged kernel modules

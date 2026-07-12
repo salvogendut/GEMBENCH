@@ -1,11 +1,8 @@
-;; pack_comp2.asm - COMPANION floppy, pass 2 of 3 (#250). See pack_comp1.asm header.
+;; pack_comp2.asm - COMPANION floppy, pass 2 of 4 (#250). See pack_comp1.asm header.
 ;;
-;; Pass 2: a second gallery picture + the first half of the screensaver set (~41 KB).
+;; Pass 2: the first half of the screensaver set.
 ;; The .SAV names mirror tools/stage_dist.sh (build/<NAME>.RAW -> <NAME>.SAV).
                 org   #4000
-tle_img         incbin "../assets/pictures/TLEUNG.PIC"  ; sample picture -> TLEUNG.PIC
-tle_imgend
-                save  "TLEUNG.PIC",tle_img,tle_imgend-tle_img,DSK,"build/companion.dsk"
 cir_img         incbin "../build/SQUARES.RAW"   ; SQUARES.SAV (#219/#281) - also on Main as the
 cir_imgend                                      ; default idle saver; here so FM-B/Settings list all
                 save  "SQUARES.SAV",cir_img,cir_imgend-cir_img,DSK,"build/companion.dsk"

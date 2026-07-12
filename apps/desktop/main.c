@@ -211,18 +211,16 @@ static unsigned char wp_changed(void)
     return (unsigned char)!same11(wp_name, nm);
 }
 
-/* enter_sys: descend into the /GBENCH system folder if present (the card holds the
-   assets there), so gb_pic_open finds the wallpaper. Returns 1 if we descended (pair
-   with gb_back). A flat floppy (no GBENCH dir) returns 0 -> load from the root as-is.
-   Mirrors the Settings app's enter_sys, the proven depth-1 descent (#212). */
-static unsigned char enter_sys(void)
+/* enter_pics: descend into the root-level /PICS gallery if present, so gb_pic_open
+   finds the wallpaper on card/MSX media. Flat CPC/PCW floppies have no directories
+   and keep LOGO.PIC at root, so they fall through without descending. */
+static unsigned char enter_pics(void)
 {
     char *p = gb_dir1();
     while (p) {
         if (gb_isdir()) {
             const char *r = gb_entname();
-            if (r[0]=='G' && r[1]=='B' && r[2]=='E' && r[3]=='N'
-                && r[4]=='C' && r[5]=='H' && r[6]==' ') {
+            if (r[0]=='P' && r[1]=='I' && r[2]=='C' && r[3]=='S' && r[4]==' ') {
                 gb_chdir();
                 return 1;
             }
@@ -309,12 +307,12 @@ static void wp_init(void)
     if (!drive_present(wp_drive)) return;       /* bad qualified drive -> NONE fallback */
     old_drive = gb_get_drive();
     gb_set_drive(wp_drive);
-    descended = enter_sys();                     /* card: into /GBENCH; floppy: stays at root */
+    descended = enter_pics();                    /* card/MSX: /PICS; floppy: root */
     gb_set_name(nm);                             /* the focused (desktop) window's file arg */
     wp_bank = gb_pic_open();                   /* borrow a bank + parse the GBPC header */
     UI_MODAL_K = 0;                              /* picture loaders reuse #1700; keep menus live */
     wp_bank2 = 0;
-    if (descended) gb_back();                    /* /GBENCH -> root (depth-1, safe) */
+    if (descended) gb_back();                    /* /PICS -> root (depth-1, safe) */
     gb_set_drive(old_drive);
     if (wp_bank) {
         wp_bank2 = PIC_PAGE2_K;
