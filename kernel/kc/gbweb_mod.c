@@ -157,13 +157,13 @@ static void cfg_proxy(void)
     *(volatile unsigned int *)0x1200 = len;
 }
 
-static void save_cfg(void)
+static unsigned char save_cfg(void)
 {
     unsigned char i, d = gb_drives();
     gb_set_drive((d & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
     for (i = 0; i < 4; i++) gb_back();
     gb_set_name("GEOBENCHCFG");
-    gb_fs_save((char *)0x1000, *(volatile unsigned int *)0x1200);
+    return gb_fs_save((char *)0x1000, *(volatile unsigned int *)0x1200);
 }
 
 static void load_proxy(void)
@@ -200,7 +200,7 @@ static unsigned char parse_proxy(void)
     const char *p = BUI_PROXY;
     char *dst = BUI_PROXY_HOST;
     unsigned char n = 0, digit;
-    unsigned int port = 80;
+    BUI_PROXY_PORT = 80;
     BUI_CTRL &= (unsigned char)~BUI_PROXY_ON;
     if (!*p) return 1;
     if (prefix(p, "https://")) return 0;
@@ -209,18 +209,19 @@ static unsigned char parse_proxy(void)
     *dst = 0;
     if (!n || (n == 63 && *p && *p != ':' && *p != '/')) return 0;
     if (*p == ':') {
-        p++; port = 0;
+        p++; BUI_PROXY_PORT = 0;
         if (*p < '0' || *p > '9') return 0;
         while (*p >= '0' && *p <= '9') {
             digit = (unsigned char)(*p++ - '0');
-            if (port > 6553 || (port == 6553 && digit > 5)) return 0;
-            port = (unsigned int)(port * 10 + digit);
+            if (BUI_PROXY_PORT > 6553 ||
+                (BUI_PROXY_PORT == 6553 && digit > 5)) return 0;
+            BUI_PROXY_PORT = (unsigned int)(BUI_PROXY_PORT * 10 + digit);
         }
-        if (!port) return 0;
+        if (!*(volatile unsigned char *)0x39C0 &&
+            !*(volatile unsigned char *)0x39C1) return 0;
     }
     if (*p == '/') p++;
     if (*p) return 0;
-    BUI_PROXY_PORT = port;
     BUI_CTRL |= BUI_PROXY_ON;
     return 1;
 }
@@ -265,7 +266,7 @@ void main(void)
     UI_RES = 1;
     if (UI_OP == 6) source_put();
     else if (UI_OP == 7) source_free();
-    else if (UI_OP == 9) { cfg_proxy(); save_cfg(); }
+    else if (UI_OP == 9) { cfg_proxy(); UI_RES = save_cfg(); }
     else if (UI_OP == 10) local_read();
     else if (UI_OP == 11) UI_RES = parse_proxy();
     else if (UI_OP == 12) load_proxy();

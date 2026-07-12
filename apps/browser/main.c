@@ -113,6 +113,7 @@
 #define UI_OP         (*(volatile unsigned char *)0x1700)
 #define UI_N          (*(volatile unsigned char *)0x1703)
 #define UI_RES        (*(volatile unsigned char *)0x1704)
+#define UI_MODAL      (*(volatile unsigned char *)0x1705)
 #define UI_NAME       ((char *)0x1708)
 #define BUI_ACT_LOAD   1
 #define BUI_ACT_SAVE   2
@@ -125,6 +126,8 @@ static unsigned char web_call(void) __naked
 __asm
     ld a,#0x80
     call #0x80AE
+    xor a
+    ld (#0x1705),a
     ld a,c
     ret
 __endasm;
@@ -867,13 +870,16 @@ static void network_tick(void)
 
 static void save_source(void)
 {
+    unsigned char action;
     source_flush();
     BUI_CTRL &= (unsigned char)~BUI_SAVE_PENDING;
     if ((BUI_FLAGS & BUI_SOURCE_FULL) || !BUI_NPAGES) {
         set_status("Source cache full"); return;
     }
     UI_OP = 8; UI_RES = 0;
-    if (gb_ui() != BUI_ACT_SAVETO) { dirty = 1; return; }
+    action = gb_ui();
+    UI_MODAL = 0;
+    if (action != BUI_ACT_SAVETO) { dirty = 1; return; }
     BUI_SAVE_RESULT = 0;
     BUI_CTRL |= BUI_SAVE_WORKER;
     set_status("Saving...");
@@ -887,6 +893,7 @@ static void run_menu(void)
     UI_OP = 5; UI_N = BUI_WANT_MENU; UI_RES = 0;
     BUI_WANT_MENU = 0;
     action = gb_ui();
+    UI_MODAL = 0;
     if (action == BUI_ACT_LOAD) {
         if (socket_open) tr_close();
         state = ST_IDLE; receive_paused = 0;
@@ -899,8 +906,11 @@ static void run_menu(void)
         } else if (have_page) save_source();
         else set_status("No page to save");
     } else if (action == BUI_ACT_PROXY) {
-        (void)web_op(9);
-        set_status(BUI_PROXY[0] ? "HTTP proxy enabled" : "Direct enabled");
+        if (web_op(11)) {
+            if (web_op(9))
+                set_status(BUI_PROXY[0] ? "HTTP proxy enabled" : "Direct enabled");
+            else set_status("Save failed");
+        } else set_status("Invalid proxy");
     }
     dirty = 1;
 }

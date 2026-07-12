@@ -17,17 +17,20 @@
 unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen)
 {
     unsigned char x = 12, y = 60, w = 52, h = 34, plain = (unsigned char)(maxlen & 0x80);
-    unsigned char fl = 0, c, n = 0, done = 0, ok = 0, redraw = 1;
+    unsigned char fl = 0, c, n = 0, done = 0, ok = 0, redraw = 1, replace = plain;
     maxlen &= 0x7F;
     if (!plain && maxlen > 12) maxlen = 12;
     if (plain) { while (buf[n] && n < maxlen) n++; buf[n] = 0; }
     else buf[0] = 0;
     gb_modal_set(1);
+    while (gb_poll() & GB_FIRE) while (gb_getkey()) ;
     while (gb_getkey()) ;                   /* drop the click's buffered keys */
     gb_curhide();
     gb_fill(x, y, w, h, 1);
-    gb_frame(x, y, w, h, 2);
+    gb_frame(x, y, w, h, plain ? 3 : 2);
     gb_textbw((unsigned char)(x + 2), (unsigned char)(y + 3), caption);
+    if (plain) gb_frame((unsigned char)(x + 1), (unsigned char)(y + 13),
+                        (unsigned char)(w - 2), 14, 3);
     gb_curshow();
     while (!done) {
         if (redraw) {
@@ -35,7 +38,7 @@ unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen)
             gb_fill((unsigned char)(x + 2), (unsigned char)(y + 16),
                     (unsigned char)(w - 4), 8, 1);
             gb_textbw((unsigned char)(x + 2), (unsigned char)(y + 16),
-                      plain && n > 30 ? buf + n - 30 : buf);
+                      plain && n > 24 ? buf + n - 24 : buf);
             gb_curshow();
             redraw = 0;
         }
@@ -43,8 +46,11 @@ unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen)
         if (fl & GB_QUIT) { done = 1; break; }       /* ESC -> cancel */
         while ((c = gb_getkey()) != 0) {
             if (c == 0x0D) { done = 1; ok = (unsigned char)(n > 0); break; }
-            else if ((c == 0x08 || c == 0x7F) && n) { buf[--n] = 0; redraw = 1; }
-            else if (c >= 32 && c < 127 && n < maxlen) {
+            else if ((c == 0x08 || c == 0x7F) && n) {
+                replace = 0; buf[--n] = 0; redraw = 1;
+            } else if (c >= 32 && c < 127) {
+                if (replace) { replace = 0; n = 0; buf[0] = 0; }
+                if (n >= maxlen) continue;
                 if (!plain && c >= 'a' && c <= 'z') c = (unsigned char)(c - 32);
                 buf[n++] = (char)c; buf[n] = 0; redraw = 1;
             }

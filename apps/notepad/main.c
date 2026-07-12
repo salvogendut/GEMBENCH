@@ -304,6 +304,15 @@ static unsigned char is_bas(void)
     return (unsigned char)(n[8] == 'B' && n[9] == 'A' && n[10] == 'S');
 }
 
+static unsigned char is_geobench_cfg(void)
+{
+    const char *n = gb_doc_name();
+    return (unsigned char)(n[0] == 'G' && n[1] == 'E' && n[2] == 'O' &&
+                           n[3] == 'B' && n[4] == 'E' && n[5] == 'N' &&
+                           n[6] == 'C' && n[7] == 'H' && n[8] == 'C' &&
+                           n[9] == 'F' && n[10] == 'G');
+}
+
 /* strip_cr: drop every \r from buf[0..n) so a CR+LF file edits as plain \n lines;
    returns the new length. */
 static unsigned int strip_cr(unsigned int n)
@@ -360,6 +369,12 @@ static unsigned int np_save(void)
 static void np_saved(void)
 {
     if (is_bas()) { strip_cr(sv_wl); len = sv_orig; }   /* collapse back to \n */
+    else if (is_geobench_cfg() && len <= 512) {
+        char *cfg = (char *)0x1000;
+        unsigned int i;
+        for (i = 0; i < len; i++) cfg[i] = buf[i];
+        *(volatile unsigned int *)0x1200 = len;
+    }
 }
 
 /* the file types Notepad opens - the file dialog shows only these (+ folders) */
