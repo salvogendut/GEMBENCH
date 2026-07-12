@@ -408,7 +408,8 @@ _gb_pic_blit:
         ld      hl, (sv_ret)
         jp      (hl)
 ;; unsigned char gb_pic_edit(unsigned char op);  op in A:
-;;   0=get tile, 1=put tile, 2=read a bank chunk, 3=write a bank chunk.
+;;   0=get tile, 1=put tile, 2=read a bank chunk, 3=write a bank chunk,
+;;   4=convert a short canonical picture buffer to native display bytes (MSX).
 _gb_pic_edit:
         jp      0x8048          ; GB_PICEDIT (retired GB_VSYNC slot)
 ;; void gb_pic_close(void);   release the borrowed picture bank(s).

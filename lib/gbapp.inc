@@ -135,7 +135,9 @@ GB_GETKEY       equ   GB_KERNEL+69 ; #8045  -> A = a typed character from the
 GB_PICEDIT      equ   GB_KERNEL+72 ; #8048  banked .PIC tile edit/save service (#288;
                                    ;        retired GB_VSYNC slot). A=0 get 100x100
                                    ;        tile into PIC_EDIT_BUF, A=1 put tile back,
-                                   ;        A=2 copy fs_save_len bytes to PIC_EDIT_BUF.
+                                   ;        A=2 copy fs_save_len bytes to PIC_EDIT_BUF,
+                                   ;        A=3 write a short chunk to bank 1, A=4
+                                   ;        canonical Mode-1 -> native display bytes.
                                    ;        -> A=1 success, A=0 unsupported/failure.
 GB_ONEVENT      equ   GB_KERNEL+75 ; #804B  register an event handler: HL = address
                                    ;        of a void(void) function in the app, 0 to

@@ -22,14 +22,15 @@
 ; Video: 720x256 1bpp roller RAM, displayed by the 1985 emulator's
 ; video_mode=cga2 as 2bpp 360x256 (pixel i of a byte = (byte>>(6-2i))&3 -
 ; the MSX Screen 6 packing) with the FIXED palette 0=black 1=cyan 2=magenta
-; 3=white. GEOBENCH assets stay in GB pen space (identical bytes to the MSX
-; build); the driver permutes pens on the way to the screen:
+; 3=white. Native icon/backdrop assets stay in Screen-6-style GB pen space;
+; the driver permutes pens on the way to the screen:
 ;     GB pen 0 blue -> 1 cyan     GB pen 1 white -> 3 white
 ;     GB pen 2 black-> 0 black    GB pen 3 red   -> 2 magenta
 ; which is the bit transform h1=g0, h0=~g1, i.e. for a whole byte
 ;     screen = ((gb & #55)<<1) | ((~gb & #AA)>>1)
 ; so no lookup table is needed and pen-0 transparency masks keep working on
-; the GB-space source bytes.
+; those GB-space source bytes. Portable GBPC pictures are the exception: their
+; canonical Mode-1 bytes use a generated lookup table in restore_pic_block.
 ;
 ; The roller word for row address A (17-bit physical) is
 ;     w = ((A>>1) & #FFF8) | (A & 7)          (A bit3 must be 0)

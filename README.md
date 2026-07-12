@@ -94,6 +94,8 @@ Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.
   optional GEOBENCH ROM.
 - **[The MSX2 target](docs/MSX2.md)** — the second platform: `GBMSX.COM`, Screen 6,
   the openMSX harness.
+- **[Portable picture format](docs/PIC_FORMAT.md)** — the byte-identical GBPC v2
+  payload shared by CPC, MSX2, and PCW.
 - **[Roadmap](docs/ROADMAP.md)** — what's done and what's next.
 
 ## Where it's going
@@ -101,7 +103,7 @@ Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.
 The core desktop, windowing, file manager, C app model and most bundled apps work
 across the three targets. Network apps run on CPC and PCW; MSX networking remains
 future work. Next up: a single
-canonical asset format shared across CPC and MSX, resizable Paint canvases,
+canonical non-picture assets shared across platforms, resizable Paint canvases,
 drawers/folders, and per-screensaver configuration. See the
 [roadmap](docs/ROADMAP.md) for the full list.
 

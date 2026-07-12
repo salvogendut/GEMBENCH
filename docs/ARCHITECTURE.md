@@ -119,6 +119,12 @@ The default media layout is intentionally simple:
 - floppy: `QA/GEOBENCH.DSK` (Main), `QA/COMPANION.DSK` (drive-B extras), and
   `QA/MEDIA.DSK` (the complete gallery)
 
+Picture files are the portable exception to the otherwise target-specific asset
+payloads. CPC, MSX2, and PCW all store canonical Mode-1 GBPC v2 bytes; the MSX2
+and PCW screen backends translate them while blitting. See
+[`PIC_FORMAT.md`](PIC_FORMAT.md). Icon sets and backdrops still use target-native
+build outputs.
+
 ## Settings and media contracts
 
 `GEOBENCH.CFG` is the user-visible configuration contract. The important current

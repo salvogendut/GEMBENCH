@@ -28,6 +28,13 @@
                 include "../lib/firmware.inc"
                 endif
                 endif
+                ifdef PLATFORM_MSX
+PIC_RUNTIME_CONVERT equ 1             ; one canonical Mode-1 .PIC payload on every platform
+                else
+                ifdef PLATFORM_PCW
+PIC_RUNTIME_CONVERT equ 1
+                endif
+                endif
 
 ; STORAGE_ALBIREO (#104): build-time drive-0 backend select. 0 (default) = the
 ; SYMBiFACE IDE FAT32 backend; 1 (pass -DSTORAGE_ALBIREO=1) = the Albireo CH376
@@ -697,7 +704,11 @@ kpo_setmax      ld    (fs_load_max),hl
                 ld    hl,(PIC_OFS)           ; EOF is OK after at least one chunk; empty is not
                 ld    a,h
                 or    l
+                ifdef PIC_RUNTIME_CONVERT
+                jp    z,kpo_fail
+                else
                 jr    z,kpo_fail
+                endif
                 jr    kpo_done_load
 kpo_got         ld    b,h
                 ld    c,l
@@ -725,6 +736,14 @@ kpo_done_load   ld    a,(PIC_PAGE)
                 ld    a,(#4004)              ; version: 2 = v2 (else v1), as the Viewer's parse_pic
                 cp    2
                 jr    nz,kpo_v1
+                ifdef PIC_RUNTIME_CONVERT
+                ld    a,(#4005)              ; portable mode 1, or a legacy native mode-6 file
+                cp    1
+                jr    z,kpo_v2_mode_ok
+                cp    6
+                jp    nz,kpo_fail             ; unknown packing: do not display corrupt bytes
+kpo_v2_mode_ok
+                endif
                 ld    hl,(#4006)            ; v2: pic_wb = (width + 3) >> 2
                 inc   hl
                 inc   hl
@@ -748,7 +767,11 @@ kpo_v1          ld    a,(#4004)             ; v1: byte width, then height, bitma
                 ld    (PIC_H),hl
                 ld    a,6
                 ld    (PIC_OFF),a
-kpo_ok          pop   af                       ; restore the Viewer's page
+kpo_ok
+                ifdef PIC_RUNTIME_CONVERT
+                call  kpo_normalize_pic        ; legacy mode 6 -> canonical mode 1 in the bank
+                endif
+                pop   af                       ; restore the Viewer's page
                 call  bank_set
                 xor   a
                 ld    (FS_XFLAGS),a           ; chunked picture loads must not poison later app/file loads
@@ -797,10 +820,73 @@ kpb_page2       ld    a,(PIC_PAGE2)
                 jr    z,kpb_done
                 ld    (sb_buf),hl             ; src_off #4000..#7FFF maps directly in bank 2
 kpb_map         call  bank_set
+                ifdef PIC_RUNTIME_CONVERT
+                call  restore_pic_block      ; canonical Mode-1 bytes -> native screen bytes
+                else
                 call  restore_block          ; reads sb_buf (#4000..bank), writes the screen
+                endif
 kpb_done        pop   af
                 call  bank_set
                 ret
+
+                ifdef PIC_RUNTIME_CONVERT
+; Normalize old platform-native mode-6 pictures once at load. New files already
+; carry canonical CPC Mode-1 bytes and skip this path. The inverse table is target
+; specific: Screen 6 on MSX, Screen 6 + CGA2 permutation on PCW.
+kpo_normalize_pic
+                ld    a,(#4004)
+                cp    2
+                ret   nz
+                ld    a,(#4005)
+                cp    6
+                ret   nz
+                ld    a,1
+                ld    (#4005),a
+                ld    hl,(PIC_OFS)           ; payload bytes = complete file size - 14
+                ld    de,14
+                or    a
+                sbc   hl,de
+                ret   c
+                ld    a,h
+                or    l
+                ret   z
+                ld    de,#3FF2               ; first bank room after the 14-byte header
+                or    a
+                sbc   hl,de
+                jr    c,kpn_first_short
+                push  hl                     ; bytes remaining for page 2 (possibly zero)
+                ld    bc,#3FF2
+                ld    hl,#400E
+                call  kpn_convert
+                pop   bc
+                ld    a,b
+                or    c
+                ret   z
+                push  bc
+                ld    a,(PIC_PAGE2)
+                or    a
+                jr    z,kpn_no_page2
+                call  bank_set
+                pop   bc
+                ld    hl,#4000
+                jr    kpn_convert
+kpn_no_page2    pop   bc
+                ret
+kpn_first_short add   hl,de                   ; restore payload length after the compare
+                ld    b,h
+                ld    c,l
+                ld    hl,#400E
+kpn_convert     ld    a,(hl)
+                ld    (kpn_lut+1),a            ; both generated tables are page-aligned
+kpn_lut         ld    a,(pic_native_to_m1)
+                ld    (hl),a
+                inc   hl
+                dec   bc
+                ld    a,b
+                or    c
+                jr    nz,kpn_convert
+                ret
+                endif
 
                 ifdef PLATFORM_MSX
 ; k_pic_edit (GB_PICEDIT, #288): Paint edits a 100x100 byte-aligned tile of a banked
@@ -813,6 +899,8 @@ PIC_TILE_H      equ   100
 PIC_TILE_SZ     equ   PIC_TILE_WB*PIC_TILE_H
 PIC_TMP         equ   #2200
 k_pic_edit
+                cp    4
+                jp    z,kpe_native
                 cp    2
                 jp    z,kpe_chunk
                 cp    1
@@ -820,6 +908,29 @@ k_pic_edit
                 or    a
                 jp    z,kpe_get
                 xor   a
+                ret
+
+; Convert a short canonical Mode-1 app buffer to native Screen-6 bytes without
+; changing the source. Paint uses this for its small in-page canvas; banked
+; pictures use restore_pic_block directly. PIC_EDIT_BUF=source,
+; PIC_EDIT_OFF=destination, fs_save_len=count.
+kpe_native      ld    hl,(PIC_EDIT_BUF)
+                ld    de,(PIC_EDIT_OFF)
+                ld    bc,(fs_save_len)
+                ld    a,b
+                or    c
+                jr    z,kpen_done
+kpen_loop       ld    a,(hl)
+                inc   hl
+                ld    (kpen_lut+1),a
+kpen_lut        ld    a,(pic_m1_to_native)
+                ld    (de),a
+                inc   de
+                dec   bc
+                ld    a,b
+                or    c
+                jr    nz,kpen_loop
+kpen_done       ld    a,1
                 ret
 
 kpe_get         ld    a,(PIC_PAGE)

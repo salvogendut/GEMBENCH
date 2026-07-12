@@ -266,13 +266,15 @@ void gb_get_name(char *dst11);
  * picture open at once must store both and write them back before each gb_pic_blit,
  * gb_pic_edit, or gb_pic_close. gb_pic_blit blits a wbytes x h region from offset src_off
  * in the banked picture to the screen; gb_pic_edit moves a Paint 100x100 tile, copies
- * an arbitrary non-crossing save chunk to an app/low-RAM buffer, or writes a short
- * low-RAM chunk back to the first bank (CPC/PCW Browser cache);
+ * an arbitrary non-crossing save chunk to an app/low-RAM buffer, writes a short
+ * low-RAM chunk back to the first bank (CPC/PCW Browser cache), or converts a short
+ * canonical Mode-1 app buffer to native display bytes (MSX2);
  * gb_pic_close frees the bank(s). The cursor is handled by the WM during on_draw. */
 #define GB_PICEDIT_GET  0
 #define GB_PICEDIT_PUT  1
 #define GB_PICEDIT_CHUNK 2
 #define GB_PICEDIT_WRITE 3
+#define GB_PICEDIT_NATIVE 4  /* canonical Mode-1 app buffer -> native display bytes (MSX) */
 #define gb_pic_edit_buf (*(volatile unsigned int *)0x134B)
 #define gb_pic_edit_off (*(volatile unsigned int *)0x134D)
 unsigned char gb_pic_open(void);

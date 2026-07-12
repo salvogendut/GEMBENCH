@@ -89,24 +89,7 @@ def quantize(img, dither):
     return out
 
 
-PLATFORM = 'cpc'   # set by main(); 'msx2' emits Screen-6 packing + mode byte 6
-
-def _pack_screen6(pens):
-    """Pack pens to V9938 Screen 6 bytes (pixel i in bits 7-2i, 6-2i)."""
-    data = bytearray()
-    h = len(pens)
-    w = len(pens[0]) if h else 0
-    for y in range(h):
-        for bx in range(w // 4):
-            byte = 0
-            for i in range(4):
-                byte |= (pens[y][bx * 4 + i] & 3) << (6 - 2 * i)
-            data.append(byte)
-    return bytes(data)
-
 def pack(pens):
-    if PLATFORM == 'msx2':
-        return _pack_screen6(pens)
     """2D pens -> Mode-1 bytes (row-major, 4 px per byte)."""
     h = len(pens)
     w = len(pens[0]) if h else 0
@@ -134,8 +117,7 @@ def prepare(img, width):
 
 
 def save_pic(path, pens, w, h):
-    mode = 6 if PLATFORM == 'msx2' else 1
-    hdr = b"GBPC" + bytes([2, mode]) + struct.pack("<HH", w, h) + bytes(INKS)
+    hdr = b"GBPC" + bytes([2, 1]) + struct.pack("<HH", w, h) + bytes(INKS)
     with open(path, "wb") as f:
         f.write(hdr)
         f.write(pack(pens))
@@ -264,11 +246,7 @@ def main():
     p.add_argument("-d", "--dither", choices=DITHERS, default="floyd")
     p.add_argument("-w", "--width", type=int, default=0, help="target width (snapped x4); 0 = source width")
     p.add_argument("--gui", action="store_true", help="open the GUI on this file")
-    p.add_argument("--platform", choices=("cpc", "msx2"), default="cpc",
-                   help="msx2: V9938 Screen-6 packing + .PIC mode byte 6 (#287)")
     a = p.parse_args(args)
-    global PLATFORM
-    PLATFORM = a.platform
     if a.gui:
         run_gui(a.in_img)
         return

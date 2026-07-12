@@ -7,11 +7,15 @@
  * gibberish, so this doubles as a quick "peek" at anything on the disk. */
 #include "gb.h"
 
+#if defined(GB_MSX2) || defined(GB_PCW)
+#define VIEW_MAX  5488    /* leave room for portable-PIC fallback conversion */
+#else
 #define VIEW_MAX  6000    /* in-page text/fallback buffer. Pictures use
                              the banked buffer on
                              GBALB/ROM (#164) - so where a spare bank exists this is just the
                              TEXT buffer; it's the picture fallback only with no free bank (bare
                              128K). */
+#endif
 #define TX_COL    (unsigned char)(win_x + 2)
 #define TX_Y0     (unsigned char)(win_y + 12)
 #define LINE_H    11
@@ -90,6 +94,7 @@ static unsigned char pic_toobig;                       /* 1 = .PIC too big for t
 #define PIC_H_K   (*(volatile unsigned int  *)0x130D)  /* 16-bit height */
 #define PIC_OFF_K (*(volatile unsigned char *)0x130F)
 #define UI_MODAL_K (*(volatile unsigned char *)0x1705)
+#define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
 
 static unsigned char is_pic(void)
 {
@@ -109,7 +114,16 @@ static void pic_floor(void)
 static void parse_pic(void)
 {
     if ((unsigned char)filebuf[4] == 2) {
-        unsigned int w = (unsigned char)filebuf[6] | ((unsigned int)(unsigned char)filebuf[7] << 8);
+        unsigned int w;
+#if defined(GB_MSX2) || defined(GB_PCW)
+        if ((unsigned char)filebuf[5] != 1) {
+            pic_toobig = 1;
+            pic_wb = 26; pic_h = 32; pic_off = 0;
+            pic_floor();
+            return;
+        }
+#endif
+        w = (unsigned char)filebuf[6] | ((unsigned int)(unsigned char)filebuf[7] << 8);
         pic_wb  = (unsigned char)((w + 3) >> 2);
         pic_h   = (unsigned char)filebuf[8] | ((unsigned int)(unsigned char)filebuf[9] << 8);
         pic_off = 14;
@@ -232,6 +246,47 @@ static void draw_toobig(void)
     gb_text(TX_COL, (unsigned char)(TX_Y0 + LINE_H), "Need banks/<32K");
 }
 
+#if defined(GB_MSX2) || defined(GB_PCW)
+#ifdef GB_PCW
+static unsigned char native_pic_byte(unsigned char b)
+{
+    unsigned char i, p, out = 0;
+    for (i = 0; i < 4; i++) {
+        p = (unsigned char)(((b >> (7 - i)) & 1) | (((b >> (3 - i)) & 1) << 1));
+        out |= (unsigned char)(p << (6 - 2 * i));
+    }
+    return (unsigned char)(((out & 0x55) << 1) | (((out ^ 0xFF) & 0xAA) >> 1));
+}
+#endif
+
+/* No free picture bank: translate one canonical row through line[] in bounded
+   chunks. Normal systems use the faster banked kernel blitter. */
+static void blit_file_row(unsigned char x, unsigned char y, unsigned char w,
+                          unsigned int src)
+{
+    unsigned char n, dx = 0;
+#ifdef GB_PCW
+    unsigned char c;
+#endif
+    while (w) {
+        n = (w > MAXWRAP) ? MAXWRAP : w;
+#ifdef GB_MSX2
+        gb_pic_edit_buf = (unsigned int)(filebuf + src);
+        gb_pic_edit_off = (unsigned int)line;
+        FS_SAVE_LEN_K = n;
+        if (!gb_pic_edit(GB_PICEDIT_NATIVE)) return;
+#else
+        for (c = 0; c < n; c++)
+            line[c] = (char)native_pic_byte((unsigned char)filebuf[src + c]);
+#endif
+        gb_restorerect((unsigned char)(x + dx), y, n, 1, (unsigned char *)line);
+        src += n;
+        dx = (unsigned char)(dx + n);
+        w = (unsigned char)(w - n);
+    }
+}
+#endif
+
 static void blit_pic(unsigned char x, unsigned char y, unsigned char w,
                      unsigned char rows, unsigned int src)
 {
@@ -239,8 +294,17 @@ static void blit_pic(unsigned char x, unsigned char y, unsigned char w,
     if (!w || !rows) return;
     if (w == pic_wb && !banked2) {
         if (banked) { PIC_PAGE_K = banked; PIC_PAGE2_K = 0; gb_pic_blit(x, y, w, rows, src); }
-        else if (src + (unsigned int)w * rows <= filen)
+        else if (src + (unsigned int)w * rows <= filen) {
+#if defined(GB_MSX2) || defined(GB_PCW)
+            while (r < rows) {
+                blit_file_row(x, (unsigned char)(y + r), w, src);
+                src += pic_wb;
+                r++;
+            }
+#else
             gb_restorerect(x, y, w, rows, (unsigned char *)filebuf + src);
+#endif
+        }
         return;
     }
     while (r < rows) {
@@ -249,7 +313,11 @@ static void blit_pic(unsigned char x, unsigned char y, unsigned char w,
             PIC_PAGE2_K = banked2;
             gb_pic_blit(x, (unsigned char)(y + r), w, 1, src);
         } else if (src + w <= filen) {
+#if defined(GB_MSX2) || defined(GB_PCW)
+            blit_file_row(x, (unsigned char)(y + r), w, src);
+#else
             gb_restorerect(x, (unsigned char)(y + r), w, 1, (unsigned char *)filebuf + src);
+#endif
         }
         src += pic_wb;
         r++;

@@ -74,7 +74,12 @@ Build the on-demand kernel modules (loaded into a bank and `call`ed): config
   from an icon asm source while preserving the set's slot count and layout.
 - **`packfont.py` / `genfont.py`** — pack an 8×8 asm font into a `.FNT`, or generate
   the 6×8 `DEFAULT.FNT` procedurally.
-- **`picconv.py`** — convert a PNG to a 4-colour Mode-1 `.PIC` (GUI or CLI).
+- **`picconv.py`** — convert a PNG to the portable, canonical Mode-1 GBPC v2
+  `.PIC` format (GUI or CLI); the same file runs on CPC, MSX2, and PCW.
+- **`gen_pic_luts.py`** — generate and verify the reversible MSX2/PCW picture
+  display lookup tables used by the kernels.
+- **`check_pic_distribution.py`** — verify canonical headers and byte identity
+  across staged card/MSX folders and CPC/PCW media disks.
 - **`iconedit.py`** — a host-side tkinter editor for `.IST` icon sets.
 - **`amsdos_header.py`** — prepend a 128-byte AMSDOS header to a RAW binary.
 

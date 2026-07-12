@@ -7,7 +7,8 @@ The .IST v2 container ("GBIS", version 2, count, then a directory of
 identical on both platforms - only the in-byte pixel packing differs. This
 re-packs each icon's bitmap bytes for Screen 6, leaving the header and directory
 untouched, so an icon set authored with the CPC tools (packicons.py / iconedit.py)
-drops straight into the MSX distro. Mirrors pic_to_msx.py for pictures.
+drops straight into the MSX distro. Unlike icon sets, portable GBPC v2 pictures
+are translated by the kernel while drawing and need no build-time transcoder.
 
 Usage: tools/ist_to_msx.py <in.IST> <out.IST>
 """

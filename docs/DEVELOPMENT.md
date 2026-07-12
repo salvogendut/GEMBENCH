@@ -140,11 +140,12 @@ line in the pack assembly or stage it into the card distribution as appropriate)
      `stage_dist.sh` copies every `assets/iconsets/*.IST` onto
      the card automatically. Select it with `ICONS=MYSET` in `GEOBENCH.CFG`. See
      `assets/iconsets/README.md`.
-- **Pictures** (`.PIC`): convert a PNG to a 4-colour Mode-1 picture with
-  `tools/picconv.py` — a tkinter GUI (Open / dither / width / preview / Save) or a
-  CLI (`tools/picconv.py in.png out.PIC -d floyd -w 160`). `.PIC` opens in the
-  Viewer and edits in PAINT; no packaging needed (it's user content, not a build
-  asset).
+- **Pictures** (`.PIC`): convert a PNG to the portable 4-colour GBPC v2 format
+  with `tools/picconv.py` — a tkinter GUI (Open / dither / width / preview / Save)
+  or a CLI (`tools/picconv.py in.png out.PIC -d floyd -w 160`). The canonical
+  Mode-1 payload is byte-identical on CPC, MSX2, and PCW; target kernels translate
+  it while drawing. `.PIC` opens in Viewer and edits in PAINT. See
+  [PIC_FORMAT.md](PIC_FORMAT.md).
 
 ## File line endings
 

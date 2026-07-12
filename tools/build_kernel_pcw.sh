@@ -8,9 +8,10 @@
 # from the disc's reserved tracks; system files live in the disc's CP/M 2.2
 # filesystem (read by lib/pcw/fs.asm, written at build time by mkpcwdsk.py).
 #
-# Assets reuse the MSX transcoders: PCW CGA2 packing = MSX Screen 6 packing
-# (lib/pcw/glue.inc). Only save-block-format blobs (the splash) need the
-# CGA2 hardware-pen permute, applied here at build time.
+# Icon/backdrop assets reuse the MSX transcoders: PCW CGA2 packing = MSX
+# Screen 6 packing (lib/pcw/glue.inc). Save-block-format blobs such as the
+# splash need the CGA2 hardware-pen permute at build time. GBPC v2 pictures
+# stay canonical and are translated by the kernel at display time.
 #
 #   bash tools/build_kernel_pcw.sh
 #   SDL_VIDEODRIVER=dummy ~/Dev/1985/1985 --config debug/1985-pcw.conf \
@@ -29,7 +30,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x6D20 DOC=1 tools/build_capp.sh apps/desktop build/
 APPDEFS="-DGB_PCW" DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
-APPDEFS="-DGB_PCW" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x68C0 DOCRO=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
@@ -52,7 +53,7 @@ tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
 tools/build_uimod.sh                             # -> build/GBUI.RAW
 tools/build_webmod.sh                            # -> build/GBWEB.RAW
 
-# --- assets (MSX encodings = PCW encodings) -----------------------------------
+# --- native assets (MSX encodings = PCW encodings); .PIC stays canonical ------
 python3 tools/genfont.py build/pcw/DEFAULT.FNT
 python3 tools/packfont.py build/pcw/CLASSIC.FNT lib/font.asm   # 8x8 (FONT=CLASSIC)
 python3 tools/packicons.py --platform msx2 build/pcw/DEFAULT.IST \
@@ -83,7 +84,7 @@ import sys
 d = open(sys.argv[1], 'rb').read()
 open(sys.argv[2], 'wb').write(bytes(((b & 0x55) << 1) | (((b ^ 0xFF) & 0xAA) >> 1) for b in d))
 PY
-python3 tools/pic_to_pcw.py assets/pictures/LOGO.PIC build/pcw/LOGO.PIC
+cp assets/pictures/LOGO.PIC build/pcw/LOGO.PIC
 
 # --- the kernel + the boot sector ---------------------------------------------
 rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
@@ -138,12 +139,11 @@ python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     --add build/pcw/XAOS.RAW=XAOS.APP \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
-# --- MEDIA.DSK: complete PCW-transcoded gallery on a 720K CF2DD data disc
+# --- MEDIA.DSK: complete portable gallery on a 720K CF2DD data disc
 MEDIA_ADDS=()
 for pic in assets/pictures/*.PIC; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    python3 tools/pic_to_pcw.py "$pic" "build/pcw/$name.PIC"
-    MEDIA_ADDS+=(--add "build/pcw/$name.PIC=$name.PIC")
+    MEDIA_ADDS+=(--add "$pic=$name.PIC")
 done
 python3 tools/mkpcwdsk.py QA/PCW/MEDIA.DSK --type cf2dd "${MEDIA_ADDS[@]}"
 

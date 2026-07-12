@@ -10,8 +10,9 @@
  *
  * Maths is Q4.12 signed fixed point (16-bit: 4 integer bits incl. sign, 12
  * fractional). The hot op - a signed (a*b)>>12 - is a hand-written Z80 routine
- * (fixmul); the per-pixel escape loop is C around it. The canvas is a Mode-1 bitmap
- * blitted with gb_restorerect; each row shows as it finishes. The canvas lives
+ * (fixmul); the per-pixel escape loop is C around it. The canvas remains in the
+ * portable Mode-1 .PIC encoding; MSX/PCW builds translate rows only while blitting.
+ * Each row shows as it finishes. The canvas lives
  * inside a .PIC buffer (header + bitmap) so Save is a single gb_fs_save.
  */
 #include "gb.h"
@@ -149,36 +150,66 @@ static unsigned char pen_of(unsigned char it)
     return 1;                           /* near the edge: white */
 }
 
-/* ---- pixel packing: set pixel i (0..3) of a byte to pen p (#287) ----
- * CPC Mode 1: bit0 @ 7-i, bit1 @ 3-i.  MSX Screen 6: the 2-bit pen sits in
- * bits (7-2i),(6-2i) - leftmost pixel in bits 7,6. The canvas is blitted raw
- * with gb_restorerect, so it must carry the platform's screen encoding. */
+/* ---- portable Mode-1 pixel packing: set pixel i (0..3) to pen p ---------- */
 static unsigned char set_pixel(unsigned char b, unsigned char i, unsigned char p)
 {
-#ifdef GB_MSX2
-    unsigned char sh = (unsigned char)(6 - (i << 1));   /* low bit of the pen field */
-    b &= (unsigned char)~(3 << sh);
-    b |= (unsigned char)((p & 3) << sh);
-    return b;
-#else
     b &= (unsigned char)~((1 << (7 - i)) | (1 << (3 - i)));
     if (p & 1) b |= (unsigned char)(1 << (7 - i));
     if (p & 2) b |= (unsigned char)(1 << (3 - i));
     return b;
-#endif
 }
+
+#if defined(GB_MSX2) || defined(GB_PCW)
+static unsigned char native_row[CANVAS_WB];
+
+static unsigned char native_pic_byte(unsigned char byte)
+{
+    unsigned char i, p, out = 0;
+    for (i = 0; i < 4; i++) {
+        p = (unsigned char)(((byte >> (7 - i)) & 1) |
+            (((byte >> (3 - i)) & 1) << 1));
+        out |= (unsigned char)(p << (6 - 2 * i));
+    }
+#ifdef GB_PCW
+    out = (unsigned char)(((out & 0x55) << 1) | (((out ^ 0xFF) & 0xAA) >> 1));
+#endif
+    return out;
+}
+
+static void prepare_native_row(const unsigned char *src)
+{
+    unsigned char x;
+    for (x = 0; x < CANVAS_WB; x++) native_row[x] = native_pic_byte(src[x]);
+}
+#endif
 
 static void blit_row(unsigned char row)
 {
+    const unsigned char *src = canvas + (unsigned int)row * CANVAS_WB;
     gb_curhide();
+#if defined(GB_MSX2) || defined(GB_PCW)
+    prepare_native_row(src);
+    gb_restorerect(CVX, (unsigned char)(CVY + row), CANVAS_WB, 1, native_row);
+#else
     gb_restorerect(CVX, (unsigned char)(CVY + row), CANVAS_WB, 1,
-                   canvas + (unsigned int)row * CANVAS_WB);
+                   src);
+#endif
     gb_curshow();
 }
 static void blit_canvas(void)
 {
+#if defined(GB_MSX2) || defined(GB_PCW)
+    unsigned char row;
+#endif
     gb_curhide();
+#if defined(GB_MSX2) || defined(GB_PCW)
+    for (row = 0; row < CANVAS_H; row++) {
+        prepare_native_row(canvas + (unsigned int)row * CANVAS_WB);
+        gb_restorerect(CVX, (unsigned char)(CVY + row), CANVAS_WB, 1, native_row);
+    }
+#else
     gb_restorerect(CVX, CVY, CANVAS_WB, CANVAS_H, canvas);
+#endif
     gb_curshow();
 }
 
