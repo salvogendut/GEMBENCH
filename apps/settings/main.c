@@ -79,6 +79,7 @@ static const setting_t rows[] = {
 };
 #define NROWS 5
 #define BD_SOLID_ADDR 0x1290   /* kernel BD_SOLID flag */
+#define BD_DRIVE_ADDR 0x123C   /* kernel KCFG_BDDRIVE: selected backdrop drive */
 #define BD_TILE_ADDR  0x1250   /* kernel BD_TILE: the loaded 16x16 backdrop tile (#216) */
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
@@ -378,8 +379,13 @@ static void s_draw(void)
             unsigned char sx = (unsigned char)(win_x + 42), sy = row_y(r);  /* keep clear of "A:NAME.BDP" */
             if (*(volatile unsigned char *)BD_SOLID_ADDR)
                 gb_fill(sx, sy, 4, 8, 0);    /* SOLID -> a plain pen-0 (desktop) square */
+#if defined(GB_MSX2) || defined(GB_PCW)
+            else
+                gb_backdrop(sx, sy, 4, 8);   /* applies the target's native tile encoding */
+#else
             else
                 gb_restorerect(sx, sy, 4, 8, (const void *)BD_TILE_ADDR);   /* tile's top 8 rows */
+#endif
             gb_frame(sx, sy, 4, 8, 2);       /* outline so it shows on the white panel */
         }
     }
@@ -679,6 +685,10 @@ static void saver_dialog(void)
 
 /* ---- interaction ------------------------------------------------------------- */
 
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+/* CPC keeps canonical Mode-1 BDP bytes unchanged. Its resident kernel cannot
+   afford the tiled filler, so Settings loads the selected tile directly for
+   the desktop-side renderer. */
 static void load_backdrop_live(const char *name, unsigned char drive)
 {
     unsigned char old_drive, descended, i;
@@ -710,6 +720,7 @@ static void load_backdrop_live(const char *name, unsigned char drive)
         *(unsigned char *)BD_SOLID_ADDR = 1;
     }
 }
+#endif
 
 /* live_apply: write the chosen 8.3 name into the kernel transfer area and call
    gb_reload. The desktop re-reads WALLPAPER= when it regains focus after Settings
@@ -717,10 +728,13 @@ static void load_backdrop_live(const char *name, unsigned char drive)
 static void live_apply(unsigned char r, const char *name, unsigned char drive)
 {
     const char *ext = rows[r].ext;
+    unsigned char is_backdrop = (unsigned char)(ext[0] == 'B');
     if (ext[0] == 'P') return;
-    if (ext[0] == 'B') {
-        load_backdrop_live(name, drive);
-        return;
+    if (is_backdrop) {
+        *(unsigned char *)BD_DRIVE_ADDR = drive;
+        *(unsigned char *)BD_SOLID_ADDR =
+            (name[0]=='S' && name[1]=='O' && name[2]=='L' &&
+             name[3]=='I' && name[4]=='D' && name[5]==0) ? 1 : 0;
     }
     {
         char *dst = (char *)rows[r].tfr;
@@ -729,6 +743,12 @@ static void live_apply(unsigned char r, const char *name, unsigned char drive)
         while (i < 8) dst[i++] = ' ';
         dst[8] = ext[0]; dst[9] = ext[1]; dst[10] = ext[2];
     }
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    if (is_backdrop) {
+        load_backdrop_live(name, drive);
+        return;
+    }
+#endif
     gb_reload();
 }
 

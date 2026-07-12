@@ -120,11 +120,11 @@ The default media layout is intentionally simple:
   `QA/CPC/Floppies/COMPANION.DSK` (drive-B apps), and
   `QA/CPC/Floppies/EXTRAS.DSK` (the complete gallery)
 
-Picture files are the portable exception to the otherwise target-specific asset
-payloads. CPC, MSX2, and PCW all store canonical Mode-1 GBPC v2 bytes; the MSX2
-and PCW screen backends translate them while blitting. See
-[`PIC_FORMAT.md`](PIC_FORMAT.md). Icon sets and backdrops still use target-native
-build outputs.
+Pictures, icon sets, and backdrops use portable payloads. CPC, MSX2, and PCW all
+store canonical Mode-1 GBPC v2 picture bytes; the MSX2 and PCW screen backends
+translate them while blitting. See [`PIC_FORMAT.md`](PIC_FORMAT.md). Canonical
+Mode-1 `.IST` icon sets and 64-byte `.BDP` backdrop tiles are decoded when loaded
+on MSX2/PCW, while CPC uses their bytes directly.
 
 ## Settings and media contracts
 

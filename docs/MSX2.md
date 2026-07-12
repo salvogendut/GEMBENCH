@@ -25,8 +25,8 @@ Clock — all co-resident under the kernel window manager on a V9938 Screen 6.
   Clock, and **all 16 screensavers**. Telnet, NETTEST, WGET and Browser are not built for MSX yet
   because GEOBENCH does not have an MSX network transport.
 - **Assets:** icon sets in `assets/iconsets/*.IST` are stored in canonical Mode-1
-  bytes and decoded to Screen 6 at runtime by the kernel. Backdrops are converted
-  to Screen 6 format at build time. Pictures use the portable [GBPC v2 format](PIC_FORMAT.md):
+  bytes and decoded to Screen 6 at runtime by the kernel. Backdrop tiles use the
+  same canonical bytes and are converted when loaded. Pictures use the portable [GBPC v2 format](PIC_FORMAT.md):
   the same canonical Mode-1 `.PIC` bytes are staged on every platform and the MSX
   kernel translates them while drawing. MSX pictures live once under root-level `PICS/`;
   development diagnostics such as `GBSPIKE.COM` are kept under `DIAG/`.

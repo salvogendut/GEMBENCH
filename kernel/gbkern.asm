@@ -79,9 +79,9 @@ WM_GADGETS      equ   1
                 endif
                 endif
                 endif
-                ifndef BACKDROP_TILE           ; CPC resident headroom is tight; keep tiled
-                ifdef PLATFORM_MSX             ; .BDP backdrops on MSX+PCW, but CPC uses
-BACKDROP_TILE   equ   1                        ; solid backdrop + optional wallpaper.
+                ifndef BACKDROP_TILE           ; CPC resident headroom is at its guarded stack
+                ifdef PLATFORM_MSX             ; limit, so its desktop draws canonical Mode-1
+BACKDROP_TILE   equ   1                        ; BDPs. MSX/PCW transcode + tile in the kernel.
                 else
                 ifdef PLATFORM_PCW
 BACKDROP_TILE   equ   1

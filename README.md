@@ -104,9 +104,8 @@ Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.
 
 The core desktop, windowing, file manager, C app model and most bundled apps work
 across the three targets. Network apps run on CPC and PCW; MSX networking remains
-future work. Next up: a single
-canonical non-picture assets shared across platforms, resizable Paint canvases,
-drawers/folders, and per-screensaver configuration. See the
+future work. Next up: resizable and scrollable Paint canvases, drawers/folders,
+and per-screensaver configuration. See the
 [roadmap](docs/ROADMAP.md) for the full list.
 
 ## License

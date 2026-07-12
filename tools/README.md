@@ -83,8 +83,11 @@ Build the on-demand kernel modules (loaded into a bank and `call`ed): config
   `.PIC` format (GUI or CLI); the same file runs on CPC, MSX2, and PCW.
 - **`gen_pic_luts.py`** — generate and verify the reversible MSX2/PCW picture
   display lookup tables used by the kernels.
-- **`check_pic_distribution.py`** — verify canonical headers and byte identity
-  across staged card/MSX folders and CPC/PCW Extras disks.
+- **`png2backdrop.py` / `patternedit.py`** — create or edit portable canonical
+  Mode-1 `.BDP` backdrop tiles. CPC uses them directly, MSX2/PCW decode them when
+  loaded, and `bdp_to_msx.py` remains only for legacy artifacts.
+- **`check_pic_distribution.py`** — verify canonical `.PIC`/`.BDP` byte identity
+  across staged folders and CPC/PCW disks.
 - **`iconedit.py`** — a host-side tkinter editor for `.IST` icon sets.
 - **`amsdos_header.py`** — prepend a 128-byte AMSDOS header to a RAW binary.
 

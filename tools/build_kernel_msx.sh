@@ -6,8 +6,8 @@
 # Kept separate from tools/build_kernel.sh (that script is CPC-DSK-entangled
 # and wipes its own QA outputs); the shared pieces (apps via build_capp.sh,
 # GBCFG via build_cfgmod.sh, the Python asset tools) are reused. Portable GBPC
-# v2 pictures and icon sets remain canonical and are translated to native bytes by
-# the kernel at display time.
+# v2 pictures, icon sets, and backdrop tiles remain canonical and are translated
+# to native bytes by the kernel at display/load time.
 #
 #   bash tools/build_kernel_msx.sh
 #   MSX_SHOTS="20 30 45" tools/run_msx.sh      # then verify in openMSX
@@ -177,20 +177,19 @@ cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/
 cp build/msx/DEFAULT.IST QA/MSX/GBENCH/
 cp build/msx/DEFAULT.SPR QA/MSX/GBENCH/
 
-# --- drop-in assets: everything under assets/{backdrops,iconsets,pictures} gets
-# transcoded to Screen 6 and packaged automatically, mirroring the CPC build's
-# globs (build_kernel.sh / stage_dist.sh) so a file dropped in ships on BOTH
-# distros. Names are uppercased 8.3. (#287)
+# --- drop-in assets: canonical backdrops/iconsets/pictures are copied unchanged,
+# mirroring the CPC build's globs (build_kernel.sh / stage_dist.sh) so a file
+# dropped in ships on both distros. Names are uppercased 8.3. (#287/#388)
 for bdp in assets/backdrops/*.BDP; do            # backdrop tiles (BACKDROP=<name>)
     [ -e "$bdp" ] || continue
     name=$(basename "$bdp" .BDP | tr a-z A-Z)
-    python3 tools/bdp_to_msx.py "$bdp" "QA/MSX/GBENCH/$name.BDP"
+    cp "$bdp" "QA/MSX/GBENCH/$name.BDP"
 done
 for png in assets/backdrops/*.png; do            # ... or a source PNG with no .BDP
     [ -e "$png" ] || continue
     name=$(basename "$png" .png | tr a-z A-Z)
     [ -e "QA/MSX/GBENCH/$name.BDP" ] || \
-        python3 tools/png2backdrop.py --platform msx2 "$png" "QA/MSX/GBENCH/$name.BDP"
+        python3 tools/png2backdrop.py "$png" "QA/MSX/GBENCH/$name.BDP"
 done
 for ist in assets/iconsets/*.IST; do             # icon sets (ICONS=<name>)
     [ -e "$ist" ] || continue
