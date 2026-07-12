@@ -10,8 +10,8 @@
 #
 # Icon/backdrop assets reuse the MSX transcoders: PCW CGA2 packing = MSX
 # Screen 6 packing (lib/pcw/glue.inc). Save-block-format blobs such as the
-# splash need the CGA2 hardware-pen permute at build time. GBPC v2 pictures
-# stay canonical and are translated by the kernel at display time.
+# splash need the CGA2 hardware-pen permute at build time. GBPC v2 pictures and
+# icon sets stay canonical and are translated by the kernel at runtime.
 #
 #   bash tools/build_kernel_pcw.sh
 #   SDL_VIDEODRIVER=dummy ~/Dev/1985/1985 --config debug/1985-pcw.conf \
@@ -68,7 +68,7 @@ tools/build_webmod.sh                            # -> build/GBWEB.RAW
 # --- native assets (MSX encodings = PCW encodings); .PIC stays canonical ------
 python3 tools/genfont.py build/pcw/DEFAULT.FNT
 python3 tools/packfont.py build/pcw/CLASSIC.FNT lib/font.asm   # 8x8 (FONT=CLASSIC)
-python3 tools/packicons.py --platform msx2 build/pcw/DEFAULT.IST \
+python3 tools/packicons.py build/pcw/DEFAULT.IST \
     lib/icon_floppy.asm lib/icon_flowchart.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
@@ -79,7 +79,7 @@ python3 tools/packicons.py --platform msx2 build/pcw/DEFAULT.IST \
     lib/icon_viewer.asm \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_screensaver.asm
-python3 tools/ist_to_msx.py assets/iconsets/REFINED.IST build/pcw/REFINED.IST
+cp assets/iconsets/REFINED.IST build/pcw/REFINED.IST
 
 # the pointer: interleaved software-cursor .SPR in CGA2 hardware space
 "$RASM" kernel/modules/picedit_low.asm -DPLATFORM_PCW=1 >/dev/null

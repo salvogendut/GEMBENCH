@@ -54,10 +54,10 @@ hold 256) with the last 8 scanlines as a static letterbox strip.
 The CGA2 palette is fixed (black/cyan/magenta/white). The driver
 (`lib/pcw/screen.asm`) permutes GEOBENCH pens on the way to the screen —
 pen 0 blue→cyan, 1 white→white, 2 black→black, 3 red→magenta, which is the
-bit transform `screen = ((gb & #55)<<1) | ((~gb & #AA)>>1)`. Icon sets and
-backdrops are converted to Screen-6-style bytes by the build and permuted by the
-PCW driver on write (`packicons`, `ist_to_msx`, `bdp_to_msx`). The splash and
-pointer remain hardware-format exceptions. Pictures instead use the portable
+bit transform `screen = ((gb & #55)<<1) | ((~gb & #AA)>>1)`. Icon sets are staged
+as canonical Mode-1 `.IST` files and decoded to native icon bytes at boot (`icon_convert`)
+inside the PCW kernel; only backdrops still need build-time transcode (`bdp_to_msx`).
+The splash and pointer remain hardware-format exceptions. Pictures instead use the portable
 [GBPC v2 format](PIC_FORMAT.md): `restore_pic_block` translates canonical
 Mode-1 bytes directly to PCW CGA2 hardware bytes while drawing, so staged
 `.PIC` files remain byte-identical to the CPC and MSX copies.

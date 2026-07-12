@@ -5,9 +5,9 @@
 #
 # Kept separate from tools/build_kernel.sh (that script is CPC-DSK-entangled
 # and wipes its own QA outputs); the shared pieces (apps via build_capp.sh,
-# GBCFG via build_cfgmod.sh, the Python asset tools) are reused, with
-# -DGB_MSX2 / --platform msx2 selecting MSX encodings where required. Portable
-# GBPC v2 pictures remain canonical and are translated by the kernel at display.
+# GBCFG via build_cfgmod.sh, the Python asset tools) are reused. Portable GBPC
+# v2 pictures and icon sets remain canonical and are translated to native bytes by
+# the kernel at display time.
 #
 #   bash tools/build_kernel_msx.sh
 #   MSX_SHOTS="20 30 45" tools/run_msx.sh      # then verify in openMSX
@@ -72,7 +72,7 @@ tools/build_uimod.sh                             # -> build/GBUI.RAW (dialogs/me
 
 # --- assets ------------------------------------------------------------------
 python3 tools/genfont.py build/msx/DEFAULT.FNT           # 1bpp glyphs: shared format
-python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
+python3 tools/packicons.py build/msx/DEFAULT.IST \
     lib/icon_floppy.asm lib/icon_flowchart.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
@@ -83,7 +83,7 @@ python3 tools/packicons.py --platform msx2 build/msx/DEFAULT.IST \
     lib/icon_viewer.asm \
     lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_screensaver.asm
-python3 tools/packicons.py --platform msx2 build/msx/PAINT.IST \
+python3 tools/packicons.py build/msx/PAINT.IST \
     "$PAINT_ASSET_DIR/pencil.asm" "$PAINT_ASSET_DIR/square.asm" "$PAINT_ASSET_DIR/circle.asm" \
     "$PAINT_ASSET_DIR/fill.asm" "$PAINT_ASSET_DIR/undo.asm"
 "$RASM" kernel/modules/picedit_low.asm >/dev/null
@@ -195,7 +195,7 @@ done
 for ist in assets/iconsets/*.IST; do             # icon sets (ICONS=<name>)
     [ -e "$ist" ] || continue
     name=$(basename "$ist" .IST | tr a-z A-Z)
-    python3 tools/ist_to_msx.py "$ist" "QA/MSX/GBENCH/$name.IST"
+    cp "$ist" "QA/MSX/GBENCH/$name.IST"
 done
 for pic in assets/pictures/*.PIC; do             # portable canonical .PIC files need no transcode
     [ -e "$pic" ] || continue

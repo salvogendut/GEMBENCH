@@ -42,9 +42,9 @@
 
 ## Next
 
-- **Shared non-picture assets across platforms** — icon sets and backdrops still
-  have platform-specific Mode-1 / Screen-6 payloads. Pictures are already shared
-  through the portable GBPC v2 format.
+- **Shared non-picture assets across platforms** — icon sets are now canonical Mode-1
+  payloads shared by CPC/MSX/PCW and decoded in kernel for non-native targets.
+  Backdrops are still platform-specific because of byte-layout differences.
 - **Paint** follow-ups — resizable canvas and scrolling for pictures bigger than the
   screen (Fullscreen already centers the canvas + tools).
 - **Drawers/folders** and richer desktop arrangement.

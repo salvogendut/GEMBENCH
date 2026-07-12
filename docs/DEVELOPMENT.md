@@ -124,6 +124,8 @@ line in the pack assembly or stage it into the card distribution as appropriate)
   lib/icon_x.asm icon_x 32x32`, then `tools/packicons.py build/NAME.IST
   lib/icon_*.asm ...` in **slot order** (must match `ext_to_icon` in `gbkern.asm`:
   floppy ide clock trash geobench basic binary picture text folder).
+  `packicons.py` always emits canonical CPC Mode-1 payloads. MSX and PCW keep the
+  `.IST` files unchanged on disk and decode them to native icon bytes at boot.
 
   Two ways to get edited icons onto the next card:
 

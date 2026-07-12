@@ -56,9 +56,108 @@ icon_init
                 ld    (fs_load_dst),hl
                 ld    hl,def_ist             ; fall back to DEFAULT.IST if missing
                 call  load_or_default
+                ifdef PLATFORM_MSX             ; #287: icon packs are stored in canonical
+                call  icon_convert            ; CPC Mode-1 bytes, transcode to platform
+                endif                        ; encoding at runtime
+                ifdef PLATFORM_PCW
+                call  icon_convert            ; keep the .IST payload unified across targets
+                endif
                 call  bank_normal
                 ei
                 ret
+
+; icon_convert: transcode a loaded .IST in-place from canonical CPC Mode-1 icon
+; bytes to the current platform's runtime encoding. The file format itself is
+; unchanged (magic/version/directory); only the icon bitmap payload bytes are
+; rewritten at DATA_ICONS+offset. CPC keeps the source as-is.
+icon_convert
+                ; quick validation: missing file / oversized payload -> skip conversion
+                ld    a,(fs_ent_size+2)
+                or    a
+                ret   nz
+                ld    hl,DATA_ICONS
+                ld    a,(hl)
+                cp    'G'
+                ret   nz
+                inc   hl
+                ld    a,(hl)
+                cp    'B'
+                ret   nz
+                inc   hl
+                ld    a,(hl)
+                cp    'I'
+                ret   nz
+                inc   hl
+                ld    a,(hl)
+                cp    'S'
+                ret   nz
+                ld    hl,DATA_ICONS+4
+                ld    a,(hl)
+                cp    2
+                ret   nz
+                ld    a,(DATA_ICONS+5)
+                ld    b,a
+                or    a
+                ret   z
+                ld    hl,DATA_ICONS+16       ; icon directory entries
+                ld    c,0                    ; keep count in BC for each loop
+icon_conv_loop
+                ld    a,b
+                or    a
+                ret   z
+                push  bc                     ; preserve icon count during conversion
+
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)                 ; DE = icon offset
+                inc   hl
+                ld    b,(hl)
+                inc   hl                     ; B = icon width (bytes)
+                ld    a,(hl)
+                inc   hl                     ; A = icon height (rows)
+
+                push  hl                     ; save next-directory entry pointer
+                ld    hl,DATA_ICONS
+                add   hl,de                  ; HL = DATA_ICONS + offset
+
+                ; length = width * height (pixels, in bytes), BxA <= 1024
+                push  hl                     ; save source pointer for the conversion loop
+                ld    e,b
+                ld    d,0
+                ld    h,0
+                ld    l,0
+                or    a
+                jr    z,icon_zero_len
+icon_mul_loop
+                add   hl,de
+                dec   a
+                jr    nz,icon_mul_loop
+icon_zero_len
+                pop   hl
+                ld    b,h
+                ld    c,l
+                ld    a,b                    ; preserve zero/non-zero check after BC load
+                or    c
+                jr    z,icon_no_bytes
+
+icon_conv_bytes
+                ld    a,(hl)
+                ld    (icon_conv_lut+1),a
+icon_conv_lut
+                ld    a,(pic_m1_to_native)    ; runtime LUT, included on MSX/PCW only
+                ld    (hl),a
+                inc   hl
+                dec   bc
+                ld    a,b
+                or    c
+                jr    nz,icon_conv_bytes
+
+icon_no_bytes
+                pop   hl                     ; restore next-directory entry pointer
+                pop   bc                     ; restore remaining-icon count
+                dec   b
+                jr    icon_conv_loop
+
 
 ; cursor_init (#65): load the cursor sprite (<CURSOR>.SPR from GEOBENCH.CFG, built
 ; by the GBCFG module into KCFG_CURSORNAME) into low RAM at CUR_LOW, so the 256-byte
