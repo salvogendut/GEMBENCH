@@ -46,12 +46,14 @@
    canonical Mode-1 `.BDP` tiles. MSX2 and PCW convert the selected tile at load
    time while CPC draws the already-native bytes from its desktop app, preserving
    the resident kernel's stack guard.
+16. ✅ **Per-screensaver configuration (#390)** — Settings has a reusable Configure
+   entry and modal editor path. STARFLD is the first consumer, with persisted,
+   bounded speed and star-count values read directly from `GEOBENCH.CFG`.
 
 ## Next
 
 - **Paint** follow-ups — resizable canvas and scrolling for pictures bigger than the
   screen (Fullscreen already centers the canvas + tools).
 - **Drawers/folders** and richer desktop arrangement.
-- **Per-screensaver configuration** — the savers currently use baked-in defaults
-  (there is no per-module setup panel yet); Settings only picks the module + idle
-  timeout.
+- **More screensaver controls** — extend the Configure registry beyond STARFLD as
+  each saver gets useful module-specific parameters.

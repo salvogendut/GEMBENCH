@@ -114,6 +114,11 @@ failures visible until the ranges are actually moved or retired.
 cursor settings fall back to `DEFAULT`; invalid background media falls back to
 `SOLID` / `NONE` during boot so the machine still starts.
 
+Per-screensaver options also live in this file. The first contract is
+`STARFLD_SPEED=1..8` and `STARFLD_STARS=16..96` (defaults `4` and `64`). Saver
+apps should use `lib/gb/gbcfg.h` for bounded numeric values so old, missing, or
+malformed settings fall back safely without kernel involvement.
+
 Build a set, then package it (add an `incbin` + a `save "<NAME>.<EXT>",...,DSK`
 line in the pack assembly or stage it into the card distribution as appropriate):
 

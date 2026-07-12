@@ -60,7 +60,8 @@ backdrop, dragging icons, opening apps and menus:
   `SOLID`) and a centred **wallpaper** (`.PIC`) from the system folder, a **Colours**
   editor for the 4 Mode-1 pens + the screen border (`INKS=`) with a **live** preview
   — `-`/`+` recolours the whole desktop instantly — and a **Screensaver** section
-  (**Module** picker + idle **Timeout**). Media settings are stored as
+  (**Module** picker, per-saver **Configure**, and idle **Timeout**). Starfield's
+  configuration window controls its speed and number of stars. Media settings are stored as
   **drive-qualified names** such as `A:DARKER` or `C:XMATRIX`, so Settings can
   browse either floppy or Albireo content without ambiguity. Invalid media
   falls back safely to `SOLID` / `NONE` at boot instead of blocking startup. The
@@ -110,7 +111,9 @@ backdrop, dragging icons, opening apps and menus:
   **PYRO** (fireworks), **FOREST** (fractal trees), **HELIX** (harmonograph), and
   **CATCLK** (a Kit-Cat Klock with sliding pupils + real hour/minute hands). The
   Settings **Module** picker lists every `.SAV` in the system folder (scrolling
-  when there are more than fit), so new ones appear automatically.
+  when there are more than fit), so new ones appear automatically. **Configure**
+  persists supported module options in `GEOBENCH.CFG`; STARFLD currently exposes
+  `STARFLD_SPEED` and `STARFLD_STARS`.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),

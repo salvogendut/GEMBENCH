@@ -13,3 +13,5 @@ trap 'rm -rf "$tmp"' EXIT
 "$tmp/test_gbform"
 "$CC" -Wall -Wextra -std=c99 -o "$tmp/test_gburl" test_gburl.c
 "$tmp/test_gburl"
+"$CC" -Wall -Wextra -std=c99 -o "$tmp/test_gbcfg" test_gbcfg.c
+"$tmp/test_gbcfg"
