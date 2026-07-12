@@ -9,9 +9,12 @@ Gotek (FlashFloppy) serving `QA/PCW/GEOBENCH.DSK`. On real machines the
 display is the native 1bpp monochrome (see the colour section below).
 
 ```
-bash tools/build_kernel_pcw.sh          # -> GEOBENCH.DSK + COMPANION.DSK + MEDIA.DSK
+bash tools/build_kernel_pcw.sh          # -> GEOBENCH.DSK + COMPANION.DSK + EXTRAS.DSK
 ~/Dev/1985/1985 --config debug/1985-pcw.conf --disk-a QA/PCW/GEOBENCH.DSK
 ```
+
+The distribution build expects matching `../GB-PAINT` and `../GB-BASIC`
+checkouts. Set `GB_PAINT_DIR=` or `GB_BASIC_DIR=` when they live elsewhere.
 
 Headless smoke test:
 
@@ -105,15 +108,19 @@ directory layout. `k_drive_poll` uses a single-sector probe for media presence.
 
 - **GEOBENCH.DSK** (bootable): kernel + DESKTOP, FILEMGR, NOTEPAD,
   SETTINGS, VIEWER, CLOCK, TIMESYNC, ICONED, SHELL + the portable savers
-  (SQUARES — the default —, ANT, XMATRIX, DECO) + fonts, icon sets, pointer,
-  splash, Browser's `GBWEB.MOD`/`BRSAVE.APP` helpers, `LOGO.PIC` (default
-  wallpaper), GEOBENCH.CFG. No other picture is included.
+  (`SQUARES`, the default) + fonts, icon sets, pointer, splash, Browser's
+  `GBWEB.MOD`/`BRSAVE.APP` helpers, `LOGO.PIC` (default wallpaper),
+  GEOBENCH.CFG. No other picture is included.
 - **COMPANION.DSK** (CF2 data): backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
   WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, WELCOME.TXT.
-- **MEDIA.DSK** (720K read-only CF2DD data): every portable picture from
-  `assets/pictures`, stored byte-for-byte in canonical GBPC v2 format. Use it
-  in drive B when browsing the gallery.
+- **EXTRAS.DSK** (720K read-only CF2DD data): every portable picture from
+  `assets/pictures`, stored byte-for-byte in canonical GBPC v2 format, plus
+  GB-PAINT (`PAINT.APP` and `PAINT.IST`), GB-BASIC (`BASIC.APP`, its runtime and
+  engine), the BASIC examples, and the other verified portable PCW savers
+  (`ANT`, `DECO`, and `XMATRIX`). Use it in drive B to browse pictures or run
+  the applications and savers. Save edited pictures and programs to writable
+  CF2 media; the PCW CF2DD backend is currently read-only.
 
 ## PCW Time Sync With PerryFi / PerryNet
 
@@ -171,8 +178,7 @@ it. HTTPS is not supported because the PCW side has no TLS implementation.
 
 - The direct-`#C000` savers (PYRO, HELIX, STARFLD, …) — they poke the CPC
   framebuffer; each needs a PCW plot path.
-- DISKUTIL (needs a PCW FORMAT TRACK backend), PAINT and GB-BASIC (their
-  repos need `-DGB_PCW` targets).
+- DISKUTIL (needs a PCW FORMAT TRACK backend).
 - TELNET, WGET and Browser use PerryNet/PerryFi directly for TCP sessions on
   PCW. They open PerryNet sockets in host-pulled receive mode (`TCP_RECV`) so
   network data is only transmitted while the app is actively polling serial; a

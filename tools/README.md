@@ -16,6 +16,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   rebuild it for recovery with `STORAGE=ide`. `STORAGE=m4` leaves an M4 dev-harness
   kernel in `build/`. `FAT16=1` and `EXTRA_RASM=...` tune the variant
   (e.g. `EXTRA_RASM="-DGB_ROM_REQ=1"` for the ROM-offload kernel).
+- **`build_kernel_pcw.sh`** — builds the standalone PCW boot disk, companion
+  disk, and 720K `EXTRAS.DSK`. The extras build stages the PCW payloads from
+  sibling GB-PAINT and GB-BASIC checkouts.
 - **`m4detect.asm`** — a tiny BASIC-callable detector that asks the firmware
   (`KL_FIND_COMMAND`) whether an M4 ROM RSX is installed. The staged `GB.BAS` loads
   it as `M4DETECT.BIN` and uses its result to pick `GBM4` vs `GBALB`.
@@ -49,7 +52,7 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`mkcpcmedia.py OUT.dsk --add FILE ...`** — builds the extended 80-track,
   single-sided AMSDOS DATA image used for the CPC picture gallery.
 - **`mkpcwdsk.py`** — builds bootable or data PCW CF2/CF2DD images, including
-  `QA/PCW/MEDIA.DSK`.
+  `QA/PCW/EXTRAS.DSK`.
 - **`build_ide_img.sh`** — *(archived)* older IDE-only image helper.
 
 ## Paged kernel modules

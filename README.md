@@ -75,8 +75,9 @@ hardware, or use the disk images in an emulator.
 - Boot **`QA/PCW/GEOBENCH.DSK`** on a real PCW 8256/8512 (e.g. from a Gotek) or
   in the [1985 emulator](docs/PCW.md) with `video_mode = cga2` and the
   DK'tronics board enabled (`debug/1985-pcw.conf`); **`QA/PCW/COMPANION.DSK`**
-  contains backdrops and network apps, while **`QA/PCW/MEDIA.DSK`** is the 720K
-  picture-gallery disk. No CP/M is needed — the disc boots GEOBENCH directly. Real machines show the native 1bpp monochrome; the CGA2
+  contains backdrops and network apps, while **`QA/PCW/EXTRAS.DSK`** is the 720K
+  picture gallery and carries GB-PAINT, GB-BASIC, BASIC examples, and additional
+  PCW-compatible screensavers. No CP/M is needed — the disc boots GEOBENCH directly. Real machines show the native 1bpp monochrome; the CGA2
   colours are an emulator feature (see [docs/PCW.md](docs/PCW.md)).
 - On real PCW hardware, automatic desktop time sync uses a PerryFi card running
   PerryNet firmware. Enable it with `TIMESYNC=true` and set the local whole-hour

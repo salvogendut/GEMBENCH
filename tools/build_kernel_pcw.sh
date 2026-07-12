@@ -2,7 +2,7 @@
 # tools/build_kernel_pcw.sh - build the Amstrad PCW target (#331): the
 # GBKERNP.RAW kernel on its own boot sector, the core app/asset set, staged
 # into QA/PCW and packed into GEOBENCH.DSK (bootable CF2), COMPANION.DSK,
-# and MEDIA.DSK (CF2DD picture gallery).
+# and EXTRAS.DSK (CF2DD picture gallery plus standalone applications).
 #
 # The PCW boots standalone (no CP/M): kernel/pcwboot.asm loads the kernel
 # from the disc's reserved tracks; system files live in the disc's CP/M 2.2
@@ -20,8 +20,20 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 RASM="${RASM:-rasm}"
+GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
+GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
+[ -f "$GB_PAINT_DIR/Makefile" ] || {
+    echo "ERROR: GB-PAINT checkout not found at $GB_PAINT_DIR" >&2
+    echo "Set GB_PAINT_DIR=/path/to/GB-PAINT or clone it next to geobench." >&2
+    exit 1
+}
+[ -f "$GB_BASIC_DIR/Makefile" ] || {
+    echo "ERROR: GB-BASIC checkout not found at $GB_BASIC_DIR" >&2
+    echo "Set GB_BASIC_DIR=/path/to/GB-BASIC or clone it next to geobench." >&2
+    exit 1
+}
 
 mkdir -p build/pcw QA/PCW
 
@@ -117,9 +129,6 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/SHELL.RAW=SHELL.APP \
     --add build/pcw/BRSAVE.RAW=BRSAVE.APP \
     --add build/pcw/SQUARES.RAW=SQUARES.SAV \
-    --add build/pcw/ANT.RAW=ANT.SAV \
-    --add build/pcw/XMATRIX.RAW=XMATRIX.SAV \
-    --add build/pcw/DECO.RAW=DECO.SAV \
     --add build/pcw/LOGO.PIC=LOGO.PIC \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT
 
@@ -139,12 +148,45 @@ python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     --add build/pcw/XAOS.RAW=XAOS.APP \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
-# --- MEDIA.DSK: complete portable gallery on a 720K CF2DD data disc
-MEDIA_ADDS=()
+# --- EXTRAS.DSK: portable gallery + standalone apps on a 720K CF2DD disc
+echo "Building GB-PAINT PCW payload from $GB_PAINT_DIR"
+make -C "$GB_PAINT_DIR" GEOBENCH="$PWD" app-pcw assets-pcw
+echo "Building GB-BASIC PCW payload from $GB_BASIC_DIR"
+make -C "$GB_BASIC_DIR" GEOBENCH="$PWD" raws-pcw
+
+for f in \
+    "$GB_PAINT_DIR/build/pcw/PAINT.APP" \
+    "$GB_PAINT_DIR/build/pcw/PAINT.IST" \
+    "$GB_BASIC_DIR/build/pcw/BASIC.RAW" \
+    "$GB_BASIC_DIR/build/pcw/BASRUN.RAW" \
+    "$GB_BASIC_DIR/build/pcw/BASRUN2.BIN"; do
+    [ -s "$f" ] || { echo "ERROR: missing PCW extras payload $f" >&2; exit 1; }
+done
+
+rm -rf build/pcw/basic-examples
+mkdir -p build/pcw/basic-examples
+for bas in "$GB_BASIC_DIR"/examples/*.BAS; do
+    sed 's/$/\r/' "$bas" > "build/pcw/basic-examples/$(basename "$bas")"
+done
+
+EXTRAS_ADDS=(
+    --add "$GB_PAINT_DIR/build/pcw/PAINT.APP=PAINT.APP"
+    --add "$GB_PAINT_DIR/build/pcw/PAINT.IST=PAINT.IST"
+    --add "$GB_BASIC_DIR/build/pcw/BASIC.RAW=BASIC.APP"
+    --add "$GB_BASIC_DIR/build/pcw/BASRUN.RAW=BASRUN.APP"
+    --add "$GB_BASIC_DIR/build/pcw/BASRUN2.BIN=BASRUN2.BIN"
+    --add "build/pcw/ANT.RAW=ANT.SAV"
+    --add "build/pcw/DECO.RAW=DECO.SAV"
+    --add "build/pcw/XMATRIX.RAW=XMATRIX.SAV"
+)
 for pic in assets/pictures/*.PIC; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    MEDIA_ADDS+=(--add "$pic=$name.PIC")
+    EXTRAS_ADDS+=(--add "$pic=$name.PIC")
 done
-python3 tools/mkpcwdsk.py QA/PCW/MEDIA.DSK --type cf2dd "${MEDIA_ADDS[@]}"
+for bas in build/pcw/basic-examples/*.BAS; do
+    EXTRAS_ADDS+=(--add "$bas=$(basename "$bas")")
+done
+rm -f QA/PCW/MEDIA.DSK
+python3 tools/mkpcwdsk.py QA/PCW/EXTRAS.DSK --type cf2dd "${EXTRAS_ADDS[@]}"
 
-echo "PCW target built: QA/PCW/GEOBENCH.DSK + COMPANION.DSK + MEDIA.DSK"
+echo "PCW target built: QA/PCW/GEOBENCH.DSK + COMPANION.DSK + EXTRAS.DSK"
