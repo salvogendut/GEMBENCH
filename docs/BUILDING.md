@@ -98,14 +98,15 @@ MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
   it from `QA/MSX` plus the Nextor system files, so Nextor's Sunrise IDE driver
   boots it straight to the desktop.
 
-**Assets are packaged automatically.** Icon sets and backdrops are transcoded
-from CPC Mode 1 to V9938 Screen 6. `.PIC` files are different: GBPC mode 1 is a
-portable canonical representation, so pictures are copied byte-for-byte into
-root-level `PICS/` and translated only while the MSX displays them. See
-[Portable GEOBENCH picture format](PIC_FORMAT.md). System assets stay in
-`GBENCH/`. The remaining converters take a `--platform msx2` flag or are
-dedicated tools such as `ist_to_msx` and `bdp_to_msx`. The mouse pointer is a
-V9938 hardware sprite: a hand-edited **`assets/pointer.SPR`** (edit it with
+**Assets are packaged automatically.** `.PIC` files are canonical GBPC Mode-1 and
+are copied byte-for-byte into root-level `PICS/`; the kernel translates pictures
+while displaying them on MSX as on other targets. Icon sets (`.IST`) are also now
+stored in canonical Mode-1 bytes and are decoded when loaded by the MSX kernel. Backdrops
+still need MSX-specific transcode for byte layout, so the build keeps calling
+`png2cpc.py --platform msx2` / `bdp_to_msx` where necessary.
+[Portable GEOBENCH picture format](PIC_FORMAT.md) explains why this works.
+System assets stay in `GBENCH/`. The mouse pointer is a V9938 hardware sprite: a
+hand-edited **`assets/pointer.SPR`** (edit it with
 `tools/iconedit.py --platform msx2 assets/pointer.SPR`) is preferred over
 generating it from `assets/pointer.png`.
 

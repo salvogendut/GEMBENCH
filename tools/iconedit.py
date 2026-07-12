@@ -17,11 +17,11 @@ Window), so you can Copy/Paste Icon between two sets side by side.
 Run:
     python3 tools/iconedit.py [--platform msx2] [file.IST | file.SPR]
 
---platform msx2 edits V9938 Screen-6 icon sets (round-trips byte-for-byte with
-packicons.py --platform msx2) AND the MSX2 hardware-sprite cursor (.SPR, 66 bytes,
+All .IST files use the same canonical CPC Mode-1 encoding. --platform msx2 only
+selects the V9938 hardware-sprite cursor format for .SPR files (66 bytes,
 round-trips with png2spr.py --platform msx2): paint pen 1 (white) for the outline,
-pen 3 (red) for the fill, pen 0 to erase. Without --platform msx2, .SPR is a CPC
-Mode-1 masked cursor instead.
+pen 3 (red) for the fill, pen 0 to erase. Without it, .SPR is a CPC Mode-1 masked
+cursor instead.
 """
 import json
 import os
@@ -31,21 +31,14 @@ import tempfile
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-# --- pixel packing: CPC Mode 1 (default) or MSX2 Screen 6 (--platform msx2) --
-# Both pack 4 pixels per byte; only the bit layout differs. PLATFORM is set by
-# main() and switches the .IST codec so the editor round-trips MSX icon sets
-# byte-for-byte with `packicons.py --platform msx2`. (MSX .SPR cursors use their
-# own V9938 hardware-sprite codec below - decode_msx_sprite/encode_msx_sprite.)
+# --- portable .IST pixel packing: canonical CPC Mode 1 on every target --------
+# PLATFORM only selects the .SPR cursor codec below; it never changes .IST data.
 PLATFORM = 'cpc'
 
 def decode_pixel(b, i):
-    if PLATFORM == 'msx2':
-        return (b >> (6 - 2 * i)) & 3          # Screen 6: pen in bits 7-2i, 6-2i
     return ((b >> (7 - i)) & 1) | (((b >> (3 - i)) & 1) << 1)
 
 def set_pixel(b, i, pen):
-    if PLATFORM == 'msx2':
-        return (b & ~(3 << (6 - 2 * i))) | ((pen & 3) << (6 - 2 * i))
     if pen & 1:
         b |= 1 << (7 - i)
     if pen & 2:

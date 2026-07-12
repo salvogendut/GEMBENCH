@@ -89,33 +89,22 @@ static unsigned char u_valid, u_cx, u_cy, u_pen;  /* single-level undo of last p
 static void fmt83(char *dst, const char *n11);   /* both defined below; used by draw() */
 static const char *win_title(void);
 
-/* ---- pixel packing for the .IST byte format (#287) --------------------------
- * CPC Mode 1: pixel i has bit0 @ 7-i, bit1 @ 3-i.  MSX Screen 6: the 2-bit pen
- * of pixel i sits in bits (7-2i),(6-2i). The .IST bytes are transcoded to
- * Screen-6 packing at build (packicons --platform msx2), so ICONED must read /
- * write them in the same encoding. (set_pixel assumes the target bits are 0,
- * as its callers pre-clear the byte / start from a blank cell.) */
+/* ---- pixel packing for the portable .IST byte format ------------------------
+ * Every target stores CPC Mode-1 bytes: pixel i has bit0 @ 7-i and bit1 @ 3-i.
+ * The non-CPC kernels transcode the desktop set after loading it, while ICONED
+ * reads and writes the canonical on-disk representation on every platform.
+ * set_pixel assumes the target bits are clear, as its callers start with zero. */
 
 static unsigned char dec_pixel(unsigned char b, unsigned char i)
 {
-#ifdef GB_MSX2
-    unsigned char sh = (unsigned char)(6 - (i << 1));
-    return (unsigned char)((b >> sh) & 3);
-#else
     return (unsigned char)(((b >> (7 - i)) & 1) | (((b >> (3 - i)) & 1) << 1));
-#endif
 }
 
 static unsigned char set_pixel(unsigned char b, unsigned char i, unsigned char pen)
 {
-#ifdef GB_MSX2
-    b |= (unsigned char)((pen & 3) << (6 - (i << 1)));
-    return b;
-#else
     if (pen & 1) b |= (unsigned char)(1 << (7 - i));
     if (pen & 2) b |= (unsigned char)(1 << (3 - i));
     return b;
-#endif
 }
 
 /* gget/gset: read/write a single pen in the packed grid (4 pixels/byte). */

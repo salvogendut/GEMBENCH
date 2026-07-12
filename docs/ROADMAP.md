@@ -39,12 +39,14 @@
 13. ✅ **Portable picture payloads (#381)** — CPC, MSX2, and PCW distributions
    carry the same canonical GBPC v2 Mode-1 `.PIC` bytes. MSX2 and PCW translate
    pixels at the display boundary; Paint and XAOS also save the portable format.
+14. ✅ **Portable icon-set payloads** — CPC, MSX2, and PCW distributions carry
+   canonical Mode-1 `.IST` bytes. Non-CPC kernels transcode the selected set when
+   loading it, and ICONED preserves the portable format on every target.
 
 ## Next
 
-- **Shared non-picture assets across platforms** — icon sets and backdrops still
-  have platform-specific Mode-1 / Screen-6 payloads. Pictures are already shared
-  through the portable GBPC v2 format.
+- **Shared backdrop assets across platforms** — backdrops still use platform-specific
+  Mode-1 / Screen-6 payloads because of their byte-layout differences.
 - **Paint** follow-ups — resizable canvas and scrolling for pictures bigger than the
   screen (Fullscreen already centers the canvas + tools).
 - **Drawers/folders** and richer desktop arrangement.

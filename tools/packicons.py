@@ -23,31 +23,16 @@ Slot order (must match kernel/gbkern.asm): floppy ide clock trash geobench
 basic binary picture text.
 
 Usage:
-    tools/packicons.py [--platform msx2] <out.IST> <icon0.asm> <icon1.asm> ...
+    tools/packicons.py <out.IST> <icon0.asm> <icon1.asm> ...
 
---platform msx2 (#287): transcode every icon byte from CPC Mode 1 packing to
-V9938 Screen 6 packing (same 4px/byte geometry, so the container, directory
-and sizes are unchanged - only the in-byte pixel encoding differs).
+The output is always the portable canonical CPC Mode-1 representation. MSX and
+PCW kernels transcode the payload after loading it.
 """
 import sys, re, struct
 
 MAGIC = b'GBIS'
 VERSION = 2
 HDR = 16
-
-BIT0_FOR_PIXEL = (7, 6, 5, 4)   # CPC Mode 1: pen bit0 of pixel i
-BIT1_FOR_PIXEL = (3, 2, 1, 0)   #             pen bit1 of pixel i
-
-def mode1_to_screen6(data):
-    """CPC Mode 1 bytes -> Screen 6 bytes (pixel i in bits 7-2i, 6-2i)."""
-    out = bytearray()
-    for byte in data:
-        s6 = 0
-        for i in range(4):
-            pen = ((byte >> BIT0_FOR_PIXEL[i]) & 1) | (((byte >> BIT1_FOR_PIXEL[i]) & 1) << 1)
-            s6 |= pen << (6 - 2 * i)
-        out.append(s6)
-    return bytes(out)
 
 def parse_icon(path):
     w = h = None
@@ -67,16 +52,12 @@ def parse_icon(path):
     return w, h, bytes(data)
 
 def main(argv):
-    platform = 'cpc'
-    if len(argv) > 2 and argv[1] == '--platform':
-        platform = argv[2]
-        argv = argv[:1] + argv[3:]
+    if len(argv) > 1 and argv[1] == '--platform':
+        sys.exit("--platform is no longer supported for .IST; output is always canonical Mode-1")
     if len(argv) < 3:
-        sys.exit("usage: packicons.py [--platform msx2] <out.IST> <icon.asm> ...")
+        sys.exit("usage: packicons.py <out.IST> <icon.asm> ...")
     out, asms = argv[1], argv[2:]
     icons = [parse_icon(a) for a in asms]
-    if platform == 'msx2':
-        icons = [(w, h, mode1_to_screen6(d)) for w, h, d in icons]
     n = len(icons)
 
     header = bytearray(16)

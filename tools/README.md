@@ -69,7 +69,9 @@ Build the on-demand kernel modules (loaded into a bank and `call`ed): config
 - **`png2spr.py`** — a PNG → a `.SPR` cursor sprite (2 pre-shifted phases, mask+data
   **interleaved** per byte to match the kernel compositor — see `lib/cursor.asm`).
 - **`packicons.py`** — pack icon asm sources into a `.IST` set (in slot order); builds
-  `build/DEFAULT.IST` fresh each build.
+  `build/DEFAULT.IST` fresh each build. The `.IST` files are stored in the canonical
+  CPC Mode-1 payload on disk; MSX/PCW decode them at load time with `icon_convert`
+  in the kernel.
 - **`ist_append.py`** — append icon asm bitmap(s) to an existing (hand-tuned) `.IST`
   set, bumping the count + shifting offsets; used to add a new slot to the tracked
   `assets/iconsets/*.IST` sets that `packicons.py` doesn't regenerate.
