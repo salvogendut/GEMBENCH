@@ -291,7 +291,7 @@ static unsigned char gb_html_block_tag(const char *name, unsigned char len)
                            name[1] >= '1' && name[1] <= '6');
 }
 
-#ifndef GB_HTML_NO_IMAGE_ALT
+#if !defined(GB_HTML_NO_IMAGE_ALT) && !defined(GB_HTML_IMAGE)
 static void gb_html_emit_alt(const char *value)
 {
     if (*value) {
@@ -307,6 +307,9 @@ static void gb_html_emit_alt(const char *value)
 static void gb_html_process_tag(void)
 {
     unsigned char i = 0, end = 0, name, len, self_close = 0, attr;
+#ifdef GB_HTML_IMAGE
+    unsigned char src_attr;
+#endif
     while (i < gb_html_tag_len &&
            gb_html_space((unsigned char)gb_html_tag_buffer[i])) i++;
     if (i < gb_html_tag_len && gb_html_tag_buffer[i] == '/') { end = 1; i++; }
@@ -382,13 +385,25 @@ static void gb_html_process_tag(void)
         GB_HTML_FORM_TAG(GB_HTML_FORM_INPUT, i);
         return;
     }
-#ifndef GB_HTML_NO_IMAGE_ALT
     if (gb_html_equal(gb_html_tag_buffer + name, len, "img")) {
+#ifdef GB_HTML_IMAGE
+        gb_html_url_buffer[0] = gb_html_alt_buffer[0] = 0;
+        src_attr = gb_html_attr(i, "src", gb_html_url_buffer, GB_HTML_URL_MAX);
+        attr = gb_html_attr(i, "alt", gb_html_alt_buffer, GB_HTML_ALT_MAX);
+        if (gb_html_pending_space && gb_html_have_text) GB_HTML_EMIT_TEXT(' ');
+        GB_HTML_IMAGE(src_attr == 1 ? gb_html_url_buffer : "",
+                      attr == 1 ? gb_html_alt_buffer : "");
+        if (src_attr == 1 || attr == 1) {
+            gb_html_have_text = 1;
+            gb_html_last_break = 0;
+            gb_html_pending_space = 0;
+        }
+#elif !defined(GB_HTML_NO_IMAGE_ALT)
         attr = gb_html_attr(i, "alt", gb_html_alt_buffer, GB_HTML_ALT_MAX);
         if (attr == 1) gb_html_emit_alt(gb_html_alt_buffer);
+#endif
         return;
     }
-#endif
     if (gb_html_block_tag(gb_html_tag_buffer + name, len)) {
         gb_html_emit_break(GB_HTML_BREAK_BLOCK);
         if (gb_html_equal(gb_html_tag_buffer + name, len, "li")) {

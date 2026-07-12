@@ -27,6 +27,9 @@
 #define BUI_FORM_VALUE  ((char *)0x3A18)
 #define BUI_FORM_URL    ((char *)0x3A48)
 #define BUI_FORM_ACTIVE (*(volatile unsigned char *)0x3AA8)
+#define BUI_REQ_PORT    (*(volatile unsigned int  *)0x3AAA)
+#define BUI_REQ_ERROR   (*(volatile unsigned char *)0x3AAC)
+#define BUI_REQ_TEXT    ((char *)0x3AC8)
 #define BUI_PROXY_MAX  95
 #define BUI_SOURCE_FULL 0x01
 #define BUI_PROXY_ON   0x08
@@ -35,6 +38,15 @@
 #define BUI_URL_BASE   ((char *)0x2900)
 #define BUI_URL_LINK   ((char *)0x2960)
 #define BUI_URL_RESULT ((char *)0x29C0)
+#define BROWSER_REQUEST ((char *)0x3300)
+#define BROWSER_LINK    ((char *)0x34F0)
+#define BROWSER_URL     ((char *)0x3542)
+#define BROWSER_HOST    ((char *)0x35A2)
+#define BROWSER_PATH    ((char *)0x35E2)
+#define BROWSER_URL_MAX 95
+#define BROWSER_HOST_MAX 63
+#define BROWSER_PATH_MAX 95
+#define BROWSER_REQUEST_MAX 240
 #define FS_LOAD_OFS    ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS      (*(volatile unsigned char *)0x144F)
 
@@ -226,6 +238,107 @@ static unsigned char parse_proxy(void)
     return 1;
 }
 
+static char *put_dec(char *p, unsigned int v)
+{
+    unsigned int d = 10000;
+    unsigned char started = 0, n;
+    while (d) {
+        n = 0;
+        while (v >= d) { v -= d; n++; }
+        if (n || started || d == 1) { *p++ = (char)('0' + n); started = 1; }
+        d /= 10;
+    }
+    return p;
+}
+
+static unsigned char prepare_request(void)
+{
+    const char *target = UI_N ? BROWSER_LINK : BROWSER_URL;
+    const char *p = target, *s;
+    char *dst, *out = BROWSER_REQUEST;
+    char *limit = BROWSER_REQUEST + BROWSER_REQUEST_MAX;
+    unsigned char n = 0, digit;
+
+    BUI_REQ_ERROR = 0;
+    if (prefix(p, "https://")) { BUI_REQ_ERROR = 1; return 0; }
+    if (!prefix(p, "http://")) { BUI_REQ_ERROR = 2; return 0; }
+    p += 7;
+    dst = BROWSER_HOST;
+    while (*p && *p != '/' && *p != ':' && *p != '?' && *p != '#' &&
+           n < BROWSER_HOST_MAX) { *dst++ = *p++; n++; }
+    *dst = 0;
+    if (!n || (*p && *p != '/' && *p != ':' && *p != '?' && *p != '#')) {
+        BUI_REQ_ERROR = 3; return 0;
+    }
+
+    BUI_REQ_PORT = 80;
+    if (*p == ':') {
+        p++; BUI_REQ_PORT = 0;
+        if (*p < '0' || *p > '9') { BUI_REQ_ERROR = 4; return 0; }
+        while (*p >= '0' && *p <= '9') {
+            digit = (unsigned char)(*p++ - '0');
+            if (BUI_REQ_PORT > 6553 ||
+                (BUI_REQ_PORT == 6553 && digit > 5)) {
+                BUI_REQ_ERROR = 4; return 0;
+            }
+            BUI_REQ_PORT = (unsigned int)(BUI_REQ_PORT * 10 + digit);
+        }
+        if (!*(volatile unsigned char *)0x3AAA &&
+            !*(volatile unsigned char *)0x3AAB) {
+            BUI_REQ_ERROR = 4; return 0;
+        }
+    }
+    if (*p && *p != '/' && *p != '?' && *p != '#') {
+        BUI_REQ_ERROR = 5; return 0;
+    }
+
+    dst = BROWSER_PATH; n = 0;
+    if (!*p || *p == '#') { *dst++ = '/'; n = 1; }
+    else {
+        if (*p == '?') { *dst++ = '/'; n = 1; }
+        while (*p && *p != '#' && n < BROWSER_PATH_MAX) {
+            *dst++ = *p++; n++;
+        }
+    }
+    *dst = 0;
+    if (*p && *p != '#') { BUI_REQ_ERROR = 6; return 0; }
+
+#define ADD_TEXT(t) do { s = (t); while (*s && out < limit) *out++ = *s++; } while (0)
+    ADD_TEXT("GET "); ADD_TEXT(BUI_PROXY[0] ? target : BROWSER_PATH);
+    ADD_TEXT(" HTTP/1.0\r\nHost: "); ADD_TEXT(BROWSER_HOST);
+    if (BUI_REQ_PORT != 80 && out < limit) {
+        *out++ = ':'; out = put_dec(out, BUI_REQ_PORT);
+    }
+    ADD_TEXT("\r\nUser-Agent: GB/1\r\nConnection: close\r\n\r\n");
+    if (out >= limit) {
+        BROWSER_REQUEST[BROWSER_REQUEST_MAX] = 0;
+        BUI_REQ_ERROR = 7;
+        return 0;
+    }
+    *out = 0;
+#undef ADD_TEXT
+    if (!parse_proxy()) { BUI_REQ_ERROR = 8; return 0; }
+    return 1;
+}
+
+static void request_error_text(void)
+{
+    const char *s;
+    unsigned char i = 0;
+    switch (BUI_REQ_ERROR) {
+        case 1: s = "HTTPS unsupported"; break;
+        case 2: s = "Use http://"; break;
+        case 3: s = "Host too long"; break;
+        case 4: s = "Invalid port number"; break;
+        case 5: s = "Invalid URL"; break;
+        case 6: s = "Path too long"; break;
+        case 7: s = "Request too long"; break;
+        default: s = "Invalid proxy"; break;
+    }
+    while (s[i] && i < 19) { BUI_REQ_TEXT[i] = s[i]; i++; }
+    BUI_REQ_TEXT[i] = 0;
+}
+
 static void local_read(void)
 {
     unsigned int n, off, i;
@@ -275,5 +388,9 @@ void main(void)
         UI_RES = gb_form_process(UI_N, *(const char **)UI_NAME);
     else if (UI_OP == 15) UI_RES = gb_form_build_url();
     else if (UI_OP == 18) UI_RES = gb_url_resolve();
+    else if (UI_OP == 19) {
+        UI_RES = prepare_request();
+        if (!UI_RES) request_error_text();
+    }
     else UI_RES = 0;
 }

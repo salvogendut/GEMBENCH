@@ -47,8 +47,8 @@ base          0x1A00  0x21FF  fs_directory_buffer     fs_1c00       floppy direc
 base          0x2200  0x3DFF  module_data_buffer      module_data   GBFAT/FLOPPYSV/GBNET bulk transfer data
 base          0x2200  0x2872  browser_pcw_transient   module_data   PCW Browser transport, protocol, render, and fallback buffers
 base          0x2900  0x32FF  browser_source_buffers  module_data   Browser offline-read buffer and 2-KiB source-cache staging block
-base          0x3300  0x3856  browser_cpc_transient   module_data   CPC Browser protocol, render, and fallback buffers; above GBNET max I/O
-base          0x3900  0x3AA9  browser_shared_state    module_data   Browser/GBUI/GBWEB cache, proxy, GET-form, and query transfer state
+base          0x3300  0x3887  browser_transient       module_data   Browser protocol, render, and fallback buffers; above GBNET max I/O
+base          0x3900  0x3ADB  browser_shared_state    module_data   Browser/GBUI/GBWEB cache, proxy, GET-form, request, resource, image, viewport, and error state
 base          0x3E00  0x3FFF  clipboard               -             shared clipboard length and data
 
 # Non-ROM IDE recovery profile. Archived, but kept visible because it shares

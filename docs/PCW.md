@@ -110,7 +110,7 @@ directory layout. `k_drive_poll` uses a single-sector probe for media presence.
 - **GEOBENCH.DSK** (bootable): kernel + DESKTOP, FILEMGR, NOTEPAD,
   SETTINGS, VIEWER, CLOCK, TIMESYNC, ICONED, SHELL + the portable savers
   (`SQUARES`, the default) + fonts, icon sets, pointer, splash, Browser's
-  `GBWEB.MOD`/`BRSAVE.APP` helpers, `LOGO.PIC` (default wallpaper),
+  `GBWEB.MOD`/`GBIMG.MOD`/`BRSAVE.APP` helpers, `LOGO.PIC` (default wallpaper),
   GEOBENCH.CFG. No other picture is included.
 - **COMPANION.DSK** (CF2 data): backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
@@ -164,13 +164,16 @@ to four absolute or relative redirects and keeps an interrupted partial file. A
 later PCW attempt restarts that file rather than sending Range: CP/M records
 only retain a 128-byte-granular size, so an exact resume offset cannot be
 reconstructed safely. Browser follows redirects too, parses chunked HTML bodies,
-renders text/list/link text into a borrowed 16K page holding up to 255
-fixed-width lines. It renders one viewport, pauses the open PerryNet TCP stream,
+renders text, links, compact GET forms, and image records into a borrowed 16K
+page holding up to 182 fixed-width rows. It renders one viewport, pauses the open PerryNet TCP stream,
 and resumes from the retained receive byte as the user scrolls down; cached lines
 remain available for upward scrolling. The proportional scrollbar shows that
 continuation is available, and reaching the line bound is reported as truncated.
-Underlined link rows open when clicked, and one previous URL is retained for
-Back. Its File menu loads and saves offline `.HTM` files, and File Manager opens
+Underlined link labels open their separately retained destination when clicked,
+so proxy transport URLs do not appear as page text. Browser fetches the visible
+image lazily into one bounded GBPC v2 slot and reuses that slot after scrolling;
+the proxy performs conversion of ordinary web images. One previous URL is
+retained for Back. Its File menu loads and saves offline `.HTM` files, and File Manager opens
 those files in Browser with the text-file icon. The Settings menu persists an
 optional plain-HTTP proxy as `PROXY=` in `GEOBENCH.CFG`; selecting Direct clears
 it. HTTPS is not supported because the PCW side has no TLS implementation.

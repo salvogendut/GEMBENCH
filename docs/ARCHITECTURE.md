@@ -55,7 +55,7 @@ subsystem so responsibilities are explicit:
 - `kernel/boot.asm` — boot path, desktop launch, return-to-BASIC path.
 - `kernel/assets.asm` — font/icon/cursor/backdrop/wallpaper reload helpers.
 - `kernel/config_module.asm` — `GBCFG.MOD` boot-time parse/load path.
-- `kernel/modules.asm` — shared paged-module runners (`GBUI`, `GBWEB`, `GBNET`, config).
+- `kernel/modules.asm` — shared paged-module runners (`GBUI`, `GBWEB`, `GBIMG`, `GBNET`, config).
 - `kernel/app_pool.asm` — bank-page allocation/free for apps and borrowed pages.
 - `kernel/input_api.asm` — pointer/keyboard polling and top-bar dispatch.
 - `kernel/clock.asm` / `kernel/memdetect.asm` — RTC/timekeeping and RAM probe.
@@ -188,7 +188,7 @@ the level of asset reload, storage, and window-manager primitives.
   stays in drive A: the kernel's system loader (`fs_load_sys`, `lib/fs.asm`) tries the boot
   drive (A) first and **falls back to the browse drive** (B), so a Companion app launched
   from a drive-B File Manager loads from B while its shared dependencies (`GBUI.MOD`,
-  `GBWEB.MOD`, `GBNET.MOD`, `BRSAVE.APP`, `PAINT.IST`) load from A — no duplicates
+  `GBWEB.MOD`, `GBIMG.MOD`, `GBNET.MOD`, `BRSAVE.APP`, `PAINT.IST`) load from A — no duplicates
   on the Companion. (Card
   builds are unaffected — they already ship everything on one volume, including
   `GBNET.MOD` for Net4CPC and `GBNETM4.MOD` for M4 TCP.)

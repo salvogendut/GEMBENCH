@@ -15,6 +15,7 @@ APP="${1:-apps/clock}"
 OUT="${2:-build/CLOCK.RAW}"
 GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.s)
 GBLIB_SRC="${GBLIB_SRC:-$GB/gblib.s}"
+APP_CFLAGS="${APP_CFLAGS:-}"
 LOAD_LIMIT="${LOAD_LIMIT:-0x7F00}"
 # DATA_LOC: where this app's data starts (code is #4000.. below it, data ..#7FFF
 # above). The default 0x6200 is a 50/50 split; a code-heavy/data-light app (NOTEPAD)
@@ -85,6 +86,7 @@ cache_key=$(printf '%s\n' \
     "NET=$NET_FLAG" \
     "GBWIN=$GBWIN_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
+    "APP_CFLAGS=$APP_CFLAGS" \
     "LOAD_LIMIT=$LOAD_LIMIT" \
     "SDCC=$SDCC" \
     "SDAS=$SDAS" \
@@ -104,7 +106,7 @@ fi
 # derives GB_COLS/GB_LINES/GB_XPIX from it, and gbwin.c/gbdoc.c clamp window
 # drag/resize + fullscreen to those extents. Omitting it built libgb with the
 # CPC 320x200 extents, so on MSX windows would not drag past x=320 (#287).
-"$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
+"$SDCC" -mz80 --fomit-frame-pointer $APP_CFLAGS ${APPDEFS:-} -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
