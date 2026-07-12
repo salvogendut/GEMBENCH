@@ -11,20 +11,23 @@
 ; fs_free_kib / fs_sysdir_enter / fs_sysdir_leave / fs_sys_resolve, and the
 ; same fs_ent_* / fs_req_name / fs_load_* low-RAM cells.
 ;
-; Filesystem shape (CF2 180K, from the disc spec at T0/R1):
-;   - data area starts at track OFF (spec[5]); 1K blocks (BSH=3, spec[6]);
-;     spec[7] directory blocks at block 0 (32 entries each)
+; Filesystem shape (from the disc spec at T0/R1):
+;   - CF2: 40 logical tracks, one side, 1K blocks and 8-bit AL entries
+;   - CF2DD: 160 alternating side-tracks, 2K blocks and 16-bit AL entries
+;   - data area starts at logical track OFF (spec[5]); spec[7] directory
+;     blocks start at block 0
 ;   - dir entry: +0 user (0 = ours, #E5 = free), +1..11 name/ext (attribute
 ;     bits in the high bits - masked), +12 EX extent#, +14 S2, +15 RC
-;     (128-byte records in this extent; #80 = full 16K), +16..31 AL[16]
-;     8-bit block numbers (a CF2 has 175 blocks, so 1-byte ALs)
+;     (128-byte records in this extent; #80 = full 16K), +16..31 allocation
+;     entries: 16 one-byte block numbers on CF2, or 8 little-endian words on
+;     CF2DD
 ;   - a file > 16K has one entry per extent, same name, EX = 0,1,2...
 ;     size = maxEX*16384 + RC(maxEX)*128 (128-byte granularity - loaders
 ;     read the content's own headers for exact geometry)
 ;
 ; CP/M is FLAT: no directories. fs_sysdir_enter/leave are no-ops and system
-; files live in the root (the "ship content flat" model). M1 scope is
-; read-only: save/delete return NC (the write path is Phase 5).
+; files live in the root (the "ship content flat" model). CF2 is read/write;
+; CF2DD is mounted read-only until the allocator supports >255 blocks.
 ;
 ; Sector cache: one sector in fs_secbuf (#1800), invalidated at every public
 ; entry point - fs_secbuf is aliased by other users (the drag ghost's
@@ -46,6 +49,7 @@ fsp_mount
                 ld    (fsp_cslsn),hl
                 xor   a                       ; read the disc spec: T0/R1 raw
                 ld    d,a
+                ld    c,a                     ; side 0
                 ld    e,1
                 ld    hl,fs_secbuf
                 call  pcwfdc_read
@@ -54,36 +58,77 @@ fsp_mount
                 ld    (fsp_offtrk),a          ; (OFF is raised by mkpcwdsk to cover
                 ld    a,2                     ; the kernel image, so a real GEOBENCH
                 ld    (fsp_dirblks),a         ; disc always has a readable spec)
+                ld    a,40
+                ld    (fsp_tracks),a
+                ld    a,1
+                ld    (fsp_sides),a
+                ld    a,2
+                ld    (fsp_spb),a
+                xor   a
+                ld    (fsp_al16),a
                 jr    fsi_geom
 fsi_spec
                 ld    a,(fs_secbuf+5)         ; OFF: reserved tracks
                 ld    (fsp_offtrk),a
                 ld    a,(fs_secbuf+7)         ; directory blocks
                 ld    (fsp_dirblks),a
+                ld    a,(fs_secbuf+2)         ; cylinders per side
+                ld    (fsp_tracks),a
+                ld    a,(fs_secbuf+1)         ; sided bit 0: alternating two-side format
+                and   1
+                inc   a
+                ld    (fsp_sides),a
+                ld    a,(fs_secbuf+6)         ; BSH 4 = 2K blocks + 16-bit allocation
+                cp    4
+                ld    a,0
+                jr    nz,fsi_setfmt
+                inc   a
+fsi_setfmt      ld    (fsp_al16),a
+                add   a,a                     ; 0 -> 0, 1 -> 2
+                add   a,2                     ; sectors/block: 2 or 4
+                ld    (fsp_spb),a
 fsi_geom
                 ld    hl,#FFFF                ; the spec read cached T0/R1, which is
                 ld    (fsp_cslsn),hl          ; NOT a data-area lsn - invalidate
-                ld    a,(fsp_dirblks)         ; drm = dirblks * 32 entries
-                add   a,a
-                add   a,a
-                add   a,a
-                add   a,a
-                add   a,a
-                ld    (fsp_drm),a
-                ld    a,(fsp_offtrk)          ; total blocks = (40 - OFF) * 9 / 2
-                ld    b,a
-                ld    a,40
-                sub   b
+                ld    a,(fsp_dirblks)         ; entries = dir blocks * block bytes / 32
                 ld    l,a
                 ld    h,0
-                ld    e,a
-                ld    d,0
                 add   hl,hl                   ; *2
                 add   hl,hl                   ; *4
                 add   hl,hl                   ; *8
-                add   hl,de                   ; *9
+                add   hl,hl                   ; *16
+                add   hl,hl                   ; *32 (1K blocks)
+                ld    a,(fsp_al16)
+                or    a
+                jr    z,fsi_drm
+                add   hl,hl                   ; *64 for 2K blocks
+fsi_drm         ld    (fsp_drm),hl
+                ld    a,(fsp_tracks)          ; logical tracks = cylinders * sides
+                ld    l,a
+                ld    h,0
+                ld    a,(fsp_sides)
+                cp    2
+                jr    nz,fsi_tracks
+                add   hl,hl
+fsi_tracks      ld    a,(fsp_offtrk)
+                ld    e,a
+                ld    d,0
+                or    a
+                sbc   hl,de                   ; data logical tracks after OFF
+                ld    d,h
+                ld    e,l
+                add   hl,hl                   ; *2
+                add   hl,hl                   ; *4
+                add   hl,hl                   ; *8
+                add   hl,de                   ; *9 sectors
                 srl   h
-                rr    l                       ; /2 -> 1K blocks
+                rr    l                       ; /2 for a 1K block
+                ld    a,(fsp_al16)
+                or    a
+                jr    z,fsi_nblocks
+                srl   h
+                rr    l                       ; /4 for a 2K block
+fsi_nblocks
                 ld    (fsp_nblocks),hl
                 scf
                 ret
@@ -117,6 +162,7 @@ fspc_probe_b
                 call  pcwfdc_setunit
                 xor   a
                 ld    d,a
+                ld    c,a                     ; side 0
                 ld    e,1
                 ld    hl,fs_secbuf
                 call  pcwfdc_read1
@@ -144,22 +190,18 @@ fs_sysdir_leave
 ; fs_dir_first / fs_dir_next -> CF set = entry ready in fs_ent_*, NC = done.
 ; Reports each FILE once (extent 0 entries only); size spans all extents.
 fs_dir_first
-                xor   a
-                ld    (fsd_idx),a
+                ld    hl,0
+                ld    (fsd_idx),hl
 fs_dir_next
                 ld    hl,#FFFF
                 ld    (fsp_cslsn),hl
 fdn_loop
-                ld    a,(fsd_idx)
-                ld    hl,fsp_drm
-                cp    (hl)
+                ld    hl,fsd_idx
+                call  fsp_scan_next
                 jr    c,fdn_have
                 or    a                       ; past the end: done
                 ret
 fdn_have
-                inc   a
-                ld    (fsd_idx),a
-                dec   a
                 call  fsp_getent
                 ret   nc                      ; read error: end the walk
                 ld    a,(hl)                  ; +0 user: 0 = ours
@@ -205,15 +247,12 @@ fsp_calcsize
                 xor   a
                 ld    (fscs_max),a            ; max EX seen
                 ld    (fscs_rc),a             ; its RC
-                ld    (fscs_e),a
+                ld    hl,0
+                ld    (fscs_e),hl
 fscs_loop
-                ld    a,(fscs_e)
-                ld    hl,fsp_drm
-                cp    (hl)
+                ld    hl,fscs_e
+                call  fsp_scan_next
                 jr    nc,fscs_done
-                inc   a
-                ld    (fscs_e),a
-                dec   a
                 call  fsp_getent
                 jr    nc,fscs_done
                 ld    a,(hl)
@@ -309,16 +348,12 @@ flf_ck
                 ld    hl,(fs_load_max)
                 ld    (fslf_rem),hl
 flf_extloop
-                xor   a                       ; scan for (fs_req_name, EX=fslf_ext)
-                ld    (fscs_e),a
+                ld    hl,0                    ; scan for (fs_req_name, EX=fslf_ext)
+                ld    (fscs_e),hl
 flf_scan
-                ld    a,(fscs_e)
-                ld    hl,fsp_drm
-                cp    (hl)
+                ld    hl,fscs_e
+                call  fsp_scan_next
                 jp    nc,flf_noent
-                inc   a
-                ld    (fscs_e),a
-                dec   a
                 call  fsp_getent
                 jp    nc,flf_noent
                 ld    a,(hl)
@@ -368,40 +403,34 @@ flf_blk
                 ld    a,h
                 or    l
                 jr    z,flf_extdone
-                ld    a,(fslf_ai)
-                cp    16
+                call  flf_next_block          ; HL = block number, CF = present
                 jr    nc,flf_extdone
-                ld    hl,fslf_blocks
-                ld    e,a
-                ld    d,0
-                add   hl,de
-                inc   a
-                ld    (fslf_ai),a
-                ld    a,(hl)                  ; A = block number (0 = hole/end)
+                add   hl,hl                   ; block -> first sector (*2 CF2)
+                ld    a,(fsp_al16)
                 or    a
-                jr    z,flf_extdone
-                ld    l,a                     ; first sector of the block: lsn = AL*2
-                ld    h,0
-                add   hl,hl
-                call  flf_copysec
-                jr    nc,flf_fail
-                ld    hl,(fslf_ebyt)          ; second sector, if the extent goes on
+                jr    z,flf_have_lsn
+                add   hl,hl                   ; *4 CF2DD
+flf_have_lsn    ld    (fslf_blsn),hl
+                ld    a,(fsp_spb)
+                ld    (fslf_bsec),a
+flf_bsec_loop
+                ld    a,(fslf_done)
+                or    a
+                jp    nz,flf_done
+                ld    hl,(fslf_ebyt)
                 ld    a,h
                 or    l
-                jr    z,flf_blk
-                ld    a,(fslf_ai)             ; lsn = AL*2 + 1 (AL was consumed: -1)
-                dec   a
-                ld    hl,fslf_blocks
-                ld    e,a
-                ld    d,0
-                add   hl,de
-                ld    a,(hl)
-                ld    l,a
-                ld    h,0
-                add   hl,hl
-                inc   hl
+                jr    z,flf_extdone
+                ld    hl,(fslf_blsn)
                 call  flf_copysec
                 jr    nc,flf_fail
+                ld    hl,(fslf_blsn)
+                inc   hl
+                ld    (fslf_blsn),hl
+                ld    a,(fslf_bsec)
+                dec   a
+                ld    (fslf_bsec),a
+                jr    nz,flf_bsec_loop
                 jr    flf_blk
 flf_extdone
                 ld    a,(fslf_rc)             ; RC < #80 = final extent
@@ -424,6 +453,50 @@ flf_done
                 xor   a
                 ld    (fs_ent_size+2),a
                 ld    (fs_ent_size+3),a
+                scf
+                ret
+
+; flf_next_block: consume the next allocation entry copied from the extent.
+; CF2 has 16 one-byte entries; CF2DD has 8 little-endian word entries.
+; Return HL=block and CF set, or NC for a zero/end entry.
+flf_next_block
+                ld    a,(fslf_ai)
+                ld    c,a
+                ld    a,(fsp_al16)
+                or    a
+                jr    nz,fnb_word
+                ld    a,c
+                cp    16
+                ret   nc
+                inc   a
+                ld    (fslf_ai),a
+                ld    hl,fslf_blocks
+                ld    e,c
+                ld    d,0
+                add   hl,de
+                ld    a,(hl)
+                ld    l,a
+                ld    h,0
+                or    a
+                ret   z
+                scf
+                ret
+fnb_word        ld    a,c
+                cp    8
+                ret   nc
+                inc   a
+                ld    (fslf_ai),a
+                sla   c
+                ld    b,0
+                ld    hl,fslf_blocks
+                add   hl,bc
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)
+                ex    de,hl
+                ld    a,h
+                or    l
+                ret   z
                 scf
                 ret
 
@@ -568,19 +641,19 @@ fs_load_sys
 
 ; fs_delete_file: free every extent entry of fs_req_name (user 0). CF = deleted.
 fs_delete_file
+                ld    a,(fsp_al16)            ; keep CF2DD consistently read-only
+                or    a
+                ret   nz
                 ld    hl,#FFFF
                 ld    (fsp_cslsn),hl
+                ld    hl,0
+                ld    (fscs_e),hl
                 xor   a
-                ld    (fscs_e),a
                 ld    (fsdl_hit),a
 fdl_loop
-                ld    a,(fscs_e)
-                ld    hl,fsp_drm
-                cp    (hl)
+                ld    hl,fscs_e
+                call  fsp_scan_next
                 jr    nc,fdl_done
-                inc   a
-                ld    (fscs_e),a
-                dec   a
                 call  fsp_getent
                 jr    nc,fdl_fail
                 ld    a,(hl)
@@ -612,6 +685,9 @@ fdl_fail
 ; round up to the next record (the shared contract already treats fs sizes
 ; as advisory - loaders read the content's own headers).
 fs_save_file
+                ld    a,(fsp_al16)            ; CF2DD is mounted read-only for now
+                or    a                       ; (16-bit allocation writes are separate)
+                ret   nz
                 ld    hl,#FFFF
                 ld    (fsp_cslsn),hl
                 ld    a,(FS_XFLAGS)
@@ -663,16 +739,13 @@ fsv_append
                 call  fsw_bitmap
                 xor   a                        ; find the LAST extent of the file
                 ld    (fsv_ext),a
-                ld    (fscs_e),a
+                ld    hl,0
+                ld    (fscs_e),hl
                 ld    (fsdl_hit),a
 fap_scan
-                ld    a,(fscs_e)
-                ld    hl,fsp_drm
-                cp    (hl)
+                ld    hl,fscs_e
+                call  fsp_scan_next
                 jr    nc,fap_scanned
-                inc   a
-                ld    (fscs_e),a
-                dec   a
                 call  fsp_getent
                 jr    nc,fap_scanned
                 ld    a,(hl)
@@ -699,8 +772,7 @@ fap_take
                 ld    (fsdl_hit),a
                 ld    a,b
                 ld    (fsv_ext),a
-                ld    a,(fscs_e)
-                dec   a
+                ld    a,(fsp_scan_idx)
                 ld    (fsv_slot),a
 fap_skip
                 pop   hl
@@ -832,22 +904,18 @@ fsv_flush
                 cp    #FF
                 jr    nz,ffl_fill
                 xor   a                        ; find a free directory slot
-                ld    (fscs_e),a
+                ld    hl,0
+                ld    (fscs_e),hl
 ffl_scan
-                ld    a,(fscs_e)
-                ld    hl,fsp_drm
-                cp    (hl)
+                ld    hl,fscs_e
+                call  fsp_scan_next
                 jr    nc,ffl_full
-                inc   a
-                ld    (fscs_e),a
-                dec   a
-                ld    c,a
                 call  fsp_getent
                 ret   nc
                 ld    a,(hl)
                 cp    #E5
                 jr    nz,ffl_scan
-                ld    a,c
+                ld    a,(fsp_scan_idx)
 ffl_fill
                 call  fsp_getent
                 ret   nc
@@ -903,15 +971,12 @@ fwb_dir
                 inc   c
                 djnz  fwb_dir
                 xor   a
-                ld    (fscs_e),a
+                ld    hl,0
+                ld    (fscs_e),hl
 fwb_loop
-                ld    a,(fscs_e)
-                ld    hl,fsp_drm
-                cp    (hl)
+                ld    hl,fscs_e
+                call  fsp_scan_next
                 ret   nc
-                inc   a
-                ld    (fscs_e),a
-                dec   a
                 call  fsp_getent
                 ret   nc
                 ld    a,(hl)
@@ -994,16 +1059,12 @@ fs_free_kib
                 ld    (fsp_cslsn),hl
                 ld    hl,0
                 ld    (fsff_used),hl
-                xor   a
-                ld    (fscs_e),a
+                ld    hl,0
+                ld    (fscs_e),hl
 fff_loop
-                ld    a,(fscs_e)
-                ld    hl,fsp_drm
-                cp    (hl)
+                ld    hl,fscs_e
+                call  fsp_scan_next
                 jr    nc,fff_done
-                inc   a
-                ld    (fscs_e),a
-                dec   a
                 call  fsp_getent
                 jr    nc,fff_done
                 ld    a,(hl)
@@ -1011,20 +1072,37 @@ fff_loop
                 jr    nz,fff_loop
                 ld    de,16                   ; count this entry's non-zero ALs
                 add   hl,de
+                ld    a,(fsp_al16)
+                or    a
+                jr    nz,fff_words
                 ld    b,16
 fff_als
                 ld    a,(hl)
                 or    a
                 jr    z,fff_alnext
+                call  fff_inc_used
+fff_alnext
+                inc   hl
+                djnz  fff_als
+                jr    fff_loop
+fff_words       ld    b,8
+fff_wals
+                ld    a,(hl)
+                inc   hl
+                or    (hl)
+                jr    z,fff_walnext
+                call  fff_inc_used
+fff_walnext
+                inc   hl
+                djnz  fff_wals
+                jr    fff_loop
+fff_inc_used
                 push  hl
                 ld    hl,(fsff_used)
                 inc   hl
                 ld    (fsff_used),hl
                 pop   hl
-fff_alnext
-                inc   hl
-                djnz  fff_als
-                jr    fff_loop
+                ret
 fff_done
                 ld    hl,(fsp_nblocks)
                 ld    de,(fsff_used)
@@ -1038,10 +1116,42 @@ fff_done
                 jr    nc,fff_ok
                 ld    hl,0
 fff_ok
+                ld    a,(fsp_al16)            ; 2K allocation blocks -> KiB
+                or    a
+                jr    z,fff_ret
+                add   hl,hl
+fff_ret
                 scf
                 ret
 
 ; --- helpers -------------------------------------------------------------------
+
+; fsp_scan_next: HL points to a 16-bit directory index. If it is below the
+; mounted directory-entry count, increment it and return the old low byte in A
+; with CF set (directories top out at 256 entries). NC means exhausted.
+fsp_scan_next
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)
+                ld    bc,(fsp_drm)
+                ld    a,d
+                cp    b
+                jr    c,fsn_take
+                jr    nz,fsn_done
+                ld    a,e
+                cp    c
+                jr    nc,fsn_done
+fsn_take        inc   de
+                ld    (hl),d
+                dec   hl
+                ld    (hl),e
+                dec   de
+                ld    a,e
+                ld    (fsp_scan_idx),a
+                scf
+                ret
+fsn_done        or    a
+                ret
 
 ; fsp_rdsec: HL = data-area lsn -> the sector in fs_secbuf (cached). CF ok.
 fsp_rdsec
@@ -1076,8 +1186,9 @@ fsp_wrsec
                 or    a
                 ret
 
-; fsp_lsn2ts: HL = data-area lsn -> D = track (OFF + lsn/9), E = sector
-; (1 + lsn%9). Clobbers A, BC, HL.
+; fsp_lsn2ts: HL = data-area lsn -> C = side, D = cylinder, E = sector.
+; CF2DD alternates side-tracks, so logical track 1 is cylinder 0 side 1.
+; Clobbers A, B, HL.
 fsp_lsn2ts
                 ld    a,(fsp_offtrk)
                 ld    d,a
@@ -1095,6 +1206,15 @@ fl2_sub
                 inc   d
                 jr    fl2_div
 fl2_have
+                ld    c,0
+                ld    a,(fsp_sides)
+                cp    2
+                jr    nz,fl2_sector
+                ld    a,d
+                srl   a                       ; cylinder = logical track / 2
+                ld    d,a
+                rl    c                       ; side = logical track & 1
+fl2_sector
                 ld    a,l
                 inc   a
                 ld    e,a
@@ -1154,18 +1274,25 @@ fnm_out
 ; --- state ----------------------------------------------------------------------
 fsp_offtrk      db    1
 fsp_dirblks     db    2
-fsp_drm         db    64
+fsp_drm         dw    64
 fsp_nblocks     dw    175
 fsp_cslsn       dw    #FFFF
 fsp_unit        db    0
-fsd_idx         db    0
-fscs_e          db    0
+fsp_tracks      db    40
+fsp_sides       db    1
+fsp_spb         db    2
+fsp_al16        db    0
+fsp_scan_idx    db    0
+fsd_idx         dw    0
+fscs_e          dw    0
 fscs_max        db    0
 fscs_rc         db    0
 fslf_ext        db    0
 fslf_rc         db    0
 fslf_ai         db    0
 fslf_ebyt       dw    0
+fslf_blsn       dw    0
+fslf_bsec       db    0
 fslf_rem        dw    0
 fslf_dst        dw    0
 fslf_total      dw    0

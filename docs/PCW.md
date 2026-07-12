@@ -88,12 +88,18 @@ reports the size in the top bar.
 
 ## Storage
 
-CP/M 2.2 on CF2 180K (40 tracks, 1K blocks, 64 dir entries, flat root).
-Read AND write: save/truncate, append (`FS_XFLAGS` bit1), delete, and
-chunked reads (`FS_XFLAGS` bit0 + 24-bit `FS_LOAD_OFS`) — so any-size
-drag-copy and the Viewer's big pictures work. Sizes are 128-byte CP/M
-records (`#1A`-padded tails). Drive B is supported for CF2 and CF2DD discs
-(`fs_set_drive` remounts; `k_drive_poll` probes with a single read).
+CP/M 2.2 with a flat root. CF2 180K media (40 tracks, 1K blocks, 64 directory
+entries) is read/write: save/truncate, append (`FS_XFLAGS` bit1), delete, and
+chunked reads (`FS_XFLAGS` bit0 + 24-bit `FS_LOAD_OFS`) all work, so any-size
+drag-copy and the Viewer's big pictures work. CF2DD 720K media (80 tracks,
+two sides, 2K blocks, 256 directory entries) is readable in drive B; writes
+are rejected until the allocator supports block numbers above 255. Sizes are
+128-byte CP/M records (`#1A`-padded tails).
+
+The 1985 emulator detects an EDSK image's track and side geometry when it is
+inserted. GEOBENCH independently reads the PCW disc specification at track 0,
+sector 1 when switching drives, then selects the correct head, block size, and
+directory layout. `k_drive_poll` uses a single-sector probe for media presence.
 
 ## What ships where
 
@@ -105,9 +111,9 @@ records (`#1A`-padded tails). Drive B is supported for CF2 and CF2DD discs
 - **COMPANION.DSK** (CF2 data): backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
   WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, WELCOME.TXT.
-- **MEDIA.DSK** (720K CF2DD data): every portable picture from `assets/pictures`,
-  stored byte-for-byte in canonical GBPC v2 format. Use it in drive B when
-  browsing the gallery.
+- **MEDIA.DSK** (720K read-only CF2DD data): every portable picture from
+  `assets/pictures`, stored byte-for-byte in canonical GBPC v2 format. Use it
+  in drive B when browsing the gallery.
 
 ## PCW Time Sync With PerryFi / PerryNet
 
@@ -171,8 +177,8 @@ it. HTTPS is not supported because the PCW side has no TLS implementation.
   PCW. They open PerryNet sockets in host-pulled receive mode (`TCP_RECV`) so
   network data is only transmitted while the app is actively polling serial; a
   shared direct network-module backend remains a later target.
-- CF2DD 720K media (2K blocks, 16-bit allocation entries) — drive B
-  currently expects CF2-format discs.
+- Writes to CF2DD 720K media. Reading, directory enumeration, free-space
+  reporting, 2K blocks, and 16-bit allocation entries are supported.
 
 ## The real uPD765 (rules the emulator does not enforce)
 

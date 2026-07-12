@@ -22,9 +22,9 @@
 ;
 ;   pcwfdc_init                     SPECIFY (ND=1) + motor + recalibrate
 ;   pcwfdc_setunit A=0/1            select drive (B double-steps CF2 media)
-;   pcwfdc_read  D=track E=sector(1..9) HL=512-byte dest  -> CF set = ok
+;   pcwfdc_read  C=side D=track E=sector(1..9) HL=512-byte dest -> CF set = ok
 ;   pcwfdc_read1                    one attempt, no retry (presence probe)
-;   pcwfdc_write D=track E=sector(1..9) HL=512-byte src   -> CF set = ok
+;   pcwfdc_write C=side D=track E=sector(1..9) HL=512-byte src  -> CF set = ok
 ;
 ; The motor is turned on at init and left running.
 ; ---------------------------------------------------------------------------
@@ -113,11 +113,14 @@ fdc_ncn
                 add   a,a
                 ret
 
-; pcwfdc_read: D = track, E = sector R, HL = 512-byte destination.
+; pcwfdc_read: C = side, D = track, E = sector R, HL = 512-byte destination.
 ; CF set = sector read. Three attempts, recalibrating between them.
 ; pcwfdc_read1: one attempt, no retry - for presence probes.
 pcwfdc_read1
                 ld    (fdr_dst),hl
+                ld    a,c
+                and   1
+                ld    (fdr_side),a
                 ld    a,d
                 ld    (fdr_trk),a
                 ld    a,e
@@ -126,6 +129,9 @@ pcwfdc_read1
                 jr    fdr_try
 pcwfdc_read
                 ld    (fdr_dst),hl
+                ld    a,c
+                and   1
+                ld    (fdr_side),a
                 ld    a,d
                 ld    (fdr_trk),a
                 ld    a,e
@@ -157,6 +163,14 @@ fdr_once
                 ld    a,(fdr_trk)
                 ld    (fdc_track),a
 fdo_onspot
+                ld    a,(fdr_side)           ; command unit/head and H must agree
+                ld    (fdc_rd_h),a
+                add   a,a
+                add   a,a
+                ld    c,a
+                ld    a,(fdc_unit)
+                or    c
+                ld    (fdc_rd_u),a
                 ld    a,6
                 out   (PCW_SYSCTL),a          ; TC clear before the command
                 ld    a,(fdr_trk)             ; READ DATA #66: R = the sector,
@@ -196,10 +210,13 @@ fdo_fail
                 or    a
                 ret
 
-; pcwfdc_write: D = track, E = sector R, HL = 512-byte source.
+; pcwfdc_write: C = side, D = track, E = sector R, HL = 512-byte source.
 ; CF set = sector written. Three attempts, recalibrating between them.
 pcwfdc_write
                 ld    (fdr_dst),hl
+                ld    a,c
+                and   1
+                ld    (fdr_side),a
                 ld    a,d
                 ld    (fdr_trk),a
                 ld    a,e
@@ -231,6 +248,14 @@ fdw_once
                 ld    a,(fdr_trk)
                 ld    (fdc_track),a
 fdw_onspot
+                ld    a,(fdr_side)
+                ld    (fdc_wr_h),a
+                add   a,a
+                add   a,a
+                ld    c,a
+                ld    a,(fdc_unit)
+                or    c
+                ld    (fdc_wr_u),a
                 ld    a,6
                 out   (PCW_SYSCTL),a          ; TC clear before the command
                 ld    a,(fdr_trk)             ; WRITE DATA #45: R = the sector,
@@ -365,7 +390,7 @@ fdc_sk_trk      db    0
 fdc_cmd_read    db    #66                     ; READ DATA, MFM + SK
 fdc_rd_u        db    #00                     ; unit + head
 fdc_rd_c        db    0
-                db    #00                     ; H
+fdc_rd_h        db    #00                     ; H
 fdc_rd_r        db    1
                 db    #02                     ; N = 512
                 db    #09                     ; EOT = 9 (TC terminates)
@@ -374,7 +399,7 @@ fdc_rd_r        db    1
 fdc_cmd_write   db    #45                     ; WRITE DATA, MFM
 fdc_wr_u        db    #00                     ; unit + head
 fdc_wr_c        db    0
-                db    #00                     ; H
+fdc_wr_h        db    #00                     ; H
 fdc_wr_r        db    1
                 db    #02                     ; N = 512
                 db    #09                     ; EOT = 9 (TC terminates)
@@ -388,6 +413,7 @@ fdc_unit        db    0                       ; selected drive unit (0 = A, 1 = 
 fdc_dbl         db    0                       ; 1 = double-step (CF2 in the DD drive)
 fdc_dbl_b       db    1                       ; unit 1's measured stepping mode
 fdr_trk         db    0
+fdr_side        db    0
 fdr_sec         db    0
 fdr_dst         dw    0
 fdc_st          ds    7                       ; last command's result bytes
