@@ -51,12 +51,13 @@ hold 256) with the last 8 scanlines as a static letterbox strip.
 The CGA2 palette is fixed (black/cyan/magenta/white). The driver
 (`lib/pcw/screen.asm`) permutes GEOBENCH pens on the way to the screen —
 pen 0 blue→cyan, 1 white→white, 2 black→black, 3 red→magenta, which is the
-bit transform `screen = ((gb & #55)<<1) | ((~gb & #AA)>>1)`. Most assets
-stay in GB pen-space / MSX Screen-6-style bytes and are permuted by the PCW
-driver on write (`packicons`, `ist_to_msx`, `bdp_to_msx`). Raw-restore assets
-are the exception: the splash, pointer, and staged `.PIC` files are
-pre-permuted to CGA2 hardware-space at build time (`pic_to_pcw.py` for
-pictures), because `restore_block` copies those bytes straight to the screen.
+bit transform `screen = ((gb & #55)<<1) | ((~gb & #AA)>>1)`. Icon sets and
+backdrops are converted to Screen-6-style bytes by the build and permuted by the
+PCW driver on write (`packicons`, `ist_to_msx`, `bdp_to_msx`). The splash and
+pointer remain hardware-format exceptions. Pictures instead use the portable
+[GBPC v2 format](PIC_FORMAT.md): `restore_pic_block` translates canonical
+Mode-1 bytes directly to PCW CGA2 hardware bytes while drawing, so staged
+`.PIC` files remain byte-identical to the CPC and MSX copies.
 
 **On real hardware the CGA2 mode does not exist**: a real PCW shows the
 same bitmap as monochrome with fine stripe textures. The port targets the
@@ -104,8 +105,9 @@ records (`#1A`-padded tails). Drive B is supported for CF2 and CF2DD discs
 - **COMPANION.DSK** (CF2 data): backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
   WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, WELCOME.TXT.
-- **MEDIA.DSK** (720K CF2DD data): every picture from `assets/pictures`, converted
-  to the PCW display encoding. Use it in drive B when browsing the gallery.
+- **MEDIA.DSK** (720K CF2DD data): every portable picture from `assets/pictures`,
+  stored byte-for-byte in canonical GBPC v2 format. Use it in drive B when
+  browsing the gallery.
 
 ## PCW Time Sync With PerryFi / PerryNet
 

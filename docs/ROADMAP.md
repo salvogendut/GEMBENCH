@@ -36,13 +36,15 @@
    platform: `GBMSX.COM` under MSX-DOS 2 / Nextor, V9938 Screen 6, hardware
    sprite pointer, MSX mouse, all 16 screensavers, and an openMSX test harness
    (`tools/build_kernel_msx.sh` + `tools/run_msx.sh`).
+13. ✅ **Portable picture payloads (#381)** — CPC, MSX2, and PCW distributions
+   carry the same canonical GBPC v2 Mode-1 `.PIC` bytes. MSX2 and PCW translate
+   pixels at the display boundary; Paint and XAOS also save the portable format.
 
 ## Next
 
-- **Shared asset files across platforms** — the CPC and MSX currently ship two
-  encodings of every icon set / picture / backdrop (Mode-1 vs Screen-6). Fold that
-  into one canonical on-disk format that the MSX kernel transcodes at load time,
-  so there is a single source of truth.
+- **Shared non-picture assets across platforms** — icon sets and backdrops still
+  have platform-specific Mode-1 / Screen-6 payloads. Pictures are already shared
+  through the portable GBPC v2 format.
 - **Paint** follow-ups — resizable canvas and scrolling for pictures bigger than the
   screen (Fullscreen already centers the canvas + tools).
 - **Drawers/folders** and richer desktop arrangement.

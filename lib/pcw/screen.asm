@@ -8,9 +8,9 @@
 ; shown through the emulator's CGA2 palette, framebuffer in physical blocks
 ; 4-5 reached through the CPU slot-3 window.
 ;
-;   - bitmaps/assets stay in GB pen space (identical bytes to the MSX build);
-;     every byte is permuted to the CGA2 hardware pens on its way to the
-;     screen: screen = ((gb & #55)<<1) | ((~gb & #AA)>>1)
+;   - native icon/backdrop bitmaps stay in Screen-6-style GB pen space and are
+;     permuted to CGA2 hardware pens on write. Portable .PIC payloads instead
+;     stay in canonical Mode-1 packing and use restore_pic_block's lookup table
 ;   - fill bytes (fb_val) arrive ALREADY permuted - pen_to_byte here returns
 ;     hardware-space bytes, and fills write them raw
 ;   - save_block/restore_block round-trip raw screen (hardware-space) bytes
@@ -371,6 +371,47 @@ rs_nc
                 jr    nz,rs_loop2
                 ret
 
+; restore_pic_block: translate canonical CPC Mode-1 picture bytes directly to
+; PCW CGA2 hardware bytes while copying. The source bank remains canonical.
+restore_pic_block
+                ld    a,(sb_h)
+                ld    (sb_rows),a
+                ld    a,(sb_y)
+                ld    (sb_cy),a
+                ld    hl,(sb_buf)
+                ld    (sb_ptr),hl
+rpw_loop
+                ld    a,(sb_x)
+                ld    d,a
+                ld    a,(sb_cy)
+                ld    e,a
+                call  pcw_addr
+                ld    de,(sb_ptr)
+                ld    a,(sb_w)
+                ld    b,a
+rpw_row
+                ld    a,(de)
+                inc   de
+                ld    (rpw_lut+1),a            ; patch the aligned table's low address byte
+rpw_lut         ld    a,(pic_m1_to_native)
+                ld    (hl),a
+                ld    a,l
+                add   a,8
+                ld    l,a
+                jr    nc,rpw_nc
+                inc   h
+rpw_nc
+                djnz  rpw_row
+                ld    (sb_ptr),de
+                ld    a,(sb_cy)
+                inc   a
+                ld    (sb_cy),a
+                ld    a,(sb_rows)
+                dec   a
+                ld    (sb_rows),a
+                jr    nz,rpw_loop
+                ret
+
 ; --- k_cls: clear the whole desktop to pen 0 --------------------------------
 k_cls
                 xor   a
@@ -648,6 +689,8 @@ sb_y            db    0
 sb_w            db    0
 sb_h            db    0
 sb_buf          dw    0
+
+                include "pic_lut.inc"
 sb_rows         equ   #14B4
 sb_cy           equ   #14B5
 sb_ptr          equ   #14B6

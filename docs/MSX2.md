@@ -21,14 +21,14 @@ Clock — all co-resident under the kernel window manager on a V9938 Screen 6.
 - **Input:** joystick / keyboard pointer, plus the standard **MSX mouse** (GTPAD).
   The clock is 50/60 Hz aware.
 - **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
-  Viewer (with a Screen-6 `.PIC` pipeline), Shell, XAOS, Clock, and **all 16
-  screensavers**. Telnet, NETTEST, WGET and Browser are not built for MSX yet
+  Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS,
+  Clock, and **all 16 screensavers**. Telnet, NETTEST, WGET and Browser are not built for MSX yet
   because GEOBENCH does not have an MSX network transport.
-- **Assets:** the icon sets, backdrops and pictures under `assets/` are packaged
-  for both platforms automatically — the build transcodes each to Screen 6, so a
-  file dropped into `assets/` ships on the CPC and the MSX distro alike. MSX
-  pictures are staged once under root-level `PICS/`; development diagnostics such
-  as `GBSPIKE.COM` are kept separately under root-level `DIAG/`.
+- **Assets:** icon sets and backdrops are transcoded to Screen 6 during the MSX
+  build. Pictures use the portable [GBPC v2 format](PIC_FORMAT.md): the same
+  canonical Mode-1 `.PIC` bytes are staged on every platform and the MSX kernel
+  translates them while drawing. MSX pictures live once under root-level `PICS/`;
+  development diagnostics such as `GBSPIKE.COM` are kept under `DIAG/`.
 
 Build and test in **openMSX** (emulating a Philips NMS 8250 with the Sunrise IDE
 Nextor extension and a 512K RAM expansion):

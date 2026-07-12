@@ -11,6 +11,8 @@ msx:
 
 check:
 	git diff --check
+	python3 tools/gen_pic_luts.py --check
+	python3 tools/check_pic_distribution.py
 	python3 tools/check_lowram_map.py
 	python3 tools/check_abi_table.py
 	kernel/kc/run_tests.sh

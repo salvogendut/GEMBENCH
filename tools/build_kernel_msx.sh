@@ -6,7 +6,8 @@
 # Kept separate from tools/build_kernel.sh (that script is CPC-DSK-entangled
 # and wipes its own QA outputs); the shared pieces (apps via build_capp.sh,
 # GBCFG via build_cfgmod.sh, the Python asset tools) are reused, with
-# -DGB_MSX2 / --platform msx2 selecting the MSX encodings.
+# -DGB_MSX2 / --platform msx2 selecting MSX encodings where required. Portable
+# GBPC v2 pictures remain canonical and are translated by the kernel at display.
 #
 #   bash tools/build_kernel_msx.sh
 #   MSX_SHOTS="20 30 45" tools/run_msx.sh      # then verify in openMSX
@@ -44,7 +45,7 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x6F00 DIALOGS=1 tools/build_capp.sh apps/settings 
 APPDEFS="-DGB_MSX2" DIALOGS=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x68C0 DOCRO=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
@@ -196,10 +197,10 @@ for ist in assets/iconsets/*.IST; do             # icon sets (ICONS=<name>)
     name=$(basename "$ist" .IST | tr a-z A-Z)
     python3 tools/ist_to_msx.py "$ist" "QA/MSX/GBENCH/$name.IST"
 done
-for pic in assets/pictures/*.PIC; do             # root-level /PICS gallery (including wallpaper)
+for pic in assets/pictures/*.PIC; do             # portable canonical .PIC files need no transcode
     [ -e "$pic" ] || continue
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    python3 tools/pic_to_msx.py "$pic" "QA/MSX/PICS/$name.PIC"
+    cp "$pic" "QA/MSX/PICS/$name.PIC"
 done
 
 # --- bootable Nextor image ------------------------------------------------------

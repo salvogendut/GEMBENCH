@@ -408,6 +408,44 @@ rs_row          outi
                 jr    nz,rs_loop2
                 ret
 
+; restore_pic_block: the .PIC payload stays in canonical CPC Mode-1 packing on
+; every platform. Translate each source byte to raw Screen-6 packing while it is
+; sent to VRAM; the banked source remains unchanged for Paint/save portability.
+restore_pic_block
+                call  vdp_wait_ce
+                ld    a,(sb_h)
+                ld    (sb_rows),a
+                ld    a,(sb_y)
+                ld    (sb_cy),a
+                ld    hl,(sb_buf)
+                ld    (sb_ptr),hl
+rpb_loop
+                ld    a,(sb_x)
+                ld    d,a
+                ld    a,(sb_cy)
+                ld    e,a
+                call  vdp_setwr
+                ld    hl,(sb_ptr)
+                ld    a,(sb_w)
+                ld    b,a
+                ld    c,VDP_DATA
+rpb_row
+                ld    a,(hl)
+                inc   hl
+                ld    (rpb_lut+1),a            ; patch the aligned table's low address byte
+rpb_lut         ld    a,(pic_m1_to_native)
+                out   (c),a
+                djnz  rpb_row
+                ld    (sb_ptr),hl
+                ld    a,(sb_cy)
+                inc   a
+                ld    (sb_cy),a
+                ld    a,(sb_rows)
+                dec   a
+                ld    (sb_rows),a
+                jr    nz,rpb_loop
+                ret
+
 ; --- k_line (GB_LINE #8009, #287): draw a line via the V9938 LINE command ----
 ; Endpoints + pen come from the GLINE_* glue cells (screen pixels, top-left
 ; origin) - the clock's inline asm fills them. The command block: DX/DY = the
@@ -697,6 +735,8 @@ sb_y            db    0
 sb_w            db    0
 sb_h            db    0
 sb_buf          dw    0
+
+                include "pic_lut.inc"
 sb_rows         equ   #14B4
 sb_cy           equ   #14B5
 sb_ptr          equ   #14B6
