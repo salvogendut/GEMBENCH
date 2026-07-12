@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # tools/build_kernel_pcw.sh - build the Amstrad PCW target (#331): the
 # GBKERNP.RAW kernel on its own boot sector, the core app/asset set, staged
-# into QA/PCW and packed into the bootable QA/PCW/GEOBENCH.DSK (CF2 180K).
+# into QA/PCW and packed into GEOBENCH.DSK (bootable CF2), COMPANION.DSK,
+# and MEDIA.DSK (CF2DD picture gallery).
 #
 # The PCW boots standalone (no CP/M): kernel/pcwboot.asm loads the kernel
 # from the disc's reserved tracks; system files live in the disc's CP/M 2.2
@@ -83,7 +84,6 @@ d = open(sys.argv[1], 'rb').read()
 open(sys.argv[2], 'wb').write(bytes(((b & 0x55) << 1) | (((b ^ 0xFF) & 0xAA) >> 1) for b in d))
 PY
 python3 tools/pic_to_pcw.py assets/pictures/LOGO.PIC build/pcw/LOGO.PIC
-python3 tools/pic_to_pcw.py assets/pictures/TLEUNG.PIC build/pcw/TLEUNG.PIC
 
 # --- the kernel + the boot sector ---------------------------------------------
 rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
@@ -120,21 +120,10 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/XMATRIX.RAW=XMATRIX.SAV \
     --add build/pcw/DECO.RAW=DECO.SAV \
     --add build/pcw/LOGO.PIC=LOGO.PIC \
-    --add build/pcw/TLEUNG.PIC=TLEUNG.PIC \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT
 
-# --- COMPANION.DSK: pictures, TELNET, backdrops, spare assets (plain data disc)
-# CF2 is tight; LOGO.PIC, TLEUNG.PIC and CLASSIC.FNT live on the boot disk,
-# while the duplicated WELCOME.TXT lives on Companion only.
-# The largest/redundant pictures are skipped so the PerryNet network tools fit.
+# --- COMPANION.DSK: TELNET, backdrops and spare assets (plain CF2 data disc)
 COMP_ADDS=()
-for pic in assets/pictures/*.PIC; do
-    name=$(basename "$pic" .PIC | tr a-z A-Z)
-    case "$name" in 1984|BIG|TLEUNG|LOGO|PENGUIN|POLYMAR) continue;; esac
-
-    python3 tools/pic_to_pcw.py "$pic" "build/pcw/$name.PIC"
-    COMP_ADDS+=(--add "build/pcw/$name.PIC=$name.PIC")
-done
 for bdp in assets/backdrops/*.BDP; do
     name=$(basename "$bdp" .BDP | tr a-z A-Z)
     python3 tools/bdp_to_msx.py "$bdp" "build/pcw/$name.BDP"
@@ -149,4 +138,13 @@ python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     --add build/pcw/XAOS.RAW=XAOS.APP \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
-echo "PCW target built: QA/PCW/GEOBENCH.DSK (bootable CF2) + QA/PCW/COMPANION.DSK"
+# --- MEDIA.DSK: complete PCW-transcoded gallery on a 720K CF2DD data disc
+MEDIA_ADDS=()
+for pic in assets/pictures/*.PIC; do
+    name=$(basename "$pic" .PIC | tr a-z A-Z)
+    python3 tools/pic_to_pcw.py "$pic" "build/pcw/$name.PIC"
+    MEDIA_ADDS+=(--add "build/pcw/$name.PIC=$name.PIC")
+done
+python3 tools/mkpcwdsk.py QA/PCW/MEDIA.DSK --type cf2dd "${MEDIA_ADDS[@]}"
+
+echo "PCW target built: QA/PCW/GEOBENCH.DSK + COMPANION.DSK + MEDIA.DSK"

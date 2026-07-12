@@ -55,25 +55,28 @@ hardware, or use the disk images in an emulator.
 
 - **Albireo / M4 card** — copy the **contents of [`QA/CARD/`](QA/CARD)** onto the
   root of the card (an Albireo SD card, or an M4 card). On the CPC type `RUN"GB` —
-  the loader detects the board and boots the right kernel.
+  the loader detects the board and boots the right kernel. The picture gallery is
+  in `PICS/`; standalone diagnostics are in `DIAG/`.
 - **Floppy** — write **`QA/GEOBENCH.DSK`** (the main disk) and
-  **`QA/COMPANION.DSK`** (the larger apps, extra savers and sample pictures, for
-  drive B) to two 3″ disks, or open the `.DSK` images in a CPC emulator (Caprice32,
-  WinAPE, …). Boot with `RUN"GB` (or `RUN"GBKERN`).
+  **`QA/COMPANION.DSK`** (the larger apps and extra savers) to the working disk
+  set. **`QA/MEDIA.DSK`** holds the complete picture gallery. It is an extended
+  80-track data image for a Gotek/emulator or compatible drive because the gallery
+  does not fit a 180K CF2. Boot with `RUN"GB` (or `RUN"GBKERN`).
 
 ### MSX2
 
 - Copy the **contents of [`QA/MSX/`](QA/MSX)** onto storage your MSX-DOS 2 / Nextor
   setup mounts (SD, IDE, …) and run **`GBMSX.COM`** — or use it in an emulator such
-  as openMSX (see [docs/MSX2.md](docs/MSX2.md)).
+  as openMSX (see [docs/MSX2.md](docs/MSX2.md)). Pictures are under `PICS/` and
+  development diagnostics under `DIAG/`.
 
 ### Amstrad PCW
 
 - Boot **`QA/PCW/GEOBENCH.DSK`** on a real PCW 8256/8512 (e.g. from a Gotek) or
   in the [1985 emulator](docs/PCW.md) with `video_mode = cga2` and the
   DK'tronics board enabled (`debug/1985-pcw.conf`); **`QA/PCW/COMPANION.DSK`**
-  (pictures, backdrops and network apps) goes in drive B. No CP/M is needed — the disc boots
-  GEOBENCH directly. Real machines show the native 1bpp monochrome; the CGA2
+  contains backdrops and network apps, while **`QA/PCW/MEDIA.DSK`** is the 720K
+  picture-gallery disk. No CP/M is needed — the disc boots GEOBENCH directly. Real machines show the native 1bpp monochrome; the CGA2
   colours are an emulator feature (see [docs/PCW.md](docs/PCW.md)).
 - On real PCW hardware, automatic desktop time sync uses a PerryFi card running
   PerryNet firmware. Enable it with `TIMESYNC=true` and set the local whole-hour

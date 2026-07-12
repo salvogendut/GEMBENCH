@@ -13,6 +13,8 @@
 #   GBM4.BIN     - M4 board kernel: real 128-byte AMSDOS header, exec 0x8000.
 #   GEOBENCH.CFG - config (root; read before the kernel enters /GBENCH)
 #   GBENCH/      - everything the kernel loads at boot (apps/modules/fonts/icons/cursor)
+#   PICS/        - the complete picture gallery (root-level: no nested directories)
+#   DIAG/        - standalone diagnostics (currently NETTEST.APP)
 # Boot: RUN"GB -> detector -> RUN"GBM4 or RUN"GBALB -> the kernel reads /GBENCH.
 # Needs build/GBALB.RAW and build/GBM4.RAW.
 #   * <app>.APP / GBCFG/GBFAT/FLOPPYSV/GBUI.MOD - HEADERLESS raw kernel modules (#234: .MOD,
@@ -26,8 +28,13 @@ GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
 OUT="${1:?usage: tools/stage_dist.sh <outdir>}"
 SYS="$OUT/GBENCH"                    # the system folder (#174: <=7 chars so the M4's
                                      # '>'-prefixed dir listing round-trips it; was /GEOBENCH)
+PICS="$OUT/PICS"
+DIAG="$OUT/DIAG"
 mkdir -p build
-mkdir -p "$SYS"
+rm -rf "$PICS" "$DIAG"
+mkdir -p "$SYS" "$PICS" "$DIAG"
+find "$SYS" -maxdepth 1 -type f -name '*.PIC' -delete
+rm -f "$SYS/NETTEST.APP"                 # pre-DIAG staging location (#379)
 
 # --- root: the loader, both card kernels, the config --------------------------
 # GB.BAS remains BASIC because UniDOS needs DOS active while RUN"ing the selected
@@ -46,7 +53,7 @@ for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS DISKUTI
     cp "build/$a.RAW" "$SYS/$a.APP"
 done
 cp build/TELNET.RAW  "$SYS/TELNET.APP"      # #238: windowed ANSI/VT terminal + telnet client
-cp build/NETTEST.RAW "$SYS/NETTEST.APP"     # #261: DNS/TCP/HTTP diagnostic for Albireo/Net4CPC and M4 backends
+cp build/NETTEST.RAW "$DIAG/NETTEST.APP"    # #261: DNS/TCP/HTTP diagnostic for Albireo/Net4CPC and M4 backends
 cp build/WGET.RAW    "$SYS/WGET.APP"        # #363: streaming HTTP downloader for any writable drive
 cp build/BROWSER.RAW "$SYS/BROWSER.APP"     # #367: streaming text-first HTTP browser
 cp build/BRSAVE.RAW  "$SYS/BRSAVE.APP"      # #373: Browser offline .HTM save worker
@@ -96,6 +103,6 @@ for ist in assets/iconsets/*.IST; do          # tracked custom icon sets (edit w
     [ -e "$ist" ] && cp "$ist" "$SYS/"         # tools/iconedit.py); select via ICONS=<name>
 done
 cp assets/WELCOME.TXT "$SYS/"
-for pic in assets/pictures/*.PIC; do        # ship every .PIC in assets/pictures/ to the card
-    [ -e "$pic" ] && cp "$pic" "$SYS/"       # (PENGUIN.PIC + anything you add - view in the Viewer)
+for pic in assets/pictures/*.PIC; do        # root-level gallery: /PICS is one supported directory deep
+    [ -e "$pic" ] && cp "$pic" "$PICS/"
 done

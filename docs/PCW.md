@@ -9,7 +9,7 @@ Gotek (FlashFloppy) serving `QA/PCW/GEOBENCH.DSK`. On real machines the
 display is the native 1bpp monochrome (see the colour section below).
 
 ```
-bash tools/build_kernel_pcw.sh          # -> QA/PCW/GEOBENCH.DSK + COMPANION.DSK
+bash tools/build_kernel_pcw.sh          # -> GEOBENCH.DSK + COMPANION.DSK + MEDIA.DSK
 ~/Dev/1985/1985 --config debug/1985-pcw.conf --disk-a QA/PCW/GEOBENCH.DSK
 ```
 
@@ -87,12 +87,11 @@ reports the size in the top bar.
 
 ## Storage
 
-CP/M 2.2 on CF2 180K (40 tracks, 1K blocks, 64 dir entries, flat root —
-CP/M has no directories, so content ships flat like the card platforms).
+CP/M 2.2 on CF2 180K (40 tracks, 1K blocks, 64 dir entries, flat root).
 Read AND write: save/truncate, append (`FS_XFLAGS` bit1), delete, and
 chunked reads (`FS_XFLAGS` bit0 + 24-bit `FS_LOAD_OFS`) — so any-size
 drag-copy and the Viewer's big pictures work. Sizes are 128-byte CP/M
-records (`#1A`-padded tails). Drive B is supported for CF2 discs
+records (`#1A`-padded tails). Drive B is supported for CF2 and CF2DD discs
 (`fs_set_drive` remounts; `k_drive_poll` probes with a single read).
 
 ## What ships where
@@ -101,13 +100,12 @@ records (`#1A`-padded tails). Drive B is supported for CF2 discs
   SETTINGS, VIEWER, CLOCK, TIMESYNC, ICONED, SHELL + the portable savers
   (SQUARES — the default —, ANT, XMATRIX, DECO) + fonts, icon sets, pointer,
   splash, Browser's `GBWEB.MOD`/`BRSAVE.APP` helpers, `LOGO.PIC` (default
-  wallpaper), `TLEUNG.PIC`, GEOBENCH.CFG.
-- **COMPANION.DSK** (data): the picture gallery, backdrop tiles,
+  wallpaper), GEOBENCH.CFG. No other picture is included.
+- **COMPANION.DSK** (CF2 data): backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
-  WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, WELCOME.TXT. `LOGO.PIC`,
-  `TLEUNG.PIC` and `CLASSIC.FNT` live on the boot disk. The largest/redundant
-  pictures (`1984.PIC`, `BIG.PIC`, `PENGUIN.PIC`, `POLYMAR.PIC`) are omitted to
-  keep enough CF2 space for the apps.
+  WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, WELCOME.TXT.
+- **MEDIA.DSK** (720K CF2DD data): every picture from `assets/pictures`, converted
+  to the PCW display encoding. Use it in drive B when browsing the gallery.
 
 ## PCW Time Sync With PerryFi / PerryNet
 

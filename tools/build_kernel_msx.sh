@@ -17,7 +17,7 @@ RASM="${RASM:-rasm}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
-mkdir -p build/msx QA/MSX/GBENCH
+mkdir -p build/msx
 
 GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
 if [ -f "$GB_PAINT_DIR/src/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
@@ -120,6 +120,12 @@ rm -f build/msx/GBKERNM.RAW build/msx/GBMSX.COM
 [ -s build/msx/GBMSX.COM ] || { echo "ERROR: GBMSX.COM not produced (rasm errors above)" >&2; exit 1; }
 
 # --- stage QA/MSX --------------------------------------------------------------
+mkdir -p QA/MSX/GBENCH
+rm -rf QA/MSX/PICS
+find QA/MSX -maxdepth 1 -type f -name '*.PIC' -delete
+find QA/MSX/GBENCH -maxdepth 1 -type f -name '*.PIC' -delete
+mkdir -p QA/MSX/PICS QA/MSX/DIAG
+rm -f QA/MSX/GBSPIKE.COM                 # pre-DIAG staging location (#379)
 cp build/msx/GBMSX.COM QA/MSX/
 printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
 printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\n' > QA/MSX/GEOBENCH.CFG
@@ -190,11 +196,10 @@ for ist in assets/iconsets/*.IST; do             # icon sets (ICONS=<name>)
     name=$(basename "$ist" .IST | tr a-z A-Z)
     python3 tools/ist_to_msx.py "$ist" "QA/MSX/GBENCH/$name.IST"
 done
-for pic in assets/pictures/*.PIC; do             # pictures: root (viewable on Disk C)
-    [ -e "$pic" ] || continue                    # + GBENCH (WALLPAPER=<name>)
+for pic in assets/pictures/*.PIC; do             # root-level /PICS gallery (including wallpaper)
+    [ -e "$pic" ] || continue
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    python3 tools/pic_to_msx.py "$pic" "QA/MSX/$name.PIC"
-    cp "QA/MSX/$name.PIC" "QA/MSX/GBENCH/$name.PIC"
+    python3 tools/pic_to_msx.py "$pic" "QA/MSX/PICS/$name.PIC"
 done
 
 # --- bootable Nextor image ------------------------------------------------------

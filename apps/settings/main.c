@@ -11,8 +11,9 @@
  *     WALLPAPER=[D:]<stem>[.PIC]
  *     SAVER=[D:]<stem>[.SAV]
  * Each row shows the current value; clicking it lists the matching files in the
- * /GBENCH system folder and offers them in a popup. The kernel loads font/icons/cursor
- * only at boot, so a change takes effect on the next boot (noted in the window).
+ * /GBENCH system folder (or root-level /PICS for wallpapers) and offers them in
+ * a popup. The kernel loads font/icons/cursor only at boot, so a change takes
+ * effect on the next boot (noted in the window).
  *
  * Designed to grow (#129): the `rows` table is data-driven, so later settings - desktop
  * colours (INKS=, needs a kernel palette key), a backdrop pattern and a screensaver
@@ -222,20 +223,21 @@ static void cfg_set(const char *key, const char *val)
     }
 }
 
-/* ---- /GBENCH enumeration ----------------------------------------------------- */
+/* ---- /GBENCH and /PICS enumeration ------------------------------------------ */
 
-/* enter_sys: at the (root) browse dir, descend into the GBENCH system folder if it is
-   present; return 1 if we descended (the caller pairs it with gb_back). A flat layout
-   (e.g. a floppy with no GBENCH subdir) returns 0 - enumerate the root as-is. */
-static unsigned char enter_sys(void)
+/* enter_assets: at the browse root, descend into GBENCH (system assets) or PICS
+   (wallpapers). A flat floppy has neither and is enumerated at root as-is. */
+static unsigned char enter_assets(unsigned char pictures)
 {
     char *p = gb_dir1();
     while (p) {
         if (gb_isdir()) {
             const char *r = gb_entname();
-            if (r[0]=='G' && r[1]=='B' && r[2]=='E' && r[3]=='N'
-                && r[4]=='C' && r[5]=='H' && r[6]==' ') {
-                gb_chdir();                  /* positioned on GBENCH: descend */
+            if ((!pictures && r[0]=='G' && r[1]=='B' && r[2]=='E' && r[3]=='N'
+                 && r[4]=='C' && r[5]=='H' && r[6]==' ') ||
+                (pictures && r[0]=='P' && r[1]=='I' && r[2]=='C' && r[3]=='S'
+                 && r[4]==' ')) {
+                gb_chdir();                  /* positioned on GBENCH/PICS: descend */
                 return 1;
             }
         }
@@ -275,7 +277,7 @@ static void enumerate_boot(const char *ext, unsigned char min_icons)
     nstem = 0;
     old_drive = gb_get_drive();
     gb_set_drive(drive);
-    descended = enter_sys();
+    descended = enter_assets(0);
 
     /* pass 1: collect the matching stems (NO file load here - that would disturb the
        gb_dir1/gb_dirn enumerator mid-scan). */
@@ -321,7 +323,7 @@ static void enumerate_media_drive(const char *ext, unsigned char drive)
     char *p;
     old_drive = gb_get_drive();
     gb_set_drive(drive);
-    descended = enter_sys();
+    descended = enter_assets((unsigned char)(ext[0] == 'P'));
     p = gb_dir1();
     while (p && nstem < MAXST) {
         if (!gb_isdir()) {
@@ -695,7 +697,7 @@ static void load_backdrop_live(const char *name, unsigned char drive)
 
     old_drive = gb_get_drive();
     gb_set_drive(drive);
-    descended = enter_sys();
+    descended = enter_assets(0);
     gb_set_name(nm);
     n = gb_fs_load(gb_copybuf, 512);
     if (descended) gb_back();

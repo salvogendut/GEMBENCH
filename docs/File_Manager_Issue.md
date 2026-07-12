@@ -78,8 +78,10 @@ CPC storage DOSes don't robustly support nested directories. Not worth fighting 
 
 ## Decision / what shipped
 
-- **Pictures ship flat in `/GEOBENCH/`** (`tools/stage_dist.sh`), alongside the apps — depth 1,
-  which navigates correctly. No `/GEOBENCH/PICTURES/` subfolder.
+- **Pictures ship in root-level `/PICS/`** (`tools/stage_dist.sh`) while apps stay
+  in root-level `/GBENCH/` and diagnostics in root-level `/DIAG/`. All are depth 1,
+  which navigates correctly; there is
+  still no nested `/GBENCH/PICTURES/` folder.
 - **Everything** from the fix attempts was reverted to `main`: the FM breadcrumb-rebuild
   (`fs_to_path`), the `gb_root` kernel primitive (`GB_ROOT`/`k_root`/libgb `gb_root()`), and the
   Albireo `alb_cd_path` walk (which *rebooted* a real Albireo on boot — never ship it).
@@ -99,7 +101,7 @@ Albireo:
 ```
 Then File Manager → into a one-level subdir → into a second subdir → `..`: the parent is empty.
 (You must put a depth-2 subdir on the card first, e.g. `mmd -i QA/GEOBENCH.IMG@@16384
-::/GEOBENCH/PICTURES`, since the shipped layout is flat.)
+::/GEOBENCH/PICTURES`, since the shipped folders are root-level.)
 
 ### Headless (deterministic)
 Temporarily auto-open the FM (`gb_set_drive(0); gb_wm_open("FILEMGR APP");` in

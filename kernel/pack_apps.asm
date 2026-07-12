@@ -9,8 +9,8 @@
 ;; These blobs are #4000 app images (build_capp output); the org is irrelevant - they
 ;; are only assembled so the save directive can write them to the disk catalogue.
 ;;
-;; #250: PAINT.APP, XAOS.APP and PENGUIN.PIC moved OFF the Main floppy to the new
-;; Companion floppy (kernel/pack_comp*.asm -> build/companion.dsk). ICONED.APP +
+;; #250/#379: PAINT.APP and XAOS.APP live on the Companion floppy; pictures now
+;; live on MEDIA.DSK. ICONED.APP +
 ;; GBUI.MOD stay on Main (ICONED is a core editor; GBUI is the shared dialog module
 ;; that every app - incl. the Companion apps - loads from the boot drive, #110/#250).
                 org   #4000

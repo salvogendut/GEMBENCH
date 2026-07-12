@@ -22,7 +22,7 @@
 ; screenshot of the final text screen is a complete verification record.
 ;
 ; Build: rasm tools/gbspike_msx.asm   (emits GBSPIKE.COM via the save below)
-; Run:   copy onto a Nextor FAT image with AUTOEXEC.BAT "GBSPIKE" and boot it
+; Run:   copy to DIAG/ on a Nextor image with AUTOEXEC.BAT "DIAG\\GBSPIKE"
 ;        under tools/run_msx.sh.
 
 BDOS            equ   #0005        ; DOS function dispatcher in page 0

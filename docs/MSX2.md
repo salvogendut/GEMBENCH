@@ -26,7 +26,9 @@ Clock — all co-resident under the kernel window manager on a V9938 Screen 6.
   because GEOBENCH does not have an MSX network transport.
 - **Assets:** the icon sets, backdrops and pictures under `assets/` are packaged
   for both platforms automatically — the build transcodes each to Screen 6, so a
-  file dropped into `assets/` ships on the CPC and the MSX distro alike.
+  file dropped into `assets/` ships on the CPC and the MSX distro alike. MSX
+  pictures are staged once under root-level `PICS/`; development diagnostics such
+  as `GBSPIKE.COM` are kept separately under root-level `DIAG/`.
 
 Build and test in **openMSX** (emulating a Philips NMS 8250 with the Sunrise IDE
 Nextor extension and a 512K RAM expansion):

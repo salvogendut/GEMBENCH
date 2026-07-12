@@ -29,16 +29,21 @@ can test or deploy without rebuilding first):
   card or use it as the source for an M4 card/image. The card root holds the
   loader `GB.BAS`, `M4DETECT.BIN`, both kernels (`GBALB.BIN`, `GBM4.BIN`), and
   `GEOBENCH.CFG` — everything else the kernel loads at boot lives in a `GBENCH/`
-  subfolder.
+  subfolder, while the complete gallery lives in root-level `PICS/` and diagnostic
+  programs such as `NETTEST.APP` live in root-level `DIAG/`.
 - **`QA/GEOBENCH.IMG`** — a ready-to-flash shared **Albireo/M4 card image**: a
   partitioned FAT16 disk the CH376 auto-detects and 1984's M4 image mode can mount.
   Built by `tools/build_card_img.sh`; a 32 MB local artifact, rebuilt every build
   and not committed.
 - **`QA/GEOBENCH.DSK`** — the bootable **Main** floppy image.
 - **`QA/COMPANION.DSK`** — the **Companion** floppy with the larger apps
-  (including Telnet, WGET, Browser and Shell), extra savers, and sample pictures
-  for drive B. Browser's `GBWEB.MOD` and `BRSAVE.APP` helpers remain on the Main
+  (including Telnet, WGET, Browser and Shell) and extra savers for drive B.
+  Browser's `GBWEB.MOD` and `BRSAVE.APP` helpers remain on the Main
   disk so File/Settings operations still work after a drive-B file picker.
+- **`QA/MEDIA.DSK`** — the complete `.PIC` gallery on an extended 80-track,
+  single-sided AMSDOS DATA disk. Its files retain AMSDOS headers and multi-extent
+  layout, so the existing chunked picture reader can open the larger images. A
+  standard 180K CF2 is too small; use a Gotek/emulator or compatible 80-track drive.
 
 Boot with **`RUN"GB`**: the card loader `GB.BAS` loads `M4DETECT.BIN`, probes for
 M4ROM's RSX table, and then `RUN"`s `GBM4` on M4 hardware or `GBALB` otherwise. On
@@ -86,7 +91,8 @@ MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 
 - **`QA/MSX/`** — the loose MSX distribution (committed): `GBMSX.COM`, an
   `AUTOEXEC.BAT` that runs it, `GEOBENCH.CFG`, the `GBENCH/` system folder
-  (fonts/icons/cursor/modules/apps/savers) and the sample pictures.
+  (fonts/icons/cursor/modules/apps/savers), the complete gallery in `PICS/`, and
+  development diagnostics in `DIAG/`.
 - **`QA/GBMSX.IMG`** — a bootable 32 MB **FAT16 hard-disk image** (a local
   artifact, git-ignored like the CPC card image). `tools/build_msx_img.sh` fills
   it from `QA/MSX` plus the Nextor system files, so Nextor's Sunrise IDE driver
@@ -94,8 +100,8 @@ MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 
 **Assets are packaged automatically.** Anything dropped into `assets/iconsets`,
 `assets/backdrops` or `assets/pictures` is transcoded from CPC Mode 1 to V9938
-Screen 6 and staged for both root (viewable) and `GBENCH/` (selectable via
-`ICONS=`/`BACKDROP=`/`WALLPAPER=`) — the tools take a `--platform msx2` flag
+Screen 6. System assets stay in `GBENCH/`; pictures go only to the root-level
+`PICS/` gallery, which the desktop also searches for `WALLPAPER=`. The tools take a `--platform msx2` flag
 (`packicons`, `png2spr`, `picconv`, `png2backdrop`, `png2cpc`) or are dedicated
 transcoders (`pic_to_msx`, `ist_to_msx`, `bdp_to_msx`). The mouse pointer is a
 V9938 hardware sprite: a hand-edited **`assets/pointer.SPR`** (edit it with

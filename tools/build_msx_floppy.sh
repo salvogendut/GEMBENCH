@@ -43,7 +43,7 @@ mcopy -i "$DSK" "$DEPS/MSXDOS2.SYS" ::MSXDOS2.SYS
 mcopy -i "$DSK" "$DEPS/MSXDOS2.SYS" ::MSXDOS.SYS
 mcopy -i "$DSK" "$DEPS/COMMAND2.COM" ::COMMAND2.COM
 mcopy -i "$DSK" "$DEPS/COMMAND2.COM" ::COMMAND.COM
-# The GEOBENCH distro (GBMSX.COM + AUTOEXEC.BAT -> "GBMSX" + GBENCH/ + pictures + CFG).
+# The GEOBENCH distro (GBMSX.COM + AUTOEXEC.BAT + GBENCH/ + PICS/ + config).
 mcopy -s -i "$DSK" "$SRC"/* ::/
 
 USED=$(( $(du -sk "$SRC" | cut -f1) ))
