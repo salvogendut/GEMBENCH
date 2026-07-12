@@ -133,11 +133,11 @@ boots to the desktop. Builds: GBIDE (FAT16) `8543 B`, fits budget.
 
 **Validation (headless):** built with a temporary `-DGBWTEST` harness (save a file right after
 `fs_sys_resolve`, then hang; WHITE border = saved). On a **FAT32** image (created with
-`mkfs.fat -F32` at partition offset 16384, populated from `QA/CARD`): `gb_rom_num=6`, the file
+`mkfs.fat -F32` at partition offset 16384, populated from `QA/CPC/CARD`): `gb_rom_num=6`, the file
 read back correct, and `fsck.fat -n` on the carved partition was clean (27 files, no structural
 errors; only the FSINFO free-count off by one). A first run on **FAT16** `CFCARD.img` *did*
 corrupt `GBCFG.BIN` (cross-linked) - that was the FAT32-only-write limitation above, not the
-offload; it was repaired with `fsck.fat -w` + re-copying `QA/CARD`. The harness was removed after.
+offload; it was repaired with `fsck.fat -w` + re-copying `QA/CPC/CARD`. The harness was removed after.
 
 **Test recipe for the next offload:** `-DGBWTEST=1` (over budget -> temporarily exempt from the
 size assert), boot a **FAT32** `ide_image`, then `dd ... skip=32 count=<part-secs>` + `fsck.fat -n`
@@ -173,7 +173,7 @@ Lower-risk than the IDE read (only exercised on Disk A/B, not every boot).
 
 - **Test harness (rebuild as needed):** `-DGBFTEST=1` after `fs_sys_resolve` -> `xor a;
   ld (fsam_unit),a; call fsam_dir_first; border WHITE if CF else RED; hang`. Config:
-  `gbide_flp.conf` = gbide.conf + `drive_a=<repo>/QA/GEOBENCH.DSK`. Read `fs_ent_name` from the
+  `gbide_flp.conf` = gbide.conf + `drive_a=<repo>/QA/CPC/Floppies/GEOBENCH.DSK`. Read `fs_ent_name` from the
   SNA (symbol `FS_ENT_NAME`, e.g. #9793) - should be `GBKERN  BIN`. (Build is over budget ->
   temporarily exempt from the size assert.)
 
@@ -338,8 +338,8 @@ lower-ROM bit, not interrupts or order.)
 ### Test harness (reuse for the rest of the offload)
 - Config: `/tmp/gbide.conf` - `[board:cyboard]` with HDCPM(1) + GEOBENCH.ROM(6) +
   UNIDOS(7) + UNITOOLS(8) + FATFS-P1/P2(9/10); `symbiface_ide=true`,
-  `ide_image=~/Downloads/CFCARD.img` (FAT16, `QA/CARD` layout at partition offset 16384).
-- Sync a fresh build: `mcopy -i ~/Downloads/CFCARD.img@@16384 -o QA/CARD/GBIDE.BIN ::/`.
+  `ide_image=~/Downloads/CFCARD.img` (FAT16, `QA/CPC/CARD` layout at partition offset 16384).
+- Sync a fresh build: `mcopy -i ~/Downloads/CFCARD.img@@16384 -o QA/CPC/CARD/GBIDE.BIN ::/`.
 - Boot: `1984 --config=/tmp/gbide.conf --paste='|drive,"A","IDE:"\nrun"gb\n'
   --save-sna-at=5400:x.sna --screenshot-at=5450:x.ppm`. Read `gb_rom_num` at SNA
   offset `256+0x1254`; `0x6` + a desktop screenshot = booted, `0x0` + UniDOS banner = reboot.
@@ -362,7 +362,7 @@ lower-ROM bit, not interrupts or order.)
    the PC to see whether the probe ran and where it died.
 
 Tooling notes: headless 1984 with this FatFS/IDE config runs <8 fps (slow to iterate;
-the real rig boots normally). The IDE test image MUST be the `QA/CARD` layout
+the real rig boots normally). The IDE test image MUST be the `QA/CPC/CARD` layout
 (`GB.BAS` + `GBIDE.BIN` + `/GEOBENCH`, booted `RUN"GB`) — NOT `tools/build_ide_img.sh`
 (old flat `GBKERN.BIN` + `.BIN` apps, `RUN"GBKERN`).
 

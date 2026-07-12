@@ -26,8 +26,13 @@ if [ ! -f "$GB_BASIC_DIR/Makefile" ] || [ ! -d "$GB_BASIC_DIR/apps/basic" ]; the
     exit 1
 fi
 GEOBENCH_ROOT="$(pwd)"
+CPC_QA="QA/CPC"
+CARD_QA="$CPC_QA/CARD"
+FLOPPY_QA="$CPC_QA/Floppies"
+CARD_IMG="$CPC_QA/GEOBENCH.IMG"
 
-# The card ships both Albireo and M4 kernels in QA/CARD and QA/GEOBENCH.IMG.
+# The card ships both Albireo and M4 kernels in QA/CPC/CARD and
+# QA/CPC/GEOBENCH.IMG.
 # STORAGE only picks the backend left in build/ for the dev harness (--disk-a):
 # "albireo" (default), "m4", or "ide" (the dormant legacy backend, still buildable
 # for recovery/tests). Backends are mutually exclusive per build (#104).
@@ -185,9 +190,9 @@ tools/build_netmod.sh build/GBNET.RAW             # W5100 networking module (#23
 tools/build_m4netmod.sh build/GBNETM4.RAW         # M4 TCP networking module (#259) -> build/GBNETM4.RAW
 tools/build_m4savemod.sh                          # M4 file save module (#259) -> build/M4SAVE.RAW
 # Card distribution: the apps/modules/assets above are shared; we assemble the Albireo
-# and M4 kernels, capture their raw images, and stage QA/CARD/ holding the BASIC loader
+# and M4 kernels, capture their raw images, and stage QA/CPC/CARD/ holding the BASIC loader
 # GB.BAS + both kernels (GBALB.BIN, GBM4.BIN). Plus a bootable floppy image
-# QA/GEOBENCH.DSK using the Albireo kernel (it falls back to floppy when no card is
+# QA/CPC/Floppies/GEOBENCH.DSK using the Albireo kernel (it falls back to floppy when no card is
 # present). The IDE backend remains archived (frozen in-tree, not shipped).
 build_variant() {                                # $1 = kernel name, $2 = rasm -D flag
     rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
@@ -199,12 +204,15 @@ build_variant() {                                # $1 = kernel name, $2 = rasm -
     cp build/GBKERN.RAW "build/$1.RAW"           # capture this card's kernel for the unified stage
 }
 # Clean only the CPC outputs - QA/MSX (the MSX2 target, #287) survives a CPC build.
-rm -rf QA/CARD QA/GEOBENCH.DSK QA/COMPANION.DSK QA/MEDIA.DSK QA/GEOBENCH.IMG; mkdir -p QA
-# Build both card kernels. QA/GEOBENCH.DSK keeps the Albireo/floppy-capable kernel
-# because that is the normal floppy boot image; QA/CARD and QA/GEOBENCH.IMG carry both.
-echo "Building the Albireo (GBALB) and M4 (GBM4) card kernels + the shared card -> QA/"
+# Remove the old root-level layout too, so stale artifacts cannot mask a bad migration.
+rm -rf "$CARD_QA" "$FLOPPY_QA" "$CARD_IMG" \
+    QA/CARD QA/GEOBENCH.DSK QA/COMPANION.DSK QA/MEDIA.DSK QA/EXTRAS.DSK QA/GEOBENCH.IMG
+mkdir -p "$FLOPPY_QA"
+# Build both card kernels. GEOBENCH.DSK keeps the Albireo/floppy-capable kernel
+# because that is the normal floppy boot image; CARD and GEOBENCH.IMG carry both.
+echo "Building the Albireo (GBALB) and M4 (GBM4) card kernels + the shared card -> $CPC_QA/"
 build_variant GBALB "-DSTORAGE_ALBIREO=1"
-cp build/gbkern.dsk QA/GEOBENCH.DSK               # bootable floppy image (the GBALB kernel)
+cp build/gbkern.dsk "$FLOPPY_QA/GEOBENCH.DSK"     # bootable floppy image (the GBALB kernel)
 build_variant GBM4 "-DSTORAGE_M4=1"
 # Add a GB.BAS loader so the floppy also boots via RUN"GB (-> RUN"GBKERN). Must be a
 # HEADERLESS ASCII file - RASM's DSK save adds an AMSDOS header, so use iDSK (-t 0).
@@ -212,13 +220,13 @@ build_variant GBM4 "-DSTORAGE_M4=1"
 IDSK="${IDSK:-$HOME/Dev/cpc-mastering/idsk}"
 if [ -x "$IDSK" ]; then
     printf '10 RUN"GBKERN\r\n' > build/GB.BAS
-    "$IDSK" QA/GEOBENCH.DSK -i build/GB.BAS -t 0 >/dev/null 2>&1 \
-        && echo "  + GB.BAS on QA/GEOBENCH.DSK (floppy RUN\"GB)" \
+    "$IDSK" "$FLOPPY_QA/GEOBENCH.DSK" -i build/GB.BAS -t 0 >/dev/null 2>&1 \
+        && echo "  + GB.BAS on $FLOPPY_QA/GEOBENCH.DSK (floppy RUN\"GB)" \
         || echo "  (iDSK present but GB.BAS insert failed - floppy still RUN\"GBKERN)"
 else
     echo "  (no iDSK at \$IDSK - floppy boots via RUN\"GBKERN; set IDSK= to add the GB.BAS loader)"
 fi
-# Companion floppy QA/COMPANION.DSK (#250): a non-bootable DATA disk with the extras
+# Companion floppy QA/CPC/Floppies/COMPANION.DSK (#250): a non-bootable DATA disk with the extras
 # (Paint/Telnet/Xaos and all screensavers). Meant for drive B - the
 # kernel loader falls back boot-drive(A) -> browse-drive(B), so these load from B while
 # their shared deps stay on Main. Four fresh 64K passes APPEND to one DSK (pass 1
@@ -228,22 +236,22 @@ rm -f build/companion.dsk
 "$RASM" kernel/pack_comp2.asm -eo                  # savers (1/2)
 "$RASM" kernel/pack_comp3.asm -eo                  # savers (2/2)
 "$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP + BROWSER.APP + SHELL.APP
-cp build/companion.dsk QA/COMPANION.DSK
-echo "  + QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Xaos + savers)"
-MEDIA_ADDS=()
+cp build/companion.dsk "$FLOPPY_QA/COMPANION.DSK"
+echo "  + $FLOPPY_QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Xaos + savers)"
+EXTRAS_ADDS=()
 for pic in assets/pictures/*.PIC; do
-    [ -e "$pic" ] && MEDIA_ADDS+=(--add "$pic")
+    [ -e "$pic" ] && EXTRAS_ADDS+=(--add "$pic")
 done
-python3 tools/mkcpcmedia.py QA/MEDIA.DSK "${MEDIA_ADDS[@]}"
-echo "  + QA/MEDIA.DSK (complete picture gallery; extended 80-track AMSDOS data disk)"
+python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (complete picture gallery; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
-GB_BASIC_DIR="$GB_BASIC_DIR" tools/stage_dist.sh QA/CARD # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH
+GB_BASIC_DIR="$GB_BASIC_DIR" tools/stage_dist.sh "$CARD_QA" # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH
 # A ready-to-flash card image (partitioned FAT16) for the Albireo CH376 card and M4 image mode.
-tools/build_card_img.sh QA/CARD QA/GEOBENCH.IMG \
-    || echo "  (QA/GEOBENCH.IMG skipped - needs sfdisk + mkfs.fat + mtools)"
-echo "  QA/CARD: loose files; QA/GEOBENCH.IMG: Albireo/M4 card; QA/GEOBENCH.DSK + QA/MEDIA.DSK: floppies"
+tools/build_card_img.sh "$CARD_QA" "$CARD_IMG" \
+    || echo "  ($CARD_IMG skipped - needs sfdisk + mkfs.fat + mtools)"
+echo "  $CARD_QA: loose files; $CARD_IMG: Albireo/M4 card; $FLOPPY_QA: floppy set"
 
 # Leave build/ as the STORAGE-selected variant (default Albireo) so the --disk-a
 # test harness sees a predictable build/gbkern.dsk + build/GBKERN.RAW.
@@ -256,4 +264,4 @@ rm -f build/gbkern.dsk
 if [ -x "$IDSK" ]; then
     "$IDSK" build/gbkern.dsk -i build/GB.BAS -t 0 >/dev/null 2>&1 || true
 fi
-echo "Built QA/CARD + QA/GEOBENCH.IMG (Albireo/M4 card deploy) + CPC floppy set; build/ = ${STORAGE:-albireo} variant"
+echo "Built $CARD_QA + $CARD_IMG (Albireo/M4 card deploy) + $FLOPPY_QA; build/ = ${STORAGE:-albireo} variant"

@@ -53,13 +53,14 @@ hardware, or use the disk images in an emulator.
 
 ### Amstrad CPC
 
-- **Albireo / M4 card** — copy the **contents of [`QA/CARD/`](QA/CARD)** onto the
+- **Albireo / M4 card** — copy the **contents of [`QA/CPC/CARD/`](QA/CPC/CARD)** onto the
   root of the card (an Albireo SD card, or an M4 card). On the CPC type `RUN"GB` —
   the loader detects the board and boots the right kernel. The picture gallery is
   in `PICS/`; standalone diagnostics are in `DIAG/`.
-- **Floppy** — write **`QA/GEOBENCH.DSK`** (the main disk) and
-  **`QA/COMPANION.DSK`** (the larger apps and extra savers) to the working disk
-  set. **`QA/MEDIA.DSK`** holds the complete picture gallery. It is an extended
+- **Floppy** — write **`QA/CPC/Floppies/GEOBENCH.DSK`** (the main disk) and
+  **`QA/CPC/Floppies/COMPANION.DSK`** (the larger apps and extra savers) to the
+  working disk set. **`QA/CPC/Floppies/EXTRAS.DSK`** holds the complete picture
+  gallery. It is an extended
   80-track data image for a Gotek/emulator or compatible drive because the gallery
   does not fit a 180K CF2. Boot with `RUN"GB` (or `RUN"GBKERN`).
 

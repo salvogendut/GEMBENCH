@@ -37,7 +37,7 @@ in `GEOBENCH.CFG`, set from **Settings → Screensaver**) after the idle timeout
 System → "Activate screensaver" runs it on demand. Each is a full-screen window
 (`WM_FS`) that animates every frame and closes on any input.
 
-The Main CPC boot floppy carries `SQUARES.SAV`; `QA/COMPANION.DSK`, the
+The Main CPC boot floppy carries `SQUARES.SAV`; `QA/CPC/Floppies/COMPANION.DSK`, the
 Albireo/M4 card distribution, and the MSX2 distribution carry all 16 savers.
 
 | Saver | Disk file | Effect |

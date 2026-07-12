@@ -3,7 +3,7 @@
 ;;
 ;; The card is staged by tools/stage_dist.sh, which globs backdrop tiles and custom
 ;; icon sets. The Main floppy keeps the same boot assets plus only LOGO.PIC for its
-;; default wallpaper; the complete gallery is generated separately as MEDIA.DSK.
+;; default wallpaper; the complete gallery is generated separately as EXTRAS.DSK.
 ;;
 ;; Like pack_apps/pack_apps2: RASM's DSK save APPENDS across invocations, so this runs
 ;; as its own fresh 64K image into the SAME build/gbkern.dsk. Keep this list in step
@@ -28,5 +28,5 @@ ist_refined     incbin "../assets/iconsets/REFINED.IST" ; ICONS=REFINED custom s
 ist_refined_e
                 save  "REFINED.IST",ist_refined,ist_refined_e-ist_refined,DSK,"build/gbkern.dsk"
 pic_logo        incbin "../assets/pictures/LOGO.PIC"    ; boot wallpaper; all pictures also ship
-pic_logo_e                                              ; on MEDIA.DSK and card/MSX PICS folders
+pic_logo_e                                              ; on EXTRAS.DSK and card/MSX PICS folders
                 save  "LOGO.PIC",pic_logo,pic_logo_e-pic_logo,DSK,"build/gbkern.dsk"

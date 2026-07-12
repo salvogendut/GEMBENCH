@@ -18,7 +18,7 @@ is the only storage backend still archived: its source stays in the tree, but
 ## M4 support boundary
 
 The M4 backend is active again for boot, directory listing, load, save/create, and
-TCP networking. The same `QA/GEOBENCH.IMG` can be used by Albireo and by 1984's
+TCP networking. The same `QA/CPC/GEOBENCH.IMG` can be used by Albireo and by 1984's
 M4 image mode. The active M4 storage and TCP paths preserve the caller's video
 mode while paging M4ROM, including Telnet's Mode 2 fullscreen terminal.
 
@@ -40,8 +40,8 @@ to the build and revalidating the FAT/image behavior.
 
 `tools/build_kernel.sh` builds the `GBALB` and `GBM4` kernels and stages:
 
-- `QA/CARD/` — loose files: `GB.BAS`, `M4DETECT.BIN`, `GBALB.BIN`, `GBM4.BIN`,
+- `QA/CPC/CARD/` — loose files: `GB.BAS`, `M4DETECT.BIN`, `GBALB.BIN`, `GBM4.BIN`,
   `GEOBENCH.CFG`, and the `GBENCH/` system folder, including `GBNET.MOD`,
   `GBNETM4.MOD`, and `M4SAVE.MOD`.
-- `QA/GEOBENCH.IMG` — a partitioned FAT16 card image for Albireo and M4 image mode.
-- `QA/GEOBENCH.DSK` — a bootable floppy image (same kernel, `RUN"GB` → `RUN"GBKERN`).
+- `QA/CPC/GEOBENCH.IMG` — a partitioned FAT16 card image for Albireo and M4 image mode.
+- `QA/CPC/Floppies/GEOBENCH.DSK` — a bootable floppy image (same kernel, `RUN"GB` → `RUN"GBKERN`).
