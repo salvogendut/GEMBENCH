@@ -24,10 +24,11 @@ Clock — all co-resident under the kernel window manager on a V9938 Screen 6.
   Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS,
   Clock, and **all 16 screensavers**. Telnet, NETTEST, WGET and Browser are not built for MSX yet
   because GEOBENCH does not have an MSX network transport.
-- **Assets:** icon sets and backdrops are transcoded to Screen 6 during the MSX
-  build. Pictures use the portable [GBPC v2 format](PIC_FORMAT.md): the same
-  canonical Mode-1 `.PIC` bytes are staged on every platform and the MSX kernel
-  translates them while drawing. MSX pictures live once under root-level `PICS/`;
+- **Assets:** icon sets in `assets/iconsets/*.IST` are stored in canonical Mode-1
+  bytes and decoded to Screen 6 at runtime by the kernel. Backdrops are converted
+  to Screen 6 format at build time. Pictures use the portable [GBPC v2 format](PIC_FORMAT.md):
+  the same canonical Mode-1 `.PIC` bytes are staged on every platform and the MSX
+  kernel translates them while drawing. MSX pictures live once under root-level `PICS/`;
   development diagnostics such as `GBSPIKE.COM` are kept under `DIAG/`.
 
 Build and test in **openMSX** (emulating a Philips NMS 8250 with the Sunrise IDE

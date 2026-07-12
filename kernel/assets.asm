@@ -56,9 +56,89 @@ icon_init
                 ld    (fs_load_dst),hl
                 ld    hl,def_ist             ; fall back to DEFAULT.IST if missing
                 call  load_or_default
+                ifdef PIC_RUNTIME_CONVERT      ; icon packs use canonical CPC Mode-1 bytes;
+                call  c,icon_convert          ; keep the .IST payload unified across targets
+                endif
                 call  bank_normal
                 ei
                 ret
+
+; icon_convert: transcode a loaded .IST in-place from canonical CPC Mode-1 icon
+; bytes to the current platform's runtime encoding. The file format itself is
+; unchanged (magic/version/directory); only the icon bitmap payload bytes are
+; rewritten at DATA_ICONS+offset. CPC keeps the source as-is.
+                ifdef PIC_RUNTIME_CONVERT
+icon_convert
+                ld    hl,DATA_ICONS
+                ld    a,(hl)
+                cp    'G'
+                ret   nz
+                inc   hl
+                ld    a,(hl)
+                cp    'B'
+                ret   nz
+                inc   hl
+                ld    a,(hl)
+                cp    'I'
+                ret   nz
+                inc   hl
+                ld    a,(hl)
+                cp    'S'
+                ret   nz
+                ld    hl,DATA_ICONS+4
+                ld    a,(hl)
+                cp    2
+                ret   nz
+                ld    a,(DATA_ICONS+5)
+                or    a
+                ret   z
+                ld    l,a                    ; payload starts after the 16-byte header
+                ld    h,0                    ; and count four-byte directory entries
+                add   hl,hl
+                add   hl,hl
+                ld    de,16
+                add   hl,de                  ; HL = payload offset
+                ld    de,(fs_ent_size)
+                ex    de,hl                  ; HL = loaded size, DE = payload offset
+                or    a
+                sbc   hl,de                  ; HL = bounded payload length
+                ret   c                      ; truncated directory
+                ld    a,h
+                or    l
+                ret   z
+                push  hl
+                ld    hl,DATA_ICONS
+                add   hl,de                  ; HL = first canonical bitmap byte
+                pop   de                     ; DE = bytes left
+
+icon_conv_bytes
+                ld    a,(hl)
+                ld    (icon_conv_lut+1),a
+icon_conv_lut
+                ld    a,(pic_m1_to_native)    ; canonical Mode-1 -> native display byte
+                ifdef PLATFORM_PCW
+                ; PCW picture bytes include the final CGA2 pen permutation. Icons
+                ; stay in Screen-6-style GB pen space because blit_bitmap applies
+                ; that permutation while drawing, so undo it here.
+                ld    c,a
+                and   #AA
+                rrca
+                ld    b,a
+                ld    a,c
+                cpl
+                and   #55
+                add   a,a
+                or    b
+                endif
+                ld    (hl),a
+                inc   hl
+                dec   de
+                ld    a,d
+                or    e
+                jr    nz,icon_conv_bytes
+                ret
+                endif
+
 
 ; cursor_init (#65): load the cursor sprite (<CURSOR>.SPR from GEOBENCH.CFG, built
 ; by the GBCFG module into KCFG_CURSORNAME) into low RAM at CUR_LOW, so the 256-byte

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""ist_to_msx - transcode a GEOBENCH .IST icon set from CPC Mode 1 to V9938
-Screen 6 (#287).
+"""ist_to_msx - legacy host-side GEOBENCH .IST transcoder.
 
 The .IST v2 container ("GBIS", version 2, count, then a directory of
 {offset u16le, width_bytes u8, height u8} and the packed icon bitmaps) is
 identical on both platforms - only the in-byte pixel packing differs. This
 re-packs each icon's bitmap bytes for Screen 6, leaving the header and directory
 untouched, so an icon set authored with the CPC tools (packicons.py / iconedit.py)
-drops straight into the MSX distro. Unlike icon sets, portable GBPC v2 pictures
-are translated by the kernel while drawing and need no build-time transcoder.
+drops straight into old MSX builds. Current CPC, MSX, and PCW distributions all
+store the canonical input unchanged and let the kernel transcode it at runtime;
+this utility remains only for inspecting or supporting older artifacts.
 
 Usage: tools/ist_to_msx.py <in.IST> <out.IST>
 """

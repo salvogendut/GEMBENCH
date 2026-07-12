@@ -1,11 +1,15 @@
 # Custom icon sets
 
 Drop tracked `.IST` icon-set files here and they are automatically staged for the
-CPC card and MSX distributions. The CPC build copies them into `QA/CPC/CARD/GBENCH/`
-via `stage_dist.sh`; the MSX build transcodes them to Screen 6 in
-`QA/MSX/GBENCH/`. Unlike `build/DEFAULT.IST` — a gitignored build artifact that
-`packicons.py` regenerates from `lib/icon_*.asm` on every build — files here are
-version-controlled and the build never overwrites them.
+CPC card and MSX distributions. The CPC build copies them into
+`QA/CPC/CARD/GBENCH/` via `stage_dist.sh`; MSX copies the same files into its
+`GBENCH/` folder unchanged. The space-constrained PCW boot disk stages its selected
+sets (currently `REFINED.IST`) from this same canonical source. MSX and PCW let the
+kernel transcode a selected set to native display bytes when it is loaded.
+
+`build/DEFAULT.IST` is a gitignored build artifact regenerated from `lib/icon_*.asm`
+each build in all desktop targets; it stays canonical (Mode-1) so it is shared by all
+platforms. Tracked sets in this folder are version-controlled and never regenerated.
 
 ## Make / edit a set
 
