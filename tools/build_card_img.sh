@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# tools/build_card_img.sh - build a partitioned FAT16 card image from the staged QA/CARD
+# tools/build_card_img.sh - build a partitioned FAT16 card image from QA/CPC/CARD
 # distribution. Usable on BOTH storage backends: the SYMBiFACE IDE (which reads the MBR
 # partition table) and the Albireo CH376 (which auto-detects the FAT partition). The IDE
 # kernel and UniDOS/FATFS both read FAT16, so one image serves the boot AND the runtime.
 #
-# Output: QA/GEOBENCH.IMG (a 32 MB FAT16 partition at sector 32 / byte 16384 - the same
+# Output: QA/CPC/GEOBENCH.IMG (a 32 MB FAT16 partition at sector 32 / byte 16384 - the same
 # layout as a real CPC CF/SD card). Rebuilt by tools/build_kernel.sh after the card is staged.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-CARD="${1:-QA/CARD}"
-IMG="${2:-QA/GEOBENCH.IMG}"
+CARD="${1:-QA/CPC/CARD}"
+IMG="${2:-QA/CPC/GEOBENCH.IMG}"
 SIZE_MB="${CARD_IMG_MB:-32}"
 POFF=32                       # partition start, in 512-byte sectors (byte 16384)
 

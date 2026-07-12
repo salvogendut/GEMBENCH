@@ -26,13 +26,13 @@ __pycache__/
 *~
 .DS_Store
 
-# The staged distribution QA/ IS shipped in the repo (ready-to-deploy QA/CARD/ +
-# QA/GEOBENCH.DSK), so re-include it despite the *.BIN/*.DSK/*.RAW ignores above.
+# The staged distribution QA/ is shipped in the repo (including the ready-to-deploy
+# QA/CPC/CARD/ and QA/CPC/Floppies/), so re-include it despite the binary ignores above.
 # Regenerate with `bash tools/build_kernel.sh`.
 !QA/**
 # ...except the 32MB card image: it is rebuilt (and byte-churns) on every build, so it
 # is a local build artifact, not committed. Build it with tools/build_card_img.sh.
-QA/GEOBENCH.IMG
+QA/CPC/GEOBENCH.IMG
 rom/GEOBENCH.ROM
 rom/GBALB.ROM
 # MSX2 target (issue #287): fetched third-party system files + the rebuilt

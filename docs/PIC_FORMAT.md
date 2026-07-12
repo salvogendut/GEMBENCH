@@ -34,4 +34,4 @@ new files must always be written as mode `1`. Paint keeps its canvas and banked
 edit tiles canonical and translates only temporary display rows.
 
 Run `make check` to validate the codec tables and confirm that every staged
-`PICS` folder and CPC/PCW media disk carries byte-identical picture payloads.
+`PICS` folder and CPC/PCW Extras disk carries byte-identical picture payloads.

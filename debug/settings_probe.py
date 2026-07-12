@@ -12,7 +12,7 @@ import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 EMU = os.path.abspath(os.path.join(ROOT, "..", "1984", "1984"))
-DSK = os.path.join(ROOT, "QA", "GEOBENCH.DSK")
+DSK = os.path.join(ROOT, "QA", "CPC", "Floppies", "GEOBENCH.DSK")
 PILOT_LINK = "/tmp/geobench-settings-pilot"
 
 

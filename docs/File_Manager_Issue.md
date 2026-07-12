@@ -100,7 +100,7 @@ Albireo:
 ~/Dev/1984/1984 --config=/tmp/gbalb_qa.conf --paste='|drive,"A","SD:"\nrun"gb\n'
 ```
 Then File Manager → into a one-level subdir → into a second subdir → `..`: the parent is empty.
-(You must put a depth-2 subdir on the card first, e.g. `mmd -i QA/GEOBENCH.IMG@@16384
+(You must put a depth-2 subdir on the card first, e.g. `mmd -i QA/CPC/GEOBENCH.IMG@@16384
 ::/GEOBENCH/PICTURES`, since the shipped folders are root-level.)
 
 ### Headless (deterministic)

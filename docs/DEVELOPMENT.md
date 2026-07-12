@@ -12,7 +12,7 @@ it's the host-side workflow.
   `makebin`) for the apps.
 - **Card image:** `tools/build_card_img.sh` needs `sfdisk` (util-linux),
   `mkfs.fat` (dosfstools) and `mcopy` (mtools) to build the partitioned FAT16
-  `QA/GEOBENCH.IMG`. The project distrobox carries all of these. `tools/build_rom.sh`
+  `QA/CPC/GEOBENCH.IMG`. The project distrobox carries all of these. `tools/build_rom.sh`
   (the driver-offload ROM) needs only `rasm`.
 - **Emulators:** see below.
 
@@ -59,15 +59,15 @@ cap32 and 1984 both accept a `.dsk` slot file. Two quick paths:
 ../caprice32/cap32 -i bin/PROG.BIN -o 0x4000
 
 # Or boot a disk image and autorun a file:
-../caprice32/cap32 --autocmd 'RUN"GB' QA/GEOBENCH.DSK
+../caprice32/cap32 --autocmd 'RUN"GB' QA/CPC/Floppies/GEOBENCH.DSK
 ```
 
 1984 has its own invocation. For GEOBENCH the common paths are:
 
 ```bash
 bash tools/build_kernel.sh
-../1984/1984 --config=/dev/null --6128 --memory=512 --disk-a=QA/GEOBENCH.DSK --disk-b=QA/COMPANION.DSK --autostart=GB
-../1984/1984 --config=/dev/null --6128 --memory=512 --disk-a=QA/GEOBENCH.DSK --autostart=GB --screenshot-at=2200:/tmp/boot.ppm --exit-after=2200
+../1984/1984 --config=/dev/null --6128 --memory=512 --disk-a=QA/CPC/Floppies/GEOBENCH.DSK --disk-b=QA/CPC/Floppies/COMPANION.DSK --autostart=GB
+../1984/1984 --config=/dev/null --6128 --memory=512 --disk-a=QA/CPC/Floppies/GEOBENCH.DSK --autostart=GB --screenshot-at=2200:/tmp/boot.ppm --exit-after=2200
 ```
 
 The boot splash prints the build commit below the progress bar only when
@@ -83,8 +83,9 @@ flags, and transitive source dependencies are unchanged. Re-running the full
 build should therefore:
 
 - rebuild only the touched apps/modules;
-- always rebuild the packaged media (`QA/GEOBENCH.DSK`, `QA/COMPANION.DSK`,
-  `QA/MEDIA.DSK`, `QA/CARD/`, `QA/GEOBENCH.IMG`);
+- always rebuild the packaged media (`QA/CPC/Floppies/GEOBENCH.DSK`,
+  `QA/CPC/Floppies/COMPANION.DSK`, `QA/CPC/Floppies/EXTRAS.DSK`,
+  `QA/CPC/CARD/`, `QA/CPC/GEOBENCH.IMG`);
 - refresh the boot-splash build id from the current git commit.
 
 ## Static Contract Checks

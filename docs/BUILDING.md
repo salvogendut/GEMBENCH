@@ -25,22 +25,22 @@ The repository also has a thin top-level Makefile: `make cpc`, `make msx`,
 This stages these outputs (the staged media under `QA/` are committed, so you
 can test or deploy without rebuilding first):
 
-- **`QA/CARD/`** — the loose card distribution. Copy its contents onto an Albireo
+- **`QA/CPC/CARD/`** — the loose card distribution. Copy its contents onto an Albireo
   card or use it as the source for an M4 card/image. The card root holds the
   loader `GB.BAS`, `M4DETECT.BIN`, both kernels (`GBALB.BIN`, `GBM4.BIN`), and
   `GEOBENCH.CFG` — everything else the kernel loads at boot lives in a `GBENCH/`
   subfolder, while the complete gallery lives in root-level `PICS/` and diagnostic
   programs such as `NETTEST.APP` live in root-level `DIAG/`.
-- **`QA/GEOBENCH.IMG`** — a ready-to-flash shared **Albireo/M4 card image**: a
+- **`QA/CPC/GEOBENCH.IMG`** — a ready-to-flash shared **Albireo/M4 card image**: a
   partitioned FAT16 disk the CH376 auto-detects and 1984's M4 image mode can mount.
   Built by `tools/build_card_img.sh`; a 32 MB local artifact, rebuilt every build
   and not committed.
-- **`QA/GEOBENCH.DSK`** — the bootable **Main** floppy image.
-- **`QA/COMPANION.DSK`** — the **Companion** floppy with the larger apps
+- **`QA/CPC/Floppies/GEOBENCH.DSK`** — the bootable **Main** floppy image.
+- **`QA/CPC/Floppies/COMPANION.DSK`** — the **Companion** floppy with the larger apps
   (including Telnet, WGET, Browser and Shell) and extra savers for drive B.
   Browser's `GBWEB.MOD` and `BRSAVE.APP` helpers remain on the Main
   disk so File/Settings operations still work after a drive-B file picker.
-- **`QA/MEDIA.DSK`** — the complete `.PIC` gallery on an extended 80-track,
+- **`QA/CPC/Floppies/EXTRAS.DSK`** — the complete `.PIC` gallery on an extended 80-track,
   single-sided AMSDOS DATA disk. Its files retain AMSDOS headers and multi-extent
   layout, so the existing chunked picture reader can open the larger images. A
   standard 180K CF2 is too small; use a Gotek/emulator or compatible 80-track drive.
@@ -52,7 +52,7 @@ card backend or falls back to the AMSDOS floppy path. On a floppy you can also
 `RUN"GBKERN` directly.
 
 ```bash
-1984 --memory=128 --disk-a=QA/GEOBENCH.DSK --autostart=GB     # floppy in an emulator
+1984 --memory=128 --disk-a=QA/CPC/Floppies/GEOBENCH.DSK --autostart=GB
 ```
 
 `tools/build_capp.sh <app_dir> <out.RAW>` builds a single C app against `libgb`

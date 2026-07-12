@@ -1,10 +1,10 @@
 ;; pack_comp1.asm - COMPANION floppy, pass 1 of 4 (#250).
 ;;
 ;; The GEOBENCH working set uses a Main floppy (build/gbkern.dsk ->
-;; QA/GEOBENCH.DSK, bootable, OS + core apps) and this Companion
-;; DATA floppy (build/companion.dsk -> QA/COMPANION.DSK, no kernel) carrying the
+;; QA/CPC/Floppies/GEOBENCH.DSK, bootable, OS + core apps) and this Companion
+;; DATA floppy (build/companion.dsk -> QA/CPC/Floppies/COMPANION.DSK, no kernel) carrying the
 ;; extras: Paint, Telnet, Xaos, and the screensavers. Gallery pictures now live
-;; on the separate MEDIA.DSK (#379). The
+;; on the separate EXTRAS.DSK (#379/#384). The
 ;; Companion is meant for drive B (Main stays in A); the kernel app/module loader now
 ;; tries the boot drive (A) first, then falls back to the browse drive (B), so a
 ;; Companion app loads from B while its shared deps (GBUI.MOD/GBNET.MOD/PAINT.IST,

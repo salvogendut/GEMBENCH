@@ -120,17 +120,17 @@ def main() -> None:
         if data[:6] != b"GBPC\x02\x01":
             sys.exit(f"assets/pictures/{name}: expected canonical GBPC v2 mode 1")
 
-    for distro in (ROOT / "QA/CARD/PICS", ROOT / "QA/MSX/PICS"):
+    for distro in (ROOT / "QA/CPC/CARD/PICS", ROOT / "QA/MSX/PICS"):
         names = {path.name for path in distro.glob("*.PIC")}
         if names != set(assets):
             sys.exit(f"{distro.relative_to(ROOT)}: picture set differs from assets/pictures")
         for name, expected in assets.items():
             compare_payload(str((distro / name).relative_to(ROOT)), (distro / name).read_bytes(), expected)
 
-    cpc_media = cpc_disk(ROOT / "QA/MEDIA.DSK")
+    cpc_extras = cpc_disk(ROOT / "QA/CPC/Floppies/EXTRAS.DSK")
     pcw_extras = pcw_disk(ROOT / "QA/PCW/EXTRAS.DSK")
-    if {name for name in cpc_media if name.endswith(".PIC")} != set(assets):
-        sys.exit("QA/MEDIA.DSK: picture catalogue differs from assets/pictures")
+    if {name for name in cpc_extras if name.endswith(".PIC")} != set(assets):
+        sys.exit("QA/CPC/Floppies/EXTRAS.DSK: picture catalogue differs from assets/pictures")
     if {name for name in pcw_extras if name.endswith(".PIC")} != set(assets):
         sys.exit("QA/PCW/EXTRAS.DSK: picture catalogue differs from assets/pictures")
     pcw_required = {
@@ -142,22 +142,22 @@ def main() -> None:
     if missing:
         sys.exit(f"QA/PCW/EXTRAS.DSK: missing extras: {', '.join(sorted(missing))}")
     for name, expected in assets.items():
-        compare_payload(f"QA/MEDIA.DSK:{name}", strip_amsdos(cpc_media[name]), expected)
+        compare_payload(f"QA/CPC/Floppies/EXTRAS.DSK:{name}", strip_amsdos(cpc_extras[name]), expected)
         compare_payload(f"QA/PCW/EXTRAS.DSK:{name}", pcw_extras[name], expected, padded=True)
 
-    cpc_main = cpc_disk(ROOT / "QA/GEOBENCH.DSK")
+    cpc_main = cpc_disk(ROOT / "QA/CPC/Floppies/GEOBENCH.DSK")
     pcw_main = pcw_disk(ROOT / "QA/PCW/GEOBENCH.DSK")
-    compare_payload("QA/GEOBENCH.DSK:LOGO.PIC", strip_amsdos(cpc_main["LOGO.PIC"]), assets["LOGO.PIC"])
+    compare_payload("QA/CPC/Floppies/GEOBENCH.DSK:LOGO.PIC", strip_amsdos(cpc_main["LOGO.PIC"]), assets["LOGO.PIC"])
     compare_payload("QA/PCW/GEOBENCH.DSK:LOGO.PIC", pcw_main["LOGO.PIC"], assets["LOGO.PIC"], padded=True)
 
     for path, files in (
-        ("QA/COMPANION.DSK", cpc_disk(ROOT / "QA/COMPANION.DSK")),
+        ("QA/CPC/Floppies/COMPANION.DSK", cpc_disk(ROOT / "QA/CPC/Floppies/COMPANION.DSK")),
         ("QA/PCW/COMPANION.DSK", pcw_disk(ROOT / "QA/PCW/COMPANION.DSK")),
     ):
         if any(name.endswith(".PIC") for name in files):
             sys.exit(f"{path}: companion disk must not contain pictures")
 
-    for directory in (ROOT / "QA/CARD/GBENCH", ROOT / "QA/MSX/GBENCH"):
+    for directory in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/GBENCH"):
         if any(directory.glob("*.PIC")):
             sys.exit(f"{directory.relative_to(ROOT)}: pictures must live under PICS")
 

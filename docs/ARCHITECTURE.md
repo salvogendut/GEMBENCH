@@ -114,10 +114,11 @@ See [`ARCHIVED.md`](ARCHIVED.md) for the exact support boundary.
 
 The default media layout is intentionally simple:
 
-- card: `QA/CARD/` with `GB.BAS`, `M4DETECT.BIN`, `GBALB.BIN`, `GBM4.BIN`,
+- card: `QA/CPC/CARD/` with `GB.BAS`, `M4DETECT.BIN`, `GBALB.BIN`, `GBM4.BIN`,
   `GEOBENCH.CFG`, `GBENCH/`, root-level `PICS/`, and root-level `DIAG/`
-- floppy: `QA/GEOBENCH.DSK` (Main), `QA/COMPANION.DSK` (drive-B extras), and
-  `QA/MEDIA.DSK` (the complete gallery)
+- floppy: `QA/CPC/Floppies/GEOBENCH.DSK` (Main),
+  `QA/CPC/Floppies/COMPANION.DSK` (drive-B apps), and
+  `QA/CPC/Floppies/EXTRAS.DSK` (the complete gallery)
 
 Picture files are the portable exception to the otherwise target-specific asset
 payloads. CPC, MSX2, and PCW all store canonical Mode-1 GBPC v2 bytes; the MSX2
@@ -170,17 +171,17 @@ the level of asset reload, storage, and window-manager primitives.
 
 `bash tools/build_kernel.sh` stages (and ships under `QA/`):
 
-- **`QA/CARD/`** — for the shared Albireo/M4 card: `GB.BAS`, `M4DETECT.BIN`,
+- **`QA/CPC/CARD/`** — for the shared Albireo/M4 card: `GB.BAS`, `M4DETECT.BIN`,
   `GBALB.BIN`, `GBM4.BIN`, `GEOBENCH.CFG`, and a `GBENCH/` subfolder holding the
   kernel-loaded payload (apps, modules, fonts, icons, cursor), plus a root-level
   `PICS/` gallery and `DIAG/` diagnostics folder.
-- **`QA/GEOBENCH.IMG`** — a ready-to-flash shared **Albireo/M4** FAT16 card image,
+- **`QA/CPC/GEOBENCH.IMG`** — a ready-to-flash shared **Albireo/M4** FAT16 card image,
   rebuilt by `tools/build_card_img.sh`; local artifact, not committed.
-- **`QA/GEOBENCH.DSK`** — the **Main** flat bootable floppy: the OS (kernel/loader/modules/
+- **`QA/CPC/Floppies/GEOBENCH.DSK`** — the **Main** flat bootable floppy: the OS (kernel/loader/modules/
   fonts/icons/cursor/config), the core apps (Desktop, Notepad, Clock, File Manager, Viewer,
   Settings, Iconed), the default `SQUARES.SAV` saver, the `LOGO.PIC` wallpaper and the
   backdrops. Built by `kernel/gbkern.asm` + `pack_apps{,2,3}.asm` (#250).
-- **`QA/COMPANION.DSK`** — the **Companion** floppy (#250): a non-bootable DATA disk with
+- **`QA/CPC/Floppies/COMPANION.DSK`** — the **Companion** floppy (#250): a non-bootable DATA disk with
   the extras — Paint, Telnet, WGET, Browser, Shell, Xaos, and the full screensaver set.
   Built by `kernel/pack_comp{1,2,3,4}.asm`. It is meant for **drive B** while the Main floppy
   stays in drive A: the kernel's system loader (`fs_load_sys`, `lib/fs.asm`) tries the boot
@@ -190,7 +191,7 @@ the level of asset reload, storage, and window-manager primitives.
   on the Companion. (Card
   builds are unaffected — they already ship everything on one volume, including
   `GBNET.MOD` for Net4CPC and `GBNETM4.MOD` for M4 TCP.)
-- **`QA/MEDIA.DSK`** — all tracked pictures, including `LOGO.PIC`, on an extended
+- **`QA/CPC/Floppies/EXTRAS.DSK`** — all tracked pictures, including `LOGO.PIC`, on an extended
   80-track single-sided AMSDOS DATA image built by `tools/mkcpcmedia.py`. The
   normal Main and Companion CF2 images contain no other `.PIC` files.
 
