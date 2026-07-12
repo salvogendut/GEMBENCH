@@ -5,9 +5,11 @@
 static char visible[1024];
 static char title[128];
 static char link_url[128];
+static char image_src[128];
 static char form_attrs[128], first_input_attrs[128], second_input_attrs[128];
 static unsigned int visible_len, title_len;
 static unsigned int link_begin_count, link_end_count;
+static unsigned int image_count;
 static unsigned int form_count, input_count, form_close_count;
 
 static void emit_text(unsigned char c);
@@ -16,6 +18,7 @@ static void emit_break(unsigned char kind);
 static void link_begin(const char *url);
 static void link_end(void);
 static void image_alt(const char *alt);
+static void image(const char *src, const char *alt);
 static void form_tag(unsigned char kind, unsigned char attr_start);
 
 #define GB_HTML_EMIT_TEXT(c) emit_text(c)
@@ -24,6 +27,7 @@ static void form_tag(unsigned char kind, unsigned char attr_start);
 #define GB_HTML_LINK_BEGIN(url) link_begin(url)
 #define GB_HTML_LINK_END() link_end()
 #define GB_HTML_IMAGE_ALT(alt) image_alt(alt)
+#define GB_HTML_IMAGE(src, alt) image(src, alt)
 #define GB_HTML_FORM_TAG(kind, attrs) form_tag(kind, attrs)
 #include "gbhtml.h"
 
@@ -68,6 +72,14 @@ static void image_alt(const char *alt)
     while (*alt) emit_text((unsigned char)*alt++);
 }
 
+static void image(const char *src, const char *alt)
+{
+    image_count++;
+    strncpy(image_src, src, sizeof(image_src) - 1);
+    image_src[sizeof(image_src) - 1] = 0;
+    image_alt(alt);
+}
+
 static void form_tag(unsigned char kind, unsigned char attr_start)
 {
     const char *attrs = gb_html_tag_buffer + attr_start;
@@ -85,8 +97,9 @@ static void capture_reset(void)
 {
     visible_len = title_len = 0;
     link_begin_count = link_end_count = 0;
+    image_count = 0;
     form_count = input_count = form_close_count = 0;
-    visible[0] = title[0] = link_url[0] = 0;
+    visible[0] = title[0] = link_url[0] = image_src[0] = 0;
     form_attrs[0] = first_input_attrs[0] = second_input_attrs[0] = 0;
     gb_html_reset();
 }
@@ -129,6 +142,8 @@ static void test_document(void)
     check(link_begin_count == 1 && link_end_count == 1 &&
               !strcmp(link_url, "/next?q=1&x=2"),
           "bounded link callbacks receive decoded href");
+    check(image_count == 1 && !strcmp(image_src, "x"),
+          "bounded image callbacks receive src and alt");
 }
 
 static void test_pre_and_entities(void)

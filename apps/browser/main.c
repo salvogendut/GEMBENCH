@@ -23,6 +23,10 @@
 #define LINK_MARK       1
 #define FORM_MARK       2
 #define FORM_CONT_MARK  3
+#define IMAGE_MARK      4
+#define IMAGE_CONT_MARK 5
+#define LINK_RAW_MARK   6
+#define INVALID_OFFSET  0xFFFF
 
 #define ST_IDLE       0
 #define ST_INIT       1
@@ -56,8 +60,16 @@
 #endif
 #define LINE_SIZE     (TEXT_COLS + 1)
 #define VIEW_ROWS     ((GB_LINES - CONTENT_Y - 2) / 8)
-#define CACHE_LINES   255
+#ifdef GB_PCW
+#define CACHE_LINES   182
+#else
+#define CACHE_LINES   208
+#endif
 #define FALLBACK_LINES 7
+#define CACHE_DATA_END 0x27D0
+#define IMAGE_SLOT_OFS 0x30F2
+#define IMAGE_SLOT_SIZE 3854
+#define IMAGE_ROWS      12
 
 /* The cooperative app-page pool is always mapped below #4000. Browser claims
  * one otherwise-free page for rendered lines and returns it through the normal
@@ -100,6 +112,30 @@
 #define BUI_FORM_VALUE  ((char *)0x3A18)
 #define BUI_FORM_URL    ((char *)0x3A48)
 #define BUI_FORM_ROW    (*(volatile unsigned char *)0x3AA9)
+#define BUI_REQ_PORT    (*(volatile unsigned int  *)0x3AAA)
+#define BUI_REQ_ERROR   (*(volatile unsigned char *)0x3AAC)
+#define BUI_RESOURCE_TAIL (*(volatile unsigned int *)0x3AAD)
+#define BUI_LINK_OFFSET (*(volatile unsigned int  *)0x3AAF)
+#define BUI_LINK_ACTIVE (*(volatile unsigned char *)0x3AB1)
+#define BUI_LINK_IMAGE  (*(volatile unsigned char *)0x3AB2)
+#define BUI_IMAGE_URL   (*(volatile unsigned int  *)0x3AB3)
+#define BUI_IMAGE_REL   (*(volatile unsigned char *)0x3AB5)
+#define BUI_IMAGE_LEN   (*(volatile unsigned int  *)0x3AB6)
+#define BUI_IMAGE_WB    (*(volatile unsigned char *)0x3AB9)
+#define BUI_IMAGE_H     (*(volatile unsigned char *)0x3ABA)
+#define BUI_IMAGE_READY (*(volatile unsigned char *)0x3ABB)
+#define BUI_IMAGE_REQUEST (*(volatile unsigned char *)0x3ABC)
+#define BUI_IMAGE_FAILED (*(volatile unsigned int *)0x3ABD)
+#define BUI_CACHE_PAGE  (*(volatile unsigned char *)0x3ABF)
+#define BUI_HIST_COUNT  (*(volatile unsigned char *)0x3AC0)
+#define BUI_VIEW_TOP    (*(volatile unsigned char *)0x3AC1)
+#define BUI_LINE_SIZE   (*(volatile unsigned char *)0x3AC2)
+#define BUI_VIEW_ROWS   (*(volatile unsigned char *)0x3AC3)
+#define BUI_TEXT_X      (*(volatile unsigned char *)0x3AC4)
+#define BUI_CONTENT_Y   (*(volatile unsigned char *)0x3AC5)
+#define BUI_SCREEN_COLS (*(volatile unsigned char *)0x3AC6)
+#define BUI_IMAGE_SCAN  (*(volatile unsigned char *)0x3AC7)
+#define BUI_REQ_TEXT     ((char *)0x3AC8)
 #define BUI_FORM_VALUE_MAX 47
 #define BUI_SOURCE_FULL 0x01
 #define BUI_CAPTURE_ALL 0x01
@@ -133,38 +169,8 @@ __asm
 __endasm;
 }
 
-#ifdef GB_PCW
-#define PCW_STAGE_BYTES LINE_SIZE
-#define PCW_BACK_OFS    PCW_STAGE_BYTES
-#define PCW_FRAME_OFS   (PCW_BACK_OFS + URL_MAX + 1)
-#define PCW_LINK_OFS    (PCW_FRAME_OFS + 264)
-#define PCW_ALT_OFS     (PCW_LINK_OFS + LINK_MAX + 1)
-#define PCW_ENTITY_OFS  (PCW_ALT_OFS + ALT_MAX + 1)
-#define PCW_HEADER_OFS  (PCW_ENTITY_OFS + 10)
-#define PCW_NETBUF_OFS  (PCW_HEADER_OFS + HEADER_MAX + 1)
-#define PCW_REQUEST_OFS (PCW_NETBUF_OFS + NETBUF_SIZE)
-#define PCW_FALLBACK_OFS (PCW_REQUEST_OFS + REQUEST_MAX + 1)
-#define PCW_TITLE_OFS   (PCW_FALLBACK_OFS + FALLBACK_LINES * LINE_SIZE)
-#define PCW_URL_OFS     (PCW_TITLE_OFS + TITLE_MAX + 1)
-#define PCW_HOST_OFS    (PCW_URL_OFS + URL_MAX + 1)
-#define PCW_PATH_OFS    (PCW_HOST_OFS + HOST_MAX + 1)
-#define PCW_PENDING_OFS (PCW_PATH_OFS + PATH_MAX + 1)
-#define request     ((char *)&gb_copybuf[PCW_REQUEST_OFS])
-#define header_line ((char *)&gb_copybuf[PCW_HEADER_OFS])
-#define netbuf      ((unsigned char *)&gb_copybuf[PCW_NETBUF_OFS])
-#define link_url    ((char *)&gb_copybuf[PCW_LINK_OFS])
-#define alt_text    ((char *)&gb_copybuf[PCW_ALT_OFS])
-#define entity_text ((char *)&gb_copybuf[PCW_ENTITY_OFS])
-#define fallback    (&gb_copybuf[PCW_FALLBACK_OFS])
-#define title       (&gb_copybuf[PCW_TITLE_OFS])
-#define url         (&gb_copybuf[PCW_URL_OFS])
-#define host        (&gb_copybuf[PCW_HOST_OFS])
-#define path        (&gb_copybuf[PCW_PATH_OFS])
-#define pending     (&gb_copybuf[PCW_PENDING_OFS])
-#else
-/* GBNET transfers at most 1024 bytes through #2200. Keep the Browser's
- * persistent transient state in the otherwise-unused upper part of the shared
- * module-data region so the CPC app bank has room for the HTML form parser. */
+/* GBNET transfers at most 1024 bytes through #2200. The common transient area
+ * above it is also free on PCW, whose direct PerryNet frame remains at #2200. */
 #define request     ((char *)0x3300)          /* 241 bytes */
 #define header_line ((char *)0x3400)          /* 112 bytes */
 #define netbuf      ((unsigned char *)0x3470) /* 128 bytes */
@@ -174,40 +180,32 @@ __endasm;
 #define url         ((char *)0x3542)          /* 96 bytes */
 #define host        ((char *)0x35A2)          /* 64 bytes */
 #define path        ((char *)0x35E2)          /* 96 bytes */
-#endif
 #ifdef GB_PCW
-/* PCW networking is direct serial I/O, so transient protocol state and the
- * no-spare-bank fallback can live above the bank service's short #2200 staging
- * record. CPC GBNET owns that area, so its fallback remains app-local. */
-#define back_url (&gb_copybuf[PCW_BACK_OFS])
-#define BROWSER_PCW_FRAME_BUFFER ((unsigned char *)&gb_copybuf[PCW_FRAME_OFS])
-#else
+#define BROWSER_PCW_FRAME_BUFFER ((unsigned char *)gb_copybuf)
+#endif
 #define title       ((char *)0x3642) /* 32 bytes */
 #define back_url    ((char *)0x3662) /* 96 bytes */
 #define pending     ((char *)0x36C2) /* 49 bytes */
 #define fallback    ((char *)0x3700) /* 343 bytes, ends at #3856 */
-#endif
 /* Drawing runs after each receive burst, so the consumed network buffer can
  * double as the short URL viewport and borrowed-bank line staging area without
  * increasing app RAM. */
 #define url_view ((char *)netbuf)
 #define line_buf ((char *)netbuf)
+#define cache_page BUI_CACHE_PAGE
+#define hist_count BUI_HIST_COUNT
+#define view_top BUI_VIEW_TOP
 
 static const char *status_text;
-static unsigned int port;
-static const char *parsed_p;
-static char *parsed_dst;
-static unsigned int parsed_port;
 static unsigned int idle_frames;
 static unsigned long bytes_done;
 static unsigned char state, editing, url_len, title_len;
 static unsigned char header_done, line_overflow, socket_open;
 static unsigned char transport_rx_status, redirect_count;
-static unsigned char hist_start, hist_count, view_top, pending_len;
+static unsigned char hist_start, pending_len;
 static unsigned char dirty, caret_tick, caret_on, redraw_div;
-static unsigned char parsed_len, parsed_digit;
 static unsigned char have_page, have_back, edit_changed;
-static unsigned char cache_page, cache_full;
+static unsigned char cache_full;
 static unsigned char rx_len, rx_pos, receive_paused, line_budget;
 
 #ifdef GB_PCW
@@ -290,6 +288,14 @@ static unsigned int text_len(const char *s)
     return n;
 }
 
+static unsigned char current_url_len(void)
+{
+    unsigned char n = 0;
+    while (n < URL_MAX && url[n]) n++;
+    url[n] = 0;
+    return n;
+}
+
 static void copy_url(char *dst, const char *src)
 {
     unsigned char n = 0;
@@ -303,11 +309,33 @@ static void set_status(const char *s)
     dirty = 1;
 }
 
+static void reset_resources(void)
+{
+    BUI_RESOURCE_TAIL = CACHE_DATA_END;
+    BUI_LINK_OFFSET = INVALID_OFFSET;
+    BUI_LINK_ACTIVE = BUI_LINK_IMAGE = 0;
+    BUI_IMAGE_URL = BUI_IMAGE_FAILED = INVALID_OFFSET;
+    BUI_IMAGE_LEN = 0;
+    BUI_IMAGE_WB = BUI_IMAGE_H = 0;
+    BUI_IMAGE_READY = BUI_IMAGE_REQUEST = 0;
+    BUI_IMAGE_SCAN = 0;
+}
+
 static unsigned char web_op(unsigned char op)
 {
     UI_OP = op;
     UI_RES = 0;
     return web_call();
+}
+
+static unsigned char image_op(unsigned char op)
+{
+    unsigned char result;
+    BUI_MODNAME[2] = 'I'; BUI_MODNAME[3] = 'M'; BUI_MODNAME[4] = 'G';
+    UI_OP = op; UI_RES = 0;
+    result = web_call();
+    BUI_MODNAME[2] = 'W'; BUI_MODNAME[3] = 'E'; BUI_MODNAME[4] = 'B';
+    return result;
 }
 
 static void source_reset(void)
@@ -350,6 +378,37 @@ static unsigned char alloc_cache_page(void)
 static void source_flush(void)
 {
     if (BUI_STAGE_LEN) (void)web_op(6);
+}
+
+static unsigned int store_resource(const char *text)
+{
+    unsigned char n = 0;
+    unsigned int off = BUI_RESOURCE_TAIL;
+    if (!cache_page) return INVALID_OFFSET;
+    while (text[n] && n < LINK_MAX) n++;
+    if (!n || off + n + 1 > IMAGE_SLOT_OFS) return INVALID_OFFSET;
+    PIC_PAGE_K = cache_page;
+    PIC_PAGE2_K = 0;
+    gb_pic_edit_buf = (unsigned int)text;
+    gb_pic_edit_off = off;
+    FS_SAVE_LEN_K = (unsigned int)(n + 1);
+    if (!gb_pic_edit(GB_PICEDIT_WRITE)) return INVALID_OFFSET;
+    BUI_RESOURCE_TAIL = (unsigned int)(off + n + 1);
+    return off;
+}
+
+static unsigned char load_resource(unsigned int off)
+{
+    if (!cache_page || off < CACHE_DATA_END || off >= BUI_RESOURCE_TAIL)
+        return 0;
+    PIC_PAGE_K = cache_page;
+    PIC_PAGE2_K = 0;
+    gb_pic_edit_buf = (unsigned int)link_url;
+    gb_pic_edit_off = off;
+    FS_SAVE_LEN_K = LINK_MAX + 1;
+    if (!gb_pic_edit(GB_PICEDIT_CHUNK)) return 0;
+    link_url[LINK_MAX] = 0;
+    return 1;
 }
 
 static char *history_line(unsigned char rel)
@@ -405,12 +464,21 @@ static void add_line(void)
 static void output_char(unsigned char c)
 {
     if (c < 32 || c >= 127) c = '?';
+    if (BUI_LINK_ACTIVE) {
+        if (pending_len < TEXT_COLS - 3) pending[pending_len++] = (char)c;
+        return;
+    }
     pending[pending_len++] = (char)c;
     if (pending_len >= TEXT_COLS) add_line();
 }
 
 static void output_break(unsigned char kind)
 {
+    if (BUI_LINK_ACTIVE) {
+        if (pending_len && pending[pending_len - 1] != ' ' &&
+            pending_len < TEXT_COLS - 3) pending[pending_len++] = ' ';
+        return;
+    }
     if (pending_len) add_line();
     else if (kind == 2 && hist_count && history_line((unsigned char)(hist_count - 1))[0]) add_line();
 }
@@ -428,16 +496,77 @@ static void title_char(unsigned char c)
     }
 }
 
+static void emit_link_line(void)
+{
+    unsigned char i;
+    if (!pending_len && BUI_LINK_IMAGE) return;
+    if (!pending_len) {
+        pending[0] = 'L'; pending[1] = 'i'; pending[2] = 'n'; pending[3] = 'k';
+        pending_len = 4;
+    }
+    if (BUI_LINK_OFFSET != INVALID_OFFSET) {
+        i = pending_len;
+        while (i) { i--; pending[i + 3] = pending[i]; }
+        pending[0] = LINK_MARK;
+        pending[1] = (char)BUI_LINK_OFFSET;
+        pending[2] = (char)(BUI_LINK_OFFSET >> 8);
+        pending_len = (unsigned char)(pending_len + 3);
+    }
+    add_line();
+}
+
 static void link_begin(const char *href)
 {
     output_break(1);
-    pending[0] = LINK_MARK;
-    pending_len = 1;
-    output_text(href);
-    if (pending_len) add_line();
+    if (!cache_page) {
+        pending[0] = LINK_RAW_MARK;
+        pending_len = 1;
+        output_text(href);
+        if (pending_len) add_line();
+        return;
+    }
+    BUI_LINK_OFFSET = store_resource(href);
+    BUI_LINK_ACTIVE = 1;
+    BUI_LINK_IMAGE = 0;
+    pending_len = 0;
 }
 
-static void link_end(void) { output_break(1); }
+static void link_end(void)
+{
+    if (BUI_LINK_ACTIVE) {
+        emit_link_line();
+        BUI_LINK_ACTIVE = 0;
+        BUI_LINK_IMAGE = 0;
+    } else output_break(1);
+}
+
+static void image_tag(const char *src, const char *alt)
+{
+    unsigned int image_off;
+    unsigned char i, parent;
+    if (!*src) { output_text(alt); return; }
+    if (BUI_LINK_ACTIVE) {
+        if (!pending_len) output_text(*alt ? alt : "Image");
+        emit_link_line();
+        BUI_LINK_IMAGE = 1;
+    } else output_break(1);
+    image_off = store_resource(src);
+    if (image_off == INVALID_OFFSET) { output_text(alt); return; }
+    parent = hist_count;
+    pending[0] = IMAGE_MARK;
+    pending[1] = (char)image_off;
+    pending[2] = (char)(image_off >> 8);
+    i = 0;
+    while (alt[i] && i < LINE_SIZE - 4) { pending[i + 3] = alt[i]; i++; }
+    pending_len = (unsigned char)(i + 3);
+    add_line();
+    for (i = 1; i < IMAGE_ROWS && !cache_full; i++) {
+        pending[0] = IMAGE_CONT_MARK;
+        pending[1] = (char)parent;
+        pending_len = 2;
+        add_line();
+    }
+}
 
 static void form_tag(unsigned char kind, unsigned char attr_start)
 {
@@ -463,7 +592,6 @@ static void form_tag(unsigned char kind, unsigned char attr_start)
 #define GB_HTML_ALT_BUFFER       alt_text
 #define GB_HTML_ENTITY_BUFFER    entity_text
 #define GB_HTML_RAW_ATTRS        1
-#define GB_HTML_NO_IMAGE_ALT     1
 #define GB_HTML_NO_FORM_CLOSE    1
 #define GB_HTML_NAMED_ENTITIES_ONLY 1
 #define GB_HTML_EMIT_TEXT(c)     output_char(c)
@@ -471,20 +599,32 @@ static void form_tag(unsigned char kind, unsigned char attr_start)
 #define GB_HTML_EMIT_BREAK(k)    output_break(k)
 #define GB_HTML_LINK_BEGIN(u)    link_begin(u)
 #define GB_HTML_LINK_END()       link_end()
+#define GB_HTML_IMAGE(s, a)      image_tag(s, a)
 #define GB_HTML_FORM_TAG(k, a)   form_tag(k, a)
 #include "gbhtml.h"
+
+static void finish_page(void);
+static void fail_page(const char *s);
 
 static unsigned char body_write(const unsigned char *buf, unsigned int len)
 {
     unsigned int i;
+    if (BUI_IMAGE_REQUEST) {
+        for (i = 0; i < len; i++) {
+            BUI_STAGE[BUI_STAGE_LEN++] = (char)buf[i];
+            if (BUI_STAGE_LEN == BUI_STAGE_CAP && !image_op(20)) {
+                fail_page("Image too large");
+                return 0;
+            }
+        }
+        bytes_done += len;
+        return 1;
+    }
     for (i = 0; i < len; i++) source_byte(buf[i]);
     gb_html_feed(buf, len);
     bytes_done += len;
     return 1;
 }
-
-static void finish_page(void);
-static void fail_page(const char *s);
 
 #define GB_HTTP_HEADER_LINE       header_line
 #define GB_HTTP_LOCATION          request
@@ -500,86 +640,14 @@ static void fail_page(const char *s);
 #include "gbhttp.h"
 
 #define BROWSER_TR_HOST ((BUI_CTRL & BUI_PROXY_ON) ? BUI_PROXY_HOST : host)
-#define BROWSER_TR_PORT ((BUI_CTRL & BUI_PROXY_ON) ? BUI_PROXY_PORT : port)
+#define BROWSER_TR_PORT ((BUI_CTRL & BUI_PROXY_ON) ? BUI_PROXY_PORT : BUI_REQ_PORT)
 #include "transport.h"
 
-static char *put_dec(char *p, unsigned int v)
+static unsigned char prepare_request(unsigned char linked)
 {
-    unsigned int d = 10000;
-    unsigned char started = 0, n;
-    while (d) {
-        n = 0;
-        while (v >= d) { v -= d; n++; }
-        if (n || started || d == 1) { *p++ = (char)('0' + n); started = 1; }
-        d /= 10;
-    }
-    *p = 0;
-    return p;
-}
-
-static unsigned char parse_url(void)
-{
-    parsed_p = url;
-    if (ci_prefix(parsed_p, "https://")) { set_status("HTTPS unsupported"); return 0; }
-    if (!ci_prefix(parsed_p, "http://")) { set_status("Use http://"); return 0; }
-    parsed_p += 7;
-    parsed_dst = host;
-    parsed_len = 0;
-    while (*parsed_p && *parsed_p != '/' && *parsed_p != ':' &&
-           *parsed_p != '?' && *parsed_p != '#' && parsed_len < HOST_MAX) {
-        *parsed_dst++ = *parsed_p++;
-        parsed_len++;
-    }
-    *parsed_dst = 0;
-    if (!parsed_len || (*parsed_p && *parsed_p != '/' && *parsed_p != ':' &&
-                        *parsed_p != '?' && *parsed_p != '#')) {
-        set_status("Host too long"); return 0;
-    }
-    port = 80;
-    if (*parsed_p == ':') {
-        parsed_p++;
-        if (*parsed_p < '0' || *parsed_p > '9') { set_status("Invalid port number"); return 0; }
-        parsed_port = 0;
-        while (*parsed_p >= '0' && *parsed_p <= '9') {
-            parsed_digit = (unsigned char)(*parsed_p++ - '0');
-            if (parsed_port > 6553 || (parsed_port == 6553 && parsed_digit > 5)) {
-                set_status("Invalid port number"); return 0;
-            }
-            parsed_port = (unsigned int)(parsed_port * 10 + parsed_digit);
-        }
-        if (!parsed_port) { set_status("Invalid port number"); return 0; }
-        port = parsed_port;
-    }
-    if (*parsed_p && *parsed_p != '/' && *parsed_p != '?' && *parsed_p != '#') {
-        set_status("Invalid URL"); return 0;
-    }
-    parsed_dst = path;
-    parsed_len = 0;
-    if (!*parsed_p || *parsed_p == '#') {
-        *parsed_dst++ = '/';
-        parsed_len = 1;
-    }
-    else {
-        if (*parsed_p == '?') {
-            *parsed_dst++ = '/';
-            parsed_len = 1;
-        }
-        while (*parsed_p && *parsed_p != '#' && parsed_len < PATH_MAX) {
-            *parsed_dst++ = *parsed_p++;
-            parsed_len++;
-        }
-    }
-    *parsed_dst = 0;
-    if (*parsed_p && *parsed_p != '#') { set_status("Path too long"); return 0; }
-    return 1;
-}
-
-/* build_request has already consumed the destination host/path when this runs,
- * so host/port can become the proxy endpoint used by the transport. */
-static unsigned char apply_proxy(void)
-{
-    if (web_op(11)) return 1;
-    set_status("Invalid proxy");
+    UI_N = linked;
+    if (web_op(19)) return 1;
+    set_status(BUI_REQ_TEXT);
     return 0;
 }
 
@@ -589,23 +657,8 @@ static unsigned char resolve_redirect(const char *location)
     copy_url(BUI_URL_LINK, location);
     if (!web_op(18)) return 0;
     copy_url(url, BUI_URL_RESULT);
-    url_len = (unsigned char)text_len(url);
-    return parse_url();
-}
-
-static unsigned char build_request(void)
-{
-    char *p = request, *limit = request + REQUEST_MAX;
-    const char *s;
-#define ADD_TEXT(t) do { s = (t); while (*s && p < limit) *p++ = *s++; } while (0)
-    ADD_TEXT("GET "); ADD_TEXT(BUI_PROXY[0] ? url : path);
-    ADD_TEXT(" HTTP/1.0\r\nHost: "); ADD_TEXT(host);
-    if (port != 80) { if (p < limit) *p++ = ':'; p = put_dec(p, port); }
-    ADD_TEXT("\r\nUser-Agent: GB/1\r\nConnection: close\r\n\r\n");
-    if (p >= limit) { request[REQUEST_MAX] = 0; return 0; }
-    *p = 0;
-    return 1;
-#undef ADD_TEXT
+    url_len = current_url_len();
+    return prepare_request(0);
 }
 
 static void reset_response(void)
@@ -621,10 +674,26 @@ static void finish_page(void)
     if (socket_open) tr_close();
     state = ST_IDLE;
     receive_paused = 0;
+    if (BUI_IMAGE_REQUEST) {
+        BUI_IMAGE_REQUEST = 0;
+        if (image_op(21)) {
+            BUI_IMAGE_READY = 1;
+            BUI_IMAGE_FAILED = INVALID_OFFSET;
+            set_status("Page complete");
+        } else {
+            BUI_IMAGE_READY = 0;
+            BUI_IMAGE_FAILED = BUI_IMAGE_URL;
+            BUI_STAGE_LEN = 0;
+            BUI_IMAGE_SCAN = 1;
+            set_status("Image unavailable");
+        }
+        return;
+    }
     gb_html_end();
     if (pending_len) add_line();
     if (view_top && view_top + VIEW_ROWS > hist_count) view_top--;
     have_page = 1;
+    BUI_IMAGE_SCAN = 1;
     if (BUI_FLAGS & BUI_SOURCE_FULL) set_status("Source cache full");
     else if (cache_full) set_status("Page cache full");
     else if (!cache_page && hist_start) set_status("Last lines only");
@@ -636,6 +705,12 @@ static void fail_page(const char *s)
     if (socket_open) tr_close();
     state = ST_IDLE;
     receive_paused = 0;
+    if (BUI_IMAGE_REQUEST) {
+        BUI_IMAGE_REQUEST = BUI_IMAGE_READY = 0;
+        BUI_IMAGE_FAILED = BUI_IMAGE_URL;
+        BUI_STAGE_LEN = 0;
+        BUI_IMAGE_SCAN = 1;
+    }
     set_status(s);
 }
 
@@ -648,6 +723,7 @@ static void headers_complete(void)
     if (redirect) {
         const char *redir_err = 0;
         const char *prev_status = status_text;
+        if (BUI_IMAGE_REQUEST) { fail_page("Image redirect"); return; }
         if (gb_http_have_location != 1) {
             fail_page(gb_http_have_location == 2 ? "Redirect too long" :
                                                   "Redirect missing");
@@ -655,17 +731,13 @@ static void headers_complete(void)
         }
         if (redirect_count >= MAX_REDIRECTS) { fail_page("Redirect limit"); return; }
         tr_close();
-        if ((BUI_CTRL & BUI_PROXY_ON) && !parse_url()) {
-            fail_page("Bad redirect base"); return;
-        }
         hist_start = hist_count = view_top = pending_len = cache_full = 0;
+        reset_resources();
         have_page = 0;
         receive_paused = 0;
         line_budget = cache_page ? 0 : FALLBACK_LINES;
         title_len = 0; title[0] = 0;
         if (!resolve_redirect(request)) redir_err = (status_text != prev_status ? status_text : "Bad redirect");
-        else if (!build_request()) redir_err = "Bad redirect";
-        else if (!apply_proxy()) redir_err = "Bad redirect";
         if (redir_err) {
             fail_page(redir_err);
             return;
@@ -685,7 +757,11 @@ static void headers_complete(void)
         gb_http_chunk_left = 0;
         gb_http_chunk_have_digit = 0;
     }
-    set_status("Receiving page...");
+    set_status(BUI_IMAGE_REQUEST ? "Receiving image..." : "Receiving page...");
+    if (BUI_IMAGE_REQUEST && gb_http_have_length &&
+        gb_http_content_length > IMAGE_SLOT_SIZE) {
+        fail_page("Image too large"); return;
+    }
     if (gb_http_have_length && !gb_http_content_length) finish_page();
 }
 
@@ -727,10 +803,11 @@ static void process_rx(void)
 static void start_page(void)
 {
     if (!url[0]) { set_status("Enter URL"); return; }
-    if (!parse_url() || !build_request() || !apply_proxy()) return;
+    if (!prepare_request(0)) return;
     source_reset();
     BUI_CTRL &= BUI_PROXY_ON;
     hist_start = hist_count = view_top = pending_len = cache_full = 0;
+    reset_resources();
     receive_paused = 0;
     line_budget = cache_page ? 0 : FALLBACK_LINES;
     title_len = 0; title[0] = 0;
@@ -746,7 +823,7 @@ static void go_back(void)
 {
     if (state != ST_IDLE || !have_back) return;
     copy_url(url, back_url);
-    url_len = (unsigned char)text_len(url);
+    url_len = current_url_len();
     have_back = 0;
     start_page();
 }
@@ -761,8 +838,7 @@ static void open_link(const char *href)
     copy_url(back_url, url);
     if (!resolve_redirect(href)) {
         copy_url(url, back_url);
-        url_len = (unsigned char)text_len(url);
-        parse_url();
+        url_len = current_url_len();
         set_status("Invalid link URL");
         return;
     }
@@ -791,6 +867,7 @@ static void start_local(void)
     }
     url[n] = 0; url_len = n;
     hist_start = hist_count = view_top = pending_len = cache_full = 0;
+    reset_resources();
     receive_paused = 0;
     line_budget = cache_page ? 0 : FALLBACK_LINES;
     title_len = 0; title[0] = 0;
@@ -811,6 +888,24 @@ static void local_tick(void)
     }
     if (receive_paused || BUI_LOCAL_POS < BUI_LOCAL_LEN) return;
     if (!web_op(10)) finish_page();
+}
+
+static void start_visible_image(void)
+{
+    if (!BUI_IMAGE_SCAN || !cache_page || !have_page || state != ST_IDLE) return;
+    BUI_IMAGE_SCAN = 0;
+    source_flush();
+    if (!image_op(22)) return;
+    if (!prepare_request(1)) {
+        BUI_IMAGE_FAILED = BUI_IMAGE_URL;
+        set_status("Image unavailable");
+        return;
+    }
+    BUI_IMAGE_REQUEST = 1;
+    reset_response();
+    redirect_count = 0;
+    state = ST_INIT;
+    set_status("Loading image...");
 }
 
 static void network_tick(void)
@@ -890,6 +985,8 @@ static void run_menu(void)
 {
     unsigned char action;
     if (!BUI_WANT_MENU) return;
+    editing = caret_on = 0;
+    caret_tick = 0;
     UI_OP = 5; UI_N = BUI_WANT_MENU; UI_RES = 0;
     BUI_WANT_MENU = 0;
     action = gb_ui();
@@ -912,6 +1009,7 @@ static void run_menu(void)
             else set_status("Save failed");
         } else set_status("Invalid proxy");
     }
+    BUI_IMAGE_SCAN = 1;
     dirty = 1;
 }
 
@@ -1017,13 +1115,20 @@ static void draw_page(void)
         y = (unsigned char)(CONTENT_Y + row * 8);
         line = history_line(rel);
         mark = (unsigned char)line[0];
-        if (mark == FORM_MARK) {
+        if (mark == IMAGE_MARK) {
+            if (!BUI_IMAGE_READY ||
+                (unsigned char)line[1] != (unsigned char)BUI_IMAGE_URL ||
+                (unsigned char)line[2] != (unsigned char)(BUI_IMAGE_URL >> 8))
+                gb_textbw(TEXT_X, y, line[3] ? line + 3 : "[Image]");
+        } else if (mark == IMAGE_CONT_MARK) {
+            /* Reserved vertical space for the image above. */
+        } else if (mark == FORM_MARK) {
             if (editing == 2) BUI_FORM_ROW = y;
             draw_form(y);
         } else if (mark == FORM_CONT_MARK) {
             /* The second row is reserved by the form above it. */
-        } else if (mark == LINK_MARK) {
-            line++;
+        } else if (mark == LINK_MARK || mark == LINK_RAW_MARK) {
+            line += mark == LINK_MARK ? 3 : 1;
             w = (unsigned char)(((unsigned int)text_len(line) * 3 + 1) / 2);
             if (w > GB_COLS - TEXT_X) w = (unsigned char)(GB_COLS - TEXT_X);
             gb_fill(TEXT_X, y, w, 8, 0);
@@ -1031,6 +1136,7 @@ static void draw_page(void)
             gb_fill(TEXT_X, (unsigned char)(y + 7), w, 1, 3);
         } else gb_textbw(TEXT_X, y, line);
     }
+    if (BUI_IMAGE_READY) (void)image_op(23);
     dirty = 0; redraw_div = 0;
 }
 
@@ -1051,7 +1157,18 @@ static void scroll_page(unsigned char down)
             return;
         }
     } else if (view_top) view_top = (unsigned char)(view_top > 3 ? view_top - 3 : 0);
+    BUI_IMAGE_SCAN = 1;
     dirty = 1;
+}
+
+static void begin_url_edit(void)
+{
+    if (state != ST_IDLE) fail_page("Cancelled");
+    url_len = current_url_len();
+    editing = 1;
+    caret_on = 1;
+    caret_tick = 0;
+    redraw_url();
 }
 
 static void handle_click(void)
@@ -1063,8 +1180,7 @@ static void handle_click(void)
         if (x >= BACK_X) go_back();
         else if (x >= GO_X) { if (state == ST_IDLE) start_page(); }
         else if (x < 2 + URL_FIELD_W) {
-            if (state != ST_IDLE) fail_page("Cancelled");
-            editing = 1; caret_on = 1; caret_tick = 0; dirty = 1; redraw_url();
+            begin_url_edit();
         }
         return;
     }
@@ -1093,8 +1209,10 @@ static void handle_click(void)
                     dirty = 1; redraw_form();
                 } else if (x >= FORM_BUTTON_X) submit_form();
             } else if (mark == LINK_MARK) {
-                open_link(line + 1);
-            }
+                unsigned int off = (unsigned char)line[1] |
+                                   ((unsigned int)(unsigned char)line[2] << 8);
+                if (load_resource(off)) open_link(link_url);
+            } else if (mark == LINK_RAW_MARK) open_link(line + 1);
         }
     }
 }
@@ -1102,24 +1220,27 @@ static void handle_click(void)
 static void handle_keys(void)
 {
     unsigned char c, count = 8, changed = 0, n;
+    if (editing == 1) url_len = current_url_len();
     if (!editing && down_key_event() &&
-        (state == ST_IDLE || (receive_paused & RECEIVE_PAUSE_FLOW)))
+        (state == ST_IDLE || BUI_IMAGE_REQUEST ||
+         (receive_paused & RECEIVE_PAUSE_FLOW)))
         scroll_page(1);
     while (count-- && (c = gb_getkey()) != 0) {
         if (state != ST_IDLE) {
             if (c == 'g' || c == 'G') {
-                fail_page("Cancelled");
-                editing = 1; caret_on = 1; caret_tick = 0; redraw_url();
+                begin_url_edit();
                 continue;
             }
             if (c == 0x1B) fail_page("Cancelled");
+            else if (BUI_IMAGE_REQUEST && c == 0x10) scroll_page(0);
+            else if (BUI_IMAGE_REQUEST && c == 0x0E) scroll_page(1);
             else if ((receive_paused & RECEIVE_PAUSE_FLOW) && c == 0x10) scroll_page(0);
             else if ((receive_paused & RECEIVE_PAUSE_FLOW) && c == 0x0E) scroll_page(1);
             continue;
         }
         if (!editing) {
             if (c == 'g' || c == 'G') {
-                editing = 1; caret_on = 1; caret_tick = 0; redraw_url();
+                begin_url_edit();
             }
             else if (c == 'b' || c == 'B') { go_back(); return; }
             else if (c == 0x10) scroll_page(0);
@@ -1181,7 +1302,10 @@ static void frame_tick(void)
     handle_keys();
     network_tick();
     if (state == ST_IDLE && (BUI_CTRL & BUI_SAVE_PENDING)) save_source();
-    if (dirty && (state == ST_IDLE || (receive_paused & RECEIVE_PAUSE_FLOW) || ++redraw_div >= 6)) {
+    if (state == ST_IDLE && !editing && !(BUI_CTRL & BUI_SAVE_PENDING))
+        start_visible_image();
+    if (!editing && dirty &&
+        (state == ST_IDLE || (receive_paused & RECEIVE_PAUSE_FLOW) || ++redraw_div >= 6)) {
         gb_curhide(); draw_page(); gb_curshow();
     }
 }
@@ -1219,10 +1343,14 @@ void main(void)
 {
     BUI_NPAGES = 0; BUI_TAIL = BUI_STAGE_LEN = 0; BUI_FLAGS = 0;
     BUI_CTRL = BUI_WANT_MENU = 0;
+    BUI_LINE_SIZE = LINE_SIZE; BUI_VIEW_ROWS = VIEW_ROWS;
+    BUI_TEXT_X = TEXT_X; BUI_CONTENT_Y = CONTENT_Y; BUI_SCREEN_COLS = GB_COLS;
     copy_url(BUI_MODNAME, "GBWEB   MOD");
     (void)web_op(12);
-    url[url_len] = 0;
+    url[0] = 0;
+    url_len = 0;
     cache_page = alloc_cache_page();
+    reset_resources();
     status_text = cache_page ? "Ready" : "Ready: limited page cache";
     editing = dirty = 1;
     gb_wm_managed(&browser_window);

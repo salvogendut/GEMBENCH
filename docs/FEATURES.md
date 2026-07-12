@@ -78,17 +78,22 @@ backdrop, dragging icons, opening apps and menus:
 - **Browser** — a small fullscreen HTTP browser for CPC and PCW. It accepts plain
   `http://` URLs, follows up to four redirects, parses headers and chunked bodies
   through the shared HTTP parser, and streams HTML through a bounded text renderer
-  instead of keeping a DOM. Text, headings, lists and link labels are cached as
-  up to 255 fixed-width rendered lines in one borrowed 16K
-  page. Browser renders the first viewport, pauses the open TCP stream, and
+  instead of keeping a DOM. Text, headings, lists, compact GET forms, link labels,
+  and inline-image records are cached in one borrowed 16K page: up to 208
+  fixed-width rows on CPC or 182 on PCW. Link destinations are retained separately
+  from their visible labels, so proxy transport URLs are not printed in the page.
+  Browser renders the first viewport, pauses the open TCP stream, and
   resumes from the exact retained byte only when the user scrolls downward;
   cached lines remain available immediately when scrolling upward. The
   proportional scrollbar includes a continuation segment while more data is
-  available. Reaching the 255-line bound is explicitly reported as truncated.
+  available. Reaching the platform cache bound is explicitly reported as truncated.
   If no spare page exists, Browser reports limited cache mode and retains the
-  latest eight lines. Link targets stand out
+  latest seven lines. Link labels stand out
   as underlined rows and open when clicked, and Back retains one previous URL;
-  CSS, JavaScript, forms, images and HTTPS are not implemented. The File menu
+  the visible image is fetched lazily into one bounded GBPC v2 slot (up to
+  160x96 pixels) and replaced as the user scrolls. CSS, JavaScript, POST forms,
+  general image decoding and HTTPS are not implemented; a configured proxy can
+  convert ordinary web images to GBPC. The File menu
   loads and saves offline `.HTM` source files; Save As always produces an 8.3
   `.HTM` name. Settings configures an optional HTTP proxy and writes `PROXY=` in
   `GEOBENCH.CFG`; Direct clears it. Source capture uses up to three available

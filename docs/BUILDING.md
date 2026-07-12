@@ -38,7 +38,7 @@ can test or deploy without rebuilding first):
 - **`QA/CPC/Floppies/GEOBENCH.DSK`** — the bootable **Main** floppy image.
 - **`QA/CPC/Floppies/COMPANION.DSK`** — the **Companion** floppy with the larger apps
   (including Telnet, WGET, Browser and Shell) and extra savers for drive B.
-  Browser's `GBWEB.MOD` and `BRSAVE.APP` helpers remain on the Main
+  Browser's `GBWEB.MOD`, `GBIMG.MOD`, and `BRSAVE.APP` helpers remain on the Main
   disk so File/Settings operations still work after a drive-B file picker.
 - **`QA/CPC/Floppies/EXTRAS.DSK`** — the complete `.PIC` gallery on an extended 80-track,
   single-sided AMSDOS DATA disk. Its files retain AMSDOS headers and multi-extent

@@ -31,14 +31,16 @@ DOS (AMSDOS / UniDOS / MSX-DOS 2), not a replacement OS — smaller scope than
 The desktop, file tools and graphical Shell build for all targets from the same
 source tree. The CPC and PCW distributions also ship Telnet, network diagnostics,
 the graphical WGET HTTP downloader, and a working streaming HTTP browser with
-links and GET search forms; PCW networking uses PerryFi/PerryNet.
+links, GET search forms, and proxy-converted inline pictures; PCW networking
+uses PerryFi/PerryNet.
 
 <p align="center">
-  <img src="screenshots/CPC-Browser.png" alt="GEOBENCH Browser running on the Amstrad CPC" width="48%">
+  <img src="screenshots/CPC-Browser.gif" alt="GEOBENCH Browser showing FrogFind, Google, Ask, and Lycos on the Amstrad CPC" width="48%">
   <img src="screenshots/PCW-browser.png" alt="GEOBENCH Browser running on the Amstrad PCW" width="48%">
 </p>
 
-*The GEOBENCH Browser on the **Amstrad CPC** (left) and **Amstrad PCW** (right).*
+*The GEOBENCH Browser on the **Amstrad CPC** (left, showing several pages through
+GB-proxy) and **Amstrad PCW** (right).*
 
 Targets:
 the CPC (Albireo/M4 card + AMSDOS floppy), the [MSX2](docs/MSX2.md)
@@ -84,6 +86,32 @@ hardware, or use the disk images in an emulator.
   PerryNet firmware. Enable it with `TIMESYNC=true` and set the local whole-hour
   UTC offset with `TIMEZONE=+H` or `TIMEZONE=-H` in `GEOBENCH.CFG`; see
   [docs/PCW.md](docs/PCW.md).
+
+### Browser proxy
+
+The optional [GB-proxy](https://github.com/salvogendut/GB-proxy) companion makes
+modern HTTPS pages practical for the CPC and PCW Browser. It simplifies HTML,
+shortens destination URLs, and converts web images into bounded four-colour
+GBPC pictures:
+
+```shell
+git clone https://github.com/salvogendut/GB-proxy.git
+cd GB-proxy
+cp config.py.example config.py
+```
+
+Set `PRESET = "geobench"` in `config.py`, then start it:
+
+```shell
+./start_macproxy.sh --port=5001
+```
+
+In `BROWSER.APP`, open **Settings > Proxy** and enter
+`http://127.0.0.1:5001` when the emulator and proxy run on the same computer.
+Real CPC/PCW hardware must use the proxy computer's LAN address, for example
+`http://192.168.1.10:5001`. The value is persisted as `PROXY=` in
+`GEOBENCH.CFG`. GB-proxy serves plain HTTP to the 8-bit client, so run it only
+on a trusted network and do not use it for sensitive accounts.
 
 Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.md).
 

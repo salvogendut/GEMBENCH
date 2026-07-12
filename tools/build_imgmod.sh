@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
-# Build GBWEB.MOD, the Browser's paged source-cache/config helper.
+# Build GBIMG.MOD, the Browser's paged inline-image cache helper.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OUT="${1:-build/GBWEB.RAW}"
+OUT="${1:-build/GBIMG.RAW}"
 GB="lib/gb"
-SRC="kernel/kc/gbweb_mod.c"
+SRC="kernel/kc/gbimg_mod.c"
 SDCC="${SDCC:-sdcc}"
 BIN="$(dirname "$(command -v "$SDCC")")"
 SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
-work="build/webmod"
+work="build/imgmod"
 mkdir -p "$work" "$(dirname "$OUT")"
 . tools/build_cache.sh
 
-deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" \
-      "$GB/gbform.h" "$GB/gburl.h" "$SRC")
+deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" "$SRC")
 stamp="$OUT.stamp"
-cache_key=$(printf '%s\n' "build_webmod.v1" "SDCC=$SDCC" "SDAS=$SDAS" "MAKEBIN=$MAKEBIN")
+cache_key=$(printf '%s\n' "build_imgmod.v1" "SDCC=$SDCC" "SDAS=$SDAS" "MAKEBIN=$MAKEBIN")
 if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
     echo "Up to date $OUT ($(stat -c%s "$OUT") bytes)"
     exit 0
@@ -25,9 +24,9 @@ fi
 
 "$SDAS" -o "$work/crt0.rel" "$GB/crt0.s"
 "$SDAS" -o "$work/gblib.rel" "$GB/gblib.s"
-"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$SRC" -o "$work/gbweb_mod.rel"
-"$SDCC" -mz80 --no-std-crt0 --code-loc 0x6000 --data-loc 0x7FFE \
-    "$work/crt0.rel" "$work/gbweb_mod.rel" "$work/gblib.rel" -o "$work/mod.ihx"
+"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$SRC" -o "$work/gbimg_mod.rel"
+"$SDCC" -mz80 --no-std-crt0 --code-loc 0x6000 --data-loc 0x7F00 \
+    "$work/crt0.rel" "$work/gbimg_mod.rel" "$work/gblib.rel" -o "$work/mod.ihx"
 
 python3 - "$work/mod.map" <<'PY'
 import re, sys
@@ -39,8 +38,8 @@ for line in open(sys.argv[1]):
 load = ('_CODE', '_GSINIT', '_GSFINAL', '_INITIALIZER')
 image_end = max(area[a][0] + area[a][1] for a in load if a in area)
 top = max(start + size for start, size in area.values())
-if image_end > 0x7FFE or top > 0x8000:
-    raise SystemExit('FIT ERROR (GBWEB): image=0x%04X top=0x%04X' % (image_end, top))
+if image_end > 0x7F00 or top > 0x8000:
+    raise SystemExit('FIT ERROR (GBIMG): image=0x%04X top=0x%04X' % (image_end, top))
 PY
 
 "$MAKEBIN" -p "$work/mod.ihx" "$work/mod.bin"

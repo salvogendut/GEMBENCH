@@ -128,13 +128,17 @@ chunk boundaries and cover malformed/oversized input. A minimal SDCC probe
 currently measures 4,505 bytes of code and 299 bytes of default parser state,
 before browser UI, history or networking. `BROWSER.APP` now composes that parser
 with the shared HTTP response parser and the existing CPC/PCW transports. It
-stores up to 255 wrapped display lines in a borrowed 16K page, pauses its TCP
+stores up to 208 CPC or 182 PCW wrapped display rows in a borrowed 16K page,
+including compact GET-form and inline-image records, and pauses its TCP
 stream after laying out one viewport, and resumes from retained receive-buffer
 state only as the user scrolls down. It follows bounded redirects, opens
-underlined links by click, and retains one refetched Back URL. The Browser build
-disables image-alt rendering, numeric-entity decoding and attribute-entity
-decoding to remain within its 16K PCW bank. Reaching the line bound is reported
-as truncated; no-spare-bank systems use an explicit eight-line fallback.
+underlined link labels by click, and retains one refetched Back URL. Link targets
+are stored separately so proxy transport URLs stay out of rendered text. One
+visible image at a time is fetched lazily as a bounded GBPC v2 object; a proxy
+can convert ordinary image formats. The Browser build disables numeric-entity
+and attribute-entity decoding to remain within its 16K PCW bank. Reaching the
+row bound is reported as truncated; no-spare-bank systems use an explicit
+seven-line fallback.
 
 This would be useful for retro-oriented sites and local services. Most modern
 public sites require HTTPS, CSS and JavaScript, so a practical optional companion
@@ -153,8 +157,8 @@ TLS should not be brought onto the Z80 merely to claim HTTPS support.
    response metadata and chunk framing; URL resolution remains in WGET.**
 4. Prototype a standalone streaming HTML parser with host-side tests based on
    classic Contiki's callback model. **Implemented in issue #367 and integrated
-   into Browser. Browser now renders bounded link rows with click navigation and
-   keeps one previous URL for Back; richer history remains future work.**
+   into Browser. Browser now renders bounded link labels with click navigation
+   and keeps one previous URL for Back; richer history remains future work.**
 5. Build `BROWSER.APP` for CPC and PCW first. **Initial text-first version
    implemented in issue #367; MSX can use it once an MSX network backend exists.**
 6. Measure every addition using the produced `.RAW` size, static RAM map and real

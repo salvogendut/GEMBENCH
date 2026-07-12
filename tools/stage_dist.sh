@@ -89,6 +89,7 @@ cp build/GBFAT.RAW "$SYS/GBFAT.MOD"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.MOD"   # #135: paged AMSDOS/floppy write module
 cp build/GBUI.RAW "$SYS/GBUI.MOD"           # #142: paged dialog (popup/prompt/file-picker) module
 cp build/GBWEB.RAW "$SYS/GBWEB.MOD"         # #373: Browser source cache + proxy config helper
+cp build/GBIMG.RAW "$SYS/GBIMG.MOD"         # #393: Browser inline-image cache helper
 cp build/GBNET.RAW "$SYS/GBNET.MOD"         # #238: W5100 networking module (gb_net_* socket API)
 cp build/GBNETM4.RAW "$SYS/GBNETM4.MOD"     # #259: M4 TCP module, same gb_net_* socket API
 cp build/M4SAVE.RAW "$SYS/M4SAVE.MOD"       # #259: M4 C_OPEN/C_WRITE/C_CLOSE save module

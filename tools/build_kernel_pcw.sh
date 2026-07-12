@@ -48,7 +48,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/p
 APPDEFS="-DGB_PCW" DATA_LOC=0x7380 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7900 DIALOGS=1 tools/build_capp.sh apps/wget build/pcw/WGET.RAW
-GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s LOAD_LIMIT=0x7F80 APPDEFS="-DGB_PCW" DATA_LOC=0x7FA4 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
+GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" LOAD_LIMIT=0x7F80 APPDEFS="-DGB_PCW" DATA_LOC=0x7FA4 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/pcw/BRSAVE.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/pcw/SHELL.RAW
@@ -63,6 +63,7 @@ APPDEFS="-DGB_PCW" tools/build_capp.sh apps/xmatrix build/pcw/XMATRIX.RAW
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
 tools/build_uimod.sh                             # -> build/GBUI.RAW
 tools/build_webmod.sh                            # -> build/GBWEB.RAW
+tools/build_imgmod.sh                            # -> build/GBIMG.RAW
 
 # --- portable icons/pictures; target-native fonts, pointer and splash ---------
 python3 tools/genfont.py build/pcw/DEFAULT.FNT
@@ -112,6 +113,7 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/GBCFG.RAW=GBCFG.MOD \
     --add build/GBUI.RAW=GBUI.MOD \
     --add build/GBWEB.RAW=GBWEB.MOD \
+    --add build/GBIMG.RAW=GBIMG.MOD \
     --add build/pcw/SPLASH.MOD=SPLASH.MOD \
     --add build/pcw/DEFAULT.FNT=DEFAULT.FNT \
     --add build/pcw/DEFAULT.IST=DEFAULT.IST \
