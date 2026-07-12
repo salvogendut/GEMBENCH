@@ -128,14 +128,22 @@ def main() -> None:
             compare_payload(str((distro / name).relative_to(ROOT)), (distro / name).read_bytes(), expected)
 
     cpc_media = cpc_disk(ROOT / "QA/MEDIA.DSK")
-    pcw_media = pcw_disk(ROOT / "QA/PCW/MEDIA.DSK")
+    pcw_extras = pcw_disk(ROOT / "QA/PCW/EXTRAS.DSK")
     if {name for name in cpc_media if name.endswith(".PIC")} != set(assets):
         sys.exit("QA/MEDIA.DSK: picture catalogue differs from assets/pictures")
-    if {name for name in pcw_media if name.endswith(".PIC")} != set(assets):
-        sys.exit("QA/PCW/MEDIA.DSK: picture catalogue differs from assets/pictures")
+    if {name for name in pcw_extras if name.endswith(".PIC")} != set(assets):
+        sys.exit("QA/PCW/EXTRAS.DSK: picture catalogue differs from assets/pictures")
+    pcw_required = {
+        "PAINT.APP", "PAINT.IST", "BASIC.APP", "BASRUN.APP", "BASRUN2.BIN",
+        "ANT.SAV", "DECO.SAV", "XMATRIX.SAV",
+        "ART.BAS", "CHASE.BAS", "GUESS.BAS", "HELLO.BAS", "PRIMES.BAS",
+    }
+    missing = pcw_required - set(pcw_extras)
+    if missing:
+        sys.exit(f"QA/PCW/EXTRAS.DSK: missing extras: {', '.join(sorted(missing))}")
     for name, expected in assets.items():
         compare_payload(f"QA/MEDIA.DSK:{name}", strip_amsdos(cpc_media[name]), expected)
-        compare_payload(f"QA/PCW/MEDIA.DSK:{name}", pcw_media[name], expected, padded=True)
+        compare_payload(f"QA/PCW/EXTRAS.DSK:{name}", pcw_extras[name], expected, padded=True)
 
     cpc_main = cpc_disk(ROOT / "QA/GEOBENCH.DSK")
     pcw_main = pcw_disk(ROOT / "QA/PCW/GEOBENCH.DSK")
