@@ -140,8 +140,9 @@ rules are:
   the machine still reaches the desktop;
 - `PROXY=` is Browser's optional persistent plain-HTTP proxy URL; an empty value
   means direct access;
-- screensavers are just full-screen `.SAV` apps launched by the desktop idle
-  timer.
+- screensavers are full-screen `.SAV` apps launched by the desktop idle timer;
+  per-module values remain app-owned `GEOBENCH.CFG` keys. `STARFLD_SPEED` and
+  `STARFLD_STARS` are the first such settings and are edited through Settings.
 
 The intent is to keep policy in apps or modules and keep the resident kernel at
 the level of asset reload, storage, and window-manager primitives.

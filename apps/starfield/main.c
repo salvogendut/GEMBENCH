@@ -11,6 +11,8 @@
  * lines, no IFS - just bounded integer division, so none of fractalic's pitfalls.
  * Small enough to ship on both the floppy and the card. */
 #include "gb.h"
+#include "gbcfg.h"
+#include "gbsaver.h"
 
 #define WM_FS (*(volatile unsigned char *)0x130A)
 #ifdef GB_MSX2
@@ -19,15 +21,14 @@
 #define KCFG_BORDER (*(volatile unsigned char *)0x1230) /* CPC: desktop's border ink (INKS= 5th) */
 #endif
 
-#define NSTARS 64
 #define ZMAX   255      /* spawn depth (far) */
 #define ZMIN   2        /* respawn at/under this depth */
 #define FOCAL  64       /* projection scale */
-#define SPEED  4        /* depth shrink per frame */
 #define BG     2        /* black background */
 
-static int x[NSTARS], y[NSTARS], z[NSTARS];   /* 3D position */
-static int px[NSTARS], py[NSTARS];            /* last plotted screen position (to erase) */
+static int x[GB_STARFLD_STARS_MAX], y[GB_STARFLD_STARS_MAX], z[GB_STARFLD_STARS_MAX];
+static int px[GB_STARFLD_STARS_MAX], py[GB_STARFLD_STARS_MAX];
+static unsigned char star_count, star_speed;
 
 static unsigned char lmx, lmy, armed;
 static unsigned int  rng;
@@ -119,9 +120,9 @@ static void star_tick(void)
 {
     unsigned char i, col;
     int sx, sy;
-    for (i = 0; i < NSTARS; i++) {
+    for (i = 0; i < star_count; i++) {
         plot_dot(px[i], py[i], BG);              /* erase the old position */
-        z[i] -= SPEED;                             /* approach */
+        z[i] -= star_speed;                       /* approach */
         if (z[i] <= ZMIN) spawn(i);
         sx = 160 + (x[i] * FOCAL) / z[i];          /* perspective projection */
         sy = 100 + (y[i] * FOCAL) / z[i];
@@ -167,10 +168,14 @@ void main(void)
     unsigned char i, n;
     lmx = gb_mx(); lmy = gb_my();
     armed = 0;
+    star_speed = gbcfg_u8(GB_STARFLD_SPEED_KEY, GB_STARFLD_SPEED_DEFAULT,
+                          GB_STARFLD_SPEED_MIN, GB_STARFLD_SPEED_MAX);
+    star_count = gbcfg_u8(GB_STARFLD_STARS_KEY, GB_STARFLD_STARS_DEFAULT,
+                          GB_STARFLD_STARS_MIN, GB_STARFLD_STARS_MAX);
     gb_time();
     rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0x57A4u);
     if (!rng) rng = 0x57A4u;
-    for (i = 0; i < NSTARS; i++) {                 /* random initial depths -> staggered */
+    for (i = 0; i < star_count; i++) {              /* random initial depths -> staggered */
         spawn(i);
         z[i] = (int)(ZMIN + 1 + rnd() % (ZMAX - ZMIN));
         px[i] = py[i] = -1;

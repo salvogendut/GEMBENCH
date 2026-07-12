@@ -26,21 +26,23 @@
  * the safe depth-1 navigation case.
  */
 #include "gb.h"
+#include "gbcfg.h"
+#include "gbsaver.h"
 
 #define TITLE_H   14
 #define DEF_X     18
 #define DEF_Y     32
 #define DEF_W     58           /* byte cols (232 px) */
-#define DEF_H     150          /* lines (5 pickers + Colours + Screensaver: Module/Timeout, + editor) */
+#define DEF_H     150          /* lines (appearance rows + screensaver controls + footer) */
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   16           /* value column offset from the window's left (byte cols); a
                                   gap past the longest label ("Backdrop") so value != label */
 #define COLOUR_ROW NROWS       /* the "Colours..." line sits below the picker rows */
-/* the screensaver section (#219): a header, then two clickable sub-rows - the .SAV
-   module (SAVER=) and the idle timeout (SAVERTIME=). */
+/* The screensaver section: module picker, per-saver Configure command, then timeout. */
 #define SS_HDR_ROW (NROWS + 1) /* "Screensaver" section header (not clickable) */
 #define SS_MOD_ROW (NROWS + 2) /* "Module"  - pick which .SAV runs */
-#define SS_TM_ROW  (NROWS + 3) /* "Timeout" - the idle minutes */
+#define SS_CFG_ROW (NROWS + 3) /* "Configure" - selected saver's own settings */
+#define SS_TM_ROW  (NROWS + 4) /* "Timeout" - the idle minutes */
 #define ROW_BACKDROP 3
 #define ROW_WALLPAPER 4
 #define DRIVE_NONE 0xFF
@@ -49,6 +51,7 @@ static unsigned char win_x, win_y, win_w, win_h;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
 static void saver_value(char *dst);       /* forward: s_draw shows the current SAVERTIME= (#219) */
 static void ss_module_value(char *dst);   /* forward: s_draw shows the current SAVER= module (#219) */
+static unsigned char ss_is_starfield(void);
 
 /* MIN_IST_ICONS: the minimum icon count for an .IST to be offered as the desktop icon
    set. A desktop set must supply every slot the kernel draws - 25 icons since #198 dropped
@@ -396,6 +399,14 @@ static void s_draw(void)
         ss_module_value(sv);                  /* Module: which .SAV */
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_MOD_ROW), "Module");
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_MOD_ROW), sv);
+        gb_textbw((unsigned char)(win_x + 2), row_y(SS_CFG_ROW), "Options");
+        {
+            unsigned char bx = (unsigned char)(win_x + VAL_COL);
+            unsigned char by = (unsigned char)(row_y(SS_CFG_ROW) - 1);
+            gb_fill(bx, by, 16, 10, 1);
+            gb_frame(bx, by, 16, 10, 2);
+            gb_textbw((unsigned char)(bx + 1), (unsigned char)(by + 1), "Configure");
+        }
         saver_value(sv);                      /* Timeout: idle minutes */
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_TM_ROW), "Timeout");
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_TM_ROW), sv);
@@ -597,18 +608,31 @@ static void colours_dialog(void)
 
 /* ---- screensaver: module (SAVER=) + idle timeout (SAVERTIME=, #219) ---------- */
 
-/* ss_module_value: the current SAVER= module/path (the default CIRCLE when absent). */
+/* ss_module_value: the current SAVER= module/path (the default SQUARES when absent). */
 static void ss_module_value(char *dst)
 {
     unsigned char i;
     cfg_get("SAVER=", dst);
     if (dst[0] == '-') {                       /* absent -> the default module */
-        dst[0]='C'; dst[1]='I'; dst[2]='R'; dst[3]='C';
-        dst[4]='L'; dst[5]='E'; dst[6]=0;
+        dst[0]='S'; dst[1]='Q'; dst[2]='U'; dst[3]='A';
+        dst[4]='R'; dst[5]='E'; dst[6]='S'; dst[7]=0;
     } else {
         for (i = 0; dst[i] && i < 14; i++) ;
         dst[i] = 0;
     }
+}
+
+static unsigned char ss_is_starfield(void)
+{
+    static const char stem[8] = { 'S','T','A','R','F','L','D',' ' };
+    char value[16];
+    unsigned char i, p = 0;
+    ss_module_value(value);
+    if (value[0] && value[1] == ':') p = 2;
+    for (i = 0; i < 7; i++)
+        if (value[p + i] != stem[i]) return 0;
+    p += 7;
+    return (unsigned char)(value[p] == 0 || value[p] == '.');
 }
 
 /* ss_module_dialog: list the .SAV screensavers in /GBENCH and persist the pick to
@@ -681,6 +705,106 @@ static void saver_dialog(void)
     }
     s_draw();
     gb_curshow();
+}
+
+/* ---- per-screensaver configuration (#390) ----------------------------------- */
+
+#define SSC_W 42
+#define SSC_H 78
+
+static void ss_cfg_number(unsigned char x, unsigned char y, unsigned char value)
+{
+    char text[6];
+    u_dec(value, text);
+    gb_fill(x, y, 5, 8, 1);
+    gb_textbw(x, y, text);
+}
+
+static void ss_cfg_draw(unsigned char x, unsigned char y,
+                        unsigned char speed, unsigned char stars)
+{
+    unsigned char sy = (unsigned char)(y + 23);
+    unsigned char ny = (unsigned char)(y + 39);
+    unsigned char by = (unsigned char)(y + SSC_H - 13);
+    gb_window(x, y, SSC_W, SSC_H, "Starfield");
+    gb_textbw((unsigned char)(x + 3), sy, "Speed");
+    gb_textbw((unsigned char)(x + 17), sy, "-");
+    ss_cfg_number((unsigned char)(x + 21), sy, speed);
+    gb_textbw((unsigned char)(x + 29), sy, "+");
+    gb_textbw((unsigned char)(x + 3), ny, "Stars");
+    gb_textbw((unsigned char)(x + 17), ny, "-");
+    ss_cfg_number((unsigned char)(x + 21), ny, stars);
+    gb_textbw((unsigned char)(x + 29), ny, "+");
+    gb_textbw((unsigned char)(x + 3), by, "Save");
+    gb_textbw((unsigned char)(x + 13), by, "Cancel");
+}
+
+static void ss_config_dialog(void)
+{
+    unsigned char x, y, speed, stars, flags = 0, done = 0;
+    if (!ss_is_starfield()) {
+        gb_alert("No settings", "for this saver.");
+        gb_curhide(); s_draw(); gb_curshow();
+        return;
+    }
+
+    speed = gbcfg_u8_from(cfgbuf, cfglen, GB_STARFLD_SPEED_KEY,
+                          GB_STARFLD_SPEED_DEFAULT,
+                          GB_STARFLD_SPEED_MIN, GB_STARFLD_SPEED_MAX);
+    stars = gbcfg_u8_from(cfgbuf, cfglen, GB_STARFLD_STARS_KEY,
+                          GB_STARFLD_STARS_DEFAULT,
+                          GB_STARFLD_STARS_MIN, GB_STARFLD_STARS_MAX);
+    x = (unsigned char)(win_x + (win_w - SSC_W) / 2);
+    y = (unsigned char)(win_y + 37);
+    gb_modal_set(1);
+    gb_curhide();
+    ss_cfg_draw(x, y, speed, stars);
+    gb_curshow();
+
+    while (!done) {
+        unsigned char mx, my, sy, ny, by;
+        flags = gb_poll();
+        if (flags & GB_QUIT) break;
+        if (!(flags & GB_CLICK)) continue;
+        mx = gb_mx(); my = gb_my();
+        sy = (unsigned char)(y + 23);
+        ny = (unsigned char)(y + 39);
+        by = (unsigned char)(y + SSC_H - 13);
+
+        if (my >= y + 2 && my < y + 12 && mx >= x + 1 && mx < x + 3)
+            break;                                      /* title-bar close = Cancel */
+        if (my >= by && my < by + 8) {
+            if (mx >= x + 3 && mx < x + 10) {
+                char text[6];
+                u_dec(speed, text); cfg_set(GB_STARFLD_SPEED_KEY, text);
+                u_dec(stars, text); cfg_set(GB_STARFLD_STARS_KEY, text);
+                done = 1;
+            } else if (mx >= x + 13 && mx < x + 23) {
+                done = 1;
+            }
+            continue;
+        }
+        if (my >= sy && my < sy + 8) {
+            if (mx >= x + 16 && mx < x + 20 && speed > GB_STARFLD_SPEED_MIN)
+                speed--;
+            else if (mx >= x + 28 && mx < x + 32 && speed < GB_STARFLD_SPEED_MAX)
+                speed++;
+            else continue;
+            gb_curhide(); ss_cfg_number((unsigned char)(x + 21), sy, speed); gb_curshow();
+        } else if (my >= ny && my < ny + 8) {
+            if (mx >= x + 16 && mx < x + 20 && stars > GB_STARFLD_STARS_MIN)
+                stars = (unsigned char)(stars - GB_STARFLD_STARS_STEP);
+            else if (mx >= x + 28 && mx < x + 32 &&
+                     stars <= GB_STARFLD_STARS_MAX - GB_STARFLD_STARS_STEP)
+                stars = (unsigned char)(stars + GB_STARFLD_STARS_STEP);
+            else continue;
+            if (stars < GB_STARFLD_STARS_MIN) stars = GB_STARFLD_STARS_MIN;
+            gb_curhide(); ss_cfg_number((unsigned char)(x + 21), ny, stars); gb_curshow();
+        }
+    }
+    if (flags & GB_QUIT) while (gb_poll() & GB_QUIT) ;
+    gb_modal_set(0);
+    gb_curhide(); s_draw(); gb_curshow();
 }
 
 /* ---- interaction ------------------------------------------------------------- */
@@ -812,9 +936,9 @@ static void open_picker(unsigned char r)
 /* a content press: which row was clicked? */
 static void s_click(void)
 {
-    unsigned char my, r;
+    unsigned char mx, my, r;
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
-    my = gb_my();
+    mx = gb_mx(); my = gb_my();
     for (r = 0; r < NROWS; r++) {
         unsigned char ry = row_y(r);
         if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
@@ -837,7 +961,15 @@ static void s_click(void)
         }
     }
     {
-        unsigned char ry = row_y(SS_TM_ROW);              /* #219: screensaver timeout */
+        unsigned char ry = row_y(SS_CFG_ROW);
+        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2) &&
+            mx >= win_x + VAL_COL && mx < win_x + VAL_COL + 16) {
+            ss_config_dialog();
+            return;
+        }
+    }
+    {
+        unsigned char ry = row_y(SS_TM_ROW);              /* screensaver timeout */
         if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2))
             saver_dialog();
     }

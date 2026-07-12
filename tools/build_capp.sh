@@ -27,7 +27,15 @@ BIN="$(dirname "$(command -v "$SDCC")")"   # sdasz80 / makebin sit beside sdcc
 SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
 
-work="build/$(basename "$APP")"
+# Keep target-specific object files apart. CPC, MSX and PCW builds may run close
+# together (or concurrently outside the top-level Makefile); sharing main.rel
+# allowed one target to link another target's conditional drawing code. That is
+# fatal on MSX for CPC apps that write directly to #C000.
+case " ${APPDEFS:-} " in
+    *" -DGB_MSX2 "*) work="build/msx-obj/$(basename "$APP")" ;;
+    *" -DGB_PCW "*)  work="build/pcw-obj/$(basename "$APP")" ;;
+    *)                work="build/$(basename "$APP")" ;;
+esac
 mkdir -p "$work"
 mkdir -p "$(dirname "$OUT")"
 . tools/build_cache.sh
