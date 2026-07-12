@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""bdp_to_msx - transcode a GEOBENCH .BDP backdrop tile from CPC Mode 1 to V9938
-Screen 6 (#287).
+"""bdp_to_msx - legacy host-side GEOBENCH .BDP transcoder.
 
 A .BDP is a raw 64-byte 16x16 Mode-1 tile (no header). Both platforms pack 4 px
 per byte, so only the in-byte bit layout changes: this re-packs each byte for
-Screen 6 so a tile authored/compiled for the CPC (tools/png2backdrop.py) drops
-straight into the MSX distro.
+Screen 6 for old MSX builds. Current CPC, MSX2, and PCW distributions all store
+the canonical input unchanged and let the kernel transcode it at load time; this
+utility remains only for inspecting or supporting older artifacts.
 
 Usage: tools/bdp_to_msx.py <in.BDP> <out.BDP>
 """

@@ -42,11 +42,13 @@
 14. ✅ **Portable icon-set payloads** — CPC, MSX2, and PCW distributions carry
    canonical Mode-1 `.IST` bytes. Non-CPC kernels transcode the selected set when
    loading it, and ICONED preserves the portable format on every target.
+15. ✅ **Portable backdrop payloads (#388)** — all targets carry the same 64-byte
+   canonical Mode-1 `.BDP` tiles. MSX2 and PCW convert the selected tile at load
+   time while CPC draws the already-native bytes from its desktop app, preserving
+   the resident kernel's stack guard.
 
 ## Next
 
-- **Shared backdrop assets across platforms** — backdrops still use platform-specific
-  Mode-1 / Screen-6 payloads because of their byte-layout differences.
 - **Paint** follow-ups — resizable canvas and scrolling for pictures bigger than the
   screen (Fullscreen already centers the canvas + tools).
 - **Drawers/folders** and richer desktop arrangement.

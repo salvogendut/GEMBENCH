@@ -110,6 +110,9 @@ static void draw_icon(unsigned char i)
 #define CLIP_W_K   (*(volatile unsigned char *)0x133A)
 #define CLIP_H_K   (*(volatile unsigned char *)0x133B)
 #define UI_MODAL_K (*(volatile unsigned char *)0x1705)
+#define BD_NAME_K  ((const char *)0x1231)
+#define BD_DRIVE_K (*(volatile unsigned char *)0x123C)
+#define BD_SOLID_K (*(volatile unsigned char *)0x1290)
 static unsigned char wp_bank;                 /* borrowed bank (0 = none) */
 static unsigned char wp_bank2;                /* optional second wallpaper picture bank */
 static unsigned char wp_wb, wp_x, wp_y;       /* picture width + centred top-left */
@@ -230,6 +233,98 @@ static unsigned char enter_pics(void)
     return 0;
 }
 
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+static unsigned char bd_tile[64];
+static unsigned char bd_drive, bd_solid;
+static char bd_name[11];
+
+/* The CPC card keeps assets in /GBENCH; its flat AMSDOS floppy keeps them at
+   root. This mirrors the kernel system-asset lookup without adding resident
+   code to a kernel that is already at its guarded stack limit. */
+static unsigned char enter_assets(void)
+{
+    char *p = gb_dir1();
+    while (p) {
+        if (gb_isdir()) {
+            const char *r = gb_entname();
+            if (r[0]=='G' && r[1]=='B' && r[2]=='E' && r[3]=='N' &&
+                r[4]=='C' && r[5]=='H' && r[6]==' ' && r[7]==' ') {
+                gb_chdir();
+                return 1;
+            }
+        }
+        p = gb_dirn();
+    }
+    return 0;
+}
+
+/* A canonical BDP is already CPC Mode-1, so no transcode is necessary. Load
+   the configured tile into the desktop bank at boot and after Settings closes. */
+static void bd_init(void)
+{
+    unsigned char drive, old_drive, descended, i;
+    unsigned int n;
+    bd_solid = BD_SOLID_K;
+    bd_drive = BD_DRIVE_K;
+    copy11(bd_name, BD_NAME_K);
+    if (bd_solid) return;
+    drive = BD_DRIVE_K;
+    if (drive == 0xFF) drive = boot_drive();
+    bd_drive = drive;
+    if (!drive_present(drive)) { BD_SOLID_K = bd_solid = 1; return; }
+    old_drive = gb_get_drive();
+    gb_set_drive(drive);
+    descended = enter_assets();
+    gb_set_name(BD_NAME_K);
+    n = gb_fs_load(gb_copybuf, 512);
+    if (descended) gb_back();
+    gb_set_drive(old_drive);
+    if (n < 64) { BD_SOLID_K = bd_solid = 1; return; }
+    for (i = 0; i < 64; i++)
+        bd_tile[i] = (unsigned char)gb_copybuf[i];
+}
+
+static unsigned char bd_changed(void)
+{
+    unsigned char drive = BD_DRIVE_K;
+    if (BD_SOLID_K != bd_solid) return 1;
+    if (bd_solid) return 0;
+    if (drive == 0xFF) drive = boot_drive();
+    if (drive != bd_drive) return 1;
+    return (unsigned char)!same11(bd_name, BD_NAME_K);
+}
+
+/* Draw a clipped canonical tile directly into CPC screen RAM. Writes still
+   reach RAM while the upper ROM is visible, matching lib/screen.asm. */
+static void cpc_backdrop(unsigned char x, unsigned char y,
+                         unsigned char w, unsigned char h)
+{
+    unsigned char ex, ey, cx, cy, cr, cb, row, col;
+    const unsigned char *tile;
+    unsigned char *dst;
+    unsigned int addr;
+
+    if (bd_solid) { gb_fill(x, y, w, h, 0); return; }
+    ex = (unsigned char)(x + w); ey = (unsigned char)(y + h);
+    cx = CLIP_X_K; cy = CLIP_Y_K;
+    cr = (unsigned char)(cx + CLIP_W_K); cb = (unsigned char)(cy + CLIP_H_K);
+    if (x < cx) x = cx;
+    if (y < cy) y = cy;
+    if (ex > cr) ex = cr;
+    if (ey > cb) ey = cb;
+    if (ex <= x || ey <= y) return;
+
+    for (row = y; row < ey; row++) {
+        addr = 0xC000u + ((unsigned int)(row & 7) << 11)
+             + (unsigned int)(row >> 3) * 80u + x;
+        dst = (unsigned char *)addr;
+        tile = bd_tile + (unsigned char)((row & 15) << 2);
+        for (col = x; col < ex; col++)
+            *dst++ = tile[col & 3];
+    }
+}
+#endif
+
 /* ---- screensaver idle trigger (#219) ----------------------------------------
  * Screensavers are apps (e.g. SQUARES.SAV) - and they are selectable. Two config keys:
  *   SAVER=<stem>        which .SAV module to run (default SQUARES)
@@ -330,6 +425,22 @@ static void wp_init(void)
     }
 }
 
+static unsigned char background_changed(void)
+{
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    if (bd_changed()) return 1;
+#endif
+    return wp_changed();
+}
+
+static void background_init(void)
+{
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    if (bd_changed()) bd_init();
+#endif
+    if (wp_changed()) wp_init();
+}
+
 static void open_saver(void)
 {
     unsigned char old_drive = gb_get_drive();
@@ -349,7 +460,14 @@ static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsig
 {
     unsigned char ix, iy, rx, by, iw, ih, ex, ey, px2, py2, cx, cy, cr, cb, row;
     unsigned int src;
-    if (!wp_bank) { gb_backdrop(x, y, w, h); return; }
+    if (!wp_bank) {
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+        cpc_backdrop(x, y, w, h);
+#else
+        gb_backdrop(x, y, w, h);
+#endif
+        return;
+    }
     ex = (unsigned char)(x + w); ey = (unsigned char)(y + h);
     cx = CLIP_X_K; cy = CLIP_Y_K;
     cr = (unsigned char)(cx + CLIP_W_K); cb = (unsigned char)(cy + CLIP_H_K);
@@ -695,10 +813,9 @@ static void on_frame(void)
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
         gb_menu_add("System", sys_items, 6, sys_action);
     }
-    if (menu_refresh && wp_changed()) {         /* WALLPAPER= changed while another window was up:
-                                                    reload it here, outside wm_repaint_all, then
-                                                    repaint once with the new desktop image. */
-        wp_init();
+    if (menu_refresh && background_changed()) { /* backdrop/wallpaper changed while a child was up:
+                                                    reload outside wm_repaint_all, then repaint once. */
+        background_init();
         gb_doc(&deskdoc);                        /* keep the desktop menu definition fresh after the
                                                     reload before we repaint the desktop. */
         gb_menu_add("System", sys_items, 6, sys_action);
@@ -818,6 +935,9 @@ void main(void)
     timesync_tries = want_timesync ? 1 : 0;
 #endif
     ss_cfg_init();                               /* #219: read the screensaver idle timeout */
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    bd_init();                                   /* canonical BDP is native CPC Mode-1 */
+#endif
     wp_init();                                   /* #212: load the configured wallpaper */
     gb_wm_damage(0, 0, GB_COLS, GB_LINES);                 /* initialise the shared repaint clip before paint() */
     paint();

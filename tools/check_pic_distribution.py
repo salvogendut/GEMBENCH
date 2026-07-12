@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that every shipped platform carries the same canonical .PIC bytes."""
+"""Verify that every shipped platform carries canonical .PIC and .BDP bytes."""
 
 import sys
 from collections import defaultdict
@@ -120,6 +120,13 @@ def main() -> None:
         if data[:6] != b"GBPC\x02\x01":
             sys.exit(f"assets/pictures/{name}: expected canonical GBPC v2 mode 1")
 
+    backdrops = {path.name.upper(): path.read_bytes() for path in sorted((ROOT / "assets/backdrops").glob("*.BDP"))}
+    if not backdrops:
+        sys.exit("no canonical backdrops found")
+    for name, data in backdrops.items():
+        if len(data) != 64:
+            sys.exit(f"assets/backdrops/{name}: expected a 64-byte canonical Mode-1 tile")
+
     for distro in (ROOT / "QA/CPC/CARD/PICS", ROOT / "QA/MSX/PICS"):
         names = {path.name for path in distro.glob("*.PIC")}
         if names != set(assets):
@@ -150,9 +157,11 @@ def main() -> None:
     compare_payload("QA/CPC/Floppies/GEOBENCH.DSK:LOGO.PIC", strip_amsdos(cpc_main["LOGO.PIC"]), assets["LOGO.PIC"])
     compare_payload("QA/PCW/GEOBENCH.DSK:LOGO.PIC", pcw_main["LOGO.PIC"], assets["LOGO.PIC"], padded=True)
 
+    cpc_companion = cpc_disk(ROOT / "QA/CPC/Floppies/COMPANION.DSK")
+    pcw_companion = pcw_disk(ROOT / "QA/PCW/COMPANION.DSK")
     for path, files in (
-        ("QA/CPC/Floppies/COMPANION.DSK", cpc_disk(ROOT / "QA/CPC/Floppies/COMPANION.DSK")),
-        ("QA/PCW/COMPANION.DSK", pcw_disk(ROOT / "QA/PCW/COMPANION.DSK")),
+        ("QA/CPC/Floppies/COMPANION.DSK", cpc_companion),
+        ("QA/PCW/COMPANION.DSK", pcw_companion),
     ):
         if any(name.endswith(".PIC") for name in files):
             sys.exit(f"{path}: companion disk must not contain pictures")
@@ -161,7 +170,25 @@ def main() -> None:
         if any(directory.glob("*.PIC")):
             sys.exit(f"{directory.relative_to(ROOT)}: pictures must live under PICS")
 
+    for directory in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/GBENCH"):
+        names = {path.name for path in directory.glob("*.BDP")}
+        if names != set(backdrops):
+            sys.exit(f"{directory.relative_to(ROOT)}: backdrop set differs from assets/backdrops")
+        for name, expected in backdrops.items():
+            compare_payload(str((directory / name).relative_to(ROOT)), (directory / name).read_bytes(), expected)
+
+    cpc_bdp = {name for name in cpc_main if name.endswith(".BDP")}
+    pcw_bdp = {name for name in pcw_companion if name.endswith(".BDP")}
+    if cpc_bdp != set(backdrops):
+        sys.exit("QA/CPC/Floppies/GEOBENCH.DSK: backdrop catalogue differs from assets/backdrops")
+    if pcw_bdp != set(backdrops):
+        sys.exit("QA/PCW/COMPANION.DSK: backdrop catalogue differs from assets/backdrops")
+    for name, expected in backdrops.items():
+        compare_payload(f"QA/CPC/Floppies/GEOBENCH.DSK:{name}", strip_amsdos(cpc_main[name]), expected)
+        compare_payload(f"QA/PCW/COMPANION.DSK:{name}", pcw_companion[name], expected, padded=True)
+
     print(f"portable PIC distribution: {len(assets)} byte-identical pictures across CPC, MSX and PCW")
+    print(f"portable BDP distribution: {len(backdrops)} byte-identical backdrops across CPC, MSX and PCW")
 
 
 if __name__ == "__main__":

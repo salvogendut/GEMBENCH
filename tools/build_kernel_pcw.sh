@@ -8,10 +8,9 @@
 # from the disc's reserved tracks; system files live in the disc's CP/M 2.2
 # filesystem (read by lib/pcw/fs.asm, written at build time by mkpcwdsk.py).
 #
-# Backdrops reuse the MSX transcoder because the PCW driver accepts Screen-6
-# pen-space bytes. Save-block-format blobs such as the splash need the final
-# CGA2 hardware-pen permutation at build time. GBPC v2 pictures and icon sets
-# stay canonical; the kernel translates them at runtime.
+# GBPC v2 pictures, icon sets, and backdrop tiles stay canonical; the kernel
+# translates them at runtime. Save-block-format blobs such as the splash still
+# need the final CGA2 hardware-pen permutation at build time.
 #
 #   bash tools/build_kernel_pcw.sh
 #   SDL_VIDEODRIVER=dummy ~/Dev/1985/1985 --config debug/1985-pcw.conf \
@@ -136,7 +135,7 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
 COMP_ADDS=()
 for bdp in assets/backdrops/*.BDP; do
     name=$(basename "$bdp" .BDP | tr a-z A-Z)
-    python3 tools/bdp_to_msx.py "$bdp" "build/pcw/$name.BDP"
+    cp "$bdp" "build/pcw/$name.BDP"
     COMP_ADDS+=(--add "build/pcw/$name.BDP=$name.BDP")
 done
 python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \

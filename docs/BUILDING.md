@@ -101,9 +101,10 @@ MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 **Assets are packaged automatically.** `.PIC` files are canonical GBPC Mode-1 and
 are copied byte-for-byte into root-level `PICS/`; the kernel translates pictures
 while displaying them on MSX as on other targets. Icon sets (`.IST`) are also now
-stored in canonical Mode-1 bytes and are decoded when loaded by the MSX kernel. Backdrops
-still need MSX-specific transcode for byte layout, so the build keeps calling
-`png2cpc.py --platform msx2` / `bdp_to_msx` where necessary.
+stored in canonical Mode-1 bytes and are decoded when loaded by the MSX kernel.
+Backdrop tiles (`.BDP`) use the same model: one canonical file is converted once
+when selected on MSX2/PCW; CPC uses those Mode-1 bytes directly in the desktop.
+Hardware sprites and bootsplash bitmaps remain target-specific.
 [Portable GEOBENCH picture format](PIC_FORMAT.md) explains why this works.
 System assets stay in `GBENCH/`. The mouse pointer is a V9938 hardware sprite: a
 hand-edited **`assets/pointer.SPR`** (edit it with

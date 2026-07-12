@@ -111,15 +111,17 @@ icon_convert
                 add   hl,de                  ; HL = first canonical bitmap byte
                 pop   de                     ; DE = bytes left
 
-icon_conv_bytes
+; mode1_convert: transcode DE non-zero canonical Mode-1 bytes in-place at HL
+; to the target's runtime UI-bitmap encoding. MSX uses Screen-6 pen space. PCW
+; UI bitmaps use that same pen space and are permuted only when drawn.
+mode1_convert
                 ld    a,(hl)
-                ld    (icon_conv_lut+1),a
-icon_conv_lut
+                ld    (mode1_conv_lut+1),a
+mode1_conv_lut
                 ld    a,(pic_m1_to_native)    ; canonical Mode-1 -> native display byte
                 ifdef PLATFORM_PCW
-                ; PCW picture bytes include the final CGA2 pen permutation. Icons
-                ; stay in Screen-6-style GB pen space because blit_bitmap applies
-                ; that permutation while drawing, so undo it here.
+                ; PCW picture bytes include the final CGA2 pen permutation. UI
+                ; bitmaps stay in GB pen space, so undo that final step here.
                 ld    c,a
                 and   #AA
                 rrca
@@ -135,7 +137,7 @@ icon_conv_lut
                 dec   de
                 ld    a,d
                 or    e
-                jr    nz,icon_conv_bytes
+                jr    nz,mode1_convert
                 ret
                 endif
 
@@ -218,6 +220,11 @@ bdi_sys         di
                 call  fs_load_sys            ; from /GEOBENCH on the boot drive (#134)
                 ei
 bdi_loaded      jr    nc,bdi_solid           ; missing / refused -> solid fallback
+                ifdef PIC_RUNTIME_CONVERT
+                ld    hl,fsam_buf            ; on-disk BDP is canonical Mode-1
+                ld    de,64                   ; convert once into native UI pen space
+                call  mode1_convert
+                endif
                 ld    hl,fsam_buf            ; copy the 64-byte tile into BD_TILE
                 ld    de,BD_TILE
                 ld    bc,64

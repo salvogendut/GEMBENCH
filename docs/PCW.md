@@ -56,8 +56,8 @@ The CGA2 palette is fixed (black/cyan/magenta/white). The driver
 pen 0 blue→cyan, 1 white→white, 2 black→black, 3 red→magenta, which is the
 bit transform `screen = ((gb & #55)<<1) | ((~gb & #AA)>>1)`. Icon sets are staged
 as canonical Mode-1 `.IST` files and decoded to Screen-6-style pen-space bytes
-when loaded (`icon_convert`) inside the PCW kernel; only backdrops still need
-build-time transcode (`bdp_to_msx`).
+when loaded inside the PCW kernel. Backdrop tiles follow the same runtime path:
+the `.BDP` on disk remains canonical and its 64 bytes are converted when selected.
 The splash and pointer remain hardware-format exceptions. Pictures instead use the portable
 [GBPC v2 format](PIC_FORMAT.md): `restore_pic_block` translates canonical
 Mode-1 bytes directly to PCW CGA2 hardware bytes while drawing, so staged
