@@ -293,10 +293,12 @@ static unsigned char net_connect_m4(const unsigned char *ip, unsigned int port)
     if (!GBNET_SOCK) return 0;
     pkt(M4C_NETCONNECT, 9);      /* cmd(2), socket, ip(4), port(2) */
     m4_packet[3] = GBNET_SOCK;
-    m4_packet[4] = ip[0];
-    m4_packet[5] = ip[1];
-    m4_packet[6] = ip[2];
-    m4_packet[7] = ip[3];
+    /* M4ROM exposes IPv4 as a little-endian 32-bit value, unlike the
+     * display-order octets used by the public gb_net_* API. */
+    m4_packet[4] = ip[3];
+    m4_packet[5] = ip[2];
+    m4_packet[6] = ip[1];
+    m4_packet[7] = ip[0];
     m4_packet[8] = (unsigned char)(port & 0xFF);
     m4_packet[9] = (unsigned char)(port >> 8);
     m4_sock_slot = GBNET_SOCK;
@@ -321,10 +323,16 @@ static unsigned char net_send_m4(const unsigned char *buf, unsigned int len)
         m4_packet[6 + i] = buf[i];
     m4_sock_slot = GBNET_SOCK;
     m4_begin();
-    m4_wait();
+    if (!m4_read_resp() || m4_resp[3] != 0) {
+        m4_finish();
+        return 0;
+    }
     s = wait_socket_ready_live(GBNET_SOCK, M4_STATUS_SENDING);
     m4_finish();
-    return (s == M4_STATUS_IDLE) ? 1 : 0;
+    /* A short HTTP peer can reply and close before the CPC observes IDLE.
+     * C_NETSEND already acknowledged the complete payload, and NETRECV can
+     * still drain bytes buffered by M4ROM after the socket reports CLOSED. */
+    return (s == M4_STATUS_IDLE || s == M4_STATUS_CLOSED) ? 1 : 0;
 }
 
 static unsigned int net_recv_m4(unsigned char *buf, unsigned int maxlen)
@@ -432,10 +440,10 @@ static unsigned char net_resolve_m4(const char *host, unsigned char *ip4)
     s = wait_socket_ready_live(0, M4_STATUS_DNS_BUSY);
     if (s >= 240) { m4_finish(); return 0; }
     copy_sock(0);
-    ip4[0] = m4_sock[4];
-    ip4[1] = m4_sock[5];
-    ip4[2] = m4_sock[6];
-    ip4[3] = m4_sock[7];
+    ip4[0] = m4_sock[7];
+    ip4[1] = m4_sock[6];
+    ip4[2] = m4_sock[5];
+    ip4[3] = m4_sock[4];
     m4_finish();
     return 1;
 }
