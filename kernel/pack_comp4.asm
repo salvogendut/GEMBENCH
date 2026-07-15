@@ -1,4 +1,4 @@
-;; pack_comp4.asm - COMPANION floppy, pass 4 of 4 (#363/#365/#367).
+;; pack_comp4.asm - COMPANION floppy, pass 4 of 5 (#363/#365/#367).
 ;;
 ;; These network/utility apps use their own fresh RASM address space and append
 ;; to the image after Paint, Telnet, Xaos and the screensavers.

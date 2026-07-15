@@ -37,6 +37,7 @@ command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 mkdir -p build/pcw QA/PCW
 
 # --- the C apps, compiled with the PCW geometry (same DATA_LOCs as CPC/MSX) --
+python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
 APPDEFS="-DGB_PCW" DATA_LOC=0x6D20 DOC=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
@@ -52,6 +53,7 @@ GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 10000
 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/pcw/BRSAVE.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/pcw/SHELL.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/pcw/MAHJONG.RAW
 # savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a
 # PCW plot path first (follow-up)
 APPDEFS="-DGB_PCW" tools/build_capp.sh apps/saver build/pcw/SQUARES.RAW
@@ -77,7 +79,7 @@ python3 tools/packicons.py build/pcw/DEFAULT.IST \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
     lib/icon_paint.asm lib/icon_browser.asm lib/icon_sd.asm \
     lib/icon_viewer.asm \
-    lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
+    lib/icon_telnet.asm lib/icon_mahjong.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_screensaver.asm
 cp assets/iconsets/REFINED.IST build/pcw/REFINED.IST
 
@@ -147,6 +149,7 @@ python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     --add build/pcw/WGET.RAW=WGET.APP \
     --add build/pcw/BROWSER.RAW=BROWSER.APP \
     --add build/pcw/XAOS.RAW=XAOS.APP \
+    --add build/pcw/MAHJONG.RAW=MAHJONG.APP \
     --add assets/WELCOME.TXT=WELCOME.TXT
 
 # --- EXTRAS.DSK: portable gallery + standalone apps on a 720K CF2DD disc

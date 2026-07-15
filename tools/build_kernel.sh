@@ -84,11 +84,11 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
     lib/icon_paint.asm lib/icon_browser.asm lib/icon_sd.asm \
     lib/icon_viewer.asm \
-    lib/icon_telnet.asm lib/icon_network.asm lib/icon_shell.asm \
+    lib/icon_telnet.asm lib/icon_mahjong.asm lib/icon_shell.asm \
     lib/icon_up.asm lib/icon_screensaver.asm \
     # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=DESKTOP 15=FILEMGR
     # 16=PAINT 17=BROWSER 18=SD (Albireo Disk C, #104) 19=VIEWER
-    # 20=TELNET 21=NETWORK 22=SHELL 23=UP (FileMgr ".." entry, #142) 24=SCREENSAVER (.SAV, #221 reused gear slot)
+    # 20=TELNET 21=MAHJONG 22=SHELL 23=UP (FileMgr ".." entry, #142) 24=SCREENSAVER (.SAV, #221 reused gear slot)
     # NOTE (#198): icon_iconset removed - it was byte-identical to icon_app; .IST files
     # now show the .APP icon, shrinking DEFAULT.IST by one slot (the floppy AMSDOS reader
     # garbles the icon set above a size threshold). All slots >=14 shifted up by 1.
@@ -110,17 +110,19 @@ for png in assets/backdrops/*.png; do
     name="$(basename "$png" .png | tr 'a-z' 'A-Z')"
     [ -e "build/$name.BDP" ] || python3 tools/png2backdrop.py "$png" "build/$name.BDP"
 done
+python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
 DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
 DATA_LOC=0x7A50 DIALOGS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
 GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371/#373): demand stream + offline/proxy/GET-form support
 DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/BRSAVE.RAW # transient Browser .HTM source writer
 DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
+DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/MAHJONG.RAW # Kana Mahjong: solvable 144-tile Turtle game
 DATA_LOC=0x7000 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
                                    # and clip-aware wallpaper repaint path.
-DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split includes the SHELL icon mapping
+DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
 DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
@@ -230,15 +232,16 @@ fi
 # Companion floppy QA/CPC/Floppies/COMPANION.DSK (#250): a non-bootable DATA disk with the extras
 # (Paint/Telnet/Xaos and all screensavers). Meant for drive B - the
 # kernel loader falls back boot-drive(A) -> browse-drive(B), so these load from B while
-# their shared deps stay on Main. Four fresh 64K passes APPEND to one DSK (pass 1
+# their shared deps stay on Main. Five fresh 64K passes APPEND to one DSK (pass 1
 # creates it). All .RAW/.SAV are already built above.
 rm -f build/companion.dsk
 "$RASM" kernel/pack_comp1.asm -eo                  # apps
 "$RASM" kernel/pack_comp2.asm -eo                  # savers (1/2)
 "$RASM" kernel/pack_comp3.asm -eo                  # savers (2/2)
 "$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP + BROWSER.APP + SHELL.APP
+"$RASM" kernel/pack_comp5.asm -eo                  # MAHJONG.APP
 cp build/companion.dsk "$FLOPPY_QA/COMPANION.DSK"
-echo "  + $FLOPPY_QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Xaos + savers)"
+echo "  + $FLOPPY_QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Mahjong/Xaos + savers)"
 EXTRAS_ADDS=()
 for pic in assets/pictures/*.PIC; do
     [ -e "$pic" ] && EXTRAS_ADDS+=(--add "$pic")

@@ -39,8 +39,14 @@ uses PerryFi/PerryNet.
   <img src="screenshots/PCW-browser.png" alt="GEOBENCH Browser running on the Amstrad PCW" width="48%">
 </p>
 
-*The GEOBENCH Browser on the **Amstrad CPC** (left, showing several pages through
-GB-proxy) and **Amstrad PCW** (right).*
+*The GEOBENCH Browser on the **Amstrad CPC** (left, showing FrogFind, Google,
+Ask, and Lycos) and **Amstrad PCW** (right). Displaying inline website images
+requires [GB-proxy](https://github.com/salvogendut/GB-proxy), which converts
+them into GEOBENCH's compact picture format.*
+
+![Kana Mahjong running in GEOBENCH on the Amstrad CPC](screenshots/CPC-Mahjong.png)
+
+*Kana Mahjong on the **Amstrad CPC**, the first native game made for GEOBENCH.*
 
 Targets:
 the CPC (Albireo/M4 card + AMSDOS floppy), the [MSX2](docs/MSX2.md)

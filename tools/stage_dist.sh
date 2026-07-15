@@ -58,6 +58,7 @@ cp build/WGET.RAW    "$SYS/WGET.APP"        # #363: streaming HTTP downloader fo
 cp build/BROWSER.RAW "$SYS/BROWSER.APP"     # #367: streaming text-first HTTP browser
 cp build/BRSAVE.RAW  "$SYS/BRSAVE.APP"      # #373: Browser offline .HTM save worker
 cp build/SHELL.RAW   "$SYS/SHELL.APP"       # #365: command-line file shell
+cp build/MAHJONG.RAW "$SYS/MAHJONG.APP"     # Kana Mahjong solitaire
 for f in "$GB_BASIC_DIR/build/BASIC.RAW" "$GB_BASIC_DIR/build/BASRUN.RAW" "$GB_BASIC_DIR/build/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC payload $f (run make -C \"$GB_BASIC_DIR\" raws)" >&2; exit 1; }
 done

@@ -114,7 +114,8 @@ directory layout. `k_drive_poll` uses a single-sector probe for media presence.
   GEOBENCH.CFG. No other picture is included.
 - **COMPANION.DSK** (CF2 data): backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
-  WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, WELCOME.TXT.
+  WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, MAHJONG.APP,
+  WELCOME.TXT.
 - **EXTRAS.DSK** (720K read-only CF2DD data): every portable picture from
   `assets/pictures`, stored byte-for-byte in canonical GBPC v2 format, plus
   GB-PAINT (`PAINT.APP` and `PAINT.IST`), GB-BASIC (`BASIC.APP`, its runtime and

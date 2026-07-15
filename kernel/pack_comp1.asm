@@ -11,7 +11,7 @@
 ;; which stay only on Main) load from A - NO duplicates are needed here (lib/fs.asm
 ;; fs_load_sys, #250).
 ;;
-;; Like pack_apps*.asm: each pass is a fresh 64K rasm image whose `save ...,DSK,...`
+;; Like pack_apps*.asm: each of five passes is a fresh 64K rasm image whose `save ...,DSK,...`
 ;; APPENDS to the same .dsk; pass 1 here CREATES build/companion.dsk (build_kernel.sh
 ;; `rm -f`s it first). The org is irrelevant - the blobs are only assembled so the
 ;; save directive can write them to the disk catalogue. Keep each pass's incbin span
