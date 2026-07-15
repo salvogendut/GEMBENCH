@@ -368,6 +368,7 @@ static const char *win_title(void)               /* "Disk C/path 32MiB free" -> 
 #define ICON_BROWSER 17
 #define ICON_VIEWER 19
 #define ICON_TELNET 20        /* #238: the telnet terminal app */
+#define ICON_MAHJONG 21       /* Kana Mahjong; replaces the unused network slot */
 #define ICON_SHELL 22         /* #365: command shell */
 #define ICON_UP 23            /* up-arrow for the ".." parent-dir entry (#142) */
 #define ICON_SCREENSAVER 24   /* #221: reused the freed gear slot for the screensaver (.SAV) icon */
@@ -379,6 +380,38 @@ static unsigned char name_is(const char *name, const char *want)
     while (want[i]) { if (name[i] != want[i]) return 0; i++; }
     return (unsigned char)(name[i] == '.' || name[i] == 0);
 }
+
+/* Slot byte followed by a NUL-terminated basename; 0xFF ends the table. */
+static const unsigned char app_icon_map[] = {
+    ICON_NOTEPAD,  'N','O','T','E','P','A','D',0,
+    ICON_ICONED,   'I','C','O','N','E','D',0,
+    ICON_CLOCK,    'C','L','O','C','K',0,
+    ICON_DESKTOP,  'D','E','S','K','T','O','P',0,
+    ICON_FILEMGR,  'F','I','L','E','M','G','R',0,
+    ICON_PAINT,    'P','A','I','N','T',0,
+    ICON_BROWSER,  'B','R','O','W','S','E','R',0,
+    ICON_VIEWER,   'V','I','E','W','E','R',0,
+    ICON_TELNET,   'T','E','L','N','E','T',0,
+    ICON_MAHJONG,  'M','A','H','J','O','N','G',0,
+    ICON_SHELL,    'S','H','E','L','L',0,
+    ICON_FLOPPY,   'D','I','S','K','U','T','I','L',0,
+    ICON_FLOWCHART,'B','A','S','I','C',0,
+    0xFF
+};
+
+static unsigned char app_icon(const char *name)
+{
+    const unsigned char *entry = app_icon_map;
+    unsigned char icon;
+    while (*entry != 0xFF) {
+        icon = *entry++;
+        if (name_is(name, (const char *)entry)) return icon;
+        while (*entry) entry++;
+        entry++;
+    }
+    return ICON_APP;
+}
+
 /* ext_of: the (uppercase, <=3 char) extension of "NAME.EXT" into ext[4]. */
 static void ext_of(const char *name, char *ext)
 {
@@ -409,22 +442,7 @@ static unsigned char entry_icon(const char *name)
     if (ext_eq(ext, "SAV")) return ICON_SCREENSAVER;   /* #221: screensaver modules */
     if (ext_eq(ext, "MOD")) return ICON_GEOBENCH;      /* #234: kernel modules = the lollipop icon */
     if (ext_eq(ext, "IST")) return ICON_BINARY;   /* #221: apps/data share the binary icon */
-    if (ext_eq(ext, "APP")) {
-        if (name_is(name, "NOTEPAD")) return ICON_NOTEPAD;
-        if (name_is(name, "ICONED"))  return ICON_ICONED;
-        if (name_is(name, "CLOCK"))   return ICON_CLOCK;
-        if (name_is(name, "DESKTOP")) return ICON_DESKTOP;
-        if (name_is(name, "FILEMGR")) return ICON_FILEMGR;
-        if (name_is(name, "PAINT"))   return ICON_PAINT;
-        if (name_is(name, "BROWSER")) return ICON_BROWSER;
-        if (name_is(name, "VIEWER"))  return ICON_VIEWER;
-        if (name_is(name, "TELNET"))  return ICON_TELNET;   /* #238 */
-        if (name_is(name, "SHELL"))   return ICON_SHELL;
-        if (name_is(name, "DISKUTIL")) return ICON_FLOPPY;  /* the floppy formatter */
-        if (name_is(name, "BASIC"))   return ICON_FLOWCHART; /* GB-BASIC uses the flowchart icon */
-        return ICON_APP;      /* a .APP with no distinctive icon uses the generic app icon
-                                 (slot 10), incl. SETTINGS (its gear slot is now the saver) */
-    }
+    if (ext_eq(ext, "APP")) return app_icon(name);
     return ICON_BINARY;
 }
 
@@ -436,7 +454,7 @@ static unsigned char rank_of(unsigned char ic)
         case ICON_FOLDER:   return 0;
         case ICON_DESKTOP: case ICON_FILEMGR: case ICON_NOTEPAD: case ICON_ICONED:
         case ICON_PAINT:    case ICON_VIEWER:  case ICON_CLOCK:   case ICON_BROWSER:
-        case ICON_SCREENSAVER: case ICON_TELNET: case ICON_FLOWCHART:
+        case ICON_SCREENSAVER: case ICON_TELNET: case ICON_MAHJONG: case ICON_FLOWCHART:
         case ICON_APP:      return 1;
         case ICON_PICTURE:  return 2;
         case ICON_TEXT:     return 3;

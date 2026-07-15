@@ -241,7 +241,7 @@ DESKTOP_SLOTS = [
     "SD card",       # 18 icon_sd
     "Viewer",        # 19 icon_viewer
     "Telnet",        # 20 icon_telnet
-    "Network",       # 21 icon_network
+    "Mahjong",       # 21 icon_mahjong
     "Shell",         # 22 icon_shell
     "Up (..)",       # 23 icon_up
     "Screensaver",   # 24 icon_screensaver (#221: reused the freed gear slot)

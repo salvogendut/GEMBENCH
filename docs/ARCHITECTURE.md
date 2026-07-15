@@ -183,8 +183,8 @@ the level of asset reload, storage, and window-manager primitives.
   Settings, Iconed), the default `SQUARES.SAV` saver, the `LOGO.PIC` wallpaper and the
   backdrops. Built by `kernel/gbkern.asm` + `pack_apps{,2,3}.asm` (#250).
 - **`QA/CPC/Floppies/COMPANION.DSK`** — the **Companion** floppy (#250): a non-bootable DATA disk with
-  the extras — Paint, Telnet, WGET, Browser, Shell, Xaos, and the full screensaver set.
-  Built by `kernel/pack_comp{1,2,3,4}.asm`. It is meant for **drive B** while the Main floppy
+  the extras — Paint, Telnet, WGET, Browser, Shell, Mahjong, Xaos, and the full screensaver set.
+  Built by `kernel/pack_comp{1,2,3,4,5}.asm`. It is meant for **drive B** while the Main floppy
   stays in drive A: the kernel's system loader (`fs_load_sys`, `lib/fs.asm`) tries the boot
   drive (A) first and **falls back to the browse drive** (B), so a Companion app launched
   from a drive-B File Manager loads from B while its shared dependencies (`GBUI.MOD`,

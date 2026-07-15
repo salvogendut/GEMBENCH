@@ -19,6 +19,7 @@ loop and calls each focused window's handlers (issue #45).
 | iconed   | `ICONED.APP`   | `.IST` icon-set / `.SPR` cursor editor |
 | paint    | `PAINT.APP`    | portable GBPC v2 bitmap paint (toolchest, saves `.PIC`) |
 | xaos     | `XAOS.APP`     | fractal generator, exports portable `.PIC` files |
+| mahjong  | `MAHJONG.APP`  | Kana Mahjong solitaire with selectable Katakana/Hiragana tiles, solvable Turtle deals, Undo and Hint |
 | clock    | `CLOCK.APP`    | analog clock widget |
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours / screensaver, persisted to `GEOBENCH.CFG` |
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal (4x8 charset): CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |

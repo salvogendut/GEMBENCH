@@ -21,7 +21,7 @@ Clock — all co-resident under the kernel window manager on a V9938 Screen 6.
 - **Input:** joystick / keyboard pointer, plus the standard **MSX mouse** (GTPAD).
   The clock is 50/60 Hz aware.
 - **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
-  Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS,
+  Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS, Mahjong,
   Clock, and **all 16 screensavers**. Telnet, NETTEST, WGET and Browser are not built for MSX yet
   because GEOBENCH does not have an MSX network transport.
 - **Assets:** icon sets in `assets/iconsets/*.IST` are stored in canonical Mode-1

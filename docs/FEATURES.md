@@ -103,6 +103,11 @@ backdrop, dragging icons, opening apps and menus:
   `ls`, `cd`, `pwd`, `cat`, `cp`, and `rm` commands. Paths accept A/B/C drive
   prefixes and 8.3 components; `cat` and `cp` stream files in chunks rather than
   limiting operations to the app's free RAM.
+- **Kana Mahjong** — a fullscreen 144-tile Mahjong solitaire game using an
+  original C engine and selectable 42-face Katakana or 36-face Hiragana tile
+  sets. New deals are assigned along a known legal Turtle-layout removal order,
+  guaranteeing a solution. Matching always uses identical Kana; Game provides
+  New, Undo, Hint and Quit, while Tiles starts a new deal with either alphabet.
 - **Screensavers** — self-contained apps shipped with a `.SAV` extension. The
   desktop's idle timer (global, so it fires over any app) launches the configured
   module after the timeout; any pointer move / click / key returns to the desktop.
