@@ -10,6 +10,7 @@
 # to native bytes by the kernel at display/load time.
 #
 #   bash tools/build_kernel_msx.sh
+#   MSX_UNAPI_TSR=/path/to/UNAPINET.COM bash tools/build_kernel_msx.sh
 #   MSX_SHOTS="20 30 45" tools/run_msx.sh      # then verify in openMSX
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -51,6 +52,9 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR
 APPDEFS="-DGB_MSX2" DOC=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
+APPDEFS="-DGB_MSX2" GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/msx/BROWSER.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/msx/BRSAVE.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/deco build/msx/DECO.RAW
@@ -71,6 +75,8 @@ APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/catclock build/msx/CATCLK.RAW
 # --- the shared config-parser module (platform-neutral C over low RAM) -----
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
 tools/build_uimod.sh                             # -> build/GBUI.RAW (dialogs/menus)
+tools/build_webmod.sh build/msx/GBWEB.RAW        # Browser cache/config helper
+tools/build_imgmod.sh build/msx/GBIMG.RAW        # Browser inline-image helper
 
 # --- assets ------------------------------------------------------------------
 python3 tools/genfont.py build/msx/DEFAULT.FNT           # 1bpp glyphs: shared format
@@ -130,7 +136,14 @@ find QA/MSX/GBENCH -maxdepth 1 -type f -name '*.PIC' -delete
 mkdir -p QA/MSX/PICS QA/MSX/DIAG
 rm -f QA/MSX/GBSPIKE.COM                 # pre-DIAG staging location (#379)
 cp build/msx/GBMSX.COM QA/MSX/
-printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
+rm -f QA/MSX/UNAPINET.COM
+if [ -n "${MSX_UNAPI_TSR:-}" ]; then
+    [ -s "$MSX_UNAPI_TSR" ] || { echo "ERROR: MSX_UNAPI_TSR not found: $MSX_UNAPI_TSR" >&2; exit 1; }
+    cp "$MSX_UNAPI_TSR" QA/MSX/UNAPINET.COM
+    printf 'UNAPINET\r\nGBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
+else
+    printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
+fi
 printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\n' > QA/MSX/GEOBENCH.CFG
 cp build/msx/DESKTOP.RAW  QA/MSX/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/GBENCH/FILEMGR.APP
@@ -144,6 +157,9 @@ cp build/msx/PAINT.RAW    QA/MSX/GBENCH/PAINT.APP
 cp build/msx/PAINT.IST    QA/MSX/GBENCH/PAINT.IST
 cp build/msx/SHELL.RAW    QA/MSX/GBENCH/SHELL.APP
 cp build/msx/MAHJONG.RAW  QA/MSX/GBENCH/MAHJONG.APP
+cp build/msx/TELNET.RAW   QA/MSX/GBENCH/TELNET.APP
+cp build/msx/BROWSER.RAW  QA/MSX/GBENCH/BROWSER.APP
+cp build/msx/BRSAVE.RAW   QA/MSX/GBENCH/BRSAVE.APP
 for f in "$GB_BASIC_DIR/build/msx/BASIC.RAW" "$GB_BASIC_DIR/build/msx/BASRUN.RAW" "$GB_BASIC_DIR/build/msx/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC MSX payload $f (run make -C \"$GB_BASIC_DIR\" raws-msx)" >&2; exit 1; }
 done
@@ -174,6 +190,8 @@ cp build/msx/CATCLK.RAW   QA/MSX/GBENCH/CATCLK.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
 cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
+cp build/msx/GBWEB.RAW  QA/MSX/GBENCH/GBWEB.MOD
+cp build/msx/GBIMG.RAW  QA/MSX/GBENCH/GBIMG.MOD
 cp build/msx/SPLASH.BIN  QA/MSX/GBENCH/SPLASH.MOD
 cp build/msx/SPLASHD.BIN QA/MSX/GBENCH/SPLASHD.MOD
 cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/

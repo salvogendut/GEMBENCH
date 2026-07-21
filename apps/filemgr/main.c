@@ -633,7 +633,7 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
      .APP / .SAV      a GEOBENCH app/screensaver -> run it
      .IST / .SPR      the icon/cursor editor (ICONED), with the file
      .TXT / .CFG      the text editor (NOTEPAD), with the file
-     .HTM             an offline page -> BROWSER.APP (CPC/PCW)
+     .HTM             an offline page -> BROWSER.APP
      .BAS             a GB-BASIC program -> opens in BASIC.APP
      .BIN             a native binary -> an info note (exec unimplemented, #236)
      anything else    the read-only VIEWER, with the file */
@@ -654,10 +654,8 @@ static void open_entry(unsigned char idx)
         gb_wm_launch_as("ICONED  APP");
     else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G'))
         gb_wm_launch_as("NOTEPAD APP");
-#ifndef GB_MSX2
     else if (ext_is(e, 'H', 'T', 'M'))
         gb_wm_launch_as("BROWSER APP");
-#endif
     else if (ext_is(e, 'B', 'A', 'S'))          /* GB-BASIC programs open in BASIC.APP */
         gb_wm_launch_as("BASIC   APP");
     else if (ext_is(e, 'B', 'I', 'N'))          /* #236: native binaries aren't runnable

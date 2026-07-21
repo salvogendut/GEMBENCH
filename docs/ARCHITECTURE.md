@@ -95,6 +95,11 @@ Current service groups:
 - **Modules / services** — config parsing, UI/file dialogs, networking, media
   reload, backdrop/wallpaper helpers, RTC/time, RAM total.
 
+The shared `gb_net_*` contract has target-specific implementations. CPC calls
+the paged `GBNET.MOD` or `GBNETM4.MOD`; PCW apps use PerryNet over the serial
+interface; MSX2 Browser and Telnet link a small TCP/IP UNAPI client into their
+own app banks, so the network transport does not occupy resident kernel space.
+
 Keeping this explicit jump table is what lets apps stay as separate C binaries
 without linking against private kernel internals.
 

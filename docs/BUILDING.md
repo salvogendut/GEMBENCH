@@ -87,6 +87,24 @@ tools/run_msx.sh                   # boot it in openMSX (interactive)
 MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 ```
 
+Browser and Telnet are included in the MSX distribution and use TCP/IP UNAPI.
+For an openMSXnet test image, pass its required TSR while building and enable
+the matching emulator extension while running:
+
+```bash
+MSX_UNAPI_TSR=/path/to/UNAPINET.COM make msx
+OPENMSX=/path/to/openmsxnet/openmsx \
+OPENMSX_SYSTEM_DATA=/path/to/openmsxnet/share \
+MSX_UNAPI=1 tools/run_msx.sh
+```
+
+`MSX_UNAPI_TSR` is optional for a normal build, but openMSXnet networking does
+not work without both that TSR and the emulator extension. The third-party TSR
+is never committed. Run `make msx` again without `MSX_UNAPI_TSR` to restore the
+standard staged `AUTOEXEC.BAT`; see
+[The MSX2 target](MSX2.md#browser-and-telnet-networking) for current UNAPI
+implementation coverage.
+
 `build_kernel_msx.sh` produces:
 
 - **`QA/MSX/`** — the loose MSX distribution (committed): `GBMSX.COM`, an
