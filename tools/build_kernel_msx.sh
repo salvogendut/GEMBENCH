@@ -95,16 +95,11 @@ python3 tools/packicons.py build/msx/PAINT.IST \
     "$PAINT_ASSET_DIR/pencil.asm" "$PAINT_ASSET_DIR/square.asm" "$PAINT_ASSET_DIR/circle.asm" \
     "$PAINT_ASSET_DIR/fill.asm" "$PAINT_ASSET_DIR/undo.asm"
 "$RASM" kernel/modules/picedit_low.asm >/dev/null
-# The MSX pointer (66-byte V9938 hardware sprite). A hand-edited assets/pointer.SPR
-# wins - edit it with `tools/iconedit.py --platform msx2 assets/pointer.SPR` (white
-# = outline, red = fill); otherwise generate it from the PNG art. 11x13 art (smaller
-# than the 14x16 default) matches the CPC pointer's apparent size - Screen 6's
-# tall/narrow pixels otherwise render it bigger.
-if [ -f assets/pointer.SPR ]; then
-    cp assets/pointer.SPR build/msx/DEFAULT.SPR
-else
-    python3 tools/png2spr.py --platform msx2 assets/pointer.png build/msx/DEFAULT.SPR cursor 11x13
-fi
+# The MSX pointer is a hand-edited 66-byte V9938 hardware sprite. Keep the
+# target-specific source under assets and stage it under the configured default
+# cursor name; CPC and PCW continue to derive their software cursors separately.
+[ -s assets/thinner.SPR ] || { echo "ERROR: missing MSX cursor assets/thinner.SPR" >&2; exit 1; }
+cp assets/thinner.SPR build/msx/DEFAULT.SPR
 
 # Bootsplash (#196/#287): the CPC lollipop, transcoded to Screen 6. The MSX
 # kernel does not incbin it (that is CPC-only) - boot_splash loads SPLASH.MOD

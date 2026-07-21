@@ -98,7 +98,9 @@ Build the on-demand kernel modules (loaded into a bank and `call`ed): config
   loaded, and `bdp_to_msx.py` remains only for legacy artifacts.
 - **`check_pic_distribution.py`** — verify canonical `.PIC`/`.BDP` byte identity
   across staged folders and CPC/PCW disks.
-- **`iconedit.py`** — a host-side tkinter editor for `.IST` icon sets.
+- **`iconedit.py`** — a host-side tkinter editor for `.IST` icon sets and `.SPR`
+  cursors. The keyboard arrow keys shift the current bitmap one pixel for easy
+  alignment; pixels shifted beyond an edge are clipped.
 - **`amsdos_header.py`** — prepend a 128-byte AMSDOS header to a RAW binary.
 
 ## Conventions

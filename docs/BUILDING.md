@@ -131,9 +131,10 @@ when selected on MSX2/PCW; CPC uses those Mode-1 bytes directly in the desktop.
 Hardware sprites and bootsplash bitmaps remain target-specific.
 [Portable GEOBENCH picture format](PIC_FORMAT.md) explains why this works.
 System assets stay in `GBENCH/`. The mouse pointer is a V9938 hardware sprite: a
-hand-edited **`assets/pointer.SPR`** (edit it with
-`tools/iconedit.py --platform msx2 assets/pointer.SPR`) is preferred over
-generating it from `assets/pointer.png`.
+hand-edited **`assets/thinner.SPR`** is staged as the MSX
+`GBENCH/DEFAULT.SPR`. Edit it with
+`tools/iconedit.py assets/thinner.SPR`; its 66-byte size lets the editor detect
+the MSX2 sprite format automatically.
 
 ### Deploying
 
