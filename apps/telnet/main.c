@@ -1,13 +1,13 @@
 /* telnet - an ANSI/VT terminal + telnet client for GEOBENCH (#238).
  *
- * Fed by a TCP socket via the gb_net_* API (Net4CPC or M4 backend), or on PCW
- * via PerryNet over the CPS8256/PerryFi serial path; speaks
+ * Fed by a TCP socket via the gb_net_* API (Net4CPC, M4, or MSX TCP/IP UNAPI),
+ * or on PCW via PerryNet over the CPS8256/PerryFi serial path; speaks
  * RFC 854 telnet (IAC option negotiation) and parses ANSI/VT100 (cursor/erase/SGR), so
  * a real BBS / MUD / shell renders. Ported from cpc-sdcc examples/telnet (main.c IAC +
  * ansi.c + screen.c), keyboard via gb_getkey. Monochrome (white on blue).
  *
- * On the PCW target there is no GEOBENCH network module yet, so the menu offers
- * both raw serial and PerryNet TCP over the CPS8256 Z80-DART (PerryFi / RS232).
+ * PCW offers both raw serial and PerryNet TCP over the CPS8256 Z80-DART
+ * (PerryFi / RS232). MSX offers TCP/IP UNAPI networking in its windowed view.
  *
  * Two views share one grid + the telnet/ANSI logic (only the renderer + dims differ):
  *   - WINDOWED  - a screen-sized managed Mode-1 window, 52x22, drawn through gb_text;
@@ -19,13 +19,20 @@
  *                 loop runs the recv/keyboard pump until Ctrl-] / ESC / disconnect.
  */
 #include "gb.h"
-#ifdef GB_PCW
+#ifdef GB_MSX2
+#define TELNET_HAS_NET        1
+#define TELNET_HAS_GBNET      1
+#define TELNET_HAS_SERIAL     0
+#define TELNET_HAS_FULLSCREEN 0
+#elif defined(GB_PCW)
 #define TELNET_HAS_NET        1
 #define TELNET_HAS_GBNET      0
+#define TELNET_HAS_SERIAL     1
 #define TELNET_HAS_FULLSCREEN 0
 #else
 #define TELNET_HAS_NET        1
 #define TELNET_HAS_GBNET      1
+#define TELNET_HAS_SERIAL     1
 #define TELNET_HAS_FULLSCREEN 1
 #endif
 
@@ -43,6 +50,9 @@
 #ifdef GB_PCW
 #define WIN_COLS 80        /* 4x8 font: 80 * 4px = 320px of the 360px CGA2 desktop */
 #define WIN_ROWS 25        /* 24 + 25*8 = 224, inside the 248-line PCW desktop */
+#elif defined(GB_MSX2)
+#define WIN_COLS 78        /* portable 6x8 text: 468px inside the 512px Screen 6 */
+#define WIN_ROWS 22        /* 24 + 22*8 = 200, leaving the bottom frame visible */
 #else
 #define WIN_COLS 78        /* 4x8 font: 78 * 4px = 312px, inset 1 byte each side (#351) */
 #define WIN_ROWS 22        /* 24 + 22*8 = 200 = the exact bottom of the Mode-1 screen */
@@ -68,7 +78,7 @@
  * content area, just below the 14px title bar (the System top bar carries the menu). */
 #define WIN_X 0
 #define WIN_Y 8
-#ifdef GB_PCW
+#if defined(GB_PCW) || defined(GB_MSX2)
 #define WIN_W GB_COLS
 #define WIN_H (GB_LINES - WIN_Y)
 #else
@@ -79,6 +89,9 @@
 #define GX    5            /* grid origin: byte column (centers 80 of the 90 byte cols) */
 #define GY    24           /* grid origin: pixel line - MUST be cellrow-aligned (mult of
                               8): the PCW renderer maps one text row to one char cellrow */
+#elif defined(GB_MSX2)
+#define GX    5            /* centers 78 six-pixel glyphs on the 512px display */
+#define GY    24
 #else
 #define GX    1            /* grid origin: byte column (inset 1 byte so the left frame survives) */
 #define GY    24           /* grid origin: pixel line - MUST be CRTC-char-row-aligned (mult
@@ -322,6 +335,26 @@ static void draw_row(unsigned char r)
         dst += 8;
     }
 }
+#elif defined(GB_MSX2)
+/* Screen 6 lives in VRAM, so the CPC direct-framebuffer renderer is not
+ * available. The kernel copies at most 48 characters per text call; split a
+ * 78-column row at an exact 288-pixel boundary (48 * 6 pixels). */
+#define MSX_TEXT_CHUNK 48
+static char msx_line[MSX_TEXT_CHUNK + 1];
+static void draw_row(unsigned char r)
+{
+    unsigned char c, n = COLS < MSX_TEXT_CHUNK ? COLS : MSX_TEXT_CHUNK;
+    const unsigned char *src = grid + (unsigned int)r * COLS;
+    for (c = 0; c < n; c++) msx_line[c] = (char)src[c];
+    msx_line[n] = 0;
+    gb_textrev(GX, (unsigned char)(GY + r * 8), msx_line);
+    if (COLS > n) {
+        for (c = n; c < COLS; c++) msx_line[c - n] = (char)src[c];
+        msx_line[COLS - n] = 0;
+        gb_textrev((unsigned char)(GX + (MSX_TEXT_CHUNK * 6) / 4),
+                   (unsigned char)(GY + r * 8), msx_line);
+    }
+}
 #else
 /* -- 4x8 direct Mode-1 renderer (#351). One glyph line = ONE byte (4 px/byte);
  * white (pen 1, high nibble) on black (pen 2, low nibble), so the screen byte is
@@ -390,6 +423,13 @@ static void draw_cursor_m1(void)      /* white underline in the cell's last line
          + (((unsigned int)gx_org + cur_col) << 3) + 7);
     bank3((unsigned char)(0x84 + (cellrow >> 4)));
     *dst = 0xFF;
+}
+#elif defined(GB_MSX2)
+static void draw_cursor_m1(void)
+{
+    unsigned int px = (unsigned int)GX * 4U + (unsigned int)cur_col * 6U;
+    gb_fill((unsigned char)(px >> 2),
+            (unsigned char)(GY + cur_row * 8 + 7), 1, 1, 3);
 }
 #else
 static void draw_cursor_m1(void)      /* red underline in the cell's last line */
@@ -481,6 +521,8 @@ static void m2_clear(void) __naked
 #endif
 
 /* ---- serial port (the second transport) ------------------------------------ */
+static unsigned char net_rx_status;
+#if TELNET_HAS_SERIAL
 #ifdef GB_PCW
 /* PCW CPS8256 / Z80-DART channel A. This follows ../vterm's PerryFi-tested path:
  * 0xE0 data, 0xE1 control/status. Status is RR0 after writing WR0=0:
@@ -490,7 +532,6 @@ static void m2_clear(void) __naked
  * else empty) / &FBD8 (presence: != 0xFF means a board is there). */
 #endif
 static volatile unsigned char ser_io;            /* port I/O scratch (the asm reads/writes it) */
-static unsigned char net_rx_status;
 #ifdef GB_PCW
 static void ser_in_data(void) __naked
 { __asm
@@ -701,6 +742,7 @@ static void serial_modem_hangup(void)
     serial_guard_spin();
     serial_ctrl(1);                         /* drain stale RX / reset board-side state */
 }
+#endif /* TELNET_HAS_SERIAL */
 
 #ifdef GB_PCW
 /* ---- PerryNet over PCW serial/PerryFi -------------------------------------- */
@@ -1064,7 +1106,9 @@ static void flush_iac_defer(void)
 
 static unsigned char transport_send_iac(const unsigned char *buf, unsigned int len)
 {
+#if TELNET_HAS_SERIAL
     if (transport == TR_SERIAL) return serial_send(buf, len);
+#endif
 #ifdef GB_PCW
     if (rx_busy) return defer_iac_send(buf, len);
 #endif
@@ -1308,17 +1352,21 @@ static void fs_label(void);            /* refresh the menu's [x]/[ ] checkbox */
 
 static unsigned int t_recv(unsigned char *buf, unsigned int max)
 {
+#if TELNET_HAS_SERIAL
     if (transport == TR_SERIAL) {
         unsigned int n = serial_recv(buf, max);
         net_rx_status = n ? GB_NET_RX_DATA :
             (serial_present() ? GB_NET_RX_IDLE : GB_NET_RX_CLOSED);
         return n;
     }
+#endif
     return net_recv(buf, max);
 }
 static unsigned char t_send(const unsigned char *buf, unsigned int len)
 {
+#if TELNET_HAS_SERIAL
     if (transport == TR_SERIAL) return serial_send(buf, len);
+#endif
     return net_send(buf, len);
 }
 #if TELNET_HAS_NET
@@ -1412,6 +1460,19 @@ static unsigned char pump_recv_burst(void)
     }
     return got;
 }
+#elif defined(GB_MSX2)
+static unsigned char pump_recv_burst(void)
+{
+    unsigned char got = 0, left = 4;
+    unsigned int n;
+    while (left--) {
+        n = pump_recv();
+        if (!n) break;
+        got = 1;
+        if (n < sizeof(rbuf)) break;
+    }
+    return got;
+}
 #else
 #define pump_recv_burst() pump_recv()
 #endif
@@ -1421,8 +1482,12 @@ static void send_key(unsigned char k)
 {
     if (k == 0x0D) {
         if (local_echo) { term_write('\r'); term_write('\n'); }
+#if TELNET_HAS_SERIAL
         if (transport == TR_SERIAL) { unsigned char cr = 0x0D; t_send(&cr, 1); }
         else { unsigned char crlf[2]; crlf[0] = 0x0D; crlf[1] = 0x0A; t_send(crlf, 2); }
+#else
+        { unsigned char crlf[2]; crlf[0] = 0x0D; crlf[1] = 0x0A; t_send(crlf, 2); }
+#endif
     } else if (k >= 32 && k < 127) {
         if (local_echo) term_write(k);
         t_send(&k, 1);
@@ -1455,7 +1520,9 @@ static void close_session(void)
 #if TELNET_HAS_NET
     if (transport == TR_NET && (state == ST_RUN || state == ST_DONE)) net_close();
 #endif
+#if TELNET_HAS_SERIAL
     if (transport == TR_SERIAL && (state == ST_RUN || state == ST_DONE)) serial_modem_hangup();
+#endif
     state = ST_IDLE;
 }
 
@@ -1494,6 +1561,7 @@ static void action_connect(void)
 #endif
 
 /* Connect over the serial port: no host, just open the raw byte pipe. */
+#if TELNET_HAS_SERIAL
 static void action_connect_serial(void)
 {
     if (state == ST_RUN || state == ST_DONE) close_session();
@@ -1504,6 +1572,7 @@ static void action_connect_serial(void)
     iac_state = IS_NORMAL;
     start_session();
 }
+#endif
 
 #if TELNET_HAS_FULLSCREEN
 /* ---- fullscreen Mode-2 80x25 terminal -------------------------------------- */
@@ -1551,7 +1620,7 @@ static void run_fullscreen(void)
  * connect goes straight into the Mode-2 fullscreen view (exit it with Ctrl-] / ESC). */
 /* item [3] carries a [x]/[ ] checkbox reflecting the 80x25 toggle (refreshed before the
  * menu opens, since gb_popup reads these label pointers live). */
-#if TELNET_HAS_NET && !defined(GB_PCW)
+#if TELNET_HAS_NET && TELNET_HAS_SERIAL && TELNET_HAS_FULLSCREEN
 static const char *telnet_items[4] = {
     "Connect (net)...", "Connect serial", "Disconnect", "80x25 fullscreen [ ]"
 };
@@ -1568,6 +1637,16 @@ static void on_menu(unsigned char sel)
         if (want_fs && state == ST_RUN) run_fullscreen();        /* enter now if connected */
         else gb_alert("80x25 fullscreen", want_fs ? "ON - connect to use it" : "OFF");
     }
+}
+#elif defined(GB_MSX2)
+static const char *telnet_items[2] = {
+    "Connect (UNAPI)...", "Disconnect"
+};
+static void fs_label(void) { }
+static void on_menu(unsigned char sel)
+{
+    if (sel == 0) action_connect();
+    else if (sel == 1) close_session();
 }
 #elif defined(GB_PCW)
 static const char *telnet_items[4] = {
@@ -1757,6 +1836,9 @@ void main(void)
 #ifdef GB_PCW
     transport = TR_SERIAL;
     want_fs = 0; fs_label();
+#elif defined(GB_MSX2)
+    transport = TR_NET;
+    want_fs = 0; fs_label();
 #elif TELNET_HAS_NET
     transport = TR_NET;
     want_fs = 1; fs_label();                    /* 80x25 fullscreen is on by default (checked) */
@@ -1766,7 +1848,9 @@ void main(void)
 #endif
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */
-#if TELNET_HAS_NET || defined(GB_PCW)
+#ifdef GB_MSX2
+    gb_menu_add("Telnet", (const char *const *)telnet_items, 2, on_menu);
+#elif TELNET_HAS_NET || defined(GB_PCW)
     gb_menu_add("Telnet", (const char *const *)telnet_items, 4, on_menu);
 #else
     gb_menu_add("Telnet", (const char *const *)telnet_items, 3, on_menu);

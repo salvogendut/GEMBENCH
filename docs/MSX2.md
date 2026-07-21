@@ -22,8 +22,8 @@ Clock — all co-resident under the kernel window manager on a V9938 Screen 6.
   The clock is 50/60 Hz aware.
 - **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
   Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS, Mahjong,
-  Clock, and **all 16 screensavers**. Telnet, NETTEST, WGET and Browser are not built for MSX yet
-  because GEOBENCH does not have an MSX network transport.
+  Clock, Browser, Telnet, and **all 16 screensavers**. NETTEST and WGET are not
+  built for MSX yet.
 - **Assets:** icon sets in `assets/iconsets/*.IST` are stored in canonical Mode-1
   bytes and decoded to Screen 6 at runtime by the kernel. Backdrop tiles use the
   same canonical bytes and are converted when loaded. Pictures use the portable [GBPC v2 format](PIC_FORMAT.md):
@@ -43,3 +43,39 @@ MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 
 `run_msx.sh` uses a native `openmsx` from `$PATH`, the Flatpak
 (`org.openmsx.openMSX`) as a fallback, or an explicit `OPENMSX="…"` override.
+
+## Browser and Telnet networking
+
+The MSX Browser and Telnet apps discover a standard **TCP/IP UNAPI**
+implementation at runtime. The transport is linked into those app banks; it
+does not consume resident kernel headroom. This initial version supports UNAPI
+implementations in mapped RAM (through the standard RAM helper) or page 3.
+Page-1 ROM-slot implementations are not supported yet. A mapped implementation
+uses one mapper segment of its own, so the usual 512K expansion remains the
+recommended setup when networking and several windows are used together.
+
+[openMSXnet](https://github.com/antxiko/openMSXnet) is the initial emulator
+target. It needs both its custom openMSX build with the `unapinet` extension and
+its `UNAPINET.COM` TSR. To produce a local image that installs the TSR before
+GEOBENCH:
+
+```bash
+MSX_UNAPI_TSR=/path/to/UNAPINET.COM bash tools/build_kernel_msx.sh
+```
+
+Then run that image with the openMSXnet executable and data directory:
+
+```bash
+OPENMSX=/path/to/openmsxnet/openmsx \
+OPENMSX_SYSTEM_DATA=/path/to/openmsxnet/share \
+MSX_UNAPI=1 tools/run_msx.sh
+```
+
+For openMSXnet, both pieces are mandatory: `UNAPINET.COM` publishes the UNAPI
+implementation inside MSX-DOS, while the custom emulator extension provides its
+host-side sockets. The normal committed distribution bundles neither third-party
+component. On an existing Nextor installation, copy `UNAPINET.COM` to the boot
+drive and run it before `GBMSX.COM`; another compatible mapped-RAM or page-3
+TCP/IP UNAPI implementation may be used instead. Browser and Telnet report a
+network-initialisation error when discovery fails. Browser currently supports
+plain HTTP only.

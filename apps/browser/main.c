@@ -2,7 +2,7 @@
  *
  * Pages are parsed directly into fixed-width rendered lines in one borrowed
  * 16K page. No DOM is retained; a bounded raw-source copy supports offline
- * Save. CPC uses GBNET, while PCW uses PerryNet. */
+ * Save. CPC uses GBNET, MSX uses TCP/IP UNAPI, and PCW uses PerryNet. */
 #include "gb.h"
 
 #define URL_MAX        95
@@ -216,6 +216,14 @@ __asm
     out (0xF3),a
     ld a,(0xFFFA)
     and #0x40
+    ret
+__endasm;
+}
+#elif defined(GB_MSX2)
+static unsigned char read_down_key(void) __naked
+{
+__asm
+    xor a
     ret
 __endasm;
 }

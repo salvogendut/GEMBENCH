@@ -48,6 +48,10 @@ DOC_FLAG="${DOC:-0}"
 DOCRO_FLAG="${DOCRO:-0}"
 NET_FLAG="${NET:-0}"
 GBWIN_FLAG="${GBWIN:-1}"
+NET_SRC="$GB/gbnet_stub.c"
+case " ${APPDEFS:-} " in
+    *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
+esac
 
 deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
 if [ "$GBWIN_FLAG" = "1" ]; then
@@ -69,7 +73,7 @@ if [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
     deps+=("$GB/gbdoc.c")
 fi
 if [ "$NET_FLAG" = "1" ]; then
-    deps+=("$GB/gbnet_stub.c")
+    deps+=("$NET_SRC")
 fi
 
 stamp="$OUT.stamp"
@@ -84,6 +88,7 @@ cache_key=$(printf '%s\n' \
     "DOC=$DOC_FLAG" \
     "DOCRO=$DOCRO_FLAG" \
     "NET=$NET_FLAG" \
+    "NET_SRC=$NET_SRC" \
     "GBWIN=$GBWIN_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
     "APP_CFLAGS=$APP_CFLAGS" \
@@ -130,9 +135,10 @@ if [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer $RO ${APPDEFS:-} -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
     DLG_REL="$DLG_REL $work/gbdoc.rel"
 fi
-# NET=1 -> gbnet_stub.c (gb_net_* -> the paged GBNET W5100 module, #238)
+# NET=1 uses the target's gb_net_* backend. CPC calls the active paged GBNET
+# module; MSX apps call a discovered TCP/IP UNAPI implementation directly.
 if [ "$NET_FLAG" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbnet_stub.c" -o "$work/gbnet_stub.rel"
+    "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$NET_SRC" -o "$work/gbnet_stub.rel"
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \

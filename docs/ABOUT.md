@@ -1,6 +1,7 @@
 # About GEOBENCH
 
-A graphical desktop environment for the **Amstrad CPC** and the **MSX2** — a
+A graphical desktop environment for the **Amstrad CPC**, **MSX2**, and
+**Amstrad PCW** — a
 hybrid clone that borrows the best ideas from **Commodore GEOS** (C64/C128) and
 the **Amiga Workbench**, reimagined for 8-bit Z80 hardware.
 
@@ -97,7 +98,8 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
 - **MSX2** (V9938, 128K VRAM) running **MSX-DOS 2 / Nextor** — see
   [The MSX2 target](MSX2.md). Stock 128K RAM boots the desktop;
   a memory-mapper expansion (512K typical) is recommended for multiple app
-  windows.
+  windows. Browser and Telnet use a mapped-RAM or page-3 TCP/IP UNAPI
+  implementation; openMSXnet is the initial supported emulator transport.
 
 ## Design inspirations
 

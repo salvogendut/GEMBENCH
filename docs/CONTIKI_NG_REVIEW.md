@@ -159,8 +159,9 @@ TLS should not be brought onto the Z80 merely to claim HTTPS support.
    classic Contiki's callback model. **Implemented in issue #367 and integrated
    into Browser. Browser now renders bounded link labels with click navigation
    and keeps one previous URL for Back; richer history remains future work.**
-5. Build `BROWSER.APP` for CPC and PCW first. **Initial text-first version
-   implemented in issue #367; MSX can use it once an MSX network backend exists.**
+5. Build `BROWSER.APP` for CPC and PCW first. **The initial text-first version
+   was implemented in issue #367; the same app now builds for MSX through the
+   TCP/IP UNAPI backend added in issue #397.**
 6. Measure every addition using the produced `.RAW` size, static RAM map and real
    transfer timing. Reject abstractions that do not reduce duplication or improve
    responsiveness.

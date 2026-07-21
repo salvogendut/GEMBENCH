@@ -18,6 +18,8 @@
 #                                               emu-time seconds into build/msx/
 #                                               (throttle off, exits after last)
 #   MSX_RAM=stock tools/run_msx.sh              no 512K expansion
+#   MSX_UNAPI=1 tools/run_msx.sh                 add openMSXnet's unapinet extension
+#                                                (the image must run UNAPINET.COM)
 #   OPENMSX="openmsx-nightly" tools/run_msx.sh  override emulator command
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -28,6 +30,7 @@ MACHINE="${MSX_MACHINE:-Philips_NMS_8250}"
 
 EXT=(-ext SunriseIDE_Nextor)
 [ "${MSX_RAM:-512k}" != stock ] && EXT+=(-ext ram512k)
+[ "${MSX_UNAPI:-0}" = 1 ] && EXT+=(-ext unapinet)
 
 ARGS=(-machine "$MACHINE" "${EXT[@]}" -hda "$IMG")
 SCRIPT=

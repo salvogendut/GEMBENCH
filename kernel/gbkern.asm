@@ -891,8 +891,9 @@ kpn_lut         ld    a,(pic_native_to_m1)
                 ifdef PLATFORM_MSX
 ; k_pic_edit (GB_PICEDIT, #288): Paint edits a 100x100 byte-aligned tile of a banked
 ; .PIC. A=0 copies the tile at PIC_EDIT_OFF into PIC_EDIT_BUF, A=1 writes PIC_EDIT_BUF
-; back to that tile, and A=2 copies fs_save_len bytes from PIC_EDIT_OFF to PIC_EDIT_BUF
-; for Paint's app-side chunk-save loop.
+; back to that tile, A=2 copies fs_save_len bytes from PIC_EDIT_OFF to PIC_EDIT_BUF,
+; and A=3 copies fs_save_len bytes in the other direction. Browser uses the generic
+; chunk operations for its rendered-page and source caches.
 ; The app supplies PIC_PAGE/PIC_PAGE2 before each call, like gb_pic_blit/gb_pic_close.
 PIC_TILE_WB     equ   25
 PIC_TILE_H      equ   100
@@ -901,6 +902,8 @@ PIC_TMP         equ   #2200
 k_pic_edit
                 cp    4
                 jp    z,kpe_native
+                cp    3
+                jp    z,kpe_write
                 cp    2
                 jp    z,kpe_chunk
                 cp    1
@@ -977,6 +980,21 @@ kpe_chunk       ld    a,(PIC_PAGE)
                 ld    de,(PIC_EDIT_BUF)
                 ld    bc,(fs_save_len)
                 call  kpe_seg_get16
+                ld    c,a
+                pop   af
+                call  bank_set
+                ld    a,c
+                ret
+
+kpe_write       ld    a,(PIC_PAGE)
+                or    a
+                ret   z
+                ld    a,(bank_cur)
+                push  af
+                ld    hl,(PIC_EDIT_OFF)
+                ld    de,(PIC_EDIT_BUF)
+                ld    bc,(fs_save_len)
+                call  kpe_seg_put16
                 ld    c,a
                 pop   af
                 call  bank_set
@@ -1113,7 +1131,7 @@ kpeg_map        push  bc
 ; Copy one non-crossing segment from low RAM to the banked .PIC. Input:
 ; HL=picture offset, DE=source, C=count. A=1 on success, DE=source advanced.
 kpe_seg_put     ld    b,0
-                bit   6,h
+kpe_seg_put16   bit   6,h
                 jr    nz,kpep_second
                 ld    a,(PIC_PAGE)
                 or    a

@@ -36,7 +36,7 @@ backdrop, dragging icons, opening apps and menus:
   up-arrow icon) goes up a directory; a **View** menu toggles list/icons and
   maximises the window. Multi-drive, drag-and-drop, a Trash.
   Offline `.HTM` files use the normal text-file icon and open directly in
-  Browser when double-clicked on CPC or PCW.
+  Browser when double-clicked on CPC, MSX2, or PCW.
 - **Notepad** — a text editor: type/edit, word-wrap, click or cursor keys to place
   the caret, **File / Edit / View** menus (New/Load/Save/Save As, copy/paste,
   Fullscreen). Saves `.BAS` with CR+LF so CPC BASIC can load them.
@@ -75,12 +75,12 @@ backdrop, dragging icons, opening apps and menus:
   `206 Content-Range`; a server that ignores Range restarts the file safely.
   PCW downloads restart because CP/M records cannot preserve an arbitrary byte
   offset. HTTPS is intentionally out of scope without TLS.
-- **Browser** — a small fullscreen HTTP browser for CPC and PCW. It accepts plain
+- **Browser** — a small fullscreen HTTP browser for CPC, MSX2, and PCW. It accepts plain
   `http://` URLs, follows up to four redirects, parses headers and chunked bodies
   through the shared HTTP parser, and streams HTML through a bounded text renderer
   instead of keeping a DOM. Text, headings, lists, compact GET forms, link labels,
   and inline-image records are cached in one borrowed 16K page: up to 208
-  fixed-width rows on CPC or 182 on PCW. Link destinations are retained separately
+  fixed-width rows on CPC/MSX2 or 182 on PCW. Link destinations are retained separately
   from their visible labels, so proxy transport URLs are not printed in the page.
   Browser renders the first viewport, pauses the open TCP stream, and
   resumes from the exact retained byte only when the user scrolls downward;
@@ -99,6 +99,10 @@ backdrop, dragging icons, opening apps and menus:
   `GEOBENCH.CFG`; Direct clears it. Source capture uses up to three available
   borrowed pages (48 KiB) while reserving a page for the save worker, and the
   proxy itself must use plain HTTP.
+- **Telnet** — an ANSI/VT100 terminal with Telnet negotiation. CPC uses
+  Net4CPC/M4, MSX2 uses TCP/IP UNAPI, and PCW offers PerryNet TCP or raw serial.
+  The MSX2 terminal is a 78x22 Screen 6 window; CPC additionally offers its
+  direct-framebuffer 80x25 mode.
 - **Shell** — a fullscreen command-line file shell with scrollback and familiar
   `ls`, `cd`, `pwd`, `cat`, `cp`, and `rm` commands. Paths accept A/B/C drive
   prefixes and 8.3 components; `cat` and `cp` stream files in chunks rather than

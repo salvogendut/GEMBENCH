@@ -12,8 +12,9 @@
    save/delete/copy; the archived IDE/FAT backend remains buildable for recovery.
 7. ✅ **Apps** — Notepad, ICONED, Paint, Clock, Viewer, Xaos, Diskutil, and a
    **Settings** control panel (font / icon set / cursor / drive-qualified
-   backdrop-wallpaper-saver settings + a live desktop-colours editor). The CPC
-   distro also ships Telnet and Nettest.
+   backdrop-wallpaper-saver settings + a live desktop-colours editor). CPC and
+   PCW ship the complete network app set; MSX2 currently ships Browser and
+   Telnet through TCP/IP UNAPI.
 8. ✅ **Unified menu system (`gb_doc`)** — one File / Edit / View menu framework for
    every app (New/Load/Save/Save As, a shared cross-app clipboard, **Fullscreen**, a
    navigable Open/Save dialog in a paged module); the desktop's System menu and the
@@ -49,6 +50,10 @@
 16. ✅ **Per-screensaver configuration (#390)** — Settings has a reusable Configure
    entry and modal editor path. STARFLD is the first consumer, with persisted,
    bounded speed and star-count values read directly from `GEOBENCH.CFG`.
+17. ✅ **MSX2 TCP/IP UNAPI networking (#397)** — Browser and Telnet use the shared
+   `gb_net_*` API through a discovered mapped-RAM or page-3 UNAPI implementation.
+   The initial emulator target is openMSXnet; no network code is added to the
+   resident kernel.
 
 ## Next
 

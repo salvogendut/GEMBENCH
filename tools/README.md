@@ -19,6 +19,12 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`build_kernel_pcw.sh`** — builds the standalone PCW boot disk, companion
   disk, and 720K `EXTRAS.DSK`. The extras build stages the PCW payloads from
   sibling GB-PAINT and GB-BASIC checkouts.
+- **`build_kernel_msx.sh`** — builds `GBMSX.COM`, the MSX2 app/module payload,
+  and the bootable Nextor `QA/GBMSX.IMG`. Set `MSX_UNAPI_TSR` to stage a local
+  openMSXnet `UNAPINET.COM` before `GBMSX.COM`; the TSR remains untracked.
+- **`run_msx.sh`** — launches the MSX2 image in native or Flatpak openMSX.
+  `MSX_UNAPI=1` adds openMSXnet's `unapinet` extension when using its custom
+  emulator build.
 - **`m4detect.asm`** — a tiny BASIC-callable detector that asks the firmware
   (`KL_FIND_COMMAND`) whether an M4 ROM RSX is installed. The staged `GB.BAS` loads
   it as `M4DETECT.BIN` and uses its result to pick `GBM4` vs `GBALB`.
@@ -36,7 +42,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`build_capp.sh <app_dir> <out.RAW>`** — builds a single C app against `libgb`,
   for iterating on one app. App/module helper scripts write `*.stamp` metadata
   beside their outputs so a repeated full build can reuse unchanged binaries and
-  skip recompiling untouched apps/modules.
+  skip recompiling untouched apps/modules. With `NET=1`, CPC links the paged
+  network stub and `APPDEFS=-DGB_MSX2` selects the TCP/IP UNAPI backend.
 - **`check_abi_table.py`** — verifies the `kernel/gbkern.asm` jump-table comments
   match the exported `lib/gbapp.inc` slot addresses through `kernel/api_table.inc`.
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in

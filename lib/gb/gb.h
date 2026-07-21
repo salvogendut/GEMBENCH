@@ -434,9 +434,9 @@ void gb_copy_end(void);
  * input / no gb_poll); use change-detection to avoid a wasteful per-frame repaint. */
 void gb_on_bar(void (*handler)(void));
 
-/* TCP networking via the active paged network module (#238/#259). Link gbnet_stub
- * (build_capp NET=1). Albireo/Net4CPC loads GBNET.MOD; M4 loads GBNETM4.MOD.
- * gb_net_init's cfg is 22 bytes for Net4CPC; M4 accepts it but keeps M4ROM config. */
+/* Shared TCP API (build_capp NET=1). CPC calls the active GBNET/GBNETM4 paged
+ * module; MSX discovers and calls a TCP/IP UNAPI implementation. gb_net_init's
+ * cfg is 22 bytes for Net4CPC, accepted but ignored by M4 and MSX. */
 #define GB_NET_RX_DATA     1  /* receive returned one or more bytes */
 #define GB_NET_RX_IDLE     2  /* connected, but no bytes are currently ready */
 #define GB_NET_RX_CLOSED   3  /* peer/socket closed and no buffered bytes remain */
