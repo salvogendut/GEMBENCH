@@ -1356,10 +1356,12 @@ void main(void)
     copy_url(BUI_MODNAME, "GBWEB   MOD");
     (void)web_op(12);
     url[0] = 0;
-    url_len = 0;
+    title[0] = pending[0] = 0;
+    url_len = title_len = 0;
+    hist_start = hist_count = view_top = pending_len = cache_full = 0;
     cache_page = alloc_cache_page();
     reset_resources();
-    status_text = cache_page ? "Ready" : "Ready: limited page cache";
+    status_text = cache_page ? "" : "Limited page cache";
     editing = dirty = 1;
     gb_wm_managed(&browser_window);
     if (web_op(13)) start_local();

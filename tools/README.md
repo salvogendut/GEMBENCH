@@ -23,8 +23,11 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   and the bootable Nextor `QA/GBMSX.IMG`. Set `MSX_UNAPI_TSR` to stage a local
   openMSXnet `UNAPINET.COM` before `GBMSX.COM`; the TSR remains untracked.
 - **`run_msx.sh`** — launches the MSX2 image in native or Flatpak openMSX.
-  `MSX_UNAPI=1` adds openMSXnet's `unapinet` extension when using its custom
-  emulator build.
+  It adds openMSXnet's `unapinet` extension by default when using its custom
+  emulator build and automatically selects a bundle in
+  `QA/MSXDEPS/openmsxnet/`. `OPENMSXNET_HOME` overrides that location;
+  missing host libraries are supplied through `my-distrobox`
+  (`MSX_DISTROBOX` overrides the name). `MSX_UNAPI=0` disables the extension.
 - **`m4detect.asm`** — a tiny BASIC-callable detector that asks the firmware
   (`KL_FIND_COMMAND`) whether an M4 ROM RSX is installed. The staged `GB.BAS` loads
   it as `M4DETECT.BIN` and uses its result to pick `GBM4` vs `GBALB`.
