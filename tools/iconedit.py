@@ -64,6 +64,23 @@ def encode_icon(grid, wbytes, h):
             out[y * wbytes + bx] = b
     return bytes(out)
 
+def shift_grid(grid, dx, dy):
+    """Move a pixel grid by (dx, dy), clipping overflow and clearing edges."""
+    if not grid:
+        return []
+    width = len(grid[0])
+    height = len(grid)
+    shifted = [[0] * width for _ in range(height)]
+    for y in range(height):
+        src_y = y - dy
+        if not 0 <= src_y < height:
+            continue
+        for x in range(width):
+            src_x = x - dx
+            if 0 <= src_x < width:
+                shifted[y][x] = grid[src_y][src_x]
+    return shifted
+
 # --- .SPR cursor: CPC Mode-1 masked, pre-shifted (256 bytes) ----------------
 # Layout matches png2spr.py + lib/cursor_data.asm (-> DEFAULT.SPR): two phases
 # (shift 0, then shift 2) back to back, each CUR_H rows of CUR_W byte-columns with
@@ -406,8 +423,10 @@ class IconEditor(tk.Toplevel):
         self.bind("<Control-z>", lambda e: self.undo())
         self.bind("<Control-c>", lambda e: self.copy_icon())
         self.bind("<Control-v>", lambda e: self.paste_icon())
-        self.bind("<Left>",  lambda e: self.prev_icon())
-        self.bind("<Right>", lambda e: self.next_icon())
+        self.bind("<Left>",  lambda e: self.shift_current(-1, 0))
+        self.bind("<Right>", lambda e: self.shift_current(1, 0))
+        self.bind("<Up>",    lambda e: self.shift_current(0, -1))
+        self.bind("<Down>",  lambda e: self.shift_current(0, 1))
         for k in "1234":
             self.bind(k, lambda e, p=int(k) - 1: self._select_pen(p))
 
@@ -651,6 +670,18 @@ class IconEditor(tk.Toplevel):
             return
         self.index = (self.index + 1) % len(self.icons)
         self._redraw()
+
+    def shift_current(self, dx, dy):
+        ic = self._cur()
+        if ic is None:
+            return "break"
+        shifted = shift_grid(ic["grid"], dx, dy)
+        if shifted != ic["grid"]:
+            self._push_undo()
+            ic["grid"] = shifted
+            self.preview = None
+            self._touched()
+        return "break"
 
     # -- drawing -------------------------------------------------------------
 
