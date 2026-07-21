@@ -95,13 +95,19 @@ the matching emulator extension while running:
 MSX_UNAPI_TSR=/path/to/UNAPINET.COM make msx
 OPENMSX=/path/to/openmsxnet/openmsx \
 OPENMSX_SYSTEM_DATA=/path/to/openmsxnet/share \
-MSX_UNAPI=1 tools/run_msx.sh
+tools/run_msx.sh
 ```
 
 `MSX_UNAPI_TSR` is optional for a normal build, but openMSXnet networking does
-not work without both that TSR and the emulator extension. The third-party TSR
-is never committed. Run `make msx` again without `MSX_UNAPI_TSR` to restore the
-standard staged `AUTOEXEC.BAT`; see
+not work without both that TSR and the emulator extension. `run_msx.sh` enables
+the `unapinet` extension by default. It also automatically uses an openMSXnet
+bundle installed at `QA/MSXDEPS/openmsxnet/`; use `OPENMSXNET_HOME` for another
+bundle location, or the explicit `OPENMSX` variables shown above. If the bundle
+needs libraries absent from the host (notably Tcl 8.6 on current Fedora), the
+launcher automatically uses `my-distrobox`; `MSX_DISTROBOX` overrides its name.
+Set `MSX_UNAPI=0` only for a non-networked run. The third-party TSR is never
+committed. Run `make msx` again without `MSX_UNAPI_TSR` to restore the standard
+staged `AUTOEXEC.BAT`; see
 [The MSX2 target](MSX2.md#browser-and-telnet-networking) for current UNAPI
 implementation coverage.
 

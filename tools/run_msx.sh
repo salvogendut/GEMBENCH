@@ -18,19 +18,25 @@
 #                                               emu-time seconds into build/msx/
 #                                               (throttle off, exits after last)
 #   MSX_RAM=stock tools/run_msx.sh              no 512K expansion
-#   MSX_UNAPI=1 tools/run_msx.sh                 add openMSXnet's unapinet extension
-#                                                (the image must run UNAPINET.COM)
+#   MSX_UNAPI=0 tools/run_msx.sh                 disable openMSXnet networking
+#   MSX_UNAPI=1 tools/run_msx.sh                 explicitly enable it (the default;
+#                                                the image must run UNAPINET.COM)
+#   OPENMSXNET_HOME=/path/to/bundle tools/run_msx.sh
+#                                                use bundle/openmsx + bundle/share
+#   MSX_DISTROBOX=name tools/run_msx.sh           container for missing host libs
 #   OPENMSX="openmsx-nightly" tools/run_msx.sh  override emulator command
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 IMG="${1:-QA/GBMSX.IMG}"
 MACHINE="${MSX_MACHINE:-Philips_NMS_8250}"
+UNAPI_ENABLED="${MSX_UNAPI:-1}"
+OPENMSXNET_HOME="${OPENMSXNET_HOME:-QA/MSXDEPS/openmsxnet}"
 [ -s "$IMG" ] || { echo "ERROR: $IMG not found - run tools/build_msx_img.sh" >&2; exit 1; }
 
 EXT=(-ext SunriseIDE_Nextor)
 [ "${MSX_RAM:-512k}" != stock ] && EXT+=(-ext ram512k)
-[ "${MSX_UNAPI:-0}" = 1 ] && EXT+=(-ext unapinet)
+[ "$UNAPI_ENABLED" = 1 ] && EXT+=(-ext unapinet)
 
 ARGS=(-machine "$MACHINE" "${EXT[@]}" -hda "$IMG")
 SCRIPT=
@@ -70,6 +76,28 @@ fi
 if [ -n "${OPENMSX:-}" ]; then
     # shellcheck disable=SC2206
     OPENMSX_CMD=($OPENMSX)
+elif [ "$UNAPI_ENABLED" = 1 ] && [ -x "$OPENMSXNET_HOME/openmsx" ]; then
+    export OPENMSX_SYSTEM_DATA="${OPENMSX_SYSTEM_DATA:-$OPENMSXNET_HOME/share}"
+    OPENMSXNET_BIN=$(realpath "$OPENMSXNET_HOME/openmsx")
+    OPENMSXNET_DATA=$(realpath "$OPENMSX_SYSTEM_DATA")
+    if LDD_OUT=$(ldd "$OPENMSXNET_BIN" 2>&1) &&
+       [[ "$LDD_OUT" != *"not found"* ]]; then
+        OPENMSX_CMD=("$OPENMSXNET_BIN")
+    elif command -v distrobox >/dev/null 2>&1; then
+        MSX_DISTROBOX="${MSX_DISTROBOX:-my-distrobox}"
+        if DISTRO_LDD=$(distrobox enter "$MSX_DISTROBOX" -- \
+            ldd "$OPENMSXNET_BIN" 2>&1) &&
+           [[ "$DISTRO_LDD" != *"not found"* ]]; then
+            OPENMSX_CMD=(distrobox enter "$MSX_DISTROBOX" -- env \
+                "OPENMSX_SYSTEM_DATA=$OPENMSXNET_DATA" "$OPENMSXNET_BIN")
+        else
+            echo "ERROR: openMSXnet has unresolved libraries on the host and in distrobox '$MSX_DISTROBOX'" >&2
+            exit 1
+        fi
+    else
+        echo "ERROR: openMSXnet has unresolved host libraries and distrobox is unavailable" >&2
+        exit 1
+    fi
 elif command -v openmsx >/dev/null 2>&1; then
     OPENMSX_CMD=(openmsx)
 elif command -v flatpak >/dev/null 2>&1 && flatpak info org.openmsx.openMSX >/dev/null 2>&1; then

@@ -68,14 +68,19 @@ Then run that image with the openMSXnet executable and data directory:
 ```bash
 OPENMSX=/path/to/openmsxnet/openmsx \
 OPENMSX_SYSTEM_DATA=/path/to/openmsxnet/share \
-MSX_UNAPI=1 tools/run_msx.sh
+tools/run_msx.sh
 ```
 
 For openMSXnet, both pieces are mandatory: `UNAPINET.COM` publishes the UNAPI
 implementation inside MSX-DOS, while the custom emulator extension provides its
-host-side sockets. The normal committed distribution bundles neither third-party
-component. On an existing Nextor installation, copy `UNAPINET.COM` to the boot
-drive and run it before `GBMSX.COM`; another compatible mapped-RAM or page-3
-TCP/IP UNAPI implementation may be used instead. Browser and Telnet report a
+host-side sockets. `run_msx.sh` enables that extension by default; use
+`MSX_UNAPI=0` for an explicitly non-networked run. A bundle placed at
+`QA/MSXDEPS/openmsxnet/` is selected automatically; `OPENMSXNET_HOME` selects a
+different location. When its libraries are not available on the host, the
+launcher runs it through `my-distrobox` (override with `MSX_DISTROBOX`). The
+normal committed distribution bundles neither third-party component. On an
+existing Nextor installation, copy `UNAPINET.COM` to the boot drive and run it
+before `GBMSX.COM`; another compatible mapped-RAM or page-3 TCP/IP UNAPI
+implementation may be used instead. Browser and Telnet report a
 network-initialisation error when discovery fails. Browser currently supports
 plain HTTP only.
