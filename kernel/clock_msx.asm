@@ -1,8 +1,13 @@
-; kernel/clock_msx.asm - software clock for the MSX2 target (#287).
+; kernel/clock_msx.asm - RTC-seeded software clock for the MSX2 target.
 ;
-; M1 keeps the CPC's RTC-less path only: clock_tick advances a software clock
-; once per 50 frames from k_poll, and GB_TIME reports it as already-binary.
-; The MSX's own RTC (ports #B4/#B5) joins in a later milestone.
+; The RP-5C01 RTC uses one 4-bit register per decimal digit. clock_init reads
+; block 0 once, then clock_tick advances the lean software clock at the VDP
+; refresh rate. This gives GEOBENCH the same startup time as MSX-DOS DATE/TIME
+; without polling the RTC from every desktop frame.
+
+MSX_RTC_ADDR    equ   #B4
+MSX_RTC_DATA    equ   #B5
+MSX_RTC_MODE    equ   13
 
 clock_tick
                 ld    a,(clk_frames)
@@ -32,6 +37,15 @@ clock_init
                 ld    a,60                    ; NTSC machine -> 60 ticks per second
 ci_tps
                 ld    (msx_tps),a
+                call  msx_rtc_read_time
+                ld    a,1
+                jr    c,ci_rtc
+                xor   a
+                ld    (sw_sec),a
+                ld    (sw_min),a
+                ld    (sw_hour),a
+ci_rtc
+                ld    (have_rtc),a
                 ret
 msx_tps         db    50
 

@@ -2714,6 +2714,7 @@ k_mxp
                 include "clock_state.inc"
 
                 include "../lib/msx/screen.asm" ; V9938 Screen 6 driver (+ shared screen_clip)
+                include "clock_msx_rtc.asm"    ; RTC seed helper after page-aligned picture LUTs
                 include "../lib/msx/text.asm"
                 include "../lib/msx/cursor.asm" ; hardware-sprite pointer
                 include "../lib/msx/input.asm"
