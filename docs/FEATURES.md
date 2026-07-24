@@ -62,7 +62,10 @@ backdrop, dragging icons, opening apps and menus:
   editor for the 4 Mode-1 pens + the screen border (`INKS=`) with a **live** preview
   — `-`/`+` recolours the whole desktop instantly — and a **Screensaver** section
   (**Module** picker, per-saver **Configure**, and idle **Timeout**). Starfield's
-  configuration window controls its speed and number of stars. Media settings are stored as
+  configuration window controls its speed and number of stars. On MSX2 the video
+  choices are labelled **4 colors** and **16 colors** (Screen 6 and Screen 7).
+  **Return to Defaults** restores the complete target-specific configuration.
+  Media settings are stored as
   **drive-qualified names** such as `A:DARKER` or `C:XMATRIX`, so Settings can
   browse either floppy or Albireo content without ambiguity. Invalid media
   falls back safely to `SOLID` / `NONE` at boot instead of blocking startup. The

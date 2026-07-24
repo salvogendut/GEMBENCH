@@ -168,6 +168,25 @@ def main() -> None:
     pcw_main = pcw_disk(ROOT / "QA/PCW/GEOBENCH.DSK")
     compare_payload("QA/CPC/Floppies/GEOBENCH.DSK:LOGO.PIC", strip_amsdos(cpc_main["LOGO.PIC"]), assets["LOGO.PIC"])
     compare_payload("QA/PCW/GEOBENCH.DSK:LOGO.PIC", pcw_main["LOGO.PIC"], assets["LOGO.PIC"], padded=True)
+    compare_payload(
+        "QA/CPC/Floppies/GEOBENCH.DSK:DEFAULT.CFG",
+        strip_amsdos(cpc_main["DEFAULT.CFG"]),
+        strip_amsdos(cpc_main["GEOBENCH.CFG"]),
+    )
+    compare_payload(
+        "QA/PCW/GEOBENCH.DSK:DEFAULT.CFG",
+        pcw_main["DEFAULT.CFG"],
+        pcw_main["GEOBENCH.CFG"],
+    )
+    for mutable, pristine in (
+        (ROOT / "QA/CPC/CARD/GEOBENCH.CFG", ROOT / "QA/CPC/CARD/GBENCH/DEFAULT.CFG"),
+        (ROOT / "QA/MSX/GEOBENCH.CFG", ROOT / "QA/MSX/GBENCH/DEFAULT.CFG"),
+    ):
+        compare_payload(
+            str(pristine.relative_to(ROOT)),
+            pristine.read_bytes(),
+            mutable.read_bytes(),
+        )
 
     cpc_companion = cpc_disk(ROOT / "QA/CPC/Floppies/COMPANION.DSK")
     pcw_companion = pcw_disk(ROOT / "QA/PCW/COMPANION.DSK")
@@ -203,6 +222,7 @@ def main() -> None:
     print(f"portable PIC distribution: {len(assets)} byte-identical pictures across CPC, MSX and PCW")
     print(f"MSX Screen 7 distribution: {mode7_count} additional pictures in QA/MSX/PICS")
     print(f"portable BDP distribution: {len(backdrops)} byte-identical backdrops across CPC, MSX and PCW")
+    print("target defaults: pristine DEFAULT.CFG matches GEOBENCH.CFG on CPC, MSX and PCW")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,8 @@
  *     BACKDROP=[D:]<stem>[.BDP]
  *     WALLPAPER=[D:]<stem>[.PIC]
  *     SAVER=[D:]<stem>[.SAV]
- *     MSXMODE=6|7       selected MSX video mode at the next boot
+ *     MSXMODE=6|7       selected MSX video mode at the next boot (shown as
+ *                       "4 colors" / "16 colors")
  * Each row shows the current value; clicking it lists the matching files in the
  * /GBENCH system folder (or root-level /PICS for wallpapers) and offers them in
  * a popup. The kernel loads font/icons/cursor only at boot, so a change takes
@@ -35,9 +36,9 @@
 #define DEF_Y     32
 #define DEF_W     58           /* byte cols (232 px) */
 #ifdef GB_MSX2
-#define DEF_H     162          /* includes the next-boot video-mode row */
+#define DEF_H     174          /* includes video mode and Return to Defaults rows */
 #else
-#define DEF_H     150
+#define DEF_H     162
 #endif
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   16           /* value column offset from the window's left (byte cols); a
@@ -45,7 +46,7 @@
 #define COLOUR_ROW NROWS       /* the "Colours..." line sits below the picker rows */
 /* The screensaver section: module picker, per-saver Configure command, then timeout. */
 #ifdef GB_MSX2
-#define VIDEO_ROW  (NROWS + 1) /* Screen 6/7 selection; applied by GBMSX.COM at boot */
+#define VIDEO_ROW  (NROWS + 1) /* 4/16 colours; applied as Screen 6/7 at the next boot */
 #define SS_HDR_ROW (NROWS + 2)
 #define SS_MOD_ROW (NROWS + 3)
 #define SS_CFG_ROW (NROWS + 4)
@@ -56,6 +57,7 @@
 #define SS_CFG_ROW (NROWS + 3)
 #define SS_TM_ROW  (NROWS + 4)
 #endif
+#define RESET_ROW  (SS_TM_ROW + 1)
 #define ROW_BACKDROP 3
 #define ROW_WALLPAPER 4
 #define DRIVE_NONE 0xFF
@@ -413,7 +415,7 @@ static void s_draw(void)
     {
         unsigned int p = cfg_keypos("MSXMODE=");
         const char *mode = (p != 0xFFFF && p < cfglen && cfgbuf[p] == '7') ?
-                           "Screen 7" : "Screen 6";
+                           "16 colors" : "4 colors";
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(VIDEO_ROW), mode);
     }
 #endif
@@ -435,6 +437,7 @@ static void s_draw(void)
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_TM_ROW), "Timeout");
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_TM_ROW), sv);
     }
+    gb_textbw((unsigned char)(win_x + 1), row_y(RESET_ROW), "Return to Defaults...");
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + win_h - 10),
 #ifdef GB_MSX2
               "Mode/font/icons: reboot.");
@@ -970,7 +973,7 @@ static void open_picker(unsigned char r)
 #ifdef GB_MSX2
 static void video_mode_dialog(void)
 {
-    static const char *const modes[] = { "Screen 6", "Screen 7" };
+    static const char *const modes[] = { "4 colors", "16 colors" };
     unsigned char sel = gb_popup((unsigned char)(win_x + VAL_COL),
                                  row_y(VIDEO_ROW), modes, 2);
     gb_curhide();
@@ -979,6 +982,48 @@ static void video_mode_dialog(void)
     gb_curshow();
 }
 #endif
+
+/* Replace the mutable config with the target-specific pristine copy shipped in
+   /GBENCH (card/MSX) or the floppy root. Font, icons, cursor and MSX mode still
+   take effect at the next boot; palette and desktop-owned settings are live. */
+static void reset_defaults(void)
+{
+    static const char *const choices[] = { "Return to Defaults", "Cancel" };
+    unsigned char descended, p;
+    unsigned int i, n;
+
+    p = gb_popup((unsigned char)(win_x + 1), row_y(RESET_ROW), choices, 2);
+    gb_curhide();
+    if (p != 0) {
+        s_draw();
+        gb_curshow();
+        return;
+    }
+
+    sel_boot_root();
+    descended = enter_assets(0);
+    gb_set_name("DEFAULT CFG");
+    n = gb_fs_load(gb_copybuf, sizeof(cfgbuf));
+    if (descended) gb_back();
+    if (!n) {
+        gb_curshow();
+        gb_alert("Defaults unavailable", "DEFAULT.CFG missing.");
+        gb_curhide();
+        s_draw();
+        gb_curshow();
+        return;
+    }
+
+    for (i = 0; i < n; i++) cfgbuf[i] = gb_copybuf[i];
+    cfglen = n;
+    cfg_set(rows[0].key, "DEFAULT");        /* save and refresh the kernel config copy */
+    cfg_get_inks(ink_cur);
+    for (p = 0; p < NPEN; p++) apply_colour(p, ink_cur[p]);
+    *(volatile unsigned char *)BD_SOLID_ADDR = 1;
+    *(volatile unsigned char *)BD_DRIVE_ADDR = DRIVE_NONE;
+    s_draw();
+    gb_curshow();
+}
 
 /* a content press: which row was clicked? */
 static void s_click(void)
@@ -1026,8 +1071,17 @@ static void s_click(void)
     }
     {
         unsigned char ry = row_y(SS_TM_ROW);              /* screensaver timeout */
-        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2))
+        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
             saver_dialog();
+            return;
+        }
+    }
+    {
+        unsigned char ry = row_y(RESET_ROW);
+        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+            reset_defaults();
+            return;
+        }
     }
 }
 

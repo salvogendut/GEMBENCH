@@ -34,12 +34,13 @@ Clock — all co-resident under the kernel window manager on a V9938.
   under root-level `PICS/`; development diagnostics such as `GBSPIKE.COM` are
   under `DIAG/`.
 
-## Selecting Screen 6 or Screen 7
+## Selecting 4 or 16 colours
 
-Open **System > Settings**, select **Video mode**, and choose **Screen 6** or
-**Screen 7**. Settings writes `MSXMODE=6` or `MSXMODE=7` to `GEOBENCH.CFG`; the
-new mode takes effect at the next GEOBENCH boot. A missing or invalid key falls
-back to Screen 6. Newly built images explicitly default to Screen 7.
+Open **System > Settings**, select **Video mode**, and choose **4 colors** (Screen 6)
+or **16 colors** (Screen 7). Settings writes `MSXMODE=6` or `MSXMODE=7` to
+`GEOBENCH.CFG`; the new mode takes effect at the next GEOBENCH boot. A missing or
+invalid key falls back to Screen 6. Newly built images explicitly default to
+Screen 7.
 
 Keep `GBMSX.COM`, `GBMSX6.COM`, and `GBMSX7.COM` together in the root of the boot
 drive. For diagnostics, either mode-specific executable can also be run directly.
