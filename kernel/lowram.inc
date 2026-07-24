@@ -90,6 +90,7 @@ POLL_MY         equ   #1307        ; last poll: cursor line (my)
 POLL_FLAGS      equ   #1308        ; last poll: flags (bit0 click, bit1 quit, bit2 fire)
 MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *count
                                    ; #1335..#1337: fs_cur_drive/fs_boot_drive/fls_browse
+KCFG_FRAMEPEN   equ   #133C        ; Edge pen, or Text/Accent when Edge matches Paper
 REPAINT_HDLR    equ   #1340        ; per-depth full-repaint handlers (4 words), for
                                    ; restoring the background under a moved window (#43)
 

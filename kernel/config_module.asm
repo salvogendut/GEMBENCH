@@ -7,6 +7,8 @@
 cfg_boot
                 ld    hl,0                    ; default: no config text (module then
                 ld    (KCFG_LEN),hl           ; emits the DEFAULT names itself)
+                ld    a,2                     ; default frame uses Edge; GBCFG may choose
+                ld    (KCFG_FRAMEPEN),a       ; Text/Accent when Edge matches Paper
                 ld    hl,cfg_fname           ; fs_req_name = "GEOBENCH.CFG"
                 ld    de,fs_req_name
                 call  copy11
