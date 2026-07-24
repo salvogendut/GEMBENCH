@@ -5,7 +5,7 @@ build time. Portable mode-1 pictures are staged for every platform: the CPC buil
 copies them into `QA/CPC/CARD/PICS/` and packs them into
 `QA/CPC/Floppies/EXTRAS.DSK`; the MSX build copies them into `QA/MSX/PICS/`, and
 the PCW build packs them into `QA/PCW/EXTRAS.DSK`. Mode-7 sixteen-colour pictures
-are staged only into `QA/MSX/PICS/` for the Screen 7 Viewer.
+are staged only into `QA/MSX/PICS/` for the Screen 7 Viewer and wallpaper loader.
 
 ## Make a .PIC from an image
 

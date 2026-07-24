@@ -153,8 +153,8 @@ line in the pack assembly or stage it into the card distribution as appropriate)
   preview / Save)
   or a CLI (`tools/picconv.py in.png out.PIC -d floyd -w 160`). The canonical
   Mode-1 payload is byte-identical on CPC, MSX2, and PCW; target kernels translate
-  it while drawing. For an MSX Screen 7 Viewer image, choose 16 colours in the
-  GUI or pass `--colors 16`; leave either size field blank to preserve aspect
+  it while drawing. For an MSX Screen 7 image, choose 16 colours in the GUI or
+  pass `--colors 16`; leave either size field blank to preserve aspect
   ratio, or set both to fit the Screen 7 limit of 512x255. This mode-7 extension is not editable in Paint and
   is not displayed by CPC, PCW, or the Screen 6 backend. `.PIC` opens in Viewer
   and portable mode-1 files edit in PAINT. See

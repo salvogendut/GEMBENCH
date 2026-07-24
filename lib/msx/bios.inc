@@ -32,6 +32,7 @@ FIB_SIZE        equ   21           ;              +21..24 file size (LE)
 CALSLT          equ   #001C        ; inter-slot call: IX=address, IYh=slot
 CHGMOD          equ   #005F        ; A = screen mode
 INITXT          equ   #006C        ; init 40-col text mode (exit path)
+INIPLT          equ   #0141        ; SUB-ROM: reset the MSX2 palette + VRAM mirror
 GTSTCK          equ   #00D5        ; A = stick id (0 kbd, 1/2 joy) -> A = 0..8
 GTTRIG          equ   #00D8        ; A = trigger id (0 space, 1..4) -> A = 0/FF
 GTPAD           equ   #00DB        ; A = pad function -> A (12/13/14 = mouse latch/X/Y)
@@ -40,6 +41,7 @@ CHGET           equ   #009F        ; A = next char (blocking - gate with CHSNS)
 SNSMAT          equ   #0141        ; A = keyboard matrix row -> A = bits (0=held)
 
 EXPTBL          equ   #FCC1        ; main BIOS slot byte (page-3 system RAM)
+EXBRSA          equ   #FAF8        ; MSX2 SUB-ROM slot byte (for RST #30 CALLF)
 JIFFY           equ   #FC9E        ; BIOS 50/60Hz frame counter (word)
 H_TIMI          equ   #FD9F        ; VBLANK interrupt hook (5 bytes)
 EXTBIO          equ   #FFCA        ; extended BIOS hook (mapper support)

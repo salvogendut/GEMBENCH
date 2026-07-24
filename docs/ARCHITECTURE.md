@@ -129,8 +129,9 @@ Pictures, icon sets, and backdrops use portable payloads. CPC, MSX2, and PCW all
 store canonical Mode-1 GBPC v2 picture bytes; the MSX2 and PCW screen backends
 translate them while blitting. See [`PIC_FORMAT.md`](PIC_FORMAT.md). Canonical
 Mode-1 `.IST` icon sets and 64-byte `.BDP` backdrop tiles are decoded when loaded
-on MSX2/PCW, while CPC uses their bytes directly. The MSX2 Screen 7 Viewer also
-accepts an explicitly non-portable mode-7 GBPC payload with sixteen colours.
+on MSX2/PCW, while CPC uses their bytes directly. The MSX2 Screen 7 Viewer and
+desktop wallpaper loader also accept an explicitly non-portable mode-7 GBPC
+payload with sixteen colours.
 
 ## Settings and media contracts
 

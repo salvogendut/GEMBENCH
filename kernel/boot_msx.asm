@@ -91,8 +91,7 @@ km_finish                                      ; reached by k_exit's longjmp
                 ldir
                 ei
                 call  msx_free_segments      ; hand every ALL_SEG segment back to DOS
-                ld    ix,INITXT              ; text mode for the DOS prompt
-                call  msx_bios
+                call  msx_text_restore       ; text mode + stock palette for the DOS prompt
                 ld    c,_TERM0               ; clean exit to COMMAND2
                 jp    BDOS
 
@@ -231,10 +230,23 @@ msx_mem_init
                 ret
 mmi_fatal
                 ld    sp,(BOOT_SP)           ; no segment for PAGE_DATA -> back to DOS
-                ld    ix,INITXT
-                call  msx_bios
+                call  msx_text_restore
                 ld    c,_TERM0
                 jp    BDOS
+
+; INITXT deliberately leaves the V9938 palette unchanged. Screen 7 replaces all
+; 16 entries and also uses VRAM over the text-mode palette mirror, so returning
+; without INIPLT leaves COMMAND2 unreadable. RST #30 (CALLF) invokes the MSX2
+; SUB-ROM entry using the machine's dynamic expanded-slot byte.
+msx_text_restore
+                ld    ix,INITXT
+                call  msx_bios
+                ld    a,(EXBRSA)
+                ld    (mtr_slot),a
+                rst   #30
+mtr_slot        db    0
+                dw    INIPLT
+                ret
 
 ; app_pool_init: APP_PAGES[0] = the TPA's own page-1 segment (the desktop rides
 ; it for free), then ALL_SEG until the pool is full or DOS runs dry. On a stock
