@@ -153,7 +153,10 @@ unsigned char gb_popup(unsigned char x, unsigned char y,
             hot = over;
         }
         if (flags & GB_QUIT) { esc = 1; break; }     /* ESC closes the menu */
-        if (flags & GB_CLICK) { if (over != 0xFF) sel = (unsigned char)(top + over); break; }
+        if (flags & GB_CLICK) {
+            if (over != 0xFF) { sel = (unsigned char)(top + over); break; }
+            if (n != 1) break;                  /* a one-button modal ignores stale/click-away input */
+        }
     }
     dlg_modal = 0;
     /* Consume the click/ESC that ended the menu so it doesn't leak into POLL_FLAGS,

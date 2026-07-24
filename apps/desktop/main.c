@@ -58,6 +58,7 @@ static unsigned char menu_inited;            /* gb_doc/System registered on the 
 static unsigned char menu_refresh;           /* refocus after a child window closes -> rebuild System */
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
+static unsigned char want_about;             /* System>About: 1=menu selected, 2=open next frame (#409) */
 #ifdef GB_PCW
 static unsigned char want_timesync;          /* boot time helper enabled when TIMESYNC=true */
 static unsigned int timesync_delay;          /* let real PerryNet hardware finish booting first */
@@ -664,6 +665,15 @@ static void bar_draw(void)
     }
 }
 
+static void repaint_desktop(void)
+{
+    gb_curhide();
+    gb_wm_damage(0, 0, GB_COLS, GB_LINES);
+    paint();
+    bar_init = 0;
+    gb_curshow();
+}
+
 static unsigned char hit_icon(unsigned char mx, unsigned char my)
 {
     unsigned char i;
@@ -786,13 +796,9 @@ static void sys_action(unsigned char sel)
                                                   whatever the SAVER= idle timeout - defer the open
                                                   past gb_doc_frame's repaint, like Settings. */
         want_saver = 1;
-    } else if (sel == 5) {                     /* About GEOBENCH (#409): GBUI owns the
-                                                  strings and modal renderer, keeping them
-                                                  out of this tight desktop bank. */
-        UI_OP_K = 24;
-        UI_COL_K = (GB_COLS - 60) / 2;
-        UI_LINE_K = (GB_LINES - 50) / 2;
-        gb_ui();
+    } else if (sel == 5) {                     /* About GEOBENCH (#409): defer until the System
+                                                  popup has released the click and repainted. */
+        want_about = 1;
     } else if (sel == 6) {                     /* Exit to DOS */
         gb_exit();                              /* does not return */
     }
@@ -853,11 +859,7 @@ static void on_frame(void)
         gb_doc(&deskdoc);                        /* keep the desktop menu definition fresh after the
                                                     reload before we repaint the desktop. */
         gb_menu_add("System", sys_items, 7, sys_action);
-        gb_curhide();
-        gb_wm_damage(0, 0, GB_COLS, GB_LINES);
-        paint();
-        bar_init = 0;
-        gb_curshow();
+        repaint_desktop();
         menu_refresh = 0;
         return;
     }
@@ -878,15 +880,25 @@ static void on_frame(void)
     }
 #endif
 
+    if (want_about == 2) {                /* The GBUI module call that drew the System menu must
+                                             unwind through the kernel before GBUI can be loaded
+                                             again. Open on the following desktop frame. */
+        want_about = 0;
+        UI_OP_K = 24;
+        UI_COL_K = (GB_COLS - 60) / 2;
+        UI_LINE_K = (GB_LINES - 50) / 2;
+        gb_ui();
+        repaint_desktop();                /* erase the transient box after OK */
+        return;
+    }
+
     if (gb_doc_frame()) {                  /* a System menu opened/ran (#142) */
-        gb_curhide();
-        gb_wm_damage(0, 0, GB_COLS, GB_LINES);       /* gb_popup left a narrow damage clip; the desktop
-                                              repaints fully here and paint() doesn't reset the
-                                              clip, so widen it back or the next op stays clipped
-                                              (#153: a dragged icon vanished on drop). */
-        paint();
-        bar_init = 0;                       /* menu drawing dirties line 0; repaint the full bar */
-        gb_curshow();
+        if (want_about) {                  /* Return to the kernel before re-entering GBUI. The menu
+                                              restored its save-under, so no interim repaint is needed. */
+            want_about = 2;
+            return;
+        }
+        repaint_desktop();                 /* also widens a popup's narrow damage clip (#153) */
         if (want_settings) {                  /* System>Settings: now safe to open on top (#129) */
             want_settings = 0;
             if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
