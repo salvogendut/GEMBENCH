@@ -18,6 +18,10 @@ hardware.
 *The same desktop on the **MSX2**, selectable between V9938 Screen 6
 (4 colours) and Screen 7 (16 colours).*
 
+![The GEOBENCH desktop with a sixteen-colour MSX2 Screen 7 wallpaper](screenshots/MSX-Mode7.png)
+
+*MSX2 **Screen 7** displaying a sixteen-colour `.PIC` as the desktop wallpaper.*
+
 ![The GEOBENCH desktop on the Amstrad PCW](screenshots/PCW-desktop.png)
 
 *The standalone **Amstrad PCW** port, shown in the 1985 emulator's monochrome
@@ -80,7 +84,8 @@ hardware, or use the disk images in an emulator.
   setup mounts (SD, IDE, …) and run **`GBMSX.COM`** — keep the companion
   `GBMSX6.COM` and `GBMSX7.COM` files beside it. Select 4-colour Screen 6 or
   16-colour Screen 7 for the next boot in **System > Settings**; Screen 7 also
-  lets Viewer display 16-colour `.PIC` files. You can also use openMSX (see
+  lets Viewer and the desktop wallpaper display 16-colour `.PIC` files. You can
+  also use openMSX (see
   [docs/MSX2.md](docs/MSX2.md)). Pictures are under `PICS/` and
   development diagnostics under `DIAG/`. Browser and Telnet additionally require
   a compatible TCP/IP UNAPI implementation; the openMSXnet setup is documented in

@@ -18,8 +18,9 @@ Clock — all co-resident under the kernel window manager on a V9938.
   (Sunrise IDE, SD interfaces, …) works.
 - **Video:** V9938 **Screen 6** (512x212, 4 colours) is the compatibility mode.
   **Screen 7** keeps the same 512x212 desktop geometry and four-pen UI while
-  enabling sixteen-colour pictures in Viewer. Both use a **hardware sprite
-  pointer** and VDP-command drawing (`GB_SETINK` palette mapping, `GB_LINE`).
+  enabling sixteen-colour pictures in Viewer and as desktop wallpaper. Both use
+  a **hardware sprite pointer** and VDP-command drawing (`GB_SETINK` palette
+  mapping, `GB_LINE`).
 - **Input:** joystick / keyboard pointer, plus the standard **MSX mouse** (GTPAD).
   The clock is 50/60 Hz aware.
 - **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
@@ -29,8 +30,9 @@ Clock — all co-resident under the kernel window manager on a V9938.
 - **Assets:** icon sets and backdrop tiles stay in canonical Mode-1 bytes and are
   decoded by either MSX video backend. Portable four-colour pictures use the same
   [GBPC v2 format](PIC_FORMAT.md) on every platform. Screen 7 additionally accepts
-  mode-7 sixteen-colour `.PIC` files in Viewer. MSX pictures live under root-level
-  `PICS/`; development diagnostics such as `GBSPIKE.COM` are under `DIAG/`.
+  mode-7 sixteen-colour `.PIC` files in Viewer and as wallpaper. MSX pictures live
+  under root-level `PICS/`; development diagnostics such as `GBSPIKE.COM` are
+  under `DIAG/`.
 
 ## Selecting Screen 6 or Screen 7
 

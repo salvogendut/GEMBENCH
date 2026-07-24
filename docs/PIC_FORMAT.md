@@ -28,10 +28,10 @@ created or edited on any target.
 Rows occupy `width / 2` bytes. Each byte stores its left pixel in the high
 nibble and its right pixel in the low nibble. Width must be a multiple of four.
 The first four palette indices retain GEOBENCH's UI pens; indices 4-15 use the
-fixed Screen 7 extension palette. The current Viewer accepts pictures up to
-512x255 whose complete file is smaller than 64 KiB.
+fixed Screen 7 extension palette. Viewer and the desktop wallpaper loader accept
+pictures up to 512x255 whose complete file is smaller than 64 KiB.
 
-Mode 7 is a Viewer extension, not a replacement for the portable payload. It is
+Mode 7 is an MSX-only extension, not a replacement for the portable payload. It is
 displayed only by the MSX2 Screen 7 kernel. Screen 6, CPC, and PCW reject it
 without interpreting its bytes, and Paint continues to edit and save mode 1.
 
