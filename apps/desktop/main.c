@@ -102,6 +102,12 @@ static void draw_icon(unsigned char i)
  * No bank (128K / missing file) -> plain gb_backdrop (tile or solid). */
 #define PIC_PAGE_K (*(volatile unsigned char *)0x130B)
 #define PIC_PAGE2_K (*(volatile unsigned char *)0x1348)
+#ifdef GB_MSX2
+#define PIC_PAGE3_K (*(volatile unsigned char *)0x1291)
+#define PIC_PAGE4_K (*(volatile unsigned char *)0x1292)
+#define PIC_MODE_K  (*(volatile unsigned char *)0x1293)
+#define PIC_STRIDE_K (*(volatile unsigned int *)0x1294)
+#endif
 #define PIC_WB_K   (*(volatile unsigned char *)0x130C)
 #define PIC_H_K    (*(volatile unsigned int  *)0x130D)
 #define PIC_OFF_K  (*(volatile unsigned char *)0x130F)
@@ -186,6 +192,11 @@ static void wp_release(void)
     if (!wp_bank) return;
     PIC_PAGE_K = wp_bank;
     PIC_PAGE2_K = wp_bank2;
+#ifdef GB_MSX2
+    PIC_PAGE3_K = PIC_PAGE4_K = 0;
+    PIC_MODE_K = 1;
+    PIC_STRIDE_K = wp_wb;
+#endif
     gb_pic_close();
     wp_bank = wp_bank2 = 0;
 }
@@ -406,6 +417,12 @@ static void wp_init(void)
     gb_set_name(nm);                             /* the focused (desktop) window's file arg */
     wp_bank = gb_pic_open();                   /* borrow a bank + parse the GBPC header */
     UI_MODAL_K = 0;                              /* picture loaders reuse #1700; keep menus live */
+#ifdef GB_MSX2
+    if (wp_bank && PIC_MODE_K != 1) {            /* mode-7 pictures are Viewer-only */
+        gb_pic_close();                          /* full context from gb_pic_open is still active */
+        wp_bank = 0;
+    }
+#endif
     wp_bank2 = 0;
     if (descended) gb_back();                    /* /PICS -> root (depth-1, safe) */
     gb_set_drive(old_drive);
@@ -500,6 +517,11 @@ static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsig
         + (unsigned char)(ix - wp_x);
     PIC_PAGE_K = wp_bank;                       /* re-assert our bank (the Viewer shares PIC_PAGE) */
     PIC_PAGE2_K = wp_bank2;
+#ifdef GB_MSX2
+    PIC_PAGE3_K = PIC_PAGE4_K = 0;
+    PIC_MODE_K = 1;
+    PIC_STRIDE_K = wp_wb;
+#endif
     if ((iw == wp_wb && !wp_bank2) || ih == 1) {
         gb_pic_blit(ix, iy, iw, ih, src);
     } else {

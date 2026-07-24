@@ -183,10 +183,10 @@ EXTRAS_ADDS=(
     --add "build/pcw/DECO.RAW=DECO.SAV"
     --add "build/pcw/XMATRIX.RAW=XMATRIX.SAV"
 )
-for pic in assets/pictures/*.PIC; do
+while IFS= read -r pic; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
     EXTRAS_ADDS+=(--add "$pic=$name.PIC")
-done
+done < <(python3 tools/picture_catalog.py portable)
 for bas in build/pcw/basic-examples/*.BAS; do
     EXTRAS_ADDS+=(--add "$bas=$(basename "$bas")")
 done

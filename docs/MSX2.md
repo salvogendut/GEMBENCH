@@ -8,35 +8,48 @@ back-ends, not in the apps.
 
 GEOBENCH on real MSX2 hardware (a 1chipMSX / "1chipbook", 4080K detected): the
 desktop with the File Manager, the Viewer showing `PENGUIN.PIC`, and the analog
-Clock — all co-resident under the kernel window manager on a V9938 Screen 6.
+Clock — all co-resident under the kernel window manager on a V9938.
 
 ![GEOBENCH on MSX2 hardware](../screenshots/msx_1chipbook.jpg)
 
-- **Runs under MSX-DOS 2 / Nextor** as a plain `GBMSX.COM` executable — no custom
-  boot ROM. Storage goes through BDOS file calls, so anything Nextor mounts
+- **Runs under MSX-DOS 2 / Nextor.** `GBMSX.COM` is a small selector that reads
+  `MSXMODE=` and chain-loads `GBMSX6.COM` or `GBMSX7.COM`; no custom boot ROM is
+  required. Storage goes through BDOS file calls, so anything Nextor mounts
   (Sunrise IDE, SD interfaces, …) works.
-- **Video:** V9938 **Screen 6** (512×212, 4 colours) — the closest analogue of the
-  CPC's Mode 1 — with a **hardware sprite pointer** and VDP-command drawing
-  (`GB_SETINK` palette mapping, `GB_LINE`).
+- **Video:** V9938 **Screen 6** (512x212, 4 colours) is the compatibility mode.
+  **Screen 7** keeps the same 512x212 desktop geometry and four-pen UI while
+  enabling sixteen-colour pictures in Viewer. Both use a **hardware sprite
+  pointer** and VDP-command drawing (`GB_SETINK` palette mapping, `GB_LINE`).
 - **Input:** joystick / keyboard pointer, plus the standard **MSX mouse** (GTPAD).
   The clock is 50/60 Hz aware.
 - **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
   Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS, Mahjong,
   Clock, Browser, Telnet, and **all 16 screensavers**. NETTEST and WGET are not
   built for MSX yet.
-- **Assets:** icon sets in `assets/iconsets/*.IST` are stored in canonical Mode-1
-  bytes and decoded to Screen 6 at runtime by the kernel. Backdrop tiles use the
-  same canonical bytes and are converted when loaded. Pictures use the portable [GBPC v2 format](PIC_FORMAT.md):
-  the same canonical Mode-1 `.PIC` bytes are staged on every platform and the MSX
-  kernel translates them while drawing. MSX pictures live once under root-level `PICS/`;
-  development diagnostics such as `GBSPIKE.COM` are kept under `DIAG/`.
+- **Assets:** icon sets and backdrop tiles stay in canonical Mode-1 bytes and are
+  decoded by either MSX video backend. Portable four-colour pictures use the same
+  [GBPC v2 format](PIC_FORMAT.md) on every platform. Screen 7 additionally accepts
+  mode-7 sixteen-colour `.PIC` files in Viewer. MSX pictures live under root-level
+  `PICS/`; development diagnostics such as `GBSPIKE.COM` are under `DIAG/`.
+
+## Selecting Screen 6 or Screen 7
+
+Open **System > Settings**, select **Video mode**, and choose **Screen 6** or
+**Screen 7**. Settings writes `MSXMODE=6` or `MSXMODE=7` to `GEOBENCH.CFG`; the
+new mode takes effect at the next GEOBENCH boot. A missing or invalid key falls
+back to Screen 6. Newly built images explicitly default to Screen 7.
+
+Keep `GBMSX.COM`, `GBMSX6.COM`, and `GBMSX7.COM` together in the root of the boot
+drive. For diagnostics, either mode-specific executable can also be run directly.
+Only the selected kernel becomes resident, so the option costs disk space rather
+than kernel headroom.
 
 Build and test in **openMSX** (emulating a Philips NMS 8250 with the Sunrise IDE
 Nextor extension and a 512K RAM expansion):
 
 ```bash
 bash tools/fetch_msx_deps.sh       # one-time: Nextor system files + NMS 8250 ROMs
-bash tools/build_kernel_msx.sh     # GBMSX.COM + QA/MSX staging + bootable QA/GBMSX.IMG
+bash tools/build_kernel_msx.sh     # selector + both kernels + staged/bootable images
 tools/run_msx.sh                   # interactive session
 MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 ```

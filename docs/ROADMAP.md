@@ -34,9 +34,9 @@
    live in dedicated source files with checked ABI/low-RAM maps, and the full
    build reuses unchanged app/module outputs instead of recompiling everything.
 12. ✅ **MSX2 port (#287)** — the kernel and app set cross-build to a second
-   platform: `GBMSX.COM` under MSX-DOS 2 / Nextor, V9938 Screen 6, hardware
-   sprite pointer, MSX mouse, all 16 screensavers, and an openMSX test harness
-   (`tools/build_kernel_msx.sh` + `tools/run_msx.sh`).
+   platform under MSX-DOS 2 / Nextor, with selectable V9938 Screen 6/7
+   backends, a hardware sprite pointer, MSX mouse, all 16 screensavers, and an
+   openMSX test harness (`tools/build_kernel_msx.sh` + `tools/run_msx.sh`).
 13. ✅ **Portable picture payloads (#381)** — CPC, MSX2, and PCW distributions
    carry the same canonical GBPC v2 Mode-1 `.PIC` bytes. MSX2 and PCW translate
    pixels at the display boundary; Paint and XAOS also save the portable format.

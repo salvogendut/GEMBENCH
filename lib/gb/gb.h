@@ -262,9 +262,10 @@ void gb_get_name(char *dst11);
  * their own 16K page; it returns the first borrowed BANK (nonzero, header parsed: read
  * PIC_WB/PIC_H/PIC_OFF at 0x130C-0x130F) or 0 (no free bank / not a .PIC / unsupported
  * kernel) -> fall back to the in-page buffer. PIC_PAGE (0x130B) and optional PIC_PAGE2
- * (0x1348) are single kernel globals, so a caller that may have more than one banked
- * picture open at once must store both and write them back before each gb_pic_blit,
- * gb_pic_edit, or gb_pic_close. gb_pic_blit blits a wbytes x h region from offset src_off
+ * (0x1348) are single kernel globals. On MSX, PIC_PAGE3/PIC_PAGE4/PIC_MODE/PIC_STRIDE
+ * at 0x1291-0x1295 complete that context. A caller that may have more than one banked
+ * picture open at once must store and restore its full platform context before each
+ * gb_pic_blit, gb_pic_edit, or gb_pic_close. gb_pic_blit blits a wbytes x h region from offset src_off
  * in the banked picture to the screen; gb_pic_edit moves a Paint 100x100 tile, copies
  * an arbitrary non-crossing save chunk to an app/low-RAM buffer, writes a short
  * low-RAM chunk back to the first bank (CPC/PCW Browser cache), or converts a short

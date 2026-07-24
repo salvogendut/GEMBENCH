@@ -10,7 +10,7 @@
 ;   3. Copy the H.TIMI tick handler into page-3 RAM and hook it (the BIOS
 ;      runs hooks with the BIOS ROM in page 0 - the M0 spike's lesson).
 ;   4. Copy the kernel image to #8000-#BFFF.
-;   5. CHGMOD 6 via the BIOS (Screen 6, BIOS variables kept consistent).
+;   5. CHGMOD 6 or 7 via the BIOS (selected at build time).
 ;   6. SP = MSX_STACK_TOP, jp GB_INIT.
 ;
 ; Build (tools/build_kernel_msx.sh): rasm assembles gbkern.asm with
@@ -131,7 +131,7 @@ map_ok
                 ld    bc,kern_img_end-kern_img
                 ldir
 
-                ld    a,6                     ; 5. Screen 6 via the BIOS
+                ld    a,MSX_SCREEN_MODE       ; 5. selected bitmap mode via the BIOS
                 ld    ix,CHGMOD
                 ld    iy,(EXPTBL-1)
                 call  CALSLT

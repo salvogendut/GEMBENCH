@@ -22,7 +22,7 @@
 #define MAX_LINES ((win_h - 16) / LINE_H)
 #define WRAP      ((win_w - 9) * 2 / 3)
 /* line[] holds WRAP chars + a NUL. On the CPC's 80-col screen WRAP <= 47, so 48
-   fits; but MSX2 Screen 6 reaches GB_COLS=128, where WRAP reaches (128-9)*2/3 =
+   fits; but both MSX2 bitmap modes reach GB_COLS=128, where WRAP reaches (128-9)*2/3 =
    79 - which overran this 48-byte buffer and corrupted memory, hanging the viewer
    the instant it drew text (#287). The viewer's page has no room to grow line[],
    so render() hard-caps the wrap at MAXWRAP-1 instead (MSX text wraps a little
@@ -77,9 +77,14 @@ static void render(unsigned int n)
 static unsigned char pic_wb;
 static unsigned int  pic_h;                            /* 16-bit: tall pictures exceed 255 (#166) */
 static unsigned int  pic_off;
+static unsigned int  pic_stride;                       /* source bytes per row (mode-dependent) */
+static unsigned char pic_mode;                         /* GBPC packing: 1=2bpp, 7=Screen-7 4bpp */
 static unsigned char rmin_w = MIN_W, rmin_h = MIN_H;   /* live resize floor (= picture size) */
 static unsigned char banked;                           /* the borrowed bank (0 = in-page), #164 */
 static unsigned char banked2;                          /* optional second bank for .PIC files >16K */
+#ifdef GB_MSX2
+static unsigned char banked3, banked4;                 /* Screen-7 pictures can occupy four banks */
+#endif
 static unsigned char scroll_y;                         /* top visible picture row (#166 scroll) */
 static unsigned char scroll_x;                         /* left visible picture byte column */
 static unsigned char view_x, view_y, view_w, view_h, view_vsb, view_hsb;
@@ -90,11 +95,29 @@ static unsigned char pic_toobig;                       /* 1 = .PIC too big for t
                                                           re-select OURS before each blit/close so
                                                           a second Viewer window can't steal it (#164) */
 #define PIC_PAGE2_K (*(volatile unsigned char *)0x1348)
+#ifdef GB_MSX2
+#define PIC_PAGE3_K (*(volatile unsigned char *)0x1291)
+#define PIC_PAGE4_K (*(volatile unsigned char *)0x1292)
+#define PIC_MODE_K  (*(volatile unsigned char *)0x1293)
+#define PIC_STRIDE_K (*(volatile unsigned int *)0x1294)
+#endif
 #define PIC_WB_K  (*(volatile unsigned char *)0x130C)  /* kernel-parsed header for the banked .PIC */
 #define PIC_H_K   (*(volatile unsigned int  *)0x130D)  /* 16-bit height */
 #define PIC_OFF_K (*(volatile unsigned char *)0x130F)
 #define UI_MODAL_K (*(volatile unsigned char *)0x1705)
 #define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
+
+static void select_banked_picture(void)
+{
+    PIC_PAGE_K = banked;
+    PIC_PAGE2_K = banked2;
+#ifdef GB_MSX2
+    PIC_PAGE3_K = banked3;
+    PIC_PAGE4_K = banked4;
+    PIC_MODE_K = pic_mode;
+    PIC_STRIDE_K = pic_stride;
+#endif
+}
 
 static unsigned char is_pic(void)
 {
@@ -115,20 +138,35 @@ static void parse_pic(void)
 {
     if ((unsigned char)filebuf[4] == 2) {
         unsigned int w;
-#if defined(GB_MSX2) || defined(GB_PCW)
-        if ((unsigned char)filebuf[5] != 1) {
+        pic_mode = (unsigned char)filebuf[5];
+#ifdef GB_MSX2
+        if (pic_mode == 7) {
+            /* Screen-7 pictures require the banked kernel path: gb_restorerect
+               intentionally retains the compact four-pen UI-buffer contract. */
             pic_toobig = 1;
             pic_wb = 26; pic_h = 32; pic_off = 0;
+            pic_stride = 0;
+            pic_floor();
+            return;
+        }
+#endif
+#if defined(GB_MSX2) || defined(GB_PCW)
+        if (pic_mode != 1) {
+            pic_toobig = 1;
+            pic_wb = 26; pic_h = 32; pic_off = 0; pic_stride = 0;
             pic_floor();
             return;
         }
 #endif
         w = (unsigned char)filebuf[6] | ((unsigned int)(unsigned char)filebuf[7] << 8);
         pic_wb  = (unsigned char)((w + 3) >> 2);
+        pic_stride = pic_wb;
         pic_h   = (unsigned char)filebuf[8] | ((unsigned int)(unsigned char)filebuf[9] << 8);
         pic_off = 14;
     } else {
+        pic_mode = 1;
         pic_wb  = (unsigned char)filebuf[4];
+        pic_stride = pic_wb;
         pic_h   = (unsigned char)filebuf[5];
         pic_off = 6;
     }
@@ -141,14 +179,33 @@ static void bank_or_parse(void)
 {
     scroll_y = 0;                                  /* a fresh file starts at the top (#166) */
     scroll_x = 0;
-    if (banked) { PIC_PAGE_K = banked; PIC_PAGE2_K = banked2; gb_pic_close(); banked = banked2 = 0; }  /* free OUR old bank only -
+    if (banked) {
+        PIC_PAGE_K = banked; PIC_PAGE2_K = banked2;
+#ifdef GB_MSX2
+        PIC_PAGE3_K = banked3; PIC_PAGE4_K = banked4;
+#endif
+        gb_pic_close();
+        banked = banked2 = 0;
+#ifdef GB_MSX2
+        banked3 = banked4 = 0;
+#endif
+    }  /* free OUR old bank only -
                                                       PIC_PAGE may hold another window's (#164) */
     banked = gb_pic_open();                        /* open sets PIC_PAGE to the new bank itself */
     UI_MODAL_K = 0;                                 /* picture loaders reuse #1700; keep menus live */
     banked2 = 0;
+#ifdef GB_MSX2
+    banked3 = banked4 = 0;
+#endif
     pic_toobig = 0;
     if (banked) {                                  /* in a bank: read the kernel-parsed header */
         banked2 = PIC_PAGE2_K;
+#ifdef GB_MSX2
+        banked3 = PIC_PAGE3_K; banked4 = PIC_PAGE4_K;
+        pic_mode = PIC_MODE_K; pic_stride = PIC_STRIDE_K;
+#else
+        pic_mode = 1; pic_stride = PIC_WB_K;
+#endif
         pic_wb = PIC_WB_K; pic_h = PIC_H_K; pic_off = PIC_OFF_K;
         pic_floor();
         return;
@@ -243,7 +300,7 @@ static void calc_view(void)
 static void draw_toobig(void)
 {
     gb_text(TX_COL, TX_Y0,                           "Pic not loaded");
-    gb_text(TX_COL, (unsigned char)(TX_Y0 + LINE_H), "Need banks/<32K");
+    gb_text(TX_COL, (unsigned char)(TX_Y0 + LINE_H), "Need free banks");
 }
 
 #if defined(GB_MSX2) || defined(GB_PCW)
@@ -293,12 +350,12 @@ static void blit_pic(unsigned char x, unsigned char y, unsigned char w,
     unsigned char r = 0;
     if (!w || !rows) return;
     if (w == pic_wb && !banked2) {
-        if (banked) { PIC_PAGE_K = banked; PIC_PAGE2_K = 0; gb_pic_blit(x, y, w, rows, src); }
+        if (banked) { select_banked_picture(); gb_pic_blit(x, y, w, rows, src); }
         else if (src + (unsigned int)w * rows <= filen) {
 #if defined(GB_MSX2) || defined(GB_PCW)
             while (r < rows) {
                 blit_file_row(x, (unsigned char)(y + r), w, src);
-                src += pic_wb;
+                src += pic_stride;
                 r++;
             }
 #else
@@ -309,8 +366,7 @@ static void blit_pic(unsigned char x, unsigned char y, unsigned char w,
     }
     while (r < rows) {
         if (banked) {
-            PIC_PAGE_K = banked;
-            PIC_PAGE2_K = banked2;
+            select_banked_picture();
             gb_pic_blit(x, (unsigned char)(y + r), w, 1, src);
         } else if (src + w <= filen) {
 #if defined(GB_MSX2) || defined(GB_PCW)
@@ -319,7 +375,7 @@ static void blit_pic(unsigned char x, unsigned char y, unsigned char w,
             gb_restorerect(x, (unsigned char)(y + r), w, 1, (unsigned char *)filebuf + src);
 #endif
         }
-        src += pic_wb;
+        src += pic_stride;
         r++;
     }
 }
@@ -333,7 +389,8 @@ static void draw_pic(void)
     if (!view_w || !view_h) return;
     draw_w = (pic_wb - scroll_x > view_w) ? view_w : (unsigned char)(pic_wb - scroll_x);
     r = pic_h - scroll_y; rows = (r > view_h) ? view_h : (unsigned char)r;
-    src = pic_off + (unsigned int)scroll_y * pic_wb + scroll_x;   /* scrolled window into bitmap */
+    src = pic_off + (unsigned int)scroll_y * pic_stride +
+          (pic_mode == 7 ? (unsigned int)scroll_x * 2U : scroll_x);
     blit_pic(view_x, view_y, draw_w, rows, src);
     if (view_vsb) {                                      /* vertical scrollbar at the LEFT edge (#166) */
         unsigned char th = (unsigned char)((unsigned int)view_h * view_h / pic_h); if (th < 4) th = 4;
@@ -554,7 +611,13 @@ static void v_frame(void)
     if (gb_doc_frame()) gb_restore_parent();    /* windowed: a menu ran (or the 'F' shortcut) */
 }
 
-static void v_close(void) { if (gb_doc_close()) { if (banked) { PIC_PAGE_K = banked; PIC_PAGE2_K = banked2; gb_pic_close(); } gb_wm_close(); } }
+static void v_close(void)
+{
+    if (gb_doc_close()) {
+        if (banked) { select_banked_picture(); gb_pic_close(); }
+        gb_wm_close();
+    }
+}
 static void v_event(void) { gb_doc_event(); }
 
 /* on_drag: a title-bar press - move the window (#146 slice 2). */

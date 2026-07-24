@@ -34,6 +34,12 @@
 #define PIC_H_K         (*(volatile unsigned int  *)0x130D)
 #define PIC_OFF_K       (*(volatile unsigned char *)0x130F)
 #define PIC_PAGE2_K     (*(volatile unsigned char *)0x1348)
+#ifdef GB_MSX2
+#define PIC_PAGE3_K     (*(volatile unsigned char *)0x1291)
+#define PIC_PAGE4_K     (*(volatile unsigned char *)0x1292)
+#define PIC_MODE_K      (*(volatile unsigned char *)0x1293)
+#define PIC_STRIDE_K    (*(volatile unsigned int  *)0x1294)
+#endif
 #define FS_SAVE_LEN_K   (*(volatile unsigned int  *)0x14FD)
 
 #define LINK_MAX        47
@@ -156,6 +162,11 @@ static void draw_visible(void)
           (unsigned int)block * BUI_IMAGE_WB;
     PIC_PAGE_K = BUI_CACHE_PAGE;
     PIC_PAGE2_K = 0;
+#ifdef GB_MSX2
+    PIC_PAGE3_K = PIC_PAGE4_K = 0;
+    PIC_MODE_K = 1;
+    PIC_STRIDE_K = BUI_IMAGE_WB;
+#endif
     PIC_WB_K = BUI_IMAGE_WB;
     PIC_H_K = BUI_IMAGE_H;
     PIC_OFF_K = IMAGE_HEADER_SIZE;

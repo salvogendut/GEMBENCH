@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# tools/build_kernel_msx.sh - build the MSX2 target (#287): the GBMSX.COM
-# kernel + the M1 app/asset set, staged into QA/MSX and packed into the
-# bootable Nextor image QA/GBMSX.IMG.
+# tools/build_kernel_msx.sh - build the MSX2 target (#287): Screen 6/7 kernels,
+# the GBMSX.COM next-boot selector, and the M1 app/asset set. Stage everything
+# into QA/MSX and pack it into the bootable Nextor image QA/GBMSX.IMG.
 #
 # Kept separate from tools/build_kernel.sh (that script is CPC-DSK-entangled
 # and wipes its own QA outputs); the shared pieces (apps via build_capp.sh,
@@ -76,7 +76,7 @@ APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/catclock build/msx/CATCLK.RAW
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
 tools/build_uimod.sh                             # -> build/GBUI.RAW (dialogs/menus)
 tools/build_webmod.sh build/msx/GBWEB.RAW        # Browser cache/config helper
-tools/build_imgmod.sh build/msx/GBIMG.RAW        # Browser inline-image helper
+APPDEFS="-DGB_MSX2" tools/build_imgmod.sh build/msx/GBIMG.RAW # Browser inline-image helper
 
 # --- assets ------------------------------------------------------------------
 python3 tools/genfont.py build/msx/DEFAULT.FNT           # 1bpp glyphs: shared format
@@ -101,9 +101,10 @@ python3 tools/packicons.py build/msx/PAINT.IST \
 [ -s assets/thinner.SPR ] || { echo "ERROR: missing MSX cursor assets/thinner.SPR" >&2; exit 1; }
 cp assets/thinner.SPR build/msx/DEFAULT.SPR
 
-# Bootsplash (#196/#287): the CPC lollipop, transcoded to Screen 6. The MSX
+# Bootsplash (#196/#287): the CPC lollipop, transcoded to the packed four-pen
+# MSX UI format shared by both video backends. The MSX
 # kernel does not incbin it (that is CPC-only) - boot_splash loads SPLASH.MOD
-# from disk, so we just stage the Screen-6 bitmap. DEBUG=TRUE selects the
+# from disk, so we just stage that compact bitmap. DEBUG=TRUE selects the
 # SPLASHD.MOD variant with the build id.
 BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
 python3 tools/make_bootsplash.py assets/SPLASH.png build/msx/SPLASH_BUILD.png "$BUILD_COMMIT" GEOBENCH
@@ -114,14 +115,32 @@ python3 tools/png2cpc.py --platform msx2 build/msx/SPLASHD_BUILD.png build/msx/S
 echo "Building GB-BASIC MSX payload from $GB_BASIC_DIR"
 make -C "$GB_BASIC_DIR" raws-msx GEOBENCH="$GEOBENCH_ROOT"
 
-# --- the kernel + the .COM stub ---------------------------------------------
+# --- the two kernels, their stubs, and the small next-boot selector ----------
 # RASM exits 0 even on assembly errors, so stale outputs would silently ship:
 # remove them first and require fresh files after each pass.
-rm -f build/msx/GBKERNM.RAW build/msx/GBMSX.COM
+rm -f build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW build/msx/GBKERN7.RAW \
+      build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM
+
+# Compatibility backend: Screen 6, four native colours.
 ( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -s -o gbkernm ${EXTRA_RASM:-} )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: GBKERNM.RAW not produced (rasm errors above)" >&2; exit 1; }
+cp build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm )
-[ -s build/msx/GBMSX.COM ] || { echo "ERROR: GBMSX.COM not produced (rasm errors above)" >&2; exit 1; }
+[ -s build/msx/GBMSX.COM ] || { echo "ERROR: Screen-6 loader stub not produced" >&2; exit 1; }
+mv build/msx/GBMSX.COM build/msx/GBMSX6.COM
+
+# Extended backend: Screen 7, with sixteen-colour Viewer support.
+rm -f build/msx/GBKERNM.RAW
+( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DMSX_SCREEN7=1 -s -o gbkernm7 ${EXTRA_RASM:-} )
+[ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: Screen-7 GBKERNM.RAW not produced" >&2; exit 1; }
+cp build/msx/GBKERNM.RAW build/msx/GBKERN7.RAW
+( cd build/msx && "$RASM" ../../kernel/msx_stub.asm -DMSX_SCREEN7=1 )
+[ -s build/msx/GBMSX.COM ] || { echo "ERROR: Screen-7 loader stub not produced" >&2; exit 1; }
+mv build/msx/GBMSX.COM build/msx/GBMSX7.COM
+
+# GBMSX.COM reads MSXMODE= and chain-loads one of the mode-specific images.
+( cd build/msx && "$RASM" ../../kernel/msx_launcher.asm )
+[ -s build/msx/GBMSX.COM ] || { echo "ERROR: MSX video selector not produced" >&2; exit 1; }
 
 # --- stage QA/MSX --------------------------------------------------------------
 mkdir -p QA/MSX/GBENCH
@@ -130,7 +149,7 @@ find QA/MSX -maxdepth 1 -type f -name '*.PIC' -delete
 find QA/MSX/GBENCH -maxdepth 1 -type f -name '*.PIC' -delete
 mkdir -p QA/MSX/PICS QA/MSX/DIAG
 rm -f QA/MSX/GBSPIKE.COM                 # pre-DIAG staging location (#379)
-cp build/msx/GBMSX.COM QA/MSX/
+cp build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM QA/MSX/
 rm -f QA/MSX/UNAPINET.COM
 if [ -n "${MSX_UNAPI_TSR:-}" ]; then
     [ -s "$MSX_UNAPI_TSR" ] || { echo "ERROR: MSX_UNAPI_TSR not found: $MSX_UNAPI_TSR" >&2; exit 1; }
@@ -139,7 +158,7 @@ if [ -n "${MSX_UNAPI_TSR:-}" ]; then
 else
     printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
 fi
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\n' > QA/MSX/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nMSXMODE=7\r\n' > QA/MSX/GEOBENCH.CFG
 cp build/msx/DESKTOP.RAW  QA/MSX/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/GBENCH/FILEMGR.APP
 cp build/msx/NOTEPAD.RAW  QA/MSX/GBENCH/NOTEPAD.APP
@@ -212,11 +231,11 @@ for ist in assets/iconsets/*.IST; do             # icon sets (ICONS=<name>)
     name=$(basename "$ist" .IST | tr a-z A-Z)
     cp "$ist" "QA/MSX/GBENCH/$name.IST"
 done
-for pic in assets/pictures/*.PIC; do             # portable canonical .PIC files need no transcode
-    [ -e "$pic" ] || continue
+# Mode 1 stays portable; mode 7 is copied only by this MSX build.
+while IFS= read -r pic; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
     cp "$pic" "QA/MSX/PICS/$name.PIC"
-done
+done < <(python3 tools/picture_catalog.py msx)
 
 # --- bootable Nextor image ------------------------------------------------------
 bash tools/build_msx_img.sh QA/MSX QA/GBMSX.IMG

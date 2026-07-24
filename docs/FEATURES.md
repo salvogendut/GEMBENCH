@@ -101,7 +101,7 @@ backdrop, dragging icons, opening apps and menus:
   proxy itself must use plain HTTP.
 - **Telnet** — an ANSI/VT100 terminal with Telnet negotiation. CPC uses
   Net4CPC/M4, MSX2 uses TCP/IP UNAPI, and PCW offers PerryNet TCP or raw serial.
-  The MSX2 terminal is a 78x22 Screen 6 window; CPC additionally offers its
+  The MSX2 terminal is a 78x22 window in either configured video mode; CPC additionally offers its
   direct-framebuffer 80x25 mode.
 - **Shell** — a fullscreen command-line file shell with scrollback and familiar
   `ls`, `cd`, `pwd`, `cat`, `cp`, and `rm` commands. Paths accept A/B/C drive

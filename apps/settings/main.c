@@ -10,6 +10,7 @@
  *     BACKDROP=[D:]<stem>[.BDP]
  *     WALLPAPER=[D:]<stem>[.PIC]
  *     SAVER=[D:]<stem>[.SAV]
+ *     MSXMODE=6|7       selected MSX video mode at the next boot
  * Each row shows the current value; clicking it lists the matching files in the
  * /GBENCH system folder (or root-level /PICS for wallpapers) and offers them in
  * a popup. The kernel loads font/icons/cursor only at boot, so a change takes
@@ -33,16 +34,28 @@
 #define DEF_X     18
 #define DEF_Y     32
 #define DEF_W     58           /* byte cols (232 px) */
-#define DEF_H     150          /* lines (appearance rows + screensaver controls + footer) */
+#ifdef GB_MSX2
+#define DEF_H     162          /* includes the next-boot video-mode row */
+#else
+#define DEF_H     150
+#endif
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   16           /* value column offset from the window's left (byte cols); a
                                   gap past the longest label ("Backdrop") so value != label */
 #define COLOUR_ROW NROWS       /* the "Colours..." line sits below the picker rows */
 /* The screensaver section: module picker, per-saver Configure command, then timeout. */
-#define SS_HDR_ROW (NROWS + 1) /* "Screensaver" section header (not clickable) */
-#define SS_MOD_ROW (NROWS + 2) /* "Module"  - pick which .SAV runs */
-#define SS_CFG_ROW (NROWS + 3) /* "Configure" - selected saver's own settings */
-#define SS_TM_ROW  (NROWS + 4) /* "Timeout" - the idle minutes */
+#ifdef GB_MSX2
+#define VIDEO_ROW  (NROWS + 1) /* Screen 6/7 selection; applied by GBMSX.COM at boot */
+#define SS_HDR_ROW (NROWS + 2)
+#define SS_MOD_ROW (NROWS + 3)
+#define SS_CFG_ROW (NROWS + 4)
+#define SS_TM_ROW  (NROWS + 5)
+#else
+#define SS_HDR_ROW (NROWS + 1)
+#define SS_MOD_ROW (NROWS + 2)
+#define SS_CFG_ROW (NROWS + 3)
+#define SS_TM_ROW  (NROWS + 4)
+#endif
 #define ROW_BACKDROP 3
 #define ROW_WALLPAPER 4
 #define DRIVE_NONE 0xFF
@@ -393,6 +406,15 @@ static void s_draw(void)
         }
     }
     gb_textbw((unsigned char)(win_x + 1), row_y(COLOUR_ROW), "Colours...");
+#ifdef GB_MSX2
+    gb_textbw((unsigned char)(win_x + 1), row_y(VIDEO_ROW), "Video mode");
+    {
+        unsigned int p = cfg_keypos("MSXMODE=");
+        const char *mode = (p != 0xFFFF && p < cfglen && cfgbuf[p] == '7') ?
+                           "Screen 7" : "Screen 6";
+        gb_textbw((unsigned char)(win_x + VAL_COL), row_y(VIDEO_ROW), mode);
+    }
+#endif
     {
         char sv[16];                          /* #219: the screensaver section */
         gb_textbw((unsigned char)(win_x + 1), row_y(SS_HDR_ROW), "Screensaver");
@@ -412,7 +434,11 @@ static void s_draw(void)
         gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_TM_ROW), sv);
     }
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + win_h - 10),
+#ifdef GB_MSX2
+              "Mode/font/icons: reboot.");
+#else
               "Font/icons: reboot.");
+#endif
 }
 
 /* ---- desktop colours (INKS=) ------------------------------------------------ */
@@ -933,6 +959,19 @@ static void open_picker(unsigned char r)
     gb_curshow();
 }
 
+#ifdef GB_MSX2
+static void video_mode_dialog(void)
+{
+    static const char *const modes[] = { "Screen 6", "Screen 7" };
+    unsigned char sel = gb_popup((unsigned char)(win_x + VAL_COL),
+                                 row_y(VIDEO_ROW), modes, 2);
+    gb_curhide();
+    if (sel != 0xFF) cfg_set("MSXMODE=", sel ? "7" : "6");
+    s_draw();
+    gb_curshow();
+}
+#endif
+
 /* a content press: which row was clicked? */
 static void s_click(void)
 {
@@ -953,6 +992,15 @@ static void s_click(void)
             return;
         }
     }
+#ifdef GB_MSX2
+    {
+        unsigned char ry = row_y(VIDEO_ROW);
+        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+            video_mode_dialog();
+            return;
+        }
+    }
+#endif
     {
         unsigned char ry = row_y(SS_MOD_ROW);             /* #219: screensaver module */
         if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {

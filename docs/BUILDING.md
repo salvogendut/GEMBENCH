@@ -113,8 +113,9 @@ implementation coverage.
 
 `build_kernel_msx.sh` produces:
 
-- **`QA/MSX/`** — the loose MSX distribution (committed): `GBMSX.COM`, an
-  `AUTOEXEC.BAT` that runs it, `GEOBENCH.CFG`, the `GBENCH/` system folder
+- **`QA/MSX/`** — the loose MSX distribution (committed): the `GBMSX.COM`
+  mode selector, `GBMSX6.COM`, `GBMSX7.COM`, an `AUTOEXEC.BAT` that runs the
+  selector, `GEOBENCH.CFG`, the `GBENCH/` system folder
   (fonts/icons/cursor/modules/apps/savers), the complete gallery in `PICS/`, and
   development diagnostics in `DIAG/`.
 - **`QA/GBMSX.IMG`** — a bootable 32 MB **FAT16 hard-disk image** (a local
@@ -122,9 +123,11 @@ implementation coverage.
   it from `QA/MSX` plus the Nextor system files, so Nextor's Sunrise IDE driver
   boots it straight to the desktop.
 
-**Assets are packaged automatically.** `.PIC` files are canonical GBPC Mode-1 and
+**Assets are packaged automatically.** Portable `.PIC` files are canonical GBPC Mode-1 and
 are copied byte-for-byte into root-level `PICS/`; the kernel translates pictures
-while displaying them on MSX as on other targets. Icon sets (`.IST`) are also now
+while displaying them on MSX as on other targets. Mode-7 sixteen-colour files
+from the same asset directory are added only to the MSX `PICS/` gallery. Icon
+sets (`.IST`) are also now
 stored in canonical Mode-1 bytes and are decoded when loaded by the MSX kernel.
 Backdrop tiles (`.BDP`) use the same model: one canonical file is converted once
 when selected on MSX2/PCW; CPC uses those Mode-1 bytes directly in the desktop.
@@ -142,6 +145,8 @@ Copy the contents of **`QA/MSX/`** onto storage your MSX-DOS 2 / Nextor setup
 mounts (an SD card, IDE disk, …) and run **`GBMSX.COM`** (the `AUTOEXEC.BAT` runs
 it for you) — or write the whole `QA/GBMSX.IMG` to the device. It needs **MSX-DOS
 2** (mapper support); a bare MSX2 with only Disk BASIC / MSX-DOS 1 won't run it.
+`GBMSX.COM` reads `MSXMODE=6|7` from `GEOBENCH.CFG` and loads the matching
+mode-specific binary. System Settings updates that key for the next boot.
 
 ### Boot floppy (experimental)
 

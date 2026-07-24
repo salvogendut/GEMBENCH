@@ -5,6 +5,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from picture_catalog import picture_mode
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,12 +115,19 @@ def compare_payload(label: str, actual: bytes, expected: bytes, padded: bool = F
 
 
 def main() -> None:
-    assets = {path.name: path.read_bytes() for path in sorted((ROOT / "assets/pictures").glob("*.PIC"))}
+    pictures = sorted((ROOT / "assets/pictures").glob("*.PIC"))
+    if not pictures:
+        sys.exit("no pictures found")
+    try:
+        modes = {path.name: picture_mode(path) for path in pictures}
+    except ValueError as error:
+        sys.exit(str(error))
+    assets = {
+        path.name: path.read_bytes() for path in pictures if modes[path.name] == 1
+    }
+    msx_assets = {path.name: path.read_bytes() for path in pictures}
     if not assets:
-        sys.exit("no canonical pictures found")
-    for name, data in assets.items():
-        if data[:6] != b"GBPC\x02\x01":
-            sys.exit(f"assets/pictures/{name}: expected canonical GBPC v2 mode 1")
+        sys.exit("no portable mode-1 pictures found")
 
     backdrops = {path.name.upper(): path.read_bytes() for path in sorted((ROOT / "assets/backdrops").glob("*.BDP"))}
     if not backdrops:
@@ -127,11 +136,14 @@ def main() -> None:
         if len(data) != 64:
             sys.exit(f"assets/backdrops/{name}: expected a 64-byte canonical Mode-1 tile")
 
-    for distro in (ROOT / "QA/CPC/CARD/PICS", ROOT / "QA/MSX/PICS"):
+    for distro, expected_assets in (
+        (ROOT / "QA/CPC/CARD/PICS", assets),
+        (ROOT / "QA/MSX/PICS", msx_assets),
+    ):
         names = {path.name for path in distro.glob("*.PIC")}
-        if names != set(assets):
+        if names != set(expected_assets):
             sys.exit(f"{distro.relative_to(ROOT)}: picture set differs from assets/pictures")
-        for name, expected in assets.items():
+        for name, expected in expected_assets.items():
             compare_payload(str((distro / name).relative_to(ROOT)), (distro / name).read_bytes(), expected)
 
     cpc_extras = cpc_disk(ROOT / "QA/CPC/Floppies/EXTRAS.DSK")
@@ -187,7 +199,9 @@ def main() -> None:
         compare_payload(f"QA/CPC/Floppies/GEOBENCH.DSK:{name}", strip_amsdos(cpc_main[name]), expected)
         compare_payload(f"QA/PCW/COMPANION.DSK:{name}", pcw_companion[name], expected, padded=True)
 
+    mode7_count = len(msx_assets) - len(assets)
     print(f"portable PIC distribution: {len(assets)} byte-identical pictures across CPC, MSX and PCW")
+    print(f"MSX Screen 7 distribution: {mode7_count} additional pictures in QA/MSX/PICS")
     print(f"portable BDP distribution: {len(backdrops)} byte-identical backdrops across CPC, MSX and PCW")
 
 

@@ -16,6 +16,15 @@ PIC_OFS         equ   #1349        ; transient k_pic_open chunk loader state; af
 PIC_EDIT_BUF    equ   #134B        ; GB_PICEDIT: app-side 100x100 tile buffer pointer.
 PIC_EDIT_OFF    equ   #134D        ; GB_PICEDIT: source/destination bitmap offset in the banked .PIC.
 BANK_CUR        equ   #134F        ; shadow of the current #4000-#7FFF page; low so PICEDITL can update it.
+                ifdef PLATFORM_MSX
+; The MSX hardware pointer has no software save-under, so its otherwise-unused
+; #1291 cursor buffer holds the extended Viewer state. Four mapper segments let
+; a full 512x212 4bpp Screen-7 picture (54,272 bytes plus header) fit.
+PIC_PAGE3       equ   #1291
+PIC_PAGE4       equ   #1292
+PIC_MODE        equ   #1293        ; GBPC packing: 1 = canonical 2bpp, 7 = Screen-7 4bpp
+PIC_STRIDE      equ   #1294        ; source bytes per picture row (word)
+                endif
 
                 ifdef GB_ROM                  ; #152: the floppy read backend (fs_amsdos) is offloaded
 FS_RDIO_LOWRAM  equ   1                       ; to GEOBENCH.ROM; its scratch state must live in fixed

@@ -1,19 +1,23 @@
 # Pictures
 
-Drop canonical GEOBENCH `.PIC` files here and they are staged for every platform
-at build time. The CPC build copies them into `QA/CPC/CARD/PICS/` and packs them
-into `QA/CPC/Floppies/EXTRAS.DSK`; the MSX build copies them into `QA/MSX/PICS/`,
-and the PCW build packs them into `QA/PCW/EXTRAS.DSK`. They show up in the Viewer.
+Drop GEOBENCH `.PIC` files here and they are classified from their GBPC header at
+build time. Portable mode-1 pictures are staged for every platform: the CPC build
+copies them into `QA/CPC/CARD/PICS/` and packs them into
+`QA/CPC/Floppies/EXTRAS.DSK`; the MSX build copies them into `QA/MSX/PICS/`, and
+the PCW build packs them into `QA/PCW/EXTRAS.DSK`. Mode-7 sixteen-colour pictures
+are staged only into `QA/MSX/PICS/` for the Screen 7 Viewer.
 
 ## Make a .PIC from an image
 
 ```
 tools/picconv.py photo.jpg PHOTO.PIC      # PNG, JPG, GIF, BMP... (any Pillow format)
 tools/picconv.py art.png ART.PIC -d none -w 160
+tools/picconv.py art.png ART16.PIC -c 16 -w 320 --height 255
 ```
 
-`picconv.py` maps each pixel to the 4 GEOBENCH desktop inks (blue/white/black/red),
-optionally dithers, and writes the v2 `.PIC` the Viewer displays.
+`picconv.py` optionally dithers and writes the v2 `.PIC` the Viewer displays.
+Four-colour output uses the portable GEOBENCH desktop inks
+(blue/white/black/red); sixteen-colour output targets MSX Screen 7.
 
 ## Naming
 

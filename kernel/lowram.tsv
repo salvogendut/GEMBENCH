@@ -18,7 +18,7 @@ base          0x1240  0x1249  kernel_boot_time        -             GB_TIME_BUF,
 base          0x124A  0x124E  wm_transient_scratch    -             ghost_on, window move/resize temporaries
 base          0x1250  0x128F  backdrop_tile           -             BD_TILE, loaded 16x16 Mode-1 backdrop tile
 base          0x1290  0x1290  backdrop_solid          -             BD_SOLID flag
-base          0x1291  0x12D0  cursor_save_under       -             cursor save-under buffer
+base          0x1291  0x12D0  cursor_save_under       msx_pic_cursor hardware-pointer MSX builds reuse the start for extended picture state
 base          0x12D1  0x12E8  window_title_scratch    -             copied window title
 base          0x12E9  0x12F6  dir_name_scratch        -             formatted visible directory name
 base          0x12F7  0x12FF  wm_call_scratch         -             WM descriptor/open/repaint scratch and drag source page
@@ -50,6 +50,8 @@ base          0x2900  0x32FF  browser_source_buffers  module_data   Browser offl
 base          0x3300  0x3887  browser_transient       module_data   Browser protocol, render, and fallback buffers; above GBNET max I/O
 base          0x3900  0x3ADB  browser_shared_state    module_data   Browser/GBUI/GBWEB cache, proxy, GET-form, request, resource, image, viewport, and error state
 base          0x3E00  0x3FFF  clipboard               -             shared clipboard length and data
+
+msx           0x1291  0x1295  msx_picture_state       msx_pic_cursor third/fourth picture banks, packing mode, and source stride
 
 # Non-ROM IDE recovery profile. Archived, but kept visible because it shares
 # the same low-RAM pool and has historically been revived for tests.
