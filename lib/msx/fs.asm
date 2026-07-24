@@ -89,10 +89,7 @@ fs_dir_first
                 call  BDOS
                 pop   ix
                 call  fsmx_restore_page
-                or    a
-                jr    z,fsd_fill
-                or    a                       ; error -> NC
-                ret
+                jr    fsd_result
 fs_dir_next
                 ei
                 push  ix
@@ -101,10 +98,13 @@ fs_dir_next
                 call  BDOS
                 pop   ix
                 call  fsmx_restore_page
+fsd_result
                 or    a
-                jr    z,fsd_fill
-                or    a
-                ret
+                ret   nz                      ; error/end -> NC
+                ld    a,(fsmx_fib+FIB_NAME)
+                cp    '.'                     ; File Manager supplies its own ".." entry
+                jr    z,fs_dir_next
+                jr    fsd_fill
 
 ; fsd_fill: FIB -> fs_ent_name (11-byte padded 8.3), fs_ent_attr, fs_ent_size.
 fsd_fill
