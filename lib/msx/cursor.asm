@@ -4,8 +4,8 @@
 ; Same interface as lib/cursor.asm (cursor_x/cursor_y in the CPC's 2-units-per-
 ; pixel virtual space, cursor_show / cursor_erase / cursor_move_to /
 ; cursor_draw, cur_supp / cur_paintlock flags) - but the arrow is two 16x16
-; hardware sprites (plane 0 = black outline, palette 12; plane 1 = white fill,
-; palette 13), so there is NO save-under, no composite, and no way for a stale
+; hardware sprites (plane 0 = white outline; plane 1 = red fill), so there is
+; NO save-under, no composite, and no way for a stale
 ; pointer to be baked into a window's save-under (#126-class bugs impossible).
 ; "Erase" just parks the sprites below the 212-line display.
 ;
@@ -26,22 +26,25 @@ cursor_apply
                 ld    c,VDP_DATA
 ca_pat          outi
                 jr    nz,ca_pat
-                ; Screen 6 (G5) quirk: a sprite colour nibble is TWO 2-bit pen
-                ; fields - the renderer emits palette[c>>2] then palette[c&3]
-                ; per sprite pixel (verified in the V9938 rasterizer). So both
-                ; halves must name the same pen. To match the CPC pointer (a red
-                ; arrow with a white border): border = %0101 (pen 1 white),
-                ; fill = %1111 (pen 3 red); both follow INKS= like the rest of
-                ; the UI. Sprite 0 (border) has priority over sprite 1 (fill).
-                ld    hl,SPR_COLOUR          ; sprite 0 lines = pen-1 pair (white border)
+                ; Screen 7 uses direct palette indices. Screen 6 repeats each
+                ; 2-bit pen in both halves of the colour nibble.
+                ld    hl,SPR_COLOUR          ; sprite 0 lines = pen 1 (white border)
                 call  vdp_setwr16
                 di
                 ld    b,16
+                ifdef MSX_SCREEN7
+                ld    a,1
+                else
                 ld    a,%0101
+                endif
 ca_c0           out   (VDP_DATA),a
                 djnz  ca_c0
-                ld    b,16                    ; sprite 1 lines = pen-3 pair (red fill)
+                ld    b,16                    ; sprite 1 lines = pen 3 (red fill)
+                ifdef MSX_SCREEN7
+                ld    a,3
+                else
                 ld    a,%1111
+                endif
 ca_c1           out   (VDP_DATA),a
                 djnz  ca_c1
                 ei
@@ -105,7 +108,7 @@ cursor_erase
 
 ; cursor_draw: position both sprites at (cursor_x, cursor_y) minus the hotspot.
 ; line = 211 - cursor_y/2 (the shared Y-flipped virtual space); sprite x is in
-; 2-screen-pixel units in Screen 6, so attr x = pixel/2 = cursor_x/4.
+; 2-screen-pixel units in the 512-dot mode, so attr x = pixel/2 = cursor_x/4.
 cursor_draw
                 ld    hl,(cursor_y)
                 srl   h

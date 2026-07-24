@@ -112,8 +112,9 @@ icon_convert
                 pop   de                     ; DE = bytes left
 
 ; mode1_convert: transcode DE non-zero canonical Mode-1 bytes in-place at HL
-; to the target's runtime UI-bitmap encoding. MSX uses Screen-6 pen space. PCW
-; UI bitmaps use that same pen space and are permuted only when drawn.
+; to the target's runtime UI-bitmap encoding. MSX keeps compact four-pen UI
+; bytes and expands them only at the Screen-7 display boundary. PCW UI bitmaps
+; use that same pen space and are permuted only when drawn.
 mode1_convert
                 ld    a,(hl)
                 ld    (mode1_conv_lut+1),a
@@ -435,7 +436,7 @@ bsp_ck_rows     db    0
 
 ; --- bootsplash, MSX2 (#287) ----------------------------------------------
 ; The MSX counterpart of the CPC bootsplash: the same lollipop + label
-; (SPLASH*.MOD, now Screen-6 art) blitted centred, plus a 4-tick load bar. The
+; (SPLASH*.MOD, packed four-pen UI art) blitted centred, plus a 4-tick load bar. The
 ; screen is already pen-0 blue (msx_video_init + set_palette); the desktop's
 ; first repaint clears it. Uses the shared VRAM primitives restore_block /
 ; fill_block / pen_to_byte and the retrace-paced wait msx_wait_tick, so no CPC
@@ -484,7 +485,7 @@ bsp_done
 ; bsp_bar: A = pen, B = width in bytes -> fill (BAR_X, BAR_Y, B, BAR_H) via fill_block.
 bsp_bar
                 push  bc
-                call  pen_to_byte            ; A = pen -> Screen-6 fill byte
+                call  pen_to_byte            ; A = pen -> active-mode solid byte
                 ld    (fb_val),a
                 pop   bc
                 ld    a,BAR_X

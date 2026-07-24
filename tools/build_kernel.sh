@@ -243,9 +243,9 @@ rm -f build/companion.dsk
 cp build/companion.dsk "$FLOPPY_QA/COMPANION.DSK"
 echo "  + $FLOPPY_QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Mahjong/Xaos + savers)"
 EXTRAS_ADDS=()
-for pic in assets/pictures/*.PIC; do
-    [ -e "$pic" ] && EXTRAS_ADDS+=(--add "$pic")
-done
+while IFS= read -r pic; do
+    EXTRAS_ADDS+=(--add "$pic")
+done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
 echo "  + $FLOPPY_QA/EXTRAS.DSK (complete picture gallery; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"

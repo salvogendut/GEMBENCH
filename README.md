@@ -15,7 +15,7 @@ hardware.
 
 ![The GEOBENCH desktop on the MSX2](screenshots/MSX2-desktop.png)
 
-*The same desktop on the **MSX2** (V9938 Screen 6).*
+*The same desktop on the **MSX2** (V9938 Screen 6 or Screen 7).*
 
 ![The GEOBENCH desktop on the Amstrad PCW](screenshots/PCW-desktop.png)
 
@@ -50,7 +50,7 @@ them into GEOBENCH's compact picture format.*
 
 Targets:
 the CPC (Albireo/M4 card + AMSDOS floppy), the [MSX2](docs/MSX2.md)
-(MSX-DOS 2 / Nextor, V9938 Screen 6) and the [Amstrad PCW](docs/PCW.md)
+(MSX-DOS 2 / Nextor, selectable V9938 Screen 6/7) and the [Amstrad PCW](docs/PCW.md)
 (8256/8512 — boots standalone from its own boot sector, CGA2 colour in the
 1985 emulator).
 
@@ -75,8 +75,10 @@ hardware, or use the disk images in an emulator.
 ### MSX2
 
 - Copy the **contents of [`QA/MSX/`](QA/MSX)** onto storage your MSX-DOS 2 / Nextor
-  setup mounts (SD, IDE, …) and run **`GBMSX.COM`** — or use it in an emulator such
-  as openMSX (see [docs/MSX2.md](docs/MSX2.md)). Pictures are under `PICS/` and
+  setup mounts (SD, IDE, …) and run **`GBMSX.COM`** — keep the companion
+  `GBMSX6.COM` and `GBMSX7.COM` files beside it. Select Screen 6 or Screen 7 for
+  the next boot in **System > Settings**. You can also use openMSX (see
+  [docs/MSX2.md](docs/MSX2.md)). Pictures are under `PICS/` and
   development diagnostics under `DIAG/`. Browser and Telnet additionally require
   a compatible TCP/IP UNAPI implementation; the openMSXnet setup is documented in
   [the MSX2 networking guide](docs/MSX2.md#browser-and-telnet-networking).
@@ -130,7 +132,7 @@ Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.
 - **[Features](docs/FEATURES.md)** — what works today, with screenshots.
 - **[Building & running](docs/BUILDING.md)** — the CPC build, deploy targets, the
   optional GEOBENCH ROM.
-- **[The MSX2 target](docs/MSX2.md)** — `GBMSX.COM`, Screen 6, TCP/IP UNAPI, and
+- **[The MSX2 target](docs/MSX2.md)** — selectable Screen 6/7, TCP/IP UNAPI, and
   the openMSX harness.
 - **[Portable picture format](docs/PIC_FORMAT.md)** — the byte-identical GBPC v2
   payload shared by CPC, MSX2, and PCW.

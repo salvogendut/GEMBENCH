@@ -105,6 +105,7 @@ for ist in assets/iconsets/*.IST; do          # tracked custom icon sets (edit w
     [ -e "$ist" ] && cp "$ist" "$SYS/"         # tools/iconedit.py); select via ICONS=<name>
 done
 cp assets/WELCOME.TXT "$SYS/"
-for pic in assets/pictures/*.PIC; do        # root-level gallery: /PICS is one supported directory deep
-    [ -e "$pic" ] && cp "$pic" "$PICS/"
-done
+# CPC cards receive portable mode-1 pictures. Mode-7 pictures are MSX-only.
+while IFS= read -r pic; do
+    cp "$pic" "$PICS/"
+done < <(python3 tools/picture_catalog.py portable)

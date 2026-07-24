@@ -14,8 +14,9 @@
 ; Build: tools/build_kernel.sh   Run: 1984 --memory=128 --disk-a=build/gbkern.dsk --autostart=GBKERN
 
 ; PLATFORM_MSX (#287): -DPLATFORM_MSX=1 builds the MSX2 target - an MSX-DOS 2 /
-; Nextor application (GBMSX.COM) with the V9938 Screen 6 driver, mapper-segment
-; banking and BDOS storage. The kernel body (WM, services, menus) is shared; the
+; Nextor application with a selectable V9938 Screen 6 or Screen 7 driver,
+; mapper-segment banking and BDOS storage. GBMSX.COM selects the mode-specific
+; image at boot. The kernel body (WM, services, menus) is shared; the
 ; platform-specific pieces swap at the include sites below.
                 include "../lib/gbapp.inc"
                 ifdef PLATFORM_MSX
@@ -347,19 +348,19 @@ gb_open_window
 gad_x_str       db    "X",0
                 endif
 
-; Window-chrome fill bytes. Raw platform bytes (NOT pen_to_byte) so the CPC
-; image stays byte-identical. Screen 6 packs four linear 2-bit pixels per byte,
-; so CPC's split-bitplane #F0/#0F values must not be written there directly:
-; they decode as red/blue blocks instead of solid light/dark pens (#406).
-; PCW's CGA2 permutation likewise needs its own native constants.
+; Window-chrome fill bytes in the compact four-pen UI representation (NOT
+; pen_to_byte), so the CPC image stays byte-identical. MSX Screen 6 uses this
+; representation natively and Screen 7 expands it at the display boundary.
+; CPC's split-bitplane #F0/#0F values therefore cannot be used for MSX; PCW's
+; CGA2 permutation likewise needs its own constants.
                 ifdef PLATFORM_PCW
 KWB_PAPER       equ   #55           ; pen 0 (cyan interior)
 KWB_LIGHT       equ   #FF           ; pen 1 (white title base / gadgets)
 KWB_DARK        equ   #00           ; pen 2 (black stripes / squares)
                 else
                 ifdef PLATFORM_MSX
-KWB_LIGHT       equ   #55           ; Screen 6 pen 1: 01 01 01 01
-KWB_DARK        equ   #AA           ; Screen 6 pen 2: 10 10 10 10
+KWB_LIGHT       equ   #55           ; packed UI pen 1: 01 01 01 01
+KWB_DARK        equ   #AA           ; packed UI pen 2: 10 10 10 10
                 else
 KWB_LIGHT       equ   #F0           ; CPC Mode-1 pen 1
 KWB_DARK        equ   #0F           ; CPC pen 2
@@ -639,6 +640,13 @@ PIC_CHUNK       equ   #1C00
 k_pic_open
                 xor   a
                 ld    (PIC_PAGE2),a
+                ifdef PLATFORM_MSX
+                ld    (PIC_PAGE3),a
+                ld    (PIC_PAGE4),a
+                ld    (PIC_MODE),a
+                ld    (PIC_STRIDE),a
+                ld    (PIC_STRIDE+1),a
+                endif
                 call  wm_alloc_page          ; A = a free app-pool page, or 0 = none free
                 or    a
                 ret   z                        ; -> A=0, caller uses its in-page buffer
@@ -651,8 +659,10 @@ kpo_loop        call  focus_arg_ptr          ; fs_req_name = the focused window'
                 ld    de,fs_req_name         ; chunk; data-module loads overwrite fs_req_name.
                 call  copy11
                 ld    hl,(PIC_OFS)
+                ifndef MSX_SCREEN7
                 bit   7,h
                 jp    nz,kpo_fail            ; <32K: two 16K picture banks
+                endif
                 ld    a,l
                 ld    (FS_LOAD_OFS),a
                 ld    a,h
@@ -661,6 +671,54 @@ kpo_loop        call  focus_arg_ptr          ; fs_req_name = the focused window'
                 ld    (FS_LOAD_OFS+2),a
                 ld    a,1
                 ld    (FS_XFLAGS),a
+                ifdef MSX_SCREEN7
+                ld    a,h                     ; one 16K mapper segment per file quarter
+                and   #C0
+                jr    z,kpo_page1
+                cp    #40
+                jr    z,kpo_page2
+                cp    #80
+                jr    z,kpo_page3
+                jr    kpo_page4
+kpo_page1       ld    a,(PIC_PAGE)
+                jr    kpo_have_page
+kpo_page2       ld    a,(PIC_PAGE2)
+                or    a
+                jr    nz,kpo_have_page
+                call  wm_alloc_page
+                or    a
+                jp    z,kpo_fail
+                ld    (PIC_PAGE2),a
+                jr    kpo_have_page
+kpo_page3       ld    a,(PIC_PAGE3)
+                or    a
+                jr    nz,kpo_have_page
+                call  wm_alloc_page
+                or    a
+                jp    z,kpo_fail
+                ld    (PIC_PAGE3),a
+                jr    kpo_have_page
+kpo_page4       ld    a,(PIC_PAGE4)
+                or    a
+                jr    nz,kpo_have_page
+                call  wm_alloc_page
+                or    a
+                jp    z,kpo_fail
+                ld    (PIC_PAGE4),a
+kpo_have_page   call  bank_set
+                ld    hl,(PIC_OFS)
+                ld    a,h                     ; CPU address = #4000 + (offset & #3FFF)
+                and   #3F
+                or    #40
+                ld    h,a
+                ld    de,#8000                ; bytes left in this mapper window
+                ex    de,hl                   ; DE = destination, HL = #8000
+                or    a
+                sbc   hl,de
+                push  hl
+                ld    (fs_load_dst),de
+                jr    kpo_have_room
+                else
                 bit   6,h
                 jr    nz,kpo_page2
                 ld    a,(PIC_PAGE)
@@ -689,6 +747,8 @@ kpo_have2       call  bank_set
                 push  hl
                 ld    hl,(PIC_OFS)            ; offset #4000..#7FFF maps directly in bank 2
 kpo_have_dst    ld    (fs_load_dst),hl
+                endif
+kpo_have_room
                 pop   hl
                 ld    de,PIC_CHUNK
                 push  hl
@@ -719,6 +779,9 @@ kpo_got         ld    b,h
                 ld    c,l
                 ld    de,(PIC_OFS)
                 add   hl,de
+                ifdef MSX_SCREEN7
+                jp    c,kpo_fail              ; this service deliberately caps files below 64K
+                endif
                 ld    (PIC_OFS),hl
                 ld    hl,(fs_load_max)
                 or    a
@@ -726,7 +789,100 @@ kpo_got         ld    b,h
                 jp    z,kpo_loop             ; full chunk: there may be more
 kpo_done_load   ld    a,(PIC_PAGE)
                 call  bank_set               ; parse the header from the first picture bank
+                ifdef PLATFORM_MSX
                 ld    a,(#4000)              ; validate the "GBPC" magic
+                cp    'G'
+                jp    nz,kpo_fail
+                ld    a,(#4001)
+                cp    'B'
+                jp    nz,kpo_fail
+                ld    a,(#4002)
+                cp    'P'
+                jp    nz,kpo_fail
+                ld    a,(#4003)
+                cp    'C'
+                jp    nz,kpo_fail
+                ld    a,(#4004)              ; version: 2 = v2 (else v1)
+                cp    2
+                jr    nz,kpo_v1
+                ld    a,(#4005)              ; 1=canonical 2bpp, 6=legacy native
+                cp    1
+                jr    z,kpo_v2_mode1
+                cp    6
+                jr    z,kpo_v2_mode1
+                ifdef MSX_SCREEN7
+                cp    7                       ; Screen-7 linear 4bpp (two pixels/byte)
+                jp    nz,kpo_fail
+                ld    a,7
+                ld    (PIC_MODE),a
+                jr    kpo_v2_dims
+                else
+                jp    kpo_fail                ; this backend cannot display Screen-7 pictures
+                endif
+kpo_v2_mode1
+                ifdef PLATFORM_MSX
+                ld    a,1
+                ld    (PIC_MODE),a
+                endif
+kpo_v2_dims
+                ld    hl,(#4006)            ; v2: pic_wb = (width + 3) >> 2
+                inc   hl
+                inc   hl
+                inc   hl
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    a,h
+                or    a
+                jp    nz,kpo_fail
+                ld    a,l
+                or    a
+                jp    z,kpo_fail
+                cp    129                    ; display width must fit 512 Screen-7 pixels
+                jp    nc,kpo_fail
+                ld    (PIC_WB),a
+                ifdef PLATFORM_MSX
+                ld    a,(PIC_MODE)
+                cp    7
+                jr    z,kpo_v2_stride7
+                ld    a,(PIC_WB)
+                ld    l,a
+                ld    h,0
+                jr    kpo_v2_stride_done
+kpo_v2_stride7 ld    hl,(#4006)              ; mode 7: two pixels per source byte
+                inc   hl
+                srl   h
+                rr    l
+kpo_v2_stride_done
+                ld    (PIC_STRIDE),hl
+                endif
+                ld    hl,(#4008)            ; height (rows), 16-bit (tall pics > 255, #166)
+                ld    (PIC_H),hl
+                ld    a,14                   ; bitmap offset
+                ld    (PIC_OFF),a
+                jr    kpo_ok
+kpo_v1          ld    a,(#4004)             ; v1: byte width, then height, bitmap at +6
+                ld    (PIC_WB),a
+                ifdef PLATFORM_MSX
+                ld    (PIC_STRIDE),a
+                xor   a
+                ld    (PIC_STRIDE+1),a
+                inc   a
+                ld    (PIC_MODE),a
+                endif
+                ld    a,(#4005)
+                ld    l,a
+                ld    h,0
+                ld    (PIC_H),hl
+                ld    a,6
+                ld    (PIC_OFF),a
+kpo_ok
+                else
+                ; Keep the compact CPC/PCW parser byte-identical. Those targets
+                ; never stage the MSX-only mode-7 pictures, and resident CPC
+                ; kernels do not have room for the extended validation path.
+                ld    a,(#4000)
                 cp    'G'
                 jr    nz,kpo_fail
                 ld    a,(#4001)
@@ -738,18 +894,18 @@ kpo_done_load   ld    a,(PIC_PAGE)
                 ld    a,(#4003)
                 cp    'C'
                 jr    nz,kpo_fail
-                ld    a,(#4004)              ; version: 2 = v2 (else v1), as the Viewer's parse_pic
+                ld    a,(#4004)
                 cp    2
                 jr    nz,kpo_v1
                 ifdef PIC_RUNTIME_CONVERT
-                ld    a,(#4005)              ; portable mode 1, or a legacy native mode-6 file
+                ld    a,(#4005)
                 cp    1
                 jr    z,kpo_v2_mode_ok
                 cp    6
-                jp    nz,kpo_fail             ; unknown packing: do not display corrupt bytes
+                jp    nz,kpo_fail
 kpo_v2_mode_ok
                 endif
-                ld    hl,(#4006)            ; v2: pic_wb = (width + 3) >> 2
+                ld    hl,(#4006)
                 inc   hl
                 inc   hl
                 inc   hl
@@ -759,12 +915,12 @@ kpo_v2_mode_ok
                 rr    l
                 ld    a,l
                 ld    (PIC_WB),a
-                ld    hl,(#4008)            ; height (rows), 16-bit (tall pics > 255, #166)
+                ld    hl,(#4008)
                 ld    (PIC_H),hl
-                ld    a,14                   ; bitmap offset
+                ld    a,14
                 ld    (PIC_OFF),a
                 jr    kpo_ok
-kpo_v1          ld    a,(#4004)             ; v1: byte width, then height, bitmap at +6
+kpo_v1          ld    a,(#4004)
                 ld    (PIC_WB),a
                 ld    a,(#4005)
                 ld    l,a
@@ -773,6 +929,7 @@ kpo_v1          ld    a,(#4004)             ; v1: byte width, then height, bitma
                 ld    a,6
                 ld    (PIC_OFF),a
 kpo_ok
+                endif
                 ifdef PIC_RUNTIME_CONVERT
                 call  kpo_normalize_pic        ; legacy mode 6 -> canonical mode 1 in the bank
                 endif
@@ -787,6 +944,21 @@ kpo_fail        pop   af                       ; restore the Viewer's page, rele
                 call  bank_set
                 xor   a
                 ld    (FS_XFLAGS),a
+                ifdef MSX_SCREEN7
+                ld    a,(PIC_PAGE4)
+                or    a
+                jr    z,kpo_fail_3
+                call  wm_free_page
+                xor   a
+                ld    (PIC_PAGE4),a
+kpo_fail_3      ld    a,(PIC_PAGE3)
+                or    a
+                jr    z,kpo_fail_2
+                call  wm_free_page
+                xor   a
+                ld    (PIC_PAGE3),a
+kpo_fail_2
+                endif
                 ld    a,(PIC_PAGE2)
                 or    a
                 jr    z,kpo_fail_1
@@ -809,6 +981,110 @@ k_pic_blit
                 ld    (sb_y),a
                 ld    a,d
                 ld    (sb_w),a
+                ifdef MSX_SCREEN7
+                ld    a,1
+                ld    (sb_h),a
+                ld    a,e
+                ld    (bl_rows),a
+                ld    a,c
+                ld    (bl_y),a
+                ld    (kpb_off),hl
+                ld    a,(bank_cur)
+                push  af
+kpb_row
+                ld    hl,(kpb_off)
+                ld    (PIC_EDIT_OFF),hl       ; copy helper may advance this at a bank edge
+                ld    a,(sb_w)
+                ld    l,a
+                ld    h,0
+                ld    a,(PIC_MODE)
+                cp    7
+                jr    nz,kpb_count_ready
+                add   hl,hl                   ; mode 7 has two source bytes/4px column
+kpb_count_ready ld    b,h
+                ld    c,l
+                ld    de,MSX_ROWBUF
+                call  kpb_copy_to_row
+                or    a
+                jr    z,kpb_done
+                ld    hl,MSX_ROWBUF
+                ld    (sb_buf),hl
+                ld    a,(bl_y)
+                ld    (sb_y),a
+                ld    a,(PIC_MODE)
+                cp    7
+                jr    nz,kpb_mode1
+                call  restore_pic16_block
+                jr    kpb_drawn
+kpb_mode1       call  restore_pic_block
+kpb_drawn
+                ld    hl,(kpb_off)            ; next source row uses the file stride,
+                ld    de,(PIC_STRIDE)         ; not the clipped draw width
+                add   hl,de
+                ld    (kpb_off),hl
+                ld    a,(bl_y)
+                inc   a
+                ld    (bl_y),a
+                ld    a,(bl_rows)
+                dec   a
+                ld    (bl_rows),a
+                jr    nz,kpb_row
+kpb_done        pop   af
+                call  bank_set
+                ret
+
+; Copy BC bytes (at most one Screen-7 row) from banked picture offset
+; PIC_EDIT_OFF to DE. Remap once if the span crosses a 16K segment edge.
+kpb_copy_to_row
+                ld    (PIC_EDIT_BUF),de
+                ld    (fs_save_len),bc
+kpb_cp_map      ld    hl,(PIC_EDIT_OFF)
+                ld    a,h
+                and   #C0
+                ld    (kpb_pageq),a
+                jr    z,kpb_cp_page1
+                cp    #40
+                jr    z,kpb_cp_page2
+                cp    #80
+                jr    z,kpb_cp_page3
+                ld    a,(PIC_PAGE4)
+                jr    kpb_cp_have_page
+kpb_cp_page3    ld    a,(PIC_PAGE3)
+                jr    kpb_cp_have_page
+kpb_cp_page2    ld    a,(PIC_PAGE2)
+                jr    kpb_cp_have_page
+kpb_cp_page1    ld    a,(PIC_PAGE)
+kpb_cp_have_page
+                or    a
+                ret   z
+                call  bank_set
+                ld    hl,(PIC_EDIT_OFF)
+                ld    a,h
+                and   #3F
+                or    #40
+                ld    h,a                     ; HL = mapped CPU source address
+                ld    de,(PIC_EDIT_BUF)
+                ld    bc,(fs_save_len)
+kpb_cp_byte     ldi
+                ld    a,b
+                or    c
+                jr    z,kpb_cp_ok
+                bit   7,h                     ; #8000 = next mapper segment
+                jr    z,kpb_cp_byte
+                ld    (PIC_EDIT_BUF),de
+                ld    (fs_save_len),bc
+                ld    a,(kpb_pageq)
+                add   a,#40
+                ret   c                       ; past the fourth/64K segment
+                ld    h,a
+                ld    l,0
+                ld    (PIC_EDIT_OFF),hl
+                jr    kpb_cp_map
+kpb_cp_ok       ld    a,1
+                ret
+kpb_off         dw    0
+kpb_pageq       db    0
+                else
                 ld    a,e
                 ld    (sb_h),a
                 ld    a,(bank_cur)
@@ -833,6 +1109,7 @@ kpb_map         call  bank_set
 kpb_done        pop   af
                 call  bank_set
                 ret
+                endif
 
                 ifdef PIC_RUNTIME_CONVERT
 ; Normalize old platform-native mode-6 pictures once at load. New files already
@@ -918,8 +1195,9 @@ k_pic_edit
                 xor   a
                 ret
 
-; Convert a short canonical Mode-1 app buffer to native Screen-6 bytes without
-; changing the source. Paint uses this for its small in-page canvas; banked
+; Convert a short canonical Mode-1 app buffer to the active MSX UI-bitmap
+; representation without changing the source. Paint uses this for its small
+; in-page canvas; banked
 ; pictures use restore_pic_block directly. PIC_EDIT_BUF=source,
 ; PIC_EDIT_OFF=destination, fs_save_len=count.
 kpe_native      ld    hl,(PIC_EDIT_BUF)
@@ -1161,6 +1439,21 @@ kpep_map        push  bc
 
 ; k_pic_close (GB_PICCLOSE): release the borrowed picture bank(s).
 k_pic_close
+                ifdef MSX_SCREEN7
+                ld    a,(PIC_PAGE4)
+                or    a
+                jr    z,kpc_third
+                call  wm_free_page
+                xor   a
+                ld    (PIC_PAGE4),a
+kpc_third       ld    a,(PIC_PAGE3)
+                or    a
+                jr    z,kpc_second
+                call  wm_free_page
+                xor   a
+                ld    (PIC_PAGE3),a
+kpc_second
+                endif
                 ld    a,(PIC_PAGE2)
                 or    a
                 jr    z,kpc_first
@@ -2718,7 +3011,7 @@ k_mxp
                 include "clock_msx.asm"        ; software clock only (H.TIMI-paced, #287)
                 include "clock_state.inc"
 
-                include "../lib/msx/screen.asm" ; V9938 Screen 6 driver (+ shared screen_clip)
+                include "../lib/msx/screen.asm" ; selected V9938 driver (+ shared screen_clip)
                 include "clock_msx_rtc.asm"    ; RTC seed helper after page-aligned picture LUTs
                 include "../lib/msx/text.asm"
                 include "../lib/msx/cursor.asm" ; hardware-sprite pointer

@@ -19,8 +19,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`build_kernel_pcw.sh`** — builds the standalone PCW boot disk, companion
   disk, and 720K `EXTRAS.DSK`. The extras build stages the PCW payloads from
   sibling GB-PAINT and GB-BASIC checkouts.
-- **`build_kernel_msx.sh`** — builds `GBMSX.COM`, the MSX2 app/module payload,
-  and the bootable Nextor `QA/GBMSX.IMG`. Set `MSX_UNAPI_TSR` to stage a local
+- **`build_kernel_msx.sh`** — builds the `GBMSX.COM` video-mode selector,
+  `GBMSX6.COM`, `GBMSX7.COM`, the MSX2 app/module payload, and the bootable
+  Nextor `QA/GBMSX.IMG`. Set `MSX_UNAPI_TSR` to stage a local
   openMSXnet `UNAPINET.COM` before `GBMSX.COM`; the TSR remains untracked.
 - **`run_msx.sh`** — launches the MSX2 image in native or Flatpak openMSX.
   It adds openMSXnet's `unapinet` extension by default when using its custom
@@ -89,8 +90,10 @@ Build the on-demand kernel modules (loaded into a bank and `call`ed): config
   from an icon asm source while preserving the set's slot count and layout.
 - **`packfont.py` / `genfont.py`** — pack an 8×8 asm font into a `.FNT`, or generate
   the 6×8 `DEFAULT.FNT` procedurally.
-- **`picconv.py`** — convert a PNG to the portable, canonical Mode-1 GBPC v2
-  `.PIC` format (GUI or CLI); the same file runs on CPC, MSX2, and PCW.
+- **`picconv.py`** — convert an image to portable four-colour GBPC v2 (the
+  default) or an MSX Screen 7 sixteen-colour `.PIC` (`--colors 16`), using
+  either the GUI or CLI. Width and height can be entered independently; leave
+  either one blank to preserve the source aspect ratio.
 - **`gen_pic_luts.py`** — generate and verify the reversible MSX2/PCW picture
   display lookup tables used by the kernels.
 - **`png2backdrop.py` / `patternedit.py`** — create or edit portable canonical

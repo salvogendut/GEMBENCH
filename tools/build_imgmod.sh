@@ -7,6 +7,7 @@ OUT="${1:-build/GBIMG.RAW}"
 GB="lib/gb"
 SRC="kernel/kc/gbimg_mod.c"
 SDCC="${SDCC:-sdcc}"
+APPDEFS="${APPDEFS:-}"
 BIN="$(dirname "$(command -v "$SDCC")")"
 SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
@@ -16,7 +17,7 @@ mkdir -p "$work" "$(dirname "$OUT")"
 
 deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" "$SRC")
 stamp="$OUT.stamp"
-cache_key=$(printf '%s\n' "build_imgmod.v1" "SDCC=$SDCC" "SDAS=$SDAS" "MAKEBIN=$MAKEBIN")
+cache_key=$(printf '%s\n' "build_imgmod.v2" "SDCC=$SDCC" "APPDEFS=$APPDEFS" "SDAS=$SDAS" "MAKEBIN=$MAKEBIN")
 if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
     echo "Up to date $OUT ($(stat -c%s "$OUT") bytes)"
     exit 0
@@ -24,7 +25,7 @@ fi
 
 "$SDAS" -o "$work/crt0.rel" "$GB/crt0.s"
 "$SDAS" -o "$work/gblib.rel" "$GB/gblib.s"
-"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$SRC" -o "$work/gbimg_mod.rel"
+"$SDCC" -mz80 --fomit-frame-pointer $APPDEFS -I "$GB" -c "$SRC" -o "$work/gbimg_mod.rel"
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x6000 --data-loc 0x7F00 \
     "$work/crt0.rel" "$work/gbimg_mod.rel" "$work/gblib.rel" -o "$work/mod.ihx"
 

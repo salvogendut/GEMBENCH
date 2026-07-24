@@ -30,9 +30,7 @@ GLINE_Y0        equ   #C032        ; (screen pixels, top-left origin) + pen byte
 GLINE_X1        equ   #C034        ; Page-3 cells so the clock's inline asm can fill
 GLINE_Y1        equ   #C036        ; them whatever segment its window has mapped.
 GLINE_PEN       equ   #C038
-MSX_ROWBUF      equ   #C080        ; 128-byte row buffer for VRAM read-modify-write
-MSX_BDSTRIP     equ   #C100        ; 16 x 128-byte pre-rendered backdrop tile strip
-                                   ; (#C100..#C8FF; fill_pattern streams rows from it)
+MSX_ROWBUF      equ   #C080        ; 256-byte Screen-7 row buffer (#C080..#C17F)
 ; NOTE (#287 M1 debugging): DOS 2 / Nextor's kernel data occupies page 3 well
 ; below #F380 (the mapper jump table itself sits around #F200, jumping into
 ; code near #EC00) - the DOS 1 "system area starts at #F380" rule does NOT
