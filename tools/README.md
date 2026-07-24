@@ -71,7 +71,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 Build the on-demand kernel modules (loaded into a bank and `call`ed): config
 (`build_cfgmod.sh`), FAT write (`build_fatmod.sh`), floppy write
 (`build_floppymod.sh`), M4 save (`build_m4savemod.sh`), dialogs/UI
-(`build_uimod.sh`), and networking (`build_netmod.sh`, `build_m4netmod.sh`);
+(`build_uimod.sh`, which also embeds the root `VERSION` and current Git commit
+for System > About GEOBENCH), and networking (`build_netmod.sh`, `build_m4netmod.sh`);
 `build_kmod.sh` is the shared helper used by the smaller asm/C module scripts.
 
 ## Asset converters

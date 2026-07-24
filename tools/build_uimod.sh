@@ -22,11 +22,25 @@ mkdir -p "$work"
 mkdir -p "$(dirname "$OUT")"
 . tools/build_cache.sh
 
+BUILD_VERSION="${VERSION:-$(tr -d '\r\n' < VERSION)}"
+BUILD_COMMIT="${GIT_COMMIT:-$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)}"
+case "$BUILD_VERSION" in
+    ""|*[!A-Za-z0-9._+-]*) echo "ERROR: invalid VERSION: $BUILD_VERSION" >&2; exit 2 ;;
+esac
+[ "${#BUILD_VERSION}" -le 12 ] || { echo "ERROR: VERSION is longer than 12 characters" >&2; exit 2; }
+case "$BUILD_COMMIT" in
+    ""|*[!A-Za-z0-9._+-]*) echo "ERROR: invalid GIT_COMMIT: $BUILD_COMMIT" >&2; exit 2 ;;
+esac
+[ "${#BUILD_COMMIT}" -le 13 ] || { echo "ERROR: GIT_COMMIT is longer than 13 characters" >&2; exit 2; }
+BUILD_DEFS=(-DGB_VERSION="\"$BUILD_VERSION\"" -DGB_GIT="\"$BUILD_COMMIT\"")
+
 deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" \
-      "$GB/gbdlg.c" "$GB/gbprompt.c" "$GB/gbpick.c" "$KC/gbui_mod.c")
+      "$GB/gbdlg.c" "$GB/gbprompt.c" "$GB/gbpick.c" "$KC/gbui_mod.c" "VERSION")
 stamp="$OUT.stamp"
 cache_key=$(printf '%s\n' \
-    "build_uimod.v1" \
+    "build_uimod.v2" \
+    "VERSION=$BUILD_VERSION" \
+    "GIT=$BUILD_COMMIT" \
     "SDCC=$SDCC" \
     "SDAS=$SDAS" \
     "MAKEBIN=$MAKEBIN")
@@ -37,12 +51,12 @@ fi
 
 "$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
 "$SDAS" -o "$work/gblib.rel" "$GB/gblib.s"
-"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$KC/gbui_mod.c" -o "$work/gbui_mod.rel"
+"$SDCC" -mz80 --fomit-frame-pointer "${BUILD_DEFS[@]}" -I "$GB" -c "$KC/gbui_mod.c" -o "$work/gbui_mod.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdlg.c"    -o "$work/gbdlg.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbprompt.c" -o "$work/gbprompt.rel"
 "$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbpick.c"   -o "$work/gbpick.rel"
 # code at #6000 (the module load address); data above it, all below the kernel (#8000).
-"$SDCC" -mz80 --no-std-crt0 --code-loc 0x6000 --data-loc 0x7400 \
+"$SDCC" -mz80 --no-std-crt0 --code-loc 0x6000 --data-loc 0x74C0 \
     "$work/crt0.rel" "$work/gbui_mod.rel" "$work/gbdlg.rel" "$work/gbprompt.rel" \
     "$work/gbpick.rel" "$work/gblib.rel" -o "$work/mod.ihx"
 
@@ -58,7 +72,7 @@ LOAD = ('_CODE','_GSINIT','_GSFINAL','_INITIALIZER')
 img = max((area[a][0]+area[a][1]) for a in LOAD if a in area)
 top = max((s+sz) for s,sz in area.values()) if area else 0
 e=[]
-if img > 0x7400: e.append('image ends 0x%04X > data-loc 0x7400'%img)
+if img > 0x74C0: e.append('image ends 0x%04X > data-loc 0x74C0'%img)
 if top > 0x8000: e.append('data/bss ends 0x%04X > 0x8000'%top)
 if e: sys.stderr.write('FIT ERROR (GBUI): '+'; '.join(e)+'\n'); sys.exit(1)
 PY

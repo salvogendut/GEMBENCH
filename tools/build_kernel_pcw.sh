@@ -38,7 +38,7 @@ mkdir -p build/pcw QA/PCW
 
 # --- the C apps, compiled with the PCW geometry (same DATA_LOCs as CPC/MSX) --
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
-APPDEFS="-DGB_PCW" DATA_LOC=0x6D20 DOC=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x6D80 DOC=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7A00 DIALOGS=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW

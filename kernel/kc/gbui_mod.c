@@ -28,6 +28,14 @@
 #define UI_OP_PICKDIR  4
 #define UI_OP_BROWSER  5
 #define UI_OP_BSAVE_AS 8
+#define UI_OP_ABOUT    24
+
+#ifndef GB_VERSION
+#define GB_VERSION "unknown"
+#endif
+#ifndef GB_GIT
+#define GB_GIT "unknown"
+#endif
 
 /* Browser's low-RAM transfer block. The non-visual source/config operations
  * live in GBWEB.MOD; this dialog module only needs their status and proxy text. */
@@ -47,6 +55,26 @@
 static const char *const browser_file[] = { "Load", "Save" };
 static const char *const browser_settings[] = { "Proxy...", "Direct" };
 static const char *const html_exts[] = { "HTM", 0 };
+static const char about_title[] = "GEOBENCH (C) salvogendut 2026";
+static const char about_build[] = "Version : " GB_VERSION " Git: " GB_GIT;
+static const char *const about_buttons[] = { "  OK  " };
+
+/* about_dialog: a compact modal notice with one real button. UI_COL/UI_LINE are
+ * supplied by the target-specific desktop so the shared GBUI.MOD remains centred
+ * on the 320-, 360-, and 512-pixel desktops. The desktop repaints after GB_UI
+ * returns, so this transient box does not need another save-under allocation. */
+static void about_dialog(void)
+{
+    unsigned char x = UI_COL, y = UI_LINE;
+
+    gb_curhide();
+    gb_fill(x, y, 60, 50, 1);
+    gb_frame(x, y, 60, 50, 2);
+    gb_textbw((unsigned char)(x + 3), (unsigned char)(y + 5), about_title);
+    gb_textbw((unsigned char)(x + 3), (unsigned char)(y + 17), about_build);
+    gb_curshow();
+    gb_popup((unsigned char)(x + 23), (unsigned char)(y + 30), about_buttons, 1);
+}
 
 static void browser_to_83(const char *src)
 {
@@ -117,5 +145,7 @@ void main(void)
         browser_menu();
     } else if (UI_OP == UI_OP_BSAVE_AS) {
         browser_save_as();
+    } else if (UI_OP == UI_OP_ABOUT) {
+        about_dialog();
     }
 }

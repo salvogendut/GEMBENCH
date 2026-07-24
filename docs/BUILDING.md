@@ -22,6 +22,10 @@ bash tools/build_kernel.sh
 The repository also has a thin top-level Makefile: `make cpc`, `make msx`,
 `make pcw`, `make all`, and `make check` wrap the same scripts and static checks.
 
+The About dialog reads the release version from the root `VERSION` file and bakes
+that value plus the current 12-character Git commit into `GBUI.MOD`. Override
+either value for a packaged build with `VERSION=...` or `GIT_COMMIT=...`.
+
 This stages these outputs (the staged media under `QA/` are committed, so you
 can test or deploy without rebuilding first):
 

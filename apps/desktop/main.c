@@ -115,10 +115,14 @@ static void draw_icon(unsigned char i)
 #define CLIP_Y_K   (*(volatile unsigned char *)0x1339)
 #define CLIP_W_K   (*(volatile unsigned char *)0x133A)
 #define CLIP_H_K   (*(volatile unsigned char *)0x133B)
+#define UI_OP_K    (*(volatile unsigned char *)0x1700)
+#define UI_COL_K   (*(volatile unsigned char *)0x1701)
+#define UI_LINE_K  (*(volatile unsigned char *)0x1702)
 #define UI_MODAL_K (*(volatile unsigned char *)0x1705)
 #define BD_NAME_K  ((const char *)0x1231)
 #define BD_DRIVE_K (*(volatile unsigned char *)0x123C)
 #define BD_SOLID_K (*(volatile unsigned char *)0x1290)
+extern unsigned char gb_ui(void);
 static unsigned char wp_bank;                 /* borrowed bank (0 = none) */
 static unsigned char wp_bank2;                /* optional second wallpaper picture bank */
 static unsigned char wp_wb, wp_x, wp_y;       /* picture width + centred top-left */
@@ -752,8 +756,9 @@ static void tidy_icons(void)
 }
 
 /* sys_action: the System menu handler, dispatched by the gb_doc framework (#142). */
-static const char *const sys_items[6] = {
-    "Ram Usage", "Refresh Media", "Tidy Icons", "Settings", "Activate screensaver", "Exit to DOS"
+static const char *const sys_items[7] = {
+    "Ram Usage", "Refresh Media", "Tidy Icons", "Settings", "Activate screensaver",
+    "About GEOBENCH", "Exit to DOS"
 };
 static void sys_action(unsigned char sel)
 {
@@ -781,7 +786,14 @@ static void sys_action(unsigned char sel)
                                                   whatever the SAVER= idle timeout - defer the open
                                                   past gb_doc_frame's repaint, like Settings. */
         want_saver = 1;
-    } else if (sel == 5) {                     /* Exit to DOS */
+    } else if (sel == 5) {                     /* About GEOBENCH (#409): GBUI owns the
+                                                  strings and modal renderer, keeping them
+                                                  out of this tight desktop bank. */
+        UI_OP_K = 24;
+        UI_COL_K = (GB_COLS - 60) / 2;
+        UI_LINE_K = (GB_LINES - 50) / 2;
+        gb_ui();
+    } else if (sel == 6) {                     /* Exit to DOS */
         gb_exit();                              /* does not return */
     }
 }
@@ -833,14 +845,14 @@ static void on_frame(void)
                                                     pointers cannot leave System unclickable. */
         menu_inited = 1;
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
-        gb_menu_add("System", sys_items, 6, sys_action);
+        gb_menu_add("System", sys_items, 7, sys_action);
     }
     if (menu_refresh && background_changed()) { /* backdrop/wallpaper changed while a child was up:
                                                     reload outside wm_repaint_all, then repaint once. */
         background_init();
         gb_doc(&deskdoc);                        /* keep the desktop menu definition fresh after the
                                                     reload before we repaint the desktop. */
-        gb_menu_add("System", sys_items, 6, sys_action);
+        gb_menu_add("System", sys_items, 7, sys_action);
         gb_curhide();
         gb_wm_damage(0, 0, GB_COLS, GB_LINES);
         paint();
