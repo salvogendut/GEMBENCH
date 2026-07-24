@@ -29,6 +29,7 @@
 #define KCFG_INKS      ((unsigned char *)0x122C)   /* out: 4 pen inks + border (INKS=) */
 #define KCFG_BDPNAME   ((char *)0x1231)            /* out: BACKDROP tile filename (11-byte 8.3) */
 #define KCFG_BDDRIVE   (*(unsigned char *)0x123C)  /* out: 0/1/2=C/A/B, 0xFF=boot/system */
+#define KCFG_FRAMEPEN  (*(unsigned char *)0x133C)  /* out: visible window-frame pen */
 #define KCFG_BD_SOLID  (*(unsigned char *)0x1290)  /* out: 1 = solid desktop (BACKDROP=SOLID/absent) */
 #define FS_REQ_NAME    ((char *)0x14EC)            /* out: boot_splash consumes this filename */
 /* WALLPAPER= is NOT parsed here (#212/#216): every free low-RAM transfer cell collides with
@@ -40,6 +41,14 @@ static void set_default(char *stem)     /* "DEFAULT" + NUL */
 {
     stem[0] = 'D'; stem[1] = 'E'; stem[2] = 'F'; stem[3] = 'A';
     stem[4] = 'U'; stem[5] = 'L'; stem[6] = 'T'; stem[7] = 0;
+}
+
+static unsigned char frame_pen(const unsigned char *inks)
+{
+    if (inks[2] != inks[0]) return 2;   /* configured Edge contrasts with Paper */
+    if (inks[1] != inks[0]) return 1;   /* otherwise prefer Text */
+    if (inks[3] != inks[0]) return 3;   /* then Accent */
+    return 2;                           /* no contrasting configured pen exists */
 }
 
 void main(void)
@@ -61,6 +70,7 @@ void main(void)
     KCFG_INKS[4] = 1;
     gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, backdrop,
                  &KCFG_BDDRIVE, KCFG_INKS, &debug);
+    KCFG_FRAMEPEN = frame_pen(KCFG_INKS);
     gb_make_83(icons,    "IST", KCFG_ICONNAME);
     gb_make_83(font,     "FNT", KCFG_FONTNAME);
     gb_make_83(cursor,   "SPR", KCFG_CURSORNAME);

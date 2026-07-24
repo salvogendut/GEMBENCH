@@ -97,6 +97,8 @@ static const setting_t rows[] = {
 #define BD_SOLID_ADDR 0x1290   /* kernel BD_SOLID flag */
 #define BD_DRIVE_ADDR 0x123C   /* kernel KCFG_BDDRIVE: selected backdrop drive */
 #define BD_TILE_ADDR  0x1250   /* kernel BD_TILE: the loaded 16x16 backdrop tile (#216) */
+#define KCFG_INKS_ADDR ((volatile unsigned char *)0x122C)
+#define KCFG_FRAMEPEN_ADDR (*(volatile unsigned char *)0x133C)
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
    512-byte sectors, so a smaller buffer would overflow into the globals after it). */
@@ -494,6 +496,14 @@ __endasm;
 #endif
 static void apply_colour(unsigned char i, unsigned char ink)
 {
+    unsigned char frame_pen = 2;
+    ink_cur[i] = ink;
+    KCFG_INKS_ADDR[i] = ink;   /* keep live chrome decisions in step with the preview */
+    if (ink_cur[2] == ink_cur[0]) {
+        if (ink_cur[1] != ink_cur[0]) frame_pen = 1;
+        else if (ink_cur[3] != ink_cur[0]) frame_pen = 3;
+    }
+    KCFG_FRAMEPEN_ADDR = frame_pen;
     si_ink = ink;
 #if defined(GB_MSX2) || defined(GB_PCW)
     si_pen = i;                 /* pen 0-3, or 4 = border - GB_SETINK handles both */
@@ -627,9 +637,7 @@ static void colours_dialog(void)
     }
     if (flags & GB_QUIT) while (gb_poll() & GB_QUIT) ;   /* swallow the ESC repeat */
     gb_modal_set(0);
-    gb_curhide();
-    s_draw();
-    gb_curshow();
+    gb_restore_parent();       /* palette roles changed: redraw every managed frame */
 }
 
 /* ---- screensaver: module (SAVER=) + idle timeout (SAVERTIME=, #219) ---------- */

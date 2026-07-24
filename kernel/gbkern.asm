@@ -410,15 +410,13 @@ kf_stripe       ld    a,(kf_sy)
                 add   a,2
                 ld    (kf_sy),a
                 djnz  kf_stripe
-                ld    a,(kw_x)               ; black borders via k_frame (all 4 edges; the
-                ld    b,a                     ; top edge coincides with the first title
-                ld    a,(kw_y)               ; stripe, so it is behavior-neutral) - was
-                ld    c,a                     ; three separate left/right/bottom fills
-                ld    a,(kw_w)
-                ld    d,a
-                ld    a,(kw_h)
-                ld    e,a
-                ld    a,2                     ; pen 2 = black (#0F)
+                ld    hl,(kw_x)              ; black borders via k_frame (all 4 edges; the
+                ld    b,l                    ; top edge coincides with the first title
+                ld    c,h                    ; stripe, so it is behavior-neutral) - was
+                ld    hl,(kw_w)              ; three separate left/right/bottom fills
+                ld    d,l
+                ld    e,h
+                ld    a,(KCFG_FRAMEPEN)      ; Edge, or a preselected contrasting UI pen
                 call  k_frame
                 ld    a,KWB_LIGHT             ; close gadget (light): (x+1, y+2, 2, 10)
                 ld    (fb_val),a
