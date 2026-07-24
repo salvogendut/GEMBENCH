@@ -348,17 +348,22 @@ gad_x_str       db    "X",0
                 endif
 
 ; Window-chrome fill bytes. Raw platform bytes (NOT pen_to_byte) so the CPC
-; image stays byte-identical; the MSX look (red-striped title bars) is that
-; platform's established character. The PCW's CGA2 permutation makes the CPC
-; literals wrong there (#331: #00 is hardware BLACK - it showed as a black
-; gap line under every File Manager icon row), so it gets its own set.
+; image stays byte-identical. Screen 6 packs four linear 2-bit pixels per byte,
+; so CPC's split-bitplane #F0/#0F values must not be written there directly:
+; they decode as red/blue blocks instead of solid light/dark pens (#406).
+; PCW's CGA2 permutation likewise needs its own native constants.
                 ifdef PLATFORM_PCW
 KWB_PAPER       equ   #55           ; pen 0 (cyan interior)
 KWB_LIGHT       equ   #FF           ; pen 1 (white title base / gadgets)
 KWB_DARK        equ   #00           ; pen 2 (black stripes / squares)
                 else
-KWB_LIGHT       equ   #F0           ; CPC pen 1 (Screen-6: the MSX red look)
+                ifdef PLATFORM_MSX
+KWB_LIGHT       equ   #55           ; Screen 6 pen 1: 01 01 01 01
+KWB_DARK        equ   #AA           ; Screen 6 pen 2: 10 10 10 10
+                else
+KWB_LIGHT       equ   #F0           ; CPC Mode-1 pen 1
 KWB_DARK        equ   #0F           ; CPC pen 2
+                endif
                 endif
 
 ; kwin_frame: paper interior, striped title bar + borders, light close gadget.
