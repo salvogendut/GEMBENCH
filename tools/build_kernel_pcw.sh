@@ -41,7 +41,7 @@ python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjon
 APPDEFS="-DGB_PCW" DATA_LOC=0x6D80 DOC=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
-APPDEFS="-DGB_PCW" DATA_LOC=0x7A00 DIALOGS=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x7B00 DIALOGS=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x68C0 DOCRO=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
 APPDEFS="-DGB_PCW" DOC=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
@@ -109,9 +109,11 @@ rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
 
 # --- the bootable disc -----------------------------------------------------------
 printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nTIMESYNC=true\r\nTIMEZONE=+2\r\nPROXY=\r\n' > build/pcw/GEOBENCH.CFG
+cp build/pcw/GEOBENCH.CFG build/pcw/DEFAULT.CFG
 python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
     --add build/pcw/GEOBENCH.CFG=GEOBENCH.CFG \
+    --add build/pcw/DEFAULT.CFG=DEFAULT.CFG \
     --add build/GBCFG.RAW=GBCFG.MOD \
     --add build/GBUI.RAW=GBUI.MOD \
     --add build/GBWEB.RAW=GBWEB.MOD \

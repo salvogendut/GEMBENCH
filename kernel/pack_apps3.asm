@@ -12,6 +12,9 @@
 cfg_geobench    incbin "../build/GEOBENCH.CFG"  ; #205: default config at the floppy root - the
 cfg_geobench_e                                  ; Settings app reads/writes it (the card gets the
                 save  "GEOBENCH.CFG",cfg_geobench,cfg_geobench_e-cfg_geobench,DSK,"build/gbkern.dsk" ; same file via stage_dist.sh)
+cfg_default     incbin "../build/DEFAULT.CFG"   ; pristine source for Settings > Return to Defaults
+cfg_default_e
+                save  "DEFAULT.CFG",cfg_default,cfg_default_e-cfg_default,DSK,"build/gbkern.dsk"
 bdp_fancy       incbin "../build/FANCY.BDP"     ; backdrop tiles (BACKDROP=<name>, #128)
 bdp_fancy_e
                 save  "FANCY.BDP",bdp_fancy,bdp_fancy_e-bdp_fancy,DSK,"build/gbkern.dsk"

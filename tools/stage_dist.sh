@@ -47,6 +47,7 @@ python3 tools/amsdos_header.py build/M4DETECT.RAW "$OUT/M4DETECT.BIN" M4DETECT B
 python3 tools/amsdos_header.py build/GBALB.RAW "$OUT/GBALB.BIN" GBALB BIN 0x8000
 python3 tools/amsdos_header.py build/GBM4.RAW "$OUT/GBM4.BIN" GBM4 BIN 0x8000
 cp build/GEOBENCH.CFG "$OUT/GEOBENCH.CFG"   # #205: one source, shared with the floppy DSK (pack_apps3)
+cp build/DEFAULT.CFG "$SYS/DEFAULT.CFG"      # pristine copy used by Settings > Return to Defaults
 
 # --- /GBENCH: apps, modules, assets -------------------------------------------
 for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS DISKUTIL; do
