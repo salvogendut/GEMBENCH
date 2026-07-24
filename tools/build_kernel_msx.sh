@@ -40,7 +40,7 @@ GEOBENCH_ROOT="$(pwd)"
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
-APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6D80 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x7A00 DIALOGS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW

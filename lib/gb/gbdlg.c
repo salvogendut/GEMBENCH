@@ -52,10 +52,10 @@ static void pop_row(unsigned char x, unsigned char y,
  * dropdowns (File/Edit/View/System, <=8 short items); a taller popup (the file picker's
  * full directory list) doesn't fit and falls back to the old erase + damaged-repaint,
  * whose caller repaints behind it anyway. Lives in the paged GBUI module's data.
- * Sized so the System menu (its widest item "Activate screensaver" -> 33x64 = 2112 B)
- * still saves-under: a wide menu that overflowed fell back to erase, and gb_doc_frame's
- * cancel path doesn't repaint -> a hole in the wallpaper on close (#221). 2560 fits the
- * 2112-B System menu with margin while the GBUI module's data still ends below #8000. */
+ * Sized so the seven-row System menu (its widest item "Activate screensaver" ->
+ * 34x74 = 2516 B) still saves-under: a wide menu that overflowed fell back to erase,
+ * and gb_doc_frame's cancel path doesn't repaint -> a hole in the wallpaper on close
+ * (#221). 2560 leaves a small margin while GBUI module data still ends below #8000. */
 #define POP_BUFSZ 2560
 static unsigned char pop_under[POP_BUFSZ];
 
@@ -153,7 +153,10 @@ unsigned char gb_popup(unsigned char x, unsigned char y,
             hot = over;
         }
         if (flags & GB_QUIT) { esc = 1; break; }     /* ESC closes the menu */
-        if (flags & GB_CLICK) { if (over != 0xFF) sel = (unsigned char)(top + over); break; }
+        if (flags & GB_CLICK) {
+            if (over != 0xFF) { sel = (unsigned char)(top + over); break; }
+            if (n != 1) break;                  /* a one-button modal ignores stale/click-away input */
+        }
     }
     dlg_modal = 0;
     /* Consume the click/ESC that ended the menu so it doesn't leak into POLL_FLAGS,

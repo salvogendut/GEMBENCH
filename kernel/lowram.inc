@@ -147,7 +147,7 @@ CLIP_CAP        equ   510          ; (which ends #3E00), so it survives app swit
 ; kernel pages in the GBUI module (#6000 in PAGE_DATA) and CALLs it; it renders the
 ; dialog (popup/prompt/file-picker) and writes the result back here. The file-write
 ; modules reuse #1700..#1712 for their control header after modal UI returns.
-UI_OP           equ   #1700        ; op: 1 popup, 2 prompt, 3 pickfile, 4 pickdir
+UI_OP           equ   #1700        ; op: 1 popup, 2 prompt, 3 pickfile, 4 pickdir, 24 About
 UI_COL          equ   #1701        ; arg: column
 UI_LINE         equ   #1702        ; arg: line
 UI_N            equ   #1703        ; arg: popup label count / prompt maxlen
