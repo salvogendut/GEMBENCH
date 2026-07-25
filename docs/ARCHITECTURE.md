@@ -42,6 +42,11 @@ RAM-config port pages a 16K block into the `#4000–#7FFF` window:
 - **Apps are loaded into bank pages** (`PAGE_APP0+`) at `#4000` and run there.
   They nest: desktop -> filemgr -> (notepad/paint/viewer/...), each in its own
   page; the launcher keeps the caller's page on the stack and restores it on quit.
+  An app may optionally begin with a `GBAP` executable preamble: a `JP` preserves
+  the `#4000` launch ABI while a canonical 32x32 icon occupies the bytes before
+  the relocated entry at `#4110`. File Manager reads that first sector on demand,
+  so personalized application icons do not enlarge the boot-loaded `.IST` or the
+  resident kernel.
 
 ## Kernel source layout
 
@@ -195,9 +200,9 @@ the level of asset reload, storage, and window-manager primitives.
   Built by `kernel/pack_comp{1,2,3,4,5}.asm`. It is meant for **drive B** while the Main floppy
   stays in drive A: the kernel's system loader (`fs_load_sys`, `lib/fs.asm`) tries the boot
   drive (A) first and **falls back to the browse drive** (B), so a Companion app launched
-  from a drive-B File Manager loads from B while its shared dependencies (`GBUI.MOD`,
-  `GBWEB.MOD`, `GBIMG.MOD`, `GBNET.MOD`, `BRSAVE.APP`, `PAINT.IST`) load from A — no duplicates
-  on the Companion. (Card
+  from a drive-B File Manager loads from B. `BRSAVE.APP` and optional `HAND.SPR`
+  live beside the Companion apps; shared dependencies (`GBUI.MOD`, `GBAPICK.MOD`,
+  `GBWEB.MOD`, `GBIMG.MOD`, `GBNET.MOD`, `PAINT.IST`) load from A. (Card
   builds are unaffected — they already ship everything on one volume, including
   `GBNET.MOD` for Net4CPC and `GBNETM4.MOD` for M4 TCP.)
 - **`QA/CPC/Floppies/EXTRAS.DSK`** — all tracked pictures, including `LOGO.PIC`, on an extended

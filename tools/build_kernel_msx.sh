@@ -46,14 +46,14 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 20000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
-APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6300 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
+APPDEFS="-DGB_MSX2 -DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6410 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x69E0 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+APP_ICON=apps/formref/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
 APPDEFS="-DGB_MSX2" GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/msx/BROWSER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/msx/BRSAVE.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
@@ -76,6 +76,7 @@ APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/catclock build/msx/CATCLK.RAW
 # --- the shared config-parser module (platform-neutral C over low RAM) -----
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
 tools/build_uimod.sh                             # -> build/GBUI.RAW (dialogs/menus)
+APPDEFS="-DGB_MSX2" tools/build_appickmod.sh build/msx/GBAPICK.RAW
 tools/build_webmod.sh build/msx/GBWEB.RAW        # Browser cache/config helper
 APPDEFS="-DGB_MSX2" tools/build_imgmod.sh build/msx/GBIMG.RAW # Browser inline-image helper
 
@@ -208,6 +209,7 @@ cp build/msx/CATCLK.RAW   QA/MSX/GBENCH/CATCLK.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
 cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
 cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
+cp build/msx/GBAPICK.RAW QA/MSX/GBENCH/GBAPICK.MOD
 cp build/msx/GBWEB.RAW  QA/MSX/GBENCH/GBWEB.MOD
 cp build/msx/GBIMG.RAW  QA/MSX/GBENCH/GBIMG.MOD
 cp build/msx/SPLASH.BIN  QA/MSX/GBENCH/SPLASH.MOD

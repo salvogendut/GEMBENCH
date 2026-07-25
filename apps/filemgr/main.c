@@ -57,6 +57,17 @@
    bit2 = chunk-save (backend may clamp stale full-file lengths to the staging chunk). */
 #define FS_LOAD_OFS ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
+#define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
+
+/* Optional GBAP v1 executable preamble (#426). The icon is deliberately fixed
+   at 32x32 so the complete header + canonical bitmap fits in one 512-byte read. */
+#define APPICON_UNKNOWN  0x80
+#define APPICON_EMBEDDED 0x40
+#define APPICON_SLOTMASK 0x3F
+#define APPICON_OFF      16
+#define APPICON_WB       8
+#define APPICON_H        32
+#define APPICON_LEN      256
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;
@@ -409,6 +420,7 @@ static unsigned char ext_eq(const char *ext, const char *want)
 static unsigned char entry_icon(const char *name)
 {
     char ext[4];
+    unsigned char icon;
     if (gb_isdir()) return ICON_FOLDER;
     if (name_is(name, "GBKERN")) return ICON_GEOBENCH;   /* the kernel binary */
     ext_of(name, ext);
@@ -419,7 +431,10 @@ static unsigned char entry_icon(const char *name)
     if (ext_eq(ext, "SAV")) return ICON_SCREENSAVER;   /* #221: screensaver modules */
     if (ext_eq(ext, "MOD")) return ICON_GEOBENCH;      /* #234: kernel modules = the lollipop icon */
     if (ext_eq(ext, "IST")) return ICON_BINARY;   /* #221: apps/data share the binary icon */
-    if (ext_eq(ext, "APP")) return app_icon(name);
+    if (ext_eq(ext, "APP")) {
+        icon = app_icon(name);
+        return (icon == ICON_APP) ? (unsigned char)(APPICON_UNKNOWN | ICON_APP) : icon;
+    }
     return ICON_BINARY;
 }
 
@@ -427,6 +442,7 @@ static unsigned char entry_icon(const char *name)
    text, BASIC, icon sets, fonts, the kernel, binaries (#118). */
 static unsigned char rank_of(unsigned char ic)
 {
+    ic &= APPICON_SLOTMASK;
     switch (ic) {
         case ICON_FOLDER:   return 0;
         case ICON_DESKTOP: case ICON_FILEMGR: case ICON_NOTEPAD: case ICON_ICONED:
@@ -440,6 +456,86 @@ static unsigned char rank_of(unsigned char ic)
         case ICON_GEOBENCH: return 7;
         default:            return 8;   /* binaries / unknown */
     }
+}
+
+#ifdef GB_PCW
+/* Canonical Mode-1 byte -> the raw PCW hardware byte expected by
+   gb_restorerect. This is the same fallback conversion used by VIEWER.APP. */
+static unsigned char appicon_native(unsigned char value)
+{
+    unsigned char i, pen, native = 0;
+    for (i = 0; i < 4; i++) {
+        pen = (unsigned char)(((value >> (7 - i)) & 1)
+                              | (((value >> (3 - i)) & 1) << 1));
+        native |= (unsigned char)(pen << (6 - 2 * i));
+    }
+    return (unsigned char)(((native & 0x55) << 1)
+                           | (((native ^ 0xFF) & 0xAA) >> 1));
+}
+#endif
+
+/* appicon_load: read and validate the first sector of cached entry raw into
+   gb_copybuf. The File Manager's launch name is parked just beyond that sector
+   while gb_fs_load temporarily targets the APP. On success the bitmap bytes are
+   converted in-place to the target's gb_restorerect representation. */
+static unsigned char appicon_load(unsigned char raw)
+{
+    unsigned char *data = (unsigned char *)gb_copybuf;
+    unsigned int got;
+#ifdef GB_PCW
+    unsigned int i;
+#endif
+
+    gb_get_name((char *)gb_copybuf + 512);
+    gb_set_name(NAME_AT(raw));
+    FS_LOAD_OFS[0] = 0; FS_LOAD_OFS[1] = 0; FS_LOAD_OFS[2] = 0;
+    FS_XFLAGS = 0x01;
+    got = gb_fs_load((char *)data, 512);
+    FS_XFLAGS = 0;
+    gb_set_name((char *)gb_copybuf + 512);
+    if (!got || data[0] != 0xC3 || data[3] != 'G' || data[4] != 'B'
+        || data[5] != 'A' || data[6] != 'P' || data[7] != 1 || data[8] != 1
+        || data[9] != APPICON_WB || data[10] != APPICON_H
+        || data[11] != 0 || data[12] != 1
+        || data[13] != APPICON_OFF || data[14] != 0)
+        return 0;
+#ifdef GB_MSX2
+    gb_pic_edit_buf = (unsigned int)(data + APPICON_OFF);
+    gb_pic_edit_off = (unsigned int)(data + APPICON_OFF);
+    FS_SAVE_LEN_K = APPICON_LEN;
+    if (!gb_pic_edit(GB_PICEDIT_NATIVE)) return 0;
+#elif defined(GB_PCW)
+    for (i = APPICON_OFF; i < APPICON_OFF + APPICON_LEN; i++)
+        data[i] = appicon_native(data[i]);
+#endif
+    return 1;
+}
+
+/* draw_entry_type: regular IST slot or an APP-owned bitmap. Generic legacy apps
+   are probed once; a confirmed embedded icon is reloaded only on a real repaint,
+   so normal pointer motion performs no disk I/O. */
+static void draw_entry_type(unsigned char raw, unsigned char x, unsigned char y,
+                            unsigned char half)
+{
+    unsigned char state = icons[raw];
+    unsigned char slot = (unsigned char)(state & APPICON_SLOTMASK);
+    unsigned char *bitmap;
+    if (slot == ICON_APP && (state & (APPICON_UNKNOWN | APPICON_EMBEDDED))) {
+        if (appicon_load(raw)) {
+            icons[raw] = (unsigned char)(APPICON_EMBEDDED | ICON_APP);
+            bitmap = (unsigned char *)gb_copybuf + APPICON_OFF;
+            if (half) {
+                bitmap += APPICON_WB * 8;       /* middle 16 rows, like gb_icon_half */
+                gb_restorerect(x, y, APPICON_WB, 16, bitmap);
+            } else {
+                gb_restorerect(x, y, APPICON_WB, APPICON_H, bitmap);
+            }
+            return;
+        }
+        if (state & APPICON_UNKNOWN) icons[raw] = ICON_APP;
+    }
+    if (half) gb_icon_half(slot, x, y);
+    else      gb_icon(slot, x, y);
 }
 
 /* entry_less: is raw entry a ordered before raw entry b? By type group, then name. */
@@ -492,7 +588,7 @@ static void draw_list_view(void)
             gb_text(CT_X + 9, y + 6, "..");
         } else {
             raw = order[(unsigned char)(p - up)];
-            gb_icon_half(icons[raw], CT_X, y + 1); /* half-height type icon (#103) */
+            draw_entry_type(raw, CT_X, y + 1, 1); /* half-height type icon (#103/#426) */
             gb_text(CT_X + 9, y + 6, name83(NAME_AT(raw)));   /* NAME.EXT */
         }
         if (nsel == (unsigned char)(p + 1))        /* red frame on the selected row */
@@ -517,7 +613,7 @@ static void draw_icons_view(void)
                     gb_text((unsigned char)(cx + (CELL_W - 3) / 2), cy + 34, "..");  /* centered */
                 } else {
                     raw = order[(unsigned char)(idx - up)];
-                    gb_icon(icons[raw], cx + (CELL_W - 8) / 2, cy + 1);   /* full icon (#103) */
+                    draw_entry_type(raw, cx + (CELL_W - 8) / 2, cy + 1, 0); /* full icon (#103/#426) */
                     draw_name(cx, cy + 34, name83(NAME_AT(raw)));         /* name below the icon */
                 }
                 if (nsel == (unsigned char)(idx + 1))

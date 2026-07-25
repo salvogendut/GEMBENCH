@@ -5,6 +5,8 @@
 # The C app is just apps/<name>/main.c; it reaches the kernel through the shared
 # libgb (lib/gb/gblib.s + gb.h) and shared crt0 (lib/gb/crt0.s, the #4000 entry).
 # Linked: crt0 FIRST (so _start is at #4000), then main, then the libgb trampolines.
+# APP_ICON=<canonical 32x32 icon.asm> reserves a GBAP v1 preamble and relocates
+# _start to #4110; the preamble's JP keeps the kernel's #4000 entry ABI unchanged.
 #
 #   tools/build_capp.sh [app_dir] [out.RAW]
 #   tools/build_capp.sh apps/chello build/CHELLO.RAW   (defaults)
@@ -16,6 +18,7 @@ OUT="${2:-build/CLOCK.RAW}"
 GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.s)
 GBLIB_SRC="${GBLIB_SRC:-$GB/gblib.s}"
 APP_CFLAGS="${APP_CFLAGS:-}"
+APP_ICON="${APP_ICON:-}"
 LOAD_LIMIT="${LOAD_LIMIT:-0x7F00}"
 # DATA_LOC: where this app's data starts (code is #4000.. below it, data ..#7FFF
 # above). The default 0x6200 is a 50/50 split; a code-heavy/data-light app (NOTEPAD)
@@ -27,6 +30,11 @@ SDCC="${SDCC:-sdcc}"
 BIN="$(dirname "$(command -v "$SDCC")")"   # sdasz80 / makebin sit beside sdcc
 SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
+CODE_LOC="0x4000"
+if [ -n "$APP_ICON" ]; then
+    APP_PREAMBLE_SIZE=$(python3 tools/embed_app_icon.py size "$APP_ICON")
+    CODE_LOC=$(printf '0x%X' $((0x4000 + APP_PREAMBLE_SIZE)))
+fi
 
 # Keep target-specific object files apart. CPC, MSX and PCW builds may run close
 # together (or concurrently outside the top-level Makefile); sharing main.rel
@@ -76,6 +84,9 @@ if [ "$FORM_SELECT_FLAG" = "1" ] &&
 fi
 
 deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
+if [ -n "$APP_ICON" ]; then
+    deps+=("tools/embed_app_icon.py" "$APP_ICON")
+fi
 if [ "$GBWIN_FLAG" = "1" ]; then
     deps+=("$GB/gbwin.c")
 fi
@@ -135,6 +146,8 @@ stamp="$OUT.stamp"
 cache_key=$(printf '%s\n' \
     "build_capp.v1" \
     "APP=$APP" \
+    "APP_ICON=$APP_ICON" \
+    "CODE_LOC=$CODE_LOC" \
     "DATA_LOC=$DATA_LOC" \
     "APPDEFS=${APPDEFS:-}" \
     "DIALOGS=$DIALOGS_FLAG" \
@@ -266,7 +279,7 @@ if [ "$NET_FLAG" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$NET_SRC" -o "$work/gbnet_stub.rel"
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
 fi
-"$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
+"$SDCC" -mz80 --no-std-crt0 --code-loc "$CODE_LOC" --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
     $FORM_SELECT_REL $TIMESET_REL $DLG_REL \
@@ -302,6 +315,11 @@ PY
 "$MAKEBIN" -p "$work/app.ihx" "$work/app.bin"
 
 # makebin emits a flat image from #0000; the app lives at #4000 -> strip low 16K.
-tail -c +16385 "$work/app.bin" > "$OUT"
+tail -c +16385 "$work/app.bin" > "$work/app.raw"
+if [ -n "$APP_ICON" ]; then
+    python3 tools/embed_app_icon.py inject "$APP_ICON" "$work/app.raw" "$OUT"
+else
+    cp "$work/app.raw" "$OUT"
+fi
 gb_write_stamp "$stamp" "$cache_key"
 echo "Built $OUT ($(stat -c%s "$OUT") bytes) from $APP"

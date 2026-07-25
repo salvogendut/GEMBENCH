@@ -17,7 +17,7 @@ focused window's handlers (issue #45).
 | filemgr  | `FILEMGR.APP`  | per-drive file browser (list/icon views, type→app routing, `..`, Trash) |
 | viewer   | `VIEWER.APP`   | text / `.PIC` viewer (banked load for big pictures) |
 | notepad  | `NOTEPAD.APP`  | text editor (word-wrap, File/Edit/View, saves `.BAS` CR+LF) |
-| iconed   | `ICONED.APP`   | `.IST` icon-set / `.SPR` cursor editor |
+| iconed   | `ICONED.APP`   | `.IST` icon-set / `.SPR` cursor / embedded `.APP` icon editor |
 | paint    | `PAINT.APP`    | portable GBPC v2 bitmap paint (toolchest, saves `.PIC`) |
 | xaos     | `XAOS.APP`     | fractal generator, exports portable `.PIC` files |
 | mahjong  | `MAHJONG.APP`  | Kana Mahjong solitaire with selectable Katakana/Hiragana tiles, solvable Turtle deals, Undo and Hint |
@@ -25,7 +25,7 @@ focused window's handlers (issue #45).
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours on CPC/MSX2 / screensaver, friendly 4-colour / 16-colour next-boot selection on MSX2, and Return to Defaults; PCW omits palette controls because its display is fixed monochrome; persisted to `GEOBENCH.CFG` |
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal: CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; MSX2 TCP/IP UNAPI in a 78x22 window; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
 | nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status; CPC uses the active GBNET backend, PCW uses PerryNet over PerryFi |
-| formref  | `FORMREF.APP`  | development reference for app-linked form composition: labels, fields, selectors, steppers, compact action rows, focus, accept/cancel, and modal cleanup |
+| formref  | `FORMREF.APP`  | development reference for app-linked form composition and the first `GBAP` embedded application icon, using the Daruma artwork |
 | wget     | `WGET.APP`     | GUI HTTP downloader with bounded redirects and streamed writes to an automatically derived 8.3 filename; CPC continues exact-length partial files with HTTP Range, while PCW uses PerryNet and safely restarts CP/M-record files |
 | browser  | `BROWSER.APP`  | fullscreen HTTP browser for CPC, MSX2, and PCW; demand-streams into a bounded borrowed-bank cache, renders compact GET forms and one lazy-loaded GBPC image, hides proxy targets behind highlighted link labels, and loads/saves offline `.HTM` files without retaining a DOM |
 | brsave   | `BRSAVE.APP`   | transient Browser helper that writes captured HTML source to an `.HTM` file without displacing the Browser bank |

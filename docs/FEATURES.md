@@ -41,8 +41,11 @@ backdrop, dragging icons, opening apps and menus:
 - **Notepad** — a text editor: type/edit, word-wrap, click or cursor keys to place
   the caret, **File / Edit / View** menus (New/Load/Save/Save As, copy/paste,
   Fullscreen). Saves `.BAS` with CR+LF so CPC BASIC can load them.
-- **ICONED** — an icon/cursor editor for `.IST` sets and `.SPR` cursors (magnified
-  canvas, pen palette, Prev/Next, undo, New/Load/Save/Save As, View > Fullscreen).
+- **ICONED** — an icon/cursor editor for `.IST` sets, `.SPR` cursors, and optional
+  icons embedded in `GBAP` `.APP` files (magnified canvas, pen palette, Prev/Next,
+  undo, New/Load/Save/Save As, View > Fullscreen). Its Load dialog hides legacy
+  `.APP` files that have no editable icon header. The Python editor supports the
+  same three formats.
 - **Paint** — a Mode-1 paint app: a canvas + toolchest (pencil, square, circle,
   flood fill, undo), a 4-ink palette and pencil width, New/Load/Save to the `.PIC`
   format (a versioned bitmap with its own size + palette), View > Fullscreen. Tool
