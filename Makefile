@@ -1,4 +1,4 @@
-.PHONY: all cpc msx pcw check test
+.PHONY: all cpc msx pcw formref check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -11,6 +11,11 @@ msx:
 
 pcw:
 	bash tools/build_kernel_pcw.sh
+
+formref:
+	DATA_LOC=0x6200 WIDGETS=1 SELECTOR=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW
+	APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 WIDGETS=1 SELECTOR=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+	APPDEFS="-DGB_PCW" DATA_LOC=0x6200 WIDGETS=1 SELECTOR=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/pcw/FORMREF.RAW
 
 check:
 	git diff --check

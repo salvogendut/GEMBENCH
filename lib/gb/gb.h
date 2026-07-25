@@ -150,6 +150,57 @@ unsigned char gb_slider_hit(unsigned char x, unsigned char y,
 unsigned char gb_slider_value(unsigned char x, unsigned char w,
                               unsigned char max, unsigned char mx);
 
+/* ---- Reusable form composition ---------------------------------------------
+ * FORM=1 links field rows, action rows and a self-polling modal lifecycle.
+ * FORM_SELECT=1 adds selector rows. Applications still own all values and return
+ * one of GB_FORM_* from their callbacks; no widget state lives in the library.
+ * FORM requires WIDGETS=1, and FORM_SELECT requires SELECTOR=1. */
+#define GB_FORM_STAY    0
+#define GB_FORM_ACCEPT  1
+#define GB_FORM_CANCEL  2
+#define GB_FORM_REDRAW  3
+#define GB_FORM_NO_ACTION 0xFF
+#define GB_FORM_CLICK_AWAY 0x01
+
+typedef struct {
+    const char *label;
+    unsigned char w;
+    unsigned char flags;
+} gb_form_action_t;
+
+typedef struct {
+    unsigned char x, y, w, h;
+    const char *title;
+    void (*on_draw)(void);
+    unsigned char (*on_click)(unsigned char mx, unsigned char my);
+    unsigned char (*on_key)(unsigned char key);
+    unsigned char flags;
+} gb_form_modal_t;
+
+void gb_form_label(unsigned char x, unsigned char y, unsigned char h,
+                   const char *label);
+void gb_form_field_row(unsigned char x, unsigned char y,
+                       unsigned char w, unsigned char h,
+                       unsigned char label_w, const char *label,
+                       const char *value, unsigned char flags);
+void gb_form_select_row(unsigned char x, unsigned char y,
+                        unsigned char w, unsigned char h,
+                        unsigned char label_w, const char *label,
+                        const char *value, unsigned char flags);
+unsigned char gb_form_row_hit(unsigned char x, unsigned char y,
+                              unsigned char w, unsigned char h,
+                              unsigned char label_w,
+                              unsigned char mx, unsigned char my);
+void gb_form_actions(unsigned char x, unsigned char y, unsigned char h,
+                     const gb_form_action_t *actions,
+                     unsigned char count, unsigned char gap);
+unsigned char gb_form_actions_hit(unsigned char x, unsigned char y,
+                                  unsigned char h,
+                                  const gb_form_action_t *actions,
+                                  unsigned char count, unsigned char gap,
+                                  unsigned char mx, unsigned char my);
+unsigned char gb_form_modal_run(const gb_form_modal_t *modal);
+
 void gb_icon(unsigned char slot, unsigned char col,      /* full icon blit       */
              unsigned char line);
 void gb_icon_half(unsigned char slot, unsigned char col,   /* half-height (16px) blit */

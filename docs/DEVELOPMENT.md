@@ -149,6 +149,33 @@ Settings also retains compact local `Configure`/`Save`/`Cancel` actions. Even th
 button-only unit moved its CPC loaded image 276 bytes past the fixed data split,
 while its data already ends only 91 bytes below the kernel.
 
+### Reusable forms and modal dialogs
+
+For a new form, link the composition layer into that application:
+
+```bash
+WIDGETS=1 FORM=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
+
+# Add a labelled selector row:
+WIDGETS=1 SELECTOR=1 FORM=1 FORM_SELECT=1 \
+    tools/build_capp.sh apps/myapp build/MYAPP.RAW
+```
+
+`gb_form_field_row()` and `gb_form_select_row()` reserve a caller-selected label
+width and draw the control in the remainder. `gb_form_actions()` lays out a
+standard button row, while `gb_form_actions_hit()` returns its enabled action.
+`gb_form_modal_run()` owns the input loop, title-bar close, optional click-away
+cancel, cursor bracketing, modal latch, and final parent repaint. The application
+owns field buffers, focus, selection, validation, and save/cancel semantics
+through draw, click, and key callbacks in `gb_form_modal_t`.
+
+The form units are app-linked and opt-in. They add nothing to the resident
+kernel or `GBUI.MOD`, and existing apps remain byte-identical until migrated
+explicitly. Build `make formref`, then run `FORMREF.APP` from `DIAG/` on CPC,
+`GBENCH/` on MSX2, or from the PCW Companion disk, before applying the API to a
+constrained app. Settings and Browser deliberately remain on their current
+implementations.
+
 ## Icon and font sets (GEOBENCH.CFG)
 
 `GEOBENCH.CFG` selects named resources. `ICONS=<name>` loads `<name>.IST`,

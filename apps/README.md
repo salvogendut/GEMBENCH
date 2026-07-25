@@ -25,6 +25,7 @@ focused window's handlers (issue #45).
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours / screensaver, friendly 4-colour / 16-colour next-boot selection on MSX2, and Return to Defaults; persisted to `GEOBENCH.CFG` |
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal: CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; MSX2 TCP/IP UNAPI in a 78x22 window; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
 | nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status; CPC uses the active GBNET backend, PCW uses PerryNet over PerryFi |
+| formref  | `FORMREF.APP`  | development reference for app-linked form composition: labels, fields, selectors, action rows, focus, accept/cancel, and modal cleanup |
 | wget     | `WGET.APP`     | GUI HTTP downloader with bounded redirects and streamed writes to an automatically derived 8.3 filename; CPC continues exact-length partial files with HTTP Range, while PCW uses PerryNet and safely restarts CP/M-record files |
 | browser  | `BROWSER.APP`  | fullscreen HTTP browser for CPC, MSX2, and PCW; demand-streams into a bounded borrowed-bank cache, renders compact GET forms and one lazy-loaded GBPC image, hides proxy targets behind highlighted link labels, and loads/saves offline `.HTM` files without retaining a DOM |
 | brsave   | `BRSAVE.APP`   | transient Browser helper that writes captured HTML source to an `.HTM` file without displacing the Browser bank |
@@ -89,6 +90,9 @@ resident kernel. Build with only the units an application uses:
 - `STEPPER=1`: decrement/value/increment controls and part hit-testing
 - `SELECTOR=1`: framed popup/list choices and hit-testing
 - `SLIDER=1`: horizontal sliders, hit-testing and pointer-to-value mapping
+- `FORM=1`: labelled field rows, action rows and modal lifecycle; requires
+  `WIDGETS=1`
+- `FORM_SELECT=1`: labelled selector rows; requires `FORM=1` and `SELECTOR=1`
 
 For example:
 
@@ -104,8 +108,10 @@ applies its own scrolling/truncation. Widgets consistently use logical pens 0–
 canvas, surface, edge/text and accent; the existing `INKS=` palette therefore
 recolours them without platform-specific code. Buttons accept
 `GB_WIDGET_PRESSED` and `GB_WIDGET_DISABLED`; `gb_button_hit` rejects disabled
-controls. WGET is the button/field reference,
-Shell and File Manager are scrollbar references, Settings is the selector/stepper
-reference, Clock combines steppers with a button, XAOS uses compact buttons, and
-Icon Editor demonstrates pressed and disabled button states. Disk Utility uses a
-shared command button for its destructive format workflow.
+controls. WGET is the button/field reference, Shell and File Manager are
+scrollbar references, Settings is the selector/stepper reference, Clock combines
+steppers with a button, XAOS uses compact buttons, and Icon Editor demonstrates
+pressed and disabled button states. Disk Utility uses a shared command button
+for its destructive format workflow. `FORMREF.APP` is staged as a development
+diagnostic and demonstrates form composition without moving any state or code
+into the resident kernel.

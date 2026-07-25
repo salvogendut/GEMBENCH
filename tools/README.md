@@ -51,7 +51,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   `WIDGETS=1` links reusable buttons/fields and `SCROLL=1` links the vertical
   scrollbar unit. `TOGGLE=1`, `STEPPER=1`, `SELECTOR=1`, and `SLIDER=1`
   independently link the corresponding settings controls, so tight apps pay only
-  for controls used.
+  for controls used. `FORM=1` adds form rows and modal lifecycle and requires
+  `WIDGETS=1`; `FORM_SELECT=1` adds selector rows and requires both `FORM=1` and
+  `SELECTOR=1`. `make formref` builds the small three-platform reference app.
 - **`check_abi_table.py`** — verifies the `kernel/gbkern.asm` jump-table comments
   match the exported `lib/gbapp.inc` slot addresses through `kernel/api_table.inc`.
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in

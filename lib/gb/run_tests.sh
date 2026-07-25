@@ -19,3 +19,6 @@ trap 'rm -rf "$tmp"' EXIT
     test_gbwidgets.c gbwidgets.c gbscroll.c gbtoggle.c gbstepper.c \
     gbselect.c gbslider.c
 "$tmp/test_gbwidgets"
+"$CC" -Wall -Wextra -std=c99 -DGB_HOST_TEST -o "$tmp/test_gbform_ui" \
+    test_gbform_ui.c gbform.c gbform_select.c gbwidgets.c gbselect.c
+"$tmp/test_gbform_ui"

@@ -21,6 +21,8 @@ bash tools/build_kernel.sh
 
 The repository also has a thin top-level Makefile: `make cpc`, `make msx`,
 `make pcw`, `make all`, and `make check` wrap the same scripts and static checks.
+`make formref` builds only the CPC, MSX2, and PCW reusable-form reference
+binaries for quick UI iteration.
 
 The About dialog reads the release version from the root `VERSION` file and bakes
 that value plus the current 12-character Git commit into `GBUI.MOD`. Override
@@ -34,7 +36,7 @@ can test or deploy without rebuilding first):
   loader `GB.BAS`, `M4DETECT.BIN`, both kernels (`GBALB.BIN`, `GBM4.BIN`), and
   `GEOBENCH.CFG` — everything else the kernel loads at boot lives in a `GBENCH/`
   subfolder, while the complete gallery lives in root-level `PICS/` and diagnostic
-  programs such as `NETTEST.APP` live in root-level `DIAG/`.
+  programs such as `NETTEST.APP` and `FORMREF.APP` live in root-level `DIAG/`.
 - **`QA/CPC/GEOBENCH.IMG`** — a ready-to-flash shared **Albireo/M4 card image**: a
   partitioned FAT16 disk the CH376 auto-detects and 1984's M4 image mode can mount.
   Built by `tools/build_card_img.sh`; a 32 MB local artifact, rebuilt every build

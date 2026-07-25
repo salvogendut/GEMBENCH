@@ -55,10 +55,22 @@ TOGGLE_FLAG="${TOGGLE:-0}"
 STEPPER_FLAG="${STEPPER:-0}"
 SELECTOR_FLAG="${SELECTOR:-0}"
 SLIDER_FLAG="${SLIDER:-0}"
+FORM_FLAG="${FORM:-0}"
+FORM_SELECT_FLAG="${FORM_SELECT:-0}"
 NET_SRC="$GB/gbnet_stub.c"
 case " ${APPDEFS:-} " in
     *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
 esac
+
+if [ "$FORM_FLAG" = "1" ] && [ "$WIDGETS_FLAG" != "1" ]; then
+    echo "ERROR: FORM=1 requires WIDGETS=1" >&2
+    exit 1
+fi
+if [ "$FORM_SELECT_FLAG" = "1" ] &&
+   { [ "$FORM_FLAG" != "1" ] || [ "$SELECTOR_FLAG" != "1" ]; }; then
+    echo "ERROR: FORM_SELECT=1 requires FORM=1 and SELECTOR=1" >&2
+    exit 1
+fi
 
 deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
 if [ "$GBWIN_FLAG" = "1" ]; then
@@ -81,6 +93,12 @@ if [ "$SELECTOR_FLAG" = "1" ]; then
 fi
 if [ "$SLIDER_FLAG" = "1" ]; then
     deps+=("$GB/gbslider.c")
+fi
+if [ "$FORM_FLAG" = "1" ]; then
+    deps+=("$GB/gbform.c")
+fi
+if [ "$FORM_SELECT_FLAG" = "1" ]; then
+    deps+=("$GB/gbform_select.c")
 fi
 while IFS= read -r dep; do
     deps+=("$dep")
@@ -122,6 +140,8 @@ cache_key=$(printf '%s\n' \
     "STEPPER=$STEPPER_FLAG" \
     "SELECTOR=$SELECTOR_FLAG" \
     "SLIDER=$SLIDER_FLAG" \
+    "FORM=$FORM_FLAG" \
+    "FORM_SELECT=$FORM_SELECT_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
     "APP_CFLAGS=$APP_CFLAGS" \
     "LOAD_LIMIT=$LOAD_LIMIT" \
@@ -182,6 +202,16 @@ if [ "$SLIDER_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbslider.c" -o "$work/gbslider.rel"
     SLIDER_REL="$work/gbslider.rel"
 fi
+FORM_REL=""
+if [ "$FORM_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbform.c" -o "$work/gbform.rel"
+    FORM_REL="$work/gbform.rel"
+fi
+FORM_SELECT_REL=""
+if [ "$FORM_SELECT_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbform_select.c" -o "$work/gbform_select.rel"
+    FORM_SELECT_REL="$work/gbform_select.rel"
+fi
 # Opt-in dialogs (#114, #142). The heavy render (popup/prompt/file-picker) now lives in
 # the paged GBUI kernel module (#142 step 1b); an app that needs ANY dialog links only
 # the tiny marshalling stub gbui_stub.c (gb_popup/gb_prompt/gb_pickfile/gb_pickdir ->
@@ -208,7 +238,8 @@ if [ "$NET_FLAG" = "1" ]; then
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $SCROLL_REL \
-    $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $DLG_REL \
+    $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
+    $FORM_SELECT_REL $DLG_REL \
     "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
