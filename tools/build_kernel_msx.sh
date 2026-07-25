@@ -43,7 +43,7 @@ python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjon
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6E60 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x778A DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
-APPDEFS="-DGB_MSX2" APP_CFLAGS=--opt-code-size DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
+APPDEFS="-DGB_MSX2" APP_CFLAGS=--opt-code-size DATA_LOC=0x7C40 DIALOGS=1 ACTIONS=1 STEPPER=1 SELECTOR=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6300 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW

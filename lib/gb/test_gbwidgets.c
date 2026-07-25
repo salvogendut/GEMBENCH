@@ -51,6 +51,11 @@ static void check(int ok, const char *name)
 
 int main(void)
 {
+    static const gb_action_t actions[2] = {
+        { "Save", 8 },
+        { "Cancel", 11 }
+    };
+
     reset_calls();
     gb_button(10, 20, 20, 15, "Go", 0);
     check(nfill == 1 && fills[0].pen == 1, "button surface");
@@ -86,6 +91,24 @@ int main(void)
 
     check(gb_widget_hit(4, 5, 10, 8, 4, 5), "widget includes top-left");
     check(!gb_widget_hit(4, 5, 10, 8, 14, 12), "widget excludes right edge");
+
+    reset_calls();
+    gb_actions(4, 12, actions, 2, 2);
+    check(nfill == 0 && nframe == 2 &&
+          frames[0].x == 4 && frames[0].w == 8 &&
+          frames[1].x == 14 && frames[1].w == 11,
+          "compact action row uses caller widths and gap");
+    check(ntext == 2 && texts[0].x == 5 && texts[0].y == 13 &&
+          !strcmp(texts[1].value, "Cancel"),
+          "compact action row labels a surface panel");
+    check(gb_actions_hit(4, 12, actions, 2, 2, 6, 14) == 0 &&
+          gb_actions_hit(4, 12, actions, 2, 2, 16, 14) == 1,
+          "compact action row identifies actions");
+    check(gb_actions_hit(4, 12, actions, 2, 2, 13, 14) ==
+              GB_ACTION_NONE &&
+          gb_actions_hit(4, 12, actions, 2, 2, 6, 22) ==
+              GB_ACTION_NONE,
+          "compact action row rejects gaps and lower edge");
 
     check(gb_vscroll_hit(1, 10, 3, 80, 10, 40, 8, 2, 12,
                          GB_WIDGET_ARROWS) == GB_SCROLL_UP,

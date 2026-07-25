@@ -163,6 +163,26 @@ unsigned char gb_slider_hit(unsigned char x, unsigned char y,
 unsigned char gb_slider_value(unsigned char x, unsigned char w,
                               unsigned char max, unsigned char mx);
 
+/* ---- Compact action rows ----------------------------------------------------
+ * ACTIONS=1 provides a default-state button row for constrained applications
+ * without linking the full button/form units. The caller owns widths and paints
+ * the containing surface panel before drawing the row. */
+#define GB_ACTION_NONE 0xFF
+#define GB_ACTION_H 10
+
+typedef struct {
+    const char *label;
+    unsigned char w;
+} gb_action_t;
+
+void gb_actions(unsigned char x, unsigned char y,
+                const gb_action_t *actions,
+                unsigned char count, unsigned char gap);
+unsigned char gb_actions_hit(unsigned char x, unsigned char y,
+                             const gb_action_t *actions,
+                             unsigned char count, unsigned char gap,
+                             unsigned char mx, unsigned char my);
+
 /* ---- Reusable form composition ---------------------------------------------
  * FORM=1 links field rows, action rows and a self-polling modal lifecycle.
  * FORM_SELECT=1 adds selector rows. Applications still own all values and return
