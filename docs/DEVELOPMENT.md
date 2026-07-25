@@ -157,11 +157,11 @@ record-rounded app loader ceiling. Linking the generic field/button unit for its
 toolbar exceeded that ceiling by 439 bytes, so it retains compact local drawing
 until equivalent room is reclaimed.
 
-Settings uses `ACTIONS=1` for its `Configure` and `Save`/`Cancel` rows. The
-specialized unit leaves its CPC loaded image 58 bytes below the fixed data split,
-seven bytes more than the previous local implementation; Settings data still
-ends only 91 bytes below the kernel. Its custom modal loops therefore remain
-until a similarly size-neutral lifecycle unit is available.
+Settings retains compact local `Configure`/`Save`/`Cancel` controls. A trial
+`ACTIONS=1` migration fitted the bank but regressed target-side colour editing;
+restoring direct hit dispatch exceeded the CPC code/data split. Settings data
+already ends only 91 bytes below the kernel, so migration remains blocked until
+the shared draw and hit paths can be made both size-neutral and target-safe.
 
 ### Reusable forms and modal dialogs
 
@@ -187,9 +187,8 @@ The form units are app-linked and opt-in. They add nothing to the resident
 kernel or `GBUI.MOD`, and existing apps remain byte-identical until migrated
 explicitly. Build `make formref`, then run `FORMREF.APP` from `DIAG/` on CPC,
 `GBENCH/` on MSX2, or from the PCW Companion disk, before applying the API to a
-constrained app. Browser deliberately remains on its compact implementation,
-while Settings adopts only the smaller action-row unit described above. Clock
-is the first production form-modal user; it builds with
+constrained app. Settings and Browser deliberately remain on their compact
+implementations. Clock is the first production form-modal user; it builds with
 `WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1`. `TIMESET=1` links `gb_set_time()` into
 that app only, preserving CPC resident-kernel headroom.
 

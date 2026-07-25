@@ -400,14 +400,6 @@ static unsigned char selector_hit(unsigned char row,
                          SELECT_W, SELECT_H, mx, my);
 }
 
-static const gb_action_t configure_action[1] = {
-    { "Configure", 16 }
-};
-static const gb_action_t save_cancel_actions[2] = {
-    { "Save", 8 },
-    { "Cancel", 11 }
-};
-
 /* paint the content: a white panel, each setting's label + current value, and a note
    that changes apply on the next boot. The WM already drew the frame/title/close. */
 static void s_draw(void)
@@ -455,7 +447,9 @@ static void s_draw(void)
         {
             unsigned char bx = (unsigned char)(win_x + VAL_COL);
             unsigned char by = (unsigned char)(row_y(SS_CFG_ROW) - 1);
-            gb_actions(bx, by, configure_action, 1, 0);
+            gb_fill(bx, by, 16, 10, 1);
+            gb_frame(bx, by, 16, 10, 2);
+            gb_textbw((unsigned char)(bx + 1), (unsigned char)(by + 1), "Configure");
         }
         saver_value(sv);                      /* Timeout: idle minutes */
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_TM_ROW), "Timeout");
@@ -612,8 +606,8 @@ static void colp_draw(void)
         colp_stepper(i);
         colp_swatch(i);                          /* #216: live colour sample (pens 0-3) */
     }
-    gb_actions((unsigned char)(win_x + 1), by,
-               save_cancel_actions, 2, 2);
+    gb_textbw((unsigned char)(win_x + 1), by, "Save");
+    gb_textbw((unsigned char)(win_x + 8), by, "Cancel");
 }
 
 /* colours_dialog: modal 4-pen editor. Each -/+ steps a pen's CPC ink (0-26, wrapping)
@@ -639,14 +633,11 @@ static void colours_dialog(void)
         {
             unsigned char mx = gb_mx(), my = gb_my();
             unsigned char by = (unsigned char)(win_y + win_h - 11);
-            unsigned char action = gb_actions_hit(
-                (unsigned char)(win_x + 1), by,
-                save_cancel_actions, 2, 2, mx, my);
-            if (action != GB_ACTION_NONE) {
-                if (action == 0) {                                  /* Save */
+            if (my >= by && my < by + 8) {
+                if (mx >= win_x + 1 && mx < win_x + 7) {            /* Save */
                     cfg_set_inks(ink_cur);
                     done = 1;
-                } else {                                             /* Cancel */
+                } else if (mx >= win_x + 8 && mx < win_x + 18) {    /* Cancel */
                     for (i = 0; i < NPEN; i++) apply_colour(i, ink_orig[i]);
                     done = 1;
                 }
@@ -798,8 +789,8 @@ static void ss_cfg_draw(unsigned char x, unsigned char y,
     ss_cfg_stepper((unsigned char)(x + 16), (unsigned char)(sy - 1), speed);
     gb_textbw((unsigned char)(x + 3), ny, "Stars");
     ss_cfg_stepper((unsigned char)(x + 16), (unsigned char)(ny - 1), stars);
-    gb_actions((unsigned char)(x + 3), by,
-               save_cancel_actions, 2, 2);
+    gb_textbw((unsigned char)(x + 3), by, "Save");
+    gb_textbw((unsigned char)(x + 13), by, "Cancel");
 }
 
 static void ss_config_dialog(void)
@@ -836,15 +827,13 @@ static void ss_config_dialog(void)
 
         if (my >= y + 2 && my < y + 12 && mx >= x + 1 && mx < x + 3)
             break;                                      /* title-bar close = Cancel */
-        part = gb_actions_hit((unsigned char)(x + 3), by,
-                              save_cancel_actions, 2, 2, mx, my);
-        if (part != GB_ACTION_NONE) {
-            if (part == 0) {
+        if (my >= by && my < by + 8) {
+            if (mx >= x + 3 && mx < x + 10) {
                 char text[6];
                 u_dec(speed, text); cfg_set(GB_STARFLD_SPEED_KEY, text);
                 u_dec(stars, text); cfg_set(GB_STARFLD_STARS_KEY, text);
                 done = 1;
-            } else {
+            } else if (mx >= x + 13 && mx < x + 23) {
                 done = 1;
             }
             continue;
@@ -1101,9 +1090,8 @@ static void s_click(void)
     }
     {
         unsigned char ry = row_y(SS_CFG_ROW);
-        if (gb_actions_hit((unsigned char)(win_x + VAL_COL),
-                           (unsigned char)(ry - 1),
-                           configure_action, 1, 0, mx, my) == 0) {
+        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2) &&
+            mx >= win_x + VAL_COL && mx < win_x + VAL_COL + 16) {
             ss_config_dialog();
             return;
         }
