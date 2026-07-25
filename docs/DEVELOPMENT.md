@@ -105,6 +105,32 @@ The default profile is the shipped no-ROM Albireo build and should stay clean.
 profiles currently expose real pressure around `#1250..#12D7`; keep those
 failures visible until the ranges are actually moved or retired.
 
+## Reusable application UI
+
+New applications should normally register a managed `gb_mwin_t` window, use
+`gb_doc_t` when they need standard File/Edit/View behaviour, and opt into the
+common non-modal controls instead of implementing their appearance independently:
+
+```c
+gb_field(x, y, w, 13, visible_text,
+         editing ? GB_WIDGET_FOCUSED : 0);
+gb_button(x, button_y, 20, 15, "Apply", 0);
+gb_vscroll(sx, sy, 3, sh, top, total, visible, GB_WIDGET_ARROWS);
+```
+
+Enable the required compilation units per app:
+
+```bash
+WIDGETS=1 SCROLL=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
+```
+
+`WIDGETS=1` provides `gb_button`, `gb_field`, and `gb_widget_hit`; `SCROLL=1`
+provides `gb_vscroll` and `gb_vscroll_hit`. Widget state stays in the app bank.
+This avoids resident-kernel growth and avoids using `GBUI.MOD`, whose modal
+dispatcher loads the module from disk for each operation. Widgets use the four
+logical UI pens, so `INKS=` changes their colours consistently on CPC, MSX2 and
+PCW. Layout metrics and inline text editing remain application-owned.
+
 ## Icon and font sets (GEOBENCH.CFG)
 
 `GEOBENCH.CFG` selects named resources. `ICONS=<name>` loads `<name>.IST`,

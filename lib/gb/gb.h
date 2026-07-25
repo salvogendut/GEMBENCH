@@ -79,6 +79,43 @@ void gb_backdrop(unsigned char col, unsigned char line,
 void gb_reload(void);
 void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline    */
               unsigned char w, unsigned char h, unsigned char pen);
+
+/* ---- Reusable widgets -------------------------------------------------------
+ * Opt in with WIDGETS=1 (buttons/fields) and/or SCROLL=1 (vertical scrollbars)
+ * when calling tools/build_capp.sh. The implementation is linked into the app
+ * bank rather than placed in the resident kernel or paged GBUI module: ordinary
+ * controls must repaint without loading code from disk.
+ *
+ * Widgets use the four logical UI pens, so INKS= palette changes theme them:
+ * canvas=0, surface=1, edge/text=2, accent/focus=3. Geometry remains fixed and
+ * app-owned; this keeps the API portable across CPC, MSX Screen 6/7, and PCW.
+ */
+#define GB_WIDGET_FOCUSED 0x01
+#define GB_WIDGET_ARROWS  0x02
+
+#define GB_SCROLL_NONE      0
+#define GB_SCROLL_UP        1
+#define GB_SCROLL_DOWN      2
+#define GB_SCROLL_PAGE_UP   3
+#define GB_SCROLL_PAGE_DOWN 4
+#define GB_SCROLL_THUMB     5
+
+void gb_button(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
+               const char *label, unsigned char flags);
+void gb_field(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
+              const char *text, unsigned char flags);
+void gb_vscroll(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
+                unsigned char pos, unsigned char total, unsigned char page,
+                unsigned char flags);
+unsigned char gb_widget_hit(unsigned char x, unsigned char y,
+                            unsigned char w, unsigned char h,
+                            unsigned char mx, unsigned char my);
+unsigned char gb_vscroll_hit(unsigned char x, unsigned char y,
+                             unsigned char w, unsigned char h,
+                             unsigned char pos, unsigned char total,
+                             unsigned char page, unsigned char mx,
+                             unsigned char my, unsigned char flags);
+
 void gb_icon(unsigned char slot, unsigned char col,      /* full icon blit       */
              unsigned char line);
 void gb_icon_half(unsigned char slot, unsigned char col,   /* half-height (16px) blit */

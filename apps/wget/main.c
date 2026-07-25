@@ -1112,13 +1112,6 @@ static void network_tick(void)
 }
 
 /* ---- GUI ----------------------------------------------------------------- */
-static void draw_button(unsigned char x, unsigned char y, unsigned char w, const char *label)
-{
-    gb_fill(x, y, w, BUTTON_H, 1);
-    gb_frame(x, y, w, BUTTON_H, 2);
-    gb_textbw((unsigned char)(x + 2), (unsigned char)(y + 4), label);
-}
-
 static void draw_url_field(void)
 {
     unsigned char x = gb_wm_x(), y = gb_wm_y();
@@ -1128,11 +1121,9 @@ static void draw_url_field(void)
     n = 0;
     while (url[start] && n < maxchars) url_view[n++] = url[start++];
     url_view[n] = 0;
-    gb_fill((unsigned char)(x + 3), (unsigned char)(y + FIELD_Y),
-            (unsigned char)(gb_wm_w() - 6), FIELD_H, 1);
-    gb_frame((unsigned char)(x + 3), (unsigned char)(y + FIELD_Y),
-             (unsigned char)(gb_wm_w() - 6), FIELD_H, editing ? 3 : 2);
-    gb_textbw((unsigned char)(x + 4), (unsigned char)(y + FIELD_Y + 3), url_view);
+    gb_field((unsigned char)(x + 3), (unsigned char)(y + FIELD_Y),
+             (unsigned char)(gb_wm_w() - 6), FIELD_H, url_view,
+             editing ? GB_WIDGET_FOCUSED : 0);
 }
 
 static void format_progress(void)
@@ -1174,9 +1165,10 @@ static void draw_content(void)
     draw_url_field();
     gb_text((unsigned char)(x + 3), (unsigned char)(y + DEST_Y), "Destination");
     gb_text((unsigned char)(x + 3), (unsigned char)(y + DESTVAL_Y), dest_text);
-    draw_button((unsigned char)(x + 3), (unsigned char)(y + BUTTON_Y), 20, "Drive...");
-    draw_button((unsigned char)(x + 28), (unsigned char)(y + BUTTON_Y), 24,
-                state == ST_IDLE ? "Download" : "Cancel");
+    gb_button((unsigned char)(x + 3), (unsigned char)(y + BUTTON_Y),
+              20, BUTTON_H, "Drive...", 0);
+    gb_button((unsigned char)(x + 28), (unsigned char)(y + BUTTON_Y),
+              24, BUTTON_H, state == ST_IDLE ? "Download" : "Cancel", 0);
     gb_curshow();
     drawn = 1;
     draw_status();
@@ -1200,15 +1192,21 @@ static void handle_click(void)
 {
     unsigned char x = gb_wm_x(), y = gb_wm_y();
     unsigned char mx = gb_mx(), my = gb_my();
-    if (state == ST_IDLE && my >= y + FIELD_Y && my < y + FIELD_Y + FIELD_H) {
+    if (state == ST_IDLE &&
+        gb_widget_hit((unsigned char)(x + 3), (unsigned char)(y + FIELD_Y),
+                      (unsigned char)(gb_wm_w() - 6), FIELD_H, mx, my)) {
         editing = 1; gb_curhide(); draw_url_field(); gb_curshow(); return;
     }
-    if (my >= y + BUTTON_Y && my < y + BUTTON_Y + BUTTON_H) {
-        if (mx >= x + 3 && mx < x + 23 && state == ST_IDLE) { choose_drive(); return; }
-        if (mx >= x + 28 && mx < x + 52) {
-            if (state == ST_IDLE) start_download(); else cancel_download();
-            draw_content();
-        }
+    if (state == ST_IDLE &&
+        gb_widget_hit((unsigned char)(x + 3), (unsigned char)(y + BUTTON_Y),
+                      20, BUTTON_H, mx, my)) {
+        choose_drive();
+        return;
+    }
+    if (gb_widget_hit((unsigned char)(x + 28), (unsigned char)(y + BUTTON_Y),
+                      24, BUTTON_H, mx, my)) {
+        if (state == ST_IDLE) start_download(); else cancel_download();
+        draw_content();
     }
 }
 
