@@ -413,8 +413,8 @@ static void d_draw(void)
         if (i == sel) gb_textrev((unsigned char)(win_x + 1), ROW_Y(i), formats[i].name);
         else          gb_textbw ((unsigned char)(win_x + 1), ROW_Y(i), formats[i].name);
     }
-    gb_frame((unsigned char)(win_x + 1), (unsigned char)(BTN_Y - 1), BTN_W, 10, 2);
-    gb_textbw((unsigned char)(win_x + 2), BTN_Y, "[ FORMAT ]");
+    gb_button((unsigned char)(win_x + 1), (unsigned char)(BTN_Y - 1),
+              BTN_W, 10, "FORMAT", 0);
     gb_textbw((unsigned char)(win_x + 1), STAT_Y, statusmsg);
 }
 
@@ -460,8 +460,8 @@ static void d_click(void)
             sel = i; gb_curhide(); d_draw(); gb_curshow(); return;
         }
     }
-    if (my >= (unsigned char)(BTN_Y - 1) && my < (unsigned char)(BTN_Y + 9) &&
-        mx >= (unsigned char)(win_x + 1) && mx < (unsigned char)(win_x + 1 + BTN_W)) {
+    if (gb_button_hit((unsigned char)(win_x + 1), (unsigned char)(BTN_Y - 1),
+                      BTN_W, 10, mx, my, 0)) {
         do_format();
     }
 }

@@ -81,10 +81,11 @@ void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline   
               unsigned char w, unsigned char h, unsigned char pen);
 
 /* ---- Reusable widgets -------------------------------------------------------
- * Opt in with WIDGETS=1 (buttons/fields) and/or SCROLL=1 (vertical scrollbars)
- * when calling tools/build_capp.sh. The implementation is linked into the app
- * bank rather than placed in the resident kernel or paged GBUI module: ordinary
- * controls must repaint without loading code from disk.
+ * Opt in with WIDGETS=1 (buttons/fields), SCROLL=1 (vertical scrollbars),
+ * TOGGLE=1, STEPPER=1, SELECTOR=1 and/or SLIDER=1 when calling
+ * tools/build_capp.sh. Each implementation is linked into the app bank rather
+ * than placed in the resident kernel or paged GBUI module: ordinary controls
+ * must repaint without loading code from disk.
  *
  * Widgets use the four logical UI pens, so INKS= palette changes theme them:
  * canvas=0, surface=1, edge/text=2, accent/focus=3. Geometry remains fixed and
@@ -92,6 +93,9 @@ void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline   
  */
 #define GB_WIDGET_FOCUSED 0x01
 #define GB_WIDGET_ARROWS  0x02
+#define GB_WIDGET_CHECKED 0x04
+#define GB_WIDGET_DISABLED 0x08
+#define GB_WIDGET_PRESSED  0x10
 
 #define GB_SCROLL_NONE      0
 #define GB_SCROLL_UP        1
@@ -99,6 +103,11 @@ void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline   
 #define GB_SCROLL_PAGE_UP   3
 #define GB_SCROLL_PAGE_DOWN 4
 #define GB_SCROLL_THUMB     5
+
+#define GB_STEPPER_NONE  0
+#define GB_STEPPER_DEC   1
+#define GB_STEPPER_VALUE 2
+#define GB_STEPPER_INC   3
 
 void gb_button(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
                const char *label, unsigned char flags);
@@ -110,11 +119,36 @@ void gb_vscroll(unsigned char x, unsigned char y, unsigned char w, unsigned char
 unsigned char gb_widget_hit(unsigned char x, unsigned char y,
                             unsigned char w, unsigned char h,
                             unsigned char mx, unsigned char my);
+#define gb_button_hit(x, y, w, h, mx, my, flags) \
+    ((unsigned char)(!((flags) & GB_WIDGET_DISABLED) && \
+     gb_widget_hit((x), (y), (w), (h), (mx), (my))))
 unsigned char gb_vscroll_hit(unsigned char x, unsigned char y,
                              unsigned char w, unsigned char h,
                              unsigned char pos, unsigned char total,
                              unsigned char page, unsigned char mx,
                              unsigned char my, unsigned char flags);
+void gb_toggle(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
+               const char *label, unsigned char flags);
+unsigned char gb_toggle_hit(unsigned char x, unsigned char y,
+                            unsigned char w, unsigned char h,
+                            unsigned char mx, unsigned char my);
+void gb_stepper(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
+                const char *value, unsigned char flags);
+unsigned char gb_stepper_hit(unsigned char x, unsigned char y,
+                             unsigned char w, unsigned char h,
+                             unsigned char mx, unsigned char my);
+void gb_select(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
+               const char *value, unsigned char flags);
+unsigned char gb_select_hit(unsigned char x, unsigned char y,
+                            unsigned char w, unsigned char h,
+                            unsigned char mx, unsigned char my);
+void gb_slider(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
+               unsigned char value, unsigned char max, unsigned char flags);
+unsigned char gb_slider_hit(unsigned char x, unsigned char y,
+                            unsigned char w, unsigned char h,
+                            unsigned char mx, unsigned char my);
+unsigned char gb_slider_value(unsigned char x, unsigned char w,
+                              unsigned char max, unsigned char mx);
 
 void gb_icon(unsigned char slot, unsigned char col,      /* full icon blit       */
              unsigned char line);

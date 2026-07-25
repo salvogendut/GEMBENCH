@@ -266,17 +266,11 @@ static const char *win_title(void)
     return wtitle;
 }
 
-static void btn(unsigned char bx, const char *label)
-{
-    gb_fill(bx, CTRL_Y, 4, 9, 1);
-    gb_frame(bx, CTRL_Y, 4, 9, 2);
-    gb_textbw((unsigned char)(bx + 1), (unsigned char)(CTRL_Y + 1), label);
-}
 static void draw_buttons(void)
 {
     gb_curhide();
-    btn((unsigned char)(ox + 1), "+");
-    btn((unsigned char)(ox + 6), "-");
+    gb_button((unsigned char)(ox + 1), CTRL_Y, 4, 9, "+", 0);
+    gb_button((unsigned char)(ox + 6), CTRL_Y, 4, 9, "-", 0);
     gb_curshow();
 }
 static void draw_all(void)        /* content only; the WM drew the frame/title (#146) */
@@ -467,9 +461,9 @@ static void x_click(void)
     if (!generated) return;                            /* zoom/pan need a fractal first (#142) */
     mx = gb_mx(); my = gb_my();
     if (my >= CTRL_Y && my < (unsigned char)(CTRL_Y + 9)) {             /* +/- buttons */
-        if (mx >= (unsigned char)(ox + 1) && mx < (unsigned char)(ox + 5))
+        if (gb_widget_hit((unsigned char)(ox + 1), CTRL_Y, 4, 9, mx, my))
             rezoom(CANVAS_W / 2, CANVAS_H / 2, 1, 2);                   /* zoom in  */
-        else if (mx >= (unsigned char)(ox + 6) && mx < (unsigned char)(ox + 10))
+        else if (gb_widget_hit((unsigned char)(ox + 6), CTRL_Y, 4, 9, mx, my))
             rezoom(CANVAS_W / 2, CANVAS_H / 2, 2, 1);                   /* zoom out */
         return;
     }

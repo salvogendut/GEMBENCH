@@ -43,6 +43,9 @@
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   16           /* value column offset from the window's left (byte cols); a
                                   gap past the longest label ("Backdrop") so value != label */
+#define SELECT_W  34           /* fits cfg_get's 14 chars with the 8px CLASSIC font */
+#define SELECT_H  10
+#define STEP_H    10
 #define COLOUR_ROW NROWS       /* the "Colours..." line sits below the picker rows */
 /* The screensaver section: module picker, per-saver Configure command, then timeout. */
 #ifdef GB_MSX2
@@ -382,6 +385,21 @@ static unsigned char row_y(unsigned char r)
     return (unsigned char)(win_y + TITLE_H + 4 + r * ROW_H);
 }
 
+static void draw_selector(unsigned char row, const char *value)
+{
+    gb_select((unsigned char)(win_x + VAL_COL),
+              (unsigned char)(row_y(row) - 1),
+              SELECT_W, SELECT_H, value, 0);
+}
+
+static unsigned char selector_hit(unsigned char row,
+                                  unsigned char mx, unsigned char my)
+{
+    return gb_select_hit((unsigned char)(win_x + VAL_COL),
+                         (unsigned char)(row_y(row) - 1),
+                         SELECT_W, SELECT_H, mx, my);
+}
+
 /* paint the content: a white panel, each setting's label + current value, and a note
    that changes apply on the next boot. The WM already drew the frame/title/close. */
 static void s_draw(void)
@@ -394,9 +412,9 @@ static void s_draw(void)
     for (r = 0; r < NROWS; r++) {
         gb_textbw((unsigned char)(win_x + 1), row_y(r), rows[r].label);
         cfg_get(rows[r].key, val);
-        gb_textbw((unsigned char)(win_x + VAL_COL), row_y(r), val);
+        draw_selector(r, val);
         if (rows[r].ext[0] == 'B') {         /* #216: preview the current backdrop tile beside */
-            unsigned char sx = (unsigned char)(win_x + 42), sy = row_y(r);  /* keep clear of "A:NAME.BDP" */
+            unsigned char sx = (unsigned char)(win_x + 51), sy = row_y(r);  /* keep clear of the selector */
             if (*(volatile unsigned char *)BD_SOLID_ADDR)
                 gb_fill(sx, sy, 4, 8, 0);    /* SOLID -> a plain pen-0 (desktop) square */
 #if defined(GB_MSX2) || defined(GB_PCW)
@@ -416,7 +434,7 @@ static void s_draw(void)
         unsigned int p = cfg_keypos("MSXMODE=");
         const char *mode = (p != 0xFFFF && p < cfglen && cfgbuf[p] == '7') ?
                            "16 colors" : "4 colors";
-        gb_textbw((unsigned char)(win_x + VAL_COL), row_y(VIDEO_ROW), mode);
+        draw_selector(VIDEO_ROW, mode);
     }
 #endif
     {
@@ -424,7 +442,7 @@ static void s_draw(void)
         gb_textbw((unsigned char)(win_x + 1), row_y(SS_HDR_ROW), "Screensaver");
         ss_module_value(sv);                  /* Module: which .SAV */
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_MOD_ROW), "Module");
-        gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_MOD_ROW), sv);
+        draw_selector(SS_MOD_ROW, sv);
         gb_textbw((unsigned char)(win_x + 2), row_y(SS_CFG_ROW), "Options");
         {
             unsigned char bx = (unsigned char)(win_x + VAL_COL);
@@ -435,7 +453,7 @@ static void s_draw(void)
         }
         saver_value(sv);                      /* Timeout: idle minutes */
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_TM_ROW), "Timeout");
-        gb_textbw((unsigned char)(win_x + VAL_COL), row_y(SS_TM_ROW), sv);
+        draw_selector(SS_TM_ROW, sv);
     }
     gb_textbw((unsigned char)(win_x + 1), row_y(RESET_ROW), "Return to Defaults...");
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + win_h - 10),
@@ -552,26 +570,29 @@ static void cfg_set_inks(const unsigned char *inks)
 
 static unsigned char colp_y(unsigned char i) { return (unsigned char)(win_y + TITLE_H + 13 + i * 12); }
 
-static void colp_num(unsigned char i)        /* draw pen i's ink number (00-26) */
+static void colp_stepper(unsigned char i)    /* draw pen i's ink number (00-26) */
 {
     char t[3];
     unsigned char v = ink_cur[i];
     t[0] = (char)((v >= 10) ? '0' + v / 10 : ' ');
     t[1] = (char)('0' + v % 10);
     t[2] = 0;
-    gb_fill((unsigned char)(win_x + 13), colp_y(i), 3, 8, 1);
-    gb_textbw((unsigned char)(win_x + 13), colp_y(i), t);
+    gb_stepper((unsigned char)(win_x + 10),
+               (unsigned char)(colp_y(i) - 1), 10, STEP_H, t, 0);
 }
 
-/* colp_swatch: a small colour sample for pens 0-3 (#216). Filled in pen i, so a live
-   apply_colour() recolours it automatically - no redraw on -/+. Framed (pen 2) so it shows
-   even when the pen equals the white panel. The 5th row (Border) has no on-screen pen to
-   match an arbitrary border ink, so it gets no swatch (its colour is the screen edge). */
+/* colp_swatch: a small colour sample for pens 0-3 (#216). The hardware border is
+   not a drawable bitmap pen, so its row uses a marked swatch; the real screen
+   border remains its exact live preview. */
 static void colp_swatch(unsigned char i)
 {
-    if (i >= 4) return;
-    gb_fill((unsigned char)(win_x + 21), colp_y(i), 3, 8, i);
-    gb_frame((unsigned char)(win_x + 21), colp_y(i), 3, 8, 2);
+    unsigned char x = (unsigned char)(win_x + 21), y = colp_y(i);
+    if (i < 4) gb_fill(x, y, 3, 8, i);
+    else {
+        gb_fill(x, y, 3, 8, 1);
+        gb_textbw((unsigned char)(x + 1), y, "/");
+    }
+    gb_frame(x, y, 3, 8, 2);
 }
 
 static void colp_draw(void)
@@ -582,9 +603,7 @@ static void colp_draw(void)
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + TITLE_H + 1), "Desktop colours");
     for (i = 0; i < NPEN; i++) {
         gb_textbw((unsigned char)(win_x + 1),  colp_y(i), pen_lbl[i]);
-        gb_textbw((unsigned char)(win_x + 11), colp_y(i), "-");
-        colp_num(i);
-        gb_textbw((unsigned char)(win_x + 17), colp_y(i), "+");
+        colp_stepper(i);
         colp_swatch(i);                          /* #216: live colour sample (pens 0-3) */
     }
     gb_textbw((unsigned char)(win_x + 1), by, "Save");
@@ -625,14 +644,16 @@ static void colours_dialog(void)
             } else {
                 for (i = 0; i < NPEN; i++) {
                     unsigned char ry = colp_y(i);
-                    if (my < ry || my >= ry + 8) continue;
-                    if (mx >= win_x + 10 && mx < win_x + 13)          /* - */
+                    unsigned char part = gb_stepper_hit(
+                        (unsigned char)(win_x + 10),
+                        (unsigned char)(ry - 1), 10, STEP_H, mx, my);
+                    if (part == GB_STEPPER_DEC)
                         ink_cur[i] = (unsigned char)((ink_cur[i] == 0) ? 26 : ink_cur[i] - 1);
-                    else if (mx >= win_x + 16 && mx < win_x + 20)     /* + */
+                    else if (part == GB_STEPPER_INC)
                         ink_cur[i] = (unsigned char)((ink_cur[i] >= 26) ? 0 : ink_cur[i] + 1);
                     else continue;
                     apply_colour(i, ink_cur[i]);                     /* live preview */
-                    gb_curhide(); colp_num(i); gb_curshow();
+                    gb_curhide(); colp_stepper(i); gb_curshow();
                     break;
                 }
             }
@@ -749,12 +770,12 @@ static void saver_dialog(void)
 #define SSC_W 42
 #define SSC_H 78
 
-static void ss_cfg_number(unsigned char x, unsigned char y, unsigned char value)
+static void ss_cfg_stepper(unsigned char x, unsigned char y,
+                           unsigned char value)
 {
     char text[6];
     u_dec(value, text);
-    gb_fill(x, y, 5, 8, 1);
-    gb_textbw(x, y, text);
+    gb_stepper(x, y, 16, STEP_H, text, 0);
 }
 
 static void ss_cfg_draw(unsigned char x, unsigned char y,
@@ -765,13 +786,9 @@ static void ss_cfg_draw(unsigned char x, unsigned char y,
     unsigned char by = (unsigned char)(y + SSC_H - 13);
     gb_window(x, y, SSC_W, SSC_H, "Starfield");
     gb_textbw((unsigned char)(x + 3), sy, "Speed");
-    gb_textbw((unsigned char)(x + 17), sy, "-");
-    ss_cfg_number((unsigned char)(x + 21), sy, speed);
-    gb_textbw((unsigned char)(x + 29), sy, "+");
+    ss_cfg_stepper((unsigned char)(x + 16), (unsigned char)(sy - 1), speed);
     gb_textbw((unsigned char)(x + 3), ny, "Stars");
-    gb_textbw((unsigned char)(x + 17), ny, "-");
-    ss_cfg_number((unsigned char)(x + 21), ny, stars);
-    gb_textbw((unsigned char)(x + 29), ny, "+");
+    ss_cfg_stepper((unsigned char)(x + 16), (unsigned char)(ny - 1), stars);
     gb_textbw((unsigned char)(x + 3), by, "Save");
     gb_textbw((unsigned char)(x + 13), by, "Cancel");
 }
@@ -799,7 +816,7 @@ static void ss_config_dialog(void)
     gb_curshow();
 
     while (!done) {
-        unsigned char mx, my, sy, ny, by;
+        unsigned char mx, my, sy, ny, by, part;
         flags = gb_poll();
         if (flags & GB_QUIT) break;
         if (!(flags & GB_CLICK)) continue;
@@ -821,22 +838,35 @@ static void ss_config_dialog(void)
             }
             continue;
         }
-        if (my >= sy && my < sy + 8) {
-            if (mx >= x + 16 && mx < x + 20 && speed > GB_STARFLD_SPEED_MIN)
+        part = gb_stepper_hit((unsigned char)(x + 16),
+                              (unsigned char)(sy - 1),
+                              16, STEP_H, mx, my);
+        if (part != GB_STEPPER_NONE) {
+            if (part == GB_STEPPER_DEC && speed > GB_STARFLD_SPEED_MIN)
                 speed--;
-            else if (mx >= x + 28 && mx < x + 32 && speed < GB_STARFLD_SPEED_MAX)
+            else if (part == GB_STEPPER_INC && speed < GB_STARFLD_SPEED_MAX)
                 speed++;
             else continue;
-            gb_curhide(); ss_cfg_number((unsigned char)(x + 21), sy, speed); gb_curshow();
-        } else if (my >= ny && my < ny + 8) {
-            if (mx >= x + 16 && mx < x + 20 && stars > GB_STARFLD_STARS_MIN)
+            gb_curhide();
+            ss_cfg_stepper((unsigned char)(x + 16),
+                           (unsigned char)(sy - 1), speed);
+            gb_curshow();
+        } else {
+            part = gb_stepper_hit((unsigned char)(x + 16),
+                                  (unsigned char)(ny - 1),
+                                  16, STEP_H, mx, my);
+            if (part == GB_STEPPER_NONE) continue;
+            if (part == GB_STEPPER_DEC && stars > GB_STARFLD_STARS_MIN)
                 stars = (unsigned char)(stars - GB_STARFLD_STARS_STEP);
-            else if (mx >= x + 28 && mx < x + 32 &&
+            else if (part == GB_STEPPER_INC &&
                      stars <= GB_STARFLD_STARS_MAX - GB_STARFLD_STARS_STEP)
                 stars = (unsigned char)(stars + GB_STARFLD_STARS_STEP);
             else continue;
             if (stars < GB_STARFLD_STARS_MIN) stars = GB_STARFLD_STARS_MIN;
-            gb_curhide(); ss_cfg_number((unsigned char)(x + 21), ny, stars); gb_curshow();
+            gb_curhide();
+            ss_cfg_stepper((unsigned char)(x + 16),
+                           (unsigned char)(ny - 1), stars);
+            gb_curshow();
         }
     }
     if (flags & GB_QUIT) while (gb_poll() & GB_QUIT) ;
@@ -1032,8 +1062,7 @@ static void s_click(void)
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
     mx = gb_mx(); my = gb_my();
     for (r = 0; r < NROWS; r++) {
-        unsigned char ry = row_y(r);
-        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+        if (selector_hit(r, mx, my)) {
             open_picker(r);
             return;
         }
@@ -1047,16 +1076,14 @@ static void s_click(void)
     }
 #ifdef GB_MSX2
     {
-        unsigned char ry = row_y(VIDEO_ROW);
-        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+        if (selector_hit(VIDEO_ROW, mx, my)) {
             video_mode_dialog();
             return;
         }
     }
 #endif
     {
-        unsigned char ry = row_y(SS_MOD_ROW);             /* #219: screensaver module */
-        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+        if (selector_hit(SS_MOD_ROW, mx, my)) {           /* #219: screensaver module */
             ss_module_dialog();
             return;
         }
@@ -1070,8 +1097,7 @@ static void s_click(void)
         }
     }
     {
-        unsigned char ry = row_y(SS_TM_ROW);              /* screensaver timeout */
-        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+        if (selector_hit(SS_TM_ROW, mx, my)) {            /* screensaver timeout */
             saver_dialog();
             return;
         }

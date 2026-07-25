@@ -123,7 +123,7 @@ DATA_LOC=0x7000 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKT
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
                                    # and clip-aware wallpaper repaint path.
-DATA_LOC=0x778A DOC=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
+APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x778A DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
 DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
@@ -133,19 +133,19 @@ DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWE
 DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: data-loc above
+APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6300 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: data-loc above
                                    # the gb_doc/fullscreen code so the 6656-B icon-set buffer
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
-DOC=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
+DATA_LOC=0x6500 DOC=1 BUTTON=1 STEPPER=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
                                    # via the shared gb_doc menu system (#142) -> build/CLOCK.RAW
 DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: custom File/Edit/View menus + picker
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
-DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
+DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
-DATA_LOC=0x7B00 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
+APP_CFLAGS=--opt-code-size DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
                                    # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
-DIALOGS=1 tools/build_capp.sh apps/diskutil build/DISKUTIL.RAW # DISKUTIL: floppy formatter - a physical
+DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/DISKUTIL.RAW # DISKUTIL: floppy formatter - a physical
                                    # uPD765 FORMAT TRACK straight to the FDC (Data/System/exotic 80-trk DS);
                                    # gb_popup confirm. Reuses the floppy icon (DEFAULT.IST slot 0).
 tools/build_capp.sh apps/saver build/SQUARES.RAW  # SAVER (#219/#281): random squares - a

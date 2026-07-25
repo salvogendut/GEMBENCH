@@ -80,18 +80,32 @@ primitives. See `lib/gb/gb.h` for the full API.
 ## Reusable widgets
 
 Common non-modal controls live in opt-in `libgb` compilation units instead of the
-resident kernel. Build with `WIDGETS=1` for buttons, text-field frames and rectangle
-hit-testing; add `SCROLL=1` for vertical scrollbars and scrollbar-part hit-testing.
+resident kernel. Build with only the units an application uses:
+
+- `BUTTON=1`: buttons and rectangle hit-testing
+- `WIDGETS=1`: buttons, text-field frames and rectangle hit-testing
+- `SCROLL=1`: vertical scrollbars and scrollbar-part hit-testing
+- `TOGGLE=1`: checkbox/toggle rendering and hit-testing
+- `STEPPER=1`: decrement/value/increment controls and part hit-testing
+- `SELECTOR=1`: framed popup/list choices and hit-testing
+- `SLIDER=1`: horizontal sliders, hit-testing and pointer-to-value mapping
+
 For example:
 
 ```bash
-WIDGETS=1 SCROLL=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
+BUTTON=1 STEPPER=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
 ```
 
 The helpers are deliberately stateless: the application owns focus, text buffers,
-scroll positions and actions, then calls the shared renderer from `GB_MSG_DRAW` and
-the matching hit-test from `GB_MSG_CLICK`. Fields draw the supplied display text
-without editing or clipping it, so the app can apply its own scrolling/truncation.
-Widgets consistently use logical pens 0–3 as canvas, surface, edge/text and accent;
-the existing `INKS=` palette therefore recolours them without platform-specific
-code. WGET is the button/field reference and Shell is the scrollbar reference.
+selected values, ranges, scroll positions and actions, then calls the shared renderer
+from `GB_MSG_DRAW` and the matching hit-test from `GB_MSG_CLICK`. Text-bearing
+controls draw the supplied display text without editing or clipping it, so the app
+applies its own scrolling/truncation. Widgets consistently use logical pens 0–3 as
+canvas, surface, edge/text and accent; the existing `INKS=` palette therefore
+recolours them without platform-specific code. Buttons accept
+`GB_WIDGET_PRESSED` and `GB_WIDGET_DISABLED`; `gb_button_hit` rejects disabled
+controls. WGET is the button/field reference,
+Shell and File Manager are scrollbar references, Settings is the selector/stepper
+reference, Clock combines steppers with a button, XAOS uses compact buttons, and
+Icon Editor demonstrates pressed and disabled button states. Disk Utility uses a
+shared command button for its destructive format workflow.

@@ -28,18 +28,27 @@ void gb_button(unsigned char x, unsigned char y, unsigned char w, unsigned char 
     unsigned char tw = text_cols(label);
     unsigned char tx = (tw + 2 < w) ? (unsigned char)(x + ((w - tw) >> 1))
                                      : (unsigned char)(x + 1);
+    unsigned char ty = text_y(y, h);
+    unsigned char pen = (flags & GB_WIDGET_DISABLED) ? UI_SURFACE :
+                        (flags & (GB_WIDGET_FOCUSED | GB_WIDGET_PRESSED))
+                            ? UI_ACCENT : UI_EDGE;
+    if ((flags & GB_WIDGET_PRESSED) && !(flags & GB_WIDGET_DISABLED) && h > 9)
+        ty++;
     gb_fill(x, y, w, h, UI_SURFACE);
-    gb_frame(x, y, w, h, (flags & GB_WIDGET_FOCUSED) ? UI_ACCENT : UI_EDGE);
-    gb_textbw(tx, text_y(y, h), label);
+    gb_frame(x, y, w, h, pen);
+    gb_textbw(tx, ty, label);
 }
 
+#ifndef GB_BUTTON_ONLY
 void gb_field(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
               const char *text, unsigned char flags)
 {
     gb_fill(x, y, w, h, UI_SURFACE);
-    gb_frame(x, y, w, h, (flags & GB_WIDGET_FOCUSED) ? UI_ACCENT : UI_EDGE);
+    gb_frame(x, y, w, h, (flags & GB_WIDGET_DISABLED) ? UI_SURFACE :
+             (flags & GB_WIDGET_FOCUSED) ? UI_ACCENT : UI_EDGE);
     gb_textbw((unsigned char)(x + 1), text_y(y, h), text);
 }
+#endif
 
 unsigned char gb_widget_hit(unsigned char x, unsigned char y,
                             unsigned char w, unsigned char h,
