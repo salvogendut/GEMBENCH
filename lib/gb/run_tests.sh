@@ -16,7 +16,7 @@ trap 'rm -rf "$tmp"' EXIT
 "$CC" -Wall -Wextra -std=c99 -o "$tmp/test_gbcfg" test_gbcfg.c
 "$tmp/test_gbcfg"
 "$CC" -Wall -Wextra -std=c99 -o "$tmp/test_gbwidgets" \
-    test_gbwidgets.c gbwidgets.c gbscroll.c gbtoggle.c gbstepper.c \
+    test_gbwidgets.c gbwidgets.c gbscroll.c gbscroll16.c gbtoggle.c gbstepper.c \
     gbselect.c gbslider.c
 "$tmp/test_gbwidgets"
 "$CC" -Wall -Wextra -std=c99 -DGB_HOST_TEST -o "$tmp/test_gbform_ui" \

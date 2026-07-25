@@ -51,12 +51,14 @@ GBWIN_FLAG="${GBWIN:-1}"
 WIDGETS_FLAG="${WIDGETS:-0}"
 BUTTON_FLAG="${BUTTON:-0}"
 SCROLL_FLAG="${SCROLL:-0}"
+SCROLL16_FLAG="${SCROLL16:-0}"
 TOGGLE_FLAG="${TOGGLE:-0}"
 STEPPER_FLAG="${STEPPER:-0}"
 SELECTOR_FLAG="${SELECTOR:-0}"
 SLIDER_FLAG="${SLIDER:-0}"
 FORM_FLAG="${FORM:-0}"
 FORM_SELECT_FLAG="${FORM_SELECT:-0}"
+TIMESET_FLAG="${TIMESET:-0}"
 NET_SRC="$GB/gbnet_stub.c"
 case " ${APPDEFS:-} " in
     *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
@@ -82,6 +84,9 @@ fi
 if [ "$SCROLL_FLAG" = "1" ]; then
     deps+=("$GB/gbscroll.c")
 fi
+if [ "$SCROLL16_FLAG" = "1" ]; then
+    deps+=("$GB/gbscroll16.c")
+fi
 if [ "$TOGGLE_FLAG" = "1" ]; then
     deps+=("$GB/gbtoggle.c")
 fi
@@ -99,6 +104,9 @@ if [ "$FORM_FLAG" = "1" ]; then
 fi
 if [ "$FORM_SELECT_FLAG" = "1" ]; then
     deps+=("$GB/gbform_select.c")
+fi
+if [ "$TIMESET_FLAG" = "1" ]; then
+    deps+=("$GB/gbsettime.c")
 fi
 while IFS= read -r dep; do
     deps+=("$dep")
@@ -136,12 +144,14 @@ cache_key=$(printf '%s\n' \
     "WIDGETS=$WIDGETS_FLAG" \
     "BUTTON=$BUTTON_FLAG" \
     "SCROLL=$SCROLL_FLAG" \
+    "SCROLL16=$SCROLL16_FLAG" \
     "TOGGLE=$TOGGLE_FLAG" \
     "STEPPER=$STEPPER_FLAG" \
     "SELECTOR=$SELECTOR_FLAG" \
     "SLIDER=$SLIDER_FLAG" \
     "FORM=$FORM_FLAG" \
     "FORM_SELECT=$FORM_SELECT_FLAG" \
+    "TIMESET=$TIMESET_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
     "APP_CFLAGS=$APP_CFLAGS" \
     "LOAD_LIMIT=$LOAD_LIMIT" \
@@ -182,6 +192,11 @@ if [ "$SCROLL_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbscroll.c" -o "$work/gbscroll.rel"
     SCROLL_REL="$work/gbscroll.rel"
 fi
+SCROLL16_REL=""
+if [ "$SCROLL16_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbscroll16.c" -o "$work/gbscroll16.rel"
+    SCROLL16_REL="$work/gbscroll16.rel"
+fi
 TOGGLE_REL=""
 if [ "$TOGGLE_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbtoggle.c" -o "$work/gbtoggle.rel"
@@ -212,6 +227,11 @@ if [ "$FORM_SELECT_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbform_select.c" -o "$work/gbform_select.rel"
     FORM_SELECT_REL="$work/gbform_select.rel"
 fi
+TIMESET_REL=""
+if [ "$TIMESET_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbsettime.c" -o "$work/gbsettime.rel"
+    TIMESET_REL="$work/gbsettime.rel"
+fi
 # Opt-in dialogs (#114, #142). The heavy render (popup/prompt/file-picker) now lives in
 # the paged GBUI kernel module (#142 step 1b); an app that needs ANY dialog links only
 # the tiny marshalling stub gbui_stub.c (gb_popup/gb_prompt/gb_pickfile/gb_pickdir ->
@@ -237,9 +257,9 @@ if [ "$NET_FLAG" = "1" ]; then
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
-    "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $SCROLL_REL \
+    "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
-    $FORM_SELECT_REL $DLG_REL \
+    $FORM_SELECT_REL $TIMESET_REL $DLG_REL \
     "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places

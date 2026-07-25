@@ -588,8 +588,8 @@ ig_done
                 include "assets.asm"
 
 ; --- desktop boot loader -------------------------------------------------
-; The old GB_RUN modal/nested app launcher is now a reserved no-op slot. Boot only needs to
-; load DESKTOP.APP once; later apps are opened by the co-resident WM path (GB_WMOPEN).
+; The old GB_RUN modal/nested app launcher is gone. Boot only needs to load
+; DESKTOP.APP once; later apps use the co-resident WM path.
 boot_desktop
                 ld    hl,name_desktop
                 ld    de,fs_req_name
@@ -3127,8 +3127,6 @@ icon_imgend
                 ; must stay below DATA_MODTOP (the write module shares PAGE_DATA) - else a
                 ; save/delete/copy overwrites the end of the set (garbled icons, #88).
                 assert icon_imgend-icon_img<=DATA_MODTOP-DATA_ICONS-#200,"DEFAULT.IST too big: would collide with the write module in PAGE_DATA - fewer icons or raise DATA_MODTOP"
-wel_img         incbin "../assets/WELCOME.TXT"  ; a sample text file to open in VIEWER
-wel_imgend
 splash_img      incbin "../build/SPLASH.BIN"    ; #196: bootsplash lollipop (raw Mode-1, 24x144)
 splash_imgend
                 include "../lib/cursor_data.asm" ; cur_spr_data..cur_spr_end -> DEFAULT.SPR
@@ -3143,15 +3141,12 @@ dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTO
 dtp_imgend
 npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
 npd_imgend
-clk_img         incbin "../build/CLOCK.RAW"     ; packaged on the disk as CLOCK.APP
-clk_imgend
 pist_img        incbin "../build/PAINT.IST"     ; PAINT toolchest set (#114): PAINT loads it,
 pist_imgend                                     ; ICONED edits it. Packaging only - down here
                                                 ; in the low region to keep the high region < #FFFF
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
-                save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
                 save  "GBCFG.MOD",cfg_img,cfg_imgend-cfg_img,DSK,"build/gbkern.dsk"
                 save  "GBFAT.MOD",fat_img,fat_imgend-fat_img,DSK,"build/gbkern.dsk"
                 save  "GBNET.MOD",net_img,net_imgend-net_img,DSK,"build/gbkern.dsk"
@@ -3159,7 +3154,6 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "PAINT.IST",pist_img,pist_imgend-pist_img,DSK,"build/gbkern.dsk"
-                save  "WELCOME.TXT",wel_img,wel_imgend-wel_img,DSK,"build/gbkern.dsk"
                 save  "SPLASH.MOD",splash_img,splash_imgend-splash_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
                 save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data

@@ -81,8 +81,9 @@ void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline   
               unsigned char w, unsigned char h, unsigned char pen);
 
 /* ---- Reusable widgets -------------------------------------------------------
- * Opt in with WIDGETS=1 (buttons/fields), SCROLL=1 (vertical scrollbars),
- * TOGGLE=1, STEPPER=1, SELECTOR=1 and/or SLIDER=1 when calling
+ * Opt in with WIDGETS=1 (buttons/fields), SCROLL=1 (byte-range vertical
+ * scrollbars), SCROLL16=1 (large vertical/horizontal scrollbars), TOGGLE=1,
+ * STEPPER=1, SELECTOR=1 and/or SLIDER=1 when calling
  * tools/build_capp.sh. Each implementation is linked into the app bank rather
  * than placed in the resident kernel or paged GBUI module: ordinary controls
  * must repaint without loading code from disk.
@@ -127,6 +128,18 @@ unsigned char gb_vscroll_hit(unsigned char x, unsigned char y,
                              unsigned char pos, unsigned char total,
                              unsigned char page, unsigned char mx,
                              unsigned char my, unsigned char flags);
+void gb_vscroll16(unsigned char x, unsigned char y,
+                  unsigned char w, unsigned char h,
+                  unsigned int pos, unsigned int total, unsigned int page);
+void gb_hscroll16(unsigned char x, unsigned char y,
+                  unsigned char w, unsigned char h,
+                  unsigned int pos, unsigned int total, unsigned int page);
+unsigned int gb_vscroll16_value(unsigned char y, unsigned char h,
+                                unsigned int total, unsigned int page,
+                                unsigned char my);
+unsigned int gb_hscroll16_value(unsigned char x, unsigned char w,
+                                unsigned int total, unsigned int page,
+                                unsigned char mx);
 void gb_toggle(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
                const char *label, unsigned char flags);
 unsigned char gb_toggle_hit(unsigned char x, unsigned char y,
@@ -486,6 +499,10 @@ void gb_wm_launch_as(const char *app);
  * values, BCD unless gb_binmode is nonzero (convert in the app, to keep the kernel
  * lean). CLOCK.APP draws its hands by calling the firmware graphics directly. */
 void gb_time(void);
+/* Set the running system clock from binary values. Invalid values are ignored.
+ * The CPC setter also updates a detected Dallas RTC; software-clock systems are
+ * updated immediately on every platform. */
+void gb_set_time(unsigned char hour, unsigned char minute, unsigned char second);
 #define gb_hour    (*(volatile unsigned char *)0x1240)
 #define gb_min     (*(volatile unsigned char *)0x1241)
 #define gb_sec     (*(volatile unsigned char *)0x1242)

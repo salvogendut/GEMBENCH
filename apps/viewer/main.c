@@ -8,13 +8,14 @@
 #include "gb.h"
 
 #if defined(GB_MSX2) || defined(GB_PCW)
-#define VIEW_MAX  5488    /* leave room for portable-PIC fallback conversion */
+#define VIEW_MAX  5184    /* leave room for portable-PIC fallback conversion */
 #else
-#define VIEW_MAX  6000    /* in-page text/fallback buffer. Pictures use
+#define VIEW_MAX  5696    /* in-page text/fallback buffer. Pictures use
                              the banked buffer on
                              GBALB/ROM (#164) - so where a spare bank exists this is just the
                              TEXT buffer; it's the picture fallback only with no free bank (bare
-                             128K). */
+                             128K). The shared 16-bit scrollbars trade 304 bytes of this fallback
+                             buffer for reusable large-document controls. */
 #endif
 #define TX_COL    (unsigned char)(win_x + 2)
 #define TX_Y0     (unsigned char)(win_y + 12)
@@ -85,7 +86,7 @@ static unsigned char banked2;                          /* optional second bank f
 #ifdef GB_MSX2
 static unsigned char banked3, banked4;                 /* Screen-7 pictures can occupy four banks */
 #endif
-static unsigned char scroll_y;                         /* top visible picture row (#166 scroll) */
+static unsigned int  scroll_y;                         /* top visible picture row (#166 scroll) */
 static unsigned char scroll_x;                         /* left visible picture byte column */
 static unsigned char view_x, view_y, view_w, view_h, view_vsb, view_hsb;
 static unsigned char hbar_x, hbar_y, hbar_w;
@@ -285,7 +286,7 @@ static void calc_view(void)
     view_w = vw;
     view_h = vh;
     if (pic_h <= view_h) scroll_y = 0;
-    else if (scroll_y > (unsigned char)(pic_h - view_h)) scroll_y = (unsigned char)(pic_h - view_h);
+    else if (scroll_y > pic_h - view_h) scroll_y = pic_h - view_h;
     if (pic_wb <= view_w) scroll_x = 0;
     else if (scroll_x > (unsigned char)(pic_wb - view_w)) scroll_x = (unsigned char)(pic_wb - view_w);
     if (view_hsb && win_w > (unsigned char)(3 + (view_vsb ? SB_W : 0) + GRIP_W)) {
@@ -392,57 +393,35 @@ static void draw_pic(void)
     src = pic_off + (unsigned int)scroll_y * pic_stride +
           (pic_mode == 7 ? (unsigned int)scroll_x * 2U : scroll_x);
     blit_pic(view_x, view_y, draw_w, rows, src);
-    if (view_vsb) {                                      /* vertical scrollbar at the LEFT edge (#166) */
-        unsigned char th = (unsigned char)((unsigned int)view_h * view_h / pic_h); if (th < 4) th = 4;
-        if (th > view_h) th = view_h;
-        {
-            unsigned char ty = (unsigned char)(TX_Y0 + (unsigned int)scroll_y * (view_h - th) / (pic_h - view_h));
-            gb_fill((unsigned char)(win_x + 1), TX_Y0, SB_W, view_h, 1);  /* white track */
-            gb_fill((unsigned char)(win_x + 2), ty, 1, th, 3);           /* red thumb */
-        }
-    }
-    if (view_hsb && hbar_w) {
-        unsigned char th, thumb_x;
-        th = (unsigned char)((unsigned int)view_w * hbar_w / pic_wb); if (th < 4) th = 4;
-        if (th > hbar_w) th = hbar_w;
-        thumb_x = (unsigned char)(hbar_x + (unsigned int)scroll_x * (hbar_w - th) / (pic_wb - view_w));
-        gb_fill(hbar_x, hbar_y, hbar_w, (unsigned char)(HSB_H - 1), 1);
-        gb_fill(thumb_x, (unsigned char)(hbar_y + 2), th, 2, 3);
-    }
+    if (view_vsb)                                      /* vertical scrollbar at the LEFT edge (#166) */
+        gb_vscroll16((unsigned char)(win_x + 1), TX_Y0, SB_W, view_h,
+                     scroll_y, pic_h, view_h);
+    if (view_hsb && hbar_w)
+        gb_hscroll16(hbar_x, hbar_y, hbar_w, (unsigned char)(HSB_H - 1),
+                     scroll_x, pic_wb, view_w);
 }
 
 /* sb_drag: while the fire is held, map the pointer Y onto scroll_y and repaint. */
 static void sb_drag(void)
 {
-    unsigned char th = (unsigned char)((unsigned int)view_h * view_h / pic_h); if (th < 4) th = 4;
-    unsigned char half = (unsigned char)(th / 2), ny;
-    unsigned int max = pic_h - view_h, my, v;
-    if (th > view_h) th = view_h;
-    if (view_h <= th) return;
+    unsigned int ny;
     while (gb_poll() & GB_FIRE) {
-        my = gb_my();
-        if (my < (unsigned int)(TX_Y0 + half)) ny = 0;
-        else { v = ((my - TX_Y0 - half) * max) / (view_h - th); ny = (v > max) ? (unsigned char)max : (unsigned char)v; }
+        ny = gb_vscroll16_value(TX_Y0, view_h, pic_h, view_h, gb_my());
         if (ny != scroll_y) { scroll_y = ny; gb_curhide(); draw_pic(); gb_curshow(); }
     }
 }
 
 static void hsb_drag(void)
 {
-    unsigned char th, half, nx;
-    unsigned int max, mx, v;
+    unsigned int nx;
     calc_view();
     if (!view_hsb || !hbar_w || pic_wb <= view_w) return;
-    th = (unsigned char)((unsigned int)view_w * hbar_w / pic_wb); if (th < 4) th = 4;
-    if (th > hbar_w) th = hbar_w;
-    if (hbar_w <= th) return;
-    half = (unsigned char)(th / 2);
-    max = pic_wb - view_w;
     while (gb_poll() & GB_FIRE) {
-        mx = gb_mx();
-        if (mx < (unsigned int)(hbar_x + half)) nx = 0;
-        else { v = ((mx - hbar_x - half) * max) / (hbar_w - th); nx = (v > max) ? (unsigned char)max : (unsigned char)v; }
-        if (nx != scroll_x) { scroll_x = nx; gb_curhide(); draw_pic(); gb_curshow(); }
+        nx = gb_hscroll16_value(hbar_x, hbar_w, pic_wb, view_w, gb_mx());
+        if (nx != scroll_x) {
+            scroll_x = (unsigned char)nx;
+            gb_curhide(); draw_pic(); gb_curshow();
+        }
     }
 }
 
