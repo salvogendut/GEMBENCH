@@ -37,6 +37,8 @@
 #define DEF_W     58           /* byte cols (232 px) */
 #ifdef GB_MSX2
 #define DEF_H     174          /* includes video mode and Return to Defaults rows */
+#elif defined(GB_PCW)
+#define DEF_H     150          /* fixed monochrome palette: no Colours row */
 #else
 #define DEF_H     162
 #endif
@@ -54,6 +56,11 @@
 #define SS_MOD_ROW (NROWS + 3)
 #define SS_CFG_ROW (NROWS + 4)
 #define SS_TM_ROW  (NROWS + 5)
+#elif defined(GB_PCW)
+#define SS_HDR_ROW NROWS
+#define SS_MOD_ROW (NROWS + 1)
+#define SS_CFG_ROW (NROWS + 2)
+#define SS_TM_ROW  (NROWS + 3)
 #else
 #define SS_HDR_ROW (NROWS + 1)
 #define SS_MOD_ROW (NROWS + 2)
@@ -400,6 +407,14 @@ static unsigned char selector_hit(unsigned char row,
                          SELECT_W, SELECT_H, mx, my);
 }
 
+static const gb_action_t configure_action[1] = {
+    { "Configure", 16 }
+};
+static const gb_action_t save_cancel_actions[2] = {
+    { "Save", 8 },
+    { "Cancel", 11 }
+};
+
 /* paint the content: a white panel, each setting's label + current value, and a note
    that changes apply on the next boot. The WM already drew the frame/title/close. */
 static void s_draw(void)
@@ -427,7 +442,9 @@ static void s_draw(void)
             gb_frame(sx, sy, 4, 8, 2);       /* outline so it shows on the white panel */
         }
     }
+#ifndef GB_PCW
     gb_textbw((unsigned char)(win_x + 1), row_y(COLOUR_ROW), "Colours...");
+#endif
 #ifdef GB_MSX2
     gb_textbw((unsigned char)(win_x + 1), row_y(VIDEO_ROW), "Video mode");
     {
@@ -447,9 +464,7 @@ static void s_draw(void)
         {
             unsigned char bx = (unsigned char)(win_x + VAL_COL);
             unsigned char by = (unsigned char)(row_y(SS_CFG_ROW) - 1);
-            gb_fill(bx, by, 16, 10, 1);
-            gb_frame(bx, by, 16, 10, 2);
-            gb_textbw((unsigned char)(bx + 1), (unsigned char)(by + 1), "Configure");
+            gb_actions(bx, by, configure_action, 1, 0);
         }
         saver_value(sv);                      /* Timeout: idle minutes */
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_TM_ROW), "Timeout");
@@ -466,8 +481,14 @@ static void s_draw(void)
 
 /* ---- desktop colours (INKS=) ------------------------------------------------ */
 
+#ifndef GB_PCW
 /* 5 colours: the 4 Mode-1 pens + the screen border (its own CPC ink). */
 #define NPEN 5
+#ifdef GB_MSX2
+#define NEDITPEN 4
+#else
+#define NEDITPEN NPEN
+#endif
 static const char *const pen_lbl[NPEN] = { "Paper", "Text", "Edge", "Accent", "Border" };
 static unsigned char ink_cur[NPEN], ink_orig[NPEN];
 
@@ -601,7 +622,7 @@ static void colp_draw(void)
     gb_fill(win_x, (unsigned char)(win_y + TITLE_H), win_w,
             (unsigned char)(win_h - TITLE_H), 1);
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + TITLE_H + 1), "Desktop colours");
-    for (i = 0; i < NPEN; i++) {
+    for (i = 0; i < NEDITPEN; i++) {
         gb_textbw((unsigned char)(win_x + 1),  colp_y(i), pen_lbl[i]);
         colp_stepper(i);
         colp_swatch(i);                          /* #216: live colour sample (pens 0-3) */
@@ -625,7 +646,7 @@ static void colours_dialog(void)
     while (!done) {
         flags = gb_poll();
         if (flags & GB_QUIT) {                       /* ESC = cancel: restore + leave */
-            for (i = 0; i < NPEN; i++) apply_colour(i, ink_orig[i]);
+            for (i = 0; i < NEDITPEN; i++) apply_colour(i, ink_orig[i]);
             done = 1;
             break;
         }
@@ -638,11 +659,11 @@ static void colours_dialog(void)
                     cfg_set_inks(ink_cur);
                     done = 1;
                 } else if (mx >= win_x + 8 && mx < win_x + 18) {    /* Cancel */
-                    for (i = 0; i < NPEN; i++) apply_colour(i, ink_orig[i]);
+                    for (i = 0; i < NEDITPEN; i++) apply_colour(i, ink_orig[i]);
                     done = 1;
                 }
             } else {
-                for (i = 0; i < NPEN; i++) {
+                for (i = 0; i < NEDITPEN; i++) {
                     unsigned char ry = colp_y(i);
                     unsigned char part = gb_stepper_hit(
                         (unsigned char)(win_x + 10),
@@ -663,6 +684,7 @@ static void colours_dialog(void)
     gb_modal_set(0);
     gb_restore_parent();       /* palette roles changed: redraw every managed frame */
 }
+#endif
 
 /* ---- screensaver: module (SAVER=) + idle timeout (SAVERTIME=, #219) ---------- */
 
@@ -717,7 +739,7 @@ static void ss_module_dialog(void)
    reads SAVERTIME=<minutes> at boot and runs the module after that idle - so a change
    takes effect on the next boot, like Font/Icons. */
 static const char *const saver_lbl[5]  = { "Off", "1 min", "2 min", "5 min", "10 min" };
-static const unsigned int saver_mins[5] = { 0, 1, 2, 5, 10 };
+static const unsigned char saver_mins[5] = { 0, 1, 2, 5, 10 };
 
 /* u_dec: write the decimal of v into s (NUL-terminated); 0 -> "0". */
 static void u_dec(unsigned int v, char *s)
@@ -734,18 +756,31 @@ static void u_dec(unsigned int v, char *s)
    one, else "<n> min" (a hand-edited non-preset minute count). */
 static void saver_value(char *dst)
 {
-    char v[10];
-    unsigned int mins = 0;
-    unsigned char i = 0, k;
+    char v[16];
+    unsigned char mins = 0, overflow = 0;
+    unsigned char i = 0, k, digit;
     cfg_get("SAVERTIME=", v);
-    while (v[i] >= '0' && v[i] <= '9') { mins = mins * 10 + (unsigned int)(v[i] - '0'); i++; }
-    for (i = 0; i < 5; i++)
-        if (saver_mins[i] == mins) {
-            for (k = 0; saver_lbl[i][k]; k++) dst[k] = saver_lbl[i][k];
-            dst[k] = 0;
+    while (v[i] >= '0' && v[i] <= '9') {
+        digit = (unsigned char)(v[i] - '0');
+        if (!overflow) {
+            if (mins > 25 || (mins == 25 && digit > 5))
+                overflow = 1;
+            else
+                mins = (unsigned char)(mins * 10 + digit);
+        }
+        i++;
+    }
+    if (!overflow) {
+        for (k = 0; k < 5; k++) if (saver_mins[k] == mins) {
+            for (i = 0; saver_lbl[k][i]; i++) dst[i] = saver_lbl[k][i];
+            dst[i] = 0;
             return;
         }
-    u_dec(mins, dst);                        /* non-preset -> "<n> min" */
+        u_dec(mins, dst);                    /* non-preset -> "<n> min" */
+    } else {
+        for (k = 0; k < i && k < 10; k++) dst[k] = v[k];
+        dst[k] = 0;
+    }
     for (k = 0; dst[k]; k++) ;
     dst[k] = ' '; dst[k+1] = 'm'; dst[k+2] = 'i'; dst[k+3] = 'n'; dst[k+4] = 0;
 }
@@ -789,8 +824,8 @@ static void ss_cfg_draw(unsigned char x, unsigned char y,
     ss_cfg_stepper((unsigned char)(x + 16), (unsigned char)(sy - 1), speed);
     gb_textbw((unsigned char)(x + 3), ny, "Stars");
     ss_cfg_stepper((unsigned char)(x + 16), (unsigned char)(ny - 1), stars);
-    gb_textbw((unsigned char)(x + 3), by, "Save");
-    gb_textbw((unsigned char)(x + 13), by, "Cancel");
+    gb_actions((unsigned char)(x + 3), by,
+               save_cancel_actions, 2, 2);
 }
 
 static void ss_config_dialog(void)
@@ -827,13 +862,17 @@ static void ss_config_dialog(void)
 
         if (my >= y + 2 && my < y + 12 && mx >= x + 1 && mx < x + 3)
             break;                                      /* title-bar close = Cancel */
-        if (my >= by && my < by + 8) {
-            if (mx >= x + 3 && mx < x + 10) {
+        part = GB_ACTION_NONE;
+        if (my >= by && (unsigned char)(my - by) < GB_ACTION_H)
+            part = gb_actions_hit((unsigned char)(x + 3), by,
+                                  save_cancel_actions, 2, 2, mx, my);
+        if (part != GB_ACTION_NONE) {
+            if (part == 0) {
                 char text[6];
                 u_dec(speed, text); cfg_set(GB_STARFLD_SPEED_KEY, text);
                 u_dec(stars, text); cfg_set(GB_STARFLD_STARS_KEY, text);
                 done = 1;
-            } else if (mx >= x + 13 && mx < x + 23) {
+            } else {
                 done = 1;
             }
             continue;
@@ -1047,8 +1086,10 @@ static void reset_defaults(void)
     for (i = 0; i < n; i++) cfgbuf[i] = gb_copybuf[i];
     cfglen = n;
     cfg_set(rows[0].key, "DEFAULT");        /* save and refresh the kernel config copy */
+#ifndef GB_PCW
     cfg_get_inks(ink_cur);
     for (p = 0; p < NPEN; p++) apply_colour(p, ink_cur[p]);
+#endif
     *(volatile unsigned char *)BD_SOLID_ADDR = 1;
     *(volatile unsigned char *)BD_DRIVE_ADDR = DRIVE_NONE;
     s_draw();
@@ -1067,6 +1108,7 @@ static void s_click(void)
             return;
         }
     }
+#ifndef GB_PCW
     {
         unsigned char ry = row_y(COLOUR_ROW);
         if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
@@ -1074,6 +1116,7 @@ static void s_click(void)
             return;
         }
     }
+#endif
 #ifdef GB_MSX2
     {
         if (selector_hit(VIDEO_ROW, mx, my)) {
@@ -1090,8 +1133,10 @@ static void s_click(void)
     }
     {
         unsigned char ry = row_y(SS_CFG_ROW);
-        if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2) &&
-            mx >= win_x + VAL_COL && mx < win_x + VAL_COL + 16) {
+        unsigned char by = (unsigned char)(ry - 1);
+        if (my >= by && (unsigned char)(my - by) < GB_ACTION_H &&
+            gb_actions_hit((unsigned char)(win_x + VAL_COL), by,
+                           configure_action, 1, 0, mx, my) == 0) {
             ss_config_dialog();
             return;
         }

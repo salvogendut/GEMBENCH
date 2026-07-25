@@ -126,6 +126,9 @@ Enable the required compilation units per app:
 ```bash
 BUTTON=1 SELECTOR=1 STEPPER=1 \
     tools/build_capp.sh apps/myapp build/MYAPP.RAW
+
+# Fixed-height default action rows on an existing surface panel:
+ACTIONS=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
 ```
 
 `BUTTON=1` provides `gb_button` and `gb_widget_hit` without linking the text-field
@@ -142,14 +145,26 @@ their colours consistently on CPC, MSX2 and PCW. Buttons may be drawn with
 rejects a disabled control. Layout metrics, selected values, ranges, popup
 actions and inline text editing remain application-owned.
 
+`ACTIONS=1` is the smaller option for a constrained dialog that only needs
+default-state command rows. `gb_actions()` frames and labels one or more
+caller-sized actions at the fixed `GB_ACTION_H` metric; the caller must first
+paint the containing panel with the surface pen. `gb_actions_hit()` uses
+wrap-safe 8-bit coordinate deltas and returns the selected index or
+`GB_ACTION_NONE`. This unit does not provide pressed or disabled states; use
+`BUTTON=1` and `gb_button()` when those states are needed.
+
 Browser is an intentional exception: its PCW build is constrained by the
 record-rounded app loader ceiling. Linking the generic field/button unit for its
 toolbar exceeded that ceiling by 439 bytes, so it retains compact local drawing
 until equivalent room is reclaimed.
 
-Settings also retains compact local `Configure`/`Save`/`Cancel` actions. Even the
-button-only unit moved its CPC loaded image 276 bytes past the fixed data split,
-while its data already ends only 91 bytes below the kernel.
+Settings uses `ACTIONS=1` for the screensaver Configure and Save/Cancel rows.
+Its stack-heavy live colour editor deliberately retains the proven local
+Save/Cancel path: calling or drawing the shared row in that loop regressed
+target-side stepper input. A bounded allocation pass keeps this mixed
+implementation within the CPC code/data split without changing the colour
+handler. Settings data still ends only 91 bytes below the kernel, so further
+migration requires target testing and an explicit map check.
 
 ### Reusable forms and modal dialogs
 
@@ -175,10 +190,12 @@ The form units are app-linked and opt-in. They add nothing to the resident
 kernel or `GBUI.MOD`, and existing apps remain byte-identical until migrated
 explicitly. Build `make formref`, then run `FORMREF.APP` from `DIAG/` on CPC,
 `GBENCH/` on MSX2, or from the PCW Companion disk, before applying the API to a
-constrained app. Settings and Browser deliberately remain on their current
-implementations. Clock is the first production form-modal user; it builds with
-`WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1`. `TIMESET=1` links `gb_set_time()` into
-that app only, preserving CPC resident-kernel headroom.
+constrained app. Its modal deliberately combines a field, selector, stepper and
+the compact `ACTIONS=1` Save/Cancel row so target dispatch can be checked before
+another Settings migration. Settings and Browser deliberately remain on their
+compact implementations. Clock is the first production form-modal user; it
+builds with `WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1`. `TIMESET=1` links
+`gb_set_time()` into that app only, preserving CPC resident-kernel headroom.
 
 ## Icon and font sets (GEOBENCH.CFG)
 

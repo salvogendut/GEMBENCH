@@ -50,6 +50,7 @@ NET_FLAG="${NET:-0}"
 GBWIN_FLAG="${GBWIN:-1}"
 WIDGETS_FLAG="${WIDGETS:-0}"
 BUTTON_FLAG="${BUTTON:-0}"
+ACTIONS_FLAG="${ACTIONS:-0}"
 SCROLL_FLAG="${SCROLL:-0}"
 SCROLL16_FLAG="${SCROLL16:-0}"
 TOGGLE_FLAG="${TOGGLE:-0}"
@@ -80,6 +81,9 @@ if [ "$GBWIN_FLAG" = "1" ]; then
 fi
 if [ "$WIDGETS_FLAG" = "1" ] || [ "$BUTTON_FLAG" = "1" ]; then
     deps+=("$GB/gbwidgets.c")
+fi
+if [ "$ACTIONS_FLAG" = "1" ]; then
+    deps+=("$GB/gbactions.c")
 fi
 if [ "$SCROLL_FLAG" = "1" ]; then
     deps+=("$GB/gbscroll.c")
@@ -143,6 +147,7 @@ cache_key=$(printf '%s\n' \
     "GBWIN=$GBWIN_FLAG" \
     "WIDGETS=$WIDGETS_FLAG" \
     "BUTTON=$BUTTON_FLAG" \
+    "ACTIONS=$ACTIONS_FLAG" \
     "SCROLL=$SCROLL_FLAG" \
     "SCROLL16=$SCROLL16_FLAG" \
     "TOGGLE=$TOGGLE_FLAG" \
@@ -186,6 +191,11 @@ if [ "$WIDGETS_FLAG" = "1" ]; then
 elif [ "$BUTTON_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer -DGB_BUTTON_ONLY ${APPDEFS:-} -I "$GB" -c "$GB/gbwidgets.c" -o "$work/gbwidgets.rel"
     WIDGETS_REL="$work/gbwidgets.rel"
+fi
+ACTIONS_REL=""
+if [ "$ACTIONS_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbactions.c" -o "$work/gbactions.rel"
+    ACTIONS_REL="$work/gbactions.rel"
 fi
 SCROLL_REL=""
 if [ "$SCROLL_FLAG" = "1" ]; then
@@ -257,7 +267,7 @@ if [ "$NET_FLAG" = "1" ]; then
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
-    "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $SCROLL_REL $SCROLL16_REL \
+    "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
     $FORM_SELECT_REL $TIMESET_REL $DLG_REL \
     "$work/gblib.rel" -o "$work/app.ihx"
