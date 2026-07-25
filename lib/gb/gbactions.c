@@ -13,10 +13,13 @@ void gb_actions(unsigned char x, unsigned char y,
 {
     unsigned char i;
     for (i = 0; i < count; i++) {
-        gb_frame(x, y, actions[i].w, GB_ACTION_H, 2);
+        unsigned char w = actions->w;
+        const char *label = actions->label;
+        gb_frame(x, y, w, GB_ACTION_H, 2);
         gb_textbw((unsigned char)(x + 1), (unsigned char)(y + 1),
-                  actions[i].label);
-        x = (unsigned char)(x + actions[i].w + gap);
+                  label);
+        x = (unsigned char)(x + w + gap);
+        actions++;
     }
 }
 
@@ -26,11 +29,13 @@ unsigned char gb_actions_hit(unsigned char x, unsigned char y,
                              unsigned char mx, unsigned char my)
 {
     unsigned char i;
-    if (my < y || my >= (unsigned char)(y + GB_ACTION_H))
+    if (my < y || (unsigned char)(my - y) >= GB_ACTION_H)
         return GB_ACTION_NONE;
     for (i = 0; i < count; i++) {
-        if (mx >= x && mx < (unsigned char)(x + actions[i].w)) return i;
-        x = (unsigned char)(x + actions[i].w + gap);
+        unsigned char w = actions->w;
+        if (mx >= x && (unsigned char)(mx - x) < w) return i;
+        x = (unsigned char)(x + w + gap);
+        actions++;
     }
     return GB_ACTION_NONE;
 }

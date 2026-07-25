@@ -109,6 +109,11 @@ int main(void)
           gb_actions_hit(4, 12, actions, 2, 2, 6, 22) ==
               GB_ACTION_NONE,
           "compact action row rejects gaps and lower edge");
+    check(gb_actions_hit(250, 250, actions, 1, 0, 1, 252) ==
+              GB_ACTION_NONE &&
+          gb_actions_hit(4, 250, actions, 1, 0, 6, 1) ==
+              GB_ACTION_NONE,
+          "compact action row does not wrap screen edges");
 
     check(gb_vscroll_hit(1, 10, 3, 80, 10, 40, 8, 2, 12,
                          GB_WIDGET_ARROWS) == GB_SCROLL_UP,
