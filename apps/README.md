@@ -85,7 +85,8 @@ resident kernel. Build with only the units an application uses:
 
 - `BUTTON=1`: buttons and rectangle hit-testing
 - `WIDGETS=1`: buttons, text-field frames and rectangle hit-testing
-- `SCROLL=1`: vertical scrollbars and scrollbar-part hit-testing
+- `SCROLL=1`: byte-range vertical scrollbars and scrollbar-part hit-testing
+- `SCROLL16=1`: 16-bit-range vertical/horizontal scrollbars and pointer-to-value mapping
 - `TOGGLE=1`: checkbox/toggle rendering and hit-testing
 - `STEPPER=1`: decrement/value/increment controls and part hit-testing
 - `SELECTOR=1`: framed popup/list choices and hit-testing
@@ -93,6 +94,7 @@ resident kernel. Build with only the units an application uses:
 - `FORM=1`: labelled field rows, action rows and modal lifecycle; requires
   `WIDGETS=1`
 - `FORM_SELECT=1`: labelled selector rows; requires `FORM=1` and `SELECTOR=1`
+- `TIMESET=1`: binary `gb_set_time()` support without adding resident kernel code
 
 For example:
 
@@ -109,8 +111,10 @@ canvas, surface, edge/text and accent; the existing `INKS=` palette therefore
 recolours them without platform-specific code. Buttons accept
 `GB_WIDGET_PRESSED` and `GB_WIDGET_DISABLED`; `gb_button_hit` rejects disabled
 controls. WGET is the button/field reference, Shell and File Manager are
-scrollbar references, Settings is the selector/stepper reference, Clock combines
-steppers with a button, XAOS uses compact buttons, and Icon Editor demonstrates
+scrollbar references, Viewer demonstrates large vertical/horizontal scrollbars,
+Settings is the selector/stepper reference, and Clock combines steppers, a
+standard action row, modal form lifecycle, and the opt-in time setter. XAOS uses
+compact buttons, and Icon Editor demonstrates
 pressed and disabled button states. Disk Utility uses a shared command button
 for its destructive format workflow. `FORMREF.APP` is staged as a development
 diagnostic and demonstrates form composition without moving any state or code

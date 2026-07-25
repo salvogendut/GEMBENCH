@@ -130,7 +130,9 @@ BUTTON=1 SELECTOR=1 STEPPER=1 \
 
 `BUTTON=1` provides `gb_button` and `gb_widget_hit` without linking the text-field
 renderer. `WIDGETS=1` provides those plus `gb_field`; `SCROLL=1`
-provides `gb_vscroll` and `gb_vscroll_hit`. `TOGGLE=1`, `STEPPER=1`,
+provides byte-range `gb_vscroll` and `gb_vscroll_hit`. `SCROLL16=1` adds
+large-range vertical and horizontal scrollbars plus pointer-to-value mapping,
+as used by Viewer for pictures taller than 255 rows. `TOGGLE=1`, `STEPPER=1`,
 `SELECTOR=1`, and `SLIDER=1` each link only that control and its matching
 hit/value helper. Widget state stays in the app bank. This avoids resident-kernel
 growth and avoids using `GBUI.MOD`, whose modal dispatcher loads the module from
@@ -174,7 +176,9 @@ kernel or `GBUI.MOD`, and existing apps remain byte-identical until migrated
 explicitly. Build `make formref`, then run `FORMREF.APP` from `DIAG/` on CPC,
 `GBENCH/` on MSX2, or from the PCW Companion disk, before applying the API to a
 constrained app. Settings and Browser deliberately remain on their current
-implementations.
+implementations. Clock is the first production form-modal user; it builds with
+`WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1`. `TIMESET=1` links `gb_set_time()` into
+that app only, preserving CPC resident-kernel headroom.
 
 ## Icon and font sets (GEOBENCH.CFG)
 

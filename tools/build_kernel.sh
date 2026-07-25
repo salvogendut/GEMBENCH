@@ -127,7 +127,7 @@ DATA_LOC=0x7000 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKT
 APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x778A DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
-DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
+DATA_LOC=0x6890 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
                                    # gb_doc (DOCRO=1 omits Save/Save As); the in-page buffer is
                                    # text/fallback only, bigger pictures use the banked .PIC path.
                                    # File>Load + View>Fullscreen (#142/#144)
@@ -137,7 +137,7 @@ DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEP
 APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6300 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: data-loc above
                                    # the gb_doc/fullscreen code so the 6656-B icon-set buffer
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
-DATA_LOC=0x6500 DOC=1 BUTTON=1 STEPPER=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
+DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
                                    # via the shared gb_doc menu system (#142) -> build/CLOCK.RAW
 DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: custom File/Edit/View menus + picker
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
@@ -244,12 +244,12 @@ rm -f build/companion.dsk
 "$RASM" kernel/pack_comp5.asm -eo                  # MAHJONG.APP
 cp build/companion.dsk "$FLOPPY_QA/COMPANION.DSK"
 echo "  + $FLOPPY_QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Mahjong/Xaos + savers)"
-EXTRAS_ADDS=()
+EXTRAS_ADDS=(--add assets/WELCOME.TXT)
 while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")
 done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
-echo "  + $FLOPPY_QA/EXTRAS.DSK (complete picture gallery; extended 80-track AMSDOS data disk)"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + WELCOME.TXT; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"

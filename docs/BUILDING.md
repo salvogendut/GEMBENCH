@@ -46,8 +46,9 @@ can test or deploy without rebuilding first):
   (including Telnet, WGET, Browser, Shell and Mahjong) and extra savers for drive B.
   Browser's `GBWEB.MOD`, `GBIMG.MOD`, and `BRSAVE.APP` helpers remain on the Main
   disk so File/Settings operations still work after a drive-B file picker.
-- **`QA/CPC/Floppies/EXTRAS.DSK`** — the complete `.PIC` gallery on an extended 80-track,
-  single-sided AMSDOS DATA disk. Its files retain AMSDOS headers and multi-extent
+- **`QA/CPC/Floppies/EXTRAS.DSK`** — the complete `.PIC` gallery plus
+  `WELCOME.TXT` on an extended 80-track, single-sided AMSDOS DATA disk. Its files
+  retain AMSDOS headers and multi-extent
   layout, so the existing chunked picture reader can open the larger images. A
   standard 180K CF2 is too small; use a Gotek/emulator or compatible 80-track drive.
 

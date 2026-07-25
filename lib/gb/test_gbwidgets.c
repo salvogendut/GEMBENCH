@@ -107,6 +107,22 @@ int main(void)
           "scrollbar track thumb and arrows");
 
     reset_calls();
+    gb_vscroll16(1, 10, 3, 80, 300, 1000, 160);
+    check(nfill == 2 && fills[1].pen == 3 && fills[1].y > 10,
+          "large vertical scrollbar");
+    check(gb_vscroll16_value(10, 80, 1000, 160, 10) == 0,
+          "large vertical scrollbar maps top");
+    check(gb_vscroll16_value(10, 80, 1000, 160, 89) == 840,
+          "large vertical scrollbar maps bottom");
+
+    reset_calls();
+    gb_hscroll16(8, 12, 40, 6, 30, 100, 25);
+    check(nfill == 2 && fills[1].pen == 3 && fills[1].x > 8,
+          "large horizontal scrollbar");
+    check(gb_hscroll16_value(8, 40, 100, 25, 47) == 75,
+          "large horizontal scrollbar maps right edge");
+
+    reset_calls();
     gb_toggle(4, 6, 20, 10, "Enabled",
               GB_WIDGET_CHECKED | GB_WIDGET_FOCUSED);
     check(nfill == 1 && nframe == 1 && frames[0].pen == 3,

@@ -10,10 +10,14 @@
 ;; are only assembled so the save directive can write them to the disk catalogue.
 ;;
 ;; #250/#379: PAINT.APP and XAOS.APP live on the Companion floppy; pictures now
-;; live on EXTRAS.DSK. ICONED.APP +
+;; live on EXTRAS.DSK. CLOCK.APP moved here when its shared form lifecycle no
+;; longer fit the main pass's low packing region. ICONED.APP +
 ;; GBUI.MOD stay on Main (ICONED is a core editor; GBUI is the shared dialog module
 ;; that every app - incl. the Companion apps - loads from the boot drive, #110/#250).
                 org   #4000
+clk_img         incbin "../build/CLOCK.RAW"
+clk_imgend
+                save  "CLOCK.APP",clk_img,clk_imgend-clk_img,DSK,"build/gbkern.dsk"
 ied_img         incbin "../build/ICONED.RAW"    ; packaged on the disk as ICONED.APP (moved
 ied_imgend                                      ; to pass 2 - the main image filled up, #142)
                 save  "ICONED.APP",ied_img,ied_imgend-ied_img,DSK,"build/gbkern.dsk"

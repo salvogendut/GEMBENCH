@@ -131,55 +131,10 @@ static void line(int x0, int y0, int x1, int y1, unsigned char pen)
 }
 #endif
 
-/* --- RTC write (Set time), straight to the Dallas registers via inline asm ----- */
-static volatile unsigned char rtc_reg, rtc_val;
-#if defined(GB_MSX2) || defined(GB_PCW)
-static void rtc_poke(void) { (void)rtc_reg; (void)rtc_val; }  /* MSX/PCW: soft clock, no RTC ports */
-#else
-static void rtc_poke(void) __naked
-{
-__asm
-    ld   a, (_rtc_reg)
-    ld   bc, #0xFD15     ; RTC address port
-    out  (c), a
-    ld   a, (_rtc_val)
-    ld   bc, #0xFD14     ; RTC data port
-    out  (c), a
-    ret
-__endasm;
-}
-#endif
-static void set_rtc(unsigned char reg, unsigned char val) { rtc_reg = reg; rtc_val = val; rtc_poke(); }
-
-#if defined(GB_MSX2) || defined(GB_PCW)
-static volatile unsigned char soft_hour, soft_min, soft_sec;
-static void soft_poke(void) __naked
-{
-__asm
-    ld   a, (_soft_hour)
-    ld   b, a
-    ld   a, (_soft_min)
-    ld   c, a
-    ld   a, (_soft_sec)
-    ld   d, a
-    call 0x802D          ; GB_RUN soft-clock setter on MSX/PCW
-    ret
-__endasm;
-}
-static void set_soft_time(unsigned char h, unsigned char m, unsigned char s)
-{
-    soft_hour = h; soft_min = m; soft_sec = s; soft_poke();
-}
-#endif
-
 /* the kernel hands us raw RTC registers; convert BCD -> binary unless it's binary */
 static unsigned char bin(unsigned char v)
 {
     return gb_binmode ? v : (unsigned char)((v >> 4) * 10 + (v & 15));
-}
-static unsigned char tobcd(unsigned char v)
-{
-    return gb_binmode ? v : (unsigned char)(((v / 10) << 4) | (v % 10));
 }
 
 /* --- drawing ----------------------------------------------------------------- */
@@ -279,91 +234,94 @@ static unsigned char changed(void)
     return show_sec ? (bin(gb_sec) != ps) : (bin(gb_min) != pm);
 }
 
-/* --- Options menu + dialogs (gb_doc framework + a bespoke Set-time dialog) ----- */
+/* --- Options menu + dialogs (gb_doc framework + shared form lifecycle) --------- */
 
 /* on_event: a top-bar title click -> the framework (View / Options) (#142). */
 static void clk_event(void) { gb_doc_event(); }
 
-/* set_time_dialog: shared horizontal steppers adjust hours/minutes and a shared
-   button applies the result. Returns 1 if the time was set. */
+/* set_time_dialog: a standard form modal with shared steppers and action row. */
+#define TIME_W 20
+#define TIME_H 50
 static unsigned char hh, mm;
-static void draw_time_stepper(unsigned char x, unsigned char y, unsigned char v)
+static unsigned char time_x, time_y;
+static const gb_form_action_t time_actions[2] = {
+    { "Save", 6, 0 }, { "Cancel", 8, 0 }
+};
+
+static void draw_time_stepper(unsigned char x, unsigned char y,
+                              unsigned char value)
 {
     char t[3];
-    put2(t, v); t[2] = 0;
+    put2(t, value); t[2] = 0;
     gb_stepper(x, y, 12, 10, t, 0);
 }
+
+static void time_draw(void)
+{
+    gb_form_label((unsigned char)(time_x + 1),
+                  (unsigned char)(time_y + 13), 10, "Hr");
+    gb_form_label((unsigned char)(time_x + 1),
+                  (unsigned char)(time_y + 25), 10, "Min");
+    draw_time_stepper((unsigned char)(time_x + 7),
+                      (unsigned char)(time_y + 13), hh);
+    draw_time_stepper((unsigned char)(time_x + 7),
+                      (unsigned char)(time_y + 25), mm);
+    gb_form_actions((unsigned char)(time_x + 2),
+                    (unsigned char)(time_y + 39), 9,
+                    time_actions, 2, 1);
+}
+
+static unsigned char time_click(unsigned char mx, unsigned char my)
+{
+    unsigned char part, action;
+    part = gb_stepper_hit((unsigned char)(time_x + 7),
+                          (unsigned char)(time_y + 13), 12, 10, mx, my);
+    if (part == GB_STEPPER_DEC || part == GB_STEPPER_INC) {
+        hh = (part == GB_STEPPER_INC) ? (unsigned char)((hh + 1) % 24)
+                                      : (unsigned char)((hh + 23) % 24);
+        return GB_FORM_REDRAW;
+    }
+    part = gb_stepper_hit((unsigned char)(time_x + 7),
+                          (unsigned char)(time_y + 25), 12, 10, mx, my);
+    if (part == GB_STEPPER_DEC || part == GB_STEPPER_INC) {
+        mm = (part == GB_STEPPER_INC) ? (unsigned char)((mm + 1) % 60)
+                                      : (unsigned char)((mm + 59) % 60);
+        return GB_FORM_REDRAW;
+    }
+    action = gb_form_actions_hit((unsigned char)(time_x + 2),
+                                 (unsigned char)(time_y + 39), 9,
+                                 time_actions, 2, 1, mx, my);
+    if (action == 0) return GB_FORM_ACCEPT;
+    if (action == 1) return GB_FORM_CANCEL;
+    return GB_FORM_STAY;
+}
+
+static unsigned char time_key(unsigned char key)
+{
+    if (key == 0x0D) return GB_FORM_ACCEPT;
+    if (key == 0x1B) return GB_FORM_CANCEL;
+    return GB_FORM_STAY;
+}
+
+static gb_form_modal_t time_modal = {
+    0, 0, TIME_W, TIME_H, "Set time",
+    time_draw, time_click, time_key, GB_FORM_CLICK_AWAY
+};
+
 static unsigned char set_time_dialog(void)
 {
-    unsigned char flags = 0, done = 0, ok = 0;
-    unsigned char w = 20, h = 44;
-    unsigned char x = (unsigned char)(win_x + ((win_w - w) >> 1));
-    unsigned char y = (unsigned char)(win_y + 34);
-    unsigned char sx = (unsigned char)(x + 7);
-    unsigned char hy = (unsigned char)(y + 10);
-    unsigned char my = (unsigned char)(y + 22);
-    unsigned char bx = (unsigned char)(x + 7);
-    unsigned char by = (unsigned char)(y + 34);
-
+    unsigned char result;
     gb_time();
-    hh = bin(gb_hour); mm = bin(gb_min);
-    gb_curhide();
-    gb_fill(x, y, w, h, 1);
-    gb_frame(x, y, w, h, 2);
-    gb_textbw(x + 1, y + 1, "Set time");
-    gb_textbw(x + 1, hy + 1, "Hr");
-    gb_textbw(x + 1, my + 1, "Min");
-    draw_time_stepper(sx, hy, hh);
-    draw_time_stepper(sx, my, mm);
-    gb_button(bx, by, 6, 9, "OK", 0);
-    gb_curshow();
-
-    while (!done) {
-        flags = gb_poll();
-        if (flags & GB_QUIT) { done = 1; break; }
-        if (!(flags & GB_CLICK)) continue;
-        {
-            unsigned char cx = gb_mx(), cy = gb_my();
-            unsigned char part = gb_stepper_hit(sx, hy, 12, 10, cx, cy);
-            if (part == GB_STEPPER_DEC || part == GB_STEPPER_INC) {
-                hh = (part == GB_STEPPER_INC) ? (unsigned char)((hh + 1) % 24)
-                                              : (unsigned char)((hh + 23) % 24);
-                gb_curhide();
-                draw_time_stepper(sx, hy, hh);
-                gb_curshow();
-                continue;
-            }
-            part = gb_stepper_hit(sx, my, 12, 10, cx, cy);
-            if (part == GB_STEPPER_DEC || part == GB_STEPPER_INC) {
-                mm = (part == GB_STEPPER_INC) ? (unsigned char)((mm + 1) % 60)
-                                              : (unsigned char)((mm + 59) % 60);
-                gb_curhide();
-                draw_time_stepper(sx, my, mm);
-                gb_curshow();
-                continue;
-            }
-            if (gb_widget_hit(bx, by, 6, 9, cx, cy)) {
-                ok = 1; done = 1;
-            } else if (cy < y || cy >= y + h || cx < x || cx >= x + w) {
-                done = 1;                                   /* clicked away -> cancel */
-            }
-        }
-    }
-    if (flags & GB_QUIT) while (gb_poll() & GB_QUIT) ;
-    gb_curhide();
-    gb_fill(x, y, w, h, 0);
-    gb_curshow();
-    if (ok) {
-#if defined(GB_MSX2) || defined(GB_PCW)
-        set_soft_time(hh, mm, 0);
-#else
-        gb_time();                       /* refresh binmode before writing */
-        set_rtc(4, tobcd(hh));           /* hours  */
-        set_rtc(2, tobcd(mm));           /* minutes */
-        set_rtc(0, tobcd(0));            /* seconds */
-#endif
-    }
-    return ok;
+    hh = bin(gb_hour);
+    mm = bin(gb_min);
+    time_x = (unsigned char)(win_x + ((win_w - TIME_W) >> 1));
+    time_y = (unsigned char)(win_y + 34);
+    time_modal.x = time_x;
+    time_modal.y = time_y;
+    result = gb_form_modal_run(&time_modal);
+    if (result != GB_FORM_ACCEPT) return 0;
+    gb_set_time(hh, mm, 0);
+    return 1;
 }
 
 /* clk_fullscreen: View > Fullscreen - the analog face rescales to the whole screen
@@ -372,12 +330,15 @@ static void clk_fullscreen(unsigned char on)
 {
     if (on) {
         fs_px = gb_wm_x(); fs_py = gb_wm_y(); fs_pw = gb_wm_w(); fs_ph = gb_wm_h();
-        gb_wm_setpos(0, 8); gb_wm_setsize(GB_COLS, GB_LINES - 8);
+        gb_wm_setpos(0, 8);
+        gb_wm_setsize((unsigned char)GB_COLS,
+                      (unsigned char)(GB_LINES - 8));
     } else {
         gb_wm_setpos(fs_px, fs_py); gb_wm_setsize(fs_pw, fs_ph);
     }
     have_prev = 0;                               /* face rescaled: no stale hands */
-    gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8);   /* repaint ONCE in on_frame, clipped to the toggle
+    gb_wm_damage(0, 8, (unsigned char)GB_COLS,
+                 (unsigned char)(GB_LINES - 8)); /* repaint ONCE in on_frame, clipped to the toggle
                                                     area; repainting here too flickers (#153) */
 }
 
