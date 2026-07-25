@@ -48,6 +48,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   beside their outputs so a repeated full build can reuse unchanged binaries and
   skip recompiling untouched apps/modules. With `NET=1`, CPC links the paged
   network stub and `APPDEFS=-DGB_MSX2` selects the TCP/IP UNAPI backend.
+  `WIDGETS=1` links reusable buttons/fields and `SCROLL=1` links the vertical
+  scrollbar unit; either remains opt-in so tight apps pay only for controls used.
 - **`check_abi_table.py`** — verifies the `kernel/gbkern.asm` jump-table comments
   match the exported `lib/gbapp.inc` slot addresses through `kernel/api_table.inc`.
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in

@@ -4,9 +4,10 @@ Bundled GEOBENCH applications — programs that run on top of the kernel + deskt
 Each app is a separate **SDCC `-mz80` C binary** built by `tools/build_capp.sh`
 to run in a 16 KB banked window (`#4000–#7FFF`), reaching the resident kernel only
 through the shared `lib/gb` API (`gb_fill`, `gb_wm_*`, the `gb_doc` document
-framework, the `gb_popup`/`gb_prompt` dialogs, …). Apps are loaded from disk on
-demand (GEOS-style), not resident; the kernel runs the cooperative window-manager
-loop and calls each focused window's handlers (issue #45).
+framework, the `gb_popup`/`gb_prompt` dialogs, and opt-in `gb_button`/`gb_field`/
+`gb_vscroll` widgets). Apps are loaded from disk on demand (GEOS-style), not
+resident; the kernel runs the cooperative window-manager loop and calls each
+focused window's handlers (issue #45).
 
 ## The apps (one C source each, under `apps/<name>/main.c`)
 
@@ -75,3 +76,22 @@ the app reads input with `gb_flags`/`gb_mx`/`gb_my` and calls `gb_wm_close` to
 quit. Settings and saver apps should keep persistent config/media policy in the
 app layer and treat the kernel as a provider of storage, WM, and reload
 primitives. See `lib/gb/gb.h` for the full API.
+
+## Reusable widgets
+
+Common non-modal controls live in opt-in `libgb` compilation units instead of the
+resident kernel. Build with `WIDGETS=1` for buttons, text-field frames and rectangle
+hit-testing; add `SCROLL=1` for vertical scrollbars and scrollbar-part hit-testing.
+For example:
+
+```bash
+WIDGETS=1 SCROLL=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
+```
+
+The helpers are deliberately stateless: the application owns focus, text buffers,
+scroll positions and actions, then calls the shared renderer from `GB_MSG_DRAW` and
+the matching hit-test from `GB_MSG_CLICK`. Fields draw the supplied display text
+without editing or clipping it, so the app can apply its own scrolling/truncation.
+Widgets consistently use logical pens 0–3 as canvas, surface, edge/text and accent;
+the existing `INKS=` palette therefore recolours them without platform-specific
+code. WGET is the button/field reference and Shell is the scrollbar reference.

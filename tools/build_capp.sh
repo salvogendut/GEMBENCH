@@ -48,6 +48,8 @@ DOC_FLAG="${DOC:-0}"
 DOCRO_FLAG="${DOCRO:-0}"
 NET_FLAG="${NET:-0}"
 GBWIN_FLAG="${GBWIN:-1}"
+WIDGETS_FLAG="${WIDGETS:-0}"
+SCROLL_FLAG="${SCROLL:-0}"
 NET_SRC="$GB/gbnet_stub.c"
 case " ${APPDEFS:-} " in
     *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
@@ -56,6 +58,12 @@ esac
 deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
 if [ "$GBWIN_FLAG" = "1" ]; then
     deps+=("$GB/gbwin.c")
+fi
+if [ "$WIDGETS_FLAG" = "1" ]; then
+    deps+=("$GB/gbwidgets.c")
+fi
+if [ "$SCROLL_FLAG" = "1" ]; then
+    deps+=("$GB/gbscroll.c")
 fi
 while IFS= read -r dep; do
     deps+=("$dep")
@@ -90,6 +98,8 @@ cache_key=$(printf '%s\n' \
     "NET=$NET_FLAG" \
     "NET_SRC=$NET_SRC" \
     "GBWIN=$GBWIN_FLAG" \
+    "WIDGETS=$WIDGETS_FLAG" \
+    "SCROLL=$SCROLL_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
     "APP_CFLAGS=$APP_CFLAGS" \
     "LOAD_LIMIT=$LOAD_LIMIT" \
@@ -117,6 +127,16 @@ if [ "$GBWIN_FLAG" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
     GBWIN_REL="$work/gbwin.rel"
 fi
+WIDGETS_REL=""
+if [ "$WIDGETS_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbwidgets.c" -o "$work/gbwidgets.rel"
+    WIDGETS_REL="$work/gbwidgets.rel"
+fi
+SCROLL_REL=""
+if [ "$SCROLL_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbscroll.c" -o "$work/gbscroll.rel"
+    SCROLL_REL="$work/gbscroll.rel"
+fi
 # Opt-in dialogs (#114, #142). The heavy render (popup/prompt/file-picker) now lives in
 # the paged GBUI kernel module (#142 step 1b); an app that needs ANY dialog links only
 # the tiny marshalling stub gbui_stub.c (gb_popup/gb_prompt/gb_pickfile/gb_pickdir ->
@@ -142,7 +162,7 @@ if [ "$NET_FLAG" = "1" ]; then
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
-    "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
+    "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $SCROLL_REL $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
 # AFTER the code) must end below data-loc - otherwise the RAM data area starts inside

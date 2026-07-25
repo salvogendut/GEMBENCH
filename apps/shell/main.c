@@ -668,22 +668,8 @@ static void build_prompt(void)
 
 static void draw_scrollbar(void)
 {
-    unsigned char area = (unsigned char)(VIEW_ROWS * 8), th, ty;
-    gb_fill(SCROLL_X, OUT_Y, SCROLL_W, area, 1);
-    if (hist_count <= VIEW_ROWS) { th = area; ty = OUT_Y; }
-    else {
-        th = (unsigned char)(((unsigned int)area * VIEW_ROWS) / hist_count);
-        if (th < 6) th = 6;
-        ty = (unsigned char)(OUT_Y +
-             ((unsigned int)(area - th) * view_top) / (hist_count - VIEW_ROWS));
-    }
-    if (th > 2) gb_fill((unsigned char)(SCROLL_X + 1), (unsigned char)(ty + 1), 1,
-                        (unsigned char)(th - 2), 3);
-    gb_fill(SCROLL_X, OUT_Y, SCROLL_W, 8, 1);
-    gb_textbw((unsigned char)(SCROLL_X + 1), OUT_Y, GLYPH_TRI_UP);
-    gb_fill(SCROLL_X, (unsigned char)(OUT_Y + area - 8), SCROLL_W, 8, 1);
-    gb_textbw((unsigned char)(SCROLL_X + 1), (unsigned char)(OUT_Y + area - 8),
-              GLYPH_TRI_DOWN);
+    gb_vscroll(SCROLL_X, OUT_Y, SCROLL_W, (unsigned char)(VIEW_ROWS * 8),
+               view_top, hist_count, VIEW_ROWS, GB_WIDGET_ARROWS);
 }
 
 static void draw_output(void)
@@ -782,15 +768,17 @@ static void handle_keys(void)
 
 static void handle_click(void)
 {
-    unsigned char my = gb_my(), area = (unsigned char)(VIEW_ROWS * 8);
-    if (gb_mx() >= SCROLL_X + SCROLL_W || my < OUT_Y || my >= OUT_Y + area) return;
-    if (my < OUT_Y + 8) {
+    unsigned char part = gb_vscroll_hit(
+        SCROLL_X, OUT_Y, SCROLL_W, (unsigned char)(VIEW_ROWS * 8),
+        view_top, hist_count, VIEW_ROWS, gb_mx(), gb_my(), GB_WIDGET_ARROWS);
+    if (part == GB_SCROLL_NONE || part == GB_SCROLL_THUMB) return;
+    if (part == GB_SCROLL_UP) {
         if (view_top) view_top--;
-    } else if (my >= OUT_Y + area - 8) {
+    } else if (part == GB_SCROLL_DOWN) {
         if (view_top + VIEW_ROWS < hist_count) view_top++;
-    } else if (my < OUT_Y + area / 2) {
+    } else if (part == GB_SCROLL_PAGE_UP) {
         view_top = view_top > VIEW_ROWS ? (unsigned char)(view_top - VIEW_ROWS) : 0;
-    } else if (hist_count > VIEW_ROWS) {
+    } else if (part == GB_SCROLL_PAGE_DOWN && hist_count > VIEW_ROWS) {
         unsigned char bottom = (unsigned char)(hist_count - VIEW_ROWS);
         view_top = (unsigned char)(view_top + VIEW_ROWS);
         if (view_top > bottom) view_top = bottom;
