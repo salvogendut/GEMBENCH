@@ -240,6 +240,39 @@ line in the pack assembly or stage it into the card distribution as appropriate)
      `stage_dist.sh` copies every `assets/iconsets/*.IST` onto
      the card automatically. Select it with `ICONS=MYSET` in `GEOBENCH.CFG`. See
      `assets/iconsets/README.md`.
+
+### Icons embedded in applications
+
+A C application can opt into the versioned `GBAP` v1 executable preamble by
+passing `APP_ICON=path/to/icon.asm` to `tools/build_capp.sh`. The icon source must
+be a canonical 32x32 Mode-1 bitmap generated with `png2cpc.py`. The build links
+the application entry at `#4110`, writes a `JP #4110` at `#4000`, and places the
+16-byte metadata header plus 256-byte bitmap before the executable. Headerless
+applications keep the legacy `#4000` entry and generic or name-mapped `.IST`
+icon.
+
+File Manager reads only the first 512 bytes of a visible generic `.APP`. A valid
+embedded icon is converted at draw time for CPC, MSX2, or PCW; an absent or
+invalid header falls back to the generic application icon. This uses no
+additional resident-kernel space. `FORMREF.APP` is the first reference:
+
+```sh
+tools/png2cpc.py assets/daruma.png apps/formref/icon.asm appicon 32x32
+APP_ICON=apps/formref/icon.asm DATA_LOC=0x6200 \
+  tools/build_capp.sh apps/formref build/FORMREF.RAW
+```
+
+Both `tools/iconedit.py` and `ICONED.APP` recognize the embedded bitmap as a
+single-icon document and preserve the executable bytes when saving. The host
+editor handles any application size. `ICONED.APP` currently uses its existing
+6656-byte whole-document buffer, so runtime editing is limited to icon-bearing
+applications that fit that buffer; larger applications still display their
+embedded icon and can be edited with the host tool. Its paged
+`GBAPICK.MOD` Open dialog uses the resident chunk readers on MSX and PCW. The
+CPC build instead probes with a bounded ordinary load into the shared
+module-data buffer, avoiding a recursive chunk-module load over the running
+picker. `.APP` entries without a valid preamble remain hidden on all targets.
+
 - **Pictures** (`.PIC`): convert a PNG to the portable 4-colour GBPC v2 format
   with `tools/picconv.py` — a tkinter GUI (Open / dither / width / height /
   preview / Save)

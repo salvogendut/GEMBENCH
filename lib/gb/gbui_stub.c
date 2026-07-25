@@ -15,6 +15,22 @@
 #define UI_MODAL (*(volatile unsigned char *)0x1705)
 #define UI_NAME  ((char *)0x1708)            /* OUT: pickfile/prompt result */
 #define UI_TEXT  ((char *)0x1718)            /* IN: packed labels / caption / exts */
+#ifdef GBUI_APPICON_PICKER
+#define UI_MODNAME ((char *)0x3914)
+static const char appick_modname[11] = {
+    'G','B','A','P','I','C','K',' ','M','O','D'
+};
+
+static unsigned char run_appick(void) __naked
+{
+__asm
+    ld a,#0x80
+    call #0x80AE
+    ld a,c
+    ret
+__endasm;
+}
+#endif
 
 extern unsigned char gb_ui(void);            /* GB_UI trampoline -> UI_RES */
 
@@ -71,9 +87,21 @@ unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen)
 unsigned char gb_pickfile(char *name11, const char *const *exts)
 {
     unsigned char i;
+#ifdef GBUI_APPICON_PICKER
+    unsigned char result;
+    (void)exts;
+    for (i = 0; i < 11; i++) UI_TEXT[i] = UI_MODNAME[i];
+    for (i = 0; i < 11; i++) UI_MODNAME[i] = appick_modname[i];
+    UI_OP = 0;
+    result = run_appick();
+    for (i = 0; i < 11; i++) UI_MODNAME[i] = UI_TEXT[i];
+    UI_MODAL = 0;
+    if (!result) return 0;
+#else
     UI_OP = 3;
     pack_exts(exts);
     if (!run_ui()) return 0;
+#endif
     for (i = 0; i < 11; i++) name11[i] = UI_NAME[i];
     return 1;
 }

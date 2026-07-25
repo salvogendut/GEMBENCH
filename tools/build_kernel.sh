@@ -114,7 +114,7 @@ done
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
 DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
-DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW # FORMREF (#420/#424): target-safe compact action diagnostic
+APP_ICON=apps/formref/icon.asm DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW # FORMREF (#420/#424/#426): compact action diagnostic + embedded APP icon reference
 DATA_LOC=0x7A50 DIALOGS=1 WIDGETS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
 GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371/#373): demand stream + offline/proxy/GET-form support
 DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/BRSAVE.RAW # transient Browser .HTM source writer
@@ -134,7 +134,7 @@ DATA_LOC=0x6890 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/VIEWER.
 DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6300 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: data-loc above
+APPDEFS="-DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6410 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: header-aware .APP picker is a paged module; whole-file GBAP edit keeps the 6656-byte document buffer
                                    # the gb_doc/fullscreen code so the 6656-B icon-set buffer
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
 DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
@@ -189,6 +189,7 @@ tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel modu
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
 tools/build_uimod.sh build/GBUI.RAW                # paged dialog module (#142) -> build/GBUI.RAW
+tools/build_appickmod.sh build/GBAPICK.RAW         # ICONED header-aware .APP picker (#426)
 tools/build_webmod.sh build/GBWEB.RAW              # Browser source/config helper (#373)
 tools/build_imgmod.sh build/GBIMG.RAW              # Browser inline-image cache helper (#393)
 tools/build_netmod.sh build/GBNET.RAW             # W5100 networking module (#238) -> build/GBNET.RAW
@@ -243,7 +244,7 @@ rm -f build/companion.dsk
 "$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP + BROWSER.APP + SHELL.APP
 "$RASM" kernel/pack_comp5.asm -eo                  # MAHJONG.APP
 cp build/companion.dsk "$FLOPPY_QA/COMPANION.DSK"
-echo "  + $FLOPPY_QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Mahjong/Xaos + savers)"
+echo "  + $FLOPPY_QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Mahjong/Xaos + helpers/savers)"
 EXTRAS_ADDS=(--add assets/WELCOME.TXT)
 while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")

@@ -53,7 +53,16 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   independently link the corresponding settings controls, so tight apps pay only
   for controls used. `FORM=1` adds form rows and modal lifecycle and requires
   `WIDGETS=1`; `FORM_SELECT=1` adds selector rows and requires both `FORM=1` and
-  `SELECTOR=1`. `make formref` builds the small three-platform reference app.
+  `SELECTOR=1`. `APP_ICON=path/icon.asm` embeds a canonical 32x32 icon in the
+  optional `GBAP` executable preamble without changing the kernel launch ABI.
+  `make formref` builds the small three-platform reference app and its Daruma
+  embedded-icon example.
+- **`embed_app_icon.py`** — validates a canonical icon source and injects/checks
+  the versioned executable preamble used by icon-bearing `.APP` files.
+- **`build_appickmod.sh`** — builds `GBAPICK.MOD`, ICONED's paged Open dialog
+  that filters out `.APP` files without an embedded icon header.
+- **`iconedit.py`** — edits `.IST`, `.SPR`, and embedded `.APP` icons while
+  preserving all non-icon executable bytes.
 - **`check_abi_table.py`** — verifies the `kernel/gbkern.asm` jump-table comments
   match the exported `lib/gbapp.inc` slot addresses through `kernel/api_table.inc`.
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in

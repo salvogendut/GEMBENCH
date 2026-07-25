@@ -6,9 +6,11 @@
  * Next to cycle the icons in a set. Pick a colour, click a cell to paint it (pen 0
  * erases). The kernel-drawn "File" menu does Load / Save.
  *
- * Two file types, told apart by content (no filename needed):
+ * Three file types, told apart by content (no filename needed):
  *   .IST icon set  - "GBIS" header, a directory, then each icon's bitmap. Edited in
  *                    place (never resized); Prev/Next walk the set.
+ *   .APP application - optional "GBAP" v1 executable preamble containing one
+ *                    canonical 32x32 icon. The executable tail is preserved.
  *   .SPR cursor    - on CPC/PCW, a 256-byte sprite: two pre-shifted phases
  *                    (shift 0, shift 2) with mask,data INTERLEAVED per column.
  *                    Shipped files may append the low-RAM helper through byte 512;
@@ -71,11 +73,17 @@
 
 #define M_ICON    0
 #define M_CURSOR  1
+#define M_APP     2
 #define M_NONE    0xFF
+#define APPICON_OFF 16
+#define APPICON_WB  8
+#define APPICON_H   32
+#define APPICON_LEN (APPICON_WB * APPICON_H)
 #define BTN_NONE  0
 #define BTN_PREV  1
 #define BTN_NEXT  2
 #define BTN_UNDO  3
+#define UI_MODAL_K (*(volatile unsigned char *)0x1705)
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char winw = WIN_W, winh = WIN_H;   /* live window size (Fullscreen, #142) */
@@ -164,6 +172,32 @@ static void encode_icon(unsigned char k)   /* current grid -> buf at icon k */
             b = 0;
             for (i = 0; i < 4; i++) b = set_pixel(b, i, gget(y, (unsigned char)(bx * 4 + i)));
             buf[icon_off + (unsigned int)y * icon_wb + bx] = b;
+        }
+}
+
+static void decode_app_icon(void)
+{
+    unsigned char y, bx, i, b;
+    u_valid = 0;
+    gw = APPICON_WB * 4;
+    gh = APPICON_H;
+    for (y = 0; y < APPICON_H; y++)
+        for (bx = 0; bx < APPICON_WB; bx++) {
+            b = buf[APPICON_OFF + (unsigned int)y * APPICON_WB + bx];
+            for (i = 0; i < 4; i++)
+                gset(y, (unsigned char)(bx * 4 + i), dec_pixel(b, i));
+        }
+}
+
+static void encode_app_icon(void)
+{
+    unsigned char y, bx, i, b;
+    for (y = 0; y < APPICON_H; y++)
+        for (bx = 0; bx < APPICON_WB; bx++) {
+            b = 0;
+            for (i = 0; i < 4; i++)
+                b = set_pixel(b, i, gget(y, (unsigned char)(bx * 4 + i)));
+            buf[APPICON_OFF + (unsigned int)y * APPICON_WB + bx] = b;
         }
 }
 
@@ -287,6 +321,13 @@ static void sniff(void)
         mode = M_ICON; count = buf[5]; idx = 0;
         if (count == 0) { mode = M_NONE; return; }
         decode_icon(0);
+    } else if (filelen >= APPICON_OFF + APPICON_LEN && buf[0] == 0xC3
+               && buf[3] == 'G' && buf[4] == 'B' && buf[5] == 'A' && buf[6] == 'P'
+               && buf[7] == 1 && buf[8] == 1 && buf[9] == APPICON_WB
+               && buf[10] == APPICON_H && buf[11] == 0 && buf[12] == 1
+               && buf[13] == APPICON_OFF && buf[14] == 0) {
+        mode = M_APP; count = 1; idx = 0;
+        decode_app_icon();
     } else if (filelen >= CURSOR_LEN && filelen <= CURSOR_FILE_MAX) {
         mode = M_CURSOR; count = 1; idx = 0;
         decode_cursor();
@@ -415,9 +456,9 @@ static const char *win_title(void)
 }
 
 /* ---- the document, via the gb_doc framework (#142) -------------------------- *
- * The document is buf (a .IST icon set or a .SPR cursor). The framework owns the File
+ * The document is buf (a .IST set, icon-bearing .APP, or .SPR cursor). The framework owns the File
  * menu (New / Load / Save / Save As) + the navigable dialog; we provide the hooks. */
-static const char *const ie_exts[] = { "IST", "SPR", 0 };
+static const char *const ie_exts[] = { "IST", "SPR", "APP", 0 };
 
 /* ie_new: a blank single 24x24 icon set (GBIS v2) so New gives something to draw. */
 static void ie_new(void)
@@ -438,6 +479,7 @@ static void ie_open(unsigned int len) { filelen = len; sniff(); }
 static unsigned int ie_save(void)
 {
     if (mode == M_ICON)   { encode_icon(idx); return filelen; }
+    if (mode == M_APP)    { encode_app_icon(); return filelen; }
     if (mode == M_CURSOR) { encode_cursor();  return filelen; }
     return 0;
 }
@@ -622,7 +664,10 @@ void main(void)
 {
     unsigned char n;
 
-    pressed_btn = BTN_NONE;
+    /* CPC storage helpers share the #1700 transfer block with GBUI. A File
+       Manager free-space probe can therefore leave the modal latch dirty and
+       make the top-bar File title appear inert. */
+    UI_MODAL_K = 0;
     gb_wm_managed(&iemw);                    /* register FIRST (no draw): captures our file arg */
     gb_doc(&iedoc);                          /* standard File menu; adopts the launch name */
     filelen = gb_fs_load(buf, BUFSZ);        /* load the launch file (0 if none) */

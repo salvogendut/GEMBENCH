@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""iconedit - Tk editor for GEOBENCH .IST icon sets and .SPR cursor sprites.
+"""iconedit - Tk editor for GEOBENCH .IST sets, .SPR cursors, and .APP icons.
 
 Edits Amstrad CPC Mode 1 bitmaps (4 colours, 4 pixels per byte) byte-for-byte
 compatible with tools/packicons.py and tools/png2spr.py — see
@@ -7,6 +7,8 @@ tools/test_iconed_codec.py for the encoding rules.
 
   * .IST  v2 icon set: header(16) + dir(count*4: off u16le, w_bytes u8, h u8)
           + bitmaps. Each icon keeps its own size; mixed sizes are allowed.
+  * .APP  GBAP v1 preamble: executable JP + metadata + one canonical 32x32
+          Mode-1 icon. Saving preserves every non-icon executable byte.
   * .SPR  cursor sprite: 256 bytes = 4 phases of 4x16 bytes (d0, m0, d2, m2).
           We edit a single 16x16 logical grid (pen 0 = transparent) and
           regenerate d0/m0/d2/m2 on save (d2/m2 are the +2 px pre-shift).
@@ -15,7 +17,7 @@ Multiple sets can be open at once, each in its own window (File > Open in New
 Window), so you can Copy/Paste Icon between two sets side by side.
 
 Run:
-    python3 tools/iconedit.py [--platform msx2] [file.IST | file.SPR]
+    python3 tools/iconedit.py [--platform msx2] [file.IST | file.SPR | file.APP]
 
 All .IST files use the same canonical CPC Mode-1 encoding. --platform msx2 only
 selects the V9938 hardware-sprite cursor format for .SPR files (66 bytes,
@@ -220,6 +222,51 @@ def save_ist(path, icons):
         f.write(directory)
         f.write(blob)
 
+# --- embedded .APP icon ----------------------------------------------------
+
+APP_MAGIC = b"GBAP"
+APP_VERSION = 1
+APP_CODEC_MODE1 = 1
+APP_ICON_OFF = 16
+APP_ICON_WB = 8
+APP_ICON_H = 32
+APP_ICON_LEN = APP_ICON_WB * APP_ICON_H
+APP_ENTRY = 0x4000 + APP_ICON_OFF + APP_ICON_LEN
+
+
+def load_app_icon(path):
+    data = bytearray(open(path, "rb").read())
+    valid = (
+        len(data) >= APP_ICON_OFF + APP_ICON_LEN
+        and data[0] == 0xC3
+        and data[1] == (APP_ENTRY & 0xFF)
+        and data[2] == (APP_ENTRY >> 8)
+        and data[3:7] == APP_MAGIC
+        and data[7] == APP_VERSION
+        and data[8] == APP_CODEC_MODE1
+        and data[9] == APP_ICON_WB
+        and data[10] == APP_ICON_H
+        and struct.unpack_from("<H", data, 11)[0] == APP_ICON_LEN
+        and struct.unpack_from("<H", data, 13)[0] == APP_ICON_OFF
+    )
+    if not valid:
+        raise ValueError(f"{path}: application has no editable GBAP v1 icon")
+    icon = {
+        "w": APP_ICON_WB,
+        "h": APP_ICON_H,
+        "grid": decode_icon(data, APP_ICON_OFF, APP_ICON_WB, APP_ICON_H),
+    }
+    return [icon], data
+
+
+def save_app_icon(path, icons, data):
+    if len(icons) != 1:
+        raise ValueError("an APP preamble contains exactly one icon")
+    bitmap = encode_icon(icons[0]["grid"], APP_ICON_WB, APP_ICON_H)
+    data[APP_ICON_OFF:APP_ICON_OFF + APP_ICON_LEN] = bitmap
+    with open(path, "wb") as target:
+        target.write(data)
+
 # --- palette ----------------------------------------------------------------
 
 PEN_RGB = ["#000080", "#ffffff", "#000000", "#ff0000"]
@@ -292,7 +339,8 @@ class IconEditor(tk.Toplevel):
 
         self.icons = []         # list of {"w","h","grid"}
         self.path = None
-        self.mode = None        # "IST", "SPR" (CPC cursor) or "MSPR" (MSX2 cursor)
+        self.mode = None        # "IST", "APP", "SPR" (CPC) or "MSPR" (MSX2)
+        self.app_data = None    # complete executable, preserved around APP icon edits
         self.msx_hotspot = (1, 0)   # hotspot for a "MSPR" sprite (x, y)
         self.index = 0
         self.scale = 24
@@ -433,11 +481,11 @@ class IconEditor(tk.Toplevel):
     # -- windows -------------------------------------------------------------
 
     def open_new_window(self):
-        """Open an icon set / cursor in a SEPARATE editor window (so you can have
+        """Open an icon set / cursor / app in a SEPARATE editor window (so you can have
         two sets side by side and Copy/Paste Icon between them)."""
         p = filedialog.askopenfilename(
             title="Open in new window",
-            filetypes=[("Icon set / cursor", "*.IST *.ist *.SPR *.spr"),
+            filetypes=[("Icon / cursor / app", "*.IST *.ist *.SPR *.spr *.APP *.app"),
                        ("All files", "*.*")])
         if p:
             IconEditor(self.master, p)        # a fresh window on the shared root
@@ -472,6 +520,7 @@ class IconEditor(tk.Toplevel):
         self.icons = [{"w": 4, "h": 16, "grid": [[0] * 16 for _ in range(16)]}]
         self.path = None
         self.mode = "IST"
+        self.app_data = None
         self.index = 0
         self.dirty = False
         self.undo_stack.clear()
@@ -483,6 +532,7 @@ class IconEditor(tk.Toplevel):
                        "grid": [[0] * (CUR_W * 4) for _ in range(CUR_H)]}]
         self.path = None
         self.mode = "MSPR" if PLATFORM == 'msx2' else "SPR"
+        self.app_data = None
         self.msx_hotspot = (1, 0)
         self.index = 0
         self.dirty = False
@@ -492,8 +542,8 @@ class IconEditor(tk.Toplevel):
 
     def open_dialog(self):
         p = filedialog.askopenfilename(
-            title="Open icon set or cursor",
-            filetypes=[("Icon set / cursor", "*.IST *.ist *.SPR *.spr"),
+            title="Open icon set, cursor, or application",
+            filetypes=[("Icon / cursor / app", "*.IST *.ist *.SPR *.spr *.APP *.app"),
                        ("All files", "*.*")])
         if p:
             self.open_file(p)
@@ -501,9 +551,13 @@ class IconEditor(tk.Toplevel):
     def open_file(self, path):
         try:
             ext = os.path.splitext(path)[1].lower()
+            self.app_data = None
             if ext == ".ist":
                 self.icons = load_ist(path)
                 self.mode = "IST"
+            elif ext == ".app":
+                self.icons, self.app_data = load_app_icon(path)
+                self.mode = "APP"
             elif ext == ".spr":
                 # Auto-detect the cursor kind by size (unambiguous): 66 bytes = an
                 # MSX2 V9938 hardware sprite, 256 = a CPC Mode-1 masked cursor. No
@@ -539,6 +593,8 @@ class IconEditor(tk.Toplevel):
         try:
             if self.mode == "IST":
                 save_ist(self.path, self.icons)
+            elif self.mode == "APP":
+                save_app_icon(self.path, self.icons, self.app_data)
             elif self.mode == "MSPR":
                 with open(self.path, "wb") as f:
                     f.write(encode_msx_sprite(self.icons[0]["grid"], self.msx_hotspot))
@@ -553,10 +609,13 @@ class IconEditor(tk.Toplevel):
         self.status.config(text=f"Saved {os.path.basename(self.path)}")
 
     def save_as(self):
-        default_ext = ".IST" if self.mode == "IST" else ".SPR"
+        default_ext = ".APP" if self.mode == "APP" else \
+                      ".IST" if self.mode == "IST" else ".SPR"
+        kinds = [("Application", "*.APP")] if self.mode == "APP" else \
+                [("Icon set", "*.IST"), ("Cursor", "*.SPR")]
         p = filedialog.asksaveasfilename(
             defaultextension=default_ext,
-            filetypes=[("Icon set", "*.IST"), ("Cursor", "*.SPR")])
+            filetypes=kinds)
         if p:
             self.path = p
             self.save()
@@ -959,6 +1018,8 @@ class IconEditor(tk.Toplevel):
         w, h, i, n = ic["w"] * 4, ic["h"], self.index, len(self.icons)
         if self.mode == "SPR":
             return f"cursor  ·  {w}x{h} px"
+        if self.mode == "APP":
+            return f"application icon  ·  {w}x{h} px"
         names = self._slot_names()
         name = f"{names[i]}  ·  " if names and i < len(names) else ""
         return f"slot {i}  ·  {name}{w}x{h} px  ·  {i + 1}/{n}"

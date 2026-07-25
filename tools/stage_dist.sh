@@ -91,6 +91,7 @@ cp build/GBCFG.RAW "$SYS/GBCFG.MOD"          # #234: kernel modules use .MOD (.B
 cp build/GBFAT.RAW "$SYS/GBFAT.MOD"
 cp build/FLOPPYSV.RAW "$SYS/FLOPPYSV.MOD"   # #135: paged AMSDOS/floppy write module
 cp build/GBUI.RAW "$SYS/GBUI.MOD"           # #142: paged dialog (popup/prompt/file-picker) module
+cp build/GBAPICK.RAW "$SYS/GBAPICK.MOD"     # #426: ICONED picker hides headerless APP files
 cp build/GBWEB.RAW "$SYS/GBWEB.MOD"         # #373: Browser source cache + proxy config helper
 cp build/GBIMG.RAW "$SYS/GBIMG.MOD"         # #393: Browser inline-image cache helper
 cp build/GBNET.RAW "$SYS/GBNET.MOD"         # #238: W5100 networking module (gb_net_* socket API)

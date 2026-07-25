@@ -3157,7 +3157,8 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "SPLASH.MOD",splash_img,splash_imgend-splash_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
                 save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data
-                save  "HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data,DSK,"build/gbkern.dsk"
+                ; HAND.SPR is optional and ships on the Companion floppy; keeping it off
+                ; Main leaves room for the header-aware ICONED picker (#426).
                 save  "build/HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
                 endif                          ; (ifndef PLATFORM_PCW: CPC packaging tail)

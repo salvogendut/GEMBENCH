@@ -12,7 +12,10 @@ gbweb_img       incbin "../build/GBWEB.RAW"
 gbweb_imgend
 gbimg_img       incbin "../build/GBIMG.RAW"
 gbimg_imgend
+gbapick_img     incbin "../build/GBAPICK.RAW"
+gbapick_imgend
                 save  "FLOPPYSV.MOD",flsv_img,flsv_imgend-flsv_img,DSK,"build/gbkern.dsk"
                 save  "SPLASHD.MOD",splashd_img,splashd_imgend-splashd_img,DSK,"build/gbkern.dsk"
                 save  "GBWEB.MOD",gbweb_img,gbweb_imgend-gbweb_img,DSK,"build/gbkern.dsk"
                 save  "GBIMG.MOD",gbimg_img,gbimg_imgend-gbimg_img,DSK,"build/gbkern.dsk"
+                save  "GBAPICK.MOD",gbapick_img,gbapick_imgend-gbapick_img,DSK,"build/gbkern.dsk"
