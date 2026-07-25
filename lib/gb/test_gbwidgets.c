@@ -60,10 +60,29 @@ int main(void)
           "button centred label");
 
     reset_calls();
+    gb_button(10, 20, 20, 15, "Go", GB_WIDGET_PRESSED);
+    check(nframe == 1 && frames[0].pen == 3 && texts[0].y == 25,
+          "pressed button accent and inset");
+
+    reset_calls();
+    gb_button(10, 20, 20, 15, "Go", GB_WIDGET_DISABLED);
+    check(nframe == 1 && frames[0].pen == 1,
+          "disabled button suppresses edge");
+    check(gb_button_hit(10, 20, 20, 15, 12, 22, 0),
+          "enabled button accepts hit");
+    check(!gb_button_hit(10, 20, 20, 15, 12, 22, GB_WIDGET_DISABLED),
+          "disabled button rejects hit");
+
+    reset_calls();
     gb_field(2, 8, 30, 13, "URL", GB_WIDGET_FOCUSED);
     check(nframe == 1 && frames[0].pen == 3, "focused field accent");
     check(ntext == 1 && texts[0].x == 3 && texts[0].y == 11,
           "field text inset");
+
+    reset_calls();
+    gb_field(2, 8, 30, 13, "URL", GB_WIDGET_DISABLED);
+    check(nframe == 1 && frames[0].pen == 1,
+          "disabled field suppresses edge");
 
     check(gb_widget_hit(4, 5, 10, 8, 4, 5), "widget includes top-left");
     check(!gb_widget_hit(4, 5, 10, 8, 14, 12), "widget excludes right edge");

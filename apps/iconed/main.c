@@ -9,10 +9,12 @@
  * Two file types, told apart by content (no filename needed):
  *   .IST icon set  - "GBIS" header, a directory, then each icon's bitmap. Edited in
  *                    place (never resized); Prev/Next walk the set.
- *   .SPR cursor    - on CPC, 256 bytes: two pre-shifted phases (shift 0, shift 2)
- *                    with mask,data INTERLEAVED per column (we edit phase 0 and
- *                    regenerate both). On MSX2, a 66-byte V9938 hardware sprite
- *                    (hotspot + outline + fill planes). Both match png2spr.py.
+ *   .SPR cursor    - on CPC/PCW, a 256-byte sprite: two pre-shifted phases
+ *                    (shift 0, shift 2) with mask,data INTERLEAVED per column.
+ *                    Shipped files may append the low-RAM helper through byte 512;
+ *                    we edit the sprite and preserve that tail. On MSX2, a strict
+ *                    66-byte V9938 hardware sprite (hotspot + outline + fill
+ *                    planes). Both match png2spr.py.
  * The bit packing / mask / shift math matches tools/packicons.py + tools/png2spr.py
  * and is round-trip-checked by tools/test_iconed_codec.py.
  *
@@ -61,13 +63,19 @@
 #define PHASE     64
 #ifdef GB_MSX2
 #define CURSOR_LEN 66          /* MSX2: V9938 hardware sprite (hotspot + 2 planes) */
+#define CURSOR_FILE_MAX CURSOR_LEN
 #else
 #define CURSOR_LEN 256         /* CPC: 2 interleaved, pre-shifted masked phases */
+#define CURSOR_FILE_MAX 512    /* shipped CPC/PCW files append PICEDITL at +256 */
 #endif
 
 #define M_ICON    0
 #define M_CURSOR  1
 #define M_NONE    0xFF
+#define BTN_NONE  0
+#define BTN_PREV  1
+#define BTN_NEXT  2
+#define BTN_UNDO  3
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char winw = WIN_W, winh = WIN_H;   /* live window size (Fullscreen, #142) */
@@ -86,6 +94,7 @@ static unsigned char selpen;               /* selected palette pen 0..3         
 static char fbase[14];                     /* "NAME.EXT" from gb_doc_name() (title) */
 static char wtitle[18];                    /* fbase + " *" when modified           */
 static unsigned char u_valid, u_cx, u_cy, u_pen;  /* single-level undo of last paint */
+static unsigned char pressed_btn;          /* one-frame shared-button feedback     */
 static void fmt83(char *dst, const char *n11);   /* both defined below; used by draw() */
 static const char *win_title(void);
 
@@ -198,14 +207,15 @@ static void encode_cursor(void)
         }
 }
 #else
-/* CPC: 256 bytes = two pre-shifted phases (shift 0, shift 2) back to back, each
- * CUR_H rows of CUR_W byte-columns with mask,data INTERLEAVED per column (the
- * kernel composites bg AND mask OR data over one advancing pointer). We edit
- * phase 0's unshifted grid and regenerate both phases. Matches png2spr.py +
- * lib/cursor_data.asm (the old d0,m0,d2,m2 block order garbled the cursor). */
+/* CPC/PCW: 256 bytes = two pre-shifted phases (shift 0, shift 2) back to back,
+ * each CUR_H rows of CUR_W byte-columns with mask,data INTERLEAVED per column.
+ * PCW stores 2-bit fields in CGA2 hardware-pen order; CPC stores Mode-1 bits. */
 static void decode_cursor(void)
 {
-    unsigned char y, bx, i, d, m;
+    unsigned char y, bx, i, d, m, pen;
+#ifdef GB_PCW
+    unsigned char sh;
+#endif
     unsigned int off;
     u_valid = 0;
     gw = 16; gh = 16;
@@ -214,14 +224,28 @@ static void decode_cursor(void)
             off = (unsigned int)y * (CUR_W * 2) + bx * 2;  /* phase 0: mask, data */
             m = buf[off];
             d = buf[off + 1];
-            for (i = 0; i < 4; i++)
-                gset(y, (unsigned char)(bx * 4 + i), ((m >> (7 - i)) & 1) ? 0 : dec_pixel(d, i));
+            for (i = 0; i < 4; i++) {
+#ifdef GB_PCW
+                sh = (unsigned char)(6 - 2 * i);
+                if ((m >> sh) & 3) pen = 0;
+                else {
+                    pen = (unsigned char)((d >> sh) & 3);
+                    pen = (pen == 3) ? 1 : (pen == 0) ? 2 : 3;
+                }
+#else
+                pen = ((m >> (7 - i)) & 1) ? 0 : dec_pixel(d, i);
+#endif
+                gset(y, (unsigned char)(bx * 4 + i), pen);
+            }
         }
 }
 
 static void enc_cursor_phase(unsigned char shift, unsigned int base)
 {
     unsigned char y, bx, i, d, m, pen;
+#ifdef GB_PCW
+    unsigned char sh;
+#endif
     int x;
     unsigned int off;
     for (y = 0; y < CUR_H; y++)
@@ -230,8 +254,17 @@ static void enc_cursor_phase(unsigned char shift, unsigned int base)
             for (i = 0; i < 4; i++) {
                 x = bx * 4 + i - shift;            /* source pixel for this column */
                 pen = (x >= 0 && x < 16) ? gget(y, (unsigned char)x) : 0;
+#ifdef GB_PCW
+                sh = (unsigned char)(6 - 2 * i);
+                if (pen == 0) m |= (unsigned char)(3 << sh);
+                else {
+                    pen = (pen == 1) ? 3 : (pen == 2) ? 0 : 2;
+                    d |= (unsigned char)(pen << sh);
+                }
+#else
                 if (pen == 0) m = set_pixel(m, i, 3);   /* transparent: mask both bits */
                 else          d = set_pixel(d, i, pen);
+#endif
             }
             off = base + (unsigned int)y * (CUR_W * 2) + bx * 2;
             buf[off]     = m;                     /* interleaved: mask, then data */
@@ -254,7 +287,7 @@ static void sniff(void)
         mode = M_ICON; count = buf[5]; idx = 0;
         if (count == 0) { mode = M_NONE; return; }
         decode_icon(0);
-    } else if (filelen == CURSOR_LEN) {
+    } else if (filelen >= CURSOR_LEN && filelen <= CURSOR_FILE_MAX) {
         mode = M_CURSOR; count = 1; idx = 0;
         decode_cursor();
     } else {
@@ -311,18 +344,23 @@ static void draw_palette(void)
 
 static void draw_nav(void)
 {
-    if (mode != M_ICON || count <= 1) return;
-    gb_textk(PREV_X, NAV_Y, GLYPH_TRI_LEFT);    /* crisp black triangles (font glyphs) */
-    gb_textk(NEXT_X, NAV_Y, GLYPH_TRI_RIGHT);
-    fmt_idx();
-    gb_text(PREV_X, NAV_Y + NAV_BH + 2, numbuf);
+    unsigned char flags = (mode == M_ICON && count > 1) ? 0 : GB_WIDGET_DISABLED;
+    gb_button(PREV_X, NAV_Y, NAV_BW, NAV_BH, GLYPH_TRI_LEFT,
+              (unsigned char)(flags | (pressed_btn == BTN_PREV ? GB_WIDGET_PRESSED : 0)));
+    gb_button(NEXT_X, NAV_Y, NAV_BW, NAV_BH, GLYPH_TRI_RIGHT,
+              (unsigned char)(flags | (pressed_btn == BTN_NEXT ? GB_WIDGET_PRESSED : 0)));
+    gb_fill(PREV_X, NAV_Y + NAV_BH + 2, 8, 8, 0);
+    if (!(flags & GB_WIDGET_DISABLED)) {
+        fmt_idx();
+        gb_text(PREV_X, NAV_Y + NAV_BH + 2, numbuf);
+    }
 }
 
 static void draw_undo(void)
 {
-    if (mode == M_NONE) return;
-    gb_frame(UNDO_X, UNDO_Y, UNDO_W, UNDO_H, 1);
-    gb_text(UNDO_X, UNDO_Y + 1, "UNDO");
+    unsigned char flags = u_valid ? 0 : GB_WIDGET_DISABLED;
+    if (pressed_btn == BTN_UNDO) flags |= GB_WIDGET_PRESSED;
+    gb_button(UNDO_X, UNDO_Y, UNDO_W, UNDO_H, "UNDO", flags);
 }
 
 static void status_line(void)
@@ -400,7 +438,7 @@ static void ie_open(unsigned int len) { filelen = len; sniff(); }
 static unsigned int ie_save(void)
 {
     if (mode == M_ICON)   { encode_icon(idx); return filelen; }
-    if (mode == M_CURSOR) { encode_cursor();  return CURSOR_LEN; }
+    if (mode == M_CURSOR) { encode_cursor();  return filelen; }
     return 0;
 }
 
@@ -438,12 +476,18 @@ static void cell_redraw(unsigned char cx, unsigned char cy)
 
 static void paint_cell(unsigned char cx, unsigned char cy)
 {
+    unsigned char had_undo = u_valid;
     u_cx = cx; u_cy = cy;                 /* remember for UNDO */
     u_pen = gget(cy, cx);
     u_valid = 1;
     gset(cy, cx, selpen);
     gb_doc_dirty();                       /* mark the document unsaved (#142) */
     cell_redraw(cx, cy);
+    if (!had_undo) {
+        gb_curhide();
+        draw_undo();
+        gb_curshow();
+    }
 }
 
 /* do_undo: restore the last painted cell's previous pen. Swaps, so pressing UNDO
@@ -470,6 +514,7 @@ static void switch_icon(unsigned char next)
     gb_fill(PREV_X, NAV_Y + NAV_BH + 2, 8, 8, 0);
     fmt_idx();
     gb_text(PREV_X, NAV_Y + NAV_BH + 2, numbuf);
+    draw_undo();                              /* changing icons clears single-level undo */
     gb_curshow();
 }
 
@@ -478,6 +523,13 @@ static void ie_frame(void)
 {
     sync_rect();
     win_title();                                      /* keep wtitle fresh for the WM title */
+    if (pressed_btn != BTN_NONE) {
+        pressed_btn = BTN_NONE;
+        gb_curhide();
+        draw_nav();
+        draw_undo();
+        gb_curshow();
+    }
     if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a File menu ran (#142) */
 }
 
@@ -501,7 +553,7 @@ static void ie_drag(void)
 /* on_click (#146): a content press - canvas paint, palette, Prev/Next, or UNDO. */
 static void ie_click(void)
 {
-    unsigned char mx, my, k, y;
+    unsigned char mx, my, k, y, flags;
     sync_rect();
     recalc_origin();                                  /* origin for the CANVAS_X/PANEL hit-tests */
     mx = gb_mx(); my = gb_my();
@@ -525,16 +577,24 @@ static void ie_click(void)
         }
     }
 
-    if (mode == M_ICON && count > 1 &&                 /* Prev / Next buttons */
-        my >= NAV_Y && my < NAV_Y + NAV_BH) {
-        if (mx >= PREV_X && mx < PREV_X + NAV_BW)      switch_icon(0);
-        else if (mx >= NEXT_X && mx < NEXT_X + NAV_BW) switch_icon(1);
+    flags = (mode == M_ICON && count > 1) ? 0 : GB_WIDGET_DISABLED;
+    if (gb_button_hit(PREV_X, NAV_Y, NAV_BW, NAV_BH, mx, my, flags)) {
+        pressed_btn = BTN_PREV;
+        gb_curhide(); draw_nav(); gb_curshow();
+        switch_icon(0);
+        return;
+    }
+    if (gb_button_hit(NEXT_X, NAV_Y, NAV_BW, NAV_BH, mx, my, flags)) {
+        pressed_btn = BTN_NEXT;
+        gb_curhide(); draw_nav(); gb_curshow();
+        switch_icon(1);
         return;
     }
 
-    if (mode != M_NONE &&                              /* UNDO button */
-        my >= UNDO_Y && my < UNDO_Y + UNDO_H &&
-        mx >= UNDO_X && mx < UNDO_X + UNDO_W) {
+    flags = u_valid ? 0 : GB_WIDGET_DISABLED;
+    if (gb_button_hit(UNDO_X, UNDO_Y, UNDO_W, UNDO_H, mx, my, flags)) {
+        pressed_btn = BTN_UNDO;
+        gb_curhide(); draw_undo(); gb_curshow();
         do_undo();
     }
 }
@@ -562,6 +622,7 @@ void main(void)
 {
     unsigned char n;
 
+    pressed_btn = BTN_NONE;
     gb_wm_managed(&iemw);                    /* register FIRST (no draw): captures our file arg */
     gb_doc(&iedoc);                          /* standard File menu; adopts the launch name */
     filelen = gb_fs_load(buf, BUFSZ);        /* load the launch file (0 if none) */

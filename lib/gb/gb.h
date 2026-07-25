@@ -94,6 +94,8 @@ void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline   
 #define GB_WIDGET_FOCUSED 0x01
 #define GB_WIDGET_ARROWS  0x02
 #define GB_WIDGET_CHECKED 0x04
+#define GB_WIDGET_DISABLED 0x08
+#define GB_WIDGET_PRESSED  0x10
 
 #define GB_SCROLL_NONE      0
 #define GB_SCROLL_UP        1
@@ -117,6 +119,9 @@ void gb_vscroll(unsigned char x, unsigned char y, unsigned char w, unsigned char
 unsigned char gb_widget_hit(unsigned char x, unsigned char y,
                             unsigned char w, unsigned char h,
                             unsigned char mx, unsigned char my);
+#define gb_button_hit(x, y, w, h, mx, my, flags) \
+    ((unsigned char)(!((flags) & GB_WIDGET_DISABLED) && \
+     gb_widget_hit((x), (y), (w), (h), (mx), (my))))
 unsigned char gb_vscroll_hit(unsigned char x, unsigned char y,
                              unsigned char w, unsigned char h,
                              unsigned char pos, unsigned char total,

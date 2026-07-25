@@ -101,6 +101,9 @@ from `GB_MSG_DRAW` and the matching hit-test from `GB_MSG_CLICK`. Text-bearing
 controls draw the supplied display text without editing or clipping it, so the app
 applies its own scrolling/truncation. Widgets consistently use logical pens 0–3 as
 canvas, surface, edge/text and accent; the existing `INKS=` palette therefore
-recolours them without platform-specific code. WGET is the button/field reference,
+recolours them without platform-specific code. Buttons accept
+`GB_WIDGET_PRESSED` and `GB_WIDGET_DISABLED`; `gb_button_hit` rejects disabled
+controls. WGET is the button/field reference,
 Shell and File Manager are scrollbar references, Settings is the selector/stepper
-reference, Clock combines steppers with a button, and XAOS uses compact buttons.
+reference, Clock combines steppers with a button, XAOS uses compact buttons, and
+Icon Editor demonstrates pressed and disabled button states.

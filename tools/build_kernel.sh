@@ -133,7 +133,7 @@ DATA_LOC=0x6720 DOCRO=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWE
 DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: data-loc above
+APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6300 DOC=1 WIDGETS=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: data-loc above
                                    # the gb_doc/fullscreen code so the 6656-B icon-set buffer
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
 DATA_LOC=0x6500 DOC=1 WIDGETS=1 STEPPER=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options

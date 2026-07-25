@@ -115,6 +115,7 @@ common non-modal controls instead of implementing their appearance independently
 gb_field(x, y, w, 13, visible_text,
          editing ? GB_WIDGET_FOCUSED : 0);
 gb_button(x, button_y, 20, 15, "Apply", 0);
+gb_button(x, button_y, 20, 15, "Apply", GB_WIDGET_PRESSED);
 gb_vscroll(sx, sy, 3, sh, top, total, visible, GB_WIDGET_ARROWS);
 gb_select(x, option_y, 26, 10, current_option, 0);
 gb_stepper(x, value_y, 16, 10, value_text, 0);
@@ -133,8 +134,15 @@ provides `gb_vscroll` and `gb_vscroll_hit`. `TOGGLE=1`, `STEPPER=1`,
 hit/value helper. Widget state stays in the app bank. This avoids resident-kernel
 growth and avoids using `GBUI.MOD`, whose modal dispatcher loads the module from
 disk for each operation. Widgets use the four logical UI pens, so `INKS=` changes
-their colours consistently on CPC, MSX2 and PCW. Layout metrics, selected values,
-ranges, popup actions and inline text editing remain application-owned.
+their colours consistently on CPC, MSX2 and PCW. Buttons may be drawn with
+`GB_WIDGET_PRESSED` or `GB_WIDGET_DISABLED`; `gb_button_hit` automatically
+rejects a disabled control. Layout metrics, selected values, ranges, popup
+actions and inline text editing remain application-owned.
+
+Browser is an intentional exception: its PCW build is constrained by the
+record-rounded app loader ceiling. Linking the generic field/button unit for its
+toolbar exceeded that ceiling by 439 bytes, so it retains compact local drawing
+until equivalent room is reclaimed.
 
 ## Icon and font sets (GEOBENCH.CFG)
 

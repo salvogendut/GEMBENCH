@@ -46,7 +46,7 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build
 APPDEFS="-DGB_MSX2" APP_CFLAGS=--opt-code-size DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6400 DOC=1 WIDGETS=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x62C0 DOC=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
+APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6300 DOC=1 WIDGETS=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x68C0 DOCRO=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6500 DOC=1 WIDGETS=1 STEPPER=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
