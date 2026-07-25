@@ -102,4 +102,5 @@ controls draw the supplied display text without editing or clipping it, so the a
 applies its own scrolling/truncation. Widgets consistently use logical pens 0–3 as
 canvas, surface, edge/text and accent; the existing `INKS=` palette therefore
 recolours them without platform-specific code. WGET is the button/field reference,
-Shell is the scrollbar reference, and Settings is the selector/stepper reference.
+Shell and File Manager are scrollbar references, Settings is the selector/stepper
+reference, Clock combines steppers with a button, and XAOS uses compact buttons.

@@ -26,7 +26,6 @@ static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;  /* live size (resizeable) */
 static unsigned char show_sec;               /* 0 = H:M (minute refresh), 1 = +seconds */
 static unsigned char ph, pm, ps, pshow, have_prev;  /* previous h/m/s + show state */
-static unsigned char modal;                  /* a self-polling dialog is up (Set time) */
 static unsigned char fs_px, fs_py, fs_pw, fs_ph;    /* geometry saved across Fullscreen (#142) */
 
 /* face geometry, recomputed from the live window rect on every full draw (#81): the
@@ -285,35 +284,38 @@ static unsigned char changed(void)
 /* on_event: a top-bar title click -> the framework (View / Options) (#142). */
 static void clk_event(void) { gb_doc_event(); }
 
-/* set_time_dialog: +/- on hours and minutes (triangle glyphs), OK applies to the
-   RTC. Returns 1 if the time was set. */
+/* set_time_dialog: shared horizontal steppers adjust hours/minutes and a shared
+   button applies the result. Returns 1 if the time was set. */
 static unsigned char hh, mm;
-static void draw_field(unsigned char x, unsigned char y, unsigned char v)
+static void draw_time_stepper(unsigned char x, unsigned char y, unsigned char v)
 {
     char t[3];
-    gb_textbw(x, y, GLYPH_TRI_UP);
     put2(t, v); t[2] = 0;
-    gb_fill(x, y + 9, 4, 8, 1);
-    gb_textbw(x, y + 9, t);
-    gb_textbw(x, y + 18, GLYPH_TRI_DOWN);
+    gb_stepper(x, y, 12, 10, t, 0);
 }
 static unsigned char set_time_dialog(void)
 {
     unsigned char flags = 0, done = 0, ok = 0;
-    unsigned char x = win_x + 3, y = win_y + 34, w = 22, h = 44;
-    unsigned char hx = x + 4, mx = x + 13, ay = y + 6;
+    unsigned char w = 20, h = 44;
+    unsigned char x = (unsigned char)(win_x + ((win_w - w) >> 1));
+    unsigned char y = (unsigned char)(win_y + 34);
+    unsigned char sx = (unsigned char)(x + 7);
+    unsigned char hy = (unsigned char)(y + 10);
+    unsigned char my = (unsigned char)(y + 22);
+    unsigned char bx = (unsigned char)(x + 7);
+    unsigned char by = (unsigned char)(y + 34);
 
     gb_time();
     hh = bin(gb_hour); mm = bin(gb_min);
-    modal = 1;
     gb_curhide();
     gb_fill(x, y, w, h, 1);
     gb_frame(x, y, w, h, 2);
     gb_textbw(x + 1, y + 1, "Set time");
-    gb_textbw(hx + 5, ay + 9, ":");
-    draw_field(hx, ay, hh);
-    draw_field(mx, ay, mm);
-    gb_textbw(x + 7, y + h - 9, "OK");
+    gb_textbw(x + 1, hy + 1, "Hr");
+    gb_textbw(x + 1, my + 1, "Min");
+    draw_time_stepper(sx, hy, hh);
+    draw_time_stepper(sx, my, mm);
+    gb_button(bx, by, 6, 9, "OK", 0);
     gb_curshow();
 
     while (!done) {
@@ -322,20 +324,31 @@ static unsigned char set_time_dialog(void)
         if (!(flags & GB_CLICK)) continue;
         {
             unsigned char cx = gb_mx(), cy = gb_my();
-            if (cy >= ay && cy < ay + 8) {                 /* up arrows */
-                if (cx >= hx && cx < hx + 3) { hh = (hh + 1) % 24; draw_field(hx, ay, hh); }
-                else if (cx >= mx && cx < mx + 3) { mm = (mm + 1) % 60; draw_field(mx, ay, mm); }
-            } else if (cy >= ay + 18 && cy < ay + 26) {    /* down arrows */
-                if (cx >= hx && cx < hx + 3) { hh = (hh + 23) % 24; draw_field(hx, ay, hh); }
-                else if (cx >= mx && cx < mx + 3) { mm = (mm + 59) % 60; draw_field(mx, ay, mm); }
-            } else if (cy >= y + h - 9 && cx >= x + 7 && cx < x + 13) {  /* OK */
+            unsigned char part = gb_stepper_hit(sx, hy, 12, 10, cx, cy);
+            if (part == GB_STEPPER_DEC || part == GB_STEPPER_INC) {
+                hh = (part == GB_STEPPER_INC) ? (unsigned char)((hh + 1) % 24)
+                                              : (unsigned char)((hh + 23) % 24);
+                gb_curhide();
+                draw_time_stepper(sx, hy, hh);
+                gb_curshow();
+                continue;
+            }
+            part = gb_stepper_hit(sx, my, 12, 10, cx, cy);
+            if (part == GB_STEPPER_DEC || part == GB_STEPPER_INC) {
+                mm = (part == GB_STEPPER_INC) ? (unsigned char)((mm + 1) % 60)
+                                              : (unsigned char)((mm + 59) % 60);
+                gb_curhide();
+                draw_time_stepper(sx, my, mm);
+                gb_curshow();
+                continue;
+            }
+            if (gb_widget_hit(bx, by, 6, 9, cx, cy)) {
                 ok = 1; done = 1;
             } else if (cy < y || cy >= y + h || cx < x || cx >= x + w) {
                 done = 1;                                   /* clicked away -> cancel */
             }
         }
     }
-    modal = 0;
     if (flags & GB_QUIT) while (gb_poll() & GB_QUIT) ;
     gb_curhide();
     gb_fill(x, y, w, h, 0);
@@ -437,7 +450,7 @@ static const gb_mwin_t cmw = {
 
 void main(void)
 {
-    show_sec = 0; have_prev = 0; modal = 0;
+    show_sec = 0; have_prev = 0;
     gb_wm_managed(&cmw);                         /* register (no draw yet) (#146) */
     gb_doc(&clkdoc);                             /* View > Fullscreen (#142) */
     gb_menu_add("Options", opt_items, 2, opt_action);

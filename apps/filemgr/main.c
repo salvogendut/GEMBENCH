@@ -192,33 +192,10 @@ static void clamp_top(void)
     if (top > tl - vl) top = tl - vl;
 }
 
-/* thumb geometry: th = height, ty = top line (only meaningful when tl > vl). */
-static unsigned char thumb_h(void)
-{
-    unsigned char tl = total_lines(), vl = vis_lines(), th;
-    if (tl <= vl) return CT_H;
-    th = (unsigned char)(((unsigned)CT_H * vl) / tl);
-    return th < 6 ? 6 : th;
-}
-static unsigned char thumb_y(void)
-{
-    unsigned char tl = total_lines(), vl = vis_lines();
-    if (tl <= vl) return CT_Y;
-    return (unsigned char)(CT_Y + ((unsigned)(CT_H - thumb_h()) * top) / (tl - vl));
-}
-
-#define ARR_H 8                          /* up/down scroll-button height (px) */
-
 static void draw_scrollbar(void)
 {
-    gb_fill(SB_X, CT_Y, SB_W, CT_H, 1);                        /* white track */
-    gb_fill(SB_X + 1, thumb_y() + 1, 1, thumb_h() - 2, 3);     /* red thumb, inset 1px */
-    /* up/down buttons: a white patch (covers the thumb if it parks at an end), then
-       the glyph black-on-white, aligned with the thumb (SB_X+1) */
-    gb_fill(SB_X, CT_Y, SB_W, ARR_H, 1);
-    gb_textbw(SB_X + 1, CT_Y, GLYPH_TRI_UP);
-    gb_fill(SB_X, CT_BOT - ARR_H, SB_W, ARR_H, 1);
-    gb_textbw(SB_X + 1, CT_BOT - ARR_H, GLYPH_TRI_DOWN);
+    gb_vscroll(SB_X, CT_Y, SB_W, CT_H, top, total_lines(), vis_lines(),
+               GB_WIDGET_ARROWS);
 }
 
 /* draw a name truncated to fit a cell (icons view) */
@@ -682,16 +659,6 @@ static void sb_drag(void)
     }
 }
 
-/* sb_click: a click in the scrollbar - page above/below the thumb, or drag it. */
-static void sb_click(unsigned char my)
-{
-    unsigned char ty = thumb_y(), th = thumb_h(), vl = vis_lines();
-    if (total_lines() <= vl) return;
-    if (my < ty)            { top = (top > vl) ? top - vl : 0; clamp_top(); draw(); }
-    else if (my >= ty + th) { top += vl; clamp_top(); draw(); }
-    else                    sb_drag();
-}
-
 /* fm_view: the gb_doc View menu's app items (after Fullscreen). 0 = toggle the
    list/icons layout (persisted to GEOBENCH.CFG). "Up" is no longer a menu item -
    it's the ".." entry in the listing now (#142). */
@@ -845,15 +812,23 @@ static void fm_click(void)
         return;
     }
 
-    /* scrollbar: up/down arrow buttons (one line) at the ends, page/drag between */
+    /* scrollbar: shared arrows/page regions plus the app-owned thumb drag loop */
     if (mx >= SB_X && mx < SB_X + SB_W && my >= CT_Y && my < CT_BOT) {
         unsigned char old = top, tl = total_lines(), vl = vis_lines();
-        if (my < CT_Y + ARR_H) {                     /* up arrow */
+        unsigned char part = gb_vscroll_hit(
+            SB_X, CT_Y, SB_W, CT_H, top, tl, vl, mx, my, GB_WIDGET_ARROWS);
+        if (part == GB_SCROLL_UP) {
             if (top) top--;
-        } else if (my >= CT_BOT - ARR_H) {           /* down arrow */
+        } else if (part == GB_SCROLL_DOWN) {
             if (tl > vl && top < tl - vl) top++;
-        } else {
-            sb_click(my);
+        } else if (part == GB_SCROLL_PAGE_UP) {
+            top = (top > vl) ? (unsigned char)(top - vl) : 0;
+            clamp_top();
+        } else if (part == GB_SCROLL_PAGE_DOWN) {
+            top = (unsigned char)(top + vl);
+            clamp_top();
+        } else if (part == GB_SCROLL_THUMB) {
+            sb_drag();
             return;
         }
         if (top != old) draw();
