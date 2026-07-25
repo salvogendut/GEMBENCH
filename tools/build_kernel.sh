@@ -142,7 +142,7 @@ DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # 
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DOC=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
-DATA_LOC=0x7B00 DIALOGS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
+APP_CFLAGS=--opt-code-size DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
                                    # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
 DIALOGS=1 tools/build_capp.sh apps/diskutil build/DISKUTIL.RAW # DISKUTIL: floppy formatter - a physical

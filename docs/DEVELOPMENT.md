@@ -116,20 +116,25 @@ gb_field(x, y, w, 13, visible_text,
          editing ? GB_WIDGET_FOCUSED : 0);
 gb_button(x, button_y, 20, 15, "Apply", 0);
 gb_vscroll(sx, sy, 3, sh, top, total, visible, GB_WIDGET_ARROWS);
+gb_select(x, option_y, 26, 10, current_option, 0);
+gb_stepper(x, value_y, 16, 10, value_text, 0);
 ```
 
 Enable the required compilation units per app:
 
 ```bash
-WIDGETS=1 SCROLL=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
+WIDGETS=1 SELECTOR=1 STEPPER=1 \
+    tools/build_capp.sh apps/myapp build/MYAPP.RAW
 ```
 
 `WIDGETS=1` provides `gb_button`, `gb_field`, and `gb_widget_hit`; `SCROLL=1`
-provides `gb_vscroll` and `gb_vscroll_hit`. Widget state stays in the app bank.
-This avoids resident-kernel growth and avoids using `GBUI.MOD`, whose modal
-dispatcher loads the module from disk for each operation. Widgets use the four
-logical UI pens, so `INKS=` changes their colours consistently on CPC, MSX2 and
-PCW. Layout metrics and inline text editing remain application-owned.
+provides `gb_vscroll` and `gb_vscroll_hit`. `TOGGLE=1`, `STEPPER=1`,
+`SELECTOR=1`, and `SLIDER=1` each link only that control and its matching
+hit/value helper. Widget state stays in the app bank. This avoids resident-kernel
+growth and avoids using `GBUI.MOD`, whose modal dispatcher loads the module from
+disk for each operation. Widgets use the four logical UI pens, so `INKS=` changes
+their colours consistently on CPC, MSX2 and PCW. Layout metrics, selected values,
+ranges, popup actions and inline text editing remain application-owned.
 
 ## Icon and font sets (GEOBENCH.CFG)
 

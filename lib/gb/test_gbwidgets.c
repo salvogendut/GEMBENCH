@@ -8,10 +8,15 @@ typedef struct {
     unsigned char x, y, w, h, pen;
 } fill_call_t;
 
+typedef struct {
+    unsigned char x, y;
+    const char *value;
+} text_call_t;
+
 static fill_call_t fills[8];
 static fill_call_t frames[8];
-static unsigned char nfill, nframe, text_x, text_y;
-static const char *text_value;
+static text_call_t texts[8];
+static unsigned char nfill, nframe, ntext;
 
 void gb_fill(unsigned char x, unsigned char y, unsigned char w,
              unsigned char h, unsigned char pen)
@@ -27,16 +32,12 @@ void gb_frame(unsigned char x, unsigned char y, unsigned char w,
 
 void gb_textbw(unsigned char x, unsigned char y, const char *text)
 {
-    text_x = x;
-    text_y = y;
-    text_value = text;
+    texts[ntext++] = (text_call_t){x, y, text};
 }
 
 static void reset_calls(void)
 {
-    nfill = nframe = 0;
-    text_x = text_y = 0;
-    text_value = 0;
+    nfill = nframe = ntext = 0;
 }
 
 static void check(int ok, const char *name)
@@ -54,13 +55,15 @@ int main(void)
     gb_button(10, 20, 20, 15, "Go", 0);
     check(nfill == 1 && fills[0].pen == 1, "button surface");
     check(nframe == 1 && frames[0].pen == 2, "button edge");
-    check(text_x == 18 && text_y == 24 && !strcmp(text_value, "Go"),
+    check(ntext == 1 && texts[0].x == 18 && texts[0].y == 24 &&
+          !strcmp(texts[0].value, "Go"),
           "button centred label");
 
     reset_calls();
     gb_field(2, 8, 30, 13, "URL", GB_WIDGET_FOCUSED);
     check(nframe == 1 && frames[0].pen == 3, "focused field accent");
-    check(text_x == 3 && text_y == 11, "field text inset");
+    check(ntext == 1 && texts[0].x == 3 && texts[0].y == 11,
+          "field text inset");
 
     check(gb_widget_hit(4, 5, 10, 8, 4, 5), "widget includes top-left");
     check(!gb_widget_hit(4, 5, 10, 8, 14, 12), "widget excludes right edge");
@@ -80,7 +83,57 @@ int main(void)
 
     reset_calls();
     gb_vscroll(1, 10, 3, 80, 10, 40, 8, GB_WIDGET_ARROWS);
-    check(nfill == 4 && !strcmp(text_value, GLYPH_TRI_DOWN),
+    check(nfill == 4 && ntext == 2 &&
+          !strcmp(texts[1].value, GLYPH_TRI_DOWN),
           "scrollbar track thumb and arrows");
+
+    reset_calls();
+    gb_toggle(4, 6, 20, 10, "Enabled",
+              GB_WIDGET_CHECKED | GB_WIDGET_FOCUSED);
+    check(nfill == 1 && nframe == 1 && frames[0].pen == 3,
+          "focused toggle frame");
+    check(ntext == 2 && !strcmp(texts[0].value, "x") &&
+          !strcmp(texts[1].value, "Enabled"),
+          "checked toggle mark and label");
+    check(gb_toggle_hit(4, 6, 20, 10, 23, 15),
+          "toggle includes bottom-right pixel");
+    check(!gb_toggle_hit(4, 6, 20, 10, 24, 15),
+          "toggle excludes right edge");
+
+    reset_calls();
+    gb_stepper(10, 20, 16, 10, "12", 0);
+    check(nfill == 1 && nframe == 3 && ntext == 3,
+          "stepper draws three parts");
+    check(!strcmp(texts[0].value, "-") && !strcmp(texts[1].value, "12") &&
+          !strcmp(texts[2].value, "+"),
+          "stepper labels");
+    check(gb_stepper_hit(10, 20, 16, 10, 11, 24) == GB_STEPPER_DEC,
+          "stepper decrement hit");
+    check(gb_stepper_hit(10, 20, 16, 10, 18, 24) == GB_STEPPER_VALUE,
+          "stepper value hit");
+    check(gb_stepper_hit(10, 20, 16, 10, 24, 24) == GB_STEPPER_INC,
+          "stepper increment hit");
+
+    reset_calls();
+    gb_select(5, 7, 26, 10, "DEFAULT", 0);
+    check(nfill == 1 && nframe == 1 && ntext == 2 &&
+          !strcmp(texts[0].value, "DEFAULT") &&
+          !strcmp(texts[1].value, ">"),
+          "selector value and affordance");
+    check(gb_select_hit(5, 7, 26, 10, 30, 16),
+          "selector hit");
+
+    reset_calls();
+    gb_slider(8, 12, 20, 9, 5, 10, GB_WIDGET_FOCUSED);
+    check(nfill == 3 && nframe == 1 && frames[0].pen == 3,
+          "focused slider track and thumb");
+    check(gb_slider_hit(8, 12, 20, 9, 27, 20),
+          "slider hit");
+    check(gb_slider_value(8, 20, 10, 9) == 0,
+          "slider maps left edge");
+    check(gb_slider_value(8, 20, 10, 25) == 10,
+          "slider maps right edge");
+    check(gb_slider_value(8, 20, 10, 17) == 5,
+          "slider maps midpoint");
     return 0;
 }

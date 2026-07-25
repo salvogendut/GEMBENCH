@@ -50,6 +50,10 @@ NET_FLAG="${NET:-0}"
 GBWIN_FLAG="${GBWIN:-1}"
 WIDGETS_FLAG="${WIDGETS:-0}"
 SCROLL_FLAG="${SCROLL:-0}"
+TOGGLE_FLAG="${TOGGLE:-0}"
+STEPPER_FLAG="${STEPPER:-0}"
+SELECTOR_FLAG="${SELECTOR:-0}"
+SLIDER_FLAG="${SLIDER:-0}"
 NET_SRC="$GB/gbnet_stub.c"
 case " ${APPDEFS:-} " in
     *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
@@ -64,6 +68,18 @@ if [ "$WIDGETS_FLAG" = "1" ]; then
 fi
 if [ "$SCROLL_FLAG" = "1" ]; then
     deps+=("$GB/gbscroll.c")
+fi
+if [ "$TOGGLE_FLAG" = "1" ]; then
+    deps+=("$GB/gbtoggle.c")
+fi
+if [ "$STEPPER_FLAG" = "1" ]; then
+    deps+=("$GB/gbstepper.c")
+fi
+if [ "$SELECTOR_FLAG" = "1" ]; then
+    deps+=("$GB/gbselect.c")
+fi
+if [ "$SLIDER_FLAG" = "1" ]; then
+    deps+=("$GB/gbslider.c")
 fi
 while IFS= read -r dep; do
     deps+=("$dep")
@@ -100,6 +116,10 @@ cache_key=$(printf '%s\n' \
     "GBWIN=$GBWIN_FLAG" \
     "WIDGETS=$WIDGETS_FLAG" \
     "SCROLL=$SCROLL_FLAG" \
+    "TOGGLE=$TOGGLE_FLAG" \
+    "STEPPER=$STEPPER_FLAG" \
+    "SELECTOR=$SELECTOR_FLAG" \
+    "SLIDER=$SLIDER_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
     "APP_CFLAGS=$APP_CFLAGS" \
     "LOAD_LIMIT=$LOAD_LIMIT" \
@@ -137,6 +157,26 @@ if [ "$SCROLL_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbscroll.c" -o "$work/gbscroll.rel"
     SCROLL_REL="$work/gbscroll.rel"
 fi
+TOGGLE_REL=""
+if [ "$TOGGLE_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbtoggle.c" -o "$work/gbtoggle.rel"
+    TOGGLE_REL="$work/gbtoggle.rel"
+fi
+STEPPER_REL=""
+if [ "$STEPPER_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbstepper.c" -o "$work/gbstepper.rel"
+    STEPPER_REL="$work/gbstepper.rel"
+fi
+SELECTOR_REL=""
+if [ "$SELECTOR_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbselect.c" -o "$work/gbselect.rel"
+    SELECTOR_REL="$work/gbselect.rel"
+fi
+SLIDER_REL=""
+if [ "$SLIDER_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbslider.c" -o "$work/gbslider.rel"
+    SLIDER_REL="$work/gbslider.rel"
+fi
 # Opt-in dialogs (#114, #142). The heavy render (popup/prompt/file-picker) now lives in
 # the paged GBUI kernel module (#142 step 1b); an app that needs ANY dialog links only
 # the tiny marshalling stub gbui_stub.c (gb_popup/gb_prompt/gb_pickfile/gb_pickdir ->
@@ -162,7 +202,9 @@ if [ "$NET_FLAG" = "1" ]; then
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
 fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc "$DATA_LOC" \
-    "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $SCROLL_REL $DLG_REL "$work/gblib.rel" -o "$work/app.ihx"
+    "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $SCROLL_REL \
+    $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $DLG_REL \
+    "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
 # AFTER the code) must end below data-loc - otherwise the RAM data area starts inside
