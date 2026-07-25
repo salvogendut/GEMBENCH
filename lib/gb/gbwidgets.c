@@ -39,6 +39,7 @@ void gb_button(unsigned char x, unsigned char y, unsigned char w, unsigned char 
     gb_textbw(tx, ty, label);
 }
 
+#ifndef GB_BUTTON_ONLY
 void gb_field(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
               const char *text, unsigned char flags)
 {
@@ -47,6 +48,7 @@ void gb_field(unsigned char x, unsigned char y, unsigned char w, unsigned char h
              (flags & GB_WIDGET_FOCUSED) ? UI_ACCENT : UI_EDGE);
     gb_textbw((unsigned char)(x + 1), text_y(y, h), text);
 }
+#endif
 
 unsigned char gb_widget_hit(unsigned char x, unsigned char y,
                             unsigned char w, unsigned char h,

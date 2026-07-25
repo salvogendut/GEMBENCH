@@ -82,6 +82,7 @@ primitives. See `lib/gb/gb.h` for the full API.
 Common non-modal controls live in opt-in `libgb` compilation units instead of the
 resident kernel. Build with only the units an application uses:
 
+- `BUTTON=1`: buttons and rectangle hit-testing
 - `WIDGETS=1`: buttons, text-field frames and rectangle hit-testing
 - `SCROLL=1`: vertical scrollbars and scrollbar-part hit-testing
 - `TOGGLE=1`: checkbox/toggle rendering and hit-testing
@@ -92,7 +93,7 @@ resident kernel. Build with only the units an application uses:
 For example:
 
 ```bash
-WIDGETS=1 STEPPER=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
+BUTTON=1 STEPPER=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
 ```
 
 The helpers are deliberately stateless: the application owns focus, text buffers,
@@ -106,4 +107,5 @@ recolours them without platform-specific code. Buttons accept
 controls. WGET is the button/field reference,
 Shell and File Manager are scrollbar references, Settings is the selector/stepper
 reference, Clock combines steppers with a button, XAOS uses compact buttons, and
-Icon Editor demonstrates pressed and disabled button states.
+Icon Editor demonstrates pressed and disabled button states. Disk Utility uses a
+shared command button for its destructive format workflow.

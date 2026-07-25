@@ -124,11 +124,12 @@ gb_stepper(x, value_y, 16, 10, value_text, 0);
 Enable the required compilation units per app:
 
 ```bash
-WIDGETS=1 SELECTOR=1 STEPPER=1 \
+BUTTON=1 SELECTOR=1 STEPPER=1 \
     tools/build_capp.sh apps/myapp build/MYAPP.RAW
 ```
 
-`WIDGETS=1` provides `gb_button`, `gb_field`, and `gb_widget_hit`; `SCROLL=1`
+`BUTTON=1` provides `gb_button` and `gb_widget_hit` without linking the text-field
+renderer. `WIDGETS=1` provides those plus `gb_field`; `SCROLL=1`
 provides `gb_vscroll` and `gb_vscroll_hit`. `TOGGLE=1`, `STEPPER=1`,
 `SELECTOR=1`, and `SLIDER=1` each link only that control and its matching
 hit/value helper. Widget state stays in the app bank. This avoids resident-kernel
@@ -143,6 +144,10 @@ Browser is an intentional exception: its PCW build is constrained by the
 record-rounded app loader ceiling. Linking the generic field/button unit for its
 toolbar exceeded that ceiling by 439 bytes, so it retains compact local drawing
 until equivalent room is reclaimed.
+
+Settings also retains compact local `Configure`/`Save`/`Cancel` actions. Even the
+button-only unit moved its CPC loaded image 276 bytes past the fixed data split,
+while its data already ends only 91 bytes below the kernel.
 
 ## Icon and font sets (GEOBENCH.CFG)
 

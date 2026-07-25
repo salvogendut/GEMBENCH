@@ -49,6 +49,7 @@ DOCRO_FLAG="${DOCRO:-0}"
 NET_FLAG="${NET:-0}"
 GBWIN_FLAG="${GBWIN:-1}"
 WIDGETS_FLAG="${WIDGETS:-0}"
+BUTTON_FLAG="${BUTTON:-0}"
 SCROLL_FLAG="${SCROLL:-0}"
 TOGGLE_FLAG="${TOGGLE:-0}"
 STEPPER_FLAG="${STEPPER:-0}"
@@ -63,7 +64,7 @@ deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
 if [ "$GBWIN_FLAG" = "1" ]; then
     deps+=("$GB/gbwin.c")
 fi
-if [ "$WIDGETS_FLAG" = "1" ]; then
+if [ "$WIDGETS_FLAG" = "1" ] || [ "$BUTTON_FLAG" = "1" ]; then
     deps+=("$GB/gbwidgets.c")
 fi
 if [ "$SCROLL_FLAG" = "1" ]; then
@@ -115,6 +116,7 @@ cache_key=$(printf '%s\n' \
     "NET_SRC=$NET_SRC" \
     "GBWIN=$GBWIN_FLAG" \
     "WIDGETS=$WIDGETS_FLAG" \
+    "BUTTON=$BUTTON_FLAG" \
     "SCROLL=$SCROLL_FLAG" \
     "TOGGLE=$TOGGLE_FLAG" \
     "STEPPER=$STEPPER_FLAG" \
@@ -150,6 +152,9 @@ fi
 WIDGETS_REL=""
 if [ "$WIDGETS_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbwidgets.c" -o "$work/gbwidgets.rel"
+    WIDGETS_REL="$work/gbwidgets.rel"
+elif [ "$BUTTON_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer -DGB_BUTTON_ONLY ${APPDEFS:-} -I "$GB" -c "$GB/gbwidgets.c" -o "$work/gbwidgets.rel"
     WIDGETS_REL="$work/gbwidgets.rel"
 fi
 SCROLL_REL=""
