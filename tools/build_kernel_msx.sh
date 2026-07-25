@@ -53,6 +53,7 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x6500 DOC=1 BUTTON=1 STEPPER=1 tools/build_capp.sh
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 WIDGETS=1 SELECTOR=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
 APPDEFS="-DGB_MSX2" GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/msx/BROWSER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/msx/BRSAVE.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
@@ -150,6 +151,7 @@ find QA/MSX/GBENCH -maxdepth 1 -type f -name '*.PIC' -delete
 mkdir -p QA/MSX/PICS QA/MSX/DIAG
 rm -f QA/MSX/GBSPIKE.COM                 # pre-DIAG staging location (#379)
 cp build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM QA/MSX/
+rm -f QA/MSX/DIAG/FORMREF.APP             # MSX app loading resolves through /GBENCH
 rm -f QA/MSX/UNAPINET.COM
 if [ -n "${MSX_UNAPI_TSR:-}" ]; then
     [ -s "$MSX_UNAPI_TSR" ] || { echo "ERROR: MSX_UNAPI_TSR not found: $MSX_UNAPI_TSR" >&2; exit 1; }
@@ -175,6 +177,7 @@ cp build/msx/MAHJONG.RAW  QA/MSX/GBENCH/MAHJONG.APP
 cp build/msx/TELNET.RAW   QA/MSX/GBENCH/TELNET.APP
 cp build/msx/BROWSER.RAW  QA/MSX/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/GBENCH/BRSAVE.APP
+cp build/msx/FORMREF.RAW  QA/MSX/GBENCH/FORMREF.APP
 for f in "$GB_BASIC_DIR/build/msx/BASIC.RAW" "$GB_BASIC_DIR/build/msx/BASRUN.RAW" "$GB_BASIC_DIR/build/msx/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC MSX payload $f (run make -C \"$GB_BASIC_DIR\" raws-msx)" >&2; exit 1; }
 done

@@ -14,7 +14,7 @@
 #   GEOBENCH.CFG - config (root; read before the kernel enters /GBENCH)
 #   GBENCH/      - everything the kernel loads at boot (apps/modules/fonts/icons/cursor)
 #   PICS/        - the complete picture gallery (root-level: no nested directories)
-#   DIAG/        - standalone diagnostics (currently NETTEST.APP)
+#   DIAG/        - standalone diagnostics and developer reference apps
 # Boot: RUN"GB -> detector -> RUN"GBM4 or RUN"GBALB -> the kernel reads /GBENCH.
 # Needs build/GBALB.RAW and build/GBM4.RAW.
 #   * <app>.APP / GBCFG/GBFAT/FLOPPYSV/GBUI.MOD - HEADERLESS raw kernel modules (#234: .MOD,
@@ -55,6 +55,7 @@ for a in DESKTOP FILEMGR VIEWER NOTEPAD ICONED CLOCK PAINT XAOS SETTINGS DISKUTI
 done
 cp build/TELNET.RAW  "$SYS/TELNET.APP"      # #238: windowed ANSI/VT terminal + telnet client
 cp build/NETTEST.RAW "$DIAG/NETTEST.APP"    # #261: DNS/TCP/HTTP diagnostic for Albireo/Net4CPC and M4 backends
+cp build/FORMREF.RAW "$DIAG/FORMREF.APP"    # #420: reusable form-composition reference
 cp build/WGET.RAW    "$SYS/WGET.APP"        # #363: streaming HTTP downloader for any writable drive
 cp build/BROWSER.RAW "$SYS/BROWSER.APP"     # #367: streaming text-first HTTP browser
 cp build/BRSAVE.RAW  "$SYS/BRSAVE.APP"      # #373: Browser offline .HTM save worker

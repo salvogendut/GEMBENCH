@@ -48,6 +48,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos 
 APPDEFS="-DGB_PCW" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6300 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7380 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x6200 WIDGETS=1 SELECTOR=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/pcw/FORMREF.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7940 DIALOGS=1 WIDGETS=1 tools/build_capp.sh apps/wget build/pcw/WGET.RAW
 GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" LOAD_LIMIT=0x7F80 APPDEFS="-DGB_PCW" DATA_LOC=0x7FA4 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/pcw/BRSAVE.RAW
@@ -148,6 +149,7 @@ python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
     "${COMP_ADDS[@]}" \
     --add build/pcw/TELNET.RAW=TELNET.APP \
     --add build/pcw/NETTEST.RAW=NETTEST.APP \
+    --add build/pcw/FORMREF.RAW=FORMREF.APP \
     --add build/pcw/WGET.RAW=WGET.APP \
     --add build/pcw/BROWSER.RAW=BROWSER.APP \
     --add build/pcw/XAOS.RAW=XAOS.APP \
