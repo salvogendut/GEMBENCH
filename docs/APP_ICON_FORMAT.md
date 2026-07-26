@@ -98,11 +98,12 @@ set kept in the kernel data page. A dual four-/sixteen-colour header costs 800
 bytes, so native variants remain optional per application.
 
 Issue #430 moved Notepad, Icon Editor, Paint, Browser, Viewer, Telnet, Mahjong,
-and Shell into app-owned headers. The resident desktop set fell from 25 to 17
-slots (`6,324` to `4,244` bytes), recovering 2,080 bytes of kernel data-page
-headroom. At the format level, before the additional code-size reductions used
-by tight applications, the two shipped icon sets and eight v1 headers make the
-raw distribution payload 1,984 bytes smaller. Clock, Desktop, File Manager, and
+and Shell into app-owned headers; BASIC.APP followed from its external
+repository. The resident desktop set fell from 25 to 16 slots (`6,324` to
+`3,984` bytes), recovering 2,340 bytes of kernel data-page headroom. At the
+format level, before the additional code-size reductions used by tight
+applications, the two shipped icon sets and nine v1 headers make the raw
+distribution payload 2,232 bytes smaller. Clock, Desktop, File Manager, and
 shared file-type/device icons remain resident.
 
 `tools/iconedit.py` opens either ASM source and both resources inside a v2 APP.

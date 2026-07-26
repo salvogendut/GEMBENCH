@@ -79,14 +79,14 @@ static void ss_module_value(char *dst);   /* forward: s_draw shows the current S
 static unsigned char ss_is_starfield(void);
 
 /* MIN_IST_ICONS: the exact icon count for an .IST to be offered as the desktop icon
-   set. App-owned icons moved into GBAP headers in #430, leaving 17 resident
+   set. App-owned icons moved into GBAP headers, leaving 16 resident
    system/file-type slots. Exact matching also rejects legacy 25-slot sets whose
    positional meanings no longer align. A small toolchest like PAINT.IST (5 tool
    icons) stays filtered out. Keep this in step with the
    GBIS count of build/DEFAULT.IST (tools/build_kernel.sh packicons list) - if it drifts
    ABOVE the real count, every full set is dropped and the Icons picker shows "No files
    found" (#209). */
-#define MIN_IST_ICONS 17
+#define MIN_IST_ICONS 16
 
 /* one configurable setting: a label, its GEOBENCH.CFG key (with '='), the 3-char file
    extension to list, and (for icon sets) the minimum icon count to qualify. */

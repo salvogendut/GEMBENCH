@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Fast cross-platform rebuild/staging for explicitly registered applications.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+APP=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
+case "$APP" in
+    mahjong|mahjong.app)
+        APP=mahjong
+        BASE=MAHJONG
+        ;;
+    *)
+        echo "ERROR: unsupported fast app '${1:-}' (supported: mahjong)" >&2
+        exit 2
+        ;;
+esac
+
+APP_ICON="apps/$APP/icon.asm" DATA_LOC=0x7000 DIALOGS=1 \
+    tools/build_capp.sh "apps/$APP" "build/$BASE.RAW"
+APP_ICON="apps/$APP/icon.asm" APPDEFS="-DGB_MSX2" DATA_LOC=0x7000 DIALOGS=1 \
+    tools/build_capp.sh "apps/$APP" "build/msx/$BASE.RAW"
+APP_ICON="apps/$APP/icon.asm" APPDEFS="-DGB_PCW" DATA_LOC=0x7000 DIALOGS=1 \
+    tools/build_capp.sh "apps/$APP" "build/pcw/$BASE.RAW"
+
+for dir in QA/CPC/CARD/GBENCH QA/MSX/GBENCH QA/CPC/Floppies QA/PCW; do
+    if [ ! -d "$dir" ]; then
+        echo "ERROR: missing $dir; run the full build once before using make app" >&2
+        exit 1
+    fi
+done
+
+cp "build/$BASE.RAW" "QA/CPC/CARD/GBENCH/$BASE.APP"
+tools/package_cpc_companion.sh QA/CPC/Floppies/COMPANION.DSK
+
+cp "build/msx/$BASE.RAW" "QA/MSX/GBENCH/$BASE.APP"
+tools/package_pcw_companion.sh QA/PCW/COMPANION.DSK
+
+patch_fat_image() {
+    local image=$1
+    local source=$2
+    local destination=$3
+
+    if [ ! -f "$image" ]; then
+        echo "  ($image absent; loose staging updated)"
+        return
+    fi
+    if ! command -v mcopy >/dev/null; then
+        echo "  ($image not updated; install mtools or run the full build)"
+        return
+    fi
+    MTOOLS_SKIP_CHECK=1 mcopy -o -i "$image@@16384" "$source" "::$destination"
+    echo "  + $destination in $image"
+}
+
+patch_fat_image QA/CPC/GEOBENCH.IMG "build/$BASE.RAW" "/GBENCH/$BASE.APP"
+patch_fat_image QA/GBMSX.IMG "build/msx/$BASE.RAW" "/GBENCH/$BASE.APP"
+
+echo "Fast rebuild complete: $BASE.APP (CPC, MSX, PCW)"

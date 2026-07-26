@@ -86,21 +86,22 @@ cp build/GEOBENCH.CFG build/DEFAULT.CFG
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
 python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
 python3 tools/packicons.py build/DEFAULT.IST \
-    lib/icon_floppy.asm lib/icon_flowchart.asm lib/icon_clock.asm lib/icon_trash.asm \
+    lib/icon_floppy.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
     lib/icon_app.asm lib/icon_font.asm \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
     lib/icon_sd.asm \
     lib/icon_up.asm lib/icon_screensaver.asm \
-    # slots: 9=folder 10=.APP 11=.FNT 12=DESKTOP 13=FILEMGR
-    # 14=SD (Albireo Disk C, #104) 15=UP (FileMgr ".." entry, #142)
-    # 16=SCREENSAVER (.SAV, #221 reused gear slot)
-    # App-owned NOTEPAD/ICONED/PAINT/BROWSER/VIEWER/TELNET/MAHJONG/SHELL icons
-    # live in GBAP headers and are loaded on demand by File Manager (#430).
+    # slots: 8=folder 9=.APP 10=.FNT 11=DESKTOP 12=FILEMGR
+    # 13=SD (Disk C, #104) 14=UP (FileMgr ".." entry, #142)
+    # 15=SCREENSAVER (.SAV, #221 reused gear slot)
+    # App-owned BASIC/NOTEPAD/ICONED/PAINT/BROWSER/VIEWER/TELNET/MAHJONG/SHELL
+    # icons live in GBAP headers and are loaded on demand by File Manager.
     # NOTE (#198): icon_iconset removed - it was byte-identical to icon_app; .IST files
     # now show the .APP icon, shrinking DEFAULT.IST by one slot (the floppy AMSDOS reader
-    # garbles the icon set above a size threshold). All slots >=14 shifted up by 1.
+    # garbles the icon set above a size threshold). Later app-owned slots are removed
+    # from every tracked set in lockstep.
 # PAINT toolchest set (24x24, ICONED-editable, #114). PAINT's 16K bank caps the loaded
 # set at ~6 icons, so the built .IST holds just the 5 live tools (pencil/square/circle/
 # fill/undo, TOOL_* order), refreshed from the GB-PAINT tool assets (#246).
@@ -240,19 +241,9 @@ if [ -x "$IDSK" ]; then
 else
     echo "  (no iDSK at \$IDSK - floppy boots via RUN\"GBKERN; set IDSK= to add the GB.BAS loader)"
 fi
-# Companion floppy QA/CPC/Floppies/COMPANION.DSK (#250): a non-bootable DATA disk with the extras
-# (Paint/Telnet/Xaos and all screensavers). Meant for drive B - the
-# kernel loader falls back boot-drive(A) -> browse-drive(B), so these load from B while
-# their shared deps stay on Main. Five fresh 64K passes APPEND to one DSK (pass 1
-# creates it). All .RAW/.SAV are already built above.
-rm -f build/companion.dsk
-"$RASM" kernel/pack_comp1.asm -eo                  # apps
-"$RASM" kernel/pack_comp2.asm -eo                  # savers (1/2)
-"$RASM" kernel/pack_comp3.asm -eo                  # savers (2/2)
-"$RASM" kernel/pack_comp4.asm -eo                  # WGET.APP + BROWSER.APP + SHELL.APP
-"$RASM" kernel/pack_comp5.asm -eo                  # MAHJONG.APP
-cp build/companion.dsk "$FLOPPY_QA/COMPANION.DSK"
-echo "  + $FLOPPY_QA/COMPANION.DSK (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Mahjong/Xaos + helpers/savers)"
+# Companion floppy QA/CPC/Floppies/COMPANION.DSK (#250): a non-bootable DATA
+# disk with the extra applications and screensavers.
+RASM="$RASM" tools/package_cpc_companion.sh "$FLOPPY_QA/COMPANION.DSK"
 EXTRAS_ADDS=(--add assets/WELCOME.TXT)
 while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")

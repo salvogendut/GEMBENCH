@@ -1,4 +1,4 @@
-.PHONY: all cpc msx pcw formref check test
+.PHONY: all cpc msx pcw app formref check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -11,6 +11,10 @@ msx:
 
 pcw:
 	bash tools/build_kernel_pcw.sh
+
+app:
+	@if [ -z "$(APP)" ]; then echo "usage: make app APP=mahjong"; exit 2; fi
+	bash tools/rebuild_app.sh "$(APP)"
 
 formref:
 	APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW

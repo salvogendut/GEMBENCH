@@ -20,16 +20,16 @@ tools/iconedit.py assets/iconsets/MYSET.IST     # tkinter editor (.IST and .SPR)
 `iconedit.py` opens an existing `.IST` or starts a new one; draw, then Save.
 
 A selectable desktop set must supply every resident system/file-type slot
-(currently 17 icons after application-owned icons moved to GBAP headers in
-#430). Settings only lists `.IST` files whose header icon count is exactly 17
+(currently 16 icons after application-owned icons moved to GBAP headers).
+Settings only lists `.IST` files whose header icon count is exactly 16
 (`MIN_IST_ICONS`), so toolchests and legacy layouts with shifted slot meanings
 remain excluded.
 
-To migrate a 25-slot set created before #430, remove the eight former
+To migrate a 25-slot set created before #430, remove the nine former
 application slots in descending order:
 
 ```sh
-for slot in 22 21 20 19 17 16 12 11; do
+for slot in 22 21 20 19 17 16 12 11 1; do
     tools/ist_remove_slot.py assets/iconsets/MYSET.IST "$slot"
 done
 ```
@@ -42,7 +42,7 @@ only regenerates `build/DEFAULT.IST`).
 When an existing slot changes meaning, replace that slot in every tracked set:
 
 ```
-tools/ist_replace_slot.py assets/iconsets/MYSET.IST 14 lib/icon_sd.asm
+tools/ist_replace_slot.py assets/iconsets/MYSET.IST 13 lib/icon_sd.asm
 ```
 
 ## Use it on the desktop

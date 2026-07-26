@@ -51,7 +51,7 @@ icon_init
                 ld    (fs_load_max),hl               ; DATA_ICONS up to DATA_MODTOP (the write
                                                      ; write module also lives in PAGE_DATA),
                                                      ; less a sector. The compact resident
-                                                     ; set has 17 icons after #430,
+                                                     ; set has 16 icons after BASIC.APP moved,
                                                      ; derived so it never needs hand-tuning.
                 ld    hl,DATA_ICONS
                 ld    (fs_load_dst),hl
