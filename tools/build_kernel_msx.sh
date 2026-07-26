@@ -22,8 +22,8 @@ command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 mkdir -p build/msx
 
 GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
-if [ -f "$GB_PAINT_DIR/src/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
-    PAINT_APP_DIR="$GB_PAINT_DIR/src"
+PAINT_APP_DIR="$GB_PAINT_DIR/apps/paint"
+if [ -f "$PAINT_APP_DIR/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
     PAINT_ASSET_DIR="$GB_PAINT_DIR/assets/paint"
 else
     echo "ERROR: GB-PAINT checkout not found at $GB_PAINT_DIR" >&2
@@ -39,7 +39,7 @@ fi
 GEOBENCH_ROOT="$(pwd)"
 PAINT_GBLIB="build/msx/GBLIBPAINT.s"
 python3 tools/gblib_subset.py \
-    lib/gb/gblib.s "$PAINT_GBLIB" "$GB_PAINT_DIR/src/gblib.symbols"
+    lib/gb/gblib.s "$PAINT_GBLIB" "$PAINT_APP_DIR/gblib.symbols"
 TELNET_GBLIB="build/msx/GBLIBTELNET.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$TELNET_GBLIB" apps/telnet/gblib.symbols
@@ -57,7 +57,7 @@ APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/m
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APP_ICON=apps/iconed/icon.asm APPDEFS="-DGB_MSX2 -DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x69E0 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
-APP_ICON="$GB_PAINT_DIR/assets/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
+APP_ICON="$PAINT_APP_DIR/icon.asm" APP_ICON16="$PAINT_APP_DIR/icon16.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x72B0 PICKER=1 GBWIN_DRAG_ONLY=1 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW

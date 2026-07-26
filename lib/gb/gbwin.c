@@ -60,6 +60,7 @@ unsigned char gb_drag_window(unsigned char *x, unsigned char *y,
     return 1;
 }
 
+#ifndef GBWIN_DRAG_ONLY
 /* gb_draw_grip: the resize grip in a window's bottom-right corner (#81) - a small
  * white box with a black edge. Apps that resize draw it in their frame. */
 void gb_draw_grip(unsigned char x, unsigned char y, unsigned char w, unsigned char h)
@@ -124,3 +125,4 @@ unsigned char gb_drag_resize(unsigned char x, unsigned char y,
     *h = oh;
     return 1;
 }
+#endif

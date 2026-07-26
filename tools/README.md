@@ -53,7 +53,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   independently link the corresponding settings controls, so tight apps pay only
   for controls used. `FORM=1` adds form rows and modal lifecycle and requires
   `WIDGETS=1`; `FORM_SELECT=1` adds selector rows and requires both `FORM=1` and
-  `SELECTOR=1`. `APP_ICON=path/icon.asm` embeds a canonical 32x32 icon in the
+  `SELECTOR=1`. `GBWIN_DRAG_ONLY=1` keeps window dragging but omits the resize
+  grip and resize-drag helpers for apps that do not use them.
+  `APP_ICON=path/icon.asm` embeds a canonical 32x32 icon in the
   optional `GBAP` executable preamble without changing the kernel launch ABI;
   `APP_ICON16=path/icon16.asm` adds an explicit native Screen-7 variant. For
   app-owned `icon.asm` sources, an adjacent `icon16.asm` is detected
