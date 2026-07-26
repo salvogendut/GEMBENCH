@@ -197,6 +197,13 @@ unsigned char gb_doc_event(void)
 
 #ifndef GBDOC_RO
 static void do_save(void);
+#ifdef GBUI_APPICON_PICKER
+extern unsigned char gb_doc_stream_save(unsigned int len);
+#endif
+#endif
+
+#ifdef GBUI_APPICON_PICKER
+extern unsigned int gb_doc_stream_load(void);
 #endif
 
 /* confirm_save: if the document is dirty, ask. -> 1 = go ahead (saved or
@@ -232,7 +239,11 @@ static void do_load(void)
     if (!(g_doc->flags & GB_DOC_LOAD_NOCONFIRM) && !confirm_save()) return;
     if (!gb_pickfile(nm, g_doc->exts)) return;     /* filtered to the app's file types */
     set_name(nm);                                  /* chosen file -> current file */
+#ifdef GBUI_APPICON_PICKER
+    len = gb_doc_stream_load();
+#else
     len = gb_fs_load(g_doc->buf, g_doc->bufmax);   /* targets the navigated directory */
+#endif
     if (g_doc->on_open) g_doc->on_open(len);
     g_dirty = 0;
 }
@@ -241,7 +252,11 @@ static void do_load(void)
 static void do_save(void)
 {
     unsigned int n  = g_doc->on_save();
+#ifdef GBUI_APPICON_PICKER
+    unsigned char ok = gb_doc_stream_save(n);
+#else
     unsigned char ok = gb_fs_save(g_doc->buf, n);
+#endif
     if (g_doc->on_saved) g_doc->on_saved();          /* restore buf if on_save transformed it */
     if (ok) g_dirty = 0;
 }

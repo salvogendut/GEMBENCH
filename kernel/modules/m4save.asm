@@ -38,7 +38,10 @@ M4C_FSIZE      equ   #11          ; C_FSIZE (#4311)
 M4_READMODE    equ   #81          ; FA_READ | FA_REALMODE
 M4_WRITEMODE   equ   #8A          ; FA_WRITE | FA_CREATE_ALWAYS | FA_REALMODE
 M4_APPENDMODE  equ   #92          ; FA_WRITE | FA_OPEN_ALWAYS | FA_REALMODE
-M4_WRITECHUNK  equ   96           ; payload bytes per C_WRITE packet
+; M4ROM's own fwrite path uses #FC-byte C_WRITE payloads. Matching it cuts the
+; number of command/ACK round trips for large APP saves without changing the
+; resident M4 stub or the on-wire protocol.
+M4_WRITECHUNK  equ   #FC
 M4_READCHUNK   equ   #0800
 M4SV_MAX       equ   #1C00
 FS_LOAD_OFS    equ   #144C        ; 24-bit chunked-copy read offset
@@ -513,6 +516,6 @@ m4_fd           defb  0
 m4_chunk        defb  0
 m4_left         defw  0
 m4_src          defw  0
-m4_cmdbuf       defs  128
+m4_cmdbuf       defs  256
 
                 save  "build/M4SAVE.RAW",M4SAVE_ORG,$-M4SAVE_ORG

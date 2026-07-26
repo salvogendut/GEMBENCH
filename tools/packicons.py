@@ -19,8 +19,9 @@ Directory (count * 4 bytes), one entry per slot in the desktop's order:
 
 Then the icon bitmaps (each width*height bytes), in slot order.
 
-Slot order (must match kernel/gbkern.asm): floppy ide clock trash geobench
-basic binary picture text.
+Slot order is defined by the build script and consumed positionally by the
+desktop and File Manager. Application-owned icons are embedded in GBAP headers
+and are not part of the resident desktop set.
 
 Usage:
     tools/packicons.py <out.IST> <icon0.asm> <icon1.asm> ...

@@ -511,7 +511,8 @@ CLIP_PATH = os.path.join(tempfile.gettempdir(), "geobench_iconedit_clip.json")
 # tables mirror that order so the editor can label each slot. KEEP IN SYNC with
 # the packicons.py argument lists in tools/build_kernel.sh (the source of truth).
 #
-# Desktop icon sets (DEFAULT.IST, REFINED.IST, any ICONS= set) - 25 slots (#198):
+# Desktop icon sets (DEFAULT.IST, REFINED.IST, any ICONS= set) - 17 resident
+# system/file-type slots. Application-owned icons live in GBAP headers (#430).
 DESKTOP_SLOTS = [
     "Floppy disk",   # 0  icon_floppy
     "Disk C / IDE",  # 1  icon_ide
@@ -524,20 +525,12 @@ DESKTOP_SLOTS = [
     "Text file",     # 8  icon_text
     "Folder",        # 9  icon_folder
     "App (.APP)",    # 10 icon_app
-    "Notepad",       # 11 icon_notepad
-    "Icon editor",   # 12 icon_iconeditor
-    "Font (.FNT)",   # 13 icon_font
-    "Desktop",       # 14 icon_desktop
-    "File manager",  # 15 icon_filemanager
-    "Paint",         # 16 icon_paint
-    "Browser",       # 17 icon_browser
-    "SD card",       # 18 icon_sd
-    "Viewer",        # 19 icon_viewer
-    "Telnet",        # 20 icon_telnet
-    "Mahjong",       # 21 icon_mahjong
-    "Shell",         # 22 icon_shell
-    "Up (..)",       # 23 icon_up
-    "Screensaver",   # 24 icon_screensaver (#221: reused the freed gear slot)
+    "Font (.FNT)",   # 11 icon_font
+    "Desktop",       # 12 icon_desktop
+    "File manager",  # 13 icon_filemanager
+    "SD card",       # 14 icon_sd
+    "Up (..)",       # 15 icon_up
+    "Screensaver",   # 16 icon_screensaver
 ]
 # App toolchests carry their own order, keyed by file stem:
 TOOL_SLOTS = {

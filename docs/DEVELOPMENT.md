@@ -228,9 +228,9 @@ line in the pack assembly or stage it into the card distribution as appropriate)
 
   1. **Change the DEFAULT set** (the icons shown out of the box): edit the source
      `assets/<name>.png` in any image editor (keep the 4-colour desktop palette),
-     then run **`tools/regen_icons.sh`** — it re-runs `png2cpc` for every committed
-     `lib/icon_*.asm` from its recorded source PNG + size. Paint-specific tool
-     icons now live in the separate GB-PAINT repository.
+     then run **`tools/regen_icons.sh`**. It re-runs `png2cpc` for committed
+     resident `lib/icon_*.asm` and app-owned `apps/*/icon.asm` sources from their
+     recorded PNG and size. Paint-specific tool icons live in GB-PAINT.
      Rebuild (`tools/build_kernel.sh`) and `packicons` repacks `build/DEFAULT.IST`.
      Note: the build does **not** auto-convert `assets/` — `build/DEFAULT.IST` is a
      gitignored artifact regenerated from the committed `lib/icon_*.asm`, so a PNG
@@ -249,7 +249,11 @@ layout: a canonical 32x32 Mode-1 bitmap and application entry at `#4110`.
 `APP_ICON16=path/to/icon16.asm` adds an explicitly declared native Screen-7
 resource, selects the v2 directory layout, and relocates the entry to `#4320`.
 Headerless applications keep the legacy `#4000` entry and generic or
-name-mapped `.IST` icon. See [APP_ICON_FORMAT.md](APP_ICON_FORMAT.md).
+system-name-mapped `.IST` icon. See [APP_ICON_FORMAT.md](APP_ICON_FORMAT.md).
+
+The app-owned source convention is `apps/<name>/icon.asm`. On an MSX build,
+`build_capp.sh` also detects an optional adjacent `icon16.asm` and emits GBAP v2
+automatically. CPC and PCW retain the smaller portable-only header.
 
 File Manager probes the first 1,024 bytes of a visible generic `.APP`. CPC, PCW,
 and MSX Screen 6 select the portable fallback; MSX Screen 7 selects the

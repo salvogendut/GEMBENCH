@@ -78,14 +78,15 @@ static void saver_value(char *dst);       /* forward: s_draw shows the current S
 static void ss_module_value(char *dst);   /* forward: s_draw shows the current SAVER= module (#219) */
 static unsigned char ss_is_starfield(void);
 
-/* MIN_IST_ICONS: the minimum icon count for an .IST to be offered as the desktop icon
-   set. A desktop set must supply every slot the kernel draws - 25 icons since #198 dropped
-   the duplicate icon_iconset slot (DEFAULT.IST/REFINED.IST are now 25; was 26). A small
-   toolchest like PAINT.IST (5 tool icons) stays filtered out. Keep this in step with the
+/* MIN_IST_ICONS: the exact icon count for an .IST to be offered as the desktop icon
+   set. App-owned icons moved into GBAP headers in #430, leaving 17 resident
+   system/file-type slots. Exact matching also rejects legacy 25-slot sets whose
+   positional meanings no longer align. A small toolchest like PAINT.IST (5 tool
+   icons) stays filtered out. Keep this in step with the
    GBIS count of build/DEFAULT.IST (tools/build_kernel.sh packicons list) - if it drifts
    ABOVE the real count, every full set is dropped and the Icons picker shows "No files
    found" (#209). */
-#define MIN_IST_ICONS 25
+#define MIN_IST_ICONS 17
 
 /* one configurable setting: a label, its GEOBENCH.CFG key (with '='), the 3-char file
    extension to list, and (for icon sets) the minimum icon count to qualify. */
@@ -93,7 +94,7 @@ typedef struct {
     const char *label;
     const char *key;       /* e.g. "FONT=" */
     const char *ext;       /* e.g. "FNT" (raw 3-char, matched against the 8.3 name) */
-    unsigned char min_icons;  /* IST: min header count to be a usable set; 0 = no check */
+    unsigned char min_icons;  /* IST: exact desktop count; 0 = no check */
     unsigned int  tfr;     /* kernel transfer-area addr for the 8.3 name (gb_reload, #185) */
 } setting_t;
 
@@ -296,9 +297,8 @@ static unsigned char ist_count(const char *stem)
 }
 
 /* enumerate_boot: fill stems[] with the names of files in the BOOT drive's /GBENCH
-   whose extension is `ext`. If min_icons is non-zero (icon sets), drop any .IST with
-   fewer icons than that - i.e. the app toolchests, which can't supply every desktop
-   slot. */
+   whose extension is `ext`. If min_icons is non-zero (icon sets), require that exact
+   layout count. This drops toolchests and legacy sets with shifted slot meanings. */
 static void enumerate_boot(const char *ext, unsigned char min_icons)
 {
     unsigned char descended, k, i, keep, old_drive;
@@ -332,7 +332,7 @@ static void enumerate_boot(const char *ext, unsigned char min_icons)
     if (min_icons) {
         keep = 0;
         for (i = 0; i < nstem; i++) {
-            if (ist_count(&stembuf[(unsigned int)i * STLEN]) < min_icons) continue;
+            if (ist_count(&stembuf[(unsigned int)i * STLEN]) != min_icons) continue;
             if (keep != i)
                 for (k = 0; k < STLEN; k++)
                     stembuf[(unsigned int)keep * STLEN + k] = stembuf[(unsigned int)i * STLEN + k];
