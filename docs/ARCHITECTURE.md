@@ -44,9 +44,9 @@ RAM-config port pages a 16K block into the `#4000–#7FFF` window:
   page; the launcher keeps the caller's page on the stack and restores it on quit.
   An app may optionally begin with a `GBAP` executable preamble: a `JP` preserves
   the `#4000` launch ABI while a canonical 32x32 icon occupies the bytes before
-  the relocated entry at `#4110`. File Manager reads that first sector on demand,
-  so personalized application icons do not enlarge the boot-loaded `.IST` or the
-  resident kernel.
+  the relocated entry. V2 may declare a second native Screen-7 icon in an
+  explicit resource directory. File Manager probes this header on demand, so
+  personalized application icons do not enlarge the boot-loaded `.IST`.
 
 ## Kernel source layout
 

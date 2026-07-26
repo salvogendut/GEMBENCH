@@ -1180,6 +1180,10 @@ PIC_TILE_H      equ   100
 PIC_TILE_SZ     equ   PIC_TILE_WB*PIC_TILE_H
 PIC_TMP         equ   #2200
 k_pic_edit
+                ifdef MSX_SCREEN7
+                cp    5
+                jp    z,kpe_native16
+                endif
                 cp    4
                 jp    z,kpe_native
                 cp    3
@@ -1216,6 +1220,25 @@ kpen_lut        ld    a,(pic_m1_to_native)
                 jr    nz,kpen_loop
 kpen_done       ld    a,1
                 ret
+
+                ifdef MSX_SCREEN7
+; Draw a short native Screen-7 resource without routing it through the shared
+; four-pen UI representation. PIC_EDIT_BUF=source; PIC_EDIT_OFF packs x,y in
+; its low/high bytes; fs_save_len packs logical width,height likewise.
+kpe_native16    ld    a,(PIC_EDIT_OFF)
+                ld    (sb_x),a
+                ld    a,(PIC_EDIT_OFF+1)
+                ld    (sb_y),a
+                ld    a,(fs_save_len)
+                ld    (sb_w),a
+                ld    a,(fs_save_len+1)
+                ld    (sb_h),a
+                ld    hl,(PIC_EDIT_BUF)
+                ld    (sb_buf),hl
+                call  restore_pic16_block
+                ld    a,1
+                ret
+                endif
 
 kpe_get         ld    a,(PIC_PAGE)
                 or    a
@@ -3141,9 +3164,6 @@ dtp_img         incbin "../build/DESKTOP.RAW"   ; packaged on the disk as DESKTO
 dtp_imgend
 npd_img         incbin "../build/NOTEPAD.RAW"   ; packaged on the disk as NOTEPAD.APP
 npd_imgend
-pist_img        incbin "../build/PAINT.IST"     ; PAINT toolchest set (#114): PAINT loads it,
-pist_imgend                                     ; ICONED edits it. Packaging only - down here
-                                                ; in the low region to keep the high region < #FFFF
                 save  "GBKERN.BIN",GB_KERNEL,kern_end-GB_KERNEL,DSK,"build/gbkern.dsk"
                 save  "DESKTOP.APP",dtp_img,dtp_imgend-dtp_img,DSK,"build/gbkern.dsk"
                 save  "NOTEPAD.APP",npd_img,npd_imgend-npd_img,DSK,"build/gbkern.dsk"
@@ -3153,7 +3173,6 @@ pist_imgend                                     ; ICONED edits it. Packaging onl
                 save  "DEFAULT.FNT",font_img,font_imgend-font_img,DSK,"build/gbkern.dsk"
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
-                save  "PAINT.IST",pist_img,pist_imgend-pist_img,DSK,"build/gbkern.dsk"
                 save  "SPLASH.MOD",splash_img,splash_imgend-splash_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
                 save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data

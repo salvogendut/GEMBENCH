@@ -59,8 +59,8 @@
 #define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
 #define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
 
-/* Optional GBAP v1 executable preamble (#426). The icon is deliberately fixed
-   at 32x32 so the complete header + canonical bitmap fits in one 512-byte read. */
+/* Optional GBAP executable preamble (#426/#428). V1 has one portable icon; V2
+   has a resource directory and may add a native MSX Screen-7 icon. */
 #define APPICON_UNKNOWN  0x80
 #define APPICON_EMBEDDED 0x40
 #define APPICON_SLOTMASK 0x3F
@@ -68,6 +68,14 @@
 #define APPICON_WB       8
 #define APPICON_H        32
 #define APPICON_LEN      256
+#define APPICON7_WB      16
+#define APPICON7_LEN     512
+#define APPICON_PROBE    1024
+#define APPICON_MODE1    1
+#define APPICON_MODE7    7
+#ifdef GB_MSX2
+#define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
+#endif
 
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;
@@ -81,12 +89,14 @@ static unsigned char my_drive;         /* the drive this window browses (#65) */
 static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
 static unsigned char free_known;
 static unsigned int free_kib;
+static unsigned int appicon_off;
+static unsigned char appicon_codec;
 
-/* GEOBENCH.CFG is loaded once at startup; the View toggle rewrites the VIEW= line
-   and saves it, so the choice persists across reboots. NOTE: gb_fs_load copies in
-   whole 512-byte sectors, so the buffer must be a full sector even though the file
-   is tiny (a smaller buffer overflows into the globals after it). */
-static char cfgbuf[512];
+/* Reuse the kernel's fixed 512-byte configuration text area. It already has this
+   lifetime, stays visible under app paging, and leaves File Manager enough bank
+   room for the dual-icon parser. */
+#define cfgbuf ((char *)0x1000)
+#define CFG_BUF_SIZE 512
 static unsigned int cfglen;
 
 /* The top bar is the gb_doc View menu (#142): Fullscreen (framework) + "Icons / List".
@@ -135,7 +145,7 @@ static void cfg_load_view(void)
 {
     unsigned int p;
     gb_set_name("GEOBENCHCFG");
-    cfglen = gb_fs_load(cfgbuf, sizeof(cfgbuf));
+    cfglen = gb_fs_load(cfgbuf, CFG_BUF_SIZE);
     view = V_ICONS;
     p = cfg_view_pos();
     if (p != 0xFFFF && p + 4 <= cfglen && cfgbuf[p] == 'L' && cfgbuf[p+1] == 'I'
@@ -155,7 +165,7 @@ static void cfg_save_view(void)
     if (cfglen == 0) return;                 /* no config loaded -> nothing to update */
     p = cfg_view_pos();
     if (p == 0xFFFF) {                        /* no VIEW= key: append a line */
-        if (cfglen + 7 + vlen > sizeof(cfgbuf)) return;
+        if (cfglen + 7 + vlen > CFG_BUF_SIZE) return;
         cfgbuf[cfglen++] = 'V'; cfgbuf[cfglen++] = 'I'; cfgbuf[cfglen++] = 'E';
         cfgbuf[cfglen++] = 'W'; cfgbuf[cfglen++] = '=';
         for (i = 0; i < vlen; i++) cfgbuf[cfglen++] = val[i];
@@ -165,7 +175,7 @@ static void cfg_save_view(void)
         while (end < cfglen && cfgbuf[end] != '\r' && cfgbuf[end] != '\n') end++;
         if (vlen > (unsigned char)(end - p)) {           /* grow: shift tail right */
             unsigned int d = vlen - (end - p);
-            if (cfglen + d > sizeof(cfgbuf)) return;
+            if (cfglen + d > CFG_BUF_SIZE) return;
             for (i = cfglen; i > end; i--) cfgbuf[i - 1 + d] = cfgbuf[i - 1];
             cfglen += d;
         } else if (vlen < (unsigned char)(end - p)) {    /* shrink: shift tail left */
@@ -474,39 +484,77 @@ static unsigned char appicon_native(unsigned char value)
 }
 #endif
 
-/* appicon_load: read and validate the first sector of cached entry raw into
-   gb_copybuf. The File Manager's launch name is parked just beyond that sector
-   while gb_fs_load temporarily targets the APP. On success the bitmap bytes are
-   converted in-place to the target's gb_restorerect representation. */
+/* appicon_load: read and validate the GBAP resources into gb_copybuf. The File
+   Manager's launch name is parked beyond the probe while gb_fs_load temporarily
+   targets the APP. Mode 7 selects codec 7 when present; every other target/mode
+   uses the required codec-1 fallback. */
 static unsigned char appicon_load(unsigned char raw)
 {
     unsigned char *data = (unsigned char *)gb_copybuf;
-    unsigned int got;
+    unsigned char *entry;
+    unsigned int got, len, total;
+#ifdef GB_MSX2
+    unsigned int off;
+#endif
 #ifdef GB_PCW
-    unsigned int i;
+    unsigned int p;
 #endif
 
-    gb_get_name((char *)gb_copybuf + 512);
+    gb_get_name((char *)gb_copybuf + APPICON_PROBE);
     gb_set_name(NAME_AT(raw));
     FS_LOAD_OFS[0] = 0; FS_LOAD_OFS[1] = 0; FS_LOAD_OFS[2] = 0;
     FS_XFLAGS = 0x01;
-    got = gb_fs_load((char *)data, 512);
+    got = gb_fs_load((char *)data, APPICON_PROBE);
     FS_XFLAGS = 0;
-    gb_set_name((char *)gb_copybuf + 512);
-    if (!got || data[0] != 0xC3 || data[3] != 'G' || data[4] != 'B'
-        || data[5] != 'A' || data[6] != 'P' || data[7] != 1 || data[8] != 1
-        || data[9] != APPICON_WB || data[10] != APPICON_H
-        || data[11] != 0 || data[12] != 1
-        || data[13] != APPICON_OFF || data[14] != 0)
+    gb_set_name((char *)gb_copybuf + APPICON_PROBE);
+    if (got < APPICON_OFF || data[0] != 0xC3 || data[3] != 'G'
+        || data[4] != 'B' || data[5] != 'A' || data[6] != 'P')
         return 0;
+    if (data[7] == 1) {
+        if (data[8] != APPICON_MODE1 || data[9] != APPICON_WB
+            || data[10] != APPICON_H || data[11] != 0 || data[12] != 1
+            || data[13] != APPICON_OFF || data[14] != 0)
+            return 0;
+        appicon_codec = APPICON_MODE1;
+        appicon_off = APPICON_OFF;
+    } else if (data[7] == 2) {
+        total = (unsigned int)data[10] | ((unsigned int)data[11] << 8);
+        if (!data[8] || data[8] > 2 || data[9] != 8
+            || data[12] != APPICON_OFF || data[13] != 0 || total > got)
+            return 0;
+        entry = data + APPICON_OFF;              /* required portable fallback */
+        appicon_codec = entry[0];
+        appicon_off = (unsigned int)entry[6] | ((unsigned int)entry[7] << 8);
+        len = (unsigned int)entry[4] | ((unsigned int)entry[5] << 8);
+        if (appicon_codec != APPICON_MODE1 || entry[1] != APPICON_WB
+            || entry[2] != APPICON_H || entry[3] != 0 || len != APPICON_LEN
+            || appicon_off + len > total)
+            return 0;
 #ifdef GB_MSX2
-    gb_pic_edit_buf = (unsigned int)(data + APPICON_OFF);
-    gb_pic_edit_off = (unsigned int)(data + APPICON_OFF);
-    FS_SAVE_LEN_K = APPICON_LEN;
-    if (!gb_pic_edit(GB_PICEDIT_NATIVE)) return 0;
+        if (MSX_SCRMOD == 7 && data[8] == 2) {
+            entry += 8;                          /* optional native variant */
+            off = (unsigned int)entry[6] | ((unsigned int)entry[7] << 8);
+            len = (unsigned int)entry[4] | ((unsigned int)entry[5] << 8);
+            if (entry[0] == APPICON_MODE7 && entry[1] == APPICON7_WB
+                && entry[2] == APPICON_H && entry[3] == 0
+                && len == APPICON7_LEN && off + len <= total) {
+                appicon_codec = APPICON_MODE7;
+                appicon_off = off;
+            }
+        }
+#endif
+    } else return 0;
+
+#ifdef GB_MSX2
+    if (appicon_codec == APPICON_MODE1) {
+        gb_pic_edit_buf = (unsigned int)(data + appicon_off);
+        gb_pic_edit_off = (unsigned int)(data + appicon_off);
+        FS_SAVE_LEN_K = APPICON_LEN;
+        if (!gb_pic_edit(GB_PICEDIT_NATIVE)) return 0;
+    }
 #elif defined(GB_PCW)
-    for (i = APPICON_OFF; i < APPICON_OFF + APPICON_LEN; i++)
-        data[i] = appicon_native(data[i]);
+    for (p = appicon_off; p < appicon_off + APPICON_LEN; p++)
+        data[p] = appicon_native(data[p]);
 #endif
     return 1;
 }
@@ -523,7 +571,20 @@ static void draw_entry_type(unsigned char raw, unsigned char x, unsigned char y,
     if (slot == ICON_APP && (state & (APPICON_UNKNOWN | APPICON_EMBEDDED))) {
         if (appicon_load(raw)) {
             icons[raw] = (unsigned char)(APPICON_EMBEDDED | ICON_APP);
-            bitmap = (unsigned char *)gb_copybuf + APPICON_OFF;
+            bitmap = (unsigned char *)gb_copybuf + appicon_off;
+#ifdef GB_MSX2
+            if (appicon_codec == APPICON_MODE7) {
+                unsigned char rows = half ? 16 : APPICON_H;
+                if (half) bitmap += APPICON7_WB * 8;
+                gb_pic_edit_buf = (unsigned int)bitmap;
+                gb_pic_edit_off = (unsigned int)x | ((unsigned int)y << 8);
+                FS_SAVE_LEN_K = APPICON_WB | ((unsigned int)rows << 8);
+                if (gb_pic_edit(GB_PICEDIT_NATIVE16)) return;
+                icons[raw] = ICON_APP;
+                gb_icon(slot, x, y);
+                return;
+            }
+#endif
             if (half) {
                 bitmap += APPICON_WB * 8;       /* middle 16 rows, like gb_icon_half */
                 gb_restorerect(x, y, APPICON_WB, 16, bitmap);

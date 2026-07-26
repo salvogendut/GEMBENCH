@@ -3,7 +3,7 @@
  * .IST and .SPR files are listed immediately. Embedded APP icons have their own
  * row because validating every APP before drawing the first dialog is painfully
  * slow on floppy media. Inside that view an .APP is listed only when its preamble
- * contains the optional GBAP v1 icon. Probing a file can disturb a backend's
+ * contains an optional GBAP v1/v2 icon. Probing a file can disturb a backend's
  * directory enumerator, so the scan resumes by name after each probe.
  */
 #include "gb.h"
@@ -60,6 +60,7 @@ static void name_disp(char *dst, const char *raw, unsigned char dir)
 
 static unsigned char has_gbap(const char *raw)
 {
+    unsigned char version;
 #if defined(GB_MSX2) || defined(GB_PCW)
     unsigned int got;
 #endif
@@ -81,12 +82,18 @@ static unsigned char has_gbap(const char *raw)
     (void)gb_fs_load((char *)PROBE_BUF, APP_PROBE_MAX);
 #endif
 
-    return (unsigned char)(PROBE_BUF[0] == 0xC3 &&
-        PROBE_BUF[3] == 'G' && PROBE_BUF[4] == 'B' &&
-        PROBE_BUF[5] == 'A' && PROBE_BUF[6] == 'P' &&
-        PROBE_BUF[7] == 1 && PROBE_BUF[8] == 1 &&
-        PROBE_BUF[9] == APPICON_WB && PROBE_BUF[10] == APPICON_H &&
-        PROBE_BUF[13] == APPICON_OFF && PROBE_BUF[14] == 0);
+    if (PROBE_BUF[0] != 0xC3 || PROBE_BUF[3] != 'G'
+        || PROBE_BUF[4] != 'B' || PROBE_BUF[5] != 'A'
+        || PROBE_BUF[6] != 'P') return 0;
+    version = PROBE_BUF[7];
+    if (version == 1)
+        return (unsigned char)(PROBE_BUF[8] == 1
+            && PROBE_BUF[9] == APPICON_WB && PROBE_BUF[10] == APPICON_H);
+    /* GBAP v2 requires the portable fallback in resource slot zero. */
+    return (unsigned char)(version == 2 && PROBE_BUF[8]
+        && PROBE_BUF[APPICON_OFF] == 1
+        && PROBE_BUF[APPICON_OFF + 1] == APPICON_WB
+        && PROBE_BUF[APPICON_OFF + 2] == APPICON_H);
 }
 
 /* Reposition after a probe or popup changed the backend directory cursor.

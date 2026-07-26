@@ -5,8 +5,9 @@
 # The C app is just apps/<name>/main.c; it reaches the kernel through the shared
 # libgb (lib/gb/gblib.s + gb.h) and shared crt0 (lib/gb/crt0.s, the #4000 entry).
 # Linked: crt0 FIRST (so _start is at #4000), then main, then the libgb trampolines.
-# APP_ICON=<canonical 32x32 icon.asm> reserves a GBAP v1 preamble and relocates
-# _start to #4110; the preamble's JP keeps the kernel's #4000 entry ABI unchanged.
+# APP_ICON=<canonical 32x32 icon.asm> reserves a GBAP v1 preamble. Adding
+# APP_ICON16=<native Screen-7 icon.asm> emits a GBAP v2 dual-icon preamble.
+# Its JP keeps the kernel's #4000 entry ABI unchanged in either format.
 #
 #   tools/build_capp.sh [app_dir] [out.RAW]
 #   tools/build_capp.sh apps/chello build/CHELLO.RAW   (defaults)
@@ -19,6 +20,7 @@ GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.
 GBLIB_SRC="${GBLIB_SRC:-$GB/gblib.s}"
 APP_CFLAGS="${APP_CFLAGS:-}"
 APP_ICON="${APP_ICON:-}"
+APP_ICON16="${APP_ICON16:-}"
 LOAD_LIMIT="${LOAD_LIMIT:-0x7F00}"
 # DATA_LOC: where this app's data starts (code is #4000.. below it, data ..#7FFF
 # above). The default 0x6200 is a 50/50 split; a code-heavy/data-light app (NOTEPAD)
@@ -31,8 +33,14 @@ BIN="$(dirname "$(command -v "$SDCC")")"   # sdasz80 / makebin sit beside sdcc
 SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
 CODE_LOC="0x4000"
+if [ -n "$APP_ICON16" ] && [ -z "$APP_ICON" ]; then
+    echo "ERROR: APP_ICON16 requires the portable APP_ICON fallback" >&2
+    exit 1
+fi
 if [ -n "$APP_ICON" ]; then
-    APP_PREAMBLE_SIZE=$(python3 tools/embed_app_icon.py size "$APP_ICON")
+    icon_args=("$APP_ICON")
+    if [ -n "$APP_ICON16" ]; then icon_args+=("$APP_ICON16"); fi
+    APP_PREAMBLE_SIZE=$(python3 tools/embed_app_icon.py size "${icon_args[@]}")
     CODE_LOC=$(printf '0x%X' $((0x4000 + APP_PREAMBLE_SIZE)))
 fi
 
@@ -86,6 +94,9 @@ fi
 deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
 if [ -n "$APP_ICON" ]; then
     deps+=("tools/embed_app_icon.py" "$APP_ICON")
+fi
+if [ -n "$APP_ICON16" ]; then
+    deps+=("$APP_ICON16")
 fi
 if [ "$GBWIN_FLAG" = "1" ]; then
     deps+=("$GB/gbwin.c")
@@ -144,9 +155,10 @@ fi
 
 stamp="$OUT.stamp"
 cache_key=$(printf '%s\n' \
-    "build_capp.v1" \
+    "build_capp.v2" \
     "APP=$APP" \
     "APP_ICON=$APP_ICON" \
+    "APP_ICON16=$APP_ICON16" \
     "CODE_LOC=$CODE_LOC" \
     "DATA_LOC=$DATA_LOC" \
     "APPDEFS=${APPDEFS:-}" \
@@ -317,7 +329,12 @@ PY
 # makebin emits a flat image from #0000; the app lives at #4000 -> strip low 16K.
 tail -c +16385 "$work/app.bin" > "$work/app.raw"
 if [ -n "$APP_ICON" ]; then
-    python3 tools/embed_app_icon.py inject "$APP_ICON" "$work/app.raw" "$OUT"
+    if [ -n "$APP_ICON16" ]; then
+        python3 tools/embed_app_icon.py inject \
+            "$APP_ICON" "$APP_ICON16" "$work/app.raw" "$OUT"
+    else
+        python3 tools/embed_app_icon.py inject "$APP_ICON" "$work/app.raw" "$OUT"
+    fi
 else
     cp "$work/app.raw" "$OUT"
 fi
