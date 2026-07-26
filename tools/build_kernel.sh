@@ -11,8 +11,8 @@ cd "$(dirname "$0")/.."          # repo root
 RASM="${RASM:-rasm}"
 
 GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
-if [ -f "$GB_PAINT_DIR/src/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
-    PAINT_APP_DIR="$GB_PAINT_DIR/src"
+PAINT_APP_DIR="$GB_PAINT_DIR/apps/paint"
+if [ -f "$PAINT_APP_DIR/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
     PAINT_ASSET_DIR="$GB_PAINT_DIR/assets/paint"
 else
     echo "ERROR: GB-PAINT checkout not found at $GB_PAINT_DIR" >&2
@@ -59,7 +59,7 @@ mkdir -p build
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 PAINT_GBLIB="build/GBLIBPAINT.s"
 python3 tools/gblib_subset.py \
-    lib/gb/gblib.s "$PAINT_GBLIB" "$GB_PAINT_DIR/src/gblib.symbols"
+    lib/gb/gblib.s "$PAINT_GBLIB" "$PAINT_APP_DIR/gblib.symbols"
 TELNET_GBLIB="build/GBLIBTELNET.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$TELNET_GBLIB" apps/telnet/gblib.symbols
@@ -148,7 +148,7 @@ APP_ICON=apps/iconed/icon.asm APPDEFS="-DGBUI_APPICON_PICKER" APP_CFLAGS="--max-
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
 DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
                                    # via the shared gb_doc menu system (#142) -> build/CLOCK.RAW
-APP_ICON="$GB_PAINT_DIR/assets/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: app-owned icon, custom File/Edit/View menus + picker
+APP_ICON="$PAINT_APP_DIR/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x72B0 PICKER=1 GBWIN_DRAG_ONLY=1 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: app-owned icon, custom File/Edit/View menus + picker
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)

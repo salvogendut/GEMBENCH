@@ -74,6 +74,7 @@ DOC_FLAG="${DOC:-0}"
 DOCRO_FLAG="${DOCRO:-0}"
 NET_FLAG="${NET:-0}"
 GBWIN_FLAG="${GBWIN:-1}"
+GBWIN_DRAG_ONLY_FLAG="${GBWIN_DRAG_ONLY:-0}"
 WIDGETS_FLAG="${WIDGETS:-0}"
 BUTTON_FLAG="${BUTTON:-0}"
 ACTIONS_FLAG="${ACTIONS:-0}"
@@ -94,6 +95,10 @@ esac
 
 if [ "$FORM_FLAG" = "1" ] && [ "$WIDGETS_FLAG" != "1" ]; then
     echo "ERROR: FORM=1 requires WIDGETS=1" >&2
+    exit 1
+fi
+if [ "$GBWIN_DRAG_ONLY_FLAG" = "1" ] && [ "$GBWIN_FLAG" != "1" ]; then
+    echo "ERROR: GBWIN_DRAG_ONLY=1 requires GBWIN=1" >&2
     exit 1
 fi
 if [ "$FORM_SELECT_FLAG" = "1" ] &&
@@ -184,6 +189,7 @@ cache_key=$(printf '%s\n' \
     "NET=$NET_FLAG" \
     "NET_SRC=$NET_SRC" \
     "GBWIN=$GBWIN_FLAG" \
+    "GBWIN_DRAG_ONLY=$GBWIN_DRAG_ONLY_FLAG" \
     "WIDGETS=$WIDGETS_FLAG" \
     "BUTTON=$BUTTON_FLAG" \
     "ACTIONS=$ACTIONS_FLAG" \
@@ -232,7 +238,9 @@ fi
 "$SDCC" -mz80 --fomit-frame-pointer $APP_CFLAGS ${APPDEFS:-} -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
+    GBWIN_DEFS=""
+    [ "$GBWIN_DRAG_ONLY_FLAG" != "1" ] || GBWIN_DEFS="-DGBWIN_DRAG_ONLY"
+    "$SDCC" -mz80 --fomit-frame-pointer $GBWIN_DEFS ${APPDEFS:-} -I "$GB" -c "$GB/gbwin.c" -o "$work/gbwin.rel"
     GBWIN_REL="$work/gbwin.rel"
 fi
 WIDGETS_REL=""

@@ -38,7 +38,7 @@ static void recalc_origin(void);                   /* defined below */
 #define CTRL_Y (unsigned char)(CVY + CANVAS_H + 2)   /* control strip (the +/- buttons) */
 
 /* .PIC v2 header (14 bytes) then the canvas, in one buffer so Save is one fs call.
-   See GB-PAINT/src/main.c for the layout. */
+   See GB-PAINT/apps/paint/main.c for the layout. */
 #define PIC_HDR 14
 #define PIC_LEN (PIC_HDR + CANVAS_WB * CANVAS_H)
 static unsigned char picbuf[PIC_LEN];
