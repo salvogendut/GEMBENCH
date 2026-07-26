@@ -349,21 +349,20 @@ static const char *win_title(void)               /* "Disk C/path 32MiB free" -> 
 /* DEFAULT.IST slot order (matches the packicons line in tools/build_kernel.sh).
    The file -> icon mapping lives here now, not in the kernel (#103). */
 #define ICON_FLOPPY 0         /* floppy drive icon (first packicons entry); DISKUTIL.APP reuses it */
-#define ICON_FLOWCHART 1      /* flowchart glyph (was the IDE disk slot); BASIC.APP uses it */
-#define ICON_CLOCK 2
-#define ICON_GEOBENCH 4
-#define ICON_BASIC 5
-#define ICON_BINARY 6
-#define ICON_PICTURE 7
-#define ICON_TEXT 8
-#define ICON_FOLDER 9
-#define ICON_APP 10           /* generic .APP icon (a custom document glyph in REFINED/DEFAULT) */
-#define ICON_FNT 11
-#define ICON_DESKTOP 12
-#define ICON_FILEMGR 13
-#define ICON_SD 14
-#define ICON_UP 15            /* up-arrow for the ".." parent-dir entry (#142) */
-#define ICON_SCREENSAVER 16   /* #221: reused the freed gear slot for the screensaver (.SAV) icon */
+#define ICON_CLOCK 1
+#define ICON_GEOBENCH 3
+#define ICON_BASIC 4
+#define ICON_BINARY 5
+#define ICON_PICTURE 6
+#define ICON_TEXT 7
+#define ICON_FOLDER 8
+#define ICON_APP 9            /* generic .APP icon (a custom document glyph in REFINED/DEFAULT) */
+#define ICON_FNT 10
+#define ICON_DESKTOP 11
+#define ICON_FILEMGR 12
+#define ICON_SD 13
+#define ICON_UP 14            /* up-arrow for the ".." parent-dir entry (#142) */
+#define ICON_SCREENSAVER 15   /* #221: reused the freed gear slot for the screensaver (.SAV) icon */
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -379,7 +378,6 @@ static const unsigned char app_icon_map[] = {
     ICON_DESKTOP,  'D','E','S','K','T','O','P',0,
     ICON_FILEMGR,  'F','I','L','E','M','G','R',0,
     ICON_FLOPPY,   'D','I','S','K','U','T','I','L',0,
-    ICON_FLOWCHART,'B','A','S','I','C',0,
     0xFF
 };
 
@@ -442,7 +440,7 @@ static unsigned char rank_of(unsigned char ic)
     switch (ic) {
         case ICON_FOLDER:   return 0;
         case ICON_DESKTOP: case ICON_FILEMGR: case ICON_CLOCK:
-        case ICON_SCREENSAVER: case ICON_FLOWCHART:
+        case ICON_SCREENSAVER:
         case ICON_APP:      return 1;
         case ICON_PICTURE:  return 2;
         case ICON_TEXT:     return 3;

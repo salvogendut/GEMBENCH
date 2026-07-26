@@ -79,7 +79,7 @@ tools/build_imgmod.sh                            # -> build/GBIMG.RAW
 python3 tools/genfont.py build/pcw/DEFAULT.FNT
 python3 tools/packfont.py build/pcw/CLASSIC.FNT lib/font.asm   # 8x8 (FONT=CLASSIC)
 python3 tools/packicons.py build/pcw/DEFAULT.IST \
-    lib/icon_floppy.asm lib/icon_flowchart.asm lib/icon_clock.asm lib/icon_trash.asm \
+    lib/icon_floppy.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
     lib/icon_app.asm lib/icon_font.asm \
@@ -144,22 +144,7 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT
 
 # --- COMPANION.DSK: TELNET, backdrops and spare assets (plain CF2 data disc)
-COMP_ADDS=()
-for bdp in assets/backdrops/*.BDP; do
-    name=$(basename "$bdp" .BDP | tr a-z A-Z)
-    cp "$bdp" "build/pcw/$name.BDP"
-    COMP_ADDS+=(--add "build/pcw/$name.BDP=$name.BDP")
-done
-python3 tools/mkpcwdsk.py QA/PCW/COMPANION.DSK \
-    "${COMP_ADDS[@]}" \
-    --add build/pcw/TELNET.RAW=TELNET.APP \
-    --add build/pcw/NETTEST.RAW=NETTEST.APP \
-    --add build/pcw/FORMREF.RAW=FORMREF.APP \
-    --add build/pcw/WGET.RAW=WGET.APP \
-    --add build/pcw/BROWSER.RAW=BROWSER.APP \
-    --add build/pcw/XAOS.RAW=XAOS.APP \
-    --add build/pcw/MAHJONG.RAW=MAHJONG.APP \
-    --add assets/WELCOME.TXT=WELCOME.TXT
+tools/package_pcw_companion.sh QA/PCW/COMPANION.DSK
 
 # --- EXTRAS.DSK: portable gallery + standalone apps on a 720K CF2DD disc
 echo "Building GB-PAINT PCW payload from $GB_PAINT_DIR"

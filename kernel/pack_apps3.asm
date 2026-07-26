@@ -27,7 +27,7 @@ bdp_waves_e
 bdp_waves2      incbin "../build/WAVES2.BDP"
 bdp_waves2_e
                 save  "WAVES2.BDP",bdp_waves2,bdp_waves2_e-bdp_waves2,DSK,"build/gbkern.dsk"
-ist_refined     incbin "../assets/iconsets/REFINED.IST" ; ICONS=REFINED custom set (6324 B, #198)
+ist_refined     incbin "../assets/iconsets/REFINED.IST" ; ICONS=REFINED custom set (3984 B)
 ist_refined_e
                 save  "REFINED.IST",ist_refined,ist_refined_e-ist_refined,DSK,"build/gbkern.dsk"
 pic_logo        incbin "../assets/pictures/LOGO.PIC"    ; boot wallpaper; all pictures also ship

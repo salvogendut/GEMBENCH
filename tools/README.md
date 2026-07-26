@@ -60,6 +60,14 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   automatically by MSX builds only.
   `make formref` builds the small three-platform reference app and its Daruma
   embedded-icon example.
+- **`rebuild_app.sh <name>`** — performs a focused cross-platform rebuild and
+  distribution refresh for a registered application. Use
+  `make app APP=mahjong` after changing Mahjongg code or its embedded icon; it
+  skips kernels, unrelated applications, pictures, and external GB-BASIC/GB-PAINT
+  builds while refreshing the companion disks and existing FAT images.
+- **`package_cpc_companion.sh` / `package_pcw_companion.sh`** — repack only the
+  corresponding companion disk from existing application payloads. Full and
+  focused builds share these helpers so their file lists cannot drift.
 - **`embed_app_icon.py`** — validates canonical four-/sixteen-colour sources and
   injects/checks the versioned executable preamble used by icon-bearing `.APP`
   files. See `docs/APP_ICON_FORMAT.md`.

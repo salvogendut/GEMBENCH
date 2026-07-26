@@ -92,7 +92,7 @@ APPDEFS="-DGB_MSX2" tools/build_imgmod.sh build/msx/GBIMG.RAW # Browser inline-i
 # --- assets ------------------------------------------------------------------
 python3 tools/genfont.py build/msx/DEFAULT.FNT           # 1bpp glyphs: shared format
 python3 tools/packicons.py build/msx/DEFAULT.IST \
-    lib/icon_floppy.asm lib/icon_flowchart.asm lib/icon_clock.asm lib/icon_trash.asm \
+    lib/icon_floppy.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
     lib/icon_app.asm lib/icon_font.asm \
