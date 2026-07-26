@@ -13,14 +13,16 @@
 #define APPICON_WB     8
 #define APPICON_H      32
 
-#if defined(GB_MSX2) || defined(GB_PCW)
 #define APP_PROBE_MAX  512
+#if defined(GB_MSX2) || defined(GB_PCW)
 #define FS_LOAD_OFS ((volatile unsigned char *)0x144C)
-#else
-#define APP_PROBE_MAX  0x1C00
 #endif
 #define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
 #define PROBE_BUF   ((unsigned char *)0x2200)
+
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+extern unsigned char gb_app_probe(char *dst);
+#endif
 
 static char          store[PICK_MAX][14];
 static char          rawname[PICK_MAX][11];
@@ -75,11 +77,9 @@ static unsigned char has_gbap(const char *raw)
     FS_XFLAGS = 0;
     if (got < APPICON_OFF) return 0;
 #else
-    /* A CPC chunk read loads another PAGE_DATA module over this picker.
-     * Use the ordinary loader within the low-RAM module-data area instead. */
-    PROBE_BUF[0] = 0;
-    FS_XFLAGS = 0;
-    (void)gb_fs_load((char *)PROBE_BUF, APP_PROBE_MAX);
+    /* The low-RAM probe borrows an app page, so this PAGE_DATA picker remains
+     * mapped even when the candidate occupies nearly its full 16 KiB. */
+    if (!gb_app_probe((char *)PROBE_BUF)) return 0;
 #endif
 
     if (PROBE_BUF[0] != 0xC3 || PROBE_BUF[3] != 'G'

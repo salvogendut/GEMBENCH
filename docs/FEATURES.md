@@ -46,7 +46,9 @@ backdrop, dragging icons, opening apps and menus:
   undo, New/Load/Save/Save As, View > Fullscreen). Its Load dialog hides legacy
   `.APP` files that have no editable icon header. A v2 APP may carry portable
   four-colour and MSX Screen-7 sixteen-colour variants; ICONED exposes both in
-  Screen 7. The Python editor also edits the canonical ASM sources directly.
+  Screen 7. Saving the configured active `.IST` reloads it immediately and
+  repaints the desktop; inactive sets take effect when selected in Settings.
+  The Python editor also edits the canonical ASM sources directly.
 - **Paint** — a Mode-1 paint app: a canvas + toolchest (pencil, square, circle,
   flood fill, undo), a 4-ink palette and pencil width, New/Load/Save to the `.PIC`
   format (a versioned bitmap with its own size + palette), View > Fullscreen. Tool

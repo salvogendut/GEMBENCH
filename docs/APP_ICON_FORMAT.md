@@ -30,6 +30,7 @@ V1 carries one codec-1 icon:
 | 16 | 256 | canonical bitmap |
 
 `APP_ICON=path/icon.asm` continues to generate this byte-identical format.
+GEOBENCH-owned applications keep this source beside `main.c`.
 
 ## GBAP v2
 
@@ -80,6 +81,29 @@ appicon16
 File Manager selects codec 7 only while the MSX is running Screen 7. MSX
 Screen 6, CPC, and PCW use codec 1. All targets preserve resources they do not
 display when saving an APP.
+
+When `APP_ICON=apps/name/icon.asm` is supplied, `build_capp.sh` automatically
+uses an adjacent `apps/name/icon16.asm` on MSX builds. Adding that file later is
+therefore sufficient to opt an application into a native 16-colour icon. CPC
+and PCW continue to embed only the canonical fallback unless `APP_ICON16` is
+passed explicitly.
+
+## Resident-set impact
+
+A portable APP header costs 272 bytes. Removing one 32x32 icon from an IST
+saves 260 bytes: 256 bitmap bytes and its four-byte directory entry. Moving an
+application icon out of both `DEFAULT.IST` and `REFINED.IST` therefore saves a
+net 248 raw distribution bytes and, more importantly, 260 bytes from the icon
+set kept in the kernel data page. A dual four-/sixteen-colour header costs 800
+bytes, so native variants remain optional per application.
+
+Issue #430 moved Notepad, Icon Editor, Paint, Browser, Viewer, Telnet, Mahjong,
+and Shell into app-owned headers. The resident desktop set fell from 25 to 17
+slots (`6,324` to `4,244` bytes), recovering 2,080 bytes of kernel data-page
+headroom. At the format level, before the additional code-size reductions used
+by tight applications, the two shipped icon sets and eight v1 headers make the
+raw distribution payload 1,984 bytes smaller. Clock, Desktop, File Manager, and
+shared file-type/device icons remain resident.
 
 `tools/iconedit.py` opens either ASM source and both resources inside a v2 APP.
 Use Previous/Next to switch variants. `ICONED.APP` edits both variants on MSX

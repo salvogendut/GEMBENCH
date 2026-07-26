@@ -50,7 +50,8 @@ icon_init
                 ld    hl,DATA_MODTOP-DATA_ICONS-#200 ; cap = the free icon region: from
                 ld    (fs_load_max),hl               ; DATA_ICONS up to DATA_MODTOP (the write
                                                      ; write module also lives in PAGE_DATA),
-                                                     ; less a sector. ~#1A00 (~25 icons),
+                                                     ; less a sector. The compact resident
+                                                     ; set has 17 icons after #430,
                                                      ; derived so it never needs hand-tuning.
                 ld    hl,DATA_ICONS
                 ld    (fs_load_dst),hl

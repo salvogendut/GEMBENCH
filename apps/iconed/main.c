@@ -39,8 +39,9 @@
 #define CANVAS_Y0 (oy + 16)
 #define PANEL_X   (ox + 33)
 
-#define SW_W      3            /* 4x4 palette; one visible interior column */
+#define SW_W      4            /* standard four-pen palette: one vertical column */
 #define SW_H      7
+#define SW16_W    3            /* native MSX palette: compact 4x4 grid */
 #define SW_COLS   4
 #define SW_ROWS   4
 #define SW_STEP   9
@@ -71,6 +72,10 @@
 #define PIC_PAGE_K    (*(volatile unsigned char *)0x130B)
 #define PIC_PAGE2_K   (*(volatile unsigned char *)0x1348)
 #define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
+#define FS_LOAD_OFS   ((volatile unsigned char *)0x144C)
+#define FS_XFLAGS     (*(volatile unsigned char *)0x144F)
+#define KCFG_ICONNAME ((volatile unsigned char *)0x1202)
+#define FS_BOOT_DRIVE (*(volatile unsigned char *)0x1336)
 #define CUR_W     4            /* cursor: 4 bytes/row x 16 rows, phase = 64 bytes */
 #define CUR_H     16
 #define PHASE     64
@@ -94,7 +99,6 @@
 #define APPICON7_LEN (APPICON7_WB * APPICON_H)
 #define APP_CODEC_MODE1 1
 #define APP_CODEC_MODE7 7
-#define PREVIEW_OFF BUFSZ
 #define BTN_NONE  0
 #define BTN_PREV  1
 #define BTN_NEXT  2
@@ -115,10 +119,20 @@ static unsigned char selpen;               /* selected palette pen 0..15        
 static unsigned int app_off[2];
 static unsigned char app_codec[2];
 static unsigned char doc_page;             /* borrowed page holding the open file  */
-/* Keep the magnified renderer's state out of SDCC's call-clobbered registers.
-   With --fomit-frame-pointer, two gb_fill() calls in one loop can otherwise
-   restore the row or packed pixels incorrectly after small code-layout changes. */
-static unsigned char canvas_y, canvas_x, canvas_row, canvas_byte;
+static unsigned char stream_loaded;
+static unsigned char stream_save_ok;
+/* Compose the magnified four-pen canvas in low RAM and submit one rectangle.
+   Each target's save-under format has a different solid-byte encoding. */
+static unsigned char canvas_y, canvas_x;
+static unsigned int canvas_pos;
+static unsigned char canvas_repeat;
+#ifdef GB_PCW
+static const unsigned char canvas_solid[4] = { 0x55, 0xFF, 0x00, 0xAA };
+#elif defined(GB_MSX2)
+static const unsigned char canvas_solid[4] = { 0x00, 0x55, 0xAA, 0xFF };
+#else
+static const unsigned char canvas_solid[4] = { 0x00, 0xF0, 0x0F, 0xFF };
+#endif
 #ifdef GB_MSX2
 #define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
 #define PIC_PAGE3_K (*(volatile unsigned char *)0x1291)
@@ -131,6 +145,9 @@ static char fbase[14];                     /* "NAME.EXT" from gb_doc_name() (tit
 static char wtitle[18];                    /* fbase + " *" when modified           */
 static unsigned char u_valid, u_cx, u_cy, u_pen;  /* single-level undo of last paint */
 static unsigned char pressed_btn;          /* one-frame shared-button feedback     */
+static unsigned char save_active;          /* keep long CPC writes visibly alive   */
+static unsigned char save_title_repaint;   /* Save changes chrome, not the editor body */
+static unsigned char icons_reloaded;       /* active IST changed: repaint the full stack */
 static void fmt83(char *dst, const char *n11);   /* both defined below; used by draw() */
 static const char *win_title(void);
 static void sniff(void);
@@ -224,6 +241,80 @@ static void adopt_document(unsigned int len)
     sniff();
 }
 
+#ifdef GBUI_APPICON_PICKER
+/* Applications can occupy nearly their full 16 KiB page, while ICONED's shared
+ * filesystem staging area is only 7 KiB. Keep every selected document in the
+ * borrowed page and stream it through the low-RAM buffer in bounded chunks. */
+unsigned int gb_doc_stream_load(void)
+{
+    unsigned int off = 0, got, take;
+
+    mode = M_NONE;
+    gb_wm_damage(win_x, win_y, winw, winh);
+    if (!doc_page && !alloc_doc_page()) {
+        UI_MODAL_K = 0;
+        return 0;
+    }
+    for (;;) {
+        if (off >= 0x4000) {
+            FS_XFLAGS = 0;
+            stream_loaded = 1;
+            UI_MODAL_K = 0;
+            return off;
+        }
+        take = (unsigned int)(0x4000 - off);
+        if (take > BUFSZ) take = BUFSZ;
+        FS_LOAD_OFS[0] = (unsigned char)off;
+        FS_LOAD_OFS[1] = (unsigned char)(off >> 8);
+        FS_LOAD_OFS[2] = 0;
+        FS_XFLAGS = 1;
+        got = gb_fs_load(buf, take);
+        FS_XFLAGS = 0;
+        if (!got) break;
+        doc_write(off, got);
+        off += got;
+        if (got < take) break;
+    }
+    stream_loaded = 1;
+    /* CPC storage backends reuse the GBUI request block at #1700. In
+       particular, a failed launch-time read can leave UI_MODAL nonzero, which
+       makes the kernel suppress every subsequent top-bar menu click. */
+    UI_MODAL_K = 0;
+    return off;
+}
+
+/* ie_save has already folded the edited resource back into doc_page. Rewrite
+ * the complete file so bytes outside the embedded icon remain unchanged. */
+unsigned char gb_doc_stream_save(unsigned int len)
+{
+    unsigned int off = 0, take;
+    unsigned char first = 1;
+
+    stream_save_ok = 0;
+    if (!len || !doc_page || len > 0x4000) {
+        UI_MODAL_K = 0;
+        return 0;
+    }
+    while (off < len) {
+        take = len - off;
+        if (take > BUFSZ) take = BUFSZ;
+        doc_read(off, take);
+        FS_XFLAGS = first ? 0x04 : 0x06;
+        if (!gb_fs_save(buf, take)) {
+            FS_XFLAGS = 0;
+            UI_MODAL_K = 0;
+            return 0;
+        }
+        first = 0;
+        off += take;
+    }
+    FS_XFLAGS = 0;
+    UI_MODAL_K = 0;
+    stream_save_ok = 1;
+    return 1;
+}
+#endif
+
 /* ---- .IST icon set ---------------------------------------------------------- */
 
 static unsigned int  icon_off;
@@ -236,7 +327,8 @@ static unsigned char icon_dir(unsigned char k) /* read directory entry -> off/wb
     icon_off = (unsigned int)buf[0] | ((unsigned int)buf[1] << 8);
     icon_wb  = buf[2];
     icon_h   = buf[3];
-    return (unsigned char)(icon_wb && icon_h
+    return (unsigned char)(icon_wb && icon_wb <= APPICON_WB
+        && icon_h && icon_h <= APPICON_H
         && icon_off <= filelen
         && (unsigned int)icon_wb * icon_h <= filelen - icon_off);
 }
@@ -593,40 +685,56 @@ static void draw_canvas(void)
         return;
     }
 #endif
-    for (canvas_y = 0; canvas_y < gh; canvas_y++) {
-        canvas_row = (unsigned char)(CANVAS_Y0 + canvas_y * CELL_H);
-        for (canvas_x = 0; canvas_x < gw; canvas_x += 2) {
-            canvas_byte = grid[canvas_y][canvas_x >> 1];
-            gb_fill((unsigned char)(CANVAS_X + canvas_x), canvas_row, 1, CELL_H,
-                    (unsigned char)(canvas_byte >> 4));
-            gb_fill((unsigned char)(CANVAS_X + canvas_x + 1), canvas_row, 1, CELL_H,
-                    (unsigned char)(canvas_byte & 15));
-        }
-    }
+    /* Render into low-RAM staging, then blit once. Besides being much faster
+       than 1024 kernel calls, this avoids an SDCC register-allocation failure
+       that made the remaining panel draw depend on generated-code layout. */
+    canvas_pos = 0;
+    for (canvas_y = 0; canvas_y < gh; canvas_y++)
+        for (canvas_repeat = 0; canvas_repeat < CELL_H; canvas_repeat++)
+            for (canvas_x = 0; canvas_x < gw; canvas_x++)
+                buf[canvas_pos++] = canvas_solid[gget(canvas_y, canvas_x) & 3];
+    gb_restorerect(CANVAS_X, CANVAS_Y0, gw,
+                   (unsigned char)(gh * CELL_H), buf);
     gb_frame(CANVAS_X, CANVAS_Y0, gw, gh * CELL_H, 2);
+}
+
+static void draw_swatch(unsigned char pen, unsigned char x,
+                        unsigned char y, unsigned char w)
+{
+#ifdef GB_MSX2
+    if (native_app_icon())
+        native_solid(x, y, w, SW_H, pen);
+    else
+#endif
+        gb_fill(x, y, w, SW_H, pen);
+    if (mode == M_CURSOR && pen == 0)       /* mark transparent brush */
+        gb_text(x, y, "T");
+    gb_frame(x, y, w, SW_H, 2);
+    gb_frame(x, (unsigned char)(y - 1), w, SW_H + 2,
+             (pen == selpen) ? 3 : 0);
 }
 
 static void draw_palette(void)
 {
-    unsigned char k, x, y, colors = 4;
     if (mode == M_NONE) return;
 #ifdef GB_MSX2
-    if (native_app_icon()) colors = 16;
-#endif
-    for (k = 0; k < colors; k++) {
-        x = (unsigned char)(PANEL_X + (k % SW_COLS) * SW_W);
-        y = (unsigned char)(SW_Y + (k / SW_COLS) * SW_STEP);
-#ifdef GB_MSX2
-        if (colors == 16) native_solid(x, y, SW_W, SW_H, k);
-        else
-#endif
-            gb_fill(x, y, SW_W, SW_H, k);
-        if (mode == M_CURSOR && k == 0)          /* mark the transparent brush */
-            gb_text(x, y, "T");
-        gb_frame(x, y, SW_W, SW_H, 2);
-        gb_frame(x, (unsigned char)(y - 1), SW_W, SW_H + 2,
-                 (k == selpen) ? 3 : 0);
+    if (native_app_icon()) {
+        unsigned char k;
+        for (k = 0; k < 16; k++)
+            draw_swatch(k,
+                (unsigned char)(PANEL_X + (k % SW_COLS) * SW16_W),
+                (unsigned char)(SW_Y + (k / SW_COLS) * SW_STEP),
+                SW16_W);
+        return;
     }
+#endif
+    /* Keep the portable pens in their original, easily scanned vertical
+       arrangement. Explicit calls also keep the CPC compiler from carrying
+       loop state across the drawing ABI. */
+    draw_swatch(0, PANEL_X, SW_Y, SW_W);
+    draw_swatch(1, PANEL_X, (unsigned char)(SW_Y + SW_STEP), SW_W);
+    draw_swatch(2, PANEL_X, (unsigned char)(SW_Y + 2 * SW_STEP), SW_W);
+    draw_swatch(3, PANEL_X, (unsigned char)(SW_Y + 3 * SW_STEP), SW_W);
 }
 
 static void draw_preview(void)
@@ -642,15 +750,62 @@ static void draw_preview(void)
         native_blit(px, py, wbytes, gh, grid[0]);
         return;
     }
+    if (MSX_SCRMOD == 7) {
+        unsigned char y, x;
+        for (y = 0; y < gh; y++) {
+            for (x = 0; x < gw; x += 2)
+                native_row[x >> 1] = (unsigned char)((gget(y, x) << 4)
+                    | gget(y, (unsigned char)(x + 1)));
+            native_blit(px, (unsigned char)(py + y), wbytes, 1, native_row);
+        }
+        return;
+    }
 #endif
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    {
+        unsigned int i, length = (unsigned int)wbytes * gh;
+
+        /* CPC's direct low-RAM restore path can turn this small bitmap into
+           swapped-width display bands. Use the established banked blitter
+           instead, but preserve the document bytes borrowed as scratch: APP
+           icons may occupy almost the entire 16 KiB page. */
+        doc_read(0, length);
+        for (i = 0; i < length; i++) buf[APPICON_LEN + i] = buf[i];
+        pack_grid(wbytes, gh);
+        doc_write(0, length);
+        select_doc_page();
+        gb_pic_blit(px, py, wbytes, gh, 0);
+        for (i = 0; i < length; i++) buf[i] = buf[APPICON_LEN + i];
+        doc_write(0, length);
+    }
+#else
     pack_grid(wbytes, gh);
-    doc_write(PREVIEW_OFF, (unsigned int)wbytes * gh);
-    select_doc_page();
 #ifdef GB_MSX2
-    PIC_MODE_K = APP_CODEC_MODE1;
-    PIC_STRIDE_K = wbytes;
+    gb_pic_edit_buf = (unsigned int)buf;
+    gb_pic_edit_off = (unsigned int)(buf + APPICON_LEN);
+    FS_SAVE_LEN_K = (unsigned int)wbytes * gh;
+    (void)gb_pic_edit(GB_PICEDIT_NATIVE);
+    gb_restorerect(px, py, wbytes, gh, buf + APPICON_LEN);
+#else
+#ifdef GB_PCW
+    {
+        unsigned int p, length = (unsigned int)wbytes * gh;
+        unsigned char value, bit, pen, native;
+        for (p = 0; p < length; p++) {
+            value = buf[p]; native = 0;
+            for (bit = 0; bit < 4; bit++) {
+                pen = (unsigned char)(((value >> (7 - bit)) & 1)
+                    | (((value >> (3 - bit)) & 1) << 1));
+                native |= (unsigned char)(pen << (6 - 2 * bit));
+            }
+            buf[p] = (unsigned char)(((native & 0x55) << 1)
+                | (((native ^ 0xFF) & 0xAA) >> 1));
+        }
+    }
 #endif
-    gb_pic_blit(px, py, wbytes, gh, PREVIEW_OFF);
+    gb_restorerect(px, py, wbytes, gh, buf);
+#endif
+#endif
 }
 
 static void draw_nav(void)
@@ -677,8 +832,9 @@ static void draw_undo(void)
 
 static void status_line(void)
 {
-    /* save feedback is now the title's " *" dirty marker (gb_doc_modified). */
-    gb_text(win_x + 1, win_y + winh - 11, "Pick a pen, click to paint");
+    gb_fill(win_x + 1, win_y + winh - 12, winw - 2, 10, 0);
+    gb_text(win_x + 1, win_y + winh - 11,
+            save_active ? "Saving..." : "Pick a pen, click to paint");
 }
 
 static void draw(void)            /* content only; the WM drew the frame/title (#146) */
@@ -737,6 +893,7 @@ static const char *const ie_exts[] = { "IST", "SPR", "APP", 0 };
 static void ie_new(void)
 {
     unsigned int i;
+    save_title_repaint = 0;                   /* New needs the normal full redraw */
     for (i = 0; i < 20 + 6 * 24; i++) buf[i] = 0;
     buf[0] = 'G'; buf[1] = 'B'; buf[2] = 'I'; buf[3] = 'S';
     buf[4] = 2; buf[5] = 1;                       /* version 2, count 1 */
@@ -744,18 +901,72 @@ static void ie_new(void)
     adopt_document(20 + 6 * 24);
 }
 
-/* ie_open: a .IST/.SPR was just loaded into buf - classify + decode the first item. */
-static void ie_open(unsigned int len) { adopt_document(len); }
+/* The picker path has already streamed the file into doc_page. Launch-time and
+ * non-picker builds still adopt a complete low-RAM buffer. */
+static void ie_open(unsigned int len)
+{
+    save_title_repaint = 0;                   /* Load replaces the editor body */
+#ifdef GBUI_APPICON_PICKER
+    if (stream_loaded) {
+        stream_loaded = 0;
+        filelen = len;
+        mode = M_NONE;
+        gb_wm_damage(win_x, win_y, winw, winh);
+        if (len) sniff();
+        return;
+    }
+#endif
+    adopt_document(len);
+}
 
 /* ie_save: fold the current edit back into buf and return the byte count to write. */
 static unsigned int ie_save(void)
 {
+    if (mode != M_ICON && mode != M_APP && mode != M_CURSOR) return 0;
+    save_active = 1;
+    gb_curhide();
+    status_line();
+    gb_curshow();
     if (mode == M_ICON) encode_icon(idx);
     else if (mode == M_APP) encode_app_icon(idx);
-    else if (mode == M_CURSOR) encode_cursor();
-    else return 0;
+    else encode_cursor();
+#ifdef GBUI_APPICON_PICKER
+    return filelen;
+#else
     doc_read(0, filelen);
     return filelen;
+#endif
+}
+
+static unsigned char active_icon_set(void)
+{
+    const char *name = gb_doc_name();
+    unsigned char i;
+
+    if (mode != M_ICON || gb_get_drive() != FS_BOOT_DRIVE) return 0;
+    for (i = 0; i < 11; i++)
+        if ((unsigned char)name[i] != KCFG_ICONNAME[i]) return 0;
+    return 1;
+}
+
+static void ie_saved(void)
+{
+    save_active = 0;
+    save_title_repaint = 1;
+    gb_curhide();
+    status_line();
+#ifdef GBUI_APPICON_PICKER
+    if (stream_save_ok && active_icon_set()) {
+#else
+    if (active_icon_set()) {
+#endif
+        /* The resident set is cached in PAGE_DATA. Reload through the existing
+           asset ABI, then redraw every managed layer once so the desktop and
+           open File Managers immediately use the edited glyphs. */
+        gb_reload();
+        icons_reloaded = 1;
+    }
+    gb_curshow();
 }
 
 /* recalc_origin: refresh the centered content origin from the live geometry. */
@@ -775,7 +986,7 @@ static void ie_fullscreen(unsigned char on)
 }
 
 static const gb_doc_t iedoc = {
-    buf, BUFSZ, ie_new, ie_open, ie_save, 0, 0, 0, 0, ie_exts,
+    buf, BUFSZ, ie_new, ie_open, ie_save, ie_saved, 0, 0, 0, ie_exts,
     0, 0, ie_fullscreen, 0, 0
 };
 
@@ -843,6 +1054,7 @@ static void switch_icon(unsigned char next)
 /* on_frame (#146): the WM handled close/drag; run the menu framework. */
 static void ie_frame(void)
 {
+    unsigned char doc_result;
     sync_rect();
     win_title();                                      /* keep wtitle fresh for the WM title */
     if (pressed_btn != BTN_NONE) {
@@ -852,7 +1064,21 @@ static void ie_frame(void)
         draw_undo();
         gb_curshow();
     }
-    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a File menu ran (#142) */
+    doc_result = gb_doc_frame();
+    if (doc_result) {
+        if (save_title_repaint) {
+            save_title_repaint = 0;
+            win_title();                              /* dirty state changed during Save */
+            if (icons_reloaded) {
+                icons_reloaded = 0;
+                gb_wm_damage(0, 0, GB_COLS, GB_LINES);
+            } else {
+                gb_wm_damage(win_x, win_y, winw, TITLE_H);
+            }
+        }
+        gb_restore_parent();
+        return;
+    }
 }
 
 /* on_close (#146): offer to save, then close (or repaint on cancel). */
@@ -878,7 +1104,7 @@ static void ie_drag(void)
 /* on_click (#146): a content press - canvas paint, palette, Prev/Next, or UNDO. */
 static void ie_click(void)
 {
-    unsigned char mx, my, k, y, flags, colors = 4;
+    unsigned char mx, my, y, flags;
     sync_rect();
     recalc_origin();                                  /* origin for the CANVAS_X/PANEL hit-tests */
     mx = gb_mx(); my = gb_my();
@@ -891,19 +1117,26 @@ static void ie_click(void)
         return;
     }
 
-    if (mode != M_NONE && mx >= PANEL_X
-        && mx < PANEL_X + SW_COLS * SW_W) {
-        unsigned char col = (unsigned char)((mx - PANEL_X) / SW_W);
+    if (mode != M_NONE && my >= SW_Y) {
         unsigned char row = (unsigned char)((my - SW_Y) / SW_STEP);
-#ifdef GB_MSX2
-        if (native_app_icon()) colors = 16;
-#endif
-        k = (unsigned char)(row * SW_COLS + col);
         y = (unsigned char)(SW_Y + row * SW_STEP);
-        if (row < SW_ROWS && k < colors && my >= y && my < y + SW_H) {
-            selpen = k;
-            gb_curhide(); draw_palette(); gb_curshow();
-            return;
+        if (row < SW_ROWS && my >= y && my < y + SW_H) {
+#ifdef GB_MSX2
+            if (native_app_icon()) {
+                if (mx >= PANEL_X && mx < PANEL_X + SW_COLS * SW16_W) {
+                    unsigned char col =
+                        (unsigned char)((mx - PANEL_X) / SW16_W);
+                    selpen = (unsigned char)(row * SW_COLS + col);
+                    gb_curhide(); draw_palette(); gb_curshow();
+                    return;
+                }
+            } else
+#endif
+            if (mx >= PANEL_X && mx < PANEL_X + SW_W) {
+                selpen = row;
+                gb_curhide(); draw_palette(); gb_curshow();
+                return;
+            }
         }
     }
 
@@ -953,13 +1186,13 @@ void main(void)
 {
     unsigned char n;
 
-    /* CPC storage helpers share the #1700 transfer block with GBUI. A File
-       Manager free-space probe can therefore leave the modal latch dirty and
-       make the top-bar File title appear inert. */
-    UI_MODAL_K = 0;
     gb_wm_managed(&iemw);                    /* register FIRST (no draw): captures our file arg */
     gb_doc(&iedoc);                          /* standard File menu; adopts the launch name */
+#ifdef GBUI_APPICON_PICKER
+    ie_open(gb_doc_stream_load());
+#else
     adopt_document(gb_fs_load(buf, BUFSZ));   /* stage, then retain in a borrowed page */
+#endif
     selpen = 1;
     win_title();                             /* build wtitle before the first paint */
     for (n = 64; n; n--) if (!gb_getkey()) break;

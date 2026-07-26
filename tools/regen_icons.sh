@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # tools/regen_icons.sh - regenerate the committed icon .asm sources from their
-# PNGs in assets/, so a *visual* edit to a PNG flows into the desktop's DEFAULT
-# icon set on the next build.
+# PNGs in assets/, so a visual edit flows into either the resident DEFAULT icon
+# set or an app-owned GBAP icon on the next build.
 #
 # The build (tools/build_kernel.sh -> packicons.py) bundles the committed
-# lib/icon_*.asm into build/DEFAULT.IST; it does NOT re-run png2cpc, so editing
-# a PNG under assets/ alone does nothing. Run this after editing a PNG, then
-# rebuild - build_kernel.sh repacks DEFAULT.IST and the card build picks it up.
+# lib/icon_*.asm into build/DEFAULT.IST and apps/*/icon.asm into application
+# headers; it does NOT re-run png2cpc. Run this after editing a PNG, then rebuild.
 #
 # Each generated icon .asm carries, in its first two lines, the source PNG + size
 # and the asm label (written by png2cpc), e.g.
@@ -18,15 +17,15 @@
 # 4-colour desktop palette - see tools/png2cpc.py), run this, rebuild.
 #
 # Usage:
-#   tools/regen_icons.sh                 # every generated GEOBENCH icon under lib/
-#   tools/regen_icons.sh lib/icon_ide.asm lib/icon_paint.asm        # just these
+#   tools/regen_icons.sh                 # resident and app-owned generated icons
+#   tools/regen_icons.sh lib/icon_ide.asm apps/browser/icon.asm     # just these
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ "$#" -gt 0 ]; then
     files=("$@")
 else
-    files=(lib/icon_*.asm)
+    files=(lib/icon_*.asm apps/*/icon.asm)
 fi
 
 n=0

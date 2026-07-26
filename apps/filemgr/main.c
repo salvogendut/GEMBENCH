@@ -73,6 +73,9 @@
 #define APPICON_PROBE    1024
 #define APPICON_MODE1    1
 #define APPICON_MODE7    7
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+extern unsigned char gb_app_probe(char *dst);
+#endif
 #ifdef GB_MSX2
 #define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
 #endif
@@ -355,21 +358,12 @@ static const char *win_title(void)               /* "Disk C/path 32MiB free" -> 
 #define ICON_TEXT 8
 #define ICON_FOLDER 9
 #define ICON_APP 10           /* generic .APP icon (a custom document glyph in REFINED/DEFAULT) */
-#define ICON_NOTEPAD 11
-#define ICON_ICONED 12
-#define ICON_FNT 13
-/* .IST icon-set files reuse the .APP document icon (they were byte-identical, #198):
-   the duplicate bitmap was dropped to shrink DEFAULT.IST, so every slot below shifts up 1. */
-#define ICON_DESKTOP 14
-#define ICON_FILEMGR 15
-#define ICON_PAINT 16
-#define ICON_BROWSER 17
-#define ICON_VIEWER 19
-#define ICON_TELNET 20        /* #238: the telnet terminal app */
-#define ICON_MAHJONG 21       /* Kana Mahjong; replaces the unused network slot */
-#define ICON_SHELL 22         /* #365: command shell */
-#define ICON_UP 23            /* up-arrow for the ".." parent-dir entry (#142) */
-#define ICON_SCREENSAVER 24   /* #221: reused the freed gear slot for the screensaver (.SAV) icon */
+#define ICON_FNT 11
+#define ICON_DESKTOP 12
+#define ICON_FILEMGR 13
+#define ICON_SD 14
+#define ICON_UP 15            /* up-arrow for the ".." parent-dir entry (#142) */
+#define ICON_SCREENSAVER 16   /* #221: reused the freed gear slot for the screensaver (.SAV) icon */
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -381,17 +375,9 @@ static unsigned char name_is(const char *name, const char *want)
 
 /* Slot byte followed by a NUL-terminated basename; 0xFF ends the table. */
 static const unsigned char app_icon_map[] = {
-    ICON_NOTEPAD,  'N','O','T','E','P','A','D',0,
-    ICON_ICONED,   'I','C','O','N','E','D',0,
     ICON_CLOCK,    'C','L','O','C','K',0,
     ICON_DESKTOP,  'D','E','S','K','T','O','P',0,
     ICON_FILEMGR,  'F','I','L','E','M','G','R',0,
-    ICON_PAINT,    'P','A','I','N','T',0,
-    ICON_BROWSER,  'B','R','O','W','S','E','R',0,
-    ICON_VIEWER,   'V','I','E','W','E','R',0,
-    ICON_TELNET,   'T','E','L','N','E','T',0,
-    ICON_MAHJONG,  'M','A','H','J','O','N','G',0,
-    ICON_SHELL,    'S','H','E','L','L',0,
     ICON_FLOPPY,   'D','I','S','K','U','T','I','L',0,
     ICON_FLOWCHART,'B','A','S','I','C',0,
     0xFF
@@ -455,9 +441,8 @@ static unsigned char rank_of(unsigned char ic)
     ic &= APPICON_SLOTMASK;
     switch (ic) {
         case ICON_FOLDER:   return 0;
-        case ICON_DESKTOP: case ICON_FILEMGR: case ICON_NOTEPAD: case ICON_ICONED:
-        case ICON_PAINT:    case ICON_VIEWER:  case ICON_CLOCK:   case ICON_BROWSER:
-        case ICON_SCREENSAVER: case ICON_TELNET: case ICON_MAHJONG: case ICON_FLOWCHART:
+        case ICON_DESKTOP: case ICON_FILEMGR: case ICON_CLOCK:
+        case ICON_SCREENSAVER: case ICON_FLOWCHART:
         case ICON_APP:      return 1;
         case ICON_PICTURE:  return 2;
         case ICON_TEXT:     return 3;
@@ -502,10 +487,14 @@ static unsigned char appicon_load(unsigned char raw)
 
     gb_get_name((char *)gb_copybuf + APPICON_PROBE);
     gb_set_name(NAME_AT(raw));
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    got = gb_app_probe((char *)data) ? APPICON_PROBE : 0;
+#else
     FS_LOAD_OFS[0] = 0; FS_LOAD_OFS[1] = 0; FS_LOAD_OFS[2] = 0;
     FS_XFLAGS = 0x01;
     got = gb_fs_load((char *)data, APPICON_PROBE);
     FS_XFLAGS = 0;
+#endif
     gb_set_name((char *)gb_copybuf + APPICON_PROBE);
     if (got < APPICON_OFF || data[0] != 0xC3 || data[3] != 'G'
         || data[4] != 'B' || data[5] != 'A' || data[6] != 'P')

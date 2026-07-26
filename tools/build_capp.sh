@@ -33,6 +33,16 @@ BIN="$(dirname "$(command -v "$SDCC")")"   # sdasz80 / makebin sit beside sdcc
 SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
 CODE_LOC="0x4000"
+# Adding icon16.asm beside an app-owned icon.asm automatically upgrades only
+# the MSX build to a dual-resource GBAP v2 header. CPC and PCW retain v1.
+case " ${APPDEFS:-} " in
+    *" -DGB_MSX2 "*)
+        if [ -n "$APP_ICON" ] && [ -z "$APP_ICON16" ]; then
+            icon16_candidate="$(dirname "$APP_ICON")/icon16.asm"
+            [ ! -f "$icon16_candidate" ] || APP_ICON16="$icon16_candidate"
+        fi
+        ;;
+esac
 if [ -n "$APP_ICON16" ] && [ -z "$APP_ICON" ]; then
     echo "ERROR: APP_ICON16 requires the portable APP_ICON fallback" >&2
     exit 1
@@ -76,6 +86,7 @@ SLIDER_FLAG="${SLIDER:-0}"
 FORM_FLAG="${FORM:-0}"
 FORM_SELECT_FLAG="${FORM_SELECT:-0}"
 TIMESET_FLAG="${TIMESET:-0}"
+APP_PROBE_FLAG="${APP_PROBE:-0}"
 NET_SRC="$GB/gbnet_stub.c"
 case " ${APPDEFS:-} " in
     *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
@@ -134,6 +145,9 @@ fi
 if [ "$TIMESET_FLAG" = "1" ]; then
     deps+=("$GB/gbsettime.c")
 fi
+if [ "$APP_PROBE_FLAG" = "1" ]; then
+    deps+=("$GB/gbapprobe.s")
+fi
 while IFS= read -r dep; do
     deps+=("$dep")
 done < <(find "$APP" -type f | sort)
@@ -182,6 +196,7 @@ cache_key=$(printf '%s\n' \
     "FORM=$FORM_FLAG" \
     "FORM_SELECT=$FORM_SELECT_FLAG" \
     "TIMESET=$TIMESET_FLAG" \
+    "APP_PROBE=$APP_PROBE_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
     "APP_CFLAGS=$APP_CFLAGS" \
     "LOAD_LIMIT=$LOAD_LIMIT" \
@@ -195,6 +210,17 @@ fi
 
 "$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
 "$SDAS" -o "$work/gblib.rel" "$GBLIB_SRC"
+APP_PROBE_REL=""
+if [ "$APP_PROBE_FLAG" = "1" ]; then
+    case " ${APPDEFS:-} " in
+        *" -DGB_MSX2 "*|*" -DGB_PCW "*)
+            echo "ERROR: APP_PROBE is the CPC-only whole-APP preamble reader" >&2
+            exit 1
+            ;;
+    esac
+    "$SDAS" -o "$work/gbapprobe.rel" "$GB/gbapprobe.s"
+    APP_PROBE_REL="$work/gbapprobe.rel"
+fi
 # --fomit-frame-pointer: frame on IY, not IX. The kernel/fs code uses IX as a
 # scratch (it never touches IY) and firmware calls preserve the caller's IY, so
 # this stops a kernel call from wrecking an app's frame pointer (which crashed
@@ -294,7 +320,7 @@ fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc "$CODE_LOC" --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
-    $FORM_SELECT_REL $TIMESET_REL $DLG_REL \
+    $FORM_SELECT_REL $TIMESET_REL $DLG_REL $APP_PROBE_REL \
     "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places

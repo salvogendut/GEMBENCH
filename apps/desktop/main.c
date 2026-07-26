@@ -38,7 +38,7 @@
 /* Settings has no desktop icon (#221): reach it from the top-bar System menu. */
 
 #define ICON_IDE 1            /* IST slots (packicons order): Disk C as IDE ... */
-#define ICON_SD  18           /* ... vs Albireo SD/USB card (#104); slots shifted -1 (#198 dedup) */
+#define ICON_SD  14           /* ... vs Albireo SD/USB card (#104); compact set after #430 */
 #define IC_RCOL (GB_COLS - 14)  /* right icon column: 66 on the CPC, 114 on the MSX (#287) */
 #define IC_BOTY (GB_LINES - 50) /* bottom row: label clears the border (150 CPC / 162 MSX) */
 static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, IC_RCOL, IC_RCOL };
@@ -59,6 +59,9 @@ static unsigned char menu_refresh;           /* refocus after a child window clo
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 static unsigned char want_about;             /* System>About: 1=menu selected, 2=open next frame (#409) */
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+static unsigned char first_paint;             /* defer the definitive paint until WM registration */
+#endif
 #ifdef GB_PCW
 static unsigned char want_timesync;          /* boot time helper enabled when TIMESYNC=true */
 static unsigned int timesync_delay;          /* let real PerryNet hardware finish booting first */
@@ -885,6 +888,16 @@ static void on_frame(void)
         gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
         gb_menu_add("System", sys_items, 7, sys_action);
     }
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    if (first_paint) {
+        /* The pre-WM paint left the CPC splash beneath the desktop until a
+           later restack. Use the normal registered compositor from frame one. */
+        first_paint = 0;
+        gb_wm_damage(0, 0, GB_COLS, GB_LINES);
+        gb_restore_parent();
+        return;
+    }
+#endif
     if (menu_refresh && background_changed()) { /* backdrop/wallpaper changed while a child was up:
                                                     reload outside wm_repaint_all, then repaint once. */
         background_init();
@@ -1017,9 +1030,13 @@ void main(void)
     bd_init();                                   /* canonical BDP is native CPC Mode-1 */
 #endif
     wp_init();                                   /* #212: load the configured wallpaper */
-    gb_wm_damage(0, 0, GB_COLS, GB_LINES);                 /* initialise the shared repaint clip before paint() */
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    first_paint = 1;                            /* paint from the first registered WM frame */
+#else
+    gb_wm_damage(0, 0, GB_COLS, GB_LINES);
     paint();
-    gb_curshow();                               /* paint() no longer shows the pointer (#153) */
+    gb_curshow();
+#endif
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;

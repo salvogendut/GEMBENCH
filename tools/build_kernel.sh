@@ -57,6 +57,15 @@ fi
 
 mkdir -p build
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
+PAINT_GBLIB="build/GBLIBPAINT.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$PAINT_GBLIB" "$GB_PAINT_DIR/src/gblib.symbols"
+TELNET_GBLIB="build/GBLIBTELNET.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$TELNET_GBLIB" apps/telnet/gblib.symbols
+VIEWER_GBLIB="build/GBLIBVIEWER.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$VIEWER_GBLIB" apps/viewer/gblib.symbols
 
 BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
 if ! git diff --quiet --ignore-submodules -- 2>/dev/null \
@@ -80,16 +89,15 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_floppy.asm lib/icon_flowchart.asm lib/icon_clock.asm lib/icon_trash.asm \
     lib/icon_geobench.asm lib/icon_basic.asm lib/icon_binary.asm \
     lib/icon_picture.asm lib/icon_text.asm lib/icon_folder.asm \
-    lib/icon_app.asm lib/icon_notepad.asm lib/icon_iconeditor.asm \
-    lib/icon_font.asm \
+    lib/icon_app.asm lib/icon_font.asm \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
-    lib/icon_paint.asm lib/icon_browser.asm lib/icon_sd.asm \
-    lib/icon_viewer.asm \
-    lib/icon_telnet.asm lib/icon_mahjong.asm lib/icon_shell.asm \
+    lib/icon_sd.asm \
     lib/icon_up.asm lib/icon_screensaver.asm \
-    # slots: 9=folder 10=.APP 11=NOTEPAD 12=ICONED 13=.FNT 14=DESKTOP 15=FILEMGR
-    # 16=PAINT 17=BROWSER 18=SD (Albireo Disk C, #104) 19=VIEWER
-    # 20=TELNET 21=MAHJONG 22=SHELL 23=UP (FileMgr ".." entry, #142) 24=SCREENSAVER (.SAV, #221 reused gear slot)
+    # slots: 9=folder 10=.APP 11=.FNT 12=DESKTOP 13=FILEMGR
+    # 14=SD (Albireo Disk C, #104) 15=UP (FileMgr ".." entry, #142)
+    # 16=SCREENSAVER (.SAV, #221 reused gear slot)
+    # App-owned NOTEPAD/ICONED/PAINT/BROWSER/VIEWER/TELNET/MAHJONG/SHELL icons
+    # live in GBAP headers and are loaded on demand by File Manager (#430).
     # NOTE (#198): icon_iconset removed - it was byte-identical to icon_app; .IST files
     # now show the .APP icon, shrinking DEFAULT.IST by one slot (the floppy AMSDOS reader
     # garbles the icon set above a size threshold). All slots >=14 shifted up by 1.
@@ -112,34 +120,34 @@ for png in assets/backdrops/*.png; do
     [ -e "build/$name.BDP" ] || python3 tools/png2backdrop.py "$png" "build/$name.BDP"
 done
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
-DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
+APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
 APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW # FORMREF (#420/#424/#426/#428): compact action diagnostic + dual embedded APP icon reference
 DATA_LOC=0x7A50 DIALOGS=1 WIDGETS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
-GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371/#373): demand stream + offline/proxy/GET-form support
+APP_ICON=apps/browser/icon.asm GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371/#373): demand stream + offline/proxy/GET-form support
 DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/BRSAVE.RAW # transient Browser .HTM source writer
-DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
-DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/MAHJONG.RAW # Kana Mahjong: solvable 144-tile Turtle game
+APP_ICON=apps/shell/icon.asm DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
+APP_ICON=apps/mahjong/icon.asm DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/MAHJONG.RAW # Kana Mahjong: solvable 144-tile Turtle game
 DATA_LOC=0x7000 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
                                    # and clip-aware wallpaper repaint path.
-APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
+APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 APP_PROBE=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
-DATA_LOC=0x6890 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
+APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" DATA_LOC=0x6890 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
                                    # gb_doc (DOCRO=1 omits Save/Save As); the in-page buffer is
                                    # text/fallback only, bigger pictures use the banked .PIC path.
                                    # File>Load + View>Fullscreen (#142/#144)
-DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
+APP_ICON=apps/notepad/icon.asm DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-APPDEFS="-DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: header-aware .APP picker; document lives in a borrowed app page
+APP_ICON=apps/iconed/icon.asm APPDEFS="-DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: header-aware .APP picker; document lives in a borrowed app page
                                    # the gb_doc/fullscreen code so the 6656-B icon-set buffer
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
 DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
                                    # via the shared gb_doc menu system (#142) -> build/CLOCK.RAW
-DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: custom File/Edit/View menus + picker
+APP_ICON="$GB_PAINT_DIR/assets/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x72B0 PICKER=1 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: app-owned icon, custom File/Edit/View menus + picker
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
