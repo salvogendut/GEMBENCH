@@ -114,7 +114,7 @@ done
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
 DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
-APP_ICON=apps/formref/icon.asm DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW # FORMREF (#420/#424/#426): compact action diagnostic + embedded APP icon reference
+APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW # FORMREF (#420/#424/#426/#428): compact action diagnostic + dual embedded APP icon reference
 DATA_LOC=0x7A50 DIALOGS=1 WIDGETS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
 GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371/#373): demand stream + offline/proxy/GET-form support
 DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/BRSAVE.RAW # transient Browser .HTM source writer
@@ -124,7 +124,7 @@ DATA_LOC=0x7000 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKT
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
                                    # and clip-aware wallpaper repaint path.
-APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x778A DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
+APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
 DATA_LOC=0x6890 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
@@ -134,7 +134,7 @@ DATA_LOC=0x6890 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/VIEWER.
 DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-APPDEFS="-DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x6410 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: header-aware .APP picker is a paged module; whole-file GBAP edit keeps the 6656-byte document buffer
+APPDEFS="-DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: header-aware .APP picker; document lives in a borrowed app page
                                    # the gb_doc/fullscreen code so the 6656-B icon-set buffer
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
 DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options

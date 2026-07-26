@@ -431,6 +431,7 @@ void gb_get_name(char *dst11);
 #define GB_PICEDIT_CHUNK 2
 #define GB_PICEDIT_WRITE 3
 #define GB_PICEDIT_NATIVE 4  /* canonical Mode-1 app buffer -> native display bytes (MSX) */
+#define GB_PICEDIT_NATIVE16 5 /* Screen-7 native blit; off=x|y<<8, save_len=w|h<<8 */
 #define gb_pic_edit_buf (*(volatile unsigned int *)0x134B)
 #define gb_pic_edit_off (*(volatile unsigned int *)0x134D)
 unsigned char gb_pic_open(void);

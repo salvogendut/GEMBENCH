@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""iconedit - Tk editor for GEOBENCH .IST sets, .SPR cursors, and .APP icons.
+"""iconedit - Tk editor for GEOBENCH .IST, .SPR, .APP, and icon .asm files.
 
 Edits Amstrad CPC Mode 1 bitmaps (4 colours, 4 pixels per byte) byte-for-byte
 compatible with tools/packicons.py and tools/png2spr.py — see
@@ -7,8 +7,13 @@ tools/test_iconed_codec.py for the encoding rules.
 
   * .IST  v2 icon set: header(16) + dir(count*4: off u16le, w_bytes u8, h u8)
           + bitmaps. Each icon keeps its own size; mixed sizes are allowed.
-  * .APP  GBAP v1 preamble: executable JP + metadata + one canonical 32x32
-          Mode-1 icon. Saving preserves every non-icon executable byte.
+  * .APP  GBAP v1/v2 preamble: executable JP + one canonical 32x32 Mode-1
+          icon and, in v2, an optional native Screen-7 icon. Saving preserves
+          every non-icon executable byte and unedited resource.
+  * .ASM  RASM icon source: one labelled Mode-1 or native MSX Screen-7 bitmap
+          with <label>_w and <label>_h dimensions. Mode 7 adds
+          <label>_mode equ 7 and packs two 4-bit pixels per byte. Four-colour
+          sources remain directly APP_ICON-compatible.
   * .SPR  cursor sprite: 256 bytes = 4 phases of 4x16 bytes (d0, m0, d2, m2).
           We edit a single 16x16 logical grid (pen 0 = transparent) and
           regenerate d0/m0/d2/m2 on save (d2/m2 are the +2 px pre-shift).
@@ -17,7 +22,7 @@ Multiple sets can be open at once, each in its own window (File > Open in New
 Window), so you can Copy/Paste Icon between two sets side by side.
 
 Run:
-    python3 tools/iconedit.py [--platform msx2] [file.IST | file.SPR | file.APP]
+    python3 tools/iconedit.py [--platform msx2] [file.IST | file.SPR | file.APP | icon.asm]
 
 All .IST files use the same canonical CPC Mode-1 encoding. --platform msx2 only
 selects the V9938 hardware-sprite cursor format for .SPR files (66 bytes,
@@ -27,11 +32,15 @@ cursor instead.
 """
 import json
 import os
+import re
 import struct
 import sys
 import tempfile
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+
+from embed_app_icon import (CODEC_MODE1, CODEC_SCREEN7, ICON_H, ICON_WB,
+                            parse_resources)
 
 # --- portable .IST pixel packing: canonical CPC Mode 1 on every target --------
 # PLATFORM only selects the .SPR cursor codec below; it never changes .IST data.
@@ -65,6 +74,28 @@ def encode_icon(grid, wbytes, h):
                 b = set_pixel(b, i, grid[y][bx * 4 + i])
             out[y * wbytes + bx] = b
     return bytes(out)
+
+
+def decode_icon16(data, off, wbytes, h):
+    """Native Screen-7 4bpp: high nibble left, low nibble right."""
+    grid = [[0] * (wbytes * 2) for _ in range(h)]
+    for y in range(h):
+        for bx in range(wbytes):
+            value = data[off + y * wbytes + bx]
+            grid[y][bx * 2] = value >> 4
+            grid[y][bx * 2 + 1] = value & 0x0F
+    return grid
+
+
+def encode_icon16(grid, wbytes, h):
+    out = bytearray(wbytes * h)
+    for y in range(h):
+        for bx in range(wbytes):
+            out[y * wbytes + bx] = (
+                (grid[y][bx * 2] << 4) | grid[y][bx * 2 + 1]
+            )
+    return bytes(out)
+
 
 def shift_grid(grid, dx, dy):
     """Move a pixel grid by (dx, dy), clipping overflow and clearing edges."""
@@ -222,55 +253,253 @@ def save_ist(path, icons):
         f.write(directory)
         f.write(blob)
 
+# --- canonical RASM icon source --------------------------------------------
+
+ASM_EQU_RE = re.compile(
+    r"^([A-Za-z_][A-Za-z0-9_]*)_(w|h|mode)\s+equ\s+(\S+)$",
+    re.IGNORECASE)
+ASM_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+ASM_LABEL_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):?$")
+ASM_DB_RE = re.compile(r"^db\s+(.+)$", re.IGNORECASE)
+
+
+def _asm_int(text):
+    text = text.strip()
+    if text.startswith(("#", "$")):
+        value = int(text[1:], 16)
+    elif text.lower().startswith("0x"):
+        value = int(text[2:], 16)
+    else:
+        value = int(text, 10)
+    return value
+
+
+def asm_label_from_path(path):
+    """Derive a RASM-safe label from a new source file's basename."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    label = re.sub(r"[^A-Za-z0-9_]", "_", stem)
+    if not label:
+        label = "appicon"
+    if label[0].isdigit():
+        label = "icon_" + label
+    return label
+
+
+def load_asm_icon(path):
+    widths = {}
+    heights = {}
+    modes = {}
+    bare_labels = []
+    bitmap = bytearray()
+
+    with open(path, encoding="ascii") as source:
+        for lineno, raw in enumerate(source, 1):
+            code = raw.split(";", 1)[0].strip()
+            if not code:
+                continue
+            match = ASM_EQU_RE.fullmatch(code)
+            if match:
+                label, kind, value_text = match.groups()
+                try:
+                    value = _asm_int(value_text)
+                except ValueError as error:
+                    raise ValueError(
+                        f"{path}:{lineno}: invalid {kind} value {value_text!r}"
+                    ) from error
+                kind = kind.lower()
+                dimensions = widths if kind == "w" else \
+                             heights if kind == "h" else modes
+                if label in dimensions:
+                    raise ValueError(f"{path}:{lineno}: duplicate {label}_{kind}")
+                dimensions[label] = value
+                continue
+            match = ASM_DB_RE.fullmatch(code)
+            if match:
+                operands = [operand.strip() for operand in match.group(1).split(",")]
+                if not operands or any(not operand for operand in operands):
+                    raise ValueError(f"{path}:{lineno}: malformed db directive")
+                for operand in operands:
+                    try:
+                        value = _asm_int(operand)
+                    except ValueError as error:
+                        raise ValueError(
+                            f"{path}:{lineno}: invalid byte {operand!r}"
+                        ) from error
+                    if not 0 <= value <= 255:
+                        raise ValueError(
+                            f"{path}:{lineno}: byte {operand!r} is outside 0..255"
+                        )
+                    bitmap.append(value)
+                continue
+            match = ASM_LABEL_RE.fullmatch(code)
+            if match:
+                bare_labels.append(match.group(1))
+
+    pairs = set(widths).intersection(heights)
+    labelled_pairs = [label for label in bare_labels if label in pairs]
+    if len(labelled_pairs) == 1:
+        label = labelled_pairs[0]
+    elif len(pairs) == 1:
+        label = next(iter(pairs))
+    elif not pairs:
+        raise ValueError(f"{path}: missing matching <label>_w and <label>_h")
+    else:
+        raise ValueError(f"{path}: contains more than one icon definition")
+
+    wbytes, height = widths[label], heights[label]
+    mode = modes.get(label, 1)
+    if mode not in (1, 7):
+        raise ValueError(f"{path}: unsupported icon packing mode {mode}")
+    if wbytes <= 0 or height <= 0:
+        raise ValueError(f"{path}: icon dimensions must be positive")
+    if mode == 7 and wbytes & 1:
+        raise ValueError(
+            f"{path}: Screen-7 width must be an even byte count "
+            "(four-pixel editor cells)"
+        )
+    expected = wbytes * height
+    if len(bitmap) != expected:
+        width_px = wbytes * (4 if mode == 1 else 2)
+        raise ValueError(
+            f"{path}: expected {expected} bitmap bytes for "
+            f"{width_px}x{height}, got {len(bitmap)}"
+        )
+    icon = {
+        "w": wbytes if mode == 1 else wbytes // 2,
+        "h": height,
+        "codec": mode,
+        "grid": decode_icon(bitmap, 0, wbytes, height) if mode == 1
+                else decode_icon16(bitmap, 0, wbytes, height),
+    }
+    return [icon], label
+
+
+def save_asm_icon(path, icons, label):
+    if len(icons) != 1:
+        raise ValueError("an icon ASM source contains exactly one icon")
+    if not label or not ASM_NAME_RE.fullmatch(label):
+        raise ValueError(f"invalid RASM label {label!r}")
+    mode = icons[0].get("codec", 1)
+    if mode not in (1, 7):
+        raise ValueError(f"unsupported icon packing mode {mode}")
+    icon = icons[0]
+    editor_wbytes, height = icon["w"], icon["h"]
+    if editor_wbytes <= 0 or height <= 0:
+        raise ValueError("icon dimensions must be positive")
+    if len(icon["grid"]) != height or any(
+            len(row) != editor_wbytes * 4 for row in icon["grid"]):
+        raise ValueError("icon grid does not match its dimensions")
+    colors = 4 if mode == 1 else 16
+    if any(not 0 <= pen < colors for row in icon["grid"] for pen in row):
+        raise ValueError(f"mode {mode} icon contains a pen outside 0..{colors - 1}")
+    wbytes = editor_wbytes if mode == 1 else editor_wbytes * 2
+    bitmap = encode_icon(icon["grid"], wbytes, height) if mode == 1 \
+             else encode_icon16(icon["grid"], wbytes, height)
+    width_px = editor_wbytes * 4
+
+    with open(path, "w", encoding="ascii", newline="\n") as target:
+        target.write(
+            f"; generated by GEOBENCH iconedit ({width_px}x{height} px)\n"
+        )
+        if mode == 7:
+            target.write(
+                f"{label + '_mode':<16}equ   7"
+                "            ; native MSX Screen-7 4bpp\n"
+            )
+        target.write(
+            f"{label + '_w':<16}equ   {wbytes}"
+            f"            ; width in packed bytes ({width_px}px)\n"
+        )
+        target.write(
+            f"{label + '_h':<16}equ   {height}"
+            "            ; height in rows\n"
+        )
+        target.write(f"{label}\n")
+        for row in range(height):
+            start = row * wbytes
+            values = ",".join(f"#{value:02X}"
+                              for value in bitmap[start:start + wbytes])
+            target.write(f"                db    {values}\n")
+
 # --- embedded .APP icon ----------------------------------------------------
 
-APP_MAGIC = b"GBAP"
-APP_VERSION = 1
-APP_CODEC_MODE1 = 1
 APP_ICON_OFF = 16
-APP_ICON_WB = 8
-APP_ICON_H = 32
+APP_ICON_WB = ICON_WB
+APP_ICON_H = ICON_H
 APP_ICON_LEN = APP_ICON_WB * APP_ICON_H
-APP_ENTRY = 0x4000 + APP_ICON_OFF + APP_ICON_LEN
 
 
 def load_app_icon(path):
     data = bytearray(open(path, "rb").read())
-    valid = (
-        len(data) >= APP_ICON_OFF + APP_ICON_LEN
-        and data[0] == 0xC3
-        and data[1] == (APP_ENTRY & 0xFF)
-        and data[2] == (APP_ENTRY >> 8)
-        and data[3:7] == APP_MAGIC
-        and data[7] == APP_VERSION
-        and data[8] == APP_CODEC_MODE1
-        and data[9] == APP_ICON_WB
-        and data[10] == APP_ICON_H
-        and struct.unpack_from("<H", data, 11)[0] == APP_ICON_LEN
-        and struct.unpack_from("<H", data, 13)[0] == APP_ICON_OFF
-    )
-    if not valid:
-        raise ValueError(f"{path}: application has no editable GBAP v1 icon")
-    icon = {
-        "w": APP_ICON_WB,
-        "h": APP_ICON_H,
-        "grid": decode_icon(data, APP_ICON_OFF, APP_ICON_WB, APP_ICON_H),
-    }
-    return [icon], data
+    try:
+        _, resources = parse_resources(data)
+    except ValueError as error:
+        raise ValueError(f"{path}: application has no editable GBAP icon") from error
+    icons = []
+    for resource in resources:
+        codec = resource["codec"]
+        width = resource["wbytes"]
+        height = resource["height"]
+        offset = resource["offset"]
+        if codec == CODEC_MODE1:
+            grid = decode_icon(data, offset, width, height)
+            editor_width = width
+        elif codec == CODEC_SCREEN7:
+            grid = decode_icon16(data, offset, width, height)
+            editor_width = width // 2
+        else:
+            continue
+        icons.append({
+            "w": editor_width,
+            "h": height,
+            "codec": codec,
+            "offset": offset,
+            "packed_w": width,
+            "grid": grid,
+        })
+    if not icons:
+        raise ValueError(f"{path}: GBAP preamble has no editable icon resource")
+    return icons, data
 
 
 def save_app_icon(path, icons, data):
-    if len(icons) != 1:
-        raise ValueError("an APP preamble contains exactly one icon")
-    bitmap = encode_icon(icons[0]["grid"], APP_ICON_WB, APP_ICON_H)
-    data[APP_ICON_OFF:APP_ICON_OFF + APP_ICON_LEN] = bitmap
+    _, resources = parse_resources(data)
+    if len(icons) != len(resources):
+        raise ValueError("APP icon resource count changed")
+    for icon, resource in zip(icons, resources):
+        codec = resource["codec"]
+        if icon.get("codec", codec) != codec:
+            raise ValueError("APP icon resource codec changed")
+        if codec == CODEC_MODE1:
+            bitmap = encode_icon(icon["grid"], resource["wbytes"],
+                                 resource["height"])
+        elif codec == CODEC_SCREEN7:
+            bitmap = encode_icon16(icon["grid"], resource["wbytes"],
+                                   resource["height"])
+        else:
+            raise ValueError(f"unsupported APP icon codec {codec}")
+        start = resource["offset"]
+        data[start:start + resource["length"]] = bitmap
     with open(path, "wb") as target:
         target.write(data)
 
 # --- palette ----------------------------------------------------------------
 
-PEN_RGB = ["#000080", "#ffffff", "#000000", "#ff0000"]
-PEN_NAME = ["blue", "white", "black", "red"]
+# The Screen-7 extension entries mirror tools/picconv.py and
+# lib/msx/screen7.asm. Entries 0..3 remain the configurable UI roles; these RGB
+# values show the stock GEOBENCH palette in the editor.
+PEN_RGB = [
+    "#000080", "#ffffff", "#000000", "#ff0000",
+    "#00ff00", "#0000ff", "#ffff00", "#ff00ff",
+    "#00ffff", "#ff9200", "#ff9292", "#0092ff",
+    "#92ff00", "#9200ff", "#929292", "#92ff92",
+]
+PEN_NAME = [
+    "blue", "white", "black", "red",
+    "green", "bright blue", "yellow", "magenta",
+    "cyan", "orange", "pink", "sky blue",
+    "lime", "violet", "gray", "mint",
+]
 
 # Copy/Paste Icon share this file so a SECOND iconedit window can paste an icon
 # copied in the first - the workflow for moving an icon between two .IST sets.
@@ -339,8 +568,9 @@ class IconEditor(tk.Toplevel):
 
         self.icons = []         # list of {"w","h","grid"}
         self.path = None
-        self.mode = None        # "IST", "APP", "SPR" (CPC) or "MSPR" (MSX2)
+        self.mode = None        # "IST", "ASM", "APP", "SPR" (CPC), or "MSPR"
         self.app_data = None    # complete executable, preserved around APP icon edits
+        self.asm_label = None   # source symbol for one-icon "ASM" documents
         self.msx_hotspot = (1, 0)   # hotspot for a "MSPR" sprite (x, y)
         self.index = 0
         self.scale = 24
@@ -367,6 +597,10 @@ class IconEditor(tk.Toplevel):
         menubar = tk.Menu(self)
         m_file = tk.Menu(menubar, tearoff=0)
         m_file.add_command(label="New IST...", command=self._new_ist)
+        m_file.add_command(label="New 4-color APP Icon ASM",
+                           command=lambda: self._new_app_asm(CODEC_MODE1))
+        m_file.add_command(label="New 16-color APP Icon ASM",
+                           command=lambda: self._new_app_asm(CODEC_SCREEN7))
         m_file.add_command(label="New SPR", command=self._new_spr)
         m_file.add_command(label="Open...", accelerator="Ctrl+O", command=self.open_dialog)
         m_file.add_command(label="Open in New Window...", accelerator="Ctrl+Shift+O",
@@ -432,10 +666,10 @@ class IconEditor(tk.Toplevel):
         self.swatches = []
         sw_frame = ttk.Frame(right)
         sw_frame.pack(anchor="w", pady=2)
-        for p in range(4):
+        for p in range(16):
             sw = tk.Label(sw_frame, width=3, height=1, relief="raised",
                           bg=PEN_RGB[p], borderwidth=2)
-            sw.grid(row=p // 2, column=p % 2, padx=2, pady=2)
+            sw.grid(row=p // 4, column=p % 4, padx=2, pady=2)
             sw.bind("<Button-1>", lambda e, pen=p: self._select_pen(pen))
             self.swatches.append(sw)
         self.pen_label = ttk.Label(right, text="")
@@ -481,11 +715,11 @@ class IconEditor(tk.Toplevel):
     # -- windows -------------------------------------------------------------
 
     def open_new_window(self):
-        """Open an icon set / cursor / app in a SEPARATE editor window (so you can have
-        two sets side by side and Copy/Paste Icon between them)."""
+        """Open an icon source/set/cursor/app in a separate editor window."""
         p = filedialog.askopenfilename(
             title="Open in new window",
-            filetypes=[("Icon / cursor / app", "*.IST *.ist *.SPR *.spr *.APP *.app"),
+            filetypes=[("Icon / cursor / app",
+                        "*.IST *.ist *.SPR *.spr *.APP *.app *.ASM *.asm"),
                        ("All files", "*.*")])
         if p:
             IconEditor(self.master, p)        # a fresh window on the shared root
@@ -501,10 +735,28 @@ class IconEditor(tk.Toplevel):
         self.master.destroy()                 # File > Quit closes every window
 
     def _select_pen(self, p):
+        if p >= self._palette_size():
+            return
         self.pen.set(p)
         for i, sw in enumerate(self.swatches):
             sw.config(relief=("sunken" if i == p else "raised"))
         self.pen_label.config(text=f"Pen {p} ({PEN_NAME[p]})")
+
+    def _palette_size(self):
+        icon = self._cur()
+        return 16 if icon and icon.get("codec", CODEC_MODE1) == CODEC_SCREEN7 \
+            else 4
+
+    def _sync_palette(self):
+        size = self._palette_size()
+        if self.pen.get() >= size:
+            self.pen.set(2)
+        for index, swatch in enumerate(self.swatches):
+            if index < size:
+                swatch.grid(row=index // 4, column=index % 4, padx=2, pady=2)
+            else:
+                swatch.grid_remove()
+        self._select_pen(self.pen.get())
 
     def _set_scale(self, s):
         self.scale = max(4, min(48, s))
@@ -521,6 +773,24 @@ class IconEditor(tk.Toplevel):
         self.path = None
         self.mode = "IST"
         self.app_data = None
+        self.asm_label = None
+        self.index = 0
+        self.dirty = False
+        self.undo_stack.clear()
+        self._refresh_title()
+        self._redraw()
+
+    def _new_app_asm(self, codec):
+        self.icons = [{
+            "w": APP_ICON_WB,
+            "h": APP_ICON_H,
+            "codec": codec,
+            "grid": [[0] * (APP_ICON_WB * 4) for _ in range(APP_ICON_H)],
+        }]
+        self.path = None
+        self.mode = "ASM"
+        self.app_data = None
+        self.asm_label = None
         self.index = 0
         self.dirty = False
         self.undo_stack.clear()
@@ -533,6 +803,7 @@ class IconEditor(tk.Toplevel):
         self.path = None
         self.mode = "MSPR" if PLATFORM == 'msx2' else "SPR"
         self.app_data = None
+        self.asm_label = None
         self.msx_hotspot = (1, 0)
         self.index = 0
         self.dirty = False
@@ -542,8 +813,9 @@ class IconEditor(tk.Toplevel):
 
     def open_dialog(self):
         p = filedialog.askopenfilename(
-            title="Open icon set, cursor, or application",
-            filetypes=[("Icon / cursor / app", "*.IST *.ist *.SPR *.spr *.APP *.app"),
+            title="Open icon source, set, cursor, or application",
+            filetypes=[("Icon / cursor / app",
+                        "*.IST *.ist *.SPR *.spr *.APP *.app *.ASM *.asm"),
                        ("All files", "*.*")])
         if p:
             self.open_file(p)
@@ -552,9 +824,13 @@ class IconEditor(tk.Toplevel):
         try:
             ext = os.path.splitext(path)[1].lower()
             self.app_data = None
+            self.asm_label = None
             if ext == ".ist":
                 self.icons = load_ist(path)
                 self.mode = "IST"
+            elif ext == ".asm":
+                self.icons, self.asm_label = load_asm_icon(path)
+                self.mode = "ASM"
             elif ext == ".app":
                 self.icons, self.app_data = load_app_icon(path)
                 self.mode = "APP"
@@ -593,6 +869,8 @@ class IconEditor(tk.Toplevel):
         try:
             if self.mode == "IST":
                 save_ist(self.path, self.icons)
+            elif self.mode == "ASM":
+                save_asm_icon(self.path, self.icons, self.asm_label)
             elif self.mode == "APP":
                 save_app_icon(self.path, self.icons, self.app_data)
             elif self.mode == "MSPR":
@@ -610,13 +888,17 @@ class IconEditor(tk.Toplevel):
 
     def save_as(self):
         default_ext = ".APP" if self.mode == "APP" else \
+                      ".ASM" if self.mode == "ASM" else \
                       ".IST" if self.mode == "IST" else ".SPR"
         kinds = [("Application", "*.APP")] if self.mode == "APP" else \
+                [("Icon source", "*.ASM")] if self.mode == "ASM" else \
                 [("Icon set", "*.IST"), ("Cursor", "*.SPR")]
         p = filedialog.asksaveasfilename(
             defaultextension=default_ext,
             filetypes=kinds)
         if p:
+            if self.mode == "ASM" and self.asm_label is None:
+                self.asm_label = asm_label_from_path(p)
             self.path = p
             self.save()
 
@@ -690,6 +972,7 @@ class IconEditor(tk.Toplevel):
         if ic is None:
             return
         self.clipboard_icon = {"w": ic["w"], "h": ic["h"],
+                               "codec": ic.get("codec", CODEC_MODE1),
                                "grid": [row[:] for row in ic["grid"]]}
         self._clip_save()                            # so a second window can paste it
         self.status.config(text=f"Copied {ic['w']*4}x{ic['h']} icon")
@@ -704,16 +987,19 @@ class IconEditor(tk.Toplevel):
             return
         cb = self.clipboard_icon
         self._push_undo()
-        if self.mode == "SPR":
-            # cursor is a fixed 16x16 grid: drop the copy in top-left, clipped
+        if self.mode in ("SPR", "MSPR", "APP", "ASM"):
+            # Single-resource documents keep their dimensions: paste top-left,
+            # clipping or padding rather than producing an invalid file.
             for y in range(ic["h"]):
                 for x in range(ic["w"] * 4):
                     inside = y < cb["h"] and x < cb["w"] * 4
-                    ic["grid"][y][x] = cb["grid"][y][x] if inside else 0
+                    value = cb["grid"][y][x] if inside else 0
+                    ic["grid"][y][x] = min(value, self._palette_size() - 1)
         else:
             # IST icons keep their own size: replace this one wholesale
             ic["w"] = cb["w"]
             ic["h"] = cb["h"]
+            ic["codec"] = CODEC_MODE1
             ic["grid"] = [row[:] for row in cb["grid"]]
         self._touched()
         self.status.config(text=f"Pasted {cb['w']*4}x{cb['h']} icon")
@@ -902,6 +1188,7 @@ class IconEditor(tk.Toplevel):
         if ic is None:
             self.info_var.set("—")
             return
+        self._sync_palette()
         ox, oy = self._origin(ic)
         s = self.scale
         pw = ic["w"] * 4
@@ -1019,7 +1306,12 @@ class IconEditor(tk.Toplevel):
         if self.mode == "SPR":
             return f"cursor  ·  {w}x{h} px"
         if self.mode == "APP":
-            return f"application icon  ·  {w}x{h} px"
+            colors = 16 if ic.get("codec", 1) == CODEC_SCREEN7 else 4
+            return f"application icon  ·  {colors} colors  ·  {w}x{h} px  ·  {i + 1}/{n}"
+        if self.mode == "ASM":
+            label = self.asm_label or "new source"
+            colors = 16 if ic.get("codec", 1) == CODEC_SCREEN7 else 4
+            return f"icon source  ·  {label}  ·  {colors} colors  ·  {w}x{h} px"
         names = self._slot_names()
         name = f"{names[i]}  ·  " if names and i < len(names) else ""
         return f"slot {i}  ·  {name}{w}x{h} px  ·  {i + 1}/{n}"

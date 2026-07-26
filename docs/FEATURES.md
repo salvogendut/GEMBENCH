@@ -44,8 +44,9 @@ backdrop, dragging icons, opening apps and menus:
 - **ICONED** — an icon/cursor editor for `.IST` sets, `.SPR` cursors, and optional
   icons embedded in `GBAP` `.APP` files (magnified canvas, pen palette, Prev/Next,
   undo, New/Load/Save/Save As, View > Fullscreen). Its Load dialog hides legacy
-  `.APP` files that have no editable icon header. The Python editor supports the
-  same three formats.
+  `.APP` files that have no editable icon header. A v2 APP may carry portable
+  four-colour and MSX Screen-7 sixteen-colour variants; ICONED exposes both in
+  Screen 7. The Python editor also edits the canonical ASM sources directly.
 - **Paint** — a Mode-1 paint app: a canvas + toolchest (pencil, square, circle,
   flood fill, undo), a 4-ink palette and pencil width, New/Load/Save to the `.PIC`
   format (a versioned bitmap with its own size + palette), View > Fullscreen. Tool

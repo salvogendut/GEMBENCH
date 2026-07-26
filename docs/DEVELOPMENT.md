@@ -243,31 +243,35 @@ line in the pack assembly or stage it into the card distribution as appropriate)
 
 ### Icons embedded in applications
 
-A C application can opt into the versioned `GBAP` v1 executable preamble by
-passing `APP_ICON=path/to/icon.asm` to `tools/build_capp.sh`. The icon source must
-be a canonical 32x32 Mode-1 bitmap generated with `png2cpc.py`. The build links
-the application entry at `#4110`, writes a `JP #4110` at `#4000`, and places the
-16-byte metadata header plus 256-byte bitmap before the executable. Headerless
-applications keep the legacy `#4000` entry and generic or name-mapped `.IST`
-icon.
+A C application can opt into the versioned `GBAP` executable preamble by
+passing `APP_ICON=path/to/icon.asm` to `tools/build_capp.sh`. This retains the v1
+layout: a canonical 32x32 Mode-1 bitmap and application entry at `#4110`.
+`APP_ICON16=path/to/icon16.asm` adds an explicitly declared native Screen-7
+resource, selects the v2 directory layout, and relocates the entry to `#4320`.
+Headerless applications keep the legacy `#4000` entry and generic or
+name-mapped `.IST` icon. See [APP_ICON_FORMAT.md](APP_ICON_FORMAT.md).
 
-File Manager reads only the first 512 bytes of a visible generic `.APP`. A valid
-embedded icon is converted at draw time for CPC, MSX2, or PCW; an absent or
-invalid header falls back to the generic application icon. This uses no
-additional resident-kernel space. `FORMREF.APP` is the first reference:
+File Manager probes the first 1,024 bytes of a visible generic `.APP`. CPC, PCW,
+and MSX Screen 6 select the portable fallback; MSX Screen 7 selects the
+sixteen-colour resource when present. An absent or invalid header falls back to
+the generic application icon. The native blit operation is compiled only into
+the Screen-7 kernel. `FORMREF.APP` is the dual-icon reference:
 
 ```sh
 tools/png2cpc.py assets/daruma.png apps/formref/icon.asm appicon 32x32
-APP_ICON=apps/formref/icon.asm DATA_LOC=0x6200 \
+APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm \
+  DATA_LOC=0x6200 \
   tools/build_capp.sh apps/formref build/FORMREF.RAW
 ```
 
-Both `tools/iconedit.py` and `ICONED.APP` recognize the embedded bitmap as a
-single-icon document and preserve the executable bytes when saving. The host
-editor handles any application size. `ICONED.APP` currently uses its existing
-6656-byte whole-document buffer, so runtime editing is limited to icon-bearing
-applications that fit that buffer; larger applications still display their
-embedded icon and can be edited with the host tool. Its paged
+Both `tools/iconedit.py` and `ICONED.APP` preserve executable bytes and
+unselected resources when saving. The host editor opens either `APP_ICON=` ASM
+source directly, offers separate New 4-color/New 16-color source commands, and
+uses Previous/Next for the two resources in a v2 APP. `ICONED.APP` uses the
+7,168-byte low-RAM transfer buffer for its whole document; MSX Screen 7 exposes
+both resources and the other modes expose the portable fallback. Larger
+applications still display their embedded icon and can be edited with the host
+tool. Its paged
 `GBAPICK.MOD` Open dialog uses the resident chunk readers on MSX and PCW. The
 CPC build instead probes with a bounded ordinary load into the shared
 module-data buffer, avoiding a recursive chunk-module load over the running

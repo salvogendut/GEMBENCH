@@ -1,11 +1,9 @@
 ;; pack_comp2.asm - COMPANION floppy, pass 2 of 4 (#250). See pack_comp1.asm header.
 ;;
-;; Pass 2: the first half of the screensaver set.
+;; Pass 2: the first half of the screensaver set. SQUARES stays on Main as the
+;; default and is not duplicated here; that block now carries PAINT.IST in pass 1.
 ;; The .SAV names mirror tools/stage_dist.sh (build/<NAME>.RAW -> <NAME>.SAV).
                 org   #4000
-cir_img         incbin "../build/SQUARES.RAW"   ; SQUARES.SAV (#219/#281) - also on Main as the
-cir_imgend                                      ; default idle saver; here so FM-B/Settings list all
-                save  "SQUARES.SAV",cir_img,cir_imgend-cir_img,DSK,"build/companion.dsk"
 dec_img         incbin "../build/DECO.RAW"      ; art-deco panels
 dec_imgend
                 save  "DECO.SAV",dec_img,dec_imgend-dec_img,DSK,"build/companion.dsk"
