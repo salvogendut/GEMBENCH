@@ -16,15 +16,18 @@
 ; ---------------------------------------------------------------------------
 
 ; bank_set: A = segment number -> map it at #4000-#7FFF and record it.
-; Preserves the CPC contract (clobbers A,B,C at most).
+; Preserve A as the CPC and PCW implementations naturally do; callers can map
+; and then pass the same page value to wm_free_page. PUT_P1 may clobber B/C.
 bank_set
                 ld    (bank_cur),a
+                push  af
                 push  hl
                 push  de
                 ld    hl,(MSX_PUTP1)
                 call  jp_hl
                 pop   de
                 pop   hl
+                pop   af
                 ret
 jp_hl           jp    (hl)
 
