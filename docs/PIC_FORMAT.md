@@ -50,7 +50,7 @@ The generated lookup tables are reversible. A legacy v2 file tagged with mode
 `6` is normalized to canonical mode `1` when loaded into a bank on MSX2 or PCW.
 New portable files must use mode `1`; mode `7` is reserved for the sixteen-colour
 extension. Paint keeps documents in a borrowed bank and transfers only the active
-10x10 edit tile into its app page. MSX Screen-7 Paint can create and edit mode `7`
+20x20 edit tile into its app page. MSX Screen-7 Paint can create and edit mode `7`
 tiles directly; the other targets retain canonical mode `1`.
 
 `tools/picconv.py` defaults to portable four-colour output. Use `--colors 16`
