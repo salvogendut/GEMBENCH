@@ -311,92 +311,8 @@ fst_done:
         ; --- fs WRITE tests (#331 Phase 5b): create, delete, and a
         ; chunked multi-extent copy (2KB chunks through FS_LOAD_OFS +
         ; append) - the host extracts the results from the .dsk after.
-        ld hl,n_save            ; 1. create PCWSAVE.TST
-        ld de,fs_req_name
-        ld bc,11
-        ldir
-        ld hl,msg_wr
-        ld (fs_save_src),hl
-        ld hl,msg_wr_len
-        ld (fs_save_len),hl
-        xor a
-        ld (FS_XFLAGS),a
-        call fs_save_file
-        jp nc,wt_fail
-        ld hl,n_del             ; 2. create then delete PCWDEL.TST
-        ld de,fs_req_name
-        ld bc,11
-        ldir
-        ld hl,msg_wr
-        ld (fs_save_src),hl
-        ld hl,msg_wr_len
-        ld (fs_save_len),hl
-        call fs_save_file
-        jp nc,wt_fail
-        ld hl,n_del
-        ld de,fs_req_name
-        ld bc,11
-        ldir
-        call fs_delete_file
-        jp nc,wt_fail
-        ld hl,0                 ; 3. chunked copy BIGTEST.BIN -> COPYOUT.BIN
-        ld (ctofs),hl
-        ld a,1
-        ld (ctfirst),a
-ct_loop:
-        ld hl,n_big
-        ld de,fs_req_name
-        ld bc,11
-        ldir
-        ld hl,(ctofs)
-        ld (FS_LOAD_OFS),hl
-        xor a
-        ld (FS_LOAD_OFS+2),a
-        ld a,1                  ; chunk-read
-        ld (FS_XFLAGS),a
-        ld hl,#6000
-        ld (fs_load_dst),hl
-        ld hl,2048
-        ld (fs_load_max),hl
-        call fs_load_file
-        jp nc,wt_fail
-        ld hl,(fs_ent_size)
-        ld (ctgot),hl
-        ld a,h
-        or l
-        jr z,ct_done            ; EOF
-        ld hl,n_out
-        ld de,fs_req_name
-        ld bc,11
-        ldir
-        ld a,(ctfirst)
-        or a
-        jr nz,ct_create
-        ld a,2                  ; append
-        jr ct_fl
-ct_create:
-        xor a                   ; create/truncate
-ct_fl:
-        ld (FS_XFLAGS),a
-        ld hl,#6000
-        ld (fs_save_src),hl
-        ld hl,(ctgot)
-        ld (fs_save_len),hl
-        call fs_save_file
-        jp nc,wt_fail
-        xor a
-        ld (ctfirst),a
-        ld hl,(ctofs)
-        ld de,(ctgot)
-        add hl,de
-        ld (ctofs),hl
-        ld hl,(ctgot)           ; short chunk = final
-        ld de,2048
-        or a
-        sbc hl,de
-        jr c,ct_done
-        jp ct_loop
-ct_done:
+        call wt_run
+        jr nc,wt_fail
         ld b,3
         ld c,0
         call set_text_pens
@@ -453,6 +369,8 @@ db_ncmp:
         ld a,(fs_cur_drive)     ; and the browse drive must survive
         cp 2
         jp nz,db_fail
+        call wt_run             ; exercise writes on the mounted B geometry
+        jp nc,db_fail
         ld a,#B0                ; B-stage verdict: pass
         ld (#0F03),a
         ld b,3
@@ -520,6 +438,98 @@ tb_put:
         ld hl,typebuf
         call draw_text
         jr tloop
+
+; wt_run: exercise create, delete, chunk-read, append, and a second extent on
+; the currently mounted disk. CF set on success. The host verifies the files.
+wt_run:
+        ld hl,n_save            ; 1. create PCWSAVE.TST
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld hl,msg_wr
+        ld (fs_save_src),hl
+        ld hl,msg_wr_len
+        ld (fs_save_len),hl
+        xor a
+        ld (FS_XFLAGS),a
+        call fs_save_file
+        ret nc
+        ld hl,n_del             ; 2. create then delete PCWDEL.TST
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld hl,msg_wr
+        ld (fs_save_src),hl
+        ld hl,msg_wr_len
+        ld (fs_save_len),hl
+        call fs_save_file
+        ret nc
+        ld hl,n_del
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        call fs_delete_file
+        ret nc
+        ld hl,0                 ; 3. chunked copy BIGTEST.BIN -> COPYOUT.BIN
+        ld (ctofs),hl
+        ld a,1
+        ld (ctfirst),a
+ct_loop:
+        ld hl,n_big
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld hl,(ctofs)
+        ld (FS_LOAD_OFS),hl
+        xor a
+        ld (FS_LOAD_OFS+2),a
+        ld a,1                  ; chunk-read
+        ld (FS_XFLAGS),a
+        ld hl,#6000
+        ld (fs_load_dst),hl
+        ld hl,2048
+        ld (fs_load_max),hl
+        call fs_load_file
+        ret nc
+        ld hl,(fs_ent_size)
+        ld (ctgot),hl
+        ld a,h
+        or l
+        jr z,ct_done            ; EOF
+        ld hl,n_out
+        ld de,fs_req_name
+        ld bc,11
+        ldir
+        ld a,(ctfirst)
+        or a
+        jr nz,ct_create
+        ld a,2                  ; append
+        jr ct_fl
+ct_create:
+        xor a                   ; create/truncate
+ct_fl:
+        ld (FS_XFLAGS),a
+        ld hl,#6000
+        ld (fs_save_src),hl
+        ld hl,(ctgot)
+        ld (fs_save_len),hl
+        call fs_save_file
+        ret nc
+        xor a
+        ld (ctfirst),a
+        ld hl,(ctofs)
+        ld de,(ctgot)
+        add hl,de
+        ld (ctofs),hl
+        ld hl,(ctgot)           ; short chunk = final
+        ld de,2048
+        or a
+        sbc hl,de
+        jr c,ct_done
+        jp ct_loop
+ct_done:
+        scf
+        ret
 
 ; fill_t: A = pen, B = x, C = y, D = w, E = h -> fill_block
 fill_t:

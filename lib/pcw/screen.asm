@@ -331,7 +331,7 @@ sv_nc
                 ld    a,(sb_rows)
                 dec   a
                 ld    (sb_rows),a
-                jr    nz,sv_loop
+                jp    nz,sv_loop
                 ret
 
 restore_block
@@ -368,7 +368,7 @@ rs_nc
                 ld    a,(sb_rows)
                 dec   a
                 ld    (sb_rows),a
-                jr    nz,rs_loop2
+                jp    nz,rs_loop2
                 ret
 
 ; restore_pic_block: translate canonical CPC Mode-1 picture bytes directly to

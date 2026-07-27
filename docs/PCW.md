@@ -93,12 +93,12 @@ reports the size in the top bar.
 ## Storage
 
 CP/M 2.2 with a flat root. CF2 180K media (40 tracks, 1K blocks, 64 directory
-entries) is read/write: save/truncate, append (`FS_XFLAGS` bit1), delete, and
+entries) and CF2DD 720K media (80 tracks, two sides, 2K blocks, 256 directory
+entries) are read/write: save/truncate, append (`FS_XFLAGS` bit1), delete, and
 chunked reads (`FS_XFLAGS` bit0 + 24-bit `FS_LOAD_OFS`) all work, so any-size
-drag-copy and the Viewer's big pictures work. CF2DD 720K media (80 tracks,
-two sides, 2K blocks, 256 directory entries) is readable in drive B; writes
-are rejected until the allocator supports block numbers above 255. Sizes are
-128-byte CP/M records (`#1A`-padded tails).
+drag-copy, Paint saves, and the Viewer's big pictures work. The CF2DD allocator
+uses the format's 16-bit block entries. Sizes are 128-byte CP/M records
+(`#1A`-padded tails).
 
 The 1985 emulator detects an EDSK image's track and side geometry when it is
 inserted. GEOBENCH independently reads the PCW disc specification at track 0,
@@ -116,13 +116,12 @@ directory layout. `k_drive_poll` uses a single-sector probe for media presence.
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
   WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, MAHJONG.APP,
   WELCOME.TXT.
-- **EXTRAS.DSK** (720K read-only CF2DD data): every portable picture from
+- **EXTRAS.DSK** (720K CF2DD data): every portable picture from
   `assets/pictures`, stored byte-for-byte in canonical GBPC v2 format, plus
   GB-PAINT (`PAINT.APP` and `PAINT.IST`), GB-BASIC (`BASIC.APP`, its runtime and
   engine), the BASIC examples, and the other verified portable PCW savers
-  (`ANT`, `DECO`, and `XMATRIX`). Use it in drive B to browse pictures or run
-  the applications and savers. Save edited pictures and programs to writable
-  CF2 media; the PCW CF2DD backend is currently read-only.
+  (`ANT`, `DECO`, and `XMATRIX`). Use it in drive B to browse pictures, run the
+  applications and savers, and save edited pictures or programs.
 
 ## PCW Time Sync With PerryFi / PerryNet
 
@@ -188,8 +187,6 @@ it. HTTPS is not supported because the PCW side has no TLS implementation.
   PCW. They open PerryNet sockets in host-pulled receive mode (`TCP_RECV`) so
   network data is only transmitted while the app is actively polling serial; a
   shared direct network-module backend remains a later target.
-- Writes to CF2DD 720K media. Reading, directory enumeration, free-space
-  reporting, 2K blocks, and 16-bit allocation entries are supported.
 
 ## The real uPD765 (rules the emulator does not enforce)
 

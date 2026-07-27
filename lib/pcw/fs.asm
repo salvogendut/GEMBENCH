@@ -26,8 +26,8 @@
 ;     read the content's own headers for exact geometry)
 ;
 ; CP/M is FLAT: no directories. fs_sysdir_enter/leave are no-ops and system
-; files live in the root (the "ship content flat" model). CF2 is read/write;
-; CF2DD is mounted read-only until the allocator supports >255 blocks.
+; files live in the root (the "ship content flat" model). CF2 and CF2DD are
+; both read/write; the allocator handles 8-bit and 16-bit allocation entries.
 ;
 ; Sector cache: one sector in fs_secbuf (#1800), invalidated at every public
 ; entry point - fs_secbuf is aliased by other users (the drag ghost's
@@ -641,9 +641,6 @@ fs_load_sys
 
 ; fs_delete_file: free every extent entry of fs_req_name (user 0). CF = deleted.
 fs_delete_file
-                ld    a,(fsp_al16)            ; keep CF2DD consistently read-only
-                or    a
-                ret   nz
                 ld    hl,#FFFF
                 ld    (fsp_cslsn),hl
                 ld    hl,0
@@ -685,9 +682,6 @@ fdl_fail
 ; round up to the next record (the shared contract already treats fs sizes
 ; as advisory - loaders read the content's own headers).
 fs_save_file
-                ld    a,(fsp_al16)            ; CF2DD is mounted read-only for now
-                or    a                       ; (16-bit allocation writes are separate)
-                ret   nz
                 ld    hl,#FFFF
                 ld    (fsp_cslsn),hl
                 ld    a,(FS_XFLAGS)
@@ -807,9 +801,14 @@ fsv_fail
                 ret
 
 ; fsv_putrec: write the record at index fsv_rc from (fsv_src): allocate its
-; block if needed, read-modify-write the sector, #1A-pad a short tail. CF ok.
+; block if needed, read-modify-write the sector, #1A-pad a short tail. CF2
+; has 8 records per 1K block and byte ALs; CF2DD has 16 records per 2K block
+; and word ALs. CF ok.
 fsv_putrec
-                ld    a,(fsv_rc)               ; block index within extent = rc/8
+                ld    a,(fsp_al16)
+                or    a
+                jr    nz,fpr_word
+                ld    a,(fsv_rc)               ; CF2 AL byte index = rc/8
                 srl   a
                 srl   a
                 srl   a
@@ -817,22 +816,61 @@ fsv_putrec
                 ld    d,0
                 ld    hl,fsv_al
                 add   hl,de
-                ld    a,(hl)
+                ld    e,(hl)
+                ld    d,0
+                ld    a,e
                 or    a
                 jr    nz,fpr_haveblk
                 push  hl
-                call  fsw_alloc                ; claim a free block
+                call  fsw_alloc                ; HL = claimed free block
+                ex    de,hl
                 pop   hl
                 ret   nc                       ; disc full
-                ld    (hl),a
-fpr_haveblk
-                ld    l,a                      ; lsn = block*2 (+1 for records 4-7)
-                ld    h,0
-                add   hl,hl
-                ld    a,(fsv_rc)
-                and   4
-                jr    z,fpr_s0
+                ld    (hl),e
+                jr    fpr_haveblk
+fpr_word
+                ld    a,(fsv_rc)               ; CF2DD word offset = (rc/16)*2
+                srl   a
+                srl   a
+                srl   a
+                and   #FE
+                ld    e,a
+                ld    d,0
+                ld    hl,fsv_al
+                add   hl,de
+                ld    e,(hl)
                 inc   hl
+                ld    d,(hl)
+                dec   hl
+                ld    a,d
+                or    e
+                jr    nz,fpr_haveblk
+                push  hl
+                call  fsw_alloc                ; HL = claimed free block
+                ex    de,hl
+                pop   hl
+                ret   nc                       ; disc full
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d
+fpr_haveblk
+                ex    de,hl                    ; lsn = block * sectors-per-block
+                add   hl,hl
+                ld    a,(fsp_al16)
+                or    a
+                jr    z,fpr_blocklsn
+                add   hl,hl
+fpr_blocklsn
+                ld    a,(fsv_rc)               ; sector = (rc/4) & (spb-1)
+                srl   a
+                srl   a
+                ld    e,a
+                ld    a,(fsp_spb)
+                dec   a
+                and   e
+                ld    e,a
+                ld    d,0
+                add   hl,de
 fpr_s0
                 push  hl                       ; RMW: a fresh block reads whatever
                 call  fsp_rdsec                ; the format left - harmless, the
@@ -953,11 +991,12 @@ ffl_full
 ; --- block allocation ------------------------------------------------------------
 
 ; fsw_bitmap: build the used-block bitmap from the directory (every user's
-; files count - foreign blocks must not be clobbered).
+; files count - foreign blocks must not be clobbered). CF2 ALs are bytes;
+; CF2DD ALs are little-endian words.
 fsw_bitmap
                 ld    hl,fsw_bmap
                 ld    de,fsw_bmap+1
-                ld    bc,21
+                ld    bc,44
                 ld    (hl),0
                 ldir
                 ld    a,(fsp_dirblks)          ; the directory's own blocks
@@ -965,7 +1004,8 @@ fsw_bitmap
                 ld    c,0
 fwb_dir
                 push  bc
-                ld    a,c
+                ld    l,c
+                ld    h,0
                 call  fsw_setbit
                 pop   bc
                 inc   c
@@ -984,41 +1024,66 @@ fwb_loop
                 jr    z,fwb_loop
                 ld    de,16
                 add   hl,de
+                ld    a,(fsp_al16)
+                or    a
+                jr    nz,fwb_words
                 ld    b,16
 fwb_als
                 ld    a,(hl)
+                inc   hl
                 or    a
                 jr    z,fwb_next
                 push  hl
                 push  bc
+                ld    l,a
+                ld    h,0
                 call  fsw_setbit
                 pop   bc
                 pop   hl
 fwb_next
-                inc   hl
                 djnz  fwb_als
                 jr    fwb_loop
+fwb_words
+                ld    b,8
+fwb_wals
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)
+                inc   hl
+                ld    a,d
+                or    e
+                jr    z,fwb_wnext
+                push  hl
+                push  bc
+                ex    de,hl
+                call  fsw_setbit
+                pop   bc
+                pop   hl
+fwb_wnext
+                djnz  fwb_wals
+                jr    fwb_loop
 
-; fsw_setbit: A = block number -> mark used. Clobbers A,BC,DE,HL.
+; fsw_setbit: HL = block number -> mark used. Clobbers A,BC,DE,HL.
 fsw_setbit
                 call  fsw_bitpos
                 or    (hl)
                 ld    (hl),a
                 ret
 
-; fsw_bitpos: A = block -> HL = bitmap byte, A = its bit mask.
+; fsw_bitpos: HL = block -> HL = bitmap byte, A = its bit mask.
 fsw_bitpos
-                ld    c,a
-                srl   a
-                srl   a
-                srl   a
-                ld    e,a
-                ld    d,0
-                ld    hl,fsw_bmap
-                add   hl,de
-                ld    a,c
+                ld    a,l
                 and   7
-                ld    b,a
+                ld    c,a
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                srl   h
+                rr    l
+                ld    de,fsw_bmap
+                add   hl,de
+                ld    b,c
                 ld    a,1
                 inc   b
 fbp_sh
@@ -1027,28 +1092,32 @@ fbp_sh
                 add   a,a
                 jr    fbp_sh
 
-; fsw_alloc: find + claim a free block -> A. CF ok, NC = disc full.
+; fsw_alloc: find + claim a free block -> HL. CF ok, NC = disc full.
 fsw_alloc
-                ld    a,(fsp_nblocks)          ; <= 175, fits a byte
-                ld    b,a
-                ld    c,0
+                ld    bc,0
 fwa_loop
-                ld    a,c
+                ld    hl,(fsp_nblocks)
+                or    a
+                sbc   hl,bc
+                jr    z,fwa_full
+                ld    h,b
+                ld    l,c
                 push  bc
                 call  fsw_bitpos
                 and   (hl)
                 pop   bc
                 jr    z,fwa_take
-                inc   c
-                djnz  fwa_loop
+                inc   bc
+                jr    fwa_loop
+fwa_full
                 or    a
                 ret
 fwa_take
-                ld    a,c
-                push  bc
+                ld    h,b
+                ld    l,c
+                push  hl
                 call  fsw_setbit
-                pop   bc
-                ld    a,c
+                pop   hl
                 scf
                 ret
 
@@ -1165,6 +1234,7 @@ fsp_rdsec
 frs_load
                 ld    (fsp_cslsn),hl
                 call  fsp_lsn2ts
+frs_have_ts
                 ld    hl,fs_secbuf
                 call  pcwfdc_read
                 ret   c
@@ -1311,7 +1381,7 @@ fsv_ext         db    0
 fsv_app         db    0
 fsv_slot        db    0
 fsv_al          ds    16
-fsw_bmap        ds    22
+fsw_bmap        ds    45          ; up to 360 blocks on an 80-track CF2DD disc
 fslf_blocks     equ   #1490        ; 16-byte extent AL copy (documented low-RAM home)
 fs_dir_clus     ds    4            ; dummy: k_copy_begin/end context swap expects it
 

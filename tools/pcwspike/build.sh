@@ -56,12 +56,16 @@ EOF
 
 printf 'CP/M FS READ OK\r\n' > build/HELLO.TXT
 python3 -c "open('build/BIGTEST.BIN','wb').write(bytes((i*7+13)&255 for i in range(20000)))"
+python3 -c "open('build/DDPAD.BIN','wb').write(bytes((i*11+5)&255 for i in range(480*1024)))"
 python3 tools/mkpcwdsk.py build/pcwspike.dsk \
     --boot build/pcwboot.bin --sys build/pcwspike.bin --load 0x2000 \
     --add build/HELLO.TXT --add assets/WELCOME.TXT --add build/DEFAULT.FNT \
     --add build/BIGTEST.BIN
 printf 'A file that lives on drive B\r\n' > build/BFILE.TXT
-python3 tools/mkpcwdsk.py build/pcwb.dsk --add build/BFILE.TXT
+python3 tools/mkpcwdsk.py build/pcwb.dsk \
+    --add build/BFILE.TXT --add build/BIGTEST.BIN
+python3 tools/mkpcwdsk.py build/pcwbdd.dsk --type cf2dd \
+    --add build/BFILE.TXT --add build/DDPAD.BIN --add build/BIGTEST.BIN
 sed 's/ext_second_drive        = false/ext_second_drive        = true/' \
     debug/1985-pcw.conf > build/1985-pcw-2drive.conf
 
@@ -87,6 +91,7 @@ d[0x30] = 43
 open('build/pcwb43.dsk','wb').write(d)
 EOF
 cp build/pcwspike.dsk build/pcwspike43.dsk    # pristine A for the second run
+cp build/pcwspike.dsk build/pcwspikedd-a.dsk  # pristine A for the CF2DD run
 
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
     --config build/1985-pcw-2drive.conf \
@@ -106,6 +111,14 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
     --save-sna-at 3600:build/pcwspike.sna \
     --exit-after 3700
 
+SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$E1985" \
+    --config build/1985-pcw-2drive.conf \
+    --disk-a build/pcwspikedd-a.dsk \
+    --disk-b build/pcwbdd.dsk \
+    --unthrottled \
+    --save-sna-at 3600:build/pcwspikedd.sna \
+    --exit-after 3700
+
 # Drive-B stepping: assert both measured modes + both stage verdicts.
 python3 - <<'EOF'
 import sys
@@ -113,7 +126,8 @@ def cell(path, addr):
     return open(path, 'rb').read()[256 + addr]
 ok = True
 for path, want, label in (('build/pcwspike.sna',   1, 'CF2DD B (double-step)'),
-                          ('build/pcwspike43.sna', 0, 'Gotek-like B (1:1)')):
+                          ('build/pcwspike43.sna', 0, 'Gotek-like B (1:1)'),
+                          ('build/pcwspikedd.sna', 0, 'native CF2DD B (1:1)')):
     dbl, verdict = cell(path, 0x0F02), cell(path, 0x0F03)
     good = dbl == want and verdict == 0xB0
     print(('OK  ' if good else 'FAIL') +
@@ -129,58 +143,98 @@ print('build/pcwspike.png written')
 EOF
 
 # --- host-side verification of the write path (#331 Phase 5b) -----------
-# The emulator wrote back build/pcwspike.dsk; extract the spike's outputs
-# from the CP/M fs and byte-compare.
+# Extract the spike's outputs from both CF2 and CF2DD CP/M filesystems. The
+# pre-filled CF2DD image forces COPYOUT.BIN above allocation block 255.
 python3 - <<'EOF'
 import sys
-data = open('build/pcwspike.dsk','rb').read()
-SPT, SS = 9, 512
-tracks = data[0x30]
-tsize = 256 + SPT*SS
-def sector(t, r):
-    off = 256 + t*tsize
-    for i in range(SPT):
-        si = off + 0x18 + i*8
-        if data[si+2] == r:
-            return data[off+256+i*SS: off+256+(i+1)*SS]
-    raise KeyError((t, r))
-spec = sector(0, 1)
-OFF, dirblk = spec[5], spec[7]
-def lsn(n):
-    return sector(OFF + n//SPT, 1 + n%SPT)
-dirdata = b''.join(lsn(i) for i in range(dirblk*2))
-def extract(n83):
-    exts = {}
-    for e in range(0, len(dirdata), 32):
-        ent = dirdata[e:e+32]
-        if ent[0] != 0: continue
-        if bytes(c & 0x7F for c in ent[1:12]) != n83: continue
-        exts[ent[12] & 0x1F] = ent
-    if not exts: return None
-    out = bytearray()
-    for ex in sorted(exts):
-        ent = exts[ex]
-        recs = ent[15]
-        n = recs * 128
-        for al in ent[16:32]:
-            if al == 0 or n <= 0: break
-            blk = lsn(al*2) + lsn(al*2+1)
-            take = min(1024, n)
-            out += blk[:take]
-            n -= take
-    return bytes(out)
-big = open('build/BIGTEST.BIN','rb').read()
-save = extract(b'PCWSAVE TST')
-copy = extract(b'COPYOUT BIN')
-dele = extract(b'PCWDEL  TST')
+SPT = 9
+
+def filesystem(path):
+    data = open(path, 'rb').read()
+    tracks, sides = data[0x30], data[0x31]
+    sectors = {}
+    pos = 256
+    for ti in range(tracks * sides):
+        tlen = data[0x34 + ti] * 256
+        track = data[pos:pos + tlen]
+        payload = 256
+        for i in range(track[0x15]):
+            si = 0x18 + i * 8
+            size = track[si + 6] | (track[si + 7] << 8)
+            if not size:
+                size = 128 << track[si + 3]
+            key = (track[si], track[si + 1], track[si + 2])
+            sectors[key] = track[payload:payload + size]
+            payload += size
+        pos += tlen
+
+    spec = sectors[(0, 0, 1)]
+    off, dirblk = spec[5], spec[7]
+    bls = 128 << spec[6]
+    spb = bls // 512
+    al16 = spec[6] == 4
+
+    def lsn(n):
+        logical_track = off + n // SPT
+        side = logical_track & 1 if sides == 2 else 0
+        track = logical_track >> 1 if sides == 2 else logical_track
+        return sectors[(track, side, 1 + n % SPT)]
+
+    directory = b''.join(lsn(i) for i in range(dirblk * spb))
+
+    def extract(n83):
+        exts = {}
+        for e in range(0, len(directory), 32):
+            ent = directory[e:e + 32]
+            if ent[0] != 0:
+                continue
+            if bytes(c & 0x7F for c in ent[1:12]) == n83:
+                exts[ent[12] & 0x1F] = ent
+        if not exts:
+            return None, []
+        out = bytearray()
+        used = []
+        for ex in sorted(exts):
+            ent = exts[ex]
+            left = ent[15] * 128
+            if al16:
+                blocks = [ent[i] | (ent[i + 1] << 8)
+                          for i in range(16, 32, 2)]
+            else:
+                blocks = list(ent[16:32])
+            for block in blocks:
+                if not block or left <= 0:
+                    break
+                used.append(block)
+                payload = b''.join(lsn(block * spb + s)
+                                   for s in range(spb))
+                take = min(bls, left)
+                out += payload[:take]
+                left -= take
+        return bytes(out), used
+
+    return extract, 'CF2DD' if al16 else 'CF2'
+
+big = open('build/BIGTEST.BIN', 'rb').read()
 ok = True
-if not save or not save.startswith(b'PCW write path OK'):
-    print('FAIL: PCWSAVE.TST wrong/missing'); ok = False
-if dele is not None:
-    print('FAIL: PCWDEL.TST still present'); ok = False
-if not copy or copy[:len(big)] != big:
-    print(f'FAIL: COPYOUT.BIN mismatch (got {len(copy) if copy else 0})'); ok = False
-if ok:
-    print(f'fs write verification OK: save + delete + {len(big)}-byte chunked copy')
+for path, need_high in (('build/pcwspike.dsk', False),
+                        ('build/pcwbdd.dsk', True)):
+    extract, geometry = filesystem(path)
+    save, _ = extract(b'PCWSAVE TST')
+    copy, blocks = extract(b'COPYOUT BIN')
+    dele, _ = extract(b'PCWDEL  TST')
+    if not save or not save.startswith(b'PCW write path OK'):
+        print(f'FAIL: {path}: PCWSAVE.TST wrong/missing'); ok = False
+    if dele is not None:
+        print(f'FAIL: {path}: PCWDEL.TST still present'); ok = False
+    if not copy or copy[:len(big)] != big:
+        print(f'FAIL: {path}: COPYOUT.BIN mismatch '
+              f'(got {len(copy) if copy else 0})'); ok = False
+    if need_high and (not blocks or max(blocks) <= 255):
+        print(f'FAIL: {path}: did not allocate above block 255'); ok = False
+    if ok:
+        high = f', highest block {max(blocks)}' if blocks else ''
+        print(f'{geometry} write verification OK: save + delete + '
+              f'{len(big)}-byte chunked copy{high}')
 sys.exit(0 if ok else 1)
 EOF
