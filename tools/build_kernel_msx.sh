@@ -57,7 +57,7 @@ APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/m
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APP_ICON=apps/iconed/icon.asm APPDEFS="-DGB_MSX2 -DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x69E0 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
-APP_ICON="$PAINT_APP_DIR/icon.asm" APP_ICON16="$PAINT_APP_DIR/icon16.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x72B0 PICKER=1 GBWIN_DRAG_ONLY=1 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
+APP_ICON="$PAINT_APP_DIR/icon.asm" APP_ICON16="$PAINT_APP_DIR/icon16.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7B80 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
@@ -100,8 +100,13 @@ python3 tools/packicons.py build/msx/DEFAULT.IST \
     lib/icon_sd.asm \
     lib/icon_up.asm lib/icon_screensaver.asm
 python3 tools/packicons.py build/msx/PAINT.IST \
-    "$PAINT_ASSET_DIR/pencil.asm" "$PAINT_ASSET_DIR/square.asm" "$PAINT_ASSET_DIR/circle.asm" \
-    "$PAINT_ASSET_DIR/fill.asm" "$PAINT_ASSET_DIR/undo.asm"
+    "$PAINT_ASSET_DIR/pencil.asm" "$PAINT_ASSET_DIR/line.asm" \
+    "$PAINT_ASSET_DIR/square.asm" "$PAINT_ASSET_DIR/boxfill.asm" \
+    "$PAINT_ASSET_DIR/circle.asm" "$PAINT_ASSET_DIR/circlefill.asm" \
+    "$PAINT_ASSET_DIR/bucket.asm" "$PAINT_ASSET_DIR/spray.asm" \
+    "$PAINT_ASSET_DIR/select.asm" "$PAINT_ASSET_DIR/cut.asm" \
+    "$PAINT_ASSET_DIR/copy.asm" "$PAINT_ASSET_DIR/paste.asm" \
+    "$PAINT_ASSET_DIR/undo.asm"
 "$RASM" kernel/modules/picedit_low.asm >/dev/null
 # The MSX pointer is a hand-edited 66-byte V9938 hardware sprite. Keep the
 # target-specific source under assets and stage it under the configured default

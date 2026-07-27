@@ -46,18 +46,13 @@ static void pop_row(unsigned char x, unsigned char y,
     else     gb_textbw ((unsigned char)(x + 1), ty, label);
 }
 
-/* #191: save-under buffer for a TRANSPARENT close. The popup saves the screen it
- * covers on open and restores it on close, so a menu leaves the screen pixel-identical
- * - no hole to repair, nothing repainted underneath, no flash. Sized for the menu
- * dropdowns (File/Edit/View/System, <=8 short items); a taller popup (the file picker's
- * full directory list) doesn't fit and falls back to the old erase + damaged-repaint,
- * whose caller repaints behind it anyway. Lives in the paged GBUI module's data.
- * Sized so the seven-row System menu (its widest item "Activate screensaver" ->
- * 34x74 = 2516 B) still saves-under: a wide menu that overflowed fell back to erase,
- * and gb_doc_frame's cancel path doesn't repaint -> a hole in the wallpaper on close
- * (#221). 2560 leaves a small margin while GBUI module data still ends below #8000. */
-#define POP_BUFSZ 2560
-static unsigned char pop_under[POP_BUFSZ];
+/* #191: menus save and restore the covered pixels. The buffer is transient for
+ * exactly the lifetime of this modal call, so use libgb's documented low-memory
+ * transfer scratch instead of permanently consuming 2.5 KiB of GBUI.MOD's page.
+ * GB_COPYMAX also lets the taller file picker restore cleanly instead of falling
+ * back to an erase/repaint path. */
+#define POP_BUFSZ GB_COPYMAX
+#define pop_under ((unsigned char *)gb_copybuf)
 
 /* gb_popup: THE GEOBENCH dropdown menu - one implementation every menu uses (the
  * desktop's System menu and every app's title menus), so they all look and behave

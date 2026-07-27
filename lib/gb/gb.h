@@ -306,6 +306,11 @@ void gb_menu(const void *def);
 unsigned char gb_popup(unsigned char col, unsigned char line,
                        const char *const *labels, unsigned char n);
 unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen);
+/* One modal panel containing two framed three-digit fields, displayed as
+ * "width by height". The pointed values seed the fields and receive the accepted
+ * values. Enter advances/accepts, Tab or a field click changes focus, and ESC
+ * cancels. Opt in with SIZEPROMPT=1. */
+unsigned char gb_size_prompt(unsigned int *width, unsigned int *height);
 unsigned char gb_modal(void);
 void          gb_modal_set(unsigned char on);
 /* gb_popup_close: make a live gb_popup cancel itself - used by the top-bar menu toggle.
@@ -319,8 +324,9 @@ void          gb_popup_close(void);
  * is the file DIALOG, not the File Manager. Folders descend, ".." goes up; both
  * leave the filesystem positioned in the chosen directory, so a following
  * gb_fs_load / gb_fs_save (or gb_set_name) targets it.
- *   gb_pickfile - Open: pick a file; fills name11 with its raw 11-byte 8.3 name,
- *                 returns 1 (0 = cancel). Caller then gb_set_name(name11)+gb_fs_load.
+ *   gb_pickfile - Open: start at the current drive root and pick a file; fills
+ *                 name11 with its raw 11-byte 8.3 name, returns 1 (0 = cancel).
+ *                 Caller then gb_set_name(name11)+gb_fs_load.
  *   gb_pickdir  - Save destination: navigate, then "[Save here]" returns 1 with the
  *                 FS in that directory (0 = cancel). Caller then prompts a name.
  * `exts` is a NULL-terminated list of 3-char space-padded uppercase extensions to

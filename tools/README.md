@@ -48,7 +48,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   beside their outputs so a repeated full build can reuse unchanged binaries and
   skip recompiling untouched apps/modules. With `NET=1`, CPC links the paged
   network stub and `APPDEFS=-DGB_MSX2` selects the TCP/IP UNAPI backend.
-  `WIDGETS=1` links reusable buttons/fields and `SCROLL=1` links the vertical
+  `WIDGETS=1` links reusable buttons/fields, `SIZEPROMPT=1` links the compact
+  shared width-by-height dialog stub, and `SCROLL=1` links the vertical
   scrollbar unit. `TOGGLE=1`, `STEPPER=1`, `SELECTOR=1`, and `SLIDER=1`
   independently link the corresponding settings controls, so tight apps pay only
   for controls used. `FORM=1` adds form rows and modal lifecycle and requires
@@ -78,7 +79,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`iconedit.py`** — edits `.IST`, `.SPR`, embedded `.APP` icons, and canonical
   four-/sixteen-colour RASM icon sources. Open an `APP_ICON=`/`APP_ICON16=`
   source and save it directly to make an icon change survive rebuilds;
-  executable bytes are preserved when editing an `.APP` binary.
+  executable bytes are preserved when editing an `.APP` binary. Its compact
+  toolchest provides pen/erase, straight lines, outline and filled shapes,
+  flood fill, spray paint, undo, and rectangular selection-aware copy/paste.
 - **`check_abi_table.py`** — verifies the `kernel/gbkern.asm` jump-table comments
   match the exported `lib/gbapp.inc` slot addresses through `kernel/api_table.inc`.
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in
@@ -136,7 +139,9 @@ for System > About GEOBENCH), and networking (`build_netmod.sh`, `build_m4netmod
 - **`iconedit.py`** — a host-side tkinter editor for canonical icon `.asm`
   sources, `.IST` icon sets, `.SPR` cursors, and embedded `.APP` icons. The
   keyboard arrow keys shift the current bitmap one pixel for easy alignment;
-  pixels shifted beyond an edge are clipped.
+  pixels shifted beyond an edge are clipped. Drag with Select to copy or paste
+  a sub-region; with no selection, Copy/Paste continues to operate on the whole
+  icon for cross-window icon-set workflows.
 - **`amsdos_header.py`** — prepend a 128-byte AMSDOS header to a RAW binary.
 
 ## Conventions

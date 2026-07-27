@@ -31,6 +31,7 @@ check:
 	python3 tools/check_lowram_map.py --profile msx
 	python3 tools/check_abi_table.py
 	python3 tools/test_appicon.py
+	python3 tools/test_iconedit_tools.py
 	kernel/kc/run_tests.sh
 	lib/gb/run_tests.sh
 

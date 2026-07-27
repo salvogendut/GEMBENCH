@@ -102,13 +102,16 @@ python3 tools/packicons.py build/DEFAULT.IST \
     # now show the .APP icon, shrinking DEFAULT.IST by one slot (the floppy AMSDOS reader
     # garbles the icon set above a size threshold). Later app-owned slots are removed
     # from every tracked set in lockstep.
-# PAINT toolchest set (24x24, ICONED-editable, #114). PAINT's 16K bank caps the loaded
-# set at ~6 icons, so the built .IST holds just the 5 live tools (pencil/square/circle/
-# fill/undo, TOOL_* order), refreshed from the GB-PAINT tool assets (#246).
-# The full tool art now lives in the sibling GB-PAINT repository.
+# PAINT's portable 24x21 toolchest set. The picture document now occupies a
+# borrowed page, leaving PAINT's app page free for all thirteen live tools.
 python3 tools/packicons.py build/PAINT.IST \
-    "$PAINT_ASSET_DIR/pencil.asm" "$PAINT_ASSET_DIR/square.asm" "$PAINT_ASSET_DIR/circle.asm" \
-    "$PAINT_ASSET_DIR/fill.asm" "$PAINT_ASSET_DIR/undo.asm"
+    "$PAINT_ASSET_DIR/pencil.asm" "$PAINT_ASSET_DIR/line.asm" \
+    "$PAINT_ASSET_DIR/square.asm" "$PAINT_ASSET_DIR/boxfill.asm" \
+    "$PAINT_ASSET_DIR/circle.asm" "$PAINT_ASSET_DIR/circlefill.asm" \
+    "$PAINT_ASSET_DIR/bucket.asm" "$PAINT_ASSET_DIR/spray.asm" \
+    "$PAINT_ASSET_DIR/select.asm" "$PAINT_ASSET_DIR/cut.asm" \
+    "$PAINT_ASSET_DIR/copy.asm" "$PAINT_ASSET_DIR/paste.asm" \
+    "$PAINT_ASSET_DIR/undo.asm"
 "$RASM" kernel/modules/picedit_low.asm >/dev/null
 # Backdrop tiles (#128): stage every assets/backdrops tile as build/<NAME>.BDP - copy any
 # ready-made *.BDP, and convert any *.png that has no matching .BDP. Uppercased 8.3 names.
@@ -148,7 +151,7 @@ APP_ICON=apps/iconed/icon.asm APPDEFS="-DGBUI_APPICON_PICKER" APP_CFLAGS="--max-
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
 DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
                                    # via the shared gb_doc menu system (#142) -> build/CLOCK.RAW
-APP_ICON="$PAINT_APP_DIR/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x72B0 PICKER=1 GBWIN_DRAG_ONLY=1 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: app-owned icon, custom File/Edit/View menus + picker
+APP_ICON="$PAINT_APP_DIR/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7B80 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: three app-owned panes + banked 10x editor
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
