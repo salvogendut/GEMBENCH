@@ -14,3 +14,6 @@ brsave_imgend
 hand_img        incbin "../build/HAND.SPR"
 hand_imgend
                 save  "HAND.SPR",hand_img,hand_imgend-hand_img,DSK,"build/companion.dsk"
+calc_img        incbin "../build/CALC.RAW"
+calc_imgend
+                save  "CALC.APP",calc_img,calc_imgend-calc_img,DSK,"build/companion.dsk"

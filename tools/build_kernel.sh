@@ -93,9 +93,12 @@ python3 tools/packicons.py build/DEFAULT.IST \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
     lib/icon_sd.asm \
     lib/icon_up.asm lib/icon_screensaver.asm \
+    lib/icon_cf.asm lib/icon_ide.asm lib/icon_fractal.asm \
+    lib/icon_settings.asm lib/icon_calculator.asm \
     # slots: 8=folder 9=.APP 10=.FNT 11=DESKTOP 12=FILEMGR
     # 13=SD (Disk C, #104) 14=UP (FileMgr ".." entry, #142)
     # 15=SCREENSAVER (.SAV, #221 reused gear slot)
+    # 16=CF 17=IDE 18=FRACTAL 19=SETTINGS 20=CALCULATOR
     # App-owned BASIC/NOTEPAD/ICONED/PAINT/BROWSER/VIEWER/TELNET/MAHJONG/SHELL
     # icons live in GBAP headers and are loaded on demand by File Manager.
     # NOTE (#198): icon_iconset removed - it was byte-identical to icon_app; .IST files
@@ -132,6 +135,7 @@ APP_ICON=apps/browser/icon.asm GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLA
 DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/BRSAVE.RAW # transient Browser .HTM source writer
 APP_ICON=apps/shell/icon.asm DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
 APP_ICON=apps/mahjong/icon.asm DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/MAHJONG.RAW # Kana Mahjong: solvable 144-tile Turtle game
+DATA_LOC=0x6800 BUTTON=1 tools/build_capp.sh apps/calculator build/CALC.RAW # CALC (#437): compact fixed-point desktop calculator
 DATA_LOC=0x7000 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
@@ -153,7 +157,7 @@ DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh a
                                    # via the shared gb_doc menu system (#142) -> build/CLOCK.RAW
 APP_ICON="$PAINT_APP_DIR/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x79E0 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: three app-owned panes + banked 20x20 editor
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
-DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
+APP_ICON=apps/xaos/icon.asm DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
 APP_CFLAGS="--opt-code-size --max-allocs-per-node 20000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
@@ -247,12 +251,12 @@ fi
 # Companion floppy QA/CPC/Floppies/COMPANION.DSK (#250): a non-bootable DATA
 # disk with the extra applications and screensavers.
 RASM="$RASM" tools/package_cpc_companion.sh "$FLOPPY_QA/COMPANION.DSK"
-EXTRAS_ADDS=(--add assets/WELCOME.TXT)
+EXTRAS_ADDS=(--add assets/WELCOME.TXT --add build/XROACH.RAW=XROACH.SAV)
 while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")
 done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
-echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + WELCOME.TXT; extended 80-track AMSDOS data disk)"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + XROACH.SAV + WELCOME.TXT; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"

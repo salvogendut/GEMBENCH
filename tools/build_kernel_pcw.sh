@@ -50,7 +50,7 @@ APP_ICON=apps/notepad/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/bu
 APPDEFS="-DGB_PCW" APP_CFLAGS="--opt-code-size --max-allocs-per-node 20000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
 APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_PCW" DATA_LOC=0x6A30 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
-APPDEFS="-DGB_PCW" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
+APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
 APP_ICON=apps/iconed/icon.asm APPDEFS="-DGB_PCW -DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_PCW" DATA_LOC=0x7380 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
@@ -61,6 +61,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/pcw/BRS
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
 APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/pcw/SHELL.RAW
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x7000 DIALOGS=1 tools/build_capp.sh apps/mahjong build/pcw/MAHJONG.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x6800 BUTTON=1 tools/build_capp.sh apps/calculator build/pcw/CALC.RAW
 # savers: the PORTABLE (pure gb_* API) subset - the direct-#C000 ones need a
 # PCW plot path first (follow-up)
 APPDEFS="-DGB_PCW" tools/build_capp.sh apps/saver build/pcw/SQUARES.RAW
@@ -85,7 +86,9 @@ python3 tools/packicons.py build/pcw/DEFAULT.IST \
     lib/icon_app.asm lib/icon_font.asm \
     lib/icon_desktop.asm lib/icon_filemanager.asm \
     lib/icon_sd.asm \
-    lib/icon_up.asm lib/icon_screensaver.asm
+    lib/icon_up.asm lib/icon_screensaver.asm \
+    lib/icon_cf.asm lib/icon_ide.asm lib/icon_fractal.asm \
+    lib/icon_settings.asm lib/icon_calculator.asm
 cp assets/iconsets/REFINED.IST build/pcw/REFINED.IST
 
 # the pointer: interleaved software-cursor .SPR in CGA2 hardware space

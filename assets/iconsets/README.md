@@ -20,18 +20,21 @@ tools/iconedit.py assets/iconsets/MYSET.IST     # tkinter editor (.IST and .SPR)
 `iconedit.py` opens an existing `.IST` or starts a new one; draw, then Save.
 
 A selectable desktop set must supply every resident system/file-type slot
-(currently 16 icons after application-owned icons moved to GBAP headers).
-Settings only lists `.IST` files whose header icon count is exactly 16
+(currently 21 icons, including the auxiliary CF, IDE, Fractal, Settings, and
+Calculator artwork slots). Settings only lists `.IST` files whose header icon count is exactly 21
 (`MIN_IST_ICONS`), so toolchests and legacy layouts with shifted slot meanings
 remain excluded.
 
 To migrate a 25-slot set created before #430, remove the nine former
-application slots in descending order:
+application slots in descending order, then append the five auxiliary slots:
 
 ```sh
 for slot in 22 21 20 19 17 16 12 11 1; do
     tools/ist_remove_slot.py assets/iconsets/MYSET.IST "$slot"
 done
+tools/ist_append.py assets/iconsets/MYSET.IST \
+    lib/icon_cf.asm lib/icon_ide.asm lib/icon_fractal.asm \
+    lib/icon_settings.asm lib/icon_calculator.asm
 ```
 
 Convert a legacy set before naming it manually in `GEOBENCH.CFG`; the

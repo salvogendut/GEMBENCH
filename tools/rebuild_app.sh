@@ -8,18 +8,30 @@ case "$APP" in
     mahjong|mahjong.app)
         APP=mahjong
         BASE=MAHJONG
+        APP_ICON="apps/mahjong/icon.asm"
+        DATA_LOC=0x7000
+        DIALOGS=1
+        BUTTON=0
+        ;;
+    calc|calc.app|calculator)
+        APP=calculator
+        BASE=CALC
+        APP_ICON=
+        DATA_LOC=0x6800
+        DIALOGS=0
+        BUTTON=1
         ;;
     *)
-        echo "ERROR: unsupported fast app '${1:-}' (supported: mahjong)" >&2
+        echo "ERROR: unsupported fast app '${1:-}' (supported: mahjong, calculator)" >&2
         exit 2
         ;;
 esac
 
-APP_ICON="apps/$APP/icon.asm" DATA_LOC=0x7000 DIALOGS=1 \
+APP_ICON="$APP_ICON" DATA_LOC="$DATA_LOC" DIALOGS="$DIALOGS" BUTTON="$BUTTON" \
     tools/build_capp.sh "apps/$APP" "build/$BASE.RAW"
-APP_ICON="apps/$APP/icon.asm" APPDEFS="-DGB_MSX2" DATA_LOC=0x7000 DIALOGS=1 \
+APP_ICON="$APP_ICON" APPDEFS="-DGB_MSX2" DATA_LOC="$DATA_LOC" DIALOGS="$DIALOGS" BUTTON="$BUTTON" \
     tools/build_capp.sh "apps/$APP" "build/msx/$BASE.RAW"
-APP_ICON="apps/$APP/icon.asm" APPDEFS="-DGB_PCW" DATA_LOC=0x7000 DIALOGS=1 \
+APP_ICON="$APP_ICON" APPDEFS="-DGB_PCW" DATA_LOC="$DATA_LOC" DIALOGS="$DIALOGS" BUTTON="$BUTTON" \
     tools/build_capp.sh "apps/$APP" "build/pcw/$BASE.RAW"
 
 for dir in QA/CPC/CARD/GBENCH QA/MSX/GBENCH QA/CPC/Floppies QA/PCW; do

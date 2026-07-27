@@ -19,6 +19,3 @@ stf_imgend
 frc_img         incbin "../build/FRACTALI.RAW"  ; fractal (Sierpinski/Koch/Dragon/Fern)
 frc_imgend
                 save  "FRACTALI.SAV",frc_img,frc_imgend-frc_img,DSK,"build/companion.dsk"
-xro_img         incbin "../build/XROACH.RAW"    ; cockroaches
-xro_imgend
-                save  "XROACH.SAV",xro_img,xro_imgend-xro_img,DSK,"build/companion.dsk"

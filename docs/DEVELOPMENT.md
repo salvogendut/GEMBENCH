@@ -220,7 +220,8 @@ line in the pack assembly or stage it into the card distribution as appropriate)
 - **Icons** (`.IST`): each icon is a 32×32 PNG → `tools/png2cpc.py assets/x.png
   lib/icon_x.asm icon_x 32x32`, then `tools/packicons.py build/NAME.IST
   lib/icon_*.asm ...` in **slot order** (must match `ext_to_icon` in `gbkern.asm`:
-  floppy clock trash geobench basic binary picture text folder).
+     floppy clock trash geobench basic binary picture text folder app font
+     desktop filemanager sd up screensaver cf ide fractal settings calculator).
   `packicons.py` always emits canonical CPC Mode-1 payloads. MSX and PCW keep the
   `.IST` files unchanged on disk and decode them to native icon bytes when loaded.
 

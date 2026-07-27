@@ -24,7 +24,8 @@ Clock — all co-resident under the kernel window manager on a V9938.
 - **Input:** joystick / keyboard pointer, plus the standard **MSX mouse** (GTPAD).
   The clock is 50/60 Hz aware.
 - **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
-  Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS, Mahjong,
+  Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS,
+  Calculator, Mahjong,
   Clock, Browser, Telnet, and **all 16 screensavers**. NETTEST and WGET are not
   built for MSX yet.
 - **Assets:** icon sets and backdrop tiles stay in canonical Mode-1 bytes and are

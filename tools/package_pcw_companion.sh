@@ -22,4 +22,5 @@ python3 tools/mkpcwdsk.py "$OUT" \
     --add build/pcw/BROWSER.RAW=BROWSER.APP \
     --add build/pcw/XAOS.RAW=XAOS.APP \
     --add build/pcw/MAHJONG.RAW=MAHJONG.APP \
+    --add build/pcw/CALC.RAW=CALC.APP \
     --add assets/WELCOME.TXT=WELCOME.TXT

@@ -597,7 +597,7 @@ CLIP_PATH = os.path.join(tempfile.gettempdir(), "geobench_iconedit_clip.json")
 # tables mirror that order so the editor can label each slot. KEEP IN SYNC with
 # the packicons.py argument lists in tools/build_kernel.sh (the source of truth).
 #
-# Desktop icon sets (DEFAULT.IST, REFINED.IST, any ICONS= set) - 16 resident
+# Desktop icon sets (DEFAULT.IST, REFINED.IST, any ICONS= set) - 21 resident
 # system/file-type slots. Application-owned icons live in GBAP headers.
 DESKTOP_SLOTS = [
     "Floppy disk",   # 0  icon_floppy

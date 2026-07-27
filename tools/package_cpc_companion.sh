@@ -15,4 +15,4 @@ rm -f build/companion.dsk
 "$RASM" kernel/pack_comp5.asm -eo
 cp build/companion.dsk "$OUT"
 
-echo "  + $OUT (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Mahjong/Xaos + helpers/savers)"
+echo "  + $OUT (Companion floppy: Paint/Telnet/Wget/Browser/Shell/Mahjong/Xaos/Calc + helpers/savers)"
