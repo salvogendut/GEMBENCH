@@ -73,6 +73,8 @@ static unsigned char pick(unsigned char savemode, char *out11)
     const char *labels[PICK_MAX + 2];
     unsigned char nreal, nlab, base, sel, i;
     char *p;
+    if (!savemode)
+        for (i = 0; i < 8; i++) gb_back();
     for (;;) {
         nreal = 0;
         p = gb_dir1();
@@ -90,7 +92,7 @@ static unsigned char pick(unsigned char savemode, char *out11)
         if (savemode) labels[nlab++] = "[Save here]";   /* target = current directory */
         base = nlab;
         for (i = 0; i < nreal; i++) labels[nlab++] = store[i];
-        sel = gb_popup(10, 18, labels, nlab);
+        sel = gb_popup(10, 8, labels, nlab);
         if (sel == 0xFF) return 0;                      /* cancel / ESC */
         if (sel == 0) { gb_back(); continue; }          /* .. */
         if (savemode && sel == 1) return 1;             /* [Save here] */
@@ -103,8 +105,9 @@ static unsigned char pick(unsigned char savemode, char *out11)
 }
 
 /* gb_pickfile: navigable Open dialog filtered to `exts` (per-app: each app passes its
- * own list). Fills name11 with the chosen file's raw 11-byte name, FS left in its
- * directory; returns 1 (0 = cancel). */
+ * own list). It starts at the current drive's root, fills name11 with the chosen
+ * file's raw 11-byte name, and leaves the FS in its directory; returns 1
+ * (0 = cancel). */
 unsigned char gb_pickfile(char *name11, const char *const *exts) { g_exts = exts; return pick(0, name11); }
 
 /* gb_pickdir: navigable destination chooser (files shown for reference, filtered to

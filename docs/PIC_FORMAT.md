@@ -33,7 +33,8 @@ pictures up to 512x255 whose complete file is smaller than 64 KiB.
 
 Mode 7 is an MSX-only extension, not a replacement for the portable payload. It is
 displayed only by the MSX2 Screen 7 kernel. Screen 6, CPC, and PCW reject it
-without interpreting its bytes, and Paint continues to edit and save mode 1.
+without interpreting its bytes. Paint edits Mode-7 pictures only on MSX under
+Screen 7; CPC and PCW Paint accept only portable Mode-1 pictures.
 
 ## Runtime display
 
@@ -48,8 +49,9 @@ without interpreting its bytes, and Paint continues to edit and save mode 1.
 The generated lookup tables are reversible. A legacy v2 file tagged with mode
 `6` is normalized to canonical mode `1` when loaded into a bank on MSX2 or PCW.
 New portable files must use mode `1`; mode `7` is reserved for the sixteen-colour
-extension. Paint keeps its canvas and banked edit tiles canonical and translates
-only temporary display rows.
+extension. Paint keeps documents in a borrowed bank and transfers only the active
+10x10 edit tile into its app page. MSX Screen-7 Paint can create and edit mode `7`
+tiles directly; the other targets retain canonical mode `1`.
 
 `tools/picconv.py` defaults to portable four-colour output. Use `--colors 16`
 (or select 16 in its GUI) to produce an MSX Screen 7 picture:

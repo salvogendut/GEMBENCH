@@ -31,7 +31,9 @@ pen 3 (red) for the fill, pen 0 to erase. Without it, .SPR is a CPC Mode-1 maske
 cursor instead.
 """
 import json
+import math
 import os
+import random
 import re
 import struct
 import sys
@@ -113,6 +115,90 @@ def shift_grid(grid, dx, dy):
             if 0 <= src_x < width:
                 shifted[y][x] = grid[src_y][src_x]
     return shifted
+
+
+def normalize_rect(x0, y0, x1, y1):
+    """Return an inclusive rectangle with ordered coordinates."""
+    return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
+
+
+def flood_fill_grid(grid, x, y, pen):
+    """Four-way flood fill. Mutates grid and returns the changed coordinates."""
+    if not grid or not 0 <= y < len(grid) or not 0 <= x < len(grid[0]):
+        return []
+    source = grid[y][x]
+    if source == pen:
+        return []
+    width = len(grid[0])
+    height = len(grid)
+    changed = []
+    pending = [(x, y)]
+    grid[y][x] = pen
+    while pending:
+        px, py = pending.pop()
+        changed.append((px, py))
+        for nx, ny in ((px - 1, py), (px + 1, py),
+                       (px, py - 1), (px, py + 1)):
+            if (0 <= nx < width and 0 <= ny < height
+                    and grid[ny][nx] == source):
+                grid[ny][nx] = pen
+                pending.append((nx, ny))
+    return changed
+
+
+def spray_points(width, height, x, y, rng, radius=2, drops=8):
+    """Return bounded pseudo-random points for one spray-paint pulse."""
+    points = {(x, y)} if 0 <= x < width and 0 <= y < height else set()
+    for _ in range(drops):
+        dx = rng.randint(-radius, radius)
+        dy = rng.randint(-radius, radius)
+        if dx * dx + dy * dy > radius * radius:
+            continue
+        px, py = x + dx, y + dy
+        if 0 <= px < width and 0 <= py < height:
+            points.add((px, py))
+    return sorted(points)
+
+
+def copy_grid_region(grid, rect):
+    """Copy an inclusive rectangle into a clipboard-sized pixel grid."""
+    x0, y0, x1, y1 = normalize_rect(*rect)
+    return {
+        "pixel_w": x1 - x0 + 1,
+        "h": y1 - y0 + 1,
+        "grid": [row[x0:x1 + 1] for row in grid[y0:y1 + 1]],
+    }
+
+
+def pasted_grid(grid, payload, dst_x, dst_y, max_pen):
+    """Return a copy of grid with a clipboard region pasted and clipped."""
+    result = [row[:] for row in grid]
+    if not result:
+        return result, None
+    source = payload.get("grid", [])
+    if not source:
+        return result, None
+    width = len(result[0])
+    height = len(result)
+    changed = False
+    min_x, min_y = width, height
+    max_x = max_y = -1
+    for sy, row in enumerate(source):
+        py = dst_y + sy
+        if not 0 <= py < height:
+            continue
+        for sx, value in enumerate(row):
+            px = dst_x + sx
+            if not 0 <= px < width:
+                continue
+            value = max(0, min(int(value), max_pen))
+            if result[py][px] != value:
+                result[py][px] = value
+                changed = True
+            min_x, min_y = min(min_x, px), min(min_y, py)
+            max_x, max_y = max(max_x, px), max(max_y, py)
+    bounds = (min_x, min_y, max_x, max_y) if max_x >= 0 else None
+    return (result if changed else grid), bounds
 
 # --- .SPR cursor: CPC Mode-1 masked, pre-shifted (256 bytes) ----------------
 # Layout matches png2spr.py + lib/cursor_data.asm (-> DEFAULT.SPR): two phases
@@ -403,15 +489,15 @@ def save_asm_icon(path, icons, label):
         )
         if mode == 7:
             target.write(
-                f"{label + '_mode':<16}equ   7"
+                f"{label + '_mode':<16} equ   7"
                 "            ; native MSX Screen-7 4bpp\n"
             )
         target.write(
-            f"{label + '_w':<16}equ   {wbytes}"
+            f"{label + '_w':<16} equ   {wbytes}"
             f"            ; width in packed bytes ({width_px}px)\n"
         )
         target.write(
-            f"{label + '_h':<16}equ   {height}"
+            f"{label + '_h':<16} equ   {height}"
             "            ; height in rows\n"
         )
         target.write(f"{label}\n")
@@ -533,7 +619,21 @@ DESKTOP_SLOTS = [
 ]
 # App toolchests carry their own order, keyed by file stem:
 TOOL_SLOTS = {
-    "PAINT": ["Pencil", "Square", "Circle", "Fill", "Undo"],
+    "PAINT": [
+        "Pencil",
+        "Line",
+        "Rectangle",
+        "Filled rectangle",
+        "Circle",
+        "Filled circle",
+        "Fill bucket",
+        "Spray",
+        "Select",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Undo",
+    ],
 }
 GRID_LINE = "#404060"
 CHECKER_A = "#bdbdbd"
@@ -569,11 +669,15 @@ class IconEditor(tk.Toplevel):
         self.preview_scale = PREVIEW_SCALE
         self.tool = tk.StringVar(value="pen")
         self.pen = tk.IntVar(value=2)
-        self.fill = tk.BooleanVar(value=False)
         self.dirty = False
         self.undo_stack = []
         self.preview = None     # (tool, x0, y0, x1, y1) during a drag
+        self.selection = None   # inclusive (x0, y0, x1, y1) marquee
         self.clipboard_icon = None   # {"w","h","grid"} copied by Edit > Copy Icon
+        self.rng = random.Random()
+        self.tool_buttons = {}
+        self.tooltip_window = None
+        self.tooltip_job = None
 
         self._build_ui()
         self._bind_keys()
@@ -640,18 +744,9 @@ class IconEditor(tk.Toplevel):
             .pack(side="left", fill="x", expand=True)
         ttk.Button(nav, text=">", width=3, command=self.next_icon).pack(side="left")
 
-        # right: toolbox
+        # right: palette, view controls, then the compact toolchest
         right = ttk.Frame(root, padding=(8, 4))
         right.pack(side="right", fill="y")
-
-        ttk.Label(right, text="Tools", font=("TkDefaultFont", 10, "bold"))\
-            .pack(anchor="w")
-        for label, val in [("Pen", "pen"), ("Square", "rect"),
-                           ("Circle", "circle"), ("Delete", "erase")]:
-            ttk.Radiobutton(right, text=label, value=val,
-                            variable=self.tool).pack(anchor="w")
-        ttk.Checkbutton(right, text="Filled", variable=self.fill)\
-            .pack(anchor="w", pady=(2, 8))
 
         ttk.Label(right, text="Color", font=("TkDefaultFont", 10, "bold"))\
             .pack(anchor="w")
@@ -685,9 +780,158 @@ class IconEditor(tk.Toplevel):
         ttk.Button(pvz, text="+", width=2,
                    command=lambda: self._set_preview_scale(self.preview_scale + 1)).pack(side="left")
 
+        toolchest = ttk.LabelFrame(right, text="Toolchest", padding=4)
+        toolchest.pack(anchor="w", pady=(10, 2))
+        tools = [
+            ("circle_fill", "Filled circle", 0, 0, None),
+            ("circle", "Outline circle", 0, 1, None),
+            ("rect_fill", "Filled square", 0, 2, None),
+            ("rect", "Outline square", 0, 3, None),
+            ("pen", "Pen", 1, 0, None),
+            ("line", "Line", 1, 1, None),
+            ("erase", "Eraser", 1, 2, None),
+            ("bucket", "Fill bucket", 1, 3, None),
+            ("spray", "Spray paint", 2, 0, None),
+            ("undo", "Undo", 2, 1, self.undo),
+            ("select", "Select region", 2, 2, None),
+            ("copy", "Copy selection or icon", 3, 0, self.copy_icon),
+            ("paste", "Paste selection or icon", 3, 1, self.paste_icon),
+        ]
+        for key, label, row, col, command in tools:
+            self._add_tool_button(toolchest, key, label, row, col, command)
+        self._select_tool("pen")
+
         ttk.Separator(right, orient="horizontal").pack(fill="x", pady=4)
-        self.status = ttk.Label(right, text="", foreground="#666", wraplength=120)
+        self.status = ttk.Label(right, text="", foreground="#666", wraplength=150)
         self.status.pack(anchor="w")
+        self._select_tool(self.tool.get())
+
+    def _add_tool_button(self, parent, key, label, row, col, command):
+        """Create one fixed-size icon button in the compact toolchest."""
+        holder = tk.Frame(parent, width=36, height=36, borderwidth=2,
+                          relief="raised", background="#e6e6e6",
+                          takefocus=1)
+        holder.grid(row=row, column=col, padx=2, pady=2)
+        holder.grid_propagate(False)
+        icon = tk.Canvas(holder, width=28, height=28, background="#e6e6e6",
+                         highlightthickness=0, cursor="hand2")
+        icon.place(relx=0.5, rely=0.5, anchor="center")
+        self._draw_tool_icon(icon, key)
+        selectable = command is None
+        self.tool_buttons[key] = (holder, selectable)
+
+        def invoke(_event=None):
+            if selectable:
+                self._select_tool(key)
+            else:
+                command()
+            return "break"
+
+        for widget in (holder, icon):
+            widget.bind("<Button-1>", invoke)
+            widget.bind("<Enter>",
+                        lambda e, w=holder, text=label: self._queue_tooltip(w, text))
+            widget.bind("<Leave>", lambda e: self._hide_tooltip())
+        holder.bind("<Return>", invoke)
+        holder.bind("<space>", invoke)
+
+    @staticmethod
+    def _draw_tool_icon(canvas, key):
+        """Draw small theme-neutral tool glyphs without external image assets."""
+        fg = "#202020"
+        accent = "#1769b0"
+        if key == "circle_fill":
+            canvas.create_oval(4, 4, 24, 24, fill=fg, outline=fg)
+        elif key == "circle":
+            canvas.create_oval(4, 4, 24, 24, outline=fg, width=3)
+        elif key == "rect_fill":
+            canvas.create_rectangle(5, 5, 23, 23, fill=fg, outline=fg)
+        elif key == "rect":
+            canvas.create_rectangle(5, 5, 23, 23, outline=fg, width=3)
+        elif key == "pen":
+            canvas.create_line(6, 22, 20, 8, fill=accent, width=5)
+            canvas.create_polygon(4, 24, 7, 18, 10, 21,
+                                  fill=fg, outline=fg)
+        elif key == "line":
+            canvas.create_line(5, 23, 23, 5, fill=fg, width=3)
+            canvas.create_oval(3, 21, 7, 25, fill=accent, outline=accent)
+            canvas.create_oval(21, 3, 25, 7, fill=accent, outline=accent)
+        elif key == "erase":
+            canvas.create_polygon(5, 19, 16, 7, 23, 14, 12, 25,
+                                  fill="#ffffff", outline=fg, width=2)
+            canvas.create_line(9, 21, 19, 11, fill=accent, width=2)
+        elif key == "bucket":
+            canvas.create_polygon(5, 12, 15, 5, 23, 15, 13, 23,
+                                  fill="#ffffff", outline=fg, width=2)
+            canvas.create_line(8, 13, 20, 16, fill=accent, width=3)
+            canvas.create_oval(20, 20, 24, 26, fill=accent, outline=accent)
+        elif key == "spray":
+            canvas.create_rectangle(5, 10, 13, 24, fill="#ffffff",
+                                    outline=fg, width=2)
+            canvas.create_rectangle(8, 6, 15, 11, fill="#ffffff",
+                                    outline=fg, width=2)
+            for x, y in ((18, 8), (22, 6), (20, 13), (25, 11),
+                         (17, 17), (23, 18)):
+                canvas.create_oval(x - 1, y - 1, x + 1, y + 1,
+                                   fill=accent, outline=accent)
+        elif key == "undo":
+            canvas.create_arc(5, 5, 24, 24, start=35, extent=260,
+                              style="arc", outline=accent, width=4)
+            canvas.create_polygon(4, 8, 11, 5, 10, 13,
+                                  fill=accent, outline=accent)
+        elif key == "select":
+            canvas.create_rectangle(4, 4, 20, 21, outline=fg,
+                                    width=2, dash=(3, 2))
+            canvas.create_polygon(15, 14, 25, 20, 20, 22, 18, 27,
+                                  fill=fg, outline=fg)
+        elif key == "copy":
+            canvas.create_rectangle(4, 4, 18, 19, fill="#ffffff",
+                                    outline="#777777", width=2)
+            canvas.create_rectangle(10, 10, 25, 25, fill="#ffffff",
+                                    outline=fg, width=2)
+        elif key == "paste":
+            canvas.create_rectangle(5, 7, 23, 25, fill="#ffffff",
+                                    outline=fg, width=2)
+            canvas.create_rectangle(9, 3, 19, 9, fill="#aeb7c0",
+                                    outline=fg, width=2)
+
+    def _select_tool(self, key):
+        self.tool.set(key)
+        for name, (holder, selectable) in self.tool_buttons.items():
+            holder.config(relief=("sunken" if selectable and name == key
+                                  else "raised"))
+        labels = {
+            "pen": "Pen", "line": "Line", "erase": "Eraser",
+            "bucket": "Fill bucket",
+            "spray": "Spray paint", "select": "Select region",
+            "rect": "Outline square", "rect_fill": "Filled square",
+            "circle": "Outline circle", "circle_fill": "Filled circle",
+        }
+        if hasattr(self, "status"):
+            self.status.config(text=f"Tool: {labels.get(key, key)}")
+
+    def _queue_tooltip(self, widget, text):
+        self._hide_tooltip()
+        self.tooltip_job = self.after(
+            450, lambda: self._show_tooltip(widget, text))
+
+    def _show_tooltip(self, widget, text):
+        self.tooltip_job = None
+        tip = tk.Toplevel(self)
+        tip.wm_overrideredirect(True)
+        tip.wm_geometry(f"+{widget.winfo_rootx() + 8}"
+                        f"+{widget.winfo_rooty() + widget.winfo_height() + 2}")
+        ttk.Label(tip, text=text, padding=(5, 2), relief="solid")\
+            .pack()
+        self.tooltip_window = tip
+
+    def _hide_tooltip(self):
+        if self.tooltip_job is not None:
+            self.after_cancel(self.tooltip_job)
+            self.tooltip_job = None
+        if self.tooltip_window is not None:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
 
     def _bind_keys(self):
         self.bind("<Control-s>", lambda e: self.save())
@@ -697,6 +941,7 @@ class IconEditor(tk.Toplevel):
         self.bind("<Control-z>", lambda e: self.undo())
         self.bind("<Control-c>", lambda e: self.copy_icon())
         self.bind("<Control-v>", lambda e: self.paste_icon())
+        self.bind("<Escape>", self.clear_selection)
         self.bind("<Left>",  lambda e: self.shift_current(-1, 0))
         self.bind("<Right>", lambda e: self.shift_current(1, 0))
         self.bind("<Up>",    lambda e: self.shift_current(0, -1))
@@ -718,6 +963,7 @@ class IconEditor(tk.Toplevel):
 
     def close_window(self):
         """Close just this window; quit the app when the last one closes."""
+        self._hide_tooltip()
         IconEditor._windows.remove(self)
         self.destroy()
         if not IconEditor._windows:
@@ -769,6 +1015,8 @@ class IconEditor(tk.Toplevel):
         self.index = 0
         self.dirty = False
         self.undo_stack.clear()
+        self.selection = None
+        self.preview = None
         self._refresh_title()
         self._redraw()
 
@@ -786,6 +1034,8 @@ class IconEditor(tk.Toplevel):
         self.index = 0
         self.dirty = False
         self.undo_stack.clear()
+        self.selection = None
+        self.preview = None
         self._refresh_title()
         self._redraw()
 
@@ -800,6 +1050,8 @@ class IconEditor(tk.Toplevel):
         self.index = 0
         self.dirty = False
         self.undo_stack.clear()
+        self.selection = None
+        self.preview = None
         self._refresh_title()
         self._redraw()
 
@@ -852,6 +1104,8 @@ class IconEditor(tk.Toplevel):
         self.index = 0
         self.dirty = False
         self.undo_stack.clear()
+        self.selection = None
+        self.preview = None
         self._refresh_title()
         self._redraw()
 
@@ -901,6 +1155,7 @@ class IconEditor(tk.Toplevel):
         if ic is None:
             return
         self._push_undo()
+        self.selection = None
         for y in range(ic["h"]):
             for x in range(ic["w"] * 4):
                 ic["grid"][y][x] = 0
@@ -930,6 +1185,7 @@ class IconEditor(tk.Toplevel):
             self.icons.append({"w": w // 4, "h": h,
                                "grid": [[0] * w for _ in range(h)]})
             self.index = len(self.icons) - 1
+            self.selection = None
             dlg.destroy()
             self._touched()
         ttk.Button(dlg, text="OK", command=ok).grid(row=2, column=0, columnspan=2, pady=4)
@@ -941,6 +1197,7 @@ class IconEditor(tk.Toplevel):
         self._push_undo()
         del self.icons[self.index]
         self.index = min(self.index, len(self.icons) - 1)
+        self.selection = None
         self._touched()
 
     def _clip_save(self):
@@ -963,11 +1220,27 @@ class IconEditor(tk.Toplevel):
         ic = self._cur()
         if ic is None:
             return
-        self.clipboard_icon = {"w": ic["w"], "h": ic["h"],
-                               "codec": ic.get("codec", CODEC_MODE1),
-                               "grid": [row[:] for row in ic["grid"]]}
+        if self.selection is not None:
+            self.clipboard_icon = copy_grid_region(ic["grid"], self.selection)
+            self.clipboard_icon.update({
+                "kind": "selection",
+                "codec": ic.get("codec", CODEC_MODE1),
+            })
+            width = self.clipboard_icon["pixel_w"]
+            height = self.clipboard_icon["h"]
+            description = f"{width}x{height} selection"
+        else:
+            self.clipboard_icon = {
+                "kind": "icon",
+                "w": ic["w"],
+                "pixel_w": ic["w"] * 4,
+                "h": ic["h"],
+                "codec": ic.get("codec", CODEC_MODE1),
+                "grid": [row[:] for row in ic["grid"]],
+            }
+            description = f"{ic['w'] * 4}x{ic['h']} icon"
         self._clip_save()                            # so a second window can paste it
-        self.status.config(text=f"Copied {ic['w']*4}x{ic['h']} icon")
+        self.status.config(text=f"Copied {description}")
 
     def paste_icon(self):
         self._clip_load()                            # share across iconedit windows
@@ -978,34 +1251,75 @@ class IconEditor(tk.Toplevel):
         if ic is None:
             return
         cb = self.clipboard_icon
-        self._push_undo()
+        if cb.get("kind") == "selection":
+            dst_x, dst_y = (self.selection[0], self.selection[1]) \
+                if self.selection is not None else (0, 0)
+            grid, bounds = pasted_grid(
+                ic["grid"], cb, dst_x, dst_y, self._palette_size() - 1)
+            if grid is ic["grid"]:
+                self.status.config(text="Paste made no changes")
+                return
+            self._push_undo()
+            ic["grid"] = grid
+            self.selection = bounds
+            self.preview = None
+            self._touched()
+            self.status.config(
+                text=f"Pasted {cb.get('pixel_w', len(cb['grid'][0]))}"
+                     f"x{cb['h']} selection")
+            return
+
+        cb_w = cb.get("w")
+        if cb_w is None:
+            cb_w = (cb.get("pixel_w", len(cb["grid"][0])) + 3) // 4
         if self.mode in ("SPR", "MSPR", "APP", "ASM"):
             # Single-resource documents keep their dimensions: paste top-left,
             # clipping or padding rather than producing an invalid file.
+            grid = [[0] * (ic["w"] * 4) for _ in range(ic["h"])]
             for y in range(ic["h"]):
                 for x in range(ic["w"] * 4):
-                    inside = y < cb["h"] and x < cb["w"] * 4
+                    inside = (y < cb["h"] and y < len(cb["grid"])
+                              and x < cb_w * 4
+                              and x < len(cb["grid"][y]))
                     value = cb["grid"][y][x] if inside else 0
-                    ic["grid"][y][x] = min(value, self._palette_size() - 1)
+                    grid[y][x] = max(
+                        0, min(int(value), self._palette_size() - 1))
+            if grid == ic["grid"]:
+                self.status.config(text="Paste made no changes")
+                return
+            self._push_undo()
+            ic["grid"] = grid
         else:
             # IST icons keep their own size: replace this one wholesale
-            ic["w"] = cb["w"]
+            grid = [[max(0, min(int(value), 3)) for value in row]
+                    for row in cb["grid"]]
+            if ic["w"] == cb_w and ic["h"] == cb["h"] and ic["grid"] == grid:
+                self.status.config(text="Paste made no changes")
+                return
+            self._push_undo()
+            ic["w"] = cb_w
             ic["h"] = cb["h"]
             ic["codec"] = CODEC_MODE1
-            ic["grid"] = [row[:] for row in cb["grid"]]
+            ic["grid"] = grid
+        self.selection = None
+        self.preview = None
         self._touched()
-        self.status.config(text=f"Pasted {cb['w']*4}x{cb['h']} icon")
+        self.status.config(text=f"Pasted {cb_w * 4}x{cb['h']} icon")
 
     def prev_icon(self):
         if not self.icons:
             return
         self.index = (self.index - 1) % len(self.icons)
+        self.selection = None
+        self.preview = None
         self._redraw()
 
     def next_icon(self):
         if not self.icons:
             return
         self.index = (self.index + 1) % len(self.icons)
+        self.selection = None
+        self.preview = None
         self._redraw()
 
     def shift_current(self, dx, dy):
@@ -1016,8 +1330,17 @@ class IconEditor(tk.Toplevel):
         if shifted != ic["grid"]:
             self._push_undo()
             ic["grid"] = shifted
+            self.selection = None
             self.preview = None
             self._touched()
+        return "break"
+
+    def clear_selection(self, _event=None):
+        if self.selection is not None or self.preview is not None:
+            self.selection = None
+            self.preview = None
+            self._redraw()
+            self.status.config(text="Selection cleared")
         return "break"
 
     # -- drawing -------------------------------------------------------------
@@ -1047,10 +1370,33 @@ class IconEditor(tk.Toplevel):
         cell = self._cell_at(ev.x, ev.y)
         if cell is None:
             return
-        self._push_undo()
         tool = self.tool.get()
+        if tool == "select":
+            self.preview = (tool, cell[0], cell[1], cell[0], cell[1])
+            self._redraw()
+            return
+        if tool == "bucket":
+            ic = self._cur()
+            target = ic["grid"][cell[1]][cell[0]]
+            if target == self.pen.get():
+                self.status.config(text="Area already uses that color")
+                return
+            self._push_undo()
+            self.selection = None
+            changed = flood_fill_grid(
+                ic["grid"], cell[0], cell[1], self.pen.get())
+            self.preview = None
+            self._touched()
+            self.status.config(text=f"Filled {len(changed)} pixels")
+            return
+
+        self._push_undo()
+        self.selection = None
         if tool in ("pen", "erase"):
             self._paint(cell[0], cell[1], 0 if tool == "erase" else self.pen.get())
+            self.preview = (tool, cell[0], cell[1], cell[0], cell[1])
+        elif tool == "spray":
+            self._spray_at(cell[0], cell[1])
             self.preview = (tool, cell[0], cell[1], cell[0], cell[1])
         else:
             self.preview = (tool, cell[0], cell[1], cell[0], cell[1])
@@ -1072,6 +1418,9 @@ class IconEditor(tk.Toplevel):
             pen = 0 if tool == "erase" else self.pen.get()
             self._line(x0, y0, cell[0], cell[1], pen)
             self.preview = (tool, cell[0], cell[1], cell[0], cell[1])
+        elif tool == "spray":
+            self._spray_line(x0, y0, cell[0], cell[1])
+            self.preview = (tool, cell[0], cell[1], cell[0], cell[1])
         else:
             self.preview = (tool, x0, y0, cell[0], cell[1])
             self._redraw()
@@ -1080,10 +1429,22 @@ class IconEditor(tk.Toplevel):
         if self.preview is None:
             return
         tool, x0, y0, x1, y1 = self.preview
-        if tool == "rect":
-            self._draw_rect(x0, y0, x1, y1, self.pen.get(), self.fill.get())
-        elif tool == "circle":
-            self._draw_ellipse(x0, y0, x1, y1, self.pen.get(), self.fill.get())
+        if tool in ("rect", "rect_fill"):
+            self._draw_rect(
+                x0, y0, x1, y1, self.pen.get(), tool == "rect_fill")
+        elif tool in ("circle", "circle_fill"):
+            self._draw_ellipse(
+                x0, y0, x1, y1, self.pen.get(), tool == "circle_fill")
+        elif tool == "line":
+            self._line(x0, y0, x1, y1, self.pen.get())
+        elif tool == "select":
+            self.selection = normalize_rect(x0, y0, x1, y1)
+            self.preview = None
+            self._redraw()
+            width = self.selection[2] - self.selection[0] + 1
+            height = self.selection[3] - self.selection[1] + 1
+            self.status.config(text=f"Selected {width}x{height} pixels")
+            return
         self.preview = None
         self._touched()
 
@@ -1104,6 +1465,27 @@ class IconEditor(tk.Toplevel):
         err = dx + dy
         while True:
             self._paint(x0, y0, pen)
+            if x0 == x1 and y0 == y1:
+                break
+            e2 = 2 * err
+            if e2 >= dy:
+                err += dy; x0 += sx
+            if e2 <= dx:
+                err += dx; y0 += sy
+
+    def _spray_at(self, x, y):
+        ic = self._cur()
+        for px, py in spray_points(
+                ic["w"] * 4, ic["h"], x, y, self.rng):
+            self._paint(px, py, self.pen.get())
+
+    def _spray_line(self, x0, y0, x1, y1):
+        """Pulse the spray along a Bresenham path so fast drags have no gaps."""
+        dx = abs(x1 - x0); sx = 1 if x0 < x1 else -1
+        dy = -abs(y1 - y0); sy = 1 if y0 < y1 else -1
+        err = dx + dy
+        while True:
+            self._spray_at(x0, y0)
             if x0 == x1 and y0 == y1:
                 break
             e2 = 2 * err
@@ -1136,7 +1518,6 @@ class IconEditor(tk.Toplevel):
         else:
             painted = set()
             steps = int(2 * 3.14159 * max(rx, ry) * 4) + 8
-            import math
             for i in range(steps):
                 t = 2 * math.pi * i / steps
                 px = int(round(cx + rx * math.cos(t)))
@@ -1151,6 +1532,7 @@ class IconEditor(tk.Toplevel):
             return
         snap = {"index": self.index,
                 "icons": [{"w": i["w"], "h": i["h"],
+                           "codec": i.get("codec", CODEC_MODE1),
                            "grid": [row[:] for row in i["grid"]]}
                           for i in self.icons]}
         self.undo_stack.append(snap)
@@ -1163,6 +1545,8 @@ class IconEditor(tk.Toplevel):
         snap = self.undo_stack.pop()
         self.icons = snap["icons"]
         self.index = min(snap["index"], len(self.icons) - 1)
+        self.selection = None
+        self.preview = None
         self.dirty = True
         self._refresh_title()
         self._redraw()
@@ -1199,20 +1583,45 @@ class IconEditor(tk.Toplevel):
         # preview overlay for shape tools
         if self.preview is not None:
             tool, x0, y0, x1, y1 = self.preview
-            if tool in ("rect", "circle"):
-                lo_x, hi_x = sorted((x0, x1))
-                lo_y, hi_y = sorted((y0, y1))
+            if tool == "line":
+                col = PEN_RGB[self.pen.get()]
+                self.canvas.create_line(
+                    ox + (x0 + 0.5) * s, oy + (y0 + 0.5) * s,
+                    ox + (x1 + 0.5) * s, oy + (y1 + 0.5) * s,
+                    fill=col, width=3)
+            elif tool in ("rect", "rect_fill", "circle", "circle_fill",
+                          "select"):
+                lo_x, lo_y, hi_x, hi_y = normalize_rect(x0, y0, x1, y1)
                 rx = ox + lo_x * s
                 ry = oy + lo_y * s
                 rxe = ox + (hi_x + 1) * s
                 rye = oy + (hi_y + 1) * s
-                col = PEN_RGB[self.pen.get()]
-                if tool == "rect":
+                if tool == "select":
                     self.canvas.create_rectangle(rx, ry, rxe, rye,
-                                                 outline=col, width=2)
+                                                 outline="#00d8ff", width=2,
+                                                 dash=(6, 4))
                 else:
-                    self.canvas.create_oval(rx, ry, rxe, rye,
-                                            outline=col, width=2)
+                    col = PEN_RGB[self.pen.get()]
+                    filled = tool.endswith("_fill")
+                    options = {
+                        "outline": col,
+                        "width": 2,
+                        "fill": col if filled else "",
+                    }
+                    if filled:
+                        options["stipple"] = "gray50"
+                    if tool.startswith("rect"):
+                        self.canvas.create_rectangle(rx, ry, rxe, rye,
+                                                     **options)
+                    else:
+                        self.canvas.create_oval(rx, ry, rxe, rye, **options)
+        if self.selection is not None:
+            x0, y0, x1, y1 = self.selection
+            self.canvas.create_rectangle(
+                ox + x0 * s, oy + y0 * s,
+                ox + (x1 + 1) * s, oy + (y1 + 1) * s,
+                outline="#00d8ff", width=2, dash=(6, 4),
+                tags="selection")
         self.info_var.set(self._info_text())
         self._draw_preview()
 

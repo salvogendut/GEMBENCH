@@ -51,12 +51,17 @@ fi
 
 "$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
 "$SDAS" -o "$work/gblib.rel" "$GB/gblib.s"
-"$SDCC" -mz80 --fomit-frame-pointer "${BUILD_DEFS[@]}" -I "$GB" -c "$KC/gbui_mod.c" -o "$work/gbui_mod.rel"
-"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbdlg.c"    -o "$work/gbdlg.rel"
-"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbprompt.c" -o "$work/gbprompt.rel"
-"$SDCC" -mz80 --fomit-frame-pointer -I "$GB" -c "$GB/gbpick.c"   -o "$work/gbpick.rel"
+"$SDCC" -mz80 --opt-code-size --max-allocs-per-node 100000 --fomit-frame-pointer \
+    "${BUILD_DEFS[@]}" -I "$GB" -c "$KC/gbui_mod.c" -o "$work/gbui_mod.rel"
+"$SDCC" -mz80 --opt-code-size --max-allocs-per-node 100000 --fomit-frame-pointer \
+    -I "$GB" -c "$GB/gbdlg.c" -o "$work/gbdlg.rel"
+"$SDCC" -mz80 --opt-code-size --max-allocs-per-node 100000 --fomit-frame-pointer \
+    -I "$GB" -c "$GB/gbprompt.c" -o "$work/gbprompt.rel"
+"$SDCC" -mz80 --opt-code-size --max-allocs-per-node 100000 --fomit-frame-pointer \
+    -I "$GB" -c "$GB/gbpick.c" -o "$work/gbpick.rel"
 # code at #6000 (the module load address); data above it, all below the kernel (#8000).
-"$SDCC" -mz80 --no-std-crt0 --code-loc 0x6000 --data-loc 0x74C0 \
+# Popup save-under pixels use gb_copybuf, so the module retains only compact state.
+"$SDCC" -mz80 --no-std-crt0 --code-loc 0x6000 --data-loc 0x7780 \
     "$work/crt0.rel" "$work/gbui_mod.rel" "$work/gbdlg.rel" "$work/gbprompt.rel" \
     "$work/gbpick.rel" "$work/gblib.rel" -o "$work/mod.ihx"
 
@@ -72,7 +77,7 @@ LOAD = ('_CODE','_GSINIT','_GSFINAL','_INITIALIZER')
 img = max((area[a][0]+area[a][1]) for a in LOAD if a in area)
 top = max((s+sz) for s,sz in area.values()) if area else 0
 e=[]
-if img > 0x74C0: e.append('image ends 0x%04X > data-loc 0x74C0'%img)
+if img > 0x7780: e.append('image ends 0x%04X > data-loc 0x7780'%img)
 if top > 0x8000: e.append('data/bss ends 0x%04X > 0x8000'%top)
 if e: sys.stderr.write('FIT ERROR (GBUI): '+'; '.join(e)+'\n'); sys.exit(1)
 PY

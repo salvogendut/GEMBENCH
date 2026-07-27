@@ -158,7 +158,7 @@ unsigned char gb_pickappicon(char *out11)
         labels[1] = "[Next drive]";
         labels[2] = app_only ? "[Files]" : "[APP icons]";
         for (i = 0; i < nreal; i++) labels[i + 3] = store[i];
-        sel = gb_popup(10, 18, labels, (unsigned char)(nreal + 3));
+        sel = gb_popup(10, 8, labels, (unsigned char)(nreal + 3));
         if (sel == 0xFF) return 0;
         if (sel == 0) {
             gb_back();
