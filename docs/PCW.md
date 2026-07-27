@@ -115,6 +115,7 @@ directory layout. `k_drive_poll` uses a single-sector probe for media presence.
 - **COMPANION.DSK** (CF2 data): backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
   WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, MAHJONG.APP,
+  CALC.APP,
   WELCOME.TXT.
 - **EXTRAS.DSK** (720K CF2DD data): every portable picture from
   `assets/pictures`, stored byte-for-byte in canonical GBPC v2 format, plus

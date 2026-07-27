@@ -32,6 +32,7 @@ check:
 	python3 tools/check_abi_table.py
 	python3 tools/test_appicon.py
 	python3 tools/test_iconedit_tools.py
+	bash apps/calculator/run_tests.sh
 	kernel/kc/run_tests.sh
 	lib/gb/run_tests.sh
 

@@ -363,6 +363,7 @@ static const char *win_title(void)               /* "Disk C/path 32MiB free" -> 
 #define ICON_SD 13
 #define ICON_UP 14            /* up-arrow for the ".." parent-dir entry (#142) */
 #define ICON_SCREENSAVER 15   /* #221: reused the freed gear slot for the screensaver (.SAV) icon */
+#define ICON_CALCULATOR 20    /* #437: shared themed CALC.APP icon */
 
 /* name_is: does the name part (before '.') of "NAME.EXT" equal want? */
 static unsigned char name_is(const char *name, const char *want)
@@ -378,6 +379,7 @@ static const unsigned char app_icon_map[] = {
     ICON_DESKTOP,  'D','E','S','K','T','O','P',0,
     ICON_FILEMGR,  'F','I','L','E','M','G','R',0,
     ICON_FLOPPY,   'D','I','S','K','U','T','I','L',0,
+    ICON_CALCULATOR, 'C','A','L','C',0,
     0xFF
 };
 
@@ -440,7 +442,7 @@ static unsigned char rank_of(unsigned char ic)
     switch (ic) {
         case ICON_FOLDER:   return 0;
         case ICON_DESKTOP: case ICON_FILEMGR: case ICON_CLOCK:
-        case ICON_SCREENSAVER:
+        case ICON_SCREENSAVER: case ICON_CALCULATOR:
         case ICON_APP:      return 1;
         case ICON_PICTURE:  return 2;
         case ICON_TEXT:     return 3;

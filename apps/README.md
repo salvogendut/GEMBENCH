@@ -21,6 +21,7 @@ focused window's handlers (issue #45).
 | paint    | `PAINT.APP`    | portable GBPC v2 bitmap paint (toolchest, saves `.PIC`) |
 | xaos     | `XAOS.APP`     | fractal generator, exports portable `.PIC` files |
 | mahjong  | `MAHJONG.APP`  | Kana Mahjong solitaire with selectable Katakana/Hiragana tiles, solvable Turtle deals, Undo and Hint |
+| calculator | `CALC.APP`   | fixed-point desktop calculator with basic arithmetic, percentage and square root |
 | clock    | `CLOCK.APP`    | analog clock widget |
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours on CPC/MSX2 / screensaver, friendly 4-colour / 16-colour next-boot selection on MSX2, and Return to Defaults; PCW omits palette controls because its display is fixed monochrome; persisted to `GEOBENCH.CFG` |
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal: CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; MSX2 TCP/IP UNAPI in a 78x22 window; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
@@ -40,8 +41,10 @@ in `GEOBENCH.CFG`, set from **Settings → Screensaver**) after the idle timeout
 System → "Activate screensaver" runs it on demand. Each is a full-screen window
 (`WM_FS`) that animates every frame and closes on any input.
 
-The Main CPC boot floppy carries `SQUARES.SAV`; `QA/CPC/Floppies/COMPANION.DSK`, the
-Albireo/M4 card distribution, and the MSX2 distribution carry all 16 savers.
+The Main CPC boot floppy carries `SQUARES.SAV`; the CPC floppy set carries the
+remaining savers across `COMPANION.DSK` and `EXTRAS.DSK` (`XROACH.SAV` is on
+Extras to leave room for Calculator). The Albireo/M4 card and MSX2 distributions
+carry all 16 savers together.
 
 | Saver | Disk file | Effect |
 |-------|-----------|--------|

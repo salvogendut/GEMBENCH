@@ -117,6 +117,9 @@ backdrop, dragging icons, opening apps and menus:
   `ls`, `cd`, `pwd`, `cat`, `cp`, and `rm` commands. Paths accept A/B/C drive
   prefixes and 8.3 components; `cat` and `cp` stream files in chunks rather than
   limiting operations to the app's free RAM.
+- **Calculator** — a compact windowed fixed-point calculator with keyboard and
+  pointer input, basic arithmetic, percentage, square root, sign and clear
+  operations, and a black display with red digits.
 - **Kana Mahjong** — a fullscreen 144-tile Mahjong solitaire game using an
   original C engine and selectable 42-face Katakana or 36-face Hiragana tile
   sets. New deals are assigned along a known legal Turtle-layout removal order,
@@ -126,8 +129,9 @@ backdrop, dragging icons, opening apps and menus:
   desktop's idle timer (global, so it fires over any app) launches the configured
   module after the timeout; any pointer move / click / key returns to the desktop.
   The Main CPC boot floppy carries the default **SQUARES** saver; the Companion
-  floppy, the Albireo/M4 card distribution, and the MSX2 distribution carry the
-  full set: **SQUARES** (random squares), **DECO** (Art-Deco panels), **XMATRIX**
+  and Extras floppies together, the Albireo/M4 card distribution, and the MSX2
+  distribution carry the full set: **SQUARES** (random squares), **DECO**
+  (Art-Deco panels), **XMATRIX**
   (binary "Matrix" rain), **MOUNTAIN** (isometric 3D terrain), **FRACTALI**
   (Sierpinski + Koch), **STARFLD** (3D star-field), **XROACH** (scattering
   cockroaches), **MUNCH** (munching squares), **RORSCH** (symmetric ink-blots),
