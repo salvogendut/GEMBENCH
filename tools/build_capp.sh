@@ -19,6 +19,7 @@ OUT="${2:-build/CLOCK.RAW}"
 GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.s)
 GBLIB_SRC="${GBLIB_SRC:-$GB/gblib.s}"
 APP_CFLAGS="${APP_CFLAGS:-}"
+HELPER_CFLAGS="${HELPER_CFLAGS:-}"
 APP_ICON="${APP_ICON:-}"
 APP_ICON16="${APP_ICON16:-}"
 LOAD_LIMIT="${LOAD_LIMIT:-0x7F00}"
@@ -210,6 +211,7 @@ cache_key=$(printf '%s\n' \
     "APP_PROBE=$APP_PROBE_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
     "APP_CFLAGS=$APP_CFLAGS" \
+    "HELPER_CFLAGS=$HELPER_CFLAGS" \
     "LOAD_LIMIT=$LOAD_LIMIT" \
     "SDCC=$SDCC" \
     "SDAS=$SDAS" \
@@ -308,7 +310,7 @@ if [ "$TIMESET_FLAG" = "1" ]; then
 fi
 SIZEPROMPT_REL=""
 if [ "$SIZEPROMPT_FLAG" = "1" ]; then
-    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" \
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $HELPER_CFLAGS ${APPDEFS:-} -I "$GB" \
         -c "$GB/gbsizedlg.c" -o "$work/gbsizedlg.rel"
     SIZEPROMPT_REL="$work/gbsizedlg.rel"
 fi
@@ -321,7 +323,7 @@ fi
 #   DOC=1                      -> gbdoc.c too (the document/File-menu framework)
 DLG_REL=""
 if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
+    "$SDCC" -mz80 --fomit-frame-pointer $HELPER_CFLAGS ${APPDEFS:-} -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
     DLG_REL="$work/gbui_stub.rel"
 fi
 # DOC=1 = the full document framework; DOCRO=1 = a READ-ONLY variant (-DGBDOC_RO) that
