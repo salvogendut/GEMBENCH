@@ -1947,7 +1947,7 @@ wm_register
                 call  copy11
                 ld    a,(wm_slot)                 ; focus + append the new window (z-top)
                 ld    (WM_FOCUS),a
-                jp    wm_z_append                  ; A = slot; tail-call (rets to wm_register's caller)
+                jr    wm_z_append                  ; A = slot; tail-call (rets to wm_register's caller)
 
 ; ===== managed windows (#146): the kernel owns the chrome ====================
 ; k_wm_managed (GB_WMMANAGED): HL = a gb_mwin_t descriptor in the caller's page.
@@ -2054,7 +2054,7 @@ wm_chrome_draw
                 ld    e,a                     ; h
                 call  gb_open_window         ; frame + title
                 ld    a,GB_MSG_DRAW          ; -> the proc draws the content
-                jp    mw_hook
+                jr    mw_hook
 
 ; wm_chrome_frame: HL = entry. The per-frame router: idle hook, then QUIT/close,
 ; close-gadget, content click. (Title drag + grip resize land in slice 2.)
@@ -2327,14 +2327,16 @@ k_wm_close
                 ld    (hl),0                       ; mark dead (clear the alive flag)
                 call  wm_z_remove                 ; drop slot C from the z-order (keeps C)
                 call  wm_focus_top                ; refocus the new live z-top
-                ld    a,#FF                        ; #156: force the next wm_map_focus to re-install
-                ld    (WM_FPREV),a               ; the newly-focused (desktop) menu - else the bar
-                                                  ; keeps the closed window's menu title (stale "View")
+                cpl                                ; force wm_map_focus to reinstall its menu even
+                ld    (WM_FPREV),a                ; if this window closed before its first frame
                 call  wm_map_focus               ; install the new focus's handler + menu NOW,
                                                   ; before we repaint/return. This avoids a dead
                                                   ; top bar after closing a no-menu child that
                                                   ; dirtied global menu state via a modal picker.
                 pop   af                           ; A = the closed window's page
+                call  bank_set                     ; wm_map_focus mapped the new focus, but the
+                                                  ; closing handler must return in its own page;
+                                                  ; bank_set preserves A for wm_free_page
                 call  wm_free_page                 ; release it (z-order already updated)
                 call  clip_set_full              ; #156: full repaint so the desktop fully restores the
                                                   ; icons/labels the window had overlapped (clipping to
