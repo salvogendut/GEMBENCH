@@ -81,7 +81,7 @@ python3 tools/png2cpc.py build/SPLASHD_BUILD.png build/SPLASHD.BIN splash 96x184
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=18\r\nPROXY=\r\n' > build/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=18\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nPROXY=\r\n' > build/GEOBENCH.CFG
 cp build/GEOBENCH.CFG build/DEFAULT.CFG
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
 python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
@@ -175,6 +175,7 @@ tools/build_capp.sh apps/xmatrix build/XMATRIX.RAW # XMATRIX screensaver (ported
 tools/build_savercfg.sh apps/xmatrix build/XMATRIXCFG.RAW # same-stem XMATRIX.MOD Configure UI
 tools/build_capp.sh apps/mountain build/MOUNTAIN.RAW # MOUNTAIN screensaver (ported from symsav-mountain):
                                    # isometric filled terrain + white wireframe, direct #C000 plot. -> MOUNTAIN.SAV
+tools/build_savercfg.sh apps/mountain build/MOUNTAINCFG.RAW # same-stem MOUNTAIN.MOD Configure UI
 tools/build_capp.sh apps/fractalic build/FRACTALI.RAW # FRACTALIC screensaver (ported from symsav-fractalic):
                                    # random fractal (Sierpinski/Koch/Dragon/Fern), direct #C000 plot.
                                    # CARD-ONLY (too big for the floppy) -> FRACTALI.SAV via stage_dist.sh
@@ -257,12 +258,13 @@ EXTRAS_ADDS=(
     --add assets/WELCOME.TXT
     --add build/XROACH.RAW=XROACH.SAV
     --add build/CATCLK.RAW=CATCLK.SAV
+    --add build/HELIX.RAW=HELIX.SAV
 )
 while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")
 done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
-echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + XROACH/CATCLK savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + XROACH/CATCLK/HELIX savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"

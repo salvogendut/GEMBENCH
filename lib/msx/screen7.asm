@@ -611,8 +611,8 @@ kl_xmajor
                 ld    (vc_ny),hl              ; NY = |dy| (short)
 kl_go
                 ld    a,(GLINE_PEN)
-                and   3
-                ld    (vc_clr),a              ; LINE colour = the 2-bit pen value
+                and   #0F
+                ld    (vc_clr),a              ; LINE colour = native 4-bit palette index
                 ld    a,#70                   ; LINE command, IMP logical op
                 ld    (vc_cmd),a
                 jp    vdp_hmmv                ; same R#17-indirect block streamer

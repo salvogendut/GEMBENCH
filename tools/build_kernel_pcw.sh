@@ -69,6 +69,8 @@ APPDEFS="-DGB_PCW" tools/build_capp.sh apps/ant  build/pcw/ANT.RAW
 APPDEFS="-DGB_PCW" tools/build_capp.sh apps/deco build/pcw/DECO.RAW
 APPDEFS="-DGB_PCW" tools/build_capp.sh apps/xmatrix build/pcw/XMATRIX.RAW
 APPDEFS="-DGB_PCW" tools/build_savercfg.sh apps/xmatrix build/pcw/XMATRIXCFG.RAW
+APPDEFS="-DGB_PCW" tools/build_capp.sh apps/mountain build/pcw/MOUNTAIN.RAW
+APPDEFS="-DGB_PCW" tools/build_savercfg.sh apps/mountain build/pcw/MOUNTAINCFG.RAW
 
 # --- shared paged C modules (platform-neutral, low-RAM marshalled) -----------
 tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
@@ -117,7 +119,7 @@ rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
 [ -s build/pcwboot.bin ] || { echo "ERROR: pcwboot.bin not produced" >&2; exit 1; }
 
 # --- the bootable disc -----------------------------------------------------------
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nTIMESYNC=true\r\nTIMEZONE=+2\r\nPROXY=\r\n' > build/pcw/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nTIMESYNC=true\r\nTIMEZONE=+2\r\nPROXY=\r\n' > build/pcw/GEOBENCH.CFG
 cp build/pcw/GEOBENCH.CFG build/pcw/DEFAULT.CFG
 python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
@@ -181,6 +183,8 @@ EXTRAS_ADDS=(
     --add "build/pcw/DECO.RAW=DECO.SAV"
     --add "build/pcw/XMATRIX.RAW=XMATRIX.SAV"
     --add "build/pcw/XMATRIXCFG.RAW=XMATRIX.MOD"
+    --add "build/pcw/MOUNTAIN.RAW=MOUNTAIN.SAV"
+    --add "build/pcw/MOUNTAINCFG.RAW=MOUNTAIN.MOD"
 )
 while IFS= read -r pic; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)

@@ -1,19 +1,18 @@
-/* mountain - a 3D isometric terrain screensaver for GEOBENCH (#219 family).
+/* mountain - a 3D isometric terrain screensaver for GEOBENCH (#219/#446).
  *
  * Ported from the SymbOS symsav-mountain screensaver (itself after Pascal Pensa's
  * xlockmore "mountain", 1995). A 20x20 height map is seeded with random peaks,
- * smoothed, then drawn cell by cell as an isometric grid: each cell is a filled
- * quad (red = higher ground, black = valleys) outlined in a white wireframe, on
- * the blue sky. Cells are drawn back-to-front so near terrain occludes far. Holds
- * the finished landscape, then regenerates.
+ * smoothed, then drawn cell by cell as an isometric grid. MSX Screen 7 maps the
+ * average cell height through eight stable palette entries; four-colour targets
+ * keep a compact low/high treatment. Cells are drawn back-to-front so near
+ * terrain occludes far. The finished landscape is held, then regenerated.
  *
- * The original is already CPC Mode 1 (4 colours) and plots single pixels straight
- * to the #C000 screen. GEOBENCH's screen is the same standard #C000 layout and is
- * always mapped (not banked), so we write it directly - no kernel pixel primitive
- * and none of the SymbOS Bank_Copy / shadow-buffer dance is needed. The SymbOS
- * config dialog + message protocol are dropped; this is just a fullscreen window
- * that animates and closes on input, like the other .SAV savers. */
+ * CPC writes its native Mode-1 framebuffer directly; MSX and PCW use the shared
+ * line primitive. The configuration UI is supplied by the same-stem
+ * MOUNTAIN.MOD companion, keeping saver-specific controls out of Settings. */
 #include "gb.h"
+#include "gbcfg.h"
+#include "gbsaver.h"
 
 #define WM_FS (*(volatile unsigned char *)0x130A)
 
@@ -21,21 +20,36 @@
 #define MAXH     220     /* initial random peak height */
 #define TH_MID   25      /* avg height >= this -> red fill, else black */
 #define YOFF     70      /* vertical screen offset of the grid */
-#define PAUSE    120     /* frames the finished landscape is held */
-#define NPEAKS   8       /* random peaks seeded into the terrain */
-#define CELLS    6       /* grid cells drawn per frame */
 
-/* GEOBENCH pens: 0 blue, 1 white, 2 black, 3 red. */
-#define COL_BG      0    /* blue sky (background) */
-#define COL_WIRE    1    /* white wireframe edges */
-#define COL_FILL_HI 3    /* red - higher ground */
-#define COL_FILL_LO 2    /* black - valleys */
+#define CELLS_SLOW    1
+#define CELLS_NORMAL  3
+#define CELLS_FAST    7
+
+/* GEOBENCH logical pens: 0 blue, 1 white, 2 black, 3 red. Screen 7 can also
+ * address the fixed extended palette at indices 4..15. */
+#define COL_BG_4      0
+#define COL_WIRE_4    1
+#define COL_FILL_HI   3
+#define COL_FILL_LO   2
+#define COL_BLACK     2
+#define COL_WHITE     1
+
+#ifdef GB_MSX2
+#define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
+#define KCFG_INKS ((volatile unsigned char *)0x122C)
+#elif !defined(GB_PCW)
+#define KCFG_BORDER (*(volatile unsigned char *)0x1230)
+#endif
 
 static int h[WW][WW];                 /* height map */
 static int draw_x, draw_y;
 static unsigned char anim_stage;      /* 0 = drawing, 1 = pause, 2 = regen */
 static int stage_timer;
 static unsigned char lmx, lmy, armed;
+static unsigned char mountain_peaks, mountain_hold, cells_per_frame;
+#ifdef GB_MSX2
+static unsigned char mode7, saved_paper_ink, saved_text_ink, saved_edge_ink;
+#endif
 static unsigned int  rng;
 
 static unsigned int rnd(void)
@@ -46,16 +60,23 @@ static unsigned int rnd(void)
     return rng;
 }
 
-/* Line/span primitive. CPC: Bresenham straight to the #C000 Mode-1 screen. MSX2:
-   the V9938 hardware LINE command (GB_LINE #8009), the same path the clock uses -
-   proj_sx/proj_sy already emit 512x212 screen coords there, so a filled span is a
-   horizontal hardware line and a wire edge a diagonal one (no per-pixel VDP). (#287) */
+/* Line/span primitive. CPC writes the #C000 Mode-1 screen. MSX uses the V9938
+ * LINE command and PCW uses the kernel's slot-3 Bresenham path. A filled span
+ * is one horizontal line, avoiding per-pixel calls on those targets. */
+#if defined(GB_MSX2) || defined(GB_PCW)
 #ifdef GB_MSX2
 #define GLINE_X0  (*(volatile unsigned int  *)0xC030)
 #define GLINE_Y0  (*(volatile unsigned int  *)0xC032)
 #define GLINE_X1  (*(volatile unsigned int  *)0xC034)
 #define GLINE_Y1  (*(volatile unsigned int  *)0xC036)
 #define GLINE_PEN (*(volatile unsigned char *)0xC038)
+#else
+#define GLINE_X0  (*(volatile unsigned int  *)0x0F10)
+#define GLINE_Y0  (*(volatile unsigned int  *)0x0F12)
+#define GLINE_X1  (*(volatile unsigned int  *)0x0F14)
+#define GLINE_Y1  (*(volatile unsigned int  *)0x0F16)
+#define GLINE_PEN (*(volatile unsigned char *)0x0F18)
+#endif
 static void fw_line(void) __naked
 {
 __asm
@@ -106,6 +127,119 @@ static void draw_line(int x0, int y0, int x1, int y1, unsigned char ink)
 #define plot_span(xl, xr, y, ink) do { int _x; for (_x = (xl); _x <= (xr); _x++) vram_pixel(_x, (y), (ink)); } while (0)
 #endif
 
+#ifdef GB_MSX2
+static volatile unsigned char pal_pen, pal_ink;
+
+static void pal_set_call(void) __naked
+{
+__asm
+    ld   a,(_pal_ink)
+    ld   b,a
+    ld   a,(_pal_pen)
+    call 0x8006
+    ret
+__endasm;
+}
+
+static void set_ink(unsigned char pen, unsigned char ink)
+{
+    pal_pen = pen;
+    pal_ink = ink;
+    pal_set_call();
+}
+
+static void mountain_palette(void)
+{
+    saved_paper_ink = KCFG_INKS[0];
+    if (mode7) {
+        saved_text_ink = KCFG_INKS[1];
+        saved_edge_ink = KCFG_INKS[2];
+        set_ink(COL_WHITE, 26);
+        set_ink(COL_BLACK, 0);
+    }
+    set_ink(0, 0);
+}
+
+static void restore_palette(void)
+{
+    if (mode7) {
+        set_ink(COL_WHITE, saved_text_ink);
+        set_ink(COL_BLACK, saved_edge_ink);
+    }
+    set_ink(0, saved_paper_ink);
+}
+#elif defined(GB_PCW)
+static void mountain_palette(void) { }
+static void restore_palette(void) { }
+#else
+static volatile unsigned char border_ink;
+
+static void set_border(void) __naked
+{
+__asm
+    ld   a,(_border_ink)
+    ld   b,a
+    ld   c,a
+    call 0xBC38
+    ret
+__endasm;
+}
+
+static void mountain_palette(void)
+{
+    border_ink = 0;
+    set_border();
+}
+
+static void restore_palette(void)
+{
+    border_ink = KCFG_BORDER;
+    set_border();
+}
+#endif
+
+/* Screen 7 mirrors the original xlockmore c/10 height selection, but uses a
+ * fixed low-to-high ramp rather than rotating the palette each landscape. */
+static unsigned char terrain_fill(int avg)
+{
+#ifdef GB_MSX2
+    if (mode7) {
+        if (avg < 10) return 4;   /* green */
+        if (avg < 20) return 12;  /* yellow-green */
+        if (avg < 30) return 15;  /* pale green */
+        if (avg < 40) return 6;   /* yellow */
+        if (avg < 50) return 9;   /* orange */
+        if (avg < 60) return 10;  /* light red */
+        if (avg < 70) return 14;  /* rock grey */
+        return COL_WHITE;         /* snow */
+    }
+#endif
+#ifdef GB_PCW
+    return (avg >= TH_MID) ? COL_FILL_HI : COL_BG_4;
+#else
+    return (avg >= TH_MID) ? COL_FILL_HI : COL_FILL_LO;
+#endif
+}
+
+static unsigned char terrain_bg(void)
+{
+#if defined(GB_PCW)
+    return COL_BLACK;
+#elif defined(GB_MSX2)
+    return mode7 ? COL_BLACK : COL_BG_4;
+#else
+    return COL_BG_4;
+#endif
+}
+
+static unsigned char terrain_wire(void)
+{
+#ifdef GB_MSX2
+    if (mode7) return COL_BLACK;
+#endif
+    return COL_WIRE_4;
+}
+
 /* edge_x: if edge (ax,ay)-(bx,by) crosses scanline y (half-open [ay,by)), widen
    the [*xl,*xr] span by the crossing x. */
 static void edge_x(int ax, int ay, int bx, int by, int y, int *xl, int *xr)
@@ -151,7 +285,7 @@ static void init_terrain(void)
 {
     int x, y, i, noise;
     for (y = 0; y < WW; y++) for (x = 0; x < WW; x++) h[x][y] = 0;
-    for (i = 0; i < NPEAKS; i++) {
+    for (i = 0; i < mountain_peaks; i++) {
         x = 1 + (int)(rnd() % (WW - 2));
         y = 1 + (int)(rnd() % (WW - 2));
         h[x][y] = MAXH / 4 + (int)(rnd() % (MAXH * 3 / 4));
@@ -166,12 +300,14 @@ static void init_terrain(void)
         }
 }
 
-/* isometric projection: the original 320x200 formula, scaled up on MSX2 to fill the
-   512x212 Screen 6 (x*512/320, y*212/200) - both are 4:3 displays, so the terrain
-   keeps its proportions and just gets bigger. CPC is unchanged. (#287) */
+/* Isometric projection: preserve the original 320x200 formula, then scale to
+ * the target framebuffer. CPC remains byte-for-byte in the original space. */
 #ifdef GB_MSX2
 static int proj_sx(int gx, int gy) { return ((gx * 640 / 60) - (gy * 400 / 60) / 2 + 80) * 8 / 5; }
 static int proj_sy(int gy, int hv) { return ((gy * 400 / 60) - hv + YOFF) * 53 / 50; }
+#elif defined(GB_PCW)
+static int proj_sx(int gx, int gy) { return ((gx * 640 / 60) - (gy * 400 / 60) / 2 + 80) * 9 / 8; }
+static int proj_sy(int gy, int hv) { return ((gy * 400 / 60) - hv + YOFF) * 31 / 25; }
 #else
 static int proj_sx(int gx, int gy) { return (gx * 640 / 60) - (gy * 400 / 60) / 2 + 80; }
 static int proj_sy(int gy, int hv) { return (gy * 400 / 60) - hv + YOFF; }
@@ -180,34 +316,39 @@ static int proj_sy(int gy, int hv) { return (gy * 400 / 60) - hv + YOFF; }
 static void draw_terrain_cell(int cx, int cy)
 {
     int x0, y0, x1, y1, x2, y2, x3, y3, avg;
-    unsigned char fill;
+    unsigned char fill, wire;
     x0 = proj_sx(cx,     cy);     y0 = proj_sy(cy,     h[cx][cy]);
     x1 = proj_sx(cx + 1, cy);     y1 = proj_sy(cy,     h[cx + 1][cy]);
     x2 = proj_sx(cx + 1, cy + 1); y2 = proj_sy(cy + 1, h[cx + 1][cy + 1]);
     x3 = proj_sx(cx,     cy + 1); y3 = proj_sy(cy + 1, h[cx][cy + 1]);
     avg = (h[cx][cy] + h[cx + 1][cy] + h[cx][cy + 1] + h[cx + 1][cy + 1]) / 4;
-    fill = (avg >= TH_MID) ? COL_FILL_HI : COL_FILL_LO;
-    fill_quad(x0, y0, x1, y1, x2, y2, x3, y3, fill);     /* red/black fill ... */
-    draw_line(x0, y0, x1, y1, COL_WIRE);                 /* ... white wireframe edges */
-    draw_line(x1, y1, x2, y2, COL_WIRE);
-    draw_line(x2, y2, x3, y3, COL_WIRE);
-    draw_line(x3, y3, x0, y0, COL_WIRE);
+    fill = terrain_fill(avg);
+    wire = terrain_wire();
+    fill_quad(x0, y0, x1, y1, x2, y2, x3, y3, fill);
+    draw_line(x0, y0, x1, y1, wire);
+    draw_line(x1, y1, x2, y2, wire);
+    draw_line(x2, y2, x3, y3, wire);
+    draw_line(x3, y3, x0, y0, wire);
 }
 
 static void anim_tick(void)
 {
     unsigned char n;
-    if (anim_stage == 0) {                  /* draw the grid, CELLS cells per frame */
-        for (n = 0; n < CELLS; n++) {
+    if (anim_stage == 0) {
+        for (n = 0; n < cells_per_frame; n++) {
             if (draw_x >= WW - 1) { draw_x = 0; draw_y++; }
-            if (draw_y >= WW - 1) { anim_stage = 1; stage_timer = PAUSE; break; }
+            if (draw_y >= WW - 1) {
+                anim_stage = 1;
+                stage_timer = mountain_hold;
+                break;
+            }
             draw_terrain_cell(draw_x, draw_y);
             draw_x++;
         }
-    } else if (anim_stage == 1) {           /* hold the finished landscape */
+    } else if (anim_stage == 1) {
         if (--stage_timer <= 0) anim_stage = 2;
-    } else {                                /* regenerate */
-        gb_fill(0, 0, GB_COLS, GB_LINES, COL_BG);
+    } else {
+        gb_fill(0, 0, GB_COLS, GB_LINES, terrain_bg());
         init_terrain();
         draw_x = 0; draw_y = 0; anim_stage = 0;
     }
@@ -215,7 +356,7 @@ static void anim_tick(void)
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, GB_COLS, GB_LINES, COL_BG);         /* blue sky */
+    gb_fill(0, 0, GB_COLS, GB_LINES, terrain_bg());
     draw_x = 0; draw_y = 0; anim_stage = 0;
 }
 
@@ -229,6 +370,7 @@ static void ss_frame(void)
     }
     if (gb_getkey() || (f & (GB_CLICK | GB_FIRE | GB_QUIT)) ||
         gb_mx() != lmx || gb_my() != lmy) {
+        restore_palette();
         WM_FS = 0;
         gb_wm_close();
         return;
@@ -240,13 +382,29 @@ static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 
 
 void main(void)
 {
-    unsigned char n;
+    unsigned char n, speed;
     lmx = gb_mx(); lmy = gb_my();
     armed = 0;
+#ifdef GB_MSX2
+    mode7 = (MSX_SCRMOD == 7);
+#endif
+    speed = gbcfg_u8(GB_MOUNTAIN_SPEED_KEY, GB_MOUNTAIN_SPEED_DEFAULT,
+                     GB_MOUNTAIN_SPEED_MIN, GB_MOUNTAIN_SPEED_MAX);
+    mountain_peaks = gbcfg_u8(GB_MOUNTAIN_PEAKS_KEY,
+                              GB_MOUNTAIN_PEAKS_DEFAULT,
+                              GB_MOUNTAIN_PEAKS_MIN,
+                              GB_MOUNTAIN_PEAKS_MAX);
+    mountain_hold = gbcfg_u8(GB_MOUNTAIN_HOLD_KEY,
+                             GB_MOUNTAIN_HOLD_DEFAULT,
+                             GB_MOUNTAIN_HOLD_MIN,
+                             GB_MOUNTAIN_HOLD_MAX);
+    cells_per_frame = speed == 1 ? CELLS_SLOW :
+                      speed == 3 ? CELLS_FAST : CELLS_NORMAL;
     gb_time();
     rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0x3217u);
     if (!rng) rng = 0x3217u;
     init_terrain();
+    mountain_palette();
     WM_FS = 1;
     gb_curhide();
     for (n = 64; n; n--) if (!gb_getkey()) break;

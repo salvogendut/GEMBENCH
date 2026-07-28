@@ -226,6 +226,15 @@ palette index in `4..15` (default `4`). PCW and MSX Screen 6 keep the fixed
 green treatment and do not offer the color row. Every mode clears to black,
 snapshots its launch-time palette, and restores that snapshot on exit.
 
+MOUNTAIN adds `MOUNTAIN_SPEED=1..3` (default `2`),
+`MOUNTAIN_PEAKS=4..30` (default `15`), and
+`MOUNTAIN_HOLD=30..240` (default `120`, stepped by 30). MSX Screen 7 maps
+terrain height through eight fixed palette bands; MSX Screen 6, CPC, and PCW
+retain bounded target-appropriate shading. The saver restores the two temporary
+Screen 7 wire/background palette entries when it exits. CPC and MSX force a
+black display border while Mountain runs and restore the configured border on
+exit; on MSX Screen 6 the border shares palette entry 0 with the sky.
+
 Build a set, then package it (add an `incbin` + a `save "<NAME>.<EXT>",...,DSK`
 line in the pack assembly or stage it into the card distribution as appropriate):
 
