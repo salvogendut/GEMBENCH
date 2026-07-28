@@ -48,8 +48,8 @@ can test or deploy without rebuilding first):
   `HAND.SPR` cursor are kept beside those apps; shared `GBWEB.MOD`/`GBIMG.MOD`
   modules remain on Main.
 - **`QA/CPC/Floppies/EXTRAS.DSK`** — the complete `.PIC` gallery plus
-  `XROACH.SAV` and `WELCOME.TXT` on an extended 80-track, single-sided AMSDOS
-  DATA disk. Its files
+  `XROACH.SAV`, `CATCLK.SAV`, and `WELCOME.TXT` on an extended 80-track,
+  single-sided AMSDOS DATA disk. Its files
   retain AMSDOS headers and multi-extent
   layout, so the existing chunked picture reader can open the larger images. A
   standard 180K CF2 is too small; use a Gotek/emulator or compatible 80-track drive.

@@ -74,7 +74,7 @@ hardware, or use the disk images in an emulator.
 - **Floppy** — write **`QA/CPC/Floppies/GEOBENCH.DSK`** (the main disk) and
   **`QA/CPC/Floppies/COMPANION.DSK`** (the larger apps and extra savers) to the
   working disk set. **`QA/CPC/Floppies/EXTRAS.DSK`** holds the complete picture
-  gallery. It is an extended
+  gallery plus the XRoach and Cat Clock savers. It is an extended
   80-track data image for a Gotek/emulator or compatible drive because the gallery
   does not fit a 180K CF2. Boot with `RUN"GB` (or `RUN"GBKERN`).
 

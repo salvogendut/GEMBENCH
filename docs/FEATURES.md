@@ -67,9 +67,10 @@ backdrop, dragging icons, opening apps and menus:
   `SOLID`) and a centred **wallpaper** (`.PIC`) from the system folder, a **Colours**
   editor for the 4 Mode-1 pens + the screen border (`INKS=`) with a **live** preview
   — `-`/`+` recolours the whole desktop instantly — and a **Screensaver** section
-  (**Module** picker, per-saver **Configure**, and idle **Timeout**). Starfield's
-  configuration window controls its speed and number of stars. On MSX2 the video
-  choices are labelled **4 colors** and **16 colors** (Screen 6 and Screen 7).
+  (**Module** picker, per-saver **Configure**, and idle **Timeout**). Starfield
+  controls speed and star count; XMatrix controls binary/Kana glyphs and speed,
+  plus its main color in MSX 16-color mode. On MSX2 the video choices are labelled
+  **4 colors** and **16 colors** (Screen 6 and Screen 7).
   **Return to Defaults** restores the complete target-specific configuration.
   Media settings are stored as
   **drive-qualified names** such as `A:DARKER` or `C:XMATRIX`, so Settings can
@@ -132,7 +133,7 @@ backdrop, dragging icons, opening apps and menus:
   and Extras floppies together, the Albireo/M4 card distribution, and the MSX2
   distribution carry the full set: **SQUARES** (random squares), **DECO**
   (Art-Deco panels), **XMATRIX**
-  (binary "Matrix" rain), **MOUNTAIN** (isometric 3D terrain), **FRACTALI**
+  (configurable binary/Kana "Matrix" rain), **MOUNTAIN** (isometric 3D terrain), **FRACTALI**
   (Sierpinski + Koch), **STARFLD** (3D star-field), **XROACH** (scattering
   cockroaches), **MUNCH** (munching squares), **RORSCH** (symmetric ink-blots),
   **TRUCHET** (tile maze), **ANT** (Langton's ant), **LIGHTN** (forked lightning),
@@ -140,8 +141,9 @@ backdrop, dragging icons, opening apps and menus:
   **CATCLK** (a Kit-Cat Klock with sliding pupils + real hour/minute hands). The
   Settings **Module** picker lists every `.SAV` in the system folder (scrolling
   when there are more than fit), so new ones appear automatically. **Configure**
-  persists supported module options in `GEOBENCH.CFG`; STARFLD currently exposes
-  `STARFLD_SPEED` and `STARFLD_STARS`.
+  persists supported module options in `GEOBENCH.CFG`. STARFLD exposes speed and
+  star count; XMATRIX exposes binary/Kana glyphs and speed. In MSX 16-color mode,
+  XMATRIX also exposes its main glyph color. Its background is always black.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),

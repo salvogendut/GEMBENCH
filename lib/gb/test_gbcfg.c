@@ -3,6 +3,7 @@
 
 #define GBCFG_HOST_TEST
 #include "gbcfg.h"
+#include "gbsaver.h"
 
 static int failures;
 
@@ -37,6 +38,27 @@ int main(void)
           "STARFLD_SPEED=2\r\nSTARFLD_SPEED=99\r\n",
           "STARFLD_SPEED=", 4, 1, 8, 4);
     check("star count", "STARFLD_STARS=96\n", "STARFLD_STARS=", 64, 16, 96, 96);
+    check("xmatrix Kana glyphs", "XMATRIX_GLYPHS=1\r\n",
+          GB_XMATRIX_GLYPHS_KEY, GB_XMATRIX_GLYPHS_DEFAULT,
+          GB_XMATRIX_GLYPHS_MIN, GB_XMATRIX_GLYPHS_MAX, 1);
+    check("xmatrix invalid glyphs", "XMATRIX_GLYPHS=2\r\n",
+          GB_XMATRIX_GLYPHS_KEY, GB_XMATRIX_GLYPHS_DEFAULT,
+          GB_XMATRIX_GLYPHS_MIN, GB_XMATRIX_GLYPHS_MAX,
+          GB_XMATRIX_GLYPHS_DEFAULT);
+    check("xmatrix fast speed", "XMATRIX_SPEED=3\r\n",
+          GB_XMATRIX_SPEED_KEY, GB_XMATRIX_SPEED_DEFAULT,
+          GB_XMATRIX_SPEED_MIN, GB_XMATRIX_SPEED_MAX, 3);
+    check("xmatrix invalid speed", "XMATRIX_SPEED=4\r\n",
+          GB_XMATRIX_SPEED_KEY, GB_XMATRIX_SPEED_DEFAULT,
+          GB_XMATRIX_SPEED_MIN, GB_XMATRIX_SPEED_MAX,
+          GB_XMATRIX_SPEED_DEFAULT);
+    check("xmatrix Screen 7 color", "XMATRIX_COLOR=15\r\n",
+          GB_XMATRIX_COLOR_KEY, GB_XMATRIX_COLOR_DEFAULT,
+          GB_XMATRIX_COLOR_MIN, GB_XMATRIX_COLOR_MAX, 15);
+    check("xmatrix invalid color", "XMATRIX_COLOR=3\r\n",
+          GB_XMATRIX_COLOR_KEY, GB_XMATRIX_COLOR_DEFAULT,
+          GB_XMATRIX_COLOR_MIN, GB_XMATRIX_COLOR_MAX,
+          GB_XMATRIX_COLOR_DEFAULT);
 
     if (failures) return 1;
     puts("\nall app config tests passed");

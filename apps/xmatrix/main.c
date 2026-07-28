@@ -1,50 +1,84 @@
-/* xmatrix - a "Matrix" digital-rain screensaver for GEOBENCH (#219 family).
+/* xmatrix - Matrix digital rain for GEOBENCH (#404).
  *
- * Ported from the SymbOS symsav-xmatrix screensaver: a grid of cells, one
- * "feeder" per column dropping random glyphs with a glow countdown, so each
- * column shows a bright leading character with a fading trail behind it. The
- * SymbOS scaffolding (config dialog, message protocol) is dropped - this is just
- * a fullscreen window that animates and closes on input, like CIRCLE.SAV.
+ * The glyphs and feeder animation are ported from ../symsav-xmatrix. Binary
+ * and Kana styles share the original 8x8 artwork. Glyph buffers are built in
+ * each target's native screen representation so CPC, MSX and PCW all render
+ * the same shapes.
  *
- * The CPC original ran in Mode 1, an 8x8 grid (40x25). We keep that grid. There
- * is no green in GEOBENCH's 4-colour palette and no per-pen text primitive, so
- * we build each glyph as a small Mode-1 bitmap in two pens - WHITE (the bright
- * head) and RED (the trail) - and blit it with gb_restorerect. */
+ * CPC and MSX Screen 6 use the original fixed green palette. MSX Screen 7 can
+ * select a stable 16-colour palette entry for the main trail. Palette entries
+ * temporarily used by the saver are restored before the desktop returns. */
 #include "gb.h"
+#include "gbcfg.h"
+#include "gbsaver.h"
 
 #define WM_FS (*(volatile unsigned char *)0x130A)
+#define KCFG_INKS ((volatile unsigned char *)0x122C)
 
-#define CW    2         /* a cell is 2 byte columns (8px) x 8 lines */
-#define GW    (GB_COLS / CW)   /* grid cols: 40 on CPC (320/8), 64 on MSX2 (512/8), #287 */
-#define GH    (GB_LINES / 8)   /* grid rows: 25 on CPC (200/8), 26 on MSX2 (208/8) */
+#define CW    2
+#define GW    (GB_COLS / CW)
+#define GH    (GB_LINES / 8)
 #define TOTAL (GW * GH)
-#define GLOW_MAX   6
-#define GLOW_WHITE 3    /* glow > this = white head, else red trail */
-#define NGLYPHS    2
-#define DENSITY    2    /* new feeders started per tick */
-#define BG         0    /* background pen: 0 = blue */
 
-/* glyph art: 8x8, one byte per row (bit 7 = leftmost pixel). Binary rain: 0 / 1. */
-static const unsigned char glyph_bits[NGLYPHS][8] = {
-    { 0x18,0x38,0x18,0x18,0x18,0x18,0x3C,0x00 },  /* 1 */
-    { 0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00 },  /* 0 */
+#define NGLYPHS_BINARY 2
+#define NGLYPHS_KANA   9
+#define NGLYPHS_TOTAL  (NGLYPHS_BINARY + NGLYPHS_KANA)
+#define GLOW_MAX       6
+#define GLOW_WHITE     3
+#define DENSITY        2
+
+#ifdef GB_MSX2
+#define GLYPH_SLOT 32
+#define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
+#define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
+#else
+#define GLYPH_SLOT 16
+#endif
+
+#ifdef GB_PCW
+#define BG_PEN     2
+#define HEAD_PEN   1
+#define BRIGHT_PEN 3
+#define DIM_PEN    0
+#else
+#define BG_PEN     0
+#define HEAD_PEN   1
+#define BRIGHT_PEN 3
+#define DIM_PEN    2
+#endif
+
+/* Exact 8x8 artwork from symsav-xmatrix: 0, 1, then nine Katakana. */
+static const unsigned char glyph_bits[NGLYPHS_TOTAL][8] = {
+    { 0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00 },
+    { 0x18,0x38,0x18,0x18,0x18,0x18,0x7E,0x00 },
+    { 0xFF,0x18,0x18,0x18,0x18,0xFF,0x00,0x00 },
+    { 0x7E,0x60,0x60,0x60,0x60,0x7E,0x00,0x00 },
+    { 0x7E,0x0C,0x18,0x3C,0x66,0xC3,0x00,0x00 },
+    { 0x0C,0x0C,0x7F,0x0C,0x0C,0x0C,0x00,0x00 },
+    { 0x18,0xFF,0x18,0x66,0xC3,0x00,0x00,0x00 },
+    { 0x7E,0x03,0x06,0x0C,0x18,0x30,0x00,0x00 },
+    { 0x7E,0x66,0x66,0x66,0x66,0x7E,0x00,0x00 },
+    { 0x3C,0x18,0xFF,0x18,0x1F,0x00,0x00,0x00 },
+    { 0x6F,0x66,0x36,0x0F,0x0E,0x18,0x00,0x00 }
 };
 
-/* built glyph bitmaps: NGLYPHS * (8 rows * 2 Mode-1 bytes) per pen, on the blue bg.
-   Three glow stages give the fade white (head) -> red (mid) -> black (dim tail). */
-static unsigned char font_w[NGLYPHS * 16];   /* white (head, glow > GLOW_WHITE) */
-static unsigned char font_r[NGLYPHS * 16];   /* red   (mid,  glow 1..GLOW_WHITE) */
-static unsigned char font_k[NGLYPHS * 16];   /* black (dim tail, glow 0) */
+static unsigned char font_head[NGLYPHS_TOTAL * GLYPH_SLOT];
+static unsigned char font_bright[NGLYPHS_TOTAL * GLYPH_SLOT];
+static unsigned char font_dim[NGLYPHS_TOTAL * GLYPH_SLOT];
 
-static unsigned char cg[TOTAL];    /* glyph: 0 = empty, else 1+index */
-static unsigned char cgl[TOTAL];   /* glow countdown */
-static unsigned char cd[TOTAL];    /* dirty: needs redraw */
-static signed char   fy[GW];       /* feeder row (-1 = inactive) */
-static unsigned char frem[GW];     /* glyphs left to drop */
-static unsigned char fthr[GW];     /* throttle ticks */
+static unsigned char cg[TOTAL];
+static unsigned char cgl[TOTAL];
+static unsigned char cd[TOTAL];
+static signed char   fy[GW];
+static unsigned char frem[GW];
+static unsigned char fthr[GW];
 
-static unsigned char lmx, lmy, armed, phase;
-static unsigned int  rng;
+static unsigned char lmx, lmy, armed, phase, frame_skip;
+static unsigned char glyph_base, glyph_count, matrix_speed;
+#ifdef GB_MSX2
+static unsigned char matrix_color;
+#endif
+static unsigned int rng;
 
 static unsigned int rnd(void)
 {
@@ -54,43 +88,179 @@ static unsigned int rnd(void)
     return rng;
 }
 
-/* set Mode-1 pixel k (0..3) within byte *b to pen p (0..3). */
-static unsigned char put1(unsigned char b, unsigned char k, unsigned char p)
+#if !defined(GB_PCW)
+static volatile unsigned char pal_pen, pal_ink;
+
+#ifdef GB_MSX2
+static void pal_set_call(void) __naked
 {
-    if (p & 1) b |= (unsigned char)(1u << (7 - k));
-    if (p & 2) b |= (unsigned char)(1u << (3 - k));
-    return b;
+__asm
+    ld   a,(_pal_ink)
+    ld   b,a
+    ld   a,(_pal_pen)
+    call 0x8006
+    ret
+__endasm;
+}
+#else
+static void pal_set_call(void) __naked
+{
+__asm
+    ld   a,(_pal_ink)
+    ld   b,a
+    ld   c,a
+    ld   a,(_pal_pen)
+    call 0xBC32
+    ret
+__endasm;
 }
 
-/* build_font: expand glyph_bits into Mode-1 bitmaps for the white + red pens
-   (foreground = the pen, background = pen 2 black), so a blit also clears the cell. */
+static void border_set_call(void) __naked
+{
+__asm
+    ld   a,(_pal_ink)
+    ld   b,a
+    ld   c,a
+    call 0xBC38
+    ret
+__endasm;
+}
+#endif
+
+static void set_ink(unsigned char pen, unsigned char ink)
+{
+    pal_pen = pen;
+    pal_ink = ink;
+    pal_set_call();
+}
+
+#ifdef GB_MSX2
+/* Dim companions for the fixed Screen-7 colours at palette indices 4..15. */
+static const unsigned char mode7_dim_ink[12] = {
+    9, 1, 12, 4, 10, 3, 4, 1, 9, 4, 13, 9
+};
+#endif
+
+static void matrix_palette(void)
+{
+    unsigned char main_ink = 18;
+    unsigned char dim_ink = 9;
+#ifdef GB_MSX2
+    if (MSX_SCRMOD == 7) {
+        dim_ink = mode7_dim_ink[matrix_color - GB_XMATRIX_COLOR_MIN];
+        set_ink(0, 0);
+        set_ink(1, 26);
+        set_ink(2, dim_ink);
+        return;
+    }
+#endif
+    set_ink(0, 0);
+    set_ink(1, 26);
+    set_ink(2, dim_ink);
+    set_ink(3, main_ink);
+#ifndef GB_MSX2
+    pal_ink = 0;
+    border_set_call();
+#endif
+}
+
+static void restore_palette(void)
+{
+    unsigned char i;
+    for (i = 0; i < 4; i++) set_ink(i, KCFG_INKS[i]);
+#ifndef GB_MSX2
+    pal_ink = KCFG_INKS[4];
+    border_set_call();
+#endif
+}
+#else
+static void matrix_palette(void) { }
+static void restore_palette(void) { }
+#endif
+
+static unsigned char encode4(unsigned char bits, unsigned char first,
+                             unsigned char fg, unsigned char bg)
+{
+    unsigned char i, pen, out = 0;
+    for (i = 0; i < 4; i++) {
+        pen = (bits & (unsigned char)(0x80u >> (first + i))) ? fg : bg;
+#if defined(GB_MSX2) || defined(GB_PCW)
+        out |= (unsigned char)(pen << (6 - 2 * i));
+#else
+        if (pen & 1) out |= (unsigned char)(0x80u >> i);
+        if (pen & 2) out |= (unsigned char)(0x08u >> i);
+#endif
+    }
+#ifdef GB_PCW
+    out = (unsigned char)(((out & 0x55) << 1) |
+                          (((out ^ 0xFF) & 0xAA) >> 1));
+#endif
+    return out;
+}
+
 static void build_font(void)
 {
-    unsigned char g, r, i, bits, p, *dst;
-    for (g = 0; g < NGLYPHS; g++) {
+    unsigned char g, r, bits;
+    unsigned int off;
+    for (g = 0; g < NGLYPHS_TOTAL; g++) {
         for (r = 0; r < 8; r++) {
             bits = glyph_bits[g][r];
-            for (p = 0; p < 3; p++) {               /* 0=white, 1=red, 2=black */
-                unsigned char pen = (p == 0) ? 1 : (p == 1) ? 3 : 2;
-                unsigned char b0 = 0, b1 = 0;
-                for (i = 0; i < 4; i++)
-                    if (bits & (1u << (7 - i))) b0 = put1(b0, i, pen);
-                for (i = 4; i < 8; i++)
-                    if (bits & (1u << (7 - i))) b1 = put1(b1, i - 4, pen);
-                dst = (p == 0) ? font_w : (p == 1) ? font_r : font_k;
-                dst[g * 16 + r * 2]     = b0;
-                dst[g * 16 + r * 2 + 1] = b1;
+#ifdef GB_MSX2
+            if (MSX_SCRMOD == 7) {
+                unsigned char b, lp, rp;
+                off = (unsigned int)g * GLYPH_SLOT + (unsigned int)r * 4;
+                for (b = 0; b < 4; b++) {
+                    lp = (bits & (unsigned char)(0x80u >> (b * 2))) ? 1 : 0;
+                    rp = (bits & (unsigned char)(0x40u >> (b * 2))) ? 1 : 0;
+                    font_head[off + b] =
+                        (unsigned char)((lp ? HEAD_PEN : BG_PEN) << 4 |
+                                        (rp ? HEAD_PEN : BG_PEN));
+                    font_bright[off + b] =
+                        (unsigned char)((lp ? matrix_color : BG_PEN) << 4 |
+                                        (rp ? matrix_color : BG_PEN));
+                    font_dim[off + b] =
+                        (unsigned char)((lp ? DIM_PEN : BG_PEN) << 4 |
+                                        (rp ? DIM_PEN : BG_PEN));
+                }
+                continue;
             }
+#endif
+            off = (unsigned int)g * GLYPH_SLOT + (unsigned int)r * 2;
+            font_head[off]       = encode4(bits, 0, HEAD_PEN, BG_PEN);
+            font_head[off + 1]   = encode4(bits, 4, HEAD_PEN, BG_PEN);
+            font_bright[off]     = encode4(bits, 0, BRIGHT_PEN, BG_PEN);
+            font_bright[off + 1] = encode4(bits, 4, BRIGHT_PEN, BG_PEN);
+            font_dim[off]        = encode4(bits, 0, DIM_PEN, BG_PEN);
+            font_dim[off + 1]    = encode4(bits, 4, DIM_PEN, BG_PEN);
         }
     }
 }
 
-/* stage: 2 = white head, 1 = red mid, 0 = black dim tail. */
-static void draw_cell(unsigned char cx, unsigned char cy, unsigned char g, unsigned char stage)
+#ifdef GB_MSX2
+static void native16_blit(unsigned char x, unsigned char y,
+                          const unsigned char *source)
 {
-    const unsigned char *f = (stage >= 2) ? font_w : (stage == 1) ? font_r : font_k;
-    gb_restorerect((unsigned char)(cx * CW), (unsigned char)(cy * 8), CW, 8,
-                   f + (unsigned int)g * 16);
+    gb_pic_edit_buf = (unsigned int)source;
+    gb_pic_edit_off = (unsigned int)x | ((unsigned int)y << 8);
+    FS_SAVE_LEN_K = CW | ((unsigned int)8 << 8);
+    (void)gb_pic_edit(GB_PICEDIT_NATIVE16);
+}
+#endif
+
+static void draw_cell(unsigned char cx, unsigned char cy,
+                      unsigned char g, unsigned char stage)
+{
+    const unsigned char *font = stage >= 2 ? font_head :
+                                stage == 1 ? font_bright : font_dim;
+    const unsigned char *source = font + (unsigned int)g * GLYPH_SLOT;
+#ifdef GB_MSX2
+    if (MSX_SCRMOD == 7) {
+        native16_blit((unsigned char)(cx * CW), (unsigned char)(cy * 8), source);
+        return;
+    }
+#endif
+    gb_restorerect((unsigned char)(cx * CW), (unsigned char)(cy * 8),
+                   CW, 8, source);
 }
 
 static void anim_tick(void)
@@ -98,51 +268,62 @@ static void anim_tick(void)
     unsigned int idx;
     unsigned char x, y, nf;
 
-    for (x = 0; x < GW; x++) {                   /* advance feeders */
+    for (x = 0; x < GW; x++) {
         if (fy[x] < 0) continue;
         if (fthr[x]) { fthr[x]--; continue; }
         if ((unsigned char)fy[x] < GH) {
             idx = (unsigned int)(unsigned char)fy[x] * GW + x;
             if (frem[x]) {
-                cg[idx] = (unsigned char)(1 + rnd() % NGLYPHS);
-                cgl[idx] = GLOW_MAX; cd[idx] = 1; frem[x]--;
+                cg[idx] = (unsigned char)(glyph_base + rnd() % glyph_count + 1);
+                cgl[idx] = GLOW_MAX;
+                cd[idx] = 1;
+                frem[x]--;
             } else if (cg[idx]) {
-                cg[idx] = 0; cgl[idx] = 0; cd[idx] = 1;
+                cg[idx] = 0;
+                cgl[idx] = 0;
+                cd[idx] = 1;
             }
         }
         fy[x]++;
         if (fy[x] >= GH) { fy[x] = -1; frem[x] = 0; }
     }
 
-    for (idx = 0; idx < TOTAL; idx++)            /* glow decay */
+    for (idx = 0; idx < TOTAL; idx++) {
         if (cg[idx] && cgl[idx]) {
             cgl[idx]--;
             if (cgl[idx] == GLOW_WHITE || cgl[idx] == 0) cd[idx] = 1;
         }
+    }
 
-    nf = DENSITY;                                /* start new feeders */
+    nf = DENSITY;
     while (nf--) {
         x = (unsigned char)(rnd() % GW);
         if (fy[x] >= 0) continue;
-        fy[x]   = (signed char)(rnd() % (GH / 3));
+        fy[x] = (signed char)(rnd() % (GH / 3));
         frem[x] = (unsigned char)(5 + rnd() % (GH - 5));
-        fthr[x] = (unsigned char)(rnd() % 4);
+        fthr[x] = matrix_speed >= 3 ? 0 :
+                  matrix_speed == 2 ? (unsigned char)(rnd() % 4) :
+                                      (unsigned char)(rnd() % 8);
     }
 
-    idx = 0;                                     /* render dirty cells */
-    for (y = 0; y < GH; y++)
+    idx = 0;
+    for (y = 0; y < GH; y++) {
         for (x = 0; x < GW; x++, idx++) {
             if (!cd[idx]) continue;
             cd[idx] = 0;
-            if (!cg[idx]) gb_fill((unsigned char)(x * CW), (unsigned char)(y * 8), CW, 8, BG);
-            else draw_cell(x, y, (unsigned char)(cg[idx] - 1),
-                           cgl[idx] > GLOW_WHITE ? 2 : cgl[idx] ? 1 : 0);
+            if (!cg[idx])
+                gb_fill((unsigned char)(x * CW), (unsigned char)(y * 8),
+                        CW, 8, BG_PEN);
+            else
+                draw_cell(x, y, (unsigned char)(cg[idx] - 1),
+                          cgl[idx] > GLOW_WHITE ? 2 : cgl[idx] ? 1 : 0);
         }
+    }
 }
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, GB_COLS, GB_LINES, BG);        /* blue screen */
+    gb_fill(0, 0, GB_COLS, GB_LINES, BG_PEN);
 }
 
 static void ss_frame(void)
@@ -150,29 +331,67 @@ static void ss_frame(void)
     unsigned char f = gb_flags();
     if (!armed) {
         while (gb_getkey()) ;
-        if (!(f & (GB_CLICK | GB_FIRE | GB_QUIT))) { lmx = gb_mx(); lmy = gb_my(); armed = 1; }
+        if (!(f & (GB_CLICK | GB_FIRE | GB_QUIT))) {
+            lmx = gb_mx();
+            lmy = gb_my();
+            armed = 1;
+        }
         return;
     }
     if (gb_getkey() || (f & (GB_CLICK | GB_FIRE | GB_QUIT)) ||
         gb_mx() != lmx || gb_my() != lmy) {
+        restore_palette();
         WM_FS = 0;
         gb_wm_close();
         return;
     }
-    if (phase ^= 1) anim_tick();                 /* ~25 fps - every other frame */
+    phase++;
+    if (phase >= frame_skip) {
+        phase = 0;
+        anim_tick();
+    }
 }
 
-static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
+static const gb_win_t sswin = {
+    0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0
+};
 
 void main(void)
 {
-    unsigned char n;
-    lmx = gb_mx(); lmy = gb_my();
-    armed = 0; phase = 0;
+    unsigned char n, glyphs;
+    lmx = gb_mx();
+    lmy = gb_my();
+    armed = 0;
+    phase = 0;
+
+    glyphs = gbcfg_u8(GB_XMATRIX_GLYPHS_KEY, GB_XMATRIX_GLYPHS_DEFAULT,
+                      GB_XMATRIX_GLYPHS_MIN, GB_XMATRIX_GLYPHS_MAX);
+    matrix_speed = gbcfg_u8(GB_XMATRIX_SPEED_KEY, GB_XMATRIX_SPEED_DEFAULT,
+                            GB_XMATRIX_SPEED_MIN, GB_XMATRIX_SPEED_MAX);
+    if (glyphs) {
+        glyph_base = NGLYPHS_BINARY;
+        glyph_count = NGLYPHS_KANA;
+    } else {
+        glyph_base = 0;
+        glyph_count = NGLYPHS_BINARY;
+    }
+    frame_skip = matrix_speed == 1 ? 6 : matrix_speed == 2 ? 3 : 1;
+#ifdef GB_MSX2
+    matrix_color = GB_XMATRIX_COLOR_DEFAULT;
+    if (MSX_SCRMOD == 7)
+        matrix_color = gbcfg_u8(GB_XMATRIX_COLOR_KEY,
+                                GB_XMATRIX_COLOR_DEFAULT,
+                                GB_XMATRIX_COLOR_MIN,
+                                GB_XMATRIX_COLOR_MAX);
+#endif
+
     gb_time();
-    rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0x4A1Du);
+    rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^
+                         gb_hour ^ 0x4A1Du);
     if (!rng) rng = 0x4A1Du;
     for (n = 0; n < GW; n++) fy[n] = -1;
+
+    matrix_palette();
     build_font();
     WM_FS = 1;
     gb_curhide();
