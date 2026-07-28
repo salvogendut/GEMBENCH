@@ -211,6 +211,11 @@ Per-screensaver options also live in this file. The first contract is
 apps should use `lib/gb/gbcfg.h` for bounded numeric values so old, missing, or
 malformed settings fall back safely without kernel involvement.
 
+XMATRIX adds `XMATRIX_GLYPHS=0|1` (binary/Kana), `XMATRIX_SPEED=1..3`, and
+`XMATRIX_COLOR=4..15`, with defaults `0`, `2`, and `4`. The color is read and
+offered by Settings only on MSX Screen 7; CPC, PCW, and MSX Screen 6 use the
+fixed green treatment. Every mode clears to a black background.
+
 Build a set, then package it (add an `incbin` + a `save "<NAME>.<EXT>",...,DSK`
 line in the pack assembly or stage it into the card distribution as appropriate):
 

@@ -13,4 +13,20 @@
 #define GB_STARFLD_STARS_MAX      96
 #define GB_STARFLD_STARS_STEP     8
 
+#define GB_XMATRIX_GLYPHS_KEY      "XMATRIX_GLYPHS="
+#define GB_XMATRIX_GLYPHS_DEFAULT  0
+#define GB_XMATRIX_GLYPHS_MIN      0
+#define GB_XMATRIX_GLYPHS_MAX      1
+
+#define GB_XMATRIX_SPEED_KEY      "XMATRIX_SPEED="
+#define GB_XMATRIX_SPEED_DEFAULT  2
+#define GB_XMATRIX_SPEED_MIN      1
+#define GB_XMATRIX_SPEED_MAX      3
+
+/* Screen 7 palette indices 4..15 are stable across desktop themes. */
+#define GB_XMATRIX_COLOR_KEY      "XMATRIX_COLOR="
+#define GB_XMATRIX_COLOR_DEFAULT  4
+#define GB_XMATRIX_COLOR_MIN      4
+#define GB_XMATRIX_COLOR_MAX      15
+
 #endif

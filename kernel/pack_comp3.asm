@@ -1,6 +1,7 @@
 ;; pack_comp3.asm - COMPANION floppy, pass 3 of 4 (#250). See pack_comp1.asm header.
 ;;
-;; Pass 3: the rest of the screensaver set (the xscreensaver ports + CATCLK, ~42 KB).
+;; Pass 3: the remaining xscreensaver ports. CATCLK moved to the extended
+;; EXTRAS.DSK when configurable XMatrix outgrew the CF2 free space (#404).
                 org   #4000
 mun_img         incbin "../build/MUNCH.RAW"     ; munching squares (xscreensaver port)
 mun_imgend
@@ -26,6 +27,3 @@ for_imgend
 hlx_img         incbin "../build/HELIX.RAW"     ; harmonograph curves
 hlx_imgend
                 save  "HELIX.SAV",hlx_img,hlx_imgend-hlx_img,DSK,"build/companion.dsk"
-cat_img         incbin "../build/CATCLK.RAW"    ; Kit-Cat clock
-cat_imgend
-                save  "CATCLK.SAV",cat_img,cat_imgend-cat_img,DSK,"build/companion.dsk"

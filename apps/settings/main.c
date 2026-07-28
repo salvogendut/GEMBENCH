@@ -76,7 +76,7 @@ static unsigned char win_x, win_y, win_w, win_h;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
 static void saver_value(char *dst);       /* forward: s_draw shows the current SAVERTIME= (#219) */
 static void ss_module_value(char *dst);   /* forward: s_draw shows the current SAVER= module (#219) */
-static unsigned char ss_is_starfield(void);
+static unsigned char ss_kind(void);
 
 /* MIN_IST_ICONS: the exact icon count for an .IST to be offered as the desktop icon
    set. App-owned icons moved into GBAP headers, leaving 21 resident
@@ -112,6 +112,9 @@ static const setting_t rows[] = {
 #define BD_TILE_ADDR  0x1250   /* kernel BD_TILE: the loaded 16x16 backdrop tile (#216) */
 #define KCFG_INKS_ADDR ((volatile unsigned char *)0x122C)
 #define KCFG_FRAMEPEN_ADDR (*(volatile unsigned char *)0x133C)
+#ifdef GB_MSX2
+#define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
+#endif
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
    512-byte sectors, so a smaller buffer would overflow into the globals after it). */
@@ -702,17 +705,33 @@ static void ss_module_value(char *dst)
     }
 }
 
-static unsigned char ss_is_starfield(void)
+#define SS_NONE      0
+#define SS_STARFIELD 1
+#define SS_XMATRIX   2
+
+static unsigned char ss_kind(void)
 {
-    static const char stem[8] = { 'S','T','A','R','F','L','D',' ' };
+    static const char stems[14] = {
+        'S','T','A','R','F','L','D',
+        'X','M','A','T','R','I','X'
+    };
     char value[16];
-    unsigned char i, p = 0;
+    unsigned char i, kind, off, p = 0;
     ss_module_value(value);
     if (value[0] && value[1] == ':') p = 2;
+    if (value[p] == 'S') {
+        kind = SS_STARFIELD;
+        off = 0;
+    } else if (value[p] == 'X') {
+        kind = SS_XMATRIX;
+        off = 7;
+    } else {
+        return SS_NONE;
+    }
     for (i = 0; i < 7; i++)
-        if (value[p + i] != stem[i]) return 0;
-    p += 7;
-    return (unsigned char)(value[p] == 0 || value[p] == '.');
+        if (value[p + i] != stems[off + i]) return SS_NONE;
+    return (unsigned char)((value[p + 7] == 0 || value[p + 7] == '.') ?
+                           kind : SS_NONE);
 }
 
 /* ss_module_dialog: list the .SAV screensavers in /GBENCH and persist the pick to
@@ -828,21 +847,22 @@ static void ss_cfg_draw(unsigned char x, unsigned char y,
                save_cancel_actions, 2, 2);
 }
 
-static void ss_config_dialog(void)
+static void ss_cfg_finish(unsigned char flags)
+{
+    if (flags & GB_QUIT) while (gb_poll() & GB_QUIT) ;
+    gb_modal_set(0);
+    gb_curhide(); s_draw(); gb_curshow();
+}
+
+static void starfield_config_dialog(void)
 {
     unsigned char x, y, speed, stars, flags = 0, done = 0;
-    if (!ss_is_starfield()) {
-        gb_alert("No settings", "for this saver.");
-        gb_curhide(); s_draw(); gb_curshow();
-        return;
-    }
-
     speed = gbcfg_u8_from(cfgbuf, cfglen, GB_STARFLD_SPEED_KEY,
-                          GB_STARFLD_SPEED_DEFAULT,
-                          GB_STARFLD_SPEED_MIN, GB_STARFLD_SPEED_MAX);
+                         GB_STARFLD_SPEED_DEFAULT,
+                         GB_STARFLD_SPEED_MIN, GB_STARFLD_SPEED_MAX);
     stars = gbcfg_u8_from(cfgbuf, cfglen, GB_STARFLD_STARS_KEY,
-                          GB_STARFLD_STARS_DEFAULT,
-                          GB_STARFLD_STARS_MIN, GB_STARFLD_STARS_MAX);
+                         GB_STARFLD_STARS_DEFAULT,
+                         GB_STARFLD_STARS_MIN, GB_STARFLD_STARS_MAX);
     x = (unsigned char)(win_x + (win_w - SSC_W) / 2);
     y = (unsigned char)(win_y + 37);
     gb_modal_set(1);
@@ -877,6 +897,7 @@ static void ss_config_dialog(void)
             }
             continue;
         }
+
         part = gb_stepper_hit((unsigned char)(x + 16),
                               (unsigned char)(sy - 1),
                               16, STEP_H, mx, my);
@@ -908,9 +929,141 @@ static void ss_config_dialog(void)
             gb_curshow();
         }
     }
-    if (flags & GB_QUIT) while (gb_poll() & GB_QUIT) ;
-    gb_modal_set(0);
-    gb_curhide(); s_draw(); gb_curshow();
+    ss_cfg_finish(flags);
+}
+
+#define XMC_H2 78
+#define XMC_H3 94
+static unsigned char xmc_x, xmc_y, xmc_h;
+static unsigned char xmc_glyphs, xmc_speed, xmc_color;
+
+static const char *xmc_speed_name(void)
+{
+    if (xmc_speed == 1) return "Slow";
+    if (xmc_speed == 3) return "Fast";
+    return "Normal";
+}
+
+static void xmatrix_cfg_draw(void)
+{
+    unsigned char sy = (unsigned char)(xmc_y + 23);
+    unsigned char ny = (unsigned char)(xmc_y + 39);
+    gb_window(xmc_x, xmc_y, SSC_W, xmc_h, "XMatrix");
+    gb_textbw((unsigned char)(xmc_x + 3), sy, "Glyphs");
+    gb_stepper((unsigned char)(xmc_x + 16), (unsigned char)(sy - 1),
+               16, STEP_H, xmc_glyphs ? "Kana" : "Binary", 0);
+    gb_textbw((unsigned char)(xmc_x + 3), ny, "Speed");
+    gb_stepper((unsigned char)(xmc_x + 16), (unsigned char)(ny - 1),
+               16, STEP_H, xmc_speed_name(), 0);
+#ifdef GB_MSX2
+    if (xmc_h == XMC_H3) {
+        unsigned char cy = (unsigned char)(xmc_y + 55);
+        gb_textbw((unsigned char)(xmc_x + 3), cy, "Color");
+        ss_cfg_stepper((unsigned char)(xmc_x + 16),
+                       (unsigned char)(cy - 1), xmc_color);
+    }
+#endif
+    gb_actions((unsigned char)(xmc_x + 3),
+               (unsigned char)(xmc_y + xmc_h - 13),
+               save_cancel_actions, 2, 2);
+}
+
+static void xmatrix_config_dialog(void)
+{
+    unsigned char flags = 0, done = 0;
+    xmc_glyphs = gbcfg_u8_from(cfgbuf, cfglen, GB_XMATRIX_GLYPHS_KEY,
+                               GB_XMATRIX_GLYPHS_DEFAULT,
+                               GB_XMATRIX_GLYPHS_MIN, GB_XMATRIX_GLYPHS_MAX);
+    xmc_speed = gbcfg_u8_from(cfgbuf, cfglen, GB_XMATRIX_SPEED_KEY,
+                              GB_XMATRIX_SPEED_DEFAULT,
+                              GB_XMATRIX_SPEED_MIN, GB_XMATRIX_SPEED_MAX);
+    xmc_color = GB_XMATRIX_COLOR_DEFAULT;
+    xmc_h = XMC_H2;
+#ifdef GB_MSX2
+    if (MSX_SCRMOD == 7) {
+        xmc_h = XMC_H3;
+        xmc_color = gbcfg_u8_from(cfgbuf, cfglen, GB_XMATRIX_COLOR_KEY,
+                                  GB_XMATRIX_COLOR_DEFAULT,
+                                  GB_XMATRIX_COLOR_MIN, GB_XMATRIX_COLOR_MAX);
+    }
+#endif
+    xmc_x = (unsigned char)(win_x + (win_w - SSC_W) / 2);
+    xmc_y = (unsigned char)(win_y + 37);
+    gb_modal_set(1);
+    gb_curhide(); xmatrix_cfg_draw(); gb_curshow();
+
+    while (!done) {
+        unsigned char mx, my, part, changed = 0;
+        flags = gb_poll();
+        if (flags & GB_QUIT) break;
+        if (!(flags & GB_CLICK)) continue;
+        mx = gb_mx(); my = gb_my();
+        if (my >= xmc_y + 2 && my < xmc_y + 12 &&
+            mx >= xmc_x + 1 && mx < xmc_x + 3) break;
+        part = gb_actions_hit((unsigned char)(xmc_x + 3),
+                              (unsigned char)(xmc_y + xmc_h - 13),
+                              save_cancel_actions, 2, 2, mx, my);
+        if (part != GB_ACTION_NONE) {
+            if (part == 0) {
+                char text[6];
+                u_dec(xmc_glyphs, text); cfg_set(GB_XMATRIX_GLYPHS_KEY, text);
+                u_dec(xmc_speed, text); cfg_set(GB_XMATRIX_SPEED_KEY, text);
+#ifdef GB_MSX2
+                if (xmc_h == XMC_H3) {
+                    u_dec(xmc_color, text); cfg_set(GB_XMATRIX_COLOR_KEY, text);
+                }
+#endif
+            }
+            done = 1;
+            continue;
+        }
+        part = gb_stepper_hit((unsigned char)(xmc_x + 16),
+                              (unsigned char)(xmc_y + 22),
+                              16, STEP_H, mx, my);
+        if (part == GB_STEPPER_DEC || part == GB_STEPPER_INC) {
+            xmc_glyphs = (unsigned char)!xmc_glyphs;
+            changed = 1;
+        } else {
+            part = gb_stepper_hit((unsigned char)(xmc_x + 16),
+                                  (unsigned char)(xmc_y + 38),
+                                  16, STEP_H, mx, my);
+            if (part == GB_STEPPER_DEC && xmc_speed > GB_XMATRIX_SPEED_MIN) {
+                xmc_speed--; changed = 1;
+            } else if (part == GB_STEPPER_INC &&
+                       xmc_speed < GB_XMATRIX_SPEED_MAX) {
+                xmc_speed++; changed = 1;
+            }
+#ifdef GB_MSX2
+            else if (xmc_h == XMC_H3) {
+                part = gb_stepper_hit((unsigned char)(xmc_x + 16),
+                                      (unsigned char)(xmc_y + 54),
+                                      16, STEP_H, mx, my);
+                if (part == GB_STEPPER_DEC &&
+                    xmc_color > GB_XMATRIX_COLOR_MIN) {
+                    xmc_color--; changed = 1;
+                } else if (part == GB_STEPPER_INC &&
+                           xmc_color < GB_XMATRIX_COLOR_MAX) {
+                    xmc_color++; changed = 1;
+                }
+            }
+#endif
+        }
+        if (changed) {
+            gb_curhide(); xmatrix_cfg_draw(); gb_curshow();
+        }
+    }
+    ss_cfg_finish(flags);
+}
+
+static void ss_config_dialog(void)
+{
+    unsigned char kind = ss_kind();
+    if (kind == SS_STARFIELD) starfield_config_dialog();
+    else if (kind == SS_XMATRIX) xmatrix_config_dialog();
+    else {
+        gb_alert("No settings", "for this saver.");
+        gb_curhide(); s_draw(); gb_curshow();
+    }
 }
 
 /* ---- interaction ------------------------------------------------------------- */

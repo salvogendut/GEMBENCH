@@ -81,7 +81,7 @@ python3 tools/png2cpc.py build/SPLASHD_BUILD.png build/SPLASHD.BIN splash 96x184
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nPROXY=\r\n' > build/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nPROXY=\r\n' > build/GEOBENCH.CFG
 cp build/GEOBENCH.CFG build/DEFAULT.CFG
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
 python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
@@ -159,7 +159,7 @@ APP_ICON="$PAINT_APP_DIR/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-co
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 APP_ICON=apps/xaos/icon.asm DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
-APP_CFLAGS="--opt-code-size --max-allocs-per-node 20000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
+APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
                                    # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
 DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/DISKUTIL.RAW # DISKUTIL: floppy formatter - a physical
@@ -171,7 +171,7 @@ tools/build_capp.sh apps/saver build/SQUARES.RAW  # SAVER (#219/#281): random sq
 tools/build_capp.sh apps/deco  build/DECO.RAW     # DECO screensaver (ported from symsav-deco):
                                    # recursive rectangle subdivision -> art-deco panels. -> DECO.SAV
 tools/build_capp.sh apps/xmatrix build/XMATRIX.RAW # XMATRIX screensaver (ported from symsav-xmatrix):
-                                   # Matrix digital rain, white head -> red -> black glow. -> XMATRIX.SAV
+                                   # configurable binary/Kana rain on black, with a green trail. -> XMATRIX.SAV
 tools/build_capp.sh apps/mountain build/MOUNTAIN.RAW # MOUNTAIN screensaver (ported from symsav-mountain):
                                    # isometric filled terrain + white wireframe, direct #C000 plot. -> MOUNTAIN.SAV
 tools/build_capp.sh apps/fractalic build/FRACTALI.RAW # FRACTALIC screensaver (ported from symsav-fractalic):
@@ -200,7 +200,7 @@ tools/build_capp.sh apps/helix build/HELIX.RAW    # HELIX (xscreensaver port): w
                                    # (sin-table), direct #C000 lines. CARD-ONLY -> HELIX.SAV
 DATA_LOC=0x6700 tools/build_capp.sh apps/catclock build/CATCLK.RAW # CATCLOCK (inspired by X11 catclock):
                                    # Kit-Cat clock - embedded body bitmap (catimg.h, from png2catclock.py) +
-                                   # moving pupils + real hour/minute hands (gb_time). CARD-ONLY -> CATCLK.SAV
+                                   # moving pupils + real hour/minute hands (gb_time). CARD/EXTRAS -> CATCLK.SAV
 tools/build_cfgmod.sh build/GBCFG.RAW              # config-parser C kernel module -> build/GBCFG.RAW
 tools/build_fatmod.sh                              # FAT16/IDE write module -> build/GBFAT.RAW
 tools/build_floppymod.sh                           # AMSDOS/floppy write module -> build/FLOPPYSV.RAW
@@ -251,12 +251,16 @@ fi
 # Companion floppy QA/CPC/Floppies/COMPANION.DSK (#250): a non-bootable DATA
 # disk with the extra applications and screensavers.
 RASM="$RASM" tools/package_cpc_companion.sh "$FLOPPY_QA/COMPANION.DSK"
-EXTRAS_ADDS=(--add assets/WELCOME.TXT --add build/XROACH.RAW=XROACH.SAV)
+EXTRAS_ADDS=(
+    --add assets/WELCOME.TXT
+    --add build/XROACH.RAW=XROACH.SAV
+    --add build/CATCLK.RAW=CATCLK.SAV
+)
 while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")
 done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
-echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + XROACH.SAV + WELCOME.TXT; extended 80-track AMSDOS data disk)"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + XROACH/CATCLK savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"

@@ -154,8 +154,9 @@ rules are:
 - `PROXY=` is Browser's optional persistent plain-HTTP proxy URL; an empty value
   means direct access;
 - screensavers are full-screen `.SAV` apps launched by the desktop idle timer;
-  per-module values remain app-owned `GEOBENCH.CFG` keys. `STARFLD_SPEED` and
-  `STARFLD_STARS` are the first such settings and are edited through Settings.
+  per-module values remain app-owned `GEOBENCH.CFG` keys. Settings edits the
+  STARFLD speed/star-count keys and XMATRIX's glyph-set/speed keys. Its optional
+  main-color key is exposed only by the MSX Screen 7 build.
 
 The intent is to keep policy in apps or modules and keep the resident kernel at
 the level of asset reload, storage, and window-manager primitives.
@@ -197,8 +198,8 @@ the level of asset reload, storage, and window-manager primitives.
   backdrops. Built by `kernel/gbkern.asm` + `pack_apps{,2,3}.asm` (#250).
 - **`QA/CPC/Floppies/COMPANION.DSK`** — the **Companion** floppy (#250): a non-bootable DATA disk with
   the extras — Paint, Telnet, WGET, Browser, Shell, Mahjong, Xaos, Calculator,
-  and the extra screensavers except `XROACH.SAV`, which is kept on Extras to
-  leave enough CF2 blocks for Calculator.
+  and the extra screensavers except `XROACH.SAV` and `CATCLK.SAV`, which are
+  kept on Extras to leave enough CF2 blocks for Calculator.
   Built by `kernel/pack_comp{1,2,3,4,5}.asm`. It is meant for **drive B** while the Main floppy
   stays in drive A: the kernel's system loader (`fs_load_sys`, `lib/fs.asm`) tries the boot
   drive (A) first and **falls back to the browse drive** (B), so a Companion app launched
@@ -208,8 +209,8 @@ the level of asset reload, storage, and window-manager primitives.
   builds are unaffected — they already ship everything on one volume, including
   `GBNET.MOD` for Net4CPC and `GBNETM4.MOD` for M4 TCP.)
 - **`QA/CPC/Floppies/EXTRAS.DSK`** — all tracked pictures, including `LOGO.PIC`,
-  plus `XROACH.SAV`, on an extended 80-track single-sided AMSDOS DATA image
-  built by `tools/mkcpcmedia.py`. The
+  plus `XROACH.SAV` and `CATCLK.SAV`, on an extended 80-track single-sided
+  AMSDOS DATA image built by `tools/mkcpcmedia.py`. The
   normal Main and Companion CF2 images contain no other `.PIC` files.
 
 M4 TCP is intentionally still a paged service: each `gb_net_*` call loads
