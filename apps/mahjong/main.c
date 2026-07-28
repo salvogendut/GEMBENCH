@@ -30,6 +30,7 @@
 #define TILE_NORMAL    0
 #define TILE_SELECTED  1
 #define TILE_HINT      2
+#define MATCH_HOLD    10
 
 static unsigned char board_x, board_y;
 static unsigned char face[MJ_TILE_COUNT];
@@ -39,7 +40,7 @@ static unsigned char undo_a[72], undo_b[72];
 static unsigned char undo_count;
 static unsigned char pair_face[72];
 static unsigned char move_first[MJ_FACE_COUNT_MAX];
-static unsigned char selected, hint_a, hint_b;
+static unsigned char selected, match_second, match_wait, hint_a, hint_b;
 static unsigned char remaining;
 static unsigned char tileset;
 static unsigned char want_menu;
@@ -155,7 +156,7 @@ static void draw_tile(unsigned char i)
     unsigned int offset;
     unsigned char state, k;
     if (!active[i]) return;
-    state = selected == i ? TILE_SELECTED :
+    state = (selected == i || match_second == i) ? TILE_SELECTED :
             ((hint_a == i || hint_b == i) ? TILE_HINT : TILE_NORMAL);
     offset = mj_art_offset[tileset] + (unsigned int)face[i] * MJ_TILE_BYTES;
     src = mj_tile_art + offset;
@@ -208,6 +209,56 @@ static void draw_board(void)
     for (i = 0; i < MJ_TILE_COUNT; i++) draw_tile(i);
 }
 
+static void redraw_hole(unsigned char hole)
+{
+    unsigned char i, k;
+    unsigned char hx = tile_x(hole), hy = tile_y(hole);
+
+    for (k = 0; k < MJ_TILE_BYTES; k++) tilebuf[k] = 0;
+    for (i = 0; i < MJ_TILE_COUNT; i++) {
+        const unsigned char *src;
+        unsigned char tx, ty, left, right, top, bottom, x, y;
+        unsigned int offset;
+
+        if (!active[i]) continue;
+        tx = tile_x(i); ty = tile_y(i);
+        if (tx >= (unsigned char)(hx + MJ_TILE_WB) ||
+            hx >= (unsigned char)(tx + MJ_TILE_WB) ||
+            ty >= (unsigned char)(hy + MJ_TILE_H) ||
+            hy >= (unsigned char)(ty + MJ_TILE_H)) continue;
+
+        left = tx > hx ? tx : hx;
+        right = (unsigned char)(tx + MJ_TILE_WB);
+        if (right > (unsigned char)(hx + MJ_TILE_WB))
+            right = (unsigned char)(hx + MJ_TILE_WB);
+        top = ty > hy ? ty : hy;
+        bottom = (unsigned char)(ty + MJ_TILE_H);
+        if (bottom > (unsigned char)(hy + MJ_TILE_H))
+            bottom = (unsigned char)(hy + MJ_TILE_H);
+
+        offset = mj_art_offset[tileset] +
+                 (unsigned int)face[i] * MJ_TILE_BYTES;
+        src = mj_tile_art + offset;
+        for (y = top; y < bottom; y++) {
+            for (x = left; x < right; x++) {
+                tilebuf[(unsigned char)((y - hy) * MJ_TILE_WB + x - hx)] =
+                    src[(unsigned char)((y - ty) * MJ_TILE_WB + x - tx)];
+            }
+        }
+    }
+#if defined(GB_MSX2) || defined(GB_PCW)
+    for (k = 0; k < MJ_TILE_BYTES; k++) tilebuf[k] = native_byte(tilebuf[k]);
+#endif
+    gb_restorerect(hx, hy, MJ_TILE_WB, MJ_TILE_H, tilebuf);
+}
+
+static void redraw_removed_pair(unsigned char a, unsigned char b)
+{
+    /* #439: compose each hole without touching adjacent tile pixels. */
+    redraw_hole(a);
+    redraw_hole(b);
+}
+
 static void draw_all(void)
 {
     gb_curhide();
@@ -246,7 +297,8 @@ static void new_game(void)
         face[mj_solution[(unsigned char)(p * 2 + 1)]] = pair_face[p];
     }
     for (i = 0; i < MJ_TILE_COUNT; i++) active[i] = 1;
-    selected = hint_a = hint_b = NO_TILE;
+    selected = match_second = hint_a = hint_b = NO_TILE;
+    match_wait = 0;
     undo_count = 0; remaining = MJ_TILE_COUNT;
     refresh_open();
     status_text = "New game";
@@ -261,7 +313,8 @@ static void undo_move(void)
         if (!defer_draw) redraw_status();
         return;
     }
-    selected = hint_a = hint_b = NO_TILE;
+    selected = match_second = hint_a = hint_b = NO_TILE;
+    match_wait = 0;
     undo_count--;
     a = undo_a[undo_count]; b = undo_b[undo_count];
     active[a] = active[b] = 1;
@@ -313,10 +366,31 @@ static void clear_hint_tiles(void)
     if (b != NO_TILE && b != a && active[b]) draw_tile(b);
 }
 
+static void finish_match(void)
+{
+    unsigned char a = selected, b = match_second;
+
+    active[a] = active[b] = 0;
+    undo_a[undo_count] = a; undo_b[undo_count] = b; undo_count++;
+    remaining = (unsigned char)(remaining - 2);
+    selected = match_second = NO_TILE;
+    refresh_open();
+    if (!remaining) status_text = "Board cleared";
+    else {
+        unsigned char next_a, next_b;
+        status_text = find_move(&next_a, &next_b) ?
+                      "Pair removed" : "No moves available";
+    }
+    gb_curhide();
+    draw_status();
+    redraw_removed_pair(a, b);
+    gb_curshow();
+}
+
 static void click_board(void)
 {
     unsigned char i = hit_tile(), old;
-    if (i == NO_TILE) return;
+    if (i == NO_TILE || match_wait) return;
     gb_curhide();
     clear_hint_tiles();
     if (!open_tile[i]) {
@@ -334,17 +408,11 @@ static void click_board(void)
         draw_tile(i);
         status_text = old == NO_TILE ? "Tile selected" : "Selection moved";
     } else {
-        active[old] = active[i] = 0;
-        undo_a[undo_count] = old; undo_b[undo_count] = i; undo_count++;
-        remaining = (unsigned char)(remaining - 2);
-        selected = NO_TILE;
-        refresh_open();
-        if (!remaining) status_text = "Board cleared";
-        else {
-            unsigned char a, b;
-            status_text = find_move(&a, &b) ? "Pair removed" : "No moves available";
-        }
-        draw_status(); draw_board(); gb_curshow(); return;
+        match_second = i;
+        match_wait = MATCH_HOLD;
+        draw_tile(i);
+        status_text = "Pair matched";
+        draw_status(); gb_curshow(); return;
     }
     draw_status();
     gb_curshow();
@@ -391,7 +459,9 @@ static void mahjong_proc(void)
     if (type == GB_MSG_DRAW) draw_all();
     else if (type == GB_MSG_CLICK) click_board();
     else if (type == GB_MSG_FRAME) {
-        if (!run_menu()) handle_keys();
+        if (match_wait) {
+            if (!--match_wait) finish_match();
+        } else if (!run_menu()) handle_keys();
     } else if (type == GB_MSG_MENU) {
         if (!gb_modal()) {
             if (gb_msg.p0 >= 10 && gb_msg.p0 < 17) want_menu = 1;
@@ -413,7 +483,8 @@ void main(void)
     board_y = BOARD_Y;
     tileset = 0;
     status_text = "Starting game";
-    selected = hint_a = hint_b = NO_TILE;
+    selected = match_second = hint_a = hint_b = NO_TILE;
+    match_wait = 0;
     gb_wm_managed(&mahjong_window);
     gb_menu(menu_def);
     for (n = 64; n; n--) if (!gb_getkey()) break;
