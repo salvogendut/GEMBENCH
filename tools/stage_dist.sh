@@ -74,8 +74,10 @@ done
 cp build/SQUARES.RAW "$SYS/SQUARES.SAV"     # #219/#281: the default screensaver (a .SAV, not a .APP)
 cp build/DECO.RAW   "$SYS/DECO.SAV"         # art-deco panels screensaver (ported from symsav-deco)
 cp build/XMATRIX.RAW "$SYS/XMATRIX.SAV"     # Matrix digital-rain screensaver (ported from symsav-xmatrix)
+cp build/XMATRIXCFG.RAW "$SYS/XMATRIX.MOD"  # paged, same-stem Configure companion
 cp build/MOUNTAIN.RAW "$SYS/MOUNTAIN.SAV"   # isometric terrain screensaver (ported from symsav-mountain)
 cp build/STARFLD.RAW  "$SYS/STARFLD.SAV"    # 3D star-field screensaver (inspired by symsav-starfield)
+cp build/STARFLDCFG.RAW "$SYS/STARFLD.MOD"   # paged, same-stem Configure companion
 cp build/FRACTALI.RAW "$SYS/FRACTALI.SAV"   # fractal screensaver (ported from symsav-fractalic) - CARD ONLY
 cp build/XROACH.RAW   "$SYS/XROACH.SAV"     # cockroach screensaver (ported from symsav-xroach) - CARD ONLY
 cp build/MUNCH.RAW    "$SYS/MUNCH.SAV"      # munching-squares screensaver (xscreensaver port) - CARD ONLY

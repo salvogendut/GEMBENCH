@@ -67,9 +67,12 @@ backdrop, dragging icons, opening apps and menus:
   `SOLID`) and a centred **wallpaper** (`.PIC`) from the system folder, a **Colours**
   editor for the 4 Mode-1 pens + the screen border (`INKS=`) with a **live** preview
   — `-`/`+` recolours the whole desktop instantly — and a **Screensaver** section
-  (**Module** picker, per-saver **Configure**, and idle **Timeout**). Starfield
-  controls speed and star count; XMatrix controls binary/Kana glyphs and speed,
-  plus its main color in MSX 16-color mode. On MSX2 the video choices are labelled
+  (**Module** picker, modular per-saver **Configure**, and idle **Timeout**).
+  Settings pages in an optional same-stem `.MOD`, so adding saver controls does
+  not grow Settings. Starfield controls speed and star count; XMatrix controls
+  binary/Kana glyphs and speed, plus its main color on CPC and in MSX 16-color
+  mode. The MSX selector includes a native-color swatch. On MSX2 the video
+  choices are labelled
   **4 colors** and **16 colors** (Screen 6 and Screen 7).
   **Return to Defaults** restores the complete target-specific configuration.
   Media settings are stored as
@@ -141,9 +144,11 @@ backdrop, dragging icons, opening apps and menus:
   **CATCLK** (a Kit-Cat Klock with sliding pupils + real hour/minute hands). The
   Settings **Module** picker lists every `.SAV` in the system folder (scrolling
   when there are more than fit), so new ones appear automatically. **Configure**
-  persists supported module options in `GEOBENCH.CFG`. STARFLD exposes speed and
-  star count; XMATRIX exposes binary/Kana glyphs and speed. In MSX 16-color mode,
-  XMATRIX also exposes its main glyph color. Its background is always black.
+  loads an optional same-stem `.MOD` and persists the module's returned options
+  in `GEOBENCH.CFG`. STARFLD exposes speed and star count; XMATRIX exposes
+  binary/Kana glyphs and speed. CPC and MSX 16-color mode also expose its main
+  glyph color; the saver restores the launch-time desktop palette when it exits.
+  Its background is always black.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),

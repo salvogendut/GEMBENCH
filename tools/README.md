@@ -61,6 +61,10 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   `APP_ICON16=path/icon16.asm` adds an explicit native Screen-7 variant. For
   app-owned `icon.asm` sources, an adjacent `icon16.asm` is detected
   automatically by MSX builds only.
+- **`build_savercfg.sh <app_dir> <out.RAW>`** — builds
+  `apps/<saver>/config.c` as an 8 KB-bounded paged configuration companion at
+  `#6000`. Package the result with the same stem as its saver (`XMATRIX.MOD`
+  beside `XMATRIX.SAV`); Settings launches it without linking its controls.
   `make formref` builds the small three-platform reference app and its Daruma
   embedded-icon example.
 - **`rebuild_app.sh <name>`** — performs a focused cross-platform rebuild and

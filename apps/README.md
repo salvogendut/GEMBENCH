@@ -70,6 +70,12 @@ the selected drive, so a new screensaver appears there automatically once it is
 built and staged. Saver names in `GEOBENCH.CFG` may be drive-qualified
 (`A:XMATRIX`, `C:CATCLK`) for mixed floppy/card setups.
 
+A configurable saver may carry a same-stem paged companion: `XMATRIX.MOD` and
+`STARFLD.MOD` currently implement their **Configure** dialogs. Settings discovers
+the companion from the selected `.SAV`, runs it through the existing module
+loader, and persists the bounded key/value result. Savers without a `.MOD` do
+not add code to Settings and continue to run normally.
+
 ## App contract
 
 An app's `main()` runs in its bank, draws its initial content, and registers a

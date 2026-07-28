@@ -70,9 +70,11 @@ APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/ant  build/msx/ANT.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/deco build/msx/DECO.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/xmatrix build/msx/XMATRIX.RAW
+APPDEFS="-DGB_MSX2" tools/build_savercfg.sh apps/xmatrix build/msx/XMATRIXCFG.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/mountain build/msx/MOUNTAIN.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/forest build/msx/FOREST.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/starfield build/msx/STARFLD.RAW
+APPDEFS="-DGB_MSX2" tools/build_savercfg.sh apps/starfield build/msx/STARFLDCFG.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/fractalic build/msx/FRACTALI.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/munch build/msx/MUNCH.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/rorschach build/msx/RORSCH.RAW
@@ -209,9 +211,11 @@ cp build/msx/SQUARES.RAW  QA/MSX/GBENCH/SQUARES.SAV
 cp build/msx/ANT.RAW      QA/MSX/GBENCH/ANT.SAV
 cp build/msx/DECO.RAW     QA/MSX/GBENCH/DECO.SAV
 cp build/msx/XMATRIX.RAW  QA/MSX/GBENCH/XMATRIX.SAV
+cp build/msx/XMATRIXCFG.RAW QA/MSX/GBENCH/XMATRIX.MOD
 cp build/msx/MOUNTAIN.RAW QA/MSX/GBENCH/MOUNTAIN.SAV
 cp build/msx/FOREST.RAW   QA/MSX/GBENCH/FOREST.SAV
 cp build/msx/STARFLD.RAW  QA/MSX/GBENCH/STARFLD.SAV
+cp build/msx/STARFLDCFG.RAW QA/MSX/GBENCH/STARFLD.MOD
 cp build/msx/FRACTALI.RAW QA/MSX/GBENCH/FRACTALI.SAV
 cp build/msx/MUNCH.RAW QA/MSX/GBENCH/MUNCH.SAV
 cp build/msx/RORSCH.RAW QA/MSX/GBENCH/RORSCH.SAV

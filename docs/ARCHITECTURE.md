@@ -154,9 +154,13 @@ rules are:
 - `PROXY=` is Browser's optional persistent plain-HTTP proxy URL; an empty value
   means direct access;
 - screensavers are full-screen `.SAV` apps launched by the desktop idle timer;
-  per-module values remain app-owned `GEOBENCH.CFG` keys. Settings edits the
-  STARFLD speed/star-count keys and XMATRIX's glyph-set/speed keys. Its optional
-  main-color key is exposed only by the MSX Screen 7 build.
+  per-module values remain app-owned `GEOBENCH.CFG` keys. Settings derives and
+  pages in an optional same-stem configuration companion (`XMATRIX.SAV` uses
+  `XMATRIX.MOD`) through the existing arbitrary `GB_UI` module path. The
+  companion owns its controls and returns bounded key/value updates for Settings
+  to persist, so neither Settings nor the resident kernel contains a saver
+  registry. STARFLD exposes speed/star count; XMATRIX exposes glyphs/speed plus
+  a CPC hardware-ink or MSX Screen 7 palette-index control.
 
 The intent is to keep policy in apps or modules and keep the resident kernel at
 the level of asset reload, storage, and window-manager primitives.
