@@ -699,13 +699,14 @@ static void bar_draw(void)
     }
 }
 
-static void repaint_desktop(void)
+/* Desktop-owned dialogs and menus may run while child windows remain open.
+ * Recompose the managed stack instead of painting the desktop directly over
+ * those windows; a full damage rect also clears any popup-sized clip. */
+static void repaint_stack(void)
 {
-    gb_curhide();
     gb_wm_damage(0, 0, GB_COLS, GB_LINES);
-    paint();
+    gb_restore_parent();
     bar_init = 0;
-    gb_curshow();
 }
 
 static unsigned char hit_icon(unsigned char mx, unsigned char my)
@@ -903,7 +904,7 @@ static void on_frame(void)
         gb_doc(&deskdoc);                        /* keep the desktop menu definition fresh after the
                                                     reload before we repaint the desktop. */
         gb_menu_add("System", sys_items, 7, sys_action);
-        repaint_desktop();
+        repaint_stack();
         menu_refresh = 0;
         return;
     }
@@ -932,7 +933,7 @@ static void on_frame(void)
         UI_COL_K = (GB_COLS - 60) / 2;
         UI_LINE_K = (GB_LINES - 50) / 2;
         gb_ui();
-        repaint_desktop();                /* erase the transient box after OK */
+        repaint_stack();                  /* erase the transient box and restore every window */
         return;
     }
 
@@ -942,7 +943,7 @@ static void on_frame(void)
             want_about = 2;
             return;
         }
-        repaint_desktop();                 /* also widens a popup's narrow damage clip (#153) */
+        repaint_stack();                   /* restore existing windows and widen the popup clip */
         if (want_settings) {                  /* System>Settings: now safe to open on top (#129) */
             want_settings = 0;
             if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
