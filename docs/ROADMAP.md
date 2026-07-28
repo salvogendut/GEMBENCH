@@ -47,9 +47,10 @@
    canonical Mode-1 `.BDP` tiles. MSX2 and PCW convert the selected tile at load
    time while CPC draws the already-native bytes from its desktop app, preserving
    the resident kernel's stack guard.
-16. ✅ **Per-screensaver configuration (#390)** — Settings has a reusable Configure
-   entry and modal editor path. STARFLD has persisted speed and star-count
-   values; XMATRIX adds binary/Kana glyphs, speed, and a Screen 7 color choice.
+16. ✅ **Per-screensaver configuration (#390)** — Settings has a generic
+   same-stem `.MOD` launcher instead of embedded saver dialogs. STARFLD's module
+   persists speed and star count; XMATRIX's module adds binary/Kana glyphs,
+   speed, and a CPC/MSX Screen 7 color choice with palette restoration on exit.
 17. ✅ **MSX2 TCP/IP UNAPI networking (#397)** — Browser and Telnet use the shared
    `gb_net_*` API through a discovered mapped-RAM or page-3 UNAPI implementation.
    The initial emulator target is openMSXnet; no network code is added to the
@@ -60,5 +61,6 @@
 - **Paint** follow-ups — resizable canvas and scrolling for pictures bigger than the
   screen (Fullscreen already centers the canvas + tools).
 - **Drawers/folders** and richer desktop arrangement.
-- **More screensaver controls** — extend the Configure registry beyond STARFLD
-  and XMATRIX as each saver gets useful module-specific parameters.
+- **More screensaver controls** — add same-stem configuration companions as
+  individual savers gain useful parameters; Settings needs no corresponding
+  source or resident-kernel change.

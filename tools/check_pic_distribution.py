@@ -154,7 +154,7 @@ def main() -> None:
         sys.exit("QA/PCW/EXTRAS.DSK: picture catalogue differs from assets/pictures")
     pcw_required = {
         "PAINT.APP", "PAINT.IST", "BASIC.APP", "BASRUN.APP", "BASRUN2.BIN",
-        "ANT.SAV", "DECO.SAV", "XMATRIX.SAV",
+        "ANT.SAV", "DECO.SAV", "XMATRIX.SAV", "XMATRIX.MOD",
         "ART.BAS", "CHASE.BAS", "GUESS.BAS", "HELLO.BAS", "PRIMES.BAS",
     }
     missing = pcw_required - set(pcw_extras)
@@ -190,6 +190,9 @@ def main() -> None:
 
     cpc_companion = cpc_disk(ROOT / "QA/CPC/Floppies/COMPANION.DSK")
     pcw_companion = pcw_disk(ROOT / "QA/PCW/COMPANION.DSK")
+    configurable_saver_modules = {"XMATRIX.MOD", "STARFLD.MOD"}
+    if not configurable_saver_modules <= set(cpc_companion):
+        sys.exit("QA/CPC/Floppies/COMPANION.DSK: missing saver Configure module")
     for path, files in (
         ("QA/CPC/Floppies/COMPANION.DSK", cpc_companion),
         ("QA/PCW/COMPANION.DSK", pcw_companion),
@@ -198,6 +201,9 @@ def main() -> None:
             sys.exit(f"{path}: companion disk must not contain pictures")
 
     for directory in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/GBENCH"):
+        names = {path.name for path in directory.iterdir()}
+        if not configurable_saver_modules <= names:
+            sys.exit(f"{directory.relative_to(ROOT)}: missing saver Configure module")
         if any(directory.glob("*.PIC")):
             sys.exit(f"{directory.relative_to(ROOT)}: pictures must live under PICS")
 

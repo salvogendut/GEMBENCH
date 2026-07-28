@@ -45,8 +45,9 @@ can test or deploy without rebuilding first):
 - **`QA/CPC/Floppies/COMPANION.DSK`** — the **Companion** floppy with the larger apps
   (including Telnet, WGET, Browser, Shell, Mahjong and Calculator) and extra savers for drive B.
   Browser's `BRSAVE.APP` worker, Paint's `PAINT.IST` tool set, and the optional
-  `HAND.SPR` cursor are kept beside those apps; shared `GBWEB.MOD`/`GBIMG.MOD`
-  modules remain on Main.
+  `HAND.SPR` cursor are kept beside those apps. Configurable savers carry their
+  same-stem Configure companions (`XMATRIX.MOD`, `STARFLD.MOD`) on this disk;
+  shared `GBWEB.MOD`/`GBIMG.MOD` modules remain on Main.
 - **`QA/CPC/Floppies/EXTRAS.DSK`** — the complete `.PIC` gallery plus
   `XROACH.SAV`, `CATCLK.SAV`, and `WELCOME.TXT` on an extended 80-track,
   single-sided AMSDOS DATA disk. Its files

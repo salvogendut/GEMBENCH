@@ -23,10 +23,16 @@
 #define GB_XMATRIX_SPEED_MIN      1
 #define GB_XMATRIX_SPEED_MAX      3
 
-/* Screen 7 palette indices 4..15 are stable across desktop themes. */
 #define GB_XMATRIX_COLOR_KEY      "XMATRIX_COLOR="
-#define GB_XMATRIX_COLOR_DEFAULT  4
-#define GB_XMATRIX_COLOR_MIN      4
-#define GB_XMATRIX_COLOR_MAX      15
+
+/* CPC uses firmware hardware-ink numbers. */
+#define GB_XMATRIX_CPC_COLOR_DEFAULT  18
+#define GB_XMATRIX_CPC_COLOR_MIN      0
+#define GB_XMATRIX_CPC_COLOR_MAX      26
+
+/* Screen 7 palette indices 4..15 are stable across desktop themes. */
+#define GB_XMATRIX_MSX_COLOR_DEFAULT  4
+#define GB_XMATRIX_MSX_COLOR_MIN      4
+#define GB_XMATRIX_MSX_COLOR_MAX      15
 
 #endif

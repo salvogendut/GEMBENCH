@@ -5,9 +5,10 @@
  * each target's native screen representation so CPC, MSX and PCW all render
  * the same shapes.
  *
- * CPC and MSX Screen 6 use the original fixed green palette. MSX Screen 7 can
- * select a stable 16-colour palette entry for the main trail. Palette entries
- * temporarily used by the saver are restored before the desktop returns. */
+ * CPC can select any hardware ink for the main trail. MSX Screen 6 keeps the
+ * original fixed green palette, while Screen 7 selects a stable 16-colour
+ * palette entry. The launch-time palette is restored before the desktop
+ * returns. */
 #include "gb.h"
 #include "gbcfg.h"
 #include "gbsaver.h"
@@ -75,7 +76,7 @@ static unsigned char fthr[GW];
 
 static unsigned char lmx, lmy, armed, phase, frame_skip;
 static unsigned char glyph_base, glyph_count, matrix_speed;
-#ifdef GB_MSX2
+#ifndef GB_PCW
 static unsigned char matrix_color;
 #endif
 static unsigned int rng;
@@ -90,6 +91,7 @@ static unsigned int rnd(void)
 
 #if !defined(GB_PCW)
 static volatile unsigned char pal_pen, pal_ink;
+static unsigned char saved_inks[5];
 
 #ifdef GB_MSX2
 static void pal_set_call(void) __naked
@@ -139,7 +141,21 @@ static void set_ink(unsigned char pen, unsigned char ink)
 static const unsigned char mode7_dim_ink[12] = {
     9, 1, 12, 4, 10, 3, 4, 1, 9, 4, 13, 9
 };
+#else
+/* CPC hardware inks form a 3x3x3 RGB cube. Each selected component is stepped
+ * down once to make the fading trail retain the same hue. */
+static const unsigned char cpc_dim_ink[27] = {
+    0,0,1, 0,0,1, 3,3,4,
+    0,0,1, 0,0,1, 3,3,4,
+    9,9,10, 9,9,10, 12,12,13
+};
 #endif
+
+static void save_palette(void)
+{
+    unsigned char i;
+    for (i = 0; i < 5; i++) saved_inks[i] = KCFG_INKS[i];
+}
 
 static void matrix_palette(void)
 {
@@ -147,12 +163,15 @@ static void matrix_palette(void)
     unsigned char dim_ink = 9;
 #ifdef GB_MSX2
     if (MSX_SCRMOD == 7) {
-        dim_ink = mode7_dim_ink[matrix_color - GB_XMATRIX_COLOR_MIN];
+        dim_ink = mode7_dim_ink[matrix_color - GB_XMATRIX_MSX_COLOR_MIN];
         set_ink(0, 0);
         set_ink(1, 26);
         set_ink(2, dim_ink);
         return;
     }
+#else
+    main_ink = matrix_color;
+    dim_ink = cpc_dim_ink[matrix_color];
 #endif
     set_ink(0, 0);
     set_ink(1, 26);
@@ -167,13 +186,14 @@ static void matrix_palette(void)
 static void restore_palette(void)
 {
     unsigned char i;
-    for (i = 0; i < 4; i++) set_ink(i, KCFG_INKS[i]);
+    for (i = 0; i < 4; i++) set_ink(i, saved_inks[i]);
 #ifndef GB_MSX2
-    pal_ink = KCFG_INKS[4];
+    pal_ink = saved_inks[4];
     border_set_call();
 #endif
 }
 #else
+static void save_palette(void) { }
 static void matrix_palette(void) { }
 static void restore_palette(void) { }
 #endif
@@ -377,12 +397,17 @@ void main(void)
     }
     frame_skip = matrix_speed == 1 ? 6 : matrix_speed == 2 ? 3 : 1;
 #ifdef GB_MSX2
-    matrix_color = GB_XMATRIX_COLOR_DEFAULT;
+    matrix_color = GB_XMATRIX_MSX_COLOR_DEFAULT;
     if (MSX_SCRMOD == 7)
         matrix_color = gbcfg_u8(GB_XMATRIX_COLOR_KEY,
-                                GB_XMATRIX_COLOR_DEFAULT,
-                                GB_XMATRIX_COLOR_MIN,
-                                GB_XMATRIX_COLOR_MAX);
+                                GB_XMATRIX_MSX_COLOR_DEFAULT,
+                                GB_XMATRIX_MSX_COLOR_MIN,
+                                GB_XMATRIX_MSX_COLOR_MAX);
+#elif !defined(GB_PCW)
+    matrix_color = gbcfg_u8(GB_XMATRIX_COLOR_KEY,
+                            GB_XMATRIX_CPC_COLOR_DEFAULT,
+                            GB_XMATRIX_CPC_COLOR_MIN,
+                            GB_XMATRIX_CPC_COLOR_MAX);
 #endif
 
     gb_time();
@@ -391,6 +416,7 @@ void main(void)
     if (!rng) rng = 0x4A1Du;
     for (n = 0; n < GW; n++) fy[n] = -1;
 
+    save_palette();
     matrix_palette();
     build_font();
     WM_FS = 1;
