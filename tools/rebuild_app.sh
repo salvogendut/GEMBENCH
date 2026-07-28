@@ -9,7 +9,7 @@ case "$APP" in
         APP=mahjong
         BASE=MAHJONG
         APP_ICON="apps/mahjong/icon.asm"
-        DATA_LOC=0x7000
+        DATA_LOC=0x7100
         DIALOGS=1
         BUTTON=0
         ;;
