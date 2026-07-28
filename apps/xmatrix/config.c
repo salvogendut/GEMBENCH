@@ -9,6 +9,8 @@
 #define DLG_H3 94
 #define STEP_W 16
 #define STEP_H 10
+#define SWATCH_W 4
+#define SWATCH_H 8
 
 #ifdef GB_MSX2
 #define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
@@ -28,7 +30,9 @@ static unsigned char glyphs, speed;
 static unsigned char color;
 #endif
 #ifdef GB_MSX2
-static unsigned char swatch[32];
+/* Screen coordinates use four-pixel logical columns.  Keep two columns inside
+ * the one-column frame on each side so the outline cannot cover the sample. */
+static unsigned char swatch[SWATCH_W * 2 * SWATCH_H];
 #endif
 
 static const gb_action_t actions[2] = {
@@ -59,9 +63,9 @@ static void draw_swatch(unsigned char y)
     for (i = 0; i < sizeof(swatch); i++) swatch[i] = packed;
     gb_pic_edit_buf = (unsigned int)swatch;
     gb_pic_edit_off = (unsigned int)(dlg_x + 34) | ((unsigned int)y << 8);
-    FS_SAVE_LEN_K = 2 | ((unsigned int)8 << 8);
+    FS_SAVE_LEN_K = SWATCH_W | ((unsigned int)SWATCH_H << 8);
     (void)gb_pic_edit(GB_PICEDIT_NATIVE16);
-    gb_frame((unsigned char)(dlg_x + 34), y, 2, 8, 2);
+    gb_frame((unsigned char)(dlg_x + 34), y, SWATCH_W, SWATCH_H, 2);
 }
 #endif
 
