@@ -76,6 +76,7 @@ cp build/DECO.RAW   "$SYS/DECO.SAV"         # art-deco panels screensaver (porte
 cp build/XMATRIX.RAW "$SYS/XMATRIX.SAV"     # Matrix digital-rain screensaver (ported from symsav-xmatrix)
 cp build/XMATRIXCFG.RAW "$SYS/XMATRIX.MOD"  # paged, same-stem Configure companion
 cp build/MOUNTAIN.RAW "$SYS/MOUNTAIN.SAV"   # isometric terrain screensaver (ported from symsav-mountain)
+cp build/MOUNTAINCFG.RAW "$SYS/MOUNTAIN.MOD" # paged, same-stem Configure companion
 cp build/STARFLD.RAW  "$SYS/STARFLD.SAV"    # 3D star-field screensaver (inspired by symsav-starfield)
 cp build/STARFLDCFG.RAW "$SYS/STARFLD.MOD"   # paged, same-stem Configure companion
 cp build/FRACTALI.RAW "$SYS/FRACTALI.SAV"   # fractal screensaver (ported from symsav-fractalic) - CARD ONLY

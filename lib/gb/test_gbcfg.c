@@ -66,6 +66,23 @@ int main(void)
           GB_XMATRIX_COLOR_KEY, GB_XMATRIX_MSX_COLOR_DEFAULT,
           GB_XMATRIX_MSX_COLOR_MIN, GB_XMATRIX_MSX_COLOR_MAX,
           GB_XMATRIX_MSX_COLOR_DEFAULT);
+    check("mountain fast speed", "MOUNTAIN_SPEED=3\r\n",
+          GB_MOUNTAIN_SPEED_KEY, GB_MOUNTAIN_SPEED_DEFAULT,
+          GB_MOUNTAIN_SPEED_MIN, GB_MOUNTAIN_SPEED_MAX, 3);
+    check("mountain peak count", "MOUNTAIN_PEAKS=24\r\n",
+          GB_MOUNTAIN_PEAKS_KEY, GB_MOUNTAIN_PEAKS_DEFAULT,
+          GB_MOUNTAIN_PEAKS_MIN, GB_MOUNTAIN_PEAKS_MAX, 24);
+    check("mountain invalid peaks", "MOUNTAIN_PEAKS=31\r\n",
+          GB_MOUNTAIN_PEAKS_KEY, GB_MOUNTAIN_PEAKS_DEFAULT,
+          GB_MOUNTAIN_PEAKS_MIN, GB_MOUNTAIN_PEAKS_MAX,
+          GB_MOUNTAIN_PEAKS_DEFAULT);
+    check("mountain hold time", "MOUNTAIN_HOLD=240\r\n",
+          GB_MOUNTAIN_HOLD_KEY, GB_MOUNTAIN_HOLD_DEFAULT,
+          GB_MOUNTAIN_HOLD_MIN, GB_MOUNTAIN_HOLD_MAX, 240);
+    check("mountain invalid hold", "MOUNTAIN_HOLD=29\r\n",
+          GB_MOUNTAIN_HOLD_KEY, GB_MOUNTAIN_HOLD_DEFAULT,
+          GB_MOUNTAIN_HOLD_MIN, GB_MOUNTAIN_HOLD_MAX,
+          GB_MOUNTAIN_HOLD_DEFAULT);
 
     if (failures) return 1;
     puts("\nall app config tests passed");

@@ -42,16 +42,16 @@ System → "Activate screensaver" runs it on demand. Each is a full-screen windo
 (`WM_FS`) that animates every frame and closes on any input.
 
 The Main CPC boot floppy carries `SQUARES.SAV`; the CPC floppy set carries the
-remaining savers across `COMPANION.DSK` and `EXTRAS.DSK` (`XROACH.SAV` is on
-Extras to leave room for Calculator). The Albireo/M4 card and MSX2 distributions
-carry all 16 savers together.
+remaining savers across `COMPANION.DSK` and `EXTRAS.DSK` (`XROACH.SAV`,
+`CATCLK.SAV`, and `HELIX.SAV` are on Extras to preserve Companion allocation
+blocks). The Albireo/M4 card and MSX2 distributions carry all 16 savers together.
 
 | Saver | Disk file | Effect |
 |-------|-----------|--------|
 | saver    | `SQUARES.SAV`  | random squares (the default saver) |
 | deco     | `DECO.SAV`     | Art-Deco / Mondrian rectangle subdivision — ported from the SymbOS `symsav-deco` |
 | xmatrix  | `XMATRIX.SAV`  | binary "Matrix" digital rain (white → red → black glow) — ported from `symsav-xmatrix` |
-| mountain | `MOUNTAIN.SAV` | isometric 3D filled terrain + white wireframe — ported from `symsav-mountain` (writes the `#C000` screen directly) |
+| mountain | `MOUNTAIN.SAV` | configurable isometric 3D terrain — MSX Screen 7 uses eight elevation colours; four-colour and monochrome targets use compact low/high shading |
 | fractalic | `FRACTALI.SAV` | Sierpinski triangle + Koch snowflake (random each cycle) — ported from `symsav-fractalic` |
 | starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl |
 | xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the blue field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit |
@@ -70,11 +70,12 @@ the selected drive, so a new screensaver appears there automatically once it is
 built and staged. Saver names in `GEOBENCH.CFG` may be drive-qualified
 (`A:XMATRIX`, `C:CATCLK`) for mixed floppy/card setups.
 
-A configurable saver may carry a same-stem paged companion: `XMATRIX.MOD` and
-`STARFLD.MOD` currently implement their **Configure** dialogs. Settings discovers
-the companion from the selected `.SAV`, runs it through the existing module
-loader, and persists the bounded key/value result. Savers without a `.MOD` do
-not add code to Settings and continue to run normally.
+A configurable saver may carry a same-stem paged companion: `XMATRIX.MOD`,
+`STARFLD.MOD`, and `MOUNTAIN.MOD` currently implement their **Configure**
+dialogs. Settings discovers the companion from the selected `.SAV`, runs it
+through the existing module loader, and persists the bounded key/value result.
+Mountain exposes drawing speed, peak count, and completed-landscape hold time.
+Savers without a `.MOD` do not add code to Settings and continue to run normally.
 
 ## App contract
 

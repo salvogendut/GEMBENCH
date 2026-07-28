@@ -1,7 +1,9 @@
 ;; pack_comp3.asm - COMPANION floppy, pass 3 of 4 (#250). See pack_comp1.asm header.
 ;;
 ;; Pass 3: the remaining xscreensaver ports. CATCLK moved to the extended
-;; EXTRAS.DSK when configurable XMatrix outgrew the CF2 free space (#404).
+;; EXTRAS.DSK when configurable XMatrix outgrew the CF2 free space (#404);
+;; HELIX joined it when MOUNTAIN gained its same-stem configuration module
+;; (#446).
                 org   #4000
 mun_img         incbin "../build/MUNCH.RAW"     ; munching squares (xscreensaver port)
 mun_imgend
@@ -24,6 +26,3 @@ pyr_imgend
 for_img         incbin "../build/FOREST.RAW"    ; fractal trees
 for_imgend
                 save  "FOREST.SAV",for_img,for_imgend-for_img,DSK,"build/companion.dsk"
-hlx_img         incbin "../build/HELIX.RAW"     ; harmonograph curves
-hlx_imgend
-                save  "HELIX.SAV",hlx_img,hlx_imgend-hlx_img,DSK,"build/companion.dsk"

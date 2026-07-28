@@ -148,6 +148,10 @@ def main() -> None:
 
     cpc_extras = cpc_disk(ROOT / "QA/CPC/Floppies/EXTRAS.DSK")
     pcw_extras = pcw_disk(ROOT / "QA/PCW/EXTRAS.DSK")
+    cpc_required = {"XROACH.SAV", "CATCLK.SAV", "HELIX.SAV", "WELCOME.TXT"}
+    missing = cpc_required - set(cpc_extras)
+    if missing:
+        sys.exit(f"QA/CPC/Floppies/EXTRAS.DSK: missing extras: {', '.join(sorted(missing))}")
     if {name for name in cpc_extras if name.endswith(".PIC")} != set(assets):
         sys.exit("QA/CPC/Floppies/EXTRAS.DSK: picture catalogue differs from assets/pictures")
     if {name for name in pcw_extras if name.endswith(".PIC")} != set(assets):
@@ -155,6 +159,7 @@ def main() -> None:
     pcw_required = {
         "PAINT.APP", "PAINT.IST", "BASIC.APP", "BASRUN.APP", "BASRUN2.BIN",
         "ANT.SAV", "DECO.SAV", "XMATRIX.SAV", "XMATRIX.MOD",
+        "MOUNTAIN.SAV", "MOUNTAIN.MOD",
         "ART.BAS", "CHASE.BAS", "GUESS.BAS", "HELLO.BAS", "PRIMES.BAS",
     }
     missing = pcw_required - set(pcw_extras)
@@ -190,7 +195,9 @@ def main() -> None:
 
     cpc_companion = cpc_disk(ROOT / "QA/CPC/Floppies/COMPANION.DSK")
     pcw_companion = pcw_disk(ROOT / "QA/PCW/COMPANION.DSK")
-    configurable_saver_modules = {"XMATRIX.MOD", "STARFLD.MOD"}
+    configurable_saver_modules = {
+        "XMATRIX.MOD", "MOUNTAIN.MOD", "STARFLD.MOD"
+    }
     if not configurable_saver_modules <= set(cpc_companion):
         sys.exit("QA/CPC/Floppies/COMPANION.DSK: missing saver Configure module")
     for path, files in (

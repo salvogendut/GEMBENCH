@@ -46,10 +46,11 @@ can test or deploy without rebuilding first):
   (including Telnet, WGET, Browser, Shell, Mahjong and Calculator) and extra savers for drive B.
   Browser's `BRSAVE.APP` worker, Paint's `PAINT.IST` tool set, and the optional
   `HAND.SPR` cursor are kept beside those apps. Configurable savers carry their
-  same-stem Configure companions (`XMATRIX.MOD`, `STARFLD.MOD`) on this disk;
+  same-stem Configure companions (`XMATRIX.MOD`, `STARFLD.MOD`,
+  `MOUNTAIN.MOD`) on this disk;
   shared `GBWEB.MOD`/`GBIMG.MOD` modules remain on Main.
 - **`QA/CPC/Floppies/EXTRAS.DSK`** — the complete `.PIC` gallery plus
-  `XROACH.SAV`, `CATCLK.SAV`, and `WELCOME.TXT` on an extended 80-track,
+  `XROACH.SAV`, `CATCLK.SAV`, `HELIX.SAV`, and `WELCOME.TXT` on an extended 80-track,
   single-sided AMSDOS DATA disk. Its files
   retain AMSDOS headers and multi-extent
   layout, so the existing chunked picture reader can open the larger images. A

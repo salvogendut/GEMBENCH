@@ -71,7 +71,8 @@ backdrop, dragging icons, opening apps and menus:
   Settings pages in an optional same-stem `.MOD`, so adding saver controls does
   not grow Settings. Starfield controls speed and star count; XMatrix controls
   binary/Kana glyphs and speed, plus its main color on CPC and in MSX 16-color
-  mode. The MSX selector includes a native-color swatch. On MSX2 the video
+  mode; Mountain controls speed, peak count, and hold time. The MSX selector
+  includes a native-color swatch. On MSX2 the video
   choices are labelled
   **4 colors** and **16 colors** (Screen 6 and Screen 7).
   **Return to Defaults** restores the complete target-specific configuration.
@@ -146,9 +147,11 @@ backdrop, dragging icons, opening apps and menus:
   when there are more than fit), so new ones appear automatically. **Configure**
   loads an optional same-stem `.MOD` and persists the module's returned options
   in `GEOBENCH.CFG`. STARFLD exposes speed and star count; XMATRIX exposes
-  binary/Kana glyphs and speed. CPC and MSX 16-color mode also expose its main
-  glyph color; the saver restores the launch-time desktop palette when it exits.
-  Its background is always black.
+  binary/Kana glyphs and speed; MOUNTAIN exposes speed, peak count, and hold
+  time. Mountain uses eight height bands in MSX 16-color mode and restores the
+  desktop palette on exit. CPC and MSX 16-color mode also expose XMatrix's main
+  glyph color; XMatrix restores the launch-time desktop palette when it exits
+  and always uses a black background.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**
   from one place: it registers a small "document" (its buffer + new/open/save hooks)
   and the framework supplies a standard **File** menu (New / Load / Save / Save As),

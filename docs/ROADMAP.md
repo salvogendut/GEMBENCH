@@ -51,6 +51,8 @@
    same-stem `.MOD` launcher instead of embedded saver dialogs. STARFLD's module
    persists speed and star count; XMATRIX's module adds binary/Kana glyphs,
    speed, and a CPC/MSX Screen 7 color choice with palette restoration on exit.
+   MOUNTAIN's module adds speed, peak-count, and hold-time controls; its MSX
+   Screen 7 renderer uses an eight-band elevation palette.
 17. ✅ **MSX2 TCP/IP UNAPI networking (#397)** — Browser and Telnet use the shared
    `gb_net_*` API through a discovered mapped-RAM or page-3 UNAPI implementation.
    The initial emulator target is openMSXnet; no network code is added to the
