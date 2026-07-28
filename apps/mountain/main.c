@@ -37,6 +37,8 @@
 #ifdef GB_MSX2
 #define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
 #define KCFG_INKS ((volatile unsigned char *)0x122C)
+#elif !defined(GB_PCW)
+#define KCFG_BORDER (*(volatile unsigned char *)0x1230)
 #endif
 
 static int h[WW][WW];                 /* height map */
@@ -46,7 +48,7 @@ static int stage_timer;
 static unsigned char lmx, lmy, armed;
 static unsigned char mountain_peaks, mountain_hold, cells_per_frame;
 #ifdef GB_MSX2
-static unsigned char mode7, saved_text_ink, saved_edge_ink;
+static unsigned char mode7, saved_paper_ink, saved_text_ink, saved_edge_ink;
 #endif
 static unsigned int  rng;
 
@@ -148,22 +150,52 @@ static void set_ink(unsigned char pen, unsigned char ink)
 
 static void mountain_palette(void)
 {
-    if (!mode7) return;
-    saved_text_ink = KCFG_INKS[1];
-    saved_edge_ink = KCFG_INKS[2];
-    set_ink(COL_WHITE, 26);
-    set_ink(COL_BLACK, 0);
+    saved_paper_ink = KCFG_INKS[0];
+    if (mode7) {
+        saved_text_ink = KCFG_INKS[1];
+        saved_edge_ink = KCFG_INKS[2];
+        set_ink(COL_WHITE, 26);
+        set_ink(COL_BLACK, 0);
+    }
+    set_ink(0, 0);
 }
 
 static void restore_palette(void)
 {
-    if (!mode7) return;
-    set_ink(COL_WHITE, saved_text_ink);
-    set_ink(COL_BLACK, saved_edge_ink);
+    if (mode7) {
+        set_ink(COL_WHITE, saved_text_ink);
+        set_ink(COL_BLACK, saved_edge_ink);
+    }
+    set_ink(0, saved_paper_ink);
 }
-#else
+#elif defined(GB_PCW)
 static void mountain_palette(void) { }
 static void restore_palette(void) { }
+#else
+static volatile unsigned char border_ink;
+
+static void set_border(void) __naked
+{
+__asm
+    ld   a,(_border_ink)
+    ld   b,a
+    ld   c,a
+    call 0xBC38
+    ret
+__endasm;
+}
+
+static void mountain_palette(void)
+{
+    border_ink = 0;
+    set_border();
+}
+
+static void restore_palette(void)
+{
+    border_ink = KCFG_BORDER;
+    set_border();
+}
 #endif
 
 /* Screen 7 mirrors the original xlockmore c/10 height selection, but uses a
