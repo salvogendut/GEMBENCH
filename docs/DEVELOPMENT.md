@@ -211,11 +211,13 @@ The portable API in `lib/gb/gb.h` is deliberately small:
 - `gb_sound_tone(note, volume)` starts a C3..B6 chromatic note.
 - `gb_sound_noise(period, volume)` starts PSG noise.
 - `gb_sound_stop()` silences the app-owned channel.
+- `gb_sound_caps()` reports pitch, noise, and volume capabilities.
 
 Use `GB_SOUND_NOTE(GB_PITCH_*, octave)` to construct a note and keep volume in
-`0..GB_SOUND_VOLUME_MAX`. CPC and MSX2 use PSG channel A. A stock PCW has no
-programmable sound generator, so its backend maps both tone and noise to the
-fixed 3.75 kHz beeper. Duration and sequencing remain in the app's
+`0..GB_SOUND_VOLUME_MAX`. CPC and MSX2 use PSG channel A. PCW safely probes the
+DK'tronics AY at ports `A9`/`AA`/`AB`, preserves channels B/C and the joystick
+input bit, and uses channel A when found. A stock PCW maps both tone and noise
+to the fixed 3.75 kHz beeper. Duration and sequencing remain in the app's
 `GB_MSG_FRAME` handler; always call `gb_sound_stop()` before closing.
 
 This design adds no resident state, kernel code, or ABI slot. Apps that do not

@@ -54,8 +54,12 @@ static void draw_app(void)
     gb_fill(win_x, (unsigned char)(win_y + TITLE_H), WIN_W,
             (unsigned char)(WIN_H - TITLE_H), 1);
 #ifdef GB_PCW
-    gb_textbw((unsigned char)(win_x + 3), (unsigned char)(win_y + 18),
-              "PCW fixed beeper");
+    if (gb_sound_caps() & GB_SOUND_CAP_PITCH)
+        gb_textbw((unsigned char)(win_x + 3), (unsigned char)(win_y + 18),
+                  "DKsound AY channel A");
+    else
+        gb_textbw((unsigned char)(win_x + 3), (unsigned char)(win_y + 18),
+                  "PCW fixed beeper");
 #else
     gb_textbw((unsigned char)(win_x + 3), (unsigned char)(win_y + 18),
               "PSG channel A");

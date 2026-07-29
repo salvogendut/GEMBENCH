@@ -236,9 +236,9 @@ unsigned char gb_form_modal_run(const gb_form_modal_t *modal);
 
 /* ---- App-linked sound -------------------------------------------------------
  * SOUND=1 links the target backend into this application only. It adds no
- * resident-kernel code or ABI entry. CPC/MSX use PSG channel A; a stock PCW
- * maps tone and noise to its fixed 3.75 kHz beeper. Apps own duration and call
- * gb_sound_stop() from their frame/close handlers.
+ * resident-kernel code or ABI entry. CPC/MSX use PSG channel A. PCW probes for
+ * the DK'tronics AY and falls back to its fixed 3.75 kHz beeper when absent.
+ * Apps own duration and call gb_sound_stop() from frame/close handlers.
  *
  * Notes cover C3..B6 as a zero-based chromatic index. Build them from a pitch
  * and octave with GB_SOUND_NOTE(), or use the common aliases below. */
@@ -261,7 +261,13 @@ unsigned char gb_form_modal_run(const gb_form_modal_t *modal);
 #define GB_NOTE_C5 GB_SOUND_NOTE(GB_PITCH_C, 5)
 #define GB_NOTE_C6 GB_SOUND_NOTE(GB_PITCH_C, 6)
 #define GB_SOUND_VOLUME_MAX 15
+#define GB_SOUND_CAP_PITCH  0x01
+#define GB_SOUND_CAP_NOISE  0x02
+#define GB_SOUND_CAP_VOLUME 0x04
+#define GB_SOUND_CAP_PSG \
+    (GB_SOUND_CAP_PITCH | GB_SOUND_CAP_NOISE | GB_SOUND_CAP_VOLUME)
 
+unsigned char gb_sound_caps(void);
 void gb_sound_tone(unsigned char note, unsigned char volume);
 void gb_sound_noise(unsigned char period, unsigned char volume);
 void gb_sound_stop(void);

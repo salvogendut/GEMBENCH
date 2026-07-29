@@ -27,7 +27,7 @@ focused window's handlers (issue #45).
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal: CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; MSX2 TCP/IP UNAPI in a 78x22 window; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
 | nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status; CPC uses the active GBNET backend, PCW uses PerryNet over PerryFi |
 | formref  | `FORMREF.APP`  | development reference for app-linked form composition and the first `GBAP` embedded application icon, using the Daruma artwork |
-| sndtest  | `SNDTEST.APP`  | non-blocking app-linked sound diagnostic: chromatic PSG scale and noise on CPC/MSX2, fixed beeper on stock PCW |
+| sndtest  | `SNDTEST.APP`  | non-blocking app-linked sound diagnostic: PSG scale/noise on CPC/MSX2 and DKsound-equipped PCWs, with stock-PCW beeper fallback |
 | wget     | `WGET.APP`     | GUI HTTP downloader with bounded redirects and streamed writes to an automatically derived 8.3 filename; CPC continues exact-length partial files with HTTP Range, while PCW uses PerryNet and safely restarts CP/M-record files |
 | browser  | `BROWSER.APP`  | fullscreen HTTP browser for CPC, MSX2, and PCW; demand-streams into a bounded borrowed-bank cache, renders compact GET forms and one lazy-loaded GBPC image, hides proxy targets behind highlighted link labels, and loads/saves offline `.HTM` files without retaining a DOM |
 | brsave   | `BRSAVE.APP`   | transient Browser helper that writes captured HTML source to an `.HTM` file without displacing the Browser bank |
@@ -142,10 +142,12 @@ SOUND=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
 
 `gb_sound_tone(note, volume)` plays a chromatic note from C3 through B6,
 `gb_sound_noise(period, volume)` starts noise, and `gb_sound_stop()` silences
-the app. CPC and MSX2 use AY/YM PSG channel A; the stock PCW maps both start
-calls to its fixed 3.75 kHz beeper. The app owns timing and sequencing, normally
-from `GB_MSG_FRAME`, and must stop sound when its window closes. There is no
-resident timer, sequencer, kernel jump-table entry, or kernel-space cost.
+the app. `gb_sound_caps()` reports pitch/noise/volume support. CPC and MSX2 use
+AY/YM PSG channel A. PCW probes the DK'tronics AY at runtime and preserves its
+joystick port; without that board, both start calls map to the fixed 3.75 kHz
+beeper. The app owns timing and sequencing, normally from `GB_MSG_FRAME`, and
+must stop sound when its window closes. There is no resident timer, sequencer,
+kernel jump-table entry, or kernel-space cost.
 
 Build `make sndtest`. Run `SNDTEST.APP` from `DIAG/` on a CPC card,
 `GBENCH/` on MSX2, or the PCW Companion disk. Its Scale, Noise, and Stop

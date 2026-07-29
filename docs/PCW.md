@@ -79,12 +79,14 @@ flyback (port `#F8` bit 6).
 
 ## Audio
 
-The optional app-linked sound library uses the stock PCW's fixed 3.75 kHz
-beeper. Tone and noise requests therefore become simple beeper on/off events;
-duration remains under the app's `GB_MSG_FRAME` control. This adds no resident
-kernel code. A later DK'tronics AY backend can provide programmable pitch
-without changing the portable API. Run `SNDTEST.APP` from the Companion disk
-to check the current backend.
+The optional app-linked sound library probes for the DK'tronics AY at
+ports `#A9`/`#AA`/`#AB`. When present it uses channel A for programmable tone
+and noise while preserving channels B/C and keeping register 14 configured for
+joystick input. Without the board it falls back to the stock PCW's fixed
+3.75 kHz beeper, so pitch, noise, and volume collapse to on/off events. Duration
+remains under the app's `GB_MSG_FRAME` control and no code is added to the
+resident kernel. Run `SNDTEST.APP` from the Companion disk; its first line says
+whether `DKsound AY` or the fixed beeper was detected.
 
 ## Memory plan
 
