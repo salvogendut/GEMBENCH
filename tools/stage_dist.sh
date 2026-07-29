@@ -56,6 +56,7 @@ done
 cp build/TELNET.RAW  "$SYS/TELNET.APP"      # #238: windowed ANSI/VT terminal + telnet client
 cp build/NETTEST.RAW "$DIAG/NETTEST.APP"    # #261: DNS/TCP/HTTP diagnostic for Albireo/Net4CPC and M4 backends
 cp build/FORMREF.RAW "$DIAG/FORMREF.APP"    # #420: reusable form-composition reference
+cp build/SNDTEST.RAW "$DIAG/SNDTEST.APP"    # #452: app-linked AY/beeper sound diagnostic
 cp build/WGET.RAW    "$SYS/WGET.APP"        # #363: streaming HTTP downloader for any writable drive
 cp build/BROWSER.RAW "$SYS/BROWSER.APP"     # #367: streaming text-first HTTP browser
 cp build/BRSAVE.RAW  "$SYS/BRSAVE.APP"      # #373: Browser offline .HTM save worker

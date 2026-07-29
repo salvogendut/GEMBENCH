@@ -27,6 +27,7 @@ focused window's handlers (issue #45).
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal: CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; MSX2 TCP/IP UNAPI in a 78x22 window; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
 | nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status; CPC uses the active GBNET backend, PCW uses PerryNet over PerryFi |
 | formref  | `FORMREF.APP`  | development reference for app-linked form composition and the first `GBAP` embedded application icon, using the Daruma artwork |
+| sndtest  | `SNDTEST.APP`  | non-blocking app-linked sound diagnostic: PSG scale/noise on CPC/MSX2 and DKsound-equipped PCWs, with stock-PCW beeper fallback |
 | wget     | `WGET.APP`     | GUI HTTP downloader with bounded redirects and streamed writes to an automatically derived 8.3 filename; CPC continues exact-length partial files with HTTP Range, while PCW uses PerryNet and safely restarts CP/M-record files |
 | browser  | `BROWSER.APP`  | fullscreen HTTP browser for CPC, MSX2, and PCW; demand-streams into a bounded borrowed-bank cache, renders compact GET forms and one lazy-loaded GBPC image, hides proxy targets behind highlighted link labels, and loads/saves offline `.HTM` files without retaining a DOM |
 | brsave   | `BRSAVE.APP`   | transient Browser helper that writes captured HTML source to an `.HTM` file without displacing the Browser bank |
@@ -105,6 +106,7 @@ resident kernel. Build with only the units an application uses:
   `WIDGETS=1`
 - `FORM_SELECT=1`: labelled selector rows; requires `FORM=1` and `SELECTOR=1`
 - `TIMESET=1`: binary `gb_set_time()` support without adding resident kernel code
+- `SOUND=1`: target sound primitives without adding resident kernel code
 
 For example:
 
@@ -129,3 +131,24 @@ pressed and disabled button states. Disk Utility uses a shared command button
 for its destructive format workflow. `FORMREF.APP` is staged as a development
 diagnostic and demonstrates form composition without moving any state or code
 into the resident kernel.
+
+## App-linked sound
+
+Sound follows the same opt-in model as forms and widgets:
+
+```bash
+SOUND=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
+```
+
+`gb_sound_tone(note, volume)` plays a chromatic note from C3 through B6,
+`gb_sound_noise(period, volume)` starts noise, and `gb_sound_stop()` silences
+the app. `gb_sound_caps()` reports pitch/noise/volume support. CPC and MSX2 use
+AY/YM PSG channel A. PCW probes the DK'tronics AY at runtime and preserves its
+joystick port; without that board, both start calls map to the fixed 3.75 kHz
+beeper. The app owns timing and sequencing, normally from `GB_MSG_FRAME`, and
+must stop sound when its window closes. There is no resident timer, sequencer,
+kernel jump-table entry, or kernel-space cost.
+
+Build `make sndtest`. Run `SNDTEST.APP` from `DIAG/` on a CPC card,
+`GBENCH/` on MSX2, or the PCW Companion disk. Its Scale, Noise, and Stop
+actions are also available on the `T`, `N`, and `S` keys.

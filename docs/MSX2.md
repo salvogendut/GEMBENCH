@@ -32,8 +32,8 @@ Clock — all co-resident under the kernel window manager on a V9938.
   decoded by either MSX video backend. Portable four-colour pictures use the same
   [GBPC v2 format](PIC_FORMAT.md) on every platform. Screen 7 additionally accepts
   mode-7 sixteen-colour `.PIC` files in Viewer and as wallpaper. MSX pictures live
-  under root-level `PICS/`; development diagnostics such as `GBSPIKE.COM` are
-  under `DIAG/`.
+  under root-level `PICS/`; low-level diagnostics such as `GBSPIKE.COM` are
+  under `DIAG/`, while app diagnostics such as `SNDTEST.APP` live in `GBENCH/`.
 
 ## Selecting 4 or 16 colours
 
@@ -59,6 +59,14 @@ The driver ignores both known offset pairs returned by an enabled but unplugged
 port (`FF/FF` on hardware and `01/01` from some BIOS/emulator combinations), so
 a missing mouse does not pull the pointer into a corner. Keyboard and joystick
 input remain active as a fallback.
+
+## App-linked sound
+
+Apps may opt into the MSX PSG backend with `SOUND=1`. It uses channel A for
+chromatic tone or noise while preserving the current channel B/C mixer state.
+Timing and sequencing stay in the app's frame handler, so the resident Screen 6
+and Screen 7 kernels gain no code or ABI entries. `GBENCH/SNDTEST.APP` provides
+Scale, Noise, and Stop checks for real hardware and emulators.
 
 `tools/run_msx.sh` attaches openMSX's `mouse` pluggable to `joyporta` by
 default. Set `MSX_MOUSE=0` to leave openMSX's normal joystick attachment in

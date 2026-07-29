@@ -56,6 +56,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   `WIDGETS=1`; `FORM_SELECT=1` adds selector rows and requires both `FORM=1` and
   `SELECTOR=1`. `GBWIN_DRAG_ONLY=1` keeps window dragging but omits the resize
   grip and resize-drag helpers for apps that do not use them.
+  `SOUND=1` links the target-specific PSG/beeper primitives into that app only;
+  it does not add a resident kernel service.
   `APP_ICON=path/icon.asm` embeds a canonical 32x32 icon in the
   optional `GBAP` executable preamble without changing the kernel launch ABI;
   `APP_ICON16=path/icon16.asm` adds an explicit native Screen-7 variant. For
@@ -67,6 +69,7 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   beside `XMATRIX.SAV`); Settings launches it without linking its controls.
   `make formref` builds the small three-platform reference app and its Daruma
   embedded-icon example.
+  `make sndtest` builds the three app-linked sound diagnostics.
 - **`rebuild_app.sh <name>`** — performs a focused cross-platform rebuild and
   distribution refresh for a registered application. Use
   `make app APP=mahjong` after changing Mahjongg code or its embedded icon; it

@@ -77,6 +77,17 @@ window, active-high, Joyce layout with shift tables) — there is no
 firmware to ask. The machine runs fully DI; k_poll paces on the frame
 flyback (port `#F8` bit 6).
 
+## Audio
+
+The optional app-linked sound library probes for the DK'tronics AY at
+ports `#A9`/`#AA`/`#AB`. When present it uses channel A for programmable tone
+and noise while preserving channels B/C and keeping register 14 configured for
+joystick input. Without the board it falls back to the stock PCW's fixed
+3.75 kHz beeper, so pitch, noise, and volume collapse to on/off events. Duration
+remains under the app's `GB_MSG_FRAME` control and no code is added to the
+resident kernel. Run `SNDTEST.APP` from the Companion disk; its first line says
+whether `DKsound AY` or the fixed beeper was detected.
+
 ## Memory plan
 
 | CPU slot | Contents |
@@ -115,7 +126,7 @@ directory layout. `k_drive_poll` uses a single-sector probe for media presence.
 - **COMPANION.DSK** (CF2 data): backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
   WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, MAHJONG.APP,
-  CALC.APP,
+  CALC.APP, FORMREF.APP, SNDTEST.APP,
   WELCOME.TXT.
 - **EXTRAS.DSK** (720K CF2DD data): every portable picture from
   `assets/pictures`, stored byte-for-byte in canonical GBPC v2 format, plus

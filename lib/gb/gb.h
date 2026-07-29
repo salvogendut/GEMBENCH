@@ -234,6 +234,44 @@ unsigned char gb_form_actions_hit(unsigned char x, unsigned char y,
                                   unsigned char mx, unsigned char my);
 unsigned char gb_form_modal_run(const gb_form_modal_t *modal);
 
+/* ---- App-linked sound -------------------------------------------------------
+ * SOUND=1 links the target backend into this application only. It adds no
+ * resident-kernel code or ABI entry. CPC/MSX use PSG channel A. PCW probes for
+ * the DK'tronics AY and falls back to its fixed 3.75 kHz beeper when absent.
+ * Apps own duration and call gb_sound_stop() from frame/close handlers.
+ *
+ * Notes cover C3..B6 as a zero-based chromatic index. Build them from a pitch
+ * and octave with GB_SOUND_NOTE(), or use the common aliases below. */
+#define GB_PITCH_C   0
+#define GB_PITCH_CS  1
+#define GB_PITCH_D   2
+#define GB_PITCH_DS  3
+#define GB_PITCH_E   4
+#define GB_PITCH_F   5
+#define GB_PITCH_FS  6
+#define GB_PITCH_G   7
+#define GB_PITCH_GS  8
+#define GB_PITCH_A   9
+#define GB_PITCH_AS 10
+#define GB_PITCH_B  11
+#define GB_SOUND_NOTE(pitch, octave) \
+    ((unsigned char)(((octave) - 3) * 12 + (pitch)))
+#define GB_NOTE_C3 GB_SOUND_NOTE(GB_PITCH_C, 3)
+#define GB_NOTE_C4 GB_SOUND_NOTE(GB_PITCH_C, 4)
+#define GB_NOTE_C5 GB_SOUND_NOTE(GB_PITCH_C, 5)
+#define GB_NOTE_C6 GB_SOUND_NOTE(GB_PITCH_C, 6)
+#define GB_SOUND_VOLUME_MAX 15
+#define GB_SOUND_CAP_PITCH  0x01
+#define GB_SOUND_CAP_NOISE  0x02
+#define GB_SOUND_CAP_VOLUME 0x04
+#define GB_SOUND_CAP_PSG \
+    (GB_SOUND_CAP_PITCH | GB_SOUND_CAP_NOISE | GB_SOUND_CAP_VOLUME)
+
+unsigned char gb_sound_caps(void);
+void gb_sound_tone(unsigned char note, unsigned char volume);
+void gb_sound_noise(unsigned char period, unsigned char volume);
+void gb_sound_stop(void);
+
 void gb_icon(unsigned char slot, unsigned char col,      /* full icon blit       */
              unsigned char line);
 void gb_icon_half(unsigned char slot, unsigned char col,   /* half-height (16px) blit */
