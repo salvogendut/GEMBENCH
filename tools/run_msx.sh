@@ -21,6 +21,8 @@
 #   MSX_UNAPI=0 tools/run_msx.sh                 disable openMSXnet networking
 #   MSX_UNAPI=1 tools/run_msx.sh                 explicitly enable it (the default;
 #                                                the image must run UNAPINET.COM)
+#   MSX_MOUSE=0 tools/run_msx.sh                 leave joystick port A unchanged
+#                                                instead of attaching an MSX mouse
 #   OPENMSXNET_HOME=/path/to/bundle tools/run_msx.sh
 #                                                use bundle/openmsx + bundle/share
 #   MSX_DISTROBOX=name tools/run_msx.sh           container for missing host libs
@@ -31,14 +33,20 @@ cd "$(dirname "$0")/.."
 IMG="${1:-QA/GBMSX.IMG}"
 MACHINE="${MSX_MACHINE:-Philips_NMS_8250}"
 UNAPI_ENABLED="${MSX_UNAPI:-1}"
+MOUSE_ENABLED="${MSX_MOUSE:-1}"
 OPENMSXNET_HOME="${OPENMSXNET_HOME:-QA/MSXDEPS/openmsxnet}"
 [ -s "$IMG" ] || { echo "ERROR: $IMG not found - run tools/build_msx_img.sh" >&2; exit 1; }
+case "$MOUSE_ENABLED" in
+    0|1) ;;
+    *) echo "ERROR: MSX_MOUSE must be 0 or 1" >&2; exit 1 ;;
+esac
 
 EXT=(-ext SunriseIDE_Nextor)
 [ "${MSX_RAM:-512k}" != stock ] && EXT+=(-ext ram512k)
 [ "$UNAPI_ENABLED" = 1 ] && EXT+=(-ext unapinet)
 
 ARGS=(-machine "$MACHINE" "${EXT[@]}" -hda "$IMG")
+[ "$MOUSE_ENABLED" = 1 ] && ARGS+=(-command "plug joyporta mouse")
 SCRIPT=
 
 if [ -n "${MSX_SHOTS:-}" ]; then

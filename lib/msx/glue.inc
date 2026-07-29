@@ -22,9 +22,8 @@ MSX_TOTSEG      equ   #C019        ; byte: primary-mapper total segments
 MSX_FREESEG     equ   #C01A        ; byte: primary-mapper free segments at entry
 MSX_HOOKSAVE    equ   #C01B        ; 5 bytes: original H.TIMI content (restored on exit)
 MSX_PAGE_DATA   equ   #C020        ; byte: the allocated PAGE_DATA mapper segment
-MSX_MOUSE       equ   #C021        ; byte: 1 = poll the GTPAD mouse (GBMSX /M) - default
-                                   ; off: with NO mouse plugged the port reads as constant
-                                   ; offsets and the pointer drifts to a corner (#287)
+MSX_MOUSE       equ   #C021        ; byte: 1 = poll GTPAD (MSXMOUSE=TRUE or GBMSX /M)
+                                   ; known empty-port samples are ignored by input.asm
 GLINE_X0        equ   #C030        ; GB_LINE marshal block (#287): x0,y0,x1,y1 words
 GLINE_Y0        equ   #C032        ; (screen pixels, top-left origin) + pen byte.
 GLINE_X1        equ   #C034        ; Page-3 cells so the clock's inline asm can fill
