@@ -79,12 +79,13 @@ input_poll
 ; read_mouse: latch the mouse counters (GTPAD 12), then add the X/Y offsets
 ; into in_dx/in_dy (x2: mouse counts ~ pixels, the pointer space is 2 units/px;
 ; Y sign flips - mouse-down is positive, cursor_y grows upward). A mouse's
-; buttons arrive as joystick triggers, which read_trig already merges. With no
-; mouse plugged the offsets read 0, so this is a no-op on joystick setups.
+; buttons arrive as joystick triggers, which read_trig already merges. An empty
+; port reports either FF/FF or 01/01, depending on the BIOS; discard both exact
+; pairs so an enabled but unplugged mouse cannot drag the pointer into a corner.
 read_mouse
-                ld    a,(MSX_MOUSE)          ; opt-in (GBMSX /M): an EMPTY joystick port
-                or    a                       ; reads as constant GTPAD offsets and drags
-                ret   z                       ; the pointer into a corner (#287)
+                ld    a,(MSX_MOUSE)          ; opt-in: config or GBMSX /M
+                or    a
+                ret   z
                 ld    a,12                    ; presence + latch
                 ld    ix,GTPAD
                 call  msx_bios
@@ -93,6 +94,21 @@ read_mouse
                 ld    a,13                    ; X offset since last latch (signed byte)
                 ld    ix,GTPAD
                 call  msx_bios
+                push  af
+                ld    a,14                    ; Y offset (positive = down)
+                ld    ix,GTPAD
+                call  msx_bios
+                ld    c,a
+                pop   af
+                cp    c
+                jr    nz,rm_x                 ; unequal axes cannot be a signature
+                inc   a
+                ret   z                       ; FF/FF: floating port on real hardware
+                dec   a
+                dec   a
+                ret   z                       ; 01/01: NMS 8250 BIOS/openMSX empty port
+                inc   a                       ; restore any other equal X/Y sample
+rm_x
                 or    a
                 jr    z,rm_y
                 ld    e,a                     ; sign-extend into DE, then x2
@@ -104,9 +120,7 @@ read_mouse
                 ld    hl,in_dx
                 call  add_de_to
 rm_y
-                ld    a,14                    ; Y offset (positive = down)
-                ld    ix,GTPAD
-                call  msx_bios
+                ld    a,c
                 or    a
                 ret   z
                 ld    e,a                     ; sign-extend, negate (flip), x2

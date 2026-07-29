@@ -21,8 +21,8 @@ Clock — all co-resident under the kernel window manager on a V9938.
   enabling sixteen-colour pictures in Viewer and as desktop wallpaper. Both use
   a **hardware sprite pointer** and VDP-command drawing (`GB_SETINK` palette
   mapping, `GB_LINE`).
-- **Input:** joystick / keyboard pointer, plus the standard **MSX mouse** (GTPAD).
-  The clock is 50/60 Hz aware.
+- **Input:** joystick / keyboard pointer, plus the standard **MSX mouse** in
+  joystick port 1 (GTPAD). The clock is 50/60 Hz aware.
 - **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
   Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS,
   Calculator, Mahjong,
@@ -47,6 +47,24 @@ Keep `GBMSX.COM`, `GBMSX6.COM`, and `GBMSX7.COM` together in the root of the boo
 drive. For diagnostics, either mode-specific executable can also be run directly.
 Only the selected kernel becomes resident, so the option costs disk space rather
 than kernel headroom.
+
+## Mouse input
+
+Newly built MSX images set `MSXMOUSE=TRUE` in `GEOBENCH.CFG`. This makes the
+`GBMSX.COM` selector pass `/M` to the selected Screen 6/7 loader, which enables
+the BIOS GTPAD driver for a standard MSX mouse in joystick port 1. Set
+`MSXMOUSE=FALSE` to retain keyboard/joystick-only input. A manual
+`GBMSX /M`, `GBMSX6 /M`, or `GBMSX7 /M` also enables the mouse for that run.
+The driver ignores both known offset pairs returned by an enabled but unplugged
+port (`FF/FF` on hardware and `01/01` from some BIOS/emulator combinations), so
+a missing mouse does not pull the pointer into a corner. Keyboard and joystick
+input remain active as a fallback.
+
+`tools/run_msx.sh` attaches openMSX's `mouse` pluggable to `joyporta` by
+default. Set `MSX_MOUSE=0` to leave openMSX's normal joystick attachment in
+place. In the 1983 emulator, select **General > Joy Port A > Mouse** (or set
+`joy_port_a = mouse` in `1983.conf`), then click inside the emulator window to
+capture relative mouse input; `Ctrl+Enter` releases it.
 
 Build and test in **openMSX** (emulating a Philips NMS 8250 with the Sunrise IDE
 Nextor extension and a 512K RAM expansion):
