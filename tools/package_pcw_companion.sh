@@ -18,6 +18,7 @@ python3 tools/mkpcwdsk.py "$OUT" \
     --add build/pcw/TELNET.RAW=TELNET.APP \
     --add build/pcw/NETTEST.RAW=NETTEST.APP \
     --add build/pcw/FORMREF.RAW=FORMREF.APP \
+    --add build/pcw/SNDTEST.RAW=SNDTEST.APP \
     --add build/pcw/WGET.RAW=WGET.APP \
     --add build/pcw/BROWSER.RAW=BROWSER.APP \
     --add build/pcw/XAOS.RAW=XAOS.APP \

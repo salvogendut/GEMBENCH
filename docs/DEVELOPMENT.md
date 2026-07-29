@@ -197,6 +197,31 @@ compact implementations. Clock is the first production form-modal user; it
 builds with `WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1`. `TIMESET=1` links
 `gb_set_time()` into that app only, preserving CPC resident-kernel headroom.
 
+### App-linked audio
+
+Audio is an optional application library, not a kernel service. Link it only
+into an app that needs sound:
+
+```bash
+SOUND=1 tools/build_capp.sh apps/myapp build/MYAPP.RAW
+```
+
+The portable API in `lib/gb/gb.h` is deliberately small:
+
+- `gb_sound_tone(note, volume)` starts a C3..B6 chromatic note.
+- `gb_sound_noise(period, volume)` starts PSG noise.
+- `gb_sound_stop()` silences the app-owned channel.
+
+Use `GB_SOUND_NOTE(GB_PITCH_*, octave)` to construct a note and keep volume in
+`0..GB_SOUND_VOLUME_MAX`. CPC and MSX2 use PSG channel A. A stock PCW has no
+programmable sound generator, so its backend maps both tone and noise to the
+fixed 3.75 kHz beeper. Duration and sequencing remain in the app's
+`GB_MSG_FRAME` handler; always call `gb_sound_stop()` before closing.
+
+This design adds no resident state, kernel code, or ABI slot. Apps that do not
+build with `SOUND=1` remain byte-identical. `make sndtest` builds the
+three-platform `SNDTEST.APP` reference without rebuilding the distributions.
+
 ## Icon and font sets (GEOBENCH.CFG)
 
 `GEOBENCH.CFG` selects named resources. `ICONS=<name>` loads `<name>.IST`,

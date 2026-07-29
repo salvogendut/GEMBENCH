@@ -88,6 +88,7 @@ SLIDER_FLAG="${SLIDER:-0}"
 FORM_FLAG="${FORM:-0}"
 FORM_SELECT_FLAG="${FORM_SELECT:-0}"
 TIMESET_FLAG="${TIMESET:-0}"
+SOUND_FLAG="${SOUND:-0}"
 SIZEPROMPT_FLAG="${SIZEPROMPT:-0}"
 APP_PROBE_FLAG="${APP_PROBE:-0}"
 NET_SRC="$GB/gbnet_stub.c"
@@ -152,6 +153,9 @@ fi
 if [ "$TIMESET_FLAG" = "1" ]; then
     deps+=("$GB/gbsettime.c")
 fi
+if [ "$SOUND_FLAG" = "1" ]; then
+    deps+=("$GB/gbsound.c")
+fi
 if [ "$SIZEPROMPT_FLAG" = "1" ]; then
     deps+=("$GB/gbsizedlg.c")
 fi
@@ -207,6 +211,7 @@ cache_key=$(printf '%s\n' \
     "FORM=$FORM_FLAG" \
     "FORM_SELECT=$FORM_SELECT_FLAG" \
     "TIMESET=$TIMESET_FLAG" \
+    "SOUND=$SOUND_FLAG" \
     "SIZEPROMPT=$SIZEPROMPT_FLAG" \
     "APP_PROBE=$APP_PROBE_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
@@ -308,6 +313,12 @@ if [ "$TIMESET_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer ${APPDEFS:-} -I "$GB" -c "$GB/gbsettime.c" -o "$work/gbsettime.rel"
     TIMESET_REL="$work/gbsettime.rel"
 fi
+SOUND_REL=""
+if [ "$SOUND_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $HELPER_CFLAGS ${APPDEFS:-} -I "$GB" \
+        -c "$GB/gbsound.c" -o "$work/gbsound.rel"
+    SOUND_REL="$work/gbsound.rel"
+fi
 SIZEPROMPT_REL=""
 if [ "$SIZEPROMPT_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $HELPER_CFLAGS ${APPDEFS:-} -I "$GB" \
@@ -342,7 +353,7 @@ fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc "$CODE_LOC" --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
-    $FORM_SELECT_REL $TIMESET_REL $SIZEPROMPT_REL $DLG_REL $APP_PROBE_REL \
+    $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $DLG_REL $APP_PROBE_REL \
     "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places

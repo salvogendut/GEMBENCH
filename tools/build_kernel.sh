@@ -130,6 +130,7 @@ python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjon
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/TELNET.RAW # TELNET (#238): 78x22 windowed (4x8 charset, #351) ANSI/VT terminal + telnet client (+ Mode-2 80x25 fullscreen)
 DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTEST (#261): card-side DNS/TCP/HTTP diagnostic for the active network backend
 APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW # FORMREF (#420/#424/#426/#428): compact action diagnostic + dual embedded APP icon reference
+DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/SNDTEST.RAW # SNDTEST (#452): app-linked PSG/beeper diagnostic; zero resident kernel bytes
 DATA_LOC=0x7A50 DIALOGS=1 WIDGETS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
 APP_ICON=apps/browser/icon.asm GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371/#373): demand stream + offline/proxy/GET-form support
 DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/BRSAVE.RAW # transient Browser .HTM source writer

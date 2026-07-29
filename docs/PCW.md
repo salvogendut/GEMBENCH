@@ -77,6 +77,15 @@ window, active-high, Joyce layout with shift tables) — there is no
 firmware to ask. The machine runs fully DI; k_poll paces on the frame
 flyback (port `#F8` bit 6).
 
+## Audio
+
+The optional app-linked sound library uses the stock PCW's fixed 3.75 kHz
+beeper. Tone and noise requests therefore become simple beeper on/off events;
+duration remains under the app's `GB_MSG_FRAME` control. This adds no resident
+kernel code. A later DK'tronics AY backend can provide programmable pitch
+without changing the portable API. Run `SNDTEST.APP` from the Companion disk
+to check the current backend.
+
 ## Memory plan
 
 | CPU slot | Contents |
@@ -115,7 +124,7 @@ directory layout. `k_drive_poll` uses a single-sector probe for media presence.
 - **COMPANION.DSK** (CF2 data): backdrop tiles,
   TELNET.APP (PerryNet/PerryFi plus serial), NETTEST.APP (PerryNet/PerryFi),
   WGET.APP and BROWSER.APP (HTTP over PerryNet), XAOS.APP, MAHJONG.APP,
-  CALC.APP,
+  CALC.APP, FORMREF.APP, SNDTEST.APP,
   WELCOME.TXT.
 - **EXTRAS.DSK** (720K CF2DD data): every portable picture from
   `assets/pictures`, stored byte-for-byte in canonical GBPC v2 format, plus

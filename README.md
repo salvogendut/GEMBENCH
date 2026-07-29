@@ -87,7 +87,8 @@ hardware, or use the disk images in an emulator.
   lets Viewer and the desktop wallpaper display 16-colour `.PIC` files. You can
   also use openMSX (see
   [docs/MSX2.md](docs/MSX2.md)). Pictures are under `PICS/` and
-  development diagnostics under `DIAG/`. Browser and Telnet additionally require
+  low-level diagnostics under `DIAG/`; app diagnostics such as `SNDTEST.APP`
+  are under `GBENCH/`. Browser and Telnet additionally require
   a compatible TCP/IP UNAPI implementation; the openMSXnet setup is documented in
   [the MSX2 networking guide](docs/MSX2.md#browser-and-telnet-networking).
 

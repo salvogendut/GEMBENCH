@@ -64,6 +64,7 @@ APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DIALOGS=1 too
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6800 BUTTON=1 tools/build_capp.sh apps/calculator build/msx/CALC.RAW
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
 APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/msx/SNDTEST.RAW
 APP_ICON=apps/browser/icon.asm APPDEFS="-DGB_MSX2" GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/msx/BROWSER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/msx/BRSAVE.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/saver build/msx/SQUARES.RAW
@@ -197,6 +198,7 @@ cp build/msx/TELNET.RAW   QA/MSX/GBENCH/TELNET.APP
 cp build/msx/BROWSER.RAW  QA/MSX/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/GBENCH/BRSAVE.APP
 cp build/msx/FORMREF.RAW  QA/MSX/GBENCH/FORMREF.APP
+cp build/msx/SNDTEST.RAW  QA/MSX/GBENCH/SNDTEST.APP
 for f in "$GB_BASIC_DIR/build/msx/BASIC.RAW" "$GB_BASIC_DIR/build/msx/BASRUN.RAW" "$GB_BASIC_DIR/build/msx/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC MSX payload $f (run make -C \"$GB_BASIC_DIR\" raws-msx)" >&2; exit 1; }
 done
