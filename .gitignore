@@ -30,7 +30,7 @@ __pycache__/
 # QA/CPC/CARD/ and QA/CPC/Floppies/), so re-include it despite the binary ignores above.
 # Regenerate with `bash tools/build_kernel.sh`.
 !QA/**
-# Optional third-party TCP/IP UNAPI TSR, staged only for local MSX network tests.
+# Fetched third-party TCP/IP UNAPI TSR, staged only in local MSX builds.
 QA/MSX/UNAPINET.COM
 # ...except the 32MB card image: it is rebuilt (and byte-churns) on every build, so it
 # is a local build artifact, not committed. Build it with tools/build_card_img.sh.

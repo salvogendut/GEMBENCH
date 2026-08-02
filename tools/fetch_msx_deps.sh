@@ -3,7 +3,7 @@
 # emulator testing (issue #287). Everything lands outside the git tree:
 #
 #   QA/MSXDEPS/            (git-ignored)  Nextor system files for image staging:
-#     NEXTOR.SYS COMMAND2.COM
+#     NEXTOR.SYS COMMAND2.COM UNAPINET.COM
 #   ~/.openMSX/share/systemroms/          ROMs openMSX identifies by sha1:
 #     Nextor-2.1.1.SunriseIDE.ROM         (matches the bundled SunriseIDE_Nextor
 #                                          extension's expected sha1)
@@ -23,6 +23,8 @@ ROMS="$HOME/.openMSX/share/systemroms"
 NEXTOR_ROM_VER=v2.1.1        # must match the sha1 in openMSX's SunriseIDE_Nextor.xml
 NEXTOR_SYS_VER=v2.1.3        # newest release that ships NEXTOR.SYS
 NEXTOR_TOOLS_VER=v2.1.0      # newest release that ships tools.zip (COMMAND2.COM)
+OPENMSXNET_VER=v0.9.7
+UNAPINET_SHA256=86e7bb27d1f020e235929a6806f5f2dc8188c458119041c4017afd93a3c13227
 
 mkdir -p "$DEPS" "$ROMS"
 
@@ -30,6 +32,22 @@ fetch() { # url dest
     [ -s "$2" ] && { echo "have  $2"; return; }
     echo "fetch $2"
     curl -sfL -o "$2" "$1"
+}
+
+verify_sha256() { # path expected
+    local actual
+    actual="$(python3 - "$1" <<'PY'
+import hashlib, sys
+with open(sys.argv[1], "rb") as source:
+    print(hashlib.sha256(source.read()).hexdigest())
+PY
+)"
+    [ "$actual" = "$2" ] || {
+        echo "ERROR: SHA-256 mismatch for $1" >&2
+        echo "expected $2" >&2
+        echo "actual   $actual" >&2
+        exit 1
+    }
 }
 
 # --- Nextor kernel ROM + system files ---------------------------------------
@@ -44,6 +62,13 @@ if [ ! -s "$DEPS/COMMAND2.COM" ]; then
     rm -f "$DEPS/tools.zip"
     echo "have  $DEPS/COMMAND2.COM"
 fi
+
+# --- openMSXnet TCP/IP UNAPI guest driver ----------------------------------
+# This is the guest half of the port-mapped host bridge. It remains in the
+# ignored dependency/staging directories and is never committed to GeoBench.
+fetch "https://github.com/antxiko/openMSXnet/releases/download/$OPENMSXNET_VER/UNAPINET.COM" \
+      "$DEPS/UNAPINET.COM"
+verify_sha256 "$DEPS/UNAPINET.COM" "$UNAPINET_SHA256"
 
 # --- Philips NMS 8250 system ROMs (sha1-carved from the MiSter BIOS pack) ----
 need_roms=0
@@ -86,4 +111,4 @@ if missing:
 EOF
 fi
 
-echo "MSX deps ready: $DEPS + $ROMS"
+echo "MSX deps ready: $DEPS (including UNAPINET.COM) + $ROMS"

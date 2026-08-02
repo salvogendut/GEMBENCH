@@ -21,8 +21,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   sibling GB-PAINT and GB-BASIC checkouts.
 - **`build_kernel_msx.sh`** — builds the `GBMSX.COM` video-mode selector,
   `GBMSX6.COM`, `GBMSX7.COM`, the MSX2 app/module payload, and the bootable
-  Nextor `QA/GBMSX.IMG`. Set `MSX_UNAPI_TSR` to stage a local
-  openMSXnet `UNAPINET.COM` before `GBMSX.COM`; the TSR remains untracked.
+  Nextor `QA/GBMSX.IMG`. The dependency fetcher supplies a local openMSXnet
+  `UNAPINET.COM`, which is staged before `GBMSX.COM`; `MSX_UNAPI_TSR` overrides
+  it, and an explicitly empty value omits it. The TSR remains untracked.
 - **`run_msx.sh`** — launches the MSX2 image in native or Flatpak openMSX.
   It adds openMSXnet's `unapinet` extension by default when using its custom
   emulator build and automatically selects a bundle in
