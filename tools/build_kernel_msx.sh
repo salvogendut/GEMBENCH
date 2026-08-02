@@ -9,8 +9,9 @@
 # v2 pictures, icon sets, and backdrop tiles remain canonical and are translated
 # to native bytes by the kernel at display/load time.
 #
-#   bash tools/build_kernel_msx.sh
+#   bash tools/build_kernel_msx.sh       # uses QA/MSXDEPS/UNAPINET.COM
 #   MSX_UNAPI_TSR=/path/to/UNAPINET.COM bash tools/build_kernel_msx.sh
+#   MSX_UNAPI_TSR= bash tools/build_kernel_msx.sh  # explicitly omit the TSR
 #   MSX_SHOTS="20 30 45" tools/run_msx.sh      # then verify in openMSX
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -18,6 +19,17 @@ cd "$(dirname "$0")/.."
 RASM="${RASM:-rasm}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
+
+# fetch_msx_deps.sh supplies the standard local guest driver. An explicitly
+# set MSX_UNAPI_TSR overrides it; setting the variable to empty deliberately
+# produces a network-free image. The binary stays in ignored paths.
+if [ "${MSX_UNAPI_TSR+x}" = x ]; then
+    UNAPI_TSR="$MSX_UNAPI_TSR"
+elif [ -s QA/MSXDEPS/UNAPINET.COM ]; then
+    UNAPI_TSR=QA/MSXDEPS/UNAPINET.COM
+else
+    UNAPI_TSR=
+fi
 
 mkdir -p build/msx
 
@@ -172,9 +184,9 @@ rm -f QA/MSX/GBSPIKE.COM                 # pre-DIAG staging location (#379)
 cp build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM QA/MSX/
 rm -f QA/MSX/DIAG/FORMREF.APP             # MSX app loading resolves through /GBENCH
 rm -f QA/MSX/UNAPINET.COM
-if [ -n "${MSX_UNAPI_TSR:-}" ]; then
-    [ -s "$MSX_UNAPI_TSR" ] || { echo "ERROR: MSX_UNAPI_TSR not found: $MSX_UNAPI_TSR" >&2; exit 1; }
-    cp "$MSX_UNAPI_TSR" QA/MSX/UNAPINET.COM
+if [ -n "$UNAPI_TSR" ]; then
+    [ -s "$UNAPI_TSR" ] || { echo "ERROR: MSX_UNAPI_TSR not found: $UNAPI_TSR" >&2; exit 1; }
+    cp "$UNAPI_TSR" QA/MSX/UNAPINET.COM
     printf 'UNAPINET\r\nGBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
 else
     printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT

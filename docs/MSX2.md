@@ -99,12 +99,17 @@ recommended setup when networking and several windows are used together.
 
 [openMSXnet](https://github.com/antxiko/openMSXnet) is the initial emulator
 target. It needs both its custom openMSX build with the `unapinet` extension and
-its `UNAPINET.COM` TSR. To produce a local image that installs the TSR before
-GEOBENCH:
+its `UNAPINET.COM` TSR. `tools/fetch_msx_deps.sh` downloads the official v0.9.7
+guest driver into the ignored `QA/MSXDEPS/` directory, and the normal MSX build
+stages and runs it before GEOBENCH:
 
 ```bash
-MSX_UNAPI_TSR=/path/to/UNAPINET.COM bash tools/build_kernel_msx.sh
+bash tools/fetch_msx_deps.sh
+bash tools/build_kernel_msx.sh
 ```
+
+`MSX_UNAPI_TSR=/path/to/UNAPINET.COM` selects another local driver binary;
+`MSX_UNAPI_TSR=` explicitly builds an image without the TSR.
 
 Then run that image with the openMSXnet executable and data directory:
 
@@ -121,9 +126,9 @@ host-side sockets. `run_msx.sh` enables that extension by default; use
 `QA/MSXDEPS/openmsxnet/` is selected automatically; `OPENMSXNET_HOME` selects a
 different location. When its libraries are not available on the host, the
 launcher runs it through `my-distrobox` (override with `MSX_DISTROBOX`). The
-normal committed distribution bundles neither third-party component. On an
-existing Nextor installation, copy `UNAPINET.COM` to the boot drive and run it
-before `GBMSX.COM`; another compatible mapped-RAM or page-3 TCP/IP UNAPI
-implementation may be used instead. Browser and Telnet report a
-network-initialisation error when discovery fails. Browser currently supports
-plain HTTP only.
+third-party executable and generated image remain untracked; a source checkout
+without fetched dependencies still contains neither component. On an existing
+Nextor installation, copy `UNAPINET.COM` to the boot drive and run it before
+`GBMSX.COM`; another compatible mapped-RAM or page-3 TCP/IP UNAPI implementation
+may be used instead. Browser and Telnet report a network-initialisation error
+when discovery fails. Browser currently supports plain HTTP only.

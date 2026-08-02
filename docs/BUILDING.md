@@ -94,33 +94,34 @@ kernel, `-DGB_MSX2` for the apps). See [The MSX2 target](MSX2.md) for the runtim
 design; this is the build.
 
 ```bash
-bash tools/fetch_msx_deps.sh       # one-time: Nextor system files + NMS 8250 ROMs
+bash tools/fetch_msx_deps.sh       # one-time: Nextor, UNAPINET + NMS 8250 ROMs
 bash tools/build_kernel_msx.sh     # the whole MSX2 distribution
 tools/run_msx.sh                   # boot it in openMSX (interactive)
 MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 ```
 
 Browser and Telnet are included in the MSX distribution and use TCP/IP UNAPI.
-For an openMSXnet test image, pass its required TSR while building and enable
-the matching emulator extension while running:
+The dependency fetcher places openMSXnet v0.9.7's guest TSR in ignored
+`QA/MSXDEPS/`; the standard MSX build stages it automatically. Enable the
+matching emulator extension while running:
 
 ```bash
-MSX_UNAPI_TSR=/path/to/UNAPINET.COM make msx
+make msx
 OPENMSX=/path/to/openmsxnet/openmsx \
 OPENMSX_SYSTEM_DATA=/path/to/openmsxnet/share \
 tools/run_msx.sh
 ```
 
-`MSX_UNAPI_TSR` is optional for a normal build, but openMSXnet networking does
-not work without both that TSR and the emulator extension. `run_msx.sh` enables
-the `unapinet` extension by default. It also automatically uses an openMSXnet
-bundle installed at `QA/MSXDEPS/openmsxnet/`; use `OPENMSXNET_HOME` for another
-bundle location, or the explicit `OPENMSX` variables shown above. If the bundle
-needs libraries absent from the host (notably Tcl 8.6 on current Fedora), the
-launcher automatically uses `my-distrobox`; `MSX_DISTROBOX` overrides its name.
-Set `MSX_UNAPI=0` only for a non-networked run. The third-party TSR is never
-committed. Run `make msx` again without `MSX_UNAPI_TSR` to restore the standard
-staged `AUTOEXEC.BAT`; see
+`MSX_UNAPI_TSR=/path/to/UNAPINET.COM` overrides the fetched driver, while an
+explicitly empty `MSX_UNAPI_TSR=` builds a network-free image. openMSXnet does
+not work without both the guest TSR and emulator extension. `run_msx.sh` enables
+the `unapinet` extension by default and automatically uses a bundle installed at
+`QA/MSXDEPS/openmsxnet/`; use `OPENMSXNET_HOME` for another location, or the
+explicit `OPENMSX` variables shown above. If the bundle needs libraries absent
+from the host (notably Tcl 8.6 on current Fedora), the launcher automatically
+uses `my-distrobox`; `MSX_DISTROBOX` overrides its name. Set `MSX_UNAPI=0` for a
+non-networked run. The third-party TSR and generated image are never committed;
+see
 [The MSX2 target](MSX2.md#browser-and-telnet-networking) for current UNAPI
 implementation coverage.
 
