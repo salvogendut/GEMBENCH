@@ -3176,8 +3176,11 @@ npd_imgend
                 save  "CLASSIC.FNT",cfont_img,cfont_imgend-cfont_img,DSK,"build/gbkern.dsk"
                 save  "DEFAULT.IST",icon_img,icon_imgend-icon_img,DSK,"build/gbkern.dsk"
                 save  "SPLASH.MOD",splash_img,splash_imgend-splash_img,DSK,"build/gbkern.dsk"
-                save  "DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data,DSK,"build/gbkern.dsk"
                 save  "build/DEFAULT.SPR",cur_spr_data,cur_spr_end-cur_spr_data
+                ; Keep this composite cursor/helper asset headerless on the floppy.
+                ; An AMSDOS header would make its 512-byte payload occupy 640 bytes,
+                ; exceeding cursor_init's exact 512-byte load window at #1500.
+                edsk  putfile,"build/gbkern.dsk","build/DEFAULT.SPR","DEFAULT.SPR"
                 ; HAND.SPR is optional and ships on the Companion floppy; keeping it off
                 ; Main leaves room for the header-aware ICONED picker (#426).
                 save  "build/HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data
