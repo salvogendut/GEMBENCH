@@ -171,6 +171,11 @@ def main() -> None:
 
     cpc_main = cpc_disk(ROOT / "QA/CPC/Floppies/GEOBENCH.DSK")
     pcw_main = pcw_disk(ROOT / "QA/PCW/GEOBENCH.DSK")
+    compare_payload(
+        "QA/CPC/Floppies/GEOBENCH.DSK:DEFAULT.SPR",
+        cpc_main["DEFAULT.SPR"],
+        (ROOT / "QA/CPC/CARD/GBENCH/DEFAULT.SPR").read_bytes(),
+    )
     compare_payload("QA/CPC/Floppies/GEOBENCH.DSK:LOGO.PIC", strip_amsdos(cpc_main["LOGO.PIC"]), assets["LOGO.PIC"])
     compare_payload("QA/PCW/GEOBENCH.DSK:LOGO.PIC", pcw_main["LOGO.PIC"], assets["LOGO.PIC"], padded=True)
     compare_payload(
@@ -235,6 +240,7 @@ def main() -> None:
     print(f"portable PIC distribution: {len(assets)} byte-identical pictures across CPC, MSX and PCW")
     print(f"MSX Screen 7 distribution: {mode7_count} additional pictures in QA/MSX/PICS")
     print(f"portable BDP distribution: {len(backdrops)} byte-identical backdrops across CPC, MSX and PCW")
+    print("CPC floppy cursor: headerless DEFAULT.SPR matches the card distribution")
     print("target defaults: pristine DEFAULT.CFG matches GEOBENCH.CFG on CPC, MSX and PCW")
 
 
