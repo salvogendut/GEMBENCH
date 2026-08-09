@@ -27,7 +27,7 @@ sndtest:
 	APPDEFS="-DGB_PCW" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/pcw/SNDTEST.RAW
 
 titlebar-editor:
-	python3 tools/titlebaredit.py assets/titlebars/ORIGINAL.TBR
+	python3 tools/titlebaredit.py assets/titlebars/ORIGINAL.TBR assets/gadgets/ORIGINAL.GDT
 
 check:
 	git diff --check

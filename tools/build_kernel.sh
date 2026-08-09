@@ -84,7 +84,7 @@ python3 tools/png2cpc.py build/SPLASHD_BUILD.png build/SPLASHD.BIN splash 96x184
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=18\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nPROXY=\r\n' > build/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=18\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nPROXY=\r\n' > build/GEOBENCH.CFG
 cp build/GEOBENCH.CFG build/DEFAULT.CFG
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
 python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
@@ -271,11 +271,17 @@ for tbr in build/titlebars/*.TBR; do
     esac
     EXTRAS_ADDS+=(--add "$tbr")
 done
+for gdt in build/gadgets/*.GDT; do
+    case "$(basename "$gdt")" in
+        ORIGINAL.GDT) continue ;;
+    esac
+    EXTRAS_ADDS+=(--add "$gdt")
+done
 while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")
 done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
-echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + secondary title bars + Disk Utility + XROACH/CATCLK/HELIX savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + secondary title/gadget themes + Disk Utility + XROACH/CATCLK/HELIX savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"

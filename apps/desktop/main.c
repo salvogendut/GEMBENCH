@@ -386,34 +386,130 @@ static unsigned int cfg_val(const char *key, unsigned char klen)
     return len;
 }
 
-/* Load TITLEBAR=<stem>.TBR into the shared low-RAM buffer, then ask the paged
-   GBTITLE module to install it. Missing/invalid files select its embedded
-   ORIGINAL fallback. This runs before the first managed window can open. */
-static void titlebar_init(void)
+static char chrome_name[11];
+
+/* Load one boot-drive chrome asset from /GBENCH into the shared copy buffer.
+   This compact assembly helper keeps the second configurable asset inside the
+   Desktop app's fixed code boundary. A=0 selects TITLEBAR/TBR, A=1 selects
+   GADGETS/GDT; SDCC returns the loaded size in DE. */
+static unsigned int chrome_load(unsigned char gadgets) __naked
 {
-    const char *t = KCFG_TEXT;
-    unsigned int len = KCFG_LEN, p, n;
-    unsigned char i, old_drive, descended;
-    char name[11];
-    p = cfg_val("TITLEBAR=", 9);
-    for (i = 0; i < 8; i++) name[i] = ' ';
-    if (p < len) {
-        for (i = 0; i < 8 && p < len && t[p] != '\r' && t[p] != '\n' && t[p] != '.'; i++, p++)
-            name[i] = t[p];
-    } else {
-        name[0]='O'; name[1]='R'; name[2]='I'; name[3]='G';
-        name[4]='I'; name[5]='N'; name[6]='A'; name[7]='L';
-    }
-    name[8]='T'; name[9]='B'; name[10]='R';
-    old_drive = gb_get_drive();
-    gb_set_drive(boot_drive());
-    for (i = 0; i < 4; i++) gb_back();
-    descended = enter_system();
-    gb_set_name(name);
-    n = gb_fs_load(gb_copybuf, 512);
-    if (descended) gb_back();
-    gb_set_drive(old_drive);
-    gb_titlebar_install(n);
+    gadgets;
+__asm
+    push af                         ; retain the TBR/GDT selector
+    or a
+    jr z,cl_title_key
+    ld a,#8
+    push af
+    inc sp
+    ld hl,#cl_gadget_key
+    call _cfg_val                  ; DE = value offset
+    jr cl_have_pos
+cl_title_key:
+    ld a,#9
+    push af
+    inc sp
+    ld hl,#cl_title_key_text
+    call _cfg_val
+cl_have_pos:
+    push de
+    ld hl,#cl_default
+    ld de,#_chrome_name
+    ld bc,#11
+    ldir
+    pop de
+    ld hl,(#0x1200)                ; KCFG_LEN
+    ld a,d
+    cp h
+    jr c,cl_copy_stem
+    jr nz,cl_extension
+    ld a,e
+    cp l
+    jr nc,cl_extension
+cl_copy_stem:
+    push de
+    ld hl,#_chrome_name
+    ld (hl),#0x20
+    ld de,#_chrome_name+1
+    ld bc,#7
+    ldir
+    pop hl
+    ld de,#0x1000                  ; KCFG_TEXT
+    add hl,de
+    ld de,#_chrome_name
+    ld b,#8
+cl_stem_loop:
+    ld a,(hl)
+    cp #13
+    jr z,cl_extension
+    cp #10
+    jr z,cl_extension
+    cp #'.'
+    jr z,cl_extension
+    ld (de),a
+    inc hl
+    inc de
+    djnz cl_stem_loop
+cl_extension:
+    pop af
+    or a
+    jr z,cl_load
+    ld hl,#_chrome_name+8
+    ld (hl),#'G'
+    inc hl
+    ld (hl),#'D'
+    inc hl
+    ld (hl),#'T'
+cl_load:
+    call _gb_get_drive
+    push af
+    call _boot_drive
+    call _gb_set_drive
+    ld b,#4
+cl_root:
+    push bc
+    call _gb_back
+    pop bc
+    djnz cl_root
+    call _enter_system
+    push af
+    ld hl,#_chrome_name
+    call _gb_set_name
+    ld de,#0x0200
+    ld hl,#0x2200                  ; gb_copybuf
+    call _gb_fs_load              ; DE = loaded size
+    pop af
+    or a
+    jr z,cl_restore_drive
+    push de
+    call _gb_back
+    pop de
+cl_restore_drive:
+    pop af
+    push de
+    call _gb_set_drive
+    pop de
+    ret
+cl_default:
+    .ascii "ORIGINALTBR"
+cl_gadget_key:
+    .ascii "GADGETS="
+    .db 0
+cl_title_key_text:
+    .ascii "TITLEBAR="
+    .db 0
+__endasm;
+}
+
+/* Install the independently selected title motif and close/maximize gadgets.
+   The paged module supplies ORIGINAL fallbacks when either file is absent. */
+static void chrome_init(void)
+{
+    unsigned int n;
+    n = chrome_load(0);
+    gb_titlebar_init(n);
+    n = chrome_load(1);
+    gb_gadgets_install(n);
 }
 
 /* ss_cfg_init: read SAVER=<stem> (the module, default SQUARES) into ss_name and
@@ -1051,7 +1147,7 @@ void main(void)
     *WM_FS = 0;                                 /* clear the fullscreen flag at boot (low RAM is
                                                    uninitialised; bar_draw reads it every frame) */
     WM_OPEN_STRICT = 0;
-    titlebar_init();                            /* install ORIGINAL or configured .TBR before windows */
+    chrome_init();                              /* install configured .TBR/.GDT before windows */
     drive_poll();                               /* drives present at boot -> icons (#65) */
 #ifdef GB_PCW
     p = cfg_val("TIMESYNC=", 9);

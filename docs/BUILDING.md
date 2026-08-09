@@ -25,20 +25,22 @@ The repository also has a thin top-level Makefile: `make cpc`, `make msx`,
 binaries for quick UI iteration; `make sndtest` likewise builds only the
 three app-linked sound diagnostics.
 
-Window title motifs are standalone `.TBR` assets selected independently from
-the icon set. Open the default motif in the visual tile editor with:
+Window title motifs are standalone 56-byte `.TBR` assets, while the close and
+maximize pair is a standalone 50-byte `.GDT`. Both are selected independently
+from each other and from the icon set. Open the defaults together in the visual
+tile editor with:
 
 ```bash
 make titlebar-editor
 ```
 
 Every file in `assets/titlebars/` is packaged for card and MSX distributions.
+The same applies to `assets/gadgets/`.
 The space-constrained CPC and PCW boot floppies carry `ORIGINAL.TBR` and
-`IMPROVED.TBR`; their `EXTRAS.DSK` carries the remaining themes. Available
-themes appear in Settings > Title bar, and `TITLEBAR=ORIGINAL` is the default
-on every platform. Current 106-byte themes
-also carry reusable close and maximize gadget tiles; legacy 56-byte motif-only
-files remain loadable.
+`IMPROVED.TBR`, plus `ORIGINAL.GDT`; their `EXTRAS.DSK` carries the remaining
+themes. Available assets appear in Settings > Title bar and Settings > Gadgets.
+`TITLEBAR=ORIGINAL` and `GADGETS=ORIGINAL` are the defaults on every platform.
+Legacy 106-byte combined `.TBR` files remain loadable.
 
 The About dialog reads the release version from the root `VERSION` file and bakes
 that value plus the current 12-character Git commit into `GBUI.MOD`. Override

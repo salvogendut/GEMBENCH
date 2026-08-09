@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Edit and preview GEOBENCH tileable window title bars (.TBR).
+"""Edit and preview GEOBENCH window title bars (.TBR) and gadgets (.GDT).
 
-A current .TBR is a headerless canonical Mode-1 theme: a 16x14 background tile
-followed by reusable 8x10 close and 12x10 maximize gadget tiles. Four pixels
-are packed per byte, for a total of 106 bytes. Legacy 56-byte background-only
-files still open and receive the traditional gadgets when saved.
+A .TBR is a headerless 56-byte canonical Mode-1 16x14 background tile. A .GDT
+is the matching 50-byte asset containing an 8x10 close tile and a 12x10
+maximize tile. Four pixels are packed per byte. Legacy 106-byte combined .TBR
+themes still open and can be split with ``--split``.
 
-    python3 tools/titlebaredit.py [tile.TBR]
+    python3 tools/titlebaredit.py [tile.TBR] [gadgets.GDT]
     python3 tools/titlebaredit.py --write-sample assets/titlebars/WEAVE.TBR
 """
 
@@ -30,7 +30,8 @@ CLOSE_BYTES = (CLOSE_W // 4) * CLOSE_H
 MAX_W = 12
 MAX_H = 10
 MAX_BYTES = (MAX_W // 4) * MAX_H
-THEME_BYTES = TILE_BYTES + CLOSE_BYTES + MAX_BYTES
+GADGET_BYTES = CLOSE_BYTES + MAX_BYTES
+THEME_BYTES = TILE_BYTES + GADGET_BYTES
 
 PEN_RGB = ("#0000aa", "#ffffff", "#000000", "#ff0000")
 PEN_NAME = ("Paper", "White", "Black", "Red")
@@ -89,8 +90,26 @@ def decode_tbr(data: bytes) -> list[list[int]]:
 
 
 def encode_tbr(grid: list[list[int]]) -> bytes:
-    """Encode a legacy 56-byte background tile (kept for codec compatibility)."""
+    """Encode a canonical 56-byte background tile."""
     return encode_grid(grid, TILE_W, TILE_H)
+
+
+def decode_gdt(data: bytes) -> tuple[list[list[int]], list[list[int]]]:
+    """Decode a canonical close/maximize gadget pair."""
+    if len(data) != GADGET_BYTES:
+        raise ValueError(f"expected {GADGET_BYTES} bytes, got {len(data)}")
+    return (
+        decode_grid(data[:CLOSE_BYTES], CLOSE_W, CLOSE_H),
+        decode_grid(data[CLOSE_BYTES:], MAX_W, MAX_H),
+    )
+
+
+def encode_gdt(close: list[list[int]], maximize: list[list[int]]) -> bytes:
+    """Encode a canonical 50-byte close/maximize gadget pair."""
+    return b"".join((
+        encode_grid(close, CLOSE_W, CLOSE_H),
+        encode_grid(maximize, MAX_W, MAX_H),
+    ))
 
 
 def default_close_grid() -> list[list[int]]:
@@ -114,17 +133,12 @@ def default_max_grid() -> list[list[int]]:
 
 
 def decode_theme(data: bytes) -> tuple[list[list[int]], list[list[int]], list[list[int]]]:
-    """Decode a full theme, supplying traditional gadgets for a legacy tile."""
+    """Decode a legacy combined theme or supply defaults for a current tile."""
     title = decode_tbr(data)
     if len(data) == TILE_BYTES:
         return title, default_close_grid(), default_max_grid()
-    close_start = TILE_BYTES
-    max_start = close_start + CLOSE_BYTES
-    return (
-        title,
-        decode_grid(data[close_start:max_start], CLOSE_W, CLOSE_H),
-        decode_grid(data[max_start:], MAX_W, MAX_H),
-    )
+    close, maximize = decode_gdt(data[TILE_BYTES:])
+    return title, close, maximize
 
 
 def encode_theme(title: list[list[int]], close: list[list[int]], maximize: list[list[int]]) -> bytes:
@@ -229,14 +243,15 @@ def ellipse_points(
 
 
 class TitleBarEditor(tk.Tk):
-    def __init__(self, path: str | None = None):
+    def __init__(self, path: str | None = None, gadget_path: str | None = None):
         super().__init__()
         self.title("GEOBENCH title-bar tile editor")
         self.resizable(False, False)
         self.grid_data = stripe_grid()
         self.close_data = default_close_grid()
         self.max_data = default_max_grid()
-        self.path: Path | None = None
+        self.title_path: Path | None = None
+        self.gadget_path: Path | None = None
         self.pen = tk.IntVar(value=2)
         self.tool = tk.StringVar(value="pen")
         self.active_name = "title"
@@ -254,10 +269,12 @@ class TitleBarEditor(tk.Tk):
         self._activate(self.editor)
         if path:
             self.load_tbr(Path(path))
+        if gadget_path:
+            self.load_gdt(Path(gadget_path))
         self._redraw()
         self.bind("<Control-n>", lambda _event: self.new())
         self.bind("<Control-o>", lambda _event: self.open_tbr())
-        self.bind("<Control-s>", lambda _event: self.save_tbr())
+        self.bind("<Control-s>", lambda _event: self.save_active())
         self.bind("<Control-z>", lambda _event: self.undo())
 
     def _build(self) -> None:
@@ -266,8 +283,10 @@ class TitleBarEditor(tk.Tk):
         ttk.Button(toolbar, text="New", command=self.new).pack(side="left")
         ttk.Button(toolbar, text="Sample", command=self.use_sample).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Open .TBR", command=self.open_tbr).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Open .GDT", command=self.open_gdt).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Import .png", command=self.import_png).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Save .TBR", command=self.save_tbr).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Save .GDT", command=self.save_gdt).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Export .png", command=self.export_png).pack(side="left", padx=2)
 
         pens = ttk.Frame(toolbar)
@@ -831,13 +850,16 @@ class TitleBarEditor(tk.Tk):
             for x in range(MAX_W):
                 self.max_editor.itemconfig(self.max_ids[y][x], fill=PEN_RGB[self.max_data[y][x]])
         self._draw_preview()
-        self.status.config(text=str(self.path) if self.path else "(unsaved)")
+        title = str(self.title_path) if self.title_path else "(unsaved .TBR)"
+        gadgets = str(self.gadget_path) if self.gadget_path else "(unsaved .GDT)"
+        self.status.config(text=f"Title: {title} | Gadgets: {gadgets}")
 
     def new(self) -> None:
         self.grid_data = stripe_grid()
         self.close_data = default_close_grid()
         self.max_data = default_max_grid()
-        self.path = None
+        self.title_path = None
+        self.gadget_path = None
         self.undo_stack.clear()
         self.drag = None
         self._redraw()
@@ -846,18 +868,35 @@ class TitleBarEditor(tk.Tk):
         self.grid_data = sample_grid()
         self.close_data = default_close_grid()
         self.max_data = default_max_grid()
-        self.path = None
+        self.title_path = None
+        self.gadget_path = None
         self.undo_stack.clear()
         self.drag = None
         self._redraw()
 
     def load_tbr(self, path: Path) -> None:
         try:
-            self.grid_data, self.close_data, self.max_data = decode_theme(path.read_bytes())
+            data = path.read_bytes()
+            title, close, maximize = decode_theme(data)
         except (OSError, ValueError) as error:
             messagebox.showerror("Open .TBR", f"{path}: {error}")
             return
-        self.path = path
+        self.grid_data = title
+        if len(data) == THEME_BYTES:
+            self.close_data = close
+            self.max_data = maximize
+            self.gadget_path = None
+        self.title_path = path
+        self.undo_stack.clear()
+        self.drag = None
+
+    def load_gdt(self, path: Path) -> None:
+        try:
+            self.close_data, self.max_data = decode_gdt(path.read_bytes())
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Open .GDT", f"{path}: {error}")
+            return
+        self.gadget_path = path
         self.undo_stack.clear()
         self.drag = None
 
@@ -865,6 +904,12 @@ class TitleBarEditor(tk.Tk):
         selected = filedialog.askopenfilename(filetypes=[("Title-bar tile", "*.TBR *.tbr")])
         if selected:
             self.load_tbr(Path(selected))
+            self._redraw()
+
+    def open_gdt(self) -> None:
+        selected = filedialog.askopenfilename(filetypes=[("Title-bar gadgets", "*.GDT *.gdt")])
+        if selected:
+            self.load_gdt(Path(selected))
             self._redraw()
 
     def import_png(self) -> None:
@@ -882,13 +927,13 @@ class TitleBarEditor(tk.Tk):
             [nearest_pen(pixels[x, y]) for x in range(TILE_W)]
             for y in range(TILE_H)
         ]
-        self.path = None
+        self.title_path = None
         self.undo_stack.clear()
         self.drag = None
         self._redraw()
 
     def save_tbr(self) -> None:
-        path = self.path
+        path = self.title_path
         if path is None or path.suffix.lower() != ".tbr":
             selected = filedialog.asksaveasfilename(
                 defaultextension=".TBR",
@@ -898,12 +943,36 @@ class TitleBarEditor(tk.Tk):
                 return
             path = Path(selected)
         try:
-            path.write_bytes(encode_theme(self.grid_data, self.close_data, self.max_data))
+            path.write_bytes(encode_tbr(self.grid_data))
         except (OSError, ValueError) as error:
             messagebox.showerror("Save .TBR", str(error))
             return
-        self.path = path
+        self.title_path = path
         self._redraw()
+
+    def save_gdt(self) -> None:
+        path = self.gadget_path
+        if path is None or path.suffix.lower() != ".gdt":
+            selected = filedialog.asksaveasfilename(
+                defaultextension=".GDT",
+                filetypes=[("Title-bar gadgets", "*.GDT")],
+            )
+            if not selected:
+                return
+            path = Path(selected)
+        try:
+            path.write_bytes(encode_gdt(self.close_data, self.max_data))
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Save .GDT", str(error))
+            return
+        self.gadget_path = path
+        self._redraw()
+
+    def save_active(self) -> None:
+        if self.active_name == "title":
+            self.save_tbr()
+        else:
+            self.save_gdt()
 
     def export_png(self) -> None:
         try:
@@ -928,27 +997,35 @@ class TitleBarEditor(tk.Tk):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tile", nargs="?", help="optional .TBR tile to open")
+    parser.add_argument("gadgets", nargs="?", help="optional .GDT gadget pair to open")
     parser.add_argument("--write-sample", metavar="PATH", help="write the sample weave and exit")
     parser.add_argument(
-        "--upgrade",
+        "--split",
         metavar="PATH",
         action="append",
-        help="append the traditional gadget tiles to a legacy 56-byte theme",
+        help="split a legacy 106-byte .TBR into a 56-byte .TBR and sibling .GDT",
     )
     args = parser.parse_args()
-    if args.upgrade:
-        for name in args.upgrade:
+    if args.split:
+        for name in args.split:
             path = Path(name)
             data = path.read_bytes()
+            if len(data) != THEME_BYTES:
+                raise ValueError(f"{path}: expected a {THEME_BYTES}-byte combined theme")
             title, close, maximize = decode_theme(data)
-            path.write_bytes(encode_theme(title, close, maximize))
+            path.write_bytes(encode_tbr(title))
+            gadget_dir = path.parent.parent / "gadgets"
+            gadget_dir.mkdir(parents=True, exist_ok=True)
+            (gadget_dir / path.with_suffix(".GDT").name).write_bytes(
+                encode_gdt(close, maximize)
+            )
         return
     if args.write_sample:
         output = Path(args.write_sample)
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_bytes(encode_theme(sample_grid(), default_close_grid(), default_max_grid()))
+        output.write_bytes(encode_tbr(sample_grid()))
         return
-    TitleBarEditor(args.tile).mainloop()
+    TitleBarEditor(args.tile, args.gadgets).mainloop()
 
 
 if __name__ == "__main__":

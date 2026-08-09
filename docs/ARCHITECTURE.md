@@ -151,9 +151,9 @@ rules are:
   sources;
 - invalid configured media falls back safely to `SOLID` / `NONE` during boot so
   the machine still reaches the desktop;
-- `TITLEBAR=<name>` selects a canonical `.TBR` background/gadget theme
-  independently of `ICONS=` and falls back to embedded `ORIGINAL` assets when
-  absent or invalid;
+- `TITLEBAR=<name>` selects a canonical 56-byte `.TBR` background motif and
+  `GADGETS=<name>` independently selects a 50-byte `.GDT` close/maximize pair;
+  both are independent of `ICONS=` and fall back to embedded `ORIGINAL` assets;
 - `PROXY=` is Browser's optional persistent plain-HTTP proxy URL; an empty value
   means direct access;
 - screensavers are full-screen `.SAV` apps launched by the desktop idle timer;

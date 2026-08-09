@@ -8,6 +8,7 @@
  *     ICONS=<stem>   a .IST icon set      (kernel icon_init)
  *     CURSOR=<stem>  a .SPR pointer sprite(kernel cursor_init)
  *     TITLEBAR=<stem> a .TBR repeated window-title motif
+ *     GADGETS=<stem>  a .GDT close/maximize gadget pair
  *     BACKDROP=[D:]<stem>[.BDP]
  *     WALLPAPER=[D:]<stem>[.PIC]
  *     SAVER=[D:]<stem>[.SAV]
@@ -37,11 +38,11 @@
 #define DEF_X     18
 #define DEF_W     58           /* byte cols (232 px) */
 #ifdef GB_MSX2
-#define DEF_H     186          /* includes video mode and Return to Defaults rows */
+#define DEF_H     198          /* includes video mode and Return to Defaults rows */
 #elif defined(GB_PCW)
-#define DEF_H     162          /* fixed monochrome palette: no Colours row */
+#define DEF_H     174          /* fixed monochrome palette: no Colours row */
 #else
-#define DEF_H     174
+#define DEF_H     186
 #endif
 #define DEF_BOTTOM_MARGIN 4
 #define DEF_MAX_Y (GB_LINES - DEF_H - DEF_BOTTOM_MARGIN)
@@ -73,8 +74,9 @@
 #endif
 #define RESET_ROW  (SS_TM_ROW + 1)
 #define ROW_TITLEBAR 3
-#define ROW_BACKDROP 4
-#define ROW_WALLPAPER 5
+#define ROW_GADGETS 4
+#define ROW_BACKDROP 5
+#define ROW_WALLPAPER 6
 #define DRIVE_NONE 0xFF
 
 static unsigned char win_x, win_y, win_w, win_h;
@@ -108,11 +110,12 @@ static const setting_t rows[] = {
     { "Icons",  "ICONS=",    "IST", MIN_IST_ICONS, 0x1202 },  /* KCFG_ICONNAME */
     { "Cursor", "CURSOR=",   "SPR", 0,             0x1221 },  /* KCFG_CURSORNAME */
     { "Title bar","TITLEBAR=","TBR", 0,             0 },       /* paged app-linked installer */
+    { "Gadgets", "GADGETS=", "GDT", 0,             0 },       /* independent close/maximize pair */
     { "Backdrop","BACKDROP=","BDP", 0,             0x1231 },  /* KCFG_BDPNAME (+ BD_SOLID #1290) */
     { "Wallpaper","WALLPAPER=","PIC", 0,           0 },       /* no live tfr: the desktop reads
                                                                  WALLPAPER= from the config (#216) */
 };
-#define NROWS 6
+#define NROWS 7
 #define BD_SOLID_ADDR 0x1290   /* kernel BD_SOLID flag */
 #define BD_DRIVE_ADDR 0x123C   /* kernel KCFG_BDDRIVE: selected backdrop drive */
 #define BD_TILE_ADDR  0x1250   /* kernel BD_TILE: the loaded 16x16 backdrop tile (#216) */
@@ -927,21 +930,23 @@ static void live_apply(unsigned char r, const char *name, unsigned char drive)
     const char *ext = rows[r].ext;
     unsigned char is_backdrop = (unsigned char)(ext[0] == 'B');
     unsigned char is_titlebar = (unsigned char)(ext[0] == 'T');
+    unsigned char is_gadgets = (unsigned char)(ext[0] == 'G');
     if (ext[0] == 'P') return;
-    if (is_titlebar) {
+    if (is_titlebar || is_gadgets) {
         char nm[11];
         unsigned char i, descended;
         unsigned int n;
         (void)drive;
         for (i = 0; i < 8; i++) nm[i] = ' ';
         for (i = 0; i < 8 && name[i]; i++) nm[i] = name[i];
-        nm[8] = 'T'; nm[9] = 'B'; nm[10] = 'R';
+        nm[8] = ext[0]; nm[9] = ext[1]; nm[10] = ext[2];
         sel_boot_root();
         descended = enter_assets(0);
         gb_set_name(nm);
         n = gb_fs_load(gb_copybuf, 512);
         if (descended) gb_back();
-        gb_titlebar_install(n);
+        if (is_titlebar) gb_titlebar_install(n);
+        else gb_gadgets_install(n);
         titlebar_repaint = 1;  /* repaint after the modal picker has fully unwound */
         return;
     }
@@ -1043,7 +1048,7 @@ static void reset_defaults(void)
     static const char *const choices[] = { "Return to Defaults", "Cancel" };
     unsigned char descended, p;
     unsigned int i, n;
-    char titlebar[16];
+    char chrome[16];
 
     p = gb_popup((unsigned char)(win_x + 1), row_y(RESET_ROW), choices, 2);
     gb_curhide();
@@ -1070,8 +1075,10 @@ static void reset_defaults(void)
     for (i = 0; i < n; i++) cfgbuf[i] = gb_copybuf[i];
     cfglen = n;
     cfg_set(rows[0].key, "DEFAULT");        /* save and refresh the kernel config copy */
-    cfg_get(rows[ROW_TITLEBAR].key, titlebar);
-    live_apply(ROW_TITLEBAR, titlebar, boot_drive());
+    cfg_get(rows[ROW_TITLEBAR].key, chrome);
+    live_apply(ROW_TITLEBAR, chrome, boot_drive());
+    cfg_get(rows[ROW_GADGETS].key, chrome);
+    live_apply(ROW_GADGETS, chrome, boot_drive());
 #ifndef GB_PCW
     cfg_get_inks(ink_cur);
     for (p = 0; p < NPEN; p++) apply_colour(p, ink_cur[p]);

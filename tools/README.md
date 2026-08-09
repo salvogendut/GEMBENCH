@@ -131,14 +131,14 @@ for System > About GEOBENCH), and networking (`build_netmod.sh`, `build_m4netmod
   `assets/iconsets/*.IST` sets that `packicons.py` doesn't regenerate.
 - **`ist_replace_slot.py`** — replace one positional icon in a tracked `.IST` set
   from an icon asm source while preserving the set's slot count and layout.
-- **`titlebaredit.py`** — edit a canonical four-pen `.TBR` theme: the repeated
-  16x14 title background plus reusable close and maximize gadget tiles. Preview
-  the complete result on sample windows. Its toolchest supplies pencil, line,
+- **`titlebaredit.py`** — edit a canonical four-pen `.TBR` repeated 16x14 title
+  background and an independently saved `.GDT` close/maximize pair. Preview the
+  combined result on sample windows. Its toolchest supplies pencil, line,
   outlined/filled shapes, bucket fill, spray paint, undo, and one-pixel shift
   arrows for the active canvas. `make titlebar-editor` opens the shipped
-  `ORIGINAL.TBR` default; legacy 56-byte motifs are upgraded on save.
-- **`build_titlebarmod.sh`** — validate/stage all `assets/titlebars/*.TBR` files
-  and assemble the paged renderer with an embedded safe fallback.
+  `ORIGINAL.TBR` and `ORIGINAL.GDT` defaults; legacy 106-byte themes can be split.
+- **`build_titlebarmod.sh`** — validate/stage all `.TBR` and `.GDT` assets and
+  assemble the paged renderer with a composed embedded safe fallback.
 - **`packfont.py` / `genfont.py`** — pack an 8×8 asm font into a `.FNT`, or generate
   the 6×8 `DEFAULT.FNT` procedurally.
 - **`picconv.py`** — convert an image to portable four-colour GBPC v2 (the

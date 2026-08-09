@@ -33,6 +33,7 @@ DIAG="$OUT/DIAG"
 mkdir -p build
 rm -rf "$PICS" "$DIAG"
 mkdir -p "$SYS" "$PICS" "$DIAG"
+rm -f "$SYS"/*.TBR "$SYS"/*.GDT          # asset catalogues are authoritative; drop stale themes
 find "$SYS" -maxdepth 1 -type f -name '*.PIC' -delete
 rm -f "$SYS/NETTEST.APP"                 # pre-DIAG staging location (#379)
 
@@ -108,6 +109,9 @@ cp build/SPLASHD.BIN "$SYS/SPLASHD.MOD"       # DEBUG=TRUE variant with the buil
 cp build/GBTITLE.RAW "$SYS/GBTITLE.MOD"       # paged title-bar renderer + fallback tile
 for tbr in build/titlebars/*.TBR; do           # selectable TITLEBAR=<name> motifs
     [ -e "$tbr" ] && cp "$tbr" "$SYS/"
+done
+for gdt in build/gadgets/*.GDT; do             # selectable GADGETS=<name> pairs
+    [ -e "$gdt" ] && cp "$gdt" "$SYS/"
 done
 for bdp in build/*.BDP; do                    # #128: backdrop tiles (BACKDROP=<name>)
     [ -e "$bdp" ] && cp "$bdp" "$SYS/"

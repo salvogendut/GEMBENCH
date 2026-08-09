@@ -180,6 +180,7 @@ mv build/msx/GBMSX.COM build/msx/GBMSX7.COM
 # --- stage QA/MSX --------------------------------------------------------------
 mkdir -p QA/MSX/GBENCH
 rm -rf QA/MSX/PICS
+rm -f QA/MSX/GBENCH/*.TBR QA/MSX/GBENCH/*.GDT
 find QA/MSX -maxdepth 1 -type f -name '*.PIC' -delete
 find QA/MSX/GBENCH -maxdepth 1 -type f -name '*.PIC' -delete
 mkdir -p QA/MSX/PICS QA/MSX/DIAG
@@ -194,7 +195,7 @@ if [ -n "$UNAPI_TSR" ]; then
 else
     printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
 fi
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/GEOBENCH.CFG
 cp QA/MSX/GEOBENCH.CFG QA/MSX/GBENCH/DEFAULT.CFG
 cp build/msx/DESKTOP.RAW  QA/MSX/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/GBENCH/FILEMGR.APP
@@ -258,6 +259,9 @@ cp build/msx/DEFAULT.IST QA/MSX/GBENCH/
 cp build/msx/DEFAULT.SPR QA/MSX/GBENCH/
 for tbr in build/titlebars/*.TBR; do
     [ -e "$tbr" ] && cp "$tbr" QA/MSX/GBENCH/
+done
+for gdt in build/gadgets/*.GDT; do
+    [ -e "$gdt" ] && cp "$gdt" QA/MSX/GBENCH/
 done
 
 # --- drop-in assets: canonical backdrops/iconsets/pictures are copied unchanged,
