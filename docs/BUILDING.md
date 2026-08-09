@@ -33,9 +33,10 @@ make titlebar-editor
 ```
 
 Every file in `assets/titlebars/` is packaged for card and MSX distributions.
-The space-constrained CPC and PCW boot floppies carry `SOLID.TBR` and
-`ORIGINAL.TBR`. Available themes appear in Settings > Title bar, and
-`TITLEBAR=ORIGINAL` is the default on every platform. Current 106-byte themes
+The space-constrained CPC and PCW boot floppies carry `ORIGINAL.TBR` and
+`IMPROVED.TBR`; their `EXTRAS.DSK` carries the remaining themes. Available
+themes appear in Settings > Title bar, and `TITLEBAR=ORIGINAL` is the default
+on every platform. Current 106-byte themes
 also carry reusable close and maximize gadget tiles; legacy 56-byte motif-only
 files remain loadable.
 

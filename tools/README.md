@@ -133,8 +133,10 @@ for System > About GEOBENCH), and networking (`build_netmod.sh`, `build_m4netmod
   from an icon asm source while preserving the set's slot count and layout.
 - **`titlebaredit.py`** — edit a canonical four-pen `.TBR` theme: the repeated
   16x14 title background plus reusable close and maximize gadget tiles. Preview
-  the complete result on sample windows. `make titlebar-editor` opens the
-  shipped `ORIGINAL.TBR` default; legacy 56-byte motifs are upgraded on save.
+  the complete result on sample windows. Its toolchest supplies pencil, line,
+  outlined/filled shapes, bucket fill, spray paint, undo, and one-pixel shift
+  arrows for the active canvas. `make titlebar-editor` opens the shipped
+  `ORIGINAL.TBR` default; legacy 56-byte motifs are upgraded on save.
 - **`build_titlebarmod.sh`** — validate/stage all `assets/titlebars/*.TBR` files
   and assemble the paged renderer with an embedded safe fallback.
 - **`packfont.py` / `genfont.py`** — pack an 8×8 asm font into a `.FNT`, or generate

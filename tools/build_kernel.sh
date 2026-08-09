@@ -265,11 +265,17 @@ EXTRAS_ADDS=(
     --add build/CATCLK.RAW=CATCLK.SAV
     --add build/HELIX.RAW=HELIX.SAV
 )
+for tbr in build/titlebars/*.TBR; do
+    case "$(basename "$tbr")" in
+        IMPROVED.TBR|ORIGINAL.TBR) continue ;;
+    esac
+    EXTRAS_ADDS+=(--add "$tbr")
+done
 while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")
 done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
-echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + Disk Utility + XROACH/CATCLK/HELIX savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + secondary title bars + Disk Utility + XROACH/CATCLK/HELIX savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"

@@ -153,8 +153,8 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/SQUARES.RAW=SQUARES.SAV \
     --add build/pcw/LOGO.PIC=LOGO.PIC \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT \
-    --add build/titlebars/SOLID.TBR=SOLID.TBR \
-    --add build/titlebars/ORIGINAL.TBR=ORIGINAL.TBR
+    --add build/titlebars/ORIGINAL.TBR=ORIGINAL.TBR \
+    --add build/titlebars/IMPROVED.TBR=IMPROVED.TBR
 
 # --- COMPANION.DSK: TELNET, backdrops and spare assets (plain CF2 data disc)
 tools/package_pcw_companion.sh QA/PCW/COMPANION.DSK
@@ -193,6 +193,13 @@ EXTRAS_ADDS=(
     --add "build/pcw/MOUNTAIN.RAW=MOUNTAIN.SAV"
     --add "build/pcw/MOUNTAINCFG.RAW=MOUNTAIN.MOD"
 )
+for tbr in build/titlebars/*.TBR; do
+    name=$(basename "$tbr")
+    case "$name" in
+        IMPROVED.TBR|ORIGINAL.TBR) continue ;;
+    esac
+    EXTRAS_ADDS+=(--add "$tbr=$name")
+done
 while IFS= read -r pic; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
     EXTRAS_ADDS+=(--add "$pic=$name.PIC")

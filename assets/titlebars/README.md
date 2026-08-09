@@ -16,10 +16,15 @@ Edit a tile and preview it repeated across several complete window bars with:
 python3 tools/titlebaredit.py assets/titlebars/ORIGINAL.TBR
 ```
 
+The toolchest works on the last-clicked title, close, or maximize canvas. It
+provides pencil and line drawing, outlined and filled rectangles/circles,
+bucket fill, spray paint, and undo. The four arrow controls shift the active
+canvas by one pixel and clear the newly exposed edge with paper colour.
+
 All `.TBR` files in this directory are validated and staged for card and MSX
-distributions. Space-constrained CPC and PCW boot floppies carry `SOLID.TBR`
-and `ORIGINAL.TBR`. Select an available theme live in Settings with **Title bar**,
-or set:
+distributions. Space-constrained CPC and PCW boot floppies carry `ORIGINAL.TBR`
+and `IMPROVED.TBR`; their `EXTRAS.DSK` carries the remaining themes. Select an
+available theme live in Settings with **Title bar**, or set:
 
 ```ini
 TITLEBAR=WEAVE

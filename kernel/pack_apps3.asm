@@ -36,12 +36,12 @@ ist_refined_e
 pic_logo        incbin "../assets/pictures/LOGO.PIC"    ; boot wallpaper; all pictures also ship
 pic_logo_e                                              ; on EXTRAS.DSK and card/MSX PICS folders
                 save  "LOGO.PIC",pic_logo,pic_logo_e-pic_logo,DSK,"build/gbkern.dsk"
-                if TITLEBAR_TILE             ; tight boot floppies carry only the two basics;
+                if TITLEBAR_TILE             ; tight boot floppies carry the default and original;
                                              ; card/MSX staging copies every assets/titlebars file
-tbr_solid       incbin "../build/titlebars/SOLID.TBR"
-tbr_solid_e
-                save  "SOLID.TBR",tbr_solid,tbr_solid_e-tbr_solid,DSK,"build/gbkern.dsk"
 tbr_original    incbin "../build/titlebars/ORIGINAL.TBR"
 tbr_original_e
                 save  "ORIGINAL.TBR",tbr_original,tbr_original_e-tbr_original,DSK,"build/gbkern.dsk"
+tbr_improved    incbin "../build/titlebars/IMPROVED.TBR"
+tbr_improved_e
+                save  "IMPROVED.TBR",tbr_improved,tbr_improved_e-tbr_improved,DSK,"build/gbkern.dsk"
                 endif

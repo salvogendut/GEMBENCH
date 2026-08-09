@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Codec checks for the tileable title-bar experiment."""
 
+import random
+
 from titlebaredit import (
     CLOSE_BYTES,
     CLOSE_H,
@@ -18,7 +20,13 @@ from titlebaredit import (
     default_max_grid,
     encode_theme,
     encode_tbr,
+    ellipse_points,
+    flood_fill_grid,
+    line_points,
+    rectangle_points,
     sample_grid,
+    shift_grid,
+    spray_points,
     stripe_grid,
 )
 
@@ -66,6 +74,32 @@ def main() -> None:
         check(True, "truncated tiles are rejected")
     else:
         check(False, "truncated tiles are rejected")
+
+    check(line_points(0, 0, 4, 4) == [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)],
+          "line tool uses inclusive Bresenham pixels")
+    outline = set(rectangle_points(1, 1, 3, 3, False))
+    check(len(outline) == 8 and (2, 2) not in outline,
+          "outlined square leaves its centre untouched")
+    filled = set(rectangle_points(1, 1, 3, 3, True))
+    check(len(filled) == 9 and (2, 2) in filled,
+          "filled square covers its centre")
+    circle = set(ellipse_points(0, 0, 4, 4, False))
+    check({(0, 2), (2, 0), (4, 2), (2, 4)} <= circle,
+          "circle tool reaches each bounding-box edge")
+    disk = set(ellipse_points(0, 0, 4, 4, True))
+    check((2, 2) in disk and (0, 0) not in disk,
+          "filled circle covers its centre without filling corners")
+
+    fill_grid = [[0, 0, 1], [0, 1, 1], [2, 2, 1]]
+    changed = flood_fill_grid(fill_grid, 0, 0, 3)
+    check(len(changed) == 3 and fill_grid[0][2] == 1,
+          "bucket fill is bounded by other pens")
+    spray = spray_points(8, 6, 0, 0, random.Random(7))
+    check((0, 0) in spray and all(0 <= x < 8 and 0 <= y < 6 for x, y in spray),
+          "spray paint clips at canvas edges")
+    shifted = shift_grid([[1, 2], [3, 0]], 1, 0)
+    check(shifted == [[0, 1], [0, 3]],
+          "arrow control shifts one pixel and clears the exposed edge")
 
     print("\nall title-bar tile tests passed")
 

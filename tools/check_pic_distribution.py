@@ -194,15 +194,26 @@ def main() -> None:
                 str((distro / name).relative_to(ROOT)),
                 (distro / name).read_bytes(), expected,
             )
-    floppy_titlebars = {"SOLID.TBR", "ORIGINAL.TBR"}
+    floppy_titlebars = {"IMPROVED.TBR", "ORIGINAL.TBR"}
+    extras_titlebars = set(titlebars) - floppy_titlebars
     for label, files, padded in (
         ("QA/CPC/Floppies/GEOBENCH.DSK", cpc_main, False),
         ("QA/PCW/GEOBENCH.DSK", pcw_main, True),
     ):
         names = {name for name in files if name.endswith(".TBR")}
         if names != floppy_titlebars:
-            sys.exit(f"{label}: expected only SOLID.TBR and ORIGINAL.TBR")
+            sys.exit(f"{label}: expected only IMPROVED.TBR and ORIGINAL.TBR")
         for name in floppy_titlebars:
+            payload = files[name] if padded else strip_amsdos(files[name])
+            compare_payload(f"{label}:{name}", payload, titlebars[name], padded=padded)
+    for label, files, padded in (
+        ("QA/CPC/Floppies/EXTRAS.DSK", cpc_extras, False),
+        ("QA/PCW/EXTRAS.DSK", pcw_extras, True),
+    ):
+        names = {name for name in files if name.endswith(".TBR")}
+        if names != extras_titlebars:
+            sys.exit(f"{label}: secondary title-bar catalogue is incomplete")
+        for name in extras_titlebars:
             payload = files[name] if padded else strip_amsdos(files[name])
             compare_payload(f"{label}:{name}", payload, titlebars[name], padded=padded)
     compare_payload(
@@ -298,7 +309,8 @@ def main() -> None:
     print(f"portable BDP distribution: {len(backdrops)} byte-identical backdrops across CPC, MSX and PCW")
     print(
         f"title bars: {len(titlebars)} motifs on card/MSX; "
-        "SOLID and ORIGINAL on CPC/PCW boot floppies; ORIGINAL default"
+        "IMPROVED and ORIGINAL on CPC/PCW boot floppies; remaining motifs on "
+        "EXTRAS.DSK; ORIGINAL default"
     )
     print("CPC floppy cursor: headerless DEFAULT.SPR matches the card distribution")
     print("target defaults: pristine DEFAULT.CFG matches GEOBENCH.CFG on CPC, MSX and PCW")
