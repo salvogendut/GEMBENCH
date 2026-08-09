@@ -36,6 +36,9 @@ PIC_RUNTIME_CONVERT equ 1             ; one canonical Mode-1 .PIC payload on eve
 PIC_RUNTIME_CONVERT equ 1
                 endif
                 endif
+                ifndef TITLEBAR_TILE
+TITLEBAR_TILE   equ   0             ; issue #458: 16x14 repeated title-bar tile
+                endif
 
 ; STORAGE_ALBIREO (#104): build-time drive-0 backend select. 0 (default) = the
 ; SYMBiFACE IDE FAT32 backend; 1 (pass -DSTORAGE_ALBIREO=1) = the Albireo CH376
@@ -90,6 +93,15 @@ BACKDROP_TILE   equ   1
 BACKDROP_TILE   equ   0
                 endif
                 endif
+                endif
+                ifdef WM_GADGETS
+                if TITLEBAR_TILE
+THEMED_GADGETS  equ   1
+                else
+THEMED_GADGETS  equ   0
+                endif
+                else
+THEMED_GADGETS  equ   0
                 endif
                 include "lowram.inc"
 
@@ -317,8 +329,13 @@ gb_open_window
                 ld    (kw_h),a
                 ld    de,kw_title            ; copy title out of the caller's page
                 call  gtd_copy
+                if TITLEBAR_TILE
+                call  to_data                 ; GBTITLE.MOD shares PAGE_DATA with font/icons
                 call  kwin_frame             ; frame: fills to screen, no font
+                else
+                call  kwin_frame
                 call  to_data                 ; title needs the font page
+                endif
                 ld    b,1                     ; white on black title bar
                 ld    c,2
                 call  set_text_pens
@@ -330,6 +347,7 @@ gb_open_window
                 ld    (tc_y),a
                 ld    hl,kw_title
                 call  draw_text
+                if !THEMED_GADGETS
                 ifdef WM_GADGETS
                 ld    b,2                     ; close 'X' glyph: pen 2 (black) on pen 1 (white box)
                 ld    c,1
@@ -343,9 +361,12 @@ gb_open_window
                 ld    hl,gad_x_str
                 call  draw_text
                 endif
+                endif
                 jp    from_data
+                if !THEMED_GADGETS
                 ifdef WM_GADGETS
 gad_x_str       db    "X",0
+                endif
                 endif
 
 ; Window-chrome fill bytes in the compact four-pen UI representation (NOT
@@ -367,7 +388,7 @@ KWB_DARK        equ   #0F           ; CPC pen 2
                 endif
                 endif
 
-; kwin_frame: paper interior, striped title bar + borders, light close gadget.
+; kwin_frame: paper interior, striped/tiled title bar, borders and gadgets.
 kwin_frame
                 ifdef PLATFORM_PCW
                 ld    a,KWB_PAPER             ; interior (pen 0)
@@ -384,6 +405,36 @@ kwin_frame
                 ld    a,(kw_h)
                 ld    e,a
                 call  fill_xywh
+                if TITLEBAR_TILE
+                ; The tile renderer clips like fill_block and phases the
+                ; 16x14 motif from this window's own top-left corner.
+                ld    a,(kw_x)
+                ld    (fb_x),a
+                ld    a,(kw_y)
+                ld    (fb_y),a
+                ld    a,(kw_w)
+                ld    (fb_w),a
+                ld    a,14
+                ld    (fb_h),a
+                ld    a,(TITLE_READY)
+                or    a
+                jr    z,kf_tile_missing
+                ifdef PLATFORM_MSX
+                call  fill_title_pattern
+                else
+                ifdef PLATFORM_PCW
+                call  fill_title_pattern
+                else
+                call  DATA_TITLE_RUN         ; CPC renderer executes from PAGE_DATA
+                endif
+                endif
+                jr    kf_title_done
+kf_tile_missing
+                ld    a,KWB_LIGHT             ; missing sample module: safe plain title bar
+                ld    (fb_val),a
+                call  fill_block
+kf_title_done
+                else
                 ld    a,KWB_LIGHT             ; title bar: light base (x, y, w, 14)
                 ld    (fb_val),a
                 ld    a,(kw_x)
@@ -410,6 +461,7 @@ kf_stripe       ld    a,(kf_sy)
                 add   a,2
                 ld    (kf_sy),a
                 djnz  kf_stripe
+                endif
                 ld    hl,(kw_x)              ; black borders via k_frame (all 4 edges; the
                 ld    b,l                    ; top edge coincides with the first title
                 ld    c,h                    ; stripe, so it is behavior-neutral) - was
@@ -418,6 +470,9 @@ kf_stripe       ld    a,(kf_sy)
                 ld    e,h
                 ld    a,(KCFG_FRAMEPEN)      ; Edge, or a preselected contrasting UI pen
                 call  k_frame
+                if THEMED_GADGETS
+                jp    kf_theme_gadgets
+                else
                 ld    a,KWB_LIGHT             ; close gadget (light): (x+1, y+2, 2, 10)
                 ld    (fb_val),a
                 ld    a,(kw_x)
@@ -461,6 +516,44 @@ kf_stripe       ld    a,(kf_sy)
 kf_gx           db    0            ; maximize-gadget x byte-col (set by kwin_frame)
                 else
                 ret                            ; plain (no-room) build: just the close box
+                endif
+                endif
+
+                if THEMED_GADGETS
+; Reusable gadget tiles live beside the repeated background in PAGE_DATA. The
+; shared opaque bitmap path performs each target's native write/transcoding.
+kf_theme_gadgets
+                xor   a
+                ld    (bm_keep),a
+                ld    hl,DATA_TITLE_CLOSE
+                ld    (bm_src),hl
+                ld    a,(kw_x)
+                inc   a
+                ld    (bm_x),a
+                ld    a,(kw_y)
+                add   a,2
+                ld    (bm_y),a
+                ld    a,2
+                ld    (bm_w),a
+                ld    a,10
+                ld    (bm_h),a
+                call  blit_bitmap
+
+                ld    hl,DATA_TITLE_MAX
+                ld    (bm_src),hl
+                ld    a,(kw_x)
+                ld    hl,kw_w
+                add   a,(hl)
+                sub   4
+                ld    (bm_x),a
+                ld    a,(kw_y)
+                add   a,2
+                ld    (bm_y),a
+                ld    a,3
+                ld    (bm_w),a
+                ld    a,10
+                ld    (bm_h),a
+                jp    blit_bitmap
                 endif
 kw_x            db    0
 kw_y            db    0

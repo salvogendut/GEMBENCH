@@ -1,4 +1,4 @@
-.PHONY: all cpc msx pcw app formref sndtest check test
+.PHONY: all cpc msx pcw app formref sndtest titlebar-editor check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -26,6 +26,9 @@ sndtest:
 	APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/msx/SNDTEST.RAW
 	APPDEFS="-DGB_PCW" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/pcw/SNDTEST.RAW
 
+titlebar-editor:
+	python3 tools/titlebaredit.py assets/titlebars/ORIGINAL.TBR
+
 check:
 	git diff --check
 	python3 tools/gen_pic_luts.py --check
@@ -37,6 +40,7 @@ check:
 	python3 tools/check_abi_table.py
 	python3 tools/test_appicon.py
 	python3 tools/test_iconedit_tools.py
+	python3 tools/test_titlebaredit.py
 	bash apps/calculator/run_tests.sh
 	kernel/kc/run_tests.sh
 	lib/gb/run_tests.sh

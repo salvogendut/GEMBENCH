@@ -25,6 +25,20 @@ The repository also has a thin top-level Makefile: `make cpc`, `make msx`,
 binaries for quick UI iteration; `make sndtest` likewise builds only the
 three app-linked sound diagnostics.
 
+Window title motifs are standalone `.TBR` assets selected independently from
+the icon set. Open the default motif in the visual tile editor with:
+
+```bash
+make titlebar-editor
+```
+
+Every file in `assets/titlebars/` is packaged for card and MSX distributions.
+The space-constrained CPC and PCW boot floppies carry `SOLID.TBR` and
+`ORIGINAL.TBR`. Available themes appear in Settings > Title bar, and
+`TITLEBAR=ORIGINAL` is the default on every platform. Current 106-byte themes
+also carry reusable close and maximize gadget tiles; legacy 56-byte motif-only
+files remain loadable.
+
 The About dialog reads the release version from the root `VERSION` file and bakes
 that value plus the current 12-character Git commit into `GBUI.MOD`. Override
 either value for a packaged build with `VERSION=...` or `GIT_COMMIT=...`.
@@ -52,7 +66,7 @@ can test or deploy without rebuilding first):
   `MOUNTAIN.MOD`) on this disk;
   shared `GBWEB.MOD`/`GBIMG.MOD` modules remain on Main.
 - **`QA/CPC/Floppies/EXTRAS.DSK`** — the complete `.PIC` gallery plus
-  `XROACH.SAV`, `CATCLK.SAV`, `HELIX.SAV`, and `WELCOME.TXT` on an extended 80-track,
+  `DISKUTIL.APP`, `XROACH.SAV`, `CATCLK.SAV`, `HELIX.SAV`, and `WELCOME.TXT` on an extended 80-track,
   single-sided AMSDOS DATA disk. Its files
   retain AMSDOS headers and multi-extent
   layout, so the existing chunked picture reader can open the larger images. A

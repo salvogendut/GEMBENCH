@@ -280,10 +280,32 @@ fill_block
                 jp    vdp_hmmv
 
                 if BACKDROP_TILE
-; --- fill_pattern: like fill_block but from the 16x16 BD_TILE ---------------
-; Builds each row in MSX_ROWBUF from the tile at absolute phase (the tile byte
-; for (x,y) is BD_TILE[(y&15)*4 + (x&3)]), then streams it out.
+; --- fill_pattern: select the backdrop tile at absolute screen phase --------
 fill_pattern
+                ld    hl,BD_TILE
+                ld    (fp_base+1),hl
+                xor   a
+                ld    (fp_xphase+1),a
+                ld    (fp_yphase+1),a
+                jr    fp_begin
+                endif
+
+                if TITLEBAR_TILE
+; --- fill_title_pattern: select the title tile at window-relative phase -----
+fill_title_pattern
+                ld    hl,DATA_TITLE
+                ld    (fp_base+1),hl
+                ld    a,(kw_x)
+                neg
+                ld    (fp_xphase+1),a
+                ld    a,(kw_y)
+                neg
+                ld    (fp_yphase+1),a
+                endif
+
+                if BACKDROP_TILE | TITLEBAR_TILE
+; Build each native row in MSX_ROWBUF, then stream it to VRAM.
+fp_begin
                 call  clip_fb_copy
                 ret   c
                 call  vdp_wait_ce
@@ -293,16 +315,18 @@ fill_pattern
                 ld    (fb_cy),a
 fp_row
                 ld    a,(fb_cy)              ; DE = tile row base + column phase
+fp_yphase       add   a,0
                 and   15
                 add   a,a
                 add   a,a
                 ld    c,a
                 ld    a,(fbw_x)
+fp_xphase       add   a,0
                 and   3
                 add   a,c
                 ld    e,a
                 ld    d,0
-                ld    hl,BD_TILE
+fp_base         ld    hl,BD_TILE
                 add   hl,de
                 ex    de,hl                   ; DE = tile ptr (phase-corrected)
                 ld    hl,MSX_ROWBUF          ; build the row

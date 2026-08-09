@@ -72,6 +72,11 @@ PAGE_APP0       equ   #C5          ; bank 0, block 1 -> the desktop (always APP_
 DATA_BUF        equ   #4000        ; base of the kernel data buffers (in PAGE_DATA)
 DATA_FONT       equ   DATA_BUF     ; font set lives at the start of PAGE_DATA
 DATA_ICONS      equ   #4400        ; icon set (.IST) follows the font in PAGE_DATA
+DATA_TITLE      equ   #5E00        ; issue #458: canonical .TBR theme in PAGE_DATA
+DATA_TITLE_CLOSE equ  DATA_TITLE+56 ; 8x10 close tile, two bytes per row
+DATA_TITLE_MAX  equ   DATA_TITLE_CLOSE+20 ; 12x10 maximize tile, three bytes per row
+DATA_TITLE_SIZE equ   106           ; repeated background + two reusable gadget tiles
+DATA_TITLE_RUN  equ   DATA_TITLE+DATA_TITLE_SIZE ; CPC renderer follows the theme
 DATA_MODTOP     equ   #6000        ; ceiling of the icon region in PAGE_DATA: the on-demand
                                    ; write module (GBFAT on IDE builds) loads here, so the icon
                                    ; set must stay below it. Build-independent (#104) - the IDE

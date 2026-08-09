@@ -20,6 +20,9 @@ RASM="${RASM:-rasm}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
+TITLEBAR_RASM="-DTITLEBAR_TILE=1"
+RASM="$RASM" bash tools/build_titlebarmod.sh
+
 # fetch_msx_deps.sh supplies the standard local guest driver. An explicitly
 # set MSX_UNAPI_TSR overrides it; setting the variable to empty deliberately
 # produces a network-free image. The binary stays in ignored paths.
@@ -61,10 +64,10 @@ python3 tools/gblib_subset.py \
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
-APPDEFS="-DGB_MSX2" DATA_LOC=0x6E60 DOC=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APP_ICON=apps/notepad/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
-APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
+APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
 APP_ICON=apps/iconed/icon.asm APPDEFS="-DGB_MSX2 -DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
@@ -154,7 +157,7 @@ rm -f build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW build/msx/GBKERN7.RAW \
       build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM
 
 # Compatibility backend: Screen 6, four native colours.
-( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -s -o gbkernm ${EXTRA_RASM:-} )
+( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -s -o gbkernm ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: GBKERNM.RAW not produced (rasm errors above)" >&2; exit 1; }
 cp build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm )
@@ -163,7 +166,7 @@ mv build/msx/GBMSX.COM build/msx/GBMSX6.COM
 
 # Extended backend: Screen 7, with sixteen-colour Viewer support.
 rm -f build/msx/GBKERNM.RAW
-( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DMSX_SCREEN7=1 -s -o gbkernm7 ${EXTRA_RASM:-} )
+( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DMSX_SCREEN7=1 -s -o gbkernm7 ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: Screen-7 GBKERNM.RAW not produced" >&2; exit 1; }
 cp build/msx/GBKERNM.RAW build/msx/GBKERN7.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm -DMSX_SCREEN7=1 )
@@ -191,7 +194,7 @@ if [ -n "$UNAPI_TSR" ]; then
 else
     printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
 fi
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/GEOBENCH.CFG
 cp QA/MSX/GEOBENCH.CFG QA/MSX/GBENCH/DEFAULT.CFG
 cp build/msx/DESKTOP.RAW  QA/MSX/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/GBENCH/FILEMGR.APP
@@ -249,9 +252,13 @@ cp build/msx/GBWEB.RAW  QA/MSX/GBENCH/GBWEB.MOD
 cp build/msx/GBIMG.RAW  QA/MSX/GBENCH/GBIMG.MOD
 cp build/msx/SPLASH.BIN  QA/MSX/GBENCH/SPLASH.MOD
 cp build/msx/SPLASHD.BIN QA/MSX/GBENCH/SPLASHD.MOD
+cp build/msx/GBTITLE.RAW QA/MSX/GBENCH/GBTITLE.MOD
 cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/
 cp build/msx/DEFAULT.IST QA/MSX/GBENCH/
 cp build/msx/DEFAULT.SPR QA/MSX/GBENCH/
+for tbr in build/titlebars/*.TBR; do
+    [ -e "$tbr" ] && cp "$tbr" QA/MSX/GBENCH/
+done
 
 # --- drop-in assets: canonical backdrops/iconsets/pictures are copied unchanged,
 # mirroring the CPC build's globs (build_kernel.sh / stage_dist.sh) so a file

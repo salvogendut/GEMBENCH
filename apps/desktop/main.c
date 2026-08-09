@@ -14,6 +14,7 @@
  * backdrop is a solid colour, so the drag outline erases by redrawing in the
  * backdrop pen - no save-under needed. */
 #include "gb.h"
+#include "gbtitle.h"
 
 #define IC_W    8             /* icon width  (byte cols) = 32 px */
 #define IC_H    32            /* icon height (lines)             */
@@ -262,15 +263,9 @@ static unsigned char enter_pics(void)
     return 0;
 }
 
-#if !defined(GB_MSX2) && !defined(GB_PCW)
-static unsigned char bd_tile[64];
-static unsigned char bd_drive, bd_solid;
-static char bd_name[11];
-
-/* The CPC card keeps assets in /GBENCH; its flat AMSDOS floppy keeps them at
-   root. This mirrors the kernel system-asset lookup without adding resident
-   code to a kernel that is already at its guarded stack limit. */
-static unsigned char enter_assets(void)
+/* System assets live in /GBENCH on hierarchical media and at the root of flat
+   CPC/PCW floppies. */
+static unsigned char enter_system(void)
 {
     char *p = gb_dir1();
     while (p) {
@@ -287,6 +282,14 @@ static unsigned char enter_assets(void)
     return 0;
 }
 
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+static unsigned char bd_tile[64];
+static unsigned char bd_drive, bd_solid;
+static char bd_name[11];
+
+/* The CPC card keeps assets in /GBENCH; its flat AMSDOS floppy keeps them at
+   root. This mirrors the kernel system-asset lookup without adding resident
+   code to a kernel that is already at its guarded stack limit. */
 /* A canonical BDP is already CPC Mode-1, so no transcode is necessary. Load
    the configured tile into the desktop bank at boot and after Settings closes. */
 static void bd_init(void)
@@ -303,7 +306,7 @@ static void bd_init(void)
     if (!drive_present(drive)) { BD_SOLID_K = bd_solid = 1; return; }
     old_drive = gb_get_drive();
     gb_set_drive(drive);
-    descended = enter_assets();
+    descended = enter_system();
     gb_set_name(BD_NAME_K);
     n = gb_fs_load(gb_copybuf, 512);
     if (descended) gb_back();
@@ -381,6 +384,36 @@ static unsigned int cfg_val(const char *key, unsigned char klen)
         if (j == klen) return i + klen;
     }
     return len;
+}
+
+/* Load TITLEBAR=<stem>.TBR into the shared low-RAM buffer, then ask the paged
+   GBTITLE module to install it. Missing/invalid files select its embedded
+   ORIGINAL fallback. This runs before the first managed window can open. */
+static void titlebar_init(void)
+{
+    const char *t = KCFG_TEXT;
+    unsigned int len = KCFG_LEN, p, n;
+    unsigned char i, old_drive, descended;
+    char name[11];
+    p = cfg_val("TITLEBAR=", 9);
+    for (i = 0; i < 8; i++) name[i] = ' ';
+    if (p < len) {
+        for (i = 0; i < 8 && p < len && t[p] != '\r' && t[p] != '\n' && t[p] != '.'; i++, p++)
+            name[i] = t[p];
+    } else {
+        name[0]='O'; name[1]='R'; name[2]='I'; name[3]='G';
+        name[4]='I'; name[5]='N'; name[6]='A'; name[7]='L';
+    }
+    name[8]='T'; name[9]='B'; name[10]='R';
+    old_drive = gb_get_drive();
+    gb_set_drive(boot_drive());
+    for (i = 0; i < 4; i++) gb_back();
+    descended = enter_system();
+    gb_set_name(name);
+    n = gb_fs_load(gb_copybuf, 512);
+    if (descended) gb_back();
+    gb_set_drive(old_drive);
+    gb_titlebar_install(n);
 }
 
 /* ss_cfg_init: read SAVER=<stem> (the module, default SQUARES) into ss_name and
@@ -1018,6 +1051,7 @@ void main(void)
     *WM_FS = 0;                                 /* clear the fullscreen flag at boot (low RAM is
                                                    uninitialised; bar_draw reads it every frame) */
     WM_OPEN_STRICT = 0;
+    titlebar_init();                            /* install ORIGINAL or configured .TBR before windows */
     drive_poll();                               /* drives present at boot -> icons (#65) */
 #ifdef GB_PCW
     p = cfg_val("TIMESYNC=", 9);

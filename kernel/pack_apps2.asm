@@ -22,9 +22,6 @@ app_imgend
 set_img         incbin "../build/SETTINGS.RAW"  ; packaged on the disk as SETTINGS.APP (#129)
 set_imgend
                 save  "SETTINGS.APP",set_img,set_imgend-set_img,DSK,"build/gbkern.dsk"
-dku_img         incbin "../build/DISKUTIL.RAW"  ; packaged on the disk as DISKUTIL.APP (floppy formatter)
-dku_imgend
-                save  "DISKUTIL.APP",dku_img,dku_imgend-dku_img,DSK,"build/gbkern.dsk"
 sav_img         incbin "../build/SQUARES.RAW"   ; the default screensaver -> SQUARES.SAV (#219/#281)
 sav_imgend
                 save  "SQUARES.SAV",sav_img,sav_imgend-sav_img,DSK,"build/gbkern.dsk"

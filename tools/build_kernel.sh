@@ -10,6 +10,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."          # repo root
 RASM="${RASM:-rasm}"
 
+TITLEBAR_RASM="-DTITLEBAR_TILE=1"
+RASM="$RASM" bash tools/build_titlebarmod.sh
+
 GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
 PAINT_APP_DIR="$GB_PAINT_DIR/apps/paint"
 if [ -f "$PAINT_APP_DIR/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
@@ -81,7 +84,7 @@ python3 tools/png2cpc.py build/SPLASHD_BUILD.png build/SPLASHD.BIN splash 96x184
 # Default GEOBENCH.CFG (#205): one source for BOTH distributions - the card root (stage_dist.sh)
 # and the floppy DSK (pack_apps3.asm). CR+LF, as the CPC requires. Without it on the floppy the
 # Settings app read all-blank and could not persist a change (the kernel falls back to defaults).
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=18\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nPROXY=\r\n' > build/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=18\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nPROXY=\r\n' > build/GEOBENCH.CFG
 cp build/GEOBENCH.CFG build/DEFAULT.CFG
 python3 tools/genfont.py build/DEFAULT.FNT   # 6x8 font -> PAGE_DATA
 python3 tools/packfont.py build/CLASSIC.FNT lib/font.asm  # 8x8 ROM font (FONT=CLASSIC)
@@ -137,7 +140,7 @@ DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/BRSAVE.RAW # transient Bro
 APP_ICON=apps/shell/icon.asm DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
 APP_ICON=apps/mahjong/icon.asm DATA_LOC=0x7100 DIALOGS=1 tools/build_capp.sh apps/mahjong build/MAHJONG.RAW # Kana Mahjong: solvable 144-tile Turtle game
 DATA_LOC=0x6800 BUTTON=1 tools/build_capp.sh apps/calculator build/CALC.RAW # CALC (#437): compact fixed-point desktop calculator
-DATA_LOC=0x7000 DOC=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
+DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
                                    # and clip-aware wallpaper repaint path.
@@ -160,7 +163,7 @@ APP_ICON="$PAINT_APP_DIR/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-co
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
 APP_ICON=apps/xaos/icon.asm DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
-APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
+APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
                                    # rewrite GEOBENCH.CFG; data-driven rows grow with colours/etc.
 DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/DISKUTIL.RAW # DISKUTIL: floppy formatter - a physical
@@ -222,11 +225,11 @@ tools/build_m4savemod.sh                          # M4 file save module (#259) -
 # present). The IDE backend remains archived (frozen in-tree, not shipped).
 build_variant() {                                # $1 = kernel name, $2 = rasm -D flag
     rm -f build/gbkern.dsk                       # save-to-DSK appends; start clean
-    "$RASM" kernel/gbkern.asm -eo $2 ${EXTRA_RASM:-} # incbins apps + font + icons -> .dsk + RAW
-    "$RASM" kernel/pack_modules.asm -eo          # paged modules that no longer fit gbkern.asm
+    "$RASM" kernel/gbkern.asm -eo $2 ${EXTRA_RASM:-} $TITLEBAR_RASM # incbins apps + font + icons -> .dsk + RAW
+    "$RASM" kernel/pack_modules.asm -eo $TITLEBAR_RASM # paged modules that no longer fit gbkern.asm
     "$RASM" kernel/pack_apps.asm -eo             # 2nd pass: overflow apps -> same .dsk (#114)
     "$RASM" kernel/pack_apps2.asm -eo            # 3rd pass: VIEWER + FILEMGR -> same .dsk (#142)
-    "$RASM" kernel/pack_apps3.asm -eo            # 4th pass: backdrops/REFINED/LOGO -> same .dsk (#198/#379)
+    "$RASM" kernel/pack_apps3.asm -eo $TITLEBAR_RASM # 4th pass: visual assets -> same .dsk
     cp build/GBKERN.RAW "build/$1.RAW"           # capture this card's kernel for the unified stage
 }
 # Clean only the CPC outputs - QA/MSX (the MSX2 target, #287) survives a CPC build.
@@ -257,6 +260,7 @@ fi
 RASM="$RASM" tools/package_cpc_companion.sh "$FLOPPY_QA/COMPANION.DSK"
 EXTRAS_ADDS=(
     --add assets/WELCOME.TXT
+    --add build/DISKUTIL.RAW=DISKUTIL.APP
     --add build/XROACH.RAW=XROACH.SAV
     --add build/CATCLK.RAW=CATCLK.SAV
     --add build/HELIX.RAW=HELIX.SAV
@@ -265,7 +269,7 @@ while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")
 done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
-echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + XROACH/CATCLK/HELIX savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + Disk Utility + XROACH/CATCLK/HELIX savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
@@ -278,11 +282,11 @@ echo "  $CARD_QA: loose files; $CARD_IMG: Albireo/M4 card; $FLOPPY_QA: floppy se
 # Leave build/ as the STORAGE-selected variant (default Albireo) so the --disk-a
 # test harness sees a predictable build/gbkern.dsk + build/GBKERN.RAW.
 rm -f build/gbkern.dsk
-"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG ${FAT16_FLAG:+$FAT16_FLAG} >/dev/null
-"$RASM" kernel/pack_modules.asm -eo >/dev/null  # paged modules that no longer fit gbkern.asm
+"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG ${FAT16_FLAG:+$FAT16_FLAG} $TITLEBAR_RASM >/dev/null
+"$RASM" kernel/pack_modules.asm -eo $TITLEBAR_RASM >/dev/null  # paged modules that no longer fit gbkern.asm
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 "$RASM" kernel/pack_apps2.asm -eo >/dev/null     # 3rd pass: VIEWER + FILEMGR -> .dsk (#142)
-"$RASM" kernel/pack_apps3.asm -eo >/dev/null     # 4th pass: backdrops/REFINED/LOGO -> .dsk (#198/#379)
+"$RASM" kernel/pack_apps3.asm -eo $TITLEBAR_RASM >/dev/null     # 4th pass: visual assets
 if [ -x "$IDSK" ]; then
     "$IDSK" build/gbkern.dsk -i build/GB.BAS -t 0 >/dev/null 2>&1 || true
 fi

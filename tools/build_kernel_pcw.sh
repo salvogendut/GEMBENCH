@@ -23,6 +23,9 @@ GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
 GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
+
+TITLEBAR_RASM="-DTITLEBAR_TILE=1"
+RASM="$RASM" bash tools/build_titlebarmod.sh
 [ -f "$GB_PAINT_DIR/Makefile" ] || {
     echo "ERROR: GB-PAINT checkout not found at $GB_PAINT_DIR" >&2
     echo "Set GB_PAINT_DIR=/path/to/GB-PAINT or clone it next to geobench." >&2
@@ -44,10 +47,10 @@ python3 tools/gblib_subset.py \
 
 # --- the C apps, compiled with the PCW geometry (same DATA_LOCs as CPC/MSX) --
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
-APPDEFS="-DGB_PCW" DATA_LOC=0x6D80 DOC=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
+APPDEFS="-DGB_PCW" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
 APPDEFS="-DGB_PCW" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
 APP_ICON=apps/notepad/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
-APPDEFS="-DGB_PCW" APP_CFLAGS="--opt-code-size --max-allocs-per-node 20000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
+APPDEFS="-DGB_PCW" APP_CFLAGS="--opt-code-size --max-allocs-per-node 20000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
 APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_PCW" DATA_LOC=0x6A30 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
 APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
@@ -114,13 +117,13 @@ cp assets/pictures/LOGO.PIC build/pcw/LOGO.PIC
 
 # --- the kernel + the boot sector ---------------------------------------------
 rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
-( cd build/pcw && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_PCW=1 -s -o gbkernp ${EXTRA_RASM:-} )
+( cd build/pcw && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_PCW=1 -s -o gbkernp ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/pcw/GBKERNP.RAW ] || { echo "ERROR: GBKERNP.RAW not produced (rasm errors above)" >&2; exit 1; }
 "$RASM" kernel/pcwboot.asm
 [ -s build/pcwboot.bin ] || { echo "ERROR: pcwboot.bin not produced" >&2; exit 1; }
 
 # --- the bootable disc -----------------------------------------------------------
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nTIMESYNC=true\r\nTIMEZONE=+2\r\nPROXY=\r\n' > build/pcw/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nTIMESYNC=true\r\nTIMEZONE=+2\r\nPROXY=\r\n' > build/pcw/GEOBENCH.CFG
 cp build/pcw/GEOBENCH.CFG build/pcw/DEFAULT.CFG
 python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
@@ -132,6 +135,7 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/GBWEB.RAW=GBWEB.MOD \
     --add build/GBIMG.RAW=GBIMG.MOD \
     --add build/pcw/SPLASH.MOD=SPLASH.MOD \
+    --add build/pcw/GBTITLE.RAW=GBTITLE.MOD \
     --add build/pcw/DEFAULT.FNT=DEFAULT.FNT \
     --add build/pcw/DEFAULT.IST=DEFAULT.IST \
     --add build/pcw/REFINED.IST=REFINED.IST \
@@ -148,7 +152,9 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/BRSAVE.RAW=BRSAVE.APP \
     --add build/pcw/SQUARES.RAW=SQUARES.SAV \
     --add build/pcw/LOGO.PIC=LOGO.PIC \
-    --add build/pcw/CLASSIC.FNT=CLASSIC.FNT
+    --add build/pcw/CLASSIC.FNT=CLASSIC.FNT \
+    --add build/titlebars/SOLID.TBR=SOLID.TBR \
+    --add build/titlebars/ORIGINAL.TBR=ORIGINAL.TBR
 
 # --- COMPANION.DSK: TELNET, backdrops and spare assets (plain CF2 data disc)
 tools/package_pcw_companion.sh QA/PCW/COMPANION.DSK
