@@ -222,12 +222,15 @@ static void draw_scrollbar(void)
                GB_WIDGET_ARROWS);
 }
 
-/* draw a name truncated to fit a cell (icons view) */
+/* Draw a name truncated to the current icon cell. Calculate the dynamic limit
+   once: expanding NAME_MAX in the loop condition makes SDCC run two signed
+   divisions per character and corrupts the longest CPC label. */
 static void draw_name(unsigned char col, unsigned char line, char *name)
 {
     static char tmp[14];
-    unsigned char i;
-    for (i = 0; i < NAME_MAX && i < 13 && name[i]; i++) tmp[i] = name[i];
+    unsigned char i, limit = NAME_MAX;
+    if (limit > 13) limit = 13;
+    for (i = 0; i < limit && name[i]; i++) tmp[i] = name[i];
     tmp[i] = 0;
     gb_text(col, line, tmp);
 }
