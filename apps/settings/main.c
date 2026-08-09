@@ -1155,7 +1155,9 @@ static void s_frame(void)
 {
     if (!titlebar_repaint) return;
     titlebar_repaint = 0;
-    gb_wm_damage(win_x, win_y, win_w, TITLE_H);
+    /* Lower windows repaint first, and icon blits are not damage-clipped. Repaint
+       our complete opaque surface so a desktop icon cannot show through the body. */
+    gb_wm_damage(win_x, win_y, win_w, win_h);
     gb_restore_parent();
 }
 
