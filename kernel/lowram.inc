@@ -72,6 +72,7 @@ GB_KSIZE        equ   #1246        ; word: resident kernel size in bytes (System
                                     ; (binmode 0 = BCD regs, nonzero = already binary)
 BAR_HANDLER     equ   #1248        ; word: top-bar handler, run every WM frame in PAGE_APP0
                                     ; regardless of focus (0 = none); bar-as-app expt (#77)
+TITLE_READY     equ   #124F        ; issue #458: paged GBTITLE renderer/tile is installed
 
 ; Callback API (issue #32) - kernel->app event delivery, state in low RAM so it
 ; costs no resident image bytes (low RAM stays main RAM under banking).

@@ -10,7 +10,7 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`build_kernel.sh`** — the one-shot build. Assembles the shipped **`GBALB`** (Albireo)
   and **`GBM4`** (M4) kernels, packs the apps, and stages the distribution into `QA/`:
   the loose card files (`QA/CPC/CARD/`), the Main and Companion floppies under
-  `QA/CPC/Floppies/`, the gallery `EXTRAS.DSK`, and the shared card image
+  `QA/CPC/Floppies/`, the gallery and Disk Utility `EXTRAS.DSK`, and the shared card image
   (`QA/CPC/GEOBENCH.IMG`).
   The IDE backend is archived (frozen, not built — see `docs/ARCHIVED.md`);
   rebuild it for recovery with `STORAGE=ide`. `STORAGE=m4` leaves an M4 dev-harness
@@ -131,6 +131,14 @@ for System > About GEOBENCH), and networking (`build_netmod.sh`, `build_m4netmod
   `assets/iconsets/*.IST` sets that `packicons.py` doesn't regenerate.
 - **`ist_replace_slot.py`** — replace one positional icon in a tracked `.IST` set
   from an icon asm source while preserving the set's slot count and layout.
+- **`titlebaredit.py`** — edit a canonical four-pen `.TBR` theme: the repeated
+  16x14 title background plus reusable close and maximize gadget tiles. Preview
+  the complete result on sample windows. Its toolchest supplies pencil, line,
+  outlined/filled shapes, bucket fill, spray paint, undo, and one-pixel shift
+  arrows for the active canvas. `make titlebar-editor` opens the shipped
+  `ORIGINAL.TBR` default; legacy 56-byte motifs are upgraded on save.
+- **`build_titlebarmod.sh`** — validate/stage all `assets/titlebars/*.TBR` files
+  and assemble the paged renderer with an embedded safe fallback.
 - **`packfont.py` / `genfont.py`** — pack an 8×8 asm font into a `.FNT`, or generate
   the 6×8 `DEFAULT.FNT` procedurally.
 - **`picconv.py`** — convert an image to portable four-colour GBPC v2 (the

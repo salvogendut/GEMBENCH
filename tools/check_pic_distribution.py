@@ -136,6 +136,18 @@ def main() -> None:
         if len(data) != 64:
             sys.exit(f"assets/backdrops/{name}: expected a 64-byte canonical Mode-1 tile")
 
+    titlebars = {
+        path.name.upper(): path.read_bytes()
+        for path in sorted((ROOT / "assets/titlebars").glob("*.TBR"))
+    }
+    if not titlebars:
+        sys.exit("no canonical title-bar motifs found")
+    for name, data in titlebars.items():
+        if len(data) not in (56, 106):
+            sys.exit(
+                f"assets/titlebars/{name}: expected a 56-byte legacy tile or 106-byte theme"
+            )
+
     for distro, expected_assets in (
         (ROOT / "QA/CPC/CARD/PICS", assets),
         (ROOT / "QA/MSX/PICS", msx_assets),
@@ -148,7 +160,9 @@ def main() -> None:
 
     cpc_extras = cpc_disk(ROOT / "QA/CPC/Floppies/EXTRAS.DSK")
     pcw_extras = pcw_disk(ROOT / "QA/PCW/EXTRAS.DSK")
-    cpc_required = {"XROACH.SAV", "CATCLK.SAV", "HELIX.SAV", "WELCOME.TXT"}
+    cpc_required = {
+        "DISKUTIL.APP", "XROACH.SAV", "CATCLK.SAV", "HELIX.SAV", "WELCOME.TXT"
+    }
     missing = cpc_required - set(cpc_extras)
     if missing:
         sys.exit(f"QA/CPC/Floppies/EXTRAS.DSK: missing extras: {', '.join(sorted(missing))}")
@@ -171,6 +185,57 @@ def main() -> None:
 
     cpc_main = cpc_disk(ROOT / "QA/CPC/Floppies/GEOBENCH.DSK")
     pcw_main = pcw_disk(ROOT / "QA/PCW/GEOBENCH.DSK")
+    for distro in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/GBENCH"):
+        names = {path.name for path in distro.glob("*.TBR")}
+        if names != set(titlebars):
+            sys.exit(f"{distro.relative_to(ROOT)}: title-bar set differs from assets/titlebars")
+        for name, expected in titlebars.items():
+            compare_payload(
+                str((distro / name).relative_to(ROOT)),
+                (distro / name).read_bytes(), expected,
+            )
+    floppy_titlebars = {"IMPROVED.TBR", "ORIGINAL.TBR"}
+    extras_titlebars = set(titlebars) - floppy_titlebars
+    for label, files, padded in (
+        ("QA/CPC/Floppies/GEOBENCH.DSK", cpc_main, False),
+        ("QA/PCW/GEOBENCH.DSK", pcw_main, True),
+    ):
+        names = {name for name in files if name.endswith(".TBR")}
+        if names != floppy_titlebars:
+            sys.exit(f"{label}: expected only IMPROVED.TBR and ORIGINAL.TBR")
+        for name in floppy_titlebars:
+            payload = files[name] if padded else strip_amsdos(files[name])
+            compare_payload(f"{label}:{name}", payload, titlebars[name], padded=padded)
+    for label, files, padded in (
+        ("QA/CPC/Floppies/EXTRAS.DSK", cpc_extras, False),
+        ("QA/PCW/EXTRAS.DSK", pcw_extras, True),
+    ):
+        names = {name for name in files if name.endswith(".TBR")}
+        if names != extras_titlebars:
+            sys.exit(f"{label}: secondary title-bar catalogue is incomplete")
+        for name in extras_titlebars:
+            payload = files[name] if padded else strip_amsdos(files[name])
+            compare_payload(f"{label}:{name}", payload, titlebars[name], padded=padded)
+    compare_payload(
+        "QA/CPC/Floppies/GEOBENCH.DSK:GBTITLE.MOD",
+        strip_amsdos(cpc_main["GBTITLE.MOD"]),
+        (ROOT / "build/GBTITLE.RAW").read_bytes(),
+    )
+    compare_payload(
+        "QA/CPC/CARD/GBENCH/GBTITLE.MOD",
+        (ROOT / "QA/CPC/CARD/GBENCH/GBTITLE.MOD").read_bytes(),
+        (ROOT / "build/GBTITLE.RAW").read_bytes(),
+    )
+    compare_payload(
+        "QA/MSX/GBENCH/GBTITLE.MOD",
+        (ROOT / "QA/MSX/GBENCH/GBTITLE.MOD").read_bytes(),
+        (ROOT / "build/msx/GBTITLE.RAW").read_bytes(),
+    )
+    compare_payload(
+        "QA/PCW/GEOBENCH.DSK:GBTITLE.MOD",
+        pcw_main["GBTITLE.MOD"], (ROOT / "build/pcw/GBTITLE.RAW").read_bytes(),
+        padded=True,
+    )
     compare_payload(
         "QA/CPC/Floppies/GEOBENCH.DSK:DEFAULT.SPR",
         cpc_main["DEFAULT.SPR"],
@@ -197,6 +262,8 @@ def main() -> None:
             pristine.read_bytes(),
             mutable.read_bytes(),
         )
+        if b"TITLEBAR=ORIGINAL\r\n" not in mutable.read_bytes():
+            sys.exit(f"{mutable.relative_to(ROOT)}: TITLEBAR must default to ORIGINAL")
 
     cpc_companion = cpc_disk(ROOT / "QA/CPC/Floppies/COMPANION.DSK")
     pcw_companion = pcw_disk(ROOT / "QA/PCW/COMPANION.DSK")
@@ -240,6 +307,11 @@ def main() -> None:
     print(f"portable PIC distribution: {len(assets)} byte-identical pictures across CPC, MSX and PCW")
     print(f"MSX Screen 7 distribution: {mode7_count} additional pictures in QA/MSX/PICS")
     print(f"portable BDP distribution: {len(backdrops)} byte-identical backdrops across CPC, MSX and PCW")
+    print(
+        f"title bars: {len(titlebars)} motifs on card/MSX; "
+        "IMPROVED and ORIGINAL on CPC/PCW boot floppies; remaining motifs on "
+        "EXTRAS.DSK; ORIGINAL default"
+    )
     print("CPC floppy cursor: headerless DEFAULT.SPR matches the card distribution")
     print("target defaults: pristine DEFAULT.CFG matches GEOBENCH.CFG on CPC, MSX and PCW")
 

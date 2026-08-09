@@ -105,6 +105,10 @@ cp build/DEFAULT.FNT build/CLASSIC.FNT build/DEFAULT.IST build/PAINT.IST \
    build/DEFAULT.SPR build/HAND.SPR "$SYS/"
 cp build/SPLASH.BIN "$SYS/SPLASH.MOD"         # #196: bootsplash lollipop bitmap (.MOD, #234)
 cp build/SPLASHD.BIN "$SYS/SPLASHD.MOD"       # DEBUG=TRUE variant with the build id
+cp build/GBTITLE.RAW "$SYS/GBTITLE.MOD"       # paged title-bar renderer + fallback tile
+for tbr in build/titlebars/*.TBR; do           # selectable TITLEBAR=<name> motifs
+    [ -e "$tbr" ] && cp "$tbr" "$SYS/"
+done
 for bdp in build/*.BDP; do                    # #128: backdrop tiles (BACKDROP=<name>)
     [ -e "$bdp" ] && cp "$bdp" "$SYS/"
 done

@@ -17,7 +17,7 @@ time, so several share the same low-RAM transfer/buffer overlays.
 
 | Built module | Sources | Build script | Role |
 |------|---------|--------------|------|
-| `GBCFG.MOD` | `kcfg.c` + `kcfg_mod.c` wrapper | `tools/build_cfgmod.sh` | Parse `GEOBENCH.CFG` KEY=VALUE text into the `ICONS=`/`FONT=`/`CURSOR=` set names, the `BACKDROP=` tile name (+ its `A:`/`B:` drive prefix), the `INKS=` palette (4 pens + border), and `DEBUG=TRUE` boot-splash selection. |
+| `GBCFG.MOD` | `kcfg.c` + `kcfg_mod.c` wrapper | `tools/build_cfgmod.sh` | Parse `GEOBENCH.CFG` KEY=VALUE text into the `ICONS=`/`FONT=`/`CURSOR=` asset names, the `BACKDROP=` tile name (+ its `A:`/`B:` drive prefix), the `INKS=` palette (4 pens + border), and `DEBUG=TRUE` boot-splash selection. |
 | `GBUI.MOD` | `gbui_mod.c` dispatcher + `lib/gb/gbdlg.c`, `gbprompt.c`, `gbpick.c` | `tools/build_uimod.sh` | The shared `gb_doc` dialog/menu renderer (#142): File/Edit/View menus, the Open/Save file dialog, and prompts — paged so it isn't duplicated into every app bank. |
 | `GBAPICK.MOD` | `gbappick_mod.c` + `lib/gb/gbappick.c`, `gbdlg.c` | `tools/build_appickmod.sh` | ICONED's header-aware Open dialog: lists `.IST`/`.SPR` files and only those `.APP` files carrying a valid `GBAP` embedded-icon preamble. |
 | `GBWEB.MOD` | `gbweb_mod.c` | `tools/build_webmod.sh` | Browser helper for up-to-48-KiB borrowed-page HTML source capture, offline `.HTM` reads, focused launch-file transfer, proxy parsing, and live `PROXY=` config updates. Its low-RAM transfer block overlays the shared `#2200–#3DFF` module-data region. |
@@ -69,8 +69,10 @@ Boot flow for the config module lives in `kernel/config_module.asm` (split out o
 `gbkern.asm`): it seeds the outputs with `DEFAULT`, `fs_load_file`s
 `GEOBENCH.CFG` into the transfer area (length 0 if absent), then pages
 `GBCFG.MOD` into a bank and calls it — the C parser fills the outputs.
-`assets.asm` then builds `<FONT>.FNT` / `<ICONS>.IST` / `<CURSOR>.SPR` /
-`<BACKDROP>.BDP` from the parsed stems, so the config keys select what loads.
+`assets.asm` then loads `<FONT>.FNT` / `<ICONS>.IST` / `<CURSOR>.SPR` /
+`<BACKDROP>.BDP` from the parsed stems. Desktop and Settings parse
+`TITLEBAR=<name>` app-side, load `<name>.TBR` into the shared copy buffer, and
+invoke the paged `GBTITLE.MOD` installer through the arbitrary-module route.
 
 ## Follow-ups
 

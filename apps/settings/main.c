@@ -7,6 +7,7 @@
  *     FONT=<stem>    a .FNT font set      (kernel font_init)
  *     ICONS=<stem>   a .IST icon set      (kernel icon_init)
  *     CURSOR=<stem>  a .SPR pointer sprite(kernel cursor_init)
+ *     TITLEBAR=<stem> a .TBR repeated window-title motif
  *     BACKDROP=[D:]<stem>[.BDP]
  *     WALLPAPER=[D:]<stem>[.PIC]
  *     SAVER=[D:]<stem>[.SAV]
@@ -30,18 +31,21 @@
 #include "gb.h"
 #include "gbcfg.h"
 #include "gbsavercfg.h"
+#include "gbtitle.h"
 
 #define TITLE_H   14
 #define DEF_X     18
-#define DEF_Y     32
 #define DEF_W     58           /* byte cols (232 px) */
 #ifdef GB_MSX2
-#define DEF_H     174          /* includes video mode and Return to Defaults rows */
+#define DEF_H     186          /* includes video mode and Return to Defaults rows */
 #elif defined(GB_PCW)
-#define DEF_H     150          /* fixed monochrome palette: no Colours row */
+#define DEF_H     162          /* fixed monochrome palette: no Colours row */
 #else
-#define DEF_H     162
+#define DEF_H     174
 #endif
+#define DEF_BOTTOM_MARGIN 4
+#define DEF_MAX_Y (GB_LINES - DEF_H - DEF_BOTTOM_MARGIN)
+#define DEF_Y     ((DEF_MAX_Y < 32) ? DEF_MAX_Y : 32)
 #define ROW_H     12           /* per-setting row height, px */
 #define VAL_COL   16           /* value column offset from the window's left (byte cols); a
                                   gap past the longest label ("Backdrop") so value != label */
@@ -68,11 +72,13 @@
 #define SS_TM_ROW  (NROWS + 4)
 #endif
 #define RESET_ROW  (SS_TM_ROW + 1)
-#define ROW_BACKDROP 3
-#define ROW_WALLPAPER 4
+#define ROW_TITLEBAR 3
+#define ROW_BACKDROP 4
+#define ROW_WALLPAPER 5
 #define DRIVE_NONE 0xFF
 
 static unsigned char win_x, win_y, win_w, win_h;
+static unsigned char titlebar_repaint;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
 static void saver_value(char *dst);       /* forward: s_draw shows the current SAVERTIME= (#219) */
 static void ss_module_value(char *dst);   /* forward: s_draw shows the current SAVER= module (#219) */
@@ -101,11 +107,12 @@ static const setting_t rows[] = {
     { "Font",   "FONT=",     "FNT", 0,             0x120D },  /* KCFG_FONTNAME */
     { "Icons",  "ICONS=",    "IST", MIN_IST_ICONS, 0x1202 },  /* KCFG_ICONNAME */
     { "Cursor", "CURSOR=",   "SPR", 0,             0x1221 },  /* KCFG_CURSORNAME */
+    { "Title bar","TITLEBAR=","TBR", 0,             0 },       /* paged app-linked installer */
     { "Backdrop","BACKDROP=","BDP", 0,             0x1231 },  /* KCFG_BDPNAME (+ BD_SOLID #1290) */
     { "Wallpaper","WALLPAPER=","PIC", 0,           0 },       /* no live tfr: the desktop reads
                                                                  WALLPAPER= from the config (#216) */
 };
-#define NROWS 5
+#define NROWS 6
 #define BD_SOLID_ADDR 0x1290   /* kernel BD_SOLID flag */
 #define BD_DRIVE_ADDR 0x123C   /* kernel KCFG_BDDRIVE: selected backdrop drive */
 #define BD_TILE_ADDR  0x1250   /* kernel BD_TILE: the loaded 16x16 backdrop tile (#216) */
@@ -919,7 +926,25 @@ static void live_apply(unsigned char r, const char *name, unsigned char drive)
 {
     const char *ext = rows[r].ext;
     unsigned char is_backdrop = (unsigned char)(ext[0] == 'B');
+    unsigned char is_titlebar = (unsigned char)(ext[0] == 'T');
     if (ext[0] == 'P') return;
+    if (is_titlebar) {
+        char nm[11];
+        unsigned char i, descended;
+        unsigned int n;
+        (void)drive;
+        for (i = 0; i < 8; i++) nm[i] = ' ';
+        for (i = 0; i < 8 && name[i]; i++) nm[i] = name[i];
+        nm[8] = 'T'; nm[9] = 'B'; nm[10] = 'R';
+        sel_boot_root();
+        descended = enter_assets(0);
+        gb_set_name(nm);
+        n = gb_fs_load(gb_copybuf, 512);
+        if (descended) gb_back();
+        gb_titlebar_install(n);
+        titlebar_repaint = 1;  /* repaint after the modal picker has fully unwound */
+        return;
+    }
     if (is_backdrop) {
         *(unsigned char *)BD_DRIVE_ADDR = drive;
         *(unsigned char *)BD_SOLID_ADDR =
@@ -990,10 +1015,8 @@ static void open_picker(unsigned char r)
             live_apply(r, media ? (list[sel] + 2) : list[sel],
                        media ? stem_drive[sel - base] : boot_drive()); /* ...and apply now, no reboot (#185) */
         }
-        /* Do not force a full ancestor repaint from inside the picker callback. A successful
-           selection used to re-enter the WM repaint stack while this managed window was still
-           unwinding its modal UI path, and that left the desktop's System menu dead afterwards.
-           Persist the choice now; the desktop/window stack repaints naturally on close. */
+        /* Titlebar changes schedule a clipped repaint for the next frame. Repainting from this
+           picker callback would re-enter the WM while its modal UI path is still unwinding. */
     }
     s_draw();                                /* repaint our content (new font/value) */
     gb_curshow();
@@ -1020,6 +1043,7 @@ static void reset_defaults(void)
     static const char *const choices[] = { "Return to Defaults", "Cancel" };
     unsigned char descended, p;
     unsigned int i, n;
+    char titlebar[16];
 
     p = gb_popup((unsigned char)(win_x + 1), row_y(RESET_ROW), choices, 2);
     gb_curhide();
@@ -1046,6 +1070,8 @@ static void reset_defaults(void)
     for (i = 0; i < n; i++) cfgbuf[i] = gb_copybuf[i];
     cfglen = n;
     cfg_set(rows[0].key, "DEFAULT");        /* save and refresh the kernel config copy */
+    cfg_get(rows[ROW_TITLEBAR].key, titlebar);
+    live_apply(ROW_TITLEBAR, titlebar, boot_drive());
 #ifndef GB_PCW
     cfg_get_inks(ink_cur);
     for (p = 0; p < NPEN; p++) apply_colour(p, ink_cur[p]);
@@ -1125,11 +1151,20 @@ static void s_drag(void)
     }
 }
 
+static void s_frame(void)
+{
+    if (!titlebar_repaint) return;
+    titlebar_repaint = 0;
+    gb_wm_damage(win_x, win_y, win_w, TITLE_H);
+    gb_restore_parent();
+}
+
 static void s_proc(void)
 {
     switch (gb_msg.type) {
         case GB_MSG_DRAW:  s_draw();      break;
         case GB_MSG_CLICK: s_click();     break;
+        case GB_MSG_FRAME: s_frame();     break;
         case GB_MSG_CLOSE: gb_wm_close(); break;
         case GB_MSG_DRAG:  s_drag();      break;
     }

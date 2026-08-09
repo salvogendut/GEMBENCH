@@ -224,10 +224,32 @@ fbk_row
                 ret
 
                 if BACKDROP_TILE
-; fill_pattern: like fill_block but from the 16x16 BD_TILE (GB-pen-space bytes,
-; permuted on write), phased off absolute screen x,y. Tile byte for (x,y) is
-; BD_TILE[(y & 15)*4 + (x & 3)].
+; fill_pattern: select the 16x16 backdrop tile at absolute screen phase.
 fill_pattern
+                ld    hl,BD_TILE
+                ld    (fp_base+1),hl
+                xor   a
+                ld    (fp_xphase+1),a
+                ld    (fp_yphase+1),a
+                jr    fp_begin
+                endif
+
+                if TITLEBAR_TILE
+; fill_title_pattern: select the 16x14 title tile at window-relative phase.
+fill_title_pattern
+                ld    hl,DATA_TITLE
+                ld    (fp_base+1),hl
+                ld    a,(kw_x)
+                neg
+                ld    (fp_xphase+1),a
+                ld    a,(kw_y)
+                neg
+                ld    (fp_yphase+1),a
+                endif
+
+                if BACKDROP_TILE | TITLEBAR_TILE
+; Common canonical tile renderer; PCW pen bytes are permuted on write.
+fp_begin
                 call  clip_fb_copy
                 ret   c
                 ld    a,(fbw_h)
@@ -236,11 +258,13 @@ fill_pattern
                 ld    (fb_cy),a
 fp_row
                 ld    a,(fb_cy)              ; tile offset for this row
+fp_yphase       add   a,0
                 and   15
                 add   a,a
                 add   a,a
                 ld    c,a
                 ld    a,(fbw_x)
+fp_xphase       add   a,0
                 and   3
                 add   a,c
                 ld    (fp_off),a
@@ -253,7 +277,7 @@ fp_row
                 ld    e,a
                 ld    d,0
                 push  hl
-                ld    hl,BD_TILE
+fp_base         ld    hl,BD_TILE
                 add   hl,de
                 ld    d,h
                 ld    e,l

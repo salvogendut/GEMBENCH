@@ -8,6 +8,9 @@
 ;; Like pack_apps/pack_apps2: RASM's DSK save APPENDS across invocations, so this runs
 ;; as its own fresh 64K image into the SAME build/gbkern.dsk. Keep this list in step
 ;; with the stage_dist.sh globs when assets change.
+                ifndef TITLEBAR_TILE
+TITLEBAR_TILE   equ   0
+                endif
                 org   #4000
 cfg_geobench    incbin "../build/GEOBENCH.CFG"  ; #205: default config at the floppy root - the
 cfg_geobench_e                                  ; Settings app reads/writes it (the card gets the
@@ -27,9 +30,18 @@ bdp_waves_e
 bdp_waves2      incbin "../build/WAVES2.BDP"
 bdp_waves2_e
                 save  "WAVES2.BDP",bdp_waves2,bdp_waves2_e-bdp_waves2,DSK,"build/gbkern.dsk"
-ist_refined     incbin "../assets/iconsets/REFINED.IST" ; ICONS=REFINED custom set (3984 B)
+ist_refined     incbin "../assets/iconsets/REFINED.IST" ; ICONS=REFINED custom set
 ist_refined_e
                 save  "REFINED.IST",ist_refined,ist_refined_e-ist_refined,DSK,"build/gbkern.dsk"
 pic_logo        incbin "../assets/pictures/LOGO.PIC"    ; boot wallpaper; all pictures also ship
 pic_logo_e                                              ; on EXTRAS.DSK and card/MSX PICS folders
                 save  "LOGO.PIC",pic_logo,pic_logo_e-pic_logo,DSK,"build/gbkern.dsk"
+                if TITLEBAR_TILE             ; tight boot floppies carry the default and original;
+                                             ; card/MSX staging copies every assets/titlebars file
+tbr_original    incbin "../build/titlebars/ORIGINAL.TBR"
+tbr_original_e
+                save  "ORIGINAL.TBR",tbr_original,tbr_original_e-tbr_original,DSK,"build/gbkern.dsk"
+tbr_improved    incbin "../build/titlebars/IMPROVED.TBR"
+tbr_improved_e
+                save  "IMPROVED.TBR",tbr_improved,tbr_improved_e-tbr_improved,DSK,"build/gbkern.dsk"
+                endif
