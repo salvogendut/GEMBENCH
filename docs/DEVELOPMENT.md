@@ -228,17 +228,19 @@ three-platform `SNDTEST.APP` reference without rebuilding the distributions.
 
 `GEOBENCH.CFG` selects named resources. `ICONS=<name>` loads `<name>.IST`,
 `FONT=<name>` loads `<name>.FNT`, `CURSOR=<name>` loads `<name>.SPR`,
-`TITLEBAR=<name>` loads a standalone `<name>.TBR` window-title theme,
+`TITLEBAR=<name>` loads a standalone `<name>.TBR` window-title motif,
+`GADGETS=<name>` loads a standalone `<name>.GDT` close/maximize pair,
 `BACKDROP=<drive:name|SOLID>`, `WALLPAPER=<drive:name|NONE>`, and
 `SAVER=<drive:name|NONE>` identify optional desktop media. Missing font/icon/
 cursor settings fall back to `DEFAULT`; invalid background media falls back to
 `SOLID` / `NONE` during boot so the machine still starts.
 
-Title themes are canonical four-pen assets shared unchanged by every target.
-Their 16x14 background repeats horizontally; 8x10 close and 12x10 maximize
-tiles are stamped over it. Settings applies a new theme live and independently
-of `ICONS=`. A missing theme falls back to embedded `ORIGINAL` assets. Legacy
-56-byte files replace only the repeated background and retain fallback gadgets.
+Title and gadget themes are canonical four-pen assets shared unchanged by every
+target. A 56-byte `.TBR` 16x14 background repeats horizontally; a 50-byte `.GDT`
+provides the stamped 8x10 close and 12x10 maximize tiles. Settings applies each
+part live and independently of the other and of `ICONS=`. Missing assets fall
+back to embedded `ORIGINAL` data. Legacy 106-byte combined `.TBR` files replace
+both parts safely.
 
 Per-screensaver options also live in this file. The first contract is
 `STARFLD_SPEED=1..8` and `STARFLD_STARS=16..96` (defaults `4` and `64`). Saver

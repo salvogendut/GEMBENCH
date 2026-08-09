@@ -71,8 +71,10 @@ Boot flow for the config module lives in `kernel/config_module.asm` (split out o
 `GBCFG.MOD` into a bank and calls it — the C parser fills the outputs.
 `assets.asm` then loads `<FONT>.FNT` / `<ICONS>.IST` / `<CURSOR>.SPR` /
 `<BACKDROP>.BDP` from the parsed stems. Desktop and Settings parse
-`TITLEBAR=<name>` app-side, load `<name>.TBR` into the shared copy buffer, and
-invoke the paged `GBTITLE.MOD` installer through the arbitrary-module route.
+`TITLEBAR=<name>` and `GADGETS=<name>` app-side, load the selected `.TBR` or
+`.GDT` into the shared copy buffer, and invoke the paged `GBTITLE.MOD` installer
+through the arbitrary-module route. Both payloads occupy fixed parts of the
+existing `PAGE_DATA` title theme, so this separation adds no resident state.
 
 ## Follow-ups
 

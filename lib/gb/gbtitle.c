@@ -14,14 +14,29 @@ __asm
 __endasm;
 }
 
-void gb_titlebar_install(unsigned int size)
+static void install(unsigned char mode)
 {
     static const char name[11] = {
         'G','B','T','I','T','L','E',' ','M','O','D'
     };
     unsigned char i;
     for (i = 0; i < 11; i++) TITLE_MODNAME[i] = name[i];
-    TITLE_VALID = (size >= 106) ? 2 : (size >= 56);
-    TITLE_READY = 0;
+    TITLE_VALID = mode;
     run_title_module();
+}
+
+void gb_titlebar_install(unsigned int size)
+{
+    install((size >= 106) ? 2 : (size >= 56));
+}
+
+void gb_titlebar_init(unsigned int size)
+{
+    TITLE_READY = 0;
+    gb_titlebar_install(size);
+}
+
+void gb_gadgets_install(unsigned int size)
+{
+    install((size >= 50) ? 3 : 0);
 }

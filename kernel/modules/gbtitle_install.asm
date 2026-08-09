@@ -1,16 +1,23 @@
 ; GBTITLE.MOD installer. The existing arbitrary paged-module service loads this
 ; at #6000. It copies the renderer payload to its permanent PAGE_DATA slot and
-; optionally replaces the fallback tile from the low-RAM copy buffer.
+; optionally replaces the fallback title or gadgets from the low-RAM copy
+; buffer. TITLE_VALID: 1 = 56-byte TBR, 2 = legacy 106-byte combined TBR,
+; 3 = 50-byte GDT.
 
 DATA_MODTOP     equ   #6000
 DATA_TITLE      equ   #5E00
 DATA_TITLE_SIZE equ   106
+DATA_GADGETS    equ   DATA_TITLE+56
+DATA_GADGET_SIZE equ  50
 TITLE_READY     equ   #124F
 TITLE_VALID     equ   #1710
 TITLE_XFER      equ   #2200
 
                 org   DATA_MODTOP
 gbtitle_install
+                ld    a,(TITLE_READY)
+                or    a
+                jr    nz,gti_replace
                 ld    hl,gbtitle_payload
                 ld    de,DATA_TITLE
                 ld    bc,gbtitle_payload_e-gbtitle_payload
@@ -21,15 +28,22 @@ gbtitle_install
                 ld    b,DATA_TITLE_SIZE
                 call  gti_convert
                 endif
+gti_replace
                 ld    a,(TITLE_VALID)
                 or    a
                 jr    z,gti_ready
                 ld    hl,TITLE_XFER
+                cp    3
+                jr    z,gti_gadgets
                 ld    de,DATA_TITLE
                 cp    2
-                ld    b,56                    ; legacy theme: keep fallback gadgets
+                ld    b,56                    ; current TBR: retain installed gadgets
                 jr    c,gti_copy
-                ld    b,DATA_TITLE_SIZE
+                ld    b,DATA_TITLE_SIZE       ; legacy combined TBR
+                jr    gti_copy
+gti_gadgets
+                ld    de,DATA_GADGETS
+                ld    b,DATA_GADGET_SIZE
 gti_copy
                 ifdef TITLE_NATIVE
                 call  gti_convert

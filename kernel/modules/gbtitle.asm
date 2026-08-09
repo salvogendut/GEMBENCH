@@ -2,10 +2,11 @@
 ; GBTITLE.PAY - issue #458 runtime title-bar tile and CPC renderer payload.
 ;
 ; PAGE_DATA reserves #5E00..#5FFF below the normal #6000 module slot. The first
-; The first 106 bytes are the canonical fallback theme: repeated background,
-; close tile, and maximize tile. TITLEBAR=<name> replaces all three for current
-; files or only the background for legacy 56-byte files. CPC calls the renderer
-; immediately after the theme; MSX/PCW use their resident screen renderers.
+; The first 106 bytes are the composed fallback theme: a 56-byte repeated
+; background followed by the 50-byte close/maximize pair. TITLEBAR=<name>
+; replaces the background and GADGETS=<name> replaces the gadget pair. Legacy
+; 106-byte TBR files still replace both. CPC calls the renderer immediately
+; after the theme; MSX/PCW use their resident screen renderers.
 ; ---------------------------------------------------------------------------
 
 DATA_TITLE      equ   #5E00

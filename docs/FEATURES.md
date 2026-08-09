@@ -64,7 +64,7 @@ backdrop, dragging icons, opening apps and menus:
   rescales the face to the whole screen, an Options menu sets the time / toggles seconds.
 - **Settings** — a control panel for `GEOBENCH.CFG`: pick the **font** (`.FNT`),
   **icon set** (`.IST`), **cursor** (`.SPR`), standalone **title-bar theme**
-  (`.TBR`), **backdrop** pattern (`.BDP`, or
+  (`.TBR`), independently selectable **window gadgets** (`.GDT`), **backdrop** pattern (`.BDP`, or
   `SOLID`) and a centred **wallpaper** (`.PIC`) from the system folder, a **Colours**
   editor for the 4 Mode-1 pens + the screen border (`INKS=`) with a **live** preview
   — `-`/`+` recolours the whole desktop instantly — and a **Screensaver** section

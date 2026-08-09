@@ -145,8 +145,17 @@ def main() -> None:
     for name, data in titlebars.items():
         if len(data) not in (56, 106):
             sys.exit(
-                f"assets/titlebars/{name}: expected a 56-byte legacy tile or 106-byte theme"
+                f"assets/titlebars/{name}: expected a 56-byte tile or 106-byte legacy theme"
             )
+    gadgets = {
+        path.name.upper(): path.read_bytes()
+        for path in sorted((ROOT / "assets/gadgets").glob("*.GDT"))
+    }
+    if not gadgets:
+        sys.exit("no canonical title-bar gadget themes found")
+    for name, data in gadgets.items():
+        if len(data) != 50:
+            sys.exit(f"assets/gadgets/{name}: expected a 50-byte gadget pair")
 
     for distro, expected_assets in (
         (ROOT / "QA/CPC/CARD/PICS", assets),
@@ -194,8 +203,18 @@ def main() -> None:
                 str((distro / name).relative_to(ROOT)),
                 (distro / name).read_bytes(), expected,
             )
+        names = {path.name for path in distro.glob("*.GDT")}
+        if names != set(gadgets):
+            sys.exit(f"{distro.relative_to(ROOT)}: gadget set differs from assets/gadgets")
+        for name, expected in gadgets.items():
+            compare_payload(
+                str((distro / name).relative_to(ROOT)),
+                (distro / name).read_bytes(), expected,
+            )
     floppy_titlebars = {"IMPROVED.TBR", "ORIGINAL.TBR"}
     extras_titlebars = set(titlebars) - floppy_titlebars
+    floppy_gadgets = {"ORIGINAL.GDT"}
+    extras_gadgets = set(gadgets) - floppy_gadgets
     for label, files, padded in (
         ("QA/CPC/Floppies/GEOBENCH.DSK", cpc_main, False),
         ("QA/PCW/GEOBENCH.DSK", pcw_main, True),
@@ -206,6 +225,13 @@ def main() -> None:
         for name in floppy_titlebars:
             payload = files[name] if padded else strip_amsdos(files[name])
             compare_payload(f"{label}:{name}", payload, titlebars[name], padded=padded)
+        names = {name for name in files if name.endswith(".GDT")}
+        if names != floppy_gadgets:
+            sys.exit(f"{label}: expected only ORIGINAL.GDT")
+        payload = files["ORIGINAL.GDT"] if padded else strip_amsdos(files["ORIGINAL.GDT"])
+        compare_payload(
+            f"{label}:ORIGINAL.GDT", payload, gadgets["ORIGINAL.GDT"], padded=padded
+        )
     for label, files, padded in (
         ("QA/CPC/Floppies/EXTRAS.DSK", cpc_extras, False),
         ("QA/PCW/EXTRAS.DSK", pcw_extras, True),
@@ -216,6 +242,12 @@ def main() -> None:
         for name in extras_titlebars:
             payload = files[name] if padded else strip_amsdos(files[name])
             compare_payload(f"{label}:{name}", payload, titlebars[name], padded=padded)
+        names = {name for name in files if name.endswith(".GDT")}
+        if names != extras_gadgets:
+            sys.exit(f"{label}: secondary gadget catalogue is incomplete")
+        for name in extras_gadgets:
+            payload = files[name] if padded else strip_amsdos(files[name])
+            compare_payload(f"{label}:{name}", payload, gadgets[name], padded=padded)
     compare_payload(
         "QA/CPC/Floppies/GEOBENCH.DSK:GBTITLE.MOD",
         strip_amsdos(cpc_main["GBTITLE.MOD"]),
@@ -264,6 +296,8 @@ def main() -> None:
         )
         if b"TITLEBAR=ORIGINAL\r\n" not in mutable.read_bytes():
             sys.exit(f"{mutable.relative_to(ROOT)}: TITLEBAR must default to ORIGINAL")
+        if b"GADGETS=ORIGINAL\r\n" not in mutable.read_bytes():
+            sys.exit(f"{mutable.relative_to(ROOT)}: GADGETS must default to ORIGINAL")
 
     cpc_companion = cpc_disk(ROOT / "QA/CPC/Floppies/COMPANION.DSK")
     pcw_companion = pcw_disk(ROOT / "QA/PCW/COMPANION.DSK")
@@ -311,6 +345,10 @@ def main() -> None:
         f"title bars: {len(titlebars)} motifs on card/MSX; "
         "IMPROVED and ORIGINAL on CPC/PCW boot floppies; remaining motifs on "
         "EXTRAS.DSK; ORIGINAL default"
+    )
+    print(
+        f"title gadgets: {len(gadgets)} themes on card/MSX; ORIGINAL on CPC/PCW "
+        "boot floppies; remaining themes on EXTRAS.DSK"
     )
     print("CPC floppy cursor: headerless DEFAULT.SPR matches the card distribution")
     print("target defaults: pristine DEFAULT.CFG matches GEOBENCH.CFG on CPC, MSX and PCW")

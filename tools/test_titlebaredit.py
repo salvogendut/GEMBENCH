@@ -7,6 +7,7 @@ from titlebaredit import (
     CLOSE_BYTES,
     CLOSE_H,
     CLOSE_W,
+    GADGET_BYTES,
     MAX_BYTES,
     MAX_H,
     MAX_W,
@@ -15,10 +16,12 @@ from titlebaredit import (
     TILE_H,
     TILE_W,
     decode_theme,
+    decode_gdt,
     decode_tbr,
     default_close_grid,
     default_max_grid,
     encode_theme,
+    encode_gdt,
     encode_tbr,
     ellipse_points,
     flood_fill_grid,
@@ -45,6 +48,11 @@ def main() -> None:
 
     close = default_close_grid()
     maximize = default_max_grid()
+    gadgets = encode_gdt(close, maximize)
+    check(len(gadgets) == GADGET_BYTES == CLOSE_BYTES + MAX_BYTES,
+          "gadget theme is exactly 50 bytes")
+    check(decode_gdt(gadgets) == (close, maximize),
+          "close and maximize gadgets round-trip independently")
     theme = encode_theme(stripes, close, maximize)
     check(len(theme) == THEME_BYTES == TILE_BYTES + CLOSE_BYTES + MAX_BYTES,
           "title theme is exactly 106 bytes")
