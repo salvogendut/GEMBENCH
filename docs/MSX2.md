@@ -81,11 +81,36 @@ Nextor extension and a 512K RAM expansion):
 bash tools/fetch_msx_deps.sh       # one-time: Nextor system files + NMS 8250 ROMs
 bash tools/build_kernel_msx.sh     # selector + both kernels + staged/bootable images
 tools/run_msx.sh                   # interactive session
+tools/run_msx.sh QA/MSX/Floppies/GEOBENCH.DSK
 MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 ```
 
 `run_msx.sh` uses a native `openmsx` from `$PATH`, the Flatpak
 (`org.openmsx.openMSX`) as a fallback, or an explicit `OPENMSX="…"` override.
+
+## Floppy distribution
+
+The build creates two standard 720K FAT12 images in `QA/MSX/Floppies/`:
+
+- `GEOBENCH.DSK` boots to GEOBENCH and contains the complete system and
+  diagnostics.
+- `EXTRAS.DSK` contains the `PICS/` gallery. Mount it as drive B when available,
+  or swap it into drive A after the desktop has booted.
+
+The system floppy carries `NEXTOR.SYS` and `COMMAND2.COM`, but the Nextor kernel
+itself lives in ROM supplied by the machine or a cartridge. A Sunrise IDE Nextor
+ROM is used by the openMSX harness because it is a readily available compatible
+kernel provider; the floppy is still read through the NMS 8250 FDC and does not
+require IDE storage. RainBIOS likewise provides the BIOS and floppy firmware,
+not the Nextor kernel, so a Nextor cartridge remains necessary when testing that
+firmware in 1983. GEOBENCH also runs under MSX-DOS 2, but this redistributable
+image does not include the separately licensed `MSXDOS2.SYS` required by a
+DOS2-ROM-only setup.
+
+The Nextor components are distributable for non-commercial use when their
+copyright and permission notice is included. The exact notice is stored in
+[`licenses/NEXTOR.md`](licenses/NEXTOR.md) and copied to the system floppy as
+`NEXTOR.TXT`. Proprietary `MSXDOS2.SYS` is not included.
 
 ## Browser and Telnet networking
 

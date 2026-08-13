@@ -9,10 +9,16 @@
 # with MSX_RAM=stock.
 #
 # System ROMs are found in ~/.openMSX/share/systemroms (tools/fetch_msx_deps.sh
-# sets them up). The disk image defaults to QA/GBMSX.IMG (tools/build_msx_img.sh).
+# sets them up). The disk image defaults to QA/GBMSX.IMG
+# (tools/build_msx_img.sh). A 720K .DSK can be passed instead; it is mounted in
+# drive A and uses the Nextor kernel supplied by the emulator extension.
 #
 # Usage:
 #   tools/run_msx.sh [image]                    interactive session
+#   tools/run_msx.sh QA/MSX/Floppies/GEOBENCH.DSK
+#                                               boot the floppy distribution
+#   MSX_DISKB=file.dsk tools/run_msx.sh disk.dsk
+#                                               mount an optional second floppy
 #   MSX_SCRIPT=file.tcl tools/run_msx.sh        drive it from a Tcl script
 #   MSX_SHOTS="10 20 30" tools/run_msx.sh       headless: screenshots at those
 #                                               emu-time seconds into build/msx/
@@ -45,7 +51,19 @@ EXT=(-ext SunriseIDE_Nextor)
 [ "${MSX_RAM:-512k}" != stock ] && EXT+=(-ext ram512k)
 [ "$UNAPI_ENABLED" = 1 ] && EXT+=(-ext unapinet)
 
-ARGS=(-machine "$MACHINE" "${EXT[@]}" -hda "$IMG")
+case "${IMG,,}" in
+    *.dsk)
+        ARGS=(-machine "$MACHINE" "${EXT[@]}" -diska "$IMG")
+        [ -z "${MSX_DISKB:-}" ] || ARGS+=(-diskb "$MSX_DISKB")
+        ;;
+    *)
+        [ -z "${MSX_DISKB:-}" ] || {
+            echo "ERROR: MSX_DISKB is only valid with a primary .DSK image" >&2
+            exit 1
+        }
+        ARGS=(-machine "$MACHINE" "${EXT[@]}" -hda "$IMG")
+        ;;
+esac
 [ "$MOUSE_ENABLED" = 1 ] && ARGS+=(-command "plug joyporta mouse")
 SCRIPT=
 

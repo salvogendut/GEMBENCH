@@ -30,7 +30,10 @@ mkfs.fat -F16 --offset "$POFF" -n GBMSX "$IMG" >/dev/null
 export MTOOLS_SKIP_CHECK=1
 mcopy -i "$IMG@@$((POFF * 512))" QA/MSXDEPS/NEXTOR.SYS QA/MSXDEPS/COMMAND2.COM ::/
 if [ -d "$SRC" ]; then
-    mcopy -s -i "$IMG@@$((POFF * 512))" "$SRC"/* ::/
+    for path in "$SRC"/*; do
+        [ "$(basename "$path")" = Floppies ] && continue
+        mcopy -s -i "$IMG@@$((POFF * 512))" "$path" ::/
+    done
 fi
 
 echo "Built $IMG (${SIZE_MB}MB, FAT16 @ sector $POFF) from ${SRC}$([ -d "$SRC" ] || echo ' [missing - boot files only]')"

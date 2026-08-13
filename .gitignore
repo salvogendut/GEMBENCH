@@ -41,6 +41,10 @@ rom/GBALB.ROM
 # 32MB Nextor image are local artifacts (tools/fetch_msx_deps.sh recreates them)
 QA/MSXDEPS/
 QA/GBMSX.IMG
+!QA/MSX/Floppies/
+!QA/MSX/Floppies/*.DSK
+!assets/msx/
+!assets/msx/MSXDOS2.BIN
 
 # Raw 1984 emulator screen captures are kept locally only; commit just the
 # curated/optimised GIFs under screenshots/.

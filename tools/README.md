@@ -21,15 +21,22 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   sibling GB-PAINT and GB-BASIC checkouts.
 - **`build_kernel_msx.sh`** — builds the `GBMSX.COM` video-mode selector,
   `GBMSX6.COM`, `GBMSX7.COM`, the MSX2 app/module payload, and the bootable
-  Nextor `QA/GBMSX.IMG`. The dependency fetcher supplies a local openMSXnet
+  Nextor `QA/GBMSX.IMG`, plus the two 720K images under `QA/MSX/Floppies/`.
+  The dependency fetcher supplies a local openMSXnet
   `UNAPINET.COM`, which is staged before `GBMSX.COM`; `MSX_UNAPI_TSR` overrides
   it, and an explicitly empty value omits it. The TSR remains untracked.
+- **`build_msx_floppy.sh`** — builds `GEOBENCH.DSK` with the full system and
+  `EXTRAS.DSK` with the picture gallery. The disks use standard 720K FAT12
+  geometry and, as shipped with `NEXTOR.SYS`, require a Nextor kernel ROM
+  supplied by the MSX.
 - **`run_msx.sh`** — launches the MSX2 image in native or Flatpak openMSX.
   It adds openMSXnet's `unapinet` extension by default when using its custom
   emulator build and automatically selects a bundle in
   `QA/MSXDEPS/openmsxnet/`. `OPENMSXNET_HOME` overrides that location;
   missing host libraries are supplied through `my-distrobox`
   (`MSX_DISTROBOX` overrides the name). `MSX_UNAPI=0` disables the extension.
+  Passing a `.DSK` mounts it in drive A; `MSX_DISKB` optionally mounts a second
+  floppy on machine definitions that expose drive B.
 - **`m4detect.asm`** — a tiny BASIC-callable detector that asks the firmware
   (`KL_FIND_COMMAND`) whether an M4 ROM RSX is installed. The staged `GB.BAS` loads
   it as `M4DETECT.BIN` and uses its result to pick `GBM4` vs `GBALB`.

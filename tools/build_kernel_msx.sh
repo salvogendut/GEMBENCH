@@ -291,5 +291,6 @@ done < <(python3 tools/picture_catalog.py msx)
 
 # --- bootable Nextor image ------------------------------------------------------
 bash tools/build_msx_img.sh QA/MSX QA/GBMSX.IMG
+bash tools/build_msx_floppy.sh QA/MSX QA/MSX/Floppies
 
-echo "MSX2 target built: QA/MSX (staged) + QA/GBMSX.IMG (bootable Nextor image)"
+echo "MSX2 target built: QA/MSX (staged) + QA/GBMSX.IMG + QA/MSX/Floppies/*.DSK"
