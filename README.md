@@ -78,7 +78,7 @@ hardware, or use the disk images in an emulator.
   80-track data image for a Gotek/emulator or compatible drive because the gallery
   does not fit a 180K CF2. Boot with `RUN"GB` (or `RUN"GBKERN`).
 - **Live disks** — test the CPC distribution directly in the
-  [js1984 web emulator](https://salvogendut.github.io/chimeric/js1984/?diska=../media/CPC/GEOBENCH.DSK&diskb=../media/CPC/COMPANION.DSK&autorun=GB),
+  [js1984 web emulator](https://salvogendut.github.io/chimeric/js1984/?memory=512&diska=../media/CPC/GEOBENCH.DSK&diskb=../media/CPC/COMPANION.DSK&autorun=GB),
   with the main disk in drive A and the companion disk in drive B.
 
 ### MSX2
