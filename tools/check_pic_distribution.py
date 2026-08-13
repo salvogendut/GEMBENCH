@@ -285,6 +285,8 @@ def main() -> None:
         pcw_main["DEFAULT.CFG"],
         pcw_main["GEOBENCH.CFG"],
     )
+    if b"TIMESYNC=false\r\n" not in pcw_main["GEOBENCH.CFG"]:
+        sys.exit("QA/PCW/GEOBENCH.DSK: time sync must be disabled by default")
     for mutable, pristine in (
         (ROOT / "QA/CPC/CARD/GEOBENCH.CFG", ROOT / "QA/CPC/CARD/GBENCH/DEFAULT.CFG"),
         (ROOT / "QA/MSX/GEOBENCH.CFG", ROOT / "QA/MSX/GBENCH/DEFAULT.CFG"),
@@ -351,7 +353,7 @@ def main() -> None:
         "boot floppies; remaining themes on EXTRAS.DSK"
     )
     print("CPC floppy cursor: headerless DEFAULT.SPR matches the card distribution")
-    print("target defaults: pristine DEFAULT.CFG matches GEOBENCH.CFG on CPC, MSX and PCW")
+    print("target defaults: pristine DEFAULT.CFG matches GEOBENCH.CFG on CPC, MSX and PCW; PCW time sync disabled")
 
 
 if __name__ == "__main__":

@@ -138,8 +138,9 @@ directory layout. `k_drive_poll` uses a single-sector probe for media presence.
 ## PCW Time Sync With PerryFi / PerryNet
 
 On real PCW hardware, automatic desktop time sync needs a PerryFi card running
-the PerryNet firmware. Configure WiFi in PerryNet first, then enable sync in the
-GEOBENCH boot config:
+the PerryNet firmware. Time sync is disabled by default on distributed disks
+(`TIMESYNC=false`). Configure WiFi in PerryNet first, then opt in by changing
+the GEOBENCH boot config to:
 
 ```text
 TIMESYNC=true
