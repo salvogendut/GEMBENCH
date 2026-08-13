@@ -77,6 +77,8 @@ hardware, or use the disk images in an emulator.
   gallery, Disk Utility, and the XRoach, Cat Clock, and Helix savers. It is an extended
   80-track data image for a Gotek/emulator or compatible drive because the gallery
   does not fit a 180K CF2. Boot with `RUN"GB` (or `RUN"GBKERN`).
+- **Live disk** — test the CPC distribution directly in the
+  [js1984 web emulator](https://salvogendut.github.io/chimeric/js1984/?disk=../media/CPC/GEOBENCH.DSK&autorun=GB).
 
 ### MSX2
 
