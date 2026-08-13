@@ -77,8 +77,9 @@ hardware, or use the disk images in an emulator.
   gallery, Disk Utility, and the XRoach, Cat Clock, and Helix savers. It is an extended
   80-track data image for a Gotek/emulator or compatible drive because the gallery
   does not fit a 180K CF2. Boot with `RUN"GB` (or `RUN"GBKERN`).
-- **Live disk** — test the CPC distribution directly in the
-  [js1984 web emulator](https://salvogendut.github.io/chimeric/js1984/?disk=../media/CPC/GEOBENCH.DSK&autorun=GB).
+- **Live disks** — test the CPC distribution directly in the
+  [js1984 web emulator](https://salvogendut.github.io/chimeric/js1984/?diska=../media/CPC/GEOBENCH.DSK&diskb=../media/CPC/COMPANION.DSK&autorun=GB),
+  with the main disk in drive A and the companion disk in drive B.
 
 ### MSX2
 
@@ -103,6 +104,9 @@ hardware, or use the disk images in an emulator.
   picture gallery and carries GB-PAINT, GB-BASIC, BASIC examples, and additional
   PCW-compatible screensavers. No CP/M is needed — the disc boots GEOBENCH directly. Real machines show the native 1bpp monochrome; the CGA2
   colours are an emulator feature (see [docs/PCW.md](docs/PCW.md)).
+- **Live disks** — test the PCW distribution directly in the
+  [js1985 web emulator](https://salvogendut.github.io/chimeric/js1985/?disk=../media/PCW/GEOBENCH.DSK&diskb=../media/PCW/COMPANION.DSK),
+  with the main disk in drive A and the companion disk in drive B.
 - On real PCW hardware, automatic desktop time sync uses a PerryFi card running
   PerryNet firmware. Enable it with `TIMESYNC=true` and set the local whole-hour
   UTC offset with `TIMEZONE=+H` or `TIMEZONE=-H` in `GEOBENCH.CFG`; see
