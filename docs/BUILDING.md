@@ -114,6 +114,7 @@ design; this is the build.
 bash tools/fetch_msx_deps.sh       # one-time: Nextor, UNAPINET + NMS 8250 ROMs
 bash tools/build_kernel_msx.sh     # the whole MSX2 distribution
 tools/run_msx.sh                   # boot it in openMSX (interactive)
+tools/run_msx.sh QA/MSX/Floppies/GEOBENCH.DSK
 MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 ```
 
@@ -153,6 +154,11 @@ implementation coverage.
   artifact, git-ignored like the CPC card image). `tools/build_msx_img.sh` fills
   it from `QA/MSX` plus the Nextor system files, so Nextor's Sunrise IDE driver
   boots it straight to the desktop.
+- **`QA/MSX/Floppies/GEOBENCH.DSK`** — the bootable 720K FAT12 system floppy,
+  with the selectors, complete `GBENCH/` and `DIAG/` trees, `NEXTOR.SYS`,
+  `COMMAND2.COM`, and the Nextor distribution notice.
+- **`QA/MSX/Floppies/EXTRAS.DSK`** — the second 720K floppy containing the
+  complete `PICS/` gallery.
 
 **Assets are packaged automatically.** Portable `.PIC` files are canonical GBPC Mode-1 and
 are copied byte-for-byte into root-level `PICS/`; the kernel translates pictures
@@ -179,13 +185,31 @@ it for you) — or write the whole `QA/GBMSX.IMG` to the device. It needs **MSX-
 `GBMSX.COM` reads `MSXMODE=6|7` from `GEOBENCH.CFG` and loads the matching
 mode-specific binary. System Settings updates that key for the next boot.
 
-### Boot floppy (experimental)
+### Floppy distribution
 
-`tools/build_msx_floppy.sh` assembles a single bootable **720 KB MSX-DOS 2 floppy**
-(`QA/GBMSX.DSK`) — MSX floppies are big enough that the whole ~612 KB distro fits
-on one disk. It carries third-party MSX-DOS 2 files (`MSXDOS2.SYS`, `COMMAND2.COM`),
-so treat it as an optional generated test artifact; it may appear untracked after
-running the builder. **Status:** it boots MSX-DOS 2 and GEOBENCH starts, but the
-display currently stays blanked under a floppy DOS2 setup (the disk ROM holds the
-screen off during floppy access) — under investigation; the IDE/SD image
-(`QA/GBMSX.IMG`) is the working path for now.
+`tools/build_msx_floppy.sh` assembles two standard **720K FAT12** images under
+`QA/MSX/Floppies/`. `GEOBENCH.DSK` contains the complete desktop and development
+diagnostics; `EXTRAS.DSK` contains the picture gallery. FAT12 cluster overhead
+makes this split necessary even though the loose files are close to 720K in
+total. Run `make msx-floppies` to rebuild only these images and
+`python3 tools/check_msx_floppies.py` to validate their geometry and contents.
+
+The system disk includes the open-source `NEXTOR.SYS`, `COMMAND2.COM`, and the
+required Nextor notice. It intentionally does **not** include proprietary
+`MSXDOS2.SYS`. As shipped, the disk must therefore find a **Nextor kernel ROM**
+in built-in firmware or a cartridge. A Sunrise IDE Nextor cartridge is one such
+provider, but the floppy continues to use the machine's normal FDC; IDE storage
+is not required by the disk format or by GEOBENCH. GEOBENCH itself also runs on
+MSX-DOS 2, but users of a DOS2 kernel must supply their own licensed
+`MSXDOS2.SYS` instead of the included `NEXTOR.SYS`.
+
+For openMSX:
+
+```bash
+tools/run_msx.sh QA/MSX/Floppies/GEOBENCH.DSK
+```
+
+The default Philips NMS 8250 definition exposes one drive, so swap
+`EXTRAS.DSK` into drive A after boot. With a two-drive machine definition, set
+`MSX_MACHINE` appropriately and pass
+`MSX_DISKB=QA/MSX/Floppies/EXTRAS.DSK`.
