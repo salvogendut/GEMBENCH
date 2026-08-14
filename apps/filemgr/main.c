@@ -90,6 +90,9 @@ static unsigned char dc_timer;
 static unsigned char view = V_ICONS;   /* default = icon view (GEOBENCH.CFG VIEW=) */
 static unsigned char my_drive;         /* the drive this window browses (#65) */
 static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
+#ifdef GB_MSX2
+static char msx_drive_title[7] = "Disk A";
+#endif
 static unsigned char free_known;
 static unsigned int free_kib;
 static unsigned int appicon_off;
@@ -337,7 +340,13 @@ static unsigned char make_free_suffix(void)
 static const char *win_title(void)               /* "Disk C/path 32MiB free" -> title_buf */
 {
     unsigned char i = 0, j = 0, slen, body_max;
+#ifdef GB_MSX2
+    const char *d;
+    msx_drive_title[5] = (char)gb_msx_drive_letter(my_drive);
+    d = msx_drive_title;
+#else
     const char *d = drive_title[my_drive];
+#endif
     slen = make_free_suffix();
     body_max = (slen < TITLE_MAX) ? (unsigned char)(TITLE_MAX - slen) : TITLE_MAX;
     while (d[j] && i < body_max) title_buf[i++] = d[j++];
@@ -900,7 +909,11 @@ static void on_event(void)
     sync_rect();
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
         if (!copy_file()) {               /* copy it onto THIS window's drive, any size (#74) */
+#ifdef GB_MSX2
+            if (gb_msx_drive_media(my_drive) == GB_MSX_MEDIA_FLOPPY) {
+#else
             if (my_drive == GB_DRIVE_A || my_drive == GB_DRIVE_B) {
+#endif
                 gb_alert("Copy failed", "floppy write error");
             } else {
                 gb_alert("Copy failed", "too big or disk full");

@@ -200,9 +200,13 @@ static void set_status(const char *s)
 
 static unsigned char drive_letter(unsigned char drive)
 {
+#ifdef GB_MSX2
+    return gb_msx_drive_letter(drive);
+#else
     if (drive == GB_DRIVE_A) return 'A';
     if (drive == GB_DRIVE_B) return 'B';
     return 'C';
+#endif
 }
 
 static void format_dest(void)
@@ -1178,9 +1182,18 @@ static void choose_drive(void)
 {
     const char *items[3];
     unsigned char map[3], n = 0, sel;
+#ifdef GB_MSX2
+    static char labels[3][7] = { "Disk A", "Disk B", "Disk C" };
+    unsigned char i;
+    for (i = 0; i < GB_MSX_DRIVE_COUNT; i++) {
+        labels[i][5] = (char)gb_msx_drive_letter(i);
+        items[n] = labels[i]; map[n++] = i;
+    }
+#else
     if (drive_mask & GB_DRV_C) { items[n] = "Disk C (card)"; map[n++] = GB_DRIVE_C; }
     if (drive_mask & GB_DRV_A) { items[n] = "Disk A"; map[n++] = GB_DRIVE_A; }
     if (drive_mask & GB_DRV_B) { items[n] = "Disk B"; map[n++] = GB_DRIVE_B; }
+#endif
     if (!n) { set_status("No writable drive found"); return; }
     sel = gb_popup((unsigned char)(gb_wm_x() + 3),
                    (unsigned char)(gb_wm_y() + BUTTON_Y + BUTTON_H), items, n);
@@ -1229,9 +1242,13 @@ static void handle_keys(void)
 
 static unsigned char drive_available(unsigned char drive)
 {
+#ifdef GB_MSX2
+    return (unsigned char)(drive < GB_MSX_DRIVE_COUNT);
+#else
     if (drive == GB_DRIVE_C) return (unsigned char)((drive_mask & GB_DRV_C) != 0);
     if (drive == GB_DRIVE_A) return (unsigned char)((drive_mask & GB_DRV_A) != 0);
     return (unsigned char)((drive_mask & GB_DRV_B) != 0);
+#endif
 }
 
 static void frame_tick(void)
@@ -1240,9 +1257,13 @@ static void frame_tick(void)
         set_status("Checking drives...");
         drive_mask = gb_drives();
         if (!drive_available(dest_drive)) {
+#ifdef GB_MSX2
+            dest_drive = gb_boot_drive;
+#else
             if (drive_mask & GB_DRV_C) dest_drive = GB_DRIVE_C;
             else if (drive_mask & GB_DRV_A) dest_drive = GB_DRIVE_A;
             else dest_drive = GB_DRIVE_B;
+#endif
         }
         format_dest();
         probe_pending = 0;
@@ -1287,6 +1308,8 @@ void main(void)
     url[0] = 0;
 #ifdef GB_PCW
     dest_drive = GB_DRIVE_A;
+#elif defined(GB_MSX2)
+    dest_drive = gb_boot_drive;
 #else
     dest_drive = GB_DRIVE_C;
 #endif

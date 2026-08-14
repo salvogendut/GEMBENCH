@@ -139,14 +139,18 @@ static const char *stems[MAXST];
 static unsigned char nstem;
 static unsigned char stem_drive[MAXST];       /* source drive for each media entry */
 
-/* sel_boot: pin the active drive to the boot drive (Disk C if a card is present, else
-   floppy A), where GEOBENCH.CFG + /GBENCH live - mirrors the kernel's fs_init. Another
+/* sel_boot: pin the active drive to the boot drive, where GEOBENCH.CFG + /GBENCH
+   live - mirrors the kernel's fs_init. Another
    co-resident window may have left the global drive elsewhere, so we re-assert it
    before every FS op. */
 static void sel_boot(void)
 {
+#ifdef GB_MSX2
+    gb_set_drive(gb_boot_drive);
+#else
     unsigned char d = gb_drives();
     gb_set_drive((d & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
+#endif
 }
 
 static void sel_boot_root(void)
@@ -158,14 +162,22 @@ static void sel_boot_root(void)
 
 static unsigned char boot_drive(void)
 {
+#ifdef GB_MSX2
+    return gb_boot_drive;
+#else
     return (gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A;
+#endif
 }
 
 static char drive_letter(unsigned char d)
 {
+#ifdef GB_MSX2
+    return (char)gb_msx_drive_letter(d);
+#else
     if (d == GB_DRIVE_A) return 'A';
     if (d == GB_DRIVE_B) return 'B';
     return 'C';
+#endif
 }
 
 /* ---- GEOBENCH.CFG read/write (generic, key includes the '=') ----------------- */
@@ -200,9 +212,15 @@ static unsigned char cfg_drive(const char *key, unsigned char fallback)
 {
     unsigned int p = cfg_keypos(key);
     if (p != 0xFFFF && p + 1 < cfglen && cfgbuf[p + 1] == ':') {
+#ifdef GB_MSX2
+        unsigned char i;
+        for (i = 0; i < GB_MSX_DRIVE_COUNT; i++)
+            if (gb_msx_drive_letter(i) == (unsigned char)cfgbuf[p]) return i;
+#else
         if (cfgbuf[p] == 'A') return GB_DRIVE_A;
         if (cfgbuf[p] == 'B') return GB_DRIVE_B;
         if (cfgbuf[p] == 'C') return GB_DRIVE_C;
+#endif
     }
     return fallback;
 }
@@ -390,11 +408,17 @@ static void enumerate_media_drive(const char *ext, unsigned char drive)
 
 static void enumerate_media(const char *ext)
 {
+#ifdef GB_MSX2
+    unsigned char i;
+    nstem = 0;
+    for (i = 0; i < GB_MSX_DRIVE_COUNT; i++) enumerate_media_drive(ext, i);
+#else
     unsigned char mask = gb_drives();
     nstem = 0;
     if (mask & GB_DRV_A) enumerate_media_drive(ext, GB_DRIVE_A);
     if (mask & GB_DRV_B) enumerate_media_drive(ext, GB_DRIVE_B);
     if (mask & GB_DRV_C) enumerate_media_drive(ext, GB_DRIVE_C);
+#endif
 }
 
 /* ---- drawing ----------------------------------------------------------------- */

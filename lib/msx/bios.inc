@@ -10,6 +10,9 @@
 ; --- MSX-DOS 2 (BDOS entry + function numbers used) ------------------------
 BDOS            equ   #0005        ; jp into the DOS kernel dispatcher
 _TERM0          equ   #00          ; program terminate (CP/M style)
+_SELDSK         equ   #0E          ; select current drive: E=0 for A:, etc.
+_LOGIN          equ   #18          ; assigned drive bit vector in HL
+_CURDRV         equ   #19          ; current drive: L=0 for A:, etc.
 _ALLOC          equ   #1B          ; get allocation info (free space)
 _FFIRST         equ   #40          ; find first entry -> FIB at IX
 _FNEXT          equ   #41          ; find next entry (FIB from _FFIRST)
@@ -23,6 +26,8 @@ _DELETE         equ   #4D          ; delete: DE=ASCIIZ
 _GETCD          equ   #59          ; get current directory: B=drive DE=64B buf
 _CHDIR          equ   #5A          ; change current directory: DE=ASCIIZ
 _DOSVER         equ   #6F          ; get DOS version: B=kernel major
+_GDRVR          equ   #78          ; Nextor: driver information -> 64-byte buffer
+_GDLI           equ   #79          ; Nextor: drive-letter information -> 64-byte buffer
 
 FIB_NAME        equ   1            ; FIB offsets: +1..13 ASCIIZ filename
 FIB_ATTR        equ   14           ;              +14 attributes byte

@@ -600,10 +600,12 @@ unsigned char gb_drag_start(const char *name);
  * Trash drop handler (#62). */
 unsigned char gb_file_delete(const char *name);
 
-/* gb_drives: probe the drives GEOBENCH can reach. Returns a bitmask (#65):
+/* gb_drives: probe the drives GEOBENCH can reach. CPC/PCW return a bitmask (#65):
  *   GB_DRV_A (floppy A), GB_DRV_B (floppy B), GB_DRV_C (Disk C, the hard volume).
  *   GB_DRV_C_SD: Disk C is an Albireo SD/USB card (vs IDE), set with GB_DRV_C so
  *   the desktop can show a different icon (#104).
+ * On MSX the first three bits instead identify populated GEOBENCH display slots;
+ * use GB_MSX_DRIVE_MAP/TYPE below for each slot's DOS letter and media class.
  * Floppy probing spins the drive motor, so call at boot and on demand. */
 #define GB_DRV_A    0x01
 #define GB_DRV_B    0x02
@@ -611,9 +613,10 @@ unsigned char gb_file_delete(const char *name);
 #define GB_DRV_C_SD 0x08
 unsigned char gb_drives(void);
 
-/* Multi-drive (#65). gb_set_drive selects which drive subsequent FS calls target
- * (0 = IDE / Disk C, 1 = floppy A, 2 = floppy B); gb_get_drive returns the current
- * one. A File Manager window reads gb_get_drive at startup (the drive the desktop
+/* Multi-drive (#65). On CPC/PCW, gb_set_drive selects 0 = IDE / Disk C,
+ * 1 = floppy A, or 2 = floppy B. On MSX it selects one of the three mapped slots.
+ * gb_get_drive returns the current slot. A File Manager window reads it at startup
+ * (the drive the desktop
  * opened it on) and re-asserts gb_set_drive before its FS ops, so each window
  * browses its own drive. */
 #define GB_DRIVE_C 0
@@ -621,6 +624,26 @@ unsigned char gb_drives(void);
 #define GB_DRIVE_B 2
 void gb_set_drive(unsigned char d);
 unsigned char gb_get_drive(void);
+
+/* On MSX the three GEOBENCH drive numbers above are display slots, not fixed
+ * DOS letters. Slot 0 is the volume GBMSX was launched from; remaining slots
+ * are assigned DOS drives in letter order. Nextor metadata supplies the media
+ * class independently of the assigned letter, so an SD Mapper volume keeps its
+ * SD-card icon whether DOS calls it A:, C:, or another letter. */
+#define gb_boot_drive (*(volatile unsigned char *)0x1336)
+#ifdef GB_MSX2
+#define GB_MSX_DRIVE_MAP   ((volatile unsigned char *)0xC022)
+#define GB_MSX_DRIVE_TYPE  ((volatile unsigned char *)0xC025)
+#define GB_MSX_DRIVE_COUNT (*(volatile unsigned char *)0xC028)
+#define GB_MSX_BOOT_DOS    (*(volatile unsigned char *)0xC029)
+#define GB_MSX_MEDIA_FLOPPY 0
+#define GB_MSX_MEDIA_SD     1
+#define GB_MSX_MEDIA_IDE    2
+#define GB_MSX_MEDIA_OTHER  3
+#define GB_MSX_MEDIA_RAM    4
+#define gb_msx_drive_letter(d) ((unsigned char)('A' + GB_MSX_DRIVE_MAP[(d)]))
+#define gb_msx_drive_media(d)  (GB_MSX_DRIVE_TYPE[(d)])
+#endif
 
 /* Cross-drive copy (#65 phase 3; orchestration moved app-side in #74). On a
  * GB_MSG_DROP, the File Manager copies the dragged file (name = gb_dragname)

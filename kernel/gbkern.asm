@@ -1807,8 +1807,7 @@ k_fssave
 ; (#104). Probing a floppy spins the motor + recalibrates (slow) - call on demand.
 k_drive_poll
                 ifdef PLATFORM_MSX
-                ld    a,%00001100                  ; #287: Disk C present + SD-card icon;
-                ret                                ;  DOS drive letters come later (M2+)
+                jp    fsmx_drive_poll              ; actual DOS letters/media map
                 else
                 ifdef PLATFORM_PCW
                 jp    fspc_probe_b                 ; #331: floppy A + a probed floppy B

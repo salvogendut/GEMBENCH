@@ -171,19 +171,32 @@ static void output_error(const char *what, const char *path)
 
 static unsigned char drive_letter(unsigned char drive)
 {
+#ifdef GB_MSX2
+    return gb_msx_drive_letter(drive);
+#else
     if (drive == GB_DRIVE_A) return 'A';
     if (drive == GB_DRIVE_B) return 'B';
     return 'C';
+#endif
 }
 
 static unsigned char drive_from_letter(unsigned char c, unsigned char *drive)
 {
     c = upper(c);
+#ifdef GB_MSX2
+    {
+        unsigned char i;
+        for (i = 0; i < GB_MSX_DRIVE_COUNT; i++)
+            if (gb_msx_drive_letter(i) == c) { *drive = i; return 1; }
+    }
+    return 0;
+#else
     if (c == 'A') *drive = GB_DRIVE_A;
     else if (c == 'B') *drive = GB_DRIVE_B;
     else if (c == 'C') *drive = GB_DRIVE_C;
     else return 0;
     return 1;
+#endif
 }
 
 static unsigned char valid_name_char(unsigned char c)
@@ -807,7 +820,11 @@ void main(void)
     for (i = 0; i < 3; i++) { CWD_AT(i)[0] = '/'; CWD_AT(i)[1] = 0; }
     gb_wm_managed(&shell_window);
     active_drive = gb_get_drive();
+#ifdef GB_MSX2
+    if (active_drive >= GB_MSX_DRIVE_COUNT) active_drive = gb_boot_drive;
+#else
     if (active_drive > GB_DRIVE_B) active_drive = GB_DRIVE_C;
+#endif
     restore_cwd();
     cmd_hist_pos = 0xFF; caret_on = 1; key_cool = 3;
     output_line("GEOBENCH Shell");

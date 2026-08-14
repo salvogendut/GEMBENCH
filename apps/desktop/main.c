@@ -27,9 +27,9 @@
 #define DRAGTH  2             /* press must move this far before it lifts (#153) */
 #define WM_OPEN_STRICT (*(volatile unsigned char *)0x123D)
 
-/* The desktop icons: drives (C = IDE, A/B = floppies) + Clock + Trash (#65). The
-   drive icons appear only when that drive is present (gb_drives poll); Clock and
-   Trash are always shown. Positions are mutable (drag updates them). */
+/* The desktop icons: three storage slots + Clock + Trash (#65). CPC/PCW retain
+   the historical C/A/B slots; MSX resolves each slot to the letter and media
+   type DOS assigned at boot. Positions are mutable (drag updates them). */
 #define N_ICONS  5
 #define IDX_C    0            /* Disk C = IDE */
 #define IDX_A    1            /* Disk A = floppy A */
@@ -39,12 +39,17 @@
 /* Settings has no desktop icon (#221): reach it from the top-bar System menu. */
 
 #define ICON_DISK_C 13        /* shared card icon for current Disk C backends */
+#define ICON_CF     16
+#define ICON_IDE    17
 #define IC_RCOL (GB_COLS - 14)  /* right icon column: 66 on the CPC, 114 on the MSX (#287) */
 #define IC_BOTY (GB_LINES - 50) /* bottom row: label clears the border (150 CPC / 162 MSX) */
 static unsigned char ic_x[N_ICONS]     = {  0,  0,  0, IC_RCOL, IC_RCOL };
 static unsigned char ic_y[N_ICONS]     = { 35, 80, 125, 35, IC_BOTY };
 static unsigned char ic_slot[N_ICONS] = { ICON_DISK_C, 0, 0, 1, 2 };  /* C, flp, flp, clock, trash */
-static const char *const ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash" };
+static const char *ic_lbl[N_ICONS] = { "Disk C","Disk A","Disk B","Clock","Trash" };
+#ifdef GB_MSX2
+static char drive_lbl[3][7] = { "Disk A", "Disk B", "Disk C" };
+#endif
 static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0 };      /* opens the file mgr */
 static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };          /* drives set by poll */
 
@@ -76,10 +81,26 @@ static unsigned char timesync_tries;         /* one visible boot sync attempt */
 static void drive_poll(void)
 {
     unsigned char d = gb_drives(), i, n = 0;
+#ifdef GB_MSX2
+    (void)d;
+    for (i = 0; i < 3; i++) {
+        unsigned char media;
+        ic_present[i] = (unsigned char)(i < GB_MSX_DRIVE_COUNT);
+        if (!ic_present[i]) continue;
+        drive_lbl[i][5] = (char)gb_msx_drive_letter(i);
+        ic_lbl[i] = drive_lbl[i];
+        media = gb_msx_drive_media(i);
+        if (media == GB_MSX_MEDIA_FLOPPY) ic_slot[i] = 0;
+        else if (media == GB_MSX_MEDIA_SD) ic_slot[i] = ICON_DISK_C;
+        else if (media == GB_MSX_MEDIA_IDE) ic_slot[i] = ICON_IDE;
+        else ic_slot[i] = ICON_CF;
+    }
+#else
     ic_present[IDX_C] = (d & GB_DRV_C) ? 1 : 0;
     ic_present[IDX_A] = (d & GB_DRV_A) ? 1 : 0;
     ic_present[IDX_B] = (d & GB_DRV_B) ? 1 : 0;
     ic_slot[IDX_C] = ICON_DISK_C;
+#endif
     for (i = 0; i < 3; i++)               /* the three drive icons are indices 0..2 */
         if (ic_present[i]) {
             ic_x[i] = 0;
@@ -153,23 +174,37 @@ static char wp_name[11];                      /* last parsed 8.3 wallpaper name 
 
 static unsigned char boot_drive(void)
 {
+#ifdef GB_MSX2
+    return gb_boot_drive;
+#else
     return (gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A;
+#endif
 }
 
 static unsigned char drive_present(unsigned char d)
 {
+#ifdef GB_MSX2
+    return (unsigned char)(d < GB_MSX_DRIVE_COUNT);
+#else
     unsigned char m = gb_drives();
     if (d == GB_DRIVE_A) return (unsigned char)((m & GB_DRV_A) != 0);
     if (d == GB_DRIVE_B) return (unsigned char)((m & GB_DRV_B) != 0);
     return (unsigned char)((m & GB_DRV_C) != 0);
+#endif
 }
 
 static unsigned char parse_drive(const char *t, unsigned int len, unsigned int *p)
 {
     if (*p + 1 < len && t[*p + 1] == ':') {
+#ifdef GB_MSX2
+        unsigned char i, letter = (unsigned char)t[*p];
+        for (i = 0; i < GB_MSX_DRIVE_COUNT; i++)
+            if (gb_msx_drive_letter(i) == letter) { *p += 2; return i; }
+#else
         if (t[*p] == 'A') { *p += 2; return GB_DRIVE_A; }
         if (t[*p] == 'B') { *p += 2; return GB_DRIVE_B; }
         if (t[*p] == 'C') { *p += 2; return GB_DRIVE_C; }
+#endif
     }
     return boot_drive();
 }
@@ -1117,7 +1152,7 @@ static void on_frame(void)
             gb_alert("Sorry, not enough RAM", "to run more apps.");
         else if (ic_drive[icon]) {                           /* browse that drive (#65): */
             select_icon(NONE);                               /* opening clears the selection (#153) */
-            gb_set_drive(icon);                              /* icon idx 0/1/2 = C/A/B   */
+            gb_set_drive(icon);                              /* icon idx 0/1/2 = drive slot */
             gb_wm_open("FILEMGR APP");
         }
         else if (icon == IDX_CLOCK) { select_icon(NONE); gb_wm_open("CLOCK   APP"); } /* clock (#72) */
