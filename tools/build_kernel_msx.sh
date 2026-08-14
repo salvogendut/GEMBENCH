@@ -104,7 +104,7 @@ APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/xroach build/msx/XROACH.RAW
 APPDEFS="-DGB_MSX2" tools/build_capp.sh apps/catclock build/msx/CATCLK.RAW
 
 # --- the shared config-parser module (platform-neutral C over low RAM) -----
-tools/build_cfgmod.sh                            # -> build/GBCFG.RAW
+APPDEFS="-DGB_MSX2" tools/build_cfgmod.sh build/msx/GBCFG.RAW
 tools/build_uimod.sh                             # -> build/GBUI.RAW (dialogs/menus)
 APPDEFS="-DGB_MSX2" tools/build_appickmod.sh build/msx/GBAPICK.RAW
 tools/build_webmod.sh build/msx/GBWEB.RAW        # Browser cache/config helper
@@ -249,7 +249,7 @@ cp build/msx/HELIX.RAW QA/MSX/GBENCH/HELIX.SAV
 cp build/msx/XROACH.RAW   QA/MSX/GBENCH/XROACH.SAV
 cp build/msx/CATCLK.RAW   QA/MSX/GBENCH/CATCLK.SAV
 cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
-cp build/GBCFG.RAW      QA/MSX/GBENCH/GBCFG.MOD
+cp build/msx/GBCFG.RAW  QA/MSX/GBENCH/GBCFG.MOD
 cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
 cp build/msx/GBAPICK.RAW QA/MSX/GBENCH/GBAPICK.MOD
 cp build/msx/GBWEB.RAW  QA/MSX/GBENCH/GBWEB.MOD

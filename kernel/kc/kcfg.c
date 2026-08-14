@@ -54,9 +54,18 @@ static void copy_val(const char *p, const char *e, char *dst, unsigned char max)
 
 static unsigned char drive_id(char c)
 {
+#ifdef GB_MSX2
+    volatile unsigned char *map = (volatile unsigned char *)0xC022;
+    unsigned char count = *(volatile unsigned char *)0xC028;
+    unsigned char i;
+    for (i = 0; i < count; ++i)
+        if ((unsigned char)('A' + map[i]) == (unsigned char)c)
+            return i;
+#else
     if (c == 'C') return 0;
     if (c == 'A') return 1;
     if (c == 'B') return 2;
+#endif
     return GB_CFG_DRIVE_NONE;
 }
 

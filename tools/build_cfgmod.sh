@@ -12,6 +12,7 @@ cd "$(dirname "$0")/.."
 OUT="${1:-build/GBCFG.RAW}"
 GB="lib/gb"
 KC="kernel/kc"
+APPDEFS="${APPDEFS:-}"
 
 SDCC="${SDCC:-sdcc}"
 BIN="$(dirname "$(command -v "$SDCC")")"
@@ -29,7 +30,8 @@ cache_key=$(printf '%s\n' \
     "build_cfgmod.v1" \
     "SDCC=$SDCC" \
     "SDAS=$SDAS" \
-    "MAKEBIN=$MAKEBIN")
+    "MAKEBIN=$MAKEBIN" \
+    "APPDEFS=$APPDEFS")
 if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
     echo "Up to date $OUT ($(stat -c%s "$OUT") bytes)"
     exit 0
@@ -38,8 +40,8 @@ fi
 "$SDAS" -o "$work/crt0.rel" "$GB/crt0.s"
 # --fomit-frame-pointer to match the app/kernel IX convention (the parser does
 # not care, but keep the toolchain flags uniform across all GEOBENCH C).
-"$SDCC" -mz80 --fomit-frame-pointer -I "$KC" -c "$KC/kcfg_mod.c" -o "$work/kcfg_mod.rel"
-"$SDCC" -mz80 --fomit-frame-pointer -I "$KC" -c "$KC/kcfg.c"     -o "$work/kcfg.rel"
+"$SDCC" -mz80 --fomit-frame-pointer $APPDEFS -I "$KC" -c "$KC/kcfg_mod.c" -o "$work/kcfg_mod.rel"
+"$SDCC" -mz80 --fomit-frame-pointer $APPDEFS -I "$KC" -c "$KC/kcfg.c"     -o "$work/kcfg.rel"
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x4000 --data-loc 0x6000 \
     "$work/crt0.rel" "$work/kcfg_mod.rel" "$work/kcfg.rel" -o "$work/mod.ihx"
 "$MAKEBIN" -p "$work/mod.ihx" "$work/mod.bin"

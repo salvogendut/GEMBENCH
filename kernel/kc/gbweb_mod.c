@@ -171,8 +171,8 @@ static void cfg_proxy(void)
 
 static unsigned char save_cfg(void)
 {
-    unsigned char i, d = gb_drives();
-    gb_set_drive((d & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A);
+    unsigned char i;
+    gb_set_drive(gb_boot_drive);
     for (i = 0; i < 4; i++) gb_back();
     gb_set_name("GEOBENCHCFG");
     return gb_fs_save((char *)0x1000, *(volatile unsigned int *)0x1200);

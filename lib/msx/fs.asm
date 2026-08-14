@@ -12,7 +12,9 @@
 ; Directory enumeration maps _FFIRST/_FNEXT FIBs into fs_ent_* (the FIB
 ; carries name/attr/size straight from the FAT entry). Loads open a handle,
 ; read up to fs_load_max, and probe one extra byte to detect too-big files.
-; M1 scope: read-only (save/delete/free are M2 - they return NC for now).
+; GEOBENCH keeps three window slots, but each slot maps to the actual DOS drive
+; number discovered at startup. Nextor's _GDLI/_GDRVR metadata classifies each
+; slot independently of its letter; plain MSX-DOS 2 falls back to _LOGIN.
 ;
 ; Notes:
 ;  - BDOS may be entered with a mapped app segment in page 1: switching only
@@ -27,17 +29,360 @@
 
 FS_ATTR_DIRS    equ   #10          ; _FFIRST search attributes: include directories
 
-; fs_init: single-drive model for M1 - the DOS current drive is the world.
+FSMX_MEDIA_FLOPPY equ 0
+FSMX_MEDIA_SD     equ 1
+FSMX_MEDIA_IDE    equ 2
+FSMX_MEDIA_OTHER  equ 3
+FSMX_MEDIA_RAM    equ 4
+
+; fs_init: capture the real DOS boot drive and populate the three GEOBENCH drive
+; slots. The boot drive is always slot 0; remaining assigned letters follow in
+; alphabetical order. This keeps the system volume reachable even on a machine
+; with more drive letters than the desktop can display.
 fs_init
+                ld    a,(MSX_TPASEG)          ; fs_init precedes msx_mem_init: seed the
+                ld    (bank_cur),a             ; page shadow before any BDOS restore
+                xor   a
+                ld    (FS_XFLAGS),a
+                ei
+                push  ix
+                ld    c,_CURDRV
+                call  BDOS
+                pop   ix
+                ld    a,l                     ; DOS/Nextor return the drive in L
+                ld    (MSX_BOOT_DOS),a
+                call  fsmx_scan_drives
                 xor   a
                 ld    (fs_boot_drive),a
                 ld    (fs_cur_drive),a
-                ld    (FS_XFLAGS),a           ; chunked-copy flags start clear (normal loads/saves)
                 ret
 
-; fs_set_drive: A = drive. Recorded only (drive letters arrive with M2+).
+; fs_set_drive: A = GEOBENCH slot. Resolve it to the DOS drive number, make that
+; drive current through _SELDSK, and update fs_cur_drive only on success.
+; Nextor's CP/M-compatible _SELDSK return value is not consistent with the
+; MSX-DOS 2 error-code convention (some kernels return the drive count in A),
+; so verify the result through _CURDRV instead of testing A.
 fs_set_drive
+                ld    (fsmx_target_slot),a
+                ld    b,a
+                ld    a,(MSX_DRIVE_COUNT)
+                cp    b
+                ret   z
+                ret   c
+                ld    hl,MSX_DRIVE_MAP
+                ld    e,b
+                ld    d,0
+                add   hl,de
+                ld    e,(hl)
+                ld    a,e
+                ld    (fsmx_target_dos),a
+                ei
+                push  ix
+                ld    c,_SELDSK
+                call  BDOS
+                ld    c,_CURDRV
+                call  BDOS
+                pop   ix
+                ld    a,(fsmx_target_dos)
+                cp    l
+                call  fsmx_restore_page
+                ret   nz
+                ld    a,(fsmx_target_slot)
                 ld    (fs_cur_drive),a
+                ret
+
+; fsmx_drive_poll: translate the populated slot count to the historical mask
+; layout (slot 0=GB_DRV_C, slot 1=GB_DRV_A, slot 2=GB_DRV_B). On MSX these are
+; slot bits only; letters and media types live in MSX_DRIVE_MAP/TYPE.
+fsmx_drive_poll
+                ld    a,(MSX_DRIVE_COUNT)
+                or    a
+                ret   z
+                ld    b,a
+                ld    a,%00000100
+                dec   b
+                ret   z
+                or    %00000001
+                dec   b
+                ret   z
+                or    %00000010
+                ret
+
+; Discover the DOS drive assignments once, while the kernel is starting. Nextor
+; supplies both the actual letter assignment and the owning driver. If _GDLI is
+; unavailable (plain MSX-DOS 2), _LOGIN still gives us the assigned letters.
+fsmx_scan_drives
+                xor   a
+                ld    (MSX_DRIVE_COUNT),a
+                ld    hl,MSX_DRIVE_MAP
+                ld    de,MSX_DRIVE_MAP+1
+                ld    bc,5
+                ld    (hl),#FF
+                ldir
+
+                ld    a,(MSX_BOOT_DOS)        ; preserve the launch volume as slot 0
+                call  fsmx_probe_nextor
+                xor   a
+                ld    (fsmx_scan_drive),a
+fsmx_scan_next
+                ld    a,(MSX_DRIVE_COUNT)
+                cp    3
+                ret   nc
+                ld    a,(fsmx_scan_drive)
+                cp    8
+                jr    nc,fsmx_scan_next_done
+                call  fsmx_probe_nextor
+                ld    a,(fsmx_scan_drive)
+                inc   a
+                ld    (fsmx_scan_drive),a
+                jr    fsmx_scan_next
+fsmx_scan_next_done
+                ld    a,(MSX_DRIVE_COUNT)
+                or    a
+                ret   nz
+
+                ; No _GDLI result: use the standard MSX-DOS assigned-drive map.
+                ei
+                push  ix
+                ld    c,_LOGIN
+                call  BDOS
+                pop   ix
+                ld    (fsmx_login),hl
+                ld    a,(MSX_BOOT_DOS)
+                call  fsmx_append_fallback
+                xor   a
+                ld    (fsmx_scan_drive),a
+fsmx_scan_login
+                ld    a,(MSX_DRIVE_COUNT)
+                cp    3
+                ret   nc
+                ld    a,(fsmx_scan_drive)
+                cp    8
+                ret   nc
+                ld    b,a
+                ld    hl,(fsmx_login)
+                inc   b
+fsmx_login_shift
+                srl   h
+                rr    l
+                djnz  fsmx_login_shift
+                jr    nc,fsmx_scan_login_next
+                ld    a,(fsmx_scan_drive)
+                call  fsmx_append_fallback
+fsmx_scan_login_next
+                ld    a,(fsmx_scan_drive)
+                inc   a
+                ld    (fsmx_scan_drive),a
+                jr    fsmx_scan_login
+
+; Probe one actual DOS drive with Nextor. The drive-letter block identifies the
+; owning driver; its printable name distinguishes common SD and IDE drivers.
+; Legacy MSX-DOS drivers have flags=0 and no name, and are treated as floppies.
+fsmx_probe_nextor
+                ld    (fsmx_probe_drive),a
+                ld    hl,fsmx_fib
+                ld    de,fsmx_fib+1
+                ld    bc,63
+                xor   a
+                ld    (hl),a
+                ldir
+                ld    a,(fsmx_probe_drive)
+                ld    hl,fsmx_fib
+                ei
+                push  ix
+                ld    c,_GDLI
+                call  BDOS
+                pop   ix
+                or    a
+                ret   nz
+                ld    a,(fsmx_fib)
+                cp    4
+                jp    z,fsmx_probe_ram
+                cp    1
+                ret   nz
+
+                ; _GDLI reports assigned letters even when an SD slot or floppy
+                ; has no mounted medium. Only expose drives whose filesystem is
+                ; currently accessible; otherwise every controller slot becomes
+                ; a misleading desktop icon and opening it can block on I/O.
+                call  fsmx_drive_accessible
+                ret   nz
+
+                ld    a,FSMX_MEDIA_OTHER      ; retain a useful fallback if this
+                ld    (fsmx_probe_hint),a     ; legacy driver rejects _GDRVR
+                ld    a,(fsmx_fib+3)          ; relative drive, FF=device-based
+                inc   a
+                jr    z,fsmx_probe_driver
+                ld    a,FSMX_MEDIA_FLOPPY
+                ld    (fsmx_probe_hint),a
+fsmx_probe_driver
+                ld    a,(fsmx_fib+1)
+                ld    d,a
+                ld    a,(fsmx_fib+2)
+                ld    e,a
+                xor   a
+                ld    hl,fsmx_fib
+                ei
+                push  ix
+                ld    c,_GDRVR
+                call  BDOS
+                pop   ix
+                or    a
+                jr    nz,fsmx_probe_hint_append
+
+                ; Search the 32-byte, space-padded driver name case-insensitively.
+                ld    hl,fsmx_fib+8
+                ld    b,31
+fsmx_find_sd
+                ld    a,(hl)
+                and   #DF
+                cp    'S'
+                jr    nz,fsmx_find_sd_next
+                inc   hl
+                ld    a,(hl)
+                dec   hl
+                and   #DF
+                cp    'D'
+                jr    z,fsmx_probe_sd
+fsmx_find_sd_next
+                inc   hl
+                djnz  fsmx_find_sd
+
+                ld    hl,fsmx_fib+8
+                ld    b,30
+fsmx_find_ide
+                ld    a,(hl)
+                and   #DF
+                cp    'I'
+                jr    nz,fsmx_find_ide_next
+                inc   hl
+                ld    a,(hl)
+                and   #DF
+                cp    'D'
+                jr    nz,fsmx_find_ide_back
+                inc   hl
+                ld    a,(hl)
+                and   #DF
+                cp    'E'
+                jr    z,fsmx_probe_ide
+                dec   hl
+fsmx_find_ide_back
+                dec   hl
+fsmx_find_ide_next
+                inc   hl
+                djnz  fsmx_find_ide
+
+                ld    a,(fsmx_fib+4)          ; device-based but unknown storage
+                and   1
+                jr    nz,fsmx_probe_other
+                ld    e,FSMX_MEDIA_FLOPPY     ; legacy/drive-based media
+                jr    fsmx_probe_append
+fsmx_probe_sd
+                ld    e,FSMX_MEDIA_SD
+                jr    fsmx_probe_append
+fsmx_probe_ide
+                ld    e,FSMX_MEDIA_IDE
+                jr    fsmx_probe_append
+fsmx_probe_other
+                ld    e,FSMX_MEDIA_OTHER
+                jr    fsmx_probe_append
+fsmx_probe_hint_append
+                ld    a,(fsmx_probe_hint)
+                ld    e,a
+                jr    fsmx_probe_append
+fsmx_probe_ram
+                ld    e,FSMX_MEDIA_RAM
+fsmx_probe_append
+                ld    a,(fsmx_probe_drive)
+                jr    fsmx_append_drive
+
+; Return Z only when Nextor can query the drive's filesystem. Empty removable
+; units raise a DOS disk error instead of returning it normally, so install a
+; short-lived handler which aborts that one BDOS call back to this probe.
+fsmx_drive_accessible
+                ld    de,fsmx_abort_exit
+                ld    c,_DEFAB
+                push  ix
+                call  BDOS
+                pop   ix
+                ld    de,fsmx_disk_error
+                ld    c,_DEFER
+                push  ix
+                call  BDOS
+                pop   ix
+
+                ld    a,(fsmx_probe_drive)
+                inc   a                       ; _DSPACE: 1=A:, 2=B:, ...
+                ld    e,a
+                xor   a                       ; query free space
+                ld    c,_DSPACE
+                push  ix
+                call  BDOS
+                pop   ix
+                ld    (fsmx_probe_error),a
+
+                ld    de,0                    ; restore the process defaults
+                ld    c,_DEFER
+                push  ix
+                call  BDOS
+                pop   ix
+                ld    de,0
+                ld    c,_DEFAB
+                push  ix
+                call  BDOS
+                pop   ix
+                call  fsmx_restore_page
+                ld    a,(fsmx_probe_error)
+                or    a
+                ret
+fsmx_disk_error
+                ld    a,1                     ; abort this disk operation
+                ret
+fsmx_abort_exit
+                pop   hl                      ; resume after the interrupted BDOS call
+                ret
+
+; Plain MSX-DOS has no driver metadata. A:/B: are conventional floppy letters;
+; later letters are retained as generic storage rather than guessed as SD/IDE.
+fsmx_append_fallback
+                ld    e,FSMX_MEDIA_FLOPPY
+                cp    2
+                jr    c,fsmx_append_drive
+                ld    e,FSMX_MEDIA_OTHER
+
+; Append A=actual DOS drive, E=media type unless already present/full.
+fsmx_append_drive
+                ld    (fsmx_probe_drive),a
+                ld    a,e
+                ld    (fsmx_probe_type),a
+                ld    a,(MSX_DRIVE_COUNT)
+                cp    3
+                ret   nc
+                ld    b,a
+                ld    hl,MSX_DRIVE_MAP
+fsmx_append_check
+                ld    a,b
+                or    a
+                jr    z,fsmx_append_store
+                ld    a,(fsmx_probe_drive)
+                cp    (hl)
+                ret   z
+                inc   hl
+                dec   b
+                jr    fsmx_append_check
+fsmx_append_store
+                ld    a,(fsmx_probe_drive)
+                ld    (hl),a
+                ld    hl,MSX_DRIVE_TYPE
+                ld    a,(MSX_DRIVE_COUNT)
+                ld    e,a
+                ld    d,0
+                add   hl,de
+                ld    a,(fsmx_probe_type)
+                ld    (hl),a
+                ld    a,(MSX_DRIVE_COUNT)
+                inc   a
+                ld    (MSX_DRIVE_COUNT),a
                 ret
 
 ; fs_sys_resolve: nothing to pre-resolve - fs_sysdir_enter chdirs per call.
@@ -266,16 +611,30 @@ fsload_miss
                 or    a
                 ret
 
-; fs_load_cur_sys / fs_load_sys: system-dir load, CPC semantics. One drive on
-; M1, so both are enter -> load -> leave.
+; fs_load_cur_sys: load from /GBENCH on the current DOS drive.
 fs_load_cur_sys
-fs_load_sys
                 call  fs_sysdir_enter
                 call  fs_load_file
                 push  af
                 call  fs_sysdir_leave
                 pop   af
                 ret
+
+; fs_load_sys: try /GBENCH on the boot drive first, restore the browse drive,
+; then fall back to its current directory. This is the same contract used by
+; CPC/PCW and lets an app on drive B use modules from the system disk.
+fs_load_sys
+                ld    a,(fs_cur_drive)
+                ld    (fls_browse),a
+                ld    a,(fs_boot_drive)
+                call  fs_set_drive
+                call  fs_load_cur_sys
+                push  af
+                ld    a,(fls_browse)
+                call  fs_set_drive
+                pop   af
+                ret   c
+                jp    fs_load_file
 
 ; --- write ops ----------------------------------------------------------------
 ; fs_save_file: write fs_save_len bytes from (fs_save_src) to fs_req_name in
@@ -476,6 +835,14 @@ fsmx_star       db    "*.*",0                 ; "*" alone matches only ext-less 
 fsmx_sysdir     db    92,"GBENCH",0           ; "\GBENCH" (the staged system folder)
 fsmx_root       db    92,0                    ; "\" (root)
 fsmx_dotdot     db    "..",0
+fsmx_target_slot db   0
+fsmx_target_dos db    0
+fsmx_probe_drive db   0
+fsmx_probe_type db    0
+fsmx_probe_hint db    0
+fsmx_probe_error db   0
+fsmx_scan_drive db    0
+fsmx_login      dw    0
 fsmx_handle     db    0
 fsmx_probe      db    0
 fsmx_dst        dw    0

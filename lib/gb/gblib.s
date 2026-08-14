@@ -526,13 +526,14 @@ _gb_file_delete:
         inc     a
         ret
 
-;; unsigned char gb_drives(void);  probe drives -> bitmask in A:
-;;   bit0 = floppy A, bit1 = floppy B, bit2 = IDE (Disk C)
+;; unsigned char gb_drives(void);  probe drives -> bitmask in A.
+;; On MSX the bits denote up to three mapped display slots; actual DOS letters
+;; and media classes are exposed by GB_MSX_DRIVE_MAP/TYPE in gb.h.
 _gb_drives:
         jp      0x807E          ; GB_DRIVES (returns the mask in A)
 
-;; void gb_set_drive(unsigned char d);  d in A -> select the active drive
-;;   (0 = IDE/Disk C, 1 = floppy A, 2 = floppy B)
+;; void gb_set_drive(unsigned char d);  d in A -> select the active drive.
+;; On MSX d is a mapped display slot, resolved to its actual DOS drive by the kernel.
 _gb_set_drive:
         jp      0x8081          ; GB_SETDRIVE
 

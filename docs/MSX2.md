@@ -117,6 +117,26 @@ The system floppy also carries openMSXnet's guest TSR under the MIT License.
 Its notice is stored in [`licenses/OPENMSXNET.md`](licenses/OPENMSXNET.md) and
 copied as `UNAPI.TXT`.
 
+## DOS drive letters and media icons
+
+GEOBENCH does not assign fixed meanings to A:, B:, or C: on MSX. At startup it
+reads the drive letters assigned by MSX-DOS/Nextor, keeps the launch volume as
+the first desktop drive, and exposes up to two additional mounted, accessible
+volumes in letter order. Under Nextor, empty SD slots and floppy units without
+readable media are omitted. The desktop label, File Manager title, Shell path,
+Settings media picker, and save destinations all use those actual DOS letters.
+
+Under Nextor, GEOBENCH also asks which driver owns each letter. The driver name
+and type select the desktop icon independently of the letter: SD Mapper volumes
+use the SD-card icon, Sunrise IDE volumes use the IDE icon, and legacy drive-based
+DOS devices use the floppy icon. Unknown device-based drivers use the generic
+storage icon. Plain MSX-DOS 2 falls back to its assigned-drive vector; A:/B: are
+treated as floppies and later letters as generic storage.
+
+The current desktop and per-drive state have three slots, so only three accessible
+DOS volumes are shown. The mapping is captured when GEOBENCH starts; restart it
+after changing a Nextor drive assignment or inserting/removing media.
+
 ## Browser and Telnet networking
 
 The MSX Browser and Telnet apps discover a standard **TCP/IP UNAPI**
