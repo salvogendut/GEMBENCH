@@ -24,11 +24,13 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   Nextor `QA/GBMSX.IMG`, plus the two 720K images under `QA/MSX/Floppies/`.
   The dependency fetcher supplies a local openMSXnet
   `UNAPINET.COM`, which is staged before `GBMSX.COM`; `MSX_UNAPI_TSR` overrides
-  it, and an explicitly empty value omits it. The TSR remains untracked.
+  it, and an explicitly empty value omits it. Loose staging remains untracked;
+  the released system floppy embeds the MIT-licensed TSR and notice.
 - **`build_msx_floppy.sh`** — builds `GEOBENCH.DSK` with the full system and
   `EXTRAS.DSK` with the picture gallery. The disks use standard 720K FAT12
   geometry and, as shipped with `NEXTOR.SYS`, require a Nextor kernel ROM
-  supplied by the MSX.
+  supplied by the MSX. The system disk starts `UNAPINET.COM` before GEOBENCH so
+  its network apps can use the matching openMSXnet emulator extension.
 - **`run_msx.sh`** — launches the MSX2 image in native or Flatpak openMSX.
   It adds openMSXnet's `unapinet` extension by default when using its custom
   emulator build and automatically selects a bundle in

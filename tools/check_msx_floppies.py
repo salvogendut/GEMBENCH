@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import struct
 import subprocess
@@ -13,7 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "QA/MSX/Floppies/GEOBENCH.DSK"
 EXTRAS = ROOT / "QA/MSX/Floppies/EXTRAS.DSK"
 BOOT = ROOT / "assets/msx/MSXDOS2.BIN"
-LICENSE = ROOT / "docs/licenses/NEXTOR.md"
+NEXTOR_LICENSE = ROOT / "docs/licenses/NEXTOR.md"
+UNAPI_LICENSE = ROOT / "docs/licenses/OPENMSXNET.md"
+UNAPINET_SHA256 = (
+    "86e7bb27d1f020e235929a6806f5f2dc"
+    "8188c458119041c4017afd93a3c13227"
+)
 
 
 def fail(message: str) -> None:
@@ -83,7 +89,7 @@ def main() -> None:
     for command in ("mdir", "mtype"):
         if not shutil.which(command):
             fail(f"missing {command}; install mtools")
-    for path in (MAIN, EXTRAS, BOOT, LICENSE):
+    for path in (MAIN, EXTRAS, BOOT, NEXTOR_LICENSE, UNAPI_LICENSE):
         if not path.is_file():
             fail(f"missing {path.relative_to(ROOT)}")
 
@@ -96,6 +102,8 @@ def main() -> None:
         "NEXTOR.SYS",
         "COMMAND2.COM",
         "NEXTOR.TXT",
+        "UNAPINET.COM",
+        "UNAPI.TXT",
         "AUTOEXEC.BAT",
         "GBMSX.COM",
         "GBMSX6.COM",
@@ -126,12 +134,22 @@ def main() -> None:
         if actual != expected:
             fail(f"{MAIN.relative_to(ROOT)}: {directory} file set is stale")
 
-    if payload(MAIN, "/NEXTOR.TXT") != LICENSE.read_bytes():
+    if payload(MAIN, "/NEXTOR.TXT") != NEXTOR_LICENSE.read_bytes():
         fail(f"{MAIN.relative_to(ROOT)}: Nextor notice differs from source")
+    if payload(MAIN, "/UNAPI.TXT") != UNAPI_LICENSE.read_bytes():
+        fail(f"{MAIN.relative_to(ROOT)}: openMSXnet notice differs from source")
+    if payload(MAIN, "/AUTOEXEC.BAT") != b"UNAPINET\r\nGBMSX\r\n":
+        fail(f"{MAIN.relative_to(ROOT)}: AUTOEXEC must start UNAPINET before GBMSX")
+    unapinet = payload(MAIN, "/UNAPINET.COM")
+    if hashlib.sha256(unapinet).hexdigest() != UNAPINET_SHA256:
+        fail(f"{MAIN.relative_to(ROOT)}: unexpected UNAPINET.COM release")
     for name in ("NEXTOR.SYS", "COMMAND2.COM"):
         dependency = ROOT / f"QA/MSXDEPS/{name}"
         if dependency.is_file() and payload(MAIN, f"/{name}") != dependency.read_bytes():
             fail(f"{MAIN.relative_to(ROOT)}: {name} differs from fetched dependency")
+    dependency = ROOT / "QA/MSXDEPS/UNAPINET.COM"
+    if dependency.is_file() and unapinet != dependency.read_bytes():
+        fail(f"{MAIN.relative_to(ROOT)}: UNAPINET.COM differs from fetched dependency")
 
     pictures = {
         path.name.upper(): path.read_bytes()

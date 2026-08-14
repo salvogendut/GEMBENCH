@@ -15,8 +15,22 @@ OUT="${2:-QA/MSX/Floppies}"
 DEPS="${MSX_DEPS:-QA/MSXDEPS}"
 BOOT_SECTOR="assets/msx/MSXDOS2.BIN"
 NEXTOR_LICENSE="docs/licenses/NEXTOR.md"
+UNAPI_LICENSE="docs/licenses/OPENMSXNET.md"
 MAIN="$OUT/GEOBENCH.DSK"
 EXTRAS="$OUT/EXTRAS.DSK"
+
+# Prefer an explicit override, including an empty one for a deliberately
+# network-free local disk. Clean release staging does not contain ignored
+# binaries, so fall back to the fetched dependency directory.
+if [ "${MSX_UNAPI_TSR+x}" = x ]; then
+    UNAPI_TSR="$MSX_UNAPI_TSR"
+elif [ -s "$SRC/UNAPINET.COM" ]; then
+    UNAPI_TSR="$SRC/UNAPINET.COM"
+elif [ -s "$DEPS/UNAPINET.COM" ]; then
+    UNAPI_TSR="$DEPS/UNAPINET.COM"
+else
+    UNAPI_TSR=
+fi
 
 for tool in mkfs.fat mcopy mdir dd; do
     command -v "$tool" >/dev/null || {
@@ -57,9 +71,13 @@ make_disk() { # image label
 }
 
 copy_root_files() {
-    local image="$1" path
+    local image="$1" path name
     for path in "$SRC"/*; do
         [ -f "$path" ] || continue
+        name="$(basename "$path")"
+        case "$name" in
+            AUTOEXEC.BAT|UNAPINET.COM|UNAPI.TXT) continue ;;
+        esac
         mcopy -o -i "$image" "$path" ::/
     done
 }
@@ -69,13 +87,33 @@ mcopy -i "$MAIN" "$DEPS/NEXTOR.SYS" ::NEXTOR.SYS
 mcopy -i "$MAIN" "$DEPS/COMMAND2.COM" ::COMMAND2.COM
 mcopy -i "$MAIN" "$NEXTOR_LICENSE" ::NEXTOR.TXT
 copy_root_files "$MAIN"
+AUTOEXEC="$(mktemp)"
+trap 'rm -f "$AUTOEXEC"' EXIT
+if [ -n "$UNAPI_TSR" ]; then
+    [ -s "$UNAPI_TSR" ] || {
+        echo "ERROR: MSX_UNAPI_TSR not found: $UNAPI_TSR" >&2
+        exit 1
+    }
+    [ -s "$UNAPI_LICENSE" ] || {
+        echo "ERROR: missing $UNAPI_LICENSE" >&2
+        exit 1
+    }
+    mcopy -i "$MAIN" "$UNAPI_TSR" ::UNAPINET.COM
+    mcopy -i "$MAIN" "$UNAPI_LICENSE" ::UNAPI.TXT
+    printf 'UNAPINET\r\nGBMSX\r\n' > "$AUTOEXEC"
+    NETWORK_STATUS="TCP/IP UNAPI enabled"
+else
+    printf 'GBMSX\r\n' > "$AUTOEXEC"
+    NETWORK_STATUS="network disabled"
+fi
+mcopy -i "$MAIN" "$AUTOEXEC" ::AUTOEXEC.BAT
 mcopy -s -i "$MAIN" "$SRC/GBENCH" ::/
 mcopy -s -i "$MAIN" "$SRC/DIAG" ::/
 
 make_disk "$EXTRAS" GBEXTRAS
 mcopy -s -i "$EXTRAS" "$SRC/PICS" ::/
 
-echo "Built $MAIN (Nextor boot + complete GEOBENCH system)"
+echo "Built $MAIN (Nextor boot + complete GEOBENCH system; $NETWORK_STATUS)"
 echo "Built $EXTRAS (picture gallery)"
 mdir -i "$MAIN" :: | tail -n 2
 mdir -i "$EXTRAS" :: | tail -n 2
