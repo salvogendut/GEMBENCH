@@ -93,7 +93,8 @@ MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 The build creates two standard 720K FAT12 images in `QA/MSX/Floppies/`:
 
 - `GEOBENCH.DSK` boots to GEOBENCH and contains the complete system and
-  diagnostics. It includes `UNAPINET.COM` and starts it before GEOBENCH.
+  diagnostics. It includes `UNAPINET.COM`, starts it before GEOBENCH, and keeps
+  `PICS/LOGO.PIC` on the system disk for the default wallpaper.
 - `EXTRAS.DSK` contains the `PICS/` gallery. Mount it as drive B when available,
   or swap it into drive A after the desktop has booted.
 

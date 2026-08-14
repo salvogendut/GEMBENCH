@@ -96,8 +96,10 @@ hardware, or use the disk images in an emulator.
   [the MSX2 networking guide](docs/MSX2.md#browser-and-telnet-networking).
 - For floppy systems, boot **[`QA/MSX/Floppies/GEOBENCH.DSK`](QA/MSX/Floppies/GEOBENCH.DSK)**
   from a 720K drive and mount **`EXTRAS.DSK`** in drive B, or swap it into a
-  single drive after boot. As shipped, the disk requires a Nextor kernel ROM;
-  it supplies the redistributable Nextor system files, not an IDE requirement.
+  single drive after boot. The system disk includes `PICS/LOGO.PIC`, so the
+  default wallpaper does not depend on the extras disk. As shipped, the disk
+  requires a Nextor kernel ROM; it supplies the redistributable Nextor system
+  files, not an IDE requirement.
   The system disk also starts openMSXnet's `UNAPINET.COM` before GEOBENCH, so
   Browser and Telnet work when the matching openMSX `unapinet` extension is
   enabled.
