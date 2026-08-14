@@ -604,7 +604,7 @@ unsigned char gb_file_delete(const char *name);
  *   GB_DRV_A (floppy A), GB_DRV_B (floppy B), GB_DRV_C (Disk C, the hard volume).
  *   GB_DRV_C_SD: Disk C is an Albireo SD/USB card (vs IDE), set with GB_DRV_C so
  *   the desktop can show a different icon (#104).
- * On MSX the first three bits instead identify populated GEOBENCH display slots;
+ * On MSX the first three bits instead identify accessible GEOBENCH display slots;
  * use GB_MSX_DRIVE_MAP/TYPE below for each slot's DOS letter and media class.
  * Floppy probing spins the drive motor, so call at boot and on demand. */
 #define GB_DRV_A    0x01
@@ -626,8 +626,8 @@ void gb_set_drive(unsigned char d);
 unsigned char gb_get_drive(void);
 
 /* On MSX the three GEOBENCH drive numbers above are display slots, not fixed
- * DOS letters. Slot 0 is the volume GBMSX was launched from; remaining slots
- * are assigned DOS drives in letter order. Nextor metadata supplies the media
+ * DOS letters. Slot 0 is the volume GBMSX was launched from; remaining mounted
+ * DOS drives follow in letter order. Nextor metadata supplies the media
  * class independently of the assigned letter, so an SD Mapper volume keeps its
  * SD-card icon whether DOS calls it A:, C:, or another letter. */
 #define gb_boot_drive (*(volatile unsigned char *)0x1336)

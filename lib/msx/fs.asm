@@ -40,6 +40,8 @@ FSMX_MEDIA_RAM    equ 4
 ; alphabetical order. This keeps the system volume reachable even on a machine
 ; with more drive letters than the desktop can display.
 fs_init
+                ld    a,(MSX_TPASEG)          ; fs_init precedes msx_mem_init: seed the
+                ld    (bank_cur),a             ; page shadow before any BDOS restore
                 xor   a
                 ld    (FS_XFLAGS),a
                 ei
@@ -57,6 +59,9 @@ fs_init
 
 ; fs_set_drive: A = GEOBENCH slot. Resolve it to the DOS drive number, make that
 ; drive current through _SELDSK, and update fs_cur_drive only on success.
+; Nextor's CP/M-compatible _SELDSK return value is not consistent with the
+; MSX-DOS 2 error-code convention (some kernels return the drive count in A),
+; so verify the result through _CURDRV instead of testing A.
 fs_set_drive
                 ld    (fsmx_target_slot),a
                 ld    b,a
@@ -69,13 +74,18 @@ fs_set_drive
                 ld    d,0
                 add   hl,de
                 ld    e,(hl)
+                ld    a,e
+                ld    (fsmx_target_dos),a
                 ei
                 push  ix
                 ld    c,_SELDSK
                 call  BDOS
+                ld    c,_CURDRV
+                call  BDOS
                 pop   ix
+                ld    a,(fsmx_target_dos)
+                cp    l
                 call  fsmx_restore_page
-                or    a
                 ret   nz
                 ld    a,(fsmx_target_slot)
                 ld    (fs_cur_drive),a
@@ -191,6 +201,13 @@ fsmx_probe_nextor
                 cp    1
                 ret   nz
 
+                ; _GDLI reports assigned letters even when an SD slot or floppy
+                ; has no mounted medium. Only expose drives whose filesystem is
+                ; currently accessible; otherwise every controller slot becomes
+                ; a misleading desktop icon and opening it can block on I/O.
+                call  fsmx_drive_accessible
+                ret   nz
+
                 ld    a,FSMX_MEDIA_OTHER      ; retain a useful fallback if this
                 ld    (fsmx_probe_hint),a     ; legacy driver rejects _GDRVR
                 ld    a,(fsmx_fib+3)          ; relative drive, FF=device-based
@@ -278,6 +295,52 @@ fsmx_probe_ram
 fsmx_probe_append
                 ld    a,(fsmx_probe_drive)
                 jr    fsmx_append_drive
+
+; Return Z only when Nextor can query the drive's filesystem. Empty removable
+; units raise a DOS disk error instead of returning it normally, so install a
+; short-lived handler which aborts that one BDOS call back to this probe.
+fsmx_drive_accessible
+                ld    de,fsmx_abort_exit
+                ld    c,_DEFAB
+                push  ix
+                call  BDOS
+                pop   ix
+                ld    de,fsmx_disk_error
+                ld    c,_DEFER
+                push  ix
+                call  BDOS
+                pop   ix
+
+                ld    a,(fsmx_probe_drive)
+                inc   a                       ; _DSPACE: 1=A:, 2=B:, ...
+                ld    e,a
+                xor   a                       ; query free space
+                ld    c,_DSPACE
+                push  ix
+                call  BDOS
+                pop   ix
+                ld    (fsmx_probe_error),a
+
+                ld    de,0                    ; restore the process defaults
+                ld    c,_DEFER
+                push  ix
+                call  BDOS
+                pop   ix
+                ld    de,0
+                ld    c,_DEFAB
+                push  ix
+                call  BDOS
+                pop   ix
+                call  fsmx_restore_page
+                ld    a,(fsmx_probe_error)
+                or    a
+                ret
+fsmx_disk_error
+                ld    a,1                     ; abort this disk operation
+                ret
+fsmx_abort_exit
+                pop   hl                      ; resume after the interrupted BDOS call
+                ret
 
 ; Plain MSX-DOS has no driver metadata. A:/B: are conventional floppy letters;
 ; later letters are retained as generic storage rather than guessed as SD/IDE.
@@ -773,9 +836,11 @@ fsmx_sysdir     db    92,"GBENCH",0           ; "\GBENCH" (the staged system fol
 fsmx_root       db    92,0                    ; "\" (root)
 fsmx_dotdot     db    "..",0
 fsmx_target_slot db   0
+fsmx_target_dos db    0
 fsmx_probe_drive db   0
 fsmx_probe_type db    0
 fsmx_probe_hint db    0
+fsmx_probe_error db   0
 fsmx_scan_drive db    0
 fsmx_login      dw    0
 fsmx_handle     db    0

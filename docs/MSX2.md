@@ -121,9 +121,10 @@ copied as `UNAPI.TXT`.
 
 GEOBENCH does not assign fixed meanings to A:, B:, or C: on MSX. At startup it
 reads the drive letters assigned by MSX-DOS/Nextor, keeps the launch volume as
-the first desktop drive, and exposes up to two additional assigned volumes in
-letter order. The desktop label, File Manager title, Shell path, Settings media
-picker, and save destinations all use those actual DOS letters.
+the first desktop drive, and exposes up to two additional mounted, accessible
+volumes in letter order. Under Nextor, empty SD slots and floppy units without
+readable media are omitted. The desktop label, File Manager title, Shell path,
+Settings media picker, and save destinations all use those actual DOS letters.
 
 Under Nextor, GEOBENCH also asks which driver owns each letter. The driver name
 and type select the desktop icon independently of the letter: SD Mapper volumes
@@ -132,9 +133,9 @@ DOS devices use the floppy icon. Unknown device-based drivers use the generic
 storage icon. Plain MSX-DOS 2 falls back to its assigned-drive vector; A:/B: are
 treated as floppies and later letters as generic storage.
 
-The current desktop and per-drive state have three slots, so only three assigned
+The current desktop and per-drive state have three slots, so only three accessible
 DOS volumes are shown. The mapping is captured when GEOBENCH starts; restart it
-after changing a Nextor drive assignment.
+after changing a Nextor drive assignment or inserting/removing media.
 
 ## Browser and Telnet networking
 

@@ -25,7 +25,10 @@ _SEEK           equ   #4A          ; seek: B=handle A=method(0=start,2=end) DE:H
 _DELETE         equ   #4D          ; delete: DE=ASCIIZ
 _GETCD          equ   #59          ; get current directory: B=drive DE=64B buf
 _CHDIR          equ   #5A          ; change current directory: DE=ASCIIZ
+_DEFAB          equ   #63          ; define abort-exit routine: DE=address/0
+_DEFER          equ   #64          ; define disk-error routine: DE=address/0
 _DOSVER         equ   #6F          ; get DOS version: B=kernel major
+_DSPACE         equ   #76          ; Nextor: drive space, E=0/default or 1=A, 2=B...
 _GDRVR          equ   #78          ; Nextor: driver information -> 64-byte buffer
 _GDLI           equ   #79          ; Nextor: drive-letter information -> 64-byte buffer
 
