@@ -26,6 +26,7 @@ RASM="$RASM" bash tools/build_titlebarmod.sh
 # fetch_msx_deps.sh supplies the standard local guest driver. An explicitly
 # set MSX_UNAPI_TSR overrides it; setting the variable to empty deliberately
 # produces a network-free image. The binary stays in ignored paths.
+UNAPI_LICENSE=docs/licenses/OPENMSXNET.md
 if [ "${MSX_UNAPI_TSR+x}" = x ]; then
     UNAPI_TSR="$MSX_UNAPI_TSR"
 elif [ -s QA/MSXDEPS/UNAPINET.COM ]; then
@@ -187,10 +188,12 @@ mkdir -p QA/MSX/PICS QA/MSX/DIAG
 rm -f QA/MSX/GBSPIKE.COM                 # pre-DIAG staging location (#379)
 cp build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM QA/MSX/
 rm -f QA/MSX/DIAG/FORMREF.APP             # MSX app loading resolves through /GBENCH
-rm -f QA/MSX/UNAPINET.COM
+rm -f QA/MSX/UNAPINET.COM QA/MSX/UNAPI.TXT
 if [ -n "$UNAPI_TSR" ]; then
     [ -s "$UNAPI_TSR" ] || { echo "ERROR: MSX_UNAPI_TSR not found: $UNAPI_TSR" >&2; exit 1; }
+    [ -s "$UNAPI_LICENSE" ] || { echo "ERROR: missing $UNAPI_LICENSE" >&2; exit 1; }
     cp "$UNAPI_TSR" QA/MSX/UNAPINET.COM
+    cp "$UNAPI_LICENSE" QA/MSX/UNAPI.TXT
     printf 'UNAPINET\r\nGBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
 else
     printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT

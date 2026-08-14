@@ -138,10 +138,10 @@ the `unapinet` extension by default and automatically uses a bundle installed at
 explicit `OPENMSX` variables shown above. If the bundle needs libraries absent
 from the host (notably Tcl 8.6 on current Fedora), the launcher automatically
 uses `my-distrobox`; `MSX_DISTROBOX` overrides its name. Set `MSX_UNAPI=0` for a
-non-networked run. The third-party TSR and generated image are never committed;
-see
-[The MSX2 target](MSX2.md#browser-and-telnet-networking) for current UNAPI
-implementation coverage.
+non-networked run. The standalone staged TSR and generated card image remain
+ignored, while the released system floppy embeds the MIT-licensed TSR and its
+`UNAPI.TXT` notice. See [The MSX2 target](MSX2.md#browser-and-telnet-networking)
+for current UNAPI implementation coverage.
 
 `build_kernel_msx.sh` produces:
 
@@ -156,7 +156,7 @@ implementation coverage.
   boots it straight to the desktop.
 - **`QA/MSX/Floppies/GEOBENCH.DSK`** — the bootable 720K FAT12 system floppy,
   with the selectors, complete `GBENCH/` and `DIAG/` trees, `NEXTOR.SYS`,
-  `COMMAND2.COM`, and the Nextor distribution notice.
+  `COMMAND2.COM`, `UNAPINET.COM`, and both third-party distribution notices.
 - **`QA/MSX/Floppies/EXTRAS.DSK`** — the second 720K floppy containing the
   complete `PICS/` gallery.
 
@@ -195,13 +195,20 @@ total. Run `make msx-floppies` to rebuild only these images and
 `python3 tools/check_msx_floppies.py` to validate their geometry and contents.
 
 The system disk includes the open-source `NEXTOR.SYS`, `COMMAND2.COM`, and the
-required Nextor notice. It intentionally does **not** include proprietary
+required Nextor notice. It also includes openMSXnet's MIT-licensed
+`UNAPINET.COM`, starts it before `GBMSX`, and carries its license as
+`UNAPI.TXT`. It intentionally does **not** include proprietary
 `MSXDOS2.SYS`. As shipped, the disk must therefore find a **Nextor kernel ROM**
 in built-in firmware or a cartridge. A Sunrise IDE Nextor cartridge is one such
 provider, but the floppy continues to use the machine's normal FDC; IDE storage
 is not required by the disk format or by GEOBENCH. GEOBENCH itself also runs on
 MSX-DOS 2, but users of a DOS2 kernel must supply their own licensed
 `MSXDOS2.SYS` instead of the included `NEXTOR.SYS`.
+
+The floppy builder obtains `UNAPINET.COM` from the staged tree or
+`QA/MSXDEPS/`, so clean release staging retains networking. An explicitly empty
+`MSX_UNAPI_TSR=` still produces a network-free local disk; the committed release
+validator requires the network-enabled form.
 
 For openMSX:
 

@@ -93,7 +93,7 @@ MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 The build creates two standard 720K FAT12 images in `QA/MSX/Floppies/`:
 
 - `GEOBENCH.DSK` boots to GEOBENCH and contains the complete system and
-  diagnostics.
+  diagnostics. It includes `UNAPINET.COM` and starts it before GEOBENCH.
 - `EXTRAS.DSK` contains the `PICS/` gallery. Mount it as drive B when available,
   or swap it into drive A after the desktop has booted.
 
@@ -111,6 +111,10 @@ The Nextor components are distributable for non-commercial use when their
 copyright and permission notice is included. The exact notice is stored in
 [`licenses/NEXTOR.md`](licenses/NEXTOR.md) and copied to the system floppy as
 `NEXTOR.TXT`. Proprietary `MSXDOS2.SYS` is not included.
+
+The system floppy also carries openMSXnet's guest TSR under the MIT License.
+Its notice is stored in [`licenses/OPENMSXNET.md`](licenses/OPENMSXNET.md) and
+copied as `UNAPI.TXT`.
 
 ## Browser and Telnet networking
 
@@ -151,9 +155,11 @@ host-side sockets. `run_msx.sh` enables that extension by default; use
 `QA/MSXDEPS/openmsxnet/` is selected automatically; `OPENMSXNET_HOME` selects a
 different location. When its libraries are not available on the host, the
 launcher runs it through `my-distrobox` (override with `MSX_DISTROBOX`). The
-third-party executable and generated image remain untracked; a source checkout
-without fetched dependencies still contains neither component. On an existing
-Nextor installation, copy `UNAPINET.COM` to the boot drive and run it before
-`GBMSX.COM`; another compatible mapped-RAM or page-3 TCP/IP UNAPI implementation
-may be used instead. Browser and Telnet report a network-initialisation error
-when discovery fails. Browser currently supports plain HTTP only.
+standalone fetched executable and generated card image remain untracked. The
+released `GEOBENCH.DSK`, however, embeds the v0.9.7 guest TSR and its MIT notice
+so floppy networking is ready when the host-side extension is enabled. On an
+existing Nextor installation, copy `UNAPINET.COM` to the boot drive and run it
+before `GBMSX.COM`; another compatible mapped-RAM or page-3 TCP/IP UNAPI
+implementation may be used instead. Browser and Telnet report a
+network-initialisation error when discovery fails. Browser currently supports
+plain HTTP only.

@@ -98,6 +98,9 @@ hardware, or use the disk images in an emulator.
   from a 720K drive and mount **`EXTRAS.DSK`** in drive B, or swap it into a
   single drive after boot. As shipped, the disk requires a Nextor kernel ROM;
   it supplies the redistributable Nextor system files, not an IDE requirement.
+  The system disk also starts openMSXnet's `UNAPINET.COM` before GEOBENCH, so
+  Browser and Telnet work when the matching openMSX `unapinet` extension is
+  enabled.
   See [the MSX2 deployment guide](docs/MSX2.md#floppy-distribution).
 
 ### Amstrad PCW
@@ -170,4 +173,6 @@ canvases, drawers/folders, and configuration panels for more screensavers. See t
 
 BSD 3-Clause License. See [`LICENSE`](LICENSE). The MSX floppy distribution
 also carries Nextor components under their upstream non-commercial distribution
-terms; see [`docs/licenses/NEXTOR.md`](docs/licenses/NEXTOR.md).
+terms; see [`docs/licenses/NEXTOR.md`](docs/licenses/NEXTOR.md). Its openMSXnet
+guest driver is distributed under the MIT License; see
+[`docs/licenses/OPENMSXNET.md`](docs/licenses/OPENMSXNET.md).
