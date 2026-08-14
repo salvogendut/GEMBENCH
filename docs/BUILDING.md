@@ -156,7 +156,8 @@ for current UNAPI implementation coverage.
   boots it straight to the desktop.
 - **`QA/MSX/Floppies/GEOBENCH.DSK`** — the bootable 720K FAT12 system floppy,
   with the selectors, complete `GBENCH/` and `DIAG/` trees, `NEXTOR.SYS`,
-  `COMMAND2.COM`, `UNAPINET.COM`, and both third-party distribution notices.
+  `COMMAND2.COM`, `UNAPINET.COM`, both third-party distribution notices, and
+  `PICS/LOGO.PIC` so the default wallpaper is available without the extras disk.
 - **`QA/MSX/Floppies/EXTRAS.DSK`** — the second 720K floppy containing the
   complete `PICS/` gallery.
 

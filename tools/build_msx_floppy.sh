@@ -3,8 +3,9 @@
 #
 # GEOBENCH.DSK is bootable on a machine with a Nextor kernel ROM. It
 # carries NEXTOR.SYS, COMMAND2.COM, the mode loaders, and the complete GBENCH
-# system directory. EXTRAS.DSK carries the picture gallery. Keeping PICS on the
-# second disk avoids FAT12 cluster overhead overflowing the boot disk.
+# system directory and the boot wallpaper. EXTRAS.DSK carries the complete
+# picture gallery. Keeping the rest of PICS on the second disk avoids FAT12
+# cluster overhead overflowing the boot disk.
 #
 # Usage: tools/build_msx_floppy.sh [staging-dir] [output-dir]
 set -euo pipefail
@@ -32,7 +33,7 @@ else
     UNAPI_TSR=
 fi
 
-for tool in mkfs.fat mcopy mdir dd; do
+for tool in mkfs.fat mcopy mdir mmd dd; do
     command -v "$tool" >/dev/null || {
         echo "ERROR: missing '$tool' (install dosfstools and mtools)" >&2
         exit 1
@@ -53,6 +54,10 @@ for path in "$SRC/GBENCH" "$SRC/PICS" "$SRC/DIAG"; do
         exit 1
     }
 done
+[ -s "$SRC/PICS/LOGO.PIC" ] || {
+    echo "ERROR: $SRC/PICS/LOGO.PIC missing - run tools/build_kernel_msx.sh" >&2
+    exit 1
+}
 
 mkdir -p "$OUT"
 export MTOOLS_SKIP_CHECK=1
@@ -109,11 +114,13 @@ fi
 mcopy -i "$MAIN" "$AUTOEXEC" ::AUTOEXEC.BAT
 mcopy -s -i "$MAIN" "$SRC/GBENCH" ::/
 mcopy -s -i "$MAIN" "$SRC/DIAG" ::/
+mmd -i "$MAIN" ::/PICS
+mcopy -i "$MAIN" "$SRC/PICS/LOGO.PIC" ::/PICS/LOGO.PIC
 
 make_disk "$EXTRAS" GBEXTRAS
 mcopy -s -i "$EXTRAS" "$SRC/PICS" ::/
 
-echo "Built $MAIN (Nextor boot + complete GEOBENCH system; $NETWORK_STATUS)"
+echo "Built $MAIN (Nextor boot + complete GEOBENCH system + LOGO.PIC; $NETWORK_STATUS)"
 echo "Built $EXTRAS (picture gallery)"
 mdir -i "$MAIN" :: | tail -n 2
 mdir -i "$EXTRAS" :: | tail -n 2

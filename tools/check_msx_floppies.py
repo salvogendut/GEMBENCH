@@ -112,6 +112,7 @@ def main() -> None:
         "WELCOME.TXT",
         "GBENCH",
         "DIAG",
+        "PICS",
     }
     missing = required_root - main_files
     if missing:
@@ -133,6 +134,17 @@ def main() -> None:
         }
         if actual != expected:
             fail(f"{MAIN.relative_to(ROOT)}: {directory} file set is stale")
+
+    main_pictures = {
+        name for name in main_files if name.startswith("PICS/")
+    }
+    if main_pictures != {"PICS/LOGO.PIC"}:
+        fail(
+            f"{MAIN.relative_to(ROOT)}: system PICS must contain only LOGO.PIC"
+        )
+    logo = ROOT / "assets/pictures/LOGO.PIC"
+    if payload(MAIN, "/PICS/LOGO.PIC") != logo.read_bytes():
+        fail(f"{MAIN.relative_to(ROOT)}: PICS/LOGO.PIC differs from asset")
 
     if payload(MAIN, "/NEXTOR.TXT") != NEXTOR_LICENSE.read_bytes():
         fail(f"{MAIN.relative_to(ROOT)}: Nextor notice differs from source")
