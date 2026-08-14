@@ -102,6 +102,9 @@ hardware, or use the disk images in an emulator.
   Browser and Telnet work when the matching openMSX `unapinet` extension is
   enabled.
   See [the MSX2 deployment guide](docs/MSX2.md#floppy-distribution).
+- **Live disk** — test the MSX distribution directly in the
+  [js1983 web emulator](https://salvogendut.github.io/chimeric/js1983/?machine=nms8250&extensions=sdmapper%2Cunapi&disk=../media/MSX/GEOBENCH.DSK),
+  preconfigured with the NMS 8250, SD mapper, and UNAPI extension.
 
 ### Amstrad PCW
 
