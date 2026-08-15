@@ -207,6 +207,7 @@ static unsigned char dirty, caret_tick, caret_on, redraw_div;
 static unsigned char have_page, have_back, edit_changed;
 static unsigned char cache_full;
 static unsigned char rx_len, rx_pos, receive_paused, line_budget;
+static unsigned char proxy_pending;
 
 #ifdef GB_PCW
 static unsigned char read_down_key(void) __naked
@@ -1011,11 +1012,10 @@ static void run_menu(void)
         } else if (have_page) save_source();
         else set_status("No page to save");
     } else if (action == BUI_ACT_PROXY) {
-        if (web_op(11)) {
-            if (web_op(9))
-                set_status(BUI_PROXY[0] ? "HTTP proxy enabled" : "Direct enabled");
-            else set_status("Save failed");
-        } else set_status("Invalid proxy");
+        /* GBUI has only just returned. Defer loading GBWEB until the next WM
+         * frame so the paged dialog module has fully unwound on MSX. */
+        proxy_pending = 1;
+        set_status("Saving proxy...");
     }
     BUI_IMAGE_SCAN = 1;
     dirty = 1;
@@ -1298,6 +1298,15 @@ static void handle_keys(void)
 
 static void frame_tick(void)
 {
+    unsigned char proxy_result;
+    if (proxy_pending) {
+        proxy_pending = 0;
+        proxy_result = web_op(9);
+        if (proxy_result == 1)
+            set_status(BUI_PROXY[0] ? "HTTP proxy enabled" : "Direct enabled");
+        else if (proxy_result == 2) set_status("Save failed");
+        else set_status("Invalid proxy");
+    }
     if (receive_paused & RECEIVE_PAUSE_FLUSH) {
         source_flush();
         receive_paused &= (unsigned char)~RECEIVE_PAUSE_FLUSH;
@@ -1351,6 +1360,7 @@ void main(void)
 {
     BUI_NPAGES = 0; BUI_TAIL = BUI_STAGE_LEN = 0; BUI_FLAGS = 0;
     BUI_CTRL = BUI_WANT_MENU = 0;
+    proxy_pending = 0;
     BUI_LINE_SIZE = LINE_SIZE; BUI_VIEW_ROWS = VIEW_ROWS;
     BUI_TEXT_X = TEXT_X; BUI_CONTENT_Y = CONTENT_Y; BUI_SCREEN_COLS = GB_COLS;
     copy_url(BUI_MODNAME, "GBWEB   MOD");

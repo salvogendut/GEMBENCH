@@ -379,7 +379,10 @@ void main(void)
     UI_RES = 1;
     if (UI_OP == 6) source_put();
     else if (UI_OP == 7) source_free();
-    else if (UI_OP == 9) { cfg_proxy(); UI_RES = save_cfg(); }
+    else if (UI_OP == 9) {
+        if (!parse_proxy()) UI_RES = 0;
+        else { cfg_proxy(); UI_RES = save_cfg() ? 1 : 2; }
+    }
     else if (UI_OP == 10) local_read();
     else if (UI_OP == 11) UI_RES = parse_proxy();
     else if (UI_OP == 12) load_proxy();
