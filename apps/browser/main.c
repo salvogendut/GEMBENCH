@@ -8,7 +8,7 @@
 #define URL_MAX        95
 #define HOST_MAX       63
 #define PATH_MAX       95
-#define REQUEST_MAX   240
+#define REQUEST_MAX   255
 #define HEADER_MAX    111
 /* Increase request length for explicit headers; keep parser headers compact. */
 #ifdef GB_PCW
@@ -82,6 +82,9 @@
 #define APP_BUSY      ((volatile unsigned char *)0x1440)
 #define PIC_PAGE_K    (*(volatile unsigned char *)0x130B)
 #define PIC_PAGE2_K   (*(volatile unsigned char *)0x1348)
+#ifdef GB_MSX2
+#define MSX_SCRMOD    (*(volatile unsigned char *)0xFCAF)
+#endif
 #define FS_SAVE_LEN_K (*(volatile unsigned int  *)0x14FD)
 #define FS_LOAD_OFS   ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS     (*(volatile unsigned char *)0x144F)
@@ -138,6 +141,10 @@
 #define BUI_SCREEN_COLS (*(volatile unsigned char *)0x3AC6)
 #define BUI_IMAGE_SCAN  (*(volatile unsigned char *)0x3AC7)
 #define BUI_REQ_TEXT     ((char *)0x3AC8)
+#define BUI_IMAGE_PAGE (*(volatile unsigned char *)0x3ADC)
+#define BUI_IMAGE_MODE (*(volatile unsigned char *)0x3ADD)
+#define BUI_IMAGE_STRIDE (*(volatile unsigned char *)0x3ADE)
+#define BUI_SCREEN_MODE (*(volatile unsigned char *)0x3ADF)
 #define BUI_FORM_VALUE_MAX 47
 #define BUI_SOURCE_FULL 0x01
 #define BUI_CAPTURE_ALL 0x01
@@ -175,7 +182,7 @@ __endasm;
 
 /* GBNET transfers at most 1024 bytes through #2200. The common transient area
  * above it is also free on PCW, whose direct PerryNet frame remains at #2200. */
-#define request     ((char *)0x3300)          /* 241 bytes */
+#define request     ((char *)0x3300)          /* 256 bytes */
 #define header_line ((char *)0x3400)          /* 112 bytes */
 #define netbuf      ((unsigned char *)0x3470) /* 128 bytes */
 #define link_url    ((char *)0x34F0)          /* 48 bytes */
@@ -334,6 +341,7 @@ static void reset_resources(void)
     BUI_IMAGE_WB = BUI_IMAGE_H = 0;
     BUI_IMAGE_READY = BUI_IMAGE_REQUEST = 0;
     BUI_IMAGE_SCAN = 0;
+    BUI_IMAGE_MODE = BUI_IMAGE_STRIDE = 0;
 }
 
 static unsigned char web_op(unsigned char op)
@@ -777,6 +785,9 @@ static void headers_complete(void)
     }
     set_status(BUI_IMAGE_REQUEST ? "Receiving image..." : "Receiving page...");
     if (BUI_IMAGE_REQUEST && gb_http_have_length &&
+#ifdef GB_MSX2
+        !BUI_IMAGE_PAGE &&
+#endif
         gb_http_content_length > IMAGE_SLOT_SIZE) {
         fail_page("Image too large"); return;
     }
@@ -1374,12 +1385,7 @@ static void browser_proc(void)
         case GB_MSG_CLOSE:
             if (socket_open) tr_close();
             (void)web_op(7);
-            if (cache_page) {
-                PIC_PAGE_K = cache_page;
-                PIC_PAGE2_K = 0;
-                gb_pic_close();
-                cache_page = 0;
-            }
+            (void)web_op(16);
             gb_wm_close();
             break;
         case GB_MSG_DRAG: break;
@@ -1394,6 +1400,7 @@ void main(void)
 {
     BUI_NPAGES = 0; BUI_TAIL = BUI_STAGE_LEN = 0; BUI_FLAGS = 0;
     BUI_CTRL = BUI_WANT_MENU = 0;
+    BUI_IMAGE_PAGE = BUI_SCREEN_MODE = 0;
 #ifndef GB_PCW
     deferred_ops = 0;
 #endif
@@ -1406,6 +1413,12 @@ void main(void)
     url_len = title_len = 0;
     hist_start = hist_count = view_top = pending_len = cache_full = 0;
     cache_page = alloc_cache_page();
+#ifdef GB_MSX2
+    /* Screen 7 can consume the proxy's denser mode-7 payload, but only when a
+     * dedicated page is available for the full 160x96 image. */
+    UI_N = MSX_SCRMOD;
+    (void)web_op(17);
+#endif
     reset_resources();
     status_text = cache_page ? "" : "Limited page cache";
     editing = dirty = 1;

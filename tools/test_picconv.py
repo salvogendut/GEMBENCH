@@ -39,6 +39,10 @@ def main() -> None:
         assert data4[14:] == bytes([0x53])
         assert data16[14:] == bytes([0x01, 0xEF])
 
+        max16 = Path(tmp) / "MAX16.PIC"
+        picconv.save_pic(max16, [[0] * 160 for _ in range(96)], 160, 96, 16)
+        assert max16.stat().st_size == 14 + (160 // 2) * 96 == 7694
+
         try:
             picconv.save_pic(out16, [[0] * 516], 516, 1, 16)
         except ValueError:

@@ -107,14 +107,19 @@ backdrop, dragging icons, opening apps and menus:
   latest seven lines. Link labels stand out
   as underlined rows and open when clicked, and Back retains one previous URL;
   the visible image is fetched lazily into one bounded GBPC v2 slot (up to
-  160x96 pixels) and replaced as the user scrolls. CSS, JavaScript, POST forms,
+  160x96 pixels) and replaced as the user scrolls. On MSX2 Screen 7, successful
+  reservation of one additional app-pool page adds `X-GBPC: 7,1` to every page
+  and image request, allowing a proxy to return a sixteen-colour mode-7 image.
+  Screen 6, CPC, PCW, and low-memory Screen-7 sessions omit the header and keep
+  the portable four-colour mode-1 path. CSS, JavaScript, POST forms,
   general image decoding and HTTPS are not implemented; a configured proxy can
   convert ordinary web images to GBPC. The File menu
   loads and saves offline `.HTM` source files; Save As always produces an 8.3
   `.HTM` name. Settings configures an optional HTTP proxy and writes `PROXY=` in
   `GEOBENCH.CFG`; Direct clears it. Source capture uses up to three available
-  borrowed pages (48 KiB) while reserving a page for the save worker, and the
-  proxy itself must use plain HTTP.
+  borrowed pages (48 KiB) while reserving a page for the save worker. An active
+  Screen-7 image page reduces source capture to two pages (32 KiB) so that same
+  save-worker reserve remains available. The proxy itself must use plain HTTP.
 - **Telnet** — an ANSI/VT100 terminal with Telnet negotiation. CPC uses
   Net4CPC/M4, MSX2 uses TCP/IP UNAPI, and PCW offers PerryNet TCP or raw serial.
   The MSX2 terminal is a 78x22 window in either configured video mode; CPC additionally offers its
