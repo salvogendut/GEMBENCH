@@ -53,18 +53,13 @@
 #define TEXT_X         5
 #define SCROLL_X       1
 #define SCROLL_W       3
-#ifdef GB_PCW
-#define TEXT_COLS     55
-#else
+/* The resident text renderer accepts at most 48 characters. Wider PCW rows
+ * were silently truncated while Browser still advanced through all 55 bytes,
+ * leaving stray characters at the right edge. */
 #define TEXT_COLS     48
-#endif
 #define LINE_SIZE     (TEXT_COLS + 1)
 #define VIEW_ROWS     ((GB_LINES - CONTENT_Y - 2) / 8)
-#ifdef GB_PCW
-#define CACHE_LINES   182
-#else
 #define CACHE_LINES   208
-#endif
 #define FALLBACK_LINES 7
 #define CACHE_DATA_END 0x27D0
 #define IMAGE_SLOT_OFS 0x30F2
@@ -207,7 +202,9 @@ static unsigned char dirty, caret_tick, caret_on, redraw_div;
 static unsigned char have_page, have_back, edit_changed;
 static unsigned char cache_full;
 static unsigned char rx_len, rx_pos, receive_paused, line_budget;
+#ifndef GB_PCW
 static unsigned char proxy_pending;
+#endif
 
 #ifdef GB_PCW
 static unsigned char read_down_key(void) __naked
@@ -489,7 +486,10 @@ static void output_break(unsigned char kind)
         return;
     }
     if (pending_len) add_line();
-    else if (kind == 2 && hist_count && history_line((unsigned char)(hist_count - 1))[0]) add_line();
+    /* gb_html suppresses repeated block breaks. Do not inspect the previous
+     * cached row here: history_line() stages through netbuf, which may still
+     * contain unconsumed bytes from the current transport chunk. */
+    else if (kind == 2 && hist_count) add_line();
 }
 
 static void output_text(const char *s)
@@ -1012,10 +1012,21 @@ static void run_menu(void)
         } else if (have_page) save_source();
         else set_status("No page to save");
     } else if (action == BUI_ACT_PROXY) {
+#ifdef GB_PCW
+        /* PCW has no room for a deferred worker in this nearly-full app page.
+         * GBWEB op 9 validates and saves atomically, and PCW safely used this
+         * immediate module path before the MSX-specific deferral was added. */
+        action = web_op(9);
+        if (action == 1)
+            set_status(BUI_PROXY[0] ? "HTTP proxy enabled" : "Direct enabled");
+        else if (action == 2) set_status("Save failed");
+        else set_status("Invalid proxy");
+#else
         /* GBUI has only just returned. Defer loading GBWEB until the next WM
          * frame so the paged dialog module has fully unwound on MSX. */
         proxy_pending = 1;
         set_status("Saving proxy...");
+#endif
     }
     BUI_IMAGE_SCAN = 1;
     dirty = 1;
@@ -1298,6 +1309,7 @@ static void handle_keys(void)
 
 static void frame_tick(void)
 {
+#ifndef GB_PCW
     unsigned char proxy_result;
     if (proxy_pending) {
         proxy_pending = 0;
@@ -1307,6 +1319,7 @@ static void frame_tick(void)
         else if (proxy_result == 2) set_status("Save failed");
         else set_status("Invalid proxy");
     }
+#endif
     if (receive_paused & RECEIVE_PAUSE_FLUSH) {
         source_flush();
         receive_paused &= (unsigned char)~RECEIVE_PAUSE_FLUSH;
@@ -1360,7 +1373,9 @@ void main(void)
 {
     BUI_NPAGES = 0; BUI_TAIL = BUI_STAGE_LEN = 0; BUI_FLAGS = 0;
     BUI_CTRL = BUI_WANT_MENU = 0;
+#ifndef GB_PCW
     proxy_pending = 0;
+#endif
     BUI_LINE_SIZE = LINE_SIZE; BUI_VIEW_ROWS = VIEW_ROWS;
     BUI_TEXT_X = TEXT_X; BUI_CONTENT_Y = CONTENT_Y; BUI_SCREEN_COLS = GB_COLS;
     copy_url(BUI_MODNAME, "GBWEB   MOD");

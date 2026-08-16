@@ -96,7 +96,7 @@ backdrop, dragging icons, opening apps and menus:
   through the shared HTTP parser, and streams HTML through a bounded text renderer
   instead of keeping a DOM. Text, headings, lists, compact GET forms, link labels,
   and inline-image records are cached in one borrowed 16K page: up to 208
-  fixed-width rows on CPC/MSX2 or 182 on PCW. Link destinations are retained separately
+  fixed-width rows. Link destinations are retained separately
   from their visible labels, so proxy transport URLs are not printed in the page.
   Browser renders the first viewport, pauses the open TCP stream, and
   resumes from the exact retained byte only when the user scrolls downward;
