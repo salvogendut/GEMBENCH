@@ -184,3 +184,12 @@ before `GBMSX.COM`; another compatible mapped-RAM or page-3 TCP/IP UNAPI
 implementation may be used instead. Browser and Telnet report a
 network-initialisation error when discovery fails. Browser currently supports
 plain HTTP only.
+
+When Browser starts under Screen 7, it reads the live BIOS `SCRMOD` work-area
+byte and tries to reserve a second app-pool page in addition to its normal
+history/cache page. If both checks succeed, every page and inline-image request
+includes `X-GBPC: 7,1`: mode 7 is preferred and portable mode 1 remains an
+accepted fallback. The mode-7 image occupies the dedicated page and may be up
+to 160x96 pixels (7,694 bytes including its GBPC header). Screen 6 and a
+low-memory Screen-7 session omit the capability header and retain the existing
+four-colour image path. The dedicated page is returned when Browser closes.

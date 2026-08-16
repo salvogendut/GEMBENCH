@@ -129,8 +129,10 @@ hardware, or use the disk images in an emulator.
 
 The optional [GB-proxy](https://github.com/salvogendut/GB-proxy) companion makes
 modern HTTPS pages practical for the CPC, MSX2, and PCW Browser. It simplifies HTML,
-shortens destination URLs, and converts web images into bounded four-colour
-GBPC pictures:
+shortens destination URLs, and converts web images into bounded GBPC pictures.
+The MSX2 Browser advertises sixteen-colour mode-7 support when GEOBENCH is
+running in Screen 7 and can reserve the extra image page; every other case
+continues to request the portable four-colour mode:
 
 ```shell
 git clone https://github.com/salvogendut/GB-proxy.git

@@ -26,6 +26,9 @@
 #define BUI_TEXT_X      (*(volatile unsigned char *)0x3AC4)
 #define BUI_CONTENT_Y   (*(volatile unsigned char *)0x3AC5)
 #define BUI_SCREEN_COLS (*(volatile unsigned char *)0x3AC6)
+#define BUI_IMAGE_PAGE  (*(volatile unsigned char *)0x3ADC)
+#define BUI_IMAGE_MODE  (*(volatile unsigned char *)0x3ADD)
+#define BUI_IMAGE_STRIDE (*(volatile unsigned char *)0x3ADE)
 
 #define BROWSER_LINE    ((char *)0x3300)
 #define BROWSER_LINK    ((char *)0x34F0)
@@ -49,6 +52,7 @@
 #define CACHE_DATA_END  0x27D0
 #define IMAGE_SLOT_OFS  0x30F2
 #define IMAGE_SLOT_SIZE 3854
+#define IMAGE_PAGE_SIZE 7694
 #define IMAGE_HEADER_SIZE 14
 #define IMAGE_ROWS      12
 
@@ -58,6 +62,25 @@ static unsigned char bank_read(unsigned int off, char *dst, unsigned int len)
     PIC_PAGE2_K = 0;
     gb_pic_edit_buf = (unsigned int)dst;
     gb_pic_edit_off = off;
+    FS_SAVE_LEN_K = len;
+    return gb_pic_edit(GB_PICEDIT_CHUNK);
+}
+
+static unsigned int image_base(void)
+{
+    return BUI_IMAGE_MODE == 7 ? 0 : IMAGE_SLOT_OFS;
+}
+
+static unsigned char image_bank_read(unsigned int off, char *dst,
+                                     unsigned int len)
+{
+    PIC_PAGE_K = BUI_IMAGE_MODE == 7 ? BUI_IMAGE_PAGE : BUI_CACHE_PAGE;
+    PIC_PAGE2_K = 0;
+#ifdef GB_MSX2
+    PIC_PAGE3_K = PIC_PAGE4_K = 0;
+#endif
+    gb_pic_edit_buf = (unsigned int)dst;
+    gb_pic_edit_off = image_base() + off;
     FS_SAVE_LEN_K = len;
     return gb_pic_edit(GB_PICEDIT_CHUNK);
 }
@@ -78,14 +101,24 @@ static unsigned char load_resource(unsigned int off)
 
 static unsigned char flush_image(void)
 {
-    unsigned int next;
+    unsigned int next, limit;
     if (!BUI_STAGE_LEN) return 1;
+    if (!BUI_IMAGE_MODE) {
+        BUI_IMAGE_MODE = (unsigned char)(BUI_IMAGE_PAGE && BUI_STAGE_LEN >= 6 &&
+            BUI_STAGE[0] == 'G' && BUI_STAGE[1] == 'B' &&
+            BUI_STAGE[2] == 'P' && BUI_STAGE[3] == 'C' &&
+            BUI_STAGE[4] == 2 && BUI_STAGE[5] == 7 ? 7 : 1);
+    }
     next = BUI_IMAGE_LEN + BUI_STAGE_LEN;
-    if (next > IMAGE_SLOT_SIZE) return 0;
-    PIC_PAGE_K = BUI_CACHE_PAGE;
+    limit = BUI_IMAGE_MODE == 7 ? IMAGE_PAGE_SIZE : IMAGE_SLOT_SIZE;
+    if (next > limit) return 0;
+    PIC_PAGE_K = BUI_IMAGE_MODE == 7 ? BUI_IMAGE_PAGE : BUI_CACHE_PAGE;
     PIC_PAGE2_K = 0;
+#ifdef GB_MSX2
+    PIC_PAGE3_K = PIC_PAGE4_K = 0;
+#endif
     gb_pic_edit_buf = (unsigned int)BUI_STAGE;
-    gb_pic_edit_off = IMAGE_SLOT_OFS + BUI_IMAGE_LEN;
+    gb_pic_edit_off = image_base() + BUI_IMAGE_LEN;
     FS_SAVE_LEN_K = BUI_STAGE_LEN;
     if (!gb_pic_edit(GB_PICEDIT_WRITE)) return 0;
     BUI_IMAGE_LEN = next;
@@ -96,19 +129,31 @@ static unsigned char flush_image(void)
 static unsigned char validate_image(void)
 {
     unsigned int expected = IMAGE_HEADER_SIZE;
-    unsigned char width, rows;
+    unsigned char mode, width, rows;
     if (!flush_image() || BUI_IMAGE_LEN < IMAGE_HEADER_SIZE ||
-        !bank_read(IMAGE_SLOT_OFS, BROWSER_LINE, IMAGE_HEADER_SIZE)) return 0;
+        !image_bank_read(0, BROWSER_LINE, IMAGE_HEADER_SIZE)) return 0;
     if (BROWSER_LINE[0] != 'G' || BROWSER_LINE[1] != 'B' ||
         BROWSER_LINE[2] != 'P' || BROWSER_LINE[3] != 'C' ||
-        BROWSER_LINE[4] != 2 || BROWSER_LINE[5] != 1 ||
-        BROWSER_LINE[7] || BROWSER_LINE[9]) return 0;
+        BROWSER_LINE[4] != 2 || BROWSER_LINE[7] || BROWSER_LINE[9]) return 0;
+    mode = (unsigned char)BROWSER_LINE[5];
     width = (unsigned char)BROWSER_LINE[6];
     BUI_IMAGE_H = (unsigned char)BROWSER_LINE[8];
     if (!width || width > 160 || !BUI_IMAGE_H || BUI_IMAGE_H > 96) return 0;
-    BUI_IMAGE_WB = (unsigned char)((width + 3) >> 2);
+    if (mode == 1) {
+        BUI_IMAGE_WB = (unsigned char)((width + 3) >> 2);
+        BUI_IMAGE_STRIDE = BUI_IMAGE_WB;
+    }
+#ifdef GB_MSX2
+    else if (mode == 7 && BUI_IMAGE_PAGE && BUI_IMAGE_MODE == 7 &&
+             !(width & 3)) {
+        BUI_IMAGE_WB = (unsigned char)(width >> 2);
+        BUI_IMAGE_STRIDE = (unsigned char)(width >> 1);
+    }
+#endif
+    else return 0;
     rows = BUI_IMAGE_H;
-    while (rows--) expected += BUI_IMAGE_WB;
+    while (rows--) expected += BUI_IMAGE_STRIDE;
+    if (mode == 7) return (unsigned char)(expected == BUI_IMAGE_LEN);
     return (unsigned char)(expected <= BUI_IMAGE_LEN);
 }
 
@@ -135,6 +180,7 @@ static unsigned char find_visible(void)
         BUI_IMAGE_URL = off;
         BUI_IMAGE_REL = parent;
         BUI_IMAGE_LEN = BUI_STAGE_LEN = 0;
+        BUI_IMAGE_MODE = BUI_IMAGE_STRIDE = 0;
         BUI_IMAGE_READY = 0;
         return 1;
     }
@@ -158,14 +204,14 @@ static void draw_visible(void)
     x = (unsigned char)(BUI_TEXT_X +
         (BUI_SCREEN_COLS - BUI_TEXT_X - BUI_IMAGE_WB) / 2);
     y = (unsigned char)(BUI_CONTENT_Y + (first - BUI_VIEW_TOP) * 8);
-    src = IMAGE_SLOT_OFS + IMAGE_HEADER_SIZE +
-          (unsigned int)block * BUI_IMAGE_WB;
-    PIC_PAGE_K = BUI_CACHE_PAGE;
+    src = image_base() + IMAGE_HEADER_SIZE +
+          (unsigned int)block * BUI_IMAGE_STRIDE;
+    PIC_PAGE_K = BUI_IMAGE_MODE == 7 ? BUI_IMAGE_PAGE : BUI_CACHE_PAGE;
     PIC_PAGE2_K = 0;
 #ifdef GB_MSX2
     PIC_PAGE3_K = PIC_PAGE4_K = 0;
-    PIC_MODE_K = 1;
-    PIC_STRIDE_K = BUI_IMAGE_WB;
+    PIC_MODE_K = BUI_IMAGE_MODE;
+    PIC_STRIDE_K = BUI_IMAGE_STRIDE;
 #endif
     PIC_WB_K = BUI_IMAGE_WB;
     PIC_H_K = BUI_IMAGE_H;

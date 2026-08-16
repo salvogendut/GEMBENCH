@@ -29,7 +29,10 @@
 #define BUI_FORM_ACTIVE (*(volatile unsigned char *)0x3AA8)
 #define BUI_REQ_PORT    (*(volatile unsigned int  *)0x3AAA)
 #define BUI_REQ_ERROR   (*(volatile unsigned char *)0x3AAC)
+#define BUI_CACHE_PAGE  (*(volatile unsigned char *)0x3ABF)
 #define BUI_REQ_TEXT    ((char *)0x3AC8)
+#define BUI_IMAGE_PAGE (*(volatile unsigned char *)0x3ADC)
+#define BUI_SCREEN_MODE (*(volatile unsigned char *)0x3ADF)
 #define BUI_PROXY_MAX  95
 #define BUI_SOURCE_FULL 0x01
 #define BUI_PROXY_ON   0x08
@@ -46,7 +49,7 @@
 #define BROWSER_URL_MAX 95
 #define BROWSER_HOST_MAX 63
 #define BROWSER_PATH_MAX 95
-#define BROWSER_REQUEST_MAX 240
+#define BROWSER_REQUEST_MAX 255
 #define FS_LOAD_OFS    ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS      (*(volatile unsigned char *)0x144F)
 
@@ -69,6 +72,8 @@
 #define APP_BUSY       ((volatile unsigned char *)0x1440)
 #define PIC_PAGE_K     (*(volatile unsigned char *)0x130B)
 #define PIC_PAGE2_K    (*(volatile unsigned char *)0x1348)
+#define PIC_PAGE3_K    (*(volatile unsigned char *)0x1291)
+#define PIC_PAGE4_K    (*(volatile unsigned char *)0x1292)
 #define FS_SAVE_LEN_K  (*(volatile unsigned int  *)0x14FD)
 
 static unsigned char alloc_page(void)
@@ -90,8 +95,11 @@ static void source_put(void)
     while (left) {
         if (!BUI_NPAGES || BUI_TAIL == 0x4000) {
             /* Leave one app page for BRSAVE.APP, which writes these borrowed
-             * pages without paging this helper out underneath itself. */
-            if (BUI_NPAGES >= 3 || !(page = alloc_page())) {
+             * pages without paging this helper out underneath itself. Screen
+             * 7's dedicated image page therefore reduces source capture by
+             * one page while its capability is active. */
+            if (BUI_NPAGES >= (BUI_IMAGE_PAGE ? 2 : 3) ||
+                !(page = alloc_page())) {
                 BUI_FLAGS |= BUI_SOURCE_FULL;
                 break;
             }
@@ -115,6 +123,9 @@ static void source_put(void)
 
 static void source_free(void)
 {
+    /* A nonzero image page is possible only after Browser observed Screen 7.
+     * Zero the extended picture context before each close below. */
+    if (BUI_SCREEN_MODE == 7) PIC_PAGE3_K = PIC_PAGE4_K = 0;
     while (BUI_NPAGES) {
         PIC_PAGE_K = BUI_PAGES[--BUI_NPAGES];
         PIC_PAGE2_K = 0;
@@ -309,7 +320,9 @@ static unsigned char prepare_request(void)
     if (BUI_REQ_PORT != 80 && out < limit) {
         *out++ = ':'; out = put_dec(out, BUI_REQ_PORT);
     }
-    ADD_TEXT("\r\nUser-Agent: GB/1\r\nConnection: close\r\n\r\n");
+    ADD_TEXT("\r\nUser-Agent: GB/1\r\n");
+    if (BUI_IMAGE_PAGE) ADD_TEXT("X-GBPC: 7,1\r\n");
+    ADD_TEXT("Connection: close\r\n\r\n");
     if (out >= limit) {
         BROWSER_REQUEST[BROWSER_REQUEST_MAX] = 0;
         BUI_REQ_ERROR = 7;
@@ -390,6 +403,27 @@ void main(void)
     else if (UI_OP == 14)
         UI_RES = gb_form_process(UI_N, *(const char **)UI_NAME);
     else if (UI_OP == 15) UI_RES = gb_form_build_url();
+    else if (UI_OP == 16) {
+        if (BUI_SCREEN_MODE == 7) PIC_PAGE3_K = PIC_PAGE4_K = 0;
+        if (BUI_CACHE_PAGE) {
+            PIC_PAGE_K = BUI_CACHE_PAGE;
+            PIC_PAGE2_K = 0;
+            gb_pic_close();
+            BUI_CACHE_PAGE = 0;
+        }
+        if (BUI_IMAGE_PAGE) {
+            PIC_PAGE_K = BUI_IMAGE_PAGE;
+            PIC_PAGE2_K = PIC_PAGE3_K = PIC_PAGE4_K = 0;
+            gb_pic_close();
+            BUI_IMAGE_PAGE = 0;
+        }
+        BUI_SCREEN_MODE = 0;
+    }
+    else if (UI_OP == 17) {
+        BUI_SCREEN_MODE = UI_N;
+        BUI_IMAGE_PAGE = 0;
+        if (UI_N == 7 && BUI_CACHE_PAGE) BUI_IMAGE_PAGE = alloc_page();
+    }
     else if (UI_OP == 18) UI_RES = gb_url_resolve();
     else if (UI_OP == 19) {
         UI_RES = prepare_request();
