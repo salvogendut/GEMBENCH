@@ -178,7 +178,7 @@ later PCW attempt restarts that file rather than sending Range: CP/M records
 only retain a 128-byte-granular size, so an exact resume offset cannot be
 reconstructed safely. Browser follows redirects too, parses chunked HTML bodies,
 renders text, links, compact GET forms, and image records into a borrowed 16K
-page holding up to 182 fixed-width rows. It renders one viewport, pauses the open PerryNet TCP stream,
+page holding up to 208 fixed-width rows. It renders one viewport, pauses the open PerryNet TCP stream,
 and resumes from the retained receive byte as the user scrolls down; cached lines
 remain available for upward scrolling. The proportional scrollbar shows that
 continuation is available, and reaching the line bound is reported as truncated.

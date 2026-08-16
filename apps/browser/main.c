@@ -53,18 +53,20 @@
 #define TEXT_X         5
 #define SCROLL_X       1
 #define SCROLL_W       3
-#ifdef GB_PCW
-#define TEXT_COLS     55
-#else
+/* The resident text renderer accepts at most 48 characters. Wider PCW rows
+ * were silently truncated while Browser still advanced through all 55 bytes,
+ * leaving stray characters at the right edge. */
 #define TEXT_COLS     48
-#endif
 #define LINE_SIZE     (TEXT_COLS + 1)
-#define VIEW_ROWS     ((GB_LINES - CONTENT_Y - 2) / 8)
-#ifdef GB_PCW
-#define CACHE_LINES   182
+#ifdef GB_MSX2
+/* The MSX URL field is wider than the resident text renderer's 48-character
+ * staging buffer. Keep the visible tail within that contract. */
+#define URL_VIEW_MAX  TEXT_COLS
 #else
-#define CACHE_LINES   208
+#define URL_VIEW_MAX  (((URL_FIELD_W - 4) * 2) / 3)
 #endif
+#define VIEW_ROWS     ((GB_LINES - CONTENT_Y - 2) / 8)
+#define CACHE_LINES   208
 #define FALLBACK_LINES 7
 #define CACHE_DATA_END 0x27D0
 #define IMAGE_SLOT_OFS 0x30F2
@@ -145,6 +147,8 @@
 #define BUI_SAVE_WORKER 0x10
 #define RECEIVE_PAUSE_FLOW 0x01
 #define RECEIVE_PAUSE_FLUSH 0x02
+#define DEFER_PROXY_SAVE 0x01
+#define DEFER_NET_START  0x02
 
 #define UI_OP         (*(volatile unsigned char *)0x1700)
 #define UI_N          (*(volatile unsigned char *)0x1703)
@@ -207,7 +211,9 @@ static unsigned char dirty, caret_tick, caret_on, redraw_div;
 static unsigned char have_page, have_back, edit_changed;
 static unsigned char cache_full;
 static unsigned char rx_len, rx_pos, receive_paused, line_budget;
-static unsigned char proxy_pending;
+#ifndef GB_PCW
+static unsigned char deferred_ops;
+#endif
 
 #ifdef GB_PCW
 static unsigned char read_down_key(void) __naked
@@ -489,7 +495,10 @@ static void output_break(unsigned char kind)
         return;
     }
     if (pending_len) add_line();
-    else if (kind == 2 && hist_count && history_line((unsigned char)(hist_count - 1))[0]) add_line();
+    /* gb_html suppresses repeated block breaks. Do not inspect the previous
+     * cached row here: history_line() stages through netbuf, which may still
+     * contain unconsumed bytes from the current transport chunk. */
+    else if (kind == 2 && hist_count) add_line();
 }
 
 static void output_text(const char *s)
@@ -713,7 +722,7 @@ static void fail_page(const char *s)
 {
     if (socket_open) tr_close();
     state = ST_IDLE;
-    receive_paused = 0;
+    rx_len = rx_pos = receive_paused = 0;
     if (BUI_IMAGE_REQUEST) {
         BUI_IMAGE_REQUEST = BUI_IMAGE_READY = 0;
         BUI_IMAGE_FAILED = BUI_IMAGE_URL;
@@ -825,6 +834,11 @@ static void start_page(void)
     redirect_count = 0;
     editing = caret_on = edit_changed = have_page = 0;
     state = ST_INIT;
+#ifndef GB_PCW
+    /* prepare_request() pages GBWEB. Let that module fully unwind before the
+     * CPC GBNET module or the MSX UNAPI backend starts in frame_tick(). */
+    deferred_ops |= DEFER_NET_START;
+#endif
     set_status("Network init...");
 }
 
@@ -1012,10 +1026,21 @@ static void run_menu(void)
         } else if (have_page) save_source();
         else set_status("No page to save");
     } else if (action == BUI_ACT_PROXY) {
+#ifdef GB_PCW
+        /* PCW has no room for a deferred worker in this nearly-full app page.
+         * GBWEB op 9 validates and saves atomically, and PCW safely used this
+         * immediate module path before the MSX-specific deferral was added. */
+        action = web_op(9);
+        if (action == 1)
+            set_status(BUI_PROXY[0] ? "HTTP proxy enabled" : "Direct enabled");
+        else if (action == 2) set_status("Save failed");
+        else set_status("Invalid proxy");
+#else
         /* GBUI has only just returned. Defer loading GBWEB until the next WM
          * frame so the paged dialog module has fully unwound on MSX. */
-        proxy_pending = 1;
+        deferred_ops |= DEFER_PROXY_SAVE;
         set_status("Saving proxy...");
+#endif
     }
     BUI_IMAGE_SCAN = 1;
     dirty = 1;
@@ -1023,7 +1048,7 @@ static void run_menu(void)
 
 static void make_url_view(void)
 {
-    unsigned char max = (unsigned char)(((URL_FIELD_W - 4) * 2) / 3);
+    unsigned char max = URL_VIEW_MAX;
     unsigned char start = 0, i = 0;
     if (url_len > max) start = (unsigned char)(url_len - max);
     while (url[start] && i < max) url_view[i++] = url[start++];
@@ -1237,7 +1262,9 @@ static void handle_keys(void)
         if (state != ST_IDLE) {
             if (c == 'g' || c == 'G') {
                 begin_url_edit();
-                continue;
+                /* Let transport teardown and the URL redraw unwind before
+                 * consuming characters queued behind the edit shortcut. */
+                return;
             }
             if (c == 0x1B) fail_page("Cancelled");
             else if (BUI_IMAGE_REQUEST && c == 0x10) scroll_page(0);
@@ -1298,15 +1325,17 @@ static void handle_keys(void)
 
 static void frame_tick(void)
 {
+#ifndef GB_PCW
     unsigned char proxy_result;
-    if (proxy_pending) {
-        proxy_pending = 0;
+    if (deferred_ops & DEFER_PROXY_SAVE) {
+        deferred_ops &= (unsigned char)~DEFER_PROXY_SAVE;
         proxy_result = web_op(9);
         if (proxy_result == 1)
             set_status(BUI_PROXY[0] ? "HTTP proxy enabled" : "Direct enabled");
         else if (proxy_result == 2) set_status("Save failed");
         else set_status("Invalid proxy");
     }
+#endif
     if (receive_paused & RECEIVE_PAUSE_FLUSH) {
         source_flush();
         receive_paused &= (unsigned char)~RECEIVE_PAUSE_FLUSH;
@@ -1317,6 +1346,11 @@ static void frame_tick(void)
     }
     run_menu();
     handle_keys();
+#ifndef GB_PCW
+    if (deferred_ops & DEFER_NET_START)
+        deferred_ops &= (unsigned char)~DEFER_NET_START;
+    else
+#endif
     network_tick();
     if (state == ST_IDLE && (BUI_CTRL & BUI_SAVE_PENDING)) save_source();
     if (state == ST_IDLE && !editing && !(BUI_CTRL & BUI_SAVE_PENDING))
@@ -1360,7 +1394,9 @@ void main(void)
 {
     BUI_NPAGES = 0; BUI_TAIL = BUI_STAGE_LEN = 0; BUI_FLAGS = 0;
     BUI_CTRL = BUI_WANT_MENU = 0;
-    proxy_pending = 0;
+#ifndef GB_PCW
+    deferred_ops = 0;
+#endif
     BUI_LINE_SIZE = LINE_SIZE; BUI_VIEW_ROWS = VIEW_ROWS;
     BUI_TEXT_X = TEXT_X; BUI_CONTENT_Y = CONTENT_Y; BUI_SCREEN_COLS = GB_COLS;
     copy_url(BUI_MODNAME, "GBWEB   MOD");

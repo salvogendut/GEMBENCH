@@ -60,7 +60,7 @@ APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NE
 APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/pcw/FORMREF.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/pcw/SNDTEST.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7940 DIALOGS=1 WIDGETS=1 tools/build_capp.sh apps/wget build/pcw/WGET.RAW
-APP_ICON=apps/browser/icon.asm GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" LOAD_LIMIT=0x7FF0 APPDEFS="-DGB_PCW" DATA_LOC=0x7FA4 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
+APP_ICON=apps/browser/icon.asm GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" LOAD_LIMIT=0x7F80 APPDEFS="-DGB_PCW" DATA_LOC=0x7FA4 tools/build_capp.sh apps/browser build/pcw/BROWSER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/pcw/BRSAVE.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/timesync build/pcw/TIMESYNC.RAW
 APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/pcw/SHELL.RAW
