@@ -171,7 +171,7 @@ def main() -> None:
     pcw_extras = pcw_disk(ROOT / "QA/PCW/EXTRAS.DSK")
     cpc_required = {
         "DISKUTIL.APP", "XROACH.SAV", "CATCLK.SAV", "HELIX.SAV", "FOREST.SAV",
-        "WELCOME.TXT"
+        "MOUNTAIN.SAV", "MOUNTAIN.MOD", "WELCOME.TXT"
     }
     missing = cpc_required - set(cpc_extras)
     if missing:
@@ -307,10 +307,16 @@ def main() -> None:
     configurable_saver_modules = {
         "XMATRIX.MOD", "MOUNTAIN.MOD", "STARFLD.MOD"
     }
-    if not configurable_saver_modules <= set(cpc_companion):
+    if not {"XMATRIX.MOD", "STARFLD.MOD"} <= set(cpc_companion):
         sys.exit("QA/CPC/Floppies/COMPANION.DSK: missing saver Configure module")
     if "FOREST.SAV" in cpc_companion:
         sys.exit("QA/CPC/Floppies/COMPANION.DSK: FOREST.SAV belongs on EXTRAS.DSK")
+    for path, main_files, companion_files in (
+        ("QA/CPC", cpc_main, cpc_companion),
+        ("QA/PCW", pcw_main, pcw_companion),
+    ):
+        if "GBIMG.MOD" in main_files or "GBIMG.MOD" not in companion_files:
+            sys.exit(f"{path}: GBIMG.MOD must live beside Browser on Companion")
     for path, files in (
         ("QA/CPC/Floppies/COMPANION.DSK", cpc_companion),
         ("QA/PCW/COMPANION.DSK", pcw_companion),
