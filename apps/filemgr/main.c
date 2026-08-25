@@ -58,6 +58,14 @@
 #define FS_LOAD_OFS ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
 #define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
+#ifdef GB_PREEMPTIVE
+#define COPY_IDLE      0
+#define COPY_DRAW      1
+#define COPY_TRANSFER  2
+#define COPY_DONE      3
+#define COPY_FAILED    4
+#define COPY_CANCELLED 5
+#endif
 
 /* Optional GBAP executable preamble (#426/#428). V1 has one portable icon; V2
    has a resource directory and may add a native MSX Screen-7 icon. */
@@ -97,6 +105,12 @@ static unsigned char free_known;
 static unsigned int free_kib;
 static unsigned int appicon_off;
 static unsigned char appicon_codec;
+#ifdef GB_PREEMPTIVE
+static unsigned char copy_state;
+static unsigned char copy_created;
+static unsigned char copy_ofs_hi;
+static unsigned int copy_ofs_lo;
+#endif
 
 /* Reuse the kernel's fixed 512-byte configuration text area. It already has this
    lifetime, stays visible under app paging, and leaves File Manager enough bank
@@ -859,6 +873,107 @@ static const gb_doc_t fmdoc = {          /* no document -> no File menu, just Vi
     0, 0, fm_fullscreen, fm_view_items, fm_view
 };
 
+#ifdef GB_PREEMPTIVE
+/* A copy stays on the root task because every filesystem operation is kernel-owned.
+   The kernel already captured its source context at drag start; one complete
+   read/write chunk runs per focused frame, leaving input, the clock, and compute
+   workers live between chunks. The WM raises the claimed target, and other File
+   Managers suspend storage actions until release; a chunk never leaves live data
+   in the shared transfer buffer across frames. */
+static void copy_start(void)
+{
+    copy_ofs_lo = 0;
+    copy_ofs_hi = 0;
+    copy_created = 0;
+    copy_state = COPY_DRAW;
+    title_buf[0] = 'C'; title_buf[1] = 'o'; title_buf[2] = 'p'; title_buf[3] = 'y';
+    title_buf[4] = 'i'; title_buf[5] = 'n'; title_buf[6] = 'g'; title_buf[7] = 0;
+    gb_drop_claim();
+}
+
+static void copy_remove_partial(void)
+{
+    if (!copy_created) return;
+    gb_set_drive(my_drive);
+    gb_file_delete(gb_dragname);
+}
+
+static void copy_error(void)
+{
+#ifdef GB_MSX2
+    if (gb_msx_drive_media(my_drive) == GB_MSX_MEDIA_FLOPPY) {
+#else
+    if (my_drive == GB_DRIVE_A || my_drive == GB_DRIVE_B) {
+#endif
+        gb_alert("Copy failed", "floppy write error");
+    } else {
+        gb_alert("Copy failed", "too big or disk full");
+    }
+}
+
+static void copy_finish(void)
+{
+    unsigned char result = copy_state;
+    FS_XFLAGS = 0;
+    gb_drop_release();
+    if (result != COPY_DONE) copy_remove_partial();
+    copy_created = 0;
+    copy_state = COPY_IDLE;
+    relist();
+    if (result == COPY_FAILED) copy_error();
+}
+
+static void copy_step(void)
+{
+    unsigned int got;
+
+    if (copy_state == COPY_DRAW) {
+        copy_state = COPY_TRANSFER;
+        gb_wm_damage(win_x, win_y, win_w, win_h);
+        gb_restore_parent();
+        return;
+    }
+    if (copy_state >= COPY_DONE) {
+        copy_finish();
+        return;
+    }
+    if (copy_state != COPY_TRANSFER) return;
+
+    gb_set_drive(my_drive);
+    gb_copy_begin();
+    gb_set_name(gb_dragname);
+    FS_LOAD_OFS[0] = (unsigned char)copy_ofs_lo;
+    FS_LOAD_OFS[1] = (unsigned char)(copy_ofs_lo >> 8);
+    FS_LOAD_OFS[2] = copy_ofs_hi;
+    FS_XFLAGS = 0x01;
+    got = gb_fs_load(gb_copybuf, GB_COPYMAX);
+    gb_copy_end();
+    if (got == 0) {
+        FS_XFLAGS = 0;
+        copy_state = (copy_ofs_lo || copy_ofs_hi) ? COPY_DONE : COPY_FAILED;
+        return;
+    }
+    if (got > GB_COPYMAX) got = GB_COPYMAX;
+
+    gb_set_drive(my_drive);
+    gb_set_name(gb_dragname);
+    FS_XFLAGS = (copy_ofs_lo || copy_ofs_hi) ? 0x06 : 0x04;
+    if (!copy_created) copy_created = 1;
+    FSV_DIAG = 0xEE;
+    if (!gb_fs_save(gb_copybuf, got)) {
+        FS_XFLAGS = 0;
+        copy_state = COPY_FAILED;
+        return;
+    }
+    FS_XFLAGS = 0;
+    {
+        unsigned int n = (unsigned int)(copy_ofs_lo + got);
+        if (n < copy_ofs_lo) copy_ofs_hi++;
+        copy_ofs_lo = n;
+    }
+    if (got < GB_COPYMAX) copy_state = COPY_DONE;
+}
+#else
 /* copy_file: copy gb_dragname from the drag-source drive/dir onto my_drive in
    <=GB_COPYMAX chunks. Each pass reads a chunk at the running offset (FS_XFLAGS
    chunk-read) and appends it to the dest (FS_XFLAGS append after the first),
@@ -901,6 +1016,7 @@ static unsigned char copy_file(void)
     FS_XFLAGS = 0;
     return 1;
 }
+#endif
 
 /* on_event: a file dropped here from another window is copied onto our drive (#65);
    a top-bar menu click goes to the framework's View handler (#142). */
@@ -908,6 +1024,9 @@ static void on_event(void)
 {
     sync_rect();
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
+#ifdef GB_PREEMPTIVE
+        if (copy_state == COPY_IDLE) copy_start();
+#else
         if (!copy_file()) {               /* copy it onto THIS window's drive, any size (#74) */
 #ifdef GB_MSX2
             if (gb_msx_drive_media(my_drive) == GB_MSX_MEDIA_FLOPPY) {
@@ -920,8 +1039,12 @@ static void on_event(void)
             }
         }
         relist();
+#endif
         return;
     }
+#ifdef GB_PREEMPTIVE
+    if (copy_state != COPY_IDLE || gb_drop_claimed()) return;
+#endif
     gb_doc_event();                       /* the View menu (Fullscreen / Icons-List / Up) */
 }
 
@@ -931,6 +1054,10 @@ static void fm_frame(void)
 {
     sync_rect();
     gb_set_drive(my_drive);              /* re-assert our drive each focused frame (#65) */
+#ifdef GB_PREEMPTIVE
+    if (copy_state != COPY_IDLE) { copy_step(); return; }
+    if (gb_drop_claimed()) return;        /* another File Manager owns the storage job */
+#endif
     if (dc_timer) dc_timer--;
     if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a View menu ran (#142) */
 }
@@ -938,6 +1065,17 @@ static void fm_frame(void)
 /* on_close (#146): no document to save -> just close. */
 static void fm_close(void)
 {
+#ifdef GB_PREEMPTIVE
+    if (copy_state != COPY_IDLE) {
+        FS_XFLAGS = 0;
+        gb_drop_release();
+        copy_remove_partial();
+        copy_created = 0;
+        copy_state = COPY_IDLE;
+        gb_wm_close();
+        return;
+    }
+#endif
     if (gb_doc_close()) gb_wm_close();
     else gb_restore_parent();
 }
@@ -946,6 +1084,9 @@ static void fm_close(void)
 static void fm_drag(void)
 {
     sync_rect();
+#ifdef GB_PREEMPTIVE
+    if (copy_state != COPY_IDLE) return;
+#endif
     if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
         gb_wm_setpos(win_x, win_y);
         gb_restore_parent();
@@ -962,6 +1103,10 @@ static void fm_click(void)
     gb_set_drive(my_drive);
     mx = gb_mx();
     my = gb_my();
+
+#ifdef GB_PREEMPTIVE
+    if (copy_state != COPY_IDLE || gb_drop_claimed()) return;
+#endif
 
     /* resize grip (bottom-right corner) -> resize the window (#81) */
     if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {
@@ -1018,7 +1163,11 @@ static void fm_click(void)
            the Trash (#62); a plain click (no move) falls through to select/open */
         dir_seek(order[idx]);                /* sorted index -> raw entry for gb_entname */
         if (gb_drag_start(gb_entname())) {   /* dropped on a target -> it handled it */
-            relist();                        /* refresh (a move changes this dir) */
+#ifdef GB_PREEMPTIVE
+            if (!gb_drop_claimed()) relist(); /* an async target owns focus + its own repaint */
+#else
+            relist();                         /* refresh (a move changes this dir) */
+#endif
             return;
         }
         if (dc_timer && dc_idx == (unsigned char)(idx + up_avail())) {   /* double-click -> open */

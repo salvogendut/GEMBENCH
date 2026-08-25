@@ -307,7 +307,10 @@ typedef struct {
 #define GB_MSG_MENU 1
 /* GB_MSG_DROP (#62): a file was dropped on this window via drag-and-drop. The
  * dragged item's 11-byte 8.3 name is at gb_dragname; the drop position is the
- * current gb_mx()/gb_my(). Delivered to the *target* window's on_event handler. */
+ * current gb_mx()/gb_my(). Delivered to the *target* window's on_event handler.
+ * A preemptive target starting a bounded root job may claim the drop before the
+ * callback returns; the WM raises that target. Release the claim when the job
+ * finishes or is cancelled. */
 #define GB_MSG_DROP 2
 /* Window messages (#148): the kernel routes EVERY managed-window callback through
  * the single gb_mwin_t.proc, keyed by gb_msg.type - the proc switches on it. */
@@ -317,6 +320,9 @@ typedef struct {
 #define GB_MSG_CLOSE 6   /* close requested (gadget/ESC): confirm + gb_wm_close      */
 #define GB_MSG_DRAG  7   /* a title-bar press: gb_drag_window + gb_wm_setpos         */
 #define gb_dragname ((const char *)0x1423)  /* mirrors WM_DRAGNAME in kernel/lowram.inc */
+#define gb_drop_claim()   (*(volatile unsigned char *)0x142F |= 0x80)
+#define gb_drop_release() (*(volatile unsigned char *)0x142F &= 0x7F)
+#define gb_drop_claimed() ((*(volatile unsigned char *)0x142F & 0x80) != 0)
 #define gb_msg (*(volatile gb_msg_t *)0x1302)
 
 /* Top-bar menu (issue #34). The app registers menu titles the kernel draws in

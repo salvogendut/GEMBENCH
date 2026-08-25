@@ -129,7 +129,7 @@ WM_FPREV        equ   #1422        ; previously focused slot (menu-swap edge det
 WM_DRAGNAME     equ   #1423        ; drag-and-drop (#62): dragged 11-byte 8.3 name,
                                    ; app-visible (the drop target reads it on GB_MSG_DROP)
 WM_DRAGSRC      equ   #142E        ; source window slot of the active drag
-WM_DRAGMOV      equ   #142F        ; 1 once the pointer moved (a drag, not a click)
+WM_DRAGMOV      equ   #142F        ; bit0 = pointer moved; bit7 = preemptive drop job claimed
 WM_DRAGX0       equ   #1430        ; last drag position (byte col / line); movement
 WM_DRAGY0       equ   #1431        ; vs this drives both the ghost and click/drag tell
 WM_DRAGDRV      equ   #1432        ; source drive of the active drag (for cross-drive copy)

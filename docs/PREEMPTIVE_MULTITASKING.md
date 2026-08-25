@@ -6,6 +6,13 @@ preemptively scheduled application workers. This remains an opt-in development
 build. Normal release builds retain the existing cooperative behavior and pay
 no resident-kernel cost.
 
+The app-by-app scheduler classification, responsiveness contract, and migration
+order are maintained in
+[PREEMPTIVE_APP_AUDIT.md](PREEMPTIVE_APP_AUDIT.md). In particular, applications
+that call storage, networking, firmware, bank-switching, drawing, or window
+services remain on the root task and must split long work into bounded jobs;
+they are not safe compute-worker candidates.
+
 ## Non-ROM Architecture
 
 Preemption does not use `GEOBENCH.ROM`, the M4 ROM, or a ROM-backed CPC kernel.
@@ -144,6 +151,13 @@ worker would add synchronization without taking meaningful work out of the
 root task. A future integration must preserve those platform renderers and
 offload a genuinely independent decode stage.
 
+`FILEMGR.APP` keeps storage on the root task but advances a drag/drop copy by one
+complete read/write chunk per focused frame. The destination window is raised
+and titled `Copying`; closing it cancels the operation and removes the partial
+file. Other File Manager instances suspend storage actions while the job owns
+the shared transfer context. Directory scanning, sorting, and embedded-icon
+probing are still synchronous and remain the next File Manager work.
+
 The MSX2 rotation and lifecycle checks run without a GUI:
 
 ```sh
@@ -168,6 +182,9 @@ then use System > Exit to exercise the warm-boot vector restoration.
 ## Budget
 
 - Normal `PREEMPTIVE=0` resident-kernel cost: **0 bytes**.
+- CPC claimed-drop handoff in `PREEMPTIVE=1`: **12 resident bytes**. The current
+  Albireo kernel retains one byte above the required stack reserve; the M4
+  kernel sits exactly at the enforced 256-byte reserve.
 - Scheduler image: **at most 512 bytes**, carried by the desktop and installed
   in fixed RAM. The current PCW adapter occupies the complete 512-byte slot;
   CPC and MSX2 retain a small amount of scheduler headroom.

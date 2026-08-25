@@ -1990,8 +1990,17 @@ kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs +
 ; the slot in C across wm_free_page (which does ld c,a) and dropped the wrong
 ; window. Centralising it kills that bug class and dedups the loops.
 ;
-; wm_z_append: A = slot -> WM_Z[WM_NWIN++] = slot (new z-top). Clobbers A,B,HL.
+; wm_z_append: A = slot -> WM_Z[WM_NWIN++] = slot (new z-top).
 wm_z_append
+                if PREEMPTIVE
+                ld    hl,WM_NWIN
+                ld    e,(hl)                       ; preserve/return A = slot for claimed drops
+                inc   (hl)                          ; NWIN++
+                ld    d,0
+                ld    hl,WM_Z
+                add   hl,de                         ; HL = &WM_Z[NWIN]
+                ld    (hl),a
+                else
                 ld    b,a                          ; B = slot
                 ld    hl,WM_NWIN
                 ld    a,(hl)                       ; A = NWIN
@@ -2000,6 +2009,7 @@ wm_z_append
                 add   a,l
                 ld    l,a                           ; HL = &WM_Z[NWIN]
                 ld    (hl),b
+                endif
                 ret
 
 ; wm_z_remove: C = slot -> compact WM_Z dropping slot C, dec NWIN once. Keeps C.
@@ -2797,8 +2807,19 @@ ds_drop
                 ld    a,c                           ; map the target's page, call it
                 call  bank_set                      ; (it reads WM_DRAGNAME + POLL_MX/MY)
                 call  md_call
+                if PREEMPTIVE
+                ld    a,(WM_DRAGMOV)                ; carry = target claimed this drop as a job
+                add   a,a
+                ld    a,(WM_DRAGSRC)                ; loading the source slot preserves carry
+                jr    nc,ds_drop_source
+                ld    a,(WM_FOCUS)                  ; claimed: keep and raise the target
+                call  wm_raise
+ds_drop_source
+                ld    (WM_FOCUS),a                  ; commit target (claimed) or source (ordinary)
+                else
                 ld    a,(WM_DRAGSRC)
                 ld    (WM_FOCUS),a
+                endif
                 ld    a,(wm_drag_pg)              ; restore the source page
                 call  bank_set
                 ld    a,1
