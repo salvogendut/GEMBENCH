@@ -179,7 +179,13 @@ DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh a
                                    # via the shared gb_doc menu system (#142) -> build/CLOCK.RAW
 APP_ICON="$PAINT_APP_DIR/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x79E0 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: three app-owned panes + banked 20x20 editor
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
-APP_ICON=apps/xaos/icon.asm DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
+if [ "$PREEMPTIVE" = "1" ]; then
+    TASK=1 TASK_STACK_RESERVE=256 APP_ICON=apps/xaos/icon.asm DATA_LOC=0x6600 DOC=1 BUTTON=1 \
+        tools/build_capp.sh apps/xaos build/XAOS.RAW
+else
+    APP_ICON=apps/xaos/icon.asm DATA_LOC=0x6400 DOC=1 BUTTON=1 \
+        tools/build_capp.sh apps/xaos build/XAOS.RAW
+fi                                                                 # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
 APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),

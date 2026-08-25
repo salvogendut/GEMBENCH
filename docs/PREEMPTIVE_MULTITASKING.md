@@ -128,6 +128,14 @@ than cooperative progress. Build it with `make taskdemo`; it is not staged in
 normal distributions. Defining `GB_PREEMPTIVE_DIAGNOSTIC` for the desktop
 auto-opens it for emulator tests.
 
+`XAOS.APP` is the first production application with an opt-in worker. On CPC,
+MSX2, and PCW the worker performs only fixed-point Mandelbrot calculations and
+publishes complete rows. Its normal window callback remains on the root task
+and owns row conversion, drawing, menus, input, files, and lifecycle. Starting
+a new view increments a generation counter so a suspended calculation cannot
+publish a stale pixel after zooming or panning. Cooperative builds retain the
+original bounded per-frame renderer.
+
 The MSX2 rotation and lifecycle checks run without a GUI:
 
 ```sh
@@ -181,5 +189,9 @@ resident-kernel bytes.
   while both workers remain in their non-yielding loops. Boot-time and app-load
   floppy I/O complete with the hook active. Closing task B leaves task A
   advancing with `Tasks=1` and `Fault=0`; closing task A returns cleanly to the
-  desktop. A manual System > Exit smoke test remains required before enabling
-  preemption in normal distributions.
+  desktop. A manual System > Exit smoke test also completed the expected PCW
+  warm reboot after restoring the interrupt bootstrap.
+
+The scheduler path and the XAOS compute-worker integration now build on all
+three targets. Preemption remains a development option while production apps
+are converted individually; normal distributions are still cooperative.
