@@ -1,4 +1,4 @@
-.PHONY: all cpc cpc-preemptive msx msx-preemptive msx-floppies pcw app formref sndtest taskdemo titlebar-editor check test
+.PHONY: all cpc cpc-preemptive msx msx-preemptive msx-floppies pcw pcw-preemptive app formref sndtest taskdemo titlebar-editor check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -24,6 +24,11 @@ msx-floppies:
 
 pcw:
 	bash tools/build_kernel_pcw.sh
+
+# Development image with the PCW 300 Hz timer adapter and an automatically
+# opened pair of non-yielding TASKDEMO workers.
+pcw-preemptive:
+	PREEMPTIVE=1 PREEMPTIVE_DIAGNOSTIC=1 bash tools/build_kernel_pcw.sh
 
 app:
 	@if [ -z "$(APP)" ]; then echo "usage: make app APP=mahjong"; exit 2; fi

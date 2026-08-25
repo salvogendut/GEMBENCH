@@ -47,6 +47,9 @@ sched_init_impl
                 if PREEMPTIVE_CONTEXT
                 ld    a,SCHED_QUANTUM_TICKS
                 ld    (SCHED_QUANTUM),a
+                if PREEMPTIVE_TIMER
+                call  sched_irq_install       ; one install for the scheduler lifetime
+                endif
                 endif
                 ret
 
@@ -218,19 +221,22 @@ sched_context_restore
                 pop   hl
                 pop   de
                 pop   bc
-                ifndef PLATFORM_PCW
-                ld    hl,SCHED_RESERVED
-                bit   0,(hl)
-                jr    z,sched_restore_yield
-                res   0,(hl)
+                ld    a,(SCHED_RESERVED)      ; AF is still saved, so restored HL stays untouched
+                rra
+                jr    nc,sched_restore_yield
+                xor   a
+                ld    (SCHED_RESERVED),a
+                ifdef PLATFORM_PCW
+                jp    sched_pcw_irq_finish
+                else
                 pop   af
                 ifdef PLATFORM_MSX
                 jp    sched_irq_chain          ; finish through the saved DOS IM1 handler
                 else
                 jp    CPC_FW_IRQ               ; finish the IRQ in the restored task context
                 endif
-sched_restore_yield
                 endif
+sched_restore_yield
                 pop   af
                 ei
                 ret
@@ -261,15 +267,6 @@ k_task_enable
                 set   3,(hl)                  ; publish only after snapshot is complete
                 ld    hl,SCHED_RUNNABLE
                 inc   (hl)
-                if PREEMPTIVE_CONTEXT
-                ifndef PLATFORM_PCW
-                if PREEMPTIVE_TIMER
-                ld    a,(hl)
-                cp    2
-                call  z,sched_irq_install     ; no frame event until a peer can run
-                endif
-                endif
-                endif
 sched_task_enable_done
                 ei
                 ret
@@ -319,7 +316,43 @@ sched_task_sleep
                 call  sched_yield
                 jr    sched_task_loop
 
-                ifndef PLATFORM_PCW
+                ifdef PLATFORM_PCW
+; GEOBENCH owns the PCW outright. Its FDC interrupt route remains disabled and
+; storage is polled, leaving the ASIC's 300 Hz maskable timer as the only INT
+; source. The standard PCW MCU bootstrap has F0 21 F5 at #0038; k_exit restores
+; those bytes before jumping to #0000 for a warm boot.
+PCW_IRQ_VECTOR  equ #0038
+PCW_TIMER_ACK   equ #F4
+
+sched_irq_install
+                ld    hl,PCW_IRQ_VECTOR
+                ld    (hl),#C3
+                inc   hl
+                ld    de,sched_irq_vector
+                ld    (hl),e
+                inc   hl
+                ld    (hl),d
+                im    1
+                in    a,(PCW_TIMER_ACK)       ; discard timer ticks accumulated while DI
+                ret
+
+sched_irq_uninstall
+                ld    hl,PCW_IRQ_VECTOR
+                ld    (hl),#F0
+                inc   hl
+                ld    (hl),#21
+                inc   hl
+                ld    (hl),#F5
+                ret
+
+; AF is still the first word on the selected task's restored stack. Acknowledge
+; the PCW timer before restoring it, then return directly from IM 1.
+sched_pcw_irq_finish
+                in    a,(PCW_TIMER_ACK)
+                pop   af
+                ei
+                reti
+                else
                 ifdef PLATFORM_MSX
 ; MSX-DOS leaves a writable IM 1 trampoline at #0038 while the TPA is active.
 ; Hooking it keeps page-0 GEOBENCH state visible, unlike H.TIMI (which runs
@@ -366,8 +399,10 @@ sched_irq_set_vector
                 ld    (CPC_IRQ_VECTOR+1),hl
                 ret
                 endif
+                endif
 
 sched_irq_vector
+                ifndef PLATFORM_PCW
                 ifndef PLATFORM_MSX
                 ex    af,af'
                 jr    nc,sched_irq_normal
@@ -376,8 +411,10 @@ sched_irq_vector
 sched_irq_normal
                 ex    af,af'
                 endif
+                endif
 sched_irq_body
                 push  af
+                push  hl                      ; quantum bookkeeping must preserve worker HL
                 ld    a,(SCHED_CURRENT)
                 or    a
                 jr    z,sched_irq_fast
@@ -393,14 +430,20 @@ sched_irq_worker
                 or    a
                 jr    z,sched_irq_switch
 sched_irq_fast
+                pop   hl
+                ifdef PLATFORM_PCW
+                jp    sched_pcw_irq_finish
+                else
                 pop   af
                 ifdef PLATFORM_MSX
                 jp    sched_irq_chain
                 else
                 jp    CPC_FW_IRQ
                 endif
+                endif
 
 sched_irq_switch
+                pop   hl
                 inc   a                       ; A is zero after the SCHED_LOCK test
                 ld    (SCHED_RESERVED),a      ; common restore must complete this firmware tick
                 push  bc
@@ -435,10 +478,6 @@ sched_irq_restore
                 jp    sched_context_restore
 sched_irq_defer
                 jp    sched_context_restore
-                else
-sched_irq_uninstall
-                ret
-                endif
 
 ; Fixed-address scheduler helpers. They duplicate only the small pieces that
 ; cannot be called through profile-dependent resident labels.

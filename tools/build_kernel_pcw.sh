@@ -24,6 +24,27 @@ GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
+PREEMPTIVE="${PREEMPTIVE:-0}"
+PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
+if [ "$PREEMPTIVE" = "1" ]; then
+    RASM="$RASM" bash tools/build_scheduler.sh pcw
+    EXTRA_RASM="${EXTRA_RASM:-} -DPREEMPTIVE=1 -DPREEMPTIVE_CONTEXT=1"
+    export EXTRA_RASM
+    export GLOBAL_APPDEFS="${GLOBAL_APPDEFS:-} -DGB_PREEMPTIVE"
+    if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
+        export GLOBAL_APPDEFS="$GLOBAL_APPDEFS -DGB_PREEMPTIVE_DIAGNOSTIC"
+    elif [ "$PREEMPTIVE_DIAGNOSTIC" != "0" ]; then
+        echo "PREEMPTIVE_DIAGNOSTIC must be 0 or 1" >&2
+        exit 2
+    fi
+elif [ "$PREEMPTIVE" != "0" ]; then
+    echo "PREEMPTIVE must be 0 or 1" >&2
+    exit 2
+elif [ "$PREEMPTIVE_DIAGNOSTIC" != "0" ]; then
+    echo "PREEMPTIVE_DIAGNOSTIC requires PREEMPTIVE=1" >&2
+    exit 2
+fi
+
 TITLEBAR_RASM="-DTITLEBAR_TILE=1"
 RASM="$RASM" bash tools/build_titlebarmod.sh
 [ -f "$GB_PAINT_DIR/Makefile" ] || {
@@ -47,7 +68,21 @@ python3 tools/gblib_subset.py \
 
 # --- the C apps, compiled with the PCW geometry (same DATA_LOCs as CPC/MSX) --
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
-APPDEFS="-DGB_PCW" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
+PCW_TASK_ADDS=()
+PCW_BRSAVE_ADDS=(--add build/pcw/BRSAVE.RAW=BRSAVE.APP)
+PCW_SPARE_THEME_ADDS=(--add build/titlebars/IMPROVED.TBR=IMPROVED.TBR)
+if [ "$PREEMPTIVE" = "1" ]; then
+    TASK_ROOT=1 TASK_RUNTIME_RAW=build/pcw/GBSCHED.RAW \
+        TASK_STACK_RESERVE=256 APPDEFS="-DGB_PCW" DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
+        tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
+    TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 \
+        tools/build_capp.sh apps/taskdemo build/pcw/TASKDEMO.RAW
+    PCW_TASK_ADDS=(--add build/pcw/TASKDEMO.RAW=TASKDEMO.APP)
+    PCW_BRSAVE_ADDS=()                # the CF2 diagnostic disc needs room for scheduler + task
+    PCW_SPARE_THEME_ADDS=()
+else
+    APPDEFS="-DGB_PCW" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
+fi
 APPDEFS="-DGB_PCW" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
 APP_ICON=apps/notepad/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
 APPDEFS="-DGB_PCW" APP_CFLAGS="--opt-code-size --max-allocs-per-node 20000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
@@ -127,6 +162,7 @@ printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\n
 cp build/pcw/GEOBENCH.CFG build/pcw/DEFAULT.CFG
 python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
+    "${PCW_TASK_ADDS[@]}" \
     --add build/pcw/GEOBENCH.CFG=GEOBENCH.CFG \
     --add build/pcw/DEFAULT.CFG=DEFAULT.CFG \
     --add build/GBCFG.RAW=GBCFG.MOD \
@@ -149,12 +185,12 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/TIMESYNC.RAW=TIMESYNC.APP \
     --add build/pcw/ICONED.RAW=ICONED.APP \
     --add build/pcw/SHELL.RAW=SHELL.APP \
-    --add build/pcw/BRSAVE.RAW=BRSAVE.APP \
+    "${PCW_BRSAVE_ADDS[@]}" \
     --add build/pcw/SQUARES.RAW=SQUARES.SAV \
     --add build/pcw/LOGO.PIC=LOGO.PIC \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT \
     --add build/titlebars/ORIGINAL.TBR=ORIGINAL.TBR \
-    --add build/titlebars/IMPROVED.TBR=IMPROVED.TBR \
+    "${PCW_SPARE_THEME_ADDS[@]}" \
     --add build/gadgets/ORIGINAL.GDT=ORIGINAL.GDT
 
 # --- COMPANION.DSK: TELNET, backdrops and spare assets (plain CF2 data disc)

@@ -44,7 +44,7 @@ The worker may only operate on its own computation state. It must not call the
 kernel, paged modules, firmware, storage, drawing, or other shared UI services.
 The compositor-side `proc` samples worker state when it paints.
 
-The CPC and MSX2 timers can interrupt a worker that never yields. They cannot
+The CPC, MSX2, and PCW timers can interrupt a worker that never yields. They cannot
 preempt the resident kernel, a paged module, firmware, storage code, or the
 compositor. Blocking I/O therefore still blocks the system at this stage.
 
@@ -68,7 +68,7 @@ application execution is interruptible; that scratch is not live then.
 ## CPC Interrupt Path
 
 The CPC adapter installs a three-byte jump in writable IM-1 vector RAM at
-`#0038` only after a worker becomes runnable. A six-tick quantum at the CPC's
+`#0038` when the app-carried scheduler initializes. A six-tick quantum at the CPC's
 300 Hz interrupt rate gives a nominal 50 Hz scheduling slice.
 
 On a worker interrupt, the adapter switches only when all of these checks pass:
@@ -88,7 +88,7 @@ BASIC/DOS restores the standard `JP #B941` IM-1 vector.
 ## MSX2 Interrupt Path
 
 MSX-DOS leaves a writable IM-1 trampoline at `#0038`. The scheduler replaces
-only that trampoline's JP target after the first worker becomes runnable and
+only that trampoline's JP target when it initializes and
 saves the original DOS target for tail chaining. This runs before the BIOS maps
 ROM into page 0 for H.TIMI, so GEOBENCH low RAM and mapper state remain visible.
 
@@ -99,11 +99,28 @@ saved DOS handler, which continues through the normal BIOS/H.TIMI path; the
 clock tick and UNAPI hook therefore keep running. Exit restores the saved DOS
 trampoline before H.TIMI is restored and mapper segments are released.
 
+## PCW Interrupt Path
+
+Standalone GEOBENCH owns the PCW and keeps the floppy controller's interrupt
+route disabled; its storage driver polls the raw FDC status instead. The
+scheduler can therefore use the ASIC's independent 300 Hz maskable timer as its
+sole interrupt source. A six-tick quantum gives a nominal 50 Hz task slice.
+
+The adapter replaces the standard PCW MCU-bootstrap bytes at `#0038` with an
+IM-1 jump and acknowledges each timer tick by reading port `#F4`. Fast and
+switched paths return directly with `RETI`; no absent firmware or CP/M handler
+is involved. Exit disables interrupts, restores the canonical `F0 21 F5`
+bootstrap sequence, and then performs GEOBENCH's normal warm reboot through
+`#0000`.
+
 ## Build And Diagnostic
 
-Use `make cpc-preemptive` or `make msx-preemptive` for a RAM-resident development
-distribution. The scheduler is embedded automatically in `DESKTOP.APP`; no
-scheduler file or ROM is required on the target media.
+Use `make cpc-preemptive`, `make msx-preemptive`, or `make pcw-preemptive` for
+a RAM-resident development distribution. The scheduler is embedded
+automatically in `DESKTOP.APP`; no scheduler file or ROM is required on the
+target media. The PCW CF2 boot disk is already full, so its diagnostic build
+temporarily omits Browser Save and the spare `IMPROVED.TBR`; Browser remains on
+the Companion disk and normal `make pcw` packaging is unchanged.
 
 `TASKDEMO.APP` is the deterministic test worker. Its compute callback never
 yields, so a responsive desktop while it runs proves timer preemption rather
@@ -121,11 +138,23 @@ MSX_HEADLESS=1 MSX_SCRIPT=debug/msx_preempt_lifecycle.tcl tools/run_msx.sh QA/GB
 They write telemetry to `build/msx/preempt-probe.txt` and
 `build/msx/preempt-lifecycle.txt` respectively.
 
+The PCW diagnostic boots in `1985` with both workers already open:
+
+```sh
+../1985/1985 --config debug/1985-pcw.conf \
+  --disk-a QA/PCW/GEOBENCH.DSK
+```
+
+The emulator's keyboard pointer fallback is sufficient for lifecycle testing:
+use the cursor keys to move and Space to click. Close each task independently,
+then use System > Exit to exercise the warm-boot vector restoration.
+
 ## Budget
 
 - Normal `PREEMPTIVE=0` resident-kernel cost: **0 bytes**.
 - Scheduler image: **at most 512 bytes**, carried by the desktop and installed
-  in fixed RAM.
+  in fixed RAM. The current PCW adapter occupies the complete 512-byte slot;
+  CPC and MSX2 retain a small amount of scheduler headroom.
 - Scheduler state: **0 new low-RAM bytes**, reusing eight retired bytes.
 - Participating application reserve: **256 bytes per app bank**.
 - CPC preemptive transfer buffer: **6.5 KiB** (`#2200-#3BFF`) instead of the
@@ -147,8 +176,10 @@ resident-kernel bytes.
   non-yielding workers rotate with BIOS ticks advancing, a 32-byte maximum
   observed context, and no stack fault. Closing each worker independently
   returns focus and runnable count to the desktop before DOS-vector restoration.
-- **PCW:** fixed-RAM payload location and shared context format are defined;
-  a platform timer source still needs implementation and stress testing.
-
-PCW must remain cooperative until its timer adapter passes the same
-non-yielding-worker, input, repaint, storage, close, and exit tests as CPC.
+- **PCW:** the ASIC 300 Hz timer adapter and warm-boot vector restoration are
+  implemented. `1985` traces show deterministic root/task-A/task-B rotation
+  while both workers remain in their non-yielding loops. Boot-time and app-load
+  floppy I/O complete with the hook active. Closing task B leaves task A
+  advancing with `Tasks=1` and `Fault=0`; closing task A returns cleanly to the
+  desktop. A manual System > Exit smoke test remains required before enabling
+  preemption in normal distributions.

@@ -66,6 +66,7 @@ static unsigned char want_saver;             /* System>Activate screensaver: ope
 static unsigned char want_about;             /* System>About: 1=menu selected, 2=open next frame (#409) */
 #ifdef GB_PREEMPTIVE_DIAGNOSTIC
 static unsigned char preemptive_diagnostic_started;
+static unsigned char preemptive_diagnostic_refresh;
 #endif
 #if !defined(GB_MSX2) && !defined(GB_PCW)
 static unsigned char first_paint;             /* defer the definitive paint until WM registration */
@@ -837,6 +838,12 @@ static void bar_draw(void)
         bar_min = gb_min;
         bar_clock(gb_hour, gb_min);
     }
+#ifdef GB_PREEMPTIVE_DIAGNOSTIC
+    /* Periodically sample both non-yielding workers through their normal DRAW
+       callbacks so headless diagnostics expose counter progress on screen. */
+    if (!++preemptive_diagnostic_refresh)
+        gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8);
+#endif
     /* The desktop loses focus when a window is clicked, and its on_frame stops
        running - but this bar hook runs every frame in the desktop's page regardless
        of focus. on_frame (above) sets desk_active when the desktop is focused; if it
