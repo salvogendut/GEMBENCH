@@ -29,6 +29,9 @@
 #                                                the image must run UNAPINET.COM)
 #   MSX_MOUSE=0 tools/run_msx.sh                 leave joystick port A unchanged
 #                                                instead of attaching an MSX mouse
+#   MSX_HEADLESS=1 MSX_SCRIPT=file.tcl tools/run_msx.sh
+#                                                disable video/audio output for a
+#                                                deterministic scripted test
 #   OPENMSXNET_HOME=/path/to/bundle tools/run_msx.sh
 #                                                use bundle/openmsx + bundle/share
 #   MSX_DISTROBOX=name tools/run_msx.sh           container for missing host libs
@@ -40,11 +43,16 @@ IMG="${1:-QA/GBMSX.IMG}"
 MACHINE="${MSX_MACHINE:-Philips_NMS_8250}"
 UNAPI_ENABLED="${MSX_UNAPI:-1}"
 MOUSE_ENABLED="${MSX_MOUSE:-1}"
+HEADLESS_ENABLED="${MSX_HEADLESS:-0}"
 OPENMSXNET_HOME="${OPENMSXNET_HOME:-QA/MSXDEPS/openmsxnet}"
 [ -s "$IMG" ] || { echo "ERROR: $IMG not found - run tools/build_msx_img.sh" >&2; exit 1; }
 case "$MOUSE_ENABLED" in
     0|1) ;;
     *) echo "ERROR: MSX_MOUSE must be 0 or 1" >&2; exit 1 ;;
+esac
+case "$HEADLESS_ENABLED" in
+    0|1) ;;
+    *) echo "ERROR: MSX_HEADLESS must be 0 or 1" >&2; exit 1 ;;
 esac
 
 EXT=(-ext SunriseIDE_Nextor)
@@ -65,6 +73,7 @@ case "${IMG,,}" in
         ;;
 esac
 [ "$MOUSE_ENABLED" = 1 ] && ARGS+=(-command "plug joyporta mouse")
+[ "$HEADLESS_ENABLED" = 1 ] && ARGS+=(-command "set renderer none")
 SCRIPT=
 
 if [ -n "${MSX_SHOTS:-}" ]; then
@@ -103,19 +112,24 @@ if [ -n "${OPENMSX:-}" ]; then
     # shellcheck disable=SC2206
     OPENMSX_CMD=($OPENMSX)
 elif [ "$UNAPI_ENABLED" = 1 ] && [ -x "$OPENMSXNET_HOME/openmsx" ]; then
-    export OPENMSX_SYSTEM_DATA="${OPENMSX_SYSTEM_DATA:-$OPENMSXNET_HOME/share}"
+    OPENMSXNET_DATA_SOURCE="${OPENMSX_SYSTEM_DATA:-$OPENMSXNET_HOME/share}"
     OPENMSXNET_BIN=$(realpath "$OPENMSXNET_HOME/openmsx")
-    OPENMSXNET_DATA=$(realpath "$OPENMSX_SYSTEM_DATA")
+    OPENMSXNET_DATA=$(realpath "$OPENMSXNET_DATA_SOURCE")
     if LDD_OUT=$(ldd "$OPENMSXNET_BIN" 2>&1) &&
        [[ "$LDD_OUT" != *"not found"* ]]; then
+        export OPENMSX_SYSTEM_DATA="$OPENMSXNET_DATA"
         OPENMSX_CMD=("$OPENMSXNET_BIN")
     elif command -v distrobox >/dev/null 2>&1; then
         MSX_DISTROBOX="${MSX_DISTROBOX:-my-distrobox}"
         if DISTRO_LDD=$(distrobox enter "$MSX_DISTROBOX" -- \
             ldd "$OPENMSXNET_BIN" 2>&1) &&
            [[ "$DISTRO_LDD" != *"not found"* ]]; then
+            OPENMSX_ENV=("OPENMSX_SYSTEM_DATA=$OPENMSXNET_DATA")
+            if [ "$HEADLESS_ENABLED" = 1 ]; then
+                OPENMSX_ENV+=(SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy)
+            fi
             OPENMSX_CMD=(distrobox enter "$MSX_DISTROBOX" -- env \
-                "OPENMSX_SYSTEM_DATA=$OPENMSXNET_DATA" "$OPENMSXNET_BIN")
+                "${OPENMSX_ENV[@]}" "$OPENMSXNET_BIN")
         else
             echo "ERROR: openMSXnet has unresolved libraries on the host and in distrobox '$MSX_DISTROBOX'" >&2
             exit 1
@@ -131,6 +145,10 @@ elif command -v flatpak >/dev/null 2>&1 && flatpak info org.openmsx.openMSX >/de
 else
     echo "ERROR: openMSX not found (install openmsx or Flatpak org.openmsx.openMSX)" >&2
     exit 1
+fi
+
+if [ "$HEADLESS_ENABLED" = 1 ]; then
+    export SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
 fi
 
 if [ -n "$SCRIPT" ]; then

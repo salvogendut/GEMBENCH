@@ -64,11 +64,11 @@ static unsigned char menu_refresh;           /* refocus after a child window clo
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 static unsigned char want_about;             /* System>About: 1=menu selected, 2=open next frame (#409) */
-#if !defined(GB_MSX2) && !defined(GB_PCW)
-static unsigned char first_paint;             /* defer the definitive paint until WM registration */
 #ifdef GB_PREEMPTIVE_DIAGNOSTIC
 static unsigned char preemptive_diagnostic_started;
 #endif
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+static unsigned char first_paint;             /* defer the definitive paint until WM registration */
 #endif
 #ifdef GB_PCW
 static unsigned char want_timesync;          /* boot time helper enabled when TIMESYNC=true */

@@ -15,7 +15,11 @@ TASK_STACK_LEN  equ   TASK_SNAPSHOT ; byte: saved stack length
 TASK_STACK_DATA equ   TASK_SNAPSHOT+1
 TASK_STACK_CAP  equ   255          ; includes interrupt-saved Z80 context
 TASK_STACK_SIZE equ   256          ; length byte plus TASK_STACK_CAP payload
-SCHED_QUANTUM_TICKS equ 6          ; six 300 Hz firmware ticks per 50 Hz slice
+                ifdef PLATFORM_MSX
+SCHED_QUANTUM_TICKS equ 2          ; 25/30 Hz slices from the 50/60 Hz MSX IRQ
+                else
+SCHED_QUANTUM_TICKS equ 6          ; six 300 Hz CPC firmware ticks per 50 Hz slice
+                endif
 
 ; #1450..#1480 is write-before-read kernel scratch. A real switch may use it
 ; as a tiny emergency stack only after SCHED_LOCK reaches zero. Interrupts
@@ -137,9 +141,9 @@ sched_restore_slot
                 or    a
                 jr    z,sched_restore_fault
                 ld    c,a
-                ld    b,0
                 ld    e,a
-                ld    d,0
+                ld    b,0
+                ld    d,b
                 ld    hl,(BOOT_SP)
                 or    a
                 sbc   hl,de                   ; target fixed-stack bottom
@@ -214,25 +218,27 @@ sched_context_restore
                 pop   hl
                 pop   de
                 pop   bc
-                ifndef PLATFORM_MSX
                 ifndef PLATFORM_PCW
                 ld    hl,SCHED_RESERVED
                 bit   0,(hl)
                 jr    z,sched_restore_yield
                 res   0,(hl)
                 pop   af
+                ifdef PLATFORM_MSX
+                jp    sched_irq_chain          ; finish through the saved DOS IM1 handler
+                else
                 jp    CPC_FW_IRQ               ; finish the IRQ in the restored task context
-sched_restore_yield
                 endif
+sched_restore_yield
                 endif
                 pop   af
                 ei
                 ret
 
-; k_task_enable: opt an already-registered legacy WM window into task service.
-; Its on_frame callback becomes a compute-only callback: it must not call kernel
-; APIs or paint directly. on_repaint remains compositor-owned. The app build
-; must reserve #7F00-#7FFF.
+; k_task_enable: opt an already-registered managed window into task service.
+; desc.task_worker becomes the compute-only callback; desc.proc stays on the
+; root/compositor task for draw, input, and lifecycle. The app build must reserve
+; #7F00-#7FFF.
 k_task_enable
                 di
                 ld    a,(WM_FOCUS)
@@ -248,19 +254,19 @@ k_task_enable
                 pop   hl
                 ld    de,WM_FR_FLAGS
                 add   hl,de
+                bit   1,(hl)                   ; only managed windows have a task_worker field
+                jr    z,sched_task_enable_done
                 bit   3,(hl)
                 jr    nz,sched_task_enable_done
                 set   3,(hl)                  ; publish only after snapshot is complete
                 ld    hl,SCHED_RUNNABLE
                 inc   (hl)
                 if PREEMPTIVE_CONTEXT
-                ifndef PLATFORM_MSX
                 ifndef PLATFORM_PCW
                 if PREEMPTIVE_TIMER
                 ld    a,(hl)
                 cp    2
                 call  z,sched_irq_install     ; no frame event until a peer can run
-                endif
                 endif
                 endif
                 endif
@@ -272,10 +278,10 @@ sched_task_enable_fail
                 ei
                 ret
 
-; A task-enabled legacy on_frame runs outside the compositor. Existing apps are
-; not opted in: the normal WM continues to drive their callbacks exactly as it
-; does in release builds. A worker is deliberately a pure compute function;
-; kernel and paged-module work belongs in compositor callbacks on the root task.
+; A task-enabled managed descriptor's task_worker runs outside the compositor.
+; Existing apps are not opted in: the normal WM continues to drive their proc
+; exactly as it does in release builds. A worker is deliberately pure compute;
+; kernel and paged-module work belongs in proc callbacks on the root task.
 sched_task_start
 sched_task_loop
                 ld    a,(SCHED_CURRENT)
@@ -289,6 +295,12 @@ sched_task_loop
                 pop   hl
                 jr    nz,sched_task_sleep
                 ld    de,WM_FR_FRAME
+                add   hl,de
+                ld    e,(hl)                   ; entry+5 = managed descriptor pointer
+                inc   hl
+                ld    d,(hl)
+                ex    de,hl
+                ld    de,10                    ; desc.task_worker
                 add   hl,de
                 ld    a,(hl)
                 inc   hl
@@ -307,8 +319,30 @@ sched_task_sleep
                 call  sched_yield
                 jr    sched_task_loop
 
-                ifndef PLATFORM_MSX
                 ifndef PLATFORM_PCW
+                ifdef PLATFORM_MSX
+; MSX-DOS leaves a writable IM 1 trampoline at #0038 while the TPA is active.
+; Hooking it keeps page-0 GEOBENCH state visible, unlike H.TIMI (which runs
+; after the BIOS maps its ROM into page 0). The original DOS JP target is
+; copied into sched_irq_chain and receives the exact raw interrupt stack after
+; either a fast path or a task switch.
+MSX_IRQ_VECTOR  equ #0038
+
+sched_irq_install
+                ld    hl,(MSX_IRQ_VECTOR+1)
+                ld    (sched_irq_chain+1),hl
+                ld    hl,sched_irq_vector
+                ld    (MSX_IRQ_VECTOR+1),hl
+                ret
+
+sched_irq_uninstall
+                ld    hl,(sched_irq_chain+1)
+                ld    (MSX_IRQ_VECTOR+1),hl
+                ret
+
+sched_irq_chain
+                jp    0                       ; patched with the original DOS IRQ target
+                else
 ; CPC IM 1 enters through writable RAM at #0038. The scheduler runs before the
 ; firmware tick. Fast paths tail-call B941 immediately. A context switch marks
 ; the shared restore path, which tail-calls B941 after the target registers and
@@ -331,37 +365,40 @@ sched_irq_set_vector
                 ld    (CPC_IRQ_VECTOR),a
                 ld    (CPC_IRQ_VECTOR+1),hl
                 ret
+                endif
 
 sched_irq_vector
+                ifndef PLATFORM_MSX
                 ex    af,af'
                 jr    nc,sched_irq_normal
                 ex    af,af'                  ; restore app AF and leave firmware's stack untouched
                 jp    CPC_FW_IRQ
 sched_irq_normal
                 ex    af,af'
+                endif
 sched_irq_body
                 push  af
                 ld    a,(SCHED_CURRENT)
                 or    a
-                jr    nz,sched_irq_worker
-                pop   af
-                jp    CPC_FW_IRQ
+                jr    z,sched_irq_fast
 sched_irq_worker
                 if !PREEMPTIVE_SWITCH
                 jp    sched_irq_fast          ; diagnostic: prove the firmware trampoline alone
                 endif
-                ld    a,(SCHED_QUANTUM)
-                dec   a
-                ld    (SCHED_QUANTUM),a
+                ld    hl,SCHED_QUANTUM
+                dec   (hl)
                 jr    nz,sched_irq_fast
-                ld    a,SCHED_QUANTUM_TICKS
-                ld    (SCHED_QUANTUM),a
+                ld    (hl),SCHED_QUANTUM_TICKS
                 ld    a,(SCHED_LOCK)
                 or    a
                 jr    z,sched_irq_switch
 sched_irq_fast
                 pop   af
+                ifdef PLATFORM_MSX
+                jp    sched_irq_chain
+                else
                 jp    CPC_FW_IRQ
+                endif
 
 sched_irq_switch
                 inc   a                       ; A is zero after the SCHED_LOCK test
@@ -387,8 +424,6 @@ sched_irq_switch
                 cp    #80
                 jr    nc,sched_irq_defer
                 ld    a,(SCHED_CURRENT)
-                cp    #FF
-                jr    z,sched_irq_defer
                 call  sched_wm_entry
                 ld    a,(BANK_CUR)
                 cp    (hl)                    ; reject kernel modules mapped over the app bank
@@ -400,10 +435,6 @@ sched_irq_restore
                 jp    sched_context_restore
 sched_irq_defer
                 jp    sched_context_restore
-                else
-sched_irq_uninstall
-                ret
-                endif
                 else
 sched_irq_uninstall
                 ret
@@ -428,15 +459,8 @@ sched_md_call
 sched_bank_set
                 ld    (BANK_CUR),a
                 ifdef PLATFORM_MSX
-                push  af
-                push  hl
-                push  de
                 ld    hl,(MSX_PUTP1)
-                call  sched_md_call
-                pop   de
-                pop   hl
-                pop   af
-                ret
+                jp    (hl)                    ; mapper RET returns to our caller
                 else
                 ifdef PLATFORM_PCW
                 out   (PCW_BANK1),a
@@ -450,4 +474,7 @@ sched_bank_set
                 endif                         ; PREEMPTIVE_CONTEXT
 
 sched_image_end
-                assert sched_image_end-SCHED_BASE<=512,"scheduler exceeds fixed 512-byte slot"
+                ifndef SCHED_LIMIT
+SCHED_LIMIT     equ   512
+                endif
+                assert sched_image_end-SCHED_BASE<=SCHED_LIMIT,"scheduler exceeds fixed slot"

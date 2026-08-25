@@ -32,14 +32,21 @@ The desktop is the root task. It continues to own the compositor, input,
 firmware calls, storage, paged modules, and window-manager policy. Once per WM
 cycle it yields only when at least one worker is runnable.
 
-An application becomes a worker explicitly by calling `gb_task_enable()` after
-registering its window. Its legacy `on_frame` callback then performs background
-computation, while `on_repaint` remains compositor-owned. Existing applications
-are not opted in and continue to run cooperatively without source changes.
+An application opts in by placing a pure compute callback in
+`gb_mwin_t.task_worker`, registering that managed window, completing its initial
+paint, and calling `gb_task_enable()`. The normal managed-window `proc` remains
+on the root task and continues to receive draw, frame, menu, click/drag, and
+close messages. Lifecycle and UI code therefore never runs in the preemptible
+worker context. Existing applications leave `task_worker` null and continue to
+run cooperatively without source changes.
 
-The CPC timer can interrupt a worker that never yields. It cannot preempt the
-resident kernel, a paged module, firmware, storage code, or the compositor.
-Blocking I/O therefore still blocks the system at this stage.
+The worker may only operate on its own computation state. It must not call the
+kernel, paged modules, firmware, storage, drawing, or other shared UI services.
+The compositor-side `proc` samples worker state when it paints.
+
+The CPC and MSX2 timers can interrupt a worker that never yields. They cannot
+preempt the resident kernel, a paged module, firmware, storage code, or the
+compositor. Blocking I/O therefore still blocks the system at this stage.
 
 ## Context And Stack
 
@@ -78,17 +85,41 @@ and firmware events continue at their normal rate. The scheduler also preserves
 the alternate Z80 register set used internally by the CPC firmware. Exit to
 BASIC/DOS restores the standard `JP #B941` IM-1 vector.
 
+## MSX2 Interrupt Path
+
+MSX-DOS leaves a writable IM-1 trampoline at `#0038`. The scheduler replaces
+only that trampoline's JP target after the first worker becomes runnable and
+saves the original DOS target for tail chaining. This runs before the BIOS maps
+ROM into page 0 for H.TIMI, so GEOBENCH low RAM and mapper state remain visible.
+
+A two-interrupt quantum gives nominal 25 Hz PAL or 30 Hz NTSC task slices. The
+same application-page, mapper-bank, and scheduler-lock checks used by the CPC
+adapter gate every switch. Fast paths and completed switches both tail-chain the
+saved DOS handler, which continues through the normal BIOS/H.TIMI path; the
+clock tick and UNAPI hook therefore keep running. Exit restores the saved DOS
+trampoline before H.TIMI is restored and mapper segments are released.
+
 ## Build And Diagnostic
 
-Use `make cpc-preemptive` for the RAM-resident CPC development distribution.
-The scheduler is embedded automatically in `DESKTOP.APP`; no scheduler file or
-ROM is required on the target media.
+Use `make cpc-preemptive` or `make msx-preemptive` for a RAM-resident development
+distribution. The scheduler is embedded automatically in `DESKTOP.APP`; no
+scheduler file or ROM is required on the target media.
 
 `TASKDEMO.APP` is the deterministic test worker. Its compute callback never
 yields, so a responsive desktop while it runs proves timer preemption rather
 than cooperative progress. Build it with `make taskdemo`; it is not staged in
 normal distributions. Defining `GB_PREEMPTIVE_DIAGNOSTIC` for the desktop
 auto-opens it for emulator tests.
+
+The MSX2 rotation and lifecycle checks run without a GUI:
+
+```sh
+MSX_HEADLESS=1 MSX_SCRIPT=debug/msx_preempt_probe.tcl tools/run_msx.sh QA/GBMSX.IMG
+MSX_HEADLESS=1 MSX_SCRIPT=debug/msx_preempt_lifecycle.tcl tools/run_msx.sh QA/GBMSX.IMG
+```
+
+They write telemetry to `build/msx/preempt-probe.txt` and
+`build/msx/preempt-lifecycle.txt` respectively.
 
 ## Budget
 
@@ -111,10 +142,13 @@ resident-kernel bytes.
   are implemented. Two simultaneous non-yielding workers have run for an
   extended emulator stress test with exact 300 Hz firmware-time progression,
   a 32-byte maximum observed context, and no stack fault.
-- **MSX2:** fixed-RAM payload location and shared context format are defined;
-  H.TIMI/mapper-safe timer glue still needs implementation and stress testing.
+- **MSX2:** the DOS IM-1 adapter, mapper-aware context switch, close/input
+  lifecycle, and exit restoration are implemented. Two simultaneous
+  non-yielding workers rotate with BIOS ticks advancing, a 32-byte maximum
+  observed context, and no stack fault. Closing each worker independently
+  returns focus and runnable count to the desktop before DOS-vector restoration.
 - **PCW:** fixed-RAM payload location and shared context format are defined;
   a platform timer source still needs implementation and stress testing.
 
-MSX2 and PCW must remain cooperative until their timer adapters pass the same
+PCW must remain cooperative until its timer adapter passes the same
 non-yielding-worker, input, repaint, storage, close, and exit tests as CPC.

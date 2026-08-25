@@ -85,6 +85,9 @@ gft_hang        jr    gft_hang
                 call  boot_desktop           ; the WM master loop never returns
 km_finish                                      ; reached by k_exit's longjmp
                 di
+                if PREEMPTIVE_CONTEXT
+                call  SCHED_IRQ_UNINSTALL_ENTRY ; restore the MSX-DOS IM 1 trampoline
+                endif
                 ld    hl,MSX_HOOKSAVE        ; restore the original H.TIMI hook
                 ld    de,H_TIMI
                 ld    bc,5

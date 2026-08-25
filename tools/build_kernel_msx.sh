@@ -20,6 +20,27 @@ RASM="${RASM:-rasm}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
+PREEMPTIVE="${PREEMPTIVE:-0}"
+PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
+if [ "$PREEMPTIVE" = "1" ]; then
+    RASM="$RASM" bash tools/build_scheduler.sh msx
+    EXTRA_RASM="${EXTRA_RASM:-} -DPREEMPTIVE=1 -DPREEMPTIVE_CONTEXT=1"
+    export EXTRA_RASM
+    export GLOBAL_APPDEFS="${GLOBAL_APPDEFS:-} -DGB_PREEMPTIVE"
+    if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
+        export GLOBAL_APPDEFS="$GLOBAL_APPDEFS -DGB_PREEMPTIVE_DIAGNOSTIC"
+    elif [ "$PREEMPTIVE_DIAGNOSTIC" != "0" ]; then
+        echo "PREEMPTIVE_DIAGNOSTIC must be 0 or 1" >&2
+        exit 2
+    fi
+elif [ "$PREEMPTIVE" != "0" ]; then
+    echo "PREEMPTIVE must be 0 or 1" >&2
+    exit 2
+elif [ "$PREEMPTIVE_DIAGNOSTIC" != "0" ]; then
+    echo "PREEMPTIVE_DIAGNOSTIC requires PREEMPTIVE=1" >&2
+    exit 2
+fi
+
 TITLEBAR_RASM="-DTITLEBAR_TILE=1"
 RASM="$RASM" bash tools/build_titlebarmod.sh
 
@@ -65,7 +86,16 @@ python3 tools/gblib_subset.py \
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
+if [ "$PREEMPTIVE" = "1" ]; then
+    TASK_ROOT=1 TASK_RUNTIME_RAW=build/msx/GBSCHED.RAW \
+        TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
+        tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
+    TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
+        tools/build_capp.sh apps/taskdemo build/msx/TASKDEMO.RAW
+else
+    APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 \
+        tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
+fi
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APP_ICON=apps/notepad/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
@@ -218,6 +248,11 @@ cp build/msx/BROWSER.RAW  QA/MSX/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/GBENCH/BRSAVE.APP
 cp build/msx/FORMREF.RAW  QA/MSX/GBENCH/FORMREF.APP
 cp build/msx/SNDTEST.RAW  QA/MSX/GBENCH/SNDTEST.APP
+if [ "$PREEMPTIVE" = "1" ]; then
+    cp build/msx/TASKDEMO.RAW QA/MSX/GBENCH/TASKDEMO.APP
+else
+    rm -f QA/MSX/GBENCH/TASKDEMO.APP
+fi
 for f in "$GB_BASIC_DIR/build/msx/BASIC.RAW" "$GB_BASIC_DIR/build/msx/BASRUN.RAW" "$GB_BASIC_DIR/build/msx/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC MSX payload $f (run make -C \"$GB_BASIC_DIR\" raws-msx)" >&2; exit 1; }
 done

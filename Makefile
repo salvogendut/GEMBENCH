@@ -1,4 +1,4 @@
-.PHONY: all cpc cpc-preemptive msx msx-floppies pcw app formref sndtest taskdemo titlebar-editor check test
+.PHONY: all cpc cpc-preemptive msx msx-preemptive msx-floppies pcw app formref sndtest taskdemo titlebar-editor check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -13,6 +13,11 @@ cpc-preemptive:
 
 msx:
 	bash tools/build_kernel_msx.sh
+
+# Development image with the desktop-carried scheduler and an automatically
+# opened pair of non-yielding TASKDEMO workers.
+msx-preemptive:
+	PREEMPTIVE=1 PREEMPTIVE_DIAGNOSTIC=1 bash tools/build_kernel_msx.sh
 
 msx-floppies:
 	bash tools/build_msx_floppy.sh

@@ -17,7 +17,6 @@
 
 static volatile unsigned int spins;
 static unsigned char task_id;
-static unsigned char win_x;
 
 static const unsigned char menu_def[] = {
     1,
@@ -38,6 +37,8 @@ static void worker(void)
 static void repaint(void)
 {
     unsigned int sample = spins;
+    unsigned char x = gb_wm_x();
+    unsigned char y = gb_wm_y();
     char count[5];
     char status[19] = "Tasks: 0 Stack: 00";
     char fault[20] = "Fault: 0  Stop menu";
@@ -52,37 +53,35 @@ static void repaint(void)
     status[17] = hex_digit(SCHED_STACK_MAX);
     fault[7] = hex_digit(SCHED_FAULT);
 
-    gb_window(win_x, WIN_Y, WIN_W, WIN_H,
-              task_id ? "Preempt task B" : "Preempt task A");
-    gb_textbw(win_x + 2, WIN_Y + 20, "Worker never yields");
-    gb_textbw(win_x + 2, WIN_Y + 33, "Counter:");
-    gb_textbw(win_x + 19, WIN_Y + 33, count);
-    gb_textbw(win_x + 2, WIN_Y + 46, status);
-    gb_textbw(win_x + 2, WIN_Y + 59, fault);
+    gb_textbw(x + 2, y + 20, "Worker never yields");
+    gb_textbw(x + 2, y + 33, "Counter:");
+    gb_textbw(x + 19, y + 33, count);
+    gb_textbw(x + 2, y + 46, status);
+    gb_textbw(x + 2, y + 59, fault);
 }
 
-static void on_event(void)
+static void proc(void)
 {
-    if (gb_msg.type == GB_MSG_CLOSE ||
+    if (gb_msg.type == GB_MSG_DRAW) repaint();
+    else if (gb_msg.type == GB_MSG_CLOSE ||
         (gb_msg.type == GB_MSG_MENU && gb_msg.p0 >= 10 && gb_msg.p0 < 18))
         gb_wm_close();
 }
 
-static const gb_win_t task_window_a = {
-    2, WIN_Y, WIN_W, WIN_H, worker, repaint, on_event, menu_def
+static const gb_mwin_t task_window_a = {
+    2, WIN_Y, WIN_W, WIN_H, 0, 0, proc, "Preempt task A", worker
 };
 
-static const gb_win_t task_window_b = {
-    41, WIN_Y, WIN_W, WIN_H, worker, repaint, on_event, menu_def
+static const gb_mwin_t task_window_b = {
+    41, WIN_Y, WIN_W, WIN_H, 0, 0, proc, "Preempt task B", worker
 };
 
 void main(void)
 {
     spins = 0;
     task_id = SCHED_RUNNABLE > 1;
-    win_x = task_id ? 41 : 2;
-    gb_wm_add(task_id ? &task_window_b : &task_window_a);
+    gb_wm_managed(task_id ? &task_window_b : &task_window_a);
     gb_menu(menu_def);
-    repaint();
+    gb_restore_parent();
     gb_task_enable();
 }

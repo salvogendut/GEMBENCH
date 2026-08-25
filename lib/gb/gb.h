@@ -511,8 +511,9 @@ typedef struct {
 } gb_win_t;
 void gb_wm_run(const gb_win_t *desc);
 void gb_wm_add(const gb_win_t *desc);
-/* Opt-in worker task (#477). Call after gb_wm_add(); on_frame becomes a
- * compute callback and on_repaint remains compositor-owned. TASK=1 builds only. */
+/* Opt-in worker task (#477). Register a gb_mwin_t whose task_worker is a pure
+ * compute callback, then call this after the initial compositor paint. proc
+ * continues to receive draw/input/lifecycle messages on the root task. */
 void gb_task_enable(void);
 
 /* Managed window (#146, #148): the KERNEL owns the chrome. Register with gb_wm_managed
@@ -533,8 +534,7 @@ typedef struct {
     unsigned char min_w, min_h;     /* min size; min_w == 0 -> not resizable */
     void (*proc)(void);             /* the window's ONE handler; switch on gb_msg.type */
     const char *title;
-    const void *reserved;           /* keep the descriptor 12 bytes wide for wm_register;
-                                       leave 0 */
+    void (*task_worker)(void);       /* pure compute callback for gb_task_enable; else 0 */
 } gb_mwin_t;
 void          gb_wm_managed(const gb_mwin_t *desc);   /* register a kernel-managed window */
 unsigned char gb_wm_x(void);    /* live window rect (WM-owned) */

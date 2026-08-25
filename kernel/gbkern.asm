@@ -2058,8 +2058,8 @@ wm_register
 ; Register a window the WM draws + drives: the descriptor pointer goes in WM_FR_FRAME
 ; and FLAGS gets MW_MANAGED, so wm_loop / wm_repaint_all route it to wm_chrome_frame /
 ; wm_chrome_draw instead of the app's on_frame/on_repaint. Descriptor layout:
-;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 on_draw +8 on_click +10 on_frame
-;   +12 on_close +14 on_event +16 title
+;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 proc +8 title
+;   +10 task_worker (0 for normal managed windows)
 k_wm_managed
                 call  wm_register            ; HL = desc; register as a normal window (slot,
                                              ; page, focus, z-order, arg, flags=alive; copies
@@ -2094,8 +2094,8 @@ k_wm_managed
                 inc   hl
                 ld    (hl),d                 ; REPAINT (entry+7,8) is garbage but the managed
                                              ; flag means wm_repaint_all skips it; MENU (entry+
-                                             ; 11,12) comes from the managed descriptor's trailing
-                                             ; reserved field and starts clear until gb_doc sets it
+                                             ; 11,12) temporarily contains task_worker but gb_doc
+                                             ; replaces it before the app returns to the WM loop
                 ld    a,(WM_FOCUS)           ; publish MW_RECT so the app can read gb_wm_x/y/w/h
                 call  wm_entry               ; in main, but DON'T draw yet: the app loads its
                 call  mw_publish             ; content then calls gb_restore_parent for the first
@@ -2319,8 +2319,6 @@ wm_loop
                 if PREEMPTIVE_CONTEXT
                 ld    a,(hl)
                 pop   hl
-                bit   3,a                         ; task worker owns this legacy on_frame
-                jr    nz,wmf_done
                 bit   1,a
                 else
                 bit   1,(hl)
