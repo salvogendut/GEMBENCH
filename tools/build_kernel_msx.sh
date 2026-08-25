@@ -90,8 +90,10 @@ if [ "$PREEMPTIVE" = "1" ]; then
     TASK_ROOT=1 TASK_RUNTIME_RAW=build/msx/GBSCHED.RAW \
         TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
-    TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
-        tools/build_capp.sh apps/taskdemo build/msx/TASKDEMO.RAW
+    if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
+        TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
+            tools/build_capp.sh apps/taskdemo build/msx/TASKDEMO.RAW
+    fi
 else
     APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
@@ -254,7 +256,7 @@ cp build/msx/BROWSER.RAW  QA/MSX/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/GBENCH/BRSAVE.APP
 cp build/msx/FORMREF.RAW  QA/MSX/GBENCH/FORMREF.APP
 cp build/msx/SNDTEST.RAW  QA/MSX/GBENCH/SNDTEST.APP
-if [ "$PREEMPTIVE" = "1" ]; then
+if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
     cp build/msx/TASKDEMO.RAW QA/MSX/GBENCH/TASKDEMO.APP
 else
     rm -f QA/MSX/GBENCH/TASKDEMO.APP

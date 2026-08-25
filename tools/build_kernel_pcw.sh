@@ -75,11 +75,13 @@ if [ "$PREEMPTIVE" = "1" ]; then
     TASK_ROOT=1 TASK_RUNTIME_RAW=build/pcw/GBSCHED.RAW \
         TASK_STACK_RESERVE=256 APPDEFS="-DGB_PCW" DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
         tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
-    TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 \
-        tools/build_capp.sh apps/taskdemo build/pcw/TASKDEMO.RAW
-    PCW_TASK_ADDS=(--add build/pcw/TASKDEMO.RAW=TASKDEMO.APP)
-    PCW_BRSAVE_ADDS=()                # the CF2 diagnostic disc needs room for scheduler + task
-    PCW_SPARE_THEME_ADDS=()
+    if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
+        TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 \
+            tools/build_capp.sh apps/taskdemo build/pcw/TASKDEMO.RAW
+        PCW_TASK_ADDS=(--add build/pcw/TASKDEMO.RAW=TASKDEMO.APP)
+        PCW_SPARE_THEME_ADDS=()
+    fi
+    PCW_BRSAVE_ADDS=()                # the CF2 boot disc needs room for the scheduler
 else
     APPDEFS="-DGB_PCW" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
 fi

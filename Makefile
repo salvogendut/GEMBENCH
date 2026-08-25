@@ -1,4 +1,4 @@
-.PHONY: all cpc cpc-preemptive msx msx-preemptive msx-floppies pcw pcw-preemptive app formref sndtest taskdemo titlebar-editor check test
+.PHONY: all cpc cpc-preemptive msx msx-preemptive msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-preemptive-diagnostic app formref sndtest taskdemo titlebar-editor check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -14,9 +14,13 @@ cpc-preemptive:
 msx:
 	bash tools/build_kernel_msx.sh
 
-# Development image with the desktop-carried scheduler and an automatically
-# opened pair of non-yielding TASKDEMO workers.
+# Development image with the desktop-carried scheduler. Diagnostics are not
+# staged or launched.
 msx-preemptive:
+	PREEMPTIVE=1 bash tools/build_kernel_msx.sh
+
+# Explicit scheduler stress image: stage and auto-open TASKDEMO workers.
+msx-preemptive-diagnostic:
 	PREEMPTIVE=1 PREEMPTIVE_DIAGNOSTIC=1 bash tools/build_kernel_msx.sh
 
 msx-floppies:
@@ -25,9 +29,13 @@ msx-floppies:
 pcw:
 	bash tools/build_kernel_pcw.sh
 
-# Development image with the PCW 300 Hz timer adapter and an automatically
-# opened pair of non-yielding TASKDEMO workers.
+# Development image with the PCW 300 Hz timer adapter. Diagnostics are not
+# staged or launched.
 pcw-preemptive:
+	PREEMPTIVE=1 bash tools/build_kernel_pcw.sh
+
+# Explicit scheduler stress image: stage and auto-open TASKDEMO workers.
+pcw-preemptive-diagnostic:
 	PREEMPTIVE=1 PREEMPTIVE_DIAGNOSTIC=1 bash tools/build_kernel_pcw.sh
 
 app:

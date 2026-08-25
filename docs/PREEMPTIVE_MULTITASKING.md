@@ -118,15 +118,17 @@ bootstrap sequence, and then performs GEOBENCH's normal warm reboot through
 Use `make cpc-preemptive`, `make msx-preemptive`, or `make pcw-preemptive` for
 a RAM-resident development distribution. The scheduler is embedded
 automatically in `DESKTOP.APP`; no scheduler file or ROM is required on the
-target media. The PCW CF2 boot disk is already full, so its diagnostic build
-temporarily omits Browser Save and the spare `IMPROVED.TBR`; Browser remains on
-the Companion disk and normal `make pcw` packaging is unchanged.
+target media. These targets do not stage or launch `TASKDEMO.APP`. The PCW CF2
+boot disk is already full, so its preemptive build omits Browser Save; Browser
+remains on the Companion disk and normal `make pcw` packaging is unchanged.
+The explicit diagnostic build also omits the spare `IMPROVED.TBR`.
 
 `TASKDEMO.APP` is the deterministic test worker. Its compute callback never
 yields, so a responsive desktop while it runs proves timer preemption rather
 than cooperative progress. Build it with `make taskdemo`; it is not staged in
-normal distributions. Defining `GB_PREEMPTIVE_DIAGNOSTIC` for the desktop
-auto-opens it for emulator tests.
+normal or ordinary preemptive distributions. Use
+`make msx-preemptive-diagnostic` or `make pcw-preemptive-diagnostic` to stage
+and auto-open it for emulator stress tests.
 
 `XAOS.APP` is the first production application with an opt-in worker. On CPC,
 MSX2, and PCW the worker performs only fixed-point Mandelbrot calculations and
@@ -135,6 +137,12 @@ and owns row conversion, drawing, menus, input, files, and lifecycle. Starting
 a new view increments a generation counter so a suspended calculation cannot
 publish a stale pixel after zooming or panning. Cooperative builds retain the
 original bounded per-frame renderer.
+
+`VIEWER.APP` remains root-managed. Its banked picture I/O and target-native
+blitters are kernel-owned operations, so moving only byte conversion into a
+worker would add synchronization without taking meaningful work out of the
+root task. A future integration must preserve those platform renderers and
+offload a genuinely independent decode stage.
 
 The MSX2 rotation and lifecycle checks run without a GUI:
 
