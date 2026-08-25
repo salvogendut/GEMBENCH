@@ -29,7 +29,7 @@ base          0x1310  0x1334  menu_def                -             top-bar menu
 base          0x1335  0x1337  fs_drive_state          -             current drive, boot drive, system-load browse scratch
 base          0x1338  0x133B  repaint_clip            -             WM damage clip (x,y,w,h), also read by desktop wallpaper blits
 base          0x133C  0x133C  window_frame_pen        -             Edge pen, or a contrasting Text/Accent fallback when Edge equals Paper
-base          0x1340  0x1347  repaint_handlers_legacy -             legacy repaint handler table
+base          0x1340  0x1347  retired_repaint_handlers -             dead repaint-handler table; scheduler state in preemptive builds
 base          0x1348  0x134F  pic_buffer_state        -             second picture bank, loaded size, banked picture tile edit request, and page shadow
 base          0x1350  0x144B  wm_state                -             WM table, z-order, drag state, app page pool, MW_RECT
 base          0x144C  0x144F  fs_copy_xfer            -             chunked copy: FS_LOAD_OFS (24-bit) + FS_XFLAGS (chunk-read/append/chunk-save)
@@ -46,11 +46,12 @@ base          0x1700  0x1712  module_control_header   modal_1700    GBFAT/FLOPPY
 base          0x1710  0x174F  module_path_buffer      modal_1700    M4SAVE/FLOPPYSV card path prefix; never live during GBUI
 base          0x1800  0x19FF  fs_sector_buffer        -             shared 512-byte sector buffer
 base          0x1A00  0x21FF  fs_directory_buffer     fs_1c00       floppy directory buffer; IDE ROM state may overlay #1C00
-base          0x2200  0x3DFF  module_data_buffer      module_data   GBFAT/FLOPPYSV/GBNET bulk transfer data
+base          0x2200  0x3BFF  module_data_buffer      module_data   preemptive GBFAT/FLOPPYSV/GBNET 6.5-KiB bulk transfer data; cooperative builds extend through 0x3DFF
 base          0x2200  0x2872  browser_pcw_transient   module_data   PCW Browser transport, protocol, render, and fallback buffers
 base          0x2900  0x32FF  browser_source_buffers  module_data   Browser offline-read buffer and 2-KiB source-cache staging block
 base          0x3300  0x3887  browser_transient       module_data   Browser protocol, render, and fallback buffers; above GBNET max I/O
 base          0x3900  0x3ADF  browser_shared_state    module_data   Browser/GBUI/GBWEB/GBIMG cache, proxy, GET-form, request, resource, image page/mode/stride, live screen mode, viewport, and error state
+base          0x3C00  0x3DFF  scheduler_runtime       -             app-carried scheduler in preemptive CPC/PCW builds; cooperative builds reuse this range as transfer data
 base          0x3E00  0x3FFF  clipboard               -             shared clipboard length and data
 
 msx           0x1291  0x1295  msx_picture_state       msx_pic_cursor third/fourth picture banks, packing mode, and source stride

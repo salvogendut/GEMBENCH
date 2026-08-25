@@ -403,13 +403,17 @@ fsam_ent_out    push  af
 ; marshals name/len/unit into the transfer area, loads + CALLs the module.
 ;   FSV_TX_LEN/NAME/RES/UNIT  the marshalling slots (reuse the gbfat area - the IDE
 ;                             write + floppy write are never live at once)
-;   FSV_TX_DATA (<=7KB)       the staged source data
+;   FSV_TX_DATA (<=6.5 KiB)   the staged source data
 FSV_TX_LEN      equ   #1700
 FSV_TX_NAME     equ   #1702
 FSV_TX_RES      equ   #170D
 FSV_TX_UNIT     equ   #170F
 FSV_TX_DATA     equ   #2200
-FSV_TX_MAX      equ   #1C00        ; 7 KB staging cap (matches the gbfat/IDE save cap)
+                if PREEMPTIVE
+FSV_TX_MAX      equ   #1A00        ; 6.5 KiB cap; #3C00..#3DFF is scheduler RAM
+                else
+FSV_TX_MAX      equ   #1C00
+                endif
 
 fsam_free_mod_op
                 ld    (FSV_TX_LEN),hl

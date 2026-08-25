@@ -70,7 +70,12 @@ PICEDIT_ENTRY   equ   PICEDIT_BASE
                 else
                 jp    k_ret0                 ; no banked picture support -> A=0
                 endif
-                jp    k_noop                 ; GB_ONEVENT     #804B (dead stub -> shared ret, #274)
+                if PREEMPTIVE_CONTEXT
+GB_ONEVENT_ENTRY equ SCHED_TASK_ENABLE_ENTRY ; #477: opt-in worker task in preemptive builds
+                else
+GB_ONEVENT_ENTRY equ k_noop
+                endif
+                jp    GB_ONEVENT_ENTRY       ; GB_ONEVENT     #804B (GB_TASKENABLE under #477)
                 jp    k_menu                 ; GB_MENU        #804E
                 jp    k_setname              ; GB_SETNAME     #8051
                 ifdef WM_GADGETS

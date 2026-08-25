@@ -12,7 +12,7 @@
 ;   M4SV_NAME (#1702, 11)     8.3 target name
 ;   M4SV_RES  (#170D, byte)   result: 1 = saved, 0 = failed
 ;   M4SV_PATH (#1710, 64)     current M4 path prefix ("" = root)
-;   M4SV_DATA (#2200, <=7KB)  staged source bytes
+;   M4SV_DATA (#2200, <=6.5KiB) staged source bytes
 ; ---------------------------------------------------------------------------
 
 M4SAVE_ORG     equ   #6000
@@ -43,7 +43,14 @@ M4_APPENDMODE  equ   #92          ; FA_WRITE | FA_OPEN_ALWAYS | FA_REALMODE
 ; resident M4 stub or the on-wire protocol.
 M4_WRITECHUNK  equ   #FC
 M4_READCHUNK   equ   #0800
+                ifndef PREEMPTIVE
+PREEMPTIVE     equ   0
+                endif
+                if PREEMPTIVE
+M4SV_MAX       equ   #1A00
+                else
 M4SV_MAX       equ   #1C00
+                endif
 FS_LOAD_OFS    equ   #144C        ; 24-bit chunked-copy read offset
 FS_XFLAGS      equ   #144F        ; bit1 = append-write, bit2 = chunk-save marker
 fs_load_max    equ   #14F9

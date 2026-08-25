@@ -70,16 +70,21 @@ size work safer.
 
 ## Execution model
 
-Cooperative and single-foreground-app to start:
+GEOBENCH is currently cooperative and callback-driven:
 
-- One application has the foreground at a time.
-- The desktop runs an event loop; when it launches an app, control transfers to
-  the app's own event loop until the user quits.
-- A vblank interrupt drives lightweight housekeeping (pointer, cursor blink,
-  timers) regardless of who has the foreground.
+- The resident window manager owns the master event loop and keeps several
+  banked app windows resident at once.
+- Each app registers frame, draw, and event callbacks; the manager currently
+  invokes the focused app's frame callback and composites repaint callbacks in
+  z-order.
+- One window owns input focus. Kernel services, paged modules, storage, and
+  painting execute atomically.
 
-Preemptive multitasking is explicitly out of scope. GEOBENCH is cooperative and
-single-foreground by design.
+The build-gated preemptive conversion keeps kernel work atomic while allowing
+application tasks to be time-sliced. Its scheduler is carried by
+`DESKTOP.APP`, installed in fixed RAM, and explicitly does not use the optional
+GEOBENCH/M4 ROM paths; see
+[PREEMPTIVE_MULTITASKING.md](PREEMPTIVE_MULTITASKING.md).
 
 ## The system API
 
@@ -183,7 +188,8 @@ the level of asset reload, storage, and window-manager primitives.
 ## Known architectural limits
 
 - **128K+ only.** The app model depends on banked memory.
-- **Cooperative execution only.** No preemptive multitasking.
+- **Cooperative execution in release builds.** The build-gated preemptive task
+  conversion is tracked in [PREEMPTIVE_MULTITASKING.md](PREEMPTIVE_MULTITASKING.md).
 - **Flat-ish content layout.** Nested subdirectories deeper than one level are
   not a supported storage workflow today; see [`File_Manager_Issue.md`](File_Manager_Issue.md).
 - **Legacy AMSDOS software is not run.** GEOBENCH does not launch ordinary

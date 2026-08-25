@@ -151,6 +151,8 @@ GB_ONEVENT      equ   GB_KERNEL+75 ; #804B  register an event handler: HL = addr
                                    ;        message at GB_MSG (#1302): type, p0, p1,
                                    ;        p2. type GB_MSG_MENU(1) -> p0 = byte col.
                                    ;        Handler must return promptly (no GB_POLL).
+GB_TASKENABLE   equ   GB_ONEVENT   ; #477 preemptive builds: opt the calling legacy
+                                   ;        window into task service after GB_WMADD.
 GB_MENU         equ   GB_KERNEL+78 ; #804E  register the top-bar menu: HL = blob
                                    ;        (count, then {col, 8-byte label} per
                                    ;        title) in the caller page. Kernel copies

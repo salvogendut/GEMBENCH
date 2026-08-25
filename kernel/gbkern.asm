@@ -39,6 +39,13 @@ PIC_RUNTIME_CONVERT equ 1
                 ifndef TITLEBAR_TILE
 TITLEBAR_TILE   equ   0             ; issue #458: 16x14 repeated title-bar tile
                 endif
+                ifndef PREEMPTIVE
+PREEMPTIVE      equ   0             ; issue #477: opt-in scheduler while it is being proven
+                endif               ; normal distribution remains byte-identical
+                ifndef PREEMPTIVE_CONTEXT
+PREEMPTIVE_CONTEXT equ 0            ; stack-copy engine; enabled by scheduler test builds
+                endif
+                assert !PREEMPTIVE_CONTEXT|PREEMPTIVE,"PREEMPTIVE_CONTEXT requires PREEMPTIVE=1"
 
 ; STORAGE_ALBIREO (#104): build-time drive-0 backend select. 0 (default) = the
 ; SYMBiFACE IDE FAT32 backend; 1 (pass -DSTORAGE_ALBIREO=1) = the Albireo CH376
@@ -67,6 +74,7 @@ GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present.
                 if GB_ROM_REQ
 GB_ROM          equ   1
                 endif
+                assert !PREEMPTIVE|!GB_ROM_REQ,"preemptive CPC builds are RAM-resident and do not use GEOBENCH.ROM"
 ; #156: the window maximize/restore + close-X title-bar gadgets AND the banked picture buffer
 ; (#164: lets the Viewer open .PICs larger than its 8K in-page buffer) are resident chrome, so
 ; they only build where there is headroom - the GB_ROM (offloaded) kernels, the smaller Albireo
@@ -723,7 +731,11 @@ bd_done         pop   af
 ; through the low-RAM module buffer, then blit from them with restore_block (which reads its
 ; sb_buf in the #4000 window). Lets the Viewer show .PIC files bigger than its own 16K page.
 ;
+                if PREEMPTIVE
+PIC_CHUNK       equ   #1A00
+                else
 PIC_CHUNK       equ   #1C00
+                endif
 
 ; k_pic_open (GB_PICOPEN): load the opened file into borrowed bank(s) + parse the .PIC header.
 ; -> A=bank with PIC_WB/PIC_H/PIC_OFF set if it's a .PIC loaded OK; A=0 (no free bank, or not a
@@ -2280,6 +2292,12 @@ wfs_found       ld    a,c
 ; master loop. Never returns.
 k_wm_run
                 call  wm_register
+                if PREEMPTIVE_CONTEXT
+                xor   a                           ; first registration is always root slot zero
+                ld    (SCHED_CURRENT),a
+                inc   a
+                ld    (SCHED_RUNNABLE),a
+                endif
 wm_loop
                 call  wm_map_focus               ; bank focused page; APP_HANDLER = its
                 call  k_poll                      ; on_event, so a top-bar click reaches
@@ -2298,8 +2316,16 @@ wm_loop
                 push  hl                          ; #146: managed window -> kernel router
                 ld    de,WM_FR_FLAGS
                 add   hl,de
+                if PREEMPTIVE_CONTEXT
+                ld    a,(hl)
+                pop   hl
+                bit   3,a                         ; task worker owns this legacy on_frame
+                jr    nz,wmf_done
+                bit   1,a
+                else
                 bit   1,(hl)
                 pop   hl                          ; HL = entry
+                endif
                 jr    z,wmf_legacy
                 call  wm_chrome_frame
                 jr    wmf_done
@@ -2315,7 +2341,11 @@ wmf_done
                 ld    hl,(BAR_HANDLER)            ; top-bar hook (#77): run the bar handler every
                 ld    a,h                          ; frame in the desktop's page so the bar stays
                 or    l                            ; live regardless of which window has focus.
-                jr    z,wm_loop                    ; bar_draw only repaints lines 0-7 when the clock
+                if PREEMPTIVE_CONTEXT
+                jr    z,wm_loop_tail               ; bar_draw only repaints lines 0-7 when the clock
+                else
+                jr    z,wm_loop
+                endif
                 ifdef PLATFORM_MSX                 ; (#287: APP_PAGES[0] = the TPA segment)
                 ld    a,(MSX_TPASEG)
                 else
@@ -2324,6 +2354,15 @@ wmf_done
                 call  bank_set                     ; its own redraws with gb_curhide/show), so the
                 ld    hl,(BAR_HANDLER)            ; pointer over the bar is left untouched - do NOT
                 call  md_call                      ; erase/show it every frame here: that landed the
+                if PREEMPTIVE_CONTEXT
+wm_loop_tail
+                ld    a,(SCHED_RUNNABLE)
+                cp    2                            ; avoid a stack copy when the desktop is alone
+                jr    c,wm_loop
+                ld    a,(WM_TABLE)                 ; system task snapshot belongs to the root bank
+                call  bank_set
+                call  SCHED_YIELD_ENTRY
+                endif
                 jr    wm_loop                      ; erase at the beam and dropped the bar pointer.
 
 ; k_on_bar (GB_ONBAR #77): HL = a handler the WM loop runs every frame in PAGE_APP0
@@ -2416,6 +2455,15 @@ k_wm_close
                 push  af                           ; save it: wm_free_page clobbers everything
                 ld    de,WM_FR_FLAGS
                 add   hl,de
+                if PREEMPTIVE_CONTEXT
+                bit   3,(hl)
+                jr    z,kwc_not_task
+                push  hl
+                ld    hl,SCHED_RUNNABLE
+                dec   (hl)
+                pop   hl
+kwc_not_task
+                endif
                 ld    (hl),0                       ; mark dead (clear the alive flag)
                 call  wm_z_remove                 ; drop slot C from the z-order (keeps C)
                 call  wm_focus_top                ; refocus the new live z-top

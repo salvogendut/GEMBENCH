@@ -66,6 +66,9 @@ static unsigned char want_saver;             /* System>Activate screensaver: ope
 static unsigned char want_about;             /* System>About: 1=menu selected, 2=open next frame (#409) */
 #if !defined(GB_MSX2) && !defined(GB_PCW)
 static unsigned char first_paint;             /* defer the definitive paint until WM registration */
+#ifdef GB_PREEMPTIVE_DIAGNOSTIC
+static unsigned char preemptive_diagnostic_started;
+#endif
 #endif
 #ifdef GB_PCW
 static unsigned char want_timesync;          /* boot time helper enabled when TIMESYNC=true */
@@ -1062,6 +1065,14 @@ static void on_frame(void)
         return;
     }
 #endif
+#ifdef GB_PREEMPTIVE_DIAGNOSTIC
+    if (!preemptive_diagnostic_started) {
+        preemptive_diagnostic_started = 1;
+        gb_wm_open("TASKDEMOAPP");
+        gb_wm_open("TASKDEMOAPP");
+        return;
+    }
+#endif
     if (menu_refresh && background_changed()) { /* backdrop/wallpaper changed while a child was up:
                                                     reload outside wm_repaint_all, then repaint once. */
         background_init();
@@ -1205,6 +1216,9 @@ void main(void)
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;
+#ifdef GB_PREEMPTIVE
+    gb_task_root_init();                         /* install app-carried fixed-RAM scheduler */
+#endif
     gb_on_bar(bar_draw);                        /* top-bar handler runs every frame (#77) */
     gb_wm_run(&deskwin);                        /* register + run the kernel WM (#45) */
 }

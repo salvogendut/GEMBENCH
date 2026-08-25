@@ -465,7 +465,11 @@ ALBSV_TX_RES    equ   #170D
 ALBSV_TX_UNIT   equ   #170F
 ALBSV_TX_PATH   equ   #1710
 ALBSV_TX_DATA   equ   #2200
+                if PREEMPTIVE
+ALBSV_TX_MAX    equ   #1A00
+                else
 ALBSV_TX_MAX    equ   #1C00
+                endif
 
 fsalb_load_chunk_mod
                 xor   a

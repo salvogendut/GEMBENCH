@@ -34,6 +34,11 @@ focused window's handlers (issue #45).
 | shell    | `SHELL.APP`    | fullscreen command shell with `ls`, `cd`, `pwd`, `cat`, `cp`, `rm`, `clear`, `help`, and `exit`; supports A/B/C paths and streamed arbitrary-size file copies |
 | timesync | `TIMESYNC.APP` | PCW desktop helper — reads PerryNet's firmware clock with `TIME_GET` when `TIMESYNC=true`, then applies `TIMEZONE=+/-H` |
 
+`TASKDEMO.APP` is a development-only preemption diagnostic and is not staged in
+the distributions. Its worker intentionally never yields; build it with
+`make taskdemo` and run it only against `make cpc-preemptive`. The scheduler is
+carried by `DESKTOP.APP` and installed into RAM; no ROM is required.
+
 ## Screensavers (`.SAV`)
 
 A screensaver is just an app shipped with a `.SAV` extension. The desktop's
@@ -107,6 +112,8 @@ resident kernel. Build with only the units an application uses:
 - `FORM_SELECT=1`: labelled selector rows; requires `FORM=1` and `SELECTOR=1`
 - `TIMESET=1`: binary `gb_set_time()` support without adding resident kernel code
 - `SOUND=1`: target sound primitives without adding resident kernel code
+- `TASK=1 TASK_STACK_RESERVE=256`: opt a legacy window's `on_frame` callback
+  into the experimental worker scheduler and reserve its bank-top stack snapshot
 
 For example:
 

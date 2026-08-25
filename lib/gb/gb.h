@@ -511,6 +511,9 @@ typedef struct {
 } gb_win_t;
 void gb_wm_run(const gb_win_t *desc);
 void gb_wm_add(const gb_win_t *desc);
+/* Opt-in worker task (#477). Call after gb_wm_add(); on_frame becomes a
+ * compute callback and on_repaint remains compositor-owned. TASK=1 builds only. */
+void gb_task_enable(void);
 
 /* Managed window (#146, #148): the KERNEL owns the chrome. Register with gb_wm_managed
  * and the WM draws the frame/title/grip and runs close/drag/resize for you; the app
@@ -654,13 +657,21 @@ unsigned char gb_get_drive(void);
 void gb_copy_begin(void);
 void gb_copy_end(void);
 #define gb_copybuf ((char *)0x2200)
+#ifdef GB_PREEMPTIVE
+#define GB_COPYMAX 0x1A00
+#else
 #define GB_COPYMAX 0x1C00
+#endif
 
 /* Top-bar handler (experiment #77). gb_on_bar registers a handler the WM master loop
  * runs every frame in the desktop's page, regardless of which window has focus - so a
  * desktop-owned top bar (clock, menu titles, footprint) stays live. Draw only (no
  * input / no gb_poll); use change-detection to avoid a wasteful per-frame repaint. */
 void gb_on_bar(void (*handler)(void));
+
+/* Development preemption runtime. TASK_ROOT=1 links the scheduler payload into
+ * the desktop; this installs it in fixed RAM without a ROM or external module. */
+void gb_task_root_init(void);
 
 /* Shared TCP API (build_capp NET=1). CPC calls the active GBNET/GBNETM4 paged
  * module; MSX discovers and calls a TCP/IP UNAPI implementation. gb_net_init's

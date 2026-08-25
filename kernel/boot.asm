@@ -219,6 +219,9 @@ km_finish                                      ; reached by k_exit's longjmp
 ; the boot value, then fall into km_finish's clean exit (#74).
 k_exit
                 di
+                if PREEMPTIVE_CONTEXT
+                call  SCHED_IRQ_UNINSTALL_ENTRY ; restore the standard CPC IM-1 vector
+                endif
                 call  bank_normal             ; main RAM at #4000-#7FFF (for BASIC)
                 ld    sp,(BOOT_SP)
                 jp    km_finish

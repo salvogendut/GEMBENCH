@@ -44,7 +44,11 @@ GBFAT_RES       equ   #170D        ; result: 1 = saved, 0 = failed
 GBFAT_OP        equ   #170E        ; operation: 0 = save, 1 = delete (#62)
 GBFAT_DIR       equ   #170F        ; directory cluster (4 bytes) to operate in
 GBFAT_DATA      equ   #2200        ; staged data (<= GBFAT_MAX bytes)
-GBFAT_MAX       equ   #1C00        ; 7 KB staging cap (fits #2200..#3DFF in low RAM)
+                if PREEMPTIVE
+GBFAT_MAX       equ   #1A00        ; 6.5 KiB staging cap (fits #2200..#3BFF)
+                else
+GBFAT_MAX       equ   #1C00        ; cooperative build uses the full 7 KiB buffer
+                endif
 GBFAT_LOAD      equ   DATA_MODTOP  ; module load address, above the font+icon set in
                                    ; PAGE_DATA (must match GBFAT_ORG in gbfat.asm; #88)
 

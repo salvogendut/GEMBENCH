@@ -13,12 +13,12 @@ mkdir -p build
 OUT="build/FLOPPYSV.RAW"
 deps=("$0" "tools/build_cache.sh" "kernel/modules/floppysv.asm" "lib/fs_amsdos_core.asm")
 stamp="$OUT.stamp"
-cache_key=$(printf '%s\n' "build_floppymod.v1" "RASM=$RASM")
+cache_key=$(printf '%s\n' "build_floppymod.v1" "RASM=$RASM" "EXTRA_RASM=${EXTRA_RASM:-}")
 if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
     echo "Up to date $OUT ($(stat -c%s "$OUT") bytes)"
     exit 0
 fi
 
-"$RASM" kernel/modules/floppysv.asm -eo
+"$RASM" kernel/modules/floppysv.asm -eo ${EXTRA_RASM:-}
 gb_write_stamp "$stamp" "$cache_key"
 echo "Built $OUT ($(stat -c%s "$OUT") bytes)"

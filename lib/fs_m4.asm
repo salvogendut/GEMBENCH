@@ -546,8 +546,12 @@ fsm4_delete_file
                 jr    msv_common
 
 fsm4_save_file
-                ld    hl,(fs_save_len)       ; low-RAM staging cap: #2200..#3DFF
+                ld    hl,(fs_save_len)       ; low-RAM staging cap
+                if PREEMPTIVE
+                ld    de,#1A01
+                else
                 ld    de,#1C01
+                endif
                 or    a
                 sbc   hl,de
                 jr    nc,msv_fail

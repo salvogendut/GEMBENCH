@@ -15,7 +15,7 @@
 ;   FSV_TX_UNIT (#170F, byte)   floppy unit (0 = A, 1 = B)
 ;                              #FF = Albireo/CH376 append/write operation
 ;   FSV_TX_PATH (#1710, 64)     card path prefix for Albireo/CH376 operations
-;   FSV_TX_DATA (#2200, <=7KB)  the data, copied out of the app's page by the stub
+;   FSV_TX_DATA (#2200, <=6.5KiB) data copied out of the app's page by the stub
 ;
 ; Build: tools/build_floppymod.sh -> build/FLOPPYSV.RAW, packaged as FLOPPYSV.BIN.
 ; ---------------------------------------------------------------------------
@@ -31,7 +31,14 @@ FSV_TX_ERR      equ   #170E
 FSV_TX_UNIT     equ   #170F
 FSV_TX_PATH     equ   #1710
 FSV_TX_DATA     equ   #2200
+                ifndef PREEMPTIVE
+PREEMPTIVE      equ   0
+                endif
+                if PREEMPTIVE
+FSV_TX_MAX      equ   #1A00
+                else
 FSV_TX_MAX      equ   #1C00
+                endif
 FS_LOAD_OFS     equ   #144C        ; 24-bit read offset for #FFFC chunk-read op
 FS_XFLAGS       equ   #144F        ; bit1 = append-write, bit2 = chunk-save marker
 fs_ent_size     equ   #14E8
