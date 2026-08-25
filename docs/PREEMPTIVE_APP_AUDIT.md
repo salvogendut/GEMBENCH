@@ -39,7 +39,7 @@ kernel work into a worker would make the system unsafe rather than preemptible.
 
 | Priority | Area | Result |
 |---|---|---|
-| P0 | File Manager | Copy is a bounded root job; directory preparation remains synchronous. |
+| P0 | File Manager | Copy, directory preparation, and APP-icon probing are bounded root jobs. |
 | P0 | Settings | Needs bounded asset enumeration and careful modal/I/O lifecycle. |
 | P0 | Screensavers | Several are already frame-bounded; five need incremental generation. |
 | P1 | BASIC and Paint | Mostly cooperative already, but long individual operations need bounds. |
@@ -63,24 +63,32 @@ Implemented:
   removes the partial destination;
 - other File Manager instances suspend storage operations while the copy owns
   the shared filesystem context;
+- directory scans process at most four entries per frame and insert each entry
+  directly into the sorted display order;
+- the free-space query runs as a separate frame step after enumeration;
+- embedded `.APP` icons are probed and drawn one visible slot per frame through
+  `GBAPICK.MOD`; repaint callbacks perform no storage I/O;
 - cooperative builds retain the original synchronous copy path.
 
 Remaining risks:
 
-- `build_list()` scans up to 104 directory entries and then insertion-sorts the
-  complete list synchronously.
-- embedded `.APP` icons can cause file reads while File Manager is painting.
-- relisting combines directory scan, free-space query, sorting, title update,
-  and a full parent repaint in one operation.
+- each directory entry and APP probe still requires one atomic backend
+  operation on the root task; slow firmware cannot be preempted inside that
+  operation;
+- a missing `GBAPICK.MOD` leaves the generic APP icon, as intended, but needs a
+  cross-target runtime check;
+- multiple File Manager windows serialize scans and copies through the shared
+  storage claim; icon probes run only while that claim is free. This still
+  needs contention testing.
 
 Required work:
 
 1. Exercise the copy job on every storage backend, including cancellation and
    exact-multiple chunk sizes, before treating it as production-ready.
-2. Split directory loading into scan, sort, and optional embedded-icon phases.
-   The window may display collected entries progressively.
-3. Keep icon probing out of repaint callbacks; queue probes and repaint only the
-   affected cell when a probe completes.
+2. Exercise maximum-size directories and close a File Manager during each scan
+   stage; verify the storage claim is always released.
+3. Exercise generic, missing, single-codec, and dual-codec APP icons while
+   scrolling and switching between list and icon views.
 
 Acceptance tests:
 
@@ -216,8 +224,8 @@ kernel drawing, file I/O, or `gb_copybuf` users into a worker.
 
 ## Implementation order
 
-1. Validate the implemented File Manager copy job, then add progressive
-   directory/icon preparation.
+1. Validate the implemented File Manager copy, progressive directory scan, and
+   queued APP-icon probing across all storage backends.
 2. Settings progressive picker enumeration and modal cleanup audit.
 3. Incremental DECO, MOUNTAIN, FOREST, TRUCHET, and HELIX generation.
 4. Screensaver timing and lifecycle matrix across CPC, MSX2, and PCW.

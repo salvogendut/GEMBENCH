@@ -13,12 +13,27 @@
 #define APPICON_WB     8
 #define APPICON_H      32
 
+#ifdef GB_PREEMPTIVE
+#define APP_PROBE_MAX  1024
+#define APPICON_LEN    (APPICON_WB * APPICON_H)
+#define APPICON7_WB    16
+#define APPICON7_LEN   (APPICON7_WB * APPICON_H)
+#define APPICON_MODE1  1
+#define APPICON_MODE7  7
+#else
 #define APP_PROBE_MAX  512
+#endif
 #if defined(GB_MSX2) || defined(GB_PCW)
 #define FS_LOAD_OFS ((volatile unsigned char *)0x144C)
 #endif
 #define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
 #define PROBE_BUF   ((unsigned char *)0x2200)
+#ifdef GB_PREEMPTIVE
+#define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
+#endif
+#if defined(GB_MSX2) && defined(GB_PREEMPTIVE)
+#define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
+#endif
 
 #if !defined(GB_MSX2) && !defined(GB_PCW)
 extern unsigned char gb_app_probe(char *dst);
@@ -28,6 +43,9 @@ static char          store[PICK_MAX][14];
 static char          rawname[PICK_MAX][11];
 static unsigned char isdir_f[PICK_MAX];
 static char          saved_name[11];
+#ifdef GB_PREEMPTIVE
+static char          draw_launch_name[11];
+#endif
 
 static void copy11(char *dst, const char *src)
 {
@@ -95,6 +113,112 @@ static unsigned char has_gbap(const char *raw)
         && PROBE_BUF[APPICON_OFF + 1] == APPICON_WB
         && PROBE_BUF[APPICON_OFF + 2] == APPICON_H);
 }
+
+#if defined(GB_PCW) && defined(GB_PREEMPTIVE)
+static unsigned char appicon_native(unsigned char value)
+{
+    unsigned char i, pen, native = 0;
+    for (i = 0; i < 4; i++) {
+        pen = (unsigned char)(((value >> (7 - i)) & 1)
+                              | (((value >> (3 - i)) & 1) << 1));
+        native |= (unsigned char)(pen << (6 - 2 * i));
+    }
+    return (unsigned char)(((native & 0x55) << 1)
+                           | (((native ^ 0xFF) & 0xAA) >> 1));
+}
+#endif
+
+#ifdef GB_PREEMPTIVE
+/* Load and draw one APP-owned icon. File Manager invokes this only from its
+ * frame callback; repaint callbacks merely leave a generic APP placeholder.
+ * The module is paged over the caller, so all request data and icon bytes live
+ * in low RAM. */
+unsigned char gb_drawappicon(const char *raw, unsigned char x,
+                             unsigned char y, unsigned char half)
+{
+    unsigned char *data = PROBE_BUF;
+    unsigned char *entry;
+    unsigned char codec = APPICON_MODE1;
+    unsigned char rows = half ? 16 : APPICON_H;
+    unsigned int got, len, off = APPICON_OFF, total;
+#ifdef GB_PCW
+    unsigned int p;
+#endif
+
+    /* Module loading overwrites fs_req_name. Restore the focused File Manager's
+     * launch name, matching the established APP-picker/module convention. */
+    gb_get_name(draw_launch_name);
+    gb_set_name(raw);
+#if defined(GB_MSX2) || defined(GB_PCW)
+    FS_LOAD_OFS[0] = 0;
+    FS_LOAD_OFS[1] = 0;
+    FS_LOAD_OFS[2] = 0;
+    FS_XFLAGS = 1;
+    got = gb_fs_load((char *)data, APP_PROBE_MAX);
+    FS_XFLAGS = 0;
+#else
+    got = gb_app_probe((char *)data) ? APP_PROBE_MAX : 0;
+#endif
+    gb_set_name(draw_launch_name);
+
+    if (got < APPICON_OFF || data[0] != 0xC3 || data[3] != 'G'
+        || data[4] != 'B' || data[5] != 'A' || data[6] != 'P')
+        return 0;
+    if (data[7] == 1) {
+        if (data[8] != APPICON_MODE1 || data[9] != APPICON_WB
+            || data[10] != APPICON_H || data[11] != 0 || data[12] != 1
+            || data[13] != APPICON_OFF || data[14] != 0
+            || got < APPICON_OFF + APPICON_LEN)
+            return 0;
+    } else if (data[7] == 2) {
+        total = (unsigned int)data[10] | ((unsigned int)data[11] << 8);
+        if (!data[8] || data[8] > 2 || data[9] != 8
+            || data[12] != APPICON_OFF || data[13] != 0 || total > got)
+            return 0;
+        entry = data + APPICON_OFF;
+        off = (unsigned int)entry[6] | ((unsigned int)entry[7] << 8);
+        len = (unsigned int)entry[4] | ((unsigned int)entry[5] << 8);
+        if (entry[0] != APPICON_MODE1 || entry[1] != APPICON_WB
+            || entry[2] != APPICON_H || entry[3] || len != APPICON_LEN
+            || off + len > total)
+            return 0;
+#ifdef GB_MSX2
+        if (MSX_SCRMOD == 7 && data[8] == 2) {
+            entry += 8;
+            len = (unsigned int)entry[4] | ((unsigned int)entry[5] << 8);
+            if (entry[0] == APPICON_MODE7 && entry[1] == APPICON7_WB
+                && entry[2] == APPICON_H && !entry[3] && len == APPICON7_LEN) {
+                unsigned int native_off = (unsigned int)entry[6]
+                                          | ((unsigned int)entry[7] << 8);
+                if (native_off + len <= total) {
+                    codec = APPICON_MODE7;
+                    off = native_off;
+                }
+            }
+        }
+#endif
+    } else return 0;
+
+#ifdef GB_MSX2
+    if (codec == APPICON_MODE7) {
+        if (half) off += APPICON7_WB * 8;
+        gb_pic_edit_buf = (unsigned int)(data + off);
+        gb_pic_edit_off = (unsigned int)x | ((unsigned int)y << 8);
+        FS_SAVE_LEN_K = APPICON_WB | ((unsigned int)rows << 8);
+        return gb_pic_edit(GB_PICEDIT_NATIVE16);
+    }
+    gb_pic_edit_buf = (unsigned int)(data + off);
+    gb_pic_edit_off = (unsigned int)(data + off);
+    FS_SAVE_LEN_K = APPICON_LEN;
+    if (!gb_pic_edit(GB_PICEDIT_NATIVE)) return 0;
+#elif defined(GB_PCW)
+    for (p = off; p < off + APPICON_LEN; p++) data[p] = appicon_native(data[p]);
+#endif
+    if (half) off += APPICON_WB * 8;
+    gb_restorerect(x, y, APPICON_WB, rows, data + off);
+    return 1;
+}
+#endif
 
 /* Reposition after a probe or popup changed the backend directory cursor.
  * advance=1 returns the entry after raw; 0 leaves raw positioned for chdir. */

@@ -155,8 +155,12 @@ offload a genuinely independent decode stage.
 complete read/write chunk per focused frame. The destination window is raised
 and titled `Copying`; closing it cancels the operation and removes the partial
 file. Other File Manager instances suspend storage actions while the job owns
-the shared transfer context. Directory scanning, sorting, and embedded-icon
-probing are still synchronous and remain the next File Manager work.
+the shared transfer context. Directory scans process at most four entries per
+frame and insertion-order entries as they arrive; the free-space query is a
+separate frame step. Repaint callbacks use generic APP placeholders and perform
+no storage I/O. `GBAPICK.MOD` then probes and draws at most one visible embedded
+APP icon per frame. Normal cooperative builds retain their original synchronous
+File Manager path.
 
 The MSX2 rotation and lifecycle checks run without a GUI:
 

@@ -71,7 +71,8 @@
    has a resource directory and may add a native MSX Screen-7 icon. */
 #define APPICON_UNKNOWN  0x80
 #define APPICON_EMBEDDED 0x40
-#define APPICON_SLOTMASK 0x3F
+#define APPICON_PENDING  0x20
+#define APPICON_SLOTMASK 0x1F
 #define APPICON_OFF      16
 #define APPICON_WB       8
 #define APPICON_H        32
@@ -103,13 +104,16 @@ static char msx_drive_title[7] = "Disk A";
 #endif
 static unsigned char free_known;
 static unsigned int free_kib;
+#ifndef GB_PREEMPTIVE
 static unsigned int appicon_off;
 static unsigned char appicon_codec;
+#endif
 #ifdef GB_PREEMPTIVE
 static unsigned char copy_state;
 static unsigned char copy_created;
 static unsigned char copy_ofs_hi;
 static unsigned int copy_ofs_lo;
+static unsigned char list_state;
 #endif
 
 /* Reuse the kernel's fixed 512-byte configuration text area. It already has this
@@ -137,6 +141,54 @@ static char          names[MAX_ENT * 11];  /* raw 8.3 names, in raw directory or
 static unsigned char icons[MAX_ENT];       /* precomputed type icon per entry        */
 static unsigned char order[MAX_ENT];       /* sorted permutation -> raw index         */
 #define NAME_AT(k) (&names[(unsigned int)(k) * 11])
+
+#ifdef GB_PREEMPTIVE
+static const char appicon_modname[11] = {
+    'G','B','A','P','I','C','K',' ','M','O','D'
+};
+static unsigned char icon_req_raw, icon_req_x, icon_req_y;
+static unsigned char icon_scan_pos, icon_scan_col;
+
+/* Marshal the queued icon request entirely in assembly. Besides being smaller
+   than SDCC's four-argument loop, this makes the low-RAM handoff explicit. */
+static unsigned char module_draw_icon(void) __naked
+{
+__asm
+    ld a,(_icon_req_raw)
+    ld l,a
+    ld h,#0
+    ld e,l
+    ld d,h
+    add hl,hl
+    add hl,hl
+    add hl,de
+    add hl,hl
+    add hl,de
+    ld de,#_names
+    add hl,de
+    ld de,#0x1708
+    ld bc,#11
+    ldir
+    ld hl,#_appicon_modname
+    ld de,#0x3914
+    ld bc,#11
+    ldir
+    ld a,#1
+    ld (#0x1700),a
+    ld a,(_icon_req_x)
+    ld (#0x1701),a
+    ld a,(_icon_req_y)
+    ld (#0x1702),a
+    ld a,(_view)
+    xor a,#1
+    ld (#0x1703),a
+    ld a,#0x80
+    call #0x80AE
+    ld a,c
+    ret
+__endasm;
+}
+#endif
 
 /* dir_seek: position the dir cursor at absolute index idx; return its name (0 if
    past the end). The caller continues with gb_dirn() from there. */
@@ -479,7 +531,7 @@ static unsigned char rank_of(unsigned char ic)
     }
 }
 
-#ifdef GB_PCW
+#if defined(GB_PCW) && !defined(GB_PREEMPTIVE)
 /* Canonical Mode-1 byte -> the raw PCW hardware byte expected by
    gb_restorerect. This is the same fallback conversion used by VIEWER.APP. */
 static unsigned char appicon_native(unsigned char value)
@@ -495,6 +547,7 @@ static unsigned char appicon_native(unsigned char value)
 }
 #endif
 
+#ifndef GB_PREEMPTIVE
 /* appicon_load: read and validate the GBAP resources into gb_copybuf. The File
    Manager's launch name is parked beyond the probe while gb_fs_load temporarily
    targets the APP. Mode 7 selects codec 7 when present; every other target/mode
@@ -573,15 +626,22 @@ static unsigned char appicon_load(unsigned char raw)
 #endif
     return 1;
 }
+#endif
 
-/* draw_entry_type: regular IST slot or an APP-owned bitmap. Generic legacy apps
-   are probed once; a confirmed embedded icon is reloaded only on a real repaint,
-   so normal pointer motion performs no disk I/O. */
+/* draw_entry_type: regular IST slot or an APP-owned bitmap. */
 static void draw_entry_type(unsigned char raw, unsigned char x, unsigned char y,
                             unsigned char half)
 {
     unsigned char state = icons[raw];
     unsigned char slot = (unsigned char)(state & APPICON_SLOTMASK);
+#ifdef GB_PREEMPTIVE
+    /* Repaints are storage-free. The frame job reloads and draws visible embedded
+       icons after this generic placeholder has been painted. */
+    if (slot == ICON_APP && (state & APPICON_EMBEDDED))
+        icons[raw] = (unsigned char)(state | APPICON_PENDING);
+    if (half) gb_icon_half(slot, x, y);
+    else      gb_icon(slot, x, y);
+#else
     unsigned char *bitmap;
     if (slot == ICON_APP && (state & (APPICON_UNKNOWN | APPICON_EMBEDDED))) {
         if (appicon_load(raw)) {
@@ -612,6 +672,7 @@ static void draw_entry_type(unsigned char raw, unsigned char x, unsigned char y,
     }
     if (half) gb_icon_half(slot, x, y);
     else      gb_icon(slot, x, y);
+#endif
 }
 
 /* entry_less: is raw entry a ordered before raw entry b? By type group, then name. */
@@ -625,6 +686,72 @@ static unsigned char entry_less(unsigned char a, unsigned char b)
     return 0;
 }
 
+static void draw(void);
+
+#ifdef GB_PREEMPTIVE
+#define LIST_IDLE  0
+#define LIST_WAIT  1
+#define LIST_FIRST 2
+#define LIST_NEXT  3
+#define LIST_FREE  4
+#define LIST_BATCH 4
+
+/* list_start/list_step keep filesystem work on the root task, but process only a
+   small directory batch per frame. LIST_WAIT serialises File Manager storage jobs
+   without stealing another window's claim. Each new entry is inserted directly
+   into the sorted permutation, eliminating the old second full sort pass. The
+   collected list is published only when complete: painting every batch made the
+   window visibly flash and repeatedly moved entries as sorting progressed. */
+static void list_start(void)
+{
+    total = 0; top = 0; nsel = 0; free_known = 0;
+    title_buf[0] = 'R'; title_buf[1] = 'e'; title_buf[2] = 'a'; title_buf[3] = 'd';
+    title_buf[4] = 'i'; title_buf[5] = 'n'; title_buf[6] = 'g'; title_buf[7] = 0;
+    list_state = LIST_WAIT;
+}
+
+static void list_step(void)
+{
+    unsigned char n = 0, i, j, raw;
+    char *p, *e, *d;
+
+    if (list_state == LIST_WAIT) {
+        if (gb_drop_claimed()) return;
+        gb_drop_claim();
+        list_state = LIST_FIRST;
+    }
+    if (list_state == LIST_FREE) {
+        gb_set_drive(my_drive);
+        free_known = gb_fs_free_kib(&free_kib);
+        gb_drop_release();
+        list_state = LIST_IDLE;
+        win_title();
+        /* Publish the completed listing in one repaint. A title-only damage
+           rectangle updates the name but clips fm_draw's entire body. */
+        gb_wm_damage(win_x, win_y, win_w, win_h);
+        gb_restore_parent();
+        return;
+    }
+
+    gb_set_drive(my_drive);
+    p = (list_state == LIST_FIRST) ? gb_dir1() : gb_dirn();
+    while (p && total < MAX_ENT && n < LIST_BATCH) {
+        raw = total;
+        d = NAME_AT(raw); e = gb_entname();
+        for (i = 0; i < 11; i++) d[i] = e[i];
+        icons[raw] = entry_icon(name83(e));
+        j = raw;
+        while (j && entry_less(raw, order[j - 1])) {
+            order[j] = order[j - 1];
+            j--;
+        }
+        order[j] = raw;
+        total++; n++;
+        if (n < LIST_BATCH && total < MAX_ENT) p = gb_dirn();
+    }
+    list_state = (!p || total == MAX_ENT) ? LIST_FREE : LIST_NEXT;
+}
+#else
 /* build_list: stream the directory into the cache (raw order, with each entry's type
    icon), then insertion-sort `order` by (type, name). Sets `total`. */
 static void build_list(void)
@@ -649,11 +776,18 @@ static void build_list(void)
         order[j] = v;
     }
 }
+#endif
 
 static void draw_list_view(void)
 {
     unsigned char i, y, p, raw, up = up_avail();
     unsigned char dt = disp_total();
+#ifdef GB_PREEMPTIVE
+    icon_scan_pos = 0;
+    icon_scan_col = 0;
+    icon_req_x = CT_X;
+    icon_req_y = CT_Y + 1;
+#endif
     for (i = 0; i < LVIS; i++) {                   /* draw from the sorted cache (#118) */
         p = (unsigned char)(top + i);
         y = CT_Y + i * ROW_H;
@@ -674,33 +808,39 @@ static void draw_list_view(void)
 
 static void draw_icons_view(void)
 {
-    unsigned char r, c, cx, cy, raw, up = up_avail();
+    unsigned char r, c, cx, cy, raw, cell_w = CELL_W, up = up_avail();
     unsigned int idx = (unsigned int)top * ICOLS;    /* first visible item */
     unsigned int dt = disp_total();
+    cy = CT_Y;
+#ifdef GB_PREEMPTIVE
+    icon_scan_pos = 0;
+    icon_scan_col = 0;
+    icon_req_x = (unsigned char)(CT_X + (cell_w - 8) / 2);
+    icon_req_y = CT_Y + 1;
+#endif
     for (r = 0; r < IVIS; r++) {
+        cx = CT_X;
         for (c = 0; c < ICOLS; c++) {
-            cx = CT_X + c * CELL_W;
-            cy = CT_Y + r * CELL_H;
-            gb_fill(cx, cy, CELL_W, CELL_H - 1, 0);             /* clear whole cell before repaint */
+            gb_fill(cx, cy, cell_w, CELL_H - 1, 0);             /* clear whole cell before repaint */
             if (idx < dt) {
                 if (up && idx == 0) {                            /* the ".." entry (#142) */
-                    gb_icon(ICON_UP, (unsigned char)(cx + (CELL_W - 4) / 2),  /* 16px, centered */
+                    gb_icon(ICON_UP, (unsigned char)(cx + (cell_w - 4) / 2),  /* 16px, centered */
                             (unsigned char)(cy + 9));                    /* in the 32px band */
-                    gb_text((unsigned char)(cx + (CELL_W - 3) / 2), cy + 34, "..");  /* centered */
+                    gb_text((unsigned char)(cx + (cell_w - 3) / 2), cy + 34, "..");  /* centered */
                 } else {
                     raw = order[(unsigned char)(idx - up)];
-                    draw_entry_type(raw, cx + (CELL_W - 8) / 2, cy + 1, 0); /* full icon (#103/#426) */
+                    draw_entry_type(raw, cx + (cell_w - 8) / 2, cy + 1, 0); /* full icon (#103/#426) */
                     draw_name(cx, cy + 34, name83(NAME_AT(raw)));         /* name below the icon */
                 }
                 if (nsel == (unsigned char)(idx + 1))
-                    gb_frame(cx, cy, CELL_W, CELL_H - 1, 3);
+                    gb_frame(cx, cy, cell_w, CELL_H - 1, 3);
             }
             idx++;
+            cx = (unsigned char)(cx + cell_w);
         }
+        cy = (unsigned char)(cy + CELL_H);
     }
 }
-
-static void draw(void);
 
 static void sel_frame(unsigned char pos, unsigned char pen)
 {
@@ -744,6 +884,49 @@ static void draw(void)
     draw_body();
     gb_curshow();
 }
+
+#ifdef GB_PREEMPTIVE
+/* Probe at most one visible APP per frame. A normal repaint leaves its generic
+   placeholder and marks a known custom icon pending, so no filesystem operation
+   ever runs from fm_draw. */
+static unsigned char appicon_step(void)
+{
+    unsigned char p, raw, state, up = up_avail();
+    unsigned char limit = (view == V_ICONS)
+        ? (unsigned char)(IVIS * ICOLS) : LVIS;
+
+    if (icon_scan_pos >= limit) return 0;
+    p = (view == V_ICONS)
+        ? (unsigned char)(top * ICOLS + icon_scan_pos)
+        : (unsigned char)(top + icon_scan_pos);
+    if (p >= disp_total()) { icon_scan_pos = limit; return 0; }
+
+    if (!(up && p == 0)) {
+        raw = order[(unsigned char)(p - up)];
+        state = icons[raw];
+        if ((state & APPICON_SLOTMASK) == ICON_APP
+            && (state & (APPICON_UNKNOWN | APPICON_PENDING))) {
+            icon_req_raw = raw;
+            gb_set_drive(my_drive);
+            gb_curhide();
+            icons[raw] = module_draw_icon()
+                ? (unsigned char)(APPICON_EMBEDDED | ICON_APP) : ICON_APP;
+            gb_curshow();
+        }
+    }
+
+    icon_scan_pos++;
+    if (view == V_ICONS) {
+        icon_scan_col++;
+        if (icon_scan_col == ICOLS) {
+            icon_scan_col = 0;
+            icon_req_x = (unsigned char)(CT_X + (CELL_W - 8) / 2);
+            icon_req_y = (unsigned char)(icon_req_y + CELL_H);
+        } else icon_req_x = (unsigned char)(icon_req_x + CELL_W);
+    } else icon_req_y = (unsigned char)(icon_req_y + ROW_H);
+    return 1;
+}
+#endif
 /* sync_rect: pull the live WM-owned geometry before we use it (#146). */
 static void sync_rect(void)
 {
@@ -759,12 +942,17 @@ static void fm_draw(void)
 /* relist: re-read the current directory and redraw from the top (#54). */
 static void relist(void)
 {
+#ifdef GB_PREEMPTIVE
+    list_start();
+    gb_restore_parent();
+#else
     build_list();              /* stream + sort the directory (sets total) (#118) */
     free_known = gb_fs_free_kib(&free_kib);
     top = 0; nsel = 0;
     clamp_top();
     win_title();               /* the path changed -> refresh the title buffer (#146) */
     gb_restore_parent();       /* full repaint: the WM redraws the frame/title + fm_draw */
+#endif
 }
 
 /* go_up: ascend to the parent directory (the ".." entry / old View>Up). */
@@ -1025,7 +1213,8 @@ static void on_event(void)
     sync_rect();
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
 #ifdef GB_PREEMPTIVE
-        if (copy_state == COPY_IDLE) copy_start();
+        if (copy_state == COPY_IDLE && list_state == LIST_IDLE
+            && !gb_drop_claimed()) copy_start();
 #else
         if (!copy_file()) {               /* copy it onto THIS window's drive, any size (#74) */
 #ifdef GB_MSX2
@@ -1056,7 +1245,9 @@ static void fm_frame(void)
     gb_set_drive(my_drive);              /* re-assert our drive each focused frame (#65) */
 #ifdef GB_PREEMPTIVE
     if (copy_state != COPY_IDLE) { copy_step(); return; }
+    if (list_state != LIST_IDLE) { list_step(); return; }
     if (gb_drop_claimed()) return;        /* another File Manager owns the storage job */
+    if (appicon_step()) return;
 #endif
     if (dc_timer) dc_timer--;
     if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a View menu ran (#142) */
@@ -1075,6 +1266,10 @@ static void fm_close(void)
         gb_wm_close();
         return;
     }
+    if (list_state != LIST_IDLE) {
+        if (list_state != LIST_WAIT) gb_drop_release();
+        list_state = LIST_IDLE;
+    }
 #endif
     if (gb_doc_close()) gb_wm_close();
     else gb_restore_parent();
@@ -1085,7 +1280,7 @@ static void fm_drag(void)
 {
     sync_rect();
 #ifdef GB_PREEMPTIVE
-    if (copy_state != COPY_IDLE) return;
+    if (copy_state != COPY_IDLE || list_state != LIST_IDLE || gb_drop_claimed()) return;
 #endif
     if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
         gb_wm_setpos(win_x, win_y);
@@ -1105,7 +1300,7 @@ static void fm_click(void)
     my = gb_my();
 
 #ifdef GB_PREEMPTIVE
-    if (copy_state != COPY_IDLE || gb_drop_claimed()) return;
+    if (copy_state != COPY_IDLE || list_state != LIST_IDLE || gb_drop_claimed()) return;
 #endif
 
     /* resize grip (bottom-right corner) -> resize the window (#81) */
@@ -1222,11 +1417,16 @@ void main(void)
        root on both backends; DIRSTACK is 4 deep) so the listing matches fm_path. */
     { unsigned char k; for (k = 0; k < 4; k++) gb_back(); }
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
+#ifdef GB_PREEMPTIVE
+    fmmw.title = title_buf;
+    list_start();                /* progressive scan begins after the first paint */
+#else
     build_list();                /* stream + sort the directory (sets total) (#118) */
     free_known = gb_fs_free_kib(&free_kib);
     top = 0;
     clamp_top();
     fmmw.title = win_title();    /* build "<drive><path>" before the first paint (#146) */
+#endif
     gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8); /* opening one FM can expose older stacked FM
                                                   windows outside the new window's damage rect */
     gb_restore_parent();         /* first paint: WM chrome + fm_draw */
