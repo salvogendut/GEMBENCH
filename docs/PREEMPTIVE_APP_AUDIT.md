@@ -42,7 +42,7 @@ kernel work into a worker would make the system unsafe rather than preemptible.
 | P0 | File Manager | Copy, directory preparation, and APP-icon probing are bounded root jobs. |
 | P0 | Settings | Asset enumeration and icon-set validation are bounded root jobs; modal/I/O lifecycle needs cross-target validation. |
 | P0 | Screensavers | All shipped savers now use fixed or incremental frame budgets; lifecycle validation remains. |
-| P1 | BASIC and Paint | Mostly cooperative already, but long individual operations need bounds. |
+| P1 | BASIC and Paint | BASIC graphics and scans are bounded; Paint document I/O still needs bounds. |
 | P1 | Browser, WGET, Telnet, Shell | Network/storage stays root-owned and must advance in bounded chunks. |
 | P1 | Viewer, Notepad, Icon Editor, Mahjong | Root-owned; measure and split their longest operations where needed. |
 | P2 | Clock and small utilities | Clock is already bounded; remaining utilities need lifecycle smoke tests. |
@@ -198,15 +198,25 @@ out of scope unless those bounded operations show measurable input latency.
 
 ### GB-BASIC
 
-`BASIC.APP` is an event-driven editor and should remain root-owned. `BASRUN.APP`
-already executes at most 24 statements and four scroll operations per frame,
-which is the correct cooperative shape.
+`BASIC.APP` remains an event-driven root-owned editor. `BASRUN.APP` executes at
+most 24 ordinary statements and four console scrolls per frame. A complete
+line-number or DATA scan consumes the rest of the current statement slice, so
+repeated backward jumps and sparse DATA programs cannot multiply full-program
+scans inside one frame.
 
-The remaining risk is an expensive *single* BASIC statement. Array creation,
-data scans, string expressions, graphics lines/circles, and input parsing can
-each run to completion inside one statement budget slot. Test those worst cases,
-then make any over-budget statement resumable. Interpreter code cannot become a
-worker while statements call console, graphics, input, or kernel services.
+`LINE` advances by eight pixels per frame, a filled box by four rows, outline
+verticals by eight rows, and `CIRCLE` by two midpoint iterations. The graphics
+state and dispatch vector live in the existing `BASRUN2.BIN` low-RAM overlay;
+no kernel or resident scheduler space is used. Ctrl-C and window close remain
+active while a graphics job is pending. DIM, expression, string, and INPUT
+loops remain synchronous because their work is already capped by the fixed
+40-element array pool, 192-byte expression arena, 25-character strings, and
+56-byte input buffer.
+
+Remaining validation: run mixed text/graphics programs on every target, abort
+each graphics operation mid-draw, and exercise backward GOTO/GOSUB plus sparse
+READ/RESTORE loops. Startup program/overlay loads remain atomic filesystem
+operations by design.
 
 ### GB-PAINT
 
@@ -260,7 +270,7 @@ kernel drawing, file I/O, or `gb_copybuf` users into a worker.
 3. Validate every incremental and fixed-budget screensaver, including dense and
    maximum-setting cases.
 4. Complete the screensaver timing and lifecycle matrix across CPC, MSX2, and PCW.
-5. GB-BASIC worst-statement tests and any required resumable statements.
+5. Validate GB-BASIC's bounded graphics and scan lifecycle across all targets.
 6. GB-PAINT document create/load/save jobs.
 7. Browser/WGET/Telnet/Shell and the remaining P1 application checks.
 8. Complete cross-target smoke matrix before issue #477 is proposed for merge.
