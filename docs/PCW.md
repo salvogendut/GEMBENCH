@@ -132,9 +132,10 @@ directory layout. `k_drive_poll` uses a single-sector probe for media presence.
 - **EXTRAS.DSK** (720K CF2DD data): every portable picture from
   `assets/pictures`, stored byte-for-byte in canonical GBPC v2 format, plus
   GB-PAINT (`PAINT.APP` and `PAINT.IST`), GB-BASIC (`BASIC.APP`, its runtime and
-  engine), the BASIC examples, and the other verified portable PCW savers
-  (`ANT`, `DECO`, and `XMATRIX`). Use it in drive B to browse pictures, run the
-  applications and savers, and save edited pictures or programs.
+  engine), the BASIC examples, and the other verified portable PCW savers:
+  `ANT`, `DECO`, `XMATRIX` with `XMATRIX.MOD`, and `MOUNTAIN` with
+  `MOUNTAIN.MOD`. Use it in drive B to browse pictures, run the applications and
+  savers, and save edited pictures or programs.
 
 ## PCW Time Sync With PerryFi / PerryNet
 

@@ -7,7 +7,8 @@ CPC card and MSX distributions. The CPC build copies them into
 sets (currently `REFINED.IST`) from this same canonical source. MSX and PCW let the
 kernel transcode a selected set to native display bytes when it is loaded.
 
-`build/DEFAULT.IST` is a gitignored build artifact regenerated from `lib/icon_*.asm`
+`build/DEFAULT.IST` is a gitignored build artifact regenerated from the ordered
+system/file-type `lib/icon_*.asm` sources
 each build in all desktop targets; it stays canonical (Mode-1) so it is shared by all
 platforms. Tracked sets in this folder are version-controlled and never regenerated.
 

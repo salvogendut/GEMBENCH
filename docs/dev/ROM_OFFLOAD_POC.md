@@ -1,5 +1,11 @@
 # GEOBENCH.ROM offload — PoC design & findings (#152)
 
+> Historical proof-of-concept record. Normal CPC distributions now use the
+> no-ROM Albireo/M4 kernels, and the default preemptive runtime is deliberately
+> ROM-independent. The optional sources remain for recovery and size research;
+> use [BUILDING.md](../BUILDING.md) and [ARCHIVED.md](../ARCHIVED.md) for current
+> support boundaries.
+
 > **Status: SHIPPED.** The PoC below grew into the full feature on branch
 > `152-rom-offload`. The IDE *and* Albireo backends now run from the ROM (FAT
 > read/write, AMSDOS floppy read, IDE read, the CH376 backend), the kernel keeps thin

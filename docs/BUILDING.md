@@ -1,9 +1,12 @@
 # Building, deploying and running
 
 The **Amstrad CPC** build is below; the **MSX2** build is in
-[Building for MSX2](#building-for-msx2). Both share the RASM kernel + SDCC apps
-and happen inside the project distrobox (RASM, SDCC, `mtools`/`dosfstools` on
-`PATH`).
+[Building for MSX2](#building-for-msx2), and PCW-specific media details are in
+[The PCW target](PCW.md#what-ships-where). All three share the RASM kernel +
+SDCC apps and are normally built inside the project distrobox (RASM, SDCC,
+`mtools`/`dosfstools` on `PATH`). Full distribution builds also require sibling
+`GB-PAINT` and `GB-BASIC` checkouts; override their locations with
+`GB_PAINT_DIR=` and `GB_BASIC_DIR=`.
 
 ## Amstrad CPC
 
@@ -47,8 +50,9 @@ themes. Available assets appear in Settings > Title bar and Settings > Gadgets.
 Legacy 106-byte combined `.TBR` files remain loadable.
 
 The About dialog reads the release version from the root `VERSION` file and bakes
-that value plus the current 12-character Git commit into `GBUI.MOD`. Override
-either value for a packaged build with `VERSION=...` or `GIT_COMMIT=...`.
+that value plus the current 12-character Git commit into `GBUI.MOD`; installed
+RAM is read at runtime. Override either build value for a packaged build with
+`VERSION=...` or `GIT_COMMIT=...`.
 
 This stages these outputs (the staged media under `QA/` are committed, so you
 can test or deploy without rebuilding first):
@@ -93,10 +97,25 @@ card backend or falls back to the AMSDOS floppy path. On a floppy you can also
 `tools/build_capp.sh <app_dir> <out.RAW>` builds a single C app against `libgb`
 if you just want to iterate on one.
 
+## Building for PCW
+
+```bash
+bash tools/build_kernel_pcw.sh
+# or: make pcw
+```
+
+This rebuilds `QA/PCW/GEOBENCH.DSK`, `COMPANION.DSK`, and the 720K
+`EXTRAS.DSK`. The build imports Paint and BASIC from their sibling repositories.
+Use `../1985/1985` with the current 1985 configuration for emulator testing;
+see [PCW.md](PCW.md) for boot, disk geometry, serial networking, and deployment
+details.
+
 ## Optional: the GEOBENCH ROM
 
-`tools/build_rom.sh` builds a 16K upper ROM — `rom/GBALB.ROM` (Albireo) is the shipped
-one (`rom/GEOBENCH.ROM` is the archived IDE variant) — that does two things:
+`tools/build_rom.sh` builds an optional legacy 16K upper ROM:
+`rom/GBALB.ROM` for Albireo or the archived IDE
+`rom/GEOBENCH.ROM`. Neither is required or included in normal release media.
+The proof-of-concept does two things:
 
 - **Offloads the low-level drivers.** The screen-independent storage drivers (FAT
   read/write, the AMSDOS floppy reader, the IDE backend and the CH376/Albireo backend) run

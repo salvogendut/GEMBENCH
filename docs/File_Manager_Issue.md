@@ -1,5 +1,10 @@
 # Nested subdirectories (depth ≥ 2) don't navigate on this platform
 
+> Historical investigation retained as the evidence for the current one-level
+> content-layout limit. The IDE-specific reproduction below is not a description
+> of the shipped backend; see [ARCHIVED.md](ARCHIVED.md) for current storage
+> support and [ARCHITECTURE.md](ARCHITECTURE.md) for the active limit.
+
 **Status:** won't-fix — a **kernel FAT-core / storage re-mount limitation**, below the File
 Manager. Reproduced **deterministically in the 1984 emulator on the IDE backend** (which the
 emulator runs faithfully), and on Albireo/CH376. **Resolution: ship content flat in

@@ -41,6 +41,10 @@ backdrop, dragging icons, opening apps and menus:
 - **Notepad** — a text editor: type/edit, word-wrap, click or cursor keys to place
   the caret, **File / Edit / View** menus (New/Load/Save/Save As, copy/paste,
   Fullscreen). Saves `.BAS` with CR+LF so CPC BASIC can load them.
+- **GB-BASIC** — a separately maintained GW-BASIC-flavoured editor/runtime.
+  Double-clicking a `.BAS` file opens it in `BASIC.APP`; Run launches the
+  co-resident console and its bounded numeric/graphics overlay. Programs and
+  examples are staged from the sibling GB-BASIC repository.
 - **ICONED** — an icon/cursor editor for `.IST` sets, `.SPR` cursors, and optional
   icons embedded in `GBAP` `.APP` files (magnified canvas, pen palette, Prev/Next,
   undo, New/Load/Save/Save As, View > Fullscreen). Its Load dialog hides legacy
@@ -49,16 +53,22 @@ backdrop, dragging icons, opening apps and menus:
   Screen 7. Saving the configured active `.IST` reloads it immediately and
   repaints the desktop; inactive sets take effect when selected in Settings.
   The Python editor also edits the canonical ASM sources directly.
-- **Paint** — a Mode-1 paint app: a canvas + toolchest (pencil, square, circle,
-  flood fill, undo), a 4-ink palette and pencil width, New/Load/Save to the `.PIC`
-  format (a versioned bitmap with its own size + palette), View > Fullscreen. Tool
-  icons are a normal `.IST` set, editable in ICONED.
+- **Paint** — the separately maintained GB-PAINT application uses an Area
+  Selector, a magnified 20x20 work canvas, and a floating toolchest. It supports
+  pencil and shape tools, fill, spray, line, selection/clipboard operations and
+  undo; edits are reflected in the selected picture area. New chooses explicit
+  dimensions, while Load/Save use bounded GBPC v2 `.PIC` files. MSX Paint
+  requires 16-color mode and is the only build that opens native 16-color
+  pictures. Tool icons live in `PAINT.IST`.
 - **Viewer** — open `.PIC` images in a window sized to the picture. File > Load
   selects another picture and View > Fullscreen maximises it; windows remain
   draggable and resizeable, with horizontal and vertical scrolling. Viewer uses
   borrowed RAM banks for fast redraws. If other windows or pictures occupy the
   remaining banks, it reads the visible rows from disk in bounded chunks instead
-  of refusing a second large image. Text editing belongs to Notepad.
+  of failing solely because a picture cache page is unavailable. Concurrent
+  Viewer windows are still bounded by the shared app-page pool; the current
+  desktop flow supports two open pictures and silently refuses a third. Text
+  editing belongs to Notepad.
 - **Clock** — an analog clock window (Dallas RTC, else software); View > Fullscreen
   rescales the face to the whole screen, an Options menu sets the time / toggles seconds.
 - **Settings** — a control panel for `GEOBENCH.CFG`: pick the **font** (`.FNT`),
@@ -76,6 +86,9 @@ backdrop, dragging icons, opening apps and menus:
   choices are labelled
   **4 colors** and **16 colors** (Screen 6 and Screen 7).
   **Return to Defaults** restores the complete target-specific configuration.
+  MSX2 also exposes **Input device** (`Mouse` or `Joystick`), persisted as
+  `MSXMOUSE=TRUE|FALSE`; the setting must match the device connected to the
+  selected joystick port.
   Media settings are stored as
   **drive-qualified names** such as `A:DARKER` or `C:XMATRIX`, so Settings can
   browse either floppy or Albireo content without ambiguity. Invalid media
@@ -136,6 +149,9 @@ backdrop, dragging icons, opening apps and menus:
 - **Calculator** — a compact windowed fixed-point calculator with keyboard and
   pointer input, basic arithmetic, percentage, square root, sign and clear
   operations, and a black display with red digits.
+- **Disk Utility** — formats CPC AMSDOS data/system media (including supported
+  80-track geometry) or performs an MSX2 FAT12 quick format. It is deliberately
+  app-linked and modal because formatting is destructive; PCW does not ship it.
 - **Kana Mahjong** — a fullscreen 144-tile Mahjong solitaire game using an
   original C engine and selectable 42-face Katakana or 36-face Hiragana tile
   sets. New deals are assigned along a known legal Turtle-layout removal order,
@@ -176,4 +192,8 @@ backdrop, dragging icons, opening apps and menus:
 - **Banked app model** — the desktop and every app are separate binaries, paged
   into expansion-bank slots and run co-resident with the kernel; shared window
   chrome (drag/resize) lives in `libgb`.
+- **Preemptive release runtime** — CPC, MSX2, and PCW release images carry the
+  scheduler in `DESKTOP.APP`. Pure compute workers may be time-sliced; UI,
+  storage, modules, firmware and drawing remain root-owned and atomic. Explicit
+  cooperative builds remain available for regression testing.
 - **Hybrid implementation** — the kernel is Z80 assembly; **every app is C**.

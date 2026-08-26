@@ -29,6 +29,11 @@ The `.c`/`.h` pairs `net`, `udp`, `dns`, `w5100` (plus `netinit.h`) are the
 Net4CPC stack compiled into `GBNET.MOD`; `gbnet_m4_mod.c` is intentionally
 separate so M4 does not carry W5100 register code.
 
+`GBTITLE.MOD` follows the same paged-module architecture but is assembled from
+`kernel/modules/gbtitle.asm` and `gbtitle_install.asm`, so it is not part of this
+C-module table. `tools/build_titlebarmod.sh` builds its CPC/MSX2/PCW variants
+and validates/stages the `.TBR` and `.GDT` assets.
+
 ## Why C costs more here
 
 A C routine compiled with SDCC is roughly **4–5×** the size of the hand-written

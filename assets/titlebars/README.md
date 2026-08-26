@@ -22,8 +22,8 @@ bucket fill, spray paint, and undo. The four arrow controls shift the active
 canvas by one pixel and clear the newly exposed edge with paper colour.
 
 All `.TBR` files in this directory are validated and staged for card and MSX
-distributions. Space-constrained CPC and PCW boot floppies carry `ORIGINAL.TBR`
-and `IMPROVED.TBR`; their `EXTRAS.DSK` carries the remaining themes. Select an
+distributions. Space-constrained CPC and PCW boot floppies carry
+`ORIGINAL.TBR`; their `EXTRAS.DSK` carries the remaining themes. Select an
 available motif live in Settings with **Title bar**, or set:
 
 ```ini

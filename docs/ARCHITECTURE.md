@@ -12,7 +12,7 @@ GEOBENCH is organised as layers, lowest (closest to hardware) at the bottom:
 ```
 ┌─────────────────────────────────────────────┐
 │  apps/  desktop·filemgr·notepad·iconed·       │  ← banked binaries, run on demand
-│         paint·viewer·clock (C)                │
+│         viewer·clock·network tools (C)        │
 ├─────────────────────────────────────────────┤
 │  libgb  C bindings -> the kernel jump table,  │  ← lib/gb/ (gb.h + trampolines,
 │         window + dialog helpers               │     gbwin.c, gbdlg.c/gbprompt.c)
@@ -20,7 +20,7 @@ GEOBENCH is organised as layers, lowest (closest to hardware) at the bottom:
 │  kernel/   boot · API table · banking · fs ·  │  ← resident; Z80 asm
 │            assets · modules · input · WM       │
 ├─────────────────────────────────────────────┤
-│  Amstrad CPC hardware  (Z80, CRTC, gate array, AMSDOS)│
+│  CPC / MSX2 / PCW hardware and DOS/firmware services │
 └─────────────────────────────────────────────┘
 ```
 
@@ -31,11 +31,11 @@ the first one booted and the one other apps return to.
 
 ## Memory model
 
-128K+ only (the banked app model needs the expansion banks). The gate-array
-RAM-config port pages a 16K block into the `#4000–#7FFF` window:
+128K+ only (the banked app model needs expansion banks). A target-specific
+memory mapper pages a 16K block into the `#4000-#7FFF` window:
 
 - The **kernel is resident** in always-mapped RAM at `#8000+`. So are the stack,
-  the screen, fixed low-RAM contracts, and the firmware.
+  fixed low-RAM contracts, and the target's screen/firmware interface.
 - The kernel's **data buffers** (font, icon set, directory scratch) live in a
   bank page (`PAGE_DATA`); a service swaps that page in, touches the buffer, and
   restores the caller's page.
@@ -57,7 +57,8 @@ subsystem so responsibilities are explicit:
 - `kernel/api_table.inc` — the fixed kernel jump table.
 - `kernel/lowram.inc` / `kernel/lowram.tsv` — absolute low-RAM ownership and the
   checked manifest used by `tools/check_lowram_map.py`.
-- `kernel/boot.asm` — boot path, desktop launch, return-to-BASIC path.
+- `kernel/boot.asm` plus `boot_msx.asm` / `boot_pcw.asm` — target boot, desktop
+  launch, and exit/warm-boot paths.
 - `kernel/assets.asm` — font/icon/cursor/backdrop/wallpaper reload helpers.
 - `kernel/config_module.asm` — `GBCFG.MOD` boot-time parse/load path.
 - `kernel/modules.asm` — shared paged-module runners (`GBUI`, `GBWEB`, `GBIMG`, `GBNET`, config).
@@ -70,20 +71,22 @@ size work safer.
 
 ## Execution model
 
-GEOBENCH is currently cooperative and callback-driven:
+GEOBENCH uses a hybrid preemptive runtime:
 
 - The resident window manager owns the master event loop and keeps several
   banked app windows resident at once.
-- Each app registers frame, draw, and event callbacks; the manager currently
-  invokes the focused app's frame callback and composites repaint callbacks in
-  z-order.
+- Each app registers frame, draw, and event callbacks. The root task invokes
+  bounded app jobs and composites repaint callbacks in z-order.
 - One window owns input focus. Kernel services, paged modules, storage, and
   painting execute atomically.
+- Apps may explicitly register a pure compute worker. Timer preemption rotates
+  those workers without allowing them to call kernel, UI, firmware, storage, or
+  module services.
 
-The build-gated preemptive conversion keeps kernel work atomic while allowing
-application tasks to be time-sliced. Its scheduler is carried by
-`DESKTOP.APP`, installed in fixed RAM, and explicitly does not use the optional
-GEOBENCH/M4 ROM paths; see
+The scheduler is the release default on CPC, MSX2, and PCW. It is carried by
+`DESKTOP.APP`, installed in fixed RAM, and does not use the optional
+GEOBENCH/M4 ROM paths. Explicit cooperative builds remain available for
+regression testing; see
 [PREEMPTIVE_MULTITASKING.md](PREEMPTIVE_MULTITASKING.md).
 
 ## The system API
@@ -115,7 +118,7 @@ without linking against private kernel internals.
 
 ## Storage and distribution shape
 
-The shipped runtime targets are:
+The shipped CPC runtime targets are:
 
 - **Albireo / CH376 card** as the primary read/write storage path.
 - **M4 board** as a shared-image card path (`GBM4.BIN` on the same FAT image as
@@ -124,16 +127,24 @@ The shipped runtime targets are:
   such as Telnet are not forced back to Mode 1 while modules are loaded.
 - **AMSDOS floppy** as the fallback path and as the bootable disk-pair format.
 
+MSX2 uses MSX-DOS 2 / Nextor BDOS calls for mapper-aware drive access. PCW uses
+its native uPD765 CF2/CF2DD backend and boots without CP/M. These target
+backends expose the same app-visible file API.
+
 The **IDE** backend still exists in source but is not built by the default workflow.
 See [`ARCHIVED.md`](ARCHIVED.md) for the exact support boundary.
 
-The default media layout is intentionally simple:
+The CPC media layout is intentionally simple:
 
 - card: `QA/CPC/CARD/` with `GB.BAS`, `M4DETECT.BIN`, `GBALB.BIN`, `GBM4.BIN`,
   `GEOBENCH.CFG`, `GBENCH/`, root-level `PICS/`, and root-level `DIAG/`
 - floppy: `QA/CPC/Floppies/GEOBENCH.DSK` (Main),
   `QA/CPC/Floppies/COMPANION.DSK` (drive-B apps), and
   `QA/CPC/Floppies/EXTRAS.DSK` (the complete gallery)
+
+MSX2 stages loose files under `QA/MSX/` and two FAT12 floppies under
+`QA/MSX/Floppies/`; its generated `QA/GBMSX.IMG` is local and ignored. PCW
+ships `QA/PCW/GEOBENCH.DSK`, `COMPANION.DSK`, and a 720K `EXTRAS.DSK`.
 
 Pictures, icon sets, and backdrops use portable payloads. CPC, MSX2, and PCW all
 store canonical Mode-1 GBPC v2 picture bytes; the MSX2 and PCW screen backends
@@ -149,6 +160,8 @@ payload with sixteen colours.
 rules are:
 
 - on MSX2, `MSXMODE=6|7` selects the mode-specific kernel at the next boot;
+- on MSX2, `MSXMOUSE=TRUE|FALSE` selects mouse or joystick interpretation for
+  the joystick port;
 - backdrop, wallpaper, and saver names may be **drive-qualified** (`A:NAME`,
   `B:NAME`, `C:NAME`) so the Settings app can point at either floppy or Albireo
   content explicitly;
@@ -177,9 +190,9 @@ the level of asset reload, storage, and window-manager primitives.
 
 ## Hardware notes
 
-- **Video:** Mode 1 (320×200, 4 colours) is the planned default desktop surface
-  — a compromise between resolution and the ~16K framebuffer cost. The graphics
-  library isolates the Mode 1 byte/pixel layout so other modes remain possible.
+- **Video:** CPC uses Mode 1 (320x200, 4 colours); MSX2 uses V9938 Screen 6 or
+  Screen 7 at 512x212; PCW uses a monochrome 720x256 surface. Platform drawing
+  backends translate canonical portable assets at the display boundary.
 - **CPC vs CPC+:** addressed behind named constants; the plus's extra features
   (hardware sprites, palette) are a possible enhancement, not a dependency.
 - **AMSDOS:** file I/O goes through firmware vectors. Note that USB/FAT-drive
@@ -188,16 +201,16 @@ the level of asset reload, storage, and window-manager primitives.
 ## Known architectural limits
 
 - **128K+ only.** The app model depends on banked memory.
-- **Cooperative execution in release builds.** The build-gated preemptive task
-  conversion is tracked in [PREEMPTIVE_MULTITASKING.md](PREEMPTIVE_MULTITASKING.md).
+- **Shared services are atomic.** Preemption is restricted to opted-in pure app
+  workers; UI callbacks, storage, modules, firmware, and kernel work remain on
+  the root task.
 - **Flat-ish content layout.** Nested subdirectories deeper than one level are
   not a supported storage workflow today; see [`File_Manager_Issue.md`](File_Manager_Issue.md).
-- **Legacy AMSDOS software is not run.** GEOBENCH does not launch ordinary
-  `.BIN`/`.BAS` programs (they assume total machine ownership); the File Manager
-  shows an info note pointing the user to BASIC. This is a non-goal, not a
-  pending feature.
+- **Legacy machine-code software is not contained.** Ordinary `.BIN` programs
+  still require leaving GEOBENCH. `.BAS` files open in the external GB-BASIC
+  application when that package is staged.
 
-## Booting and distribution
+## CPC booting and distribution
 
 `bash tools/build_kernel.sh` stages (and ships under `QA/`):
 
@@ -247,10 +260,11 @@ The loader is **BASIC, not machine code**, on purpose: under UniDOS (CP/M-based)
 and the DOS's RSXs/BIOS are unreachable from a loaded binary — whereas a BASIC program
 runs with the DOS fully active, so its `RUN"GBALB` or `RUN"GBKERN` simply works.
 
-### The GEOBENCH ROM (driver offload + boot banner)
+### Optional legacy GEOBENCH ROM (driver offload + boot banner)
 
-The screen-independent low-level drivers — the FAT read/write core, the AMSDOS floppy
-reader, the IDE backend and the CH376/Albireo backend — can run from a **16K loadable
+For recovery and size experiments, the screen-independent low-level drivers —
+the FAT read/write core, the AMSDOS floppy reader, the IDE backend and the
+CH376/Albireo backend — can run from a **16K loadable
 upper ROM** instead of the resident kernel, freeing `#8000` RAM (the headroom that
 unblocks window-chrome work like #156). `tools/build_rom.sh` builds one per card:
 `rom/GEOBENCH.ROM` (IDE) and `rom/GBALB.ROM` (Albireo).
@@ -262,7 +276,7 @@ The ROM is read-only, so each backend's writable state is relocated to fixed low
 both the resident stubs and the ROM agree on (the FAT core at `#1C00`, the CH376 path at
 `#1293`, a transfer area at `#1270`). The resident kernel is built with `-DGB_ROM_REQ=1`
 to use the stubs; without the ROM the plain kernel runs every driver resident, so the ROM
-is optional.
+is optional and is not part of the normal release configuration.
 
 The same image is a standard CPC **background ROM** (type-1 header at `#C000`):
 the firmware initialises it at cold boot and it prints a `GEOBENCH <commit>`

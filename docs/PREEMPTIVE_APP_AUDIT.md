@@ -3,9 +3,9 @@
 Date: 2026-08-26
 Issue: [#477](https://github.com/salvogendut/geobench/issues/477)
 
-This audit determines what each GEOBENCH application needs before the optional
-preemptive build can be considered broadly application-compatible. It does not
-assume that every application should become a scheduled worker.
+This audit records how each GEOBENCH application fits the default preemptive
+runtime. It does not assume that every application should become a scheduled
+worker; most UI and I/O code remains a bounded root job.
 
 ## Responsiveness contract
 
@@ -39,13 +39,13 @@ kernel work into a worker would make the system unsafe rather than preemptible.
 
 | Priority | Area | Result |
 |---|---|---|
-| P0 | File Manager | Copy, directory preparation, and APP-icon probing are bounded root jobs. |
-| P0 | Settings | Asset enumeration and icon-set validation are bounded root jobs; modal/I/O lifecycle needs cross-target validation. |
-| P0 | Screensavers | All shipped savers now use fixed or incremental frame budgets; lifecycle validation remains. |
-| P1 | BASIC, Paint, and Notepad | BASIC graphics/scans and Paint/Notepad document I/O are bounded. |
-| P1 | Browser, WGET, Telnet, Shell | Shell storage commands are bounded; the network applications remain to audit. |
-| P1 | Viewer, Notepad, Icon Editor, Mahjong | Viewer, Notepad, and Icon Editor use bounded root jobs; Mahjong still needs deal/shuffle measurement. |
-| P2 | Clock and small utilities | Clock is already bounded; remaining utilities need lifecycle smoke tests. |
+| P0 | File Manager | Copy, directory preparation, and APP-icon probing are bounded root jobs and have cross-target smoke coverage. |
+| P0 | Settings | Asset enumeration and icon-set validation are bounded root jobs; initial CPC/MSX2/PCW validation is complete. |
+| P0 | Screensavers | All shipped savers use fixed or incremental frame budgets and have initial cross-target smoke coverage. |
+| P1 | BASIC, Paint, Notepad, Icon Editor, Shell | Long graphics, document, and storage operations are bounded and have target smoke coverage. |
+| P1 | Browser, WGET, Telnet | Network receive/parser and cancellation paths remain the main conversion work. |
+| P1 | Viewer and Mahjong | Viewer is a bounded root renderer; Mahjong is event-driven. Resource/error feedback and worst-case measurement remain. |
+| P2 | Clock and small utilities | Clock is bounded and smoke-tested; destructive and diagnostic utilities still need lifecycle edge tests. |
 
 ## P0: File Manager
 
@@ -259,7 +259,6 @@ floppy/card storage, MSX DOS drives, and PCW floppies.
 | Browser | Bounded root network/parser job | Bound each receive, parse, image, redirect, and cache step; cancellation must close the channel. |
 | WGET | Bounded root network/storage job | Verify one receive/write unit per frame and safe partial-file cleanup/resume. |
 | Telnet | Bounded root network/serial job | Cap receive and ANSI parsing per frame; disconnect must cancel every transport state. |
-| Shell | Bounded root command jobs | Preemptive `ls`, `cat`, and `cp` are metered per frame, serialize storage, and clean partial copies on cancellation or close. |
 | Viewer | Root-owned image renderer | Image-only; retains native banked rendering and falls back to bounded visible-row reads when picture banks are exhausted. |
 | Notepad | Bounded root document job | Preemptive builds load/save 512 bytes per frame, serialize storage, clean partial saves, and cap input shifts to two characters per frame. Validate maximum files and deferred save actions. |
 | Icon Editor | Bounded root document job | Loads and saves 512 bytes per frame while preserving borrowed-bank, preview, and active-icon-set reload state. |
@@ -284,18 +283,18 @@ floppy/card storage, MSX DOS drives, and PCW floppies.
   fixed-point Mandelbrot computation and publishes complete rows; root code owns
   all drawing and lifecycle.
 
-## Implementation order
+## Remaining order
 
-1. Validate the implemented File Manager copy, progressive directory scan, and
-   queued APP-icon probing across all storage backends.
-2. Validate Settings progressive picker enumeration and finish its modal cleanup audit.
-3. Validate every incremental and fixed-budget screensaver, including dense and
-   maximum-setting cases.
-4. Complete the screensaver timing and lifecycle matrix across CPC, MSX2, and PCW.
-5. Validate GB-BASIC's bounded graphics and scan lifecycle across all targets.
-6. Validate GB-PAINT and Notepad bounded document jobs, cancellation, and exact-size files.
-7. Browser/WGET/Telnet/Shell and the remaining P1 application checks.
-8. Complete cross-target smoke matrix before issue #477 is proposed for merge.
+1. Audit Browser, WGET, and Telnet receive/parser loops, transport cancellation,
+   timeout, and partial-file behavior.
+2. Finish Browser Save's chunked write path and the remaining Nettest, Time Sync,
+   and Disk Utility lifecycle checks.
+3. Exercise exact-boundary, cancellation, slow-media, and contention cases for
+   the already bounded File Manager, Settings, BASIC, Paint, Notepad, Icon
+   Editor, Shell, and screensaver paths.
+4. Add explicit Viewer feedback/resource handling when the app-page pool cannot
+   open a third picture window.
+5. Maintain the CPC/MSX2/PCW smoke matrix as these follow-ups land.
 
 All changes should remain app-linked or app-local. This audit identifies no
 reason to add more resident kernel code before the application passes are

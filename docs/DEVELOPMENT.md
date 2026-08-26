@@ -1,7 +1,7 @@
 # Development
 
-How GEOBENCH is built and run during development. None of this runs on the CPC;
-it's the host-side workflow.
+How GEOBENCH is built and run during development. This is the host-side workflow
+for the CPC, MSX2, and PCW targets.
 
 ## Toolchain
 
@@ -27,12 +27,15 @@ dependencies are expected to exist.
 
 ## Emulators
 
-We develop against two emulators with distinct roles:
+We develop against target-specific emulators with distinct roles:
 
 | Emulator | Role | Why |
 |----------|------|-----|
 | **1984** (`../1984`) | **Primary dev target** | The user's own cycle-stepped CPC emulator. Standard firmware/AMSDOS software runs well — which is all GEOBENCH is. `--screenshot-at=N:PATH` dumps a `.ppm` and exits, giving clean headless visual verification, and `--autostart=NAME` autoruns a file after boot. Dogfooding it exercises the emulator too. |
 | **cap32** (`../caprice32`) | **Cross-check oracle** | Mature, widely-validated [Caprice32](https://github.com/ColinPitrat/caprice32). When a behaviour is ambiguous, run the same artifact on cap32: if the two disagree, the bug is localised. |
+| **1983** (`../1983`) | **MSX2 integration target** | Uses the current local machine configuration for disk/card, mapper, mouse/joystick, and UNAPI checks. `tools/run_msx.sh` remains the normal openMSX launcher. |
+| **openMSX** | **MSX2 reference/network target** | The NMS 8250 setup and openMSXnet extension validate Screen 6/7, DOS2/Nextor, and TCP/IP UNAPI behavior. |
+| **1985** (`../1985`) | **PCW integration target** | Boots the committed PCW media and exercises CF2/CF2DD geometry, pointer fallback, serial/PerryNet, and monochrome rendering. |
 
 ### Why 1984 is primary, not cap32
 
@@ -73,6 +76,10 @@ bash tools/build_kernel.sh
 The boot splash prints the build commit below the progress bar only when
 `DEBUG=TRUE` is set in `GEOBENCH.CFG`; normal media show `GEOBENCH` there. Use the
 debug splash to cross-check media against the source tree under test.
+
+For MSX2 and PCW, use `make msx` / `tools/run_msx.sh` and `make pcw`
+respectively. The complete commands and media layouts are documented in
+[BUILDING.md](BUILDING.md), [MSX2.md](MSX2.md), and [PCW.md](PCW.md).
 
 ### Incremental build behavior
 
@@ -350,9 +357,10 @@ picker. `.APP` entries without a valid preamble remain hidden on all targets.
   Mode-1 payload is byte-identical on CPC, MSX2, and PCW; target kernels translate
   it while drawing. For an MSX Screen 7 image, choose 16 colours in the GUI or
   pass `--colors 16`; leave either size field blank to preserve aspect
-  ratio, or set both to fit the Screen 7 limit of 512x255. This mode-7 extension is not editable in Paint and
-  is not displayed by CPC, PCW, or the Screen 6 backend. `.PIC` opens in Viewer
-  and portable mode-1 files edit in PAINT. See
+  ratio, or set both to fit the Screen 7 limit of 512x255. This mode-7 extension
+  is editable only by MSX Paint while GEOBENCH is running Screen 7; it is not
+  displayed by CPC, PCW, or the Screen 6 backend. `.PIC` opens in Viewer and
+  portable mode-1 files edit in Paint on every target. See
   [PIC_FORMAT.md](PIC_FORMAT.md).
 
 ## File line endings

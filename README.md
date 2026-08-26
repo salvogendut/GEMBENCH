@@ -33,6 +33,12 @@ reaching the kernel through `libgb`. It's a graphical layer on top of an existin
 DOS (AMSDOS / UniDOS / MSX-DOS 2), not a replacement OS — smaller scope than
 [SymbOS](https://www.symbos.de), different goal.
 
+Release builds use an app-carried, RAM-resident preemptive scheduler on CPC,
+MSX2, and PCW. The desktop remains the non-preemptible owner of hardware,
+storage, modules, input, and composition; pure application computation can run
+in preemptible workers, while I/O-heavy apps advance through bounded root jobs.
+No GEOBENCH ROM is required.
+
 The desktop, file tools and graphical Shell build for all targets from the same
 source tree. CPC and PCW ship the complete network app set; Browser and Telnet
 also build for MSX2 through TCP/IP UNAPI. The streaming HTTP browser supports
@@ -74,9 +80,10 @@ hardware, or use the disk images in an emulator.
 - **Floppy** — write **`QA/CPC/Floppies/GEOBENCH.DSK`** (the main disk) and
   **`QA/CPC/Floppies/COMPANION.DSK`** (the larger apps and extra savers) to the
   working disk set. **`QA/CPC/Floppies/EXTRAS.DSK`** holds the complete picture
-  gallery, Disk Utility, and the XRoach, Cat Clock, and Helix savers. It is an extended
-  80-track data image for a Gotek/emulator or compatible drive because the gallery
-  does not fit a 180K CF2. Boot with `RUN"GB` (or `RUN"GBKERN`).
+  gallery, Disk Utility, and the XRoach, Cat Clock, Helix, Forest, and Mountain
+  savers (plus Mountain's configuration module). It is an extended 80-track
+  data image for a Gotek/emulator or compatible drive because the gallery does
+  not fit a 180K CF2. Boot with `RUN"GB` (or `RUN"GBKERN`).
 - **Live disks** — test the CPC distribution directly in the
   [js1984 web emulator](https://salvogendut.github.io/chimeric/js1984/?memory=512&diska=../media/CPC/GEOBENCH.DSK&diskb=../media/CPC/COMPANION.DSK&autorun=GB),
   with the main disk in drive A and the companion disk in drive B.
@@ -165,21 +172,28 @@ Building from source is for developers — see [docs/BUILDING.md](docs/BUILDING.
 - **[About](docs/ABOUT.md)** — what GEOBENCH is, why, how it works, design
   inspirations, target hardware, goals and non-goals, project layout.
 - **[Features](docs/FEATURES.md)** — what works today, with screenshots.
-- **[Building & running](docs/BUILDING.md)** — the CPC build, deploy targets, the
-  optional GEOBENCH ROM.
+- **[Building & running](docs/BUILDING.md)** — CPC, MSX2, and PCW builds, deploy
+  targets, and the optional GEOBENCH ROM.
 - **[The MSX2 target](docs/MSX2.md)** — selectable Screen 6/7, TCP/IP UNAPI, and
   the openMSX harness.
 - **[Portable picture format](docs/PIC_FORMAT.md)** — the byte-identical GBPC v2
   payload shared by CPC, MSX2, and PCW.
-- **[Roadmap](docs/ROADMAP.md)** — what's done and what's next.
+- **[Architecture](docs/ARCHITECTURE.md)** — current memory, execution, storage,
+  module, and media contracts.
+- **[Preemptive multitasking](docs/PREEMPTIVE_MULTITASKING.md)** — scheduler
+  boundaries, platform interrupt paths, builds, and diagnostics.
+- **[Development](docs/DEVELOPMENT.md)** — toolchain, emulators, reusable UI,
+  assets, and incremental workflows.
+- **[Roadmap](docs/ROADMAP.md)** — current priorities and longer-term work.
 
 ## Where it's going
 
-The core desktop, windowing, file manager, C app model and most bundled apps work
-across the three targets. CPC and PCW carry the full network suite; MSX2 now has
-Browser and Telnet through TCP/IP UNAPI. Next up: resizable and scrollable Paint
-canvases, drawers/folders, and configuration panels for more screensavers. See the
-[roadmap](docs/ROADMAP.md) for the full list.
+The core desktop, windowing, file manager, preemptive runtime, C app model, and
+major bundled apps work across all three targets. Current work is tracked in the
+[roadmap](docs/ROADMAP.md); the main remaining areas are deeper directory
+navigation, finishing bounded responsiveness audits for network applications,
+and target-specific ports or enhancements that can stay outside the resident
+kernel.
 
 ## License
 
