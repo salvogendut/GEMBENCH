@@ -15,7 +15,7 @@ focused window's handlers (issue #45).
 |-----|-----------|------------|
 | desktop  | `DESKTOP.APP`  | the root window — drive/Clock/Trash icons, drag-and-drop, the top bar + System menu, the screensaver idle trigger |
 | filemgr  | `FILEMGR.APP`  | per-drive file browser (list/icon views, type→app routing, `..`, Trash) |
-| viewer   | `VIEWER.APP`   | text / `.PIC` viewer (banked load for big pictures) |
+| viewer   | `VIEWER.APP`   | image-only `.PIC` viewer; uses banked RAM when available and demand-streams visible rows when banks are occupied |
 | notepad  | `NOTEPAD.APP`  | text editor (word-wrap, File/Edit/View, saves `.BAS` CR+LF) |
 | iconed   | `ICONED.APP`   | `.IST` icon-set / `.SPR` cursor / embedded `.APP` icon editor |
 | paint    | `PAINT.APP`    | portable GBPC v2 bitmap paint (toolchest, saves `.PIC`) |
@@ -112,6 +112,9 @@ resident kernel. Build with only the units an application uses:
 - `FORM_SELECT=1`: labelled selector rows; requires `FORM=1` and `SELECTOR=1`
 - `TIMESET=1`: binary `gb_set_time()` support without adding resident kernel code
 - `SOUND=1`: target sound primitives without adding resident kernel code
+- `REPAINTTOP=1`: the `gb_repaint_top()` binding for publishing a newly opened
+  opaque top window without redrawing lower layers; do not use it after a move,
+  shrink, or popup that exposes parent content
 - `TASK=1 TASK_STACK_RESERVE=256`: opt a legacy window's `on_frame` callback
   into the experimental worker scheduler and reserve its bank-top stack snapshot
 

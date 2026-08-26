@@ -239,6 +239,13 @@ static void do_load(void)
     if (!(g_doc->flags & GB_DOC_LOAD_NOCONFIRM) && !confirm_save()) return;
     if (!gb_pickfile(nm, g_doc->exts)) return;     /* filtered to the app's file types */
     set_name(nm);                                  /* chosen file -> current file */
+#ifdef GBDOC_RO
+    if (g_doc->flags & GB_DOC_OPEN_OWNS_LOAD) {
+        if (g_doc->on_open) g_doc->on_open(0);
+        g_dirty = 0;
+        return;
+    }
+#endif
 #ifdef GBUI_APPICON_PICKER
     len = gb_doc_stream_load();
 #else

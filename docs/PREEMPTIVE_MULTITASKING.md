@@ -145,11 +145,12 @@ a new view increments a generation counter so a suspended calculation cannot
 publish a stale pixel after zooming or panning. Cooperative builds retain the
 original bounded per-frame renderer.
 
-`VIEWER.APP` remains root-managed. Its banked picture I/O and target-native
-blitters are kernel-owned operations, so moving only byte conversion into a
-worker would add synchronization without taking meaningful work out of the
-root task. A future integration must preserve those platform renderers and
-offload a genuinely independent decode stage.
+`VIEWER.APP` remains root-managed because filesystem calls, bank mapping and
+target-native blitters are kernel-owned operations. It is image-only: the normal
+path retains the native banked renderer, while bank exhaustion falls back to
+bounded visible-row reads rather than requiring another picture bank. Text files
+remain the responsibility of Notepad. Moving byte conversion alone into a worker
+would add synchronization without removing kernel work from the root task.
 
 `FILEMGR.APP` keeps storage on the root task but advances a drag/drop copy by one
 complete read/write chunk per focused frame. The destination window is raised
@@ -162,6 +163,14 @@ one repaint; partial scan state is never exposed. Repaint callbacks use generic
 APP placeholders and perform no storage I/O. `GBAPICK.MOD` then probes and draws
 at most one visible embedded APP icon per frame. Normal cooperative builds retain
 their original synchronous File Manager path.
+
+Publishing a newly opened opaque managed window uses `GB_REPAINTTOP`, so the
+window is drawn without invoking Desktop and every lower window's repaint
+handler. Closing a window damages its former rectangle plus one icon-cell guard
+at the right (whole glyph/icon blits may cross a clip edge), then recomposes the
+remaining layers inside that area. Moves, shrinking resizes, and modal popups
+still use the bottom-up compositor because they expose content from more than
+one layer.
 
 Settings asset and screensaver pickers also remain root-owned. In preemptive
 images they discover asset directories and enumerate at most four entries per

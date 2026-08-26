@@ -389,6 +389,8 @@ unsigned char gb_pickdir(const char *const *exts);
  * Mark edits with gb_doc_dirty() so New / Load / close can offer to save first.
  * Apps can set GB_DOC_LOAD_NOCONFIRM when LOAD should behave like BASIC LOAD:
  * discard the current contents and leave the newly loaded file clean.
+ * GB_DOC_OPEN_OWNS_LOAD is for streamed/banked documents: the picker updates the
+ * current name, then on_open performs the load instead of gb_doc filling buf.
  *
  * Recipe: call gb_doc(&doc) before gb_wm_run; in your on_event call
  * gb_doc_event() first (returns 1 if the framework consumed the event); in your
@@ -429,6 +431,7 @@ typedef struct {
     unsigned char flags;
 } gb_doc_t;
 #define GB_DOC_LOAD_NOCONFIRM 0x01
+#define GB_DOC_OPEN_OWNS_LOAD 0x02
 void          gb_doc(const gb_doc_t *d);   /* register; adds the standard File (+Edit) menu */
 void          gb_doc_dirty(void);          /* mark the document modified */
 unsigned char gb_doc_modified(void);       /* is it dirty? (e.g. for a "*" in the title) */
@@ -490,6 +493,7 @@ void gb_pic_blit(unsigned char x, unsigned char y, unsigned char wbytes,
 unsigned char gb_pic_edit(unsigned char op);
 void gb_pic_close(void);
 void gb_restore_parent(void);                /* repaint ancestor apps behind us */
+void gb_repaint_top(void);                   /* repaint only the opaque z-top window */
 void gb_wm_damage(unsigned char x, unsigned char y,
                   unsigned char w, unsigned char h);  /* limit the next repaint to a rect (#153) */
 unsigned char gb_wm_full(void);              /* 1 = no free app bank for another window (#153) */

@@ -164,12 +164,12 @@ fi
                                    # and clip-aware wallpaper repaint path.
 FILEMGR_APP_PROBE=1
 if [ "$PREEMPTIVE" = "1" ]; then FILEMGR_APP_PROBE=0; fi
-APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 APP_PROBE="$FILEMGR_APP_PROBE" tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
+APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 APP_PROBE="$FILEMGR_APP_PROBE" REPAINTTOP=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
-APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" DATA_LOC=0x6890 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
-                                   # gb_doc (DOCRO=1 omits Save/Save As); the in-page buffer is
-                                   # text/fallback only, bigger pictures use the banked .PIC path.
+APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" DATA_LOC=0x68B0 DOCRO=1 SCROLL16=1 REPAINTTOP=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: image-only, read-only
+                                   # gb_doc (DOCRO=1 omits Save/Save As); pictures use banked RAM
+                                   # when available and demand-stream visible rows otherwise.
                                    # File>Load + View>Fullscreen (#142/#144)
 APP_ICON=apps/notepad/icon.asm DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room

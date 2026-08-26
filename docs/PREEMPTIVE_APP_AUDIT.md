@@ -228,7 +228,7 @@ kernel drawing, file I/O, or `gb_copybuf` users into a worker.
 | WGET | Bounded root network/storage job | Verify one receive/write unit per frame and safe partial-file cleanup/resume. |
 | Telnet | Bounded root network/serial job | Cap receive and ANSI parsing per frame; disconnect must cancel every transport state. |
 | Shell | Needs bounded root commands | `cat` and `cp` currently loop through complete files inside one command. |
-| Viewer | Root-owned renderer | Retain native banked renderers; measure decode/blit batches and keep the known-good paths. |
+| Viewer | Root-owned image renderer | Image-only; retains native banked rendering and falls back to bounded visible-row reads when picture banks are exhausted. |
 | Notepad | Root-owned editor | Measure full-document load/save, wrap, and redraw; split only operations that exceed a frame. |
 | Icon Editor | Root-owned editor | Bound `.IST`/`.APP` load/save and conversion; preserve borrowed-bank and preview state. |
 | Mahjong | Root-owned game | Measure deal/shuffle/hint and full-board draws; tile interaction is otherwise event-driven. |

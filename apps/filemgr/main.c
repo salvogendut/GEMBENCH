@@ -737,7 +737,7 @@ static void list_step(void)
         win_title();
         /* Publish the completed title and listing together in one repaint. */
         gb_wm_damage(win_x, win_y, win_w, win_h);
-        gb_restore_parent();
+        gb_repaint_top();             /* publish the new opaque window without redrawing Desktop */
         return;
     }
 
@@ -977,10 +977,11 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
      .APP / .SAV      a GEOBENCH app/screensaver -> run it
      .IST / .SPR      the icon/cursor editor (ICONED), with the file
      .TXT / .CFG      the text editor (NOTEPAD), with the file
+     .PIC             the image-only VIEWER
      .HTM             an offline page -> BROWSER.APP
      .BAS             a GB-BASIC program -> opens in BASIC.APP
      .BIN             a native binary -> an info note (exec unimplemented, #236)
-     anything else    the read-only VIEWER, with the file */
+     anything else    no associated GEOBENCH application */
 static void open_entry(unsigned char idx)
 {
     char *e;
@@ -998,6 +999,8 @@ static void open_entry(unsigned char idx)
         gb_wm_launch_as("ICONED  APP");
     else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G'))
         gb_wm_launch_as("NOTEPAD APP");
+    else if (ext_is(e, 'P', 'I', 'C'))
+        gb_wm_launch_as("VIEWER  APP");
     else if (ext_is(e, 'H', 'T', 'M'))
         gb_wm_launch_as("BROWSER APP");
     else if (ext_is(e, 'B', 'A', 'S'))          /* GB-BASIC programs open in BASIC.APP */
@@ -1006,8 +1009,7 @@ static void open_entry(unsigned char idx)
                                                    from GEOBENCH (exec unimplemented) - say so */
         gb_alert("Binary programs cannot", "be run from GEOBENCH.");
     else
-        gb_wm_launch_as("VIEWER  APP");         /* default: view it (incl. .PIC images,
-                                                   #114) - PAINT edits via File > Load */
+        gb_alert("No application for", "this file type.");
 }
 
 /* sb_drag: while the fire is held, map the pointer's Y to the scroll position

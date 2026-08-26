@@ -243,7 +243,7 @@ static void adopt_document(unsigned int len)
 
 #ifdef GBUI_APPICON_PICKER
 /* Applications can occupy nearly their full 16 KiB page, while ICONED's shared
- * filesystem staging area is only 7 KiB. Keep every selected document in the
+ * filesystem staging area is only 6.5 KiB. Keep every selected document in the
  * borrowed page and stream it through the low-RAM buffer in bounded chunks. */
 unsigned int gb_doc_stream_load(void)
 {

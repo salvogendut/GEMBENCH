@@ -2458,10 +2458,11 @@ wmo_fail
 k_wm_close
                 ld    a,(WM_FOCUS)
                 ld    c,a                          ; C = slot being closed
-                call  wm_entry                    ; HL = entry
-                ld    a,(hl)                       ; page
+                call  wm_set_clip                 ; damage only the rectangle being exposed;
+                                                  ; B = page, HL = closing entry+4
+                ld    a,b                          ; page
                 push  af                           ; save it: wm_free_page clobbers everything
-                ld    de,WM_FR_FLAGS
+                ld    de,WM_FR_FLAGS-4
                 add   hl,de
                 if PREEMPTIVE_CONTEXT
                 bit   3,(hl)
@@ -2486,10 +2487,7 @@ kwc_not_task
                                                   ; closing handler must return in its own page;
                                                   ; bank_set preserves A for wm_free_page
                 call  wm_free_page                 ; release it (z-order already updated)
-                call  clip_set_full              ; #156: full repaint so the desktop fully restores the
-                                                  ; icons/labels the window had overlapped (clipping to
-                                                  ; the window rect left truncated drive labels behind)
-                jp    wm_repaint_all               ; repaint remaining windows + return
+                jp    wm_repaint_all               ; repaint remaining layers only inside that rect
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
 ; (x,y), so click-to-focus follows a window the app has dragged. Also sets the fill
@@ -2880,7 +2878,8 @@ wm_repaint_all
                 xor   a
                 jr    wra_seed
 ; wm_repaint_top: repaint only the current z-top. Used after click-to-focus raises an
-; opaque managed window; redrawing lower layers first makes the stack visibly flash.
+; opaque managed window and through GB_REPAINTTOP for a newly published managed
+; window; redrawing lower layers first makes the stack visibly flash.
 wm_repaint_top
                 ld    a,(WM_NWIN)
                 dec   a
@@ -2969,18 +2968,20 @@ clip_set_full
                 ld    (clip_w),de
                 ret
 
-; wm_set_clip: A = slot -> set the fill clip to that window's rect, so the next
-; wm_repaint_all only erases inside the window's area (its damage region).
+; wm_set_clip: A = slot -> set the fill clip to that window's rect plus one icon
+; cell at the right. Returns B = page and HL = entry+4; close reuses both.
 wm_set_clip
                 call  wm_entry                    ; HL = entry
+                ld    b,(hl)                       ; page for close
                 inc   hl                            ; +1 x
                 ld    a,(hl)
                 ld    (clip_x),a
                 inc   hl                            ; +2 y
                 ld    a,(hl)
                 ld    (clip_y),a
-                inc   hl                            ; +3 w
-                ld    a,(hl)
+                inc   hl                            ; +3 w. Bitmap/glyph clipping culls whole
+                ld    a,(hl)                        ; draw atoms: one which starts inside this
+                add   a,8                           ; damage may extend one 32px icon cell right.
                 ld    (clip_w),a
                 inc   hl                            ; +4 h
                 ld    a,(hl)

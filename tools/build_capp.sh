@@ -98,6 +98,7 @@ SOUND_FLAG="${SOUND:-0}"
 TITLEBAR_FLAG="${TITLEBAR:-0}"
 SIZEPROMPT_FLAG="${SIZEPROMPT:-0}"
 APP_PROBE_FLAG="${APP_PROBE:-0}"
+REPAINTTOP_FLAG="${REPAINTTOP:-0}"
 NET_SRC="$GB/gbnet_stub.c"
 case " $ALL_APPDEFS " in
     *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
@@ -185,6 +186,9 @@ fi
 if [ "$APP_PROBE_FLAG" = "1" ]; then
     deps+=("$GB/gbapprobe.s")
 fi
+if [ "$REPAINTTOP_FLAG" = "1" ]; then
+    deps+=("$GB/gbrepaint.s")
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -247,6 +251,7 @@ cache_key=$(printf '%s\n' \
     "TITLEBAR=$TITLEBAR_FLAG" \
     "SIZEPROMPT=$SIZEPROMPT_FLAG" \
     "APP_PROBE=$APP_PROBE_FLAG" \
+    "REPAINTTOP=$REPAINTTOP_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -275,6 +280,11 @@ if [ "$APP_PROBE_FLAG" = "1" ]; then
     esac
     "$SDAS" -o "$work/gbapprobe.rel" "$GB/gbapprobe.s"
     APP_PROBE_REL="$work/gbapprobe.rel"
+fi
+REPAINTTOP_REL=""
+if [ "$REPAINTTOP_FLAG" = "1" ]; then
+    "$SDAS" -o "$work/gbrepaint.rel" "$GB/gbrepaint.s"
+    REPAINTTOP_REL="$work/gbrepaint.rel"
 fi
 TASK_REL=""
 if [ "$TASK_FLAG" = "1" ]; then
@@ -412,7 +422,7 @@ fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc "$CODE_LOC" --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
-    $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $APP_PROBE_REL $TASK_REL $TASK_ROOT_REL \
+    $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $APP_PROBE_REL $REPAINTTOP_REL $TASK_REL $TASK_ROOT_REL \
     "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places

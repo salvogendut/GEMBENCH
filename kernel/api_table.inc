@@ -42,7 +42,8 @@ PICEDIT_ENTRY   equ   PICEDIT_BASE
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
                 jp    cursor_erase           ; GB_CURHIDE #8024
-                jp    k_noop                 ; GB_LAUNCH  #8027 (dead stub -> shared ret, #148)
+                jp    wm_repaint_top         ; GB_REPAINTTOP #8027: repaint only the opaque z-top
+                                             ; (reuses the retired modal GB_LAUNCH slot, #477)
                 jp    focus_arg_ptr          ; GB_GETARG  #802A (k_getarg collapsed, #148)
                 ifdef PLATFORM_MSX
                 jp    k_settime              ; MSX software-clock setter in the GB_RUN slot

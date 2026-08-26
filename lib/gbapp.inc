@@ -110,7 +110,9 @@ GB_FRAME        equ   GB_KERNEL+33 ; #8021  rectangle outline: B=x C=y D=w E=h
                                    ;        A=pen (0..3)
 GB_CURHIDE      equ   GB_KERNEL+36 ; #8024  lift the pointer (before drawing under
                                    ;        it; pair with GB_CURSHOW after)
-GB_LAUNCH       equ   GB_KERNEL+39 ; #8027  reserved legacy current-entry launch stub
+GB_REPAINTTOP   equ   GB_KERNEL+39 ; #8027  repaint only the opaque z-top; retired
+                                   ;        modal GB_LAUNCH slot reused (#477)
+GB_LAUNCH       equ   GB_REPAINTTOP ; legacy source alias; no longer launches
 GB_GETARG       equ   GB_KERNEL+42 ; #802A  -> HL = launch arg (11-byte 8.3 name
                                    ;        of the file the app was opened with)
 GB_RUN          equ   GB_KERNEL+45 ; #802D  reserved legacy modal-run slot.
