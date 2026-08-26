@@ -36,8 +36,8 @@ make titlebar-editor
 
 Every file in `assets/titlebars/` is packaged for card and MSX distributions.
 The same applies to `assets/gadgets/`.
-The space-constrained CPC and PCW boot floppies carry `ORIGINAL.TBR` and
-`IMPROVED.TBR`, plus `ORIGINAL.GDT`; their `EXTRAS.DSK` carries the remaining
+The space-constrained CPC and PCW boot floppies carry the default
+`ORIGINAL.TBR` plus `ORIGINAL.GDT`; their `EXTRAS.DSK` carries the remaining
 themes. Available assets appear in Settings > Title bar and Settings > Gadgets.
 `TITLEBAR=ORIGINAL` and `GADGETS=ORIGINAL` are the defaults on every platform.
 Legacy 106-byte combined `.TBR` files remain loadable.

@@ -42,7 +42,7 @@ kernel work into a worker would make the system unsafe rather than preemptible.
 | P0 | File Manager | Copy, directory preparation, and APP-icon probing are bounded root jobs. |
 | P0 | Settings | Asset enumeration and icon-set validation are bounded root jobs; modal/I/O lifecycle needs cross-target validation. |
 | P0 | Screensavers | All shipped savers now use fixed or incremental frame budgets; lifecycle validation remains. |
-| P1 | BASIC and Paint | BASIC graphics and scans are bounded; Paint document I/O still needs bounds. |
+| P1 | BASIC, Paint, and Notepad | BASIC graphics/scans and Paint/Notepad document I/O are bounded. |
 | P1 | Browser, WGET, Telnet, Shell | Network/storage stays root-owned and must advance in bounded chunks. |
 | P1 | Viewer, Notepad, Icon Editor, Mahjong | Root-owned; measure and split their longest operations where needed. |
 | P2 | Clock and small utilities | Clock is already bounded; remaining utilities need lifecycle smoke tests. |
@@ -222,13 +222,10 @@ operations by design.
 
 Paint owns banked picture storage and several windows, so it remains root-owned.
 Its 20x20 editing tile keeps flood fill, shape, clipboard, and undo loops tightly
-bounded. The higher-risk paths are creating, loading, and saving a complete
-picture of up to 16 KiB in one command, plus repeated bank transfers and full
-pane repaints.
-
-Convert picture creation and save/load into per-frame document jobs. Keep
-interactive drags modal and bounded by user input. Do not move bank mapping,
-kernel drawing, file I/O, or `gb_copybuf` users into a worker.
+bounded. New, Load, Save, and Save As now advance in 512-byte root-owned jobs;
+closing cancels the job and removes an incomplete output. Pane movement uses a
+live title outline and damage-clipped final repaint. Bank mapping, drawing,
+storage, and interactive drag handling remain correctly on the root task.
 
 ## P1: Remaining user applications
 
@@ -239,7 +236,7 @@ kernel drawing, file I/O, or `gb_copybuf` users into a worker.
 | Telnet | Bounded root network/serial job | Cap receive and ANSI parsing per frame; disconnect must cancel every transport state. |
 | Shell | Needs bounded root commands | `cat` and `cp` currently loop through complete files inside one command. |
 | Viewer | Root-owned image renderer | Image-only; retains native banked rendering and falls back to bounded visible-row reads when picture banks are exhausted. |
-| Notepad | Root-owned editor | Measure full-document load/save, wrap, and redraw; split only operations that exceed a frame. |
+| Notepad | Bounded root document job | Preemptive builds load/save 512 bytes per frame, serialize storage, clean partial saves, and cap input shifts to two characters per frame. Validate maximum files and deferred save actions. |
 | Icon Editor | Root-owned editor | Bound `.IST`/`.APP` load/save and conversion; preserve borrowed-bank and preview state. |
 | Mahjong | Root-owned game | Measure deal/shuffle/hint and full-board draws; tile interaction is otherwise event-driven. |
 | Disk Utility | Root-owned destructive I/O | Formatting remains atomic kernel/module work; enforce modal state and error cleanup. |
@@ -271,7 +268,7 @@ kernel drawing, file I/O, or `gb_copybuf` users into a worker.
    maximum-setting cases.
 4. Complete the screensaver timing and lifecycle matrix across CPC, MSX2, and PCW.
 5. Validate GB-BASIC's bounded graphics and scan lifecycle across all targets.
-6. GB-PAINT document create/load/save jobs.
+6. Validate GB-PAINT and Notepad bounded document jobs, cancellation, and exact-size files.
 7. Browser/WGET/Telnet/Shell and the remaining P1 application checks.
 8. Complete cross-target smoke matrix before issue #477 is proposed for merge.
 

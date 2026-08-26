@@ -212,7 +212,7 @@ def main() -> None:
                 str((distro / name).relative_to(ROOT)),
                 (distro / name).read_bytes(), expected,
             )
-    floppy_titlebars = {"IMPROVED.TBR", "ORIGINAL.TBR"}
+    floppy_titlebars = {"ORIGINAL.TBR"}
     extras_titlebars = set(titlebars) - floppy_titlebars
     floppy_gadgets = {"ORIGINAL.GDT"}
     extras_gadgets = set(gadgets) - floppy_gadgets
@@ -222,7 +222,7 @@ def main() -> None:
     ):
         names = {name for name in files if name.endswith(".TBR")}
         if names != floppy_titlebars:
-            sys.exit(f"{label}: expected only IMPROVED.TBR and ORIGINAL.TBR")
+            sys.exit(f"{label}: expected only ORIGINAL.TBR")
         for name in floppy_titlebars:
             payload = files[name] if padded else strip_amsdos(files[name])
             compare_payload(f"{label}:{name}", payload, titlebars[name], padded=padded)
@@ -348,7 +348,7 @@ def main() -> None:
     print(f"portable BDP distribution: {len(backdrops)} byte-identical backdrops across CPC, MSX and PCW")
     print(
         f"title bars: {len(titlebars)} motifs on card/MSX; "
-        "IMPROVED and ORIGINAL on CPC/PCW boot floppies; remaining motifs on "
+        "ORIGINAL on CPC/PCW boot floppies; remaining motifs on "
         "EXTRAS.DSK; ORIGINAL default"
     )
     print(

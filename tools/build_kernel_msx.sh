@@ -22,6 +22,10 @@ command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
 PREEMPTIVE="${PREEMPTIVE:-0}"
 PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
+NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
+NOTEPAD_DATA_LOC="0x6F48"
+NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
+NOTEPAD_SCROLL=1
 if [ "$PREEMPTIVE" = "1" ]; then
     RASM="$RASM" bash tools/build_scheduler.sh msx
     EXTRA_RASM="${EXTRA_RASM:-} -DPREEMPTIVE=1 -DPREEMPTIVE_CONTEXT=1"
@@ -83,6 +87,9 @@ python3 tools/gblib_subset.py \
 VIEWER_GBLIB="build/msx/GBLIBVIEWER.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$VIEWER_GBLIB" apps/viewer/gblib.symbols
+NOTEPAD_GBLIB="build/msx/GBLIBNOTEPAD.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$NOTEPAD_GBLIB" apps/notepad/gblib.symbols
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
@@ -99,7 +106,7 @@ else
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 fi
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 REPAINTTOP=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
-APP_ICON=apps/notepad/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
+APP_ICON=apps/notepad/icon.asm GBLIB_SRC="$NOTEPAD_GBLIB" APPDEFS="-DGB_MSX2 $NOTEPAD_APPDEFS" APP_CFLAGS="$NOTEPAD_CFLAGS" DATA_LOC="$NOTEPAD_DATA_LOC" DOC=1 REPAINTTOP="$NOTEPAD_SCROLL" tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 if [ "$PREEMPTIVE" = "1" ]; then

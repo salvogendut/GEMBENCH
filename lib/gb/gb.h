@@ -443,6 +443,10 @@ unsigned char gb_doc_frame(void);          /* in on_frame: ran a menu? 0 = no, o
                                             * change (redraw your body); 3 = File/View action (full
                                             * repaint via gb_restore_parent). `if (gb_doc_frame())
                                             * gb_restore_parent();` stays correct for non-Edit apps. */
+#ifdef GBDOC_BOUNDED_IO
+unsigned char gb_doc_startup_load(void);   /* begin loading the launch file; 0 = no launch file */
+unsigned char gb_doc_busy(void);           /* 0 idle, 1 loading, 2 saving */
+#endif
 
 /* Shared clipboard (#142): a system buffer that survives app switches, so copy in
  * one app and paste in another. An app's on_copy fills it; on_paste reads it. */

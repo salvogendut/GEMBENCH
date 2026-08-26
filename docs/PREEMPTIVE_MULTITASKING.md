@@ -152,6 +152,15 @@ bounded visible-row reads rather than requiring another picture bank. Text files
 remain the responsibility of Notepad. Moving byte conversion alone into a worker
 would add synchronization without removing kernel work from the root task.
 
+`NOTEPAD.APP` is also root-managed. Its app-linked document framework loads and
+saves one 512-byte chunk per focused frame in every build, including launch
+files. The job owns the shared storage context, blocks edits while its buffer is
+in transit, and removes a partial output if saving fails or the window closes.
+Dirty-document Save-then-New, Save-then-Load, and Save-then-Close actions resume
+only after a successful write. Its fixed 4 KiB text transformations remain
+root-owned, typing is capped at two insert/delete shifts per frame, and its
+app-linked compact scrollbar moves the view three lines per click.
+
 `FILEMGR.APP` keeps storage on the root task but advances a drag/drop copy by one
 complete read/write chunk per focused frame. The destination window is raised
 and titled `Copying`; closing it cancels the operation and removes the partial

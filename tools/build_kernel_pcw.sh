@@ -26,6 +26,10 @@ command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
 PREEMPTIVE="${PREEMPTIVE:-0}"
 PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
+NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
+NOTEPAD_DATA_LOC="0x6F48"
+NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
+NOTEPAD_SCROLL=1
 if [ "$PREEMPTIVE" = "1" ]; then
     RASM="$RASM" bash tools/build_scheduler.sh pcw
     EXTRA_RASM="${EXTRA_RASM:-} -DPREEMPTIVE=1 -DPREEMPTIVE_CONTEXT=1"
@@ -65,12 +69,15 @@ python3 tools/gblib_subset.py \
 VIEWER_GBLIB="build/pcw/GBLIBVIEWER.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$VIEWER_GBLIB" apps/viewer/gblib.symbols
+NOTEPAD_GBLIB="build/pcw/GBLIBNOTEPAD.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$NOTEPAD_GBLIB" apps/notepad/gblib.symbols
 
 # --- the C apps, compiled with the PCW geometry (same DATA_LOCs as CPC/MSX) --
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
 PCW_TASK_ADDS=()
 PCW_BRSAVE_ADDS=(--add build/pcw/BRSAVE.RAW=BRSAVE.APP)
-PCW_SPARE_THEME_ADDS=(--add build/titlebars/IMPROVED.TBR=IMPROVED.TBR)
+PCW_SPARE_THEME_ADDS=()
 if [ "$PREEMPTIVE" = "1" ]; then
     TASK_ROOT=1 TASK_RUNTIME_RAW=build/pcw/GBSCHED.RAW \
         TASK_STACK_RESERVE=256 APPDEFS="-DGB_PCW" DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
@@ -86,7 +93,7 @@ else
     APPDEFS="-DGB_PCW" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
 fi
 APPDEFS="-DGB_PCW" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 REPAINTTOP=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
-APP_ICON=apps/notepad/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
+APP_ICON=apps/notepad/icon.asm GBLIB_SRC="$NOTEPAD_GBLIB" APPDEFS="-DGB_PCW $NOTEPAD_APPDEFS" APP_CFLAGS="$NOTEPAD_CFLAGS" DATA_LOC="$NOTEPAD_DATA_LOC" DOC=1 REPAINTTOP="$NOTEPAD_SCROLL" tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
 APPDEFS="-DGB_PCW" APP_CFLAGS="--opt-code-size --max-allocs-per-node 20000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
 APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_PCW" DATA_LOC=0x6A30 DOCRO=1 SCROLL16=1 REPAINTTOP=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
@@ -241,7 +248,7 @@ EXTRAS_ADDS=(
 for tbr in build/titlebars/*.TBR; do
     name=$(basename "$tbr")
     case "$name" in
-        IMPROVED.TBR|ORIGINAL.TBR) continue ;;
+        ORIGINAL.TBR) continue ;;
     esac
     EXTRAS_ADDS+=(--add "$tbr=$name")
 done
