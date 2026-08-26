@@ -43,7 +43,7 @@ kernel work into a worker would make the system unsafe rather than preemptible.
 | P0 | Settings | Asset enumeration and icon-set validation are bounded root jobs; modal/I/O lifecycle needs cross-target validation. |
 | P0 | Screensavers | All shipped savers now use fixed or incremental frame budgets; lifecycle validation remains. |
 | P1 | BASIC, Paint, and Notepad | BASIC graphics/scans and Paint/Notepad document I/O are bounded. |
-| P1 | Browser, WGET, Telnet, Shell | Network/storage stays root-owned and must advance in bounded chunks. |
+| P1 | Browser, WGET, Telnet, Shell | Shell storage commands are bounded; the network applications remain to audit. |
 | P1 | Viewer, Notepad, Icon Editor, Mahjong | Viewer, Notepad, and Icon Editor use bounded root jobs; Mahjong still needs deal/shuffle measurement. |
 | P2 | Clock and small utilities | Clock is already bounded; remaining utilities need lifecycle smoke tests. |
 
@@ -237,6 +237,21 @@ removes partial output and releases the borrowed page on every close path.
 Transfer status and completion repaint only the focused window unless editing
 the active icon set requires the complete managed stack to be refreshed.
 
+### Shell
+
+SHELL remains root-owned because command execution, directory traversal, and
+file transfer use the shared filesystem context. In preemptive builds, `ls`
+enumerates at most four entries per frame, `cat` loads 512-byte chunks and
+decodes at most 96 characters per frame, and `cp` performs one complete
+512-byte read/write unit per frame. These jobs serialize through the shared
+storage claim; `Esc`, `Ctrl-C`, or closing the window releases that claim, and a
+cancelled or failed copy removes its partial destination. Cooperative builds
+retain their original synchronous command paths.
+
+Remaining validation: exercise empty files, exact 512-byte boundaries, long
+text lines, cross-drive copies, full destinations, and cancellation on CPC
+floppy/card storage, MSX DOS drives, and PCW floppies.
+
 ## P1: Remaining user applications
 
 | Application | Classification | Main audit item |
@@ -244,7 +259,7 @@ the active icon set requires the complete managed stack to be refreshed.
 | Browser | Bounded root network/parser job | Bound each receive, parse, image, redirect, and cache step; cancellation must close the channel. |
 | WGET | Bounded root network/storage job | Verify one receive/write unit per frame and safe partial-file cleanup/resume. |
 | Telnet | Bounded root network/serial job | Cap receive and ANSI parsing per frame; disconnect must cancel every transport state. |
-| Shell | Needs bounded root commands | `cat` and `cp` currently loop through complete files inside one command. |
+| Shell | Bounded root command jobs | Preemptive `ls`, `cat`, and `cp` are metered per frame, serialize storage, and clean partial copies on cancellation or close. |
 | Viewer | Root-owned image renderer | Image-only; retains native banked rendering and falls back to bounded visible-row reads when picture banks are exhausted. |
 | Notepad | Bounded root document job | Preemptive builds load/save 512 bytes per frame, serialize storage, clean partial saves, and cap input shifts to two characters per frame. Validate maximum files and deferred save actions. |
 | Icon Editor | Bounded root document job | Loads and saves 512 bytes per frame while preserving borrowed-bank, preview, and active-icon-set reload state. |

@@ -32,7 +32,17 @@
 #define INPUT_MAX   79
 #define CMD_HISTORY 4
 #define PATH_MAX    40
+#ifdef GB_PREEMPTIVE
+#define IO_CHUNK    512
+#define CAT_FRAME_BYTES 96
+#define IO_JOB_NONE 0
+#define IO_JOB_CAT  1
+#define IO_JOB_CP   2
+#define IO_JOB_LS   3
+#define LS_FRAME_ENTRIES 4
+#else
 #define IO_CHUNK    1024
+#endif
 
 #define FS_LOAD_OFS ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
@@ -59,6 +69,16 @@ static unsigned char pending_len, input_len;
 static unsigned char active_drive, close_requested;
 static unsigned char cmd_hist_start, cmd_hist_count, cmd_hist_pos;
 static unsigned char caret_tick, caret_on, key_cool;
+#ifdef GB_PREEMPTIVE
+static unsigned char io_job, io_src_drive, io_dst_drive;
+static unsigned char io_hi, io_first, io_wrote;
+static unsigned int io_lo, io_got, io_pos;
+#endif
+
+static void redraw_output(void);
+#ifdef GB_PREEMPTIVE
+static void io_release(void);
+#endif
 
 #define HIST_AT(n) (&history[(unsigned int)(n) * LINE_SIZE])
 #define CMD_AT(n)  (&cmd_history[(unsigned int)(n) * (INPUT_MAX + 1)])
@@ -385,6 +405,7 @@ static void command_pwd(void)
     output_line(path_a);
 }
 
+#ifndef GB_PREEMPTIVE
 static void command_ls(const char *arg)
 {
     unsigned char drive, any = 0;
@@ -418,6 +439,28 @@ static void command_ls(const char *arg)
     output_flush(1);
     restore_cwd();
 }
+#else
+static void command_ls(const char *arg)
+{
+    if (!normalize_path(arg && *arg ? arg : ".", &io_src_drive, path_a)) {
+        output_error("ls: invalid path", arg); return;
+    }
+    if (gb_drop_claimed()) { output_line("ls: storage busy"); return; }
+    gb_drop_claim();
+    if (select_directory(io_src_drive, path_a)) {
+        copy_text(path_b, path_a, PATH_MAX - 1);
+        io_first = 1; io_wrote = 0; io_job = IO_JOB_LS;
+        return;
+    }
+    if (!split_parent(path_a, path_b, name_a) ||
+        !select_directory(io_src_drive, path_b) || !find_entry(name_a)) {
+        output_error("ls: not found", arg); io_release(); return;
+    }
+    format83(component, name_a); output_text(component);
+    if (gb_isdir()) output_char('/');
+    output_flush(1); io_release();
+}
+#endif
 
 static void command_cd(const char *arg)
 {
@@ -469,6 +512,7 @@ static void advance_offset(unsigned int *lo, unsigned char *hi, unsigned int amo
     *lo = next;
 }
 
+#ifndef GB_PREEMPTIVE
 static void command_cat(const char *arg)
 {
     unsigned char drive, hi = 0, first = 1;
@@ -504,6 +548,7 @@ static void command_cat(const char *arg)
     if (first) output_line("");
     restore_cwd();
 }
+#endif
 
 static unsigned char locate_file(const char *arg, unsigned char *drive,
                                  char *parent, char *raw)
@@ -529,6 +574,7 @@ static void remove_copy_target(unsigned char drive, const char *dir, const char 
     if (select_directory(drive, dir)) gb_file_delete(raw);
 }
 
+#ifndef GB_PREEMPTIVE
 static void command_cp(const char *src, const char *dst)
 {
     unsigned char src_drive, dst_drive, hi = 0, first = 1, wrote = 0, ok = 1;
@@ -582,6 +628,184 @@ static void command_cp(const char *src, const char *dst)
     }
     restore_cwd();
 }
+#else
+static void io_release(void)
+{
+    FS_XFLAGS = 0;
+    restore_cwd();
+    gb_drop_release();
+    io_job = IO_JOB_NONE;
+    io_got = io_pos = 0;
+}
+
+static void io_setup_failed(void)
+{
+    io_release();
+}
+
+static void command_cat(const char *arg)
+{
+    if (!arg || !*arg) { output_line("usage: cat FILE"); return; }
+    if (gb_drop_claimed()) { output_line("cat: storage busy"); return; }
+    gb_drop_claim();
+    if (!locate_file(arg, &io_src_drive, path_b, name_a)) {
+        output_error("cat: file not found", arg); io_setup_failed(); return;
+    }
+    io_lo = 0; io_hi = 0; io_got = 0; io_pos = 0; io_first = 1;
+    io_job = IO_JOB_CAT;
+}
+
+static void command_cp(const char *src, const char *dst)
+{
+    unsigned char i;
+    if (!src || !dst) { output_line("usage: cp SOURCE DEST"); return; }
+    if (gb_drop_claimed()) { output_line("cp: storage busy"); return; }
+    gb_drop_claim();
+    if (!locate_file(src, &io_src_drive, path_b, name_a)) {
+        output_error("cp: source not found", src); io_setup_failed(); return;
+    }
+    if (!normalize_path(dst, &io_dst_drive, path_a)) {
+        output_error("cp: invalid destination", dst); io_setup_failed(); return;
+    }
+    if (select_directory(io_dst_drive, path_a)) {
+        copy_text(path_c, path_a, PATH_MAX - 1);
+        for (i = 0; i < 11; i++) name_b[i] = name_a[i];
+    } else if (!split_parent(path_a, path_c, name_b)) {
+        output_error("cp: destination not found", dst); io_setup_failed(); return;
+    } else if (!select_directory(io_dst_drive, path_c)) {
+        output_error("cp: destination not found", dst); io_setup_failed(); return;
+    }
+    if (same_path(io_src_drive, path_b, name_a,
+                  io_dst_drive, path_c, name_b)) {
+        output_line("cp: source and destination are the same");
+        io_setup_failed(); return;
+    }
+    io_lo = 0; io_hi = 0; io_got = 0; io_pos = 0;
+    io_first = 1; io_wrote = 0; io_job = IO_JOB_CP;
+}
+
+static void io_remove_partial(void)
+{
+    if (io_job == IO_JOB_CP && io_wrote)
+        remove_copy_target(io_dst_drive, path_c, name_b);
+}
+
+static void io_cancel(unsigned char announce)
+{
+    io_remove_partial();
+    io_release();
+    if (announce) output_line("cancelled");
+}
+
+static void cat_finish(void)
+{
+    if (pending_len) output_flush(0);
+    if (io_first) output_line("");
+    io_release();
+}
+
+static void cat_step(void)
+{
+    unsigned char budget = CAT_FRAME_BYTES;
+
+    if (io_pos >= io_got) {
+        if (!io_first && io_got < IO_CHUNK) {
+            cat_finish(); redraw_output(); return;
+        }
+        if (!select_directory(io_src_drive, path_b)) {
+            output_error("cat: read failed", arg_one);
+            io_release(); redraw_output(); return;
+        }
+        gb_set_name(name_a); set_offset(io_lo, io_hi); FS_XFLAGS = 0x01;
+        io_got = gb_fs_load(io_buffer, IO_CHUNK);
+        FS_XFLAGS = 0;
+        if (io_got > IO_CHUNK) io_got = IO_CHUNK;
+        io_pos = 0;
+        if (!io_got) { cat_finish(); redraw_output(); return; }
+        io_first = 0;
+        advance_offset(&io_lo, &io_hi, io_got);
+    }
+    while (budget && io_pos < io_got) {
+        output_char((unsigned char)io_buffer[io_pos++]);
+        budget--;
+    }
+    if (io_pos >= io_got && io_got < IO_CHUNK) {
+        cat_finish(); redraw_output(); return;
+    }
+}
+
+static void cp_finish(unsigned char ok)
+{
+    if (!ok) {
+        io_remove_partial();
+        io_release();
+        output_error("cp: copy failed", arg_two);
+    } else {
+        io_release();
+        output_text("copied "); output_text(arg_one);
+        output_text(" to "); output_line(arg_two);
+    }
+    redraw_output();
+}
+
+static void cp_step(void)
+{
+    unsigned int got;
+    if (!select_directory(io_src_drive, path_b)) { cp_finish(0); return; }
+    gb_set_name(name_a); set_offset(io_lo, io_hi); FS_XFLAGS = 0x01;
+    got = gb_fs_load(io_buffer, IO_CHUNK);
+    FS_XFLAGS = 0;
+    if (got > IO_CHUNK) got = IO_CHUNK;
+    if (!got) {
+        if (io_first) {
+            if (!select_directory(io_dst_drive, path_c)) { cp_finish(0); return; }
+            gb_set_name(name_b); FS_XFLAGS = 0x04; io_wrote = 1;
+            if (!gb_fs_save(io_buffer, 0)) { FS_XFLAGS = 0; cp_finish(0); return; }
+            FS_XFLAGS = 0;
+        }
+        cp_finish(1); return;
+    }
+    if (!select_directory(io_dst_drive, path_c)) { cp_finish(0); return; }
+    gb_set_name(name_b); FS_XFLAGS = io_first ? 0x04 : 0x06; io_wrote = 1;
+    if (!gb_fs_save(io_buffer, got)) { FS_XFLAGS = 0; cp_finish(0); return; }
+    FS_XFLAGS = 0; io_first = 0; advance_offset(&io_lo, &io_hi, got);
+    if (got < IO_CHUNK) cp_finish(1);
+}
+
+static void ls_step(void)
+{
+    unsigned char count = 0;
+    char *p;
+
+    gb_set_drive(io_src_drive);
+    p = io_first ? gb_dir1() : gb_dirn();
+    io_first = 0;
+    while (p && count < LS_FRAME_ENTRIES) {
+        format83(component, gb_entname());
+        output_text(component);
+        if (gb_isdir()) output_char('/');
+        output_flush(1); io_wrote = 1; count++;
+        if (count < LS_FRAME_ENTRIES) p = gb_dirn();
+    }
+    if (!p) {
+        if (!io_wrote) output_line("(empty)");
+        io_release(); redraw_output(); return;
+    }
+}
+
+static void io_step(void)
+{
+    unsigned char c, count = 8;
+    while (count-- && (c = gb_getkey()) != 0) {
+        if (c == 0x1B || c == 0x03) {
+            io_cancel(1); redraw_output(); return;
+        }
+    }
+    if (io_job == IO_JOB_CAT) cat_step();
+    else if (io_job == IO_JOB_CP) cp_step();
+    else if (io_job == IO_JOB_LS) ls_step();
+}
+#endif
 
 static void command_help(void)
 {
@@ -701,6 +925,17 @@ static void draw_output(void)
 static void draw_input(void)
 {
     unsigned char i = 0, j = 0, avail, start;
+#ifdef GB_PREEMPTIVE
+    if (io_job != IO_JOB_NONE) {
+        if (io_job == IO_JOB_CAT) copy_text(input_draw, "Reading...", TERM_COLS);
+        else if (io_job == IO_JOB_CP) copy_text(input_draw, "Copying...", TERM_COLS);
+        else copy_text(input_draw, "Listing...", TERM_COLS);
+        gb_fill((unsigned char)(TEXT_X - 1), (unsigned char)INPUT_Y,
+                (unsigned char)(GB_COLS - TEXT_X), 10, 0);
+        gb_text(TEXT_X, (unsigned char)INPUT_Y, input_draw);
+        return;
+    }
+#endif
     build_prompt();
     while (prompt[i] && i < TERM_COLS) { input_draw[i] = prompt[i]; i++; }
     avail = (unsigned char)(TERM_COLS - i);
@@ -803,9 +1038,19 @@ static void shell_proc(void)
 {
     switch (gb_msg.type) {
         case GB_MSG_DRAW:  draw_content(); break;
-        case GB_MSG_FRAME: handle_keys(); break;
+        case GB_MSG_FRAME:
+#ifdef GB_PREEMPTIVE
+            if (io_job != IO_JOB_NONE) io_step(); else handle_keys();
+#else
+            handle_keys();
+#endif
+            break;
         case GB_MSG_CLICK: handle_click(); break;
-        case GB_MSG_CLOSE: FS_XFLAGS = 0; gb_wm_close(); break;
+        case GB_MSG_CLOSE:
+#ifdef GB_PREEMPTIVE
+            if (io_job != IO_JOB_NONE) io_cancel(0);
+#endif
+            FS_XFLAGS = 0; gb_wm_close(); break;
         case GB_MSG_DRAG:  break;
     }
 }
