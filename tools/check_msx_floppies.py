@@ -127,7 +127,7 @@ def main() -> None:
     for directory in ("GBENCH", "DIAG"):
         expected = {
             f"{directory}/{name}"
-            for name in staged_files(ROOT / f"QA/MSX/{directory}")
+            for name in staged_files(ROOT / f"QA/MSX/CARD/{directory}")
         }
         actual = {
             name for name in main_files if name.startswith(f"{directory}/")

@@ -21,12 +21,12 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   sibling GB-PAINT and GB-BASIC checkouts.
 - **`build_kernel_msx.sh`** — builds the `GBMSX.COM` video-mode selector,
   `GBMSX6.COM`, `GBMSX7.COM`, the MSX2 app/module payload, and the bootable
-  Nextor `QA/GBMSX.IMG`, plus the two 720K images under `QA/MSX/Floppies/`.
+  Nextor `QA/MSX/GBMSX.IMG`, plus the two 720K images under `QA/MSX/Floppies/`.
   The dependency fetcher supplies a local openMSXnet
   `UNAPINET.COM`, which is staged before `GBMSX.COM`; `MSX_UNAPI_TSR` overrides
   it, and an explicitly empty value omits it. The standalone staged TSR and
   dependency bundle remain untracked; the released system floppy embeds the
-  MIT-licensed TSR and notice, while the rest of `QA/MSX/` is committed.
+  MIT-licensed TSR and notice, while the rest of `QA/MSX/CARD/` is committed.
 - **`build_msx_floppy.sh`** — builds `GEOBENCH.DSK` with the full system and
   `EXTRAS.DSK` with the picture gallery. The disks use standard 720K FAT12
   geometry and, as shipped with `NEXTOR.SYS`, require a Nextor kernel ROM
@@ -127,7 +127,7 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`mkcpcmedia.py OUT.dsk --add FILE ...`** — builds the extended 80-track,
   single-sided AMSDOS DATA image used for the CPC picture gallery.
 - **`mkpcwdsk.py`** — builds bootable or data PCW CF2/CF2DD images, including
-  `QA/PCW/EXTRAS.DSK`.
+  `QA/PCW/Floppies/EXTRAS.DSK`.
 - **`build_ide_img.sh`** — *(archived)* older IDE-only image helper.
 
 ## Paged kernel modules

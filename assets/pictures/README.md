@@ -3,9 +3,9 @@
 Drop GEOBENCH `.PIC` files here and they are classified from their GBPC header at
 build time. Portable mode-1 pictures are staged for every platform: the CPC build
 copies them into `QA/CPC/CARD/PICS/` and packs them into
-`QA/CPC/Floppies/EXTRAS.DSK`; the MSX build copies them into `QA/MSX/PICS/`, and
-the PCW build packs them into `QA/PCW/EXTRAS.DSK`. Mode-7 sixteen-colour pictures
-are staged only into `QA/MSX/PICS/` for the Screen 7 Viewer and wallpaper loader.
+`QA/CPC/Floppies/EXTRAS.DSK`; the MSX build copies them into `QA/MSX/CARD/PICS/`, and
+the PCW build packs them into `QA/PCW/Floppies/EXTRAS.DSK`. Mode-7 sixteen-colour pictures
+are staged only into `QA/MSX/CARD/PICS/` for the Screen 7 Viewer and wallpaper loader.
 
 ## Make a .PIC from an image
 

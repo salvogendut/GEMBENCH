@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OUT="${1:-QA/PCW/COMPANION.DSK}"
+OUT="${1:-QA/PCW/Floppies/COMPANION.DSK}"
 COMP_ADDS=()
 
 mkdir -p build/pcw "$(dirname "$OUT")"

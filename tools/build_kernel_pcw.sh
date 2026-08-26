@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tools/build_kernel_pcw.sh - build the Amstrad PCW target (#331): the
 # GBKERNP.RAW kernel on its own boot sector, the core app/asset set, staged
-# into QA/PCW and packed into GEOBENCH.DSK (bootable CF2), COMPANION.DSK,
+# into QA/PCW/Floppies as GEOBENCH.DSK (bootable CF2), COMPANION.DSK,
 # and EXTRAS.DSK (CF2DD picture gallery plus standalone applications).
 #
 # The PCW boots standalone (no CP/M): kernel/pcwboot.asm loads the kernel
@@ -14,7 +14,7 @@
 #
 #   bash tools/build_kernel_pcw.sh
 #   SDL_VIDEODRIVER=dummy ~/Dev/1985/1985 --config debug/1985-pcw.conf \
-#       --disk-a QA/PCW/GEOBENCH.DSK --screenshot-at 600:/tmp/pcw.ppm
+#       --disk-a QA/PCW/Floppies/GEOBENCH.DSK --screenshot-at 600:/tmp/pcw.ppm
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -62,7 +62,7 @@ RASM="$RASM" bash tools/build_titlebarmod.sh
     exit 1
 }
 
-mkdir -p build/pcw QA/PCW
+mkdir -p build/pcw QA/PCW/Floppies
 TELNET_GBLIB="build/pcw/GBLIBTELNET.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$TELNET_GBLIB" apps/telnet/gblib.symbols
@@ -178,7 +178,7 @@ rm -f build/pcw/GBKERNP.RAW build/pcwboot.bin
 # --- the bootable disc -----------------------------------------------------------
 printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nTIMESYNC=false\r\nTIMEZONE=+2\r\nPROXY=\r\n' > build/pcw/GEOBENCH.CFG
 cp build/pcw/GEOBENCH.CFG build/pcw/DEFAULT.CFG
-python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
+python3 tools/mkpcwdsk.py QA/PCW/Floppies/GEOBENCH.DSK \
     --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
     "${PCW_TASK_ADDS[@]}" \
     --add build/pcw/GEOBENCH.CFG=GEOBENCH.CFG \
@@ -211,7 +211,7 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/gadgets/ORIGINAL.GDT=ORIGINAL.GDT
 
 # --- COMPANION.DSK: TELNET, backdrops and spare assets (plain CF2 data disc)
-tools/package_pcw_companion.sh QA/PCW/COMPANION.DSK
+tools/package_pcw_companion.sh QA/PCW/Floppies/COMPANION.DSK
 
 # --- EXTRAS.DSK: portable gallery + standalone apps on a 720K CF2DD disc
 echo "Building GB-PAINT PCW payload from $GB_PAINT_DIR"
@@ -268,7 +268,7 @@ done < <(python3 tools/picture_catalog.py portable)
 for bas in build/pcw/basic-examples/*.BAS; do
     EXTRAS_ADDS+=(--add "$bas=$(basename "$bas")")
 done
-rm -f QA/PCW/MEDIA.DSK
-python3 tools/mkpcwdsk.py QA/PCW/EXTRAS.DSK --type cf2dd "${EXTRAS_ADDS[@]}"
+rm -f QA/PCW/Floppies/MEDIA.DSK
+python3 tools/mkpcwdsk.py QA/PCW/Floppies/EXTRAS.DSK --type cf2dd "${EXTRAS_ADDS[@]}"
 
-echo "PCW target built: QA/PCW/GEOBENCH.DSK + COMPANION.DSK + EXTRAS.DSK"
+echo "PCW target built: QA/PCW/Floppies/GEOBENCH.DSK + COMPANION.DSK + EXTRAS.DSK"

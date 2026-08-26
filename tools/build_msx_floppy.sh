@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SRC="${1:-QA/MSX}"
+SRC="${1:-QA/MSX/CARD}"
 OUT="${2:-QA/MSX/Floppies}"
 DEPS="${MSX_DEPS:-QA/MSXDEPS}"
 BOOT_SECTOR="assets/msx/MSXDOS2.BIN"

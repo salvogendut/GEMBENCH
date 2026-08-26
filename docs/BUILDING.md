@@ -104,7 +104,7 @@ bash tools/build_kernel_pcw.sh
 # or: make pcw
 ```
 
-This rebuilds `QA/PCW/GEOBENCH.DSK`, `COMPANION.DSK`, and the 720K
+This rebuilds `QA/PCW/Floppies/GEOBENCH.DSK`, `COMPANION.DSK`, and the 720K
 `EXTRAS.DSK`. The build imports Paint and BASIC from their sibling repositories.
 Use `../1985/1985` with the current 1985 configuration for emulator testing;
 see [PCW.md](PCW.md) for boot, disk geometry, serial networking, and deployment
@@ -169,14 +169,14 @@ for current UNAPI implementation coverage.
 
 `build_kernel_msx.sh` produces:
 
-- **`QA/MSX/`** — the loose MSX distribution (committed): the `GBMSX.COM`
+- **`QA/MSX/CARD/`** — the loose MSX distribution (committed): the `GBMSX.COM`
   mode selector, `GBMSX6.COM`, `GBMSX7.COM`, an `AUTOEXEC.BAT` that runs the
   selector, `GEOBENCH.CFG`, the `GBENCH/` system folder
   (fonts/icons/cursor/modules/apps/savers), the complete gallery in `PICS/`, and
   development diagnostics in `DIAG/`.
-- **`QA/GBMSX.IMG`** — a bootable 32 MB **FAT16 hard-disk image** (a local
+- **`QA/MSX/GBMSX.IMG`** — a bootable 32 MB **FAT16 hard-disk image** (a local
   artifact, git-ignored like the CPC card image). `tools/build_msx_img.sh` fills
-  it from `QA/MSX` plus the Nextor system files, so Nextor's Sunrise IDE driver
+  it from `QA/MSX/CARD` plus the Nextor system files, so Nextor's Sunrise IDE driver
   boots it straight to the desktop.
 - **`QA/MSX/Floppies/GEOBENCH.DSK`** — the bootable 720K FAT12 system floppy,
   with the selectors, complete `GBENCH/` and `DIAG/` trees, `NEXTOR.SYS`,
@@ -203,9 +203,9 @@ the MSX2 sprite format automatically.
 
 ### Deploying
 
-Copy the contents of **`QA/MSX/`** onto storage your MSX-DOS 2 / Nextor setup
+Copy the contents of **`QA/MSX/CARD/`** onto storage your MSX-DOS 2 / Nextor setup
 mounts (an SD card, IDE disk, …) and run **`GBMSX.COM`** (the `AUTOEXEC.BAT` runs
-it for you) — or write the whole `QA/GBMSX.IMG` to the device. It needs **MSX-DOS
+it for you) — or write the whole `QA/MSX/GBMSX.IMG` to the device. It needs **MSX-DOS
 2** (mapper support); a bare MSX2 with only Disk BASIC / MSX-DOS 1 won't run it.
 `GBMSX.COM` reads `MSXMODE=6|7` from `GEOBENCH.CFG` and loads the matching
 mode-specific binary. System Settings updates that key for the next boot.
