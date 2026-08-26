@@ -53,12 +53,16 @@ than kernel headroom.
 Newly built MSX images set `MSXMOUSE=TRUE` in `GEOBENCH.CFG`. This makes the
 `GBMSX.COM` selector pass `/M` to the selected Screen 6/7 loader, which enables
 the BIOS GTPAD driver for a standard MSX mouse in joystick port 1. Set
-`MSXMOUSE=FALSE` to retain keyboard/joystick-only input. A manual
+`MSXMOUSE=FALSE` to use that connector as a joystick instead. Mouse and
+joystick direction polling are mutually exclusive because reading a mouse as
+a joystick can produce false held directions on real hardware; keyboard
+pointer control remains available in either mode. A manual
 `GBMSX /M`, `GBMSX6 /M`, or `GBMSX7 /M` also enables the mouse for that run.
+The MSX Settings panel exposes the same choice as **Input device**, with
+**Joystick** and **Mouse** options; restart GEOBENCH after changing it.
 The driver ignores both known offset pairs returned by an enabled but unplugged
 port (`FF/FF` on hardware and `01/01` from some BIOS/emulator combinations), so
-a missing mouse does not pull the pointer into a corner. Keyboard and joystick
-input remain active as a fallback.
+a missing mouse does not pull the pointer into a corner.
 
 ## App-linked sound
 
@@ -72,7 +76,10 @@ Scale, Noise, and Stop checks for real hardware and emulators.
 default. Set `MSX_MOUSE=0` to leave openMSX's normal joystick attachment in
 place. In the 1983 emulator, select **General > Joy Port A > Mouse** (or set
 `joy_port_a = mouse` in `1983.conf`), then click inside the emulator window to
-capture relative mouse input; `Ctrl+Enter` releases it.
+capture relative mouse input; `Ctrl+Enter` releases it. To use a USB gamepad,
+select **Joy Port A > Joystick** and set `MSXMOUSE=FALSE` in the image's
+`GEOBENCH.CFG`; `1983` deliberately ignores gamepad input while the port is
+configured as a mouse.
 
 Build and test in **openMSX** (emulating a Philips NMS 8250 with the Sunrise IDE
 Nextor extension and a 512K RAM expansion):
