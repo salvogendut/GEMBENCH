@@ -142,9 +142,9 @@ The CPC media layout is intentionally simple:
   `QA/CPC/Floppies/COMPANION.DSK` (drive-B apps), and
   `QA/CPC/Floppies/EXTRAS.DSK` (the complete gallery)
 
-MSX2 stages loose files under `QA/MSX/` and two FAT12 floppies under
-`QA/MSX/Floppies/`; its generated `QA/GBMSX.IMG` is local and ignored. PCW
-ships `QA/PCW/GEOBENCH.DSK`, `COMPANION.DSK`, and a 720K `EXTRAS.DSK`.
+MSX2 stages loose files under `QA/MSX/CARD/` and two FAT12 floppies under
+`QA/MSX/Floppies/`; its generated `QA/MSX/GBMSX.IMG` is local and ignored. PCW
+ships `QA/PCW/Floppies/GEOBENCH.DSK`, `COMPANION.DSK`, and a 720K `EXTRAS.DSK`.
 
 Pictures, icon sets, and backdrops use portable payloads. CPC, MSX2, and PCW all
 store canonical Mode-1 GBPC v2 picture bytes; the MSX2 and PCW screen backends

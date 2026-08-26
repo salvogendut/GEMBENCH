@@ -6,13 +6,13 @@
 # from the partition root, so the same image is both boot and payload media.
 #
 # Usage: tools/build_msx_img.sh [staging-dir] [out.img]
-#   staging dir default: QA/MSX      (falls back to a minimal QA/MSXDEPS boot set)
-#   output default:      QA/GBMSX.IMG (local artifact, git-ignored like GEOBENCH.IMG)
+#   staging dir default: QA/MSX/CARD (falls back to a minimal QA/MSXDEPS boot set)
+#   output default:      QA/MSX/GBMSX.IMG (local artifact, git-ignored like GEOBENCH.IMG)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SRC="${1:-QA/MSX}"
-IMG="${2:-QA/GBMSX.IMG}"
+SRC="${1:-QA/MSX/CARD}"
+IMG="${2:-QA/MSX/GBMSX.IMG}"
 SIZE_MB="${MSX_IMG_MB:-32}"
 POFF=32                       # partition start, in 512-byte sectors
 

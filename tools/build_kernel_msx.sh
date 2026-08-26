@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tools/build_kernel_msx.sh - build the MSX2 target (#287): Screen 6/7 kernels,
 # the GBMSX.COM next-boot selector, and the M1 app/asset set. Stage everything
-# into QA/MSX and pack it into the bootable Nextor image QA/GBMSX.IMG.
+# into QA/MSX/CARD and pack it into the bootable Nextor image QA/MSX/GBMSX.IMG.
 #
 # Kept separate from tools/build_kernel.sh (that script is CPC-DSK-entangled
 # and wipes its own QA outputs); the shared pieces (apps via build_capp.sh,
@@ -226,98 +226,98 @@ mv build/msx/GBMSX.COM build/msx/GBMSX7.COM
 ( cd build/msx && "$RASM" ../../kernel/msx_launcher.asm )
 [ -s build/msx/GBMSX.COM ] || { echo "ERROR: MSX video selector not produced" >&2; exit 1; }
 
-# --- stage QA/MSX --------------------------------------------------------------
-mkdir -p QA/MSX/GBENCH
-rm -rf QA/MSX/PICS
-rm -f QA/MSX/GBENCH/*.TBR QA/MSX/GBENCH/*.GDT
-find QA/MSX -maxdepth 1 -type f -name '*.PIC' -delete
-find QA/MSX/GBENCH -maxdepth 1 -type f -name '*.PIC' -delete
-mkdir -p QA/MSX/PICS QA/MSX/DIAG
-rm -f QA/MSX/GBSPIKE.COM                 # pre-DIAG staging location (#379)
-cp build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM QA/MSX/
-rm -f QA/MSX/DIAG/FORMREF.APP             # MSX app loading resolves through /GBENCH
-rm -f QA/MSX/UNAPINET.COM QA/MSX/UNAPI.TXT
+# --- stage QA/MSX/CARD ---------------------------------------------------------
+mkdir -p QA/MSX/CARD/GBENCH
+rm -rf QA/MSX/CARD/PICS
+rm -f QA/MSX/CARD/GBENCH/*.TBR QA/MSX/CARD/GBENCH/*.GDT
+find QA/MSX/CARD -maxdepth 1 -type f -name '*.PIC' -delete
+find QA/MSX/CARD/GBENCH -maxdepth 1 -type f -name '*.PIC' -delete
+mkdir -p QA/MSX/CARD/PICS QA/MSX/CARD/DIAG
+rm -f QA/MSX/CARD/GBSPIKE.COM                 # pre-DIAG staging location (#379)
+cp build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM QA/MSX/CARD/
+rm -f QA/MSX/CARD/DIAG/FORMREF.APP             # MSX app loading resolves through /GBENCH
+rm -f QA/MSX/CARD/UNAPINET.COM QA/MSX/CARD/UNAPI.TXT
 if [ -n "$UNAPI_TSR" ]; then
     [ -s "$UNAPI_TSR" ] || { echo "ERROR: MSX_UNAPI_TSR not found: $UNAPI_TSR" >&2; exit 1; }
     [ -s "$UNAPI_LICENSE" ] || { echo "ERROR: missing $UNAPI_LICENSE" >&2; exit 1; }
-    cp "$UNAPI_TSR" QA/MSX/UNAPINET.COM
-    cp "$UNAPI_LICENSE" QA/MSX/UNAPI.TXT
-    printf 'UNAPINET\r\nGBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
+    cp "$UNAPI_TSR" QA/MSX/CARD/UNAPINET.COM
+    cp "$UNAPI_LICENSE" QA/MSX/CARD/UNAPI.TXT
+    printf 'UNAPINET\r\nGBMSX\r\n' > QA/MSX/CARD/AUTOEXEC.BAT
 else
-    printf 'GBMSX\r\n' > QA/MSX/AUTOEXEC.BAT
+    printf 'GBMSX\r\n' > QA/MSX/CARD/AUTOEXEC.BAT
 fi
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/GEOBENCH.CFG
-cp QA/MSX/GEOBENCH.CFG QA/MSX/GBENCH/DEFAULT.CFG
-cp build/msx/DESKTOP.RAW  QA/MSX/GBENCH/DESKTOP.APP
-cp build/msx/FILEMGR.RAW  QA/MSX/GBENCH/FILEMGR.APP
-cp build/msx/NOTEPAD.RAW  QA/MSX/GBENCH/NOTEPAD.APP
-cp build/msx/SETTINGS.RAW QA/MSX/GBENCH/SETTINGS.APP
-cp build/msx/DISKUTIL.RAW QA/MSX/GBENCH/DISKUTIL.APP
-cp build/msx/XAOS.RAW     QA/MSX/GBENCH/XAOS.APP
-cp build/msx/ICONED.RAW   QA/MSX/GBENCH/ICONED.APP
-cp build/msx/VIEWER.RAW   QA/MSX/GBENCH/VIEWER.APP
-cp build/msx/PAINT.RAW    QA/MSX/GBENCH/PAINT.APP
-cp build/msx/PAINT.IST    QA/MSX/GBENCH/PAINT.IST
-cp build/msx/SHELL.RAW    QA/MSX/GBENCH/SHELL.APP
-cp build/msx/MAHJONG.RAW  QA/MSX/GBENCH/MAHJONG.APP
-cp build/msx/CALC.RAW     QA/MSX/GBENCH/CALC.APP
-cp build/msx/TELNET.RAW   QA/MSX/GBENCH/TELNET.APP
-cp build/msx/BROWSER.RAW  QA/MSX/GBENCH/BROWSER.APP
-cp build/msx/BRSAVE.RAW   QA/MSX/GBENCH/BRSAVE.APP
-cp build/msx/FORMREF.RAW  QA/MSX/GBENCH/FORMREF.APP
-cp build/msx/SNDTEST.RAW  QA/MSX/GBENCH/SNDTEST.APP
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/CARD/GEOBENCH.CFG
+cp QA/MSX/CARD/GEOBENCH.CFG QA/MSX/CARD/GBENCH/DEFAULT.CFG
+cp build/msx/DESKTOP.RAW  QA/MSX/CARD/GBENCH/DESKTOP.APP
+cp build/msx/FILEMGR.RAW  QA/MSX/CARD/GBENCH/FILEMGR.APP
+cp build/msx/NOTEPAD.RAW  QA/MSX/CARD/GBENCH/NOTEPAD.APP
+cp build/msx/SETTINGS.RAW QA/MSX/CARD/GBENCH/SETTINGS.APP
+cp build/msx/DISKUTIL.RAW QA/MSX/CARD/GBENCH/DISKUTIL.APP
+cp build/msx/XAOS.RAW     QA/MSX/CARD/GBENCH/XAOS.APP
+cp build/msx/ICONED.RAW   QA/MSX/CARD/GBENCH/ICONED.APP
+cp build/msx/VIEWER.RAW   QA/MSX/CARD/GBENCH/VIEWER.APP
+cp build/msx/PAINT.RAW    QA/MSX/CARD/GBENCH/PAINT.APP
+cp build/msx/PAINT.IST    QA/MSX/CARD/GBENCH/PAINT.IST
+cp build/msx/SHELL.RAW    QA/MSX/CARD/GBENCH/SHELL.APP
+cp build/msx/MAHJONG.RAW  QA/MSX/CARD/GBENCH/MAHJONG.APP
+cp build/msx/CALC.RAW     QA/MSX/CARD/GBENCH/CALC.APP
+cp build/msx/TELNET.RAW   QA/MSX/CARD/GBENCH/TELNET.APP
+cp build/msx/BROWSER.RAW  QA/MSX/CARD/GBENCH/BROWSER.APP
+cp build/msx/BRSAVE.RAW   QA/MSX/CARD/GBENCH/BRSAVE.APP
+cp build/msx/FORMREF.RAW  QA/MSX/CARD/GBENCH/FORMREF.APP
+cp build/msx/SNDTEST.RAW  QA/MSX/CARD/GBENCH/SNDTEST.APP
 if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
-    cp build/msx/TASKDEMO.RAW QA/MSX/GBENCH/TASKDEMO.APP
+    cp build/msx/TASKDEMO.RAW QA/MSX/CARD/GBENCH/TASKDEMO.APP
 else
-    rm -f QA/MSX/GBENCH/TASKDEMO.APP
+    rm -f QA/MSX/CARD/GBENCH/TASKDEMO.APP
 fi
 for f in "$GB_BASIC_DIR/build/msx/BASIC.RAW" "$GB_BASIC_DIR/build/msx/BASRUN.RAW" "$GB_BASIC_DIR/build/msx/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC MSX payload $f (run make -C \"$GB_BASIC_DIR\" raws-msx)" >&2; exit 1; }
 done
-cp "$GB_BASIC_DIR/build/msx/BASIC.RAW"   QA/MSX/GBENCH/BASIC.APP
-cp "$GB_BASIC_DIR/build/msx/BASRUN.RAW"  QA/MSX/GBENCH/BASRUN.APP
-cp "$GB_BASIC_DIR/build/msx/BASRUN2.BIN" QA/MSX/GBENCH/BASRUN2.BIN
+cp "$GB_BASIC_DIR/build/msx/BASIC.RAW"   QA/MSX/CARD/GBENCH/BASIC.APP
+cp "$GB_BASIC_DIR/build/msx/BASRUN.RAW"  QA/MSX/CARD/GBENCH/BASRUN.APP
+cp "$GB_BASIC_DIR/build/msx/BASRUN2.BIN" QA/MSX/CARD/GBENCH/BASRUN2.BIN
 for bas in "$GB_BASIC_DIR"/examples/*.BAS; do
     [ -e "$bas" ] || continue
-    sed 's/$/\r/' "$bas" > "QA/MSX/GBENCH/$(basename "$bas")"
+    sed 's/$/\r/' "$bas" > "QA/MSX/CARD/GBENCH/$(basename "$bas")"
 done
-cp build/msx/CLOCK.RAW    QA/MSX/GBENCH/CLOCK.APP
-cp build/msx/SQUARES.RAW  QA/MSX/GBENCH/SQUARES.SAV
-cp build/msx/ANT.RAW      QA/MSX/GBENCH/ANT.SAV
-cp build/msx/DECO.RAW     QA/MSX/GBENCH/DECO.SAV
-cp build/msx/XMATRIX.RAW  QA/MSX/GBENCH/XMATRIX.SAV
-cp build/msx/XMATRIXCFG.RAW QA/MSX/GBENCH/XMATRIX.MOD
-cp build/msx/MOUNTAIN.RAW QA/MSX/GBENCH/MOUNTAIN.SAV
-cp build/msx/MOUNTAINCFG.RAW QA/MSX/GBENCH/MOUNTAIN.MOD
-cp build/msx/FOREST.RAW   QA/MSX/GBENCH/FOREST.SAV
-cp build/msx/STARFLD.RAW  QA/MSX/GBENCH/STARFLD.SAV
-cp build/msx/STARFLDCFG.RAW QA/MSX/GBENCH/STARFLD.MOD
-cp build/msx/FRACTALI.RAW QA/MSX/GBENCH/FRACTALI.SAV
-cp build/msx/MUNCH.RAW QA/MSX/GBENCH/MUNCH.SAV
-cp build/msx/RORSCH.RAW QA/MSX/GBENCH/RORSCH.SAV
-cp build/msx/TRUCHET.RAW QA/MSX/GBENCH/TRUCHET.SAV
-cp build/msx/LIGHTN.RAW QA/MSX/GBENCH/LIGHTN.SAV
-cp build/msx/PYRO.RAW QA/MSX/GBENCH/PYRO.SAV
-cp build/msx/HELIX.RAW QA/MSX/GBENCH/HELIX.SAV
-cp build/msx/XROACH.RAW   QA/MSX/GBENCH/XROACH.SAV
-cp build/msx/CATCLK.RAW   QA/MSX/GBENCH/CATCLK.SAV
-cp assets/WELCOME.TXT     QA/MSX/WELCOME.TXT
-cp build/msx/GBCFG.RAW  QA/MSX/GBENCH/GBCFG.MOD
-cp build/GBUI.RAW       QA/MSX/GBENCH/GBUI.MOD
-cp build/msx/GBAPICK.RAW QA/MSX/GBENCH/GBAPICK.MOD
-cp build/msx/GBWEB.RAW  QA/MSX/GBENCH/GBWEB.MOD
-cp build/msx/GBIMG.RAW  QA/MSX/GBENCH/GBIMG.MOD
-cp build/msx/SPLASH.BIN  QA/MSX/GBENCH/SPLASH.MOD
-cp build/msx/SPLASHD.BIN QA/MSX/GBENCH/SPLASHD.MOD
-cp build/msx/GBTITLE.RAW QA/MSX/GBENCH/GBTITLE.MOD
-cp build/msx/DEFAULT.FNT QA/MSX/GBENCH/
-cp build/msx/DEFAULT.IST QA/MSX/GBENCH/
-cp build/msx/DEFAULT.SPR QA/MSX/GBENCH/
+cp build/msx/CLOCK.RAW    QA/MSX/CARD/GBENCH/CLOCK.APP
+cp build/msx/SQUARES.RAW  QA/MSX/CARD/GBENCH/SQUARES.SAV
+cp build/msx/ANT.RAW      QA/MSX/CARD/GBENCH/ANT.SAV
+cp build/msx/DECO.RAW     QA/MSX/CARD/GBENCH/DECO.SAV
+cp build/msx/XMATRIX.RAW  QA/MSX/CARD/GBENCH/XMATRIX.SAV
+cp build/msx/XMATRIXCFG.RAW QA/MSX/CARD/GBENCH/XMATRIX.MOD
+cp build/msx/MOUNTAIN.RAW QA/MSX/CARD/GBENCH/MOUNTAIN.SAV
+cp build/msx/MOUNTAINCFG.RAW QA/MSX/CARD/GBENCH/MOUNTAIN.MOD
+cp build/msx/FOREST.RAW   QA/MSX/CARD/GBENCH/FOREST.SAV
+cp build/msx/STARFLD.RAW  QA/MSX/CARD/GBENCH/STARFLD.SAV
+cp build/msx/STARFLDCFG.RAW QA/MSX/CARD/GBENCH/STARFLD.MOD
+cp build/msx/FRACTALI.RAW QA/MSX/CARD/GBENCH/FRACTALI.SAV
+cp build/msx/MUNCH.RAW QA/MSX/CARD/GBENCH/MUNCH.SAV
+cp build/msx/RORSCH.RAW QA/MSX/CARD/GBENCH/RORSCH.SAV
+cp build/msx/TRUCHET.RAW QA/MSX/CARD/GBENCH/TRUCHET.SAV
+cp build/msx/LIGHTN.RAW QA/MSX/CARD/GBENCH/LIGHTN.SAV
+cp build/msx/PYRO.RAW QA/MSX/CARD/GBENCH/PYRO.SAV
+cp build/msx/HELIX.RAW QA/MSX/CARD/GBENCH/HELIX.SAV
+cp build/msx/XROACH.RAW   QA/MSX/CARD/GBENCH/XROACH.SAV
+cp build/msx/CATCLK.RAW   QA/MSX/CARD/GBENCH/CATCLK.SAV
+cp assets/WELCOME.TXT     QA/MSX/CARD/WELCOME.TXT
+cp build/msx/GBCFG.RAW  QA/MSX/CARD/GBENCH/GBCFG.MOD
+cp build/GBUI.RAW       QA/MSX/CARD/GBENCH/GBUI.MOD
+cp build/msx/GBAPICK.RAW QA/MSX/CARD/GBENCH/GBAPICK.MOD
+cp build/msx/GBWEB.RAW  QA/MSX/CARD/GBENCH/GBWEB.MOD
+cp build/msx/GBIMG.RAW  QA/MSX/CARD/GBENCH/GBIMG.MOD
+cp build/msx/SPLASH.BIN  QA/MSX/CARD/GBENCH/SPLASH.MOD
+cp build/msx/SPLASHD.BIN QA/MSX/CARD/GBENCH/SPLASHD.MOD
+cp build/msx/GBTITLE.RAW QA/MSX/CARD/GBENCH/GBTITLE.MOD
+cp build/msx/DEFAULT.FNT QA/MSX/CARD/GBENCH/
+cp build/msx/DEFAULT.IST QA/MSX/CARD/GBENCH/
+cp build/msx/DEFAULT.SPR QA/MSX/CARD/GBENCH/
 for tbr in build/titlebars/*.TBR; do
-    [ -e "$tbr" ] && cp "$tbr" QA/MSX/GBENCH/
+    [ -e "$tbr" ] && cp "$tbr" QA/MSX/CARD/GBENCH/
 done
 for gdt in build/gadgets/*.GDT; do
-    [ -e "$gdt" ] && cp "$gdt" QA/MSX/GBENCH/
+    [ -e "$gdt" ] && cp "$gdt" QA/MSX/CARD/GBENCH/
 done
 
 # --- drop-in assets: canonical backdrops/iconsets/pictures are copied unchanged,
@@ -326,27 +326,27 @@ done
 for bdp in assets/backdrops/*.BDP; do            # backdrop tiles (BACKDROP=<name>)
     [ -e "$bdp" ] || continue
     name=$(basename "$bdp" .BDP | tr a-z A-Z)
-    cp "$bdp" "QA/MSX/GBENCH/$name.BDP"
+    cp "$bdp" "QA/MSX/CARD/GBENCH/$name.BDP"
 done
 for png in assets/backdrops/*.png; do            # ... or a source PNG with no .BDP
     [ -e "$png" ] || continue
     name=$(basename "$png" .png | tr a-z A-Z)
-    [ -e "QA/MSX/GBENCH/$name.BDP" ] || \
-        python3 tools/png2backdrop.py "$png" "QA/MSX/GBENCH/$name.BDP"
+    [ -e "QA/MSX/CARD/GBENCH/$name.BDP" ] || \
+        python3 tools/png2backdrop.py "$png" "QA/MSX/CARD/GBENCH/$name.BDP"
 done
 for ist in assets/iconsets/*.IST; do             # icon sets (ICONS=<name>)
     [ -e "$ist" ] || continue
     name=$(basename "$ist" .IST | tr a-z A-Z)
-    cp "$ist" "QA/MSX/GBENCH/$name.IST"
+    cp "$ist" "QA/MSX/CARD/GBENCH/$name.IST"
 done
 # Mode 1 stays portable; mode 7 is copied only by this MSX build.
 while IFS= read -r pic; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
-    cp "$pic" "QA/MSX/PICS/$name.PIC"
+    cp "$pic" "QA/MSX/CARD/PICS/$name.PIC"
 done < <(python3 tools/picture_catalog.py msx)
 
 # --- bootable Nextor image ------------------------------------------------------
-bash tools/build_msx_img.sh QA/MSX QA/GBMSX.IMG
-bash tools/build_msx_floppy.sh QA/MSX QA/MSX/Floppies
+bash tools/build_msx_img.sh QA/MSX/CARD QA/MSX/GBMSX.IMG
+bash tools/build_msx_floppy.sh QA/MSX/CARD QA/MSX/Floppies
 
-echo "MSX2 target built: QA/MSX (staged) + QA/GBMSX.IMG + QA/MSX/Floppies/*.DSK"
+echo "MSX2 target built: QA/MSX/CARD (staged) + QA/MSX/GBMSX.IMG + QA/MSX/Floppies/*.DSK"

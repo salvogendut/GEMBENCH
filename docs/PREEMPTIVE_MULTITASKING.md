@@ -194,8 +194,8 @@ or window close; normal images retain the synchronous picker path.
 The MSX2 rotation and lifecycle checks run without a GUI:
 
 ```sh
-MSX_HEADLESS=1 MSX_SCRIPT=debug/msx_preempt_probe.tcl tools/run_msx.sh QA/GBMSX.IMG
-MSX_HEADLESS=1 MSX_SCRIPT=debug/msx_preempt_lifecycle.tcl tools/run_msx.sh QA/GBMSX.IMG
+MSX_HEADLESS=1 MSX_SCRIPT=debug/msx_preempt_probe.tcl tools/run_msx.sh QA/MSX/GBMSX.IMG
+MSX_HEADLESS=1 MSX_SCRIPT=debug/msx_preempt_lifecycle.tcl tools/run_msx.sh QA/MSX/GBMSX.IMG
 ```
 
 They write telemetry to `build/msx/preempt-probe.txt` and
@@ -205,7 +205,7 @@ The PCW diagnostic boots in `1985` with both workers already open:
 
 ```sh
 ../1985/1985 --config debug/1985-pcw.conf \
-  --disk-a QA/PCW/GEOBENCH.DSK
+  --disk-a QA/PCW/Floppies/GEOBENCH.DSK
 ```
 
 The emulator's keyboard pointer fallback is sufficient for lifecycle testing:

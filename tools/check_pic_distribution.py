@@ -159,7 +159,7 @@ def main() -> None:
 
     for distro, expected_assets in (
         (ROOT / "QA/CPC/CARD/PICS", assets),
-        (ROOT / "QA/MSX/PICS", msx_assets),
+        (ROOT / "QA/MSX/CARD/PICS", msx_assets),
     ):
         names = {path.name for path in distro.glob("*.PIC")}
         if names != set(expected_assets):
@@ -168,7 +168,7 @@ def main() -> None:
             compare_payload(str((distro / name).relative_to(ROOT)), (distro / name).read_bytes(), expected)
 
     cpc_extras = cpc_disk(ROOT / "QA/CPC/Floppies/EXTRAS.DSK")
-    pcw_extras = pcw_disk(ROOT / "QA/PCW/EXTRAS.DSK")
+    pcw_extras = pcw_disk(ROOT / "QA/PCW/Floppies/EXTRAS.DSK")
     cpc_required = {
         "DISKUTIL.APP", "XROACH.SAV", "CATCLK.SAV", "HELIX.SAV", "FOREST.SAV",
         "MOUNTAIN.SAV", "MOUNTAIN.MOD", "WELCOME.TXT"
@@ -179,7 +179,7 @@ def main() -> None:
     if {name for name in cpc_extras if name.endswith(".PIC")} != set(assets):
         sys.exit("QA/CPC/Floppies/EXTRAS.DSK: picture catalogue differs from assets/pictures")
     if {name for name in pcw_extras if name.endswith(".PIC")} != set(assets):
-        sys.exit("QA/PCW/EXTRAS.DSK: picture catalogue differs from assets/pictures")
+        sys.exit("QA/PCW/Floppies/EXTRAS.DSK: picture catalogue differs from assets/pictures")
     pcw_required = {
         "PAINT.APP", "PAINT.IST", "BASIC.APP", "BASRUN.APP", "BASRUN2.BIN",
         "ANT.SAV", "DECO.SAV", "XMATRIX.SAV", "XMATRIX.MOD",
@@ -188,14 +188,14 @@ def main() -> None:
     }
     missing = pcw_required - set(pcw_extras)
     if missing:
-        sys.exit(f"QA/PCW/EXTRAS.DSK: missing extras: {', '.join(sorted(missing))}")
+        sys.exit(f"QA/PCW/Floppies/EXTRAS.DSK: missing extras: {', '.join(sorted(missing))}")
     for name, expected in assets.items():
         compare_payload(f"QA/CPC/Floppies/EXTRAS.DSK:{name}", strip_amsdos(cpc_extras[name]), expected)
-        compare_payload(f"QA/PCW/EXTRAS.DSK:{name}", pcw_extras[name], expected, padded=True)
+        compare_payload(f"QA/PCW/Floppies/EXTRAS.DSK:{name}", pcw_extras[name], expected, padded=True)
 
     cpc_main = cpc_disk(ROOT / "QA/CPC/Floppies/GEOBENCH.DSK")
-    pcw_main = pcw_disk(ROOT / "QA/PCW/GEOBENCH.DSK")
-    for distro in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/GBENCH"):
+    pcw_main = pcw_disk(ROOT / "QA/PCW/Floppies/GEOBENCH.DSK")
+    for distro in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/CARD/GBENCH"):
         names = {path.name for path in distro.glob("*.TBR")}
         if names != set(titlebars):
             sys.exit(f"{distro.relative_to(ROOT)}: title-bar set differs from assets/titlebars")
@@ -218,7 +218,7 @@ def main() -> None:
     extras_gadgets = set(gadgets) - floppy_gadgets
     for label, files, padded in (
         ("QA/CPC/Floppies/GEOBENCH.DSK", cpc_main, False),
-        ("QA/PCW/GEOBENCH.DSK", pcw_main, True),
+        ("QA/PCW/Floppies/GEOBENCH.DSK", pcw_main, True),
     ):
         names = {name for name in files if name.endswith(".TBR")}
         if names != floppy_titlebars:
@@ -235,7 +235,7 @@ def main() -> None:
         )
     for label, files, padded in (
         ("QA/CPC/Floppies/EXTRAS.DSK", cpc_extras, False),
-        ("QA/PCW/EXTRAS.DSK", pcw_extras, True),
+        ("QA/PCW/Floppies/EXTRAS.DSK", pcw_extras, True),
     ):
         names = {name for name in files if name.endswith(".TBR")}
         if names != extras_titlebars:
@@ -260,12 +260,12 @@ def main() -> None:
         (ROOT / "build/GBTITLE.RAW").read_bytes(),
     )
     compare_payload(
-        "QA/MSX/GBENCH/GBTITLE.MOD",
-        (ROOT / "QA/MSX/GBENCH/GBTITLE.MOD").read_bytes(),
+        "QA/MSX/CARD/GBENCH/GBTITLE.MOD",
+        (ROOT / "QA/MSX/CARD/GBENCH/GBTITLE.MOD").read_bytes(),
         (ROOT / "build/msx/GBTITLE.RAW").read_bytes(),
     )
     compare_payload(
-        "QA/PCW/GEOBENCH.DSK:GBTITLE.MOD",
+        "QA/PCW/Floppies/GEOBENCH.DSK:GBTITLE.MOD",
         pcw_main["GBTITLE.MOD"], (ROOT / "build/pcw/GBTITLE.RAW").read_bytes(),
         padded=True,
     )
@@ -275,22 +275,22 @@ def main() -> None:
         (ROOT / "QA/CPC/CARD/GBENCH/DEFAULT.SPR").read_bytes(),
     )
     compare_payload("QA/CPC/Floppies/GEOBENCH.DSK:LOGO.PIC", strip_amsdos(cpc_main["LOGO.PIC"]), assets["LOGO.PIC"])
-    compare_payload("QA/PCW/GEOBENCH.DSK:LOGO.PIC", pcw_main["LOGO.PIC"], assets["LOGO.PIC"], padded=True)
+    compare_payload("QA/PCW/Floppies/GEOBENCH.DSK:LOGO.PIC", pcw_main["LOGO.PIC"], assets["LOGO.PIC"], padded=True)
     compare_payload(
         "QA/CPC/Floppies/GEOBENCH.DSK:DEFAULT.CFG",
         strip_amsdos(cpc_main["DEFAULT.CFG"]),
         strip_amsdos(cpc_main["GEOBENCH.CFG"]),
     )
     compare_payload(
-        "QA/PCW/GEOBENCH.DSK:DEFAULT.CFG",
+        "QA/PCW/Floppies/GEOBENCH.DSK:DEFAULT.CFG",
         pcw_main["DEFAULT.CFG"],
         pcw_main["GEOBENCH.CFG"],
     )
     if b"TIMESYNC=false\r\n" not in pcw_main["GEOBENCH.CFG"]:
-        sys.exit("QA/PCW/GEOBENCH.DSK: time sync must be disabled by default")
+        sys.exit("QA/PCW/Floppies/GEOBENCH.DSK: time sync must be disabled by default")
     for mutable, pristine in (
         (ROOT / "QA/CPC/CARD/GEOBENCH.CFG", ROOT / "QA/CPC/CARD/GBENCH/DEFAULT.CFG"),
-        (ROOT / "QA/MSX/GEOBENCH.CFG", ROOT / "QA/MSX/GBENCH/DEFAULT.CFG"),
+        (ROOT / "QA/MSX/CARD/GEOBENCH.CFG", ROOT / "QA/MSX/CARD/GBENCH/DEFAULT.CFG"),
     ):
         compare_payload(
             str(pristine.relative_to(ROOT)),
@@ -303,7 +303,7 @@ def main() -> None:
             sys.exit(f"{mutable.relative_to(ROOT)}: GADGETS must default to ORIGINAL")
 
     cpc_companion = cpc_disk(ROOT / "QA/CPC/Floppies/COMPANION.DSK")
-    pcw_companion = pcw_disk(ROOT / "QA/PCW/COMPANION.DSK")
+    pcw_companion = pcw_disk(ROOT / "QA/PCW/Floppies/COMPANION.DSK")
     configurable_saver_modules = {
         "XMATRIX.MOD", "MOUNTAIN.MOD", "STARFLD.MOD"
     }
@@ -313,25 +313,25 @@ def main() -> None:
         sys.exit("QA/CPC/Floppies/COMPANION.DSK: FOREST.SAV belongs on EXTRAS.DSK")
     for path, main_files, companion_files in (
         ("QA/CPC", cpc_main, cpc_companion),
-        ("QA/PCW", pcw_main, pcw_companion),
+        ("QA/PCW/Floppies", pcw_main, pcw_companion),
     ):
         if "GBIMG.MOD" in main_files or "GBIMG.MOD" not in companion_files:
             sys.exit(f"{path}: GBIMG.MOD must live beside Browser on Companion")
     for path, files in (
         ("QA/CPC/Floppies/COMPANION.DSK", cpc_companion),
-        ("QA/PCW/COMPANION.DSK", pcw_companion),
+        ("QA/PCW/Floppies/COMPANION.DSK", pcw_companion),
     ):
         if any(name.endswith(".PIC") for name in files):
             sys.exit(f"{path}: companion disk must not contain pictures")
 
-    for directory in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/GBENCH"):
+    for directory in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/CARD/GBENCH"):
         names = {path.name for path in directory.iterdir()}
         if not configurable_saver_modules <= names:
             sys.exit(f"{directory.relative_to(ROOT)}: missing saver Configure module")
         if any(directory.glob("*.PIC")):
             sys.exit(f"{directory.relative_to(ROOT)}: pictures must live under PICS")
 
-    for directory in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/GBENCH"):
+    for directory in (ROOT / "QA/CPC/CARD/GBENCH", ROOT / "QA/MSX/CARD/GBENCH"):
         names = {path.name for path in directory.glob("*.BDP")}
         if names != set(backdrops):
             sys.exit(f"{directory.relative_to(ROOT)}: backdrop set differs from assets/backdrops")
@@ -343,14 +343,14 @@ def main() -> None:
     if cpc_bdp != set(backdrops):
         sys.exit("QA/CPC/Floppies/GEOBENCH.DSK: backdrop catalogue differs from assets/backdrops")
     if pcw_bdp != set(backdrops):
-        sys.exit("QA/PCW/COMPANION.DSK: backdrop catalogue differs from assets/backdrops")
+        sys.exit("QA/PCW/Floppies/COMPANION.DSK: backdrop catalogue differs from assets/backdrops")
     for name, expected in backdrops.items():
         compare_payload(f"QA/CPC/Floppies/GEOBENCH.DSK:{name}", strip_amsdos(cpc_main[name]), expected)
-        compare_payload(f"QA/PCW/COMPANION.DSK:{name}", pcw_companion[name], expected, padded=True)
+        compare_payload(f"QA/PCW/Floppies/COMPANION.DSK:{name}", pcw_companion[name], expected, padded=True)
 
     mode7_count = len(msx_assets) - len(assets)
     print(f"portable PIC distribution: {len(assets)} byte-identical pictures across CPC, MSX and PCW")
-    print(f"MSX Screen 7 distribution: {mode7_count} additional pictures in QA/MSX/PICS")
+    print(f"MSX Screen 7 distribution: {mode7_count} additional pictures in QA/MSX/CARD/PICS")
     print(f"portable BDP distribution: {len(backdrops)} byte-identical backdrops across CPC, MSX and PCW")
     print(
         f"title bars: {len(titlebars)} motifs on card/MSX; "

@@ -9,7 +9,7 @@
 # with MSX_RAM=stock.
 #
 # System ROMs are found in ~/.openMSX/share/systemroms (tools/fetch_msx_deps.sh
-# sets them up). The disk image defaults to QA/GBMSX.IMG
+# sets them up). The disk image defaults to QA/MSX/GBMSX.IMG
 # (tools/build_msx_img.sh). A 720K .DSK can be passed instead; it is mounted in
 # drive A and uses the Nextor kernel supplied by the emulator extension.
 #
@@ -39,7 +39,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-IMG="${1:-QA/GBMSX.IMG}"
+IMG="${1:-QA/MSX/GBMSX.IMG}"
 MACHINE="${MSX_MACHINE:-Philips_NMS_8250}"
 UNAPI_ENABLED="${MSX_UNAPI:-1}"
 MOUSE_ENABLED="${MSX_MOUSE:-1}"

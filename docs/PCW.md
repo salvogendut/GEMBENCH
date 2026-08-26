@@ -5,12 +5,12 @@ apps as the CPC and MSX2 targets, running on the Amstrad PCW — a machine
 with no ROM, no firmware, and (natively) no colour.
 
 **Runs on real hardware**: verified booting a physical PCW 8256 from a
-Gotek (FlashFloppy) serving `QA/PCW/GEOBENCH.DSK`. On real machines the
+Gotek (FlashFloppy) serving `QA/PCW/Floppies/GEOBENCH.DSK`. On real machines the
 display is the native 1bpp monochrome (see the colour section below).
 
 ```
 bash tools/build_kernel_pcw.sh          # -> GEOBENCH.DSK + COMPANION.DSK + EXTRAS.DSK
-~/Dev/1985/1985 --config debug/1985-pcw.conf --disk-a QA/PCW/GEOBENCH.DSK
+~/Dev/1985/1985 --config debug/1985-pcw.conf --disk-a QA/PCW/Floppies/GEOBENCH.DSK
 ```
 
 The distribution build expects matching `../GB-PAINT` and `../GB-BASIC`
@@ -20,7 +20,7 @@ Headless smoke test:
 
 ```
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ~/Dev/1985/1985 \
-    --config debug/1985-pcw.conf --disk-a QA/PCW/GEOBENCH.DSK \
+    --config debug/1985-pcw.conf --disk-a QA/PCW/Floppies/GEOBENCH.DSK \
     --unthrottled --screenshot-at 2500:/tmp/pcw.ppm --exit-after 2600
 ```
 
