@@ -5,6 +5,11 @@ Reviewed 2026-07-10 against Contiki-NG `develop` commit
 The focus is networking and a possible small web browser for 8-bit targets.
 Implementation is tracked by [issue #367](https://github.com/salvogendut/geobench/issues/367).
 
+> Historical research note. The bounded network result states, shared streaming
+> HTTP parser, WGET, and text-first Browser proposed here have since been
+> implemented. Use [Features](FEATURES.md) and the current `gb_net_*` sources for
+> the shipped behavior; the remainder of this document records the design input.
+
 ## Short conclusion
 
 Do not port the complete Contiki-NG network stack. GEOBENCH already uses hardware

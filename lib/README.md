@@ -1,8 +1,9 @@
 # lib/
 
-System libraries shared by the kernel (and, via `gb/`, the C apps). The `.asm`
-files are assembled into the kernel; they abstract the CPC's hardware so higher
-layers never poke video, storage or input registers directly.
+System libraries shared by the kernel and, via `gb/`, the C apps. Common `.asm`
+files are assembled into the target kernel; the root implementations serve CPC
+and shared code, while `msx/` and `pcw/` keep their video, banking, storage, and
+input details out of higher layers.
 
 ## Kernel libraries (Z80 asm)
 
@@ -10,11 +11,11 @@ layers never poke video, storage or input registers directly.
 |------|------|
 | `gbapp.inc` | The **app ABI**: jump-table addresses, the banked memory model, app load address. Included by the kernel and mirrored by `libgb`. |
 | `firmware.inc` | AMSDOS/firmware vector equates used by the kernel. |
-| `screen.asm` | Mode 1 drawing: address math, filled rectangles, blits, save/restore. Hides the 320×200 pixel/byte layout. |
+| `screen.asm` and target screen backends | Drawing, address math, fills, blits, save/restore, and portable-asset translation for CPC Mode 1, MSX Screen 6/7, and PCW monochrome video. |
 | `text.asm` | The 6×8 (sub-byte) proportional text renderer. |
 | `font.asm` | Loads a `.FNT` font set into the data bank. |
-| `input.asm` | Keyboard/joystick polling -> pointer direction + fire/quit. |
-| `cursor.asm` | Software pointer sprite: draw, erase, move with save-under. |
+| `input.asm` and target input backends | Keyboard, joystick, mouse, and pointer-button polling. |
+| `cursor.asm` and target cursor backends | Software or V9938 hardware pointer handling. |
 | `cursor_arrow.asm`, `cursor_hand.asm` | Pointer bitmaps. |
 | `fs.asm` | Storage dispatcher — picks a backend at boot. |
 | `fs_amsdos.asm` | AMSDOS directory + file load over the floppy. |
@@ -46,5 +47,5 @@ The shared **C bindings** every GEOBENCH app links against:
 - **Speed first.** These run on a ~4 MHz Z80; inner loops are hand-tuned asm.
 - **One way in.** Each library exposes clear entry points; the kernel and apps
   call the same code rather than duplicating it.
-- Mode 1 (320×200, 4 colours) is the assumed surface; pixel-layout assumptions
-  stay isolated in `screen.asm`.
+- Pixel-layout assumptions stay inside the target screen backend. Portable
+  `.PIC`, `.IST`, and `.BDP` payloads are translated at the display boundary.

@@ -2,7 +2,7 @@
 
 GBPC v2 keeps the original four-colour format portable across CPC, MSX2, and
 PCW. It also defines an optional sixteen-colour Screen 7 payload for the MSX2
-Viewer.
+Viewer, wallpaper loader, and Paint.
 
 ## GBPC v2 layout
 

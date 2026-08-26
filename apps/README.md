@@ -6,10 +6,13 @@ to run in a 16 KB banked window (`#4000–#7FFF`), reaching the resident kernel 
 through the shared `lib/gb` API (`gb_fill`, `gb_wm_*`, the `gb_doc` document
 framework, the `gb_popup`/`gb_prompt` dialogs, and opt-in `gb_button`/`gb_field`/
 `gb_vscroll` widgets). Apps are loaded from disk on demand (GEOS-style), not
-resident; the kernel runs the cooperative window-manager loop and calls each
-focused window's handlers (issue #45).
+resident. The desktop owns the root window-manager task. Release builds install
+the app-carried preemptive scheduler, but drawing, input, storage, firmware,
+modules, and lifecycle callbacks stay on that root task. Long I/O workflows use
+bounded per-frame jobs; only explicitly registered pure-compute workers are
+preempted.
 
-## The apps (one C source each, under `apps/<name>/main.c`)
+## Applications
 
 | App | Disk file | What it is |
 |-----|-----------|------------|
@@ -18,7 +21,8 @@ focused window's handlers (issue #45).
 | viewer   | `VIEWER.APP`   | image-only `.PIC` viewer; uses banked RAM when available and demand-streams visible rows when banks are occupied |
 | notepad  | `NOTEPAD.APP`  | text editor (word-wrap, File/Edit/View, saves `.BAS` CR+LF) |
 | iconed   | `ICONED.APP`   | `.IST` icon-set / `.SPR` cursor / embedded `.APP` icon editor |
-| paint    | `PAINT.APP`    | portable GBPC v2 bitmap paint (toolchest, saves `.PIC`) |
+| paint    | `PAINT.APP`    | GBPC v2 bitmap editor from the sibling GB-PAINT repository; three-pane 20x20 area selector, magnified canvas, and toolchest |
+| basic    | `BASIC.APP` / `BASRUN.APP` | external GB-BASIC editor and GW-BASIC-flavoured runtime, with examples and a graphics overlay |
 | xaos     | `XAOS.APP`     | fractal generator, exports portable `.PIC` files |
 | mahjong  | `MAHJONG.APP`  | Kana Mahjong solitaire with selectable Katakana/Hiragana tiles, solvable Turtle deals, Undo and Hint |
 | calculator | `CALC.APP`   | fixed-point desktop calculator with basic arithmetic, percentage and square root |
@@ -33,6 +37,13 @@ focused window's handlers (issue #45).
 | brsave   | `BRSAVE.APP`   | transient Browser helper that writes captured HTML source to an `.HTM` file without displacing the Browser bank |
 | shell    | `SHELL.APP`    | fullscreen command shell with `ls`, `cd`, `pwd`, `cat`, `cp`, `rm`, `clear`, `help`, and `exit`; supports A/B/C paths and streamed arbitrary-size file copies |
 | timesync | `TIMESYNC.APP` | PCW desktop helper — reads PerryNet's firmware clock with `TIME_GET` when `TIMESYNC=true`, then applies `TIMEZONE=+/-H` |
+| diskutil | `DISKUTIL.APP` | CPC physical AMSDOS formatter and MSX2 FAT12 quick formatter; not shipped on PCW |
+
+Most sources live under `apps/<name>/`. `PAINT.APP` and `BASIC.APP` are built
+from sibling `GB-PAINT` and `GB-BASIC` checkouts and staged into the same
+distributions. GB-BASIC supplies its editor, runtime, numeric/graphics overlay,
+and examples; `.BAS` files open in `BASIC.APP`. Set `GB_PAINT_DIR` or
+`GB_BASIC_DIR` when those repositories are not adjacent to GEOBENCH.
 
 `TASKDEMO.APP` is a development-only preemption diagnostic and is not staged in
 the distributions. Its worker intentionally never yields; build it with
@@ -50,8 +61,9 @@ System → "Activate screensaver" runs it on demand. Each is a full-screen windo
 
 The Main CPC boot floppy carries `SQUARES.SAV`; the CPC floppy set carries the
 remaining savers across `COMPANION.DSK` and `EXTRAS.DSK` (`XROACH.SAV`,
-`CATCLK.SAV`, `HELIX.SAV`, and `FOREST.SAV` are on Extras to preserve Companion
-allocation blocks). The Albireo/M4 card and MSX2 distributions carry all 16
+`CATCLK.SAV`, `HELIX.SAV`, `FOREST.SAV`, and `MOUNTAIN.SAV` with its module are
+on Extras to preserve Companion allocation blocks). The Albireo/M4 card and
+MSX2 distributions carry all 16
 savers together.
 
 | Saver | Disk file | Effect |
@@ -117,8 +129,8 @@ resident kernel. Build with only the units an application uses:
 - `REPAINTTOP=1`: the `gb_repaint_top()` binding for publishing a newly opened
   opaque top window without redrawing lower layers; do not use it after a move,
   shrink, or popup that exposes parent content
-- `TASK=1 TASK_STACK_RESERVE=256`: opt a legacy window's `on_frame` callback
-  into the experimental worker scheduler and reserve its bank-top stack snapshot
+- `TASK=1 TASK_STACK_RESERVE=256`: opt a pure compute callback into the
+  release scheduler and reserve its bank-top stack snapshot
 
 For example:
 

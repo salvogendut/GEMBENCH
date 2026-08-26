@@ -23,9 +23,9 @@ reference resources — not dependencies, and not vendored into this repo.
   original ROM image for verification.
   **Why it matters:** GEOBENCH calls the firmware for screen, keyboard, and disk.
   This is the authoritative reference for the **TXT/GRA VDU vectors** and the
-  CAS/AMSDOS file paths the kernel uses. (Note: GEOBENCH does **not** launch
-  legacy `.BIN`/`.BAS` software — that is a non-goal; see `ARCHITECTURE.md` →
-  "Known architectural limits.")
+  CAS/AMSDOS file paths the kernel uses. (Note: GEOBENCH does **not** contain
+  legacy machine-code `.BIN` software; `.BAS` files may be opened by the
+  separately maintained GB-BASIC application.)
 
 ## Locomotive BASIC
 
@@ -34,5 +34,5 @@ reference resources — not dependencies, and not vendored into this repo.
   documented, modular Z80 assembly, with the original ROM image for verification.
   **Why it matters:** GEOBENCH boots from a `RUN"GB` BASIC loader and shares the
   machine with the BASIC ROM, so this documents how BASIC enters/exits and manages
-  its workspace — and what state the desktop must preserve. (GEOBENCH does not
-  launch `.BAS` programs itself; running them is a non-goal.)
+  its workspace — and what state the desktop must preserve. GB-BASIC provides
+  the managed editor/runtime used when a staged `.BAS` file is opened.

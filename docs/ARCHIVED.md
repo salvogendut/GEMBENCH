@@ -17,15 +17,12 @@ is the only storage backend still archived: its source stays in the tree, but
 
 ## M4 support boundary
 
-The M4 backend is active again for boot, directory listing, load, save/create, and
-TCP networking. The same `QA/CPC/GEOBENCH.IMG` can be used by Albireo and by 1984's
-M4 image mode. The active M4 storage and TCP paths preserve the caller's video
-mode while paging M4ROM, including Telnet's Mode 2 fullscreen terminal.
-
-One M4 caveat remains:
-
-- the historical real-hardware report of blank >8 KB pictures needs to be
-  revalidated on current M4ROM and current GEOBENCH.
+The M4 backend is active again for boot, directory listing, load, save/create,
+and TCP networking. The same `QA/CPC/GEOBENCH.IMG` can be used by Albireo and by
+1984's M4 image mode. The active M4 storage and TCP paths preserve the caller's
+video mode while paging M4ROM, including Telnet's Mode 2 fullscreen terminal.
+Chunked file copy and large-picture reads have been validated on current M4
+hardware; the old 8 KiB transfer ceiling no longer applies.
 
 ## What's frozen (still in-tree, unbuilt)
 

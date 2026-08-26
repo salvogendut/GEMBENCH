@@ -26,9 +26,12 @@ CPC's AMSDOS/FAT expects, and the staging copies the file under its own name.
 
 ## Size
 
-The Viewer holds a picture up to ~10 KB of bitmap (≈ 200×200; `PENGUIN.PIC` is the
-200×200 sample) in its in-window buffer. Larger pictures load into borrowed 16 KB
-RAM bank pages, so 256K+ is the practical target for large images and multiple
-picture windows. The Main CPC and PCW boot floppies carry only `LOGO.PIC`; the
-platform Extras disk and card/MSX `PICS/` directories carry the full gallery from
-this folder.
+Portable files and MSX Screen-7 files may be up to 64 KiB. Viewer uses borrowed
+16 KiB pages for fast redraws when available; if picture pages are exhausted it
+keeps the parsed header and reads only the visible rows in bounded chunks. This
+allows multiple large Viewer windows without the old "no free banks" failure,
+at the cost of disk-backed repaint speed. Viewer instances still consume normal
+app pages; the current desktop flow opens two picture windows and silently
+refuses a third until one closes. The Main CPC and PCW boot floppies
+carry only `LOGO.PIC`; the platform Extras disk and card/MSX `PICS/`
+directories carry the full compatible gallery from this folder.

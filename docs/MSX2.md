@@ -1,7 +1,7 @@
 # The MSX2 target
 
-The same OS, cross-built for the MSX2 (issue #287). It is **one source tree, two
-platforms**: the resident kernel assembles from the same `kernel/` sources under
+The same OS, cross-built for the MSX2 (issue #287). It is **one source tree,
+three platforms**: the resident kernel assembles from the same `kernel/` sources under
 `-DPLATFORM_MSX`, and the apps compile from the same `main.c` files under
 `-DGB_MSX2` — the platform differences live in the kernel's video/input/storage
 back-ends, not in the apps.
@@ -31,7 +31,7 @@ Clock — all co-resident under the kernel window manager on a V9938.
 - **Assets:** icon sets and backdrop tiles stay in canonical Mode-1 bytes and are
   decoded by either MSX video backend. Portable four-colour pictures use the same
   [GBPC v2 format](PIC_FORMAT.md) on every platform. Screen 7 additionally accepts
-  mode-7 sixteen-colour `.PIC` files in Viewer and as wallpaper. MSX pictures live
+  mode-7 sixteen-colour `.PIC` files in Viewer, Paint, and as wallpaper. MSX pictures live
   under root-level `PICS/`; low-level diagnostics such as `GBSPIKE.COM` are
   under `DIAG/`, while app diagnostics such as `SNDTEST.APP` live in `GBENCH/`.
 

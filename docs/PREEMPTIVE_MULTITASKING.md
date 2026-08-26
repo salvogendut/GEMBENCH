@@ -250,6 +250,8 @@ resident-kernel bytes.
   desktop. A manual System > Exit smoke test also completed the expected PCW
   warm reboot after restoring the interrupt bootstrap.
 
-The scheduler path and the XAOS compute-worker integration now build on all
-three targets. Preemption remains a development option while production apps
-are converted individually; normal distributions are still cooperative.
+The scheduler path and the XAOS compute-worker integration build on all three
+targets. Preemption is the release default; applications are converted
+individually where a pure worker or bounded root job improves responsiveness.
+The cooperative targets remain regression profiles, not the normal
+distribution.

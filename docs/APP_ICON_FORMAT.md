@@ -99,12 +99,13 @@ bytes, so native variants remain optional per application.
 
 Issue #430 moved Notepad, Icon Editor, Paint, Browser, Viewer, Telnet, Mahjong,
 and Shell into app-owned headers; BASIC.APP followed from its external
-repository. The resident desktop set fell from 25 to 16 slots (`6,324` to
-`3,984` bytes), recovering 2,340 bytes of kernel data-page headroom. At the
-format level, before the additional code-size reductions used by tight
-applications, the two shipped icon sets and nine v1 headers make the raw
-distribution payload 2,232 bytes smaller. Clock, Desktop, File Manager, and
-shared file-type/device icons remain resident.
+repository. Removing those nine application slots recovered 2,340 bytes from
+the boot-loaded set. Additional system/file-type slots were added later, so the
+current `DEFAULT.IST` and `REFINED.IST` each contain **21 slots** and occupy
+**5,284 bytes**. Clock, Desktop, File Manager, and shared file-type/device icons
+remain resident. At the format level, before application-specific code-size
+reductions, moving the nine v1 icons still reduces the combined raw distribution
+payload by 2,232 bytes.
 
 `tools/iconedit.py` opens either ASM source and both resources inside a v2 APP.
 Use Previous/Next to switch variants. `ICONED.APP` edits both variants on MSX

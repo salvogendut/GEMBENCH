@@ -24,8 +24,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   Nextor `QA/GBMSX.IMG`, plus the two 720K images under `QA/MSX/Floppies/`.
   The dependency fetcher supplies a local openMSXnet
   `UNAPINET.COM`, which is staged before `GBMSX.COM`; `MSX_UNAPI_TSR` overrides
-  it, and an explicitly empty value omits it. Loose staging remains untracked;
-  the released system floppy embeds the MIT-licensed TSR and notice.
+  it, and an explicitly empty value omits it. The standalone staged TSR and
+  dependency bundle remain untracked; the released system floppy embeds the
+  MIT-licensed TSR and notice, while the rest of `QA/MSX/` is committed.
 - **`build_msx_floppy.sh`** — builds `GEOBENCH.DSK` with the full system and
   `EXTRAS.DSK` with the picture gallery. The disks use standard 720K FAT12
   geometry and, as shipped with `NEXTOR.SYS`, require a Nextor kernel ROM
@@ -42,9 +43,10 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`m4detect.asm`** — a tiny BASIC-callable detector that asks the firmware
   (`KL_FIND_COMMAND`) whether an M4 ROM RSX is installed. The staged `GB.BAS` loads
   it as `M4DETECT.BIN` and uses its result to pick `GBM4` vs `GBALB`.
-- **`build_rom.sh`** — builds the 16K upper ROMs that offload the low-level drivers
-  and carry the cold-boot banner: `rom/GBALB.ROM` (Albireo, shipped) and `rom/GEOBENCH.ROM`
-  (the archived IDE backend). Bakes the git commit into the banner
+- **`build_rom.sh`** — builds optional legacy 16K upper-ROM experiments that
+  offload low-level drivers and carry the cold-boot banner:
+  `rom/GBALB.ROM` (Albireo) and `rom/GEOBENCH.ROM` (the archived IDE backend).
+  Neither is staged in normal release media. The script bakes the git commit into the banner
   (`rom/gitcommit.inc`, generated).
 - **`build_m4netmod.sh [out.RAW]`** — builds `GBNETM4.MOD`, the M4ROM TCP command
   backend for the shared `gb_net_*` API.
@@ -106,11 +108,12 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   match the exported `lib/gbapp.inc` slot addresses through `kernel/api_table.inc`.
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in
   `kernel/lowram.tsv` for accidental range overlaps.
-- **`build_scheduler.sh {cpc|msx|pcw}`** — assembles the optional, app-carried
+- **`build_scheduler.sh {cpc|msx|pcw}`** — assembles the release, app-carried
   preemptive scheduler into a bounded 512-byte raw payload. `build_capp.sh`
   embeds it in the root desktop when `TASK_ROOT=1`; the resulting runtime is
   installed in fixed RAM and requires no GEOBENCH or M4 ROM. See
-  `docs/PREEMPTIVE_MULTITASKING.md`.
+  `docs/PREEMPTIVE_MULTITASKING.md`. Explicit `*-cooperative` Make targets omit
+  it for regression testing.
 - **`check_app_layout.py` / `test_app_layout.py`** — enforce the normal app
   image limits and the `#7F00-#7FFF` task stack-snapshot reserve.
 - **`deploy_ide.sh`** — *(archived)* copy the staged distribution onto a real/emulated IDE

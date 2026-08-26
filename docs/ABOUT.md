@@ -35,47 +35,51 @@ this project sets out to do. Instead, GEOBENCH is a much humbler thing: a
 familiar DOS underneath and adds a GEOS/Workbench-style face on top, rather than
 replacing the whole system. Smaller scope, smaller footprint, different goal.
 
-## Visual target
+## Original visual reference
 
-The long-term look we're aiming for — an Amiga Workbench-style desktop as it
-might have existed on the CPC: labelled drawer/app icons, windows with title
-bars and gadgets, a trashcan, an arrow pointer.
+The project began from this Amiga Workbench-style reference: labelled
+drawer/app icons, windows with title bars and gadgets, a trashcan, and an arrow
+pointer on an 8-bit display. The current screenshots in the top-level README
+show the implemented desktop; this image records the starting visual direction,
+not an unfinished UI specification.
 
 ![Visual target](../goal.png)
 
 > Image: a screenshot from The 8-Bit Guy's video on the **C128 "Alternate
 > Universe"** — used here purely as a visual reference for the look we're after.
 
-We're a long way from this, but it's the north star.
-
 ## How it works
 
-GEOBENCH borrows SymbOS's banked-app shape, scaled down:
+GEOBENCH borrows SymbOS's banked-app shape, scaled down and shared across three
+Z80 platforms:
 
-- **Banked memory model.** On a 128K+ machine the gate-array RAM-config port
-  pages a 16K block into the `#4000–#7FFF` window. The kernel, the stack, the
-  screen and the firmware stay in always-resident RAM; apps and the kernel's data
-  buffers (font, icons) live in bank pages and are swapped in as needed.
-- **Resident kernel (`kernel/`, Z80 asm).** Boots the machine (Mode 1, palette,
-  RAM probe, clock, top bar), owns storage + screen + input + cursor, and
+- **Banked memory model.** A target-specific mapper pages a 16K application
+  block into `#4000-#7FFF`. The kernel and fixed low-RAM contracts remain
+  mapped; applications, modules, assets, and borrowed document/picture pages
+  use the expansion-bank pool.
+- **Resident kernel (`kernel/`, Z80 asm).** Boots the target video backend,
+  probes RAM, initializes the clock/top bar, owns storage + screen + input + cursor, and
   exposes a **fixed jump-table API** at `#8000`. The kernel source has been
   split by subsystem (`boot.asm`, `assets.asm`, `modules.asm`, `app_pool.asm`,
   `input_api.asm`, `clock.asm`, `memdetect.asm`, `api_table.inc`,
   `lowram.inc`) so resident responsibilities and low-RAM contracts are easier to
   reason about without changing the generated image.
-- **Apps in C (`apps/`, SDCC).** Each app is a single `main.c` compiled to run at
-  `#4000` in a bank page. It reaches the kernel only through **`libgb`**
+- **Apps in C (`apps/`, SDCC).** Each app is compiled to run at `#4000` in a
+  bank page. It reaches the kernel only through **`libgb`**
   (`lib/gb/` — `gb.h` + asm trampolines that map the C calling convention onto the
-  jump table). The desktop launches the file manager, which opens each file in its
-  app (Notepad, ICONED, Paint, Viewer, ...); an app returns to its caller by `return`.
-- **Storage backends.** A dispatcher (`lib/fs.asm`) selects the card backend at
-  build time. The shipped card builds both the CH376 **Albireo** kernel (`GBALB`)
+  jump table). Managed windows remain co-resident and are driven by the desktop's
+  root task; I/O-heavy work is split into bounded jobs, while explicitly opted-in
+  pure computation can run in preemptible workers.
+- **Storage backends.** On CPC, a dispatcher (`lib/fs.asm`) selects the card
+  backend at build time. The shipped card builds both the CH376 **Albireo** kernel (`GBALB`)
   and the **M4 board** kernel (`GBM4`) into one shared FAT image. Both kernels also
   carry the AMSDOS-over-**floppy** fallback. The FAT16/FAT32 **IDE** backend is
   archived — source kept in-tree, not built or shipped by default (see
   [`ARCHIVED.md`](ARCHIVED.md)). The screen-independent driver path can
-  still be **offloaded to a loadable upper ROM** (`GBALB.ROM`) to free resident
-  `#8000` RAM — see [Building](BUILDING.md#optional-the-geobench-rom).
+  still be built as a legacy **loadable upper-ROM** experiment (`GBALB.ROM`) to
+  study resident `#8000` headroom, but release media use the no-ROM kernels —
+  see [Building](BUILDING.md#optional-the-geobench-rom). MSX2 uses MSX-DOS
+  2/Nextor BDOS services; PCW uses its native CF2/CF2DD floppy backend.
 
 ## Target hardware
 
@@ -100,6 +104,10 @@ GEOBENCH borrows SymbOS's banked-app shape, scaled down:
   a memory-mapper expansion (512K typical) is recommended for multiple app
   windows. Browser and Telnet use a mapped-RAM or page-3 TCP/IP UNAPI
   implementation; openMSXnet is the initial supported emulator transport.
+- **Amstrad PCW** (PCW 8256/8512 class) with banked RAM and CF2 or CF2DD
+  media. The monochrome 720x256 backend preserves the shared application and
+  asset formats; serial networking uses PerryFi/PerryNet. See
+  [The PCW target](PCW.md).
 
 ## Design inspirations
 
@@ -133,31 +141,33 @@ We deliberately cherry-pick from both ancestors rather than cloning either one.
 - A documented **application API** (the `libgb` jump table) so third parties can
   write GEOBENCH apps — in C.
 
-## Running existing AMSDOS software
+## Running existing DOS software
 
-GEOBENCH does **not** run ordinary AMSDOS `.BIN` binaries or BASIC `.BAS`
-programs. Those expect to own the whole machine under BASIC/AMSDOS, so the
-desktop does not attempt to launch or contain them: double-clicking a `.BIN` or
-`.BAS` in the File Manager shows an info note telling you to run it from BASIC
-instead (`RUN"PROG"`). GEOBENCH only runs its own apps — the C `.APP` programs and
-`.SAV` screensavers — which cooperate with the kernel window manager.
+GEOBENCH does **not** run ordinary machine-code `.BIN` programs inside a
+managed window. Those programs expect to own the machine under BASIC or DOS,
+so the File Manager reports that they must be run after leaving GEOBENCH.
+
+`.BAS` files are different: when the separately maintained **GB-BASIC** package
+is installed, double-clicking a `.BAS` file opens it in `BASIC.APP`. GEOBENCH's
+native executable formats remain `.APP` applications and `.SAV` screensavers.
 
 This was an early aspiration ("layer on top of DOS, launch the existing
 catalogue"), but coaxing software that assumes total machine ownership into a
-cooperative desktop proved out of scope, so it is a non-goal rather than a
+managed desktop proved out of scope, so it is a non-goal rather than a
 roadmap item.
 
-## Non-goals (for now)
+## Non-goals
 
-- Multitasking / preemptive scheduling (cooperative, single-app-at-a-time is the
-  realistic start on a Z80).
+- Preempting the resident kernel, firmware, paged modules, storage drivers, or
+  drawing operations. Release builds preempt explicitly opted-in pure app
+  workers; shared machine services stay atomic under the desktop root task.
 - Hard compatibility with actual GEOS or Workbench binaries. GEOBENCH is
   *inspired by* them, not a binary-compatible reimplementation.
 - 100% feature parity with either ancestor.
 
 ## Tech notes
 
-- **CPU:** Zilog Z80 (~4 MHz), banked 128K+ memory map.
+- **CPU:** Zilog Z80 (~3.5-4 MHz), banked 128K+ memory map.
 - **Kernel:** Z80 assembly, assembled with **RASM**.
 - **Apps:** **C**, compiled with **SDCC**, linked against the shared `libgb`
   (`lib/gb/`) and a small crt0 to run as a banked binary at `#4000`.
@@ -176,19 +186,21 @@ geobench/
 │                      #     gb_doc menu/document framework (gbdoc.c), window
 │                      #     drag/resize (gbwin.c) + dialog stubs (the dialog renderer
 │                      #     is a paged kernel module, kernel/kc/gbui_mod.c)
-├── apps/              # the C apps (each a single main.c)
+├── apps/              # native C apps and screensavers
 │   ├── desktop/       #   the boot shell: backdrop, icons, drag, launch, System menu
 │   ├── filemgr/       #   scrolling file manager (multi-drive, drag-and-drop, Trash)
 │   ├── notepad/       #   text editor (File/Edit/View menus, copy/paste, .BAS CR+LF)
 │   ├── iconed/        #   icon/cursor editor for .IST sets and .SPR cursors
-│   ├── paint/         #   Mode-1 paint app (toolchest, palette, .PIC files)
 │   ├── xaos/          #   fixed-point Mandelbrot generator (.PIC export)
 │   ├── viewer/        #   banked/demand-streamed .PIC image viewer
 │   ├── clock/         #   analog clock window
 │   └── settings/      #   control panel: config/media picker + desktop colours
-├── rom/               # per-backend upper ROMs (GBALB.ROM shipped; IDE ROM archived)
-│                      #   for driver offload + the boot banner
-├── assets/            # icon/cursor/paint source PNGs + sample files (WELCOME.TXT)
+├── rom/               # optional CPC ROM/offload sources
+├── assets/            # icon/cursor/picture sources + sample files (WELCOME.TXT)
 ├── docs/              # architecture, development, archive notes, review docs
 └── tools/            # host-side build/asset tooling (build_kernel.sh, build_rom.sh, ...)
 ```
+
+`PAINT.APP` and `BASIC.APP` are owned by the sibling `GB-PAINT` and `GB-BASIC`
+repositories and staged by the distribution build. Normal and preemptive
+release media do not require a GEOBENCH ROM.
