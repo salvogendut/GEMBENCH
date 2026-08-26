@@ -62,8 +62,12 @@ input_poll
                 ld    (in_joy_dirs),a
                 xor   a                       ; stick 0 = cursor keys
                 call  read_stick
+                ld    a,(MSX_MOUSE)           ; port 1 is either mouse or joystick
+                or    a
+                jr    nz,ip_no_joystick
                 ld    a,1                     ; stick 1 = joystick port 1
                 call  read_stick
+ip_no_joystick
                 xor   a                       ; trigger 0 = space bar
                 call  read_trig
                 ld    a,1                     ; trigger 1 = joystick 1 button

@@ -14,6 +14,8 @@
  *     SAVER=[D:]<stem>[.SAV]
  *     MSXMODE=6|7       selected MSX video mode at the next boot (shown as
  *                       "4 colors" / "16 colors")
+ *     MSXMOUSE=TRUE|FALSE selects a mouse or joystick in MSX port 1 at the
+ *                         next boot
  * Each row shows the current value; clicking it lists the matching files in the
  * /GBENCH system folder (or root-level /PICS for wallpapers) and offers them in
  * a popup. The kernel loads font/icons/cursor only at boot, so a change takes
@@ -47,7 +49,11 @@
 #define DEF_BOTTOM_MARGIN 4
 #define DEF_MAX_Y (GB_LINES - DEF_H - DEF_BOTTOM_MARGIN)
 #define DEF_Y     ((DEF_MAX_Y < 32) ? DEF_MAX_Y : 32)
+#ifdef GB_MSX2
+#define ROW_H     11           /* fit the MSX input selector without leaving the screen */
+#else
 #define ROW_H     12           /* per-setting row height, px */
+#endif
 #define VAL_COL   16           /* value column offset from the window's left (byte cols); a
                                   gap past the longest label ("Backdrop") so value != label */
 #define SELECT_W  34           /* fits cfg_get's 14 chars with the 8px CLASSIC font */
@@ -57,10 +63,11 @@
 /* The screensaver section: module picker, per-saver Configure command, then timeout. */
 #ifdef GB_MSX2
 #define VIDEO_ROW  (NROWS + 1) /* 4/16 colours; applied as Screen 6/7 at the next boot */
-#define SS_HDR_ROW (NROWS + 2)
-#define SS_MOD_ROW (NROWS + 3)
-#define SS_CFG_ROW (NROWS + 4)
-#define SS_TM_ROW  (NROWS + 5)
+#define INPUT_ROW  (NROWS + 2) /* mouse/joystick port mode; applied at the next boot */
+#define SS_HDR_ROW (NROWS + 3)
+#define SS_MOD_ROW (NROWS + 4)
+#define SS_CFG_ROW (NROWS + 5)
+#define SS_TM_ROW  (NROWS + 6)
 #elif defined(GB_PCW)
 #define SS_HDR_ROW NROWS
 #define SS_MOD_ROW (NROWS + 1)
@@ -716,6 +723,15 @@ static void s_draw(void)
                            "16 colors" : "4 colors";
         draw_selector(VIDEO_ROW, mode);
     }
+    gb_textbw((unsigned char)(win_x + 1), row_y(INPUT_ROW), "Input device");
+    {
+        unsigned int p = cfg_keypos("MSXMOUSE=");
+        const char *input = (p != 0xFFFF && p + 3 < cfglen &&
+                             cfgbuf[p] == 'T' && cfgbuf[p + 1] == 'R' &&
+                             cfgbuf[p + 2] == 'U' && cfgbuf[p + 3] == 'E') ?
+                            "Mouse" : "Joystick";
+        draw_selector(INPUT_ROW, input);
+    }
 #endif
     {
         char sv[16];                          /* #219: the screensaver section */
@@ -742,7 +758,7 @@ static void s_draw(void)
     gb_textbw((unsigned char)(win_x + 1), row_y(RESET_ROW), "Return to Defaults...");
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + win_h - 10),
 #ifdef GB_MSX2
-              "Mode/font/icons: reboot.");
+              "Mode/input/font/icons: reboot.");
 #else
               "Font/icons: reboot.");
 #endif
@@ -1318,6 +1334,17 @@ static void video_mode_dialog(void)
     s_draw();
     gb_curshow();
 }
+
+static void input_device_dialog(void)
+{
+    static const char *const devices[] = { "Joystick", "Mouse" };
+    unsigned char sel = gb_popup((unsigned char)(win_x + VAL_COL),
+                                 row_y(INPUT_ROW), devices, 2);
+    gb_curhide();
+    if (sel != 0xFF) cfg_set("MSXMOUSE=", sel ? "TRUE" : "FALSE");
+    s_draw();
+    gb_curshow();
+}
 #endif
 
 /* Replace the mutable config with the target-specific pristine copy shipped in
@@ -1397,6 +1424,10 @@ static void s_click(void)
     {
         if (selector_hit(VIDEO_ROW, mx, my)) {
             video_mode_dialog();
+            return;
+        }
+        if (selector_hit(INPUT_ROW, mx, my)) {
+            input_device_dialog();
             return;
         }
     }
