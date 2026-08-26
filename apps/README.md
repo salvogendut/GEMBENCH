@@ -36,7 +36,8 @@ focused window's handlers (issue #45).
 
 `TASKDEMO.APP` is a development-only preemption diagnostic and is not staged in
 the distributions. Its worker intentionally never yields; build it with
-`make taskdemo` and run it only against `make cpc-preemptive`. The scheduler is
+`make taskdemo` and run it only against the default `make cpc` build (or its
+`make cpc-preemptive` compatibility alias). The scheduler is
 carried by `DESKTOP.APP` and installed into RAM; no ROM is required.
 
 ## Screensavers (`.SAV`)

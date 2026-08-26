@@ -24,7 +24,7 @@ GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
-PREEMPTIVE="${PREEMPTIVE:-0}"
+PREEMPTIVE="${PREEMPTIVE:-1}"
 PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
 NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
 NOTEPAD_DATA_LOC="0x6F48"

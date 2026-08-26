@@ -1,10 +1,10 @@
 # Preemptive Multitasking
 
-Issue [#477](https://github.com/salvogendut/geobench/issues/477) tracks the
+Issue [#477](https://github.com/salvogendut/geobench/issues/477) introduced the
 incremental conversion from the callback-driven cooperative window manager to
-preemptively scheduled application workers. This remains an opt-in development
-build. Normal release builds retain the existing cooperative behavior and pay
-no resident-kernel cost.
+preemptively scheduled application workers. Preemptive scheduling is now the
+default for CPC, MSX, and PCW release builds. Explicit cooperative builds remain
+available for regression testing.
 
 The app-by-app scheduler classification, responsiveness contract, and migration
 order are maintained in
@@ -122,13 +122,17 @@ bootstrap sequence, and then performs GEOBENCH's normal warm reboot through
 
 ## Build And Diagnostic
 
-Use `make cpc-preemptive`, `make msx-preemptive`, or `make pcw-preemptive` for
-a RAM-resident development distribution. The scheduler is embedded
-automatically in `DESKTOP.APP`; no scheduler file or ROM is required on the
-target media. These targets do not stage or launch `TASKDEMO.APP`. The PCW CF2
-boot disk is already full, so its preemptive build omits Browser Save; Browser
-remains on the Companion disk and normal `make pcw` packaging is unchanged.
-The explicit diagnostic build also omits the spare `IMPROVED.TBR`.
+Use `make cpc`, `make msx`, `make pcw`, or `make all` for the default
+RAM-resident preemptive distributions. The direct `tools/build_kernel*.sh`
+scripts also default to `PREEMPTIVE=1`. The scheduler is embedded automatically
+in `DESKTOP.APP`; no scheduler file or ROM is required on the target media.
+The compatibility targets `make cpc-preemptive`, `make msx-preemptive`, and
+`make pcw-preemptive` produce the same builds. Use `make cpc-cooperative`,
+`make msx-cooperative`, or `make pcw-cooperative` for regression images without
+the scheduler. None of these targets stages or launches `TASKDEMO.APP`. The PCW
+CF2 boot disk is already full, so its preemptive build omits Browser Save;
+Browser remains on the Companion disk. The explicit diagnostic build also omits
+the spare `IMPROVED.TBR`.
 
 `TASKDEMO.APP` is the deterministic test worker. Its compute callback never
 yields, so a responsive desktop while it runs proves timer preemption rather
@@ -210,7 +214,7 @@ then use System > Exit to exercise the warm-boot vector restoration.
 
 ## Budget
 
-- Normal `PREEMPTIVE=0` resident-kernel cost: **0 bytes**.
+- Explicit cooperative `PREEMPTIVE=0` resident-kernel cost: **0 bytes**.
 - CPC claimed-drop handoff in `PREEMPTIVE=1`: **12 resident bytes**. The current
   Albireo kernel retains one byte above the required stack reserve; the M4
   kernel sits exactly at the enforced 256-byte reserve.
