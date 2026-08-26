@@ -72,6 +72,9 @@ python3 tools/gblib_subset.py \
 NOTEPAD_GBLIB="build/pcw/GBLIBNOTEPAD.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$NOTEPAD_GBLIB" apps/notepad/gblib.symbols
+ICONED_GBLIB="build/pcw/GBLIBICONED.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$ICONED_GBLIB" apps/iconed/gblib.symbols
 
 # --- the C apps, compiled with the PCW geometry (same DATA_LOCs as CPC/MSX) --
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
@@ -104,7 +107,7 @@ else
     APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6400 DOC=1 BUTTON=1 \
         tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
 fi
-APP_ICON=apps/iconed/icon.asm APPDEFS="-DGB_PCW -DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
+APP_ICON=apps/iconed/icon.asm GBLIB_SRC="$ICONED_GBLIB" APPDEFS="-DGB_PCW -DGBUI_APPICON_PICKER -DGBDOC_BOUNDED_IO" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 REPAINTTOP=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_PCW" DATA_LOC=0x7380 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
 APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/pcw/FORMREF.RAW

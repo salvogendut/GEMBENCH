@@ -245,6 +245,35 @@ static void adopt_document(unsigned int len)
 /* Applications can occupy nearly their full 16 KiB page, while ICONED's shared
  * filesystem staging area is only 6.5 KiB. Keep every selected document in the
  * borrowed page and stream it through the low-RAM buffer in bounded chunks. */
+#ifdef GBDOC_BOUNDED_IO
+unsigned char gb_doc_stream_write(unsigned int off, unsigned int len)
+{
+    if (!off) {
+        mode = M_NONE;
+        gb_wm_damage(win_x, win_y, winw, winh);
+        if (!doc_page && !alloc_doc_page()) return 0;
+        stream_loaded = 1;
+    }
+    if (!doc_page || off > 0x4000 || len > (unsigned int)(0x4000 - off)) return 0;
+    doc_write(off, len);
+    return 1;
+}
+
+unsigned char gb_doc_stream_read(unsigned int off, unsigned int len)
+{
+    if (!doc_page || off > filelen || len > (unsigned int)(filelen - off)) return 0;
+    doc_read(off, len);
+    return 1;
+}
+
+void gb_doc_stream_saved(unsigned char ok)
+{
+    stream_save_ok = ok;
+    UI_MODAL_K = 0;
+}
+
+void gb_doc_stream_close(void) { release_doc_page(); }
+#else
 unsigned int gb_doc_stream_load(void)
 {
     unsigned int off = 0, got, take;
@@ -313,6 +342,7 @@ unsigned char gb_doc_stream_save(unsigned int len)
     stream_save_ok = 1;
     return 1;
 }
+#endif
 #endif
 
 /* ---- .IST icon set ---------------------------------------------------------- */
@@ -832,9 +862,11 @@ static void draw_undo(void)
 
 static void status_line(void)
 {
+    unsigned char busy = gb_doc_busy();
     gb_fill(win_x + 1, win_y + winh - 12, winw - 2, 10, 0);
     gb_text(win_x + 1, win_y + winh - 11,
-            save_active ? "Saving..." : "Pick a pen, click to paint");
+            busy == 1 ? "Loading..." :
+            (busy == 2 || save_active) ? "Saving..." : "Pick a pen, click to paint");
 }
 
 static void draw(void)            /* content only; the WM drew the frame/title (#146) */
@@ -1054,7 +1086,7 @@ static void switch_icon(unsigned char next)
 /* on_frame (#146): the WM handled close/drag; run the menu framework. */
 static void ie_frame(void)
 {
-    unsigned char doc_result;
+    unsigned char doc_result, was_busy, busy;
     sync_rect();
     win_title();                                      /* keep wtitle fresh for the WM title */
     if (pressed_btn != BTN_NONE) {
@@ -1064,19 +1096,30 @@ static void ie_frame(void)
         draw_undo();
         gb_curshow();
     }
+    was_busy = gb_doc_busy();
     doc_result = gb_doc_frame();
     if (doc_result) {
+        busy = gb_doc_busy();
         if (save_title_repaint) {
             save_title_repaint = 0;
             win_title();                              /* dirty state changed during Save */
             if (icons_reloaded) {
-                icons_reloaded = 0;
                 gb_wm_damage(0, 0, GB_COLS, GB_LINES);
             } else {
                 gb_wm_damage(win_x, win_y, winw, TITLE_H);
             }
         }
-        gb_restore_parent();
+        if (icons_reloaded) {
+            icons_reloaded = 0;
+            gb_wm_damage(0, 0, GB_COLS, GB_LINES);
+            gb_restore_parent();
+        } else if (was_busy || busy) {
+            if (!was_busy && busy)
+                gb_wm_damage(win_x + 1, win_y + winh - 12, winw - 2, 10);
+            gb_repaint_top();
+        } else {
+            gb_restore_parent();
+        }
         return;
     }
 }
@@ -1188,7 +1231,10 @@ void main(void)
 
     gb_wm_managed(&iemw);                    /* register FIRST (no draw): captures our file arg */
     gb_doc(&iedoc);                          /* standard File menu; adopts the launch name */
-#ifdef GBUI_APPICON_PICKER
+#ifdef GBDOC_BOUNDED_IO
+    mode = M_NONE;
+    gb_doc_startup_load();
+#elif defined(GBUI_APPICON_PICKER)
     ie_open(gb_doc_stream_load());
 #else
     adopt_document(gb_fs_load(buf, BUFSZ));   /* stage, then retain in a borrowed page */
@@ -1197,5 +1243,10 @@ void main(void)
     win_title();                             /* build wtitle before the first paint */
     for (n = 64; n; n--) if (!gb_getkey()) break;
 
+    gb_wm_damage(win_x, win_y, winw, winh);
+#ifdef GBDOC_BOUNDED_IO
+    gb_repaint_top();                        /* first paint: only our opaque window */
+#else
     gb_restore_parent();                     /* first paint: WM chrome + ie_draw */
+#endif
 }

@@ -44,7 +44,7 @@ kernel work into a worker would make the system unsafe rather than preemptible.
 | P0 | Screensavers | All shipped savers now use fixed or incremental frame budgets; lifecycle validation remains. |
 | P1 | BASIC, Paint, and Notepad | BASIC graphics/scans and Paint/Notepad document I/O are bounded. |
 | P1 | Browser, WGET, Telnet, Shell | Network/storage stays root-owned and must advance in bounded chunks. |
-| P1 | Viewer, Notepad, Icon Editor, Mahjong | Root-owned; measure and split their longest operations where needed. |
+| P1 | Viewer, Notepad, Icon Editor, Mahjong | Viewer, Notepad, and Icon Editor use bounded root jobs; Mahjong still needs deal/shuffle measurement. |
 | P2 | Clock and small utilities | Clock is already bounded; remaining utilities need lifecycle smoke tests. |
 
 ## P0: File Manager
@@ -227,6 +227,16 @@ closing cancels the job and removes an incomplete output. Pane movement uses a
 live title outline and damage-clipped final repaint. Bank mapping, drawing,
 storage, and interactive drag handling remain correctly on the root task.
 
+### Icon Editor
+
+ICONED remains root-owned because its filesystem, borrowed app-page, picture
+codec, and window operations all use kernel state. `.IST`, `.SPR`, and embedded
+`.APP` documents now load and save in 512-byte jobs, retaining the full 16 KiB
+application file while using low RAM only as a staging buffer. Save cancellation
+removes partial output and releases the borrowed page on every close path.
+Transfer status and completion repaint only the focused window unless editing
+the active icon set requires the complete managed stack to be refreshed.
+
 ## P1: Remaining user applications
 
 | Application | Classification | Main audit item |
@@ -237,7 +247,7 @@ storage, and interactive drag handling remain correctly on the root task.
 | Shell | Needs bounded root commands | `cat` and `cp` currently loop through complete files inside one command. |
 | Viewer | Root-owned image renderer | Image-only; retains native banked rendering and falls back to bounded visible-row reads when picture banks are exhausted. |
 | Notepad | Bounded root document job | Preemptive builds load/save 512 bytes per frame, serialize storage, clean partial saves, and cap input shifts to two characters per frame. Validate maximum files and deferred save actions. |
-| Icon Editor | Root-owned editor | Bound `.IST`/`.APP` load/save and conversion; preserve borrowed-bank and preview state. |
+| Icon Editor | Bounded root document job | Loads and saves 512 bytes per frame while preserving borrowed-bank, preview, and active-icon-set reload state. |
 | Mahjong | Root-owned game | Measure deal/shuffle/hint and full-board draws; tile interaction is otherwise event-driven. |
 | Disk Utility | Root-owned destructive I/O | Formatting remains atomic kernel/module work; enforce modal state and error cleanup. |
 | Nettest | Root-owned network state machine | Verify every transport state has a timeout and performs one bounded operation per frame. |

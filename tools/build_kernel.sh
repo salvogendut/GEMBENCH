@@ -87,6 +87,9 @@ python3 tools/gblib_subset.py \
 NOTEPAD_GBLIB="build/GBLIBNOTEPAD.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$NOTEPAD_GBLIB" apps/notepad/gblib.symbols
+ICONED_GBLIB="build/GBLIBICONED.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$ICONED_GBLIB" apps/iconed/gblib.symbols
 
 BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
 if ! git diff --quiet --ignore-submodules -- 2>/dev/null \
@@ -181,7 +184,7 @@ APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" DATA_LOC=0x68B0 DOCRO=1 
 APP_ICON=apps/notepad/icon.asm GBLIB_SRC="$NOTEPAD_GBLIB" APPDEFS="$NOTEPAD_APPDEFS" APP_CFLAGS="$NOTEPAD_CFLAGS" DATA_LOC="$NOTEPAD_DATA_LOC" DOC=1 REPAINTTOP="$NOTEPAD_SCROLL" tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-APP_ICON=apps/iconed/icon.asm APPDEFS="-DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: header-aware .APP picker; document lives in a borrowed app page
+APP_ICON=apps/iconed/icon.asm GBLIB_SRC="$ICONED_GBLIB" APPDEFS="-DGBUI_APPICON_PICKER -DGBDOC_BOUNDED_IO" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 REPAINTTOP=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: header-aware .APP picker; document lives in a borrowed app page
                                    # the gb_doc/fullscreen code so the 6656-B icon-set buffer
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
 DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options

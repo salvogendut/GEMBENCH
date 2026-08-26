@@ -246,6 +246,17 @@ extern unsigned int gb_doc_stream_load(void);
 #endif
 
 #ifdef GBDOC_BOUNDED_IO
+#ifdef GBUI_APPICON_PICKER
+/* ICONED retains files in a borrowed 16 KiB page. Its low-RAM document buffer
+ * is only a staging area, so bounded I/O asks the app to move each chunk to or
+ * from that page. These hooks are private to the one picker-enabled document
+ * app and deliberately do not grow gb_doc_t for every other application. */
+extern unsigned char gb_doc_stream_write(unsigned int off, unsigned int len);
+extern unsigned char gb_doc_stream_read(unsigned int off, unsigned int len);
+extern void gb_doc_stream_saved(unsigned char ok);
+extern void gb_doc_stream_close(void);
+#endif
+
 static unsigned char doc_io_claim(void)
 {
     if (gb_drop_claimed()) {
@@ -292,7 +303,12 @@ static void doc_io_cancel(void)
 {
     doc_io_remove_partial();
 #ifndef GBDOC_RO
-    if (DOC_IO_STATE == DOC_IO_SAVE && g_doc->on_saved) g_doc->on_saved();
+    if (DOC_IO_STATE == DOC_IO_SAVE) {
+#ifdef GBUI_APPICON_PICKER
+        gb_doc_stream_saved(0);
+#endif
+        if (g_doc->on_saved) g_doc->on_saved();
+    }
 #endif
     FS_XFLAGS = 0;
     gb_drop_release();
@@ -319,6 +335,9 @@ static unsigned char doc_io_finish(unsigned char ok)
         g_dirty = 0;
     } else {
 #ifndef GBDOC_RO
+#ifdef GBUI_APPICON_PICKER
+        gb_doc_stream_saved(ok);
+#endif
         if (g_doc->on_saved) g_doc->on_saved();
         if (ok) g_dirty = 0;
 #endif
@@ -327,7 +346,12 @@ static unsigned char doc_io_finish(unsigned char ok)
 
     if (after == DOC_AFTER_NEW) do_new_now();
     else if (after == DOC_AFTER_LOAD) do_load_now();
-    else if (after == DOC_AFTER_CLOSE) gb_wm_close();
+    else if (after == DOC_AFTER_CLOSE) {
+#ifdef GBUI_APPICON_PICKER
+        gb_doc_stream_close();
+#endif
+        gb_wm_close();
+    }
     return 3;
 }
 
@@ -337,18 +361,36 @@ static unsigned char doc_io_step(void)
 
     gb_set_name(g_name);
     if (DOC_IO_STATE == DOC_IO_LOAD) {
+#ifdef GBUI_APPICON_PICKER
+        if (DOC_IO_OFF >= 0x4000) return doc_io_finish(1);
+        left = (unsigned int)(0x4000 - DOC_IO_OFF);
+#else
         if (DOC_IO_OFF >= g_doc->bufmax) return doc_io_finish(1);
         left = (unsigned int)(g_doc->bufmax - DOC_IO_OFF);
+#endif
         take = left > DOC_IO_CHUNK ? DOC_IO_CHUNK : left;
         FS_LOAD_OFS[0] = (unsigned char)DOC_IO_OFF;
         FS_LOAD_OFS[1] = (unsigned char)(DOC_IO_OFF >> 8);
         FS_LOAD_OFS[2] = 0;
         FS_XFLAGS = 0x01;
+#ifdef GBUI_APPICON_PICKER
+        got = gb_fs_load(g_doc->buf, take);
+#else
         got = gb_fs_load(g_doc->buf + DOC_IO_OFF, take);
+#endif
         FS_XFLAGS = 0;
         if (got > take) got = take;
+#ifdef GBUI_APPICON_PICKER
+        if (got && !gb_doc_stream_write(DOC_IO_OFF, got))
+            return doc_io_finish(0);
+#endif
         DOC_IO_OFF = (unsigned int)(DOC_IO_OFF + got);
-        if (got < take || DOC_IO_OFF >= g_doc->bufmax) return doc_io_finish(1);
+        if (got < take) return doc_io_finish(1);
+#ifdef GBUI_APPICON_PICKER
+        if (DOC_IO_OFF >= 0x4000) return doc_io_finish(1);
+#else
+        if (DOC_IO_OFF >= g_doc->bufmax) return doc_io_finish(1);
+#endif
         return 0;
     }
 
@@ -356,9 +398,18 @@ static unsigned char doc_io_step(void)
     if (DOC_IO_CREATED && DOC_IO_OFF >= DOC_IO_TOTAL) return doc_io_finish(1);
     left = (unsigned int)(DOC_IO_TOTAL - DOC_IO_OFF);
     take = left > DOC_IO_CHUNK ? DOC_IO_CHUNK : left;
+#ifdef GBUI_APPICON_PICKER
+    if (!gb_doc_stream_read(DOC_IO_OFF, take)) return doc_io_finish(0);
+#endif
     FS_XFLAGS = DOC_IO_CREATED ? 0x06 : 0x04;
     DOC_IO_CREATED = 1;
-    if (!gb_fs_save(g_doc->buf + DOC_IO_OFF, take)) {
+    if (!gb_fs_save(
+#ifdef GBUI_APPICON_PICKER
+                    g_doc->buf,
+#else
+                    g_doc->buf + DOC_IO_OFF,
+#endif
+                    take)) {
         FS_XFLAGS = 0;
         return doc_io_finish(0);
     }
