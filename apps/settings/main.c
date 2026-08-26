@@ -82,6 +82,7 @@
 static unsigned char win_x, win_y, win_w, win_h;
 static unsigned char titlebar_repaint;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
+static void draw_selector(unsigned char row, const char *value);
 static void saver_value(char *dst);       /* forward: s_draw shows the current SAVERTIME= (#219) */
 static void ss_module_value(char *dst);   /* forward: s_draw shows the current SAVER= module (#219) */
 
@@ -138,6 +139,30 @@ static char stembuf[MAXST * STLEN];
 static const char *stems[MAXST];
 static unsigned char nstem;
 static unsigned char stem_drive[MAXST];       /* source drive for each media entry */
+
+#ifdef GB_PREEMPTIVE
+#define PICK_IDLE       0
+#define PICK_BACK       2
+#define PICK_FIND_FIRST 3
+#define PICK_FIND_NEXT  4
+#define PICK_SCAN_FIRST 5
+#define PICK_SCAN_NEXT  6
+#define PICK_FILTER     7
+#define PICK_LEAVE      8
+#define PICK_DONE       9
+#define PICK_BATCH      4
+#define PICKF_SAVER     0x01
+#define PICKF_MEDIA     0x02
+#define PICKF_DESCENDED 0x04
+#define PICKF_CLAIMED   0x08
+
+static unsigned char picker_state, picker_flags, picker_row;
+static unsigned char picker_drive_pos, picker_drive, picker_old_drive;
+static unsigned char picker_back_left, picker_filter_pos, picker_keep;
+
+static void picker_row_finish(unsigned char r);
+static void ss_module_finish(void);
+#endif
 
 /* sel_boot: pin the active drive to the boot drive, where GEOBENCH.CFG + /GBENCH
    live - mirrors the kernel's fs_init. Another
@@ -289,19 +314,22 @@ static void cfg_set(const char *key, const char *val)
 
 /* enter_assets: at the browse root, descend into GBENCH (system assets) or PICS
    (wallpapers). A flat floppy has neither and is enumerated at root as-is. */
+static unsigned char is_assets_dir(unsigned char pictures)
+{
+    const char *r = gb_entname();
+    return (unsigned char)((!pictures && r[0]=='G' && r[1]=='B' && r[2]=='E'
+             && r[3]=='N' && r[4]=='C' && r[5]=='H' && r[6]==' ') ||
+            (pictures && r[0]=='P' && r[1]=='I' && r[2]=='C' && r[3]=='S'
+             && r[4]==' '));
+}
+
 static unsigned char enter_assets(unsigned char pictures)
 {
     char *p = gb_dir1();
     while (p) {
-        if (gb_isdir()) {
-            const char *r = gb_entname();
-            if ((!pictures && r[0]=='G' && r[1]=='B' && r[2]=='E' && r[3]=='N'
-                 && r[4]=='C' && r[5]=='H' && r[6]==' ') ||
-                (pictures && r[0]=='P' && r[1]=='I' && r[2]=='C' && r[3]=='S'
-                 && r[4]==' ')) {
-                gb_chdir();                  /* positioned on GBENCH/PICS: descend */
-                return 1;
-            }
+        if (gb_isdir() && is_assets_dir(pictures)) {
+            gb_chdir();                  /* positioned on GBENCH/PICS: descend */
+            return 1;
         }
         p = gb_dirn();
     }
@@ -329,6 +357,7 @@ static unsigned char ist_count(const char *stem)
 /* enumerate_boot: fill stems[] with the names of files in the BOOT drive's /GBENCH
    whose extension is `ext`. If min_icons is non-zero (icon sets), require that exact
    layout count. This drops toolchests and legacy sets with shifted slot meanings. */
+#ifndef GB_PREEMPTIVE
 static void enumerate_boot(const char *ext, unsigned char min_icons)
 {
     unsigned char descended, k, i, keep, old_drive;
@@ -420,6 +449,200 @@ static void enumerate_media(const char *ext)
     if (mask & GB_DRV_C) enumerate_media_drive(ext, GB_DRIVE_C);
 #endif
 }
+#else
+/* Settings stays on the root task because directory and config services are
+   kernel-owned. The picker job bounds discovery/enumeration to four entries per
+   frame and validates one .IST per frame; no directory cursor or copy buffer is
+   left live while another storage owner can run. */
+static const char *picker_ext(void)
+{
+    return (picker_flags & PICKF_SAVER) ? "SAV" : rows[picker_row].ext;
+}
+
+static unsigned char picker_next_drive(void)
+{
+    if (!(picker_flags & PICKF_MEDIA)) {
+        if (picker_drive_pos) return 0;
+        picker_drive_pos = 1;
+        picker_drive = boot_drive();
+        return 1;
+    }
+#ifdef GB_MSX2
+    if (picker_drive_pos >= GB_MSX_DRIVE_COUNT) return 0;
+    picker_drive = picker_drive_pos++;
+    return 1;
+#else
+    unsigned char d;
+    while (picker_drive_pos < 3) {
+        unsigned char mask = gb_drives();
+        d = picker_drive_pos++;
+        if ((d == GB_DRIVE_C && (mask & GB_DRV_C)) ||
+            (d == GB_DRIVE_A && (mask & GB_DRV_A)) ||
+            (d == GB_DRIVE_B && (mask & GB_DRV_B))) {
+            picker_drive = d;
+            return 1;
+        }
+    }
+    return 0;
+#endif
+}
+
+static void picker_begin_drive(void)
+{
+    picker_back_left = 4;
+    picker_flags &= (unsigned char)~PICKF_DESCENDED;
+    picker_state = PICK_BACK;
+}
+
+static void picker_scan_done(void)
+{
+    if (!(picker_flags & PICKF_MEDIA) && rows[picker_row].min_icons) {
+        picker_filter_pos = 0;
+        picker_keep = 0;
+        picker_state = PICK_FILTER;
+    } else {
+        picker_state = PICK_LEAVE;
+    }
+}
+
+static void picker_add_entry(const char *ext)
+{
+    const char *r;
+    unsigned char k = 0;
+    unsigned int off;
+    if (gb_isdir()) return;
+    r = gb_entname();
+    if (r[8] != ext[0] || r[9] != ext[1] || r[10] != ext[2]) return;
+    off = (unsigned int)nstem * STLEN;
+    k = 0;
+    if (picker_flags & PICKF_MEDIA) {
+        stembuf[off++] = drive_letter(picker_drive);
+        stembuf[off++] = ':';
+        stem_drive[nstem] = picker_drive;
+    }
+    while (k < 8 && r[k] != ' ') stembuf[off++] = r[k++];
+    stembuf[off] = 0;
+    stems[nstem] = &stembuf[(unsigned int)nstem * STLEN];
+    nstem++;
+}
+
+static void picker_start(unsigned char row, unsigned char saver)
+{
+    if (picker_state != PICK_IDLE) return;
+    if (gb_drop_claimed()) {
+        gb_alert("Storage busy", "Try again shortly.");
+        s_draw();
+        return;
+    }
+    picker_row = row;
+    picker_flags = saver ? PICKF_SAVER : 0;
+    if (saver || row == ROW_BACKDROP || row == ROW_WALLPAPER)
+        picker_flags |= PICKF_MEDIA;
+    picker_drive_pos = 0;
+    nstem = 0;
+    picker_old_drive = gb_get_drive();
+    gb_drop_claim();
+    picker_flags |= PICKF_CLAIMED;
+    if (picker_next_drive()) picker_begin_drive();
+    else picker_state = PICK_DONE;
+    gb_curhide();
+    draw_selector(saver ? SS_MOD_ROW : row, "Reading...");
+    gb_curshow();
+}
+
+static void picker_cancel(void)
+{
+    if (picker_state == PICK_IDLE) return;
+    if (picker_flags & PICKF_CLAIMED) {
+        gb_set_drive(picker_drive);
+        if (picker_flags & PICKF_DESCENDED) gb_back();
+        gb_set_drive(picker_old_drive);
+        gb_drop_release();
+    }
+    picker_flags = 0;
+    picker_state = PICK_IDLE;
+}
+
+static void picker_step(void)
+{
+    const char *ext = picker_ext();
+    char *p;
+    unsigned char n, k, done_saver, done_row;
+    unsigned int src, dst;
+
+    if (picker_state == PICK_BACK) {
+        gb_set_drive(picker_drive);
+        if (picker_back_left) {
+            gb_back();
+            picker_back_left--;
+        } else picker_state = PICK_FIND_FIRST;
+        return;
+    }
+    if (picker_state == PICK_FIND_FIRST || picker_state == PICK_FIND_NEXT) {
+        gb_set_drive(picker_drive);
+        for (n = 0; n < PICK_BATCH; n++) {
+            p = (picker_state == PICK_FIND_FIRST) ? gb_dir1() : gb_dirn();
+            picker_state = PICK_FIND_NEXT;
+            if (!p) { picker_state = PICK_SCAN_FIRST; return; }
+            if (gb_isdir() && is_assets_dir((unsigned char)(ext[0] == 'P'))) {
+                gb_chdir();
+                picker_flags |= PICKF_DESCENDED;
+                picker_state = PICK_SCAN_FIRST;
+                return;
+            }
+        }
+        return;
+    }
+    if (picker_state == PICK_SCAN_FIRST || picker_state == PICK_SCAN_NEXT) {
+        gb_set_drive(picker_drive);
+        for (n = 0; n < PICK_BATCH; n++) {
+            p = (picker_state == PICK_SCAN_FIRST) ? gb_dir1() : gb_dirn();
+            picker_state = PICK_SCAN_NEXT;
+            if (!p || nstem >= MAXST) { picker_scan_done(); return; }
+            picker_add_entry(ext);
+        }
+        return;
+    }
+    if (picker_state == PICK_FILTER) {
+        gb_set_drive(picker_drive);
+        if (picker_filter_pos < nstem) {
+            src = (unsigned int)picker_filter_pos * STLEN;
+            if (ist_count(&stembuf[src]) == rows[picker_row].min_icons) {
+                dst = (unsigned int)picker_keep * STLEN;
+                if (dst != src)
+                    for (k = 0; k < STLEN; k++) stembuf[dst + k] = stembuf[src + k];
+                stems[picker_keep] = &stembuf[dst];
+                picker_keep++;
+            }
+            picker_filter_pos++;
+            return;
+        }
+        nstem = picker_keep;
+        picker_state = PICK_LEAVE;
+    }
+    if (picker_state == PICK_LEAVE) {
+        gb_set_drive(picker_drive);
+        if (picker_flags & PICKF_DESCENDED) {
+            gb_back();
+            picker_flags &= (unsigned char)~PICKF_DESCENDED;
+            return;
+        }
+        if (nstem < MAXST && picker_next_drive()) picker_begin_drive();
+        else picker_state = PICK_DONE;
+        return;
+    }
+    if (picker_state == PICK_DONE) {
+        done_saver = (unsigned char)(picker_flags & PICKF_SAVER);
+        done_row = picker_row;
+        gb_set_drive(picker_old_drive);
+        gb_drop_release();
+        picker_flags = 0;
+        picker_state = PICK_IDLE;
+        if (done_saver) ss_module_finish();
+        else picker_row_finish(done_row);
+    }
+}
+#endif
 
 /* ---- drawing ----------------------------------------------------------------- */
 
@@ -458,8 +681,16 @@ static void s_draw(void)
             (unsigned char)(win_h - TITLE_H), 1);          /* white panel */
     for (r = 0; r < NROWS; r++) {
         gb_textbw((unsigned char)(win_x + 1), row_y(r), rows[r].label);
+#ifdef GB_PREEMPTIVE
+        if (picker_state != PICK_IDLE && !(picker_flags & PICKF_SAVER) && picker_row == r) {
+            draw_selector(r, "Reading...");
+        } else {
+#endif
         cfg_get(rows[r].key, val);
         draw_selector(r, val);
+#ifdef GB_PREEMPTIVE
+        }
+#endif
         if (rows[r].ext[0] == 'B') {         /* #216: preview the current backdrop tile beside */
             unsigned char sx = (unsigned char)(win_x + 51), sy = row_y(r);  /* keep clear of the selector */
             if (*(volatile unsigned char *)BD_SOLID_ADDR)
@@ -489,6 +720,12 @@ static void s_draw(void)
     {
         char sv[16];                          /* #219: the screensaver section */
         gb_textbw((unsigned char)(win_x + 1), row_y(SS_HDR_ROW), "Screensaver");
+#ifdef GB_PREEMPTIVE
+        if (picker_state != PICK_IDLE && (picker_flags & PICKF_SAVER)) {
+            sv[0] = 'R'; sv[1] = 'e'; sv[2] = 'a'; sv[3] = 'd'; sv[4] = 'i';
+            sv[5] = 'n'; sv[6] = 'g'; sv[7] = '.'; sv[8] = '.'; sv[9] = '.'; sv[10] = 0;
+        } else
+#endif
         ss_module_value(sv);                  /* Module: which .SAV */
         gb_textbw((unsigned char)(win_x + 2),       row_y(SS_MOD_ROW), "Module");
         draw_selector(SS_MOD_ROW, sv);
@@ -734,14 +971,12 @@ static void ss_module_value(char *dst)
     }
 }
 
-/* ss_module_dialog: list the .SAV screensavers in /GBENCH and persist the pick to
-   SAVER=. Reboot to apply (the desktop reads SAVER= at boot). */
-static void ss_module_dialog(void)
+/* Present an already-enumerated .SAV list and persist the pick to SAVER=. */
+static void ss_module_finish(void)
 {
     const char *list[MAXST];
     char path[16];
     unsigned char sel, i, n = 0;
-    enumerate_media("SAV");
     for (i = 0; i < nstem; i++) list[n++] = stems[i];
     if (n == 0) { gb_alert("No screensavers", "found."); s_draw(); return; }
     sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(SS_MOD_ROW), list, n);
@@ -752,6 +987,18 @@ static void ss_module_dialog(void)
     }
     s_draw();
     gb_curshow();
+}
+
+/* ss_module_dialog: cooperative builds enumerate synchronously; preemptive
+   builds return immediately and present the popup after the frame job ends. */
+static void ss_module_dialog(void)
+{
+#ifdef GB_PREEMPTIVE
+    picker_start(0, 1);
+#else
+    enumerate_media("SAV");
+    ss_module_finish();
+#endif
 }
 
 /* preset choices: a label + the MINUTES written to SAVERTIME= (0 = off). The desktop
@@ -996,20 +1243,14 @@ static void live_apply(unsigned char r, const char *name, unsigned char drive)
     gb_reload();
 }
 
-/* open_picker: list the files for row r and let the user pick one; write it to the
-   config and repaint. */
-static void open_picker(unsigned char r)
+/* Present an already-enumerated row list, then write and apply the selection. */
+static void picker_row_finish(unsigned char r)
 {
     const char *list[MAXST + 1];
     char path[16];
     unsigned char sel, i, n = 0, media = 0, base;
     const char *ext = rows[r].ext;
-    if (r == ROW_BACKDROP || r == ROW_WALLPAPER) {
-        enumerate_media(ext);
-        media = 1;
-    } else {
-        enumerate_boot(ext, rows[r].min_icons);
-    }
+    if (r == ROW_BACKDROP || r == ROW_WALLPAPER) media = 1;
     if (ext[0] == 'B') list[n++] = "SOLID";      /* the Backdrop list leads with SOLID (no tile) */
     else if (ext[0] == 'P') list[n++] = "NONE";  /* the Wallpaper list leads with NONE (#212) */
     base = n;
@@ -1049,6 +1290,21 @@ static void open_picker(unsigned char r)
     }
     s_draw();                                /* repaint our content (new font/value) */
     gb_curshow();
+}
+
+/* open_picker: cooperative builds enumerate synchronously; preemptive builds
+   start a bounded frame job and open the same popup when it completes. */
+static void open_picker(unsigned char r)
+{
+#ifdef GB_PREEMPTIVE
+    picker_start(r, 0);
+#else
+    if (r == ROW_BACKDROP || r == ROW_WALLPAPER)
+        enumerate_media(rows[r].ext);
+    else
+        enumerate_boot(rows[r].ext, rows[r].min_icons);
+    picker_row_finish(r);
+#endif
 }
 
 #ifdef GB_MSX2
@@ -1117,6 +1373,9 @@ static void reset_defaults(void)
 static void s_click(void)
 {
     unsigned char mx, my, r;
+#ifdef GB_PREEMPTIVE
+    if (picker_state != PICK_IDLE) return;
+#endif
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
     mx = gb_mx(); my = gb_my();
     for (r = 0; r < NROWS; r++) {
@@ -1175,6 +1434,9 @@ static void s_click(void)
 
 static void s_drag(void)
 {
+#ifdef GB_PREEMPTIVE
+    if (picker_state != PICK_IDLE) return;
+#endif
     win_x = gb_wm_x(); win_y = gb_wm_y();
     if (gb_drag_window(&win_x, &win_y, gb_wm_w(), gb_wm_h())) {
         gb_wm_setpos(win_x, win_y);
@@ -1184,6 +1446,12 @@ static void s_drag(void)
 
 static void s_frame(void)
 {
+#ifdef GB_PREEMPTIVE
+    if (picker_state != PICK_IDLE) {
+        picker_step();
+        return;
+    }
+#endif
     if (!titlebar_repaint) return;
     titlebar_repaint = 0;
     /* Lower windows repaint first, and icon blits are not damage-clipped. Repaint
@@ -1192,13 +1460,21 @@ static void s_frame(void)
     gb_restore_parent();
 }
 
+static void s_close(void)
+{
+#ifdef GB_PREEMPTIVE
+    picker_cancel();
+#endif
+    gb_wm_close();
+}
+
 static void s_proc(void)
 {
     switch (gb_msg.type) {
         case GB_MSG_DRAW:  s_draw();      break;
         case GB_MSG_CLICK: s_click();     break;
         case GB_MSG_FRAME: s_frame();     break;
-        case GB_MSG_CLOSE: gb_wm_close(); break;
+        case GB_MSG_CLOSE: s_close();     break;
         case GB_MSG_DRAG:  s_drag();      break;
     }
 }

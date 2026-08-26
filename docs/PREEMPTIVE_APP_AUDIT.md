@@ -40,12 +40,12 @@ kernel work into a worker would make the system unsafe rather than preemptible.
 | Priority | Area | Result |
 |---|---|---|
 | P0 | File Manager | Copy, directory preparation, and APP-icon probing are bounded root jobs. |
-| P0 | Settings | Needs bounded asset enumeration and careful modal/I/O lifecycle. |
+| P0 | Settings | Asset enumeration and icon-set validation are bounded root jobs; modal/I/O lifecycle needs cross-target validation. |
 | P0 | Screensavers | Several are already frame-bounded; five need incremental generation. |
 | P1 | BASIC and Paint | Mostly cooperative already, but long individual operations need bounds. |
 | P1 | Browser, WGET, Telnet, Shell | Network/storage stays root-owned and must advance in bounded chunks. |
 | P1 | Viewer, Notepad, Icon Editor, Mahjong | Root-owned; measure and split their longest operations where needed. |
-| P2 | Small utilities and diagnostics | Mostly ready after lifecycle smoke tests. |
+| P2 | Clock and small utilities | Clock is already bounded; remaining utilities need lifecycle smoke tests. |
 
 ## P0: File Manager
 
@@ -66,6 +66,8 @@ Implemented:
 - directory scans process at most four entries per frame and insert each entry
   directly into the sorted display order;
 - the free-space query runs as a separate frame step after enumeration;
+- opening a drive or directory leaves the existing screen intact during the
+  scan and publishes the completed title and listing in one window repaint;
 - embedded `.APP` icons are probed and drawn one visible slot per frame through
   `GBAPICK.MOD`; repaint callbacks perform no storage I/O;
 - cooperative builds retain the original synchronous copy path.
@@ -104,11 +106,21 @@ Classification: **root-owned modal UI with bounded enumeration**. Settings
 calls configuration storage, paged modules, live asset reload, palette changes,
 and window-manager services, so it is not a worker candidate.
 
-Current risks:
+Implemented:
 
-- asset pickers synchronously enumerate one or more drives before opening;
-- icon-set enumeration additionally loads every candidate `.IST` to validate
-  its slot count;
+- selecting an asset or screensaver redraws only that selector as `Reading...`
+  and returns to the managed-window frame loop;
+- root-directory discovery and asset enumeration process at most four entries
+  per frame across every available drive;
+- icon-set pickers validate at most one `.IST` candidate per frame after the
+  directory cursor is no longer needed;
+- the completed list is handed to the existing modal popup, preserving the
+  established selection, persistence, and live-reload behavior;
+- closing Settings during enumeration restores the previous drive and releases
+  the shared storage claim; cooperative builds retain synchronous enumeration.
+
+Remaining risks:
+
 - every `cfg_set()` rewrites `GEOBENCH.CFG` immediately;
 - screensaver configuration modules and live titlebar/gadget/backdrop reloads
   execute atomically;
@@ -117,12 +129,11 @@ Current risks:
 
 Required work:
 
-1. Add an app-owned picker-enumeration job and a small `Reading...` state.
-2. Scan one bounded directory unit per frame; validate at most one icon set per
-   step.
-3. Keep configuration writes and live reload calls on root, but make the UI
+1. Validate picker cancellation and empty/missing asset directories on every
+   target and storage backend.
+2. Keep configuration writes and live reload calls on root, but make the UI
    explicit about the short commit operation and prevent re-entry.
-4. Audit every modal exit, including ESC, missing module, disk error, and close,
+3. Audit every modal exit, including ESC, missing module, disk error, and close,
    for cursor, modal, drive, palette, and repaint restoration.
 
 Acceptance tests:
@@ -163,6 +174,25 @@ All savers also need a common lifecycle test: launch-click suppression, keyboard
 and mouse wake, palette/border restoration, fullscreen reset, and immediate
 desktop repaint. The repeated keyboard-buffer drain loops are finite, but should
 be covered by held-key tests on MSX2.
+
+## P2: Clock
+
+Classification: **root-owned bounded renderer; no worker required**.
+
+- the focused-frame callback performs one time read and updates only when the
+  displayed minute or second changes;
+- a tick erases and redraws at most three hands plus the short digital readout;
+- the Set Time form polls once per frame through the shared modal lifecycle and
+  commits through the target clock service only after acceptance;
+- full face construction is a fixed 30-segment rim plus 12 ticks and occurs only
+  on launch, resize, fullscreen changes, or damage repaint;
+- no Clock path performs filesystem, module, or network I/O, and no pure compute
+  workload exists that would benefit from an app worker.
+
+Required validation: set the time and cancel the dialog on CPC, MSX, and PCW;
+toggle seconds, resize, enter/leave fullscreen, obscure/reveal the window, and
+close from each state. Adding a worker or resident scheduler hook is explicitly
+out of scope unless those bounded operations show measurable input latency.
 
 ## P1: Companion applications
 
@@ -226,7 +256,7 @@ kernel drawing, file I/O, or `gb_copybuf` users into a worker.
 
 1. Validate the implemented File Manager copy, progressive directory scan, and
    queued APP-icon probing across all storage backends.
-2. Settings progressive picker enumeration and modal cleanup audit.
+2. Validate Settings progressive picker enumeration and finish its modal cleanup audit.
 3. Incremental DECO, MOUNTAIN, FOREST, TRUCHET, and HELIX generation.
 4. Screensaver timing and lifecycle matrix across CPC, MSX2, and PCW.
 5. GB-BASIC worst-statement tests and any required resumable statements.

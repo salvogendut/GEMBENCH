@@ -157,10 +157,17 @@ and titled `Copying`; closing it cancels the operation and removes the partial
 file. Other File Manager instances suspend storage actions while the job owns
 the shared transfer context. Directory scans process at most four entries per
 frame and insertion-order entries as they arrive; the free-space query is a
-separate frame step. Repaint callbacks use generic APP placeholders and perform
-no storage I/O. `GBAPICK.MOD` then probes and draws at most one visible embedded
-APP icon per frame. Normal cooperative builds retain their original synchronous
-File Manager path.
+separate frame step. The completed title and listing are published together in
+one repaint; partial scan state is never exposed. Repaint callbacks use generic
+APP placeholders and perform no storage I/O. `GBAPICK.MOD` then probes and draws
+at most one visible embedded APP icon per frame. Normal cooperative builds retain
+their original synchronous File Manager path.
+
+Settings asset and screensaver pickers also remain root-owned. In preemptive
+images they discover asset directories and enumerate at most four entries per
+frame, then validate at most one icon set per frame before opening the existing
+modal popup. A shared storage claim covers the job and is released on completion
+or window close; normal images retain the synchronous picker path.
 
 The MSX2 rotation and lifecycle checks run without a GUI:
 

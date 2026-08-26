@@ -266,7 +266,15 @@ static void cfg_save_view(void)
    offset; disp_total = the real entries plus it. Display position 0 is "..", the
    rest map to sorted real index (pos - up_avail). */
 static unsigned char up_avail(void);     /* defined after fm_path */
-static unsigned char disp_total(void) { return (unsigned char)(total + up_avail()); }
+static unsigned char disp_total(void)
+{
+#ifdef GB_PREEMPTIVE
+    /* Directory entries are built in-place over several frames. Do not expose a
+       half-built list if unrelated WM damage repaints us before publication. */
+    if (list_state) return 0;
+#endif
+    return (unsigned char)(total + up_avail());
+}
 
 /* scroll model: lines (rows in list, grid rows in icons) and how many are visible */
 static unsigned char total_lines(void)
@@ -700,8 +708,9 @@ static void draw(void);
    small directory batch per frame. LIST_WAIT serialises File Manager storage jobs
    without stealing another window's claim. Each new entry is inserted directly
    into the sorted permutation, eliminating the old second full sort pass. The
-   collected list is published only when complete: painting every batch made the
-   window visibly flash and repeatedly moved entries as sorting progressed. */
+   collected list is published only when complete. The existing desktop/window is
+   left intact while scanning, avoiding an empty Reading paint followed by another
+   full repaint and preventing entries moving visibly as sorting progresses. */
 static void list_start(void)
 {
     total = 0; top = 0; nsel = 0; free_known = 0;
@@ -726,8 +735,7 @@ static void list_step(void)
         gb_drop_release();
         list_state = LIST_IDLE;
         win_title();
-        /* Publish the completed listing in one repaint. A title-only damage
-           rectangle updates the name but clips fm_draw's entire body. */
+        /* Publish the completed title and listing together in one repaint. */
         gb_wm_damage(win_x, win_y, win_w, win_h);
         gb_restore_parent();
         return;
@@ -944,7 +952,6 @@ static void relist(void)
 {
 #ifdef GB_PREEMPTIVE
     list_start();
-    gb_restore_parent();
 #else
     build_list();              /* stream + sort the directory (sets total) (#118) */
     free_known = gb_fs_free_kib(&free_kib);
@@ -1419,7 +1426,7 @@ void main(void)
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
 #ifdef GB_PREEMPTIVE
     fmmw.title = title_buf;
-    list_start();                /* progressive scan begins after the first paint */
+    list_start();                /* scan first; list_step publishes one complete paint */
 #else
     build_list();                /* stream + sort the directory (sets total) (#118) */
     free_known = gb_fs_free_kib(&free_kib);
@@ -1427,7 +1434,12 @@ void main(void)
     clamp_top();
     fmmw.title = win_title();    /* build "<drive><path>" before the first paint (#146) */
 #endif
+#ifdef GB_PREEMPTIVE
+    /* k_wm_managed already clipped the unpublished window. Keep the desktop as-is
+       until list_step can paint the completed window once. */
+#else
     gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8); /* opening one FM can expose older stacked FM
                                                   windows outside the new window's damage rect */
     gb_restore_parent();         /* first paint: WM chrome + fm_draw */
+#endif
 }
