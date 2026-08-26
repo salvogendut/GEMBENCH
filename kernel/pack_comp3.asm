@@ -3,7 +3,8 @@
 ;; Pass 3: the remaining xscreensaver ports. CATCLK moved to the extended
 ;; EXTRAS.DSK when configurable XMatrix outgrew the CF2 free space (#404);
 ;; HELIX joined it when MOUNTAIN gained its same-stem configuration module
-;; (#446).
+;; (#446), and FOREST moved after incremental generation added an explicit
+;; recursion stack (#477).
                 org   #4000
 mun_img         incbin "../build/MUNCH.RAW"     ; munching squares (xscreensaver port)
 mun_imgend
@@ -23,6 +24,3 @@ lgt_imgend
 pyr_img         incbin "../build/PYRO.RAW"      ; fireworks
 pyr_imgend
                 save  "PYRO.SAV",pyr_img,pyr_imgend-pyr_img,DSK,"build/companion.dsk"
-for_img         incbin "../build/FOREST.RAW"    ; fractal trees
-for_imgend
-                save  "FOREST.SAV",for_img,for_imgend-for_img,DSK,"build/companion.dsk"

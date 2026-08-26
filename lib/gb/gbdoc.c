@@ -21,6 +21,32 @@ static unsigned char   g_want;       /* 0 = none, else (title index + 1) to drop
 static char            g_name[11];   /* current file's 8.3 name (Load/Save As update it) */
 static void set_name(const char *n11);
 
+#define DOC_AFTER_NONE    0
+#define DOC_AFTER_NEW     1
+#define DOC_AFTER_LOAD    2
+#define DOC_AFTER_CLOSE   3
+
+#ifdef GBDOC_BOUNDED_IO
+/* Notepad's bounded document job is app-linked and keeps its state in the
+ * consumed executable-icon payload. This leaves both resident kernel memory
+ * and the app's nearly full data page unchanged. */
+#define DOC_IO_IDLE       0
+#define DOC_IO_LOAD       1
+#define DOC_IO_SAVE       2
+#define DOC_IO_CHUNK      512
+#define DOC_IO_STATE      (*(volatile unsigned char *)0x4084)
+#define DOC_IO_AFTER      (*(volatile unsigned char *)0x4085)
+#define DOC_IO_CREATED    (*(volatile unsigned char *)0x4086)
+#define DOC_IO_LAUNCH     (*(volatile unsigned char *)0x4087)
+#define DOC_IO_OFF        (*(volatile unsigned int *)0x4088)
+#define DOC_IO_TOTAL      (*(volatile unsigned int *)0x408A)
+#define FS_LOAD_OFS       ((volatile unsigned char *)0x144C)
+#define FS_XFLAGS         (*(volatile unsigned char *)0x144F)
+
+static void do_new_now(void);
+static void do_load_now(void);
+#endif
+
 static const char     *g_label[DOC_MAXTITLES];
 static const char *const *g_items[DOC_MAXTITLES];
 static unsigned char   g_nitems[DOC_MAXTITLES];
@@ -147,6 +173,12 @@ void gb_doc(const gb_doc_t *d)
     }
     rebuild();
     gb_get_name(g_name);              /* adopt the file we were launched with */
+#ifdef GBDOC_BOUNDED_IO
+    DOC_IO_STATE = DOC_IO_IDLE;
+    DOC_IO_AFTER = DOC_AFTER_NONE;
+    DOC_IO_CREATED = 0;
+    DOC_IO_LAUNCH = (unsigned char)(g_name[0] != 0 && g_name[0] != ' ');
+#endif
     if (g_name[0] == 0 || g_name[0] == ' ') set_name("UNTITLED   ");
 }
 
@@ -182,6 +214,9 @@ unsigned char gb_doc_event(void)
 {
     unsigned char i, col;
     if (gb_msg.type != GB_MSG_MENU) return 0;
+#ifdef GBDOC_BOUNDED_IO
+    if (DOC_IO_STATE != DOC_IO_IDLE) return 1;
+#endif
     if (gb_modal()) { gb_popup_close(); return 1; }  /* a dropdown is up: re-clicking the title
                                           closes it. The kernel ate this bar click before the popup
                                           loop could see it as a click-away, so signal it. (#142) */
@@ -196,7 +231,11 @@ unsigned char gb_doc_event(void)
 /* --- the standard File actions ------------------------------------------- */
 
 #ifndef GBDOC_RO
+#ifdef GBDOC_BOUNDED_IO
+static unsigned char do_save(unsigned char after);
+#else
 static void do_save(void);
+#endif
 #ifdef GBUI_APPICON_PICKER
 extern unsigned char gb_doc_stream_save(unsigned int len);
 #endif
@@ -206,22 +245,239 @@ extern unsigned char gb_doc_stream_save(unsigned int len);
 extern unsigned int gb_doc_stream_load(void);
 #endif
 
-/* confirm_save: if the document is dirty, ask. -> 1 = go ahead (saved or
- * discarded), 0 = cancel the operation. */
-static unsigned char confirm_save(void)
+#ifdef GBDOC_BOUNDED_IO
+#ifdef GBUI_APPICON_PICKER
+/* ICONED retains files in a borrowed 16 KiB page. Its low-RAM document buffer
+ * is only a staging area, so bounded I/O asks the app to move each chunk to or
+ * from that page. These hooks are private to the one picker-enabled document
+ * app and deliberately do not grow gb_doc_t for every other application. */
+extern unsigned char gb_doc_stream_write(unsigned int off, unsigned int len);
+extern unsigned char gb_doc_stream_read(unsigned int off, unsigned int len);
+extern void gb_doc_stream_saved(unsigned char ok);
+extern void gb_doc_stream_close(void);
+#endif
+
+static unsigned char doc_io_claim(void)
+{
+    if (gb_drop_claimed()) {
+        gb_alert("Storage busy", "Try again shortly.");
+        return 0;
+    }
+    gb_drop_claim();
+    return 1;
+}
+
+static unsigned char doc_io_start_load(unsigned char after)
+{
+    if (!doc_io_claim()) return 0;
+    DOC_IO_OFF = 0;
+    DOC_IO_AFTER = after;
+    DOC_IO_CREATED = 0;
+    DOC_IO_STATE = DOC_IO_LOAD;
+    return 1;
+}
+
+#ifndef GBDOC_RO
+static unsigned char doc_io_start_save(unsigned char after)
+{
+    if (!doc_io_claim()) return 0;
+    DOC_IO_OFF = 0;
+    DOC_IO_AFTER = after;
+    DOC_IO_CREATED = 0;
+    DOC_IO_TOTAL = g_doc->on_save();
+    DOC_IO_STATE = DOC_IO_SAVE;
+    return 1;
+}
+#endif
+
+static void doc_io_remove_partial(void)
+{
+    if (DOC_IO_STATE == DOC_IO_SAVE && DOC_IO_CREATED) {
+        FS_XFLAGS = 0;
+        gb_set_name(g_name);
+        gb_file_delete(g_name);
+    }
+}
+
+static void doc_io_cancel(void)
+{
+    doc_io_remove_partial();
+#ifndef GBDOC_RO
+    if (DOC_IO_STATE == DOC_IO_SAVE) {
+#ifdef GBUI_APPICON_PICKER
+        gb_doc_stream_saved(0);
+#endif
+        if (g_doc->on_saved) g_doc->on_saved();
+    }
+#endif
+    FS_XFLAGS = 0;
+    gb_drop_release();
+    DOC_IO_STATE = DOC_IO_IDLE;
+    DOC_IO_AFTER = DOC_AFTER_NONE;
+    DOC_IO_CREATED = 0;
+}
+
+static unsigned char doc_io_finish(unsigned char ok)
+{
+    unsigned char kind = DOC_IO_STATE;
+    unsigned char after = ok ? DOC_IO_AFTER : DOC_AFTER_NONE;
+    unsigned int total = DOC_IO_OFF;
+
+    if (!ok) doc_io_remove_partial();
+    FS_XFLAGS = 0;
+    gb_drop_release();
+    DOC_IO_STATE = DOC_IO_IDLE;
+    DOC_IO_AFTER = DOC_AFTER_NONE;
+    DOC_IO_CREATED = 0;
+
+    if (kind == DOC_IO_LOAD) {
+        if (g_doc->on_open) g_doc->on_open(total);
+        g_dirty = 0;
+    } else {
+#ifndef GBDOC_RO
+#ifdef GBUI_APPICON_PICKER
+        gb_doc_stream_saved(ok);
+#endif
+        if (g_doc->on_saved) g_doc->on_saved();
+        if (ok) g_dirty = 0;
+#endif
+        if (!ok) gb_alert("Save failed", "Disk full or write error");
+    }
+
+    if (after == DOC_AFTER_NEW) do_new_now();
+    else if (after == DOC_AFTER_LOAD) do_load_now();
+    else if (after == DOC_AFTER_CLOSE) {
+#ifdef GBUI_APPICON_PICKER
+        gb_doc_stream_close();
+#endif
+        gb_wm_close();
+    }
+    return 3;
+}
+
+static unsigned char doc_io_step(void)
+{
+    unsigned int left, take, got;
+
+    gb_set_name(g_name);
+    if (DOC_IO_STATE == DOC_IO_LOAD) {
+#ifdef GBUI_APPICON_PICKER
+        if (DOC_IO_OFF >= 0x4000) return doc_io_finish(1);
+        left = (unsigned int)(0x4000 - DOC_IO_OFF);
+#else
+        if (DOC_IO_OFF >= g_doc->bufmax) return doc_io_finish(1);
+        left = (unsigned int)(g_doc->bufmax - DOC_IO_OFF);
+#endif
+        take = left > DOC_IO_CHUNK ? DOC_IO_CHUNK : left;
+        FS_LOAD_OFS[0] = (unsigned char)DOC_IO_OFF;
+        FS_LOAD_OFS[1] = (unsigned char)(DOC_IO_OFF >> 8);
+        FS_LOAD_OFS[2] = 0;
+        FS_XFLAGS = 0x01;
+#ifdef GBUI_APPICON_PICKER
+        got = gb_fs_load(g_doc->buf, take);
+#else
+        got = gb_fs_load(g_doc->buf + DOC_IO_OFF, take);
+#endif
+        FS_XFLAGS = 0;
+        if (got > take) got = take;
+#ifdef GBUI_APPICON_PICKER
+        if (got && !gb_doc_stream_write(DOC_IO_OFF, got))
+            return doc_io_finish(0);
+#endif
+        DOC_IO_OFF = (unsigned int)(DOC_IO_OFF + got);
+        if (got < take) return doc_io_finish(1);
+#ifdef GBUI_APPICON_PICKER
+        if (DOC_IO_OFF >= 0x4000) return doc_io_finish(1);
+#else
+        if (DOC_IO_OFF >= g_doc->bufmax) return doc_io_finish(1);
+#endif
+        return 0;
+    }
+
+#ifndef GBDOC_RO
+    if (DOC_IO_CREATED && DOC_IO_OFF >= DOC_IO_TOTAL) return doc_io_finish(1);
+    left = (unsigned int)(DOC_IO_TOTAL - DOC_IO_OFF);
+    take = left > DOC_IO_CHUNK ? DOC_IO_CHUNK : left;
+#ifdef GBUI_APPICON_PICKER
+    if (!gb_doc_stream_read(DOC_IO_OFF, take)) return doc_io_finish(0);
+#endif
+    FS_XFLAGS = DOC_IO_CREATED ? 0x06 : 0x04;
+    DOC_IO_CREATED = 1;
+    if (!gb_fs_save(
+#ifdef GBUI_APPICON_PICKER
+                    g_doc->buf,
+#else
+                    g_doc->buf + DOC_IO_OFF,
+#endif
+                    take)) {
+        FS_XFLAGS = 0;
+        return doc_io_finish(0);
+    }
+    FS_XFLAGS = 0;
+    DOC_IO_OFF = (unsigned int)(DOC_IO_OFF + take);
+    if (DOC_IO_OFF >= DOC_IO_TOTAL) return doc_io_finish(1);
+#endif
+    return 0;
+}
+
+unsigned char gb_doc_startup_load(void)
+{
+    if (!DOC_IO_LAUNCH) return 0;
+    DOC_IO_LAUNCH = 0;
+    return doc_io_start_load(DOC_AFTER_NONE);
+}
+
+unsigned char gb_doc_busy(void) { return DOC_IO_STATE; }
+#endif
+
+/* confirm_save: if the document is dirty, ask. */
+#ifdef GBDOC_BOUNDED_IO
+static unsigned char confirm_save(unsigned char after)
 {
 #ifdef GBDOC_RO
+    (void)after;
     return 1;                                        /* read-only: never dirty, nothing to save */
 #else
     unsigned char sel;
     if (!g_dirty) return 1;
     sel = gb_popup(28, 90, confirm_items, 3);
-    if (sel == 0) { do_save(); return 1; }           /* Save */
+    if (sel == 0) {
+        return do_save(after) ? 2 : 0;               /* Save, then continue asynchronously */
+    }
     if (sel == 1) return 1;                          /* Don't Save */
     return 0;                                        /* Cancel / ESC */
 #endif
 }
+#else
+static unsigned char confirm_save(void)
+{
+#ifdef GBDOC_RO
+    return 1;
+#else
+    unsigned char sel;
+    if (!g_dirty) return 1;
+    sel = gb_popup(28, 90, confirm_items, 3);
+    if (sel == 0) { do_save(); return 1; }
+    if (sel == 1) return 1;
+    return 0;
+#endif
+}
+#endif
 
+#ifdef GBDOC_BOUNDED_IO
+static void do_new_now(void)
+{
+    set_name("UNTITLED   ");
+    if (g_doc->on_new) g_doc->on_new();
+    g_dirty = 0;
+}
+
+static void do_new(void)
+{
+    if (confirm_save(DOC_AFTER_NEW) != 1) return;
+    do_new_now();
+}
+#else
 static void do_new(void)
 {
     if (!confirm_save()) return;
@@ -229,16 +485,51 @@ static void do_new(void)
     if (g_doc->on_new) g_doc->on_new();
     g_dirty = 0;
 }
+#endif
 
 /* do_load: the shared navigable file chooser (gbpick), then open the choice from
  * its directory. The picker leaves the FS positioned in the chosen folder. */
+#ifdef GBDOC_BOUNDED_IO
+static void do_load_now(void)
+{
+    char nm[11];
+    if (gb_drop_claimed()) {
+        gb_alert("Storage busy", "Try again shortly.");
+        return;
+    }
+    if (!gb_pickfile(nm, g_doc->exts)) return;     /* filtered to the app's file types */
+    set_name(nm);                                  /* chosen file -> current file */
+#ifdef GBDOC_RO
+    if (g_doc->flags & GB_DOC_OPEN_OWNS_LOAD) {
+        if (g_doc->on_open) g_doc->on_open(0);
+        g_dirty = 0;
+        return;
+    }
+#endif
+    doc_io_start_load(DOC_AFTER_NONE);
+}
+
+static void do_load(void)
+{
+    if (!(g_doc->flags & GB_DOC_LOAD_NOCONFIRM) &&
+        confirm_save(DOC_AFTER_LOAD) != 1) return;
+    do_load_now();
+}
+#else
 static void do_load(void)
 {
     char nm[11];
     unsigned int len;
     if (!(g_doc->flags & GB_DOC_LOAD_NOCONFIRM) && !confirm_save()) return;
-    if (!gb_pickfile(nm, g_doc->exts)) return;     /* filtered to the app's file types */
-    set_name(nm);                                  /* chosen file -> current file */
+    if (!gb_pickfile(nm, g_doc->exts)) return;
+    set_name(nm);
+#ifdef GBDOC_RO
+    if (g_doc->flags & GB_DOC_OPEN_OWNS_LOAD) {
+        if (g_doc->on_open) g_doc->on_open(0);
+        g_dirty = 0;
+        return;
+    }
+#endif
 #ifdef GBUI_APPICON_PICKER
     len = gb_doc_stream_load();
 #else
@@ -247,8 +538,15 @@ static void do_load(void)
     if (g_doc->on_open) g_doc->on_open(len);
     g_dirty = 0;
 }
+#endif
 
 #ifndef GBDOC_RO       /* Save / Save As are omitted entirely in a read-only doc (#144) */
+#ifdef GBDOC_BOUNDED_IO
+static unsigned char do_save(unsigned char after)
+{
+    return doc_io_start_save(after);
+}
+#else
 static void do_save(void)
 {
     unsigned int n  = g_doc->on_save();
@@ -260,15 +558,26 @@ static void do_save(void)
     if (g_doc->on_saved) g_doc->on_saved();          /* restore buf if on_save transformed it */
     if (ok) g_dirty = 0;
 }
+#endif
 
 static char namebuf[16];
 static void do_saveas(void)
 {
+#ifdef GBDOC_BOUNDED_IO
+    if (gb_drop_claimed()) {
+        gb_alert("Storage busy", "Try again shortly.");
+        return;
+    }
+#endif
     if (!gb_pickdir(g_doc->exts)) return;          /* navigate to the destination dir */
     if (!gb_prompt("Save as:", namebuf, 12)) return;
     to_83(namebuf);
     set_name(name83);
-    do_save();                                     /* writes into the navigated dir */
+#ifdef GBDOC_BOUNDED_IO
+    do_save(DOC_AFTER_NONE);                       /* writes into the navigated dir */
+#else
+    do_save();
+#endif
 }
 #endif
 
@@ -280,7 +589,11 @@ static void file_action(unsigned char sel)
     if      (a == 0) do_new();
     else if (a == 1) do_load();
 #ifndef GBDOC_RO
+#ifdef GBDOC_BOUNDED_IO
+    else if (a == 2) do_save(DOC_AFTER_NONE);
+#else
     else if (a == 2) do_save();
+#endif
     else if (a == 3) do_saveas();
 #endif
     else if (a == 4) { if (g_doc->on_export) g_doc->on_export(); }   /* the optional export */
@@ -291,6 +604,9 @@ static void file_action(unsigned char sel)
 unsigned char gb_doc_frame(void)
 {
     unsigned char t, sel;
+#ifdef GBDOC_BOUNDED_IO
+    if (DOC_IO_STATE != DOC_IO_IDLE) return doc_io_step();
+#endif
     /* the maximize gadget is now a WINDOWED maximize handled in the kernel (mwf_max), separate
        from the borderless fullscreen below - it no longer routes through here. */
 #ifdef GBDOC_RO
@@ -329,4 +645,12 @@ unsigned char gb_doc_frame(void)
 
 /* gb_doc_close: the window close gadget was hit - offer to save first. 1 = go
  * ahead and close, 0 = stay open (user cancelled). */
-unsigned char gb_doc_close(void) { return confirm_save(); }
+unsigned char gb_doc_close(void)
+{
+#ifdef GBDOC_BOUNDED_IO
+    if (DOC_IO_STATE != DOC_IO_IDLE) { doc_io_cancel(); return 1; }
+    return (unsigned char)(confirm_save(DOC_AFTER_CLOSE) == 1);
+#else
+    return confirm_save();
+#endif
+}

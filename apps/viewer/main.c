@@ -1,33 +1,16 @@
-/* viewer - GEOBENCH text + .PIC viewer, a KERNEL-MANAGED window (#146).
+/* viewer - GEOBENCH .PIC image viewer, a KERNEL-MANAGED window (#146).
  *
  * The WM owns the chrome (frame, title, close, drag, resize): the viewer registers
  * a gb_mwin_t and provides only content (on_draw) + the gb_doc menus (File>Load,
  * View>Fullscreen). It reads its live rect with gb_wm_x/y/w/h and asks the WM to
- * repaint with gb_restore_parent. Binary files load fine too - they show as
- * gibberish, so this doubles as a quick "peek" at anything on the disk. */
+ * repaint with gb_restore_parent. Text belongs to NOTEPAD.APP; the File Manager
+ * routes only .PIC files here. A picture normally uses the kernel's fast banked
+ * cache. If another Viewer owns all remaining banks, rows are read from disk in
+ * bounded chunks instead of rejecting the picture. */
 #include "gb.h"
 
-#if defined(GB_MSX2) || defined(GB_PCW)
-#define VIEW_MAX  5184    /* leave room for portable-PIC fallback conversion */
-#else
-#define VIEW_MAX  5696    /* in-page text/fallback buffer. Pictures use
-                             the banked buffer on
-                             GBALB/ROM (#164) - so where a spare bank exists this is just the
-                             TEXT buffer; it's the picture fallback only with no free bank (bare
-                             128K). The shared 16-bit scrollbars trade 304 bytes of this fallback
-                             buffer for reusable large-document controls. */
-#endif
-#define TX_COL    (unsigned char)(win_x + 2)
+#define VIEW_MAX  4608    /* 18 maximum-width Screen-7 rows per streamed read */
 #define TX_Y0     (unsigned char)(win_y + 12)
-#define LINE_H    11
-#define MAX_LINES ((win_h - 16) / LINE_H)
-#define WRAP      ((win_w - 9) * 2 / 3)
-/* line[] holds WRAP chars + a NUL. On the CPC's 80-col screen WRAP <= 47, so 48
-   fits; but both MSX2 bitmap modes reach GB_COLS=128, where WRAP reaches (128-9)*2/3 =
-   79 - which overran this 48-byte buffer and corrupted memory, hanging the viewer
-   the instant it drew text (#287). The viewer's page has no room to grow line[],
-   so render() hard-caps the wrap at MAXWRAP-1 instead (MSX text wraps a little
-   narrower than the window, but never overflows). */
 #define MAXWRAP   48
 
 #define DEF_X     2
@@ -47,6 +30,7 @@ static unsigned char win_x, win_y, win_w, win_h;   /* refreshed from the WM each
 static char vtitle[14];                            /* "NAME.EXT" - the WM draws it */
 static unsigned char opened;                       /* 0 -> the next frame sizes to a picture */
 static unsigned char loaded;                       /* 0 until the file is read (blank, no msg) */
+static unsigned char my_drive;                     /* source drive for streamed redraws */
 
 /* fmt83: 11-byte 8.3 name -> "NAME.EXT". */
 static void fmt83(char *dst, const char *n11)
@@ -58,21 +42,6 @@ static void fmt83(char *dst, const char *n11)
         for (i = 8; i < 11 && n11[i] != ' '; i++) dst[j++] = n11[i];
     }
     dst[j] = 0;
-}
-
-static void render(unsigned int n)
-{
-    unsigned int i = 0;
-    unsigned char row = 0, col = 0, c;
-    while (i < n && row < MAX_LINES) {
-        c = filebuf[i++];
-        if (c == '\r') continue;
-        if (c == '\n') { line[col] = 0; gb_text(TX_COL, TX_Y0 + row * LINE_H, line); row++; col = 0; continue; }
-        if (c < 32) continue;
-        line[col++] = c;
-        if (col == WRAP || col >= MAXWRAP - 1) { line[col] = 0; gb_text(TX_COL, TX_Y0 + row * LINE_H, line); row++; col = 0; }
-    }
-    if (col > 0 && row < MAX_LINES) { line[col] = 0; gb_text(TX_COL, TX_Y0 + row * LINE_H, line); }
 }
 
 static unsigned char pic_wb;
@@ -90,8 +59,8 @@ static unsigned int  scroll_y;                         /* top visible picture ro
 static unsigned char scroll_x;                         /* left visible picture byte column */
 static unsigned char view_x, view_y, view_w, view_h, view_vsb, view_hsb;
 static unsigned char hbar_x, hbar_y, hbar_w;
-static unsigned char pic_toobig;                       /* 1 = .PIC too big for the in-page buffer and
-                                                          no spare RAM bank -> show a message, not blank */
+static unsigned char streamed;                         /* no bank: read visible source rows on demand */
+static unsigned char invalid_pic;                      /* malformed or unsupported .PIC */
 #define PIC_PAGE_K (*(volatile unsigned char *)0x130B) /* the kernel's single "active pic bank";
                                                           re-select OURS before each blit/close so
                                                           a second Viewer window can't steal it (#164) */
@@ -107,6 +76,11 @@ static unsigned char pic_toobig;                       /* 1 = .PIC too big for t
 #define PIC_OFF_K (*(volatile unsigned char *)0x130F)
 #define UI_MODAL_K (*(volatile unsigned char *)0x1705)
 #define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
+#define FS_LOAD_OFS   ((volatile unsigned char *)0x144C)
+#define FS_XFLAGS     (*(volatile unsigned char *)0x144F)
+#ifdef GB_MSX2
+#define MSX_SCRMOD    (*(volatile unsigned char *)0xFCAF)
+#endif
 
 static void select_banked_picture(void)
 {
@@ -126,7 +100,7 @@ static unsigned char is_pic(void)
         filebuf[0] == 'G' && filebuf[1] == 'B' && filebuf[2] == 'P' && filebuf[3] == 'C');
 }
 static unsigned char is_pic_name(const char *n);   /* fwd: defined with the cycling code below */
-static unsigned char have_pic(void) { return (unsigned char)(banked || is_pic() || pic_toobig); }
+static unsigned char have_pic(void) { return (unsigned char)(banked || streamed); }
 
 /* Pictures can be larger than the visible content area; resize stays free and the
    scrollbars expose the rest. */
@@ -135,49 +109,60 @@ static void pic_floor(void)
     rmin_w = MIN_W;
     rmin_h = MIN_H;
 }
-static void parse_pic(void)
+static unsigned char parse_pic(void)
 {
     if ((unsigned char)filebuf[4] == 2) {
-        unsigned int w;
+        unsigned int w, h;
         pic_mode = (unsigned char)filebuf[5];
 #ifdef GB_MSX2
         if (pic_mode == 7) {
-            /* Screen-7 pictures require the banked kernel path: gb_restorerect
-               intentionally retains the compact four-pen UI-buffer contract. */
-            pic_toobig = 1;
-            pic_wb = 26; pic_h = 32; pic_off = 0;
-            pic_stride = 0;
-            pic_floor();
-            return;
+            if (MSX_SCRMOD != 7) return 0;
         }
+#else
+        if (pic_mode == 7) return 0;
 #endif
-#if defined(GB_MSX2) || defined(GB_PCW)
-        if (pic_mode != 1) {
-            pic_toobig = 1;
-            pic_wb = 26; pic_h = 32; pic_off = 0; pic_stride = 0;
-            pic_floor();
-            return;
-        }
-#endif
+        if (pic_mode != 1 && pic_mode != 7) return 0;
         w = (unsigned char)filebuf[6] | ((unsigned int)(unsigned char)filebuf[7] << 8);
+        h = (unsigned char)filebuf[8] | ((unsigned int)(unsigned char)filebuf[9] << 8);
+        if (!w || w > 512 || !h) return 0;
         pic_wb  = (unsigned char)((w + 3) >> 2);
-        pic_stride = pic_wb;
-        pic_h   = (unsigned char)filebuf[8] | ((unsigned int)(unsigned char)filebuf[9] << 8);
+        pic_stride = (pic_mode == 7) ? (unsigned int)((w + 1) >> 1) : pic_wb;
+        pic_h   = h;
         pic_off = 14;
+        if (pic_h > (unsigned int)(65521U / pic_stride)) return 0;
     } else {
         pic_mode = 1;
         pic_wb  = (unsigned char)filebuf[4];
+        if (!pic_wb || !(unsigned char)filebuf[5]) return 0;
         pic_stride = pic_wb;
         pic_h   = (unsigned char)filebuf[5];
         pic_off = 6;
     }
     pic_floor();
+    return 1;
 }
 
-/* load the opened file: a large .PIC into a borrowed bank (#164, kernels with the pic service),
-   else the in-page filebuf (text, or a small .PIC on plain GBIDE). */
+/* Read a file fragment through the cross-device chunk protocol. Keeping the
+   offset setup here ensures every backend sees the same request and FS_XFLAGS is
+   cleared even after a short/failed read. */
+static unsigned int stream_read(unsigned int off, unsigned int max)
+{
+    unsigned int got;
+    gb_set_drive(my_drive);
+    FS_LOAD_OFS[0] = (unsigned char)off;
+    FS_LOAD_OFS[1] = (unsigned char)(off >> 8);
+    FS_LOAD_OFS[2] = 0;
+    FS_XFLAGS = 1;
+    got = gb_fs_load(filebuf, max);
+    FS_XFLAGS = 0;
+    return got;
+}
+
+/* Load the opened file. Prefer the kernel's banked cache; if its app-pool pages
+   are exhausted, retain only the parsed header and stream visible rows later. */
 static void bank_or_parse(void)
 {
+    char nm[11];
     scroll_y = 0;                                  /* a fresh file starts at the top (#166) */
     scroll_x = 0;
     if (banked) {
@@ -192,13 +177,17 @@ static void bank_or_parse(void)
 #endif
     }  /* free OUR old bank only -
                                                       PIC_PAGE may hold another window's (#164) */
-    banked = gb_pic_open();                        /* open sets PIC_PAGE to the new bank itself */
-    UI_MODAL_K = 0;                                 /* picture loaders reuse #1700; keep menus live */
     banked2 = 0;
 #ifdef GB_MSX2
     banked3 = banked4 = 0;
 #endif
-    pic_toobig = 0;
+    streamed = 0;
+    invalid_pic = 0;
+    gb_get_name(nm);
+    if (!nm[0] || nm[0] == ' ') return;            /* VIEWER.APP opened without a document */
+    gb_set_name(nm);
+    banked = gb_pic_open();                        /* open sets PIC_PAGE to the new bank itself */
+    UI_MODAL_K = 0;                                 /* picture loaders reuse #1700; keep menus live */
     if (banked) {                                  /* in a bank: read the kernel-parsed header */
         banked2 = PIC_PAGE2_K;
 #ifdef GB_MSX2
@@ -211,23 +200,14 @@ static void bank_or_parse(void)
         pic_floor();
         return;
     }
-    filen = gb_fs_load(filebuf, VIEW_MAX);
-    if (is_pic()) { parse_pic(); return; }         /* a .PIC small enough to load in-page */
-    {
-        char nm[11];
-        gb_get_name(nm);                           /* this window's launch name (gb_doc_name isn't
-                                                      set until gb_doc() runs, after us). The AMSDOS
-                                                      reader REFUSES a file bigger than the buffer,
-                                                      so a .PIC that loaded nothing + no spare bank
-                                                      = too big for this machine (#viewer). */
-        if (!filen && is_pic_name(nm)) {
-            pic_toobig = 1;
-            pic_wb = 26; pic_h = 32; pic_off = 0;  /* a small window just for the message */
-            pic_floor();
-            return;
-        }
+    filen = stream_read(0, 14);
+    if (is_pic() && parse_pic()) {
+        streamed = 1;
+        return;
     }
-    rmin_w = MIN_W; rmin_h = MIN_H;
+    invalid_pic = 1;
+    pic_wb = 28; pic_h = 32; pic_off = 0; pic_stride = 0;
+    pic_floor();
 }
 
 static void size_to_pic(void)   /* size the window to the picture, clamped on screen */
@@ -296,12 +276,11 @@ static void calc_view(void)
     } else hbar_w = 0;
 }
 
-/* draw_toobig: the .PIC can't fit the in-page buffer and there was no spare RAM bank, so
-   show a message instead of a blank window (#viewer). */
-static void draw_toobig(void)
+static void draw_invalid(void)
 {
-    gb_text(TX_COL, TX_Y0,                           "Pic not loaded");
-    gb_text(TX_COL, (unsigned char)(TX_Y0 + LINE_H), "Need free banks");
+    gb_text((unsigned char)(win_x + 2), TX_Y0, "Invalid picture");
+    gb_text((unsigned char)(win_x + 2), (unsigned char)(TX_Y0 + 11),
+            "Unsupported format");
 }
 
 #if defined(GB_MSX2) || defined(GB_PCW)
@@ -345,37 +324,64 @@ static void blit_file_row(unsigned char x, unsigned char y, unsigned char w,
 }
 #endif
 
+/* Draw visible rows from the no-bank stream buffer. Reads complete source rows
+   so horizontal scrolling still observes the format stride; each filesystem
+   request is capped by VIEW_MAX and then several rows are blitted from RAM. */
+static void blit_stream(unsigned char x, unsigned char y, unsigned char w,
+                        unsigned char rows)
+{
+    unsigned char batch, i, done = 0;
+    unsigned int want, got, src, xoff;
+    if (!pic_stride) return;
+    batch = (unsigned char)(VIEW_MAX / pic_stride);
+    if (!batch) batch = 1;
+    xoff = (pic_mode == 7) ? (unsigned int)scroll_x * 2U : scroll_x;
+    while (done < rows) {
+        unsigned char take = (unsigned char)(rows - done);
+        if (take > batch) take = batch;
+        want = (unsigned int)take * pic_stride;
+        src = pic_off + (unsigned int)(scroll_y + done) * pic_stride;
+        got = stream_read(src, want);
+        if (got < want) {
+            invalid_pic = 1;
+            streamed = 0;
+            return;
+        }
+        for (i = 0; i < take; i++) {
+            src = (unsigned int)i * pic_stride + xoff;
+#ifdef GB_MSX2
+            if (pic_mode == 7) {
+                gb_pic_edit_buf = (unsigned int)(filebuf + src);
+                gb_pic_edit_off = (unsigned int)x | ((unsigned int)(y + done + i) << 8);
+                FS_SAVE_LEN_K = (unsigned int)w | 0x0100;
+                (void)gb_pic_edit(GB_PICEDIT_NATIVE16);
+            } else {
+                blit_file_row(x, (unsigned char)(y + done + i), w, src);
+            }
+#elif defined(GB_PCW)
+            blit_file_row(x, (unsigned char)(y + done + i), w, src);
+#else
+            gb_restorerect(x, (unsigned char)(y + done + i), w, 1,
+                           (unsigned char *)filebuf + src);
+#endif
+        }
+        done = (unsigned char)(done + take);
+    }
+}
+
 static void blit_pic(unsigned char x, unsigned char y, unsigned char w,
                      unsigned char rows, unsigned int src)
 {
     unsigned char r = 0;
     if (!w || !rows) return;
     if (w == pic_wb && !banked2) {
-        if (banked) { select_banked_picture(); gb_pic_blit(x, y, w, rows, src); }
-        else if (src + (unsigned int)w * rows <= filen) {
-#if defined(GB_MSX2) || defined(GB_PCW)
-            while (r < rows) {
-                blit_file_row(x, (unsigned char)(y + r), w, src);
-                src += pic_stride;
-                r++;
-            }
-#else
-            gb_restorerect(x, y, w, rows, (unsigned char *)filebuf + src);
-#endif
-        }
+        select_banked_picture();
+        gb_pic_blit(x, y, w, rows, src);
         return;
     }
     while (r < rows) {
-        if (banked) {
-            select_banked_picture();
-            gb_pic_blit(x, (unsigned char)(y + r), w, 1, src);
-        } else if (src + w <= filen) {
-#if defined(GB_MSX2) || defined(GB_PCW)
-            blit_file_row(x, (unsigned char)(y + r), w, src);
-#else
-            gb_restorerect(x, (unsigned char)(y + r), w, 1, (unsigned char *)filebuf + src);
-#endif
-        }
+        select_banked_picture();
+        gb_pic_blit(x, (unsigned char)(y + r), w, 1, src);
         src += pic_stride;
         r++;
     }
@@ -385,14 +391,14 @@ static void draw_pic(void)
 {
     unsigned char rows, draw_w;
     unsigned int src, r;
-    if (pic_toobig) { draw_toobig(); return; }
     calc_view();
     if (!view_w || !view_h) return;
     draw_w = (pic_wb - scroll_x > view_w) ? view_w : (unsigned char)(pic_wb - scroll_x);
     r = pic_h - scroll_y; rows = (r > view_h) ? view_h : (unsigned char)r;
     src = pic_off + (unsigned int)scroll_y * pic_stride +
           (pic_mode == 7 ? (unsigned int)scroll_x * 2U : scroll_x);
-    blit_pic(view_x, view_y, draw_w, rows, src);
+    if (streamed) blit_stream(view_x, view_y, draw_w, rows);
+    else          blit_pic(view_x, view_y, draw_w, rows, src);
     if (view_vsb)                                      /* vertical scrollbar at the LEFT edge (#166) */
         gb_vscroll16((unsigned char)(win_x + 1), TX_Y0, SB_W, view_h,
                      scroll_y, pic_h, view_h);
@@ -435,9 +441,9 @@ static void v_draw(void)
         if (loaded && have_pic()) draw_pic();
         return;
     }
-    if (!loaded)           ;   /* still loading, or empty/unreadable -> blank (render(0) is a no-op) */
+    if (!loaded)           ;   /* still loading -> leave the window body blank */
     else if (have_pic())   draw_pic();
-    else                   render(filen);
+    else if (invalid_pic)  draw_invalid();
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#146) */
 }
 
@@ -580,19 +586,29 @@ static void fs_nav(void)
    resize runs after the WM services the window), then run pending menus / fullscreen keys. */
 static void v_frame(void)
 {
+    unsigned char menu;
+    if (*WM_FS) { fs_nav(); return; }           /* fullscreen: cycle images with Space / arrows */
+    menu = gb_doc_frame();
+    if (menu) {
+        if (!opened) {
+            opened = 1;
+            if (have_pic()) size_to_pic();
+        }
+        gb_restore_parent();
+        return;
+    }
     if (!opened) {
         opened = 1;
         if (have_pic()) size_to_pic();
         gb_restore_parent();          /* repaint at the new size */
         return;
     }
-    if (*WM_FS) { fs_nav(); return; }           /* fullscreen: cycle images with Space / arrows */
-    if (gb_doc_frame()) gb_restore_parent();    /* windowed: a menu ran (or the 'F' shortcut) */
 }
 
 static void v_close(void)
 {
     if (gb_doc_close()) {
+        FS_XFLAGS = 0;
         if (banked) { select_banked_picture(); gb_pic_close(); }
         gb_wm_close();
     }
@@ -654,7 +670,8 @@ static void v_fullscreen(unsigned char on)
 /* on_open (File>Load): adopt the name, (re-)load via the bank-or-in-page path, re-arm resize. */
 static void v_open(unsigned int len)
 {
-    (void)len;                        /* bank_or_parse re-loads (gb_doc's filebuf load is for text) */
+    (void)len;                        /* Viewer owns the banked/streamed load */
+    my_drive = gb_get_drive();
     fmt83(vtitle, gb_doc_name());
     bank_or_parse();
     opened = 0;                       /* the next frame sizes to the new picture */
@@ -679,9 +696,12 @@ static const gb_mwin_t vmw = {            /* register SMALL (#206): main() then 
                                             that area instead of the near-fullscreen DEF rect. */
     DEF_X, DEF_Y, MIN_W, MIN_H, MIN_W, MIN_H, v_proc, vtitle
 };
-/* read-only doc: File offers only Load; View offers Fullscreen (exts NULL = show all). */
+/* Image-only read-only doc: File offers only Load and filters for .PIC. Viewer
+   owns loading because gb_doc's whole-file path cannot represent large images. */
+static const char *const pic_exts[] = { "PIC", 0 };
 static const gb_doc_t vdoc = {
-    filebuf, VIEW_MAX, 0, v_open, 0, 0, 0, 0, 0, 0, 0, 0, v_fullscreen, 0, 0
+    filebuf, VIEW_MAX, 0, v_open, 0, 0, 0, 0, 0, pic_exts, 0, 0,
+    v_fullscreen, 0, 0, GB_DOC_OPEN_OWNS_LOAD
 };
 
 void main(void)
@@ -693,14 +713,16 @@ void main(void)
                                         size below only ever GROWS it - a shrink from a big
                                         default would damage (and progressively repaint) almost
                                         the whole screen, the "weird redraw" on open. */
-    bank_or_parse();                 /* load the launch file: banked .PIC (#164) or in-page */
+    my_drive = gb_get_drive();
+    bank_or_parse();                 /* load the launch file: banked or demand-streamed .PIC */
     loaded = 1;
     if (have_pic()) {                /* size to the picture before the first paint (grows) */
         size_to_pic();
         opened = 1;                  /* already sized; v_frame's deferred resize is for File>Load */
     }
-    else gb_wm_setsize(DEF_W, DEF_H);   /* #206: text/binary - grow to a readable window */
+    else gb_wm_setsize(DEF_W, DEF_H);   /* invalid/unsupported file: readable alert body */
     gb_doc(&vdoc);                   /* menus + adopt the name for the title */
     fmt83(vtitle, gb_doc_name());
-    gb_restore_parent();             /* FIRST paint: content, fitted - the window appears ready */
+    gb_repaint_top();                /* FIRST paint: the new opaque z-top only. Lower windows are
+                                        already valid and must not flash while the picture opens. */
 }

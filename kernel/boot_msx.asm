@@ -85,6 +85,9 @@ gft_hang        jr    gft_hang
                 call  boot_desktop           ; the WM master loop never returns
 km_finish                                      ; reached by k_exit's longjmp
                 di
+                if PREEMPTIVE_CONTEXT
+                call  SCHED_IRQ_UNINSTALL_ENTRY ; restore the MSX-DOS IM 1 trampoline
+                endif
                 ld    hl,MSX_HOOKSAVE        ; restore the original H.TIMI hook
                 ld    de,H_TIMI
                 ld    bc,5
@@ -122,7 +125,11 @@ fstest_len      equ   $-fstest_data
 ; sequence apps/filemgr/main.c copy_file runs. The host mounts the image and byte-
 ; compares COPYOUT.TST against BIG.PIC.
 CTC_BUF          equ   #2200          ; chunk buffer (module_data, free at boot)
-CTC_MAX          equ   #1C00          ; GB_COPYMAX
+                if PREEMPTIVE
+CTC_MAX          equ   #1A00          ; scheduler reserves #3C00..#3DFF
+                else
+CTC_MAX          equ   #1C00          ; cooperative GB_COPYMAX
+                endif
 CTC_OFS          equ   #144C          ; FS_LOAD_OFS
 CTC_FLAGS        equ   #144F          ; FS_XFLAGS
 msx_copytest

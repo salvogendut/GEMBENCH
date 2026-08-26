@@ -70,16 +70,21 @@ size work safer.
 
 ## Execution model
 
-Cooperative and single-foreground-app to start:
+GEOBENCH is currently cooperative and callback-driven:
 
-- One application has the foreground at a time.
-- The desktop runs an event loop; when it launches an app, control transfers to
-  the app's own event loop until the user quits.
-- A vblank interrupt drives lightweight housekeeping (pointer, cursor blink,
-  timers) regardless of who has the foreground.
+- The resident window manager owns the master event loop and keeps several
+  banked app windows resident at once.
+- Each app registers frame, draw, and event callbacks; the manager currently
+  invokes the focused app's frame callback and composites repaint callbacks in
+  z-order.
+- One window owns input focus. Kernel services, paged modules, storage, and
+  painting execute atomically.
 
-Preemptive multitasking is explicitly out of scope. GEOBENCH is cooperative and
-single-foreground by design.
+The build-gated preemptive conversion keeps kernel work atomic while allowing
+application tasks to be time-sliced. Its scheduler is carried by
+`DESKTOP.APP`, installed in fixed RAM, and explicitly does not use the optional
+GEOBENCH/M4 ROM paths; see
+[PREEMPTIVE_MULTITASKING.md](PREEMPTIVE_MULTITASKING.md).
 
 ## The system API
 
@@ -183,7 +188,8 @@ the level of asset reload, storage, and window-manager primitives.
 ## Known architectural limits
 
 - **128K+ only.** The app model depends on banked memory.
-- **Cooperative execution only.** No preemptive multitasking.
+- **Cooperative execution in release builds.** The build-gated preemptive task
+  conversion is tracked in [PREEMPTIVE_MULTITASKING.md](PREEMPTIVE_MULTITASKING.md).
 - **Flat-ish content layout.** Nested subdirectories deeper than one level are
   not a supported storage workflow today; see [`File_Manager_Issue.md`](File_Manager_Issue.md).
 - **Legacy AMSDOS software is not run.** GEOBENCH does not launch ordinary
@@ -207,19 +213,22 @@ the level of asset reload, storage, and window-manager primitives.
   backdrops. Built by `kernel/gbkern.asm` + `pack_apps{,2,3}.asm` (#250).
 - **`QA/CPC/Floppies/COMPANION.DSK`** — the **Companion** floppy (#250): a non-bootable DATA disk with
   the extras — Paint, Telnet, WGET, Browser, Shell, Mahjong, Xaos, Calculator,
-  and the extra screensavers except `XROACH.SAV`, `CATCLK.SAV`, and `HELIX.SAV`,
-  which are kept on Extras to leave enough CF2 blocks for Calculator and
-  same-stem saver configuration modules.
+  and the extra screensavers except `XROACH.SAV`, `CATCLK.SAV`, `HELIX.SAV`, and
+  `FOREST.SAV`, and `MOUNTAIN.SAV` with its same-stem configuration module,
+  which are kept on Extras to leave enough CF2 blocks for Calculator, Browser's
+  private image/layout module, and bounded saver state.
   Built by `kernel/pack_comp{1,2,3,4,5}.asm`. It is meant for **drive B** while the Main floppy
   stays in drive A: the kernel's system loader (`fs_load_sys`, `lib/fs.asm`) tries the boot
   drive (A) first and **falls back to the browse drive** (B), so a Companion app launched
   from a drive-B File Manager loads from B. `BRSAVE.APP` and optional `HAND.SPR`
-  live beside the Companion apps; shared dependencies (`GBUI.MOD`, `GBAPICK.MOD`,
-  `GBWEB.MOD`, `GBIMG.MOD`, `GBNET.MOD`, `PAINT.IST`) load from A. (Card
+  and Browser's private `GBIMG.MOD` live beside the Companion apps; shared
+  dependencies (`GBUI.MOD`, `GBAPICK.MOD`, `GBWEB.MOD`, `GBNET.MOD`) load from
+  A, while `PAINT.IST` stays beside Paint. (Card
   builds are unaffected — they already ship everything on one volume, including
   `GBNET.MOD` for Net4CPC and `GBNETM4.MOD` for M4 TCP.)
 - **`QA/CPC/Floppies/EXTRAS.DSK`** — all tracked pictures, including `LOGO.PIC`,
-  plus `XROACH.SAV`, `CATCLK.SAV`, and `HELIX.SAV`, on an extended 80-track single-sided
+  plus `XROACH.SAV`, `CATCLK.SAV`, `HELIX.SAV`, `FOREST.SAV`, and
+  `MOUNTAIN.SAV` with `MOUNTAIN.MOD`, on an extended 80-track single-sided
   AMSDOS DATA image built by `tools/mkcpcmedia.py`. The
   normal Main and Companion CF2 images contain no other `.PIC` files.
 

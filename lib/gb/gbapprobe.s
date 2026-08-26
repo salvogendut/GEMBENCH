@@ -8,7 +8,7 @@
         .module gbapprobe
         .globl  _gb_app_probe
 
-PROBE_EXEC      = 0x3D80
+PROBE_EXEC      = 0x3B80
 PIC_EDIT_BUF    = 0x134B
 BANK_CUR        = 0x134F
 APP_NPAGES      = 0x1437

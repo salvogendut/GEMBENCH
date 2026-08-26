@@ -25,6 +25,19 @@
 #define CELLS_NORMAL  3
 #define CELLS_FAST    7
 
+#define CLEAR_LINES_PER_FRAME 32
+#define MAP_CELLS_PER_FRAME   40
+#define PEAKS_PER_FRAME        4
+
+#define ST_CLEAR    0
+#define ST_ZERO     1
+#define ST_PEAKS    2
+#define ST_SPREAD1  3
+#define ST_SPREAD2  4
+#define ST_NOISE    5
+#define ST_DRAW     6
+#define ST_HOLD     7
+
 /* GEOBENCH logical pens: 0 blue, 1 white, 2 black, 3 red. Screen 7 can also
  * address the fixed extended palette at indices 4..15. */
 #define COL_BG_4      0
@@ -39,12 +52,14 @@
 #define KCFG_INKS ((volatile unsigned char *)0x122C)
 #elif !defined(GB_PCW)
 #define KCFG_BORDER (*(volatile unsigned char *)0x1230)
+#define KCFG_INK(p) (((volatile unsigned char *)0x122C)[(p)])
 #endif
 
 static int h[WW][WW];                 /* height map */
 static int draw_x, draw_y;
-static unsigned char anim_stage;      /* 0 = drawing, 1 = pause, 2 = regen */
+static unsigned char anim_stage;
 static int stage_timer;
+static unsigned char gen_x, gen_y, peak_index, clear_y;
 static unsigned char lmx, lmy, armed;
 static unsigned char mountain_peaks, mountain_hold, cells_per_frame;
 #ifdef GB_MSX2
@@ -187,7 +202,7 @@ __endasm;
 
 static void mountain_palette(void)
 {
-    border_ink = 0;
+    border_ink = KCFG_INK(COL_BG_4);
     set_border();
 }
 
@@ -281,25 +296,6 @@ static void spread(int x, int y)
                 h[x2][y2] = (h[x2][y2] + hv) / 2;
 }
 
-static void init_terrain(void)
-{
-    int x, y, i, noise;
-    for (y = 0; y < WW; y++) for (x = 0; x < WW; x++) h[x][y] = 0;
-    for (i = 0; i < mountain_peaks; i++) {
-        x = 1 + (int)(rnd() % (WW - 2));
-        y = 1 + (int)(rnd() % (WW - 2));
-        h[x][y] = MAXH / 4 + (int)(rnd() % (MAXH * 3 / 4));
-    }
-    for (y = 0; y < WW; y++) for (x = 0; x < WW; x++) if (h[x][y] > 0) spread(x, y);
-    for (y = 0; y < WW; y++) for (x = 0; x < WW; x++) if (h[x][y] > 0) spread(x, y);
-    for (y = 0; y < WW; y++)
-        for (x = 0; x < WW; x++) {
-            noise = (int)(rnd() % 11) - 5;
-            h[x][y] += noise;
-            if (h[x][y] < 0) h[x][y] = 0;
-        }
-}
-
 /* Isometric projection: preserve the original 320x200 formula, then scale to
  * the target framebuffer. CPC remains byte-for-byte in the original space. */
 #ifdef GB_MSX2
@@ -331,33 +327,99 @@ static void draw_terrain_cell(int cx, int cy)
     draw_line(x3, y3, x0, y0, wire);
 }
 
+static unsigned char next_map_cell(void)
+{
+    if (++gen_x == WW) {
+        gen_x = 0;
+        if (++gen_y == WW) return 1;
+    }
+    return 0;
+}
+
+static void begin_terrain(void)
+{
+    anim_stage = ST_CLEAR;
+    clear_y = 0;
+    gen_x = gen_y = peak_index = 0;
+    draw_x = draw_y = 0;
+}
+
 static void anim_tick(void)
 {
-    unsigned char n;
-    if (anim_stage == 0) {
+    unsigned char n, rows;
+    int x, y, noise;
+
+    if (anim_stage == ST_CLEAR) {
+        rows = CLEAR_LINES_PER_FRAME;
+        if ((unsigned int)clear_y + rows > GB_LINES)
+            rows = (unsigned char)(GB_LINES - clear_y);
+        gb_fill(0, clear_y, GB_COLS, rows, terrain_bg());
+        clear_y = (unsigned char)(clear_y + rows);
+        if (clear_y >= GB_LINES) {
+            gen_x = gen_y = 0;
+            anim_stage = ST_ZERO;
+        }
+    } else if (anim_stage == ST_ZERO) {
+        for (n = 0; n < MAP_CELLS_PER_FRAME; n++) {
+            h[gen_x][gen_y] = 0;
+            if (next_map_cell()) {
+                peak_index = 0;
+                anim_stage = ST_PEAKS;
+                break;
+            }
+        }
+    } else if (anim_stage == ST_PEAKS) {
+        for (n = 0; n < PEAKS_PER_FRAME && peak_index < mountain_peaks; n++, peak_index++) {
+            x = 1 + (int)(rnd() % (WW - 2));
+            y = 1 + (int)(rnd() % (WW - 2));
+            h[x][y] = MAXH / 4 + (int)(rnd() % (MAXH * 3 / 4));
+        }
+        if (peak_index == mountain_peaks) {
+            gen_x = gen_y = 0;
+            anim_stage = ST_SPREAD1;
+        }
+    } else if (anim_stage == ST_SPREAD1 || anim_stage == ST_SPREAD2) {
+        for (n = 0; n < MAP_CELLS_PER_FRAME; n++) {
+            if (h[gen_x][gen_y] > 0) spread(gen_x, gen_y);
+            if (next_map_cell()) {
+                gen_x = gen_y = 0;
+                anim_stage = anim_stage == ST_SPREAD1 ? ST_SPREAD2 : ST_NOISE;
+                break;
+            }
+        }
+    } else if (anim_stage == ST_NOISE) {
+        for (n = 0; n < MAP_CELLS_PER_FRAME; n++) {
+            noise = (int)(rnd() % 11) - 5;
+            h[gen_x][gen_y] += noise;
+            if (h[gen_x][gen_y] < 0) h[gen_x][gen_y] = 0;
+            if (next_map_cell()) {
+                draw_x = draw_y = 0;
+                anim_stage = ST_DRAW;
+                break;
+            }
+        }
+    } else if (anim_stage == ST_DRAW) {
         for (n = 0; n < cells_per_frame; n++) {
             if (draw_x >= WW - 1) { draw_x = 0; draw_y++; }
             if (draw_y >= WW - 1) {
-                anim_stage = 1;
+                anim_stage = ST_HOLD;
                 stage_timer = mountain_hold;
                 break;
             }
             draw_terrain_cell(draw_x, draw_y);
             draw_x++;
         }
-    } else if (anim_stage == 1) {
-        if (--stage_timer <= 0) anim_stage = 2;
+    } else if (anim_stage == ST_HOLD) {
+        if (stage_timer > 0) stage_timer--;
+        else begin_terrain();
     } else {
-        gb_fill(0, 0, GB_COLS, GB_LINES, terrain_bg());
-        init_terrain();
-        draw_x = 0; draw_y = 0; anim_stage = 0;
+        begin_terrain();
     }
 }
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, GB_COLS, GB_LINES, terrain_bg());
-    draw_x = 0; draw_y = 0; anim_stage = 0;
+    begin_terrain();
 }
 
 static void ss_frame(void)
@@ -403,7 +465,6 @@ void main(void)
     gb_time();
     rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0x3217u);
     if (!rng) rng = 0x3217u;
-    init_terrain();
     mountain_palette();
     WM_FS = 1;
     gb_curhide();

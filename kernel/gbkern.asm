@@ -39,6 +39,13 @@ PIC_RUNTIME_CONVERT equ 1
                 ifndef TITLEBAR_TILE
 TITLEBAR_TILE   equ   0             ; issue #458: 16x14 repeated title-bar tile
                 endif
+                ifndef PREEMPTIVE
+PREEMPTIVE      equ   0             ; issue #477: opt-in scheduler while it is being proven
+                endif               ; normal distribution remains byte-identical
+                ifndef PREEMPTIVE_CONTEXT
+PREEMPTIVE_CONTEXT equ 0            ; stack-copy engine; enabled by scheduler test builds
+                endif
+                assert !PREEMPTIVE_CONTEXT|PREEMPTIVE,"PREEMPTIVE_CONTEXT requires PREEMPTIVE=1"
 
 ; STORAGE_ALBIREO (#104): build-time drive-0 backend select. 0 (default) = the
 ; SYMBiFACE IDE FAT32 backend; 1 (pass -DSTORAGE_ALBIREO=1) = the Albireo CH376
@@ -67,6 +74,7 @@ GB_ROM_REQ      equ   0                       ; through GEOBENCH.ROM if present.
                 if GB_ROM_REQ
 GB_ROM          equ   1
                 endif
+                assert !PREEMPTIVE|!GB_ROM_REQ,"preemptive CPC builds are RAM-resident and do not use GEOBENCH.ROM"
 ; #156: the window maximize/restore + close-X title-bar gadgets AND the banked picture buffer
 ; (#164: lets the Viewer open .PICs larger than its 8K in-page buffer) are resident chrome, so
 ; they only build where there is headroom - the GB_ROM (offloaded) kernels, the smaller Albireo
@@ -723,7 +731,11 @@ bd_done         pop   af
 ; through the low-RAM module buffer, then blit from them with restore_block (which reads its
 ; sb_buf in the #4000 window). Lets the Viewer show .PIC files bigger than its own 16K page.
 ;
+                if PREEMPTIVE
+PIC_CHUNK       equ   #1A00
+                else
 PIC_CHUNK       equ   #1C00
+                endif
 
 ; k_pic_open (GB_PICOPEN): load the opened file into borrowed bank(s) + parse the .PIC header.
 ; -> A=bank with PIC_WB/PIC_H/PIC_OFF set if it's a .PIC loaded OK; A=0 (no free bank, or not a
@@ -1978,8 +1990,17 @@ kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs +
 ; the slot in C across wm_free_page (which does ld c,a) and dropped the wrong
 ; window. Centralising it kills that bug class and dedups the loops.
 ;
-; wm_z_append: A = slot -> WM_Z[WM_NWIN++] = slot (new z-top). Clobbers A,B,HL.
+; wm_z_append: A = slot -> WM_Z[WM_NWIN++] = slot (new z-top).
 wm_z_append
+                if PREEMPTIVE
+                ld    hl,WM_NWIN
+                ld    e,(hl)                       ; preserve/return A = slot for claimed drops
+                inc   (hl)                          ; NWIN++
+                ld    d,0
+                ld    hl,WM_Z
+                add   hl,de                         ; HL = &WM_Z[NWIN]
+                ld    (hl),a
+                else
                 ld    b,a                          ; B = slot
                 ld    hl,WM_NWIN
                 ld    a,(hl)                       ; A = NWIN
@@ -1988,6 +2009,7 @@ wm_z_append
                 add   a,l
                 ld    l,a                           ; HL = &WM_Z[NWIN]
                 ld    (hl),b
+                endif
                 ret
 
 ; wm_z_remove: C = slot -> compact WM_Z dropping slot C, dec NWIN once. Keeps C.
@@ -2046,8 +2068,8 @@ wm_register
 ; Register a window the WM draws + drives: the descriptor pointer goes in WM_FR_FRAME
 ; and FLAGS gets MW_MANAGED, so wm_loop / wm_repaint_all route it to wm_chrome_frame /
 ; wm_chrome_draw instead of the app's on_frame/on_repaint. Descriptor layout:
-;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 on_draw +8 on_click +10 on_frame
-;   +12 on_close +14 on_event +16 title
+;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 proc +8 title
+;   +10 task_worker (0 for normal managed windows)
 k_wm_managed
                 call  wm_register            ; HL = desc; register as a normal window (slot,
                                              ; page, focus, z-order, arg, flags=alive; copies
@@ -2082,8 +2104,8 @@ k_wm_managed
                 inc   hl
                 ld    (hl),d                 ; REPAINT (entry+7,8) is garbage but the managed
                                              ; flag means wm_repaint_all skips it; MENU (entry+
-                                             ; 11,12) comes from the managed descriptor's trailing
-                                             ; reserved field and starts clear until gb_doc sets it
+                                             ; 11,12) temporarily contains task_worker but gb_doc
+                                             ; replaces it before the app returns to the WM loop
                 ld    a,(WM_FOCUS)           ; publish MW_RECT so the app can read gb_wm_x/y/w/h
                 call  wm_entry               ; in main, but DON'T draw yet: the app loads its
                 call  mw_publish             ; content then calls gb_restore_parent for the first
@@ -2280,6 +2302,12 @@ wfs_found       ld    a,c
 ; master loop. Never returns.
 k_wm_run
                 call  wm_register
+                if PREEMPTIVE_CONTEXT
+                xor   a                           ; first registration is always root slot zero
+                ld    (SCHED_CURRENT),a
+                inc   a
+                ld    (SCHED_RUNNABLE),a
+                endif
 wm_loop
                 call  wm_map_focus               ; bank focused page; APP_HANDLER = its
                 call  k_poll                      ; on_event, so a top-bar click reaches
@@ -2298,8 +2326,14 @@ wm_loop
                 push  hl                          ; #146: managed window -> kernel router
                 ld    de,WM_FR_FLAGS
                 add   hl,de
+                if PREEMPTIVE_CONTEXT
+                ld    a,(hl)
+                pop   hl
+                bit   1,a
+                else
                 bit   1,(hl)
                 pop   hl                          ; HL = entry
+                endif
                 jr    z,wmf_legacy
                 call  wm_chrome_frame
                 jr    wmf_done
@@ -2315,7 +2349,11 @@ wmf_done
                 ld    hl,(BAR_HANDLER)            ; top-bar hook (#77): run the bar handler every
                 ld    a,h                          ; frame in the desktop's page so the bar stays
                 or    l                            ; live regardless of which window has focus.
-                jr    z,wm_loop                    ; bar_draw only repaints lines 0-7 when the clock
+                if PREEMPTIVE_CONTEXT
+                jr    z,wm_loop_tail               ; bar_draw only repaints lines 0-7 when the clock
+                else
+                jr    z,wm_loop
+                endif
                 ifdef PLATFORM_MSX                 ; (#287: APP_PAGES[0] = the TPA segment)
                 ld    a,(MSX_TPASEG)
                 else
@@ -2324,6 +2362,15 @@ wmf_done
                 call  bank_set                     ; its own redraws with gb_curhide/show), so the
                 ld    hl,(BAR_HANDLER)            ; pointer over the bar is left untouched - do NOT
                 call  md_call                      ; erase/show it every frame here: that landed the
+                if PREEMPTIVE_CONTEXT
+wm_loop_tail
+                ld    a,(SCHED_RUNNABLE)
+                cp    2                            ; avoid a stack copy when the desktop is alone
+                jr    c,wm_loop
+                ld    a,(WM_TABLE)                 ; system task snapshot belongs to the root bank
+                call  bank_set
+                call  SCHED_YIELD_ENTRY
+                endif
                 jr    wm_loop                      ; erase at the beam and dropped the bar pointer.
 
 ; k_on_bar (GB_ONBAR #77): HL = a handler the WM loop runs every frame in PAGE_APP0
@@ -2411,11 +2458,21 @@ wmo_fail
 k_wm_close
                 ld    a,(WM_FOCUS)
                 ld    c,a                          ; C = slot being closed
-                call  wm_entry                    ; HL = entry
-                ld    a,(hl)                       ; page
+                call  wm_set_clip                 ; damage only the rectangle being exposed;
+                                                  ; B = page, HL = closing entry+4
+                ld    a,b                          ; page
                 push  af                           ; save it: wm_free_page clobbers everything
-                ld    de,WM_FR_FLAGS
+                ld    de,WM_FR_FLAGS-4
                 add   hl,de
+                if PREEMPTIVE_CONTEXT
+                bit   3,(hl)
+                jr    z,kwc_not_task
+                push  hl
+                ld    hl,SCHED_RUNNABLE
+                dec   (hl)
+                pop   hl
+kwc_not_task
+                endif
                 ld    (hl),0                       ; mark dead (clear the alive flag)
                 call  wm_z_remove                 ; drop slot C from the z-order (keeps C)
                 call  wm_focus_top                ; refocus the new live z-top
@@ -2430,10 +2487,7 @@ k_wm_close
                                                   ; closing handler must return in its own page;
                                                   ; bank_set preserves A for wm_free_page
                 call  wm_free_page                 ; release it (z-order already updated)
-                call  clip_set_full              ; #156: full repaint so the desktop fully restores the
-                                                  ; icons/labels the window had overlapped (clipping to
-                                                  ; the window rect left truncated drive labels behind)
-                jp    wm_repaint_all               ; repaint remaining windows + return
+                jp    wm_repaint_all               ; repaint remaining layers only inside that rect
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
 ; (x,y), so click-to-focus follows a window the app has dragged. Also sets the fill
@@ -2751,8 +2805,19 @@ ds_drop
                 ld    a,c                           ; map the target's page, call it
                 call  bank_set                      ; (it reads WM_DRAGNAME + POLL_MX/MY)
                 call  md_call
+                if PREEMPTIVE
+                ld    a,(WM_DRAGMOV)                ; carry = target claimed this drop as a job
+                add   a,a
+                ld    a,(WM_DRAGSRC)                ; loading the source slot preserves carry
+                jr    nc,ds_drop_source
+                ld    a,(WM_FOCUS)                  ; claimed: keep and raise the target
+                call  wm_raise
+ds_drop_source
+                ld    (WM_FOCUS),a                  ; commit target (claimed) or source (ordinary)
+                else
                 ld    a,(WM_DRAGSRC)
                 ld    (WM_FOCUS),a
+                endif
                 ld    a,(wm_drag_pg)              ; restore the source page
                 call  bank_set
                 ld    a,1
@@ -2813,7 +2878,8 @@ wm_repaint_all
                 xor   a
                 jr    wra_seed
 ; wm_repaint_top: repaint only the current z-top. Used after click-to-focus raises an
-; opaque managed window; redrawing lower layers first makes the stack visibly flash.
+; opaque managed window and through GB_REPAINTTOP for a newly published managed
+; window; redrawing lower layers first makes the stack visibly flash.
 wm_repaint_top
                 ld    a,(WM_NWIN)
                 dec   a
@@ -2902,18 +2968,20 @@ clip_set_full
                 ld    (clip_w),de
                 ret
 
-; wm_set_clip: A = slot -> set the fill clip to that window's rect, so the next
-; wm_repaint_all only erases inside the window's area (its damage region).
+; wm_set_clip: A = slot -> set the fill clip to that window's rect plus one icon
+; cell at the right. Returns B = page and HL = entry+4; close reuses both.
 wm_set_clip
                 call  wm_entry                    ; HL = entry
+                ld    b,(hl)                       ; page for close
                 inc   hl                            ; +1 x
                 ld    a,(hl)
                 ld    (clip_x),a
                 inc   hl                            ; +2 y
                 ld    a,(hl)
                 ld    (clip_y),a
-                inc   hl                            ; +3 w
-                ld    a,(hl)
+                inc   hl                            ; +3 w. Bitmap/glyph clipping culls whole
+                ld    a,(hl)                        ; draw atoms: one which starts inside this
+                add   a,8                           ; damage may extend one 32px icon cell right.
                 ld    (clip_w),a
                 inc   hl                            ; +4 h
                 ld    a,(hl)

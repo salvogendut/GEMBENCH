@@ -208,7 +208,7 @@ Several old ABI slots are stubs or no longer used:
 
 - `GB_PRINT`;
 - `GB_QUIT`;
-- `GB_LAUNCH`;
+- old `GB_LAUNCH` (its retired slot is now `GB_REPAINTTOP`);
 - old `GB_XORFRAME`;
 - old `GB_ONREPAINT`;
 - old `GB_BLITE` (`GB_BLITEFULL`'s table slot has since been repurposed as
@@ -224,8 +224,9 @@ Concrete size candidate:
   Current apps appear to use `gb_wm_open` / `gb_wm_launch_as` instead.
 - Replace the boot use with a smaller `boot_desktop` path that allocates/maps
   `PAGE_APP0`, loads `DESKTOP.APP`, and calls it.
-- Keep `GB_RUN` / `GB_LAUNCH` as reserved stubs unless there is a current app or
-  external-app compatibility requirement.
+- Keep `GB_RUN` as a reserved stub unless there is a current app or external-app
+  compatibility requirement. The former `GB_LAUNCH` slot now exposes the
+  compositor's existing top-window-only repaint path without adding resident code.
 
 This should reclaim more than simply deleting dead jump-table entries.
 

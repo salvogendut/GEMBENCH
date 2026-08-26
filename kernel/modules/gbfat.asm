@@ -12,7 +12,7 @@
 ;   GBFAT_LEN  (#1700, word)   bytes to write
 ;   GBFAT_NAME (#1702, 11)     8.3 name
 ;   GBFAT_RES  (#170D, byte)   result: 1 = saved, 0 = failed
-;   GBFAT_DATA (#2200, <=7KB)  the data, copied out of the app's page by the stub
+;   GBFAT_DATA (#2200, <=6.5KiB) data copied out of the app's page by the stub
 ;
 ; Build: tools/build_fatmod.sh -> build/GBFAT.RAW, packaged on the disk as
 ; GBFAT.BIN (and copied onto the IDE volume).

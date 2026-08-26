@@ -42,7 +42,8 @@ PICEDIT_ENTRY   equ   PICEDIT_BASE
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021
                 jp    cursor_erase           ; GB_CURHIDE #8024
-                jp    k_noop                 ; GB_LAUNCH  #8027 (dead stub -> shared ret, #148)
+                jp    wm_repaint_top         ; GB_REPAINTTOP #8027: repaint only the opaque z-top
+                                             ; (reuses the retired modal GB_LAUNCH slot, #477)
                 jp    focus_arg_ptr          ; GB_GETARG  #802A (k_getarg collapsed, #148)
                 ifdef PLATFORM_MSX
                 jp    k_settime              ; MSX software-clock setter in the GB_RUN slot
@@ -70,7 +71,12 @@ PICEDIT_ENTRY   equ   PICEDIT_BASE
                 else
                 jp    k_ret0                 ; no banked picture support -> A=0
                 endif
-                jp    k_noop                 ; GB_ONEVENT     #804B (dead stub -> shared ret, #274)
+                if PREEMPTIVE_CONTEXT
+GB_ONEVENT_ENTRY equ SCHED_TASK_ENABLE_ENTRY ; #477: opt-in worker task in preemptive builds
+                else
+GB_ONEVENT_ENTRY equ k_noop
+                endif
+                jp    GB_ONEVENT_ENTRY       ; GB_ONEVENT     #804B (GB_TASKENABLE under #477)
                 jp    k_menu                 ; GB_MENU        #804E
                 jp    k_setname              ; GB_SETNAME     #8051
                 ifdef WM_GADGETS

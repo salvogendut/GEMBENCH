@@ -21,8 +21,12 @@
 #define NP_MAX    4096           /* editable text capacity - restored to 4096 (#142): the
                                     shared clipboard (gb_clip_*) replaced the local clip[512],
                                     so the file dialog + extension filter fit without trimming */
+#ifdef GBDOC_BOUNDED_IO
+#define NP_BUF    NP_MAX          /* chunked reads obey their exact 512-byte destination cap */
+#else
 #define NP_BUF    (NP_MAX + 512)  /* +1 sector of slack: gb_fs_load copies whole 512B
                                     sectors, so the buffer outruns the load cap */
+#endif
 #define DEF_X     2            /* initial window position (the window is draggable) */
 #define DEF_Y     14
 #define DEF_W     66           /* default size; the window is resizeable (#81) */
@@ -31,8 +35,15 @@
 #define MIN_H     72
 #define TITLE_H   14
 #define LINE_H    10
+#ifdef GBDOC_BOUNDED_IO
+#define SB_W      3
+#define SB_ARROW  8
+#define SB_THUMB  8
+#else
+#define SB_W      0
+#endif
 #define MAX_LINES ((win_h - TITLE_H - 15) / LINE_H)   /* visible text rows (runtime) */
-#define WRAP      ((win_w - 4) * 2 / 3)               /* chars per wrapped line (runtime) */
+#define WRAP      ((win_w - SB_W - 4) * 2 / 3)        /* chars per wrapped line (runtime) */
 #ifdef GB_MSX2
 #define MAXWRAP   84           /* line[] cap = max WRAP on the 128-col MSX window */
 #elif defined(GB_PCW)
@@ -42,8 +53,12 @@
 #endif
 #define MAXVIS    18           /* names[] cap = max MAX_LINES */
 /* text origin, relative to the live (draggable) window position */
-#define TX_COL    (win_x + 2)
+#define SB_X      (win_x + 1)
+#define TX_BG_X   (win_x + SB_W + 1)
+#define TX_BG_W   (win_w - SB_W - 2)
+#define TX_COL    (win_x + SB_W + 2)
 #define TX_Y0     (win_y + TITLE_H + 2)   /* +2: a 2px gap so the title bar doesn't clip line 1 */
+#define TX_H      ((unsigned char)(MAX_LINES * LINE_H))
 
 #define K_ENTER   0x0D
 #define K_BS      0x08
@@ -56,15 +71,25 @@ static unsigned char win_x = DEF_X;      /* live window position (draggable) */
 static unsigned char win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;   /* live size (resizeable, #81) */
 static char buf[NP_BUF];
+#ifdef GBDOC_BOUNDED_IO
+/* Reuse the executable icon after entry. The document framework uses 0x4084+
+ * for its bounded-I/O state, leaving these display buffers below it. */
+#define line   ((char *)0x4010)
+#define fbase  ((char *)0x4064)
+#define wtitle ((char *)0x4072)
+#else
 static char line[MAXWRAP];
+#endif
 static unsigned int len, cur;            /* text length, insertion index */
 static unsigned char view_first;         /* first visible display row */
 static unsigned int sel_a, sel_b;        /* selection [sel_a, sel_b) in buffer order */
 static unsigned char sel_on;             /* a selection exists */
 static unsigned char keycool;            /* frames to flush keys after a click or fire */
 static unsigned char prev_total;         /* display-row count at the last full draw */
+#ifndef GBDOC_BOUNDED_IO
 static char fbase[14];                    /* "NAME.EXT" of the open file (title base) */
 static char wtitle[18];                   /* fbase + " *" when dirty (window title) */
+#endif
 static unsigned char blink_ctr, caret_vis, cur_scr, cur_col;  /* caret blink (#86) */
 #define BLINK_FRAMES 16                   /* ~3 Hz caret blink at 50 fps */
 
@@ -119,6 +144,7 @@ static void cursor_at(unsigned char col, unsigned char row)
    text doesn't flash every blink. Glyph-safe because the cursor is in the gap. */
 static void caret_erase(void)
 {
+    if (cur_scr == 0xFF) return;
     gb_fill(TX_COL + (cur_col * 3) / 2, TX_Y0 + cur_scr * LINE_H + 8, 2, 2, 0);
 }
 
@@ -152,6 +178,11 @@ static const char *win_title(void)
 
 static void status_line(void)
 {
+#ifdef GBDOC_BOUNDED_IO
+    unsigned char busy = gb_doc_busy();
+    if (busy == 1) { gb_text(TX_COL, win_y + win_h - 11, "Loading..."); return; }
+    if (busy == 2) { gb_text(TX_COL, win_y + win_h - 11, "Saving..."); return; }
+#endif
     gb_text(TX_COL, win_y + win_h - 11, "Click text to place caret. Ctrl-Q=quit");
 }
 
@@ -191,6 +222,24 @@ static unsigned char count_lines(void)
     return n;
 }
 
+#ifdef GBDOC_BOUNDED_IO
+static void draw_scrollbar(void)
+{
+    unsigned char ty = TX_Y0 + SB_ARROW;
+    gb_fill(SB_X, TX_Y0, SB_W, TX_H, 1);
+    gb_textbw((unsigned char)(SB_X + 1), TX_Y0, GLYPH_TRI_UP);
+    gb_textbw((unsigned char)(SB_X + 1), (unsigned char)(TX_Y0 + TX_H - SB_ARROW),
+              GLYPH_TRI_DOWN);
+    if (view_first) {
+        if ((unsigned char)(view_first + MAX_LINES) > prev_total)
+            ty = (unsigned char)(TX_Y0 + TX_H - SB_ARROW - SB_THUMB);
+        else
+            ty = (unsigned char)(TX_Y0 + TX_H / 2 - SB_THUMB / 2);
+    }
+    gb_fill(SB_X, ty, SB_W, SB_THUMB, 3);
+}
+#endif
+
 /* scroll_to_caret: adjust view_first so the caret's row is on screen. */
 static void scroll_to_caret(void)
 {
@@ -222,7 +271,7 @@ static void render(unsigned char only)
                 if (only >= 0xFE || scr == only) {   /* 0xFF=full, 0xFE=body, else 1 row */
                     line[col] = 0;
                     if (only < 0xFE)                 /* single-line: clear it first */
-                        gb_fill(win_x + 1, TX_Y0 + scr * LINE_H, win_w - 2, LINE_H, 0);
+                        gb_fill(TX_BG_X, TX_Y0 + scr * LINE_H, TX_BG_W, LINE_H, 0);
                     gb_text(TX_COL, TX_Y0 + scr * LINE_H, line);
                 }
             }
@@ -235,9 +284,13 @@ static void render(unsigned char only)
             col++;
         }
     }
-    scr = currow - view_first;
-    cur_scr = scr; cur_col = curcol;     /* remember for the blink redraw (#86) */
-    cursor_at(curcol, scr);
+    if (currow >= view_first && (unsigned char)(currow - view_first) < MAX_LINES) {
+        scr = currow - view_first;
+        cur_scr = scr; cur_col = curcol; /* remember for the blink redraw (#86) */
+        cursor_at(curcol, scr);
+    } else {
+        cur_scr = 0xFF;                  /* manual scrollbar movement may hide the caret */
+    }
 }
 
 /* sync_rect: pull the live WM-owned geometry into win_x/y/w/h before we use it (#146). */
@@ -251,11 +304,24 @@ static void sync_rect(void)
 static void draw(void)
 {
     caret_vis = 1; blink_ctr = 0;        /* caret solid right after any redraw (#86) */
+#ifdef GBDOC_BOUNDED_IO
+    if (gb_doc_busy()) {
+        prev_total = 0;
+        gb_fill(TX_BG_X, TX_Y0, TX_BG_W, TX_H, 0);
+        draw_scrollbar();
+        status_line();
+        gb_draw_grip(win_x, win_y, win_w, win_h);
+        return;
+    }
+#endif
     scroll_to_caret();
-    gb_fill(win_x + 1, TX_Y0, win_w - 2, (unsigned char)(MAX_LINES * LINE_H), 0);  /* clear text (#146) */
+    prev_total = count_lines();
+    gb_fill(TX_BG_X, TX_Y0, TX_BG_W, TX_H, 0);  /* clear text (#146) */
+#ifdef GBDOC_BOUNDED_IO
+    draw_scrollbar();
+#endif
     render(0xFF);
     draw_selection();                    /* reverse-video highlight over the text (#99) */
-    prev_total = count_lines();
 }
 
 /* redraw_body: repaint just the text area + selection (no window frame) - used during
@@ -264,10 +330,25 @@ static void redraw_body(void)
 {
     caret_vis = 1; blink_ctr = 0;
     scroll_to_caret();
-    gb_fill(win_x + 1, TX_Y0, win_w - 2, (unsigned char)(MAX_LINES * LINE_H), 0);
+    gb_fill(TX_BG_X, TX_Y0, TX_BG_W, TX_H, 0);
+#ifdef GBDOC_BOUNDED_IO
+    draw_scrollbar();
+#endif
     render(0xFE);
     draw_selection();
 }
+
+#ifdef GBDOC_BOUNDED_IO
+/* Repaint after scrollbar movement without snapping the view back to the caret. */
+static void redraw_scrolled(void)
+{
+    caret_vis = 1; blink_ctr = 0;
+    gb_fill(TX_BG_X, TX_Y0, TX_BG_W, TX_H, 0);
+    draw_scrollbar();
+    render(0xFE);
+    draw_selection();
+}
+#endif
 
 /* insert one char at the caret; grow the buffer right. */
 static void ins(char c)
@@ -597,8 +678,14 @@ static void text_press(unsigned char mx, unsigned char my)
         }
     }
     if (!moved && (anchor != cur || sel_on)) {   /* plain click -> caret, no selection */
+        unsigned char oldscr = cur_scr, oldvf = view_first, hadsel = sel_on;
         cur = anchor; sel_on = 0;
-        gb_curhide(); draw(); gb_curshow();
+        caret_vis = 1; blink_ctr = 0;
+        gb_curhide();
+        scroll_to_caret();
+        if (hadsel || view_first != oldvf) redraw_body();
+        else render(oldscr == 0xFF ? 0xFD : oldscr); /* erase only the old caret line */
+        gb_curshow();
     }
     keycool = 4;
 }
@@ -625,6 +712,22 @@ static void n_click(void)
         }
         return;
     }
+#ifdef GBDOC_BOUNDED_IO
+    if (mx >= SB_X && mx < SB_X + SB_W && my >= TX_Y0 && my < TX_Y0 + TX_H) {
+        unsigned char old = view_first, max = 0;
+        if (prev_total >= MAX_LINES) max = (unsigned char)(prev_total - MAX_LINES + 1);
+        if (my < TX_Y0 + TX_H / 2) {
+            view_first = view_first > 3 ? (unsigned char)(view_first - 3) : 0;
+        } else {
+            view_first = (unsigned char)(view_first + 3);
+        }
+        if (view_first > max) view_first = max;
+        if (view_first != old) {
+            gb_curhide(); redraw_scrolled(); gb_curshow();
+        }
+        return;
+    }
+#endif
     /* text area bottom, precomputed flat: the summed (win_y+TITLE_H)+(win_h-...) form
        SDCC miscompiles - cf. the FM CT_BOT fix (#81). TX_Y0 + a runtime value is safe. */
     vis = MAX_LINES;
@@ -661,9 +764,20 @@ static void n_frame(void)
     win_title();                                 /* keep wtitle fresh for the WM title draw */
 
     {
+#ifdef GBDOC_BOUNDED_IO
+        unsigned char was_busy = gb_doc_busy();
+#endif
         unsigned char r = gb_doc_frame();         /* a File/Edit menu/dialog ran (#142) */
         if (r) {
             keycool = 4;                          /* flush the dialog click's buffered keys */
+#ifdef GBDOC_BOUNDED_IO
+            if (was_busy) {                       /* completed a background load/save: only our
+                                                     opaque top window changed */
+                win_title();
+                gb_wm_damage(win_x, win_y, win_w, win_h);
+                gb_repaint_top();
+            } else
+#endif
             if (r == 2) {                         /* #191: Edit changed the text (Paste/Select All) -
                                                      the menu saved-under, so just redraw the body,
                                                      smoothly, with the frame untouched (no flash) */
@@ -673,6 +787,9 @@ static void n_frame(void)
             }
             return;
         }
+#ifdef GBDOC_BOUNDED_IO
+        if (gb_doc_busy()) return;                 /* one storage chunk ran; no edits until complete */
+#endif
     }
 
     if (gb_flags() & GB_FIRE) keycool = 4;        /* fire held -> flush its 'Z'/'X' */
@@ -686,7 +803,11 @@ static void n_frame(void)
     if (handle_arrows()) return;                  /* arrow nudged the caret (#86 item 6) */
 
     edited = 0;                                   /* drain typed keys */
+#ifdef GBDOC_BOUNDED_IO
+    n = 2;                                        /* cap worst-case 4 KiB insert/delete shifts */
+#else
     n = 8;
+#endif
     while (n--) {
         c = gb_getkey();
         if (!c) break;
@@ -706,8 +827,8 @@ static void n_frame(void)
         scroll_to_caret();
         pos_of(cur, &cr, &cc);
         if (had_sel || t != prev_total || view_first != oldvf) {
-            redraw_body();                        /* clear the text area + redraw + highlight */
             prev_total = t;
+            redraw_body();                        /* clear the text area + redraw + highlight */
         } else {
             render(cr - view_first);              /* just the caret's line */
         }
@@ -716,6 +837,7 @@ static void n_frame(void)
         unsigned char co = cursor_over();
         blink_ctr = 0;
         caret_vis ^= 1;
+        if (cur_scr == 0xFF) return;               /* caret is above/below a manually scrolled view */
         if (co) gb_curhide();
         if (caret_vis) cursor_at(cur_col, cur_scr);
         else caret_erase();                       /* erase just the cell - no line flash */
@@ -751,12 +873,22 @@ void main(void)
     caret_vis = 1; blink_ctr = 0; arr_prev = 0; arr_rep = 0;
     gb_wm_managed(&npmw);                        /* register FIRST (no draw): captures our arg */
     gb_doc(&npdoc);                              /* standard File + Edit menus; adopts the name */
+#ifdef GBDOC_BOUNDED_IO
+    len = 0; cur = 0; view_first = 0;
+    gb_doc_startup_load();                       /* one 512-byte read per focused frame */
+#else
     len = gb_fs_load(buf, NP_MAX);              /* load the launch file (0 if none) */
     if (is_bas()) len = strip_cr(len);           /* .BAS in CR+LF -> edit as plain \n */
     cur = len; view_first = 0;
+#endif
     sel_on = 0;                                  /* selection state (clipboard is shared now) */
     win_title();                                 /* build wtitle before the first paint */
     for (n = 64; n; n--) if (!gb_getkey()) break;   /* drop buffered keys */
 
-    gb_restore_parent();                         /* first paint: WM chrome + n_draw */
+#ifdef GBDOC_BOUNDED_IO
+    gb_wm_damage(win_x, win_y, win_w, win_h);
+    gb_repaint_top();                            /* first paint: the new opaque window only */
+#else
+    gb_restore_parent();
+#endif
 }

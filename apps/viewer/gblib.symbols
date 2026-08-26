@@ -7,6 +7,7 @@ gb_fill
 gb_frame
 gb_fs_load
 gb_get_name
+gb_get_drive
 gb_getkey
 gb_menu
 gb_mx
@@ -19,6 +20,7 @@ gb_poll
 gb_restore_parent
 gb_restorerect
 gb_set_name
+gb_set_drive
 gb_text
 gb_ui
 gb_wm_close

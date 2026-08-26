@@ -53,13 +53,12 @@ backdrop, dragging icons, opening apps and menus:
   flood fill, undo), a 4-ink palette and pencil width, New/Load/Save to the `.PIC`
   format (a versioned bitmap with its own size + palette), View > Fullscreen. Tool
   icons are a normal `.IST` set, editable in ICONED.
-- **Viewer** — open any file to peek at it: word-wrapped text, or a `.PIC` image
-  rendered to a window sized to the picture. File > Load opens another file, View >
-  Fullscreen maximises. Draggable, resizeable. A large picture (over ~8.5 KB, i.e.
-  bigger than the in-window buffer) is loaded into a borrowed 16 KB RAM bank, so on a
-  bare 128K machine — where the desktop, file manager and viewer already use every
-  app bank — a big image shows an empty window; a 256K+ expansion (any spare bank)
-  displays it. Small pictures always work.
+- **Viewer** — open `.PIC` images in a window sized to the picture. File > Load
+  selects another picture and View > Fullscreen maximises it; windows remain
+  draggable and resizeable, with horizontal and vertical scrolling. Viewer uses
+  borrowed RAM banks for fast redraws. If other windows or pictures occupy the
+  remaining banks, it reads the visible rows from disk in bounded chunks instead
+  of refusing a second large image. Text editing belongs to Notepad.
 - **Clock** — an analog clock window (Dallas RTC, else software); View > Fullscreen
   rescales the face to the whole screen, an Options menu sets the time / toggles seconds.
 - **Settings** — a control panel for `GEOBENCH.CFG`: pick the **font** (`.FNT`),
@@ -95,8 +94,12 @@ backdrop, dragging icons, opening apps and menus:
   `http://` URLs, follows up to four redirects, parses headers and chunked bodies
   through the shared HTTP parser, and streams HTML through a bounded text renderer
   instead of keeping a DOM. Text, headings, lists, compact GET forms, link labels,
-  and inline-image records are cached in one borrowed 16K page: up to 208
-  fixed-width rows. Link destinations are retained separately
+  inline-image records, and bounded table-row records are cached in one borrowed
+  16K page: up to 208 fixed-width rows. Simple tables buffer up to four source
+  cells at a time and display as a centered three-column grid on MSX2 or a
+  two-column grid on CPC and PCW; wider rows reflow into another display row.
+  Cell text and linked images remain independently clickable. Spanning cells,
+  CSS layout, and nested-table geometry are not retained. Link destinations are retained separately
   from their visible labels, so proxy transport URLs are not printed in the page.
   Browser renders the first viewport, pauses the open TCP stream, and
   resumes from the exact retained byte only when the user scrolls downward;
@@ -106,8 +109,10 @@ backdrop, dragging icons, opening apps and menus:
   If no spare page exists, Browser reports limited cache mode and retains the
   latest seven lines. Link labels stand out
   as underlined rows and open when clicked, and Back retains one previous URL;
-  the visible image is fetched lazily into one bounded GBPC v2 slot (up to
-  160x96 pixels) and replaced as the user scrolls. On MSX2 Screen 7, successful
+  visible images are fetched sequentially through one bounded GBPC v2 slot (up
+  to 160x96 pixels each), drawn directly, and replaced as the user scrolls.
+  On CPC and MSX2, a bounded second pass retries a transiently failed visible
+  image. On MSX2 Screen 7, successful
   reservation of one additional app-pool page adds `X-GBPC: 7,1` to every page
   and image request, allowing a proxy to return a sixteen-colour mode-7 image.
   Screen 6, CPC, PCW, and low-memory Screen-7 sessions omit the header and keep
@@ -154,8 +159,9 @@ backdrop, dragging icons, opening apps and menus:
   loads an optional same-stem `.MOD` and persists the module's returned options
   in `GEOBENCH.CFG`. STARFLD exposes speed and star count; XMATRIX exposes
   binary/Kana glyphs and speed; MOUNTAIN exposes speed, peak count, and hold
-  time. Mountain uses eight height bands in MSX 16-color mode, a temporarily
-  black display border, and restores the desktop palette on exit. CPC and MSX
+  time. Mountain uses eight height bands in MSX 16-color mode, gives MSX a
+  temporary black display border, and restores the desktop palette on exit;
+  CPC keeps its border matched to the landscape background. CPC and MSX
   16-color mode also expose XMatrix's main glyph color; XMatrix restores the
   launch-time desktop palette when it exits and always uses a black background.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**

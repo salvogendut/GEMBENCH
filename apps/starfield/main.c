@@ -25,10 +25,11 @@
 #define ZMIN   2        /* respawn at/under this depth */
 #define FOCAL  64       /* projection scale */
 #define BG     2        /* black background */
+#define STAR_WORK_PER_FRAME 24
 
 static int x[GB_STARFLD_STARS_MAX], y[GB_STARFLD_STARS_MAX], z[GB_STARFLD_STARS_MAX];
 static int px[GB_STARFLD_STARS_MAX], py[GB_STARFLD_STARS_MAX];
-static unsigned char star_count, star_speed;
+static unsigned char star_count, star_speed, star_cursor, star_stride;
 
 static unsigned char lmx, lmy, armed;
 static unsigned int  rng;
@@ -118,11 +119,15 @@ static void spawn(unsigned char i)
 
 static void star_tick(void)
 {
-    unsigned char i, col;
+    unsigned char i, col, work;
     int sx, sy;
-    for (i = 0; i < star_count; i++) {
+    int delta = (int)star_speed * star_stride;
+
+    work = STAR_WORK_PER_FRAME;
+    while (work-- && star_cursor < star_count) {
+        i = star_cursor++;
         plot_dot(px[i], py[i], BG);              /* erase the old position */
-        z[i] -= star_speed;                       /* approach */
+        z[i] -= delta;                            /* account for round-robin interval */
         if (z[i] <= ZMIN) spawn(i);
         sx = 160 + (x[i] * FOCAL) / z[i];          /* perspective projection */
         sy = 100 + (y[i] * FOCAL) / z[i];
@@ -135,6 +140,7 @@ static void star_tick(void)
         plot_dot(sx, sy, col);
         px[i] = sx; py[i] = sy;
     }
+    if (star_cursor >= star_count) star_cursor = 0;
 }
 
 static void ss_paint(void)
@@ -172,6 +178,9 @@ void main(void)
                           GB_STARFLD_SPEED_MIN, GB_STARFLD_SPEED_MAX);
     star_count = gbcfg_u8(GB_STARFLD_STARS_KEY, GB_STARFLD_STARS_DEFAULT,
                           GB_STARFLD_STARS_MIN, GB_STARFLD_STARS_MAX);
+    star_cursor = 0;
+    star_stride = (unsigned char)((star_count + STAR_WORK_PER_FRAME - 1) /
+                                  STAR_WORK_PER_FRAME);
     gb_time();
     rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0x57A4u);
     if (!rng) rng = 0x57A4u;

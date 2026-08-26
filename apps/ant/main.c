@@ -25,6 +25,8 @@
 #endif
 #define STEPS 40         /* ant steps per frame */
 #define RESET 24000u     /* steps before a fresh grid */
+#define GRID_CLEAR_PER_FRAME 256
+#define SCREEN_CLEAR_LINES_PER_FRAME 16
 
 static unsigned char lmx, lmy, armed;
 static unsigned int  rng;
@@ -58,17 +60,43 @@ __endasm;
 static unsigned char grid[COLS * ROWS];
 static unsigned char acx, acy, adir;     /* ant column, row, direction (0=N 1=E 2=S 3=W) */
 static unsigned int  steps;
+static unsigned int clear_idx;
+static unsigned char clear_y, clear_phase, clearing;
 
 static const unsigned char turn_r[4] = { 0, 0, 1, 1 };  /* rule "LLRR": 0=left 1=right */
 static const unsigned char state_pen[4] = { 0, 1, 3, 2 }; /* blue, white, red, black */
 
-static void clear_grid(void)
+static void begin_clear(void)
 {
-    unsigned int i;
-    for (i = 0; i < COLS * ROWS; i++) grid[i] = 0;
-    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
-    acx = COLS / 2; acy = ROWS / 2; adir = 0;
-    steps = 0;
+    clear_idx = 0;
+    clear_y = 0;
+    clear_phase = 0;
+    clearing = 1;
+}
+
+static void clear_step(void)
+{
+    unsigned int work;
+    unsigned char rows;
+
+    if (!clear_phase) {
+        work = GRID_CLEAR_PER_FRAME;
+        while (work-- && clear_idx < COLS * ROWS)
+            grid[clear_idx++] = 0;
+        if (clear_idx >= COLS * ROWS) clear_phase = 1;
+        return;
+    }
+
+    rows = SCREEN_CLEAR_LINES_PER_FRAME;
+    if ((unsigned int)clear_y + rows > GB_LINES)
+        rows = (unsigned char)(GB_LINES - clear_y);
+    gb_fill(0, clear_y, GB_COLS, rows, BG);
+    clear_y = (unsigned char)(clear_y + rows);
+    if (clear_y >= GB_LINES) {
+        acx = COLS / 2; acy = ROWS / 2; adir = 0;
+        steps = 0;
+        clearing = 0;
+    }
 }
 
 static void ant_step(void)
@@ -90,7 +118,7 @@ static void ant_step(void)
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
+    begin_clear();
 }
 
 static void ss_frame(void)
@@ -109,8 +137,9 @@ static void ss_frame(void)
         gb_wm_close();
         return;
     }
+    if (clearing) { clear_step(); return; }
     for (i = 0; i < STEPS; i++) ant_step();
-    if ((steps += STEPS) >= RESET) clear_grid();
+    if ((steps += STEPS) >= RESET) begin_clear();
 }
 
 static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
@@ -129,6 +158,6 @@ void main(void)
     set_border();
     gb_curhide();
     for (n = 64; n; n--) if (!gb_getkey()) break;
-    clear_grid();
+    begin_clear();
     gb_wm_add(&sswin);
 }

@@ -18,6 +18,7 @@
 #define CYp   100
 #define STEPS 120        /* line-pairs per figure */
 #define HOLD  150         /* frames a figure lingers */
+#define LINES_PER_FRAME 4
 
 static const signed char sintab[60] = {
     0, 7, 13, 20, 26, 32, 38, 43, 48, 52, 55, 58, 61, 63, 64, 64, 64, 63, 61, 58,
@@ -91,30 +92,46 @@ static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
 #endif
 
 static const unsigned char pens[3] = { 1, 3, 2 };  /* white, red, black */
-static unsigned char penix;
+static unsigned char penix, pen, curve_step, drawing;
+static int r1, r2, f1, f2, f3, f4;
 
-static void draw_figure(void)
+static void begin_figure(void)
 {
-    int r1 = (int)(45 + rnd() % 35);
-    int r2 = (int)(45 + rnd() % 35);
-    int f1 = (int)(1 + rnd() % 5);
-    int f2 = (int)(1 + rnd() % 5);
-    int f3 = (int)(1 + rnd() % 5);
-    int f4 = (int)(1 + rnd() % 5);
-    unsigned char a, pen = pens[penix];
+    r1 = (int)(45 + rnd() % 35);
+    r2 = (int)(45 + rnd() % 35);
+    f1 = (int)(1 + rnd() % 5);
+    f2 = (int)(1 + rnd() % 5);
+    f3 = (int)(1 + rnd() % 5);
+    f4 = (int)(1 + rnd() % 5);
+    pen = pens[penix];
     penix = (penix + 1) % 3;
-    for (a = 0; a < STEPS; a++) {
-        int x1 = CXp + (r1 * SN(a * f1)) / 64;
-        int y1 = CYp + (r2 * CS(a * f2)) / 64;
-        int x2 = CXp + (r2 * SN(a * f3)) / 64;
-        int y2 = CYp + (r1 * CS(a * f4)) / 64;
+    curve_step = 0;
+    drawing = 1;
+}
+
+static void draw_figure_step(void)
+{
+    unsigned char n, a;
+    int x1, y1, x2, y2;
+
+    for (n = 0; n < LINES_PER_FRAME && drawing; n++) {
+        a = curve_step;
+        x1 = CXp + (r1 * SN(a * f1)) / 64;
+        y1 = CYp + (r2 * CS(a * f2)) / 64;
+        x2 = CXp + (r2 * SN(a * f3)) / 64;
+        y2 = CYp + (r1 * CS(a * f4)) / 64;
         vram_line(x1, y1, x2, y2, pen);
+        if (++curve_step == STEPS) {
+            drawing = 0;
+            hold = HOLD;
+        }
     }
 }
 
 static void ss_paint(void)
 {
     gb_fill(0, 0, GB_COLS, GB_LINES, BG);
+    begin_figure();
 }
 
 static void ss_frame(void)
@@ -133,10 +150,9 @@ static void ss_frame(void)
         gb_wm_close();
         return;
     }
+    if (drawing) { draw_figure_step(); return; }
     if (hold) { hold--; return; }
     ss_paint();
-    draw_figure();
-    hold = HOLD;
 }
 
 static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
@@ -145,7 +161,7 @@ void main(void)
 {
     unsigned char n;
     lmx = gb_mx(); lmy = gb_my();
-    armed = 0; hold = 0; penix = 0;
+    armed = 0; hold = 0; penix = 0; drawing = 0;
     gb_time();
     rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0x4858u);
     if (!rng) rng = 0x4858u;
@@ -156,7 +172,5 @@ void main(void)
     gb_curhide();
     for (n = 64; n; n--) if (!gb_getkey()) break;
     ss_paint();
-    draw_figure();
-    hold = HOLD;
     gb_wm_add(&sswin);
 }

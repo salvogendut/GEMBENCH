@@ -26,6 +26,8 @@
 
 #define STACK_MAX 32
 #define MAX_LEAVES 48
+#define WORK_PER_FRAME 4
+#define FILL_ROWS_PER_WORK 4
 
 /* the four desktop pens as panel colours (0=blue,1=white,2=black,3=red); black
    (pen 2) is the background/border between panels. */
@@ -61,6 +63,8 @@ static unsigned int  hold;
 
 static signed char sx[STACK_MAX], sy[STACK_MAX];
 static unsigned char sw[STACK_MAX], sh_[STACK_MAX], sd[STACK_MAX];
+static unsigned char top, nleaf, drawing;
+static unsigned char fill_x, fill_y, fill_w, fill_h, fill_row, fill_ink;
 
 static unsigned int rnd(void)
 {
@@ -109,27 +113,51 @@ static unsigned char panel_ink(void)
     return inks[rnd() % 3];
 }
 
-/* deco_frame: subdivide the whole screen and fill the leaf panels. Iterative
-   work stack (no recursion); splits the longer side at a 38/62 ratio for the
-   art-deco proportions. Mirrors symsav-deco's deco_plan + deco_render. */
-static void deco_frame(void)
+/* Start an iterative subdivision. Leaf panels are filled in short row bands so
+   the fullscreen saver returns to input dispatch between visible updates. */
+static void deco_begin(void)
 {
-    unsigned char top = 1, x, y, w, h, depth;
-    unsigned char nleaf = 0;
-
     gb_fill(0, 0, SCR_W, SCR_H, 2);             /* black canvas */
     sx[0] = 0; sy[0] = 0; sw[0] = SCR_W; sh_[0] = SCR_H; sd[0] = 0;
+    top = 1;
+    nleaf = 0;
+    fill_h = 0;
+    fill_row = 0;
+    drawing = 1;
+}
 
-    while (top > 0) {
+static void deco_step(void)
+{
+    unsigned char work, x, y, w, h, depth, rows;
+
+    for (work = 0; work < WORK_PER_FRAME && drawing; work++) {
+        if (fill_row < fill_h) {
+            rows = (unsigned char)(fill_h - fill_row);
+            if (rows > FILL_ROWS_PER_WORK) rows = FILL_ROWS_PER_WORK;
+            panel_fill(fill_x, (unsigned char)(fill_y + fill_row),
+                       fill_w, rows, fill_ink);
+            fill_row = (unsigned char)(fill_row + rows);
+            continue;
+        }
+
+        if (top == 0) {
+            drawing = 0;
+            hold = HOLD;
+            break;
+        }
+
         top--;
         x = (unsigned char)sx[top]; y = (unsigned char)sy[top];
         w = sw[top]; h = sh_[top]; depth = sd[top];
 
         if (w < MIN_W || h < MIN_H || (int)(rnd() % MAX_DEPTH) < (int)depth) {
             if (nleaf < MAX_LEAVES && w > 2 * BX && h > 2 * BY) {
-                panel_fill((unsigned char)(x + BX), (unsigned char)(y + BY),
-                           (unsigned char)(w - 2 * BX), (unsigned char)(h - 2 * BY),
-                           panel_ink());
+                fill_x = (unsigned char)(x + BX);
+                fill_y = (unsigned char)(y + BY);
+                fill_w = (unsigned char)(w - 2 * BX);
+                fill_h = (unsigned char)(h - 2 * BY);
+                fill_row = 0;
+                fill_ink = panel_ink();
                 nleaf++;
             }
             continue;
@@ -159,8 +187,7 @@ static void deco_frame(void)
 
 static void ss_paint(void)
 {
-    deco_frame();
-    hold = HOLD;
+    deco_begin();
 }
 
 static void ss_frame(void)
@@ -177,9 +204,9 @@ static void ss_frame(void)
         gb_wm_close();
         return;
     }
+    if (drawing) { deco_step(); return; }
     if (hold) { hold--; return; }               /* hold the layout, then regenerate */
-    deco_frame();
-    hold = HOLD;
+    deco_begin();
 }
 
 static const gb_win_t sswin = { 0, 0, SCR_W, SCR_H, ss_frame, ss_paint, 0, 0 };
@@ -191,7 +218,7 @@ void main(void)
     mode7 = (MSX_SCRMOD == 7);
 #endif
     lmx = gb_mx(); lmy = gb_my();
-    armed = 0;
+    armed = 0; drawing = 0; hold = 0;
     gb_time();
     rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0xD3C0u);
     if (!rng) rng = 0xD3C0u;

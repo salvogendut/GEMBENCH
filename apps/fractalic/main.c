@@ -8,11 +8,9 @@
  *  on the CPC, and the fern's IFS needs a better-distributed RNG than our 16-bit
  *  xorshift's rnd()%100 to form its fronds.)
  *
- * Like mountain, it plots single pixels straight to the #C000 Mode-1 screen
- * (always mapped, not banked) - the original's per-pixel plot ports verbatim, no
- * Bank_Copy. The SymbOS config dialog is dropped: depth/speed are baked in and the
- * type is always random (the user asked for a random pick each cycle). This is the
- * biggest saver, so it ships on the Albireo card only (the floppy is too tight). */
+ * Like mountain, it plots single pixels straight to the target screen. The
+ * SymbOS config dialog is dropped: depth/speed are baked in and the type is
+ * always random. Clears, Koch expansion/copying, and drawing are frame-bounded. */
 #include "gb.h"
 #include "../savdraw.h"
 
@@ -27,6 +25,19 @@ static const unsigned char ftypes[2] = { F_SIER, F_KOCH };
 #define PAUSE    150     /* frames a finished fractal is held */
 #define BG       0       /* blue background */
 
+#define CLEAR_LINES_PER_FRAME  16
+#define SIER_POINTS_PER_FRAME 192
+#define KOCH_EXPAND_PER_FRAME   4
+#define KOCH_COPY_PER_FRAME    16
+
+#define FR_CLEAR 0
+#define FR_SETUP 1
+#define FR_DRAW  2
+#define FR_HOLD  3
+
+#define KOCH_EXPAND 0
+#define KOCH_COPY   1
+
 #define KOCH_MAX 200
 static int kx0[KOCH_MAX], ky0[KOCH_MAX], kx1[KOCH_MAX], ky1[KOCH_MAX];
 static int tx0[KOCH_MAX], ty0[KOCH_MAX], tx1[KOCH_MAX], ty1[KOCH_MAX];
@@ -36,6 +47,9 @@ static int draw_idx, draw_total;
 
 static unsigned char frac_type, anim_stage;
 static int anim_timer;
+static unsigned char clear_y;
+static unsigned char koch_level, koch_phase;
+static int koch_src_count, koch_src_idx, koch_dst_count, koch_copy_idx;
 static unsigned char lmx, lmy, armed;
 static unsigned int  rng;
 
@@ -111,9 +125,9 @@ static void sierpinski_steps(int n)
 }
 
 /* ---- Koch snowflake (iterative segment expansion) ----------------------- */
-static void koch_init(void)
+static void koch_begin(void)
 {
-    int i, j, n, ns, p1x, p1y, p2x, p2y, mx, my, px, py, dx, dy, apx, apy, W;
+    int p1x, p1y, p2x, p2y, mx, my, W;
     W = 6 * (200 - 13) / 7;
     p1x = 160; p1y = 7;
     p2x = p1x - W / 2; p2y = p1y + W * 7 / 8;
@@ -121,29 +135,65 @@ static void koch_init(void)
     kx0[0] = p1x; ky0[0] = p1y; kx1[0] = p2x; ky1[0] = p2y;
     kx0[1] = p2x; ky0[1] = p2y; kx1[1] = mx;  ky1[1] = my;
     kx0[2] = mx;  ky0[2] = my;  kx1[2] = p1x; ky1[2] = p1y;
-    n = 3;
-    for (i = 0; i < DEPTH; i++) {
-        ns = 0;
-        for (j = 0; j < n && ns + 4 <= KOCH_MAX; j++) {
-            p1x = kx0[j]; p1y = ky0[j];
-            p2x = kx1[j]; p2y = ky1[j];
+    koch_level = 0;
+    koch_phase = KOCH_EXPAND;
+    koch_src_count = 3;
+    koch_src_idx = 0;
+    koch_dst_count = 0;
+}
+
+static unsigned char koch_setup_step(void)
+{
+    int work, p1x, p1y, p2x, p2y, mx, my, px, py, dx, dy, apx, apy;
+
+    if (koch_phase == KOCH_EXPAND) {
+        work = KOCH_EXPAND_PER_FRAME;
+        while (work-- && koch_src_idx < koch_src_count &&
+               koch_dst_count + 4 <= KOCH_MAX) {
+            p1x = kx0[koch_src_idx]; p1y = ky0[koch_src_idx];
+            p2x = kx1[koch_src_idx]; p2y = ky1[koch_src_idx];
             mx = p1x + (p2x - p1x) / 3;       my = p1y + (p2y - p1y) / 3;
             px = p1x + (p2x - p1x) * 2 / 3;   py = p1y + (p2y - p1y) * 2 / 3;
             dx = px - mx; dy = py - my;
             apx = (mx + px) / 2 - dy * 7 / 8;
             apy = (my + py) / 2 + dx * 7 / 8;
-            tx0[ns] = p1x; ty0[ns] = p1y; tx1[ns] = mx;  ty1[ns] = my;  ns++;
-            tx0[ns] = mx;  ty0[ns] = my;  tx1[ns] = apx; ty1[ns] = apy; ns++;
-            tx0[ns] = apx; ty0[ns] = apy; tx1[ns] = px;  ty1[ns] = py;  ns++;
-            tx0[ns] = px;  ty0[ns] = py;  tx1[ns] = p2x; ty1[ns] = p2y; ns++;
+            tx0[koch_dst_count] = p1x; ty0[koch_dst_count] = p1y;
+            tx1[koch_dst_count] = mx;  ty1[koch_dst_count++] = my;
+            tx0[koch_dst_count] = mx;  ty0[koch_dst_count] = my;
+            tx1[koch_dst_count] = apx; ty1[koch_dst_count++] = apy;
+            tx0[koch_dst_count] = apx; ty0[koch_dst_count] = apy;
+            tx1[koch_dst_count] = px;  ty1[koch_dst_count++] = py;
+            tx0[koch_dst_count] = px;  ty0[koch_dst_count] = py;
+            tx1[koch_dst_count] = p2x; ty1[koch_dst_count++] = p2y;
+            koch_src_idx++;
         }
-        for (j = 0; j < ns; j++) {
-            kx0[j] = tx0[j]; ky0[j] = ty0[j];
-            kx1[j] = tx1[j]; ky1[j] = ty1[j];
+        if (koch_src_idx >= koch_src_count) {
+            koch_copy_idx = 0;
+            koch_phase = KOCH_COPY;
         }
-        n = ns;
+        return 0;
     }
-    draw_idx = 0; draw_total = n;
+
+    work = KOCH_COPY_PER_FRAME;
+    while (work-- && koch_copy_idx < koch_dst_count) {
+        kx0[koch_copy_idx] = tx0[koch_copy_idx];
+        ky0[koch_copy_idx] = ty0[koch_copy_idx];
+        kx1[koch_copy_idx] = tx1[koch_copy_idx];
+        ky1[koch_copy_idx] = ty1[koch_copy_idx];
+        koch_copy_idx++;
+    }
+    if (koch_copy_idx < koch_dst_count) return 0;
+
+    koch_src_count = koch_dst_count;
+    if (++koch_level >= DEPTH) {
+        draw_idx = 0;
+        draw_total = koch_src_count;
+        return 1;
+    }
+    koch_src_idx = 0;
+    koch_dst_count = 0;
+    koch_phase = KOCH_EXPAND;
+    return 0;
 }
 static void koch_steps(int count)
 {
@@ -154,10 +204,11 @@ static void koch_steps(int count)
 }
 
 /* ---- dispatch ----------------------------------------------------------- */
-static void fractal_init(void)
+static void begin_fractal(void)
 {
-    if (frac_type == F_SIER) sierpinski_init();
-    else                     koch_init();
+    frac_type = ftypes[rnd() % 2];
+    clear_y = 0;
+    anim_stage = FR_CLEAR;
 }
 static unsigned char fractal_done(void)
 {
@@ -166,30 +217,43 @@ static unsigned char fractal_done(void)
 }
 static void fractal_step(void)
 {
-    if (frac_type == F_SIER) sierpinski_steps(SPD * 200);
+    if (frac_type == F_SIER) sierpinski_steps(SIER_POINTS_PER_FRAME);
     else                     koch_steps(SPD);
 }
 
 static void anim_tick(void)
 {
-    if (anim_stage == 0) {
+    unsigned char rows;
+
+    if (anim_stage == FR_CLEAR) {
+        rows = CLEAR_LINES_PER_FRAME;
+        if ((unsigned int)clear_y + rows > GB_LINES)
+            rows = (unsigned char)(GB_LINES - clear_y);
+        gb_fill(0, clear_y, GB_COLS, rows, BG);
+        clear_y = (unsigned char)(clear_y + rows);
+        if (clear_y >= GB_LINES) {
+            if (frac_type == F_SIER) {
+                sierpinski_init();
+                anim_stage = FR_DRAW;
+            } else {
+                koch_begin();
+                anim_stage = FR_SETUP;
+            }
+        }
+    } else if (anim_stage == FR_SETUP) {
+        if (koch_setup_step()) anim_stage = FR_DRAW;
+    } else if (anim_stage == FR_DRAW) {
         fractal_step();
-        if (fractal_done()) { anim_stage = 1; anim_timer = PAUSE; }
-    } else if (anim_stage == 1) {
-        if (--anim_timer <= 0) anim_stage = 2;
+        if (fractal_done()) { anim_stage = FR_HOLD; anim_timer = PAUSE; }
     } else {
-        frac_type = ftypes[rnd() % 2];                  /* a new random fractal */
-        gb_fill(0, 0, GB_COLS, GB_LINES, BG);
-        fractal_init();
-        anim_stage = 0;
+        if (anim_timer > 0) anim_timer--;
+        else begin_fractal();
     }
 }
 
 static void ss_paint(void)
 {
-    gb_fill(0, 0, GB_COLS, GB_LINES, BG);
-    anim_stage = 0;
-    fractal_init();
+    begin_fractal();
 }
 
 static void ss_frame(void)
@@ -219,7 +283,6 @@ void main(void)
     gb_time();
     rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0xF7A3u);
     if (!rng) rng = 0xF7A3u;
-    frac_type = ftypes[rnd() % 2];                /* random fractal at start */
     WM_FS = 1;
     gb_curhide();
     for (n = 64; n; n--) if (!gb_getkey()) break;

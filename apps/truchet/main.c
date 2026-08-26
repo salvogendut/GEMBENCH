@@ -18,6 +18,7 @@
 #define COLS 16         /* 16*20 = 320 */
 #define ROWS 10         /* 10*20 = 200 */
 #define HOLD 150        /* frames between re-tilings */
+#define TILES_PER_FRAME 8
 
 static unsigned char lmx, lmy, armed;
 static unsigned int  rng;
@@ -82,24 +83,37 @@ static void vram_line(int x0, int y0, int x1, int y1, unsigned char ink)
 }
 #endif
 
-static unsigned char pen, hold;
+static unsigned char pen, hold, tile_x, tile_y, drawing;
 static const unsigned char pens[3] = { 1, 3, 1 };  /* white, red, white */
 static unsigned char penix;
 
-static void draw_tiling(void)
+static void begin_tiling(void)
 {
-    unsigned char gx, gy;
-    int x0, y0;
     pen = pens[penix]; penix = (penix + 1) % 3;
-    for (gy = 0; gy < ROWS; gy++) {
-        for (gx = 0; gx < COLS; gx++) {
-            x0 = gx * CW; y0 = gy * CH;
-            if (rnd() & 1) {                 /* "\" tile */
-                vram_line(x0 + CW/2, y0,        x0 + CW,   y0 + CH/2, pen);
-                vram_line(x0,        y0 + CH/2, x0 + CW/2, y0 + CH,   pen);
-            } else {                         /* "/" tile */
-                vram_line(x0 + CW/2, y0,        x0,        y0 + CH/2, pen);
-                vram_line(x0 + CW,   y0 + CH/2, x0 + CW/2, y0 + CH,   pen);
+    tile_x = 0;
+    tile_y = 0;
+    drawing = 1;
+}
+
+static void draw_tiling_step(void)
+{
+    unsigned char n;
+    int x0, y0;
+
+    for (n = 0; n < TILES_PER_FRAME && drawing; n++) {
+        x0 = tile_x * CW; y0 = tile_y * CH;
+        if (rnd() & 1) {                 /* "\" tile */
+            vram_line(x0 + CW/2, y0,        x0 + CW,   y0 + CH/2, pen);
+            vram_line(x0,        y0 + CH/2, x0 + CW/2, y0 + CH,   pen);
+        } else {                         /* "/" tile */
+            vram_line(x0 + CW/2, y0,        x0,        y0 + CH/2, pen);
+            vram_line(x0 + CW,   y0 + CH/2, x0 + CW/2, y0 + CH,   pen);
+        }
+        if (++tile_x == COLS) {
+            tile_x = 0;
+            if (++tile_y == ROWS) {
+                drawing = 0;
+                hold = HOLD;
             }
         }
     }
@@ -108,6 +122,7 @@ static void draw_tiling(void)
 static void ss_paint(void)
 {
     gb_fill(0, 0, GB_COLS, GB_LINES, BG);
+    begin_tiling();
 }
 
 static void ss_frame(void)
@@ -126,10 +141,9 @@ static void ss_frame(void)
         gb_wm_close();
         return;
     }
+    if (drawing) { draw_tiling_step(); return; }
     if (hold) { hold--; return; }
     ss_paint();
-    draw_tiling();
-    hold = HOLD;
 }
 
 static const gb_win_t sswin = { 0, 0, GB_COLS, GB_LINES, ss_frame, ss_paint, 0, 0 };
@@ -138,7 +152,7 @@ void main(void)
 {
     unsigned char n;
     lmx = gb_mx(); lmy = gb_my();
-    armed = 0; penix = 0; hold = 0;
+    armed = 0; penix = 0; hold = 0; drawing = 0;
     gb_time();
     rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0x5452u);
     if (!rng) rng = 0x5452u;
@@ -149,7 +163,5 @@ void main(void)
     gb_curhide();
     for (n = 64; n; n--) if (!gb_getkey()) break;
     ss_paint();
-    draw_tiling();
-    hold = HOLD;
     gb_wm_add(&sswin);
 }

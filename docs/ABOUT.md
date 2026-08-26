@@ -183,7 +183,7 @@ geobench/
 │   ├── iconed/        #   icon/cursor editor for .IST sets and .SPR cursors
 │   ├── paint/         #   Mode-1 paint app (toolchest, palette, .PIC files)
 │   ├── xaos/          #   fixed-point Mandelbrot generator (.PIC export)
-│   ├── viewer/        #   text + .PIC image viewer
+│   ├── viewer/        #   banked/demand-streamed .PIC image viewer
 │   ├── clock/         #   analog clock window
 │   └── settings/      #   control panel: config/media picker + desktop colours
 ├── rom/               # per-backend upper ROMs (GBALB.ROM shipped; IDE ROM archived)

@@ -68,6 +68,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   grip and resize-drag helpers for apps that do not use them.
   `SOUND=1` links the target-specific PSG/beeper primitives into that app only;
   it does not add a resident kernel service.
+  `REPAINTTOP=1` links the three-byte `gb_repaint_top()` binding for an opaque
+  top window's initial publication; exposure repairs must keep using
+  `gb_restore_parent()`.
   `APP_ICON=path/icon.asm` embeds a canonical 32x32 icon in the
   optional `GBAP` executable preamble without changing the kernel launch ABI;
   `APP_ICON16=path/icon16.asm` adds an explicit native Screen-7 variant. For
@@ -103,6 +106,13 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   match the exported `lib/gbapp.inc` slot addresses through `kernel/api_table.inc`.
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in
   `kernel/lowram.tsv` for accidental range overlaps.
+- **`build_scheduler.sh {cpc|msx|pcw}`** — assembles the optional, app-carried
+  preemptive scheduler into a bounded 512-byte raw payload. `build_capp.sh`
+  embeds it in the root desktop when `TASK_ROOT=1`; the resulting runtime is
+  installed in fixed RAM and requires no GEOBENCH or M4 ROM. See
+  `docs/PREEMPTIVE_MULTITASKING.md`.
+- **`check_app_layout.py` / `test_app_layout.py`** — enforce the normal app
+  image limits and the `#7F00-#7FFF` task stack-snapshot reserve.
 - **`deploy_ide.sh`** — *(archived)* copy the staged distribution onto a real/emulated IDE
   image (for the frozen IDE backend).
 

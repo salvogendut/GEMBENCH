@@ -28,6 +28,16 @@
 #define GLOW_WHITE     3
 #define DENSITY        2
 
+#define MATRIX_FEEDERS_PER_FRAME 16
+#define MATRIX_CELLS_PER_FRAME   512
+#define MATRIX_DRAWS_PER_FRAME    12
+
+#define MATRIX_FEED  0
+#define MATRIX_DECAY 1
+#define MATRIX_SPAWN 2
+#define MATRIX_DRAW  3
+#define MATRIX_DELAY 4
+
 #ifdef GB_MSX2
 #define GLYPH_SLOT 32
 #define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
@@ -74,8 +84,10 @@ static signed char   fy[GW];
 static unsigned char frem[GW];
 static unsigned char fthr[GW];
 
-static unsigned char lmx, lmy, armed, phase, frame_skip;
+static unsigned char lmx, lmy, armed, frame_skip;
 static unsigned char glyph_base, glyph_count, matrix_speed;
+static unsigned char matrix_stage, feeder_cursor, frame_delay;
+static unsigned int cell_cursor;
 #ifndef GB_PCW
 static unsigned char matrix_color;
 #endif
@@ -283,39 +295,31 @@ static void draw_cell(unsigned char cx, unsigned char cy,
                    CW, 8, source);
 }
 
-static void anim_tick(void)
+static void feeder_step(unsigned char x)
 {
     unsigned int idx;
-    unsigned char x, y, nf;
-
-    for (x = 0; x < GW; x++) {
-        if (fy[x] < 0) continue;
-        if (fthr[x]) { fthr[x]--; continue; }
-        if ((unsigned char)fy[x] < GH) {
-            idx = (unsigned int)(unsigned char)fy[x] * GW + x;
-            if (frem[x]) {
-                cg[idx] = (unsigned char)(glyph_base + rnd() % glyph_count + 1);
-                cgl[idx] = GLOW_MAX;
-                cd[idx] = 1;
-                frem[x]--;
-            } else if (cg[idx]) {
-                cg[idx] = 0;
-                cgl[idx] = 0;
-                cd[idx] = 1;
-            }
-        }
-        fy[x]++;
-        if (fy[x] >= GH) { fy[x] = -1; frem[x] = 0; }
-    }
-
-    for (idx = 0; idx < TOTAL; idx++) {
-        if (cg[idx] && cgl[idx]) {
-            cgl[idx]--;
-            if (cgl[idx] == GLOW_WHITE || cgl[idx] == 0) cd[idx] = 1;
+    if (fy[x] < 0) return;
+    if (fthr[x]) { fthr[x]--; return; }
+    if ((unsigned char)fy[x] < GH) {
+        idx = (unsigned int)(unsigned char)fy[x] * GW + x;
+        if (frem[x]) {
+            cg[idx] = (unsigned char)(glyph_base + rnd() % glyph_count + 1);
+            cgl[idx] = GLOW_MAX;
+            cd[idx] = 1;
+            frem[x]--;
+        } else if (cg[idx]) {
+            cg[idx] = 0;
+            cgl[idx] = 0;
+            cd[idx] = 1;
         }
     }
+    fy[x]++;
+    if (fy[x] >= GH) { fy[x] = -1; frem[x] = 0; }
+}
 
-    nf = DENSITY;
+static void spawn_feeders(void)
+{
+    unsigned char x, nf = DENSITY;
     while (nf--) {
         x = (unsigned char)(rnd() % GW);
         if (fy[x] >= 0) continue;
@@ -325,19 +329,73 @@ static void anim_tick(void)
                   matrix_speed == 2 ? (unsigned char)(rnd() % 4) :
                                       (unsigned char)(rnd() % 8);
     }
+}
 
-    idx = 0;
-    for (y = 0; y < GH; y++) {
-        for (x = 0; x < GW; x++, idx++) {
-            if (!cd[idx]) continue;
+static void anim_work(void)
+{
+    unsigned int idx;
+    unsigned int work;
+    unsigned char x, y, draws;
+
+    if (matrix_stage == MATRIX_DELAY) {
+        if (frame_delay) { frame_delay--; return; }
+        feeder_cursor = 0;
+        matrix_stage = MATRIX_FEED;
+    }
+
+    if (matrix_stage == MATRIX_FEED) {
+        x = MATRIX_FEEDERS_PER_FRAME;
+        while (x-- && feeder_cursor < GW)
+            feeder_step(feeder_cursor++);
+        if (feeder_cursor >= GW) {
+            cell_cursor = 0;
+            matrix_stage = MATRIX_DECAY;
+        }
+        return;
+    }
+
+    if (matrix_stage == MATRIX_DECAY) {
+        work = MATRIX_CELLS_PER_FRAME;
+        while (work-- && cell_cursor < TOTAL) {
+            idx = cell_cursor++;
+            if (cg[idx] && cgl[idx]) {
+                cgl[idx]--;
+                if (cgl[idx] == GLOW_WHITE || cgl[idx] == 0) cd[idx] = 1;
+            }
+        }
+        if (cell_cursor >= TOTAL) matrix_stage = MATRIX_SPAWN;
+        return;
+    }
+
+    if (matrix_stage == MATRIX_SPAWN) {
+        spawn_feeders();
+        cell_cursor = 0;
+        matrix_stage = MATRIX_DRAW;
+        return;
+    }
+
+    work = MATRIX_CELLS_PER_FRAME;
+    draws = 0;
+    while (work-- && cell_cursor < TOTAL) {
+        idx = cell_cursor;
+        if (cd[idx]) {
+            if (draws >= MATRIX_DRAWS_PER_FRAME) break;
             cd[idx] = 0;
+            y = (unsigned char)(idx / GW);
+            x = (unsigned char)(idx - (unsigned int)y * GW);
             if (!cg[idx])
                 gb_fill((unsigned char)(x * CW), (unsigned char)(y * 8),
                         CW, 8, BG_PEN);
             else
                 draw_cell(x, y, (unsigned char)(cg[idx] - 1),
                           cgl[idx] > GLOW_WHITE ? 2 : cgl[idx] ? 1 : 0);
+            draws++;
         }
+        cell_cursor++;
+    }
+    if (cell_cursor >= TOTAL) {
+        frame_delay = (unsigned char)(frame_skip - 1);
+        matrix_stage = MATRIX_DELAY;
     }
 }
 
@@ -365,11 +423,7 @@ static void ss_frame(void)
         gb_wm_close();
         return;
     }
-    phase++;
-    if (phase >= frame_skip) {
-        phase = 0;
-        anim_tick();
-    }
+    anim_work();
 }
 
 static const gb_win_t sswin = {
@@ -382,7 +436,10 @@ void main(void)
     lmx = gb_mx();
     lmy = gb_my();
     armed = 0;
-    phase = 0;
+    matrix_stage = MATRIX_FEED;
+    feeder_cursor = 0;
+    cell_cursor = 0;
+    frame_delay = 0;
 
     glyphs = gbcfg_u8(GB_XMATRIX_GLYPHS_KEY, GB_XMATRIX_GLYPHS_DEFAULT,
                       GB_XMATRIX_GLYPHS_MIN, GB_XMATRIX_GLYPHS_MAX);

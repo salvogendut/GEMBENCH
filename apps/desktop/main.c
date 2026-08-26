@@ -64,6 +64,10 @@ static unsigned char menu_refresh;           /* refocus after a child window clo
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 static unsigned char want_about;             /* System>About: 1=menu selected, 2=open next frame (#409) */
+#ifdef GB_PREEMPTIVE_DIAGNOSTIC
+static unsigned char preemptive_diagnostic_started;
+static unsigned char preemptive_diagnostic_refresh;
+#endif
 #if !defined(GB_MSX2) && !defined(GB_PCW)
 static unsigned char first_paint;             /* defer the definitive paint until WM registration */
 #endif
@@ -834,6 +838,12 @@ static void bar_draw(void)
         bar_min = gb_min;
         bar_clock(gb_hour, gb_min);
     }
+#ifdef GB_PREEMPTIVE_DIAGNOSTIC
+    /* Periodically sample both non-yielding workers through their normal DRAW
+       callbacks so headless diagnostics expose counter progress on screen. */
+    if (!++preemptive_diagnostic_refresh)
+        gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8);
+#endif
     /* The desktop loses focus when a window is clicked, and its on_frame stops
        running - but this bar hook runs every frame in the desktop's page regardless
        of focus. on_frame (above) sets desk_active when the desktop is focused; if it
@@ -1062,6 +1072,14 @@ static void on_frame(void)
         return;
     }
 #endif
+#ifdef GB_PREEMPTIVE_DIAGNOSTIC
+    if (!preemptive_diagnostic_started) {
+        preemptive_diagnostic_started = 1;
+        gb_wm_open("TASKDEMOAPP");
+        gb_wm_open("TASKDEMOAPP");
+        return;
+    }
+#endif
     if (menu_refresh && background_changed()) { /* backdrop/wallpaper changed while a child was up:
                                                     reload outside wm_repaint_all, then repaint once. */
         background_init();
@@ -1095,7 +1113,7 @@ static void on_frame(void)
         want_about = 0;
         UI_OP_K = 24;
         UI_COL_K = (GB_COLS - 60) / 2;
-        UI_LINE_K = (GB_LINES - 50) / 2;
+        UI_LINE_K = (GB_LINES - 62) / 2;
         gb_ui();
         repaint_stack();                  /* erase the transient box and restore every window */
         return;
@@ -1205,6 +1223,9 @@ void main(void)
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;
+#ifdef GB_PREEMPTIVE
+    gb_task_root_init();                         /* install app-carried fixed-RAM scheduler */
+#endif
     gb_on_bar(bar_draw);                        /* top-bar handler runs every frame (#77) */
     gb_wm_run(&deskwin);                        /* register + run the kernel WM (#45) */
 }

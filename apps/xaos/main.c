@@ -213,22 +213,86 @@ static void blit_canvas(void)
     gb_curshow();
 }
 
-/* Incremental render: a full Mandelbrot is ~15-20s on a 4 MHz Z80, so don't compute
-   it in one blocking call (that froze the whole desktop and let the parked pointer's
-   save-under bake a hole into the canvas). Instead render_start() arms it and x_frame
-   computes ONE row per frame - the pointer, window drag and close stay live, you watch
-   it paint top-down, and any key aborts (handled in x_frame). */
-static unsigned char rendering;        /* 1 while a render is in progress */
-static unsigned char render_px;        /* next canvas pixel column to compute */
-static unsigned char render_py;        /* next canvas row to compute */
+/* Incremental render: a full Mandelbrot is ~15-20s on a 4 MHz Z80. Cooperative
+   builds compute a bounded pixel batch from x_frame. Preemptive builds run that
+   same pure calculation in the app worker and publish completed rows for the
+   root/compositor task to draw. */
+#ifdef GB_PREEMPTIVE
+static volatile unsigned char rendering; /* shared worker/root state */
+static volatile unsigned char render_px;
+static volatile unsigned char render_py;  /* number of complete rows */
+static volatile unsigned char render_epoch;
+static unsigned char displayed_py;
+#else
+static unsigned char rendering;
+static unsigned char render_px;
+static unsigned char render_py;
+#endif
 
-static void render_start(void) { rendering = 1; render_px = 0; render_py = 0; }
+static void render_start(void)
+{
+#ifdef GB_PREEMPTIVE
+    /* A suspended worker may still hold coordinates from the previous view.
+       Bumping the generation makes it discard that pixel before publication. */
+    rendering = 0;
+    render_epoch++;
+    displayed_py = 0;
+#endif
+    render_px = 0;
+    render_py = 0;
+    rendering = 1;
+}
 
 /* render_step: compute a small budget of pixels per frame and blit each row as it
    finishes. A whole row is ~0.3s of Z80 fixed-point maths, so doing one per frame
    pinned the loop at ~3 Hz and felt frozen; a sub-row budget keeps the pointer
    smooth (the loop, and the k_poll cursor move, run every budget instead). */
 #define RENDER_BUDGET 16               /* canvas pixels computed per frame */
+#ifdef GB_PREEMPTIVE
+static void render_step(void)
+{
+    unsigned char n = RENDER_BUDGET, b, px, py, pen;
+    int cx, cy;
+    unsigned char epoch = render_epoch;
+    while (n--) {
+        unsigned int off;
+        if (!rendering || epoch != render_epoch) return;
+        px = render_px;
+        py = render_py;
+        if (py >= CANVAS_H) { rendering = 0; return; }
+        if (px == 0) {                              /* new row: clear it first */
+            for (b = 0; b < CANVAS_WB; b++) {
+                if (epoch != render_epoch) return;
+                canvas[(unsigned int)py * CANVAS_WB + b] = 0;
+            }
+        }
+        cy = cy0 + (int)((int)py - CANVAS_H / 2) * step;
+        cx = cx0 + (int)((int)px - CANVAS_W / 2) * step;
+        pen = pen_of(mand(cx, cy));
+        if (!rendering || epoch != render_epoch) return;
+        off = (unsigned int)py * CANVAS_WB + (px >> 2);
+        canvas[off] = set_pixel(canvas[off], (unsigned char)(px & 3), pen);
+        if (++px >= CANVAS_W) {
+            render_px = 0;
+            render_py = (unsigned char)(py + 1);     /* publish only after the row is complete */
+            if (render_py >= CANVAS_H) { rendering = 0; return; }
+        } else render_px = px;
+    }
+}
+
+/* Worker context: calculation only. It never calls the kernel, firmware, a
+   paged module, storage, or drawing code. */
+static void x_worker(void)
+{
+    if (rendering) render_step();
+}
+
+/* Root context: consume rows after the worker has published them. */
+static void render_flush(void)
+{
+    while (displayed_py < render_py) blit_row(displayed_py++);
+}
+#else
 static void render_step(void)
 {
     unsigned char n = RENDER_BUDGET, b;
@@ -236,13 +300,14 @@ static void render_step(void)
     cy = cy0 + (int)((int)render_py - CANVAS_H / 2) * step;
     while (n--) {
         unsigned int off;
-        if (render_px == 0)                         /* new row: clear it first */
+        if (render_px == 0)
             for (b = 0; b < CANVAS_WB; b++)
                 canvas[(unsigned int)render_py * CANVAS_WB + b] = 0;
         off = (unsigned int)render_py * CANVAS_WB + (render_px >> 2);
         cx = cx0 + (int)((int)render_px - CANVAS_W / 2) * step;
-        canvas[off] = set_pixel(canvas[off], (unsigned char)(render_px & 3), pen_of(mand(cx, cy)));
-        if (++render_px >= CANVAS_W) {              /* row finished -> blit it */
+        canvas[off] = set_pixel(canvas[off], (unsigned char)(render_px & 3),
+            pen_of(mand(cx, cy)));
+        if (++render_px >= CANVAS_W) {
             blit_row(render_py);
             render_px = 0;
             if (++render_py >= CANVAS_H) { rendering = 0; return; }
@@ -250,6 +315,7 @@ static void render_step(void)
         }
     }
 }
+#endif
 
 /* ---- window chrome ---------------------------------------------------------- */
 static void fmt83(char *dst, const char *n11);   /* below */
@@ -434,6 +500,9 @@ static void x_frame(void)
     unsigned char c;
     sync_rect();
     win_title();                                       /* keep wtitle fresh for the WM title */
+#ifdef GB_PREEMPTIVE
+    render_flush();                                    /* all drawing stays on the root task */
+#endif
     if (rendering) {                                   /* paint a budget of pixels per frame: the
                                                           WM/pointer stay live (drag/close still work
                                                           via their own messages) instead of freezing.
@@ -443,7 +512,9 @@ static void x_frame(void)
                                                           released) and that would stop the render.
                                                           Close the window or click +/-/canvas
                                                           (restarts) to interrupt. */
+#ifndef GB_PREEMPTIVE
         render_step();
+#endif
         return;
     }
     if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a File menu ran (#142) */
@@ -511,6 +582,9 @@ static void x_proc(void)
 static const gb_mwin_t xmw = {
     DEF_X, DEF_Y, WIN_W, WIN_H, 0, 0,                  /* min_w=0: not grip-resizable */
     x_proc, wtitle
+#ifdef GB_PREEMPTIVE
+    , x_worker
+#endif
 };
 
 void main(void)
@@ -526,4 +600,7 @@ void main(void)
     win_title();                                        /* build wtitle before the first paint */
     for (n = 64; n; n--) if (!gb_getkey()) break;       /* drop buffered keys */
     gb_restore_parent();                               /* first paint: WM chrome + x_draw */
+#ifdef GB_PREEMPTIVE
+    gb_task_enable();                                  /* worker starts only after initial paint */
+#endif
 }

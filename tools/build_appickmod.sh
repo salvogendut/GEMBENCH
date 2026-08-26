@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 OUT="${1:-build/GBAPICK.RAW}"
-APPDEFS="${APPDEFS:-}"
+APPDEFS="${APPDEFS:-} ${GLOBAL_APPDEFS:-}"
 GB="lib/gb"
 SRC="kernel/kc/gbappick_mod.c"
 SDCC="${SDCC:-sdcc}"

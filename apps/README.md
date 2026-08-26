@@ -15,7 +15,7 @@ focused window's handlers (issue #45).
 |-----|-----------|------------|
 | desktop  | `DESKTOP.APP`  | the root window — drive/Clock/Trash icons, drag-and-drop, the top bar + System menu, the screensaver idle trigger |
 | filemgr  | `FILEMGR.APP`  | per-drive file browser (list/icon views, type→app routing, `..`, Trash) |
-| viewer   | `VIEWER.APP`   | text / `.PIC` viewer (banked load for big pictures) |
+| viewer   | `VIEWER.APP`   | image-only `.PIC` viewer; uses banked RAM when available and demand-streams visible rows when banks are occupied |
 | notepad  | `NOTEPAD.APP`  | text editor (word-wrap, File/Edit/View, saves `.BAS` CR+LF) |
 | iconed   | `ICONED.APP`   | `.IST` icon-set / `.SPR` cursor / embedded `.APP` icon editor |
 | paint    | `PAINT.APP`    | portable GBPC v2 bitmap paint (toolchest, saves `.PIC`) |
@@ -29,10 +29,15 @@ focused window's handlers (issue #45).
 | formref  | `FORMREF.APP`  | development reference for app-linked form composition and the first `GBAP` embedded application icon, using the Daruma artwork |
 | sndtest  | `SNDTEST.APP`  | non-blocking app-linked sound diagnostic: PSG scale/noise on CPC/MSX2 and DKsound-equipped PCWs, with stock-PCW beeper fallback |
 | wget     | `WGET.APP`     | GUI HTTP downloader with bounded redirects and streamed writes to an automatically derived 8.3 filename; CPC continues exact-length partial files with HTTP Range, while PCW uses PerryNet and safely restarts CP/M-record files |
-| browser  | `BROWSER.APP`  | fullscreen HTTP browser for CPC, MSX2, and PCW; demand-streams into a bounded borrowed-bank cache, renders compact GET forms and one lazy-loaded GBPC image, hides proxy targets behind highlighted link labels, and loads/saves offline `.HTM` files without retaining a DOM |
+| browser  | `BROWSER.APP`  | fullscreen HTTP browser for CPC, MSX2, and PCW; demand-streams into a bounded borrowed-bank cache, renders compact GET forms, simple table grids, and sequential lazy GBPC images through one image slot, hides proxy targets behind highlighted link labels, and loads/saves offline `.HTM` files without retaining a DOM |
 | brsave   | `BRSAVE.APP`   | transient Browser helper that writes captured HTML source to an `.HTM` file without displacing the Browser bank |
 | shell    | `SHELL.APP`    | fullscreen command shell with `ls`, `cd`, `pwd`, `cat`, `cp`, `rm`, `clear`, `help`, and `exit`; supports A/B/C paths and streamed arbitrary-size file copies |
 | timesync | `TIMESYNC.APP` | PCW desktop helper — reads PerryNet's firmware clock with `TIME_GET` when `TIMESYNC=true`, then applies `TIMEZONE=+/-H` |
+
+`TASKDEMO.APP` is a development-only preemption diagnostic and is not staged in
+the distributions. Its worker intentionally never yields; build it with
+`make taskdemo` and run it only against `make cpc-preemptive`. The scheduler is
+carried by `DESKTOP.APP` and installed into RAM; no ROM is required.
 
 ## Screensavers (`.SAV`)
 
@@ -44,8 +49,9 @@ System → "Activate screensaver" runs it on demand. Each is a full-screen windo
 
 The Main CPC boot floppy carries `SQUARES.SAV`; the CPC floppy set carries the
 remaining savers across `COMPANION.DSK` and `EXTRAS.DSK` (`XROACH.SAV`,
-`CATCLK.SAV`, and `HELIX.SAV` are on Extras to preserve Companion allocation
-blocks). The Albireo/M4 card and MSX2 distributions carry all 16 savers together.
+`CATCLK.SAV`, `HELIX.SAV`, and `FOREST.SAV` are on Extras to preserve Companion
+allocation blocks). The Albireo/M4 card and MSX2 distributions carry all 16
+savers together.
 
 | Saver | Disk file | Effect |
 |-------|-----------|--------|
@@ -57,7 +63,7 @@ blocks). The Albireo/M4 card and MSX2 distributions carry all 16 savers together
 | starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl |
 | xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the blue field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit |
 | pyro     | `PYRO.SAV`     | fixed-point fireworks — rockets rise and burst into shrapnel showers — ported from xscreensaver |
-| forest   | `FOREST.SAV`   | recursive fractal trees with red blossoms — ported from xscreensaver |
+| forest   | `FOREST.SAV`   | fractal trees with solid branches and red blossoms; each MSX Screen 7 stand randomly uses one blossom colour, one colour per tree, or mixed blossom colours — ported from xscreensaver |
 | helix    | `HELIX.SAV`    | woven harmonograph curves (sin-table) — ported from xscreensaver |
 | catclock | `CATCLK.SAV`   | Kit-Cat Klock — embedded body bitmap (from `assets/catclockbody.png` via `tools/png2catclock.py`) with sliding pupils + real hour/minute hands from `gb_time()` |
 | munch    | `MUNCH.SAV`    | "munching squares" XOR moiré sweeping a power-of-two square — ported from xscreensaver |
@@ -107,6 +113,11 @@ resident kernel. Build with only the units an application uses:
 - `FORM_SELECT=1`: labelled selector rows; requires `FORM=1` and `SELECTOR=1`
 - `TIMESET=1`: binary `gb_set_time()` support without adding resident kernel code
 - `SOUND=1`: target sound primitives without adding resident kernel code
+- `REPAINTTOP=1`: the `gb_repaint_top()` binding for publishing a newly opened
+  opaque top window without redrawing lower layers; do not use it after a move,
+  shrink, or popup that exposes parent content
+- `TASK=1 TASK_STACK_RESERVE=256`: opt a legacy window's `on_frame` callback
+  into the experimental worker scheduler and reserve its bank-top stack snapshot
 
 For example:
 

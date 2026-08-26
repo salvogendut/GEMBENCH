@@ -60,6 +60,9 @@ name_desktop    db    "DESKTOP APP"
 k_exit
 km_finish
                 di
+                if PREEMPTIVE_CONTEXT
+                call  SCHED_IRQ_UNINSTALL_ENTRY ; restore retained MCU bootstrap bytes at #0038
+                endif
                 jp    0
 
 ; pcw_mem_init: 256K vs 512K by the bank-wrap probe: non-existent blocks

@@ -92,8 +92,28 @@ POLL_FLAGS      equ   #1308        ; last poll: flags (bit0 click, bit1 quit, bi
 MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *count
                                    ; #1335..#1337: fs_cur_drive/fs_boot_drive/fls_browse
 KCFG_FRAMEPEN   equ   #133C        ; Edge pen, or Text/Accent when Edge matches Paper
-REPAINT_HDLR    equ   #1340        ; per-depth full-repaint handlers (4 words), for
-                                   ; restoring the background under a moved window (#43)
+REPAINT_HDLR    equ   #1340        ; retired per-depth repaint handlers (8 bytes).
+                                   ; PREEMPTIVE reuses this dead block for scheduler state,
+                                   ; so the experimental scheduler consumes no new low RAM.
+                if PREEMPTIVE
+SCHED_LOCK      equ   #1340        ; non-zero while kernel/module code is atomic
+SCHED_RESERVED  equ   #1341        ; reserved scheduler state byte
+SCHED_CURRENT   equ   #1342        ; current WM/task slot, #FF before task dispatch
+SCHED_QUANTUM   equ   #1343        ; ticks left in the current quantum
+SCHED_RUNNABLE  equ   #1344        ; runnable task count (desktop/system task included)
+SCHED_FLAGS     equ   #1345        ; scheduler-wide flags (reserved)
+SCHED_STACK_MAX equ   #1346        ; largest sampled fixed-stack use (bytes)
+SCHED_FAULT     equ   #1347        ; non-zero when a context exceeds the 255-byte reserve
+                ifdef PLATFORM_MSX
+SCHED_BASE      equ   #C900        ; fixed page-3 RAM, visible during H.TIMI/mapper calls
+                else
+SCHED_BASE      equ   #3C00        ; fixed low RAM; top 512B of old module transfer area
+                endif
+SCHED_INIT_ENTRY equ  SCHED_BASE
+SCHED_YIELD_ENTRY equ SCHED_BASE+3
+SCHED_TASK_ENABLE_ENTRY equ SCHED_BASE+6
+SCHED_IRQ_UNINSTALL_ENTRY equ SCHED_BASE+9
+                endif
 
 ; Window manager (issue #45) - the kernel owns the master loop and a table of
 ; co-resident windows; each app registers one and becomes callback-driven. State
@@ -109,7 +129,7 @@ WM_FPREV        equ   #1422        ; previously focused slot (menu-swap edge det
 WM_DRAGNAME     equ   #1423        ; drag-and-drop (#62): dragged 11-byte 8.3 name,
                                    ; app-visible (the drop target reads it on GB_MSG_DROP)
 WM_DRAGSRC      equ   #142E        ; source window slot of the active drag
-WM_DRAGMOV      equ   #142F        ; 1 once the pointer moved (a drag, not a click)
+WM_DRAGMOV      equ   #142F        ; bit0 = pointer moved; bit7 = preemptive drop job claimed
 WM_DRAGX0       equ   #1430        ; last drag position (byte col / line); movement
 WM_DRAGY0       equ   #1431        ; vs this drives both the ghost and click/drag tell
 WM_DRAGDRV      equ   #1432        ; source drive of the active drag (for cross-drive copy)
@@ -136,6 +156,9 @@ MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the
 ; state uses #14D2..#14FE. video_mode_hint #14FF (high bit valid) lets paged
 ; modules preserve Mode 2 fullscreen when touching the Gate Array register.
 MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
+                if PREEMPTIVE
+WM_TASK_RUNNABLE equ  8            ; WM_FR_FLAGS bit 3: bank has a valid task snapshot
+                endif
 GHOST_W         equ   8            ; drag ghost outline box: 8 byte-cols x 16 lines
 GHOST_H         equ   16           ; (an icon footprint); save-under in fs_secbuf
 CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT.SPR is

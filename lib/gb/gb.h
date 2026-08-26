@@ -307,7 +307,10 @@ typedef struct {
 #define GB_MSG_MENU 1
 /* GB_MSG_DROP (#62): a file was dropped on this window via drag-and-drop. The
  * dragged item's 11-byte 8.3 name is at gb_dragname; the drop position is the
- * current gb_mx()/gb_my(). Delivered to the *target* window's on_event handler. */
+ * current gb_mx()/gb_my(). Delivered to the *target* window's on_event handler.
+ * A preemptive target starting a bounded root job may claim the drop before the
+ * callback returns; the WM raises that target. Release the claim when the job
+ * finishes or is cancelled. */
 #define GB_MSG_DROP 2
 /* Window messages (#148): the kernel routes EVERY managed-window callback through
  * the single gb_mwin_t.proc, keyed by gb_msg.type - the proc switches on it. */
@@ -317,6 +320,9 @@ typedef struct {
 #define GB_MSG_CLOSE 6   /* close requested (gadget/ESC): confirm + gb_wm_close      */
 #define GB_MSG_DRAG  7   /* a title-bar press: gb_drag_window + gb_wm_setpos         */
 #define gb_dragname ((const char *)0x1423)  /* mirrors WM_DRAGNAME in kernel/lowram.inc */
+#define gb_drop_claim()   (*(volatile unsigned char *)0x142F |= 0x80)
+#define gb_drop_release() (*(volatile unsigned char *)0x142F &= 0x7F)
+#define gb_drop_claimed() ((*(volatile unsigned char *)0x142F & 0x80) != 0)
 #define gb_msg (*(volatile gb_msg_t *)0x1302)
 
 /* Top-bar menu (issue #34). The app registers menu titles the kernel draws in
@@ -383,6 +389,8 @@ unsigned char gb_pickdir(const char *const *exts);
  * Mark edits with gb_doc_dirty() so New / Load / close can offer to save first.
  * Apps can set GB_DOC_LOAD_NOCONFIRM when LOAD should behave like BASIC LOAD:
  * discard the current contents and leave the newly loaded file clean.
+ * GB_DOC_OPEN_OWNS_LOAD is for streamed/banked documents: the picker updates the
+ * current name, then on_open performs the load instead of gb_doc filling buf.
  *
  * Recipe: call gb_doc(&doc) before gb_wm_run; in your on_event call
  * gb_doc_event() first (returns 1 if the framework consumed the event); in your
@@ -423,6 +431,7 @@ typedef struct {
     unsigned char flags;
 } gb_doc_t;
 #define GB_DOC_LOAD_NOCONFIRM 0x01
+#define GB_DOC_OPEN_OWNS_LOAD 0x02
 void          gb_doc(const gb_doc_t *d);   /* register; adds the standard File (+Edit) menu */
 void          gb_doc_dirty(void);          /* mark the document modified */
 unsigned char gb_doc_modified(void);       /* is it dirty? (e.g. for a "*" in the title) */
@@ -434,6 +443,10 @@ unsigned char gb_doc_frame(void);          /* in on_frame: ran a menu? 0 = no, o
                                             * change (redraw your body); 3 = File/View action (full
                                             * repaint via gb_restore_parent). `if (gb_doc_frame())
                                             * gb_restore_parent();` stays correct for non-Edit apps. */
+#ifdef GBDOC_BOUNDED_IO
+unsigned char gb_doc_startup_load(void);   /* begin loading the launch file; 0 = no launch file */
+unsigned char gb_doc_busy(void);           /* 0 idle, 1 loading, 2 saving */
+#endif
 
 /* Shared clipboard (#142): a system buffer that survives app switches, so copy in
  * one app and paste in another. An app's on_copy fills it; on_paste reads it. */
@@ -484,6 +497,7 @@ void gb_pic_blit(unsigned char x, unsigned char y, unsigned char wbytes,
 unsigned char gb_pic_edit(unsigned char op);
 void gb_pic_close(void);
 void gb_restore_parent(void);                /* repaint ancestor apps behind us */
+void gb_repaint_top(void);                   /* repaint only the opaque z-top window */
 void gb_wm_damage(unsigned char x, unsigned char y,
                   unsigned char w, unsigned char h);  /* limit the next repaint to a rect (#153) */
 unsigned char gb_wm_full(void);              /* 1 = no free app bank for another window (#153) */
@@ -511,6 +525,10 @@ typedef struct {
 } gb_win_t;
 void gb_wm_run(const gb_win_t *desc);
 void gb_wm_add(const gb_win_t *desc);
+/* Opt-in worker task (#477). Register a gb_mwin_t whose task_worker is a pure
+ * compute callback, then call this after the initial compositor paint. proc
+ * continues to receive draw/input/lifecycle messages on the root task. */
+void gb_task_enable(void);
 
 /* Managed window (#146, #148): the KERNEL owns the chrome. Register with gb_wm_managed
  * and the WM draws the frame/title/grip and runs close/drag/resize for you; the app
@@ -530,8 +548,7 @@ typedef struct {
     unsigned char min_w, min_h;     /* min size; min_w == 0 -> not resizable */
     void (*proc)(void);             /* the window's ONE handler; switch on gb_msg.type */
     const char *title;
-    const void *reserved;           /* keep the descriptor 12 bytes wide for wm_register;
-                                       leave 0 */
+    void (*task_worker)(void);       /* pure compute callback for gb_task_enable; else 0 */
 } gb_mwin_t;
 void          gb_wm_managed(const gb_mwin_t *desc);   /* register a kernel-managed window */
 unsigned char gb_wm_x(void);    /* live window rect (WM-owned) */
@@ -654,13 +671,21 @@ unsigned char gb_get_drive(void);
 void gb_copy_begin(void);
 void gb_copy_end(void);
 #define gb_copybuf ((char *)0x2200)
+#ifdef GB_PREEMPTIVE
+#define GB_COPYMAX 0x1A00
+#else
 #define GB_COPYMAX 0x1C00
+#endif
 
 /* Top-bar handler (experiment #77). gb_on_bar registers a handler the WM master loop
  * runs every frame in the desktop's page, regardless of which window has focus - so a
  * desktop-owned top bar (clock, menu titles, footprint) stays live. Draw only (no
  * input / no gb_poll); use change-detection to avoid a wasteful per-frame repaint. */
 void gb_on_bar(void (*handler)(void));
+
+/* Development preemption runtime. TASK_ROOT=1 links the scheduler payload into
+ * the desktop; this installs it in fixed RAM without a ROM or external module. */
+void gb_task_root_init(void);
 
 /* Shared TCP API (build_capp NET=1). CPC calls the active GBNET/GBNETM4 paged
  * module; MSX discovers and calls a TCP/IP UNAPI implementation. gb_net_init's

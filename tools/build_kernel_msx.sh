@@ -20,6 +20,31 @@ RASM="${RASM:-rasm}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
+PREEMPTIVE="${PREEMPTIVE:-0}"
+PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
+NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
+NOTEPAD_DATA_LOC="0x6F48"
+NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
+NOTEPAD_SCROLL=1
+if [ "$PREEMPTIVE" = "1" ]; then
+    RASM="$RASM" bash tools/build_scheduler.sh msx
+    EXTRA_RASM="${EXTRA_RASM:-} -DPREEMPTIVE=1 -DPREEMPTIVE_CONTEXT=1"
+    export EXTRA_RASM
+    export GLOBAL_APPDEFS="${GLOBAL_APPDEFS:-} -DGB_PREEMPTIVE"
+    if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
+        export GLOBAL_APPDEFS="$GLOBAL_APPDEFS -DGB_PREEMPTIVE_DIAGNOSTIC"
+    elif [ "$PREEMPTIVE_DIAGNOSTIC" != "0" ]; then
+        echo "PREEMPTIVE_DIAGNOSTIC must be 0 or 1" >&2
+        exit 2
+    fi
+elif [ "$PREEMPTIVE" != "0" ]; then
+    echo "PREEMPTIVE must be 0 or 1" >&2
+    exit 2
+elif [ "$PREEMPTIVE_DIAGNOSTIC" != "0" ]; then
+    echo "PREEMPTIVE_DIAGNOSTIC requires PREEMPTIVE=1" >&2
+    exit 2
+fi
+
 TITLEBAR_RASM="-DTITLEBAR_TILE=1"
 RASM="$RASM" bash tools/build_titlebarmod.sh
 
@@ -62,18 +87,41 @@ python3 tools/gblib_subset.py \
 VIEWER_GBLIB="build/msx/GBLIBVIEWER.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$VIEWER_GBLIB" apps/viewer/gblib.symbols
+NOTEPAD_GBLIB="build/msx/GBLIBNOTEPAD.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$NOTEPAD_GBLIB" apps/notepad/gblib.symbols
+ICONED_GBLIB="build/msx/GBLIBICONED.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$ICONED_GBLIB" apps/iconed/gblib.symbols
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
-APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
-APP_ICON=apps/notepad/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
+if [ "$PREEMPTIVE" = "1" ]; then
+    TASK_ROOT=1 TASK_RUNTIME_RAW=build/msx/GBSCHED.RAW \
+        TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
+        tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
+    if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
+        TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
+            tools/build_capp.sh apps/taskdemo build/msx/TASKDEMO.RAW
+    fi
+else
+    APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 \
+        tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
+fi
+APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 REPAINTTOP=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+APP_ICON=apps/notepad/icon.asm GBLIB_SRC="$NOTEPAD_GBLIB" APPDEFS="-DGB_MSX2 $NOTEPAD_APPDEFS" APP_CFLAGS="$NOTEPAD_CFLAGS" DATA_LOC="$NOTEPAD_DATA_LOC" DOC=1 REPAINTTOP="$NOTEPAD_SCROLL" tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
-APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
-APP_ICON=apps/iconed/icon.asm APPDEFS="-DGB_MSX2 -DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
-APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x69E0 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
-APP_ICON="$PAINT_APP_DIR/icon.asm" APP_ICON16="$PAINT_APP_DIR/icon16.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7D40 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
+if [ "$PREEMPTIVE" = "1" ]; then
+    TASK=1 TASK_STACK_RESERVE=256 APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_MSX2" \
+        DATA_LOC=0x6600 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
+else
+    APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6400 DOC=1 BUTTON=1 \
+        tools/build_capp.sh apps/xaos build/msx/XAOS.RAW
+fi
+APP_ICON=apps/iconed/icon.asm GBLIB_SRC="$ICONED_GBLIB" APPDEFS="-DGB_MSX2 -DGBUI_APPICON_PICKER -DGBDOC_BOUNDED_IO" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7200 DOC=1 BUTTON=1 REPAINTTOP=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
+APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x6A40 DOCRO=1 SCROLL16=1 REPAINTTOP=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
+APP_ICON="$PAINT_APP_DIR/icon.asm" APP_ICON16="$PAINT_APP_DIR/icon16.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7DA0 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
@@ -218,6 +266,11 @@ cp build/msx/BROWSER.RAW  QA/MSX/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/GBENCH/BRSAVE.APP
 cp build/msx/FORMREF.RAW  QA/MSX/GBENCH/FORMREF.APP
 cp build/msx/SNDTEST.RAW  QA/MSX/GBENCH/SNDTEST.APP
+if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
+    cp build/msx/TASKDEMO.RAW QA/MSX/GBENCH/TASKDEMO.APP
+else
+    rm -f QA/MSX/GBENCH/TASKDEMO.APP
+fi
 for f in "$GB_BASIC_DIR/build/msx/BASIC.RAW" "$GB_BASIC_DIR/build/msx/BASRUN.RAW" "$GB_BASIC_DIR/build/msx/BASRUN2.BIN"; do
     [ -s "$f" ] || { echo "ERROR: missing GB-BASIC MSX payload $f (run make -C \"$GB_BASIC_DIR\" raws-msx)" >&2; exit 1; }
 done

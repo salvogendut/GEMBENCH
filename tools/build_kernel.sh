@@ -13,6 +13,21 @@ RASM="${RASM:-rasm}"
 TITLEBAR_RASM="-DTITLEBAR_TILE=1"
 RASM="$RASM" bash tools/build_titlebarmod.sh
 
+PREEMPTIVE="${PREEMPTIVE:-0}"
+NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
+NOTEPAD_DATA_LOC="0x6F48"
+NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
+NOTEPAD_SCROLL=1
+if [ "$PREEMPTIVE" = "1" ]; then
+    RASM="$RASM" bash tools/build_scheduler.sh cpc
+    EXTRA_RASM="${EXTRA_RASM:-} -DPREEMPTIVE=1 -DPREEMPTIVE_CONTEXT=1"
+    export EXTRA_RASM
+    export GLOBAL_APPDEFS="${GLOBAL_APPDEFS:-} -DGB_PREEMPTIVE"
+elif [ "$PREEMPTIVE" != "0" ]; then
+    echo "PREEMPTIVE must be 0 or 1" >&2
+    exit 2
+fi
+
 GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
 PAINT_APP_DIR="$GB_PAINT_DIR/apps/paint"
 if [ -f "$PAINT_APP_DIR/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
@@ -69,6 +84,12 @@ python3 tools/gblib_subset.py \
 VIEWER_GBLIB="build/GBLIBVIEWER.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$VIEWER_GBLIB" apps/viewer/gblib.symbols
+NOTEPAD_GBLIB="build/GBLIBNOTEPAD.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$NOTEPAD_GBLIB" apps/notepad/gblib.symbols
+ICONED_GBLIB="build/GBLIBICONED.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$ICONED_GBLIB" apps/iconed/gblib.symbols
 
 BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
 if ! git diff --quiet --ignore-submodules -- 2>/dev/null \
@@ -135,33 +156,48 @@ DATA_LOC=0x7000 NET=1 tools/build_capp.sh apps/nettest build/NETTEST.RAW # NETTE
 APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW # FORMREF (#420/#424/#426/#428): compact action diagnostic + dual embedded APP icon reference
 DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/SNDTEST.RAW # SNDTEST (#452): app-linked PSG/beeper diagnostic; zero resident kernel bytes
 DATA_LOC=0x7A50 DIALOGS=1 WIDGETS=1 NET=1 tools/build_capp.sh apps/wget build/WGET.RAW # WGET (#363/#367): streaming HTTP downloader with redirects + CPC resume
-APP_ICON=apps/browser/icon.asm GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371/#373): demand stream + offline/proxy/GET-form support
+APP_ICON=apps/browser/icon.asm GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/BROWSER.RAW # BROWSER (#367/#371/#373/#476): demand stream + offline/proxy/GET-form/table support
 DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/BRSAVE.RAW # transient Browser .HTM source writer
 APP_ICON=apps/shell/icon.asm DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/SHELL.RAW # SHELL (#365): portable command shell with streamed cat/cp
 APP_ICON=apps/mahjong/icon.asm DATA_LOC=0x7100 DIALOGS=1 tools/build_capp.sh apps/mahjong build/MAHJONG.RAW # Kana Mahjong: solvable 144-tile Turtle game
 DATA_LOC=0x6800 BUTTON=1 tools/build_capp.sh apps/calculator build/CALC.RAW # CALC (#437): compact fixed-point desktop calculator
-DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW # DESKTOP (C/SDCC): System
+if [ "$PREEMPTIVE" = "1" ]; then
+    TASK_ROOT=1 TASK_RUNTIME_RAW=build/GBSCHED.RAW \
+        TASK_STACK_RESERVE=256 DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
+        tools/build_capp.sh apps/desktop build/DESKTOP.RAW
+else
+    DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/DESKTOP.RAW
+fi
+                                   # DESKTOP (C/SDCC): System
                                    # menu via the shared gb_doc menu system (#142). Higher data-loc
                                    # for the wallpaper config parse (#212/#216), saver trigger (#219),
                                    # and clip-aware wallpaper repaint path.
-APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 APP_PROBE=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
+FILEMGR_APP_PROBE=1
+if [ "$PREEMPTIVE" = "1" ]; then FILEMGR_APP_PROBE=0; fi
+APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 APP_PROBE="$FILEMGR_APP_PROBE" REPAINTTOP=1 tools/build_capp.sh apps/filemgr build/FILEMGR.RAW # FILEMGR: tight split; app-specific icon names use a compact table
                                    # the gb_doc-grown code + ".." entry; the 128-entry listing cache
                                    # (#118) fits the rest. DOC=1 = View menu (Fullscreen/Icons-List) (#142)
-APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" DATA_LOC=0x6890 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: read-only
-                                   # gb_doc (DOCRO=1 omits Save/Save As); the in-page buffer is
-                                   # text/fallback only, bigger pictures use the banked .PIC path.
+APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" DATA_LOC=0x68B0 DOCRO=1 SCROLL16=1 REPAINTTOP=1 tools/build_capp.sh apps/viewer build/VIEWER.RAW # VIEWER: image-only, read-only
+                                   # gb_doc (DOCRO=1 omits Save/Save As); pictures use banked RAM
+                                   # when available and demand-stream visible rows otherwise.
                                    # File>Load + View>Fullscreen (#142/#144)
-APP_ICON=apps/notepad/icon.asm DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
+APP_ICON=apps/notepad/icon.asm GBLIB_SRC="$NOTEPAD_GBLIB" APPDEFS="$NOTEPAD_APPDEFS" APP_CFLAGS="$NOTEPAD_CFLAGS" DATA_LOC="$NOTEPAD_DATA_LOC" DOC=1 REPAINTTOP="$NOTEPAD_SCROLL" tools/build_capp.sh apps/notepad build/NOTEPAD.RAW # NOTEPAD: doc framework (#142),
                                    # code-heavy, so a higher data-loc gives it ~1.9K code room
                                    # (#97); shared File popup + name prompt (gbdlg/gbprompt, #114)
-APP_ICON=apps/iconed/icon.asm APPDEFS="-DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: header-aware .APP picker; document lives in a borrowed app page
+APP_ICON=apps/iconed/icon.asm GBLIB_SRC="$ICONED_GBLIB" APPDEFS="-DGBUI_APPICON_PICKER -DGBDOC_BOUNDED_IO" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 REPAINTTOP=1 tools/build_capp.sh apps/iconed build/ICONED.RAW # ICONED: header-aware .APP picker; document lives in a borrowed app page
                                    # the gb_doc/fullscreen code so the 6656-B icon-set buffer
                                    # (BUFSZ, holds DEFAULT.IST) + 256-B packed grid fit (#110/#142)
 DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock  build/CLOCK.RAW # CLOCK (C/SDCC): View>Fullscreen + Options
                                    # via the shared gb_doc menu system (#142) -> build/CLOCK.RAW
-APP_ICON="$PAINT_APP_DIR/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x79E0 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: three app-owned panes + banked 20x20 editor
+APP_ICON="$PAINT_APP_DIR/icon.asm" GBLIB_SRC="$PAINT_GBLIB" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7D00 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/PAINT.RAW # PAINT: three app-owned panes + banked 20x20 editor
                                    # + name prompt (gbdlg.c + gbprompt.c) for its File menu (#114)
-APP_ICON=apps/xaos/icon.asm DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/XAOS.RAW   # XAOS fractal generator:
+if [ "$PREEMPTIVE" = "1" ]; then
+    TASK=1 TASK_STACK_RESERVE=256 APP_ICON=apps/xaos/icon.asm DATA_LOC=0x6600 DOC=1 BUTTON=1 \
+        tools/build_capp.sh apps/xaos build/XAOS.RAW
+else
+    APP_ICON=apps/xaos/icon.asm DATA_LOC=0x6400 DOC=1 BUTTON=1 \
+        tools/build_capp.sh apps/xaos build/XAOS.RAW
+fi                                                                 # XAOS fractal generator:
                                    # File>Save dialog (gbdlg + gbprompt) -> .PIC (#116)
 APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/SETTINGS.RAW # SETTINGS (#129): the control
                                    # panel - pick FONT=/ICONS=/CURSOR= from /GBENCH (gb_popup),
@@ -202,7 +238,7 @@ tools/build_capp.sh apps/lightning build/LIGHTN.RAW # LIGHTNING (xscreensaver po
 tools/build_capp.sh apps/pyro build/PYRO.RAW      # PYRO (xscreensaver port): fixed-point fireworks
                                    # rockets + shrapnel, direct #C000. CARD-ONLY -> PYRO.SAV
 tools/build_capp.sh apps/forest build/FOREST.RAW  # FOREST (xscreensaver port): recursive fractal trees
-                                   # with red blossoms, direct #C000 lines. CARD-ONLY -> FOREST.SAV
+                                   # with red blossoms, direct #C000 lines. CARD/EXTRAS -> FOREST.SAV
 tools/build_capp.sh apps/helix build/HELIX.RAW    # HELIX (xscreensaver port): woven harmonograph curves
                                    # (sin-table), direct #C000 lines. CARD-ONLY -> HELIX.SAV
 DATA_LOC=0x6700 tools/build_capp.sh apps/catclock build/CATCLK.RAW # CATCLOCK (inspired by X11 catclock):
@@ -264,10 +300,13 @@ EXTRAS_ADDS=(
     --add build/XROACH.RAW=XROACH.SAV
     --add build/CATCLK.RAW=CATCLK.SAV
     --add build/HELIX.RAW=HELIX.SAV
+    --add build/FOREST.RAW=FOREST.SAV
+    --add build/MOUNTAIN.RAW=MOUNTAIN.SAV
+    --add build/MOUNTAINCFG.RAW=MOUNTAIN.MOD
 )
 for tbr in build/titlebars/*.TBR; do
     case "$(basename "$tbr")" in
-        IMPROVED.TBR|ORIGINAL.TBR) continue ;;
+        ORIGINAL.TBR) continue ;;
     esac
     EXTRAS_ADDS+=(--add "$tbr")
 done
@@ -281,7 +320,7 @@ while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")
 done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
-echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + secondary title/gadget themes + Disk Utility + XROACH/CATCLK/HELIX savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + secondary title/gadget themes + Disk Utility + XROACH/CATCLK/HELIX/FOREST/MOUNTAIN savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
@@ -294,7 +333,7 @@ echo "  $CARD_QA: loose files; $CARD_IMG: Albireo/M4 card; $FLOPPY_QA: floppy se
 # Leave build/ as the STORAGE-selected variant (default Albireo) so the --disk-a
 # test harness sees a predictable build/gbkern.dsk + build/GBKERN.RAW.
 rm -f build/gbkern.dsk
-"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG ${FAT16_FLAG:+$FAT16_FLAG} $TITLEBAR_RASM >/dev/null
+"$RASM" kernel/gbkern.asm -eo $STORAGE_FLAG ${FAT16_FLAG:+$FAT16_FLAG} ${EXTRA_RASM:-} $TITLEBAR_RASM >/dev/null
 "$RASM" kernel/pack_modules.asm -eo $TITLEBAR_RASM >/dev/null  # paged modules that no longer fit gbkern.asm
 "$RASM" kernel/pack_apps.asm -eo >/dev/null      # 2nd pass: overflow apps -> .dsk (#114)
 "$RASM" kernel/pack_apps2.asm -eo >/dev/null     # 3rd pass: VIEWER + FILEMGR -> .dsk (#142)

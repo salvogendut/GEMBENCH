@@ -24,6 +24,31 @@ GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
+PREEMPTIVE="${PREEMPTIVE:-0}"
+PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
+NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
+NOTEPAD_DATA_LOC="0x6F48"
+NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
+NOTEPAD_SCROLL=1
+if [ "$PREEMPTIVE" = "1" ]; then
+    RASM="$RASM" bash tools/build_scheduler.sh pcw
+    EXTRA_RASM="${EXTRA_RASM:-} -DPREEMPTIVE=1 -DPREEMPTIVE_CONTEXT=1"
+    export EXTRA_RASM
+    export GLOBAL_APPDEFS="${GLOBAL_APPDEFS:-} -DGB_PREEMPTIVE"
+    if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
+        export GLOBAL_APPDEFS="$GLOBAL_APPDEFS -DGB_PREEMPTIVE_DIAGNOSTIC"
+    elif [ "$PREEMPTIVE_DIAGNOSTIC" != "0" ]; then
+        echo "PREEMPTIVE_DIAGNOSTIC must be 0 or 1" >&2
+        exit 2
+    fi
+elif [ "$PREEMPTIVE" != "0" ]; then
+    echo "PREEMPTIVE must be 0 or 1" >&2
+    exit 2
+elif [ "$PREEMPTIVE_DIAGNOSTIC" != "0" ]; then
+    echo "PREEMPTIVE_DIAGNOSTIC requires PREEMPTIVE=1" >&2
+    exit 2
+fi
+
 TITLEBAR_RASM="-DTITLEBAR_TILE=1"
 RASM="$RASM" bash tools/build_titlebarmod.sh
 [ -f "$GB_PAINT_DIR/Makefile" ] || {
@@ -44,17 +69,45 @@ python3 tools/gblib_subset.py \
 VIEWER_GBLIB="build/pcw/GBLIBVIEWER.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$VIEWER_GBLIB" apps/viewer/gblib.symbols
+NOTEPAD_GBLIB="build/pcw/GBLIBNOTEPAD.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$NOTEPAD_GBLIB" apps/notepad/gblib.symbols
+ICONED_GBLIB="build/pcw/GBLIBICONED.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$ICONED_GBLIB" apps/iconed/gblib.symbols
 
 # --- the C apps, compiled with the PCW geometry (same DATA_LOCs as CPC/MSX) --
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
-APPDEFS="-DGB_PCW" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
-APPDEFS="-DGB_PCW" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
-APP_ICON=apps/notepad/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6BF0 DOC=1 tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
+PCW_TASK_ADDS=()
+PCW_BRSAVE_ADDS=(--add build/pcw/BRSAVE.RAW=BRSAVE.APP)
+PCW_SPARE_THEME_ADDS=()
+if [ "$PREEMPTIVE" = "1" ]; then
+    TASK_ROOT=1 TASK_RUNTIME_RAW=build/pcw/GBSCHED.RAW \
+        TASK_STACK_RESERVE=256 APPDEFS="-DGB_PCW" DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
+        tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
+    if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
+        TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_PCW" DATA_LOC=0x6200 \
+            tools/build_capp.sh apps/taskdemo build/pcw/TASKDEMO.RAW
+        PCW_TASK_ADDS=(--add build/pcw/TASKDEMO.RAW=TASKDEMO.APP)
+        PCW_SPARE_THEME_ADDS=()
+    fi
+    PCW_BRSAVE_ADDS=()                # the CF2 boot disc needs room for the scheduler
+else
+    APPDEFS="-DGB_PCW" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 tools/build_capp.sh apps/desktop build/pcw/DESKTOP.RAW
+fi
+APPDEFS="-DGB_PCW" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 REPAINTTOP=1 tools/build_capp.sh apps/filemgr build/pcw/FILEMGR.RAW
+APP_ICON=apps/notepad/icon.asm GBLIB_SRC="$NOTEPAD_GBLIB" APPDEFS="-DGB_PCW $NOTEPAD_APPDEFS" APP_CFLAGS="$NOTEPAD_CFLAGS" DATA_LOC="$NOTEPAD_DATA_LOC" DOC=1 REPAINTTOP="$NOTEPAD_SCROLL" tools/build_capp.sh apps/notepad build/pcw/NOTEPAD.RAW
 APPDEFS="-DGB_PCW" APP_CFLAGS="--opt-code-size --max-allocs-per-node 20000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/pcw/SETTINGS.RAW
-APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_PCW" DATA_LOC=0x6A30 DOCRO=1 SCROLL16=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
+APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_PCW" DATA_LOC=0x6A30 DOCRO=1 SCROLL16=1 REPAINTTOP=1 tools/build_capp.sh apps/viewer build/pcw/VIEWER.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x6780 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 tools/build_capp.sh apps/clock build/pcw/CLOCK.RAW
-APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6400 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
-APP_ICON=apps/iconed/icon.asm APPDEFS="-DGB_PCW -DGBUI_APPICON_PICKER" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
+if [ "$PREEMPTIVE" = "1" ]; then
+    TASK=1 TASK_STACK_RESERVE=256 APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_PCW" \
+        DATA_LOC=0x6600 DOC=1 BUTTON=1 tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
+else
+    APP_ICON=apps/xaos/icon.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6400 DOC=1 BUTTON=1 \
+        tools/build_capp.sh apps/xaos build/pcw/XAOS.RAW
+fi
+APP_ICON=apps/iconed/icon.asm GBLIB_SRC="$ICONED_GBLIB" APPDEFS="-DGB_PCW -DGBUI_APPICON_PICKER -DGBDOC_BOUNDED_IO" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7000 DOC=1 BUTTON=1 REPAINTTOP=1 tools/build_capp.sh apps/iconed build/pcw/ICONED.RAW
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_PCW" DATA_LOC=0x7380 DOC=1 tools/build_capp.sh apps/telnet build/pcw/TELNET.RAW
 APPDEFS="-DGB_PCW" DATA_LOC=0x7400 tools/build_capp.sh apps/nettest build/pcw/NETTEST.RAW
 APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/pcw/FORMREF.RAW
@@ -127,13 +180,13 @@ printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\n
 cp build/pcw/GEOBENCH.CFG build/pcw/DEFAULT.CFG
 python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --boot build/pcwboot.bin --sys build/pcw/GBKERNP.RAW --load 0x8000 \
+    "${PCW_TASK_ADDS[@]}" \
     --add build/pcw/GEOBENCH.CFG=GEOBENCH.CFG \
     --add build/pcw/DEFAULT.CFG=DEFAULT.CFG \
     --add build/GBCFG.RAW=GBCFG.MOD \
     --add build/GBUI.RAW=GBUI.MOD \
     --add build/pcw/GBAPICK.RAW=GBAPICK.MOD \
     --add build/GBWEB.RAW=GBWEB.MOD \
-    --add build/GBIMG.RAW=GBIMG.MOD \
     --add build/pcw/SPLASH.MOD=SPLASH.MOD \
     --add build/pcw/GBTITLE.RAW=GBTITLE.MOD \
     --add build/pcw/DEFAULT.FNT=DEFAULT.FNT \
@@ -149,12 +202,12 @@ python3 tools/mkpcwdsk.py QA/PCW/GEOBENCH.DSK \
     --add build/pcw/TIMESYNC.RAW=TIMESYNC.APP \
     --add build/pcw/ICONED.RAW=ICONED.APP \
     --add build/pcw/SHELL.RAW=SHELL.APP \
-    --add build/pcw/BRSAVE.RAW=BRSAVE.APP \
+    "${PCW_BRSAVE_ADDS[@]}" \
     --add build/pcw/SQUARES.RAW=SQUARES.SAV \
     --add build/pcw/LOGO.PIC=LOGO.PIC \
     --add build/pcw/CLASSIC.FNT=CLASSIC.FNT \
     --add build/titlebars/ORIGINAL.TBR=ORIGINAL.TBR \
-    --add build/titlebars/IMPROVED.TBR=IMPROVED.TBR \
+    "${PCW_SPARE_THEME_ADDS[@]}" \
     --add build/gadgets/ORIGINAL.GDT=ORIGINAL.GDT
 
 # --- COMPANION.DSK: TELNET, backdrops and spare assets (plain CF2 data disc)
@@ -197,7 +250,7 @@ EXTRAS_ADDS=(
 for tbr in build/titlebars/*.TBR; do
     name=$(basename "$tbr")
     case "$name" in
-        IMPROVED.TBR|ORIGINAL.TBR) continue ;;
+        ORIGINAL.TBR) continue ;;
     esac
     EXTRAS_ADDS+=(--add "$tbr=$name")
 done

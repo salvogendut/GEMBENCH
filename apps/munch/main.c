@@ -17,6 +17,7 @@
 #define KCFG_INK(p) (((volatile unsigned char *)0x122C)[(p)])
 
 #define BG  2          /* black background (classic munch screen) */
+#define MUNCH_WORK_PER_FRAME 16
 
 static unsigned char lmx, lmy, armed;
 static unsigned int  rng;
@@ -72,7 +73,7 @@ static void vram_pixel(int sx, int sy, unsigned char ink)
 #endif
 
 /* current muncher */
-static unsigned char mW, mask, t, kX, kT, kY, grav, pen, atY;
+static unsigned char mW, mask, t, kX, kT, kY, grav, pen, atY, draw_x;
 static unsigned int  atX;            /* 4-aligned left edge */
 static const unsigned char pens[3] = { 1, 3, 1 };  /* white, red, white */
 static unsigned char penix;
@@ -89,20 +90,27 @@ static void new_square(void)
     grav = (unsigned char)(rnd() & 1);
     pen  = pens[penix]; penix = (penix + 1) % 3;
     t    = 0;
+    draw_x = 0;
     gb_fill((unsigned char)(atX >> 2), atY, (unsigned char)(mW >> 2), mW, BG);  /* clear region */
 }
 
 static void munch_tick(void)
 {
-    unsigned char x, y, dy;
+    unsigned char x, y, dy, work;
     unsigned int dx;
-    for (x = 0; x < mW; x++) {
+
+    work = MUNCH_WORK_PER_FRAME;
+    while (work-- && draw_x < mW) {
+        x = draw_x++;
         y  = (unsigned char)(((x ^ ((t + kT) & mask)) + kY) & mask);
         dx = atX + ((x + kX) & mask);
         dy = grav ? (unsigned char)(atY + y) : (unsigned char)(atY + mask - y);
         vram_pixel((int)dx, (int)dy, pen);
     }
-    if (++t > mask) new_square();
+    if (draw_x >= mW) {
+        draw_x = 0;
+        if (++t > mask) new_square();
+    }
 }
 
 static void ss_paint(void)
