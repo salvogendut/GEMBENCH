@@ -155,7 +155,7 @@ benefit while the desktop is intentionally hidden.
 |---|---|---|---|
 | SQUARES | One square per frame | Ready | Cross-target wake/exit smoke test. |
 | ANT | Fixed `STEPS` per frame | Measure | Confirm the configured step count keeps wake latency short. |
-| DECO | Complete subdivision/layout in one call | Needs work | Make subdivision and leaf drawing incremental. |
+| DECO | Four subdivision or four-row fill units per frame | Converted | Incremental stack traversal and leaf-band rendering; cross-target lifecycle test remains. |
 | XMATRIX | Fixed columns plus complete cell scan | Measure | Measure worst-case dirty-cell frame on all targets. |
 | MOUNTAIN | Drawing is cell-budgeted; terrain regeneration is not | Needs work | Split clear, peaks, spreading, noise, and drawing into stages. |
 | FOREST | Three complete recursive trees per regeneration | Needs work | Replace recursive one-shot growth with an explicit bounded branch stack. |
@@ -163,10 +163,10 @@ benefit while the desktop is intentionally hidden.
 | FRACTALI | Drawing is budgeted; Koch geometry setup is one-shot | Measure | Bound geometry setup if target timing exceeds one frame. |
 | MUNCH | One bounded scanline-width pass | Ready/measure | Test the largest square. |
 | RORSCH | Explicit `PERFRAME` point budget | Ready | Cross-target wake/exit smoke test. |
-| TRUCHET | Complete tile grid per regeneration | Needs work | Generate a bounded number of tiles per frame. |
+| TRUCHET | Eight tiles per frame | Converted | Incremental tile generation; CPC/MSX lifecycle test remains. |
 | LIGHTN | Fixed bolt generation and drawing pass | Measure | Measure generation plus both line passes. |
 | PYRO | Fixed particle array per frame | Ready/measure | Test maximum active-particle frame. |
-| HELIX | Complete `STEPS` curve per regeneration | Needs work | Retain curve index and draw a bounded segment batch. |
+| HELIX | Four curve segments per frame | Converted | Persistent curve state; CPC/MSX lifecycle test remains. |
 | XROACH | Fixed roach count and sprite loops | Ready/measure | Test maximum movement/collision frame. |
 | CATCLK | Fixed bitmap and hand/pupil update | Ready | Verify time, palette, and fullscreen restoration. |
 
@@ -257,7 +257,7 @@ kernel drawing, file I/O, or `gb_copybuf` users into a worker.
 1. Validate the implemented File Manager copy, progressive directory scan, and
    queued APP-icon probing across all storage backends.
 2. Validate Settings progressive picker enumeration and finish its modal cleanup audit.
-3. Incremental DECO, MOUNTAIN, FOREST, TRUCHET, and HELIX generation.
+3. Incremental MOUNTAIN and FOREST generation; DECO, TRUCHET, and HELIX are converted.
 4. Screensaver timing and lifecycle matrix across CPC, MSX2, and PCW.
 5. GB-BASIC worst-statement tests and any required resumable statements.
 6. GB-PAINT document create/load/save jobs.
