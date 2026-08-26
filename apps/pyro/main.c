@@ -3,8 +3,8 @@
  * Ported from the xscreensaver pyro hack. Rockets launch from the bottom of the screen,
  * coast upward under gravity using 1/64-pixel fixed-point motion, and when their fuse
  * burns out they burst into a shower of shrapnel that arcs and fades. All integer/fixed-
- * point - no float - plotted straight to the #C000 Mode-1 screen on a black night sky.
- * Card-only (the floppy pack is full). */
+ * point - no float - plotted straight to the target screen on a black night sky.
+ * A fixed free-slot stack keeps burst allocation constant-time. */
 #include "gb.h"
 #include "../savdraw.h"
 
@@ -20,6 +20,8 @@
 #define NPART  120
 #define GRAV   5           /* downward accel per frame (fixed <<6) */
 #define FP     6           /* fixed-point shift */
+#define PART_WORK_PER_FRAME 40
+#define PART_STRIDE (NPART / PART_WORK_PER_FRAME)
 
 static const signed char sintab[60] = {
     0, 7, 13, 20, 26, 32, 38, 43, 48, 52, 55, 58, 61, 63, 64, 64, 64, 63, 61, 58,
@@ -91,17 +93,33 @@ typedef struct {
 } Part;
 
 static Part part[NPART];
+static unsigned char free_slot[NPART], free_count, part_cursor;
 
-static unsigned char find_dead(void)
+static void init_particles(void)
 {
     unsigned char i;
-    for (i = 0; i < NPART; i++) if (!part[i].life) return i;
-    return 0xFF;
+    for (i = 0; i < NPART; i++) {
+        part[i].life = 0;
+        free_slot[i] = (unsigned char)(NPART - 1 - i);
+    }
+    free_count = NPART;
+    part_cursor = 0;
+}
+
+static unsigned char alloc_part(void)
+{
+    if (!free_count) return 0xFF;
+    return free_slot[--free_count];
+}
+
+static void release_part(unsigned char i)
+{
+    if (free_count < NPART) free_slot[free_count++] = i;
 }
 
 static void launch(void)
 {
-    unsigned char i = find_dead();
+    unsigned char i = alloc_part();
     Part *p;
     if (i == 0xFF) return;
     p = &part[i];
@@ -121,7 +139,7 @@ static void burst(int x, int y)
     for (k = 0; k < 18; k++) {
         int dir, spd;
         Part *p;
-        i = find_dead();
+        i = alloc_part();
         if (i == 0xFF) return;
         p = &part[i];
         dir = (int)(rnd() % 60);
@@ -138,18 +156,37 @@ static void burst(int x, int y)
 
 static void step(void)
 {
-    unsigned char i;
-    for (i = 0; i < NPART; i++) {
-        Part *p = &part[i];
-        int nx, ny;
+    unsigned char i, work, ticks;
+    Part *p;
+    int nx, ny;
+
+    work = PART_WORK_PER_FRAME;
+    while (work--) {
+        i = part_cursor++;
+        if (part_cursor >= NPART) part_cursor = 0;
+        p = &part[i];
         if (!p->life) continue;
         if (p->ox >= 0) vram_pixel(p->ox, p->oy, BG);       /* erase */
-        p->dy += GRAV;
-        p->x += p->dx; p->y += p->dy;
+        ticks = PART_STRIDE;
+        while (ticks-- && p->life) {
+            p->dy += GRAV;
+            p->x += p->dx; p->y += p->dy;
+            p->life--;
+        }
         nx = p->x >> FP; ny = p->y >> FP;
-        p->life--;
-        if (p->primary && p->life == 0) { burst(p->x, p->y); p->ox = -1; continue; }
-        if (!p->life || nx < 0 || nx >= 320 || ny < 0 || ny >= 200) { p->ox = -1; continue; }
+        if (p->primary && p->life == 0) {
+            int bx = p->x, by = p->y;
+            p->ox = -1;
+            release_part(i);
+            burst(bx, by);
+            continue;
+        }
+        if (!p->life || nx < 0 || nx >= 320 || ny < 0 || ny >= 200) {
+            p->life = 0;
+            p->ox = -1;
+            release_part(i);
+            continue;
+        }
         vram_pixel(nx, ny, p->pen);
         p->ox = nx; p->oy = ny;
     }
@@ -190,6 +227,7 @@ void main(void)
     gb_time();
     rng = (unsigned int)((gb_sec << 8) ^ (gb_min << 3) ^ gb_hour ^ 0x5059u);
     if (!rng) rng = 0x5059u;
+    init_particles();
 
     WM_FS = 1;
     brd_ink = KCFG_INK(BG);

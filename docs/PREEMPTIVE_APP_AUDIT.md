@@ -1,6 +1,6 @@
 # Preemptive Application Audit
 
-Date: 2026-08-25
+Date: 2026-08-26
 Issue: [#477](https://github.com/salvogendut/geobench/issues/477)
 
 This audit determines what each GEOBENCH application needs before the optional
@@ -41,7 +41,7 @@ kernel work into a worker would make the system unsafe rather than preemptible.
 |---|---|---|
 | P0 | File Manager | Copy, directory preparation, and APP-icon probing are bounded root jobs. |
 | P0 | Settings | Asset enumeration and icon-set validation are bounded root jobs; modal/I/O lifecycle needs cross-target validation. |
-| P0 | Screensavers | Several are already frame-bounded; five need incremental generation. |
+| P0 | Screensavers | All shipped savers now use fixed or incremental frame budgets; lifecycle validation remains. |
 | P1 | BASIC and Paint | Mostly cooperative already, but long individual operations need bounds. |
 | P1 | Browser, WGET, Telnet, Shell | Network/storage stays root-owned and must advance in bounded chunks. |
 | P1 | Viewer, Notepad, Icon Editor, Mahjong | Root-owned; measure and split their longest operations where needed. |
@@ -154,20 +154,20 @@ benefit while the desktop is intentionally hidden.
 | Saver | Current bound | Audit result | Required action |
 |---|---|---|---|
 | SQUARES | One square per frame | Ready | Cross-target wake/exit smoke test. |
-| ANT | Fixed `STEPS` per frame | Measure | Confirm the configured step count keeps wake latency short. |
+| ANT | Forty ant steps per frame; reset clears 256 grid bytes and 16 screen lines per frame | Converted | Cross-target reset and wake/exit test. |
 | DECO | Four subdivision or four-row fill units per frame | Converted | Incremental stack traversal and leaf-band rendering; cross-target lifecycle test remains. |
-| XMATRIX | Fixed columns plus complete cell scan | Measure | Measure worst-case dirty-cell frame on all targets. |
+| XMATRIX | 16 feeder columns, 512 cell updates, or 12 dirty glyph draws per frame | Converted | Cross-target speed, wake, and dense-screen test. |
 | MOUNTAIN | Bounded clear, map generation, smoothing, noise, and cell drawing stages | Converted | Cross-target lifecycle and maximum-settings test remains. |
 | FOREST | Four explicit recursion-frame transitions per frame | Converted | CPC/MSX lifecycle test remains. |
-| STARFLD | Bounded configured star count | Ready/measure | Test maximum stars and speed on each target. |
-| FRACTALI | Drawing is budgeted; Koch geometry setup is one-shot | Measure | Bound geometry setup if target timing exceeds one frame. |
-| MUNCH | One bounded scanline-width pass | Ready/measure | Test the largest square. |
+| STARFLD | At most 24 stars per frame with round-robin motion compensation | Converted | Test maximum stars and speed on each target. |
+| FRACTALI | 16 clear lines, 192 points, four Koch expansions, or 16 segment copies per frame | Converted | Exercise both fractal types and cycle transitions. |
+| MUNCH | At most 16 points per frame | Converted | Test the largest square and square transitions. |
 | RORSCH | Explicit `PERFRAME` point budget | Ready | Cross-target wake/exit smoke test. |
 | TRUCHET | Eight tiles per frame | Converted | Incremental tile generation; CPC/MSX lifecycle test remains. |
-| LIGHTN | Fixed bolt generation and drawing pass | Measure | Measure generation plus both line passes. |
-| PYRO | Fixed particle array per frame | Ready/measure | Test maximum active-particle frame. |
+| LIGHTN | 32 clear lines or four main/fork bolt segments per frame | Converted | Exercise strike, fork, hold, clear, and wake transitions. |
+| PYRO | 40 particles per frame with three compensated physics steps and O(1) free-slot allocation | Converted | Test maximum active-particle frame and burst reuse. |
 | HELIX | Four curve segments per frame | Converted | Persistent curve state; CPC/MSX lifecycle test remains. |
-| XROACH | Fixed roach count and sprite loops | Ready/measure | Test maximum movement/collision frame. |
+| XROACH | Six roaches, updated every second frame | Ready | Cross-target movement, collision, and wake/exit test. |
 | CATCLK | Fixed bitmap and hand/pupil update | Ready | Verify time, palette, and fullscreen restoration. |
 
 All savers also need a common lifecycle test: launch-click suppression, keyboard
@@ -257,8 +257,9 @@ kernel drawing, file I/O, or `gb_copybuf` users into a worker.
 1. Validate the implemented File Manager copy, progressive directory scan, and
    queued APP-icon probing across all storage backends.
 2. Validate Settings progressive picker enumeration and finish its modal cleanup audit.
-3. Validate incremental DECO, MOUNTAIN, FOREST, TRUCHET, and HELIX generation.
-4. Screensaver timing and lifecycle matrix across CPC, MSX2, and PCW.
+3. Validate every incremental and fixed-budget screensaver, including dense and
+   maximum-setting cases.
+4. Complete the screensaver timing and lifecycle matrix across CPC, MSX2, and PCW.
 5. GB-BASIC worst-statement tests and any required resumable statements.
 6. GB-PAINT document create/load/save jobs.
 7. Browser/WGET/Telnet/Shell and the remaining P1 application checks.
