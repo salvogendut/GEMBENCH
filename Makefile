@@ -1,4 +1,4 @@
-.PHONY: all cpc cpc-preemptive msx msx-preemptive msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-preemptive-diagnostic app formref sndtest taskdemo titlebar-editor check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic app formref sndtest taskdemo titlebar-editor check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -6,18 +6,20 @@ all: cpc msx pcw
 cpc:
 	bash tools/build_kernel.sh
 
-# Development image with the desktop-carried scheduler and CPC firmware IRQ
-# hook. It works with floppy, Albireo, and M4 kernels and requires no ROM.
-cpc-preemptive:
-	PREEMPTIVE=1 bash tools/build_kernel.sh
+# Compatibility alias: preemptive scheduling is the release default.
+cpc-preemptive: cpc
+
+cpc-cooperative:
+	PREEMPTIVE=0 bash tools/build_kernel.sh
 
 msx:
 	bash tools/build_kernel_msx.sh
 
-# Development image with the desktop-carried scheduler. Diagnostics are not
-# staged or launched.
-msx-preemptive:
-	PREEMPTIVE=1 bash tools/build_kernel_msx.sh
+# Compatibility alias: preemptive scheduling is the release default.
+msx-preemptive: msx
+
+msx-cooperative:
+	PREEMPTIVE=0 bash tools/build_kernel_msx.sh
 
 # Explicit scheduler stress image: stage and auto-open TASKDEMO workers.
 msx-preemptive-diagnostic:
@@ -29,10 +31,11 @@ msx-floppies:
 pcw:
 	bash tools/build_kernel_pcw.sh
 
-# Development image with the PCW 300 Hz timer adapter. Diagnostics are not
-# staged or launched.
-pcw-preemptive:
-	PREEMPTIVE=1 bash tools/build_kernel_pcw.sh
+# Compatibility alias: preemptive scheduling is the release default.
+pcw-preemptive: pcw
+
+pcw-cooperative:
+	PREEMPTIVE=0 bash tools/build_kernel_pcw.sh
 
 # Explicit scheduler stress image: stage and auto-open TASKDEMO workers.
 pcw-preemptive-diagnostic:
@@ -53,7 +56,7 @@ sndtest:
 	APPDEFS="-DGB_PCW" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/pcw/SNDTEST.RAW
 
 # Development-only preemption proof. TASKDEMO's worker never yields, so do not
-# run it with a normal release kernel (PREEMPTIVE_CONTEXT=0).
+# run it with an explicit cooperative kernel (PREEMPTIVE_CONTEXT=0).
 taskdemo:
 	TASK=1 TASK_STACK_RESERVE=256 DATA_LOC=0x6200 tools/build_capp.sh apps/taskdemo build/TASKDEMO.RAW
 	TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 tools/build_capp.sh apps/taskdemo build/msx/TASKDEMO.RAW

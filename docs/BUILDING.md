@@ -20,7 +20,11 @@ bash tools/build_kernel.sh
 ```
 
 The repository also has a thin top-level Makefile: `make cpc`, `make msx`,
-`make pcw`, `make all`, and `make check` wrap the same scripts and static checks.
+`make pcw`, and `make all` build the default preemptive distributions, while
+`make cpc-cooperative`, `make msx-cooperative`, and `make pcw-cooperative`
+retain scheduler-free regression builds. `make check` runs the static and host
+tests. Direct `tools/build_kernel*.sh` invocations are preemptive by default;
+set `PREEMPTIVE=0` explicitly for a cooperative build.
 `make formref` builds only the CPC, MSX2, and PCW reusable-form reference
 binaries for quick UI iteration; `make sndtest` likewise builds only the
 three app-linked sound diagnostics.
