@@ -153,8 +153,9 @@ backdrop, dragging icons, opening apps and menus:
   loads an optional same-stem `.MOD` and persists the module's returned options
   in `GEOBENCH.CFG`. STARFLD exposes speed and star count; XMATRIX exposes
   binary/Kana glyphs and speed; MOUNTAIN exposes speed, peak count, and hold
-  time. Mountain uses eight height bands in MSX 16-color mode, a temporarily
-  black display border, and restores the desktop palette on exit. CPC and MSX
+  time. Mountain uses eight height bands in MSX 16-color mode, gives MSX a
+  temporary black display border, and restores the desktop palette on exit;
+  CPC keeps its border matched to the landscape background. CPC and MSX
   16-color mode also expose XMatrix's main glyph color; XMatrix restores the
   launch-time desktop palette when it exits and always uses a black background.
 - **One menu system for the whole UI (`gb_doc`)** — every app gets the **same menus**

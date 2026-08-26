@@ -228,7 +228,7 @@ tools/build_capp.sh apps/lightning build/LIGHTN.RAW # LIGHTNING (xscreensaver po
 tools/build_capp.sh apps/pyro build/PYRO.RAW      # PYRO (xscreensaver port): fixed-point fireworks
                                    # rockets + shrapnel, direct #C000. CARD-ONLY -> PYRO.SAV
 tools/build_capp.sh apps/forest build/FOREST.RAW  # FOREST (xscreensaver port): recursive fractal trees
-                                   # with red blossoms, direct #C000 lines. CARD-ONLY -> FOREST.SAV
+                                   # with red blossoms, direct #C000 lines. CARD/EXTRAS -> FOREST.SAV
 tools/build_capp.sh apps/helix build/HELIX.RAW    # HELIX (xscreensaver port): woven harmonograph curves
                                    # (sin-table), direct #C000 lines. CARD-ONLY -> HELIX.SAV
 DATA_LOC=0x6700 tools/build_capp.sh apps/catclock build/CATCLK.RAW # CATCLOCK (inspired by X11 catclock):
@@ -290,6 +290,7 @@ EXTRAS_ADDS=(
     --add build/XROACH.RAW=XROACH.SAV
     --add build/CATCLK.RAW=CATCLK.SAV
     --add build/HELIX.RAW=HELIX.SAV
+    --add build/FOREST.RAW=FOREST.SAV
 )
 for tbr in build/titlebars/*.TBR; do
     case "$(basename "$tbr")" in
@@ -307,7 +308,7 @@ while IFS= read -r pic; do
     EXTRAS_ADDS+=(--add "$pic")
 done < <(python3 tools/picture_catalog.py portable)
 python3 tools/mkcpcmedia.py "$FLOPPY_QA/EXTRAS.DSK" "${EXTRAS_ADDS[@]}"
-echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + secondary title/gadget themes + Disk Utility + XROACH/CATCLK/HELIX savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
+echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + secondary title/gadget themes + Disk Utility + XROACH/CATCLK/HELIX/FOREST savers + WELCOME.TXT; extended 80-track AMSDOS data disk)"
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"

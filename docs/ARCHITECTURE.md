@@ -213,9 +213,9 @@ the level of asset reload, storage, and window-manager primitives.
   backdrops. Built by `kernel/gbkern.asm` + `pack_apps{,2,3}.asm` (#250).
 - **`QA/CPC/Floppies/COMPANION.DSK`** — the **Companion** floppy (#250): a non-bootable DATA disk with
   the extras — Paint, Telnet, WGET, Browser, Shell, Mahjong, Xaos, Calculator,
-  and the extra screensavers except `XROACH.SAV`, `CATCLK.SAV`, and `HELIX.SAV`,
-  which are kept on Extras to leave enough CF2 blocks for Calculator and
-  same-stem saver configuration modules.
+  and the extra screensavers except `XROACH.SAV`, `CATCLK.SAV`, `HELIX.SAV`, and
+  `FOREST.SAV`, which are kept on Extras to leave enough CF2 blocks for
+  Calculator, same-stem saver configuration modules, and bounded Forest state.
   Built by `kernel/pack_comp{1,2,3,4,5}.asm`. It is meant for **drive B** while the Main floppy
   stays in drive A: the kernel's system loader (`fs_load_sys`, `lib/fs.asm`) tries the boot
   drive (A) first and **falls back to the browse drive** (B), so a Companion app launched
@@ -225,8 +225,8 @@ the level of asset reload, storage, and window-manager primitives.
   builds are unaffected — they already ship everything on one volume, including
   `GBNET.MOD` for Net4CPC and `GBNETM4.MOD` for M4 TCP.)
 - **`QA/CPC/Floppies/EXTRAS.DSK`** — all tracked pictures, including `LOGO.PIC`,
-  plus `XROACH.SAV`, `CATCLK.SAV`, and `HELIX.SAV`, on an extended 80-track single-sided
-  AMSDOS DATA image built by `tools/mkcpcmedia.py`. The
+  plus `XROACH.SAV`, `CATCLK.SAV`, `HELIX.SAV`, and `FOREST.SAV`, on an extended
+  80-track single-sided AMSDOS DATA image built by `tools/mkcpcmedia.py`. The
   normal Main and Companion CF2 images contain no other `.PIC` files.
 
 M4 TCP is intentionally still a paged service: each `gb_net_*` call loads

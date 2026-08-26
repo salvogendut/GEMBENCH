@@ -170,7 +170,8 @@ def main() -> None:
     cpc_extras = cpc_disk(ROOT / "QA/CPC/Floppies/EXTRAS.DSK")
     pcw_extras = pcw_disk(ROOT / "QA/PCW/EXTRAS.DSK")
     cpc_required = {
-        "DISKUTIL.APP", "XROACH.SAV", "CATCLK.SAV", "HELIX.SAV", "WELCOME.TXT"
+        "DISKUTIL.APP", "XROACH.SAV", "CATCLK.SAV", "HELIX.SAV", "FOREST.SAV",
+        "WELCOME.TXT"
     }
     missing = cpc_required - set(cpc_extras)
     if missing:
@@ -308,6 +309,8 @@ def main() -> None:
     }
     if not configurable_saver_modules <= set(cpc_companion):
         sys.exit("QA/CPC/Floppies/COMPANION.DSK: missing saver Configure module")
+    if "FOREST.SAV" in cpc_companion:
+        sys.exit("QA/CPC/Floppies/COMPANION.DSK: FOREST.SAV belongs on EXTRAS.DSK")
     for path, files in (
         ("QA/CPC/Floppies/COMPANION.DSK", cpc_companion),
         ("QA/PCW/COMPANION.DSK", pcw_companion),

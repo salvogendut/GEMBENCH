@@ -49,8 +49,9 @@ System → "Activate screensaver" runs it on demand. Each is a full-screen windo
 
 The Main CPC boot floppy carries `SQUARES.SAV`; the CPC floppy set carries the
 remaining savers across `COMPANION.DSK` and `EXTRAS.DSK` (`XROACH.SAV`,
-`CATCLK.SAV`, and `HELIX.SAV` are on Extras to preserve Companion allocation
-blocks). The Albireo/M4 card and MSX2 distributions carry all 16 savers together.
+`CATCLK.SAV`, `HELIX.SAV`, and `FOREST.SAV` are on Extras to preserve Companion
+allocation blocks). The Albireo/M4 card and MSX2 distributions carry all 16
+savers together.
 
 | Saver | Disk file | Effect |
 |-------|-----------|--------|
@@ -62,7 +63,7 @@ blocks). The Albireo/M4 card and MSX2 distributions carry all 16 savers together
 | starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl |
 | xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the blue field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit |
 | pyro     | `PYRO.SAV`     | fixed-point fireworks — rockets rise and burst into shrapnel showers — ported from xscreensaver |
-| forest   | `FOREST.SAV`   | recursive fractal trees with red blossoms — ported from xscreensaver |
+| forest   | `FOREST.SAV`   | fractal trees with solid branches and red blossoms; each MSX Screen 7 stand randomly uses one blossom colour, one colour per tree, or mixed blossom colours — ported from xscreensaver |
 | helix    | `HELIX.SAV`    | woven harmonograph curves (sin-table) — ported from xscreensaver |
 | catclock | `CATCLK.SAV`   | Kit-Cat Klock — embedded body bitmap (from `assets/catclockbody.png` via `tools/png2catclock.py`) with sliding pupils + real hour/minute hands from `gb_time()` |
 | munch    | `MUNCH.SAV`    | "munching squares" XOR moiré sweeping a power-of-two square — ported from xscreensaver |

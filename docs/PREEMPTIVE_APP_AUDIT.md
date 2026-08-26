@@ -157,8 +157,8 @@ benefit while the desktop is intentionally hidden.
 | ANT | Fixed `STEPS` per frame | Measure | Confirm the configured step count keeps wake latency short. |
 | DECO | Four subdivision or four-row fill units per frame | Converted | Incremental stack traversal and leaf-band rendering; cross-target lifecycle test remains. |
 | XMATRIX | Fixed columns plus complete cell scan | Measure | Measure worst-case dirty-cell frame on all targets. |
-| MOUNTAIN | Drawing is cell-budgeted; terrain regeneration is not | Needs work | Split clear, peaks, spreading, noise, and drawing into stages. |
-| FOREST | Three complete recursive trees per regeneration | Needs work | Replace recursive one-shot growth with an explicit bounded branch stack. |
+| MOUNTAIN | Bounded clear, map generation, smoothing, noise, and cell drawing stages | Converted | Cross-target lifecycle and maximum-settings test remains. |
+| FOREST | Four explicit recursion-frame transitions per frame | Converted | CPC/MSX lifecycle test remains. |
 | STARFLD | Bounded configured star count | Ready/measure | Test maximum stars and speed on each target. |
 | FRACTALI | Drawing is budgeted; Koch geometry setup is one-shot | Measure | Bound geometry setup if target timing exceeds one frame. |
 | MUNCH | One bounded scanline-width pass | Ready/measure | Test the largest square. |
@@ -257,7 +257,7 @@ kernel drawing, file I/O, or `gb_copybuf` users into a worker.
 1. Validate the implemented File Manager copy, progressive directory scan, and
    queued APP-icon probing across all storage backends.
 2. Validate Settings progressive picker enumeration and finish its modal cleanup audit.
-3. Incremental MOUNTAIN and FOREST generation; DECO, TRUCHET, and HELIX are converted.
+3. Validate incremental DECO, MOUNTAIN, FOREST, TRUCHET, and HELIX generation.
 4. Screensaver timing and lifecycle matrix across CPC, MSX2, and PCW.
 5. GB-BASIC worst-statement tests and any required resumable statements.
 6. GB-PAINT document create/load/save jobs.
