@@ -368,11 +368,13 @@ def render_c_header(blob: bytes, object_ids: dict[str, int], prefix: str) -> str
     ]
     for name, index in sorted(object_ids.items(), key=lambda item: item[1]):
         lines.append(f"#define {name} {index}u")
-    lines.extend(("", f"static const unsigned char {array_name}[] = {{"))
+    lines.extend(("", "#ifndef GEMBENCH_GBR_METADATA_ONLY",
+                  f"static const unsigned char {array_name}[] = {{"))
     for offset in range(0, len(blob), 12):
         chunk = ", ".join(f"0x{byte:02x}" for byte in blob[offset : offset + 12])
         lines.append(f"    {chunk},")
-    lines.extend(("};", "", f"#endif /* {guard} */", ""))
+    lines.extend(("};", "#endif /* GEMBENCH_GBR_METADATA_ONLY */", "",
+                  f"#endif /* {guard} */", ""))
     return "\n".join(lines)
 
 

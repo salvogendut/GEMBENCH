@@ -56,6 +56,12 @@ class CompilerTests(unittest.TestCase):
     def test_output_is_deterministic(self) -> None:
         self.assertEqual(self.compile_example(), self.compile_example())
 
+    def test_generated_header_can_omit_the_embedded_blob(self) -> None:
+        header = gbrc.render_c_header(self.compile_example(), {}, "HELLO")
+        self.assertIn("#ifndef GEMBENCH_GBR_METADATA_ONLY", header)
+        self.assertIn("static const unsigned char hello_gbr[]", header)
+        self.assertIn("#endif /* GEMBENCH_GBR_METADATA_ONLY */", header)
+
     def test_example_matches_committed_golden_binary(self) -> None:
         self.assertEqual(self.compile_example(), self.golden_example())
 

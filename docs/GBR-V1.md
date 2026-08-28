@@ -100,6 +100,13 @@ Generated blobs verified during the same build may compile the reader with
 duplicate target-side open pass. External or mutable resources must continue
 to use the strict validator.
 
+The runtime descriptor may identify either directly addressable application
+memory or an MSX2 mapper segment. `gbr_read` is the common bounded-copy boundary;
+callers never retain a pointer into a temporarily mapped segment. This storage
+choice is runtime metadata only and does not change any byte in GBR v1. The
+auxiliary-segment transport remains an opt-in experiment after the Milestone 7
+placement decision.
+
 ### String index
 
 The index contains one 16-bit absolute offset per string. Each referenced value

@@ -21,6 +21,7 @@ static unsigned char add_coordinate(unsigned int *value, unsigned int add)
     return 1;
 }
 
+#ifndef GBR_RENDERER_ONLY
 static unsigned char object_depth(const gbr_runtime_t *runtime,
                                   unsigned char index,
                                   unsigned char *depth)
@@ -36,6 +37,7 @@ static unsigned char object_depth(const gbr_runtime_t *runtime,
     }
     return (unsigned char)(index == runtime->tree.root);
 }
+#endif
 
 static unsigned char object_blocked(const gbr_runtime_t *runtime,
                                     unsigned char index,
@@ -56,13 +58,16 @@ static unsigned char object_blocked(const gbr_runtime_t *runtime,
 }
 
 #ifdef GBR_FORM_RUNTIME
+#ifndef GBR_RENDERER_ONLY
 static unsigned char text_type(unsigned char type)
 {
     return (unsigned char)(type == GBR_TYPE_TEXT || type == GBR_TYPE_STRING ||
                            type == GBR_TYPE_BUTTON || type == GBR_TYPE_FIELD ||
                            type == GBR_TYPE_CHECKBOX || type == GBR_TYPE_RADIO);
 }
+#endif
 
+#ifndef GBR_RESIDENT_DRAW
 static const char *text_override(const gbr_runtime_t *runtime,
                                  unsigned char object_index)
 {
@@ -72,6 +77,7 @@ static const char *text_override(const gbr_runtime_t *runtime,
             return runtime->text_bindings[index].text;
     return 0;
 }
+#endif
 
 static unsigned char bounded_override(const char *text)
 {
@@ -82,6 +88,7 @@ static unsigned char bounded_override(const char *text)
 }
 #endif
 
+#ifndef GBR_RESIDENT_DRAW
 static unsigned char screen_rect(const gbr_rect_t *rect,
                                  unsigned char *x, unsigned char *y,
                                  unsigned char *w, unsigned char *h)
@@ -114,7 +121,6 @@ static unsigned char copy_string(const gbr_runtime_t *runtime,
 {
     gbr_string_t string;
     unsigned char length;
-    unsigned char index;
     if (capacity == 0) return 0;
     buffer[0] = 0;
     if (spec == GBR_NONE16) return 1;
@@ -123,8 +129,10 @@ static unsigned char copy_string(const gbr_runtime_t *runtime,
         return 0;
     length = string.length;
     if (length >= capacity) length = (unsigned char)(capacity - 1u);
-    for (index = 0; index < length; index++)
-        buffer[index] = (char)runtime->resource->data[string.offset + index];
+    if (length != 0 &&
+        !gbr_read(runtime->resource, string.offset,
+                  (unsigned char *)buffer, length))
+        return 0;
     buffer[length] = 0;
     return 1;
 }
@@ -191,7 +199,6 @@ static unsigned char draw_text(const gbr_runtime_t *runtime,
     unsigned int left;
     unsigned int x;
     unsigned char count;
-    unsigned char index;
 #ifdef GBR_FORM_RUNTIME
     const char *override = text_override(runtime, object_index);
     if (override != 0) return draw_override(override, rect, state);
@@ -207,8 +214,9 @@ static unsigned char draw_text(const gbr_runtime_t *runtime,
     x = rect->x;
     while (left != 0 && x < GB_XPIX) {
         count = left > TEXT_CHUNK ? TEXT_CHUNK : (unsigned char)left;
-        for (index = 0; index < count; index++)
-            chunk[index] = (char)runtime->resource->data[source + index];
+        if (!gbr_read(runtime->resource, source,
+                      (unsigned char *)chunk, count))
+            return GBR_RT_ERR_OBJECT;
         chunk[count] = 0;
         if (state & GBR_STATE_SELECTED)
             gb_textrev((unsigned char)(x >> 2), (unsigned char)rect->y, chunk);
@@ -275,7 +283,9 @@ static unsigned char draw_object(const gbr_runtime_t *runtime,
             return GBR_RT_ERR_UNSUPPORTED;
     }
 }
+#endif
 
+#ifndef GBR_RENDERER_ONLY
 unsigned char gbr_runtime_init(gbr_runtime_t *runtime,
                                const gbr_resource_t *resource,
                                unsigned char tree_index,
@@ -284,7 +294,7 @@ unsigned char gbr_runtime_init(gbr_runtime_t *runtime,
 {
     gbr_object_t object;
     unsigned int index;
-    if (runtime == 0 || resource == 0 || resource->data == 0 || states == 0)
+    if (runtime == 0 || resource == 0 || states == 0)
         return GBR_RT_ERR_ARGUMENT;
     if (!gbr_tree_at(resource, tree_index, &runtime->tree))
         return GBR_RT_ERR_TREE;
@@ -302,8 +312,9 @@ unsigned char gbr_runtime_init(gbr_runtime_t *runtime,
     }
     return GBR_RT_OK;
 }
+#endif
 
-#ifdef GBR_FORM_RUNTIME
+#if defined(GBR_FORM_RUNTIME) && !defined(GBR_RENDERER_ONLY)
 unsigned char gbr_bind_text(gbr_runtime_t *runtime,
                             const gbr_text_binding_t *bindings,
                             unsigned char binding_count)
@@ -360,6 +371,7 @@ unsigned char gbr_object_rect(const gbr_runtime_t *runtime,
     return (unsigned char)(object_index == runtime->tree.root);
 }
 
+#ifndef GBR_RESIDENT_DRAW
 unsigned char gbr_draw_tree(const gbr_runtime_t *runtime,
                             unsigned int root_x, unsigned int root_y)
 {
@@ -389,7 +401,9 @@ unsigned char gbr_draw_tree(const gbr_runtime_t *runtime,
     }
     return GBR_RT_OK;
 }
+#endif
 
+#ifndef GBR_RENDERER_ONLY
 unsigned char gbr_hit_test(const gbr_runtime_t *runtime,
                            unsigned int root_x, unsigned int root_y,
                            unsigned int pointer_x, unsigned int pointer_y,
@@ -514,4 +528,5 @@ unsigned char gbr_focus_next(gbr_runtime_t *runtime,
     }
     return 0;
 }
+#endif
 #endif

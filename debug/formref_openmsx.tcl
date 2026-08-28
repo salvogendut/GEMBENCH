@@ -7,9 +7,30 @@ set throttle off
 set pause_on_lost_focus false
 set pause off
 
+proc fr_env_addr {name} {
+    expr {$::env($name) + 0}
+}
+
 set fr_output $::env(GEMBENCH_FORMREF_OUTPUT)
 set fr_focus_screenshot $::env(GEMBENCH_FORMREF_FOCUS_SCREENSHOT)
 set fr_final_screenshot $::env(GEMBENCH_FORMREF_FINAL_SCREENSHOT)
+set fr_addr_start [fr_env_addr GEMBENCH_FORMREF_START]
+set fr_addr_main [fr_env_addr GEMBENCH_FORMREF_MAIN]
+set fr_addr_resource_open [fr_env_addr GEMBENCH_FORMREF_RESOURCE_OPEN]
+set fr_addr_open_form [fr_env_addr GEMBENCH_FORMREF_OPEN_FORM]
+set fr_addr_app_draw [fr_env_addr GEMBENCH_FORMREF_APP_DRAW]
+set fr_addr_draw_tree [fr_env_addr GEMBENCH_FORMREF_DRAW_TREE]
+set fr_addr_draw_return [fr_env_addr GEMBENCH_FORMREF_DRAW_RETURN]
+set fr_addr_gbr_read [fr_env_addr GEMBENCH_FORMREF_GBR_READ]
+set fr_addr_segment_call [fr_env_addr GEMBENCH_FORMREF_SEGMENT_CALL]
+set fr_addr_wm_managed [fr_env_addr GEMBENCH_FORMREF_WM_MANAGED]
+set fr_addr_restore [fr_env_addr GEMBENCH_FORMREF_RESTORE]
+set fr_addr_resource [fr_env_addr GEMBENCH_FORMREF_RESOURCE]
+set fr_addr_resource_ready [fr_env_addr GEMBENCH_FORMREF_RESOURCE_READY]
+set fr_addr_saved_style [fr_env_addr GEMBENCH_FORMREF_SAVED_STYLE]
+set fr_addr_saved_level [fr_env_addr GEMBENCH_FORMREF_SAVED_LEVEL]
+set fr_addr_form_segment [fr_env_addr GEMBENCH_FORMREF_SEGMENT]
+set fr_is_banked [fr_env_addr GEMBENCH_FORMREF_BANKED]
 set fr_deadline 0
 set fr_target_x 0
 set fr_target_y 0
@@ -35,6 +56,19 @@ set fr_tree_count -1
 set fr_main_sp -1
 set fr_saved_style -1
 set fr_saved_level -1
+set fr_load_result -1
+set fr_open_result -1
+set fr_min_sp 65535
+set fr_draw_begin -1
+set fr_draw_ms -1
+set fr_input_begin -1
+set fr_input_draw_pending 0
+set fr_input_ms -1
+
+proc fr_stack_sample {} {
+    set value [reg SP]
+    if {$value < $::fr_min_sp} { set ::fr_min_sp $value }
+}
 
 proc fr_release_all {} {
     catch {keymatrixup 8 0x01}
@@ -50,9 +84,10 @@ proc fr_is_loaded {} {
     # Breakpoints in the #4000-#7FFF application page are shared by every
     # application. Match FormRef's main call sequence and GBR descriptor so
     # File Manager activity cannot satisfy the launch checks.
-    expr {[peek 0x487B] == 0xCD && [peek 0x487C] == 0xF7 &&
-          [peek 0x487D] == 0x44 && [peek 0x487E] == 0x32 &&
-          [peek 0x7454] == 0x95 && [peek 0x7459] == 0x01}
+    set target $::fr_addr_resource_open
+    expr {[peek $::fr_addr_main] == 0xCD &&
+          [peek [expr {$::fr_addr_main + 1}]] == ($target & 0xff) &&
+          [peek [expr {$::fr_addr_main + 2}]] == (($target >> 8) & 0xff)}
 }
 
 proc fr_screen_ready {} {
@@ -84,10 +119,33 @@ proc fr_finish {status} {
     puts $handle "RESTORE_SEEN=$::fr_restore_seen"
     puts $handle "TREE_COUNT=$::fr_tree_count"
     puts $handle "MAIN_SP=$::fr_main_sp"
+    puts $handle "MIN_OBSERVED_SP=$::fr_min_sp"
+    if {$::fr_main_sp >= 0 && $::fr_min_sp < 65535} {
+        puts $handle "OBSERVED_STACK_DELTA=[expr {$::fr_main_sp - $::fr_min_sp}]"
+    } else {
+        puts $handle "OBSERVED_STACK_DELTA=-1"
+    }
+    puts $handle "DRAW_MS=[format %.3f $::fr_draw_ms]"
+    puts $handle "INPUT_TO_DRAW_MS=[format %.3f $::fr_input_ms]"
     puts $handle "LAUNCH_CLICKS=$::fr_launch_clicks"
     puts $handle "FORM_CLICKS=$::fr_form_clicks"
     puts $handle "SAVED_STYLE=$::fr_saved_style"
     puts $handle "SAVED_LEVEL=$::fr_saved_level"
+    puts $handle "LOAD_RESULT=$::fr_load_result"
+    puts $handle "OPEN_RESULT=$::fr_open_result"
+    puts $handle "RESOURCE_READY=[peek $::fr_addr_resource_ready]"
+    if {$::fr_is_banked} {
+        puts $handle "FORM_SEGMENT=[peek $::fr_addr_form_segment]"
+    } else {
+        puts $handle "FORM_SEGMENT=0"
+    }
+    if {$::fr_is_banked} {
+        puts $handle "BANK_PAGE=[peek 0xC18B]"
+        puts $handle "BANK_SIZE=[expr {[peek 0xC18C] + 256 * [peek 0xC18D]}]"
+    } else {
+        puts $handle "BANK_PAGE=0"
+        puts $handle "BANK_SIZE=0"
+    }
     puts $handle "FINAL_POINTER=[peek 0x1306],[peek 0x1307]"
     close $handle
     exit
@@ -209,7 +267,8 @@ proc fr_capture_final {} {
         !$::fr_modal_draw_seen || !$::fr_save_seen ||
         !$::fr_restore_seen ||
         $::fr_tree_count != 1 || $::fr_saved_style != 1 ||
-        $::fr_saved_level != 2} {
+        $::fr_saved_level != 2 || $::fr_min_sp >= 65535 ||
+        $::fr_draw_ms < 0 || $::fr_input_ms < 0} {
         fr_finish "FAIL FormRef launch trace incomplete"
     } else {
         fr_finish PASS
@@ -265,6 +324,7 @@ proc fr_tab_decrement {} {
 }
 
 proc fr_choose_style {} {
+    set ::fr_input_begin [machine_info time]
     fr_key 7 0x80 fr_tab_decrement 10.0
 }
 
@@ -301,17 +361,21 @@ proc fr_launch_formref {} {
     set ::fr_entry_seen 0
     set ::fr_launch_clicks 2
     debug set_bp 0x4000 {} {if {[fr_is_loaded]} {set ::fr_entry_seen 1}; set ::pause off}
-    debug set_bp 0x4320 {} {if {[fr_is_loaded]} {set ::fr_start_seen 1}; set ::pause off}
-    debug set_bp 0x487B {} {if {[fr_is_loaded]} {set ::fr_main_seen 1; set ::fr_tree_count [peek 0x764D]; set ::fr_main_sp [reg SP]}; set ::pause off}
-    debug set_bp 0x44F7 {} {if {[fr_is_loaded]} {set ::fr_resource_seen 1}; set ::pause off}
-    debug set_bp 0x487E {} {if {[fr_is_loaded]} {set ::fr_resource_return_seen 1}; set ::pause off}
-    debug set_bp 0x4884 {} {if {[fr_is_loaded]} {set ::fr_wm_call_seen 1}; set ::pause off}
-    debug set_bp 0x738C {} {if {[fr_is_loaded]} {set ::fr_wm_seen 1}; set ::pause off}
-    debug set_bp 0x470C {} {if {[fr_is_loaded]} {set ::fr_outer_draw_seen 1}; set ::pause off}
-    debug set_bp 0x467C {} {if {[fr_is_loaded]} {set ::fr_modal_seen 1}; set ::pause off}
-    debug set_bp 0x6A2E {} {if {[fr_is_loaded]} {set ::fr_modal_draw_seen 1}; set ::pause off}
-    debug set_bp 0x4596 {} {if {[fr_is_loaded]} {set ::fr_save_seen 1; set ::fr_saved_style [peek 0x760D]; set ::fr_saved_level [peek 0x7647]}; set ::pause off}
-    debug set_bp 0x52D0 {} {if {[fr_is_loaded]} {set ::fr_restore_seen 1}; set ::pause off}
+    debug set_bp $::fr_addr_start {} {if {[fr_is_loaded]} {set ::fr_start_seen 1}; set ::pause off}
+    debug set_bp $::fr_addr_main {} {if {[fr_is_loaded]} {set ::fr_main_seen 1; set ::fr_main_sp [reg SP]}; set ::pause off}
+    debug set_bp $::fr_addr_resource_open {} {if {[fr_is_loaded]} {set ::fr_resource_seen 1}; set ::pause off}
+    debug set_bp [expr {$::fr_addr_main + 3}] {} {if {[fr_is_loaded]} {set ::fr_resource_return_seen 1; set ::fr_tree_count [peek [expr {$::fr_addr_resource + 5}]]; if {$::fr_is_banked} {set ::fr_load_result [peek $::fr_addr_form_segment]} else {set ::fr_load_result 0}; set ::fr_open_result 0}; set ::pause off}
+    debug set_bp [expr {$::fr_addr_main + 9}] {} {if {[fr_is_loaded]} {set ::fr_wm_call_seen 1}; set ::pause off}
+    debug set_bp $::fr_addr_wm_managed {} {if {[fr_is_loaded]} {set ::fr_wm_seen 1}; set ::pause off}
+    debug set_bp $::fr_addr_app_draw {} {if {[fr_is_loaded]} {set ::fr_outer_draw_seen 1}; set ::pause off}
+    debug set_bp $::fr_addr_open_form {} {if {[fr_is_loaded]} {set ::fr_modal_seen 1}; set ::pause off}
+    debug set_bp $::fr_addr_draw_tree {} {if {[fr_is_loaded]} {fr_stack_sample; set ::fr_modal_draw_seen 1; if {$::fr_draw_ms < 0 && $::fr_draw_begin < 0} {set ::fr_draw_begin [machine_info time]}; if {$::fr_input_begin >= 0 && $::fr_input_ms < 0} {set ::fr_input_draw_pending 1}}; set ::pause off}
+    debug set_bp $::fr_addr_draw_return {} {if {[fr_is_loaded]} {fr_stack_sample; if {$::fr_draw_ms < 0 && $::fr_draw_begin >= 0} {set ::fr_draw_ms [expr {1000.0 * ([machine_info time] - $::fr_draw_begin)}]}; if {$::fr_input_draw_pending && $::fr_input_ms < 0} {set ::fr_input_ms [expr {1000.0 * ([machine_info time] - $::fr_input_begin)}]; set ::fr_input_draw_pending 0}}; set ::pause off}
+    debug set_bp $::fr_addr_gbr_read {} {if {[fr_is_loaded]} {fr_stack_sample}; set ::pause off}
+    if {$::fr_is_banked} {
+        debug set_bp $::fr_addr_segment_call {} {if {[fr_is_loaded]} {fr_stack_sample}; set ::pause off}
+    }
+    debug set_bp $::fr_addr_restore {} {if {[fr_is_loaded]} {set ::fr_saved_style [peek $::fr_addr_saved_style]; set ::fr_saved_level [peek $::fr_addr_saved_level]; if {$::fr_saved_style == 1 && $::fr_saved_level == 2} {set ::fr_save_seen 1}; set ::fr_restore_seen 1}; set ::pause off}
     set ::fr_deadline [expr {[machine_info time] + 30.0}]
     fr_double_click fr_launch_wait
 }

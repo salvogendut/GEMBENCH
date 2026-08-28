@@ -106,7 +106,9 @@ BASELINE_FLAG="${BASELINE:-0}"
 GBR_READER_FLAG="${GBR_READER:-0}"
 GBR_FIXED_TREE_FLAG="${GBR_FIXED_TREE:-0}"
 GBR_EMBEDDED_FLAG="${GBR_EMBEDDED:-0}"
+GBR_BANKED_FLAG="${GBR_BANKED:-0}"
 GBR_OBJECT_FLAG="${GBR_OBJECTS:-0}"
+if [ "$GBR_BANKED_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
 if [ "$GBR_EMBEDDED_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
 GBR_FORM_FLAG="${GBR_FORMS:-0}"
 if [ "$GBR_FORM_FLAG" = "1" ]; then GBR_OBJECT_FLAG=1; fi
@@ -143,6 +145,16 @@ fi
 if [ "$GBR_FORM_FLAG" = "1" ] && [ "$WIDGETS_FLAG" != "1" ]; then
     echo "ERROR: GBR_FORMS=1 requires WIDGETS=1" >&2
     exit 1
+fi
+if [ "$GBR_BANKED_FLAG" = "1" ]; then
+    case " $ALL_APPDEFS " in
+        *" -DGB_MSX2 "*) ;;
+        *) echo "ERROR: GBR_BANKED=1 is MSX2-only" >&2; exit 1 ;;
+    esac
+    if [ "$GBR_EMBEDDED_FLAG" = "1" ]; then
+        echo "ERROR: GBR_BANKED=1 cannot use the embedded access-only reader" >&2
+        exit 1
+    fi
 fi
 if [ "$TASK_FLAG" = "1" ] && (( TASK_STACK_RESERVE < 256 )); then
     echo "ERROR: TASK=1 requires TASK_STACK_RESERVE=256 (or larger)" >&2
@@ -226,6 +238,9 @@ fi
 if [ "$GBR_READER_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbr.h" "$GBR_LIB/gbr_reader.c")
 fi
+if [ "$GBR_BANKED_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbr_bank.h" "$GBR_LIB/gbr_bank.c" "$GBR_LIB/gbr_bank.s")
+fi
 if [ "$GBR_OBJECT_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbr_object.h" "$GBR_LIB/gbr_object.c")
 fi
@@ -297,6 +312,7 @@ cache_key=$(printf '%s\n' \
     "GBR_READER=$GBR_READER_FLAG" \
     "GBR_FIXED_TREE=$GBR_FIXED_TREE_FLAG" \
     "GBR_EMBEDDED=$GBR_EMBEDDED_FLAG" \
+    "GBR_BANKED=$GBR_BANKED_FLAG" \
     "GBR_OBJECTS=$GBR_OBJECT_FLAG" \
     "GBR_FORMS=$GBR_FORM_FLAG" \
     "TASK=$TASK_FLAG" \
@@ -371,6 +387,12 @@ if [ "$GBR_READER_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $GBR_READER_DEFS $ALL_APPDEFS \
         -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_reader.c" -o "$work/gbr_reader.rel"
     GBR_REL="$work/gbr_reader.rel"
+fi
+if [ "$GBR_BANKED_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_bank.c" -o "$work/gbr_bank.rel"
+    "$SDAS" -o "$work/gbr_bank_call.rel" "$GBR_LIB/gbr_bank.s"
+    GBR_REL="$GBR_REL $work/gbr_bank.rel $work/gbr_bank_call.rel"
 fi
 if [ "$GBR_OBJECT_FLAG" = "1" ]; then
     GBR_FORM_DEFS=""

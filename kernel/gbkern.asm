@@ -1764,6 +1764,11 @@ kpc_first       ld    a,(PIC_PAGE)
                 endif
 
                 include "app_pool.asm"
+                ifdef PLATFORM_MSX
+                ifdef GEMBENCH_GBR_BANKING
+                include "gbr_bank.asm"
+                endif
+                endif
 
 ; GB_RUN is a reserved legacy modal-run slot; live apps use GB_WMOPEN/GB_WMLAUNCHAS.
 

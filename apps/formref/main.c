@@ -5,6 +5,9 @@
 
 #ifdef GB_MSX2
 #include "gbr_object.h"
+#ifdef GBR_BANKED
+#include "gbr_bank.h"
+#endif
 #include "formref_gbr.h"
 #endif
 
@@ -41,6 +44,13 @@ static const gb_action_t actions[2] = {
     { "Cancel", 11 }
 };
 #else
+#ifdef GBR_BANKED
+static gbr_resource_t form_resource;
+static unsigned char form_segment;
+static const char form_resource_name[11] = {
+    'F', 'O', 'R', 'M', 'R', 'E', 'F', ' ', 'G', 'B', 'R'
+};
+#else
 static gbr_resource_t form_resource = {
     formref_gbr,
     FORMREF_GBR_SIZE,
@@ -52,6 +62,7 @@ static gbr_resource_t form_resource = {
     FORMREF_OBJECT_TABLE,
     FORMREF_STRING_DATA
 };
+#endif
 static gbr_runtime_t form_runtime;
 static unsigned int form_states[FORMREF_OBJECT_COUNT];
 static unsigned char form_tree;
@@ -80,8 +91,28 @@ static void level_text(char *text, unsigned char level)
 #ifdef GB_MSX2
 static unsigned char form_resource_open(void)
 {
+#ifdef GBR_BANKED
+    unsigned int size;
+    form_segment = gbr_segment_load(form_resource_name, &size);
+    if (form_segment == 0) return 0;
+    if (gbr_open_segment(&form_resource, form_segment, size) != GBR_OK) {
+        gbr_segment_free(form_segment);
+        form_segment = 0;
+        return 0;
+    }
+#endif
     form_tree = 0;
     return (unsigned char)(form_resource.tree_count == 1);
+}
+
+static void form_resource_close(void)
+{
+#ifdef GBR_BANKED
+    if (form_segment != 0) {
+        gbr_segment_free(form_segment);
+        form_segment = 0;
+    }
+#endif
 }
 
 static void form_draw(void)
@@ -310,7 +341,12 @@ static void app_proc(void)
     switch (gb_msg.type) {
         case GB_MSG_DRAW:  app_draw();      break;
         case GB_MSG_CLICK: app_click();     break;
-        case GB_MSG_CLOSE: gb_wm_close();   break;
+        case GB_MSG_CLOSE:
+#ifdef GB_MSX2
+            form_resource_close();
+#endif
+            gb_wm_close();
+            break;
         case GB_MSG_DRAG:  app_drag();      break;
     }
 }
