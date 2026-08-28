@@ -541,8 +541,10 @@ void gb_task_enable(void);
 
 /* Managed window (#146, #148): the KERNEL owns the chrome. Register with gb_wm_managed
  * and the WM draws the frame/title/grip. Legacy descriptors receive close/drag events
- * and keep their app-linked move/resize helpers. An MSX2 descriptor tagged with
- * GB_WK_ABI_V1 selects kernel-owned furniture and gestures through its kind bitmask.
+ * and keep their app-linked move/resize helpers. An MSX2 descriptor registered with
+ * gb_wm_managed_kind selects kernel-owned furniture and gestures through its kind
+ * bitmask. The distinct registration call is the ABI discriminator: the kernel never
+ * reads beyond a legacy 12-byte descriptor.
  * The app provides only the interior, through ONE handler `proc` (a WndProc). The kernel calls
  * proc(void) for every window callback with gb_msg.type set; the proc switches on it:
  *   GB_MSG_DRAW   draw the CONTENT (the WM already drew frame/title/grip)
@@ -556,10 +558,10 @@ void gb_task_enable(void);
  * A message the proc doesn't handle is simply ignored. Legacy windows are resizable iff
  * min_w != 0. title -> the app's title string (read each repaint).
  *
- * gb_mwin_kind_t appends the MSX2 kind/tag tail without increasing gb_mwin_t itself.
- * The ABI tag makes the extension opt-in: an older 12-byte MSX2 descriptor is still
- * treated as the legacy fixed-chrome contract. Pass &extended.window to
- * gb_wm_managed(); the base is the first member and the tagged tail follows it. */
+ * gb_mwin_kind_t appends the MSX2 kind byte without increasing gb_mwin_t itself.
+ * An older 12-byte MSX2 descriptor remains the legacy fixed-chrome contract. Pass
+ * the complete extended descriptor to gb_wm_managed_kind(); do not pass its base
+ * member to gb_wm_managed(). */
 #define GB_WK_TITLE    0x01u
 #define GB_WK_CLOSE    0x02u
 #define GB_WK_MAXIMIZE 0x04u
@@ -579,8 +581,8 @@ typedef struct {
 typedef struct {
     gb_mwin_t window;               /* unchanged legacy descriptor prefix */
     unsigned char kind;             /* GB_WK_* furniture/capability bits */
-    unsigned char kind_abi;         /* GB_WK_ABI_V1 opts into the appended fields */
 } gb_mwin_kind_t;
+void gb_wm_managed_kind(const gb_mwin_kind_t *desc);
 #endif
 void          gb_wm_managed(const gb_mwin_t *desc);   /* register a kernel-managed window */
 unsigned char gb_wm_x(void);    /* live window rect (WM-owned) */

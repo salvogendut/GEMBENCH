@@ -36,9 +36,9 @@ kernel_main
                 call  boot_tick              ; #196: bar 2/4
                 call  clock_init
                 call  boot_tick              ; #196: bar 3/4
-                ld    hl,WM_NWIN            ; clear WM low-RAM state
+                ld    hl,WM_NWIN            ; clear window, z-order and drag/drop state
                 ld    de,WM_NWIN+1
-                ld    bc,WM_Z+WM_MAXWIN-WM_NWIN-1
+                ld    bc,WM_DRAGDIR+4-WM_NWIN-1
                 ld    (hl),0
                 ldir
                 call  app_pool_init

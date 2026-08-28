@@ -124,6 +124,7 @@ _gb_pic_close:
 _gb_restore_parent:
         jp      0x8057
 _gb_wm_managed:
+        xor     a
         jp      0x80B1
 _gb_wm_open:
         jp      0x8060

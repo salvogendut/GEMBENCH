@@ -189,3 +189,59 @@ The corresponding 1983 images both reached frame 6,001 with identical PC, SP,
 VDP-register, and entry mapper telemetry. The final placement decision also
 includes the resident candidate's hard fit result and is recorded in
 [M7-BANKING-DECISION.md](M7-BANKING-DECISION.md).
+
+## Milestone 8 ABI freeze
+
+Milestone 8 was validated on 2026-08-29 with openMSX 21.0 and the normal
+embedded/app-linked resource placement. GBR1 remains binary-compatible with the
+Milestone 7 resource. The managed-window prototype was deliberately revised before
+freezing: File Manager now calls `gb_wm_managed_kind()` with the 13-byte v1
+descriptor, while every `gb_wm_managed()` call explicitly selects the legacy
+12-byte contract. The kernel no longer probes bytes after a legacy descriptor.
+
+The release FormRef trace passed with one resource tree, committed Style 1 and
+Level 2, a completed modal restore, and a 184-byte observed stack delta. Its first
+modal draw measured 887.767 ms and the input-to-redraw path measured 1,136.172 ms.
+The explicit-window trace passed with:
+
+```text
+INITIAL=4 26 56 158
+MAXIMIZED=0 8 128 204
+RESTORED=4 26 56 158
+MOVED=17 8 56 158
+SIZED=17 8 86 204
+MOVED_MESSAGES=1
+SIZED_MESSAGES=1
+MAXIMIZED_MESSAGES=2
+```
+
+`MSX_HEADLESS=1` runs the same interaction and trace assertions with screenshots
+disabled for renderer-less CI. A normal rendered run additionally writes the
+captures documented above. The window driver waits for File Manager's asynchronous
+directory scan and post-list icon probes before beginning gestures, and rejects
+transient BIOS/mapper views of low RAM before recording geometry.
+
+This validation also exposed a pre-existing boot initialization hole. Nextor uses
+the shared `0x142F` drag/drop byte while loading; the three platform boot paths now
+clear the complete window, z-order, and drag/drop state through `WM_DRAGDIR+3`.
+Changing the existing clear length adds no resident bytes and prevents File Manager
+from mistaking loader residue for an active storage claim.
+
+The complementary 1983 run reached frame 6,001 at PC `0x247A`, SP `0xD8EA`, with
+VDP R0/R1 `0x0A`/`0x62`, 25 free mapper segments at entry, and the Screen 7 baseline
+matched. The Screen 6 and Screen 7 kernels remain 10,682 and 12,260 bytes. Full
+`make cpc` and `make pcw` builds also passed and regenerated their card/floppy media.
+
+```sh
+make gembench-abi-check
+make check
+make gembench-msx
+MSX_HEADLESS=1 tools/test_formref_openmsx.sh
+MSX_HEADLESS=1 tools/test_window_kinds_openmsx.sh
+python3 debug/gembench_baseline_1983.py \
+  --ide-image QA/MSX/GBMSX.IMG \
+  --output-dir build/m8/1983 \
+  --frames 6000
+make cpc
+make pcw
+```

@@ -33,13 +33,14 @@ The completed foundation currently covers:
 - an MSX2 FormRef dialog whose drawing and hit geometry come from embedded GBR;
 - a measured MSX2 auxiliary-resource prototype and resident-renderer fit probe,
   with the smaller embedded/app-linked placement retained for GBR v1;
-- tagged MSX2 window kinds with kernel-owned furniture, move, resize, and
+- explicitly versioned MSX2 window kinds with kernel-owned furniture, move, resize, and
   maximise/restore gestures, demonstrated by File Manager;
+- a machine-checked GEMBENCH-1 freeze for the GBR1 and managed-window ABIs;
 - committed golden data and corruption tests; and
 - an MSX2-only black, white, grey, and red Screen 7 visual foundation.
 
-The next milestone reviews and freezes or deliberately revises the first
-resource and window ABI.
+The first resource and managed-window ABI is frozen. New incompatible resource
+or window work must cross an explicit version boundary.
 
 ## Fixed target
 
@@ -128,6 +129,7 @@ python3 tools/gbrc.py examples/hello-dialog.json \
 - [Bootstrap validation results](docs/gembench/BOOTSTRAP-RESULTS.md)
 - [Current MSX2 baseline](docs/gembench/BASELINE.md)
 - [Milestone 7 banking decision](docs/gembench/M7-BANKING-DECISION.md)
+- [Frozen GEMBENCH-1 ABI](docs/gembench/ABI-V1.md)
 - [openMSX reference validation](docs/gembench/OPENMSX-VALIDATION.md)
 - [Baseline measurement workflow](docs/gembench/DEVELOPMENT.md)
 - [Visual direction and base palette](docs/gembench/VISUAL-DIRECTION.md)

@@ -337,7 +337,7 @@ gb_open_window
                 ifdef PLATFORM_MSX
                 ld    a,GB_WK_LEGACY         ; direct gb_window() keeps the inherited chrome
                 ld    (mw_kind),a            ; contract; managed windows enter below after
-                endif                        ; loading their tagged descriptor kind.
+                endif                        ; loading their explicitly registered kind.
 gb_open_window_kind
                 ld    a,b
                 ld    (kw_x),a
@@ -571,7 +571,7 @@ kf_gx           db    0            ; maximize-gadget x byte-col (set by kwin_fra
                 endif                        ; PLATFORM_MSX
 
                 ifdef PLATFORM_MSX
-; Draw exactly the furniture selected by the tagged MSX2 window kind. Legacy
+; Draw exactly the furniture selected by the explicit MSX2 window kind. Legacy
 ; descriptors load GB_WK_STANDARD, retaining the established full chrome.
 kf_msx_furniture
                 ld    a,(mw_kind)
@@ -2237,23 +2237,38 @@ wm_register
                 jr    wm_z_append                  ; A = slot; tail-call (rets to wm_register's caller)
 
 ; ===== managed windows (#146): the kernel owns the chrome ====================
-; k_wm_managed (GB_WMMANAGED): HL = a gb_mwin_t descriptor in the caller's page.
+; k_wm_managed (GB_WMMANAGED): HL = a gb_mwin_t descriptor in the caller's page;
+; A = 0 for the legacy 12-byte contract or GB_WK_ABI_V1 for the explicit MSX2
+; kind extension. Distinct libgb entry points supply the selector, so the kernel
+; never probes beyond a legacy descriptor.
 ; Register a window the WM draws + drives: the descriptor pointer goes in WM_FR_FRAME
 ; and FLAGS gets MW_MANAGED, so wm_loop / wm_repaint_all route it to wm_chrome_frame /
 ; wm_chrome_draw instead of the app's on_frame/on_repaint. Descriptor layout:
 ;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 proc +8 title
 ;   +10 task_worker (0 for normal managed windows)
 k_wm_managed
+                ifdef PLATFORM_MSX
+                push  af                     ; preserve the registration selector
+                endif
                 call  wm_register            ; HL = desc; register as a normal window (slot,
                                              ; page, focus, z-order, arg, flags=alive; copies
                                              ; desc[0..11] -> entry+1..12). wm_register stashed
                                              ; the desc ptr in wm_desc. Now patch for managed:
                 ld    a,(WM_FOCUS)           ; the just-registered window
                 call  wm_entry               ; HL = entry
+                ifdef PLATFORM_MSX
+                pop   af                     ; restore the registration selector
+                endif
                 push  hl
                 ld    de,WM_FR_FLAGS         ; FLAGS |= managed
                 add   hl,de
                 set   1,(hl)
+                ifdef PLATFORM_MSX
+                cp    GB_WK_ABI_V1
+                jr    nz,kwm_kind_done
+                set   4,(hl)                  ; remember explicit v1 registration per window
+kwm_kind_done
+                endif
                 pop   hl
                 push  hl
                 ld    de,WM_FR_FRAME         ; WM_FR_FRAME (entry+5,6) = the descriptor ptr
@@ -2306,19 +2321,20 @@ mw_publish
                 ret
 
                 ifdef PLATFORM_MSX
-; Load the append-only kind tail from the focused managed descriptor. The tag is
-; deliberately separate from the flags: pre-extension 12-byte application images
-; keep the legacy fixed-chrome behavior even when run by this kernel.
+; Load the append-only kind byte only for a window explicitly registered through
+; gb_wm_managed_kind. Legacy descriptors never have bytes read beyond offset 11.
 mw_kind_load
                 ld    a,GB_WK_LEGACY
                 ld    (mw_kind),a
-                ld    hl,(mw_desc)
-                ld    de,13                  ; desc.kind_abi
+                ld    a,(WM_FOCUS)
+                call  wm_entry
+                ld    de,WM_FR_FLAGS
                 add   hl,de
-                ld    a,(hl)
-                cp    GB_WK_ABI_V1
-                ret   nz
-                dec   hl                     ; desc.kind
+                bit   4,(hl)                  ; MW_KIND_V1
+                ret   z
+                ld    hl,(mw_desc)
+                ld    de,12                  ; desc.kind
+                add   hl,de
                 ld    a,(hl)
                 and   GB_WK_STANDARD
                 or    GB_WK_EXTENDED         ; internal opt-in marker
@@ -2386,7 +2402,7 @@ wm_chrome_frame
                 ifdef PLATFORM_MSX
                 jr    z,mwf_click_check
                 ld    a,(mw_kind)
-                bit   1,a                     ; tagged windows without GB_WK_CLOSE stay open
+                bit   1,a                     ; v1 windows without GB_WK_CLOSE stay open
                 jp    nz,mw_do_close
                 else
                 jp    nz,mw_do_close          ; CPC/PCW retain the compact legacy route
@@ -2454,9 +2470,9 @@ mwf_notclose
 mwf_title
                 ifdef PLATFORM_MSX
                 ld    a,(mw_kind)
-                bit   7,a                     ; untagged descriptor: preserve GB_MSG_DRAG
+                bit   7,a                     ; legacy descriptor: preserve GB_MSG_DRAG
                 jr    z,mwf_legacy_drag
-                bit   3,a                     ; tagged but not movable: consume title press
+                bit   3,a                     ; v1 but not movable: consume title press
                 ret   z
                 jp    mw_move
 mwf_legacy_drag
@@ -2541,7 +2557,7 @@ wm_sav_h        db    0
 mwf_content
                 ifdef PLATFORM_MSX
                 ld    a,(mw_kind)
-                bit   7,a                     ; only tagged kinds get kernel resize
+                bit   7,a                     ; only explicit v1 kinds get kernel resize
                 jr    z,mwf_content_hook
                 bit   4,a                     ; GB_WK_RESIZE
                 jr    z,mwf_content_hook
@@ -2577,7 +2593,7 @@ mwf_content_hook
                 jp    mw_hook
 
                 ifdef PLATFORM_MSX
-; Kernel-owned outline gestures for tagged kinds. They deliberately retain the
+; Kernel-owned outline gestures for explicit v1 kinds. They deliberately retain the
 ; established app helper's interaction: the window is lifted only after actual
 ; movement, a red outline follows the held pointer, and one compositor repaint
 ; restores the stack on release.

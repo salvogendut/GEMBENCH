@@ -104,6 +104,7 @@ kernel, C apps, and paged modules; its fixed ownership map is tracked in
 
 ```bash
 python3 tools/check_abi_table.py
+python3 tools/check_gembench_abi.py
 python3 tools/check_lowram_map.py
 ```
 

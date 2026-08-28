@@ -49,11 +49,12 @@ def main(argv: list[str]) -> int:
     if args.input_response and args.frames <= args.keyboard_paste_at + 10:
         parser.error("--frames must leave time for the injected keyboard response")
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    log_path = args.output_dir / "1983.log"
-    screenshot_path = args.output_dir / "desktop.ppm"
-    markdown_path = args.output_dir / "gembench-baseline.md"
-    json_path = args.output_dir / "gembench-baseline.json"
+    output_dir = args.output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    log_path = output_dir / "1983.log"
+    screenshot_path = output_dir / "desktop.ppm"
+    markdown_path = output_dir / "gembench-baseline.md"
+    json_path = output_dir / "gembench-baseline.json"
     for generated_path in (log_path, screenshot_path, markdown_path, json_path):
         generated_path.unlink(missing_ok=True)
     command = [

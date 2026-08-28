@@ -21,6 +21,7 @@
 #define GBR_H_STRING_COUNT          10u
 #define GBR_H_TREE_COUNT            11u
 #define GBR_H_OBJECT_COUNT          12u
+#define GBR_H_RESERVED              13u
 #define GBR_H_STRING_INDEX          14u
 #define GBR_H_TREE_TABLE            16u
 #define GBR_H_OBJECT_TABLE          18u
@@ -30,6 +31,7 @@
 #define GBR_T_ROOT                   0u
 #define GBR_T_OBJECT_COUNT           1u
 #define GBR_T_NAME                   2u
+#define GBR_T_RESERVED               3u
 
 #define GBR_O_PARENT                 0u
 #define GBR_O_FIRST_CHILD            1u

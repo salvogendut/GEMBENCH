@@ -160,6 +160,7 @@ MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the
 ; modules preserve Mode 2 fullscreen when touching the Gate Array register.
 MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
                 ifdef PLATFORM_MSX
+MW_KIND_V1      equ   16           ; WM_FR_FLAGS: explicit kind-v1 registration accepted
 GB_WK_TITLE     equ   1            ; appended gb_mwin_t.kind bits (GEMBENCH v1)
 GB_WK_CLOSE     equ   2
 GB_WK_MAXIMIZE  equ   4
@@ -167,8 +168,8 @@ GB_WK_MOVE      equ   8
 GB_WK_RESIZE    equ   16
 GB_WK_STANDARD  equ   31
 GB_WK_LEGACY    equ   7            ; inherited draw: title + close + maximise, no grip
-GB_WK_EXTENDED  equ   128          ; internal: descriptor passed the ABI-tag check
-GB_WK_ABI_V1    equ   #B6          ; gb_mwin_t.kind_abi at descriptor offset +13
+GB_WK_EXTENDED  equ   128          ; internal: window used explicit kind-v1 registration
+GB_WK_ABI_V1    equ   #B6          ; A selector used by gb_wm_managed_kind
                 endif
                 if PREEMPTIVE
 WM_TASK_RUNNABLE equ  8            ; WM_FR_FLAGS bit 3: bank has a valid task snapshot

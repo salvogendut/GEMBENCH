@@ -1,6 +1,6 @@
 # GEMBENCH implementation plan
 
-Status: **approved for bootstrap on 2026-08-28**.
+Status: **Milestones 1-8 complete; GEMBENCH-1 frozen on 2026-08-29**.
 
 This plan turns the goals in `DESIGN-ESTIMATE.md` into staged implementation
 work. The first proof of concept is expected to take approximately six to nine
@@ -45,7 +45,7 @@ baseline is recorded.
 | 5. Vertical slice (complete 2026-08-28) | Convert one representative dialog and add semantic theme roles | 1 week | Pointer and keyboard interaction require no custom object drawing |
 | 6. Window kinds (complete 2026-08-28) | Add append-only flags and messages for close, maximise, move, and resize | 1-2 weeks | The kernel owns the selected window furniture |
 | 7. Banking decision (complete 2026-08-29) | Prototype an auxiliary resource segment and resident renderer | 1 week | Measurements compare resident and app-linked implementations |
-| 8. Review | Evaluate size, responsiveness, and maintainability | 2-3 days | The first resource and window ABI is frozen or deliberately revised |
+| 8. Review (complete 2026-08-29) | Evaluate size, responsiveness, and maintainability | 2-3 days | GEMBENCH-1 is frozen after an explicit window-ABI revision |
 
 ## Bootstrap work package
 
@@ -116,8 +116,8 @@ code budget with no static data. Milestone 5 adds shared semantic pen roles,
 field rendering, live caller-owned text bindings, cyclic keyboard focus,
 deterministic generated C identifiers, and a GBR-driven MSX2 FormRef dialog.
 CPC and PCW retain their prior FormRef implementation and binary sizes.
-Milestone 6 preserves the 12-byte managed-window descriptor, adds a tagged
-MSX2-only kind tail and append-only geometry messages, and moves selected
+Milestone 6 preserved the 12-byte managed-window descriptor, prototyped a tagged
+MSX2-only kind tail and append-only geometry messages, and moved selected
 furniture plus maximise, move, and resize gestures into the resident kernel.
 File Manager is the representative migration: its MSX2 image shrank from
 14,645 to 13,244 bytes while the Screen 7 kernel grew by 768 bytes to 12,260.
@@ -128,4 +128,16 @@ mapper segment, and leaves only 216 bytes of loader headroom. The complete 6,242
 resident candidate cannot fit the banked kernel's 3,868-byte resident gap. The
 first ABI therefore keeps small GBR resources embedded and rendering app-linked;
 the measurements and reproduction commands are recorded in
-[M7-BANKING-DECISION.md](M7-BANKING-DECISION.md). Milestone 8 is the ABI review.
+[M7-BANKING-DECISION.md](M7-BANKING-DECISION.md). Milestone 8 leaves the GBR1
+file grammar unchanged and freezes all resource
+constants, layouts, validation rules, and reserved type identities. It deliberately
+revises the pre-freeze 14-byte window prototype: `gb_mwin_t` remains 12 bytes,
+while the MSX2-only `gb_mwin_kind_t` is now a 13-byte descriptor registered through
+`gb_wm_managed_kind()`. The distinct entry point passes an explicit selector through
+the existing kernel slot, so a legacy registration never reads beyond byte 11.
+The authoritative manifest is `abi/gembench-v1.json`, checked by
+`make gembench-abi-check` and `make check`; the compatibility rules are recorded in
+[ABI-V1.md](ABI-V1.md). The release MSX2 kernel sizes remain 10,682/12,260 bytes,
+File Manager grows five bytes to 13,249, and the complete MSX2, CPC, and PCW
+distribution builds pass. openMSX passes the FormRef and explicit-window logic
+traces, and 1983 reaches the healthy Screen 7 desktop at frame 6,001.

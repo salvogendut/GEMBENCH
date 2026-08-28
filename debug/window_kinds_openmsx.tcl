@@ -1,4 +1,4 @@
-# Exercise the first tagged GEMBENCH window kind through real MSX keyboard-
+# Exercise the first explicitly versioned GEMBENCH window kind through real MSX keyboard-
 # matrix pointer input. The File Manager is maximised/restored, moved and
 # resized entirely by kernel-owned title/grip furniture.
 
@@ -8,7 +8,9 @@ set pause off
 
 set wk_output $::env(GEMBENCH_WINDOW_KINDS_OUTPUT)
 set wk_screenshot $::env(GEMBENCH_WINDOW_KINDS_SCREENSHOT)
+set wk_screenshots [expr {$::env(GEMBENCH_WINDOW_KINDS_SCREENSHOTS) + 0}]
 set wk_fm_proc [expr {$::env(GEMBENCH_WINDOW_KINDS_FM_PROC)}]
+set wk_list_state [expr {$::env(GEMBENCH_WINDOW_KINDS_LIST_STATE)}]
 set wk_cursor_x [expr {$::env(GEMBENCH_WINDOW_KINDS_CURSOR_X)}]
 set wk_deadline 0
 set wk_target_x 0
@@ -25,6 +27,9 @@ set wk_maximized_messages 0
 set wk_move_attempts 0
 set wk_resize_attempts 0
 set wk_page0_slot -1
+set wk_registered 0
+set wk_list_ready 0
+set wk_started 0
 
 proc wk_release_all {} {
     catch {keymatrixup 8 0x01}
@@ -67,7 +72,7 @@ proc wk_finish {status} {
                      256 * [peek [expr {$::wk_cursor_x + 3}]]}]
     puts $handle "FINAL_CURSOR_RAW=$raw_x,$raw_y"
     close $handle
-    if {$status ne "PASS"} {
+    if {$::wk_screenshots && $status ne "PASS"} {
         catch {screenshot -raw $::wk_screenshot}
     }
     exit
@@ -75,7 +80,9 @@ proc wk_finish {status} {
 
 proc wk_proc_break {} {
     set type [peek 0x1302]
-    if {$type == 8} {
+    if {$type == 5 && [peek $::wk_list_state] == 0} {
+        set ::wk_list_ready 1
+    } elseif {$type == 8} {
         incr ::wk_moved_messages
     } elseif {$type == 9} {
         incr ::wk_sized_messages
@@ -212,7 +219,9 @@ proc wk_check_final {} {
         wk_finish "FAIL incomplete window-kind interaction"
         return
     }
-    if {[catch {screenshot -raw $::wk_screenshot} error]} {
+    if {!$::wk_screenshots} {
+        wk_finish PASS
+    } elseif {[catch {screenshot -raw $::wk_screenshot} error]} {
         wk_finish "FAIL screenshot: $error"
     } else {
         wk_finish PASS
@@ -263,7 +272,19 @@ proc wk_resize_start {} {
 }
 
 proc wk_resize_prepare {} {
-    lassign [wk_rect] x y w h
+    set rect [wk_rect]
+    set px [peek 0x1306]
+    set py [peek 0x1307]
+    if {![wk_rect_valid $rect] || $rect ne $::wk_moved ||
+        $px > 127 || $py > 211} {
+        if {[machine_info time] >= $::wk_deadline} {
+            wk_finish "FAIL resize target never became mapper-safe"
+        } else {
+            after time 0.002 wk_resize_prepare
+        }
+        return
+    }
+    lassign $rect x y w h
     # Stay inside the 6-byte x 14-line friendly grip hit area even with the
     # pointer driver's +/-1 byte, +/-3 line arrival tolerance.
     wk_move_to [expr {$x + $w - 2}] [expr {$y + $h - 4}] wk_resize_start
@@ -299,6 +320,7 @@ proc wk_move_record {} {
     # Geometry is published before the full compositor repaint returns. Leave
     # enough emulated time for that repaint so short steering pulses are not
     # consumed while the root task is still drawing the moved window.
+    set ::wk_deadline [expr {[machine_info time] + 30.0}]
     after time 3.0 wk_resize_prepare
 }
 
@@ -316,7 +338,19 @@ proc wk_window_move_start {} {
 }
 
 proc wk_move_prepare {} {
-    lassign [wk_rect] x y w h
+    set rect [wk_rect]
+    set px [peek 0x1306]
+    set py [peek 0x1307]
+    if {![wk_rect_valid $rect] || $rect ne $::wk_restored ||
+        $px > 127 || $py > 211} {
+        if {[machine_info time] >= $::wk_deadline} {
+            wk_finish "FAIL move target never became mapper-safe"
+        } else {
+            after time 0.002 wk_move_prepare
+        }
+        return
+    }
+    lassign $rect x y w h
     wk_move_to [expr {$x + 20}] [expr {$y + 6}] wk_window_move_start
 }
 
@@ -325,6 +359,7 @@ proc wk_restore_check {} {
     if {$::wk_restored ne $::wk_initial} {
         wk_finish "FAIL restore geometry: $::wk_restored"
     } else {
+        set ::wk_deadline [expr {[machine_info time] + 30.0}]
         after time 1.0 wk_move_prepare
     }
 }
@@ -348,13 +383,41 @@ proc wk_max_click {} {
     wk_click {wk_wait_rect {0 8 128 204} wk_max_check maximize}
 }
 
+proc wk_start_interaction {} {
+    set rect [wk_rect]
+    set x [peek 0x1306]
+    set y [peek 0x1307]
+    if {![wk_rect_valid $rect] || $x > 127 || $y > 211} {
+        if {[machine_info time] >= $::wk_deadline} {
+            wk_finish "FAIL interaction start never became mapper-safe"
+        } else {
+            after time 0.002 wk_start_interaction
+        }
+        return
+    }
+    set ::wk_initial $rect
+    lassign $::wk_initial x y w h
+    wk_move_to [expr {$x + $w - 2}] [expr {$y + 6}] wk_max_click
+}
+
 proc wk_filemgr_ready {} {
     if {[peek 0x1350] >= 2 && [peek 0x144A] == 56 && [peek 0x144B] == 158} {
-        set ::wk_page0_slot [expr {[debug read ioports 0xA8] & 3}]
-        set ::wk_initial [wk_rect]
-        debug set_bp $::wk_fm_proc {} {wk_proc_break}
-        lassign $::wk_initial x y w h
-        wk_move_to [expr {$x + $w - 2}] [expr {$y + 6}] wk_max_click
+        if {!$::wk_registered} {
+            set ::wk_registered 1
+            set ::wk_page0_slot [expr {[debug read ioports 0xA8] & 3}]
+            debug set_bp $::wk_fm_proc {} {wk_proc_break}
+        }
+        if {$::wk_list_ready && !$::wk_started} {
+            set ::wk_started 1
+            # Let the post-list application-icon probes finish before driving
+            # pointer gestures; they temporarily switch mapper/BIOS slots.
+            set ::wk_deadline [expr {[machine_info time] + 30.0}]
+            after time 10.0 wk_start_interaction
+        } elseif {[machine_info time] >= $::wk_deadline} {
+            wk_finish "FAIL File Manager list did not become ready"
+        } else {
+            after time 0.1 wk_filemgr_ready
+        }
     } elseif {[machine_info time] >= $::wk_deadline} {
         wk_finish "FAIL File Manager did not register: [wk_rect]"
     } else {
