@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-baseline-report gembench-baseline-1983 app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -22,6 +22,17 @@ msx:
 
 # GEMBENCH's fixed-target entry point. Keep the upstream alias during bootstrap.
 gembench-msx: msx
+
+# Generate a static report from the staged distribution. The 1983 target adds
+# guarded mapper/VRAM boot telemetry plus a desktop screenshot.
+gembench-baseline-report: gbr-example
+	mkdir -p build/baseline
+	$(PYTHON) tools/gembench_baseline.py \
+		--markdown build/baseline/gembench-baseline.md \
+		--json build/baseline/gembench-baseline.json
+
+gembench-baseline-1983: gembench-msx gbr-example
+	$(PYTHON) debug/gembench_baseline_1983.py
 
 # Compatibility alias: preemptive scheduling is the release default.
 msx-preemptive: msx

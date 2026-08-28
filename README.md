@@ -53,6 +53,13 @@ Build the fixed-target MSX distribution:
 make gembench-msx
 ```
 
+Capture the reproducible pre-GBR baseline under the sibling `1983`
+emulator checkout:
+
+```sh
+make gembench-baseline-1983
+```
+
 The inherited GeoBench build requires RASM, SDCC, mtools, dosfstools, and the
 documented MSX dependencies. See [Building and running](docs/BUILDING.md) and
 [the MSX2 target](docs/MSX2.md) for setup, deployment, and emulator commands.
@@ -69,6 +76,8 @@ python3 tools/gbrc.py examples/hello-dialog.json \
 - [Design and estimate](DESIGN-ESTIMATE.md)
 - [Approved implementation plan](docs/gembench/IMPLEMENTATION-PLAN.md)
 - [Bootstrap validation results](docs/gembench/BOOTSTRAP-RESULTS.md)
+- [Current MSX2 baseline](docs/gembench/BASELINE.md)
+- [Baseline measurement workflow](docs/gembench/DEVELOPMENT.md)
 - [GEMBENCH architecture](docs/gembench/ARCHITECTURE.md)
 - [GBR version 1](docs/GBR-V1.md)
 - [GeoBench foundation architecture](docs/ARCHITECTURE.md)

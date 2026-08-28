@@ -35,6 +35,28 @@ Rebuild only the example resource:
 make gbr-example
 ```
 
+Generate the static pre-runtime size and headroom report from the staged MSX
+distribution:
+
+```sh
+make gembench-baseline-report
+```
+
+Boot the generated 32 MiB IDE image through the Sunrise Nextor ROM in the
+sibling `1983` checkout and add guarded mapper and VRAM boot telemetry:
+
+```sh
+make gembench-baseline-1983
+```
+
+The target first runs the normal `gembench-msx` build, then writes a
+machine-readable JSON report, a Markdown report, the raw emulator log, and a
+desktop screenshot under `build/baseline/`. Override `--sunrise-rom` or
+`--ide-image` when invoking `debug/gembench_baseline_1983.py` directly if the
+sibling checkout uses different paths. A non-zero emulator exit after the
+telemetry line is tolerated because a read-only host configuration can prevent
+RTC persistence after the guest has completed.
+
 Build the fixed-target distribution:
 
 ```sh
