@@ -17,6 +17,8 @@ cd "$(dirname "$0")/.."
 APP="${1:-apps/clock}"
 OUT="${2:-build/CLOCK.RAW}"
 GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.s)
+GBR_LIB="lib/gembench"
+GBR_INCLUDE="include/gembench"
 GBLIB_SRC="${GBLIB_SRC:-$GB/gblib.s}"
 APP_CFLAGS="${APP_CFLAGS:-}"
 HELPER_CFLAGS="${HELPER_CFLAGS:-}"
@@ -100,6 +102,11 @@ SIZEPROMPT_FLAG="${SIZEPROMPT:-0}"
 APP_PROBE_FLAG="${APP_PROBE:-0}"
 REPAINTTOP_FLAG="${REPAINTTOP:-0}"
 BASELINE_FLAG="${BASELINE:-0}"
+GBR_READER_FLAG="${GBR_READER:-0}"
+GBR_OBJECT_FLAG="${GBR_OBJECTS:-0}"
+if [ "$GBR_OBJECT_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
+GBR_INCLUDE_FLAGS=""
+if [ "$GBR_READER_FLAG" = "1" ]; then GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"; fi
 NET_SRC="$GB/gbnet_stub.c"
 case " $ALL_APPDEFS " in
     *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
@@ -116,6 +123,11 @@ fi
 if [ "$FORM_SELECT_FLAG" = "1" ] &&
    { [ "$FORM_FLAG" != "1" ] || [ "$SELECTOR_FLAG" != "1" ]; }; then
     echo "ERROR: FORM_SELECT=1 requires FORM=1 and SELECTOR=1" >&2
+    exit 1
+fi
+if [ "$GBR_OBJECT_FLAG" = "1" ] &&
+   { [ "$BUTTON_FLAG" != "1" ] && [ "$WIDGETS_FLAG" != "1" ]; }; then
+    echo "ERROR: GBR_OBJECTS=1 requires BUTTON=1 or WIDGETS=1" >&2
     exit 1
 fi
 if [ "$TASK_FLAG" = "1" ] && (( TASK_STACK_RESERVE < 256 )); then
@@ -197,6 +209,12 @@ fi
 if [ "$BASELINE_FLAG" = "1" ]; then
     deps+=("$GB/gbbaseline.s")
 fi
+if [ "$GBR_READER_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbr.h" "$GBR_LIB/gbr_reader.c")
+fi
+if [ "$GBR_OBJECT_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbr_object.h" "$GBR_LIB/gbr_object.c")
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -261,6 +279,8 @@ cache_key=$(printf '%s\n' \
     "APP_PROBE=$APP_PROBE_FLAG" \
     "REPAINTTOP=$REPAINTTOP_FLAG" \
     "BASELINE=$BASELINE_FLAG" \
+    "GBR_READER=$GBR_READER_FLAG" \
+    "GBR_OBJECTS=$GBR_OBJECT_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -324,7 +344,18 @@ fi
 # derives GB_COLS/GB_LINES/GB_XPIX from it, and gbwin.c/gbdoc.c clamp window
 # drag/resize + fullscreen to those extents. Omitting it built libgb with the
 # CPC 320x200 extents, so on MSX windows would not drag past x=320 (#287).
-"$SDCC" -mz80 --fomit-frame-pointer $APP_CFLAGS $ALL_APPDEFS -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
+"$SDCC" -mz80 --fomit-frame-pointer $APP_CFLAGS $ALL_APPDEFS -I "$GB" $GBR_INCLUDE_FLAGS -c "$APP/main.c" -o "$work/main.rel"
+GBR_REL=""
+if [ "$GBR_READER_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_reader.c" -o "$work/gbr_reader.rel"
+    GBR_REL="$work/gbr_reader.rel"
+fi
+if [ "$GBR_OBJECT_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_object.c" -o "$work/gbr_object.rel"
+    GBR_REL="$GBR_REL $work/gbr_object.rel"
+fi
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then
     GBWIN_DEFS=""
@@ -436,7 +467,7 @@ fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc "$CODE_LOC" --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
-    $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $TASK_REL $TASK_ROOT_REL \
+    $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $GBR_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $TASK_REL $TASK_ROOT_REL \
     "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places

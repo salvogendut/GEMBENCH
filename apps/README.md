@@ -28,6 +28,7 @@ preempted.
 | calculator | `CALC.APP`   | fixed-point desktop calculator with basic arithmetic, percentage and square root |
 | clock    | `CLOCK.APP`    | analog clock widget |
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours on CPC/MSX2 / screensaver, friendly 4-colour / 16-colour next-boot selection on MSX2, and Return to Defaults; PCW omits palette controls because its display is fixed monochrome; persisted to `GEOBENCH.CFG` |
+| gbrdemo | `GBRDEMO.APP` | MSX2 object-runtime proof: opening `HELLO.GBR` draws and hit-tests its box, text, and button directly from the validated resource tree |
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal: CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; MSX2 TCP/IP UNAPI in a 78x22 window; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
 | nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status; CPC uses the active GBNET backend, PCW uses PerryNet over PerryFi |
 | formref  | `FORMREF.APP`  | development reference for app-linked form composition and the first `GBAP` embedded application icon, using the Daruma artwork |
