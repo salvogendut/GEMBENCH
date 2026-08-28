@@ -72,6 +72,19 @@ a disposable RTC because the accelerated clock changes its visible time. The
 diagnostic code and TASKDEMO apps are absent from a normal `make gembench-msx`
 build.
 
+Measure pointer and keyboard response with the same three runnable tasks:
+
+```sh
+make gembench-baseline-input-1983
+make gembench-baseline-input-openmsx
+```
+
+The 1983 target injects a real keyboard-matrix event at a fixed frame and
+records its visible desktop acknowledgement. Its current headless interface has
+no scripted pointer-motion source. The openMSX target therefore performs two
+reference runs, driving both pointer and keyboard through matrix events and
+requiring visible VDP/UI changes before acknowledging either response.
+
 Build the fixed-target distribution:
 
 ```sh

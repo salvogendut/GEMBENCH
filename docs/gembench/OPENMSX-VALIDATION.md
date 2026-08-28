@@ -28,16 +28,37 @@ The stack and completion telemetry agree. 1983 is about 10.6% faster for the
 full repaint and 11.3% faster for the damage-limited repaint, so openMSX values
 are the reference numbers for performance decisions.
 
+## Input response
+
+The diagnostic desktop arms its input probe only after the repaint samples are
+complete and the desktop plus two non-yielding TASKDEMO workers are runnable.
+The openMSX driver then injects real MSX keyboard-matrix events. Pointer timing
+ends after the changed coordinates are written to the VDP sprite table;
+keyboard timing ends after the desktop draws its visible acknowledgement.
+
+| Emulator | Pointer response | Keyboard response | Tasks | Stack / fault |
+| --- | ---: | ---: | ---: | ---: |
+| openMSX run 1 | 86.290 ms | 56.967 ms | 3 | 32 / 0 |
+| openMSX run 2 | 86.290 ms | 56.967 ms | 3 | 32 / 0 |
+| 1983 | not captured | 2 PAL frames (40.00 ms) | 3 | 32 / 0 |
+
+The stock 1983 headless interface can inject the keyboard event but does not
+yet expose a scripted pointer-motion source. Its keyboard result is retained as
+an integration check; the repeated openMSX runs are the reference input
+measurements.
+
 ## Reproduce
 
 Build the diagnostic image, then boot that staged image through the repository's
-normal openMSX launcher with networking disabled. At 40 emulated seconds, read
-52 bytes starting at page-3 address `0xC018`. The probe fields are documented in
-`lib/msx/glue.inc`; phase 4 means both repaint samples completed.
+normal openMSX launcher with networking disabled. The diagnostic dump covers 96
+bytes starting at page-3 address `0xC000`. The probe fields are documented in
+`lib/msx/glue.inc`; phase 4 means both repaint samples completed and input flag
+7 means the pointer and keyboard acknowledgements were observed.
 
 ```sh
 make gembench-baseline-probes-1983
-MSX_UNAPI=0 tools/run_msx.sh
+make gembench-baseline-input-1983
+make gembench-baseline-input-openmsx
 ```
 
 The diagnostic timer intentionally advances the visible RTC and should only be

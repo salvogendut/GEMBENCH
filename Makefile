@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -42,6 +42,19 @@ gembench-baseline-probes-1983: gembench-baseline-1983
 	$(PYTHON) debug/gembench_baseline_1983.py \
 		--runtime-probes \
 		--static-json build/baseline/release-baseline.json
+
+# Inject a real MSX matrix key after the diagnostic image has armed its input
+# telemetry. The guest publishes the acknowledgement only after drawing it.
+gembench-baseline-input-1983: gembench-baseline-probes-1983
+	$(PYTHON) debug/gembench_baseline_1983.py \
+		--runtime-probes \
+		--input-response \
+		--static-json build/baseline/release-baseline.json
+
+# Repeat the reference input run twice. openMSX can drive the cursor-key pointer
+# path directly; its results complement 1983's headless keyboard capture.
+gembench-baseline-input-openmsx: gembench-baseline-input-1983
+	$(PYTHON) debug/gembench_input_openmsx.py
 
 # Compatibility alias: preemptive scheduling is the release default.
 msx-preemptive: msx

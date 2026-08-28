@@ -64,7 +64,7 @@ The MSX2 pointer uses V9938 sprites, so it has no VRAM save-under. Fonts, icons,
 ## Runtime telemetry
 
 - Capture frame: 6,001
-- PC / SP: `0x4034` / `0xD904`
+- PC / SP: `0x402F` / `0xD904`
 - VDP R0 / R1: `0x0A` / `0x62`
 - Screen 7 register baseline matched: yes
 - Page-1 TPA / PAGE_DATA segments: 2 / 4
@@ -82,9 +82,21 @@ Status: **captured**.
 
 Each result is one diagnostic-build sample from the 16,384 Hz RTC seconds-test clock. Packed 24-hour start/end values give an unambiguous 5.27-second window. Release builds do not link or run this probe. The openMSX reference comparison is recorded in docs/gembench/OPENMSX-VALIDATION.md.
 
+## Input response
+
+Status: **partial**.
+
+- Runnable tasks at arm: 3.
+- Keyboard acknowledgement: 2 PAL frame(s) (40.00 ms).
+- Pointer acknowledgement in 1983: not captured.
+
+1983 injects a real matrix key at a fixed host frame. Its current headless interface has no scripted pointer-motion source, so the openMSX reference runs provide the authoritative pointer and independently repeated keyboard measurements.
+
 ## Reproduce
 
 ```sh
 make gembench-baseline-1983
 make gembench-baseline-probes-1983
+make gembench-baseline-input-1983
+make gembench-baseline-input-openmsx
 ```

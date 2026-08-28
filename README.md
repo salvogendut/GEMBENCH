@@ -69,6 +69,14 @@ make gembench-baseline-probes-1983
 The probe target preserves release artifact measurements in the report and
 does not add instrumentation to normal GEMBENCH builds.
 
+Complete the baseline with input-response measurements under three runnable
+tasks, using openMSX for the reference pointer result:
+
+```sh
+make gembench-baseline-input-1983
+make gembench-baseline-input-openmsx
+```
+
 The inherited GeoBench build requires RASM, SDCC, mtools, dosfstools, and the
 documented MSX dependencies. See [Building and running](docs/BUILDING.md) and
 [the MSX2 target](docs/MSX2.md) for setup, deployment, and emulator commands.

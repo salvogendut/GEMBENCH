@@ -31,7 +31,7 @@ NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
 NOTEPAD_SCROLL=1
 if [ "$GEMBENCH_BASELINE" = "1" ]; then
     BASELINE_APPDEFS="-DGEMBENCH_BASELINE"
-    DESKTOP_DATA_LOC="0x7400"
+    DESKTOP_DATA_LOC="0x7500"
 elif [ "$GEMBENCH_BASELINE" != "0" ]; then
     echo "GEMBENCH_BASELINE must be 0 or 1" >&2
     exit 2
@@ -218,7 +218,7 @@ rm -f build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW build/msx/GBKERN7.RAW \
       build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM
 
 # Compatibility backend: Screen 6, four native colours.
-( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -s -o gbkernm ${EXTRA_RASM:-} $TITLEBAR_RASM )
+( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DGEMBENCH_BASELINE="$GEMBENCH_BASELINE" -s -o gbkernm ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: GBKERNM.RAW not produced (rasm errors above)" >&2; exit 1; }
 cp build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm )
@@ -227,7 +227,7 @@ mv build/msx/GBMSX.COM build/msx/GBMSX6.COM
 
 # Extended backend: Screen 7, with sixteen-colour Viewer support.
 rm -f build/msx/GBKERNM.RAW
-( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DMSX_SCREEN7=1 -s -o gbkernm7 ${EXTRA_RASM:-} $TITLEBAR_RASM )
+( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DMSX_SCREEN7=1 -DGEMBENCH_BASELINE="$GEMBENCH_BASELINE" -s -o gbkernm7 ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: Screen-7 GBKERNM.RAW not produced" >&2; exit 1; }
 cp build/msx/GBKERNM.RAW build/msx/GBKERN7.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm -DMSX_SCREEN7=1 )

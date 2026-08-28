@@ -35,10 +35,17 @@ MSX_BASELINE_PHASE        equ #C02A
 MSX_BASELINE_STACK_MAX    equ #C02B
 MSX_BASELINE_STACK_FAULT  equ #C02C
 MSX_BASELINE_COOKIE       equ #C02D
+MSX_BASELINE_INPUT_FLAGS  equ #C02E  ; bit0 armed, bit1 pointer drawn, bit2 key drawn
+MSX_BASELINE_INPUT_KEY    equ #C02F  ; character acknowledged by the desktop
 MSX_BASELINE_FULL_START   equ #C040  ; RTC test-clock BCD: seconds, minutes, hours
 MSX_BASELINE_FULL_END     equ #C043
 MSX_BASELINE_DAMAGE_START equ #C046
 MSX_BASELINE_DAMAGE_END   equ #C049
+MSX_BASELINE_POINTER_ARM  equ #C04E  ; H.TIMI frame ticks at arm / completed draw
+MSX_BASELINE_POINTER_ACK  equ #C050
+MSX_BASELINE_KEY_ARM      equ #C052  ; H.TIMI frame ticks at arm / visible key response
+MSX_BASELINE_KEY_ACK      equ #C054
+MSX_BASELINE_RUNNABLE     equ #C056  ; scheduler runnable count when input is armed
 GLINE_X0        equ   #C030        ; GB_LINE marshal block (#287): x0,y0,x1,y1 words
 GLINE_Y0        equ   #C032        ; (screen pixels, top-left origin) + pen byte.
 GLINE_X1        equ   #C034        ; Page-3 cells so the clock's inline asm can fill

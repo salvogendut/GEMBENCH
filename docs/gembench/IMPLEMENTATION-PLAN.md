@@ -37,7 +37,7 @@ baseline is recorded.
 | Milestone | Scope | Estimate | Completion criterion |
 | --- | --- | ---: | --- |
 | 1. Bootstrap | Merge histories and reconcile builds and documentation | 1-2 days | Host checks and the unchanged MSX build pass |
-| 2. Baseline (in progress) | Record kernel size, app headroom, mapper/VRAM use, stack and repaint timing | 3-5 days | Screen 7 boots with reproducible measurements |
+| 2. Baseline (complete 2026-08-28) | Record kernel size, app headroom, mapper/VRAM use, stack, repaint, and input timing | 3-5 days | Screen 7 boots with reproducible measurements |
 | 3. GBR hardening | Add a binary verifier, golden files, and a target reader | 3-5 days | Z80 code safely validates and navigates the example resource |
 | 4. Object runtime | Implement app-linked drawing, lookup, state, and hit testing | 1-2 weeks | Box, text, and button objects work on Screen 7 |
 | 5. Vertical slice | Convert one representative dialog and add semantic theme roles | 1 week | Pointer and keyboard interaction require no custom object drawing |
@@ -100,8 +100,8 @@ The proof of concept succeeds when the migrated dialog is materially easier to
 maintain or smaller, remains responsive at approximately 3.58 MHz, and does not
 consume unacceptable resident or mapper capacity.
 
-The current pre-runtime snapshot is recorded in [BASELINE.md](BASELINE.md).
-Static sizing, guarded 1983 boot telemetry, and diagnostic-only stack and repaint
-probes are reproducible. Pointer and keyboard response under multiple resident
-applications remains the final measurement before this milestone can be marked
-complete.
+The completed pre-runtime snapshot is recorded in [BASELINE.md](BASELINE.md).
+Static sizing, guarded 1983 boot telemetry, and diagnostic-only stack, repaint,
+pointer, and keyboard probes are reproducible. openMSX supplies the authoritative
+input and repaint reference measurements, while 1983 remains the automated
+integration target. Milestone 3, GBR hardening, is the next implementation step.

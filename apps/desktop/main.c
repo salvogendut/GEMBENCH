@@ -32,17 +32,26 @@
 #define BASELINE_STACK_MAX   (*(volatile unsigned char *)0xC02B)
 #define BASELINE_STACK_FAULT (*(volatile unsigned char *)0xC02C)
 #define BASELINE_COOKIE      (*(volatile unsigned char *)0xC02D)
+#define BASELINE_INPUT_FLAGS (*(volatile unsigned char *)0xC02E)
+#define BASELINE_INPUT_KEY   (*(volatile unsigned char *)0xC02F)
 #define BASELINE_FULL_TIME0  (*(volatile unsigned int *)0xC040)
 #define BASELINE_FULL_TIME1  (*(volatile unsigned int *)0xC042)
 #define BASELINE_FULL_TIME2  (*(volatile unsigned int *)0xC044)
 #define BASELINE_DAMAGE_TIME0 (*(volatile unsigned int *)0xC046)
 #define BASELINE_DAMAGE_TIME1 (*(volatile unsigned int *)0xC048)
 #define BASELINE_DAMAGE_TIME2 (*(volatile unsigned int *)0xC04A)
+#define BASELINE_POINTER_ARM (*(volatile unsigned int *)0xC04E)
+#define BASELINE_POINTER_ACK (*(volatile unsigned int *)0xC050)
+#define BASELINE_KEY_ARM     (*(volatile unsigned int *)0xC052)
+#define BASELINE_KEY_ACK     (*(volatile unsigned int *)0xC054)
+#define BASELINE_RUNNABLE    (*(volatile unsigned char *)0xC056)
 #define BASELINE_COOKIE_VALUE 0xB7
 void gb_baseline_timer_start_full(void);
 void gb_baseline_timer_start_damage(void);
 void gb_baseline_timer_store_full(void);
 void gb_baseline_timer_store_damage(void);
+void gb_baseline_input_arm(void);
+void gb_baseline_input_store_key(unsigned char key);
 #endif
 
 /* The desktop icons: three storage slots + Clock + Trash (#65). CPC/PCW retain
@@ -841,6 +850,7 @@ static void bar_clock(unsigned char h, unsigned char m)
    representative damage-limited compositor pass. */
 static void baseline_probe(void)
 {
+    unsigned char key;
     if (BASELINE_PHASE == 0) {
         if (!BASELINE_STACK_MAX || ++baseline_delay < 32) return;
         baseline_delay = 0;
@@ -859,6 +869,20 @@ static void baseline_probe(void)
         gb_restore_parent();
         gb_baseline_timer_store_damage();
         BASELINE_PHASE = 4;
+    }
+    if (BASELINE_PHASE != 4) return;
+    if (!(BASELINE_INPUT_FLAGS & 1)) {
+        gb_baseline_input_arm();
+        return;
+    }
+    if (!(BASELINE_INPUT_FLAGS & 4) && (key = gb_getkey()) != 0) {
+        /* Complete a small visible update before publishing the key ACK. The
+           emulator therefore measures through application-level rendering,
+           not merely BIOS-buffer consumption. */
+        gb_curhide();
+        gb_fill(GB_COLS - 1, 0, 1, 8, 3);
+        gb_curshow();
+        gb_baseline_input_store_key(key);
     }
 }
 #endif
@@ -1283,12 +1307,19 @@ void main(void)
     BASELINE_STACK_MAX = 0;
     BASELINE_STACK_FAULT = 0;
     BASELINE_COOKIE = BASELINE_COOKIE_VALUE;
+    BASELINE_INPUT_FLAGS = 0;
+    BASELINE_INPUT_KEY = 0;
     BASELINE_FULL_TIME0 = 0;
     BASELINE_FULL_TIME1 = 0;
     BASELINE_FULL_TIME2 = 0;
     BASELINE_DAMAGE_TIME0 = 0;
     BASELINE_DAMAGE_TIME1 = 0;
     BASELINE_DAMAGE_TIME2 = 0;
+    BASELINE_POINTER_ARM = 0;
+    BASELINE_POINTER_ACK = 0;
+    BASELINE_KEY_ARM = 0;
+    BASELINE_KEY_ACK = 0;
+    BASELINE_RUNNABLE = 0;
     baseline_delay = 0;
 #endif
     gb_on_bar(bar_draw);                        /* top-bar handler runs every frame (#77) */

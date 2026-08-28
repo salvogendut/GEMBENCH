@@ -10,6 +10,8 @@
         .globl  _gb_baseline_timer_start_damage
         .globl  _gb_baseline_timer_store_full
         .globl  _gb_baseline_timer_store_damage
+        .globl  _gb_baseline_input_arm
+        .globl  _gb_baseline_input_store_key
 
 RTC_LATCH        = 0xB4
 RTC_DATA         = 0xB5
@@ -19,6 +21,14 @@ RTC_MODE_KEEP    = 0x0C
 RTC_TEST_SECONDS = 0x01
 RTC_SAVED_MODE   = 0xC04C
 RTC_SAVED_TEST   = 0xC04D
+MSX_TICK         = 0xC000
+SCHED_RUNNABLE   = 0x1344
+INPUT_FLAGS      = 0xC02E
+INPUT_KEY        = 0xC02F
+POINTER_ARM      = 0xC04E
+KEY_ARM          = 0xC052
+KEY_ACK          = 0xC054
+INPUT_RUNNABLE   = 0xC056
 
         .area   _CODE
 
@@ -106,3 +116,30 @@ _gb_baseline_timer_start_damage:
 _gb_baseline_timer_store_damage:
         ld      hl, #0xC049
         jp      gb_baseline_timer_finish
+
+;; Arm the emulator-driven input probes after the repaint samples finish.
+;; The H.TIMI counter is the shared PAL-frame timebase; emulator scripts retain
+;; their exact injection time and use these guest ticks as an independent check.
+_gb_baseline_input_arm:
+        di
+        ld      hl, (MSX_TICK)
+        ld      (POINTER_ARM), hl
+        ld      (KEY_ARM), hl
+        ld      a, (SCHED_RUNNABLE)
+        ld      (INPUT_RUNNABLE), a
+        ld      a, #1
+        ld      (INPUT_FLAGS), a
+        ei
+        ret
+
+;; A is the character whose visible acknowledgement has just been drawn.
+_gb_baseline_input_store_key:
+        di
+        ld      (INPUT_KEY), a
+        ld      hl, (MSX_TICK)
+        ld      (KEY_ACK), hl
+        ld      a, (INPUT_FLAGS)
+        or      #4
+        ld      (INPUT_FLAGS), a
+        ei
+        ret
