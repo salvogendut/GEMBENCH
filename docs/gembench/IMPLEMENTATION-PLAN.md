@@ -60,13 +60,13 @@ The bootstrap branch must contain only foundation work:
 
 ### Bootstrap acceptance checklist
 
-- [ ] Both parent histories are visible from the bootstrap merge.
-- [ ] `make check` includes the GBR compiler tests and passes.
-- [ ] The GeoBench MSX distribution builds from the merged tree.
-- [ ] Screen 7 remains the staged default.
-- [ ] The upstream commit and reproduction commands are documented.
-- [ ] Generated build products and local emulator dependencies remain ignored.
-- [ ] No OpenGEM or FreeGEM implementation code or assets are imported.
+- [x] Both parent histories are visible from the bootstrap merge.
+- [x] `make check` includes the GBR compiler tests and passes.
+- [x] The GeoBench MSX distribution builds from the merged tree.
+- [x] Screen 7 remains the staged default.
+- [x] The upstream commit and reproduction commands are documented.
+- [x] Generated build products and local emulator dependencies remain ignored.
+- [x] No OpenGEM or FreeGEM implementation code or assets are imported.
 
 ## First implementation slice after bootstrap
 

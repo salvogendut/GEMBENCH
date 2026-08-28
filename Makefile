@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx app formref sndtest taskdemo titlebar-editor gbr-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -82,7 +82,13 @@ $(GBR_EXAMPLE_OUTPUT): $(GBR_EXAMPLE_SOURCE) tools/gbrc.py
 	mkdir -p $(dir $@)
 	$(PYTHON) tools/gbrc.py $< --output $@
 
-check: gbr-check gbr-example
+# The distribution audit compares committed QA media with all three generated
+# title modules. Produce those small fixtures so `make check` works in a clean
+# checkout without requiring a full CPC/MSX/PCW distribution build first.
+distribution-check-fixtures:
+	bash tools/build_titlebarmod.sh
+
+check: gbr-check gbr-example distribution-check-fixtures
 	git diff --check
 	$(PYTHON) tools/gen_pic_luts.py --check
 	$(PYTHON) tools/test_picconv.py
