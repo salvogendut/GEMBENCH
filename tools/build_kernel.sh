@@ -44,10 +44,7 @@ if [ ! -f "$GB_BASIC_DIR/Makefile" ] || [ ! -d "$GB_BASIC_DIR/apps/basic" ]; the
     exit 1
 fi
 GEOBENCH_ROOT="$(pwd)"
-CPC_QA="QA/CPC"
-CARD_QA="$CPC_QA/CARD"
-FLOPPY_QA="$CPC_QA/Floppies"
-CARD_IMG="$CPC_QA/GEOBENCH.IMG"
+FINAL_CPC_QA="QA/CPC"
 
 # The card ships both Albireo and M4 kernels in QA/CPC/CARD and
 # QA/CPC/GEOBENCH.IMG.
@@ -74,6 +71,12 @@ if [ "${FAT16:-0}" = "1" ]; then
 fi
 
 mkdir -p build
+CPC_STAGE_ROOT="$(mktemp -d build/cpc-dist.XXXXXX)"
+trap 'rm -rf "$CPC_STAGE_ROOT"' EXIT
+CPC_QA="$CPC_STAGE_ROOT/CPC"
+CARD_QA="$CPC_QA/CARD"
+FLOPPY_QA="$CPC_QA/Floppies"
+CARD_IMG="$CPC_QA/GEOBENCH.IMG"
 rm -f build/gbkern.dsk                        # save-to-DSK appends; start clean
 PAINT_GBLIB="build/GBLIBPAINT.s"
 python3 tools/gblib_subset.py \
@@ -268,14 +271,10 @@ build_variant() {                                # $1 = kernel name, $2 = rasm -
     "$RASM" kernel/pack_apps3.asm -eo $TITLEBAR_RASM # 4th pass: visual assets -> same .dsk
     cp build/GBKERN.RAW "build/$1.RAW"           # capture this card's kernel for the unified stage
 }
-# Clean only the CPC outputs - QA/MSX (the MSX2 target, #287) survives a CPC build.
-# Remove the old root-level layout too, so stale artifacts cannot mask a bad migration.
-rm -rf "$CARD_QA" "$FLOPPY_QA" "$CARD_IMG" \
-    QA/CARD QA/GEOBENCH.DSK QA/COMPANION.DSK QA/MEDIA.DSK QA/EXTRAS.DSK QA/GEOBENCH.IMG
 mkdir -p "$FLOPPY_QA"
 # Build both card kernels. GEOBENCH.DSK keeps the Albireo/floppy-capable kernel
 # because that is the normal floppy boot image; CARD and GEOBENCH.IMG carry both.
-echo "Building the Albireo (GBALB) and M4 (GBM4) card kernels + the shared card -> $CPC_QA/"
+echo "Building the Albireo (GBALB) and M4 (GBM4) card kernels + the shared card -> $FINAL_CPC_QA/"
 build_variant GBALB "-DSTORAGE_ALBIREO=1"
 cp build/gbkern.dsk "$FLOPPY_QA/GEOBENCH.DSK"     # bootable floppy image (the GBALB kernel)
 build_variant GBM4 "-DSTORAGE_M4=1"
@@ -326,9 +325,7 @@ mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
 GB_BASIC_DIR="$GB_BASIC_DIR" tools/stage_dist.sh "$CARD_QA" # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH
 # A ready-to-flash card image (partitioned FAT16) for the Albireo CH376 card and M4 image mode.
-tools/build_card_img.sh "$CARD_QA" "$CARD_IMG" \
-    || echo "  ($CARD_IMG skipped - needs sfdisk + mkfs.fat + mtools)"
-echo "  $CARD_QA: loose files; $CARD_IMG: Albireo/M4 card; $FLOPPY_QA: floppy set"
+tools/build_card_img.sh "$CARD_QA" "$CARD_IMG"
 
 # Leave build/ as the STORAGE-selected variant (default Albireo) so the --disk-a
 # test harness sees a predictable build/gbkern.dsk + build/GBKERN.RAW.
@@ -341,4 +338,13 @@ rm -f build/gbkern.dsk
 if [ -x "$IDSK" ]; then
     "$IDSK" build/gbkern.dsk -i build/GB.BAS -t 0 >/dev/null 2>&1 || true
 fi
-echo "Built $CARD_QA + $CARD_IMG (Albireo/M4 card deploy) + $FLOPPY_QA; build/ = ${STORAGE:-albireo} variant"
+
+# Publish only after every kernel, application, disk and card-image step has
+# succeeded. A compiler or packaging failure therefore leaves the last known
+# good QA/CPC distribution intact instead of exposing a deleted/partial tree.
+rm -rf "$FINAL_CPC_QA" \
+    QA/CARD QA/GEOBENCH.DSK QA/COMPANION.DSK QA/MEDIA.DSK QA/EXTRAS.DSK QA/GEOBENCH.IMG
+mv "$CPC_QA" "$FINAL_CPC_QA"
+rm -rf "$CPC_STAGE_ROOT"
+trap - EXIT
+echo "Built $FINAL_CPC_QA/CARD + $FINAL_CPC_QA/GEOBENCH.IMG (Albireo/M4 card deploy) + $FINAL_CPC_QA/Floppies; build/ = ${STORAGE:-albireo} variant"

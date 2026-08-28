@@ -2378,16 +2378,18 @@ wm_chrome_frame
                 call  mw_hook
                 ld    a,(POLL_FLAGS)
                 bit   1,a                     ; GB_QUIT
-                jr    z,mwf_click_check
                 ifdef PLATFORM_MSX
+                jr    z,mwf_click_check
                 ld    a,(mw_kind)
                 bit   1,a                     ; tagged windows without GB_WK_CLOSE stay open
                 jp    nz,mw_do_close
                 else
-                jp    mw_do_close
+                jp    nz,mw_do_close          ; CPC/PCW retain the compact legacy route
                 endif
+                ifdef PLATFORM_MSX
 mwf_click_check
                 ld    a,(POLL_FLAGS)
+                endif
                 bit   0,a                     ; GB_CLICK
                 ret   z
                 ifdef PLATFORM_MSX
@@ -2401,9 +2403,17 @@ mwf_click_check
                 ld    d,a
                 ld    a,e
                 sub   d
+                ifdef PLATFORM_MSX
                 jp    c,mwf_content           ; my < win_y
+                else
+                jr    c,mwf_content
+                endif
                 cp    14                       ; TITLE_H
+                ifdef PLATFORM_MSX
                 jp    nc,mwf_content           ; my >= win_y+14 -> content
+                else
+                jr    nc,mwf_content
+                endif
                 ld    a,(POLL_MX)            ; in title bar: which gadget?
                 ld    e,a
                 ifdef PLATFORM_MSX
@@ -2416,7 +2426,11 @@ mwf_click_check
                 cp    e
                 jr    c,mwf_notclose          ; win_x+5 < mx -> not the close gadget
                 jr    z,mwf_notclose
+                ifdef PLATFORM_MSX
                 jp    mw_do_close             ; mx < win_x+5 -> close gadget
+                else
+                jr    mw_do_close
+                endif
 mwf_notclose
                 ifdef WM_GADGETS
                 ifdef PLATFORM_MSX
