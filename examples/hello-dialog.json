@@ -1,0 +1,35 @@
+{
+  "format": "GBR1",
+  "trees": [
+    {
+      "name": "HELLO",
+      "root": {
+        "type": "box",
+        "x": 120,
+        "y": 54,
+        "w": 272,
+        "h": 104,
+        "children": [
+          {
+            "type": "text",
+            "x": 16,
+            "y": 20,
+            "w": 240,
+            "h": 16,
+            "text": "Welcome to GEMBENCH"
+          },
+          {
+            "type": "button",
+            "x": 96,
+            "y": 64,
+            "w": 80,
+            "h": 24,
+            "text": "OK",
+            "flags": ["selectable", "default", "exit"],
+            "state": ["outlined"]
+          }
+        ]
+      }
+    }
+  ]
+}
