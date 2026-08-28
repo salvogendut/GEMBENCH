@@ -13,6 +13,8 @@ weeks for one experienced developer working substantially full-time.
 - MSX-DOS2 or Nextor provides the storage and mapper environment.
 - RainBIOS is a supported firmware and validation environment.
 - GEMBENCH is licensed under the BSD 3-Clause License.
+- The MSX2 base visual identity uses black, white, grey, and red, with black as the
+  desktop background; Screen 7 extensions must preserve those core roles.
 - OpenGEM and FreeGEM are reference material only. Code, artwork, and resources
   must be independently implemented or have separately reviewed provenance.
 - CPC and PCW compatibility do not constrain new GEMBENCH APIs or layouts.
@@ -38,10 +40,10 @@ baseline is recorded.
 | --- | --- | ---: | --- |
 | 1. Bootstrap | Merge histories and reconcile builds and documentation | 1-2 days | Host checks and the unchanged MSX build pass |
 | 2. Baseline (complete 2026-08-28) | Record kernel size, app headroom, mapper/VRAM use, stack, repaint, and input timing | 3-5 days | Screen 7 boots with reproducible measurements |
-| 3. GBR hardening | Add a binary verifier, golden files, and a target reader | 3-5 days | Z80 code safely validates and navigates the example resource |
-| 4. Object runtime | Implement app-linked drawing, lookup, state, and hit testing | 1-2 weeks | Box, text, and button objects work on Screen 7 |
-| 5. Vertical slice | Convert one representative dialog and add semantic theme roles | 1 week | Pointer and keyboard interaction require no custom object drawing |
-| 6. Window kinds | Add append-only flags and messages for close, maximise, move, and resize | 1-2 weeks | The kernel owns the selected window furniture |
+| 3. GBR hardening (complete 2026-08-28) | Add a binary verifier, golden files, and a target reader | 3-5 days | Z80 code safely validates and navigates the example resource |
+| 4. Object runtime (complete 2026-08-28) | Implement app-linked drawing, lookup, state, and hit testing | 1-2 weeks | Box, text, and button objects work on Screen 7 |
+| 5. Vertical slice (complete 2026-08-28) | Convert one representative dialog and add semantic theme roles | 1 week | Pointer and keyboard interaction require no custom object drawing |
+| 6. Window kinds (complete 2026-08-28) | Add append-only flags and messages for close, maximise, move, and resize | 1-2 weeks | The kernel owns the selected window furniture |
 | 7. Banking decision | Prototype an auxiliary resource segment and resident renderer | 1 week | Measurements compare resident and app-linked implementations |
 | 8. Review | Evaluate size, responsiveness, and maintainability | 2-3 days | The first resource and window ABI is frozen or deliberately revised |
 
@@ -104,4 +106,19 @@ The completed pre-runtime snapshot is recorded in [BASELINE.md](BASELINE.md).
 Static sizing, guarded 1983 boot telemetry, and diagnostic-only stack, repaint,
 pointer, and keyboard probes are reproducible. openMSX supplies the authoritative
 input and repaint reference measurements, while 1983 remains the automated
-integration target. Milestone 3, GBR hardening, is the next implementation step.
+integration target. Milestone 3 added strict canonical host validation, a golden
+resource and corruption corpus, and an allocation-free target reader that SDCC
+currently compiles to less than 4 KiB with no static data. Milestone 4 adds an
+app-linked box/text/string/button renderer, caller-owned state overlays,
+deepest-selectable-object hit testing, and a File Manager-launched external
+`HELLO.GBR` demonstration. The object runtime also compiles below its 4 KiB
+code budget with no static data. Milestone 5 adds shared semantic pen roles,
+field rendering, live caller-owned text bindings, cyclic keyboard focus,
+deterministic generated C identifiers, and a GBR-driven MSX2 FormRef dialog.
+CPC and PCW retain their prior FormRef implementation and binary sizes.
+Milestone 6 preserves the 12-byte managed-window descriptor, adds a tagged
+MSX2-only kind tail and append-only geometry messages, and moves selected
+furniture plus maximise, move, and resize gestures into the resident kernel.
+File Manager is the representative migration: its MSX2 image shrank from
+14,645 to 13,244 bytes while the Screen 7 kernel grew by 768 bytes to 12,260.
+The next implementation step is the measured banking decision in milestone 7.

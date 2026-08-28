@@ -65,9 +65,15 @@ void main(void)
     backdrop[0] = 'S'; backdrop[1] = 'O'; backdrop[2] = 'L'; backdrop[3] = 'I';
     backdrop[4] = 'D'; backdrop[5] = 0;     /* BACKDROP default = SOLID (plain desktop) */
     KCFG_BDDRIVE = GB_CFG_DRIVE_NONE;
-    KCFG_INKS[0] = 1;  KCFG_INKS[1] = 26;   /* default palette: blue/white/black/red, */
-    KCFG_INKS[2] = 0;  KCFG_INKS[3] = 6;    /* blue border (matches set_palette's seed) */
+#ifdef GB_MSX2
+    KCFG_INKS[0] = 0;  KCFG_INKS[1] = 26;   /* GEMBENCH MSX2: black/white/grey/red, */
+    KCFG_INKS[2] = 13; KCFG_INKS[3] = 6;    /* black border matches the canvas */
+    KCFG_INKS[4] = 0;
+#else
+    KCFG_INKS[0] = 1;  KCFG_INKS[1] = 26;   /* inherited targets retain */
+    KCFG_INKS[2] = 0;  KCFG_INKS[3] = 6;    /* blue/white/black/red */
     KCFG_INKS[4] = 1;
+#endif
     gb_cfg_parse(KCFG_TEXT, KCFG_LEN, icons, font, cursor, backdrop,
                  &KCFG_BDDRIVE, KCFG_INKS, &debug);
     KCFG_FRAMEPEN = frame_pen(KCFG_INKS);

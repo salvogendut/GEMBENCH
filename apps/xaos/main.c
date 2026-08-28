@@ -43,7 +43,11 @@ static void recalc_origin(void);                   /* defined below */
 #define PIC_LEN (PIC_HDR + CANVAS_WB * CANVAS_H)
 static unsigned char picbuf[PIC_LEN];
 #define canvas (picbuf + PIC_HDR)
-static const unsigned char pic_inks[4] = { 1, 26, 0, 6 };   /* GEOBENCH palette inks */
+#ifdef GB_MSX2
+static const unsigned char pic_inks[4] = { 0, 26, 13, 6 };  /* GEMBENCH MSX2 */
+#else
+static const unsigned char pic_inks[4] = { 1, 26, 0, 6 };   /* inherited targets */
+#endif
 
 /* view: centre (cx0,cy0) and per-pixel step, all Q4.12. Home = the whole set. */
 #define HOME_CX   (-2048)               /* -0.5 */
@@ -141,11 +145,16 @@ static unsigned char mand(int cx, int cy)
     return i;
 }
 
-/* iteration count -> a Mode-1 pen (0 blue, 1 white, 2 black, 3 red) */
+/* iteration count -> a logical base-theme pen */
 static unsigned char pen_of(unsigned char it)
 {
+#ifdef GB_MSX2
+    if (it >= MAXITER) return 0;        /* inside the set: black */
+    if (it < 5)  return 2;              /* far outside: grey    */
+#else
     if (it >= MAXITER) return 2;        /* inside the set: black */
-    if (it < 5)  return 0;              /* far outside: blue   */
+    if (it < 5)  return 0;              /* far outside: blue    */
+#endif
     if (it < 11) return 3;              /* mid:         red    */
     return 1;                           /* near the edge: white */
 }

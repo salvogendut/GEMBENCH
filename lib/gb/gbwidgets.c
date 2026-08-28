@@ -5,10 +5,6 @@
  */
 #include "gb.h"
 
-#define UI_SURFACE 1
-#define UI_EDGE    2
-#define UI_ACCENT  3
-
 static unsigned char text_cols(const char *s)
 {
     unsigned char n = 0;
@@ -29,12 +25,12 @@ void gb_button(unsigned char x, unsigned char y, unsigned char w, unsigned char 
     unsigned char tx = (tw + 2 < w) ? (unsigned char)(x + ((w - tw) >> 1))
                                      : (unsigned char)(x + 1);
     unsigned char ty = text_y(y, h);
-    unsigned char pen = (flags & GB_WIDGET_DISABLED) ? UI_SURFACE :
+    unsigned char pen = (flags & GB_WIDGET_DISABLED) ? GB_UI_SURFACE :
                         (flags & (GB_WIDGET_FOCUSED | GB_WIDGET_PRESSED))
-                            ? UI_ACCENT : UI_EDGE;
+                            ? GB_UI_ACCENT : GB_UI_EDGE;
     if ((flags & GB_WIDGET_PRESSED) && !(flags & GB_WIDGET_DISABLED) && h > 9)
         ty++;
-    gb_fill(x, y, w, h, UI_SURFACE);
+    gb_fill(x, y, w, h, GB_UI_SURFACE);
     gb_frame(x, y, w, h, pen);
     gb_textbw(tx, ty, label);
 }
@@ -43,9 +39,9 @@ void gb_button(unsigned char x, unsigned char y, unsigned char w, unsigned char 
 void gb_field(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
               const char *text, unsigned char flags)
 {
-    gb_fill(x, y, w, h, UI_SURFACE);
-    gb_frame(x, y, w, h, (flags & GB_WIDGET_DISABLED) ? UI_SURFACE :
-             (flags & GB_WIDGET_FOCUSED) ? UI_ACCENT : UI_EDGE);
+    gb_fill(x, y, w, h, GB_UI_SURFACE);
+    gb_frame(x, y, w, h, (flags & GB_WIDGET_DISABLED) ? GB_UI_SURFACE :
+             (flags & GB_WIDGET_FOCUSED) ? GB_UI_ACCENT : GB_UI_EDGE);
     gb_textbw((unsigned char)(x + 1), text_y(y, h), text);
 }
 #endif

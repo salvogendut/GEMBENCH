@@ -513,6 +513,9 @@ static unsigned char entry_icon(const char *name)
     if (ext_eq(ext, "SAV")) return ICON_SCREENSAVER;   /* #221: screensaver modules */
     if (ext_eq(ext, "MOD")) return ICON_GEOBENCH;      /* #234: kernel modules = the lollipop icon */
     if (ext_eq(ext, "IST")) return ICON_BINARY;   /* #221: apps/data share the binary icon */
+#ifdef GB_MSX2
+    if (ext_eq(ext, "GBR")) return ICON_APP;      /* app-linked GEMBENCH resource document */
+#endif
     if (ext_eq(ext, "APP")) {
         icon = app_icon(name);
         return (icon == ICON_APP) ? (unsigned char)(APPICON_UNKNOWN | ICON_APP) : icon;
@@ -881,7 +884,9 @@ static void draw_body(void)
     draw_scrollbar();
     if (view == V_ICONS) draw_icons_view();
     else                 draw_list_view();
+#ifndef GB_MSX2
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip, bottom-right (#81) */
+#endif
 }
 
 /* draw: interactive content redraw (manages the cursor) - the scroll/select paths use it
@@ -980,6 +985,7 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
      .PIC             the image-only VIEWER
      .HTM             an offline page -> BROWSER.APP
      .BAS             a GB-BASIC program -> opens in BASIC.APP
+     .GBR             a GEMBENCH resource -> GBRDEMO.APP (MSX2 only)
      .BIN             a native binary -> an info note (exec unimplemented, #236)
      anything else    no associated GEOBENCH application */
 static void open_entry(unsigned char idx)
@@ -1005,6 +1011,10 @@ static void open_entry(unsigned char idx)
         gb_wm_launch_as("BROWSER APP");
     else if (ext_is(e, 'B', 'A', 'S'))          /* GB-BASIC programs open in BASIC.APP */
         gb_wm_launch_as("BASIC   APP");
+#ifdef GB_MSX2
+    else if (ext_is(e, 'G', 'B', 'R'))          /* GEMBENCH resource proof-of-concept */
+        gb_wm_launch_as("GBRDEMO APP");
+#endif
     else if (ext_is(e, 'B', 'I', 'N'))          /* #236: native binaries aren't runnable
                                                    from GEOBENCH (exec unimplemented) - say so */
         gb_alert("Binary programs cannot", "be run from GEOBENCH.");
@@ -1284,7 +1294,8 @@ static void fm_close(void)
     else gb_restore_parent();
 }
 
-/* on_drag (#146): a title-bar press -> move the window. */
+#ifndef GB_MSX2
+/* Legacy CPC/PCW path: a title-bar press asks the app to move the window. */
 static void fm_drag(void)
 {
     sync_rect();
@@ -1296,6 +1307,7 @@ static void fm_drag(void)
         gb_restore_parent();
     }
 }
+#endif
 
 /* on_click (#146): a content press - resize grip, scrollbar, or an entry (select / open /
    drag to another window or the Trash). */
@@ -1312,7 +1324,9 @@ static void fm_click(void)
     if (copy_state != COPY_IDLE || list_state != LIST_IDLE || gb_drop_claimed()) return;
 #endif
 
-    /* resize grip (bottom-right corner) -> resize the window (#81) */
+    /* CPC/PCW retain the inherited app-owned grip. The tagged MSX2 kind makes
+       the kernel draw, hit-test and drag this furniture. */
+#ifndef GB_MSX2
     if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {
         if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
             gb_wm_setsize(win_w, win_h);
@@ -1322,6 +1336,7 @@ static void fm_click(void)
         }
         return;
     }
+#endif
 
     /* scrollbar: shared arrows/page regions plus the app-owned thumb drag loop */
     if (mx >= SB_X && mx < SB_X + SB_W && my >= CT_Y && my < CT_BOT) {
@@ -1397,15 +1412,34 @@ static void fm_proc(void)
         case GB_MSG_CLICK: fm_click(); break;
         case GB_MSG_FRAME: fm_frame(); break;
         case GB_MSG_CLOSE: fm_close(); break;
+#ifdef GB_MSX2
+        case GB_MSG_MOVED:
+            sync_rect();
+            break;
+        case GB_MSG_SIZED:
+        case GB_MSG_MAXIMIZED:
+            sync_rect();
+            clamp_top();
+            break;
+#else
         case GB_MSG_DRAG:  fm_drag();  break;
+#endif
         case GB_MSG_MENU:
         case GB_MSG_DROP:  on_event(); break;
     }
 }
 
-static gb_mwin_t fmmw = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0
+#ifdef GB_MSX2
+static gb_mwin_kind_t fmmw_kind = {
+    { DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0, 0 },
+    GB_WK_STANDARD, GB_WK_ABI_V1
 };
+#define fmmw fmmw_kind.window
+#else
+static gb_mwin_t fmmw = {
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0, 0
+};
+#endif
 
 void main(void)
 {

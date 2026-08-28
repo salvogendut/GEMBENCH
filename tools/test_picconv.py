@@ -28,14 +28,19 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         out4 = Path(tmp) / "FOUR.PIC"
+        out_gembench = Path(tmp) / "GEM.PIC"
         out16 = Path(tmp) / "SIXTEEN.PIC"
         picconv.save_pic(out4, pens4, 4, 1, 4)
+        picconv.save_pic(out_gembench, pens4, 4, 1, 4, picconv.GEMBENCH_INKS)
         picconv.save_pic(out16, pens16, 4, 1, 16)
         data4 = out4.read_bytes()
+        data_gembench = out_gembench.read_bytes()
         data16 = out16.read_bytes()
         assert data4[:6] == b"GBPC\x02\x01"
         assert data16[:6] == b"GBPC\x02\x07"
         assert struct.unpack("<HH", data16[6:10]) == (4, 1)
+        assert data4[10:14] == bytes([1, 26, 0, 6])
+        assert data_gembench[10:14] == bytes([0, 26, 13, 6])
         assert data4[14:] == bytes([0x53])
         assert data16[14:] == bytes([0x01, 0xEF])
 

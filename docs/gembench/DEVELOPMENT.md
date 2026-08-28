@@ -29,6 +29,10 @@ Run only the GBR compiler tests:
 make gbr-check
 ```
 
+This runs the compiler and golden-file tests, corruption checks, portable
+target-reader and object-runtime tests, and SDCC Z80 compile/size checks. Verify
+an individual binary with `python3 tools/gbrverify.py path/to/resource.gbr`.
+
 Rebuild only the example resource:
 
 ```sh
@@ -91,6 +95,55 @@ Build the fixed-target distribution:
 make gembench-msx
 ```
 
+The MSX build stages `HELLO.GBR` in the drive root and `GBRDEMO.APP` in
+`/GBENCH`. Open the first desktop drive, then double-click `HELLO.GBR` to test
+the real File Manager association and external-resource path. Clicking the
+resource-defined button toggles its selected state.
+
+The same release path can be driven automatically in openMSX with
+`debug/gbr_object_openmsx.tcl`; the complete command and reference result are
+recorded in [OPENMSX-VALIDATION.md](OPENMSX-VALIDATION.md). Use absolute output
+paths when openMSX is installed as a Flatpak.
+
+Build and exercise the resource-driven FormRef vertical slice with:
+
+```sh
+make formref
+tools/test_formref_openmsx.sh
+```
+
+The test makes a disposable IDE image whose root-level `A.APP` is byte-for-byte
+identical to the built `/GBENCH/FORMREF.APP`. It launches the app through File
+Manager, captures the GBR-defined modal at Compact/Level 2, and asserts the
+resource descriptor, keyboard focus actions, Save commit, and modal restore.
+
+Exercise the first tagged MSX2 window kind with:
+
+```sh
+make gembench-msx
+tools/test_window_kinds_openmsx.sh
+```
+
+The openMSX driver opens File Manager through the real desktop, then uses MSX
+keyboard-matrix pointer input to maximise and restore it, drag its title, and
+resize its kernel-drawn grip. It verifies the live geometry and observes the
+`GB_MSG_MOVED`, `GB_MSG_SIZED`, and `GB_MSG_MAXIMIZED` callbacks. The final
+Screen 7 capture is written to `build/msx/window-kinds.png`.
+
+Use 1983 as the complementary boot, mapper, and image-layout integration check:
+
+```sh
+python3 debug/gembench_baseline_1983.py \
+  --ide-image QA/MSX/GBMSX.IMG \
+  --output-dir "$PWD/build/window-kinds-1983" \
+  --frames 6000
+```
+
+The milestone-6 build measures 12,260 bytes for the resident Screen 7 kernel
+and 13,244 bytes for the migrated File Manager, leaving 2,884 bytes of loader
+headroom. The kernel increase is 768 bytes; File Manager is 1,401 bytes smaller
+because it no longer links the app-owned window gesture helpers.
+
 Generated files live under `build/` and are ignored by Git.
 
 ## Resource changes
@@ -106,13 +159,55 @@ The `.GBR` binary layout is a target ABI. When changing it:
 Do not silently reinterpret an existing object type, flag, state bit, or record
 field.
 
-## Target work
+## Object runtime
 
-Before adding the resource renderer, decide and record:
+The first renderer is deliberately app-linked and does not change the resident
+kernel jump table. Its public interface is `include/gembench/gbr_object.h`:
 
-- which jump-table slots or version negotiation the extension uses;
-- the maximum resource-segment and object-tree capacities; and
-- the exact emulator and Omega/RainBIOS validation commands.
+- the validated resource bytes remain immutable;
+- callers provide one `unsigned int` state slot per resource object;
+- tree roots are placed by the caller in Screen 7 pixel coordinates, while
+  child coordinates are relative to their parents;
+- visible box, text/string, and button objects draw through existing libgb
+  primitives and semantic black/white/grey/red pen roles;
+- hidden ancestors suppress drawing and hit testing, while disabled ancestors
+  additionally suppress hits; and
+- hit testing returns the deepest selectable object, resolving equal-depth
+  overlap in resource order.
 
-The first renderer is app-linked. Resident placement remains a later measured
-comparison rather than an initial ABI assumption.
+`GBRDEMO.APP` currently caps its external resource at 512 bytes and eight
+objects. These are demonstration-app limits, not additions to the GBR v1 ABI.
+Resident placement and mapper-backed resource storage remain a later measured
+comparison.
+
+The MSX2 FormRef embeds its compiler-verified 306-byte `FORMREF.GBR` through the
+generated `apps/formref/formref_gbr.h`. `GBR_FORMS=1` enables field rendering,
+live text bindings, and focus traversal; `GBR_EMBEDDED=1` selects the compact
+access-only reader after the host build has verified the generated blob. The
+full form runtime compiles to 4,928 bytes and the embedded accessor to 795
+bytes with the current SDCC. External files continue through the strict reader.
+
+## MSX2 window kinds
+
+The public `gb_mwin_t` prefix remains the original 12-byte descriptor. Existing
+applications therefore retain the legacy close/drag callback contract. An
+MSX2 application opts into kernel-owned furniture and gestures with the tagged
+wrapper:
+
+```c
+static gb_mwin_kind_t window = {
+    { x, y, w, h, min_w, min_h, window_proc, title, 0 },
+    GB_WK_STANDARD,
+    GB_WK_ABI_V1
+};
+
+gb_wm_managed(&window.window);
+```
+
+`GB_WK_TITLE`, `GB_WK_CLOSE`, `GB_WK_MAXIMIZE`, `GB_WK_MOVE`, and
+`GB_WK_RESIZE` may be combined independently. Completed kernel gestures report
+their committed geometry through `GB_MSG_MOVED`, `GB_MSG_SIZED`, and
+`GB_MSG_MAXIMIZED`; the application should refresh any cached rectangle from
+`gb_wm_x()`, `gb_wm_y()`, `gb_wm_w()`, and `gb_wm_h()`. File Manager is the
+reference implementation. This extension is deliberately MSX2-only and does
+not change the resident jump table.

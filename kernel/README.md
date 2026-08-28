@@ -51,3 +51,10 @@ Current documentation anchors:
   contract.
 - `../docs/KERNEL_ARCHITECTURE_REVIEW.md` — dated architecture review retained
   as audit history.
+
+On MSX2, the managed-window path also accepts an optional tagged kind tail
+after the unchanged 12-byte descriptor. It conditionally draws title, close,
+maximise, and resize furniture, owns the enabled move/resize/maximise gestures,
+and reports committed geometry through append-only messages. Untagged apps keep
+the inherited `GB_MSG_DRAG` behavior. This adds no jump-table slots; File
+Manager is the first tagged client and openMSX supplies the interaction test.
