@@ -37,7 +37,16 @@ PICEDIT_ENTRY   equ   PICEDIT_BASE
                 jp    gb_open_window         ; GB_WINDOW #800F
                 jp    gb_fs_dir_first        ; GB_DIR1   #8012
                 jp    gb_fs_dir_next         ; GB_DIRN   #8015
-                jp    k_ret0                 ; GB_BLITE  #8018 (removed: mapping->FM, #103; -> shared A=0 ret, #274)
+                ifdef PLATFORM_MSX
+                ifdef GEMBENCH_GBR_BANKING
+GB_BLITE_ENTRY  equ   k_gbr_segment          ; MSX2: milestone-7 mapper-resource service
+                else
+GB_BLITE_ENTRY  equ   k_ret0
+                endif
+                else
+GB_BLITE_ENTRY  equ   k_ret0                 ; CPC/PCW retain the retired icon-mapping slot
+                endif
+                jp    GB_BLITE_ENTRY          ; GB_BLITE  #8018 (MSX2 resource segment; legacy inert elsewhere)
                 jp    cursor_show            ; GB_CURSHOW #801B (was jp k_curshow; #148)
                 jp    k_poll                 ; GB_POLL    #801E
                 jp    k_frame                ; GB_FRAME   #8021

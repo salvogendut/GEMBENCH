@@ -169,3 +169,23 @@ The complementary 1983 run reached frame 6,001 with PC `0x247A`, SP `0xD8EA`,
 the expected Screen 7 registers, 25 free mapper segments at entry, and one idle
 busy application page. openMSX remains authoritative for the interactive
 gesture result.
+
+## Milestone 7 placement comparison
+
+Milestone 7 changed the FormRef driver to derive every application address from
+the current SDCC linker and listing outputs. The same interaction trace passed
+for the selected 13,023-byte embedded/app-linked build and the opt-in 15,912-byte
+mapper-resource build. The latter loaded the exact 306-byte `FORMREF.GBR` into
+mapper segment 8 and restored the application bank for every bounded read.
+
+The embedded run observed a 184-byte SP delta at instrumented renderer/accessor
+boundaries, an 887.758 ms first modal draw, and 1,135.416 ms from the Style Return
+key to completed redraw. The mapper-resource run observed 202 bytes, 668.618 ms,
+and 915.880 ms respectively. Both committed Style 1 and Level 2 and completed the
+modal restore. These are FormRef-path measurements; the desktop repaint and
+three-task input baselines above remain the broader scheduler references.
+
+The corresponding 1983 images both reached frame 6,001 with identical PC, SP,
+VDP-register, and entry mapper telemetry. The final placement decision also
+includes the resident candidate's hard fit result and is recorded in
+[M7-BANKING-DECISION.md](M7-BANKING-DECISION.md).

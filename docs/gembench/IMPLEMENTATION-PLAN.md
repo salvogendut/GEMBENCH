@@ -44,7 +44,7 @@ baseline is recorded.
 | 4. Object runtime (complete 2026-08-28) | Implement app-linked drawing, lookup, state, and hit testing | 1-2 weeks | Box, text, and button objects work on Screen 7 |
 | 5. Vertical slice (complete 2026-08-28) | Convert one representative dialog and add semantic theme roles | 1 week | Pointer and keyboard interaction require no custom object drawing |
 | 6. Window kinds (complete 2026-08-28) | Add append-only flags and messages for close, maximise, move, and resize | 1-2 weeks | The kernel owns the selected window furniture |
-| 7. Banking decision | Prototype an auxiliary resource segment and resident renderer | 1 week | Measurements compare resident and app-linked implementations |
+| 7. Banking decision (complete 2026-08-29) | Prototype an auxiliary resource segment and resident renderer | 1 week | Measurements compare resident and app-linked implementations |
 | 8. Review | Evaluate size, responsiveness, and maintainability | 2-3 days | The first resource and window ABI is frozen or deliberately revised |
 
 ## Bootstrap work package
@@ -121,4 +121,11 @@ MSX2-only kind tail and append-only geometry messages, and moves selected
 furniture plus maximise, move, and resize gestures into the resident kernel.
 File Manager is the representative migration: its MSX2 image shrank from
 14,645 to 13,244 bytes while the Screen 7 kernel grew by 768 bytes to 12,260.
-The next implementation step is the measured banking decision in milestone 7.
+Milestone 7 added a safe, opt-in MSX2 auxiliary-segment transport and split the
+renderer at the proposed resident boundary. The banked FormRef path is behaviorally
+equivalent, but grows the app to 15,912 bytes, adds 256 resident bytes, holds one
+mapper segment, and leaves only 216 bytes of loader headroom. The complete 6,242-byte
+resident candidate cannot fit the banked kernel's 3,868-byte resident gap. The
+first ABI therefore keeps small GBR resources embedded and rendering app-linked;
+the measurements and reproduction commands are recorded in
+[M7-BANKING-DECISION.md](M7-BANKING-DECISION.md). Milestone 8 is the ABI review.

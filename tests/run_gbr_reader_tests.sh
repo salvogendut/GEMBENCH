@@ -18,6 +18,24 @@ trap 'rm -rf "$test_tmp"' EXIT
     lib/gembench/gbr_object.c -o "$test_tmp/test_gbr_object"
 "$test_tmp/test_gbr_object"
 
+# Link the same behavioral suite across the proposed placement boundary: the
+# application-side state/hit/focus half and the renderer-only resident half.
+# Rename the renderer's private geometry copy so the two halves can coexist in
+# one host process while gbr_draw_tree resolves only to the resident candidate.
+"$CC" -Wall -Wextra -Werror -std=c99 -DGB_MSX2 -DGBR_FORM_RUNTIME \
+    -DGBR_RESIDENT_DRAW -I include/gembench -I lib/gb \
+    -c lib/gembench/gbr_object.c -o "$test_tmp/gbr_object_app.o"
+"$CC" -Wall -Wextra -Werror -std=c99 -DGB_MSX2 -DGBR_FORM_RUNTIME \
+    -DGBR_RENDERER_ONLY -Dgbr_object_rect=gbr_resident_object_rect \
+    -I include/gembench -I lib/gb \
+    -c lib/gembench/gbr_object.c -o "$test_tmp/gbr_object_resident.o"
+"$CC" -Wall -Wextra -Werror -std=c99 -DGB_MSX2 -DGBR_FORM_RUNTIME \
+    -I include/gembench -I lib/gb tests/test_gbr_object.c \
+    lib/gembench/gbr_reader.c "$test_tmp/gbr_object_app.o" \
+    "$test_tmp/gbr_object_resident.o" -o "$test_tmp/test_gbr_resident_split"
+"$test_tmp/test_gbr_resident_split"
+echo "ok   resident-renderer split matches app-linked behavior"
+
 "$SDCC" -mz80 --opt-code-size -I include/gembench \
     -c lib/gembench/gbr_reader.c -o "$test_tmp/gbr_reader.rel"
 test -s "$test_tmp/gbr_reader.rel"

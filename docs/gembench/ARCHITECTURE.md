@@ -34,12 +34,17 @@ live pointers into a mapper segment. The renderer may temporarily map a resource
 segment, consume the selected record or payload, restore the application code
 segment, and then return.
 
-The first proof of concept will compare two placements:
+The first proof of concept compared two placements:
 
 1. an app-linked renderer, which is easy to iterate but consumes each app bank;
 2. a resident renderer, which saves app space but consumes kernel headroom.
 
-No permanent ABI choice should be made before both variants are measured.
+Milestone 7 measured both variants. The resident candidate does not fit the
+current kernel window, while mapper-backing the 306-byte FormRef resource loses
+almost all application headroom to strict external validation. Small GBR v1
+resources therefore remain embedded and rendered app-side for the first ABI
+review. The bounded MSX2 mapper transport remains opt-in for future large-resource
+experiments; see [M7-BANKING-DECISION.md](M7-BANKING-DECISION.md).
 
 ## Resource ownership
 

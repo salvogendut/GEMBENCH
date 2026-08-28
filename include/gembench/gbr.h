@@ -82,6 +82,9 @@
 #define GBR_ERR_OBJECT              10u
 #define GBR_ERR_LINK                11u
 
+#define GBR_STORAGE_MEMORY           0u
+#define GBR_STORAGE_SEGMENT          1u
+
 #define GBR_U16_AT(base, offset) \
     ((unsigned int)((base)[(offset)]) | \
      ((unsigned int)((base)[(offset) + 1u]) << 8))
@@ -99,6 +102,8 @@ typedef struct gbr_resource {
     unsigned int tree_table;
     unsigned int object_table;
     unsigned int string_data;
+    unsigned char storage;
+    unsigned char segment;
 } gbr_resource_t;
 
 typedef struct gbr_tree {
@@ -128,6 +133,13 @@ typedef struct gbr_string {
 
 unsigned char gbr_open(gbr_resource_t *resource,
                        const unsigned char *data, unsigned int size);
+#ifdef GBR_BANKED
+unsigned char gbr_open_segment(gbr_resource_t *resource,
+                               unsigned char segment, unsigned int size);
+#endif
+unsigned char gbr_read(const gbr_resource_t *resource,
+                       unsigned int offset, unsigned char *data,
+                       unsigned char length);
 unsigned char gbr_tree_at(const gbr_resource_t *resource,
                           unsigned char index, gbr_tree_t *tree);
 unsigned char gbr_object_at(const gbr_resource_t *resource,

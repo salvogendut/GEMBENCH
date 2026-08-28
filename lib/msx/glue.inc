@@ -52,6 +52,17 @@ GLINE_X1        equ   #C034        ; Page-3 cells so the clock's inline asm can 
 GLINE_Y1        equ   #C036        ; them whatever segment its window has mapped.
 GLINE_PEN       equ   #C038
 MSX_ROWBUF      equ   #C080        ; 256-byte Screen-7 row buffer (#C080..#C17F)
+; Milestone-7 GBR resource-segment request. Apps marshal only fixed-size values
+; here; the resident service maps the resource, copies at most 32 bytes, and
+; restores the app before returning. Page 3 remains visible throughout.
+MSX_GBR_NAME    equ   #C180        ; 11-byte raw 8.3 name in /GBENCH
+MSX_GBR_PAGE    equ   #C18B        ; allocated mapper segment / read handle
+MSX_GBR_SIZE    equ   #C18C        ; loaded file size (word)
+MSX_GBR_OFF     equ   #C18E        ; read offset (word)
+MSX_GBR_DST     equ   #C190        ; caller destination after app restore (word)
+MSX_GBR_LEN     equ   #C192        ; requested byte count, 1..32
+MSX_GBR_BUF     equ   #C1A0        ; 32-byte resident transfer buffer
+MSX_GBR_MAXREAD equ   32
 ; NOTE (#287 M1 debugging): DOS 2 / Nextor's kernel data occupies page 3 well
 ; below #F380 (the mapper jump table itself sits around #F200, jumping into
 ; code near #EC00) - the DOS 1 "system area starts at #F380" rule does NOT

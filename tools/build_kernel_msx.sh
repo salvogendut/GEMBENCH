@@ -23,6 +23,7 @@ command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 PREEMPTIVE="${PREEMPTIVE:-1}"
 PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
 GEMBENCH_BASELINE="${GEMBENCH_BASELINE:-0}"
+GEMBENCH_M7_BANKED="${GEMBENCH_M7_BANKED:-0}"
 BASELINE_APPDEFS=""
 DESKTOP_DATA_LOC="0x7300"
 NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
@@ -54,6 +55,14 @@ elif [ "$PREEMPTIVE_DIAGNOSTIC" != "0" ]; then
     echo "PREEMPTIVE_DIAGNOSTIC requires PREEMPTIVE=1" >&2
     exit 2
 fi
+case "$GEMBENCH_M7_BANKED" in
+    0) ;;
+    1)
+        EXTRA_RASM="${EXTRA_RASM:-} -DGEMBENCH_GBR_BANKING=1"
+        export EXTRA_RASM
+        ;;
+    *) echo "GEMBENCH_M7_BANKED must be 0 or 1" >&2; exit 2 ;;
+esac
 
 TITLEBAR_RASM="-DTITLEBAR_TILE=1"
 RASM="$RASM" bash tools/build_titlebarmod.sh
@@ -140,7 +149,11 @@ APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DIALOGS=1 too
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6800 BUTTON=1 tools/build_capp.sh apps/calculator build/msx/CALC.RAW
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
 python3 tools/gbrc.py apps/formref/formref.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_gbr.h --symbol-prefix FORMREF
-APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7600 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORMS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
+    APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2 -DGBR_BANKED -DGEMBENCH_GBR_METADATA_ONLY" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7E40 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORMS=1 GBR_FIXED_TREE=1 GBR_BANKED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+else
+    APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7600 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORMS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+fi
 python3 tools/gbrc.py examples/hello-dialog.json --output build/msx/HELLO.GBR
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7000 BUTTON=1 GBR_OBJECTS=1 tools/build_capp.sh apps/gbrdemo build/msx/GBRDEMO.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/msx/SNDTEST.RAW
@@ -280,6 +293,11 @@ cp build/msx/TELNET.RAW   QA/MSX/CARD/GBENCH/TELNET.APP
 cp build/msx/BROWSER.RAW  QA/MSX/CARD/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/CARD/GBENCH/BRSAVE.APP
 cp build/msx/FORMREF.RAW  QA/MSX/CARD/GBENCH/FORMREF.APP
+if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
+    cp build/msx/FORMREF.GBR QA/MSX/CARD/GBENCH/FORMREF.GBR
+else
+    rm -f QA/MSX/CARD/GBENCH/FORMREF.GBR
+fi
 cp build/msx/GBRDEMO.RAW  QA/MSX/CARD/GBENCH/GBRDEMO.APP
 rm -f QA/MSX/CARD/GBENCH/HELLO.GBR
 cp build/msx/HELLO.GBR    QA/MSX/CARD/HELLO.GBR

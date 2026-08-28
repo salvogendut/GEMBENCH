@@ -177,15 +177,28 @@ kernel jump table. Its public interface is `include/gembench/gbr_object.h`:
 
 `GBRDEMO.APP` currently caps its external resource at 512 bytes and eight
 objects. These are demonstration-app limits, not additions to the GBR v1 ABI.
-Resident placement and mapper-backed resource storage remain a later measured
-comparison.
+Resident placement and mapper-backed resource storage were measured in
+Milestone 7.
 
 The MSX2 FormRef embeds its compiler-verified 306-byte `FORMREF.GBR` through the
 generated `apps/formref/formref_gbr.h`. `GBR_FORMS=1` enables field rendering,
 live text bindings, and focus traversal; `GBR_EMBEDDED=1` selects the compact
 access-only reader after the host build has verified the generated blob. The
-full form runtime compiles to 4,928 bytes and the embedded accessor to 795
+full form runtime compiles to 4,969 bytes and the embedded accessor to 769
 bytes with the current SDCC. External files continue through the strict reader.
+
+Milestone 7 retained that placement after measurement. Build the experimental
+mapper-backed comparison and the non-installed resident candidate with:
+
+```sh
+MSX_UNAPI_TSR= make gembench-msx-banked
+tools/test_formref_openmsx.sh
+make gembench-m7-resident-probe
+```
+
+The normal `make gembench-msx` does not install the mapper service or stage
+`FORMREF.GBR`. See [M7-BANKING-DECISION.md](M7-BANKING-DECISION.md) for the size,
+stack, interaction, and emulator results.
 
 ## MSX2 window kinds
 
