@@ -18,6 +18,7 @@ static unsigned char label_y(unsigned char y, unsigned char h)
     return (unsigned char)(y + ((h - 8 + 1) >> 1));
 }
 
+#ifndef GB_FORM_MODAL_ONLY
 void gb_form_label(unsigned char x, unsigned char y, unsigned char h,
                    const char *label)
 {
@@ -70,6 +71,7 @@ unsigned char gb_form_actions_hit(unsigned char x, unsigned char y,
     }
     return GB_FORM_NO_ACTION;
 }
+#endif
 
 static void modal_draw(const gb_form_modal_t *modal)
 {

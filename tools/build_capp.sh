@@ -17,6 +17,8 @@ cd "$(dirname "$0")/.."
 APP="${1:-apps/clock}"
 OUT="${2:-build/CLOCK.RAW}"
 GB="lib/gb"                                 # shared libgb (gb.h, gblib.s, crt0.s)
+GBR_LIB="lib/gembench"
+GBR_INCLUDE="include/gembench"
 GBLIB_SRC="${GBLIB_SRC:-$GB/gblib.s}"
 APP_CFLAGS="${APP_CFLAGS:-}"
 HELPER_CFLAGS="${HELPER_CFLAGS:-}"
@@ -92,6 +94,7 @@ STEPPER_FLAG="${STEPPER:-0}"
 SELECTOR_FLAG="${SELECTOR:-0}"
 SLIDER_FLAG="${SLIDER:-0}"
 FORM_FLAG="${FORM:-0}"
+FORM_MODAL_ONLY_FLAG="${FORM_MODAL_ONLY:-0}"
 FORM_SELECT_FLAG="${FORM_SELECT:-0}"
 TIMESET_FLAG="${TIMESET:-0}"
 SOUND_FLAG="${SOUND:-0}"
@@ -100,6 +103,16 @@ SIZEPROMPT_FLAG="${SIZEPROMPT:-0}"
 APP_PROBE_FLAG="${APP_PROBE:-0}"
 REPAINTTOP_FLAG="${REPAINTTOP:-0}"
 BASELINE_FLAG="${BASELINE:-0}"
+GBR_READER_FLAG="${GBR_READER:-0}"
+GBR_FIXED_TREE_FLAG="${GBR_FIXED_TREE:-0}"
+GBR_EMBEDDED_FLAG="${GBR_EMBEDDED:-0}"
+GBR_OBJECT_FLAG="${GBR_OBJECTS:-0}"
+if [ "$GBR_EMBEDDED_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
+GBR_FORM_FLAG="${GBR_FORMS:-0}"
+if [ "$GBR_FORM_FLAG" = "1" ]; then GBR_OBJECT_FLAG=1; fi
+if [ "$GBR_OBJECT_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
+GBR_INCLUDE_FLAGS=""
+if [ "$GBR_READER_FLAG" = "1" ]; then GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"; fi
 NET_SRC="$GB/gbnet_stub.c"
 case " $ALL_APPDEFS " in
     *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
@@ -109,6 +122,10 @@ if [ "$FORM_FLAG" = "1" ] && [ "$WIDGETS_FLAG" != "1" ]; then
     echo "ERROR: FORM=1 requires WIDGETS=1" >&2
     exit 1
 fi
+if [ "$FORM_MODAL_ONLY_FLAG" = "1" ] && [ "$FORM_FLAG" != "1" ]; then
+    echo "ERROR: FORM_MODAL_ONLY=1 requires FORM=1" >&2
+    exit 1
+fi
 if [ "$GBWIN_DRAG_ONLY_FLAG" = "1" ] && [ "$GBWIN_FLAG" != "1" ]; then
     echo "ERROR: GBWIN_DRAG_ONLY=1 requires GBWIN=1" >&2
     exit 1
@@ -116,6 +133,15 @@ fi
 if [ "$FORM_SELECT_FLAG" = "1" ] &&
    { [ "$FORM_FLAG" != "1" ] || [ "$SELECTOR_FLAG" != "1" ]; }; then
     echo "ERROR: FORM_SELECT=1 requires FORM=1 and SELECTOR=1" >&2
+    exit 1
+fi
+if [ "$GBR_OBJECT_FLAG" = "1" ] &&
+   { [ "$BUTTON_FLAG" != "1" ] && [ "$WIDGETS_FLAG" != "1" ]; }; then
+    echo "ERROR: GBR_OBJECTS=1 requires BUTTON=1 or WIDGETS=1" >&2
+    exit 1
+fi
+if [ "$GBR_FORM_FLAG" = "1" ] && [ "$WIDGETS_FLAG" != "1" ]; then
+    echo "ERROR: GBR_FORMS=1 requires WIDGETS=1" >&2
     exit 1
 fi
 if [ "$TASK_FLAG" = "1" ] && (( TASK_STACK_RESERVE < 256 )); then
@@ -197,6 +223,12 @@ fi
 if [ "$BASELINE_FLAG" = "1" ]; then
     deps+=("$GB/gbbaseline.s")
 fi
+if [ "$GBR_READER_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbr.h" "$GBR_LIB/gbr_reader.c")
+fi
+if [ "$GBR_OBJECT_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbr_object.h" "$GBR_LIB/gbr_object.c")
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -253,6 +285,7 @@ cache_key=$(printf '%s\n' \
     "SELECTOR=$SELECTOR_FLAG" \
     "SLIDER=$SLIDER_FLAG" \
     "FORM=$FORM_FLAG" \
+    "FORM_MODAL_ONLY=$FORM_MODAL_ONLY_FLAG" \
     "FORM_SELECT=$FORM_SELECT_FLAG" \
     "TIMESET=$TIMESET_FLAG" \
     "SOUND=$SOUND_FLAG" \
@@ -261,6 +294,11 @@ cache_key=$(printf '%s\n' \
     "APP_PROBE=$APP_PROBE_FLAG" \
     "REPAINTTOP=$REPAINTTOP_FLAG" \
     "BASELINE=$BASELINE_FLAG" \
+    "GBR_READER=$GBR_READER_FLAG" \
+    "GBR_FIXED_TREE=$GBR_FIXED_TREE_FLAG" \
+    "GBR_EMBEDDED=$GBR_EMBEDDED_FLAG" \
+    "GBR_OBJECTS=$GBR_OBJECT_FLAG" \
+    "GBR_FORMS=$GBR_FORM_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -324,7 +362,23 @@ fi
 # derives GB_COLS/GB_LINES/GB_XPIX from it, and gbwin.c/gbdoc.c clamp window
 # drag/resize + fullscreen to those extents. Omitting it built libgb with the
 # CPC 320x200 extents, so on MSX windows would not drag past x=320 (#287).
-"$SDCC" -mz80 --fomit-frame-pointer $APP_CFLAGS $ALL_APPDEFS -I "$GB" -c "$APP/main.c" -o "$work/main.rel"
+"$SDCC" -mz80 --fomit-frame-pointer $APP_CFLAGS $ALL_APPDEFS -I "$GB" $GBR_INCLUDE_FLAGS -c "$APP/main.c" -o "$work/main.rel"
+GBR_REL=""
+if [ "$GBR_READER_FLAG" = "1" ]; then
+    GBR_READER_DEFS=""
+    [ "$GBR_FIXED_TREE_FLAG" != "1" ] || GBR_READER_DEFS="$GBR_READER_DEFS -DGBR_READER_NO_FIND_TREE"
+    [ "$GBR_EMBEDDED_FLAG" != "1" ] || GBR_READER_DEFS="$GBR_READER_DEFS -DGBR_READER_ACCESS_ONLY"
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $GBR_READER_DEFS $ALL_APPDEFS \
+        -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_reader.c" -o "$work/gbr_reader.rel"
+    GBR_REL="$work/gbr_reader.rel"
+fi
+if [ "$GBR_OBJECT_FLAG" = "1" ]; then
+    GBR_FORM_DEFS=""
+    [ "$GBR_FORM_FLAG" != "1" ] || GBR_FORM_DEFS="-DGBR_FORM_RUNTIME"
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $GBR_FORM_DEFS $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_object.c" -o "$work/gbr_object.rel"
+    GBR_REL="$GBR_REL $work/gbr_object.rel"
+fi
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then
     GBWIN_DEFS=""
@@ -377,7 +431,9 @@ if [ "$SLIDER_FLAG" = "1" ]; then
 fi
 FORM_REL=""
 if [ "$FORM_FLAG" = "1" ]; then
-    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS -I "$GB" -c "$GB/gbform.c" -o "$work/gbform.rel"
+    FORM_DEFS=""
+    [ "$FORM_MODAL_ONLY_FLAG" != "1" ] || FORM_DEFS="-DGB_FORM_MODAL_ONLY"
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $FORM_DEFS $ALL_APPDEFS -I "$GB" -c "$GB/gbform.c" -o "$work/gbform.rel"
     FORM_REL="$work/gbform.rel"
 fi
 FORM_SELECT_REL=""
@@ -436,7 +492,7 @@ fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc "$CODE_LOC" --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
-    $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $TASK_REL $TASK_ROOT_REL \
+    $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $GBR_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $TASK_REL $TASK_ROOT_REL \
     "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
