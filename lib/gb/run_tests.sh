@@ -22,3 +22,9 @@ trap 'rm -rf "$tmp"' EXIT
 "$CC" -Wall -Wextra -std=c99 -DGB_HOST_TEST -o "$tmp/test_gbform_ui" \
     test_gbform_ui.c gbform.c gbform_select.c gbwidgets.c gbselect.c
 "$tmp/test_gbform_ui"
+"$CC" -Wall -Wextra -std=c99 -o "$tmp/test_gbwindow_kinds" test_gbwindow_kinds.c
+"$tmp/test_gbwindow_kinds"
+if command -v sdcc >/dev/null 2>&1; then
+    sdcc -mz80 --std-c99 -c test_gbwindow_kind_layout.c -o "$tmp/test_gbwindow_kind_layout.rel"
+    echo "gbwindow target layout: 12-byte legacy prefix preserved"
+fi

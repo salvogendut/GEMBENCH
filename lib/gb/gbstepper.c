@@ -1,9 +1,6 @@
 /* gbstepper.c - opt-in decrement/value/increment control. */
 #include "gb.h"
 
-#define UI_SURFACE 1
-#define UI_EDGE    2
-#define UI_ACCENT  3
 #define STEP_W     3
 
 static unsigned char step_text_cols(const char *s)
@@ -29,8 +26,8 @@ void gb_stepper(unsigned char x, unsigned char y, unsigned char w, unsigned char
     tx = (tw < middle) ? (unsigned char)(x + STEP_W + ((middle - tw) >> 1))
                        : (unsigned char)(x + STEP_W);
     ty = step_text_y(y, h);
-    pen = (flags & GB_WIDGET_FOCUSED) ? UI_ACCENT : UI_EDGE;
-    gb_fill(x, y, w, h, UI_SURFACE);
+    pen = (flags & GB_WIDGET_FOCUSED) ? GB_UI_ACCENT : GB_UI_EDGE;
+    gb_fill(x, y, w, h, GB_UI_SURFACE);
     gb_frame(x, y, STEP_W, h, pen);
     gb_frame((unsigned char)(x + STEP_W), y, middle, h, pen);
     gb_frame((unsigned char)(x + w - STEP_W), y, STEP_W, h, pen);

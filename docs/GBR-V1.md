@@ -16,6 +16,7 @@ Each tree has a name and one nested root object. Supported object keys are:
 
 | Key | Meaning |
 | --- | --- |
+| `id` | Optional source-only C identifier for this flattened object |
 | `type` | Required object type name |
 | `x`, `w` | Horizontal pixel geometry, `0..511` |
 | `y`, `h` | Vertical pixel geometry, `0..255` |
@@ -28,6 +29,10 @@ Each tree has a name and one nested root object. Supported object keys are:
 `text` and `spec` are mutually exclusive. Object records are flattened in
 pre-order. Parent, first-child, and next-sibling fields contain global object
 indices; `255` means no object.
+
+`id` values must be unique C identifiers. They do not add bytes to GBR v1;
+`gbrc.py --c-header ... --symbol-prefix ...` emits their flattened indices,
+the resource blob, counts, and section offsets into a deterministic C header.
 
 The current object types are `box`, `text`, `string`, `button`, `field`, `icon`,
 `image`, `checkbox`, `radio`, and `user`.
@@ -90,6 +95,10 @@ python3 tools/gbrverify.py build/examples/hello-dialog.gbr
 `lib/gembench/gbr_reader.c` implements the same checks without allocation or
 recursion and exposes trees, objects, and strings as copied records containing
 indices and offsets. It is compiled with SDCC as part of `make gbr-check`.
+Generated blobs verified during the same build may compile the reader with
+`GBR_READER_ACCESS_ONLY`; this retains bounded accessors while omitting the
+duplicate target-side open pass. External or mutable resources must continue
+to use the strict validator.
 
 ### String index
 

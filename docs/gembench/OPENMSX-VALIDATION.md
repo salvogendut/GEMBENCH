@@ -105,3 +105,67 @@ python3 debug/gembench_baseline_1983.py \
   --output-dir "$PWD/build/gbr-1983" \
   --frames 6000
 ```
+
+## FormRef vertical slice
+
+Milestone 5 was validated on 2026-08-28 with the normal 13,420-byte MSX2
+`FORMREF.APP` (2,708 bytes of loader headroom). The app embeds a verified
+306-byte GBR tree containing fields, buttons, labels, and actions. Its MSX2
+draw callback delegates the form body to `gbr_draw_tree`; clicks use
+`gbr_hit_test`, and Tab/Return use the shared focus and activation path.
+
+The deterministic driver creates a disposable image with an `A.APP` alias for
+the exact FormRef payload, launches it through File Manager, then uses real
+keyboard-matrix events to select Compact, decrement Level from 3 to 2, traverse
+to Save, and activate it. The trace requires the resource tree count, app entry,
+first managed draw, modal renderer, Save commit, and modal restore, and checks
+the committed style/level bytes. `build/msx/formref-focus.png` records the
+complete resource-defined dialog with its red focus indication.
+
+```sh
+make formref
+tools/test_formref_openmsx.sh
+```
+
+The driver waits for normal low-RAM mapping and an idle V9938 command engine
+before capturing, avoiding BIOS-page and in-flight Screen-7 screenshots. CPC
+and PCW FormRef builds remain 7,054 bytes and retain their inherited widget
+implementation.
+
+## Window kinds
+
+Milestone 6 was validated on 2026-08-28 with the normal 13,244-byte MSX2
+`FILEMGR.APP` (2,884 bytes of loader headroom) and the 12,260-byte Screen 7
+kernel. File Manager uses `GB_WK_STANDARD`; the kernel draws its selected
+furniture and owns maximise/restore, title dragging, and grip resizing.
+
+The deterministic driver launches File Manager through the real desktop and
+uses keyboard-matrix pointer input for every gesture. It observes the three new
+messages at the application's actual relocated callback address. A reference
+passing run produced:
+
+```text
+INITIAL=4 26 56 158
+MAXIMIZED=0 8 128 204
+RESTORED=4 26 56 158
+MOVED=17 8 56 158
+SIZED=17 8 85 204
+MOVED_MESSAGES=1
+SIZED_MESSAGES=1
+MAXIMIZED_MESSAGES=2
+```
+
+The move and resize use continuous held input after deterministic pointer
+placement, so this test covers the resident outline gesture rather than direct
+geometry calls. `build/msx/window-kinds.png` records the final moved and resized
+window with the black, white, grey, and red theme.
+
+```sh
+make gembench-msx
+tools/test_window_kinds_openmsx.sh
+```
+
+The complementary 1983 run reached frame 6,001 with PC `0x247A`, SP `0xD8EA`,
+the expected Screen 7 registers, 25 free mapper segments at entry, and one idle
+busy application page. openMSX remains authoritative for the interactive
+gesture result.

@@ -1,9 +1,6 @@
 /* gbslider.c - opt-in horizontal slider and pointer-to-value mapping. */
 #include "gb.h"
 
-#define UI_SURFACE 1
-#define UI_EDGE    2
-#define UI_ACCENT  3
 #define THUMB_W    2
 
 void gb_slider(unsigned char x, unsigned char y, unsigned char w, unsigned char h,
@@ -15,13 +12,13 @@ void gb_slider(unsigned char x, unsigned char y, unsigned char w, unsigned char 
     span = (unsigned char)(w - THUMB_W - 2);
     tx = (unsigned char)(x + 1);
     if (max) tx = (unsigned char)(tx + ((unsigned int)span * value) / max);
-    pen = (flags & GB_WIDGET_FOCUSED) ? UI_ACCENT : UI_EDGE;
-    gb_fill(x, y, w, h, UI_SURFACE);
+    pen = (flags & GB_WIDGET_FOCUSED) ? GB_UI_ACCENT : GB_UI_EDGE;
+    gb_fill(x, y, w, h, GB_UI_SURFACE);
     gb_frame(x, y, w, h, pen);
     gb_fill((unsigned char)(x + 1), (unsigned char)(y + (h >> 1)),
-            (unsigned char)(w - 2), 1, UI_EDGE);
+            (unsigned char)(w - 2), 1, GB_UI_EDGE);
     gb_fill(tx, (unsigned char)(y + 1), THUMB_W,
-            (unsigned char)(h - 2), UI_ACCENT);
+            (unsigned char)(h - 2), GB_UI_ACCENT);
 }
 
 unsigned char gb_slider_hit(unsigned char x, unsigned char y,

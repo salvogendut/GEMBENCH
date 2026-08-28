@@ -11,6 +11,7 @@ static unsigned int read_u16(const unsigned char *data, unsigned int offset)
            ((unsigned int)data[(unsigned int)(offset + 1u)] << 8);
 }
 
+#ifndef GBR_READER_ACCESS_ONLY
 static void clear_resource(gbr_resource_t *resource)
 {
     if (resource != 0) {
@@ -30,6 +31,7 @@ static unsigned char byte_is_link(unsigned char value, unsigned char count)
 {
     return (unsigned char)(value == GBR_NONE8 || value < count);
 }
+#endif
 
 static unsigned char raw_tree(const gbr_resource_t *resource,
                               unsigned char index, gbr_tree_t *tree)
@@ -84,6 +86,7 @@ static unsigned char raw_string(const gbr_resource_t *resource,
     return 1;
 }
 
+#ifndef GBR_READER_ACCESS_ONLY
 unsigned char gbr_open(gbr_resource_t *resource,
                        const unsigned char *data, unsigned int size)
 {
@@ -241,6 +244,7 @@ unsigned char gbr_open(gbr_resource_t *resource,
     *resource = candidate;
     return GBR_OK;
 }
+#endif
 
 unsigned char gbr_tree_at(const gbr_resource_t *resource,
                           unsigned char index, gbr_tree_t *tree)
@@ -260,6 +264,7 @@ unsigned char gbr_string_at(const gbr_resource_t *resource,
     return raw_string(resource, index, string);
 }
 
+#ifndef GBR_READER_NO_FIND_TREE
 unsigned char gbr_find_tree(const gbr_resource_t *resource,
                             const char *name, unsigned char *index)
 {
@@ -288,3 +293,4 @@ unsigned char gbr_find_tree(const gbr_resource_t *resource,
     }
     return 0;
 }
+#endif

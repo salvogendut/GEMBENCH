@@ -884,7 +884,9 @@ static void draw_body(void)
     draw_scrollbar();
     if (view == V_ICONS) draw_icons_view();
     else                 draw_list_view();
+#ifndef GB_MSX2
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip, bottom-right (#81) */
+#endif
 }
 
 /* draw: interactive content redraw (manages the cursor) - the scroll/select paths use it
@@ -1292,7 +1294,8 @@ static void fm_close(void)
     else gb_restore_parent();
 }
 
-/* on_drag (#146): a title-bar press -> move the window. */
+#ifndef GB_MSX2
+/* Legacy CPC/PCW path: a title-bar press asks the app to move the window. */
 static void fm_drag(void)
 {
     sync_rect();
@@ -1304,6 +1307,7 @@ static void fm_drag(void)
         gb_restore_parent();
     }
 }
+#endif
 
 /* on_click (#146): a content press - resize grip, scrollbar, or an entry (select / open /
    drag to another window or the Trash). */
@@ -1320,7 +1324,9 @@ static void fm_click(void)
     if (copy_state != COPY_IDLE || list_state != LIST_IDLE || gb_drop_claimed()) return;
 #endif
 
-    /* resize grip (bottom-right corner) -> resize the window (#81) */
+    /* CPC/PCW retain the inherited app-owned grip. The tagged MSX2 kind makes
+       the kernel draw, hit-test and drag this furniture. */
+#ifndef GB_MSX2
     if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {
         if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
             gb_wm_setsize(win_w, win_h);
@@ -1330,6 +1336,7 @@ static void fm_click(void)
         }
         return;
     }
+#endif
 
     /* scrollbar: shared arrows/page regions plus the app-owned thumb drag loop */
     if (mx >= SB_X && mx < SB_X + SB_W && my >= CT_Y && my < CT_BOT) {
@@ -1405,15 +1412,34 @@ static void fm_proc(void)
         case GB_MSG_CLICK: fm_click(); break;
         case GB_MSG_FRAME: fm_frame(); break;
         case GB_MSG_CLOSE: fm_close(); break;
+#ifdef GB_MSX2
+        case GB_MSG_MOVED:
+            sync_rect();
+            break;
+        case GB_MSG_SIZED:
+        case GB_MSG_MAXIMIZED:
+            sync_rect();
+            clamp_top();
+            break;
+#else
         case GB_MSG_DRAG:  fm_drag();  break;
+#endif
         case GB_MSG_MENU:
         case GB_MSG_DROP:  on_event(); break;
     }
 }
 
-static gb_mwin_t fmmw = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0
+#ifdef GB_MSX2
+static gb_mwin_kind_t fmmw_kind = {
+    { DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0, 0 },
+    GB_WK_STANDARD, GB_WK_ABI_V1
 };
+#define fmmw fmmw_kind.window
+#else
+static gb_mwin_t fmmw = {
+    DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0, 0
+};
+#endif
 
 void main(void)
 {
