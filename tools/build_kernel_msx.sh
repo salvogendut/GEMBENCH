@@ -203,10 +203,10 @@ cp assets/thinner.SPR build/msx/DEFAULT.SPR
 # from disk, so we just stage that compact bitmap. DEBUG=TRUE selects the
 # SPLASHD.MOD variant with the build id.
 BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
-python3 tools/make_bootsplash.py assets/SPLASH.png build/msx/SPLASH_BUILD.png "$BUILD_COMMIT" GEOBENCH
-python3 tools/png2cpc.py --platform msx2 build/msx/SPLASH_BUILD.png build/msx/SPLASH.BIN splash 96x184
-python3 tools/make_bootsplash.py assets/SPLASH.png build/msx/SPLASHD_BUILD.png "$BUILD_COMMIT"
-python3 tools/png2cpc.py --platform msx2 build/msx/SPLASHD_BUILD.png build/msx/SPLASHD.BIN splash 96x184
+python3 tools/make_bootsplash.py assets/GEMBENCH_KERNEL.png build/msx/SPLASH_BUILD.png "$BUILD_COMMIT" GEMBENCH black
+python3 tools/png2cpc.py --platform msx2 --gembench build/msx/SPLASH_BUILD.png build/msx/SPLASH.BIN splash 96x184
+python3 tools/make_bootsplash.py assets/GEMBENCH_KERNEL.png build/msx/SPLASHD_BUILD.png "$BUILD_COMMIT" - black
+python3 tools/png2cpc.py --platform msx2 --gembench build/msx/SPLASHD_BUILD.png build/msx/SPLASHD.BIN splash 96x184
 
 echo "Building GB-BASIC MSX payload from $GB_BASIC_DIR"
 make -C "$GB_BASIC_DIR" raws-msx GEOBENCH="$GEOBENCH_ROOT"
@@ -258,7 +258,7 @@ if [ -n "$UNAPI_TSR" ]; then
 else
     printf 'GBMSX\r\n' > QA/MSX/CARD/AUTOEXEC.BAT
 fi
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/CARD/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nINKS=0,26,13,6,0\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/CARD/GEOBENCH.CFG
 cp QA/MSX/CARD/GEOBENCH.CFG QA/MSX/CARD/GBENCH/DEFAULT.CFG
 cp build/msx/DESKTOP.RAW  QA/MSX/CARD/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/CARD/GBENCH/FILEMGR.APP
@@ -356,6 +356,9 @@ while IFS= read -r pic; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
     cp "$pic" "QA/MSX/CARD/PICS/$name.PIC"
 done < <(python3 tools/picture_catalog.py msx)
+# GEMBENCH is an MSX2-only fork: override the inherited LOGO.PIC in this
+# staging tree without changing the canonical picture used by CPC/PCW builds.
+cp assets/msx/GEMLOGO.PIC QA/MSX/CARD/PICS/LOGO.PIC
 
 # --- bootable Nextor image ------------------------------------------------------
 bash tools/build_msx_img.sh QA/MSX/CARD QA/MSX/GBMSX.IMG

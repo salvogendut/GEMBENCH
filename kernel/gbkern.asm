@@ -126,10 +126,17 @@ THEMED_GADGETS  equ   0
                 endif
 
 ; --- palette -------------------------------------------------------------
-INK_DESKTOP     equ   1            ; blue  -> pen 0 (paper / backdrop)
+                ifdef PLATFORM_MSX
+INK_DESKTOP     equ   0            ; GEMBENCH: black -> pen 0 (canvas)
 INK_LIGHT       equ   26           ; white -> pen 1 (text)
-INK_DARK        equ   0            ; black -> pen 2 (outlines / title bar)
+INK_DARK        equ   13           ; grey  -> pen 2 (structure / shadow)
 INK_ACCENT      equ   6            ; red   -> pen 3 (accents)
+                else
+INK_DESKTOP     equ   1            ; inherited targets: blue -> pen 0
+INK_LIGHT       equ   26           ; white -> pen 1
+INK_DARK        equ   0            ; black -> pen 2
+INK_ACCENT      equ   6            ; red   -> pen 3
+                endif
 pal_def         db    INK_DESKTOP,INK_LIGHT,INK_DARK,INK_ACCENT,INK_DESKTOP  ; default INKS= seed (+border)
 ; set_palette: apply the 4 Mode-1 pens from KCFG_INKS (INKS=, or the defaults seeded
 ; above). Each ink is reloaded from memory per pen so it survives SCR_SET_INK's clobber.
@@ -344,7 +351,7 @@ gb_open_window
                 call  kwin_frame
                 call  to_data                 ; title needs the font page
                 endif
-                ld    b,1                     ; white on black title bar
+                ld    b,1                     ; white on the structure-colour title backing
                 ld    c,2
                 call  set_text_pens
                 ld    a,(kw_x)
@@ -357,7 +364,7 @@ gb_open_window
                 call  draw_text
                 if !THEMED_GADGETS
                 ifdef WM_GADGETS
-                ld    b,2                     ; close 'X' glyph: pen 2 (black) on pen 1 (white box)
+                ld    b,2                     ; close 'X' glyph: structure colour on white
                 ld    c,1
                 call  set_text_pens
                 ld    a,(kw_x)
@@ -401,7 +408,7 @@ kwin_frame
                 ifdef PLATFORM_PCW
                 ld    a,KWB_PAPER             ; interior (pen 0)
                 else
-                xor   a                       ; interior (blue): (x, y, w, h)
+                xor   a                       ; interior (logical pen 0): (x, y, w, h)
                 endif
                 ld    (fb_val),a
                 ld    a,(kw_x)
@@ -470,7 +477,7 @@ kf_stripe       ld    a,(kf_sy)
                 ld    (kf_sy),a
                 djnz  kf_stripe
                 endif
-                ld    hl,(kw_x)              ; black borders via k_frame (all 4 edges; the
+                ld    hl,(kw_x)              ; configured borders via k_frame (all 4 edges; the
                 ld    b,l                    ; top edge coincides with the first title
                 ld    c,h                    ; stripe, so it is behavior-neutral) - was
                 ld    hl,(kw_w)              ; three separate left/right/bottom fills
@@ -493,9 +500,9 @@ kf_stripe       ld    a,(kf_sy)
                 ld    e,10
                 call  fill_xywh              ; (the 'X' glyph is drawn in gb_open_window, font)
                 ifdef WM_GADGETS
-; maximize gadget on the right: white box (x+w-4, y+2, 3, 10) + a centered black square.
-; (3 bytes wide so the black square sits in the MIDDLE byte with white either side - a 2-byte
-; box would have both edge bytes filled by k_frame, i.e. solid black. 1 byte = 4 px in mode 1.)
+; maximize gadget on the right: white box (x+w-4, y+2, 3, 10) + a centered pen-2 square.
+; (3 bytes wide so the square sits in the MIDDLE byte with white either side - a 2-byte
+; box would have both edge bytes filled by k_frame. 1 byte = 4 px.)
                 ld    a,KWB_LIGHT
                 ld    (fb_val),a
                 ld    a,(kw_x)

@@ -10,14 +10,15 @@ historical GEM applications. GEMBENCH borrows interaction and architecture
 ideas while retaining a native Z80 ABI and independently implemented BSD code
 and artwork.
 
-![GeoBench Screen 7 baseline on MSX2](screenshots/MSX-Mode7.png)
+![GEMBENCH black, white, grey, and red desktop under openMSX](screenshots/GEMBENCH-Mode7.png)
 
 ## Status
 
-The repository now contains the complete GeoBench foundation, imported with
-history from upstream commit `6309ff3`. The bootstrap intentionally preserves
-the existing runtime and applications before GEMBENCH-specific UI changes are
-introduced.
+The repository contains the complete GeoBench foundation, imported with history
+from upstream commit `6309ff3`, plus the first GEMBENCH-specific visual layer:
+an MSX2-only black, white, grey, and red base palette with original boot and
+desktop logo assets. The measured pre-theme runtime baseline remains recorded
+for comparison.
 
 The first proof of concept covers:
 
@@ -96,6 +97,7 @@ python3 tools/gbrc.py examples/hello-dialog.json \
 - [Current MSX2 baseline](docs/gembench/BASELINE.md)
 - [openMSX reference validation](docs/gembench/OPENMSX-VALIDATION.md)
 - [Baseline measurement workflow](docs/gembench/DEVELOPMENT.md)
+- [Visual direction and base palette](docs/gembench/VISUAL-DIRECTION.md)
 - [GEMBENCH architecture](docs/gembench/ARCHITECTURE.md)
 - [GBR version 1](docs/GBR-V1.md)
 - [GeoBench foundation architecture](docs/ARCHITECTURE.md)

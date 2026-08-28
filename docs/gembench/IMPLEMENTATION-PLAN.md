@@ -13,6 +13,8 @@ weeks for one experienced developer working substantially full-time.
 - MSX-DOS2 or Nextor provides the storage and mapper environment.
 - RainBIOS is a supported firmware and validation environment.
 - GEMBENCH is licensed under the BSD 3-Clause License.
+- The MSX2 base visual identity uses black, white, grey, and red, with black as the
+  desktop background; Screen 7 extensions must preserve those core roles.
 - OpenGEM and FreeGEM are reference material only. Code, artwork, and resources
   must be independently implemented or have separately reviewed provenance.
 - CPC and PCW compatibility do not constrain new GEMBENCH APIs or layouts.

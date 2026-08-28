@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -22,6 +22,11 @@ msx:
 
 # GEMBENCH's fixed-target entry point. Keep the upstream alias during bootstrap.
 gembench-msx: msx
+
+# Reproduce the MSX2-only four-pen wallpaper from the clean logo source.
+gembench-theme-assets:
+	$(PYTHON) tools/picconv.py assets/GEMBENCH_LOGO.png \
+		assets/msx/GEMLOGO.PIC --gembench -d ordered -w 176 --height 176
 
 # Generate a static report from the staged distribution. The 1983 target adds
 # guarded mapper/VRAM boot telemetry plus a desktop screenshot.

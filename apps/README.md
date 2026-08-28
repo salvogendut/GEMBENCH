@@ -73,8 +73,8 @@ savers together.
 | xmatrix  | `XMATRIX.SAV`  | binary "Matrix" digital rain (white → red → black glow) — ported from `symsav-xmatrix` |
 | mountain | `MOUNTAIN.SAV` | configurable isometric 3D terrain — MSX Screen 7 uses eight elevation colours; four-colour and monochrome targets use compact low/high shading |
 | fractalic | `FRACTALI.SAV` | Sierpinski triangle + Koch snowflake (random each cycle) — ported from `symsav-fractalic` |
-| starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl |
-| xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the blue field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit |
+| starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (GEMBENCH MSX2: grey → red → white on black) — inspired by `symsav-starfield`, fresh `#C000` impl |
+| xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the GEMBENCH MSX2 black field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit |
 | pyro     | `PYRO.SAV`     | fixed-point fireworks — rockets rise and burst into shrapnel showers — ported from xscreensaver |
 | forest   | `FOREST.SAV`   | fractal trees with solid branches and red blossoms; each MSX Screen 7 stand randomly uses one blossom colour, one colour per tree, or mixed blossom colours — ported from xscreensaver |
 | helix    | `HELIX.SAV`    | woven harmonograph curves (sin-table) — ported from xscreensaver |
