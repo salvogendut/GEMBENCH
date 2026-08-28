@@ -106,7 +106,10 @@ proc fr_move_tick {} {
     }
     if {[expr {abs($x - $::fr_target_x)}] <= 1 &&
         [expr {abs($y - $::fr_target_y)}] <= 3} {
-        after time 0.08 $::fr_callback
+        # input_poll may already have captured one last accelerated direction
+        # step even though the published position is inside the target. Wait
+        # with every direction released, then confirm the settled coordinates.
+        after time 0.12 fr_move_settled
         return
     }
     if {[machine_info time] >= $::fr_deadline} {
@@ -123,6 +126,22 @@ proc fr_move_tick {} {
         keymatrixdown 8 0x20
     }
     after time 0.025 fr_move_tick
+}
+
+proc fr_move_settled {} {
+    set x [peek 0x1306]
+    set y [peek 0x1307]
+    catch {keymatrixup 8 0x10}
+    catch {keymatrixup 8 0x20}
+    catch {keymatrixup 8 0x40}
+    catch {keymatrixup 8 0x80}
+    if {$x <= 127 && $y <= 211 &&
+        [expr {abs($x - $::fr_target_x)}] <= 1 &&
+        [expr {abs($y - $::fr_target_y)}] <= 3} {
+        after time 0.08 $::fr_callback
+    } else {
+        after time 0.002 fr_move_tick
+    }
 }
 
 proc fr_move_to {x y callback} {
@@ -259,7 +278,7 @@ proc fr_modal_check {} {
     } elseif {$::fr_form_clicks >= 6} {
         fr_finish "FAIL FormRef modal was not drawn"
     } else {
-        fr_open_form
+        fr_move_to 30 103 fr_open_form
     }
 }
 
