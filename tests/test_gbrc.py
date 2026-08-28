@@ -11,6 +11,8 @@ from tools import gbrc
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "hello-dialog.json"
+FORMREF_SOURCE = ROOT / "apps" / "formref" / "formref.json"
+FORMREF_HEADER = ROOT / "apps" / "formref" / "formref_gbr.h"
 HEADER_FILE = ROOT / "include" / "gembench" / "gbr.h"
 GOLDEN_FILE = ROOT / "tests" / "fixtures" / "hello-dialog.gbr.inc"
 
@@ -158,6 +160,81 @@ class CompilerTests(unittest.TestCase):
             ],
         }
         with self.assertRaisesRegex(gbrc.ResourceError, "printable ASCII"):
+            gbrc.compile_document(source)
+
+    def test_formref_ids_are_source_only_and_header_is_current(self) -> None:
+        document = json.loads(FORMREF_SOURCE.read_text(encoding="utf-8"))
+        blob, object_ids = gbrc.compile_document_with_ids(document)
+        self.assertEqual(
+            object_ids,
+            {
+                "FORMREF_ROOT": 0,
+                "FORMREF_NAME": 2,
+                "FORMREF_STYLE": 4,
+                "FORMREF_LEVEL_DEC": 7,
+                "FORMREF_LEVEL_VALUE": 8,
+                "FORMREF_LEVEL_INC": 9,
+                "FORMREF_SAVE": 10,
+                "FORMREF_CANCEL": 11,
+            },
+        )
+
+        def remove_ids(obj: object) -> None:
+            if isinstance(obj, dict):
+                obj.pop("id", None)
+                for value in obj.values():
+                    remove_ids(value)
+            elif isinstance(obj, list):
+                for value in obj:
+                    remove_ids(value)
+
+        without_ids = json.loads(json.dumps(document))
+        remove_ids(without_ids)
+        self.assertEqual(blob, gbrc.compile_document(without_ids))
+        self.assertEqual(
+            FORMREF_HEADER.read_text(encoding="ascii"),
+            gbrc.render_c_header(blob, object_ids, "FORMREF"),
+        )
+
+        header = gbrc.read_header(blob)
+        object_offset = int(header["object_table_offset"])
+        name_field = gbrc.OBJECT.unpack_from(
+            blob, object_offset + object_ids["FORMREF_NAME"] * gbrc.OBJECT.size
+        )
+        save = gbrc.OBJECT.unpack_from(
+            blob, object_offset + object_ids["FORMREF_SAVE"] * gbrc.OBJECT.size
+        )
+        self.assertEqual(name_field[3], gbrc.TYPE_IDS["field"])
+        self.assertEqual(name_field[4], gbrc.FLAG_BITS["selectable"])
+        self.assertEqual(
+            save[4],
+            gbrc.FLAG_BITS["selectable"]
+            | gbrc.FLAG_BITS["default"]
+            | gbrc.FLAG_BITS["exit"],
+        )
+
+    def test_object_ids_must_be_unique_c_identifiers(self) -> None:
+        source = {
+            "format": "GBR1",
+            "trees": [
+                {
+                    "name": "BAD",
+                    "root": {
+                        "id": "not-c",
+                        "type": "box",
+                    },
+                }
+            ],
+        }
+        with self.assertRaisesRegex(gbrc.ResourceError, "uppercase C identifier"):
+            gbrc.compile_document(source)
+
+        source["trees"][0]["root"] = {
+            "id": "SAME",
+            "type": "box",
+            "children": [{"id": "SAME", "type": "text", "text": "x"}],
+        }
+        with self.assertRaisesRegex(gbrc.ResourceError, "duplicate object id SAME"):
             gbrc.compile_document(source)
 
 

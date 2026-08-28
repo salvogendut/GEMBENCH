@@ -1,11 +1,6 @@
-/* App-linked object drawing and hit testing for the first GEMBENCH GBR slice.
- * Supported visible types are box, text/string, and button. */
+/* App-linked drawing, state, focus, and hit testing for GBR object trees. */
 #include "gb.h"
 #include "gbr_object.h"
-
-#define UI_SURFACE 1u
-#define UI_EDGE    2u
-#define UI_ACCENT  3u
 
 #define TEXT_CHUNK 16u
 #define BUTTON_TEXT_MAX 31u
@@ -60,6 +55,33 @@ static unsigned char object_blocked(const gbr_runtime_t *runtime,
     return 1;
 }
 
+#ifdef GBR_FORM_RUNTIME
+static unsigned char text_type(unsigned char type)
+{
+    return (unsigned char)(type == GBR_TYPE_TEXT || type == GBR_TYPE_STRING ||
+                           type == GBR_TYPE_BUTTON || type == GBR_TYPE_FIELD ||
+                           type == GBR_TYPE_CHECKBOX || type == GBR_TYPE_RADIO);
+}
+
+static const char *text_override(const gbr_runtime_t *runtime,
+                                 unsigned char object_index)
+{
+    unsigned char index;
+    for (index = 0; index < runtime->text_binding_count; index++)
+        if (runtime->text_bindings[index].object_index == object_index)
+            return runtime->text_bindings[index].text;
+    return 0;
+}
+
+static unsigned char bounded_override(const char *text)
+{
+    unsigned char length = 0;
+    if (text == 0) return 0;
+    while (length < GBR_TEXT_OVERRIDE_MAX && text[length]) length++;
+    return (unsigned char)(text[length] == 0);
+}
+#endif
+
 static unsigned char screen_rect(const gbr_rect_t *rect,
                                  unsigned char *x, unsigned char *y,
                                  unsigned char *w, unsigned char *h)
@@ -107,7 +129,58 @@ static unsigned char copy_string(const gbr_runtime_t *runtime,
     return 1;
 }
 
+static unsigned char copy_object_string(const gbr_runtime_t *runtime,
+                                        unsigned char object_index,
+                                        unsigned int spec, char *buffer,
+                                        unsigned char capacity)
+{
+#ifdef GBR_FORM_RUNTIME
+    const char *override = text_override(runtime, object_index);
+    unsigned char length = 0;
+    if (override == 0) return copy_string(runtime, spec, buffer, capacity);
+    if (!bounded_override(override) || capacity == 0) return 0;
+    while (override[length] && length + 1u < capacity) {
+        buffer[length] = override[length];
+        length++;
+    }
+    if (override[length]) return 0;
+    buffer[length] = 0;
+    return 1;
+#else
+    (void)object_index;
+    return copy_string(runtime, spec, buffer, capacity);
+#endif
+}
+
+#ifdef GBR_FORM_RUNTIME
+static unsigned char draw_override(const char *text, const gbr_rect_t *rect,
+                                   unsigned int state)
+{
+    char chunk[TEXT_CHUNK + 1u];
+    unsigned int x = rect->x;
+    unsigned char source = 0;
+    unsigned char count;
+    unsigned char index;
+    if (!bounded_override(text)) return GBR_RT_ERR_OBJECT;
+    while (text[source] && x < GB_XPIX) {
+        count = 0;
+        while (count < TEXT_CHUNK && text[source + count]) count++;
+        for (index = 0; index < count; index++)
+            chunk[index] = text[source + index];
+        chunk[count] = 0;
+        if (state & GBR_STATE_SELECTED)
+            gb_textrev((unsigned char)(x >> 2), (unsigned char)rect->y, chunk);
+        else
+            gb_textbw((unsigned char)(x >> 2), (unsigned char)rect->y, chunk);
+        source = (unsigned char)(source + count);
+        x = (unsigned int)(x + count * 6u);
+    }
+    return GBR_RT_OK;
+}
+#endif
+
 static unsigned char draw_text(const gbr_runtime_t *runtime,
+                               unsigned char object_index,
                                const gbr_object_t *object,
                                const gbr_rect_t *rect,
                                unsigned int state)
@@ -119,6 +192,12 @@ static unsigned char draw_text(const gbr_runtime_t *runtime,
     unsigned int x;
     unsigned char count;
     unsigned char index;
+#ifdef GBR_FORM_RUNTIME
+    const char *override = text_override(runtime, object_index);
+    if (override != 0) return draw_override(override, rect, state);
+#else
+    (void)object_index;
+#endif
     if (object->spec == GBR_NONE16) return GBR_RT_OK;
     if (object->spec >= runtime->resource->string_count ||
         !gbr_string_at(runtime->resource, (unsigned char)object->spec, &string))
@@ -159,19 +238,20 @@ static unsigned char draw_object(const gbr_runtime_t *runtime,
     switch (object.type) {
         case GBR_TYPE_BOX:
             if (!screen_rect(&rect, &x, &y, &w, &h)) return GBR_RT_OK;
-            gb_fill(x, y, w, h, UI_SURFACE);
+            gb_fill(x, y, w, h, GB_UI_SURFACE);
             gb_frame(x, y, w, h,
                      (unsigned char)((state & (GBR_STATE_SELECTED |
                                                GBR_STATE_OUTLINED))
-                                         ? UI_ACCENT : UI_EDGE));
+                                         ? GB_UI_ACCENT : GB_UI_EDGE));
             return GBR_RT_OK;
         case GBR_TYPE_TEXT:
         case GBR_TYPE_STRING:
             if (rect.y >= GB_LINES) return GBR_RT_OK;
-            return draw_text(runtime, &object, &rect, state);
+            return draw_text(runtime, object_index, &object, &rect, state);
         case GBR_TYPE_BUTTON:
             if (!screen_rect(&rect, &x, &y, &w, &h)) return GBR_RT_OK;
-            if (!copy_string(runtime, object.spec, label, sizeof(label)))
+            if (!copy_object_string(runtime, object_index, object.spec,
+                                    label, sizeof(label)))
                 return GBR_RT_ERR_OBJECT;
             flags = 0;
             if (state & GBR_STATE_DISABLED) flags |= GB_WIDGET_DISABLED;
@@ -179,6 +259,18 @@ static unsigned char draw_object(const gbr_runtime_t *runtime,
             if (state & GBR_STATE_OUTLINED) flags |= GB_WIDGET_FOCUSED;
             gb_button(x, y, w, h, label, flags);
             return GBR_RT_OK;
+#ifdef GBR_FORM_RUNTIME
+        case GBR_TYPE_FIELD:
+            if (!screen_rect(&rect, &x, &y, &w, &h)) return GBR_RT_OK;
+            if (!copy_object_string(runtime, object_index, object.spec,
+                                    label, sizeof(label)))
+                return GBR_RT_ERR_OBJECT;
+            flags = 0;
+            if (state & GBR_STATE_DISABLED) flags |= GB_WIDGET_DISABLED;
+            if (state & GBR_STATE_OUTLINED) flags |= GB_WIDGET_FOCUSED;
+            gb_field(x, y, w, h, label, flags);
+            return GBR_RT_OK;
+#endif
         default:
             return GBR_RT_ERR_UNSUPPORTED;
     }
@@ -201,6 +293,8 @@ unsigned char gbr_runtime_init(gbr_runtime_t *runtime,
     runtime->resource = resource;
     runtime->states = states;
     runtime->state_count = state_count;
+    runtime->text_bindings = 0;
+    runtime->text_binding_count = 0;
     for (index = 0; index < resource->object_count; index++) {
         if (!gbr_object_at(resource, (unsigned char)index, &object))
             return GBR_RT_ERR_OBJECT;
@@ -208,6 +302,37 @@ unsigned char gbr_runtime_init(gbr_runtime_t *runtime,
     }
     return GBR_RT_OK;
 }
+
+#ifdef GBR_FORM_RUNTIME
+unsigned char gbr_bind_text(gbr_runtime_t *runtime,
+                            const gbr_text_binding_t *bindings,
+                            unsigned char binding_count)
+{
+    gbr_object_t object;
+    unsigned char index;
+    unsigned char previous;
+    if (runtime == 0 || runtime->resource == 0) return 0;
+    if (binding_count == 0) {
+        runtime->text_bindings = 0;
+        runtime->text_binding_count = 0;
+        return 1;
+    }
+    if (bindings == 0 || binding_count > runtime->tree.object_count) return 0;
+    for (index = 0; index < binding_count; index++) {
+        if (!object_in_tree(runtime, bindings[index].object_index) ||
+            !gbr_object_at(runtime->resource, bindings[index].object_index,
+                           &object) ||
+            !text_type(object.type) || !bounded_override(bindings[index].text))
+            return 0;
+        for (previous = 0; previous < index; previous++)
+            if (bindings[previous].object_index == bindings[index].object_index)
+                return 0;
+    }
+    runtime->text_bindings = bindings;
+    runtime->text_binding_count = binding_count;
+    return 1;
+}
+#endif
 
 unsigned char gbr_object_rect(const gbr_runtime_t *runtime,
                               unsigned char object_index,
@@ -250,7 +375,11 @@ unsigned char gbr_draw_tree(const gbr_runtime_t *runtime,
         if (!gbr_object_at(runtime->resource, (unsigned char)index, &object))
             return GBR_RT_ERR_OBJECT;
         if (object.type != GBR_TYPE_BOX && object.type != GBR_TYPE_TEXT &&
-            object.type != GBR_TYPE_STRING && object.type != GBR_TYPE_BUTTON)
+            object.type != GBR_TYPE_STRING && object.type != GBR_TYPE_BUTTON
+#ifdef GBR_FORM_RUNTIME
+            && object.type != GBR_TYPE_FIELD
+#endif
+            )
             return GBR_RT_ERR_UNSUPPORTED;
     }
     for (index = runtime->tree.root; index < end; index++) {
@@ -321,3 +450,68 @@ unsigned int gbr_state(const gbr_runtime_t *runtime,
         return 0;
     return runtime->states[object_index];
 }
+
+#ifdef GBR_FORM_RUNTIME
+static unsigned char focusable(const gbr_runtime_t *runtime,
+                               unsigned char object_index)
+{
+    gbr_object_t object;
+    return (unsigned char)(!object_blocked(runtime, object_index, 1) &&
+                           gbr_object_at(runtime->resource, object_index,
+                                         &object) &&
+                           (object.flags & GBR_FLAG_SELECTABLE));
+}
+
+unsigned char gbr_focus_set(gbr_runtime_t *runtime,
+                            unsigned char object_index)
+{
+    unsigned int index;
+    unsigned int end;
+    if (runtime == 0 || runtime->states == 0 ||
+        !object_in_tree(runtime, object_index) ||
+        !focusable(runtime, object_index))
+        return 0;
+    end = (unsigned int)runtime->tree.root + runtime->tree.object_count;
+    for (index = runtime->tree.root; index < end; index++)
+        runtime->states[index] &= (unsigned int)~GBR_STATE_OUTLINED;
+    runtime->states[object_index] |= GBR_STATE_OUTLINED;
+    return 1;
+}
+
+unsigned char gbr_focus_next(gbr_runtime_t *runtime,
+                             unsigned char current,
+                             unsigned char reverse,
+                             unsigned char *object_index)
+{
+    unsigned int root;
+    unsigned int end;
+    unsigned int candidate;
+    unsigned char steps;
+    if (runtime == 0 || object_index == 0 || runtime->states == 0)
+        return 0;
+    *object_index = GBR_HIT_NONE;
+    root = runtime->tree.root;
+    end = root + runtime->tree.object_count;
+    if ((unsigned int)current >= root && (unsigned int)current < end) {
+        candidate = current;
+        if (reverse)
+            candidate = (candidate == root) ? end - 1u : candidate - 1u;
+        else
+            candidate = (candidate + 1u == end) ? root : candidate + 1u;
+    } else {
+        candidate = reverse ? end - 1u : root;
+    }
+    for (steps = 0; steps < runtime->tree.object_count; steps++) {
+        if (focusable(runtime, (unsigned char)candidate)) {
+            if (!gbr_focus_set(runtime, (unsigned char)candidate)) return 0;
+            *object_index = (unsigned char)candidate;
+            return 1;
+        }
+        if (reverse)
+            candidate = (candidate == root) ? end - 1u : candidate - 1u;
+        else
+            candidate = (candidate + 1u == end) ? root : candidate + 1u;
+    }
+    return 0;
+}
+#endif

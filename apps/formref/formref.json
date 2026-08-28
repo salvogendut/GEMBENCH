@@ -1,0 +1,122 @@
+{
+  "format": "GBR1",
+  "trees": [
+    {
+      "name": "FORMREF",
+      "root": {
+        "id": "FORMREF_ROOT",
+        "type": "box",
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "children": [
+          {
+            "type": "text",
+            "x": 0,
+            "y": 1,
+            "w": 40,
+            "h": 8,
+            "text": "Name"
+          },
+          {
+            "id": "FORMREF_NAME",
+            "type": "field",
+            "x": 44,
+            "y": 0,
+            "w": 116,
+            "h": 10,
+            "text": "GEOBENCH",
+            "flags": ["selectable"],
+            "state": ["outlined"]
+          },
+          {
+            "type": "text",
+            "x": 0,
+            "y": 17,
+            "w": 40,
+            "h": 8,
+            "text": "Style"
+          },
+          {
+            "id": "FORMREF_STYLE",
+            "type": "field",
+            "x": 44,
+            "y": 16,
+            "w": 116,
+            "h": 10,
+            "text": "Classic",
+            "flags": ["selectable"],
+            "children": [
+              {
+                "type": "text",
+                "x": 104,
+                "y": 1,
+                "w": 8,
+                "h": 8,
+                "text": ">"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "x": 0,
+            "y": 33,
+            "w": 40,
+            "h": 8,
+            "text": "Level"
+          },
+          {
+            "id": "FORMREF_LEVEL_DEC",
+            "type": "button",
+            "x": 44,
+            "y": 32,
+            "w": 12,
+            "h": 10,
+            "text": "-",
+            "flags": ["selectable"]
+          },
+          {
+            "id": "FORMREF_LEVEL_VALUE",
+            "type": "field",
+            "x": 56,
+            "y": 32,
+            "w": 40,
+            "h": 10,
+            "text": "3"
+          },
+          {
+            "id": "FORMREF_LEVEL_INC",
+            "type": "button",
+            "x": 96,
+            "y": 32,
+            "w": 12,
+            "h": 10,
+            "text": "+",
+            "flags": ["selectable"]
+          },
+          {
+            "id": "FORMREF_SAVE",
+            "type": "button",
+            "x": 0,
+            "y": 52,
+            "w": 32,
+            "h": 10,
+            "text": "Save",
+            "flags": ["selectable", "default", "exit"]
+          },
+          {
+            "id": "FORMREF_CANCEL",
+            "type": "button",
+            "x": 40,
+            "y": 52,
+            "w": 44,
+            "h": 10,
+            "text": "Cancel",
+            "flags": ["selectable", "exit"]
+          }
+        ]
+      }
+    }
+  ]
+}

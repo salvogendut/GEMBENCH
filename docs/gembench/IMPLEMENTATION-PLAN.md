@@ -42,7 +42,7 @@ baseline is recorded.
 | 2. Baseline (complete 2026-08-28) | Record kernel size, app headroom, mapper/VRAM use, stack, repaint, and input timing | 3-5 days | Screen 7 boots with reproducible measurements |
 | 3. GBR hardening (complete 2026-08-28) | Add a binary verifier, golden files, and a target reader | 3-5 days | Z80 code safely validates and navigates the example resource |
 | 4. Object runtime (complete 2026-08-28) | Implement app-linked drawing, lookup, state, and hit testing | 1-2 weeks | Box, text, and button objects work on Screen 7 |
-| 5. Vertical slice | Convert one representative dialog and add semantic theme roles | 1 week | Pointer and keyboard interaction require no custom object drawing |
+| 5. Vertical slice (complete 2026-08-28) | Convert one representative dialog and add semantic theme roles | 1 week | Pointer and keyboard interaction require no custom object drawing |
 | 6. Window kinds | Add append-only flags and messages for close, maximise, move, and resize | 1-2 weeks | The kernel owns the selected window furniture |
 | 7. Banking decision | Prototype an auxiliary resource segment and resident renderer | 1 week | Measurements compare resident and app-linked implementations |
 | 8. Review | Evaluate size, responsiveness, and maintainability | 2-3 days | The first resource and window ABI is frozen or deliberately revised |
@@ -112,5 +112,8 @@ currently compiles to less than 4 KiB with no static data. Milestone 4 adds an
 app-linked box/text/string/button renderer, caller-owned state overlays,
 deepest-selectable-object hit testing, and a File Manager-launched external
 `HELLO.GBR` demonstration. The object runtime also compiles below its 4 KiB
-code budget with no static data. Milestone 5, converting a representative form
-and adding keyboard traversal, is the next implementation step.
+code budget with no static data. Milestone 5 adds shared semantic pen roles,
+field rendering, live caller-owned text bindings, cyclic keyboard focus,
+deterministic generated C identifiers, and a GBR-driven MSX2 FormRef dialog.
+CPC and PCW retain their prior FormRef implementation and binary sizes. Window
+kinds are the next implementation step.

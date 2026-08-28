@@ -92,6 +92,12 @@ void gb_frame(unsigned char col, unsigned char line,     /* rectangle outline   
  * canvas=0, surface=1, edge/text=2, accent/focus=3. Geometry remains fixed and
  * app-owned; this keeps the API portable across CPC, MSX Screen 6/7, and PCW.
  */
+#define GB_UI_CANVAS  0u
+#define GB_UI_SURFACE 1u
+#define GB_UI_EDGE    2u
+#define GB_UI_TEXT    2u
+#define GB_UI_ACCENT  3u
+
 #define GB_WIDGET_FOCUSED 0x01
 #define GB_WIDGET_ARROWS  0x02
 #define GB_WIDGET_CHECKED 0x04

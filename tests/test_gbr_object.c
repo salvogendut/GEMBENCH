@@ -3,6 +3,7 @@
 
 #include "gb.h"
 #include "gbr_object.h"
+#include "../apps/formref/formref_gbr.h"
 
 static const unsigned char golden[] = {
 #include "fixtures/hello-dialog.gbr.inc"
@@ -13,6 +14,7 @@ static const unsigned char golden[] = {
 #define CALL_TEXT    3
 #define CALL_REVERSE 4
 #define CALL_BUTTON  5
+#define CALL_FIELD   6
 
 typedef struct draw_call {
     unsigned char type, x, y, w, h, value;
@@ -66,6 +68,12 @@ void gb_button(unsigned char x, unsigned char y, unsigned char w,
                unsigned char h, const char *text, unsigned char flags)
 {
     record(CALL_BUTTON, x, y, w, h, flags, text);
+}
+
+void gb_field(unsigned char x, unsigned char y, unsigned char w,
+              unsigned char h, const char *text, unsigned char flags)
+{
+    record(CALL_FIELD, x, y, w, h, flags, text);
 }
 
 static void check(int ok, const char *name)
@@ -168,6 +176,82 @@ static void test_hit_and_state(void)
           "unknown state bits are rejected");
 }
 
+static void test_text_binding_and_focus(void)
+{
+    gbr_resource_t resource;
+    gbr_runtime_t runtime;
+    unsigned int states[3];
+    unsigned char focus;
+    static const gbr_text_binding_t binding = { 2, "Proceed" };
+    static const gbr_text_binding_t duplicate[2] = {
+        { 2, "First" }, { 2, "Second" }
+    };
+
+    check(open_runtime(golden, &resource, &runtime, states),
+          "binding runtime opens");
+    check(gbr_bind_text(&runtime, &binding, 1),
+          "caller-owned text binding is accepted");
+    call_count = 0;
+    check(gbr_draw_tree(&runtime, 120, 54) == GBR_RT_OK &&
+              calls[4].type == CALL_BUTTON &&
+              !strcmp(calls[4].text, "Proceed"),
+          "dynamic text replaces an immutable resource string");
+    check(!gbr_bind_text(&runtime, duplicate, 2),
+          "duplicate text bindings are rejected");
+    check(gbr_focus_next(&runtime, GBR_HIT_NONE, 0, &focus) && focus == 2 &&
+              (gbr_state(&runtime, 2) & GBR_STATE_OUTLINED),
+          "focus traversal selects the first selectable object");
+    check(gbr_focus_next(&runtime, focus, 1, &focus) && focus == 2,
+          "focus traversal wraps in reverse");
+    check(gbr_state_change(&runtime, 2, GBR_STATE_DISABLED, 0) &&
+              !gbr_focus_next(&runtime, focus, 0, &focus) &&
+              focus == GBR_HIT_NONE,
+          "focus traversal skips disabled objects");
+}
+
+static void test_formref_resource(void)
+{
+    gbr_resource_t resource;
+    gbr_runtime_t runtime;
+    unsigned int states[FORMREF_OBJECT_COUNT];
+    unsigned char tree;
+    unsigned char focus;
+    unsigned char hit;
+    static const gbr_text_binding_t bindings[3] = {
+        { FORMREF_NAME, "GEMBENCH" },
+        { FORMREF_STYLE, "Refined" },
+        { FORMREF_LEVEL_VALUE, "9" }
+    };
+
+    check(gbr_open(&resource, formref_gbr, FORMREF_GBR_SIZE) == GBR_OK &&
+              gbr_find_tree(&resource, "FORMREF", &tree) &&
+              gbr_runtime_init(&runtime, &resource, tree, states,
+                               FORMREF_OBJECT_COUNT) == GBR_RT_OK,
+          "FormRef GBR opens in the target runtime");
+    check(gbr_bind_text(&runtime, bindings, 3),
+          "FormRef dynamic values bind");
+    call_count = 0;
+    check(gbr_draw_tree(&runtime, 84, 70) == GBR_RT_OK,
+          "FormRef fields and composed controls draw");
+    check(call_count == 11 && calls[1].type == CALL_FIELD &&
+              !strcmp(calls[1].text, "GEMBENCH") &&
+              calls[3].type == CALL_FIELD &&
+              !strcmp(calls[3].text, "Refined") &&
+              calls[7].type == CALL_FIELD && !strcmp(calls[7].text, "9"),
+          "FormRef dynamic field text reaches shared widgets");
+    check(gbr_hit_test(&runtime, 84, 70, 130, 88, &hit) &&
+              hit == FORMREF_STYLE,
+          "FormRef style hit comes from resource geometry");
+    focus = FORMREF_NAME;
+    check(gbr_focus_next(&runtime, focus, 0, &focus) &&
+              focus == FORMREF_STYLE &&
+              gbr_focus_next(&runtime, focus, 0, &focus) &&
+              focus == FORMREF_LEVEL_DEC &&
+              gbr_focus_next(&runtime, focus, 1, &focus) &&
+              focus == FORMREF_STYLE,
+          "FormRef keyboard traversal follows resource preorder");
+}
+
 static void test_unsupported_preflight(void)
 {
     unsigned char data[sizeof(golden)];
@@ -175,7 +259,7 @@ static void test_unsupported_preflight(void)
     gbr_runtime_t runtime;
     unsigned int states[3];
     memcpy(data, golden, sizeof(data));
-    data[0x32 + GBR_O_TYPE] = GBR_TYPE_FIELD;
+    data[0x32 + GBR_O_TYPE] = GBR_TYPE_CHECKBOX;
     fix_checksum(data, sizeof(data));
     check(open_runtime(data, &resource, &runtime, states),
           "valid future object type opens");
@@ -189,6 +273,8 @@ int main(void)
 {
     test_geometry_and_draw();
     test_hit_and_state();
+    test_text_binding_and_focus();
+    test_formref_resource();
     test_unsupported_preflight();
     if (failures) {
         printf("\n%d GBR object test(s) FAILED\n", failures);

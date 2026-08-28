@@ -31,7 +31,7 @@ preempted.
 | gbrdemo | `GBRDEMO.APP` | MSX2 object-runtime proof: opening `HELLO.GBR` draws and hit-tests its box, text, and button directly from the validated resource tree |
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal: CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; MSX2 TCP/IP UNAPI in a 78x22 window; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
 | nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status; CPC uses the active GBNET backend, PCW uses PerryNet over PerryFi |
-| formref  | `FORMREF.APP`  | development reference for app-linked form composition and the first `GBAP` embedded application icon, using the Daruma artwork |
+| formref  | `FORMREF.APP`  | MSX2 GBR vertical slice with resource-defined fields/actions, live text, pointer hit-testing and keyboard focus; CPC/PCW retain the reusable-widget reference; also carries the first `GBAP` Daruma icon |
 | sndtest  | `SNDTEST.APP`  | non-blocking app-linked sound diagnostic: PSG scale/noise on CPC/MSX2 and DKsound-equipped PCWs, with stock-PCW beeper fallback |
 | wget     | `WGET.APP`     | GUI HTTP downloader with bounded redirects and streamed writes to an automatically derived 8.3 filename; CPC continues exact-length partial files with HTTP Range, while PCW uses PerryNet and safely restarts CP/M-record files |
 | browser  | `BROWSER.APP`  | fullscreen HTTP browser for CPC, MSX2, and PCW; demand-streams into a bounded borrowed-bank cache, renders compact GET forms, simple table grids, and sequential lazy GBPC images through one image slot, hides proxy targets behind highlighted link labels, and loads/saves offline `.HTM` files without retaining a DOM |
@@ -153,9 +153,10 @@ Settings is the selector/stepper reference, and Clock combines steppers, a
 standard action row, modal form lifecycle, and the opt-in time setter. XAOS uses
 compact buttons, and Icon Editor demonstrates
 pressed and disabled button states. Disk Utility uses a shared command button
-for its destructive format workflow. `FORMREF.APP` is staged as a development
-diagnostic and demonstrates form composition without moving any state or code
-into the resident kernel.
+for its destructive format workflow. On MSX2, `FORMREF.APP` embeds a verified
+GBR tree and demonstrates resource-defined form drawing, hit-testing, live text,
+and cyclic focus without moving state or code into the resident kernel. Its CPC
+and PCW builds retain the inherited reusable-widget implementation.
 
 ## App-linked sound
 

@@ -28,12 +28,14 @@ The completed foundation currently covers:
 - an app-linked Screen 7 runtime for box, text/string, and button objects;
 - caller-owned state overlays plus deepest-selectable-object hit testing;
 - an MSX2 File Manager association and external `HELLO.GBR` demonstration;
+- source-only object IDs, deterministic C-header generation, field objects,
+  live text bindings, and cyclic keyboard focus;
+- an MSX2 FormRef dialog whose drawing and hit geometry come from embedded GBR;
 - committed golden data and corruption tests; and
 - an MSX2-only black, white, grey, and red Screen 7 visual foundation.
 
-The next runtime milestone converts a representative application form to the
-resource path and adds keyboard traversal. GEM-style window kinds follow that
-vertical slice.
+The next runtime milestone adds GEM-style window kinds and kernel-owned
+furniture through append-only flags and messages.
 
 ## Fixed target
 
@@ -65,6 +67,13 @@ To exercise the object runtime, open the first desktop drive and double-click
 `HELLO.GBR` in its root. File Manager launches `GBRDEMO.APP`, which validates
 the external resource, draws its `HELLO` tree, and toggles the button's selected
 state when it is clicked.
+
+Build and automatically exercise the embedded FormRef resource in openMSX:
+
+```sh
+make formref
+tools/test_formref_openmsx.sh
+```
 
 Capture the reproducible pre-GBR baseline under the sibling `1983`
 emulator checkout:

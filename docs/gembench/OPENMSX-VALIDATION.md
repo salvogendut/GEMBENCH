@@ -105,3 +105,29 @@ python3 debug/gembench_baseline_1983.py \
   --output-dir "$PWD/build/gbr-1983" \
   --frames 6000
 ```
+
+## FormRef vertical slice
+
+Milestone 5 was validated on 2026-08-28 with the normal 13,420-byte MSX2
+`FORMREF.APP` (2,708 bytes of loader headroom). The app embeds a verified
+306-byte GBR tree containing fields, buttons, labels, and actions. Its MSX2
+draw callback delegates the form body to `gbr_draw_tree`; clicks use
+`gbr_hit_test`, and Tab/Return use the shared focus and activation path.
+
+The deterministic driver creates a disposable image with an `A.APP` alias for
+the exact FormRef payload, launches it through File Manager, then uses real
+keyboard-matrix events to select Compact, decrement Level from 3 to 2, traverse
+to Save, and activate it. The trace requires the resource tree count, app entry,
+first managed draw, modal renderer, Save commit, and modal restore, and checks
+the committed style/level bytes. `build/msx/formref-focus.png` records the
+complete resource-defined dialog with its red focus indication.
+
+```sh
+make formref
+tools/test_formref_openmsx.sh
+```
+
+The driver waits for normal low-RAM mapping and an idle V9938 command engine
+before capturing, avoiding BIOS-page and in-flight Screen-7 screenshots. CPC
+and PCW FormRef builds remain 7,054 bytes and retain their inherited widget
+implementation.

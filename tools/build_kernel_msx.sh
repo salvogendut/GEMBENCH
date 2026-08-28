@@ -139,7 +139,8 @@ APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6800 BUTTON=1 tools/build_capp.sh apps/calculator build/msx/CALC.RAW
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
-APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+python3 tools/gbrc.py apps/formref/formref.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_gbr.h --symbol-prefix FORMREF
+APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7600 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORMS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
 python3 tools/gbrc.py examples/hello-dialog.json --output build/msx/HELLO.GBR
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7000 BUTTON=1 GBR_OBJECTS=1 tools/build_capp.sh apps/gbrdemo build/msx/GBRDEMO.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/msx/SNDTEST.RAW
