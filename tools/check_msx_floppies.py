@@ -142,7 +142,7 @@ def main() -> None:
         fail(
             f"{MAIN.relative_to(ROOT)}: system PICS must contain only LOGO.PIC"
         )
-    logo = ROOT / "assets/pictures/LOGO.PIC"
+    logo = ROOT / "assets/msx/GEMLOGO.PIC"
     if payload(MAIN, "/PICS/LOGO.PIC") != logo.read_bytes():
         fail(f"{MAIN.relative_to(ROOT)}: PICS/LOGO.PIC differs from asset")
 
@@ -167,6 +167,7 @@ def main() -> None:
         path.name.upper(): path.read_bytes()
         for path in sorted((ROOT / "assets/pictures").glob("*.PIC"))
     }
+    pictures["LOGO.PIC"] = logo.read_bytes()
     actual_pictures = {
         name.removeprefix("PICS/")
         for name in extras_files

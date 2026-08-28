@@ -29,9 +29,14 @@
 #define WORK_PER_FRAME 4
 #define FILL_ROWS_PER_WORK 4
 
-/* the four desktop pens as panel colours (0=blue,1=white,2=black,3=red); black
-   (pen 2) is the background/border between panels. */
-static const unsigned char inks[3] = { 1, 3, 0 };   /* white, red, blue */
+#ifdef GB_MSX2
+/* GEMBENCH MSX2 panels use white, red, and grey over a black canvas. */
+static const unsigned char inks[3] = { 1, 3, 2 };
+#define DECO_CANVAS 0
+#else
+static const unsigned char inks[3] = { 1, 3, 0 };   /* inherited white/red/blue */
+#define DECO_CANVAS 2
+#endif
 
 #ifdef GB_MSX2
 #define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
@@ -42,9 +47,9 @@ static const unsigned char inks[3] = { 1, 3, 0 };   /* white, red, blue */
 #define GLINE_PEN (*(volatile unsigned char *)0xC038)
 
 /* Screen 7 keeps these fixed extended palette entries in addition to the
-   theme-controlled desktop pens. Pen 2 remains the black panel border. */
+   theme-controlled desktop pens. Pen 0 remains the black panel border. */
 static const unsigned char inks16[15] = {
-    1, 3, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+    1, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 };
 static unsigned char mode7;
 
@@ -117,7 +122,7 @@ static unsigned char panel_ink(void)
    the fullscreen saver returns to input dispatch between visible updates. */
 static void deco_begin(void)
 {
-    gb_fill(0, 0, SCR_W, SCR_H, 2);             /* black canvas */
+    gb_fill(0, 0, SCR_W, SCR_H, DECO_CANVAS);
     sx[0] = 0; sy[0] = 0; sw[0] = SCR_W; sh_[0] = SCR_H; sd[0] = 0;
     top = 1;
     nleaf = 0;

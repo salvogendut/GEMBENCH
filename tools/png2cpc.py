@@ -21,7 +21,7 @@ Output is a RASM-includable .asm file: a label, <label>_w (width in BYTES),
 <label>_h (height in rows), and the row-major encoded bytes.
 
 Usage:
-    tools/png2cpc.py [--platform msx2] <in.png> <out.asm> <label> [WxH]
+    tools/png2cpc.py [--platform msx2] [--gembench] <in.png> <out.asm> <label> [WxH]
 
 --platform msx2 emits V9938 Screen-6 packing instead of CPC Mode 1 (same 4px/byte
 geometry).
@@ -40,15 +40,21 @@ PALETTE = [
     ((0x00, 0x00, 0x00), 2),   # black
     ((0xFF, 0x00, 0x00), 3),   # red
 ]
+GEMBENCH_PALETTE = [
+    ((0x00, 0x00, 0x00), 0),   # black canvas
+    ((0xFF, 0xFF, 0xFF), 1),   # white
+    ((0x92, 0x92, 0x92), 2),   # grey structure
+    ((0xFF, 0x00, 0x00), 3),   # red accent
+]
 
 # Which screen bits carry pen bit0 / pen bit1 for each of the 4 pixels in a byte.
 BIT0_FOR_PIXEL = (7, 6, 5, 4)
 BIT1_FOR_PIXEL = (3, 2, 1, 0)
 
 
-def nearest_pen(rgb):
+def nearest_pen(rgb, palette=PALETTE):
     best, best_d = 0, None
-    for (r, g, b), pen in PALETTE:
+    for (r, g, b), pen in palette:
         d = (r - rgb[0]) ** 2 + (g - rgb[1]) ** 2 + (b - rgb[2]) ** 2
         if best_d is None or d < best_d:
             best, best_d = pen, d
@@ -78,8 +84,11 @@ def mode1_to_screen6(byte):
 def main():
     argv = sys.argv[1:]
     platform = 'cpc'
+    palette = PALETTE
     if len(argv) >= 2 and argv[0] == '--platform':
         platform, argv = argv[1], argv[2:]
+    if argv and argv[0] == '--gembench':
+        palette, argv = GEMBENCH_PALETTE, argv[1:]
     if len(argv) not in (3, 4):
         print(__doc__)
         sys.exit(2)
@@ -103,7 +112,7 @@ def main():
         for bx in range(wbytes):
             pens = []
             for i in range(4):
-                pen = nearest_pen(px[bx * 4 + i, y])
+                pen = nearest_pen(px[bx * 4 + i, y], palette)
                 pens.append(pen)
                 used[pen] = used.get(pen, 0) + 1
             row.append(encode_byte(pens))
@@ -127,7 +136,9 @@ def main():
             for row in rows:
                 f.write("                db    " + ",".join(f"#{b:02X}" for b in row) + "\n")
 
-    names = {0: "blue", 1: "white", 2: "black", 3: "red"}
+    names = ({0: "black", 1: "white", 2: "grey", 3: "red"}
+             if palette is GEMBENCH_PALETTE else
+             {0: "blue", 1: "white", 2: "black", 3: "red"})
     report = ", ".join(f"pen{p} {names[p]}={used.get(p,0)}" for p in range(4))
     print(f"{in_png}: {w}x{h} -> {wbytes}x{h} bytes ({wbytes*h} B), {label}  [{report}]")
 

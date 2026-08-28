@@ -14,6 +14,7 @@ DEFAULT_EMULATOR = ROOT.parent / "1983" / "1983"
 DEFAULT_MODELS = ROOT.parent / "1983" / "1983-models.conf"
 DEFAULT_SUNRISE_ROM = ROOT.parent / "1983" / "ROMS" / "Nextor-2.1.1.SunriseIDE.ROM"
 DEFAULT_IDE_IMAGE = ROOT / "QA" / "MSX" / "GBMSX.IMG"
+PASTE_INITIAL_DELAY_FRAMES = 3
 
 
 def main(argv: list[str]) -> int:
@@ -26,6 +27,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--output-dir", type=Path, default=ROOT / "build" / "baseline")
     parser.add_argument("--frames", type=int, default=6000)
     parser.add_argument("--runtime-probes", action="store_true")
+    parser.add_argument("--input-response", action="store_true")
+    parser.add_argument("--keyboard-paste-at", type=int, default=2000)
     parser.add_argument("--static-json", type=Path)
     args = parser.parse_args(argv)
 
@@ -39,6 +42,12 @@ def main(argv: list[str]) -> int:
         parser.error(f"system IDE image not found: {args.ide_image}")
     if args.frames <= 0:
         parser.error("--frames must be positive")
+    if args.input_response and not args.runtime_probes:
+        parser.error("--input-response requires --runtime-probes")
+    if args.keyboard_paste_at < 0:
+        parser.error("--keyboard-paste-at must be non-negative")
+    if args.input_response and args.frames <= args.keyboard_paste_at + 10:
+        parser.error("--frames must leave time for the injected keyboard response")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     log_path = args.output_dir / "1983.log"
@@ -71,8 +80,12 @@ def main(argv: list[str]) -> int:
         str(screenshot_path),
         "--dump-state",
         "--dump-ram",
-        "0xC018:52",
+        "0xC000:96",
     ]
+    if args.input_response:
+        command.extend(
+            ["--paste-text", "b", "--paste-at", str(args.keyboard_paste_at)]
+        )
     completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
     log = completed.stdout + completed.stderr
     log_path.write_text(log, encoding="utf-8")
@@ -99,6 +112,14 @@ def main(argv: list[str]) -> int:
     ]
     if args.runtime_probes:
         report_command.append("--require-probes")
+    if args.input_response:
+        report_command.extend(
+            [
+                "--require-input-keyboard",
+                "--keyboard-injection-frame",
+                str(args.keyboard_paste_at + PASTE_INITIAL_DELAY_FRAMES),
+            ]
+        )
     if args.static_json is not None:
         report_command.extend(["--static-json", str(args.static_json)])
     report = subprocess.run(report_command, cwd=ROOT, check=False)

@@ -126,6 +126,10 @@ def main() -> None:
         path.name: path.read_bytes() for path in pictures if modes[path.name] == 1
     }
     msx_assets = {path.name: path.read_bytes() for path in pictures}
+    gembench_logo = ROOT / "assets/msx/GEMLOGO.PIC"
+    if not gembench_logo.is_file():
+        sys.exit("assets/msx/GEMLOGO.PIC: missing MSX2 GEMBENCH wallpaper")
+    msx_assets["LOGO.PIC"] = gembench_logo.read_bytes()
     if not assets:
         sys.exit("no portable mode-1 pictures found")
 
@@ -163,7 +167,7 @@ def main() -> None:
     ):
         names = {path.name for path in distro.glob("*.PIC")}
         if names != set(expected_assets):
-            sys.exit(f"{distro.relative_to(ROOT)}: picture set differs from assets/pictures")
+            sys.exit(f"{distro.relative_to(ROOT)}: picture set differs from target assets")
         for name, expected in expected_assets.items():
             compare_payload(str((distro / name).relative_to(ROOT)), (distro / name).read_bytes(), expected)
 
@@ -349,7 +353,11 @@ def main() -> None:
         compare_payload(f"QA/PCW/Floppies/COMPANION.DSK:{name}", pcw_companion[name], expected, padded=True)
 
     mode7_count = len(msx_assets) - len(assets)
-    print(f"portable PIC distribution: {len(assets)} byte-identical pictures across CPC, MSX and PCW")
+    shared_count = len(assets) - 1 if "LOGO.PIC" in assets else len(assets)
+    print(
+        f"portable PIC distribution: {shared_count} shared pictures across CPC, MSX and PCW; "
+        "LOGO.PIC has an MSX2 GEMBENCH override"
+    )
     print(f"MSX Screen 7 distribution: {mode7_count} additional pictures in QA/MSX/CARD/PICS")
     print(f"portable BDP distribution: {len(backdrops)} byte-identical backdrops across CPC, MSX and PCW")
     print(

@@ -1,8 +1,6 @@
 /* gbscroll.c - opt-in vertical scrollbar shared by GEOBENCH applications. */
 #include "gb.h"
 
-#define UI_SURFACE 1
-#define UI_ACCENT  3
 #define ARROW_H    8
 #define THUMB_MIN  6
 
@@ -31,14 +29,14 @@ void gb_vscroll(unsigned char x, unsigned char y, unsigned char w, unsigned char
 {
     unsigned char ty, th;
     scroll_geometry(y, h, pos, total, page, &ty, &th);
-    gb_fill(x, y, w, h, UI_SURFACE);
+    gb_fill(x, y, w, h, GB_UI_SURFACE);
     if (w > 2 && th > 2)
         gb_fill((unsigned char)(x + 1), (unsigned char)(ty + 1),
-                (unsigned char)(w - 2), (unsigned char)(th - 2), UI_ACCENT);
+                (unsigned char)(w - 2), (unsigned char)(th - 2), GB_UI_ACCENT);
     if (flags & GB_WIDGET_ARROWS) {
-        gb_fill(x, y, w, ARROW_H, UI_SURFACE);
+        gb_fill(x, y, w, ARROW_H, GB_UI_SURFACE);
         gb_textbw((unsigned char)(x + 1), y, GLYPH_TRI_UP);
-        gb_fill(x, (unsigned char)(y + h - ARROW_H), w, ARROW_H, UI_SURFACE);
+        gb_fill(x, (unsigned char)(y + h - ARROW_H), w, ARROW_H, GB_UI_SURFACE);
         gb_textbw((unsigned char)(x + 1), (unsigned char)(y + h - ARROW_H),
                   GLYPH_TRI_DOWN);
     }

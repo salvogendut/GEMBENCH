@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -22,6 +22,11 @@ msx:
 
 # GEMBENCH's fixed-target entry point. Keep the upstream alias during bootstrap.
 gembench-msx: msx
+
+# Reproduce the MSX2-only four-pen wallpaper from the clean logo source.
+gembench-theme-assets:
+	$(PYTHON) tools/picconv.py assets/GEMBENCH_LOGO.png \
+		assets/msx/GEMLOGO.PIC --gembench -d ordered -w 176 --height 176
 
 # Generate a static report from the staged distribution. The 1983 target adds
 # guarded mapper/VRAM boot telemetry plus a desktop screenshot.
@@ -42,6 +47,19 @@ gembench-baseline-probes-1983: gembench-baseline-1983
 	$(PYTHON) debug/gembench_baseline_1983.py \
 		--runtime-probes \
 		--static-json build/baseline/release-baseline.json
+
+# Inject a real MSX matrix key after the diagnostic image has armed its input
+# telemetry. The guest publishes the acknowledgement only after drawing it.
+gembench-baseline-input-1983: gembench-baseline-probes-1983
+	$(PYTHON) debug/gembench_baseline_1983.py \
+		--runtime-probes \
+		--input-response \
+		--static-json build/baseline/release-baseline.json
+
+# Repeat the reference input run twice. openMSX can drive the cursor-key pointer
+# path directly; its results complement 1983's headless keyboard capture.
+gembench-baseline-input-openmsx: gembench-baseline-input-1983
+	$(PYTHON) debug/gembench_input_openmsx.py
 
 # Compatibility alias: preemptive scheduling is the release default.
 msx-preemptive: msx
@@ -74,8 +92,9 @@ app:
 	bash tools/rebuild_app.sh "$(APP)"
 
 formref:
+	python3 tools/gbrc.py apps/formref/formref.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_gbr.h --symbol-prefix FORMREF
 	APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/FORMREF.RAW
-	APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+	APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7600 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORMS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
 	APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_PCW" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/pcw/FORMREF.RAW
 
 sndtest:
@@ -95,6 +114,7 @@ titlebar-editor:
 
 gbr-check:
 	$(PYTHON) -m unittest discover -s tests -v
+	bash tests/run_gbr_reader_tests.sh
 
 gbr-example: $(GBR_EXAMPLE_OUTPUT)
 

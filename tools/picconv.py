@@ -30,6 +30,9 @@ from PIL import Image
 # pen -> display RGB and the CPC hardware ink stored in the .PIC palette.
 PAL_RGB = [(0x00, 0x00, 0x80), (0xFF, 0xFF, 0xFF), (0x00, 0x00, 0x00), (0xFF, 0x00, 0x00)]
 INKS = [1, 26, 0, 6]
+GEMBENCH_PAL_RGB = [(0x00, 0x00, 0x00), (0xFF, 0xFF, 0xFF),
+                    (0x92, 0x92, 0x92), (0xFF, 0x00, 0x00)]
+GEMBENCH_INKS = [0, 26, 13, 6]
 
 # Screen-7 entries 4..15 are fixed by lib/msx/screen7.asm. The first four remain
 # the configurable GEOBENCH UI pens; this default palette matches a stock setup.
@@ -47,6 +50,7 @@ CPC_RGB = [
 ]
 PAL16_INKS = INKS + [18, 2, 24, 8, 20, 15, 16, 11, 21, 5, 13, 22]
 PAL16_RGB = [CPC_RGB[ink] for ink in PAL16_INKS]
+GEMBENCH_PAL16_RGB = GEMBENCH_PAL_RGB + PAL16_RGB[4:]
 BIT0_FOR_PIXEL = (7, 6, 5, 4)        # Mode-1: pen bit0 of the 4 pixels in a byte
 BIT1_FOR_PIXEL = (3, 2, 1, 0)        # ... pen bit1
 DITHERS = ("floyd", "atkinson", "ordered", "none")
@@ -167,7 +171,7 @@ def prepare(img, width=0, height=0):
     return img.resize((out_w, out_h), Image.LANCZOS)
 
 
-def save_pic(path, pens, w, h, colors=4):
+def save_pic(path, pens, w, h, colors=4, inks=INKS):
     if colors not in (4, 16):
         raise ValueError("colors must be 4 or 16")
     if w < 4 or w % 4:
@@ -178,18 +182,21 @@ def save_pic(path, pens, w, h, colors=4):
         raise ValueError(
             f"16-color pictures are limited to {SCREEN7_MAX_W}x{SCREEN7_MAX_H}")
     mode = MODE_SCREEN7 if colors == 16 else MODE_4COLOUR
-    hdr = b"GBPC" + bytes([2, mode]) + struct.pack("<HH", w, h) + bytes(INKS)
+    hdr = b"GBPC" + bytes([2, mode]) + struct.pack("<HH", w, h) + bytes(inks)
     with open(path, "wb") as f:
         f.write(hdr)
         f.write(pack16(pens) if colors == 16 else pack(pens))
 
 
-def convert_file(in_png, out_pic, dither, width=0, height=0, colors=4):
+def convert_file(in_png, out_pic, dither, width=0, height=0, colors=4,
+                 gembench=False):
     img = Image.open(in_png).convert("RGB")
     img = prepare(img, width, height)
-    pens = quantize(img, dither, PAL16_RGB if colors == 16 else PAL_RGB)
+    palette = ((GEMBENCH_PAL16_RGB if gembench else PAL16_RGB) if colors == 16
+               else (GEMBENCH_PAL_RGB if gembench else PAL_RGB))
+    pens = quantize(img, dither, palette)
     w, h = img.size
-    save_pic(out_pic, pens, w, h, colors)
+    save_pic(out_pic, pens, w, h, colors, GEMBENCH_INKS if gembench else INKS)
     return w, h
 
 
@@ -338,6 +345,8 @@ def main():
                    help="target height; 0 = preserve aspect ratio")
     p.add_argument("-c", "--colors", type=int, choices=(4, 16), default=4,
                    help="output palette size; 16 targets the MSX Screen-7 Viewer")
+    p.add_argument("--gembench", action="store_true",
+                   help="use the MSX2 GEMBENCH black/white/grey/red base palette")
     p.add_argument("--gui", action="store_true", help="open the GUI on this file")
     a = p.parse_args(args)
     if a.gui:
@@ -345,7 +354,8 @@ def main():
         return
     out = a.out_pic or os.path.splitext(a.in_img)[0] + ".PIC"
     try:
-        w, h = convert_file(a.in_img, out, a.dither, a.width, a.height, a.colors)
+        w, h = convert_file(a.in_img, out, a.dither, a.width, a.height, a.colors,
+                            a.gembench)
     except ValueError as e:
         p.error(str(e))
     stride = w // (2 if a.colors == 16 else 4)

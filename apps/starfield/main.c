@@ -2,7 +2,7 @@
  *
  * Inspired by the SymbOS symsav-starfield (which is pure Z80 asm, Mode 0) - this is
  * a fresh, from-scratch implementation of the classic effect: stars fly toward the
- * viewer out of the centre, accelerating and fading from blue (far) through red to
+ * viewer out of the centre, accelerating through the configured far, red, and
  * white (near) until they pass the screen edge and respawn far away.
  *
  * Each star has a 3D position (x, y, z); each frame z shrinks (the star approaches)
@@ -24,7 +24,13 @@
 #define ZMAX   255      /* spawn depth (far) */
 #define ZMIN   2        /* respawn at/under this depth */
 #define FOCAL  64       /* projection scale */
-#define BG     2        /* black background */
+#ifdef GB_MSX2
+#define BG      0       /* GEMBENCH MSX2 black canvas */
+#define FAR_PEN 2       /* grey */
+#else
+#define BG      2       /* inherited black pen */
+#define FAR_PEN 0       /* blue */
+#endif
 #define STAR_WORK_PER_FRAME 24
 
 static int x[GB_STARFLD_STARS_MAX], y[GB_STARFLD_STARS_MAX], z[GB_STARFLD_STARS_MAX];
@@ -136,7 +142,7 @@ static void star_tick(void)
             sx = 160 + (x[i] * FOCAL) / z[i];
             sy = 100 + (y[i] * FOCAL) / z[i];
         }
-        col = (z[i] > 170) ? 0 : (z[i] > 85) ? 3 : 1;   /* blue far, red mid, white near */
+        col = (z[i] > 170) ? FAR_PEN : (z[i] > 85) ? 3 : 1;
         plot_dot(sx, sy, col);
         px[i] = sx; py[i] = sy;
     }

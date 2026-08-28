@@ -841,13 +841,17 @@ static void apply_colour(unsigned char i, unsigned char ink)
 #endif
 }
 
-/* cfg_get_inks: parse INKS= into out[NPEN]; the default palette (1,26,0,6,1) when
-   absent. (cfg_get can't be reused - an INKS value can exceed its 8-char cap.) */
+/* cfg_get_inks: parse INKS= into out[NPEN]. (cfg_get can't be reused - an
+   INKS value can exceed its 8-char cap.) */
 static void cfg_get_inks(unsigned char *out)
 {
     unsigned int p = cfg_keypos("INKS=");
     unsigned char i;
+#ifdef GB_MSX2
+    out[0] = 0; out[1] = 26; out[2] = 13; out[3] = 6; out[4] = 0;
+#else
     out[0] = 1; out[1] = 26; out[2] = 0; out[3] = 6; out[4] = 1;
+#endif
     if (p == 0xFFFF) return;
     for (i = 0; i < NPEN && p < cfglen; i++) {
         unsigned int v = 0;

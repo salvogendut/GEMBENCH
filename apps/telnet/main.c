@@ -4,7 +4,7 @@
  * or on PCW via PerryNet over the CPS8256/PerryFi serial path; speaks
  * RFC 854 telnet (IAC option negotiation) and parses ANSI/VT100 (cursor/erase/SGR), so
  * a real BBS / MUD / shell renders. Ported from cpc-sdcc examples/telnet (main.c IAC +
- * ansi.c + screen.c), keyboard via gb_getkey. Monochrome (white on blue).
+ * ansi.c + screen.c), keyboard via gb_getkey. Monochrome terminal surface.
  *
  * PCW offers both raw serial and PerryNet TCP over the CPS8256 Z80-DART
  * (PerryFi / RS232). MSX offers TCP/IP UNAPI networking in its windowed view.
@@ -347,18 +347,18 @@ static void draw_row(unsigned char r)
     const unsigned char *src = grid + (unsigned int)r * COLS;
     for (c = 0; c < n; c++) msx_line[c] = (char)src[c];
     msx_line[n] = 0;
-    gb_textrev(GX, (unsigned char)(GY + r * 8), msx_line);
+    gb_text(GX, (unsigned char)(GY + r * 8), msx_line);
     if (COLS > n) {
         for (c = n; c < COLS; c++) msx_line[c - n] = (char)src[c];
         msx_line[COLS - n] = 0;
-        gb_textrev((unsigned char)(GX + (MSX_TEXT_CHUNK * 6) / 4),
-                   (unsigned char)(GY + r * 8), msx_line);
+        gb_text((unsigned char)(GX + (MSX_TEXT_CHUNK * 6) / 4),
+                (unsigned char)(GY + r * 8), msx_line);
     }
 }
 #else
 /* -- 4x8 direct Mode-1 renderer (#351). One glyph line = ONE byte (4 px/byte);
  * white (pen 1, high nibble) on black (pen 2, low nibble), so the screen byte is
- * just (n << 4) | (~n & 0x0F) - no lookup table. Text rows are CRTC-char-row
+ * just (n << 4) | (~n & 0x0F). Text rows are CRTC-char-row
  * aligned (GY multiple of 8): the cell's top line is #C000 + charrow*80 + col
  * and the 8 scan lines are 0x800 apart. #C000 is always mapped on the CPC. */
 #define M1B(n) ((unsigned char)(((n) << 4) | (~(n) & 0x0F)))
