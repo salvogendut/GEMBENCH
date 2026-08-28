@@ -85,6 +85,9 @@ GB_MSG_CLICK    equ   4            ; single gb_mwin_t.proc, keyed by gb_msg.type
 GB_MSG_FRAME    equ   5            ; proc switches on it (one WndProc per window).
 GB_MSG_CLOSE    equ   6
 GB_MSG_DRAG     equ   7
+GB_MSG_MOVED    equ   8            ; kernel-owned move completed: p0=x, p1=y
+GB_MSG_SIZED    equ   9            ; kernel-owned resize completed: p0=w, p1=h
+GB_MSG_MAXIMIZED equ  10           ; maximise/restore: p0=1/0, p1=w, p2=h
                                    ; (DnD, #62); name at WM_DRAGNAME, pos at POLL_MX/MY
 POLL_MX         equ   #1306        ; last poll: cursor byte column (mx)
 POLL_MY         equ   #1307        ; last poll: cursor line (my)
@@ -156,6 +159,17 @@ MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the
 ; state uses #14D2..#14FE. video_mode_hint #14FF (high bit valid) lets paged
 ; modules preserve Mode 2 fullscreen when touching the Gate Array register.
 MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
+                ifdef PLATFORM_MSX
+GB_WK_TITLE     equ   1            ; appended gb_mwin_t.kind bits (GEMBENCH v1)
+GB_WK_CLOSE     equ   2
+GB_WK_MAXIMIZE  equ   4
+GB_WK_MOVE      equ   8
+GB_WK_RESIZE    equ   16
+GB_WK_STANDARD  equ   31
+GB_WK_LEGACY    equ   7            ; inherited draw: title + close + maximise, no grip
+GB_WK_EXTENDED  equ   128          ; internal: descriptor passed the ABI-tag check
+GB_WK_ABI_V1    equ   #B6          ; gb_mwin_t.kind_abi at descriptor offset +13
+                endif
                 if PREEMPTIVE
 WM_TASK_RUNNABLE equ  8            ; WM_FR_FLAGS bit 3: bank has a valid task snapshot
                 endif

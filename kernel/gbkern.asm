@@ -334,6 +334,11 @@ gtd_scratch     equ   #1450        ; #188: relocated to low RAM (was resident de
 ; The frame is plain fills (screen only); the title needs the font, so swap to
 ; PAGE_DATA for it. No save-under: closing a window redraws the desktop.
 gb_open_window
+                ifdef PLATFORM_MSX
+                ld    a,GB_WK_LEGACY         ; direct gb_window() keeps the inherited chrome
+                ld    (mw_kind),a            ; contract; managed windows enter below after
+                endif                        ; loading their tagged descriptor kind.
+gb_open_window_kind
                 ld    a,b
                 ld    (kw_x),a
                 ld    a,c
@@ -351,11 +356,26 @@ gb_open_window
                 call  kwin_frame
                 call  to_data                 ; title needs the font page
                 endif
+                ifdef PLATFORM_MSX
+                ld    a,(mw_kind)
+                bit   0,a                     ; GB_WK_TITLE
+                jr    z,gow_done
+                endif
                 ld    b,1                     ; white on the structure-colour title backing
                 ld    c,2
                 call  set_text_pens
                 ld    a,(kw_x)
+                ifdef PLATFORM_MSX
+                ld    hl,mw_kind
+                bit   1,(hl)                  ; reserve the left close gadget only when selected
+                jr    z,gow_title_left
                 add   a,4
+                jr    gow_title_x
+gow_title_left  inc   a
+gow_title_x
+                else
+                add   a,4
+                endif
                 ld    (tc_x),a
                 ld    a,(kw_y)
                 add   a,3
@@ -364,6 +384,11 @@ gb_open_window
                 call  draw_text
                 if !THEMED_GADGETS
                 ifdef WM_GADGETS
+                ifdef PLATFORM_MSX
+                ld    a,(mw_kind)
+                bit   1,a                     ; GB_WK_CLOSE
+                jr    z,gow_done
+                endif
                 ld    b,2                     ; close 'X' glyph: structure colour on white
                 ld    c,1
                 call  set_text_pens
@@ -377,6 +402,7 @@ gb_open_window
                 call  draw_text
                 endif
                 endif
+gow_done
                 jp    from_data
                 if !THEMED_GADGETS
                 ifdef WM_GADGETS
@@ -420,6 +446,11 @@ kwin_frame
                 ld    a,(kw_h)
                 ld    e,a
                 call  fill_xywh
+                ifdef PLATFORM_MSX
+                ld    a,(mw_kind)
+                bit   0,a                     ; a titleless kind is a framed work surface
+                jr    z,kf_border
+                endif
                 if TITLEBAR_TILE
                 ; The tile renderer clips like fill_block and phases the
                 ; 16x14 motif from this window's own top-left corner.
@@ -477,6 +508,7 @@ kf_stripe       ld    a,(kf_sy)
                 ld    (kf_sy),a
                 djnz  kf_stripe
                 endif
+kf_border
                 ld    hl,(kw_x)              ; configured borders via k_frame (all 4 edges; the
                 ld    b,l                    ; top edge coincides with the first title
                 ld    c,h                    ; stripe, so it is behavior-neutral) - was
@@ -485,6 +517,9 @@ kf_stripe       ld    a,(kf_sy)
                 ld    e,h
                 ld    a,(KCFG_FRAMEPEN)      ; Edge, or a preselected contrasting UI pen
                 call  k_frame
+                ifdef PLATFORM_MSX
+                jp    kf_msx_furniture
+                else
                 if THEMED_GADGETS
                 jp    kf_theme_gadgets
                 else
@@ -533,8 +568,133 @@ kf_gx           db    0            ; maximize-gadget x byte-col (set by kwin_fra
                 ret                            ; plain (no-room) build: just the close box
                 endif
                 endif
+                endif                        ; PLATFORM_MSX
+
+                ifdef PLATFORM_MSX
+; Draw exactly the furniture selected by the tagged MSX2 window kind. Legacy
+; descriptors load GB_WK_STANDARD, retaining the established full chrome.
+kf_msx_furniture
+                ld    a,(mw_kind)
+                bit   0,a                     ; close/maximise live in the title band
+                jr    z,kfm_grip
+                if THEMED_GADGETS
+                xor   a
+                ld    (bm_keep),a
+                ld    a,(mw_kind)
+                bit   1,a                     ; GB_WK_CLOSE
+                jr    z,kfm_theme_max
+                ld    hl,DATA_TITLE_CLOSE
+                ld    (bm_src),hl
+                ld    a,(kw_x)
+                inc   a
+                ld    (bm_x),a
+                ld    a,(kw_y)
+                add   a,2
+                ld    (bm_y),a
+                ld    a,2
+                ld    (bm_w),a
+                ld    a,10
+                ld    (bm_h),a
+                call  blit_bitmap
+kfm_theme_max   ld    a,(mw_kind)
+                bit   2,a                     ; GB_WK_MAXIMIZE
+                jr    z,kfm_grip
+                ld    hl,DATA_TITLE_MAX
+                ld    (bm_src),hl
+                ld    a,(kw_x)
+                ld    hl,kw_w
+                add   a,(hl)
+                sub   4
+                ld    (bm_x),a
+                ld    a,(kw_y)
+                add   a,2
+                ld    (bm_y),a
+                ld    a,3
+                ld    (bm_w),a
+                ld    a,10
+                ld    (bm_h),a
+                call  blit_bitmap
+                else
+                ld    a,(mw_kind)
+                bit   1,a                     ; GB_WK_CLOSE
+                jr    z,kfm_plain_max
+                ld    a,KWB_LIGHT
+                ld    (fb_val),a
+                ld    a,(kw_x)
+                inc   a
+                ld    b,a
+                ld    a,(kw_y)
+                add   a,2
+                ld    c,a
+                ld    d,2
+                ld    e,10
+                call  fill_xywh
+kfm_plain_max   ld    a,(mw_kind)
+                bit   2,a                     ; GB_WK_MAXIMIZE
+                jr    z,kfm_grip
+                ld    a,KWB_LIGHT
+                ld    (fb_val),a
+                ld    a,(kw_x)
+                ld    hl,kw_w
+                add   a,(hl)
+                sub   4
+                ld    (kfm_gx),a
+                ld    b,a
+                ld    a,(kw_y)
+                add   a,2
+                ld    c,a
+                ld    d,3
+                ld    e,10
+                call  fill_xywh
+                ld    a,KWB_DARK
+                ld    (fb_val),a
+                ld    a,(kfm_gx)
+                inc   a
+                ld    b,a
+                ld    a,(kw_y)
+                add   a,5
+                ld    c,a
+                ld    d,1
+                ld    e,4
+                call  fill_xywh
+                endif
+kfm_grip        ld    a,(mw_kind)
+                bit   4,a                     ; GB_WK_RESIZE
+                ret   z
+                ld    a,KWB_LIGHT
+                ld    (fb_val),a
+                ld    a,(kw_x)
+                ld    hl,kw_w
+                add   a,(hl)
+                sub   2
+                ld    b,a
+                ld    a,(kw_y)
+                ld    hl,kw_h
+                add   a,(hl)
+                sub   6
+                ld    c,a
+                ld    d,2
+                ld    e,6
+                call  fill_xywh
+                ld    a,(kw_x)
+                ld    hl,kw_w
+                add   a,(hl)
+                sub   2
+                ld    b,a
+                ld    a,(kw_y)
+                ld    hl,kw_h
+                add   a,(hl)
+                sub   6
+                ld    c,a
+                ld    d,2
+                ld    e,6
+                ld    a,2
+                jp    k_frame
+kfm_gx          db    0
+                endif                        ; PLATFORM_MSX
 
                 if THEMED_GADGETS
+                ifndef PLATFORM_MSX
 ; Reusable gadget tiles live beside the repeated background in PAGE_DATA. The
 ; shared opaque bitmap path performs each target's native write/transcoding.
 kf_theme_gadgets
@@ -569,6 +729,7 @@ kf_theme_gadgets
                 ld    a,10
                 ld    (bm_h),a
                 jp    blit_bitmap
+                endif                        ; !PLATFORM_MSX
                 endif
 kw_x            db    0
 kw_y            db    0
@@ -2139,6 +2300,28 @@ mw_publish
                 pop   hl
                 ret
 
+                ifdef PLATFORM_MSX
+; Load the append-only kind tail from the focused managed descriptor. The tag is
+; deliberately separate from the flags: pre-extension 12-byte application images
+; keep the legacy fixed-chrome behavior even when run by this kernel.
+mw_kind_load
+                ld    a,GB_WK_LEGACY
+                ld    (mw_kind),a
+                ld    hl,(mw_desc)
+                ld    de,13                  ; desc.kind_abi
+                add   hl,de
+                ld    a,(hl)
+                cp    GB_WK_ABI_V1
+                ret   nz
+                dec   hl                     ; desc.kind
+                ld    a,(hl)
+                and   GB_WK_STANDARD
+                or    GB_WK_EXTENDED         ; internal opt-in marker
+                ld    (mw_kind),a
+                ret
+mw_kind         db    GB_WK_LEGACY
+                endif
+
 ; mw_hook: A = a GB_MSG_* window message. Set gb_msg.type, then dispatch to the
 ; window's single proc (desc+6). The proc switches on the type. Clobbers HL,DE,A.
 mw_hook
@@ -2158,6 +2341,9 @@ mw_hook
 ; wm_chrome_draw: HL = entry. Draw frame+title (gb_open_window) then the content (on_draw).
 wm_chrome_draw
                 call  mw_publish
+                ifdef PLATFORM_MSX
+                call  mw_kind_load
+                endif
                 ld    hl,(mw_desc)           ; title = *(desc+8)
                 ld    de,8
                 add   hl,de
@@ -2173,7 +2359,11 @@ wm_chrome_draw
                 ld    d,a                     ; w
                 ld    a,(MW_RECT+3)
                 ld    e,a                     ; h
+                ifdef PLATFORM_MSX
+                call  gb_open_window_kind    ; frame + selected furniture
+                else
                 call  gb_open_window         ; frame + title
+                endif
                 ld    a,GB_MSG_DRAW          ; -> the proc draws the content
                 jr    mw_hook
 
@@ -2181,32 +2371,59 @@ wm_chrome_draw
 ; close-gadget, content click. (Title drag + grip resize land in slice 2.)
 wm_chrome_frame
                 call  mw_publish
+                ifdef PLATFORM_MSX
+                call  mw_kind_load
+                endif
                 ld    a,GB_MSG_FRAME         ; per-frame (idle/menus/tick)
                 call  mw_hook
                 ld    a,(POLL_FLAGS)
                 bit   1,a                     ; GB_QUIT
-                jp    nz,mw_do_close          ; (jp: mwf_max grew the block past jr range)
+                jr    z,mwf_click_check
+                ifdef PLATFORM_MSX
+                ld    a,(mw_kind)
+                bit   1,a                     ; tagged windows without GB_WK_CLOSE stay open
+                jp    nz,mw_do_close
+                else
+                jp    mw_do_close
+                endif
+mwf_click_check
+                ld    a,(POLL_FLAGS)
                 bit   0,a                     ; GB_CLICK
                 ret   z
+                ifdef PLATFORM_MSX
+                ld    a,(mw_kind)
+                bit   0,a                     ; no title band: the whole framed area is content
+                jp    z,mwf_content
+                endif
                 ld    a,(POLL_MY)            ; my - win_y in title band?
                 ld    e,a
                 ld    a,(MW_RECT+1)
                 ld    d,a
                 ld    a,e
                 sub   d
-                jr    c,mwf_content           ; my < win_y
+                jp    c,mwf_content           ; my < win_y
                 cp    14                       ; TITLE_H
-                jr    nc,mwf_content           ; my >= win_y+14 -> content
+                jp    nc,mwf_content           ; my >= win_y+14 -> content
                 ld    a,(POLL_MX)            ; in title bar: which gadget?
                 ld    e,a
+                ifdef PLATFORM_MSX
+                ld    a,(mw_kind)
+                bit   1,a                     ; GB_WK_CLOSE
+                jr    z,mwf_notclose
+                endif
                 ld    a,(MW_RECT)
                 add   a,5
                 cp    e
                 jr    c,mwf_notclose          ; win_x+5 < mx -> not the close gadget
                 jr    z,mwf_notclose
-                jr    mw_do_close             ; mx < win_x+5 -> close gadget
+                jp    mw_do_close             ; mx < win_x+5 -> close gadget
 mwf_notclose
                 ifdef WM_GADGETS
+                ifdef PLATFORM_MSX
+                ld    a,(mw_kind)
+                bit   2,a                     ; GB_WK_MAXIMIZE
+                jr    z,mwf_title
+                endif
                 ld    a,(MW_RECT)            ; maximize gadget? mx >= win_x + win_w - 4
                 ld    hl,MW_RECT+2
                 add   a,(hl)                  ; A = win_x + win_w
@@ -2216,6 +2433,15 @@ mwf_notclose
                 jr    z,mwf_max
                 endif
 mwf_title
+                ifdef PLATFORM_MSX
+                ld    a,(mw_kind)
+                bit   7,a                     ; untagged descriptor: preserve GB_MSG_DRAG
+                jr    z,mwf_legacy_drag
+                bit   3,a                     ; tagged but not movable: consume title press
+                ret   z
+                jp    mw_move
+mwf_legacy_drag
+                endif
                 ld    a,GB_MSG_DRAG          ; otherwise a title-bar press -> drag the window
                 jp    mw_hook
                 ifdef WM_GADGETS
@@ -2269,6 +2495,24 @@ mwf_unmax       res   2,(hl)
 mwf_max_paint   pop   hl                      ; HL = entry
                 call  mw_publish             ; refresh MW_RECT (the app reads gb_wm_x/y/w/h)
                 call  clip_set_full
+                ifdef PLATFORM_MSX
+                push  hl
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                ld    a,(hl)
+                and   4                       ; p0 = 1 maximised, 0 restored
+                jr    z,mwf_max_msg_state
+                ld    a,1
+mwf_max_msg_state
+                ld    (GB_MSG+1),a
+                ld    a,(MW_RECT+2)
+                ld    (GB_MSG+2),a
+                ld    a,(MW_RECT+3)
+                ld    (GB_MSG+3),a
+                pop   hl
+                ld    a,GB_MSG_MAXIMIZED
+                call  mw_hook
+                endif
                 jp    wm_repaint_all
 wm_sav_x        db    0
 wm_sav_y        db    0
@@ -2276,8 +2520,304 @@ wm_sav_w        db    0
 wm_sav_h        db    0
                 endif
 mwf_content
+                ifdef PLATFORM_MSX
+                ld    a,(mw_kind)
+                bit   7,a                     ; only tagged kinds get kernel resize
+                jr    z,mwf_content_hook
+                bit   4,a                     ; GB_WK_RESIZE
+                jr    z,mwf_content_hook
+                ld    a,(MW_RECT)
+                ld    hl,MW_RECT+2
+                add   a,(hl)                  ; right edge (exclusive)
+                ld    b,a
+                ld    a,(POLL_MX)
+                cp    b
+                jr    nc,mwf_content_hook
+                ld    a,b
+                sub   6                       ; generous invisible target around 2-byte grip
+                ld    b,a
+                ld    a,(POLL_MX)
+                cp    b
+                jr    c,mwf_content_hook
+                ld    a,(MW_RECT+1)
+                ld    hl,MW_RECT+3
+                add   a,(hl)                  ; bottom edge (exclusive)
+                ld    b,a
+                ld    a,(POLL_MY)
+                cp    b
+                jr    nc,mwf_content_hook
+                ld    a,b
+                sub   14                      ; keyboard/joystick pointer may accelerate
+                ld    b,a
+                ld    a,(POLL_MY)
+                cp    b
+                jp    nc,mw_resize
+mwf_content_hook
+                endif
                 ld    a,GB_MSG_CLICK         ; content (incl. grip) -> a content press
                 jp    mw_hook
+
+                ifdef PLATFORM_MSX
+; Kernel-owned outline gestures for tagged kinds. They deliberately retain the
+; established app helper's interaction: the window is lifted only after actual
+; movement, a red outline follows the held pointer, and one compositor repaint
+; restores the stack on release.
+mw_move
+                ld    a,(WM_FOCUS)
+                call  wm_entry
+                push  hl
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                bit   2,(hl)                  ; a maximised window stays anchored
+                pop   hl
+                ret   nz
+                call  clip_set_full
+                ld    a,(MW_RECT)
+                ld    (sp_x),a
+                ld    b,a
+                ld    a,(POLL_MX)
+                sub   b
+                ld    (WM_DRAGX0),a           ; title grab offset
+                ld    a,(MW_RECT+1)
+                ld    (sp_y),a
+                ld    b,a
+                ld    a,(POLL_MY)
+                sub   b
+                ld    (WM_DRAGY0),a
+                ld    a,(MW_RECT+2)
+                ld    (ss_w),a
+                ld    a,(MW_RECT+3)
+                ld    (ss_h),a
+                xor   a
+                ld    (ghost_on),a
+mwm_loop
+                call  k_poll
+                ld    a,(POLL_FLAGS)
+                bit   2,a                     ; fire held
+                jr    z,mwm_done
+                ld    a,(POLL_MX)
+                ld    hl,WM_DRAGX0
+                sub   (hl)
+                jr    nc,mwm_x_nonnegative
+                xor   a
+mwm_x_nonnegative
+                ld    b,a                     ; B = candidate x
+                ld    a,SCR_COLS
+                ld    hl,ss_w
+                sub   (hl)                    ; A = rightmost x
+                cp    b
+                jr    nc,mwm_x_clamped
+                ld    b,a
+mwm_x_clamped
+                ld    a,(POLL_MY)
+                ld    hl,WM_DRAGY0
+                sub   (hl)
+                jr    nc,mwm_y_nonnegative
+                xor   a
+mwm_y_nonnegative
+                cp    8                       ; stay below the desktop menu bar
+                jr    nc,mwm_y_bar
+                ld    a,8
+mwm_y_bar       ld    c,a                     ; C = candidate y
+                ld    a,SCR_LINES
+                ld    hl,ss_h
+                sub   (hl)                    ; A = bottommost y
+                cp    c
+                jr    nc,mwm_y_clamped
+                ld    c,a
+mwm_y_clamped
+                ld    a,(sp_x)
+                cp    b
+                jr    nz,mwm_changed
+                ld    a,(sp_y)
+                cp    c
+                jr    z,mwm_loop
+mwm_changed     push  bc
+                call  cursor_erase
+                ld    a,(ghost_on)
+                or    a
+                jr    nz,mwm_erase_outline
+                ld    a,1
+                ld    (ghost_on),a
+                call  mw_gesture_backdrop
+                jr    mwm_store
+mwm_erase_outline
+                xor   a
+                call  mw_gesture_outline
+mwm_store       pop   bc
+                ld    a,b
+                ld    (sp_x),a
+                ld    a,c
+                ld    (sp_y),a
+                ld    a,3
+                call  mw_gesture_outline
+                call  cursor_show
+                jr    mwm_loop
+mwm_done        ld    a,(ghost_on)
+                or    a
+                ret   z
+                call  cursor_erase
+                xor   a
+                call  mw_gesture_outline
+                call  cursor_show
+                ld    a,(sp_y)
+                ld    l,a
+                ld    a,(sp_x)
+                call  k_wm_setpos
+                ld    a,(WM_FOCUS)
+                call  wm_entry
+                call  mw_publish
+                ld    a,(MW_RECT)
+                ld    (GB_MSG+1),a
+                ld    a,(MW_RECT+1)
+                ld    (GB_MSG+2),a
+                xor   a
+                ld    (GB_MSG+3),a
+                ld    a,GB_MSG_MOVED
+                call  mw_hook
+                jp    wm_repaint_all
+
+mw_resize
+                ld    a,(WM_FOCUS)
+                call  wm_entry
+                push  hl
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                bit   2,(hl)                  ; maximise/restore owns full-screen geometry
+                pop   hl
+                ret   nz
+                call  clip_set_full
+                ld    a,(MW_RECT)
+                ld    (sp_x),a
+                ld    a,(MW_RECT+1)
+                ld    (sp_y),a
+                ld    a,(MW_RECT+2)
+                ld    (ss_w),a
+                ld    a,(MW_RECT+3)
+                ld    (ss_h),a
+                ld    hl,(mw_desc)
+                ld    de,4
+                add   hl,de
+                ld    a,(hl)                  ; descriptor min_w/min_h
+                ld    (WM_DRAGX0),a
+                inc   hl
+                ld    a,(hl)
+                ld    (WM_DRAGY0),a
+                xor   a
+                ld    (ghost_on),a
+mwr_loop
+                call  k_poll
+                ld    a,(POLL_FLAGS)
+                bit   2,a
+                jr    z,mwr_done
+                ld    a,(POLL_MX)
+                ld    hl,sp_x
+                sub   (hl)
+                inc   a                       ; inclusive bottom-right pointer
+                ld    b,a                     ; B = candidate width
+                ld    hl,WM_DRAGX0
+                ld    a,b
+                cp    (hl)
+                jr    nc,mwr_w_min
+                ld    b,(hl)
+mwr_w_min       ld    a,SCR_COLS
+                ld    hl,sp_x
+                sub   (hl)
+                cp    b
+                jr    nc,mwr_w_max
+                ld    b,a
+mwr_w_max       ld    a,(POLL_MY)
+                ld    hl,sp_y
+                sub   (hl)
+                inc   a
+                ld    c,a                     ; C = candidate height
+                ld    hl,WM_DRAGY0
+                ld    a,c
+                cp    (hl)
+                jr    nc,mwr_h_min
+                ld    c,(hl)
+mwr_h_min       ld    a,SCR_LINES
+                ld    hl,sp_y
+                sub   (hl)
+                cp    c
+                jr    nc,mwr_h_max
+                ld    c,a
+mwr_h_max       ld    a,(ss_w)
+                cp    b
+                jr    nz,mwr_changed
+                ld    a,(ss_h)
+                cp    c
+                jr    z,mwr_loop
+mwr_changed     push  bc
+                call  cursor_erase
+                ld    a,(ghost_on)
+                or    a
+                jr    nz,mwr_erase_outline
+                ld    a,1
+                ld    (ghost_on),a
+                call  mw_gesture_backdrop
+                jr    mwr_store
+mwr_erase_outline
+                xor   a
+                call  mw_gesture_outline
+mwr_store       pop   bc
+                ld    a,b
+                ld    (ss_w),a
+                ld    a,c
+                ld    (ss_h),a
+                ld    a,3
+                call  mw_gesture_outline
+                call  cursor_show
+                jr    mwr_loop
+mwr_done        ld    a,(ghost_on)
+                or    a
+                ret   z
+                call  cursor_erase
+                xor   a
+                call  mw_gesture_outline
+                call  cursor_show
+                ld    a,(ss_h)
+                ld    l,a
+                ld    a,(ss_w)
+                call  k_wm_setsize
+                ld    a,(WM_FOCUS)
+                call  wm_entry
+                call  mw_publish
+                ld    a,(MW_RECT+2)
+                ld    (GB_MSG+1),a
+                ld    a,(MW_RECT+3)
+                ld    (GB_MSG+2),a
+                xor   a
+                ld    (GB_MSG+3),a
+                ld    a,GB_MSG_SIZED
+                call  mw_hook
+                jp    wm_repaint_all
+
+; A = logical pen, geometry in sp_x/sp_y/ss_w/ss_h.
+mw_gesture_outline
+                push  af
+                ld    a,(sp_x)
+                ld    b,a
+                ld    a,(sp_y)
+                ld    c,a
+                ld    a,(ss_w)
+                ld    d,a
+                ld    a,(ss_h)
+                ld    e,a
+                pop   af
+                jp    k_frame
+
+mw_gesture_backdrop
+                ld    a,(sp_x)
+                ld    b,a
+                ld    a,(sp_y)
+                ld    c,a
+                ld    a,(ss_w)
+                ld    d,a
+                ld    a,(ss_h)
+                ld    e,a
+                jp    k_backdrop
+                endif                         ; PLATFORM_MSX
 
 ; mw_do_close: a close was requested - deliver GB_MSG_CLOSE to the window's proc
 ; (it confirms + calls gb_wm_close). Every managed window has a proc, so there is

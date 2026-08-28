@@ -85,6 +85,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`test_formref_openmsx.sh`** — builds a disposable Nextor image and drives the
   resource-backed MSX2 FormRef through pointer launch, keyboard focus, mutation,
   Save, and trace assertions under openMSX.
+- **`test_window_kinds_openmsx.sh`** — drives the real MSX2 File Manager through
+  kernel-owned maximise/restore, move, and resize gestures, verifies the
+  append-only geometry messages, and captures the final Screen 7 window.
 - **`gbrc.py` / `gbrverify.py`** — compile deterministic GBR v1 resources and
   strictly verify binary resources. `gbrc.py --c-header` can also emit a C blob,
   section/count constants, and source-only object IDs for embedded resources.

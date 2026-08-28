@@ -117,6 +117,33 @@ identical to the built `/GBENCH/FORMREF.APP`. It launches the app through File
 Manager, captures the GBR-defined modal at Compact/Level 2, and asserts the
 resource descriptor, keyboard focus actions, Save commit, and modal restore.
 
+Exercise the first tagged MSX2 window kind with:
+
+```sh
+make gembench-msx
+tools/test_window_kinds_openmsx.sh
+```
+
+The openMSX driver opens File Manager through the real desktop, then uses MSX
+keyboard-matrix pointer input to maximise and restore it, drag its title, and
+resize its kernel-drawn grip. It verifies the live geometry and observes the
+`GB_MSG_MOVED`, `GB_MSG_SIZED`, and `GB_MSG_MAXIMIZED` callbacks. The final
+Screen 7 capture is written to `build/msx/window-kinds.png`.
+
+Use 1983 as the complementary boot, mapper, and image-layout integration check:
+
+```sh
+python3 debug/gembench_baseline_1983.py \
+  --ide-image QA/MSX/GBMSX.IMG \
+  --output-dir "$PWD/build/window-kinds-1983" \
+  --frames 6000
+```
+
+The milestone-6 build measures 12,260 bytes for the resident Screen 7 kernel
+and 13,244 bytes for the migrated File Manager, leaving 2,884 bytes of loader
+headroom. The kernel increase is 768 bytes; File Manager is 1,401 bytes smaller
+because it no longer links the app-owned window gesture helpers.
+
 Generated files live under `build/` and are ignored by Git.
 
 ## Resource changes
@@ -159,3 +186,28 @@ live text bindings, and focus traversal; `GBR_EMBEDDED=1` selects the compact
 access-only reader after the host build has verified the generated blob. The
 full form runtime compiles to 4,928 bytes and the embedded accessor to 795
 bytes with the current SDCC. External files continue through the strict reader.
+
+## MSX2 window kinds
+
+The public `gb_mwin_t` prefix remains the original 12-byte descriptor. Existing
+applications therefore retain the legacy close/drag callback contract. An
+MSX2 application opts into kernel-owned furniture and gestures with the tagged
+wrapper:
+
+```c
+static gb_mwin_kind_t window = {
+    { x, y, w, h, min_w, min_h, window_proc, title, 0 },
+    GB_WK_STANDARD,
+    GB_WK_ABI_V1
+};
+
+gb_wm_managed(&window.window);
+```
+
+`GB_WK_TITLE`, `GB_WK_CLOSE`, `GB_WK_MAXIMIZE`, `GB_WK_MOVE`, and
+`GB_WK_RESIZE` may be combined independently. Completed kernel gestures report
+their committed geometry through `GB_MSG_MOVED`, `GB_MSG_SIZED`, and
+`GB_MSG_MAXIMIZED`; the application should refresh any cached rectangle from
+`gb_wm_x()`, `gb_wm_y()`, `gb_wm_w()`, and `gb_wm_h()`. File Manager is the
+reference implementation. This extension is deliberately MSX2-only and does
+not change the resident jump table.

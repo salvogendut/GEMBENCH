@@ -109,6 +109,16 @@ quit. Settings and saver apps should keep persistent config/media policy in the
 app layer and treat the kernel as a provider of storage, WM, and reload
 primitives. See `lib/gb/gb.h` for the full API.
 
+On MSX2, a managed app can wrap the unchanged 12-byte `gb_mwin_t` in
+`gb_mwin_kind_t`, set `GB_WK_ABI_V1`, and combine `GB_WK_TITLE`, `GB_WK_CLOSE`,
+`GB_WK_MAXIMIZE`, `GB_WK_MOVE`, and `GB_WK_RESIZE`. The tagged contract makes
+the kernel draw only the selected furniture and own the selected geometry
+gestures. The proc receives `GB_MSG_MOVED`, `GB_MSG_SIZED`, and
+`GB_MSG_MAXIMIZED` after committed changes and should resynchronise cached
+geometry from the `gb_wm_*()` accessors. Untagged descriptors keep the legacy
+`GB_MSG_DRAG` and app-linked resize behavior. File Manager is the reference
+migration; CPC and PCW retain their prior code path.
+
 ## Reusable widgets
 
 Common non-modal controls live in opt-in `libgb` compilation units instead of the
