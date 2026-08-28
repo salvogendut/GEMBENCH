@@ -29,6 +29,10 @@ Run only the GBR compiler tests:
 make gbr-check
 ```
 
+This runs the compiler and golden-file tests, corruption checks, the portable
+target-reader tests, and an SDCC Z80 compile check. Verify an individual binary
+with `python3 tools/gbrverify.py path/to/resource.gbr`.
+
 Rebuild only the example resource:
 
 ```sh

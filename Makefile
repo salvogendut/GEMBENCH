@@ -113,6 +113,7 @@ titlebar-editor:
 
 gbr-check:
 	$(PYTHON) -m unittest discover -s tests -v
+	bash tests/run_gbr_reader_tests.sh
 
 gbr-example: $(GBR_EXAMPLE_OUTPUT)
 

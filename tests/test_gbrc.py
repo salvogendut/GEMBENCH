@@ -12,11 +12,16 @@ from tools import gbrc
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "hello-dialog.json"
 HEADER_FILE = ROOT / "include" / "gembench" / "gbr.h"
+GOLDEN_FILE = ROOT / "tests" / "fixtures" / "hello-dialog.gbr.inc"
 
 
 class CompilerTests(unittest.TestCase):
     def compile_example(self) -> bytes:
         return gbrc.compile_document(json.loads(EXAMPLE.read_text(encoding="utf-8")))
+
+    def golden_example(self) -> bytes:
+        values = re.findall(r"0x([0-9a-fA-F]{2})", GOLDEN_FILE.read_text(encoding="ascii"))
+        return bytes(int(value, 16) for value in values)
 
     def test_example_layout_and_tree_links(self) -> None:
         blob = self.compile_example()
@@ -48,6 +53,40 @@ class CompilerTests(unittest.TestCase):
 
     def test_output_is_deterministic(self) -> None:
         self.assertEqual(self.compile_example(), self.compile_example())
+
+    def test_example_matches_committed_golden_binary(self) -> None:
+        self.assertEqual(self.compile_example(), self.golden_example())
+
+    def test_strict_verifier_accepts_the_golden_binary(self) -> None:
+        header = gbrc.verify_blob(self.golden_example())
+        self.assertEqual(header["tree_count"], 1)
+        self.assertEqual(header["object_count"], 3)
+
+    def test_strict_verifier_rejects_corruptions(self) -> None:
+        def repaired(blob: bytearray) -> bytes:
+            struct.pack_into("<H", blob, gbrc.HEADER.size - 2, 0)
+            struct.pack_into("<H", blob, gbrc.HEADER.size - 2, sum(blob) & 0xFFFF)
+            return bytes(blob)
+
+        corruptions: list[tuple[str, int, int, str]] = [
+            ("layout", 16, 0x1F, "canonical v1 layout"),
+            ("string", 0x52, 0xFF, "payload exceeds"),
+            ("tree", 0x1E, 3, "invalid object range"),
+            ("object type", 0x22 + 3, 10, "unknown object type"),
+            ("text reference", 0x32 + 8, 3, "text string is out of range"),
+            ("root parent", 0x22, 0, "root links"),
+        ]
+        for name, offset, value, message in corruptions:
+            with self.subTest(name=name):
+                blob = bytearray(self.golden_example())
+                blob[offset] = value
+                with self.assertRaisesRegex(gbrc.ResourceError, message):
+                    gbrc.verify_blob(repaired(blob))
+
+        blob = bytearray(self.golden_example())
+        blob[-1] ^= 1
+        with self.assertRaisesRegex(gbrc.ResourceError, "checksum mismatch"):
+            gbrc.verify_blob(bytes(blob))
 
     def test_target_header_matches_host_compiler_constants(self) -> None:
         defines = {
@@ -84,6 +123,21 @@ class CompilerTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(gbrc.ResourceError, "unknown value 'flashing'"):
             gbrc.compile_document(source)
+
+    def test_text_and_raw_specs_are_type_safe(self) -> None:
+        text_on_box = {
+            "format": "GBR1",
+            "trees": [{"name": "BAD", "root": {"type": "box", "text": "no"}}],
+        }
+        with self.assertRaisesRegex(gbrc.ResourceError, "box objects do not carry text"):
+            gbrc.compile_document(text_on_box)
+
+        raw_button = {
+            "format": "GBR1",
+            "trees": [{"name": "BAD", "root": {"type": "button", "spec": 1}}],
+        }
+        with self.assertRaisesRegex(gbrc.ResourceError, "button objects require text"):
+            gbrc.compile_document(raw_button)
 
     def test_geometry_outside_screen_7_range_is_rejected(self) -> None:
         source = {

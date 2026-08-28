@@ -35,6 +35,9 @@ TYPE_IDS = {
     "user": 9,
 }
 
+TEXT_TYPES = {"text", "string", "button", "field", "checkbox", "radio"}
+TEXT_TYPE_IDS = {TYPE_IDS[name] for name in TEXT_TYPES}
+
 FLAG_BITS = {
     "selectable": 0x0001,
     "default": 0x0002,
@@ -50,6 +53,9 @@ STATE_BITS = {
     "outlined": 0x0008,
     "shadowed": 0x0010,
 }
+
+KNOWN_FLAG_MASK = sum(FLAG_BITS.values())
+KNOWN_STATE_MASK = sum(STATE_BITS.values())
 
 OBJECT_KEYS = {
     "type",
@@ -200,8 +206,12 @@ def _flatten_object(
     if "text" in obj and "spec" in obj:
         raise ResourceError(f"{location}: text and spec are mutually exclusive")
     if "text" in obj:
+        if type_name not in TEXT_TYPES:
+            raise ResourceError(f"{location}.text: {type_name} objects do not carry text")
         records[index].spec = strings.intern(obj["text"], f"{location}.text")
     elif "spec" in obj:
+        if type_name in TEXT_TYPES:
+            raise ResourceError(f"{location}.spec: {type_name} objects require text")
         records[index].spec = _integer(
             obj["spec"], 0, NONE16, f"{location}.spec"
         )
@@ -329,6 +339,151 @@ def read_header(blob: bytes) -> dict[str, int | bytes]:
     return dict(zip(keys, values))
 
 
+def _u16(blob: bytes, offset: int) -> int:
+    return blob[offset] | (blob[offset + 1] << 8)
+
+
+def verify_blob(blob: bytes) -> dict[str, int | bytes]:
+    """Strictly validate one canonical GBR v1 binary.
+
+    Version 1 is deliberately compact: all four sections are contiguous and
+    strings fill the remainder of the file.  Enforcing that canonical layout
+    keeps the Z80 reader bounded and rejects aliases into headers or tables.
+    """
+    if not isinstance(blob, bytes):
+        raise ResourceError("binary resource must be bytes")
+    if len(blob) < HEADER.size:
+        raise ResourceError("file is shorter than the GBR v1 header")
+    if len(blob) > MAX_FILE_SIZE:
+        raise ResourceError(
+            f"file is {len(blob)} bytes; GBR v1 limit is {MAX_FILE_SIZE}"
+        )
+
+    header = read_header(blob)
+    if header["magic"] != MAGIC:
+        raise ResourceError("invalid GBR magic")
+    if header["version"] != VERSION:
+        raise ResourceError(f"unsupported GBR version {header['version']}")
+    if header["flags"] != 0:
+        raise ResourceError("GBR v1 file flags must be zero")
+    if header["header_size"] != HEADER.size:
+        raise ResourceError("invalid GBR v1 header size")
+    if header["file_size"] != len(blob):
+        raise ResourceError("header file size does not match the binary length")
+    if header["reserved"] != 0:
+        raise ResourceError("GBR v1 reserved header byte must be zero")
+
+    checksum = (sum(blob) - blob[HEADER.size - 2] - blob[HEADER.size - 1]) & 0xFFFF
+    if header["checksum"] != checksum:
+        raise ResourceError("GBR checksum mismatch")
+
+    string_count = int(header["string_count"])
+    tree_count = int(header["tree_count"])
+    object_count = int(header["object_count"])
+    if not string_count or not tree_count or not object_count:
+        raise ResourceError("GBR v1 requires strings, trees, and objects")
+
+    string_index = int(header["string_index_offset"])
+    tree_table = int(header["tree_table_offset"])
+    object_table = int(header["object_table_offset"])
+    string_data = int(header["string_data_offset"])
+    expected_tree = HEADER.size + 2 * string_count
+    expected_object = expected_tree + TREE.size * tree_count
+    expected_strings = expected_object + OBJECT.size * object_count
+    if (
+        string_index != HEADER.size
+        or tree_table != expected_tree
+        or object_table != expected_object
+        or string_data != expected_strings
+        or string_data >= len(blob)
+    ):
+        raise ResourceError("GBR sections are not in canonical v1 layout")
+
+    next_string = string_data
+    for index in range(string_count):
+        offset = _u16(blob, string_index + 2 * index)
+        if offset != next_string or offset >= len(blob):
+            raise ResourceError(f"string {index}: invalid or non-canonical offset")
+        length = blob[offset]
+        end = offset + 1 + length
+        if end > len(blob):
+            raise ResourceError(f"string {index}: payload exceeds the file")
+        if any(byte < 0x20 or byte > 0x7E for byte in blob[offset + 1 : end]):
+            raise ResourceError(f"string {index}: payload is not printable ASCII")
+        next_string = end
+    if next_string != len(blob):
+        raise ResourceError("string data does not consume the complete file")
+
+    trees = [
+        TREE.unpack_from(blob, tree_table + TREE.size * index)
+        for index in range(tree_count)
+    ]
+    objects = [
+        OBJECT.unpack_from(blob, object_table + OBJECT.size * index)
+        for index in range(object_count)
+    ]
+
+    next_root = 0
+    for index, (root, count, name, reserved) in enumerate(trees):
+        if reserved:
+            raise ResourceError(f"tree {index}: reserved byte must be zero")
+        if not count or root != next_root or root + count > object_count:
+            raise ResourceError(f"tree {index}: invalid object range")
+        if name >= string_count:
+            raise ResourceError(f"tree {index}: name string is out of range")
+        next_root += count
+    if next_root != object_count:
+        raise ResourceError("tree ranges do not cover the object table")
+
+    for index, obj in enumerate(objects):
+        parent, child, sibling, type_id, flags, state, spec, x, _y, w, _h = obj
+        if type_id not in TYPE_IDS.values():
+            raise ResourceError(f"object {index}: unknown object type")
+        if flags & ~KNOWN_FLAG_MASK:
+            raise ResourceError(f"object {index}: unknown flag bits")
+        if state & ~KNOWN_STATE_MASK:
+            raise ResourceError(f"object {index}: unknown state bits")
+        if x > 511 or w > 511:
+            raise ResourceError(f"object {index}: Screen 7 geometry is out of range")
+        if type_id in TEXT_TYPE_IDS and spec != NONE16 and spec >= string_count:
+            raise ResourceError(f"object {index}: text string is out of range")
+        for label, link in (("parent", parent), ("child", child), ("sibling", sibling)):
+            if link != NONE8 and link >= object_count:
+                raise ResourceError(f"object {index}: {label} link is out of range")
+
+    for tree_index, (root, count, _name, _reserved) in enumerate(trees):
+        end = root + count
+        for index in range(root, end):
+            parent, child, sibling = objects[index][0:3]
+            if index == root:
+                if parent != NONE8 or sibling != NONE8:
+                    raise ResourceError(f"tree {tree_index}: root links are invalid")
+            elif parent == NONE8 or not root <= parent < index:
+                raise ResourceError(f"object {index}: parent does not precede it in its tree")
+
+            if child != NONE8:
+                if not index < child < end or objects[child][0] != index:
+                    raise ResourceError(f"object {index}: first-child link is inconsistent")
+            if sibling != NONE8:
+                if (
+                    not index < sibling < end
+                    or parent == NONE8
+                    or objects[sibling][0] != parent
+                ):
+                    raise ResourceError(f"object {index}: sibling link is inconsistent")
+
+            if index != root:
+                linked = objects[parent][1]
+                steps = 0
+                while linked != NONE8 and linked != index and steps < count:
+                    linked = objects[linked][2]
+                    steps += 1
+                if linked != index:
+                    raise ResourceError(f"object {index}: not linked from its parent")
+
+    return header
+
+
 def load_source(path: Path) -> Any:
     try:
         with path.open("r", encoding="utf-8") as source:
@@ -352,6 +507,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         blob = compile_document(load_source(args.source))
+        verify_blob(blob)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_bytes(blob)
     except (OSError, ResourceError) as exc:

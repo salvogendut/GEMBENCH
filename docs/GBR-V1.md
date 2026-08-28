@@ -59,6 +59,38 @@ from the beginning of the file.
 The checksum is the sum of every file byte modulo 65536 while treating the two
 checksum bytes as zero.
 
+## Canonical validation
+
+GBR v1 readers must reject a resource before exposing any record when:
+
+- the magic, version, flags, header size, declared file size, reserved bytes,
+  or checksum are invalid;
+- the file exceeds 16 KiB or the string, tree, or object counts are zero;
+- the string index, tree table, object table, and string data are not tightly
+  packed in that order;
+- a string offset is non-canonical, its payload crosses the file boundary, or
+  it contains bytes outside printable ASCII;
+- tree ranges do not partition the complete object table, or a tree name is
+  not a valid string index;
+- an object type, flag, state, Screen 7 horizontal coordinate, or link is out
+  of range; or
+- parent, first-child, and next-sibling links do not form a bounded tree within
+  the owning tree record's contiguous object range.
+
+This strict layout is intentional. It gives the Z80 reader simple bounded
+arithmetic, prevents offsets from aliasing headers or tables, and leaves future
+extensions to a new format version rather than ambiguous v1 files.
+
+The host verifier is available as:
+
+```sh
+python3 tools/gbrverify.py build/examples/hello-dialog.gbr
+```
+
+`lib/gembench/gbr_reader.c` implements the same checks without allocation or
+recursion and exposes trees, objects, and strings as copied records containing
+indices and offsets. It is compiled with SDCC as part of `make gbr-check`.
+
 ### String index
 
 The index contains one 16-bit absolute offset per string. Each referenced value
@@ -84,7 +116,7 @@ NUL-terminated.
 | 3 | 1 | Object type |
 | 4 | 2 | Behaviour flags |
 | 6 | 2 | Visual state bits |
-| 8 | 2 | String index or type-specific value; `65535` means none |
+| 8 | 2 | String index for text-bearing types, otherwise a type-specific value; `65535` means none |
 | 10 | 2 | X coordinate |
 | 12 | 1 | Y coordinate |
 | 13 | 2 | Width |
@@ -92,6 +124,11 @@ NUL-terminated.
 
 Flag, state, type, and byte-offset constants are mirrored in
 `include/gembench/gbr.h`.
+
+`text`, `string`, `button`, `field`, `checkbox`, and `radio` records interpret
+the field at offset 8 as a string index. The compiler rejects a raw `spec` on
+those types, and readers reject a non-`65535` index outside the string table.
+Other object types may use the field as a bounded type-specific value.
 
 ## Deliberate omissions
 

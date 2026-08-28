@@ -20,13 +20,16 @@ an MSX2-only black, white, grey, and red base palette with original boot and
 desktop logo assets. The measured pre-theme runtime baseline remains recorded
 for comparison.
 
-The first proof of concept covers:
+The completed foundation currently covers:
 
-- a compact, bank-safe `.GBR` resource format;
-- object-tree drawing, hit testing, and state changes;
-- window-kind flags and standard window-manager messages;
-- one resource-driven dialog; and
-- a coherent sixteen-colour Screen 7 theme.
+- a compact, bank-safe `.GBR` resource format and deterministic host compiler;
+- strict host and allocation-free Z80 validation of resource binaries;
+- bounded lookup and navigation of strings, trees, and objects;
+- committed golden data and corruption tests; and
+- an MSX2-only black, white, grey, and red Screen 7 visual foundation.
+
+Object drawing, resource-driven forms, and GEM-style window kinds are the next
+runtime milestones; they are not claimed by the current build.
 
 ## Fixed target
 
