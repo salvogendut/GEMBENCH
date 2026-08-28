@@ -1,4 +1,4 @@
-# Architecture
+# GEMBENCH architecture
 
 This document describes the intended GEMBENCH boundaries. It is a starting
 contract for implementation, not a claim that the target runtime exists yet.

@@ -1,4 +1,4 @@
-# Development
+# GEMBENCH development
 
 The initial repository contains only dependency-free host tooling and format
 contracts. Target builds will be documented here after the GeoBench integration
