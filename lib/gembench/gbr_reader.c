@@ -185,7 +185,8 @@ static unsigned char open_storage(gbr_resource_t *resource,
     if (header[GBR_H_VERSION] != GBR_VERSION) return GBR_ERR_VERSION;
     if (header[GBR_H_FLAGS] != 0 ||
         read_u16_memory(header, GBR_H_HEADER_SIZE) != GBR_HEADER_SIZE ||
-        read_u16_memory(header, GBR_H_FILE_SIZE) != size || header[13] != 0)
+        read_u16_memory(header, GBR_H_FILE_SIZE) != size ||
+        header[GBR_H_RESERVED] != 0)
         return GBR_ERR_HEADER;
 
     checksum = 0;
@@ -257,7 +258,8 @@ static unsigned char open_storage(gbr_resource_t *resource,
     for (tree_index = 0; tree_index < candidate.tree_count; tree_index++) {
         offset = (unsigned int)(candidate.tree_table +
                                 tree_index * GBR_TREE_RECORD_SIZE);
-        if (!gbr_read(&candidate, (unsigned int)(offset + 3u), chunk, 1) ||
+        if (!gbr_read(&candidate,
+                      (unsigned int)(offset + GBR_T_RESERVED), chunk, 1) ||
             chunk[0] != 0 ||
             !raw_tree(&candidate, (unsigned char)tree_index, &tree))
             return GBR_ERR_TREE;

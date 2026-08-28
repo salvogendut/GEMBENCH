@@ -52,9 +52,11 @@ Current documentation anchors:
 - `../docs/KERNEL_ARCHITECTURE_REVIEW.md` — dated architecture review retained
   as audit history.
 
-On MSX2, the managed-window path also accepts an optional tagged kind tail
-after the unchanged 12-byte descriptor. It conditionally draws title, close,
+On MSX2, `gb_wm_managed_kind()` explicitly selects a one-byte kind tail after
+the unchanged 12-byte descriptor. It conditionally draws title, close,
 maximise, and resize furniture, owns the enabled move/resize/maximise gestures,
-and reports committed geometry through append-only messages. Untagged apps keep
-the inherited `GB_MSG_DRAG` behavior. This adds no jump-table slots; File
-Manager is the first tagged client and openMSX supplies the interaction test.
+and reports committed geometry through append-only messages. The legacy
+`gb_wm_managed()` path never reads beyond byte 11 and keeps inherited
+`GB_MSG_DRAG` behavior. This adds no jump-table slots; File Manager is the first
+v1 client and openMSX supplies the interaction test. The frozen contract is in
+`../docs/gembench/ABI-V1.md`.

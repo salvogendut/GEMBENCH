@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m7-resident-probe gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m7-resident-probe gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -30,6 +30,9 @@ gembench-msx-banked:
 
 gembench-m7-resident-probe:
 	bash tools/build_gbr_resident_probe.sh
+
+gembench-abi-check:
+	$(PYTHON) tools/check_gembench_abi.py
 
 # Reproduce the MSX2-only four-pen wallpaper from the clean logo source.
 gembench-theme-assets:
@@ -150,6 +153,7 @@ check: gbr-check gbr-example distribution-check-fixtures
 	$(PYTHON) tools/check_lowram_map.py
 	$(PYTHON) tools/check_lowram_map.py --profile msx
 	$(PYTHON) tools/check_abi_table.py
+	$(PYTHON) tools/check_gembench_abi.py
 	$(PYTHON) tools/test_app_layout.py
 	$(PYTHON) tools/test_appicon.py
 	$(PYTHON) tools/test_iconedit_tools.py

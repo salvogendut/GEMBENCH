@@ -1,6 +1,8 @@
 # GBR version 1
 
-Status: **draft, implemented by the initial host compiler**.
+Status: **frozen as part of GEMBENCH-1 on 2026-08-29**. The compatibility
+policy and machine-readable manifest are described in
+[gembench/ABI-V1.md](gembench/ABI-V1.md).
 
 GBR is a compact, little-endian resource format for GEMBENCH. Version 1 contains
 strings and object trees. The complete file is limited to 16 KiB so one resource
@@ -34,8 +36,11 @@ indices; `255` means no object.
 `gbrc.py --c-header ... --symbol-prefix ...` emits their flattened indices,
 the resource blob, counts, and section offsets into a deterministic C header.
 
-The current object types are `box`, `text`, `string`, `button`, `field`, `icon`,
-`image`, `checkbox`, `radio`, and `user`.
+The object types are `box`, `text`, `string`, `button`, `field`, `icon`, `image`,
+`checkbox`, `radio`, and `user`. Their numeric identities are frozen. The
+GEMBENCH-1 renderer implements the first five; the remaining five are
+format-only reservations and a visible instance is rejected before any partial
+tree draw.
 
 ## Binary layout
 
@@ -138,8 +143,8 @@ NUL-terminated.
 | 13 | 2 | Width |
 | 15 | 1 | Height |
 
-Flag, state, type, and byte-offset constants are mirrored in
-`include/gembench/gbr.h`.
+Flag, state, type, reserved-field, and byte-offset constants are mirrored in
+`include/gembench/gbr.h` and checked against `abi/gembench-v1.json`.
 
 `text`, `string`, `button`, `field`, `checkbox`, and `radio` records interpret
 the field at offset 8 as a string index. The compiler rejects a raw `spec` on
@@ -151,3 +156,7 @@ Other object types may use the field as a bounded type-specific value.
 Version 1 does not yet encode icons, raster payloads, editable-field templates,
 keyboard shortcuts, palette roles, user-object callbacks, or menu-specific
 metadata. Those need target runtime designs before binary fields are assigned.
+
+The existing numeric identities for those format-only object types are
+reserved, not permission to silently assign a new record interpretation. Any
+incompatible payload or layout requires a new resource version.

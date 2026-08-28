@@ -84,6 +84,7 @@ DOCRO_FLAG="${DOCRO:-0}"
 NET_FLAG="${NET:-0}"
 GBWIN_FLAG="${GBWIN:-1}"
 GBWIN_DRAG_ONLY_FLAG="${GBWIN_DRAG_ONLY:-0}"
+WINDOW_KIND_FLAG="${WINDOW_KIND:-0}"
 WIDGETS_FLAG="${WIDGETS:-0}"
 BUTTON_FLAG="${BUTTON:-0}"
 ACTIONS_FLAG="${ACTIONS:-0}"
@@ -132,6 +133,12 @@ if [ "$GBWIN_DRAG_ONLY_FLAG" = "1" ] && [ "$GBWIN_FLAG" != "1" ]; then
     echo "ERROR: GBWIN_DRAG_ONLY=1 requires GBWIN=1" >&2
     exit 1
 fi
+if [ "$WINDOW_KIND_FLAG" = "1" ]; then
+    case " $ALL_APPDEFS " in
+        *" -DGB_MSX2 "*) ;;
+        *) echo "ERROR: WINDOW_KIND=1 is MSX2-only" >&2; exit 1 ;;
+    esac
+fi
 if [ "$FORM_SELECT_FLAG" = "1" ] &&
    { [ "$FORM_FLAG" != "1" ] || [ "$SELECTOR_FLAG" != "1" ]; }; then
     echo "ERROR: FORM_SELECT=1 requires FORM=1 and SELECTOR=1" >&2
@@ -178,6 +185,9 @@ if [ "$BASELINE_FLAG" != "0" ] && [ "$BASELINE_FLAG" != "1" ]; then
 fi
 
 deps=("$0" "tools/build_cache.sh" "tools/check_app_layout.py" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
+if [ "$WINDOW_KIND_FLAG" = "1" ]; then
+    deps+=("$GB/gbwindow_kind.s")
+fi
 if [ -n "$APP_ICON" ]; then
     deps+=("tools/embed_app_icon.py" "$APP_ICON")
 fi
@@ -290,6 +300,7 @@ cache_key=$(printf '%s\n' \
     "NET_SRC=$NET_SRC" \
     "GBWIN=$GBWIN_FLAG" \
     "GBWIN_DRAG_ONLY=$GBWIN_DRAG_ONLY_FLAG" \
+    "WINDOW_KIND=$WINDOW_KIND_FLAG" \
     "WIDGETS=$WIDGETS_FLAG" \
     "BUTTON=$BUTTON_FLAG" \
     "ACTIONS=$ACTIONS_FLAG" \
@@ -333,6 +344,11 @@ fi
 
 "$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
 "$SDAS" -o "$work/gblib.rel" "$GBLIB_SRC"
+WINDOW_KIND_REL=""
+if [ "$WINDOW_KIND_FLAG" = "1" ]; then
+    "$SDAS" -o "$work/gbwindow_kind.rel" "$GB/gbwindow_kind.s"
+    WINDOW_KIND_REL="$work/gbwindow_kind.rel"
+fi
 APP_PROBE_REL=""
 if [ "$APP_PROBE_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
@@ -515,7 +531,7 @@ fi
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
     $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $GBR_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $TASK_REL $TASK_ROOT_REL \
-    "$work/gblib.rel" -o "$work/app.ihx"
+    $WINDOW_KIND_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
 # AFTER the code) must end below data-loc - otherwise the RAM data area starts inside

@@ -195,9 +195,9 @@ m4s_hang        jr    m4s_hang
                 call  clock_init             ; detect RTC + seed the software clock (#77:
                                               ; the desktop draws the bar, not the kernel)
                 call  boot_tick              ; #196: bar 3/4
-                ld    hl,WM_NWIN            ; clear WM low-RAM state (counts, focus, table
-                ld    de,WM_NWIN+1          ; incl. alive flags, z-order)
-                ld    bc,WM_Z+WM_MAXWIN-WM_NWIN-1
+                ld    hl,WM_NWIN            ; clear WM low-RAM state (counts, focus, table,
+                ld    de,WM_NWIN+1          ; alive flags, z-order and drag/drop claim state)
+                ld    bc,WM_DRAGDIR+4-WM_NWIN-1
                 ld    (hl),0
                 ldir
                 call  app_pool_init          ; build the app-page pool from md_banks (#84)

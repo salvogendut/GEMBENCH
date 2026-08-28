@@ -1324,7 +1324,7 @@ static void fm_click(void)
     if (copy_state != COPY_IDLE || list_state != LIST_IDLE || gb_drop_claimed()) return;
 #endif
 
-    /* CPC/PCW retain the inherited app-owned grip. The tagged MSX2 kind makes
+    /* CPC/PCW retain the inherited app-owned grip. The explicit MSX2 kind makes
        the kernel draw, hit-test and drag this furniture. */
 #ifndef GB_MSX2
     if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {
@@ -1432,7 +1432,7 @@ static void fm_proc(void)
 #ifdef GB_MSX2
 static gb_mwin_kind_t fmmw_kind = {
     { DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0, 0 },
-    GB_WK_STANDARD, GB_WK_ABI_V1
+    GB_WK_STANDARD
 };
 #define fmmw fmmw_kind.window
 #else
@@ -1449,8 +1449,13 @@ void main(void)
     win_y = DEF_Y + my_drive * CASCADE_Y;
     fmmw.x = win_x;              /* register the window at the cascaded position */
     fmmw.y = win_y;
-    gb_wm_managed(&fmmw);        /* register first (no draw, focus) so gb_set_name/fs_load
-                                   target our window for the config read below */
+#ifdef GB_MSX2
+    gb_wm_managed_kind(&fmmw_kind); /* explicit v1 kind registration; no legacy overread */
+#else
+    gb_wm_managed(&fmmw);
+#endif
+    /* Register first (no draw, focus) so gb_set_name/fs_load target our window
+       for the config read below. */
     gb_doc(&fmdoc);              /* View menu (Fullscreen / Icons-List); no File (#142) */
     gb_set_drive(my_drive);
     /* Open at the drive ROOT. The kernel's directory position is a single global

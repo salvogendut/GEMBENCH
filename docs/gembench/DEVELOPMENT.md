@@ -116,8 +116,10 @@ The test makes a disposable IDE image whose root-level `A.APP` is byte-for-byte
 identical to the built `/GBENCH/FORMREF.APP`. It launches the app through File
 Manager, captures the GBR-defined modal at Compact/Level 2, and asserts the
 resource descriptor, keyboard focus actions, Save commit, and modal restore.
+Set `MSX_HEADLESS=1` to run every logic assertion with renderer-dependent
+screenshots disabled.
 
-Exercise the first tagged MSX2 window kind with:
+Exercise the first explicitly registered MSX2 window kind with:
 
 ```sh
 make gembench-msx
@@ -129,6 +131,8 @@ keyboard-matrix pointer input to maximise and restore it, drag its title, and
 resize its kernel-drawn grip. It verifies the live geometry and observes the
 `GB_MSG_MOVED`, `GB_MSG_SIZED`, and `GB_MSG_MAXIMIZED` callbacks. The final
 Screen 7 capture is written to `build/msx/window-kinds.png`.
+`MSX_HEADLESS=1` retains the geometry and message assertions without requesting
+the capture.
 
 Use 1983 as the complementary boot, mapper, and image-layout integration check:
 
@@ -204,17 +208,16 @@ stack, interaction, and emulator results.
 
 The public `gb_mwin_t` prefix remains the original 12-byte descriptor. Existing
 applications therefore retain the legacy close/drag callback contract. An
-MSX2 application opts into kernel-owned furniture and gestures with the tagged
-wrapper:
+MSX2 application opts into kernel-owned furniture and gestures with the
+explicit v1 wrapper and registration call:
 
 ```c
 static gb_mwin_kind_t window = {
     { x, y, w, h, min_w, min_h, window_proc, title, 0 },
-    GB_WK_STANDARD,
-    GB_WK_ABI_V1
+    GB_WK_STANDARD
 };
 
-gb_wm_managed(&window.window);
+gb_wm_managed_kind(&window);
 ```
 
 `GB_WK_TITLE`, `GB_WK_CLOSE`, `GB_WK_MAXIMIZE`, `GB_WK_MOVE`, and
@@ -223,4 +226,12 @@ their committed geometry through `GB_MSG_MOVED`, `GB_MSG_SIZED`, and
 `GB_MSG_MAXIMIZED`; the application should refresh any cached rectangle from
 `gb_wm_x()`, `gb_wm_y()`, `gb_wm_w()`, and `gb_wm_h()`. File Manager is the
 reference implementation. This extension is deliberately MSX2-only and does
-not change the resident jump table.
+not change the resident jump table. `gb_wm_managed()` always selects the legacy
+12-byte contract and never causes the kernel to read the appended kind byte.
+The frozen layout and compatibility rules are in [ABI-V1.md](ABI-V1.md).
+
+Run the machine-readable compatibility audit independently with:
+
+```sh
+make gembench-abi-check
+```

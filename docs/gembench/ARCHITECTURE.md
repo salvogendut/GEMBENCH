@@ -42,9 +42,11 @@ The first proof of concept compared two placements:
 Milestone 7 measured both variants. The resident candidate does not fit the
 current kernel window, while mapper-backing the 306-byte FormRef resource loses
 almost all application headroom to strict external validation. Small GBR v1
-resources therefore remain embedded and rendered app-side for the first ABI
-review. The bounded MSX2 mapper transport remains opt-in for future large-resource
-experiments; see [M7-BANKING-DECISION.md](M7-BANKING-DECISION.md).
+resources therefore remain embedded and rendered app-side. Milestone 8 froze
+that placement-independent resource format and replaced the prototype
+window-tail probe with an explicit registration contract. The bounded MSX2
+mapper transport remains opt-in for future large-resource experiments; see
+[M7-BANKING-DECISION.md](M7-BANKING-DECISION.md) and [ABI-V1.md](ABI-V1.md).
 
 ## Resource ownership
 
@@ -78,4 +80,6 @@ from that upstream rather than copied source snapshots.
 GEMBENCH-specific documents live under `docs/gembench/`, format declarations
 under `include/gembench/`, and host resource tools alongside the inherited
 GeoBench tools. Runtime extensions should remain visibly separated until their
-ABI and placement have passed the proof-of-concept measurement gate.
+ABI and placement have passed the proof-of-concept measurement gate. The GBR1
+and MSX2 managed-window contracts have passed that gate and are frozen as
+GEMBENCH-1; future incompatible work must use an explicit version boundary.

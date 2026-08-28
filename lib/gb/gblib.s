@@ -454,8 +454,10 @@ _gb_wm_run:
 _gb_wm_add:
         jp      0x805D          ; GB_WMADD
 ;; void gb_wm_managed(const gb_mwin_t *desc);   desc in HL -> register a kernel-managed
-;; window (#146): the WM owns the chrome, the app provides content hooks.
+;; legacy window (#146). A=0 is an explicit ABI selector, so the kernel never
+;; probes beyond the 12-byte descriptor.
 _gb_wm_managed:
+        xor     a
         jp      0x80B1          ; GB_WMMANAGED
 ;; The live window rect, published by the WM into MW_RECT (#1448) before each managed
 ;; hook; the app reads it (gb_wm_x/y/w/h).  (char return in A, like gb_mx.)

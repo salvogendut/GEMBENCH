@@ -14,6 +14,7 @@ proc fr_env_addr {name} {
 set fr_output $::env(GEMBENCH_FORMREF_OUTPUT)
 set fr_focus_screenshot $::env(GEMBENCH_FORMREF_FOCUS_SCREENSHOT)
 set fr_final_screenshot $::env(GEMBENCH_FORMREF_FINAL_SCREENSHOT)
+set fr_screenshots [expr {$::env(GEMBENCH_FORMREF_SCREENSHOTS) + 0}]
 set fr_addr_start [fr_env_addr GEMBENCH_FORMREF_START]
 set fr_addr_main [fr_env_addr GEMBENCH_FORMREF_MAIN]
 set fr_addr_resource_open [fr_env_addr GEMBENCH_FORMREF_RESOURCE_OPEN]
@@ -36,6 +37,8 @@ set fr_target_x 0
 set fr_target_y 0
 set fr_callback ""
 set fr_entry_seen 0
+set fr_entry_hits 0
+set fr_entry_probe ""
 set fr_start_seen 0
 set fr_main_seen 0
 set fr_resource_seen 0
@@ -100,12 +103,14 @@ proc fr_screen_ready {} {
 
 proc fr_finish {status} {
     fr_release_all
-    if {$status ne "PASS"} {
+    if {$::fr_screenshots && $status ne "PASS"} {
         catch {screenshot -raw $::fr_final_screenshot}
     }
     set handle [open $::fr_output w]
     puts $handle "STATUS=$status"
     puts $handle "ENTRY_SEEN=$::fr_entry_seen"
+    puts $handle "ENTRY_HITS=$::fr_entry_hits"
+    puts $handle "ENTRY_PROBE=$::fr_entry_probe"
     puts $handle "START_SEEN=$::fr_start_seen"
     puts $handle "MAIN_SEEN=$::fr_main_seen"
     puts $handle "RESOURCE_SEEN=$::fr_resource_seen"
@@ -308,6 +313,8 @@ proc fr_capture_focus {} {
         } else {
             after time 0.01 fr_capture_focus
         }
+    } elseif {!$::fr_screenshots} {
+        after time 5.0 fr_tab_increment
     } elseif {[catch {screenshot -raw $::fr_focus_screenshot} error]} {
         fr_finish "FAIL focus screenshot: $error"
     } else {
@@ -360,7 +367,15 @@ proc fr_launch_wait {} {
 proc fr_launch_formref {} {
     set ::fr_entry_seen 0
     set ::fr_launch_clicks 2
-    debug set_bp 0x4000 {} {if {[fr_is_loaded]} {set ::fr_entry_seen 1}; set ::pause off}
+    debug set_bp 0x4000 {} {
+        incr ::fr_entry_hits
+        set ::fr_entry_probe [format "%02X,%02X,%02X" \
+            [peek $::fr_addr_main] \
+            [peek [expr {$::fr_addr_main + 1}]] \
+            [peek [expr {$::fr_addr_main + 2}]]]
+        if {[fr_is_loaded]} {set ::fr_entry_seen 1}
+        set ::pause off
+    }
     debug set_bp $::fr_addr_start {} {if {[fr_is_loaded]} {set ::fr_start_seen 1}; set ::pause off}
     debug set_bp $::fr_addr_main {} {if {[fr_is_loaded]} {set ::fr_main_seen 1; set ::fr_main_sp [reg SP]}; set ::pause off}
     debug set_bp $::fr_addr_resource_open {} {if {[fr_is_loaded]} {set ::fr_resource_seen 1}; set ::pause off}

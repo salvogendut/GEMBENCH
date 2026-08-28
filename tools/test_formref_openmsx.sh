@@ -80,6 +80,11 @@ tools/build_msx_img.sh "$stage/card" "$stage/formref.img"
 export GEMBENCH_FORMREF_OUTPUT="$PWD/build/msx/formref-openmsx.txt"
 export GEMBENCH_FORMREF_FOCUS_SCREENSHOT="$PWD/build/msx/formref-focus.png"
 export GEMBENCH_FORMREF_FINAL_SCREENSHOT="$PWD/build/msx/formref-final.png"
+if [ "${MSX_HEADLESS:-0}" = 1 ]; then
+    export GEMBENCH_FORMREF_SCREENSHOTS=0
+else
+    export GEMBENCH_FORMREF_SCREENSHOTS=1
+fi
 export MSX_UNAPI=0
 export MSX_MOUSE=0
 export SDL_AUDIODRIVER=dummy

@@ -72,6 +72,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   accessor path for a build-verified embedded resource. `GBWIN_DRAG_ONLY=1`
   keeps window dragging but omits the resize
   grip and resize-drag helpers for apps that do not use them.
+  `WINDOW_KIND=1` links the MSX2-only explicit v1 registration wrapper; it
+  requires `APPDEFS=-DGB_MSX2` and is omitted from legacy-only applications.
   `SOUND=1` links the target-specific PSG/beeper primitives into that app only;
   it does not add a resident kernel service.
   `REPAINTTOP=1` links the three-byte `gb_repaint_top()` binding for an opaque
@@ -84,10 +86,12 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   automatically by MSX builds only.
 - **`test_formref_openmsx.sh`** — builds a disposable Nextor image and drives the
   resource-backed MSX2 FormRef through pointer launch, keyboard focus, mutation,
-  Save, and trace assertions under openMSX.
+  Save, and trace assertions under openMSX. `MSX_HEADLESS=1` skips screenshots
+  while retaining the complete logic trace.
 - **`test_window_kinds_openmsx.sh`** — drives the real MSX2 File Manager through
   kernel-owned maximise/restore, move, and resize gestures, verifies the
-  append-only geometry messages, and captures the final Screen 7 window.
+  append-only geometry messages, and captures the final Screen 7 window. Its
+  headless mode retains all geometry/message assertions.
 - **`gbrc.py` / `gbrverify.py`** — compile deterministic GBR v1 resources and
   strictly verify binary resources. `gbrc.py --c-header` can also emit a C blob,
   section/count constants, and source-only object IDs for embedded resources.
@@ -119,6 +123,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   flood fill, spray paint, undo, and rectangular selection-aware copy/paste.
 - **`check_abi_table.py`** — verifies the `kernel/gbkern.asm` jump-table comments
   match the exported `lib/gbapp.inc` slot addresses through `kernel/api_table.inc`.
+- **`check_gembench_abi.py`** — checks the frozen GEMBENCH-1 JSON manifest
+  against GBR constants, C/assembly window values, the Z80 descriptor layouts,
+  and the explicit legacy/v1 registration selectors.
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in
   `kernel/lowram.tsv` for accidental range overlaps.
 - **`build_scheduler.sh {cpc|msx|pcw}`** — assembles the release, app-carried
