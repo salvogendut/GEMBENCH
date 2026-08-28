@@ -63,3 +63,45 @@ make gembench-baseline-input-openmsx
 
 The diagnostic timer intentionally advances the visible RTC and should only be
 used with a disposable emulator clock state.
+
+## GBR object runtime
+
+Milestone 4 was validated on 2026-08-28 with openMSX 21.0 using the normal
+release `GBRDEMO.APP` (11,127 bytes, 5,001 bytes of load headroom) and the
+network-free form of the generated IDE image. The Tcl driver uses real MSX
+keyboard-matrix cursor and space events to:
+
+1. open the first desktop drive;
+2. double-click the root-level `HELLO.GBR` document in File Manager;
+3. wait for the external resource to validate and draw in a third managed
+   window; and
+4. click the resource-defined `OK` button and capture the settled Screen 7
+   repaint.
+
+The clean release capture showed the `GBR Resource` window, external welcome
+text, and selected red button outline over File Manager. A diagnostic-only run
+also observed renderer result `GBR_RT_OK`, the expected four-byte call/return
+stack delta, and button state `0x000A` (`outlined | selected`). The diagnostic
+instrumentation was removed before the release build.
+
+The corresponding 1983 integration run reached frame 6,001 with the Screen 7
+register baseline matched, 25 free mapper segments at entry, and one idle busy
+application page. 1983 remains the boot/integration check because its current
+headless interface cannot drive pointer motion; openMSX is authoritative for
+the visible association, hit-test, and state result.
+
+To reproduce after building a network-free image with
+`MSX_UNAPI_TSR= make gembench-msx`, choose writable absolute result paths (the
+Flatpak cannot see the host `/tmp` namespace):
+
+```sh
+GEMBENCH_GBR_OUTPUT="$PWD/build/msx/gbr-openmsx.txt" \
+GEMBENCH_GBR_SCREENSHOT="$PWD/build/msx/gbr-openmsx.png" \
+MSX_UNAPI=0 MSX_MOUSE=0 \
+MSX_SCRIPT=debug/gbr_object_openmsx.tcl tools/run_msx.sh
+
+python3 debug/gembench_baseline_1983.py \
+  --ide-image QA/MSX/GBMSX.IMG \
+  --output-dir "$PWD/build/gbr-1983" \
+  --frames 6000
+```

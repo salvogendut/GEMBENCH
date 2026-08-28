@@ -513,6 +513,9 @@ static unsigned char entry_icon(const char *name)
     if (ext_eq(ext, "SAV")) return ICON_SCREENSAVER;   /* #221: screensaver modules */
     if (ext_eq(ext, "MOD")) return ICON_GEOBENCH;      /* #234: kernel modules = the lollipop icon */
     if (ext_eq(ext, "IST")) return ICON_BINARY;   /* #221: apps/data share the binary icon */
+#ifdef GB_MSX2
+    if (ext_eq(ext, "GBR")) return ICON_APP;      /* app-linked GEMBENCH resource document */
+#endif
     if (ext_eq(ext, "APP")) {
         icon = app_icon(name);
         return (icon == ICON_APP) ? (unsigned char)(APPICON_UNKNOWN | ICON_APP) : icon;
@@ -980,6 +983,7 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
      .PIC             the image-only VIEWER
      .HTM             an offline page -> BROWSER.APP
      .BAS             a GB-BASIC program -> opens in BASIC.APP
+     .GBR             a GEMBENCH resource -> GBRDEMO.APP (MSX2 only)
      .BIN             a native binary -> an info note (exec unimplemented, #236)
      anything else    no associated GEOBENCH application */
 static void open_entry(unsigned char idx)
@@ -1005,6 +1009,10 @@ static void open_entry(unsigned char idx)
         gb_wm_launch_as("BROWSER APP");
     else if (ext_is(e, 'B', 'A', 'S'))          /* GB-BASIC programs open in BASIC.APP */
         gb_wm_launch_as("BASIC   APP");
+#ifdef GB_MSX2
+    else if (ext_is(e, 'G', 'B', 'R'))          /* GEMBENCH resource proof-of-concept */
+        gb_wm_launch_as("GBRDEMO APP");
+#endif
     else if (ext_is(e, 'B', 'I', 'N'))          /* #236: native binaries aren't runnable
                                                    from GEOBENCH (exec unimplemented) - say so */
         gb_alert("Binary programs cannot", "be run from GEOBENCH.");

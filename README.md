@@ -25,11 +25,15 @@ The completed foundation currently covers:
 - a compact, bank-safe `.GBR` resource format and deterministic host compiler;
 - strict host and allocation-free Z80 validation of resource binaries;
 - bounded lookup and navigation of strings, trees, and objects;
+- an app-linked Screen 7 runtime for box, text/string, and button objects;
+- caller-owned state overlays plus deepest-selectable-object hit testing;
+- an MSX2 File Manager association and external `HELLO.GBR` demonstration;
 - committed golden data and corruption tests; and
 - an MSX2-only black, white, grey, and red Screen 7 visual foundation.
 
-Object drawing, resource-driven forms, and GEM-style window kinds are the next
-runtime milestones; they are not claimed by the current build.
+The next runtime milestone converts a representative application form to the
+resource path and adds keyboard traversal. GEM-style window kinds follow that
+vertical slice.
 
 ## Fixed target
 
@@ -56,6 +60,11 @@ Build the fixed-target MSX distribution:
 ```sh
 make gembench-msx
 ```
+
+To exercise the object runtime, open the first desktop drive and double-click
+`HELLO.GBR` in its root. File Manager launches `GBRDEMO.APP`, which validates
+the external resource, draws its `HELLO` tree, and toggles the button's selected
+state when it is clicked.
 
 Capture the reproducible pre-GBR baseline under the sibling `1983`
 emulator checkout:

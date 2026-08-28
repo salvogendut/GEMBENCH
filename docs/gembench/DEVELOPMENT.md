@@ -29,9 +29,9 @@ Run only the GBR compiler tests:
 make gbr-check
 ```
 
-This runs the compiler and golden-file tests, corruption checks, the portable
-target-reader tests, and an SDCC Z80 compile check. Verify an individual binary
-with `python3 tools/gbrverify.py path/to/resource.gbr`.
+This runs the compiler and golden-file tests, corruption checks, portable
+target-reader and object-runtime tests, and SDCC Z80 compile/size checks. Verify
+an individual binary with `python3 tools/gbrverify.py path/to/resource.gbr`.
 
 Rebuild only the example resource:
 
@@ -95,6 +95,16 @@ Build the fixed-target distribution:
 make gembench-msx
 ```
 
+The MSX build stages `HELLO.GBR` in the drive root and `GBRDEMO.APP` in
+`/GBENCH`. Open the first desktop drive, then double-click `HELLO.GBR` to test
+the real File Manager association and external-resource path. Clicking the
+resource-defined button toggles its selected state.
+
+The same release path can be driven automatically in openMSX with
+`debug/gbr_object_openmsx.tcl`; the complete command and reference result are
+recorded in [OPENMSX-VALIDATION.md](OPENMSX-VALIDATION.md). Use absolute output
+paths when openMSX is installed as a Flatpak.
+
 Generated files live under `build/` and are ignored by Git.
 
 ## Resource changes
@@ -110,13 +120,23 @@ The `.GBR` binary layout is a target ABI. When changing it:
 Do not silently reinterpret an existing object type, flag, state bit, or record
 field.
 
-## Target work
+## Object runtime
 
-Before adding the resource renderer, decide and record:
+The first renderer is deliberately app-linked and does not change the resident
+kernel jump table. Its public interface is `include/gembench/gbr_object.h`:
 
-- which jump-table slots or version negotiation the extension uses;
-- the maximum resource-segment and object-tree capacities; and
-- the exact emulator and Omega/RainBIOS validation commands.
+- the validated resource bytes remain immutable;
+- callers provide one `unsigned int` state slot per resource object;
+- tree roots are placed by the caller in Screen 7 pixel coordinates, while
+  child coordinates are relative to their parents;
+- visible box, text/string, and button objects draw through existing libgb
+  primitives and semantic black/white/grey/red pen roles;
+- hidden ancestors suppress drawing and hit testing, while disabled ancestors
+  additionally suppress hits; and
+- hit testing returns the deepest selectable object, resolving equal-depth
+  overlap in resource order.
 
-The first renderer is app-linked. Resident placement remains a later measured
-comparison rather than an initial ABI assumption.
+`GBRDEMO.APP` currently caps its external resource at 512 bytes and eight
+objects. These are demonstration-app limits, not additions to the GBR v1 ABI.
+Resident placement and mapper-backed resource storage remain a later measured
+comparison.
