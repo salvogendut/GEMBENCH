@@ -6,21 +6,26 @@ declarative resources and consistent desktop conventions associated with
 Digital Research GEM.
 
 This is not an x86 GEM emulator, an AES compatibility layer, or a loader for
-historical GEM applications. The project borrows interaction and architecture
-ideas while keeping a native Z80 ABI.
+historical GEM applications. GEMBENCH borrows interaction and architecture
+ideas while retaining a native Z80 ABI and independently implemented BSD code
+and artwork.
+
+![GeoBench Screen 7 baseline on MSX2](screenshots/MSX-Mode7.png)
 
 ## Status
 
-The repository is in its pre-implementation phase. The first milestone is a
-small, measurable proof of concept for:
+The repository now contains the complete GeoBench foundation, imported with
+history from upstream commit `6309ff3`. The bootstrap intentionally preserves
+the existing runtime and applications before GEMBENCH-specific UI changes are
+introduced.
+
+The first proof of concept covers:
 
 - a compact, bank-safe `.GBR` resource format;
 - object-tree drawing, hit testing, and state changes;
 - window-kind flags and standard window-manager messages;
-- one resource-driven GeoBench dialog; and
+- one resource-driven dialog; and
 - a coherent sixteen-colour Screen 7 theme.
-
-The detailed planning document is [DESIGN-ESTIMATE.md](DESIGN-ESTIMATE.md).
 
 ## Fixed target
 
@@ -31,42 +36,55 @@ The detailed planning document is [DESIGN-ESTIMATE.md](DESIGN-ESTIMATE.md).
 - MSX-DOS2 or Nextor
 - RainBIOS as a supported validation environment
 
-CPC and PCW compatibility are outside GEMBENCH's scope.
+CPC and PCW sources are retained during bootstrap, but compatibility with those
+machines does not constrain new GEMBENCH APIs, resources, or layouts.
 
-## Repository layout
+## Build and check
 
-```text
-docs/                 Architecture, development, and format contracts
-examples/             Source resources used for examples and smoke tests
-include/gembench/     Target-visible format and ABI declarations
-tests/                Dependency-free host tests
-tools/                Host-side build tools
-```
-
-GeoBench is currently an external foundation and is not vendored here. The
-eventual import, fork, or dependency strategy must be decided before target
-runtime work begins.
-
-## Quick start
-
-The initial host tooling requires Python 3.11 or newer and GNU Make:
+Run the host checks, including the GBR compiler suite and example build:
 
 ```sh
 make check
 ```
 
-That command runs the tests and compiles the example resource to
-`build/examples/hello-dialog.gbr`.
+Build the fixed-target MSX distribution:
 
-To compile a resource directly:
+```sh
+make gembench-msx
+```
+
+The inherited GeoBench build requires RASM, SDCC, mtools, dosfstools, and the
+documented MSX dependencies. See [Building and running](docs/BUILDING.md) and
+[the MSX2 target](docs/MSX2.md) for setup, deployment, and emulator commands.
+
+Compile a resource directly with:
 
 ```sh
 python3 tools/gbrc.py examples/hello-dialog.json \
     --output build/examples/hello-dialog.gbr
 ```
 
-The source format and current binary layout are documented in
-[docs/GBR-V1.md](docs/GBR-V1.md).
+## Documentation
+
+- [Design and estimate](DESIGN-ESTIMATE.md)
+- [Approved implementation plan](docs/gembench/IMPLEMENTATION-PLAN.md)
+- [GEMBENCH architecture](docs/gembench/ARCHITECTURE.md)
+- [GBR version 1](docs/GBR-V1.md)
+- [GeoBench foundation architecture](docs/ARCHITECTURE.md)
+- [Development workflow](docs/DEVELOPMENT.md)
+
+## Upstream
+
+GeoBench history is retained in this repository. Developers can configure the
+upstream remote with:
+
+```sh
+git remote add upstream git@github.com:salvogendut/geobench.git
+git fetch upstream
+```
+
+The exact bootstrap base and reproduction procedure are recorded in
+[the upstream baseline](docs/gembench/UPSTREAM.md).
 
 ## Licensing
 

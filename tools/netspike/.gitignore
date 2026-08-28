@@ -1,0 +1,9 @@
+SPIKE.BIN
+spike.dsk
+net.conf
+*.asm
+*.conf
+*.lk
+*.png
+*.ppm
+*.log

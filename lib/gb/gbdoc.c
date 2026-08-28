@@ -1,0 +1,656 @@
+/* gbdoc.c - the document-app framework (#142), an OPT-IN libgb module.
+ *
+ * ONE File menu for every app. An app registers a gb_doc_t (buffer + new/open/save
+ * hooks) and gets a standard top-bar "File" menu (New / Load / Save / Save As) that
+ * the framework renders and runs - so the app carries no menu or file-dialog code.
+ * Apps add their own titles with gb_menu_add. Linked only when build_capp.sh sets
+ * DOC=1; the dialogs it calls (gb_popup/gb_prompt/gb_pickfile/gb_pickdir) are the tiny
+ * gbui_stub stubs - the heavy render lives in the paged GBUI module (#142 step 1b), so
+ * gbdoc + an app's menus add only a few hundred bytes, not the whole dialog stack.
+ *
+ * Recipe (see gb.h): gb_doc(&doc) before gb_wm_run; in on_event call gb_doc_event()
+ * first; in on_frame call gb_doc_frame() and repaint your window if it returns 1.
+ */
+#include "gb.h"
+
+#define DOC_MAXTITLES 4              /* File + up to 3 app titles */
+
+static const gb_doc_t *g_doc;
+static unsigned char   g_dirty;
+static unsigned char   g_want;       /* 0 = none, else (title index + 1) to drop */
+static char            g_name[11];   /* current file's 8.3 name (Load/Save As update it) */
+static void set_name(const char *n11);
+
+#define DOC_AFTER_NONE    0
+#define DOC_AFTER_NEW     1
+#define DOC_AFTER_LOAD    2
+#define DOC_AFTER_CLOSE   3
+
+#ifdef GBDOC_BOUNDED_IO
+/* Notepad's bounded document job is app-linked and keeps its state in the
+ * consumed executable-icon payload. This leaves both resident kernel memory
+ * and the app's nearly full data page unchanged. */
+#define DOC_IO_IDLE       0
+#define DOC_IO_LOAD       1
+#define DOC_IO_SAVE       2
+#define DOC_IO_CHUNK      512
+#define DOC_IO_STATE      (*(volatile unsigned char *)0x4084)
+#define DOC_IO_AFTER      (*(volatile unsigned char *)0x4085)
+#define DOC_IO_CREATED    (*(volatile unsigned char *)0x4086)
+#define DOC_IO_LAUNCH     (*(volatile unsigned char *)0x4087)
+#define DOC_IO_OFF        (*(volatile unsigned int *)0x4088)
+#define DOC_IO_TOTAL      (*(volatile unsigned int *)0x408A)
+#define FS_LOAD_OFS       ((volatile unsigned char *)0x144C)
+#define FS_XFLAGS         (*(volatile unsigned char *)0x144F)
+
+static void do_new_now(void);
+static void do_load_now(void);
+#endif
+
+static const char     *g_label[DOC_MAXTITLES];
+static const char *const *g_items[DOC_MAXTITLES];
+static unsigned char   g_nitems[DOC_MAXTITLES];
+static void          (*g_handler[DOC_MAXTITLES])(unsigned char);
+static unsigned char   g_col[DOC_MAXTITLES];     /* each title's byte column */
+static unsigned char   g_ntitles;
+static unsigned char   g_def[1 + DOC_MAXTITLES * 9];   /* MENU_DEF: count, {col,label[8]}* */
+
+/* The File menu is built per-app: only items whose hook exists appear, so a
+ * read-only app (on_open only) shows just "Load", and a document-less app (the
+ * File Manager) shows no File title at all (#142). file_act maps each visible
+ * item back to its action. */
+static const char     *file_items[6];
+static unsigned char   file_act[6];   /* per visible item: 0 New,1 Load,2 Save,3 Save As,4 Export */
+static unsigned char   file_nf;       /* number of visible File items */
+static void            file_action(unsigned char sel);
+static const char *const confirm_items[] = { "Save", "Don't Save", "Cancel" };
+
+static unsigned char slen(const char *s) { unsigned char n = 0; while (s[n]) n++; return n; }
+
+#ifndef GBDOC_RO       /* to_83 / name83 are only used by Save As (omitted in read-only) */
+/* to_83: "NAME.EXT" (or "NAME") -> an 11-byte space-padded 8.3 name (no dot) for
+ * gb_set_name. */
+static char name83[11];
+static void to_83(const char *src)
+{
+    unsigned char i = 0, j;
+    for (j = 0; j < 11; j++) name83[j] = ' ';
+    for (j = 0; j < 8 && src[i] && src[i] != '.'; j++) name83[j] = src[i++];
+    while (src[i] && src[i] != '.') i++;          /* skip any over-long name tail */
+    if (src[i] == '.') {
+        i++;
+        for (j = 0; j < 3 && src[i]; j++) name83[8 + j] = src[i++];
+    }
+}
+#endif
+
+/* (re)build the kernel MENU_DEF from the registered titles, auto-placing columns,
+ * and hand it to the bar. */
+static void rebuild(void)
+{
+    unsigned char i, j, col = 10, *p = g_def;
+    *p++ = g_ntitles;
+    for (i = 0; i < g_ntitles; i++) {
+        unsigned char len = slen(g_label[i]);
+        g_col[i] = col;
+        *p++ = col;
+        for (j = 0; j < 8; j++) *p++ = (j < len) ? g_label[i][j] : 0;
+        col = (unsigned char)(col + (len * 6 + 3) / 4 + 1);   /* next title's column */
+    }
+    gb_menu(g_def);
+}
+
+/* --- the standard Edit menu (#142): added when the doc provides on_copy --- *
+ * Copy/Paste go through the shared clipboard - gb_clip_* are resident kernel calls
+ * (a fixed low-RAM buffer at #3E00), so the clipboard survives app switches and the
+ * code isn't duplicated into every app's bank. */
+static const char *const edit_items[] = { "Select All", "Copy", "Paste" };
+static void edit_action(unsigned char sel)
+{
+    if      (sel == 0) { if (g_doc->on_selectall) g_doc->on_selectall(); }
+    else if (sel == 1) { if (g_doc->on_copy)      g_doc->on_copy(); }
+    else if (sel == 2) { if (g_doc->on_paste)     g_doc->on_paste(); }
+}
+
+/* --- the View menu (#142): added when the doc provides on_fullscreen or view_items.
+ * "Fullscreen" toggles (the app resizes its own window); app view_items follow. */
+static const char *g_view[8];          /* "Fullscreen" + the app's view_items */
+static unsigned char g_fullscreen;     /* current fullscreen toggle state */
+/* #156: the kernel sets this byte when the title-bar maximize gadget is clicked; gb_doc_frame
+ * toggles the SAME g_fullscreen the View > Fullscreen menu uses, so the two stay in sync. We
+ * clear it when a doc registers (below) so stale RAM can't toggle before the first frame. */
+#define gb_maxreq (*(volatile unsigned char *)0x1309)
+static void view_action(unsigned char sel)
+{
+    unsigned char base = 0;
+    if (g_doc->on_fullscreen) {
+        if (sel == 0) { g_fullscreen = (unsigned char)!g_fullscreen; g_doc->on_fullscreen(g_fullscreen); return; }
+        base = 1;
+    }
+    if (g_doc->on_view) g_doc->on_view((unsigned char)(sel - base));
+}
+
+void gb_doc(const gb_doc_t *d)
+{
+    g_doc = d;
+    g_dirty = 0;
+    g_want = 0;
+    g_ntitles = 0;
+    {                                 /* build the File menu from the hooks present */
+        unsigned char nf = 0;
+        if (d->on_new)  { file_items[nf] = "New";     file_act[nf++] = 0; }
+        if (d->on_open) { file_items[nf] = "Load";    file_act[nf++] = 1; }
+        if (d->on_save) { file_items[nf] = "Save";    file_act[nf++] = 2;
+                          file_items[nf] = "Save As"; file_act[nf++] = 3; }
+        if (d->export_label) { file_items[nf] = d->export_label; file_act[nf++] = 4; }
+        file_items[nf] = 0; file_nf = nf;
+        if (nf) {                     /* a document-less app gets no File title at all */
+            g_label[g_ntitles]   = "File";
+            g_items[g_ntitles]   = file_items;
+            g_nitems[g_ntitles]  = nf;
+            g_handler[g_ntitles] = file_action;
+            g_ntitles++;
+        }
+    }
+    if (d->on_copy) {                 /* standard Edit menu, backed by the shared clipboard */
+        g_label[g_ntitles]   = "Edit";
+        g_items[g_ntitles]   = edit_items;
+        g_nitems[g_ntitles]  = 3;
+        g_handler[g_ntitles] = edit_action;
+        g_ntitles++;
+    }
+    if (d->on_fullscreen || d->view_items) {        /* View menu (Fullscreen + app items) */
+        unsigned char t = g_ntitles, nv = 0, i;
+        if (d->on_fullscreen) g_view[nv++] = "Fullscreen";
+        if (d->view_items) for (i = 0; d->view_items[i] && nv < 7; i++) g_view[nv++] = d->view_items[i];
+        g_label[t]   = "View";
+        g_items[t]   = g_view;
+        g_nitems[t]  = nv;
+        g_handler[t] = view_action;
+        g_fullscreen = 0;
+        gb_maxreq    = 0;                /* #156: arm the maximize gadget from a known state */
+        g_ntitles    = (unsigned char)(t + 1);
+    }
+    rebuild();
+    gb_get_name(g_name);              /* adopt the file we were launched with */
+#ifdef GBDOC_BOUNDED_IO
+    DOC_IO_STATE = DOC_IO_IDLE;
+    DOC_IO_AFTER = DOC_AFTER_NONE;
+    DOC_IO_CREATED = 0;
+    DOC_IO_LAUNCH = (unsigned char)(g_name[0] != 0 && g_name[0] != ' ');
+#endif
+    if (g_name[0] == 0 || g_name[0] == ' ') set_name("UNTITLED   ");
+}
+
+void gb_menu_add(const char *title, const char *const *items, unsigned char n,
+                 void (*on_select)(unsigned char item))
+{
+    unsigned char i = g_ntitles;
+    if (i >= DOC_MAXTITLES) return;
+    g_label[i]   = title;
+    g_items[i]   = items;
+    g_nitems[i]  = n;
+    g_handler[i] = on_select;
+    g_ntitles++;
+    rebuild();
+}
+
+void gb_doc_dirty(void) { g_dirty = 1; }
+unsigned char gb_doc_modified(void) { return g_dirty; }
+
+/* gb_doc_name: the current file's 8.3 name (kept in step with the kernel via
+ * set_name), so the app can read it for its title / extension checks. */
+const char *gb_doc_name(void) { return g_name; }
+static void set_name(const char *n11)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++) g_name[i] = n11[i];
+    gb_set_name(g_name);
+}
+
+/* on_event: a top-bar title was clicked -> arm its menu. Returns 1 if it was one
+ * of ours (so the app's on_event stops). */
+unsigned char gb_doc_event(void)
+{
+    unsigned char i, col;
+    if (gb_msg.type != GB_MSG_MENU) return 0;
+#ifdef GBDOC_BOUNDED_IO
+    if (DOC_IO_STATE != DOC_IO_IDLE) return 1;
+#endif
+    if (gb_modal()) { gb_popup_close(); return 1; }  /* a dropdown is up: re-clicking the title
+                                          closes it. The kernel ate this bar click before the popup
+                                          loop could see it as a click-away, so signal it. (#142) */
+    col = gb_msg.p0;
+    for (i = 0; i < g_ntitles; i++) {
+        unsigned char w = (unsigned char)((slen(g_label[i]) * 6 + 3) / 4);
+        if (col >= g_col[i] && col < (unsigned char)(g_col[i] + w)) { g_want = (unsigned char)(i + 1); return 1; }
+    }
+    return 0;
+}
+
+/* --- the standard File actions ------------------------------------------- */
+
+#ifndef GBDOC_RO
+#ifdef GBDOC_BOUNDED_IO
+static unsigned char do_save(unsigned char after);
+#else
+static void do_save(void);
+#endif
+#ifdef GBUI_APPICON_PICKER
+extern unsigned char gb_doc_stream_save(unsigned int len);
+#endif
+#endif
+
+#ifdef GBUI_APPICON_PICKER
+extern unsigned int gb_doc_stream_load(void);
+#endif
+
+#ifdef GBDOC_BOUNDED_IO
+#ifdef GBUI_APPICON_PICKER
+/* ICONED retains files in a borrowed 16 KiB page. Its low-RAM document buffer
+ * is only a staging area, so bounded I/O asks the app to move each chunk to or
+ * from that page. These hooks are private to the one picker-enabled document
+ * app and deliberately do not grow gb_doc_t for every other application. */
+extern unsigned char gb_doc_stream_write(unsigned int off, unsigned int len);
+extern unsigned char gb_doc_stream_read(unsigned int off, unsigned int len);
+extern void gb_doc_stream_saved(unsigned char ok);
+extern void gb_doc_stream_close(void);
+#endif
+
+static unsigned char doc_io_claim(void)
+{
+    if (gb_drop_claimed()) {
+        gb_alert("Storage busy", "Try again shortly.");
+        return 0;
+    }
+    gb_drop_claim();
+    return 1;
+}
+
+static unsigned char doc_io_start_load(unsigned char after)
+{
+    if (!doc_io_claim()) return 0;
+    DOC_IO_OFF = 0;
+    DOC_IO_AFTER = after;
+    DOC_IO_CREATED = 0;
+    DOC_IO_STATE = DOC_IO_LOAD;
+    return 1;
+}
+
+#ifndef GBDOC_RO
+static unsigned char doc_io_start_save(unsigned char after)
+{
+    if (!doc_io_claim()) return 0;
+    DOC_IO_OFF = 0;
+    DOC_IO_AFTER = after;
+    DOC_IO_CREATED = 0;
+    DOC_IO_TOTAL = g_doc->on_save();
+    DOC_IO_STATE = DOC_IO_SAVE;
+    return 1;
+}
+#endif
+
+static void doc_io_remove_partial(void)
+{
+    if (DOC_IO_STATE == DOC_IO_SAVE && DOC_IO_CREATED) {
+        FS_XFLAGS = 0;
+        gb_set_name(g_name);
+        gb_file_delete(g_name);
+    }
+}
+
+static void doc_io_cancel(void)
+{
+    doc_io_remove_partial();
+#ifndef GBDOC_RO
+    if (DOC_IO_STATE == DOC_IO_SAVE) {
+#ifdef GBUI_APPICON_PICKER
+        gb_doc_stream_saved(0);
+#endif
+        if (g_doc->on_saved) g_doc->on_saved();
+    }
+#endif
+    FS_XFLAGS = 0;
+    gb_drop_release();
+    DOC_IO_STATE = DOC_IO_IDLE;
+    DOC_IO_AFTER = DOC_AFTER_NONE;
+    DOC_IO_CREATED = 0;
+}
+
+static unsigned char doc_io_finish(unsigned char ok)
+{
+    unsigned char kind = DOC_IO_STATE;
+    unsigned char after = ok ? DOC_IO_AFTER : DOC_AFTER_NONE;
+    unsigned int total = DOC_IO_OFF;
+
+    if (!ok) doc_io_remove_partial();
+    FS_XFLAGS = 0;
+    gb_drop_release();
+    DOC_IO_STATE = DOC_IO_IDLE;
+    DOC_IO_AFTER = DOC_AFTER_NONE;
+    DOC_IO_CREATED = 0;
+
+    if (kind == DOC_IO_LOAD) {
+        if (g_doc->on_open) g_doc->on_open(total);
+        g_dirty = 0;
+    } else {
+#ifndef GBDOC_RO
+#ifdef GBUI_APPICON_PICKER
+        gb_doc_stream_saved(ok);
+#endif
+        if (g_doc->on_saved) g_doc->on_saved();
+        if (ok) g_dirty = 0;
+#endif
+        if (!ok) gb_alert("Save failed", "Disk full or write error");
+    }
+
+    if (after == DOC_AFTER_NEW) do_new_now();
+    else if (after == DOC_AFTER_LOAD) do_load_now();
+    else if (after == DOC_AFTER_CLOSE) {
+#ifdef GBUI_APPICON_PICKER
+        gb_doc_stream_close();
+#endif
+        gb_wm_close();
+    }
+    return 3;
+}
+
+static unsigned char doc_io_step(void)
+{
+    unsigned int left, take, got;
+
+    gb_set_name(g_name);
+    if (DOC_IO_STATE == DOC_IO_LOAD) {
+#ifdef GBUI_APPICON_PICKER
+        if (DOC_IO_OFF >= 0x4000) return doc_io_finish(1);
+        left = (unsigned int)(0x4000 - DOC_IO_OFF);
+#else
+        if (DOC_IO_OFF >= g_doc->bufmax) return doc_io_finish(1);
+        left = (unsigned int)(g_doc->bufmax - DOC_IO_OFF);
+#endif
+        take = left > DOC_IO_CHUNK ? DOC_IO_CHUNK : left;
+        FS_LOAD_OFS[0] = (unsigned char)DOC_IO_OFF;
+        FS_LOAD_OFS[1] = (unsigned char)(DOC_IO_OFF >> 8);
+        FS_LOAD_OFS[2] = 0;
+        FS_XFLAGS = 0x01;
+#ifdef GBUI_APPICON_PICKER
+        got = gb_fs_load(g_doc->buf, take);
+#else
+        got = gb_fs_load(g_doc->buf + DOC_IO_OFF, take);
+#endif
+        FS_XFLAGS = 0;
+        if (got > take) got = take;
+#ifdef GBUI_APPICON_PICKER
+        if (got && !gb_doc_stream_write(DOC_IO_OFF, got))
+            return doc_io_finish(0);
+#endif
+        DOC_IO_OFF = (unsigned int)(DOC_IO_OFF + got);
+        if (got < take) return doc_io_finish(1);
+#ifdef GBUI_APPICON_PICKER
+        if (DOC_IO_OFF >= 0x4000) return doc_io_finish(1);
+#else
+        if (DOC_IO_OFF >= g_doc->bufmax) return doc_io_finish(1);
+#endif
+        return 0;
+    }
+
+#ifndef GBDOC_RO
+    if (DOC_IO_CREATED && DOC_IO_OFF >= DOC_IO_TOTAL) return doc_io_finish(1);
+    left = (unsigned int)(DOC_IO_TOTAL - DOC_IO_OFF);
+    take = left > DOC_IO_CHUNK ? DOC_IO_CHUNK : left;
+#ifdef GBUI_APPICON_PICKER
+    if (!gb_doc_stream_read(DOC_IO_OFF, take)) return doc_io_finish(0);
+#endif
+    FS_XFLAGS = DOC_IO_CREATED ? 0x06 : 0x04;
+    DOC_IO_CREATED = 1;
+    if (!gb_fs_save(
+#ifdef GBUI_APPICON_PICKER
+                    g_doc->buf,
+#else
+                    g_doc->buf + DOC_IO_OFF,
+#endif
+                    take)) {
+        FS_XFLAGS = 0;
+        return doc_io_finish(0);
+    }
+    FS_XFLAGS = 0;
+    DOC_IO_OFF = (unsigned int)(DOC_IO_OFF + take);
+    if (DOC_IO_OFF >= DOC_IO_TOTAL) return doc_io_finish(1);
+#endif
+    return 0;
+}
+
+unsigned char gb_doc_startup_load(void)
+{
+    if (!DOC_IO_LAUNCH) return 0;
+    DOC_IO_LAUNCH = 0;
+    return doc_io_start_load(DOC_AFTER_NONE);
+}
+
+unsigned char gb_doc_busy(void) { return DOC_IO_STATE; }
+#endif
+
+/* confirm_save: if the document is dirty, ask. */
+#ifdef GBDOC_BOUNDED_IO
+static unsigned char confirm_save(unsigned char after)
+{
+#ifdef GBDOC_RO
+    (void)after;
+    return 1;                                        /* read-only: never dirty, nothing to save */
+#else
+    unsigned char sel;
+    if (!g_dirty) return 1;
+    sel = gb_popup(28, 90, confirm_items, 3);
+    if (sel == 0) {
+        return do_save(after) ? 2 : 0;               /* Save, then continue asynchronously */
+    }
+    if (sel == 1) return 1;                          /* Don't Save */
+    return 0;                                        /* Cancel / ESC */
+#endif
+}
+#else
+static unsigned char confirm_save(void)
+{
+#ifdef GBDOC_RO
+    return 1;
+#else
+    unsigned char sel;
+    if (!g_dirty) return 1;
+    sel = gb_popup(28, 90, confirm_items, 3);
+    if (sel == 0) { do_save(); return 1; }
+    if (sel == 1) return 1;
+    return 0;
+#endif
+}
+#endif
+
+#ifdef GBDOC_BOUNDED_IO
+static void do_new_now(void)
+{
+    set_name("UNTITLED   ");
+    if (g_doc->on_new) g_doc->on_new();
+    g_dirty = 0;
+}
+
+static void do_new(void)
+{
+    if (confirm_save(DOC_AFTER_NEW) != 1) return;
+    do_new_now();
+}
+#else
+static void do_new(void)
+{
+    if (!confirm_save()) return;
+    set_name("UNTITLED   ");
+    if (g_doc->on_new) g_doc->on_new();
+    g_dirty = 0;
+}
+#endif
+
+/* do_load: the shared navigable file chooser (gbpick), then open the choice from
+ * its directory. The picker leaves the FS positioned in the chosen folder. */
+#ifdef GBDOC_BOUNDED_IO
+static void do_load_now(void)
+{
+    char nm[11];
+    if (gb_drop_claimed()) {
+        gb_alert("Storage busy", "Try again shortly.");
+        return;
+    }
+    if (!gb_pickfile(nm, g_doc->exts)) return;     /* filtered to the app's file types */
+    set_name(nm);                                  /* chosen file -> current file */
+#ifdef GBDOC_RO
+    if (g_doc->flags & GB_DOC_OPEN_OWNS_LOAD) {
+        if (g_doc->on_open) g_doc->on_open(0);
+        g_dirty = 0;
+        return;
+    }
+#endif
+    doc_io_start_load(DOC_AFTER_NONE);
+}
+
+static void do_load(void)
+{
+    if (!(g_doc->flags & GB_DOC_LOAD_NOCONFIRM) &&
+        confirm_save(DOC_AFTER_LOAD) != 1) return;
+    do_load_now();
+}
+#else
+static void do_load(void)
+{
+    char nm[11];
+    unsigned int len;
+    if (!(g_doc->flags & GB_DOC_LOAD_NOCONFIRM) && !confirm_save()) return;
+    if (!gb_pickfile(nm, g_doc->exts)) return;
+    set_name(nm);
+#ifdef GBDOC_RO
+    if (g_doc->flags & GB_DOC_OPEN_OWNS_LOAD) {
+        if (g_doc->on_open) g_doc->on_open(0);
+        g_dirty = 0;
+        return;
+    }
+#endif
+#ifdef GBUI_APPICON_PICKER
+    len = gb_doc_stream_load();
+#else
+    len = gb_fs_load(g_doc->buf, g_doc->bufmax);   /* targets the navigated directory */
+#endif
+    if (g_doc->on_open) g_doc->on_open(len);
+    g_dirty = 0;
+}
+#endif
+
+#ifndef GBDOC_RO       /* Save / Save As are omitted entirely in a read-only doc (#144) */
+#ifdef GBDOC_BOUNDED_IO
+static unsigned char do_save(unsigned char after)
+{
+    return doc_io_start_save(after);
+}
+#else
+static void do_save(void)
+{
+    unsigned int n  = g_doc->on_save();
+#ifdef GBUI_APPICON_PICKER
+    unsigned char ok = gb_doc_stream_save(n);
+#else
+    unsigned char ok = gb_fs_save(g_doc->buf, n);
+#endif
+    if (g_doc->on_saved) g_doc->on_saved();          /* restore buf if on_save transformed it */
+    if (ok) g_dirty = 0;
+}
+#endif
+
+static char namebuf[16];
+static void do_saveas(void)
+{
+#ifdef GBDOC_BOUNDED_IO
+    if (gb_drop_claimed()) {
+        gb_alert("Storage busy", "Try again shortly.");
+        return;
+    }
+#endif
+    if (!gb_pickdir(g_doc->exts)) return;          /* navigate to the destination dir */
+    if (!gb_prompt("Save as:", namebuf, 12)) return;
+    to_83(namebuf);
+    set_name(name83);
+#ifdef GBDOC_BOUNDED_IO
+    do_save(DOC_AFTER_NONE);                       /* writes into the navigated dir */
+#else
+    do_save();
+#endif
+}
+#endif
+
+static void file_action(unsigned char sel)
+{
+    unsigned char a;
+    if (sel >= file_nf) return;
+    a = file_act[sel];
+    if      (a == 0) do_new();
+    else if (a == 1) do_load();
+#ifndef GBDOC_RO
+#ifdef GBDOC_BOUNDED_IO
+    else if (a == 2) do_save(DOC_AFTER_NONE);
+#else
+    else if (a == 2) do_save();
+#endif
+    else if (a == 3) do_saveas();
+#endif
+    else if (a == 4) { if (g_doc->on_export) g_doc->on_export(); }   /* the optional export */
+}
+
+/* on_frame: drop a pending menu and dispatch it. Returns 1 if a menu ran (the
+ * app should repaint its window, since the popup erased a hole in it). */
+unsigned char gb_doc_frame(void)
+{
+    unsigned char t, sel;
+#ifdef GBDOC_BOUNDED_IO
+    if (DOC_IO_STATE != DOC_IO_IDLE) return doc_io_step();
+#endif
+    /* the maximize gadget is now a WINDOWED maximize handled in the kernel (mwf_max), separate
+       from the borderless fullscreen below - it no longer routes through here. */
+#ifdef GBDOC_RO
+    if (g_doc->on_fullscreen) {                       /* read-only viewers: 'F' toggles fullscreen -
+                                                         the only way back once the bar+menu hide */
+        unsigned char c = gb_getkey();                /* one/frame is fine; this runs every frame */
+        if ((c | 0x20) == 'f') { view_action(0); return 1; }   /* 'F' or 'f' */
+    }
+#endif
+    if (!g_want) return 0;
+    t = (unsigned char)(g_want - 1);
+    g_want = 0;
+    sel = gb_popup(g_col[t], 8, g_items[t], g_nitems[t]);   /* #191: save-unders -> a seamless close */
+    if (sel == 0xFF) return 0;                   /* cancelled: the menu restored the screen, nothing changed */
+    /* #279: a menu action changes only THIS (focused, top) window - the popup already restored its
+       own save-under, so nothing else on screen moved. Clamp the follow-up gb_restore_parent to the
+       focused window so it doesn't blank the desktop backdrop + repaint every other window. Set this
+       BEFORE the handler so one that opens a wider dialog (the file picker) or resizes the window
+       (View>Fullscreen) overrides it with its own damage. (Read-only viewers have no content-only
+       action - Load/Fullscreen set their own damage - so the clamp is omitted there to save space.) */
+#ifndef GBDOC_RO
+    gb_wm_damage(gb_wm_x(), gb_wm_y(), gb_wm_w(), gb_wm_h());
+#endif
+    if (g_handler[t]) g_handler[t](sel);         /* File / Edit / View / app menu */
+    if (g_handler[t] == edit_action) {           /* Edit only touched the window CONTENT (frame intact): */
+        if (sel == 1) {                          /* Copy: nothing drawn -> undo the clamp */
+#ifndef GBDOC_RO
+            gb_wm_damage(0, 0, GB_COLS, GB_LINES);
+#endif
+            return 0;
+        }
+        return 2;                                /*   Select All / Paste = window body */
+    }
+    return 3;                                    /* File / View / app action: window repaint */
+}
+
+/* gb_doc_close: the window close gadget was hit - offer to save first. 1 = go
+ * ahead and close, 0 = stay open (user cancelled). */
+unsigned char gb_doc_close(void)
+{
+#ifdef GBDOC_BOUNDED_IO
+    if (DOC_IO_STATE != DOC_IO_IDLE) { doc_io_cancel(); return 1; }
+    return (unsigned char)(confirm_save(DOC_AFTER_CLOSE) == 1);
+#else
+    return confirm_save();
+#endif
+}

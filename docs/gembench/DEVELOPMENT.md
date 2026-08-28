@@ -1,15 +1,19 @@
 # GEMBENCH development
 
-The initial repository contains only dependency-free host tooling and format
-contracts. Target builds will be documented here after the GeoBench integration
-strategy is selected.
+The repository combines the GeoBench runtime and build system with GEMBENCH
+format contracts and host tooling. GeoBench-specific toolchain and emulator
+details remain authoritative in `docs/DEVELOPMENT.md` and `docs/BUILDING.md`.
 
 ## Requirements
 
 - Python 3.11 or newer
 - GNU Make
+- RASM and SDCC for target builds
+- mtools and dosfstools for generated MSX media
 
-No third-party Python packages are required.
+The host resource compiler requires no third-party Python packages. The full
+MSX distribution also uses the sibling GB-PAINT and GB-BASIC repositories and
+the dependencies documented by the inherited GeoBench build.
 
 ## Commands
 
@@ -19,16 +23,22 @@ Run all current validation and build the example resource:
 make check
 ```
 
-Run only the unit tests:
+Run only the GBR compiler tests:
 
 ```sh
-make test
+make gbr-check
 ```
 
 Rebuild only the example resource:
 
 ```sh
-make example
+make gbr-example
+```
+
+Build the fixed-target distribution:
+
+```sh
+make gembench-msx
 ```
 
 Generated files live under `build/` and are ignored by Git.
@@ -48,10 +58,11 @@ field.
 
 ## Target work
 
-Before adding the resource renderer, record:
+Before adding the resource renderer, decide and record:
 
-- how GeoBench source enters this repository;
 - which jump-table slots or version negotiation the extension uses;
-- whether the first renderer is app-linked or resident;
 - the maximum resource-segment and object-tree capacities; and
 - the exact emulator and Omega/RainBIOS validation commands.
+
+The first renderer is app-linked. Resident placement remains a later measured
+comparison rather than an initial ABI assumption.

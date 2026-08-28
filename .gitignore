@@ -1,6 +1,48 @@
-/build/
-__pycache__/
-*.py[cod]
-*.map
+# Build artifacts
+*.bin
+*.BIN
+*.RAW
+bin/
+build/
+*.dsk
+*.DSK
+
+# Assembler / build intermediates
+*.o
+*.lst
 *.rel
 *.sym
+*.map
+rom/gitcommit.inc
+
+# Emulator screenshots
+*.ppm
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Editor / OS files
+*~
+.DS_Store
+
+# QA distributions are versioned even though they contain binary media.
+!QA/**
+
+# Fetched TCP/IP UNAPI dependencies are local.
+QA/MSX/CARD/UNAPINET.COM
+QA/MSX/CARD/UNAPI.TXT
+
+# Generated card, ROM, and MSX dependency artifacts.
+QA/CPC/GEOBENCH.IMG
+rom/GEOBENCH.ROM
+rom/GBALB.ROM
+QA/MSXDEPS/
+QA/MSX/GBMSX.IMG
+!QA/MSX/Floppies/
+!QA/MSX/Floppies/*.DSK
+!assets/msx/
+!assets/msx/MSXDOS2.BIN
+
+# Raw emulator captures remain local; curated media belongs in screenshots/.
+screenshots/1984-*.gif

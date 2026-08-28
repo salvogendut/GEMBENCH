@@ -65,10 +65,12 @@ or unconstrained dynamic structures.
 
 ## Integration boundary
 
-The current repository does not contain GeoBench. Before target code is added,
-the project needs one documented source relationship: a fork, an imported
-history, a subtree, or a pinned sibling dependency. That choice must preserve
-the ability to audit upstream changes and reproduce builds.
+The repository contains GeoBench's complete history and runtime foundation. The
+initial import is pinned to upstream commit `6309ff3`; see `UPSTREAM.md` for the
+remote and reproduction procedure. Future GeoBench updates are explicit merges
+from that upstream rather than copied source snapshots.
 
-The initial host compiler and format header are deliberately independent of
-that decision.
+GEMBENCH-specific documents live under `docs/gembench/`, format declarations
+under `include/gembench/`, and host resource tools alongside the inherited
+GeoBench tools. Runtime extensions should remain visibly separated until their
+ABI and placement have passed the proof-of-concept measurement gate.

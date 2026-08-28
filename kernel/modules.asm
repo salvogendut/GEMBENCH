@@ -1,0 +1,81 @@
+; kernel/modules.asm - shared PAGE_DATA module dispatchers.
+
+; k_ui (GB_UI #80AE): the paged dialog service (#142). The caller has marshalled its
+; request into the low-RAM UI_* block; page in PAGE_DATA, load the GBUI module to
+; DATA_MODTOP (#6000, above font+icons), raise UI_MODAL (so the dialog's own gb_poll
+; loop doesn't dispatch top-bar clicks into the now-swapped-out app), CALL it to render
+; + write UI_RES, then restore. Returns BC = UI_RES for the C trampoline. The dialog is
+; modal: this call blocks until the user picks/cancels.
+; run_data_module: the shared PAGE_DATA module loader (#238). HL = 11-byte module name.
+; Save the caller's page and fs_load_* request, map PAGE_DATA, load the named module
+; to DATA_MODTOP (#6000) from the boot drive, restore fs_load_* for the module's own
+; operation, CALL it, restore the page. CF set = loaded (NC = missing). One copy
+; instead of three (GB_UI + GB_NET + the floppy-write stub) - reclaims the resident
+; bytes the net hook needs.
+run_data_module
+                ex    de,hl                    ; keep the module-name pointer while HL
+                                               ; saves the caller's fs_load_* request.
+                ld    a,(bank_cur)
+                push  af
+                ld    hl,(fs_load_max)
+                push  hl
+                ld    hl,(fs_load_dst)
+                push  hl
+                LD_A_PAGE_DATA
+                call  bank_set
+                ex    de,hl
+                ld    de,fs_req_name          ; HL (name) -> fs_req_name
+                ld    bc,11
+                ldir
+                ld    hl,#2000                ; load cap (8 KB window to #8000)
+                ld    (fs_load_max),hl
+                ld    hl,DATA_MODTOP          ; #6000
+                ld    (fs_load_dst),hl
+                call  fs_load_sys            ; module -> #6000 (boot drive, preserves browse dir)
+                pop   de
+                ld    (fs_load_dst),de
+                pop   de
+                ld    (fs_load_max),de
+                jr    nc,rdm_miss
+                call  DATA_MODTOP            ; run it
+                pop   af
+                call  bank_set
+                scf
+                ret
+rdm_miss
+                pop   af
+                call  bank_set
+                or    a                       ; NC = missing
+                ret
+
+k_ui
+                ld    hl,UI_MODAL             ; modal: the dialog's gb_poll must not dispatch
+                inc   (hl)
+                rlca                          ; A bit 7 selects the Browser helper name that
+                ld    hl,gbui_modname         ; BROWSER.APP placed in low RAM. Normal gb_ui
+                jr    nc,kui_run               ; calls enter with A=0 (gblib enforces that).
+                ld    hl,#3914
+kui_run
+                call  run_data_module
+                ld    hl,UI_MODAL
+                dec   (hl)
+                ld    a,(UI_RES)              ; missing module -> caller pre-set a cancel
+                ld    c,a
+                ret
+gbui_modname    db    "GBUI    MOD"
+
+; k_net (GB_NET #80BD): the paged networking module. Apps marshal an op + args
+; into the GBNET_* low-RAM block; the kernel loads the module matching the card
+; backend and returns BC = GBNET_RES. Albireo uses the W5100/Net4CPC module;
+; M4 uses the M4ROM TCP command module.
+k_net
+                ld    hl,gbnet_modname
+                call  run_data_module
+                ld    a,(GBNET_RES)
+                ld    c,a
+                ret
+                if STORAGE_M4
+gbnet_modname   db    "GBNETM4 MOD"
+                else
+gbnet_modname   db    "GBNET   MOD"
+                endif
