@@ -493,19 +493,27 @@ without committing GEMBENCH to a new application model.
 
 ## Licensing boundary
 
-The local GeoBench source is BSD 3-Clause, while the examined FreeGEM AES source
-directory carries the GNU GPL version 2. Architectural ideas and independently
-implemented interaction patterns can be adopted without copying implementation
-code. Directly translating FreeGEM source or incorporating its protected assets
-requires preserving the applicable notices and reviewing the resulting GPL
-obligations.
+GEMBENCH will be released under the BSD 3-Clause License, matching GeoBench.
+OpenGEM and FreeGEM are GPL-licensed reference implementations and must remain
+reference material rather than sources for copied or translated implementation
+code.
 
-The project should decide early between:
+To preserve the BSD licensing model:
 
-- A BSD-licensed GEM-inspired implementation written against published
-  behaviour and independently created artwork, or
-- A GPL GEM derivative that intentionally reuses and translates FreeGEM code or
-  assets.
+- Implement GEM-inspired behaviour independently in new Z80/C code.
+- Use published interfaces, observable behaviour and architectural concepts as
+  references rather than translating OpenGEM functions line by line.
+- Create original GEMBENCH icons, fonts, themes and resource files.
+- Do not import OpenGEM artwork or documentation without a separate compatible
+  permission and provenance record.
+- Retain the BSD copyright and attribution notices for code reused from
+  GeoBench, RainBIOS or other BSD-licensed repositories.
+- Record the origin and license of every third-party source or asset added to
+  the repository.
+
+An OpenGEM resource importer may parse user-supplied files, but no OpenGEM
+resources should be bundled with GEMBENCH unless their redistribution terms
+have been reviewed separately.
 
 This is a project-planning observation rather than legal advice.
 

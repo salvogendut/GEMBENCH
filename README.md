@@ -70,7 +70,7 @@ The source format and current binary layout are documented in
 
 ## Licensing
 
-No project-wide implementation licence has been selected yet. GeoBench is BSD
-3-Clause, while directly translated FreeGEM code or reused FreeGEM assets may
-carry GPL obligations. Keep new work independent of GPL source and assets until
-the project explicitly chooses its licensing path.
+GEMBENCH is released under the [BSD 3-Clause License](LICENSE), matching
+GeoBench. OpenGEM and FreeGEM remain GPL-licensed references: GEMBENCH behaviour,
+code, artwork, and resources must be independently implemented unless separately
+reviewed compatible material carries a clear provenance record.
