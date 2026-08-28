@@ -16,7 +16,11 @@
 #endif
 #define KCFG_INK(p) (((volatile unsigned char *)0x122C)[(p)])
 
-#define BG  2          /* black background (classic munch screen) */
+#ifdef GB_MSX2
+#define BG  0          /* GEMBENCH MSX2 black canvas */
+#else
+#define BG  2          /* inherited black pen */
+#endif
 #define MUNCH_WORK_PER_FRAME 16
 
 static unsigned char lmx, lmy, armed;

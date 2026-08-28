@@ -57,28 +57,46 @@ The loader range is `0x4000` through `0x7F00`, giving 16,128 bytes before the lo
 - Mapper segments held from DOS at idle: 8.
 - Mapper segments total / free at GEMBENCH entry: 32 / 25.
 - Derived app-pool pages / idle busy pages: 8 / 1.
-- Non-zero VRAM bytes in the captured desktop frame: 6,484 (an occupancy signal, not an allocation limit).
+- Non-zero VRAM bytes in the captured desktop frame: 10,620 (an occupancy signal, not an allocation limit).
 
 The MSX2 pointer uses V9938 sprites, so it has no VRAM save-under. Fonts, icons, and backdrop sources remain in RAM and are rendered into the framebuffer rather than retained as a separate VRAM cache.
 
 ## Runtime telemetry
 
 - Capture frame: 6,001
-- PC / SP: `0x247A` / `0xD8EA`
+- PC / SP: `0x402F` / `0xD904`
 - VDP R0 / R1: `0x0A` / `0x62`
 - Screen 7 register baseline matched: yes
 - Page-1 TPA / PAGE_DATA segments: 2 / 4
-- Scheduler stack high-water: not captured; 1983 exits at a BIOS frame boundary where page 0 ROM hides GEMBENCH low RAM.
+- Scheduler stack high-water: 32 bytes.
+- Scheduler stack fault: 0.
+- Diagnostic probe phase: 4 (4 means complete).
 
 ## Repaint timing
 
-Status: **not-instrumented**.
+Status: **captured**.
 
-1983 currently exposes final machine counters, not cycle markers around individual repaint calls. A dedicated diagnostic probe is required for full and damage-limited repaint latency.
+- Full desktop: 36,866 ticks (2,250,122.07 us).
+- Damage rectangle (32, 48, 40, 80): 15,475 ticks (944,519.04 us).
+- Timer: RP-5C01 seconds-test clock at 16,384 Hz.
+
+Each result is one diagnostic-build sample from the 16,384 Hz RTC seconds-test clock. Packed 24-hour start/end values give an unambiguous 5.27-second window. Release builds do not link or run this probe. The openMSX reference comparison is recorded in docs/gembench/OPENMSX-VALIDATION.md.
+
+## Input response
+
+Status: **partial**.
+
+- Runnable tasks at arm: 3.
+- Keyboard acknowledgement: 2 PAL frame(s) (40.00 ms).
+- Pointer acknowledgement in 1983: not captured.
+
+1983 injects a real matrix key at a fixed host frame. Its current headless interface has no scripted pointer-motion source, so the openMSX reference runs provide the authoritative pointer and independently repeated keyboard measurements.
 
 ## Reproduce
 
 ```sh
-make gembench-msx
 make gembench-baseline-1983
+make gembench-baseline-probes-1983
+make gembench-baseline-input-1983
+make gembench-baseline-input-openmsx
 ```

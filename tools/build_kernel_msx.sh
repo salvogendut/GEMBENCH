@@ -22,10 +22,20 @@ command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
 PREEMPTIVE="${PREEMPTIVE:-1}"
 PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
+GEMBENCH_BASELINE="${GEMBENCH_BASELINE:-0}"
+BASELINE_APPDEFS=""
+DESKTOP_DATA_LOC="0x7300"
 NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
 NOTEPAD_DATA_LOC="0x6F48"
 NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
 NOTEPAD_SCROLL=1
+if [ "$GEMBENCH_BASELINE" = "1" ]; then
+    BASELINE_APPDEFS="-DGEMBENCH_BASELINE"
+    DESKTOP_DATA_LOC="0x7500"
+elif [ "$GEMBENCH_BASELINE" != "0" ]; then
+    echo "GEMBENCH_BASELINE must be 0 or 1" >&2
+    exit 2
+fi
 if [ "$PREEMPTIVE" = "1" ]; then
     RASM="$RASM" bash tools/build_scheduler.sh msx
     EXTRA_RASM="${EXTRA_RASM:-} -DPREEMPTIVE=1 -DPREEMPTIVE_CONTEXT=1"
@@ -98,17 +108,19 @@ python3 tools/gblib_subset.py \
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
 if [ "$PREEMPTIVE" = "1" ]; then
     TASK_ROOT=1 TASK_RUNTIME_RAW=build/msx/GBSCHED.RAW \
-        TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
+        TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2 $BASELINE_APPDEFS" \
+        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
     if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
         TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
             tools/build_capp.sh apps/taskdemo build/msx/TASKDEMO.RAW
     fi
 else
-    APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 \
+    APPDEFS="-DGB_MSX2 $BASELINE_APPDEFS" BASELINE="$GEMBENCH_BASELINE" \
+        DATA_LOC=0x7100 DOC=1 TITLEBAR=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 fi
-APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 REPAINTTOP=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 REPAINTTOP=1 GBWIN=0 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APP_ICON=apps/notepad/icon.asm GBLIB_SRC="$NOTEPAD_GBLIB" APPDEFS="-DGB_MSX2 $NOTEPAD_APPDEFS" APP_CFLAGS="$NOTEPAD_CFLAGS" DATA_LOC="$NOTEPAD_DATA_LOC" DOC=1 REPAINTTOP="$NOTEPAD_SCROLL" tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
@@ -127,7 +139,10 @@ APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6800 BUTTON=1 tools/build_capp.sh apps/calculator build/msx/CALC.RAW
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
-APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 WIDGETS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 FORM=1 FORM_SELECT=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+python3 tools/gbrc.py apps/formref/formref.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_gbr.h --symbol-prefix FORMREF
+APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7600 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORMS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+python3 tools/gbrc.py examples/hello-dialog.json --output build/msx/HELLO.GBR
+APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7000 BUTTON=1 GBR_OBJECTS=1 tools/build_capp.sh apps/gbrdemo build/msx/GBRDEMO.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/msx/SNDTEST.RAW
 APP_ICON=apps/browser/icon.asm APPDEFS="-DGB_MSX2" GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/msx/BROWSER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/msx/BRSAVE.RAW
@@ -191,10 +206,10 @@ cp assets/thinner.SPR build/msx/DEFAULT.SPR
 # from disk, so we just stage that compact bitmap. DEBUG=TRUE selects the
 # SPLASHD.MOD variant with the build id.
 BUILD_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
-python3 tools/make_bootsplash.py assets/SPLASH.png build/msx/SPLASH_BUILD.png "$BUILD_COMMIT" GEOBENCH
-python3 tools/png2cpc.py --platform msx2 build/msx/SPLASH_BUILD.png build/msx/SPLASH.BIN splash 96x184
-python3 tools/make_bootsplash.py assets/SPLASH.png build/msx/SPLASHD_BUILD.png "$BUILD_COMMIT"
-python3 tools/png2cpc.py --platform msx2 build/msx/SPLASHD_BUILD.png build/msx/SPLASHD.BIN splash 96x184
+python3 tools/make_bootsplash.py assets/GEMBENCH_KERNEL.png build/msx/SPLASH_BUILD.png "$BUILD_COMMIT" GEMBENCH black
+python3 tools/png2cpc.py --platform msx2 --gembench build/msx/SPLASH_BUILD.png build/msx/SPLASH.BIN splash 96x184
+python3 tools/make_bootsplash.py assets/GEMBENCH_KERNEL.png build/msx/SPLASHD_BUILD.png "$BUILD_COMMIT" - black
+python3 tools/png2cpc.py --platform msx2 --gembench build/msx/SPLASHD_BUILD.png build/msx/SPLASHD.BIN splash 96x184
 
 echo "Building GB-BASIC MSX payload from $GB_BASIC_DIR"
 make -C "$GB_BASIC_DIR" raws-msx GEOBENCH="$GEOBENCH_ROOT"
@@ -206,7 +221,7 @@ rm -f build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW build/msx/GBKERN7.RAW \
       build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM
 
 # Compatibility backend: Screen 6, four native colours.
-( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -s -o gbkernm ${EXTRA_RASM:-} $TITLEBAR_RASM )
+( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DGEMBENCH_BASELINE="$GEMBENCH_BASELINE" -s -o gbkernm ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: GBKERNM.RAW not produced (rasm errors above)" >&2; exit 1; }
 cp build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm )
@@ -215,7 +230,7 @@ mv build/msx/GBMSX.COM build/msx/GBMSX6.COM
 
 # Extended backend: Screen 7, with sixteen-colour Viewer support.
 rm -f build/msx/GBKERNM.RAW
-( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DMSX_SCREEN7=1 -s -o gbkernm7 ${EXTRA_RASM:-} $TITLEBAR_RASM )
+( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DMSX_SCREEN7=1 -DGEMBENCH_BASELINE="$GEMBENCH_BASELINE" -s -o gbkernm7 ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: Screen-7 GBKERNM.RAW not produced" >&2; exit 1; }
 cp build/msx/GBKERNM.RAW build/msx/GBKERN7.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm -DMSX_SCREEN7=1 )
@@ -246,7 +261,7 @@ if [ -n "$UNAPI_TSR" ]; then
 else
     printf 'GBMSX\r\n' > QA/MSX/CARD/AUTOEXEC.BAT
 fi
-printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/CARD/GEOBENCH.CFG
+printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nVIEW=DEFAULT\r\nBACKDROP=SOLID\r\nWALLPAPER=LOGO\r\nINKS=0,26,13,6,0\r\nSAVER=SQUARES\r\nSAVERTIME=2\r\nSTARFLD_SPEED=4\r\nSTARFLD_STARS=64\r\nXMATRIX_GLYPHS=0\r\nXMATRIX_SPEED=2\r\nXMATRIX_COLOR=4\r\nMOUNTAIN_SPEED=2\r\nMOUNTAIN_PEAKS=15\r\nMOUNTAIN_HOLD=120\r\nMSXMOUSE=TRUE\r\nMSXMODE=7\r\n' > QA/MSX/CARD/GEOBENCH.CFG
 cp QA/MSX/CARD/GEOBENCH.CFG QA/MSX/CARD/GBENCH/DEFAULT.CFG
 cp build/msx/DESKTOP.RAW  QA/MSX/CARD/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/CARD/GBENCH/FILEMGR.APP
@@ -265,6 +280,9 @@ cp build/msx/TELNET.RAW   QA/MSX/CARD/GBENCH/TELNET.APP
 cp build/msx/BROWSER.RAW  QA/MSX/CARD/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/CARD/GBENCH/BRSAVE.APP
 cp build/msx/FORMREF.RAW  QA/MSX/CARD/GBENCH/FORMREF.APP
+cp build/msx/GBRDEMO.RAW  QA/MSX/CARD/GBENCH/GBRDEMO.APP
+rm -f QA/MSX/CARD/GBENCH/HELLO.GBR
+cp build/msx/HELLO.GBR    QA/MSX/CARD/HELLO.GBR
 cp build/msx/SNDTEST.RAW  QA/MSX/CARD/GBENCH/SNDTEST.APP
 if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
     cp build/msx/TASKDEMO.RAW QA/MSX/CARD/GBENCH/TASKDEMO.APP
@@ -344,6 +362,9 @@ while IFS= read -r pic; do
     name=$(basename "$pic" .PIC | tr a-z A-Z)
     cp "$pic" "QA/MSX/CARD/PICS/$name.PIC"
 done < <(python3 tools/picture_catalog.py msx)
+# GEMBENCH is an MSX2-only fork: override the inherited LOGO.PIC in this
+# staging tree without changing the canonical picture used by CPC/PCW builds.
+cp assets/msx/GEMLOGO.PIC QA/MSX/CARD/PICS/LOGO.PIC
 
 # --- bootable Nextor image ------------------------------------------------------
 bash tools/build_msx_img.sh QA/MSX/CARD QA/MSX/GBMSX.IMG

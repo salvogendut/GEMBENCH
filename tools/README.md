@@ -66,7 +66,11 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   independently link the corresponding settings controls, so tight apps pay only
   for controls used. `FORM=1` adds form rows and modal lifecycle and requires
   `WIDGETS=1`; `FORM_SELECT=1` adds selector rows and requires both `FORM=1` and
-  `SELECTOR=1`. `GBWIN_DRAG_ONLY=1` keeps window dragging but omits the resize
+  `SELECTOR=1`. `FORM_MODAL_ONLY=1` omits row/action helpers for an app that uses
+  only the modal lifecycle. `GBR_FORMS=1` adds resource field rendering, live
+  text bindings, and focus traversal; `GBR_EMBEDDED=1` selects the compact
+  accessor path for a build-verified embedded resource. `GBWIN_DRAG_ONLY=1`
+  keeps window dragging but omits the resize
   grip and resize-drag helpers for apps that do not use them.
   `SOUND=1` links the target-specific PSG/beeper primitives into that app only;
   it does not add a resident kernel service.
@@ -78,6 +82,15 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   `APP_ICON16=path/icon16.asm` adds an explicit native Screen-7 variant. For
   app-owned `icon.asm` sources, an adjacent `icon16.asm` is detected
   automatically by MSX builds only.
+- **`test_formref_openmsx.sh`** — builds a disposable Nextor image and drives the
+  resource-backed MSX2 FormRef through pointer launch, keyboard focus, mutation,
+  Save, and trace assertions under openMSX.
+- **`test_window_kinds_openmsx.sh`** — drives the real MSX2 File Manager through
+  kernel-owned maximise/restore, move, and resize gestures, verifies the
+  append-only geometry messages, and captures the final Screen 7 window.
+- **`gbrc.py` / `gbrverify.py`** — compile deterministic GBR v1 resources and
+  strictly verify binary resources. `gbrc.py --c-header` can also emit a C blob,
+  section/count constants, and source-only object IDs for embedded resources.
 - **`build_savercfg.sh <app_dir> <out.RAW>`** — builds
   `apps/<saver>/config.c` as an 8 KB-bounded paged configuration companion at
   `#6000`. Package the result with the same stem as its saver (`XMATRIX.MOD`

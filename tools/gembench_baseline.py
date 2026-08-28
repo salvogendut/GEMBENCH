@@ -2,7 +2,7 @@
 """Collect reproducible GEMBENCH MSX2 baseline measurements.
 
 The static half reads build/distribution artifacts.  The optional runtime half
-parses 1983's ``--dump-state`` and ``--dump-ram 0xC018:9`` output.  Keeping
+parses 1983's ``--dump-state`` and page-3 diagnostic dump output. Keeping
 the parser here makes the saved JSON useful to CI and future size comparisons,
 instead of leaving the baseline as prose copied from a terminal session.
 """
@@ -35,12 +35,35 @@ SCREEN7_POINTER_RESOURCE_BYTES = (
     + SCREEN7_POINTER_ATTRIBUTE_BYTES
 )
 
-GLUE_DUMP_START = 0xC018
-GLUE_DUMP_LENGTH = 9
+GLUE_DUMP_START = 0xC000
+GLUE_DUMP_LENGTH = 0x60
+MSX_TICK = 0xC000
 MSX_TPASEG = 0xC018
 MSX_TOTSEG = 0xC019
 MSX_FREESEG = 0xC01A
 MSX_PAGE_DATA = 0xC020
+BASELINE_PHASE = 0xC02A
+BASELINE_STACK_MAX = 0xC02B
+BASELINE_STACK_FAULT = 0xC02C
+BASELINE_COOKIE = 0xC02D
+BASELINE_INPUT_FLAGS = 0xC02E
+BASELINE_INPUT_KEY = 0xC02F
+BASELINE_FULL_START = 0xC040
+BASELINE_FULL_END = 0xC043
+BASELINE_DAMAGE_START = 0xC046
+BASELINE_DAMAGE_END = 0xC049
+BASELINE_POINTER_ARM = 0xC04E
+BASELINE_POINTER_ACK = 0xC050
+BASELINE_KEY_ARM = 0xC052
+BASELINE_KEY_ACK = 0xC054
+BASELINE_RUNNABLE = 0xC056
+BASELINE_COOKIE_VALUE = 0xB7
+BASELINE_TIMER_HZ = 16_384
+BASELINE_FRAME_HZ = 50
+BASELINE_INPUT_ARMED = 0x01
+BASELINE_POINTER_ACKNOWLEDGED = 0x02
+BASELINE_KEY_ACKNOWLEDGED = 0x04
+BASELINE_DAMAGE_RECT = {"x": 32, "y": 48, "width": 40, "height": 80}
 WM_MAXWIN = 8
 
 RAM_LINE_RE = re.compile(r"^([0-9A-Fa-f]{4}):((?: [0-9A-Fa-f]{2})+)$")
@@ -212,7 +235,45 @@ def byte_at(memory: dict[int, int], address: int) -> int | None:
     return memory.get(address)
 
 
-def collect_runtime(log_path: Path) -> dict[str, Any]:
+def word_at(memory: dict[int, int], address: int) -> int | None:
+    low = byte_at(memory, address)
+    high = byte_at(memory, address + 1)
+    if low is None or high is None:
+        return None
+    return low | high << 8
+
+
+def bcd_byte(value: int | None) -> int | None:
+    if value is None or value & 0x0F > 9 or value >> 4 > 9:
+        return None
+    return (value >> 4) * 10 + (value & 0x0F)
+
+
+def rtc_seconds_at(memory: dict[int, int], address: int) -> int | None:
+    second = bcd_byte(byte_at(memory, address))
+    minute = bcd_byte(byte_at(memory, address + 1))
+    hour = bcd_byte(byte_at(memory, address + 2))
+    if second is None or minute is None or hour is None:
+        return None
+    if second >= 60 or minute >= 60 or hour >= 24:
+        return None
+    return hour * 3600 + minute * 60 + second
+
+
+def rtc_elapsed_ticks(start: int | None, end: int | None) -> int | None:
+    if start is None or end is None:
+        return None
+    return (end - start) % (24 * 60 * 60)
+
+
+def collect_runtime(
+    log_path: Path,
+    require_probes: bool = False,
+    *,
+    require_input_keyboard: bool = False,
+    keyboard_injection_frame: int | None = None,
+    expected_key: int = ord("b"),
+) -> dict[str, Any]:
     text = log_path.read_text(encoding="utf-8", errors="replace")
     runtime = parse_state(text)
     memory = parse_memory_dump(text)
@@ -224,6 +285,74 @@ def collect_runtime(log_path: Path) -> dict[str, Any]:
         # One segment is allocated for PAGE_DATA before the pool is built. The
         # pool then reuses the TPA segment and allocates at most seven more.
         app_pages = 1 + min(WM_MAXWIN - 1, max(0, free_segments_at_entry - 1))
+    probes: dict[str, Any] | None = None
+    if byte_at(memory, BASELINE_COOKIE) == BASELINE_COOKIE_VALUE:
+        full_ticks = rtc_elapsed_ticks(
+            rtc_seconds_at(memory, BASELINE_FULL_START),
+            rtc_seconds_at(memory, BASELINE_FULL_END),
+        )
+        damage_ticks = rtc_elapsed_ticks(
+            rtc_seconds_at(memory, BASELINE_DAMAGE_START),
+            rtc_seconds_at(memory, BASELINE_DAMAGE_END),
+        )
+        probes = {
+            "phase": byte_at(memory, BASELINE_PHASE),
+            "scheduler_stack_high_water_bytes": byte_at(memory, BASELINE_STACK_MAX),
+            "scheduler_stack_fault": byte_at(memory, BASELINE_STACK_FAULT),
+            "full_repaint_ticks": full_ticks,
+            "damage_repaint_ticks": damage_ticks,
+            "full_repaint_microseconds": (
+                round(full_ticks * 1_000_000 / BASELINE_TIMER_HZ, 2)
+                if full_ticks is not None
+                else None
+            ),
+            "damage_repaint_microseconds": (
+                round(damage_ticks * 1_000_000 / BASELINE_TIMER_HZ, 2)
+                if damage_ticks is not None
+                else None
+            ),
+        }
+    input_response: dict[str, Any] | None = None
+    if probes is not None:
+        input_flags = byte_at(memory, BASELINE_INPUT_FLAGS) or 0
+        final_tick = word_at(memory, MSX_TICK)
+        key_ack_tick = word_at(memory, BASELINE_KEY_ACK)
+        keyboard_frames = None
+        injection_tick = None
+        if (
+            keyboard_injection_frame is not None
+            and final_tick is not None
+            and key_ack_tick is not None
+        ):
+            injection_tick = (
+                final_tick - (runtime["frame"] - keyboard_injection_frame)
+            ) & 0xFFFF
+            keyboard_frames = (key_ack_tick - injection_tick) & 0xFFFF
+        input_response = {
+            "flags": input_flags,
+            "armed": bool(input_flags & BASELINE_INPUT_ARMED),
+            "pointer_acknowledged": bool(
+                input_flags & BASELINE_POINTER_ACKNOWLEDGED
+            ),
+            "keyboard_acknowledged": bool(
+                input_flags & BASELINE_KEY_ACKNOWLEDGED
+            ),
+            "pointer_arm_tick": word_at(memory, BASELINE_POINTER_ARM),
+            "pointer_ack_tick": word_at(memory, BASELINE_POINTER_ACK),
+            "keyboard_arm_tick": word_at(memory, BASELINE_KEY_ARM),
+            "keyboard_ack_tick": key_ack_tick,
+            "keyboard_value": byte_at(memory, BASELINE_INPUT_KEY),
+            "runnable_tasks_at_arm": byte_at(memory, BASELINE_RUNNABLE),
+            "final_tick": final_tick,
+            "keyboard_injection_frame": keyboard_injection_frame,
+            "keyboard_injection_tick_estimate": injection_tick,
+            "keyboard_response_frames": keyboard_frames,
+            "keyboard_response_milliseconds": (
+                round(keyboard_frames * 1000 / BASELINE_FRAME_HZ, 2)
+                if keyboard_frames is not None
+                else None
+            ),
+        }
     runtime.update(
         {
             "mapper_total_segments": total_segments,
@@ -239,6 +368,8 @@ def collect_runtime(log_path: Path) -> dict[str, Any]:
             "screen7_register_baseline": (
                 runtime["vdp_r0"] == 0x0A and runtime["vdp_r1"] == 0x62
             ),
+            "diagnostic_probes": probes,
+            "input_response": input_response,
             "log": log_path.as_posix(),
         }
     )
@@ -262,15 +393,64 @@ def collect_runtime(log_path: Path) -> dict[str, Any]:
         errors.append("PAGE_DATA segment was not captured")
     if app_pages is None or not 1 <= app_pages <= WM_MAXWIN:
         errors.append(f"implausible or missing app-pool size: {app_pages}")
+    if require_probes:
+        if probes is None:
+            errors.append("diagnostic probe cookie was not captured")
+        else:
+            if probes["phase"] != 4:
+                errors.append(f"diagnostic probe phase is {probes['phase']}, expected 4")
+            if not probes["scheduler_stack_high_water_bytes"]:
+                errors.append("scheduler stack high-water is zero or missing")
+            if probes["scheduler_stack_fault"] != 0:
+                errors.append(
+                    f"scheduler stack fault is {probes['scheduler_stack_fault']}, expected 0"
+                )
+            if not probes["full_repaint_ticks"]:
+                errors.append("full repaint timing is zero or missing")
+            if not probes["damage_repaint_ticks"]:
+                errors.append("damage repaint timing is zero or missing")
+    if require_input_keyboard:
+        if input_response is None:
+            errors.append("diagnostic input telemetry was not captured")
+        else:
+            if not input_response["armed"]:
+                errors.append("diagnostic input probe was not armed")
+            if not input_response["keyboard_acknowledged"]:
+                errors.append("keyboard response was not acknowledged")
+            if input_response["keyboard_value"] != expected_key:
+                errors.append(
+                    f"keyboard response value is {input_response['keyboard_value']}, "
+                    f"expected {expected_key}"
+                )
+            if input_response["runnable_tasks_at_arm"] != 3:
+                errors.append(
+                    "input probe armed with "
+                    f"{input_response['runnable_tasks_at_arm']} runnable tasks, expected 3"
+                )
+            if input_response["keyboard_response_frames"] is None:
+                errors.append("keyboard injection frame was not supplied")
+            elif input_response["keyboard_response_frames"] > 10:
+                errors.append(
+                    "keyboard response is "
+                    f"{input_response['keyboard_response_frames']} frames, expected at most 10"
+                )
     if errors:
         raise BaselineError("guest did not reach a healthy GEMBENCH desktop: " + "; ".join(errors))
     return runtime
 
 
-def collect_report(root: Path, emulator_log: Path | None = None) -> dict[str, Any]:
+def collect_report(
+    root: Path,
+    emulator_log: Path | None = None,
+    *,
+    static: dict[str, Any] | None = None,
+    require_probes: bool = False,
+    require_input_keyboard: bool = False,
+    keyboard_injection_frame: int | None = None,
+) -> dict[str, Any]:
     report: dict[str, Any] = {
         "schema_version": 1,
-        "static": collect_static(root),
+        "static": collect_static(root) if static is None else static,
         "runtime": None,
         "repaint_timing": {
             "status": "not-instrumented",
@@ -280,11 +460,71 @@ def collect_report(root: Path, emulator_log: Path | None = None) -> dict[str, An
                 "full and damage-limited repaint latency."
             ),
         },
+        "input_response": {
+            "status": "not-instrumented",
+            "notes": (
+                "Run the diagnostic input target to capture response while the "
+                "desktop and two non-yielding workers are resident."
+            ),
+        },
     }
     if emulator_log is not None:
-        runtime = collect_runtime(emulator_log)
+        runtime = collect_runtime(
+            emulator_log,
+            require_probes=require_probes,
+            require_input_keyboard=require_input_keyboard,
+            keyboard_injection_frame=keyboard_injection_frame,
+        )
         runtime["log"] = relative_name(root, emulator_log)
         report["runtime"] = runtime
+        probes = runtime["diagnostic_probes"]
+        if probes is not None:
+            report["repaint_timing"] = {
+                "status": "captured",
+                "timer_hz": BASELINE_TIMER_HZ,
+                "timer": "RP-5C01 seconds-test clock",
+                "full_ticks": probes["full_repaint_ticks"],
+                "full_microseconds": probes["full_repaint_microseconds"],
+                "damage_ticks": probes["damage_repaint_ticks"],
+                "damage_microseconds": probes["damage_repaint_microseconds"],
+                "damage_rect": BASELINE_DAMAGE_RECT,
+                "notes": (
+                    "Each result is one diagnostic-build sample from the 16,384 Hz "
+                    "RTC seconds-test clock. Packed 24-hour start/end values give an "
+                    "unambiguous 5.27-second window. Release builds do not link or run "
+                    "this probe. The openMSX reference comparison is recorded in "
+                    "docs/gembench/OPENMSX-VALIDATION.md."
+                ),
+            }
+        input_probe = runtime["input_response"]
+        if input_probe is not None and input_probe["armed"]:
+            report["input_response"] = {
+                "status": (
+                    "captured"
+                    if input_probe["pointer_acknowledged"]
+                    and input_probe["keyboard_acknowledged"]
+                    else "partial"
+                ),
+                "timer_hz": BASELINE_FRAME_HZ,
+                "runnable_tasks_at_arm": input_probe["runnable_tasks_at_arm"],
+                "keyboard": {
+                    "acknowledged": input_probe["keyboard_acknowledged"],
+                    "value": input_probe["keyboard_value"],
+                    "response_frames": input_probe["keyboard_response_frames"],
+                    "response_milliseconds": input_probe[
+                        "keyboard_response_milliseconds"
+                    ],
+                },
+                "pointer": {
+                    "acknowledged": input_probe["pointer_acknowledged"],
+                },
+                "notes": (
+                    "1983 injects a real matrix key at a fixed host frame. Its "
+                    "current headless interface has no scripted pointer-motion "
+                    "source, so the openMSX reference runs provide the authoritative "
+                    "pointer and independently repeated keyboard measurements."
+                ),
+            }
     return report
 
 
@@ -373,6 +613,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             "No emulator log was supplied. Run `make gembench-baseline-1983` to capture it."
         )
     else:
+        probes = runtime["diagnostic_probes"]
         lines.extend(
             [
                 f"- Capture frame: {runtime['frame']:,}",
@@ -380,26 +621,74 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- VDP R0 / R1: {format_hex(runtime['vdp_r0'], 2)} / {format_hex(runtime['vdp_r1'], 2)}",
                 f"- Screen 7 register baseline matched: {'yes' if runtime['screen7_register_baseline'] else 'no'}",
                 f"- Page-1 TPA / PAGE_DATA segments: {runtime['tpa_segment']} / {runtime['page_data_segment']}",
-                "- Scheduler stack high-water: not captured; 1983 exits at a BIOS frame "
-                "boundary where page 0 ROM hides GEMBENCH low RAM.",
             ]
         )
+        if probes is None:
+            lines.append(
+                "- Scheduler stack high-water: not captured; run the diagnostic probe target."
+            )
+        else:
+            lines.extend(
+                [
+                    f"- Scheduler stack high-water: {probes['scheduler_stack_high_water_bytes']} bytes.",
+                    f"- Scheduler stack fault: {probes['scheduler_stack_fault']}.",
+                    f"- Diagnostic probe phase: {probes['phase']} (4 means complete).",
+                ]
+            )
 
     repaint = report["repaint_timing"]
+    lines.extend(["", "## Repaint timing", "", f"Status: **{repaint['status']}**.", ""])
+    if repaint["status"] == "captured":
+        rect = repaint["damage_rect"]
+        lines.extend(
+            [
+                f"- Full desktop: {repaint['full_ticks']:,} ticks "
+                f"({repaint['full_microseconds']:,.2f} us).",
+                f"- Damage rectangle ({rect['x']}, {rect['y']}, {rect['width']}, "
+                f"{rect['height']}): {repaint['damage_ticks']:,} ticks "
+                f"({repaint['damage_microseconds']:,.2f} us).",
+                f"- Timer: {repaint['timer']} at {repaint['timer_hz']:,} Hz.",
+                "",
+            ]
+        )
     lines.extend(
         [
-            "",
-            "## Repaint timing",
-            "",
-            f"Status: **{repaint['status']}**.",
-            "",
             repaint["notes"],
+        ]
+    )
+    input_response = report["input_response"]
+    lines.extend(
+        ["", "## Input response", "", f"Status: **{input_response['status']}**.", ""]
+    )
+    if input_response["status"] in {"captured", "partial"}:
+        keyboard = input_response["keyboard"]
+        pointer = input_response["pointer"]
+        lines.extend(
+            [
+                f"- Runnable tasks at arm: {input_response['runnable_tasks_at_arm']}.",
+                "- Keyboard acknowledgement: "
+                + (
+                    f"{keyboard['response_frames']} PAL frame(s) "
+                    f"({keyboard['response_milliseconds']:,.2f} ms)."
+                    if keyboard["acknowledged"]
+                    else "not captured."
+                ),
+                "- Pointer acknowledgement in 1983: "
+                + ("captured." if pointer["acknowledged"] else "not captured."),
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            input_response["notes"],
             "",
             "## Reproduce",
             "",
             "```sh",
-            "make gembench-msx",
             "make gembench-baseline-1983",
+            "make gembench-baseline-probes-1983",
+            "make gembench-baseline-input-1983",
+            "make gembench-baseline-input-openmsx",
             "```",
             "",
         ]
@@ -419,14 +708,37 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--markdown", type=Path)
     parser.add_argument("--json", dest="json_path", type=Path)
     parser.add_argument("--require-runtime", action="store_true")
+    parser.add_argument("--require-probes", action="store_true")
+    parser.add_argument("--require-input-keyboard", action="store_true")
+    parser.add_argument("--keyboard-injection-frame", type=int)
+    parser.add_argument("--static-json", type=Path)
     args = parser.parse_args(argv)
     if args.markdown is None and args.json_path is None:
         parser.error("at least one of --markdown or --json is required")
     if args.require_runtime and args.emulator_log is None:
         parser.error("--require-runtime requires --emulator-log")
+    if args.require_probes and args.emulator_log is None:
+        parser.error("--require-probes requires --emulator-log")
+    if args.require_input_keyboard and args.emulator_log is None:
+        parser.error("--require-input-keyboard requires --emulator-log")
+    if args.require_input_keyboard and args.keyboard_injection_frame is None:
+        parser.error("--require-input-keyboard requires --keyboard-injection-frame")
     try:
-        report = collect_report(args.root, args.emulator_log)
-    except (BaselineError, OSError) as exc:
+        static = None
+        if args.static_json is not None:
+            source_report = json.loads(args.static_json.read_text(encoding="utf-8"))
+            static = source_report.get("static")
+            if not isinstance(static, dict):
+                raise BaselineError(f"static section is missing from {args.static_json}")
+        report = collect_report(
+            args.root,
+            args.emulator_log,
+            static=static,
+            require_probes=args.require_probes,
+            require_input_keyboard=args.require_input_keyboard,
+            keyboard_injection_frame=args.keyboard_injection_frame,
+        )
+    except (BaselineError, OSError, json.JSONDecodeError) as exc:
         print(f"baseline error: {exc}", file=sys.stderr)
         return 1
     if args.markdown is not None:

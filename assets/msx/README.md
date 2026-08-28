@@ -7,3 +7,7 @@ MSX jump/OEM bytes 0 through 10 plus bytes 30 through 511 from this template.
 
 The boot code originates from MSX-DOS/Nextor and is distributed under the
 [Nextor license](../../docs/licenses/NEXTOR.md). GEOBENCH does not modify it.
+
+`GEMLOGO.PIC` is GEMBENCH's MSX2-only default wallpaper. Reproduce it from the
+clean wordmark source with `make gembench-theme-assets`; MSX staging installs it
+as `PICS/LOGO.PIC` without changing the CPC/PCW compatibility asset.
