@@ -325,6 +325,9 @@ typedef struct {
 #define GB_MSG_FRAME 5   /* a focused frame, no chrome click (gb_doc_frame, tick)    */
 #define GB_MSG_CLOSE 6   /* close requested (gadget/ESC): confirm + gb_wm_close      */
 #define GB_MSG_DRAG  7   /* a title-bar press: gb_drag_window + gb_wm_setpos         */
+#define GB_MSG_MOVED 8   /* kernel move completed: p0=x, p1=y                        */
+#define GB_MSG_SIZED 9   /* kernel resize completed: p0=w, p1=h                      */
+#define GB_MSG_MAXIMIZED 10 /* kernel maximise/restore: p0=1/0, p1=w, p2=h           */
 #define gb_dragname ((const char *)0x1423)  /* mirrors WM_DRAGNAME in kernel/lowram.inc */
 #define gb_drop_claim()   (*(volatile unsigned char *)0x142F |= 0x80)
 #define gb_drop_release() (*(volatile unsigned char *)0x142F &= 0x7F)
@@ -537,18 +540,34 @@ void gb_wm_add(const gb_win_t *desc);
 void gb_task_enable(void);
 
 /* Managed window (#146, #148): the KERNEL owns the chrome. Register with gb_wm_managed
- * and the WM draws the frame/title/grip and runs close/drag/resize for you; the app
- * provides only the interior, through ONE handler `proc` (a WndProc). The kernel calls
+ * and the WM draws the frame/title/grip. Legacy descriptors receive close/drag events
+ * and keep their app-linked move/resize helpers. An MSX2 descriptor tagged with
+ * GB_WK_ABI_V1 selects kernel-owned furniture and gestures through its kind bitmask.
+ * The app provides only the interior, through ONE handler `proc` (a WndProc). The kernel calls
  * proc(void) for every window callback with gb_msg.type set; the proc switches on it:
  *   GB_MSG_DRAW   draw the CONTENT (the WM already drew frame/title/grip)
  *   GB_MSG_CLICK  a press in the content area (chrome handled; grip via gb_in_grip)
  *   GB_MSG_FRAME  a focused frame, no chrome click (gb_doc_frame, idle/tick)
  *   GB_MSG_CLOSE  close requested (gadget/ESC): confirm + gb_wm_close
  *   GB_MSG_DRAG   a title-bar press: gb_drag_window + gb_wm_setpos + gb_restore_parent
+ *   GB_MSG_MOVED / GB_MSG_SIZED / GB_MSG_MAXIMIZED  completed kernel geometry changes
  *   GB_MSG_MENU / GB_MSG_DROP  top-bar click / file drop (route to gb_doc_event)
  * Read input with gb_mx/gb_my, the live rect with gb_wm_x/y/w/h (WM-owned; read-only).
- * A message the proc doesn't handle is simply ignored. Resizable iff min_w != 0.
- * title -> the app's title string (read each repaint). */
+ * A message the proc doesn't handle is simply ignored. Legacy windows are resizable iff
+ * min_w != 0. title -> the app's title string (read each repaint).
+ *
+ * gb_mwin_kind_t appends the MSX2 kind/tag tail without increasing gb_mwin_t itself.
+ * The ABI tag makes the extension opt-in: an older 12-byte MSX2 descriptor is still
+ * treated as the legacy fixed-chrome contract. Pass &extended.window to
+ * gb_wm_managed(); the base is the first member and the tagged tail follows it. */
+#define GB_WK_TITLE    0x01u
+#define GB_WK_CLOSE    0x02u
+#define GB_WK_MAXIMIZE 0x04u
+#define GB_WK_MOVE     0x08u
+#define GB_WK_RESIZE   0x10u
+#define GB_WK_STANDARD (GB_WK_TITLE | GB_WK_CLOSE | GB_WK_MAXIMIZE | \
+                        GB_WK_MOVE | GB_WK_RESIZE)
+#define GB_WK_ABI_V1   0xB6u
 typedef struct {
     unsigned char x, y, w, h;       /* initial rect (byte col, line, size) */
     unsigned char min_w, min_h;     /* min size; min_w == 0 -> not resizable */
@@ -556,6 +575,13 @@ typedef struct {
     const char *title;
     void (*task_worker)(void);       /* pure compute callback for gb_task_enable; else 0 */
 } gb_mwin_t;
+#ifdef GB_MSX2
+typedef struct {
+    gb_mwin_t window;               /* unchanged legacy descriptor prefix */
+    unsigned char kind;             /* GB_WK_* furniture/capability bits */
+    unsigned char kind_abi;         /* GB_WK_ABI_V1 opts into the appended fields */
+} gb_mwin_kind_t;
+#endif
 void          gb_wm_managed(const gb_mwin_t *desc);   /* register a kernel-managed window */
 unsigned char gb_wm_x(void);    /* live window rect (WM-owned) */
 unsigned char gb_wm_y(void);

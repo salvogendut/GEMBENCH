@@ -31,11 +31,13 @@ The completed foundation currently covers:
 - source-only object IDs, deterministic C-header generation, field objects,
   live text bindings, and cyclic keyboard focus;
 - an MSX2 FormRef dialog whose drawing and hit geometry come from embedded GBR;
+- tagged MSX2 window kinds with kernel-owned furniture, move, resize, and
+  maximise/restore gestures, demonstrated by File Manager;
 - committed golden data and corruption tests; and
 - an MSX2-only black, white, grey, and red Screen 7 visual foundation.
 
-The next runtime milestone adds GEM-style window kinds and kernel-owned
-furniture through append-only flags and messages.
+The next runtime milestone measures whether GBR resources and rendering should
+move into an auxiliary mapper segment or remain app-linked.
 
 ## Fixed target
 
@@ -73,6 +75,13 @@ Build and automatically exercise the embedded FormRef resource in openMSX:
 ```sh
 make formref
 tools/test_formref_openmsx.sh
+```
+
+Exercise File Manager's GEM-style window kind, including kernel-owned
+maximise/restore, move, resize, and geometry messages:
+
+```sh
+tools/test_window_kinds_openmsx.sh
 ```
 
 Capture the reproducible pre-GBR baseline under the sibling `1983`
