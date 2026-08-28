@@ -60,6 +60,15 @@ emulator checkout:
 make gembench-baseline-1983
 ```
 
+Add diagnostic-only scheduler stack and repaint measurements with:
+
+```sh
+make gembench-baseline-probes-1983
+```
+
+The probe target preserves release artifact measurements in the report and
+does not add instrumentation to normal GEMBENCH builds.
+
 The inherited GeoBench build requires RASM, SDCC, mtools, dosfstools, and the
 documented MSX dependencies. See [Building and running](docs/BUILDING.md) and
 [the MSX2 target](docs/MSX2.md) for setup, deployment, and emulator commands.
@@ -77,6 +86,7 @@ python3 tools/gbrc.py examples/hello-dialog.json \
 - [Approved implementation plan](docs/gembench/IMPLEMENTATION-PLAN.md)
 - [Bootstrap validation results](docs/gembench/BOOTSTRAP-RESULTS.md)
 - [Current MSX2 baseline](docs/gembench/BASELINE.md)
+- [openMSX reference validation](docs/gembench/OPENMSX-VALIDATION.md)
 - [Baseline measurement workflow](docs/gembench/DEVELOPMENT.md)
 - [GEMBENCH architecture](docs/gembench/ARCHITECTURE.md)
 - [GBR version 1](docs/GBR-V1.md)

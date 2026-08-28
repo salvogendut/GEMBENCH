@@ -100,7 +100,8 @@ The proof of concept succeeds when the migrated dialog is materially easier to
 maintain or smaller, remains responsive at approximately 3.58 MHz, and does not
 consume unacceptable resident or mapper capacity.
 
-The current pre-runtime snapshot and explicit instrumentation gaps are recorded
-in [BASELINE.md](BASELINE.md). Static sizing and guarded 1983 boot telemetry are
-reproducible; stack high-water and repaint timing remain follow-on probes before
-this milestone can be marked complete.
+The current pre-runtime snapshot is recorded in [BASELINE.md](BASELINE.md).
+Static sizing, guarded 1983 boot telemetry, and diagnostic-only stack and repaint
+probes are reproducible. Pointer and keyboard response under multiple resident
+applications remains the final measurement before this milestone can be marked
+complete.

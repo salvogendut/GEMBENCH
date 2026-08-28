@@ -57,6 +57,21 @@ sibling checkout uses different paths. A non-zero emulator exit after the
 telemetry line is tolerated because a read-only host configuration can prevent
 RTC persistence after the guest has completed.
 
+Capture the scheduler stack high-water mark and one full plus one
+damage-limited repaint sample with:
+
+```sh
+make gembench-baseline-probes-1983
+```
+
+This target first records the ordinary release artifacts, then rebuilds the
+desktop with `GEMBENCH_BASELINE=1` and the existing preemptive TASKDEMO stress
+workers. The diagnostic timer uses the MSX2 RP-5C01 seconds-test clock at
+16,384 Hz, giving a 5.27-second unambiguous measurement window. The target uses
+a disposable RTC because the accelerated clock changes its visible time. The
+diagnostic code and TASKDEMO apps are absent from a normal `make gembench-msx`
+build.
+
 Build the fixed-target distribution:
 
 ```sh

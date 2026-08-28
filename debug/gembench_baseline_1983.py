@@ -25,6 +25,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--ide-image", type=Path, default=DEFAULT_IDE_IMAGE)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "build" / "baseline")
     parser.add_argument("--frames", type=int, default=6000)
+    parser.add_argument("--runtime-probes", action="store_true")
+    parser.add_argument("--static-json", type=Path)
     args = parser.parse_args(argv)
 
     if not args.emulator.is_file():
@@ -69,7 +71,7 @@ def main(argv: list[str]) -> int:
         str(screenshot_path),
         "--dump-state",
         "--dump-ram",
-        "0xC018:9",
+        "0xC018:52",
     ]
     completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
     log = completed.stdout + completed.stderr
@@ -95,6 +97,10 @@ def main(argv: list[str]) -> int:
         "--json",
         str(json_path),
     ]
+    if args.runtime_probes:
+        report_command.append("--require-probes")
+    if args.static_json is not None:
+        report_command.extend(["--static-json", str(args.static_json)])
     report = subprocess.run(report_command, cwd=ROOT, check=False)
     if report.returncode:
         return report.returncode

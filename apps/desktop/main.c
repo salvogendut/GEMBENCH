@@ -27,6 +27,24 @@
 #define DRAGTH  2             /* press must move this far before it lifts (#153) */
 #define WM_OPEN_STRICT (*(volatile unsigned char *)0x123D)
 
+#ifdef GEMBENCH_BASELINE
+#define BASELINE_PHASE       (*(volatile unsigned char *)0xC02A)
+#define BASELINE_STACK_MAX   (*(volatile unsigned char *)0xC02B)
+#define BASELINE_STACK_FAULT (*(volatile unsigned char *)0xC02C)
+#define BASELINE_COOKIE      (*(volatile unsigned char *)0xC02D)
+#define BASELINE_FULL_TIME0  (*(volatile unsigned int *)0xC040)
+#define BASELINE_FULL_TIME1  (*(volatile unsigned int *)0xC042)
+#define BASELINE_FULL_TIME2  (*(volatile unsigned int *)0xC044)
+#define BASELINE_DAMAGE_TIME0 (*(volatile unsigned int *)0xC046)
+#define BASELINE_DAMAGE_TIME1 (*(volatile unsigned int *)0xC048)
+#define BASELINE_DAMAGE_TIME2 (*(volatile unsigned int *)0xC04A)
+#define BASELINE_COOKIE_VALUE 0xB7
+void gb_baseline_timer_start_full(void);
+void gb_baseline_timer_start_damage(void);
+void gb_baseline_timer_store_full(void);
+void gb_baseline_timer_store_damage(void);
+#endif
+
 /* The desktop icons: three storage slots + Clock + Trash (#65). CPC/PCW retain
    the historical C/A/B slots; MSX resolves each slot to the letter and media
    type DOS assigned at boot. Positions are mutable (drag updates them). */
@@ -67,6 +85,9 @@ static unsigned char want_about;             /* System>About: 1=menu selected, 2
 #ifdef GB_PREEMPTIVE_DIAGNOSTIC
 static unsigned char preemptive_diagnostic_started;
 static unsigned char preemptive_diagnostic_refresh;
+#endif
+#ifdef GEMBENCH_BASELINE
+static unsigned char baseline_delay;
 #endif
 #if !defined(GB_MSX2) && !defined(GB_PCW)
 static unsigned char first_paint;             /* defer the definitive paint until WM registration */
@@ -814,6 +835,34 @@ static void bar_clock(unsigned char h, unsigned char m)
     gb_curhide(); gb_textbw(CLK_COL, 0, t); gb_curshow();
 }
 
+#ifdef GEMBENCH_BASELINE
+/* One-shot diagnostic measurements. The bar hook still runs while TASKDEMO
+   owns focus, so wait for a scheduler sample and then time one full and one
+   representative damage-limited compositor pass. */
+static void baseline_probe(void)
+{
+    if (BASELINE_PHASE == 0) {
+        if (!BASELINE_STACK_MAX || ++baseline_delay < 32) return;
+        baseline_delay = 0;
+        BASELINE_PHASE = 1;
+        gb_baseline_timer_start_full();
+        gb_wm_damage(0, 0, GB_COLS, GB_LINES);
+        gb_restore_parent();
+        gb_baseline_timer_store_full();
+        BASELINE_PHASE = 2;
+    } else if (BASELINE_PHASE == 2) {
+        if (++baseline_delay < 32) return;
+        baseline_delay = 0;
+        BASELINE_PHASE = 3;
+        gb_baseline_timer_start_damage();
+        gb_wm_damage(32, 48, 40, 80);
+        gb_restore_parent();
+        gb_baseline_timer_store_damage();
+        BASELINE_PHASE = 4;
+    }
+}
+#endif
+
 static void bar_draw(void)
 {
     unsigned char msig, i;
@@ -843,6 +892,9 @@ static void bar_draw(void)
        callbacks so headless diagnostics expose counter progress on screen. */
     if (!++preemptive_diagnostic_refresh)
         gb_wm_damage(0, 8, GB_COLS, GB_LINES - 8);
+#endif
+#ifdef GEMBENCH_BASELINE
+    baseline_probe();
 #endif
     /* The desktop loses focus when a window is clicked, and its on_frame stops
        running - but this bar hook runs every frame in the desktop's page regardless
@@ -1225,6 +1277,19 @@ void main(void)
     held_prev = 0;
 #ifdef GB_PREEMPTIVE
     gb_task_root_init();                         /* install app-carried fixed-RAM scheduler */
+#endif
+#ifdef GEMBENCH_BASELINE
+    BASELINE_PHASE = 0;
+    BASELINE_STACK_MAX = 0;
+    BASELINE_STACK_FAULT = 0;
+    BASELINE_COOKIE = BASELINE_COOKIE_VALUE;
+    BASELINE_FULL_TIME0 = 0;
+    BASELINE_FULL_TIME1 = 0;
+    BASELINE_FULL_TIME2 = 0;
+    BASELINE_DAMAGE_TIME0 = 0;
+    BASELINE_DAMAGE_TIME1 = 0;
+    BASELINE_DAMAGE_TIME2 = 0;
+    baseline_delay = 0;
 #endif
     gb_on_bar(bar_draw);                        /* top-bar handler runs every frame (#77) */
     gb_wm_run(&deskwin);                        /* register + run the kernel WM (#45) */

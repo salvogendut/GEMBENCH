@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-baseline-report gembench-baseline-1983 app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 app formref sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -33,6 +33,15 @@ gembench-baseline-report: gbr-example
 
 gembench-baseline-1983: gembench-msx gbr-example
 	$(PYTHON) debug/gembench_baseline_1983.py
+
+# Rebuild with diagnostic-only scheduler and repaint probes, while retaining
+# release artifact sizes and hashes from the ordinary baseline capture.
+gembench-baseline-probes-1983: gembench-baseline-1983
+	cp build/baseline/gembench-baseline.json build/baseline/release-baseline.json
+	GEMBENCH_BASELINE=1 PREEMPTIVE=1 PREEMPTIVE_DIAGNOSTIC=1 MSX_UNAPI_TSR= bash tools/build_kernel_msx.sh
+	$(PYTHON) debug/gembench_baseline_1983.py \
+		--runtime-probes \
+		--static-json build/baseline/release-baseline.json
 
 # Compatibility alias: preemptive scheduling is the release default.
 msx-preemptive: msx

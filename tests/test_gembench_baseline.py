@@ -64,6 +64,73 @@ class BaselineTests(unittest.TestCase):
         self.assertEqual(runtime["idle_busy_app_pages"], 1)
         self.assertEqual(runtime["mapper_segments_held_by_gembench"], 8)
         self.assertTrue(runtime["screen7_register_baseline"])
+        self.assertIsNone(runtime["diagnostic_probes"])
+
+    def test_runtime_parser_reads_diagnostic_probes(self) -> None:
+        memory = bytearray(baseline.GLUE_DUMP_LENGTH)
+
+        def put(address: int, value: int) -> None:
+            memory[address - baseline.GLUE_DUMP_START] = value
+
+        def put_clock(address: int, seconds: int) -> None:
+            def bcd(value: int) -> int:
+                return (value // 10 << 4) | value % 10
+
+            seconds %= 24 * 60 * 60
+            put(address, bcd(seconds % 60))
+            put(address + 1, bcd(seconds // 60 % 60))
+            put(address + 2, bcd(seconds // 3600))
+
+        put(baseline.MSX_TOTSEG, 32)
+        put(baseline.MSX_FREESEG, 25)
+        put(baseline.MSX_PAGE_DATA, 4)
+        put(baseline.BASELINE_COOKIE, baseline.BASELINE_COOKIE_VALUE)
+        put(baseline.BASELINE_PHASE, 4)
+        put(baseline.BASELINE_STACK_MAX, 42)
+        put(baseline.BASELINE_STACK_FAULT, 0)
+        put_clock(baseline.BASELINE_FULL_START, 0)
+        put_clock(baseline.BASELINE_FULL_END, 18432)
+        put_clock(baseline.BASELINE_DAMAGE_START, 86000)
+        put_clock(baseline.BASELINE_DAMAGE_END, 86000 + 1843)
+        lines = []
+        for offset in range(0, len(memory), 16):
+            chunk = memory[offset : offset + 16]
+            lines.append(
+                f"{baseline.GLUE_DUMP_START + offset:04X}: "
+                + " ".join(f"{value:02X}" for value in chunk)
+            )
+        lines.append(
+            "state frame=6001 pc=247A sp=F100 slot=F0 subslot=00 "
+            "mapper=03,04,05,06 cycles=429496 instructions=123456 "
+            "vram_nonzero=6742 vdp_r0=0A vdp_r1=62"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "1983.log"
+            path.write_text("\n".join(lines) + "\n", encoding="ascii")
+            runtime = baseline.collect_runtime(path, require_probes=True)
+
+        probes = runtime["diagnostic_probes"]
+        self.assertEqual(probes["scheduler_stack_high_water_bytes"], 42)
+        self.assertEqual(probes["full_repaint_ticks"], 18432)
+        self.assertEqual(probes["full_repaint_microseconds"], 1125000.0)
+        self.assertAlmostEqual(probes["damage_repaint_microseconds"], 112487.79)
+
+    def test_required_diagnostic_probes_are_rejected_when_missing(self) -> None:
+        memory = bytearray(baseline.GLUE_DUMP_LENGTH)
+        memory[baseline.MSX_TOTSEG - baseline.GLUE_DUMP_START] = 32
+        memory[baseline.MSX_FREESEG - baseline.GLUE_DUMP_START] = 25
+        memory[baseline.MSX_PAGE_DATA - baseline.GLUE_DUMP_START] = 4
+        dump = "C018: " + " ".join(f"{value:02X}" for value in memory)
+        state = (
+            "state frame=6001 pc=247A sp=F100 slot=F0 subslot=00 "
+            "mapper=03,04,05,06 cycles=1 instructions=1 "
+            "vram_nonzero=6742 vdp_r0=0A vdp_r1=62"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "1983.log"
+            path.write_text(f"{dump}\n{state}\n", encoding="ascii")
+            with self.assertRaisesRegex(baseline.BaselineError, "probe cookie"):
+                baseline.collect_runtime(path, require_probes=True)
 
     def test_missing_state_is_rejected(self) -> None:
         with self.assertRaisesRegex(baseline.BaselineError, "no --dump-state"):
@@ -116,6 +183,48 @@ class BaselineTests(unittest.TestCase):
             markdown = baseline.render_markdown(baseline.collect_report(root))
         self.assertIn("Status: **not-instrumented**", markdown)
         self.assertIn("Application-bank headroom", markdown)
+
+    def test_markdown_renders_captured_repaint_timing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.make_tree(root)
+            report = baseline.collect_report(root)
+        report["runtime"] = {
+            "frame": 6001,
+            "pc": 0x247A,
+            "sp": 0xF100,
+            "vdp_r0": 0x0A,
+            "vdp_r1": 0x62,
+            "screen7_register_baseline": True,
+            "tpa_segment": 2,
+            "page_data_segment": 4,
+            "mapper_segments_held_by_gembench": 8,
+            "mapper_total_segments": 32,
+            "mapper_free_segments_at_entry": 25,
+            "app_pool_pages": 8,
+            "idle_busy_app_pages": 1,
+            "vram_nonzero_bytes": 6484,
+            "diagnostic_probes": {
+                "phase": 4,
+                "scheduler_stack_high_water_bytes": 42,
+                "scheduler_stack_fault": 0,
+            },
+        }
+        report["repaint_timing"] = {
+            "status": "captured",
+            "timer_hz": baseline.BASELINE_TIMER_HZ,
+            "timer": "test timer",
+            "full_ticks": 18432,
+            "full_microseconds": 1125000.0,
+            "damage_ticks": 1843,
+            "damage_microseconds": 112487.79,
+            "damage_rect": baseline.BASELINE_DAMAGE_RECT,
+            "notes": "Diagnostic sample.",
+        }
+        markdown = baseline.render_markdown(report)
+        self.assertIn("Status: **captured**", markdown)
+        self.assertIn("Scheduler stack high-water: 42 bytes", markdown)
+        self.assertIn("Full desktop: 18,432 ticks (1,125,000.00 us)", markdown)
 
 
 if __name__ == "__main__":

@@ -22,10 +22,20 @@ command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
 PREEMPTIVE="${PREEMPTIVE:-1}"
 PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
+GEMBENCH_BASELINE="${GEMBENCH_BASELINE:-0}"
+BASELINE_APPDEFS=""
+DESKTOP_DATA_LOC="0x7300"
 NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
 NOTEPAD_DATA_LOC="0x6F48"
 NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
 NOTEPAD_SCROLL=1
+if [ "$GEMBENCH_BASELINE" = "1" ]; then
+    BASELINE_APPDEFS="-DGEMBENCH_BASELINE"
+    DESKTOP_DATA_LOC="0x7400"
+elif [ "$GEMBENCH_BASELINE" != "0" ]; then
+    echo "GEMBENCH_BASELINE must be 0 or 1" >&2
+    exit 2
+fi
 if [ "$PREEMPTIVE" = "1" ]; then
     RASM="$RASM" bash tools/build_scheduler.sh msx
     EXTRA_RASM="${EXTRA_RASM:-} -DPREEMPTIVE=1 -DPREEMPTIVE_CONTEXT=1"
@@ -98,14 +108,16 @@ python3 tools/gblib_subset.py \
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
 if [ "$PREEMPTIVE" = "1" ]; then
     TASK_ROOT=1 TASK_RUNTIME_RAW=build/msx/GBSCHED.RAW \
-        TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 DOC=1 TITLEBAR=1 \
+        TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2 $BASELINE_APPDEFS" \
+        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
     if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
         TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
             tools/build_capp.sh apps/taskdemo build/msx/TASKDEMO.RAW
     fi
 else
-    APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DOC=1 TITLEBAR=1 \
+    APPDEFS="-DGB_MSX2 $BASELINE_APPDEFS" BASELINE="$GEMBENCH_BASELINE" \
+        DATA_LOC=0x7100 DOC=1 TITLEBAR=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 fi
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DOC=1 SCROLL=1 REPAINTTOP=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW

@@ -85,6 +85,13 @@ sched_switch_context
                 cp    (hl)
                 jr    c,sched_stack_sampled
                 ld    (hl),a
+                ifdef PLATFORM_MSX
+                ifdef GEMBENCH_BASELINE
+                if GEMBENCH_BASELINE
+                ld    (MSX_BASELINE_STACK_MAX),a
+                endif
+                endif
+                endif
 sched_stack_sampled
 
                 ld    sp,SCHED_TMP_TOP        ; kernel scratch is dead while unlocked
@@ -171,11 +178,25 @@ sched_restore_fault
                 call  sched_bank_set
                 ld    a,1
                 ld    (SCHED_FAULT),a
+                ifdef PLATFORM_MSX
+                ifdef GEMBENCH_BASELINE
+                if GEMBENCH_BASELINE
+                ld    (MSX_BASELINE_STACK_FAULT),a
+                endif
+                endif
+                endif
                 jr    sched_resume_old
 
 sched_switch_fault
                 ld    a,1
                 ld    (SCHED_FAULT),a
+                ifdef PLATFORM_MSX
+                ifdef GEMBENCH_BASELINE
+                if GEMBENCH_BASELINE
+                ld    (MSX_BASELINE_STACK_FAULT),a
+                endif
+                endif
+                endif
                 ret                             ; original SP is still active
 
 ; sched_yield: safe-point counterpart of the interrupt wrapper. Every task
