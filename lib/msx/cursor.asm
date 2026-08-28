@@ -75,6 +75,14 @@ cursor_move_to
                 cp    h
                 ret   z
 cm_go
+                ifdef GEMBENCH_BASELINE
+                if GEMBENCH_BASELINE
+                ld    a,(cd_sx)
+                ld    (baseline_old_sx),a
+                ld    a,(cd_sy)
+                ld    (baseline_old_sy),a
+                endif
+                endif
                 ld    (cursor_x),de
                 ld    (cursor_y),hl
                 ld    a,(cur_supp)           ; suppressed (DnD ghost): track, don't draw
@@ -83,7 +91,44 @@ cm_go
                 ld    a,(cur_paintlock)
                 or    a
                 ret   nz
+                ifdef GEMBENCH_BASELINE
+                if GEMBENCH_BASELINE
+                call  cursor_draw
+                jp    baseline_pointer_ack
+                endif
+                endif
                 jp    cursor_draw
+
+                ifdef GEMBENCH_BASELINE
+                if GEMBENCH_BASELINE
+; Record the completion point only on cursor_move_to's changed-position path,
+; after both hardware-sprite attribute entries have reached VRAM. Plain
+; hide/show brackets therefore cannot produce a false pointer acknowledgement.
+baseline_pointer_ack
+                ld    a,(MSX_BASELINE_INPUT_FLAGS)
+                bit   0,a
+                ret   z
+                bit   1,a
+                ret   nz
+                ld    a,(cd_sx)               ; virtual movement smaller than one
+                ld    hl,baseline_old_sx       ; sprite pixel is not yet visible
+                cp    (hl)
+                jr    nz,bpa_visible
+                ld    a,(cd_sy)
+                ld    hl,baseline_old_sy
+                cp    (hl)
+                ret   z
+bpa_visible
+                ld    a,(MSX_BASELINE_INPUT_FLAGS)
+                ld    hl,(MSX_TICK)
+                ld    (MSX_BASELINE_POINTER_ACK),hl
+                set   1,a
+                ld    (MSX_BASELINE_INPUT_FLAGS),a
+                ret
+baseline_old_sx db    0
+baseline_old_sy db    0
+                endif
+                endif
 
 ; cursor_erase: park the sprites below the display.
 cursor_erase

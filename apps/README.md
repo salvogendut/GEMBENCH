@@ -28,9 +28,10 @@ preempted.
 | calculator | `CALC.APP`   | fixed-point desktop calculator with basic arithmetic, percentage and square root |
 | clock    | `CLOCK.APP`    | analog clock widget |
 | settings | `SETTINGS.APP` | control panel — font / icons / cursor / backdrop / wallpaper / desktop colours on CPC/MSX2 / screensaver, friendly 4-colour / 16-colour next-boot selection on MSX2, and Return to Defaults; PCW omits palette controls because its display is fixed monochrome; persisted to `GEOBENCH.CFG` |
+| gbrdemo | `GBRDEMO.APP` | MSX2 object-runtime proof: opening `HELLO.GBR` draws and hit-tests its box, text, and button directly from the validated resource tree |
 | telnet   | `TELNET.APP`   | ANSI/Telnet terminal: CPC TCP via Net4CPC/M4 plus serial, 78x22 windowed + Mode-2 80x25 fullscreen; MSX2 TCP/IP UNAPI in a 78x22 window; PCW PerryNet/PerryFi plus serial, 80x25 windowed + 90x28 fullscreen |
 | nettest  | `NETTEST.APP`  | network diagnostic — DNS `example.com`, TCP connect, HTTP GET, and PASS/FAIL status; CPC uses the active GBNET backend, PCW uses PerryNet over PerryFi |
-| formref  | `FORMREF.APP`  | development reference for app-linked form composition and the first `GBAP` embedded application icon, using the Daruma artwork |
+| formref  | `FORMREF.APP`  | MSX2 GBR vertical slice with resource-defined fields/actions, live text, pointer hit-testing and keyboard focus; CPC/PCW retain the reusable-widget reference; also carries the first `GBAP` Daruma icon |
 | sndtest  | `SNDTEST.APP`  | non-blocking app-linked sound diagnostic: PSG scale/noise on CPC/MSX2 and DKsound-equipped PCWs, with stock-PCW beeper fallback |
 | wget     | `WGET.APP`     | GUI HTTP downloader with bounded redirects and streamed writes to an automatically derived 8.3 filename; CPC continues exact-length partial files with HTTP Range, while PCW uses PerryNet and safely restarts CP/M-record files |
 | browser  | `BROWSER.APP`  | fullscreen HTTP browser for CPC, MSX2, and PCW; demand-streams into a bounded borrowed-bank cache, renders compact GET forms, simple table grids, and sequential lazy GBPC images through one image slot, hides proxy targets behind highlighted link labels, and loads/saves offline `.HTM` files without retaining a DOM |
@@ -73,8 +74,8 @@ savers together.
 | xmatrix  | `XMATRIX.SAV`  | binary "Matrix" digital rain (white → red → black glow) — ported from `symsav-xmatrix` |
 | mountain | `MOUNTAIN.SAV` | configurable isometric 3D terrain — MSX Screen 7 uses eight elevation colours; four-colour and monochrome targets use compact low/high shading |
 | fractalic | `FRACTALI.SAV` | Sierpinski triangle + Koch snowflake (random each cycle) — ported from `symsav-fractalic` |
-| starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (blue → red → white, black border) — inspired by `symsav-starfield`, fresh `#C000` impl |
-| xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the blue field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit |
+| starfield | `STARFLD.SAV`  | 3D star-field flying toward the viewer (GEMBENCH MSX2: grey → red → white on black) — inspired by `symsav-starfield`, fresh `#C000` impl |
+| xroach   | `XROACH.SAV`   | 16×16 cockroaches scuttle on the GEMBENCH MSX2 black field and scatter from a red rogue roach — ported from `symsav-xroach`, direct `#C000` sprite blit |
 | pyro     | `PYRO.SAV`     | fixed-point fireworks — rockets rise and burst into shrapnel showers — ported from xscreensaver |
 | forest   | `FOREST.SAV`   | fractal trees with solid branches and red blossoms; each MSX Screen 7 stand randomly uses one blossom colour, one colour per tree, or mixed blossom colours — ported from xscreensaver |
 | helix    | `HELIX.SAV`    | woven harmonograph curves (sin-table) — ported from xscreensaver |
@@ -107,6 +108,16 @@ the app reads input with `gb_flags`/`gb_mx`/`gb_my` and calls `gb_wm_close` to
 quit. Settings and saver apps should keep persistent config/media policy in the
 app layer and treat the kernel as a provider of storage, WM, and reload
 primitives. See `lib/gb/gb.h` for the full API.
+
+On MSX2, a managed app can wrap the unchanged 12-byte `gb_mwin_t` in
+`gb_mwin_kind_t`, set `GB_WK_ABI_V1`, and combine `GB_WK_TITLE`, `GB_WK_CLOSE`,
+`GB_WK_MAXIMIZE`, `GB_WK_MOVE`, and `GB_WK_RESIZE`. The tagged contract makes
+the kernel draw only the selected furniture and own the selected geometry
+gestures. The proc receives `GB_MSG_MOVED`, `GB_MSG_SIZED`, and
+`GB_MSG_MAXIMIZED` after committed changes and should resynchronise cached
+geometry from the `gb_wm_*()` accessors. Untagged descriptors keep the legacy
+`GB_MSG_DRAG` and app-linked resize behavior. File Manager is the reference
+migration; CPC and PCW retain their prior code path.
 
 ## Reusable widgets
 
@@ -152,9 +163,10 @@ Settings is the selector/stepper reference, and Clock combines steppers, a
 standard action row, modal form lifecycle, and the opt-in time setter. XAOS uses
 compact buttons, and Icon Editor demonstrates
 pressed and disabled button states. Disk Utility uses a shared command button
-for its destructive format workflow. `FORMREF.APP` is staged as a development
-diagnostic and demonstrates form composition without moving any state or code
-into the resident kernel.
+for its destructive format workflow. On MSX2, `FORMREF.APP` embeds a verified
+GBR tree and demonstrates resource-defined form drawing, hit-testing, live text,
+and cyclic focus without moving state or code into the resident kernel. Its CPC
+and PCW builds retain the inherited reusable-widget implementation.
 
 ## App-linked sound
 

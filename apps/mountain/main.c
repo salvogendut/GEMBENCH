@@ -38,13 +38,17 @@
 #define ST_DRAW     6
 #define ST_HOLD     7
 
-/* GEOBENCH logical pens: 0 blue, 1 white, 2 black, 3 red. Screen 7 can also
- * address the fixed extended palette at indices 4..15. */
+/* Logical pens 0..3 follow each target's configured base palette. Screen 7 can
+ * also address the fixed extended palette at indices 4..15. */
 #define COL_BG_4      0
 #define COL_WIRE_4    1
 #define COL_FILL_HI   3
 #define COL_FILL_LO   2
-#define COL_BLACK     2
+#ifdef GB_MSX2
+#define COL_BLACK     0       /* GEMBENCH MSX2 canvas */
+#else
+#define COL_BLACK     2       /* inherited target palette */
+#endif
 #define COL_WHITE     1
 
 #ifdef GB_MSX2

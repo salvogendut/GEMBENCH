@@ -5,8 +5,6 @@
  */
 #include "gb.h"
 
-#define UI_SURFACE 1
-#define UI_ACCENT  3
 #define THUMB_MIN  4
 
 /* Map value/limit onto an eight-bit track without pulling 32-bit arithmetic
@@ -48,12 +46,12 @@ void gb_vscroll16(unsigned char x, unsigned char y,
 {
     unsigned char start, length;
     scroll_geometry(h, pos, total, page, &start, &length);
-    gb_fill(x, y, w, h, UI_SURFACE);
+    gb_fill(x, y, w, h, GB_UI_SURFACE);
     if (w > 2 && length > 2)
         gb_fill((unsigned char)(x + 1),
                 (unsigned char)(y + start + 1),
                 (unsigned char)(w - 2),
-                (unsigned char)(length - 2), UI_ACCENT);
+                (unsigned char)(length - 2), GB_UI_ACCENT);
 }
 
 void gb_hscroll16(unsigned char x, unsigned char y,
@@ -62,12 +60,12 @@ void gb_hscroll16(unsigned char x, unsigned char y,
 {
     unsigned char start, length;
     scroll_geometry(w, pos, total, page, &start, &length);
-    gb_fill(x, y, w, h, UI_SURFACE);
+    gb_fill(x, y, w, h, GB_UI_SURFACE);
     if (h > 2 && length > 2)
         gb_fill((unsigned char)(x + start + 1),
                 (unsigned char)(y + 1),
                 (unsigned char)(length - 2),
-                (unsigned char)(h - 2), UI_ACCENT);
+                (unsigned char)(h - 2), GB_UI_ACCENT);
 }
 
 /* Inverse of the track mapping, with the pointer centred on the thumb. The

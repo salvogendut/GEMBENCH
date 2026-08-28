@@ -1,10 +1,6 @@
 /* gbselect.c - opt-in popup/list selector field. */
 #include "gb.h"
 
-#define UI_SURFACE 1
-#define UI_EDGE    2
-#define UI_ACCENT  3
-
 static unsigned char select_text_y(unsigned char y, unsigned char h)
 {
     if (h <= 8) return y;
@@ -15,9 +11,9 @@ void gb_select(unsigned char x, unsigned char y, unsigned char w, unsigned char 
                const char *value, unsigned char flags)
 {
     unsigned char ty = select_text_y(y, h);
-    gb_fill(x, y, w, h, UI_SURFACE);
+    gb_fill(x, y, w, h, GB_UI_SURFACE);
     gb_frame(x, y, w, h,
-             (flags & GB_WIDGET_FOCUSED) ? UI_ACCENT : UI_EDGE);
+             (flags & GB_WIDGET_FOCUSED) ? GB_UI_ACCENT : GB_UI_EDGE);
     gb_textbw((unsigned char)(x + 1), ty, value);
     if (w >= 4) gb_textbw((unsigned char)(x + w - 3), ty, ">");
 }
