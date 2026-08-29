@@ -28,6 +28,16 @@ data_abs=$(awk '$1 == "DEF" && $2 == "s__DATA" { print $3; exit }' build/msx-obj
     exit 1
 }
 printf -v list_state '0x%X' "$((0x${data_abs#0x} + 0x$list_state_rel))"
+view_rel=$(awk '$2 == "_view" { print $3; exit }' build/msx-obj/filemgr/main.sym)
+view_menu_rel=$(awk '$2 == "_view_menu" { print $3; exit }' build/msx-obj/filemgr/main.sym)
+init_abs=$(awk '$1 == "DEF" && $2 == "s__INITIALIZED" { print $3; exit }' build/msx-obj/filemgr/app.noi)
+[ -n "$view_rel" ] && [ -n "$view_menu_rel" ] && [ -n "$init_abs" ] || {
+    echo "ERROR: File Manager resource-menu symbols not found" >&2
+    exit 1
+}
+printf -v view_addr '0x%X' "$((0x${init_abs#0x} + 0x$view_rel))"
+# gbr_menu_t keeps its caller-owned state array at byte offset 8.
+printf -v menu_state '0x%X' "$((0x${data_abs#0x} + 0x$view_menu_rel + 8))"
 cursor_x_raw=$(awk '$1 == "CURSOR_X" { print $2; exit }' build/msx/gbkernm7.sym)
 [ -n "$cursor_x_raw" ] || { echo "ERROR: CURSOR_X not found in kernel symbols" >&2; exit 1; }
 printf -v cursor_x '0x%s' "${cursor_x_raw#\#}"
@@ -42,6 +52,8 @@ fi
 export GEMBENCH_WINDOW_KINDS_FM_PROC="$fm_proc"
 export GEMBENCH_WINDOW_KINDS_LIST_STATE="$list_state"
 export GEMBENCH_WINDOW_KINDS_CURSOR_X="$cursor_x"
+export GEMBENCH_WINDOW_KINDS_VIEW="$view_addr"
+export GEMBENCH_WINDOW_KINDS_MENU_STATE="$menu_state"
 export MSX_UNAPI=0
 export MSX_MOUSE=0
 export SDL_AUDIODRIVER=dummy

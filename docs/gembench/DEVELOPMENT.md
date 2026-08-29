@@ -134,13 +134,21 @@ make gembench-msx
 tools/test_window_kinds_openmsx.sh
 ```
 
-The openMSX driver opens File Manager through the real desktop, then uses MSX
-keyboard-matrix pointer input to maximise and restore it, drag its title, and
-resize its kernel-drawn grip. It verifies the live geometry and observes the
+The openMSX driver opens File Manager through the real desktop, selects List
+through the generated View popup, verifies `I`, `L`, and `F` shortcuts plus
+checked/radio transitions, then uses MSX keyboard-matrix pointer input to
+maximise and restore it, drag its title, and resize its kernel-drawn grip. It
+verifies the live geometry and observes the
 `GB_MSG_MOVED`, `GB_MSG_SIZED`, and `GB_MSG_MAXIMIZED` callbacks. The final
 Screen 7 capture is written to `build/msx/window-kinds.png`.
 `MSX_HEADLESS=1` retains the geometry and message assertions without requesting
 the capture.
+
+The menu source is `apps/filemgr/view_menu.json`. The MSX build compiles its
+ordinary frozen `.GBR` for verification and a code-only `view_menu_gbr.h` for
+the app-linked runtime. A malformed `GBRM` descriptor fails atomically before
+registering a top-bar title. CPC and PCW retain their existing `gb_doc` menu
+path because adding the MSX runtime would exceed their 16 KiB File Manager page.
 
 Use 1983 as the complementary boot, mapper, and image-layout integration check:
 

@@ -1,0 +1,36 @@
+{
+  "format": "GBR1",
+  "trees": [
+    {
+      "name": "View",
+      "root": {
+        "id": "FILEMGR_VIEW_ROOT",
+        "type": "box",
+        "children": [
+          {
+            "id": "FILEMGR_VIEW_FULLSCREEN",
+            "type": "checkbox",
+            "text": "Fullscreen",
+            "shortcut": "F",
+            "flags": ["selectable"]
+          },
+          {
+            "id": "FILEMGR_VIEW_ICONS",
+            "type": "radio",
+            "text": "Icons",
+            "shortcut": "I",
+            "flags": ["selectable", "radio"],
+            "state": ["checked"]
+          },
+          {
+            "id": "FILEMGR_VIEW_LIST",
+            "type": "radio",
+            "text": "List",
+            "shortcut": "L",
+            "flags": ["selectable", "radio"]
+          }
+        ]
+      }
+    }
+  ]
+}

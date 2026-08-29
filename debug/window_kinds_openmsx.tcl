@@ -12,6 +12,8 @@ set wk_screenshots [expr {$::env(GEMBENCH_WINDOW_KINDS_SCREENSHOTS) + 0}]
 set wk_fm_proc [expr {$::env(GEMBENCH_WINDOW_KINDS_FM_PROC)}]
 set wk_list_state [expr {$::env(GEMBENCH_WINDOW_KINDS_LIST_STATE)}]
 set wk_cursor_x [expr {$::env(GEMBENCH_WINDOW_KINDS_CURSOR_X)}]
+set wk_view [expr {$::env(GEMBENCH_WINDOW_KINDS_VIEW)}]
+set wk_menu_state [expr {$::env(GEMBENCH_WINDOW_KINDS_MENU_STATE)}]
 set wk_deadline 0
 set wk_target_x 0
 set wk_target_y 0
@@ -30,6 +32,9 @@ set wk_page0_slot -1
 set wk_registered 0
 set wk_list_ready 0
 set wk_started 0
+set wk_resource_menu {}
+set wk_view_value -1
+set wk_menu_state_value {}
 
 proc wk_release_all {} {
     catch {keymatrixup 8 0x01}
@@ -63,6 +68,9 @@ proc wk_finish {status} {
     puts $handle "MAXIMIZED_MESSAGES=$::wk_maximized_messages"
     puts $handle "MOVE_ATTEMPTS=$::wk_move_attempts"
     puts $handle "RESIZE_ATTEMPTS=$::wk_resize_attempts"
+    puts $handle "RESOURCE_MENU=$::wk_resource_menu"
+    puts $handle "VIEW=$::wk_view_value"
+    puts $handle "MENU_STATE=$::wk_menu_state_value"
     puts $handle "FINAL_POINTER=[peek 0x1306],[peek 0x1307]"
     puts $handle [format "FINAL_PC=%04X" [reg PC]]
     puts $handle [format "FINAL_SP=%04X" [reg SP]]
@@ -80,6 +88,11 @@ proc wk_finish {status} {
 
 proc wk_proc_break {} {
     set type [peek 0x1302]
+    set ::wk_view_value [peek $::wk_view]
+    set ::wk_menu_state_value [list \
+        [peek $::wk_menu_state] \
+        [peek [expr {$::wk_menu_state + 1}]] \
+        [peek [expr {$::wk_menu_state + 2}]]]
     if {$type == 5 && [peek $::wk_list_state] == 0} {
         set ::wk_list_ready 1
     } elseif {$type == 8} {
@@ -202,6 +215,112 @@ proc wk_wait_changed {before callback label} {
     } else {
         after time 0.1 [list wk_wait_changed $before $callback $label]
     }
+}
+
+proc wk_key_release {row mask callback} {
+    keymatrixup $row $mask
+    after time 1.5 $callback
+}
+
+proc wk_key_press {row mask callback} {
+    keymatrixdown $row $mask
+    after time 0.10 [list wk_key_release $row $mask $callback]
+}
+
+proc wk_resource_list_check {} {
+    set icons [lindex $::wk_menu_state_value 1]
+    set list [lindex $::wk_menu_state_value 2]
+    if {$::wk_view_value != 0 || ($icons & 2) != 0 || ($list & 2) == 0} {
+        wk_finish "FAIL resource List shortcut/state"
+    } else {
+        lappend ::wk_resource_menu LIST
+        # MSX matrix row 3 bit 3 = F.
+        wk_key_press 3 0x08 wk_resource_full_wait
+    }
+}
+
+proc wk_resource_pointer_check {} {
+    if {[peek 0x1705] != 0} {
+        after time 0.1 wk_resource_pointer_check
+        return
+    }
+    set icons [lindex $::wk_menu_state_value 1]
+    set list [lindex $::wk_menu_state_value 2]
+    if {$::wk_view_value != 0 || ($icons & 2) != 0 || ($list & 2) == 0} {
+        wk_finish "FAIL resource pointer List/state"
+    } else {
+        lappend ::wk_resource_menu POINTER_LIST
+        # MSX matrix row 3 bit 6 = I.
+        after time 2.0 {wk_key_press 3 0x40 wk_resource_icons_check}
+    }
+}
+
+proc wk_resource_icons_check {} {
+    set icons [lindex $::wk_menu_state_value 1]
+    set list [lindex $::wk_menu_state_value 2]
+    if {$::wk_view_value != 1 || ($icons & 2) == 0 || ($list & 2) != 0} {
+        wk_finish "FAIL resource Icons shortcut/state"
+    } else {
+        lappend ::wk_resource_menu ICONS
+        # MSX matrix row 4 bit 1 = L.
+        wk_key_press 4 0x02 wk_resource_list_check
+    }
+}
+
+proc wk_resource_full_wait {} {
+    set ::wk_deadline [expr {[machine_info time] + 15.0}]
+    wk_wait_rect {0 8 128 204} wk_resource_full_check "resource fullscreen"
+}
+
+proc wk_resource_full_check {} {
+    if {([lindex $::wk_menu_state_value 0] & 2) == 0} {
+        wk_finish "FAIL resource Fullscreen checked state"
+    } else {
+        lappend ::wk_resource_menu FULLSCREEN
+        wk_key_press 3 0x08 wk_resource_restore_wait
+    }
+}
+
+proc wk_resource_restore_wait {} {
+    set ::wk_deadline [expr {[machine_info time] + 15.0}]
+    wk_wait_rect $::wk_initial wk_resource_restore_check "resource fullscreen restore"
+}
+
+proc wk_resource_restore_check {} {
+    if {([lindex $::wk_menu_state_value 0] & 2) != 0} {
+        wk_finish "FAIL resource Fullscreen restore state"
+    } else {
+        lappend ::wk_resource_menu RESTORED
+        after time 1.0 wk_start_interaction
+    }
+}
+
+proc wk_resource_start {} {
+    if {$::wk_page0_slot >= 0 &&
+        [expr {[debug read ioports 0xA8] & 3}] != $::wk_page0_slot} {
+        after time 0.002 wk_resource_start
+        return
+    }
+    set rect [wk_rect]
+    if {![wk_rect_valid $rect]} {
+        if {[machine_info time] >= $::wk_deadline} {
+            wk_finish "FAIL resource menu initial geometry"
+        } else {
+            after time 0.002 wk_resource_start
+        }
+    } else {
+        set ::wk_initial $rect
+        # Open the generated View title through the real pointer path.
+        wk_move_to 12 4 wk_resource_title_click
+    }
+}
+
+proc wk_resource_title_click {} {
+    wk_click {wk_move_to 12 35 wk_resource_list_click}
+}
+
+proc wk_resource_list_click {} {
+    wk_click wk_resource_pointer_check
 }
 
 proc wk_check_final {} {
@@ -412,7 +531,7 @@ proc wk_filemgr_ready {} {
             # Let the post-list application-icon probes finish before driving
             # pointer gestures; they temporarily switch mapper/BIOS slots.
             set ::wk_deadline [expr {[machine_info time] + 30.0}]
-            after time 10.0 wk_start_interaction
+            after time 10.0 wk_resource_start
         } elseif {[machine_info time] >= $::wk_deadline} {
             wk_finish "FAIL File Manager list did not become ready"
         } else {

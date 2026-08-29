@@ -1,6 +1,6 @@
 # GEMBENCH implementation plan
 
-Status: **Milestones 1-8 complete; Milestone 9 in progress; GEMBENCH-1 frozen on 2026-08-29**.
+Status: **Milestones 1-9 complete; Milestone 10 in progress; GEMBENCH-1 frozen on 2026-08-29**.
 
 This plan turns the goals in `DESIGN-ESTIMATE.md` into staged implementation
 work. The first proof of concept is expected to take approximately six to nine
@@ -46,7 +46,8 @@ baseline is recorded.
 | 6. Window kinds (complete 2026-08-28) | Add append-only flags and messages for close, maximise, move, and resize | 1-2 weeks | The kernel owns the selected window furniture |
 | 7. Banking decision (complete 2026-08-29) | Prototype an auxiliary resource segment and resident renderer | 1 week | Measurements compare resident and app-linked implementations |
 | 8. Review (complete 2026-08-29) | Evaluate size, responsiveness, and maintainability | 2-3 days | GEMBENCH-1 is frozen after an explicit window-ABI revision |
-| 9. Resource forms ([#15](https://github.com/salvogendut/GEMBENCH/issues/15)) | Add checkbox/radio rendering, common form behavior, and a production resource panel | 1-2 weeks | FormRef exercises shared semantics and Calculator draws/routes its MSX2 panel from GBR |
+| 9. Resource forms (complete 2026-08-29; [#15](https://github.com/salvogendut/GEMBENCH/issues/15)) | Add checkbox/radio rendering, common form behavior, and a production resource panel | 1-2 weeks | FormRef exercises shared semantics and Calculator draws/routes its MSX2 panel from GBR |
+| 10. Resource menus ([#17](https://github.com/salvogendut/GEMBENCH/issues/17)) | Generate menu labels, actions, state, and shortcuts from GBR source metadata | 1 week | File Manager's MSX2 View popup is resource-driven; pointer and keyboard traces pass without changing GBR1 |
 
 ## Bootstrap work package
 
@@ -142,3 +143,9 @@ The authoritative manifest is `abi/gembench-v1.json`, checked by
 File Manager grows five bytes to 13,249, and the complete MSX2, CPC, and PCW
 distribution builds pass. openMSX passes the FormRef and explicit-window logic
 traces, and 1983 reaches the healthy Screen 7 desktop at frame 6,001.
+Milestone 9 completed the shared checkbox/radio form policy and migrated the
+MSX2 Calculator panel. Milestone 10 keeps GBR1 frozen: source-only shortcuts and
+object IDs generate a bounded `GBRM` application descriptor, while live menu
+state remains caller-owned. File Manager is the first production menu slice on
+MSX2; CPC and PCW retain `gb_doc` after their 16 KiB fit gate rejected the added
+runtime.

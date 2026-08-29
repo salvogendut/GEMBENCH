@@ -15,6 +15,8 @@ FORMREF_SOURCE = ROOT / "apps" / "formref" / "formref.json"
 FORMREF_HEADER = ROOT / "apps" / "formref" / "formref_gbr.h"
 CALCULATOR_SOURCE = ROOT / "apps" / "calculator" / "calculator.json"
 CALCULATOR_HEADER = ROOT / "apps" / "calculator" / "calculator_gbr.h"
+FILEMGR_MENU_SOURCE = ROOT / "apps" / "filemgr" / "view_menu.json"
+FILEMGR_MENU_HEADER = ROOT / "apps" / "filemgr" / "view_menu_gbr.h"
 HEADER_FILE = ROOT / "include" / "gembench" / "gbr.h"
 GOLDEN_FILE = ROOT / "tests" / "fixtures" / "hello-dialog.gbr.inc"
 
@@ -266,6 +268,50 @@ class CompilerTests(unittest.TestCase):
             equals[4],
             gbrc.FLAG_BITS["selectable"] | gbrc.FLAG_BITS["default"],
         )
+
+    def test_file_manager_menu_metadata_is_source_only_and_current(self) -> None:
+        document = json.loads(FILEMGR_MENU_SOURCE.read_text(encoding="utf-8"))
+        blob, object_ids = gbrc.compile_document_with_ids(document)
+        without_shortcuts = json.loads(json.dumps(document))
+
+        def remove_shortcuts(obj: object) -> None:
+            if isinstance(obj, dict):
+                obj.pop("shortcut", None)
+                for value in obj.values():
+                    remove_shortcuts(value)
+            elif isinstance(obj, list):
+                for value in obj:
+                    remove_shortcuts(value)
+
+        remove_shortcuts(without_shortcuts)
+        self.assertEqual(blob, gbrc.compile_document(without_shortcuts))
+        rendered = gbrc.render_menu_header(document, object_ids, "FILEMGR_VIEW")
+        self.assertEqual(FILEMGR_MENU_HEADER.read_text(encoding="ascii"), rendered)
+        descriptor = bytes(
+            int(value, 16) for value in re.findall(r"0x([0-9a-f]{2})", rendered)
+        )
+        self.assertEqual(descriptor[:7], b"GBRM\x01\x03\x04")
+        self.assertEqual(descriptor[7:11], b"View")
+        self.assertEqual(descriptor[11:15], b"\x01\x08F\x0a")
+        self.assertEqual(descriptor[25:29], b"\x02\x06I\x05")
+        self.assertEqual(descriptor[34:38], b"\x03\x04L\x04")
+
+    def test_menu_metadata_rejects_ambiguous_shortcuts_and_shapes(self) -> None:
+        document = json.loads(FILEMGR_MENU_SOURCE.read_text(encoding="utf-8"))
+        blob, object_ids = gbrc.compile_document_with_ids(document)
+        document["trees"][0]["root"]["children"][2]["shortcut"] = "i"
+        with self.assertRaisesRegex(gbrc.ResourceError, "duplicate menu shortcut"):
+            gbrc.render_menu_header(document, object_ids, "FILEMGR_VIEW")
+
+        document = json.loads(FILEMGR_MENU_SOURCE.read_text(encoding="utf-8"))
+        document["trees"][0]["root"]["children"][0]["children"] = [
+            {"type": "button", "text": "Nested", "flags": ["selectable"]}
+        ]
+        _, nested_ids = gbrc.compile_document_with_ids(document)
+        with self.assertRaisesRegex(gbrc.ResourceError, "nested menu items"):
+            gbrc.render_menu_header(document, nested_ids, "FILEMGR_VIEW")
+
+        self.assertEqual(gbrc.verify_blob(blob)["version"], 1)
 
 
 if __name__ == "__main__":
