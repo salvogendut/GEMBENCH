@@ -229,6 +229,31 @@ static unsigned char draw_text(const gbr_runtime_t *runtime,
     return GBR_RT_OK;
 }
 
+#if defined(GBR_FORM_RUNTIME) && !defined(GBR_M7_LEGACY_FORMS)
+static void draw_choice(unsigned char x, unsigned char y,
+                        unsigned char w, unsigned char h,
+                        const char *label, unsigned int state,
+                        unsigned char radio)
+{
+    unsigned char ty = y;
+    unsigned char pen;
+    if (h > 8u) ty = (unsigned char)(y + ((h - 8u + 1u) >> 1));
+    pen = (state & GBR_STATE_DISABLED) ? GB_UI_SURFACE :
+          (state & GBR_STATE_OUTLINED) ? GB_UI_ACCENT : GB_UI_EDGE;
+    gb_fill(x, y, w, h, GB_UI_SURFACE);
+    if (radio) {
+        gb_frame(x, y, 4u, h, pen);
+        gb_textbw(x, ty, (state & GBR_STATE_CHECKED) ? "(o)" : "( )");
+        gb_textbw((unsigned char)(x + 5u), ty, label);
+    } else {
+        gb_frame(x, y, 3u, h, pen);
+        if (state & GBR_STATE_CHECKED)
+            gb_textbw((unsigned char)(x + 1u), ty, "x");
+        gb_textbw((unsigned char)(x + 4u), ty, label);
+    }
+}
+#endif
+
 static unsigned char draw_object(const gbr_runtime_t *runtime,
                                  unsigned char object_index,
                                  unsigned int root_x, unsigned int root_y)
@@ -264,7 +289,9 @@ static unsigned char draw_object(const gbr_runtime_t *runtime,
             flags = 0;
             if (state & GBR_STATE_DISABLED) flags |= GB_WIDGET_DISABLED;
             if (state & GBR_STATE_SELECTED) flags |= GB_WIDGET_PRESSED;
-            if (state & GBR_STATE_OUTLINED) flags |= GB_WIDGET_FOCUSED;
+            if ((state & GBR_STATE_OUTLINED) ||
+                (object.flags & GBR_FLAG_DEFAULT))
+                flags |= GB_WIDGET_FOCUSED;
             gb_button(x, y, w, h, label, flags);
             return GBR_RT_OK;
 #ifdef GBR_FORM_RUNTIME
@@ -278,6 +305,18 @@ static unsigned char draw_object(const gbr_runtime_t *runtime,
             if (state & GBR_STATE_OUTLINED) flags |= GB_WIDGET_FOCUSED;
             gb_field(x, y, w, h, label, flags);
             return GBR_RT_OK;
+#ifndef GBR_M7_LEGACY_FORMS
+        case GBR_TYPE_CHECKBOX:
+        case GBR_TYPE_RADIO:
+            if (!screen_rect(&rect, &x, &y, &w, &h)) return GBR_RT_OK;
+            if (!copy_object_string(runtime, object_index, object.spec,
+                                    label, sizeof(label)))
+                return GBR_RT_ERR_OBJECT;
+            draw_choice(x, y, w, h, label, state,
+                        (unsigned char)(object.type == GBR_TYPE_RADIO ||
+                                        (object.flags & GBR_FLAG_RADIO)));
+            return GBR_RT_OK;
+#endif
 #endif
         default:
             return GBR_RT_ERR_UNSUPPORTED;
@@ -390,6 +429,10 @@ unsigned char gbr_draw_tree(const gbr_runtime_t *runtime,
             object.type != GBR_TYPE_STRING && object.type != GBR_TYPE_BUTTON
 #ifdef GBR_FORM_RUNTIME
             && object.type != GBR_TYPE_FIELD
+#ifndef GBR_M7_LEGACY_FORMS
+            && object.type != GBR_TYPE_CHECKBOX
+            && object.type != GBR_TYPE_RADIO
+#endif
 #endif
             )
             return GBR_RT_ERR_UNSUPPORTED;
@@ -528,5 +571,6 @@ unsigned char gbr_focus_next(gbr_runtime_t *runtime,
     }
     return 0;
 }
+
 #endif
 #endif

@@ -1,6 +1,6 @@
 # GEMBENCH implementation plan
 
-Status: **Milestones 1-8 complete; GEMBENCH-1 frozen on 2026-08-29**.
+Status: **Milestones 1-8 complete; Milestone 9 in progress; GEMBENCH-1 frozen on 2026-08-29**.
 
 This plan turns the goals in `DESIGN-ESTIMATE.md` into staged implementation
 work. The first proof of concept is expected to take approximately six to nine
@@ -46,6 +46,7 @@ baseline is recorded.
 | 6. Window kinds (complete 2026-08-28) | Add append-only flags and messages for close, maximise, move, and resize | 1-2 weeks | The kernel owns the selected window furniture |
 | 7. Banking decision (complete 2026-08-29) | Prototype an auxiliary resource segment and resident renderer | 1 week | Measurements compare resident and app-linked implementations |
 | 8. Review (complete 2026-08-29) | Evaluate size, responsiveness, and maintainability | 2-3 days | GEMBENCH-1 is frozen after an explicit window-ABI revision |
+| 9. Resource forms ([#15](https://github.com/salvogendut/GEMBENCH/issues/15)) | Add checkbox/radio rendering, common form behavior, and a production resource panel | 1-2 weeks | FormRef exercises shared semantics and Calculator draws/routes its MSX2 panel from GBR |
 
 ## Bootstrap work package
 

@@ -23,18 +23,20 @@ The complete GBR v1 binary grammar is frozen:
 - strict rejection of unknown bits, non-zero reserved fields, non-canonical
   section layouts, invalid strings, and invalid tree links.
 
-Box, text, string, button, and field are the rendered GEMBENCH-1 types. Icon,
-image, checkbox, radio, and user keep their frozen numeric identities but are
+Box, text, string, button, field, checkbox, and radio are rendered GEMBENCH-1
+types. Icon, image, and user keep their frozen numeric identities but remain
 format-only reservations: a visible instance is rejected by the current
 renderer before any partial tree draw. Future code may implement their stated
 meaning without changing the record layout; it may not reinterpret their
 numeric values.
 
-`selectable` and `hidden`, plus `disabled`, `selected`, and `outlined`, have
-generic runtime behavior today. `default`, `exit`, `radio`, `checked`, and
-`shadowed` retain their declared metadata values but do not acquire implicit
-activation or drawing behavior in GEMBENCH-1. Applications may interpret them
-explicitly. A later generic behavior must preserve these meanings.
+`selectable` and `hidden`, plus `disabled`, `selected`, `checked`, and `outlined`,
+have generic runtime behavior. The opt-in form engine implements the frozen
+`default`, `exit`, and `radio` meanings without changing their values: Enter
+selects the enabled default, Escape selects a non-default exit, and radio
+activation is exclusive among radio siblings. `shadowed` remains declared
+metadata without implicit drawing behavior. Applications not linking the form
+engine may continue to interpret the same metadata explicitly.
 
 The C runtime descriptor, embedded-versus-mapper storage, renderer placement,
 and generated source identifiers are not bytes in the GBR1 file ABI. Milestone

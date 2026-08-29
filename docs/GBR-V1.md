@@ -38,9 +38,16 @@ the resource blob, counts, and section offsets into a deterministic C header.
 
 The object types are `box`, `text`, `string`, `button`, `field`, `icon`, `image`,
 `checkbox`, `radio`, and `user`. Their numeric identities are frozen. The
-GEMBENCH-1 renderer implements the first five; the remaining five are
-format-only reservations and a visible instance is rejected before any partial
-tree draw.
+GEMBENCH-1 renderer implements box, text, string, button, field, checkbox, and
+radio. Icon, image, and user remain format-only reservations; a visible instance
+is rejected before any partial tree draw.
+
+Checkbox and radio behavior is an additive runtime implementation of the
+already frozen type, flag, and state meanings. `GBR_FORM_ENGINE=1` adds shared
+pointer activation, checked-state updates, sibling radio exclusivity, forward
+and reverse focus traversal, default Enter activation, non-default Escape exit,
+and radio cursor navigation. Mutable state remains in the caller-owned overlay;
+no GBR1 byte or record interpretation changed.
 
 ## Binary layout
 
@@ -153,7 +160,7 @@ Other object types may use the field as a bounded type-specific value.
 
 ## Deliberate omissions
 
-Version 1 does not yet encode icons, raster payloads, editable-field templates,
+Version 1 does not yet encode icon or raster payloads, editable-field templates,
 keyboard shortcuts, palette roles, user-object callbacks, or menu-specific
 metadata. Those need target runtime designs before binary fields are assigned.
 

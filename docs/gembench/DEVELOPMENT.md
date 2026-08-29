@@ -114,10 +114,18 @@ tools/test_formref_openmsx.sh
 
 The test makes a disposable IDE image whose root-level `A.APP` is byte-for-byte
 identical to the built `/GBENCH/FORMREF.APP`. It launches the app through File
-Manager, captures the GBR-defined modal at Compact/Level 2, and asserts the
-resource descriptor, keyboard focus actions, Save commit, and modal restore.
+Manager, traverses the GBR-defined modal from Name through Autosave and the two
+layout choices, and asserts the resource descriptor, keyboard focus actions,
+checkbox toggle, exclusive radio selection, default Save commit, and modal
+restore.
 Set `MSX_HEADLESS=1` to run every logic assertion with renderer-dependent
 screenshots disabled.
+
+The release MSX2 Calculator is the first production panel migrated to GBR. Run
+`make gembench-msx`, launch `CALC.APP`, and verify that pointer activation and
+keyboard arithmetic agree; its twenty button labels and hit rectangles now come
+from `apps/calculator/calculator.json`. CPC and PCW deliberately keep the prior
+panel path as compatibility controls.
 
 Exercise the first explicitly registered MSX2 window kind with:
 
@@ -184,11 +192,13 @@ objects. These are demonstration-app limits, not additions to the GBR v1 ABI.
 Resident placement and mapper-backed resource storage were measured in
 Milestone 7.
 
-The MSX2 FormRef embeds its compiler-verified 306-byte `FORMREF.GBR` through the
-generated `apps/formref/formref_gbr.h`. `GBR_FORMS=1` enables field rendering,
-live text bindings, and focus traversal; `GBR_EMBEDDED=1` selects the compact
-access-only reader after the host build has verified the generated blob. The
-full form runtime compiles to 4,969 bytes and the embedded accessor to 769
+The release MSX2 FormRef embeds its compiler-verified 231-byte `FORMREF.GBR`
+through the generated `apps/formref/formref_gbr.h`. `GBR_FORMS=1` enables field,
+checkbox, and radio rendering plus live text and focus helpers;
+`GBR_FORM_ENGINE=1` adds shared activation and navigation policy.
+`GBR_EMBEDDED=1` selects the compact access-only reader after the host build has
+verified the generated blob. The form-capable object runtime compiles to 5,339
+bytes, the optional form engine to 1,561 bytes, and the embedded accessor to 769
 bytes with the current SDCC. External files continue through the strict reader.
 
 Milestone 7 retained that placement after measurement. Build the experimental
@@ -200,9 +210,11 @@ tools/test_formref_openmsx.sh
 make gembench-m7-resident-probe
 ```
 
-The normal `make gembench-msx` does not install the mapper service or stage
-`FORMREF.GBR`. See [M7-BANKING-DECISION.md](M7-BANKING-DECISION.md) for the size,
-stack, interaction, and emulator results.
+The optional banked build keeps Milestone 7's original 306-byte resource fixture
+for reproducible comparison. The normal `make gembench-msx` does not install the
+mapper service or stage `FORMREF.GBR`. See
+[M7-BANKING-DECISION.md](M7-BANKING-DECISION.md) for the size, stack,
+interaction, and emulator results.
 
 ## MSX2 window kinds
 

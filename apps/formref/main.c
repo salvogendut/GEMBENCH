@@ -8,7 +8,11 @@
 #ifdef GBR_BANKED
 #include "gbr_bank.h"
 #endif
+#ifdef GBR_M7_LEGACY_FORMS
+#include "formref_m7_gbr.h"
+#else
 #include "formref_gbr.h"
+#endif
 #endif
 
 #define DEF_X 20
@@ -34,9 +38,15 @@
 static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static char saved_name[13] = "GEOBENCH";
 static char draft_name[13];
+#if !defined(GB_MSX2) || defined(GBR_M7_LEGACY_FORMS)
 static unsigned char saved_style, draft_style, saved_level = 3;
-static unsigned char draft_level, focus;
+static unsigned char draft_level;
 static const char *const styles[3] = { "Classic", "Compact", "Refined" };
+#endif
+static unsigned char focus;
+#if defined(GB_MSX2) && !defined(GBR_M7_LEGACY_FORMS)
+static unsigned char saved_autosave = 1, saved_layout;
+#endif
 
 #ifndef GB_MSX2
 static const gb_action_t actions[2] = {
@@ -67,12 +77,18 @@ static gbr_runtime_t form_runtime;
 static unsigned int form_states[FORMREF_OBJECT_COUNT];
 static unsigned char form_tree;
 static unsigned char resource_ready;
+#ifdef GBR_M7_LEGACY_FORMS
 static char draft_level_text[2];
 static gbr_text_binding_t form_bindings[3] = {
     { FORMREF_NAME, draft_name },
     { FORMREF_STYLE, 0 },
     { FORMREF_LEVEL_VALUE, draft_level_text }
 };
+#else
+static const gbr_text_binding_t form_bindings[1] = {
+    { FORMREF_NAME, draft_name }
+};
+#endif
 #endif
 
 static void copy_name(char *dst, const char *src)
@@ -82,11 +98,13 @@ static void copy_name(char *dst, const char *src)
     dst[i] = 0;
 }
 
+#if !defined(GB_MSX2) || defined(GBR_M7_LEGACY_FORMS)
 static void level_text(char *text, unsigned char level)
 {
     text[0] = (char)('0' + level);
     text[1] = 0;
 }
+#endif
 
 #ifdef GB_MSX2
 static unsigned char form_resource_open(void)
@@ -117,13 +135,36 @@ static void form_resource_close(void)
 
 static void form_draw(void)
 {
+#ifdef GBR_M7_LEGACY_FORMS
     level_text(draft_level_text, draft_level);
     form_bindings[1].text = styles[draft_style];
+#endif
     (void)gbr_draw_tree(&form_runtime, (unsigned int)(ROW_X << 2), NAME_Y);
 }
 
 static unsigned char activate_object(unsigned char object_index)
 {
+#if !defined(GBR_FORM_ENGINE) && !defined(GBR_M7_LEGACY_FORMS)
+    if (object_index == FORMREF_AUTOSAVE) {
+        (void)gbr_state_change(&form_runtime, object_index,
+            (gbr_state(&form_runtime, object_index) & GBR_STATE_CHECKED) ? 0 :
+                GBR_STATE_CHECKED,
+            (gbr_state(&form_runtime, object_index) & GBR_STATE_CHECKED) ?
+                GBR_STATE_CHECKED : 0);
+        return GB_FORM_REDRAW;
+    }
+    if (object_index == FORMREF_LAYOUT_CLASSIC ||
+        object_index == FORMREF_LAYOUT_REFINED) {
+        (void)gbr_state_change(&form_runtime, FORMREF_LAYOUT_CLASSIC,
+            object_index == FORMREF_LAYOUT_CLASSIC ? GBR_STATE_CHECKED : 0,
+            object_index == FORMREF_LAYOUT_CLASSIC ? 0 : GBR_STATE_CHECKED);
+        (void)gbr_state_change(&form_runtime, FORMREF_LAYOUT_REFINED,
+            object_index == FORMREF_LAYOUT_REFINED ? GBR_STATE_CHECKED : 0,
+            object_index == FORMREF_LAYOUT_REFINED ? 0 : GBR_STATE_CHECKED);
+        return GB_FORM_REDRAW;
+    }
+#endif
+#ifdef GBR_M7_LEGACY_FORMS
     if (object_index == FORMREF_STYLE) {
         draft_style = (unsigned char)((draft_style + 1u) % 3u);
         return GB_FORM_REDRAW;
@@ -136,13 +177,21 @@ static unsigned char activate_object(unsigned char object_index)
         draft_level = (unsigned char)(draft_level == 9 ? 1 : draft_level + 1);
         return GB_FORM_REDRAW;
     }
+#endif
     if (object_index == FORMREF_SAVE) {
         /* Commit before the modal runner's single compositor restore. Screen 7
          * executes redraw commands asynchronously, so a second immediate
          * restore after return can tear the stacked desktop. */
         copy_name(saved_name, draft_name);
+#ifdef GBR_M7_LEGACY_FORMS
         saved_style = draft_style;
         saved_level = draft_level;
+#else
+        saved_autosave = (unsigned char)((gbr_state(&form_runtime,
+                                      FORMREF_AUTOSAVE) & GBR_STATE_CHECKED) != 0);
+        saved_layout = (unsigned char)((gbr_state(&form_runtime,
+                                  FORMREF_LAYOUT_REFINED) & GBR_STATE_CHECKED) != 0);
+#endif
         return GB_FORM_ACCEPT;
     }
     if (object_index == FORMREF_CANCEL) return GB_FORM_CANCEL;
@@ -152,24 +201,40 @@ static unsigned char activate_object(unsigned char object_index)
 static unsigned char form_click(unsigned char mx, unsigned char my)
 {
     unsigned char object_index;
+#ifdef GBR_FORM_ENGINE
+    unsigned char event = gbr_form_click(&form_runtime,
+                         (unsigned int)(ROW_X << 2), NAME_Y,
+                         (unsigned int)(mx << 2), my, &object_index);
+    if (!(event & GBR_FORM_HANDLED))
+        return GB_FORM_STAY;
+    focus = object_index;
+    if (event & GBR_FORM_ACTIVATED) return activate_object(object_index);
+    return (event & GBR_FORM_REDRAW) ? GB_FORM_REDRAW : GB_FORM_STAY;
+#else
     if (!gbr_hit_test(&form_runtime, (unsigned int)(ROW_X << 2), NAME_Y,
                       (unsigned int)(mx << 2), my, &object_index))
         return GB_FORM_STAY;
     if (!gbr_focus_set(&form_runtime, object_index)) return GB_FORM_STAY;
     focus = object_index;
     return activate_object(object_index);
+#endif
 }
 
 static unsigned char form_key(unsigned char key)
 {
     unsigned char n = 0;
-    if (key == 0x09) {
+#ifdef GBR_FORM_ENGINE
+    unsigned char object_index;
+    unsigned char event;
+#else
+    if (key == GBR_KEY_TAB) {
         if (gbr_focus_next(&form_runtime, focus, 0, &focus))
             return GB_FORM_REDRAW;
         return GB_FORM_STAY;
     }
-    if (focus == FORMREF_NAME) {
-        if (key == 0x0D) return activate_object(FORMREF_SAVE);
+#endif
+    if (focus == FORMREF_NAME && key != GBR_KEY_TAB &&
+        key != GBR_KEY_ENTER && key != GBR_KEY_ESCAPE) {
         while (draft_name[n] && n < 12) n++;
         if ((key == 0x08 || key == 0x7F) && n) {
             draft_name[--n] = 0;
@@ -182,8 +247,17 @@ static unsigned char form_key(unsigned char key)
         }
         return GB_FORM_STAY;
     }
-    if (key == 0x0D || key == ' ') return activate_object(focus);
+#ifdef GBR_FORM_ENGINE
+    event = gbr_form_key(&form_runtime, focus, key, 0, &object_index);
+    if (!(event & GBR_FORM_HANDLED)) return GB_FORM_STAY;
+    focus = object_index;
+    if (event & GBR_FORM_ACTIVATED) return activate_object(object_index);
+    return (event & GBR_FORM_REDRAW) ? GB_FORM_REDRAW : GB_FORM_STAY;
+#else
+    if (key == GBR_KEY_ENTER) return activate_object(FORMREF_SAVE);
+    if (key == ' ') return activate_object(focus);
     return GB_FORM_STAY;
+#endif
 }
 #else
 static void form_draw(void)
@@ -262,48 +336,74 @@ static const gb_form_modal_t form = {
 
 static void open_form(void)
 {
+#ifndef GB_MSX2
     unsigned char result;
+#endif
     copy_name(draft_name, saved_name);
+#if !defined(GB_MSX2) || defined(GBR_M7_LEGACY_FORMS)
     draft_style = saved_style;
     draft_level = saved_level;
+#endif
 #ifdef GB_MSX2
     if (!resource_ready ||
         gbr_runtime_init(&form_runtime, &form_resource, form_tree,
                          form_states, FORMREF_OBJECT_COUNT) != GBR_RT_OK)
         return;
+#ifdef GBR_M7_LEGACY_FORMS
     level_text(draft_level_text, draft_level);
     form_bindings[1].text = styles[draft_style];
     if (!gbr_bind_text(&form_runtime, form_bindings, 3)) return;
+#else
+    if (!gbr_bind_text(&form_runtime, form_bindings, 1)) return;
+    (void)gbr_state_change(&form_runtime, FORMREF_AUTOSAVE,
+                           saved_autosave ? GBR_STATE_CHECKED : 0,
+                           saved_autosave ? 0 : GBR_STATE_CHECKED);
+    (void)gbr_state_change(&form_runtime, FORMREF_LAYOUT_CLASSIC,
+                           saved_layout ? 0 : GBR_STATE_CHECKED,
+                           saved_layout ? GBR_STATE_CHECKED : 0);
+    (void)gbr_state_change(&form_runtime, FORMREF_LAYOUT_REFINED,
+                           saved_layout ? GBR_STATE_CHECKED : 0,
+                           saved_layout ? 0 : GBR_STATE_CHECKED);
+#endif
     focus = FORMREF_NAME;
     if (!gbr_focus_set(&form_runtime, focus)) return;
 #else
     focus = 1;
 #endif
+#ifdef GB_MSX2
+    (void)gb_form_modal_run(&form);
+#else
     result = gb_form_modal_run(&form);
-#ifndef GB_MSX2
     if (result == GB_FORM_ACCEPT) {
         copy_name(saved_name, draft_name);
         saved_style = draft_style;
         saved_level = draft_level;
         gb_restore_parent();
     }
-#else
-    (void)result;
 #endif
 }
 
 static void app_draw(void)
 {
+#if !defined(GB_MSX2) || defined(GBR_M7_LEGACY_FORMS)
     char level[8] = "Level ";
+#endif
     win_x = gb_wm_x(); win_y = gb_wm_y();
     gb_fill(win_x, (unsigned char)(win_y + TITLE_H), WIN_W,
             (unsigned char)(WIN_H - TITLE_H), GB_UI_SURFACE);
     gb_textbw((unsigned char)(win_x + 2), (unsigned char)(win_y + 21), saved_name);
+#if !defined(GB_MSX2) || defined(GBR_M7_LEGACY_FORMS)
     gb_textbw((unsigned char)(win_x + 2), (unsigned char)(win_y + 32),
               styles[saved_style]);
     level[6] = (char)('0' + saved_level);
     level[7] = 0;
     gb_textbw((unsigned char)(win_x + 2), (unsigned char)(win_y + 43), level);
+#else
+    gb_textbw((unsigned char)(win_x + 2), (unsigned char)(win_y + 32),
+              saved_autosave ? "Autosave on" : "Autosave off");
+    gb_textbw((unsigned char)(win_x + 2), (unsigned char)(win_y + 43),
+              saved_layout ? "Refined" : "Classic");
+#endif
     gb_button((unsigned char)(win_x + 2), (unsigned char)(win_y + 56),
               18, 10, "Open form",
 #ifdef GB_MSX2

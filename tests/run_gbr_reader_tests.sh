@@ -15,7 +15,8 @@ trap 'rm -rf "$test_tmp"' EXIT
 "$CC" -Wall -Wextra -Werror -std=c99 -DGB_MSX2 -DGBR_FORM_RUNTIME \
     -I include/gembench -I lib/gb \
     tests/test_gbr_object.c lib/gembench/gbr_reader.c \
-    lib/gembench/gbr_object.c -o "$test_tmp/test_gbr_object"
+    lib/gembench/gbr_object.c lib/gembench/gbr_form.c \
+    -o "$test_tmp/test_gbr_object"
 "$test_tmp/test_gbr_object"
 
 # Link the same behavioral suite across the proposed placement boundary: the
@@ -32,7 +33,8 @@ trap 'rm -rf "$test_tmp"' EXIT
 "$CC" -Wall -Wextra -Werror -std=c99 -DGB_MSX2 -DGBR_FORM_RUNTIME \
     -I include/gembench -I lib/gb tests/test_gbr_object.c \
     lib/gembench/gbr_reader.c "$test_tmp/gbr_object_app.o" \
-    "$test_tmp/gbr_object_resident.o" -o "$test_tmp/test_gbr_resident_split"
+    "$test_tmp/gbr_object_resident.o" lib/gembench/gbr_form.c \
+    -o "$test_tmp/test_gbr_resident_split"
 "$test_tmp/test_gbr_resident_split"
 echo "ok   resident-renderer split matches app-linked behavior"
 
@@ -86,3 +88,16 @@ if (( form_bytes > 6144 )); then
     exit 1
 fi
 echo "ok   GBR form runtime compiles for Z80 with SDCC ($form_bytes bytes, no static data)"
+
+"$SDCC" -mz80 --opt-code-size -I include/gembench \
+    -c lib/gembench/gbr_form.c -o "$test_tmp/gbr_form.rel"
+test -s "$test_tmp/gbr_form.rel"
+engine_hex="$(awk '$1 == "A" && $2 == "_CODE" { print $4; exit }' \
+    "$test_tmp/gbr_form.rel")"
+test -n "$engine_hex"
+engine_bytes=$((16#$engine_hex))
+if (( engine_bytes > 2048 )); then
+    echo "FAIL GBR form engine is $engine_bytes bytes (2048-byte budget)" >&2
+    exit 1
+fi
+echo "ok   GBR form engine compiles for Z80 with SDCC ($engine_bytes bytes, no static data)"

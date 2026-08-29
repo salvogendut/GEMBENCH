@@ -136,6 +136,10 @@ resident kernel. Build with only the units an application uses:
 - `FORM=1`: labelled field rows, action rows and modal lifecycle; requires
   `WIDGETS=1`
 - `FORM_SELECT=1`: labelled selector rows; requires `FORM=1` and `SELECTOR=1`
+- `GBR_FORMS=1`: GBR field/checkbox/radio rendering, live text bindings, and
+  focus helpers; requires `WIDGETS=1`
+- `GBR_FORM_ENGINE=1`: common GBR activation and navigation policy on top of
+  `GBR_FORMS=1` (checkbox/radio state, default/exit keys, pointer routing)
 - `TIMESET=1`: binary `gb_set_time()` support without adding resident kernel code
 - `SOUND=1`: target sound primitives without adding resident kernel code
 - `REPAINTTOP=1`: the `gb_repaint_top()` binding for publishing a newly opened
@@ -166,8 +170,10 @@ compact buttons, and Icon Editor demonstrates
 pressed and disabled button states. Disk Utility uses a shared command button
 for its destructive format workflow. On MSX2, `FORMREF.APP` embeds a verified
 GBR tree and demonstrates resource-defined form drawing, hit-testing, live text,
-and cyclic focus without moving state or code into the resident kernel. Its CPC
-and PCW builds retain the inherited reusable-widget implementation.
+checkbox/radio state, default/exit activation, and cyclic focus without moving
+state or code into the resident kernel. Calculator's complete 20-button MSX2
+panel is generated from `apps/calculator/calculator.json`; CPC and PCW retain
+their inherited application-owned geometry paths.
 
 ## App-linked sound
 

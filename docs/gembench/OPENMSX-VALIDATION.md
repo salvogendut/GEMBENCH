@@ -245,3 +245,44 @@ python3 debug/gembench_baseline_1983.py \
 make cpc
 make pcw
 ```
+
+## Milestone 9 resource forms
+
+Milestone 9 was validated on 2026-08-29 with the normal embedded/app-linked
+placement. The release `FORMREF.APP` is 15,656 bytes and embeds a compact
+231-byte tree containing a dynamic Name field, Autosave checkbox, exclusive
+Classic/Refined radios, and default Save plus Cancel exits. The shared form
+engine owns pointer activation, checked state, radio exclusivity, Tab traversal,
+default Return, Escape, and radio cursor policy; mutable state remains in the
+application overlay.
+
+The openMSX keyboard-matrix trace toggled Autosave off, selected Refined,
+activated Save, and observed the compositor restore. It measured a 184-byte
+instrumented stack delta, 776.960 ms for the first modal draw, and 1,049.452 ms
+from the first Tab event to the completed redraw. The optional mapper build also
+passed against the pinned Milestone 7 fixture: its 15,938-byte app loaded the
+306-byte resource into segment 8, committed Style 1 and Level 2, and observed a
+202-byte stack delta.
+
+Calculator is the first production panel migrated to GBR. Its MSX2 build is
+11,998 bytes; all twenty button labels and hit rectangles come from the
+461-byte generated tree. CPC and PCW retain their existing application-owned
+geometry. Host tests verify object order, default-key metadata, rendering, and
+pointer identity, while the full normal MSX distribution and repository check
+suite pass.
+
+The complementary 1983 boot reached frame 6,001 at PC `0x247A`, SP `0xD8EA`,
+with VDP R0/R1 `0x0A`/`0x62`, 25 free mapper segments at entry, and one idle
+busy application page. The generated baseline reports 472 bytes of FormRef
+loader headroom and 4,130 bytes for Calculator. openMSX remains authoritative
+for the scripted form interaction.
+
+```sh
+make check
+make gembench-msx
+MSX_HEADLESS=1 tools/test_formref_openmsx.sh
+python3 debug/gembench_baseline_1983.py \
+  --ide-image QA/MSX/GBMSX.IMG --output-dir build/m9/1983 --frames 6000
+make gembench-msx-banked
+MSX_HEADLESS=1 tools/test_formref_openmsx.sh
+```

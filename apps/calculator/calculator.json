@@ -1,0 +1,34 @@
+{
+  "format": "GBR1",
+  "trees": [
+    {
+      "name": "CALCULATOR",
+      "root": {
+        "id": "CALCULATOR_ROOT",
+        "type": "box",
+        "children": [
+          { "id": "CALCULATOR_CLEAR", "type": "button", "x": 8, "y": 42, "w": 24, "h": 18, "text": "C", "flags": ["selectable"] },
+          { "id": "CALCULATOR_SQRT", "type": "button", "x": 36, "y": 42, "w": 24, "h": 18, "text": "SQR", "flags": ["selectable"] },
+          { "id": "CALCULATOR_PERCENT", "type": "button", "x": 64, "y": 42, "w": 24, "h": 18, "text": "%", "flags": ["selectable"] },
+          { "id": "CALCULATOR_DIVIDE", "type": "button", "x": 92, "y": 42, "w": 24, "h": 18, "text": "/", "flags": ["selectable"] },
+          { "id": "CALCULATOR_7", "type": "button", "x": 8, "y": 62, "w": 24, "h": 18, "text": "7", "flags": ["selectable"] },
+          { "id": "CALCULATOR_8", "type": "button", "x": 36, "y": 62, "w": 24, "h": 18, "text": "8", "flags": ["selectable"] },
+          { "id": "CALCULATOR_9", "type": "button", "x": 64, "y": 62, "w": 24, "h": 18, "text": "9", "flags": ["selectable"] },
+          { "id": "CALCULATOR_MULTIPLY", "type": "button", "x": 92, "y": 62, "w": 24, "h": 18, "text": "x", "flags": ["selectable"] },
+          { "id": "CALCULATOR_4", "type": "button", "x": 8, "y": 82, "w": 24, "h": 18, "text": "4", "flags": ["selectable"] },
+          { "id": "CALCULATOR_5", "type": "button", "x": 36, "y": 82, "w": 24, "h": 18, "text": "5", "flags": ["selectable"] },
+          { "id": "CALCULATOR_6", "type": "button", "x": 64, "y": 82, "w": 24, "h": 18, "text": "6", "flags": ["selectable"] },
+          { "id": "CALCULATOR_SUBTRACT", "type": "button", "x": 92, "y": 82, "w": 24, "h": 18, "text": "-", "flags": ["selectable"] },
+          { "id": "CALCULATOR_1", "type": "button", "x": 8, "y": 102, "w": 24, "h": 18, "text": "1", "flags": ["selectable"] },
+          { "id": "CALCULATOR_2", "type": "button", "x": 36, "y": 102, "w": 24, "h": 18, "text": "2", "flags": ["selectable"] },
+          { "id": "CALCULATOR_3", "type": "button", "x": 64, "y": 102, "w": 24, "h": 18, "text": "3", "flags": ["selectable"] },
+          { "id": "CALCULATOR_ADD", "type": "button", "x": 92, "y": 102, "w": 24, "h": 18, "text": "+", "flags": ["selectable"] },
+          { "id": "CALCULATOR_0", "type": "button", "x": 8, "y": 122, "w": 24, "h": 18, "text": "0", "flags": ["selectable"] },
+          { "id": "CALCULATOR_DECIMAL", "type": "button", "x": 36, "y": 122, "w": 24, "h": 18, "text": ".", "flags": ["selectable"] },
+          { "id": "CALCULATOR_SIGN", "type": "button", "x": 64, "y": 122, "w": 24, "h": 18, "text": "+/-", "flags": ["selectable"] },
+          { "id": "CALCULATOR_EQUALS", "type": "button", "x": 92, "y": 122, "w": 24, "h": 18, "text": "=", "flags": ["selectable", "default"] }
+        ]
+      }
+    }
+  ]
+}
