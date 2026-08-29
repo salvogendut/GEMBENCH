@@ -13,6 +13,9 @@
  * calls the CPC firmware graphics VDU directly for the hands.
  */
 #include "gb.h"
+#ifdef GB_MSX2
+#include "gbevent.h"
+#endif
 
 #define DEF_X    24
 #define DEF_Y    20
@@ -27,6 +30,10 @@ static unsigned char win_w = DEF_W, win_h = DEF_H;  /* live size (resizeable) */
 static unsigned char show_sec;               /* 0 = H:M (minute refresh), 1 = +seconds */
 static unsigned char ph, pm, ps, pshow, have_prev;  /* previous h/m/s + show state */
 static unsigned char fs_px, fs_py, fs_pw, fs_ph;    /* geometry saved across Fullscreen (#142) */
+#ifdef GB_MSX2
+static gb_event_subscription_t clock_events;
+static gb_event_t clock_event;
+#endif
 
 /* face geometry, recomputed from the live window rect on every full draw (#81): the
    analog face scales to whatever the window has been resized to. */
@@ -370,10 +377,17 @@ static void c_frame(void)
 }
 
 /* on_click (#146): the only content gesture is the resize grip. */
+#ifdef GB_MSX2
+static void c_click(unsigned char mx, unsigned char my)
+#else
 static void c_click(void)
+#endif
 {
+#ifndef GB_MSX2
+    unsigned char mx = gb_mx(), my = gb_my();
+#endif
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
-    if (gb_in_grip(win_x, win_y, win_w, win_h, gb_mx(), gb_my()))
+    if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my))
         if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
             gb_wm_setsize(win_w, win_h);
             have_prev = 0;                         /* face rescaled: no stale hands */
@@ -394,15 +408,39 @@ static void c_drag(void)
 /* the window's single handler (#148). */
 static void c_proc(void)
 {
+#ifdef GB_MSX2
+    if (!gb_event_collect(&clock_events, &clock_event, &gb_msg)) return;
+
+    if ((clock_event.classes & GB_EVENT_KEY) != 0 &&
+        (clock_event.key == 's' || clock_event.key == 'S')) {
+        show_sec ^= 1;
+        have_prev = 0;
+        gb_restore_parent();
+        return;
+    }
+    if ((clock_event.classes & GB_EVENT_TIMER) != 0) c_frame();
+    if ((clock_event.classes & GB_EVENT_POINTER) != 0 &&
+        (clock_event.pointer_flags & GB_EVENT_POINTER_CLICKED) != 0)
+        c_click(clock_event.pointer_x, clock_event.pointer_y);
+    if ((clock_event.classes & GB_EVENT_WINDOW) == 0) return;
+    switch (clock_event.message) {
+        case GB_MSG_DRAW:  c_draw();      break;
+        case GB_MSG_CLOSE: gb_wm_close(); break;
+        case GB_MSG_DRAG:  c_drag();      break;
+        case GB_MSG_MENU:
+        case GB_MSG_DROP:  clk_event();   break;
+    }
+#else
     switch (gb_msg.type) {
         case GB_MSG_DRAW:  c_draw();      break;
-        case GB_MSG_CLICK: c_click();     break;
+        case GB_MSG_CLICK: c_click();      break;
         case GB_MSG_FRAME: c_frame();     break;
         case GB_MSG_CLOSE: gb_wm_close(); break;   /* no confirm: just close */
         case GB_MSG_DRAG:  c_drag();      break;
         case GB_MSG_MENU:
         case GB_MSG_DROP:  clk_event();   break;
     }
+#endif
 }
 
 static const gb_mwin_t cmw = {
@@ -412,6 +450,9 @@ static const gb_mwin_t cmw = {
 void main(void)
 {
     show_sec = 0; have_prev = 0;
+#ifdef GB_MSX2
+    (void)gb_event_init(&clock_events, GB_EVENT_ALL, 1);
+#endif
     gb_wm_managed(&cmw);                         /* register (no draw yet) (#146) */
     gb_doc(&clkdoc);                             /* View > Fullscreen (#142) */
     gb_menu_add("Options", opt_items, 2, opt_action);

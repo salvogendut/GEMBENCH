@@ -318,3 +318,35 @@ python3 debug/gembench_baseline_1983.py --frames 6001
 make cpc
 make pcw
 ```
+
+## Milestone 11 multi-event subscriptions
+
+Milestone 11 was validated on 2026-08-29 with openMSX 21.0 using a disposable
+Nextor image whose root-level `A.APP` is byte-identical to the built MSX2
+`CLOCK.APP`. Clock owns the six-byte subscription and nine-byte result. The
+app-linked runtime is 860 bytes and has no static or resident data; Clock is
+11,288 bytes, versus 10,112 before migration. Its loaded code ends at `0x6C18`
+with data beginning at `0x6D00`, leaving 232 bytes between them. The Screen 6/7
+kernels remain 10,682/12,260 bytes.
+
+The driver launches Clock through File Manager, records its draw/event entry
+points only while its bank is mapped, holds the real MSX `S` matrix key, moves
+the pointer to Clock's grip, and clicks it. The reference trace passed with 2
+draw hits, more than 360 timer hits, one pointer-click hit, one combined
+pointer/window hit, two key-class hits (the `S` toggle and the later fire/space
+input), `show_seconds=1`, and final pointer position `(49,140)`.
+
+The complementary 1983 run reached frame 6,002 at PC `0x247A`, SP `0xD8EA`,
+with VDP R0/R1 `0x0A`/`0x62` and the expected mapper registers. Complete MSX2,
+CPC card/disk, and PCW disk builds passed; CPC and PCW do not link `gbevent`.
+
+```sh
+make gbevent-check
+make check
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_multi_event_openmsx.sh
+python3 debug/gembench_baseline_1983.py --frames 6001
+make cpc
+make pcw
+```

@@ -74,6 +74,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   grip and resize-drag helpers for apps that do not use them.
   `WINDOW_KIND=1` links the MSX2-only explicit v1 registration wrapper; it
   requires `APPDEFS=-DGB_MSX2` and is omitted from legacy-only applications.
+  `GB_EVENTS=1` links the bounded `gbevent` subscription adapter; callers own
+  its state and it adds no resident kernel or low-RAM allocation.
   `SOUND=1` links the target-specific PSG/beeper primitives into that app only;
   it does not add a resident kernel service.
   `REPAINTTOP=1` links the three-byte `gb_repaint_top()` binding for an opaque
@@ -93,6 +95,10 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   checked/radio transitions, then kernel-owned maximise/restore, move, and
   resize gestures. It verifies the menu state and append-only geometry messages
   and captures the final Screen 7 window. Headless mode retains all assertions.
+- **`test_multi_event_openmsx.sh`** — launches the built MSX2 Clock from a
+  disposable Nextor image and asserts combined timer, keyboard, pointer, and
+  window delivery through real matrix input. `MSX_HEADLESS=1` keeps the trace
+  assertions without a display.
 - **`gbrc.py` / `gbrverify.py`** — compile deterministic GBR v1 resources and
   strictly verify binary resources. `gbrc.py --c-header` can also emit a C blob,
   section/count constants, and source-only object IDs for embedded resources;

@@ -121,8 +121,9 @@ if [ "$GBR_FORM_ENGINE_FLAG" = "1" ]; then
 fi
 if [ "$GBR_OBJECT_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
 GBR_MENU_FLAG="${GBR_MENUS:-0}"
+GB_EVENT_FLAG="${GB_EVENTS:-0}"
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ]; then
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
 NET_SRC="$GB/gbnet_stub.c"
@@ -168,6 +169,10 @@ if [ "$GBR_FORM_ENGINE_FLAG" != "0" ] && [ "$GBR_FORM_ENGINE_FLAG" != "1" ]; the
 fi
 if [ "$GBR_MENU_FLAG" != "0" ] && [ "$GBR_MENU_FLAG" != "1" ]; then
     echo "ERROR: GBR_MENUS must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_EVENT_FLAG" != "0" ] && [ "$GB_EVENT_FLAG" != "1" ]; then
+    echo "ERROR: GB_EVENTS must be 0 or 1" >&2
     exit 1
 fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
@@ -277,6 +282,9 @@ fi
 if [ "$GBR_MENU_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbr_menu.h" "$GBR_LIB/gbr_menu.c")
 fi
+if [ "$GB_EVENT_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbevent.h" "$GBR_LIB/gbevent.c")
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -351,6 +359,7 @@ cache_key=$(printf '%s\n' \
     "GBR_FORMS=$GBR_FORM_FLAG" \
     "GBR_FORM_ENGINE=$GBR_FORM_ENGINE_FLAG" \
     "GBR_MENUS=$GBR_MENU_FLAG" \
+    "GB_EVENTS=$GB_EVENT_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -451,6 +460,11 @@ if [ "$GBR_MENU_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
         -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_menu.c" -o "$work/gbr_menu.rel"
     GBR_REL="$GBR_REL $work/gbr_menu.rel"
+fi
+if [ "$GB_EVENT_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbevent.c" -o "$work/gbevent.rel"
+    GBR_REL="$GBR_REL $work/gbevent.rel"
 fi
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then
