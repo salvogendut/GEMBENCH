@@ -1,6 +1,10 @@
 /* CALC.APP - compact fixed-point desktop calculator (#437). */
 #include "gb.h"
 #include "calc_core.h"
+#ifdef GB_MSX2
+#include "gbr_object.h"
+#include "calculator_gbr.h"
+#endif
 
 #define DEF_X       ((GB_COLS - WIN_W) / 2)
 #define DEF_Y       24
@@ -30,6 +34,23 @@ static unsigned char fraction_digits;
 static unsigned char negative_entry;
 static const char *error_text;
 static char display_text[16];
+
+#ifdef GB_MSX2
+static gbr_resource_t calculator_resource = {
+    calculator_gbr,
+    CALCULATOR_GBR_SIZE,
+    CALCULATOR_STRING_COUNT,
+    CALCULATOR_TREE_COUNT,
+    CALCULATOR_OBJECT_COUNT,
+    CALCULATOR_STRING_INDEX,
+    CALCULATOR_TREE_TABLE,
+    CALCULATOR_OBJECT_TABLE,
+    CALCULATOR_STRING_DATA
+};
+static gbr_runtime_t calculator_runtime;
+static unsigned int calculator_states[CALCULATOR_OBJECT_COUNT];
+static unsigned char resource_ready;
+#endif
 
 static const char *const button_labels[BUTTONS] = {
     "C", "SQR", "%", "/",
@@ -268,6 +289,13 @@ static unsigned char button_y(unsigned char index)
 static void draw_buttons(void)
 {
     unsigned char i;
+#ifdef GB_MSX2
+    if (resource_ready) {
+        (void)gbr_draw_tree(&calculator_runtime,
+                            (unsigned int)(win_x << 2), win_y);
+        return;
+    }
+#endif
     for (i = 0; i < BUTTONS; i++)
         gb_button(button_x(i), button_y(i), BUTTON_W, BUTTON_H,
                   button_labels[i], 0);
@@ -304,6 +332,20 @@ static void calculator_click(void)
 {
     unsigned char i;
     unsigned char mx = gb_mx(), my = gb_my();
+#ifdef GB_MSX2
+    unsigned char object_index;
+    if (resource_ready &&
+        gbr_hit_test(&calculator_runtime, (unsigned int)(win_x << 2), win_y,
+                     (unsigned int)(mx << 2), my, &object_index) &&
+        object_index >= CALCULATOR_CLEAR &&
+        object_index <= CALCULATOR_EQUALS) {
+        gb_curhide();
+        process_key(button_keys[object_index - CALCULATOR_CLEAR]);
+        draw_display();
+        gb_curshow();
+        return;
+    }
+#endif
     for (i = 0; i < BUTTONS; i++) {
         if (gb_button_hit(button_x(i), button_y(i), BUTTON_W, BUTTON_H,
                           mx, my, 0)) {
@@ -358,6 +400,11 @@ void main(void)
 {
     unsigned char n;
     clear_calculator();
+#ifdef GB_MSX2
+    resource_ready = (unsigned char)(gbr_runtime_init(
+        &calculator_runtime, &calculator_resource, 0, calculator_states,
+        CALCULATOR_OBJECT_COUNT) == GBR_RT_OK);
+#endif
     gb_wm_managed(&calculator_window);
     for (n = 64; n; n--) if (!gb_getkey()) break;
     gb_restore_parent();

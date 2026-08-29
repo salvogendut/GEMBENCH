@@ -113,6 +113,12 @@ if [ "$GBR_BANKED_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
 if [ "$GBR_EMBEDDED_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
 GBR_FORM_FLAG="${GBR_FORMS:-0}"
 if [ "$GBR_FORM_FLAG" = "1" ]; then GBR_OBJECT_FLAG=1; fi
+GBR_FORM_ENGINE_FLAG="${GBR_FORM_ENGINE:-0}"
+if [ "$GBR_FORM_ENGINE_FLAG" = "1" ]; then
+    GBR_FORM_FLAG=1
+    GBR_OBJECT_FLAG=1
+    ALL_APPDEFS="$ALL_APPDEFS -DGBR_FORM_ENGINE"
+fi
 if [ "$GBR_OBJECT_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
 GBR_INCLUDE_FLAGS=""
 if [ "$GBR_READER_FLAG" = "1" ]; then GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"; fi
@@ -151,6 +157,10 @@ if [ "$GBR_OBJECT_FLAG" = "1" ] &&
 fi
 if [ "$GBR_FORM_FLAG" = "1" ] && [ "$WIDGETS_FLAG" != "1" ]; then
     echo "ERROR: GBR_FORMS=1 requires WIDGETS=1" >&2
+    exit 1
+fi
+if [ "$GBR_FORM_ENGINE_FLAG" != "0" ] && [ "$GBR_FORM_ENGINE_FLAG" != "1" ]; then
+    echo "ERROR: GBR_FORM_ENGINE must be 0 or 1" >&2
     exit 1
 fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
@@ -254,6 +264,9 @@ fi
 if [ "$GBR_OBJECT_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbr_object.h" "$GBR_LIB/gbr_object.c")
 fi
+if [ "$GBR_FORM_ENGINE_FLAG" = "1" ]; then
+    deps+=("$GBR_LIB/gbr_form.c")
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -326,6 +339,7 @@ cache_key=$(printf '%s\n' \
     "GBR_BANKED=$GBR_BANKED_FLAG" \
     "GBR_OBJECTS=$GBR_OBJECT_FLAG" \
     "GBR_FORMS=$GBR_FORM_FLAG" \
+    "GBR_FORM_ENGINE=$GBR_FORM_ENGINE_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -416,6 +430,11 @@ if [ "$GBR_OBJECT_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $GBR_FORM_DEFS $ALL_APPDEFS \
         -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_object.c" -o "$work/gbr_object.rel"
     GBR_REL="$GBR_REL $work/gbr_object.rel"
+fi
+if [ "$GBR_FORM_ENGINE_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_form.c" -o "$work/gbr_form.rel"
+    GBR_REL="$GBR_REL $work/gbr_form.rel"
 fi
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then

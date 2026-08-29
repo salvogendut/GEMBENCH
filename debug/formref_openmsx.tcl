@@ -1,7 +1,8 @@
 # Exercise the resource-driven MSX2 FormRef with real keyboard-matrix events.
 # The driver opens the test image's root-level A.APP (an exact copy of the
 # shipped /GBENCH/FORMREF.APP), opens its form, traverses focus with Tab,
-# activates Style and Level with Return, saves, and captures both states.
+# exercises either the current checkbox/radio form or the pinned M7 controls,
+# saves, and verifies that the selected values reach application state.
 
 set throttle off
 set pause_on_lost_focus false
@@ -28,8 +29,12 @@ set fr_addr_wm_managed [fr_env_addr GEMBENCH_FORMREF_WM_MANAGED]
 set fr_addr_restore [fr_env_addr GEMBENCH_FORMREF_RESTORE]
 set fr_addr_resource [fr_env_addr GEMBENCH_FORMREF_RESOURCE]
 set fr_addr_resource_ready [fr_env_addr GEMBENCH_FORMREF_RESOURCE_READY]
+set fr_addr_focus [fr_env_addr GEMBENCH_FORMREF_FOCUS]
 set fr_addr_saved_style [fr_env_addr GEMBENCH_FORMREF_SAVED_STYLE]
 set fr_addr_saved_level [fr_env_addr GEMBENCH_FORMREF_SAVED_LEVEL]
+set fr_addr_saved_autosave [fr_env_addr GEMBENCH_FORMREF_SAVED_AUTOSAVE]
+set fr_addr_saved_layout [fr_env_addr GEMBENCH_FORMREF_SAVED_LAYOUT]
+set fr_has_m9_controls [fr_env_addr GEMBENCH_FORMREF_M9_CONTROLS]
 set fr_addr_form_segment [fr_env_addr GEMBENCH_FORMREF_SEGMENT]
 set fr_is_banked [fr_env_addr GEMBENCH_FORMREF_BANKED]
 set fr_deadline 0
@@ -59,6 +64,8 @@ set fr_tree_count -1
 set fr_main_sp -1
 set fr_saved_style -1
 set fr_saved_level -1
+set fr_saved_autosave -1
+set fr_saved_layout -1
 set fr_load_result -1
 set fr_open_result -1
 set fr_min_sp 65535
@@ -67,6 +74,7 @@ set fr_draw_ms -1
 set fr_input_begin -1
 set fr_input_draw_pending 0
 set fr_input_ms -1
+set fr_focus_before_style -1
 
 proc fr_stack_sample {} {
     set value [reg SP]
@@ -132,10 +140,13 @@ proc fr_finish {status} {
     }
     puts $handle "DRAW_MS=[format %.3f $::fr_draw_ms]"
     puts $handle "INPUT_TO_DRAW_MS=[format %.3f $::fr_input_ms]"
+    puts $handle "FOCUS_BEFORE_STYLE=$::fr_focus_before_style"
     puts $handle "LAUNCH_CLICKS=$::fr_launch_clicks"
     puts $handle "FORM_CLICKS=$::fr_form_clicks"
     puts $handle "SAVED_STYLE=$::fr_saved_style"
     puts $handle "SAVED_LEVEL=$::fr_saved_level"
+    puts $handle "SAVED_AUTOSAVE=$::fr_saved_autosave"
+    puts $handle "SAVED_LAYOUT=$::fr_saved_layout"
     puts $handle "LOAD_RESULT=$::fr_load_result"
     puts $handle "OPEN_RESULT=$::fr_open_result"
     puts $handle "RESOURCE_READY=[peek $::fr_addr_resource_ready]"
@@ -271,8 +282,11 @@ proc fr_capture_final {} {
         !$::fr_modal_seen ||
         !$::fr_modal_draw_seen || !$::fr_save_seen ||
         !$::fr_restore_seen ||
-        $::fr_tree_count != 1 || $::fr_saved_style != 1 ||
-        $::fr_saved_level != 2 || $::fr_min_sp >= 65535 ||
+        $::fr_tree_count != 1 || $::fr_min_sp >= 65535 ||
+        ($::fr_has_m9_controls &&
+         ($::fr_saved_autosave != 0 || $::fr_saved_layout != 1)) ||
+        (!$::fr_has_m9_controls &&
+         ($::fr_saved_style != 1 || $::fr_saved_level != 2)) ||
         $::fr_draw_ms < 0 || $::fr_input_ms < 0} {
         fr_finish "FAIL FormRef launch trace incomplete"
     } else {
@@ -300,7 +314,32 @@ proc fr_tab_save {} {
 }
 
 proc fr_tab_increment {} {
-    fr_key 7 0x08 fr_tab_save 5.0
+    if {$::fr_has_m9_controls} {
+        fr_key 7 0x08 fr_tab_autosave 5.0
+    } else {
+        fr_key 7 0x08 fr_tab_save 5.0
+    }
+}
+
+proc fr_tab_autosave {} {
+    set ::fr_input_begin [machine_info time]
+    fr_key 7 0x08 fr_toggle_autosave 3.0
+}
+
+proc fr_toggle_autosave {} {
+    fr_key 7 0x80 fr_tab_classic 3.0
+}
+
+proc fr_tab_classic {} {
+    fr_key 7 0x08 fr_tab_refined 3.0
+}
+
+proc fr_tab_refined {} {
+    fr_key 7 0x08 fr_choose_refined 3.0
+}
+
+proc fr_choose_refined {} {
+    fr_key 7 0x80 fr_tab_save 3.0
 }
 
 proc fr_capture_focus {} {
@@ -323,7 +362,7 @@ proc fr_capture_focus {} {
 }
 
 proc fr_decrement {} {
-    fr_key 7 0x80 {after time 30.0 fr_capture_focus}
+    fr_key 8 0x01 {after time 30.0 fr_capture_focus}
 }
 
 proc fr_tab_decrement {} {
@@ -331,8 +370,9 @@ proc fr_tab_decrement {} {
 }
 
 proc fr_choose_style {} {
+    set ::fr_focus_before_style [peek $::fr_addr_focus]
     set ::fr_input_begin [machine_info time]
-    fr_key 7 0x80 fr_tab_decrement 10.0
+    fr_key 8 0x01 fr_tab_decrement 10.0
 }
 
 proc fr_tab_style {} {
@@ -341,7 +381,11 @@ proc fr_tab_style {} {
 
 proc fr_modal_check {} {
     if {$::fr_modal_draw_seen} {
-        after time 12.0 fr_tab_style
+        if {$::fr_has_m9_controls} {
+            after time 12.0 fr_tab_autosave
+        } else {
+            after time 12.0 {fr_move_to 22 90 fr_tab_style}
+        }
     } elseif {$::fr_form_clicks >= 6} {
         fr_finish "FAIL FormRef modal was not drawn"
     } else {
@@ -390,7 +434,7 @@ proc fr_launch_formref {} {
     if {$::fr_is_banked} {
         debug set_bp $::fr_addr_segment_call {} {if {[fr_is_loaded]} {fr_stack_sample}; set ::pause off}
     }
-    debug set_bp $::fr_addr_restore {} {if {[fr_is_loaded]} {set ::fr_saved_style [peek $::fr_addr_saved_style]; set ::fr_saved_level [peek $::fr_addr_saved_level]; if {$::fr_saved_style == 1 && $::fr_saved_level == 2} {set ::fr_save_seen 1}; set ::fr_restore_seen 1}; set ::pause off}
+    debug set_bp $::fr_addr_restore {} {if {[fr_is_loaded]} {if {$::fr_has_m9_controls} {set ::fr_saved_autosave [peek $::fr_addr_saved_autosave]; set ::fr_saved_layout [peek $::fr_addr_saved_layout]; if {$::fr_saved_autosave == 0 && $::fr_saved_layout == 1} {set ::fr_save_seen 1}} else {set ::fr_saved_style [peek $::fr_addr_saved_style]; set ::fr_saved_level [peek $::fr_addr_saved_level]; if {$::fr_saved_style == 1 && $::fr_saved_level == 2} {set ::fr_save_seen 1}}; set ::fr_restore_seen 1}; set ::pause off}
     set ::fr_deadline [expr {[machine_info time] + 30.0}]
     fr_double_click fr_launch_wait
 }

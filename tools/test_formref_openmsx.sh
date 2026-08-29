@@ -47,8 +47,20 @@ export GEMBENCH_FORMREF_GBR_READ="$(noi_addr _gbr_read)"
 export GEMBENCH_FORMREF_WM_MANAGED="$(noi_addr _gb_wm_managed)"
 export GEMBENCH_FORMREF_RESTORE="$(noi_addr _gb_restore_parent)"
 export GEMBENCH_FORMREF_RESOURCE_READY="$(hexsum "$data_base" "$(lst_offset _resource_ready)")"
-export GEMBENCH_FORMREF_SAVED_STYLE="$(hexsum "$data_base" "$(lst_offset _saved_style)")"
-export GEMBENCH_FORMREF_SAVED_LEVEL="$(hexsum "$init_base" "$(lst_offset __xinit__saved_level)")"
+export GEMBENCH_FORMREF_FOCUS="$(hexsum "$data_base" "$(lst_offset _focus)")"
+if autosave_offset="$(lst_offset __xinit__saved_autosave 2>/dev/null)"; then
+    export GEMBENCH_FORMREF_SAVED_STYLE=0
+    export GEMBENCH_FORMREF_SAVED_LEVEL=0
+    export GEMBENCH_FORMREF_SAVED_AUTOSAVE="$(hexsum "$init_base" "$autosave_offset")"
+    export GEMBENCH_FORMREF_SAVED_LAYOUT="$(hexsum "$data_base" "$(lst_offset _saved_layout)")"
+    export GEMBENCH_FORMREF_M9_CONTROLS=1
+else
+    export GEMBENCH_FORMREF_SAVED_STYLE="$(hexsum "$data_base" "$(lst_offset _saved_style)")"
+    export GEMBENCH_FORMREF_SAVED_LEVEL="$(hexsum "$init_base" "$(lst_offset __xinit__saved_level)")"
+    export GEMBENCH_FORMREF_SAVED_AUTOSAVE=0
+    export GEMBENCH_FORMREF_SAVED_LAYOUT=0
+    export GEMBENCH_FORMREF_M9_CONTROLS=0
+fi
 if segment_offset="$(lst_offset _form_segment 2>/dev/null)"; then
     export GEMBENCH_FORMREF_RESOURCE="$(hexsum "$data_base" "$(lst_offset _form_resource)")"
     export GEMBENCH_FORMREF_SEGMENT="$(hexsum "$data_base" "$segment_offset")"
@@ -75,6 +87,9 @@ printf 'GBMSX\r\n' > "$stage/card/AUTOEXEC.BAT"
 # A short root-level alias makes File Manager navigation deterministic. The
 # payload remains byte-for-byte identical to the shipped FormRef application.
 cp build/msx/FORMREF.RAW "$stage/card/A.APP"
+if [ "$GEMBENCH_FORMREF_BANKED" = 1 ]; then
+    cp build/msx/FORMREF.GBR "$stage/card/GBENCH/FORMREF.GBR"
+fi
 tools/build_msx_img.sh "$stage/card" "$stage/formref.img"
 
 export GEMBENCH_FORMREF_OUTPUT="$PWD/build/msx/formref-openmsx.txt"

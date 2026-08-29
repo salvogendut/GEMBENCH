@@ -14,6 +14,27 @@
 #define GBR_HIT_NONE             255u
 #define GBR_TEXT_OVERRIDE_MAX     31u
 
+/* Generic form routing results. Results are bit flags so an exit control can
+ * report HANDLED | REDRAW | ACTIVATED | EXIT in one byte. These are C runtime
+ * values, not fields in the frozen GBR1 binary format. */
+#define GBR_FORM_NONE              0u
+#define GBR_FORM_HANDLED       0x01u
+#define GBR_FORM_REDRAW        0x02u
+#define GBR_FORM_ACTIVATED     0x04u
+#define GBR_FORM_EXIT          0x08u
+
+/* Character values accepted by gbr_form_key(). The MSX BIOS supplies Tab,
+ * Enter, and Escape directly. Callers may pass reverse=1 for Shift-Tab; the
+ * cursor values also make radio traversal testable by input layers that expose
+ * cursor keys separately from the desktop pointer. */
+#define GBR_KEY_TAB              0x09u
+#define GBR_KEY_ENTER            0x0Du
+#define GBR_KEY_ESCAPE           0x1Bu
+#define GBR_KEY_LEFT             0x1Cu
+#define GBR_KEY_UP               0x1Du
+#define GBR_KEY_RIGHT            0x1Eu
+#define GBR_KEY_DOWN             0x1Fu
+
 typedef struct gbr_rect {
     unsigned int x;
     unsigned int y;
@@ -71,5 +92,15 @@ unsigned char gbr_focus_next(gbr_runtime_t *runtime,
                              unsigned char current,
                              unsigned char reverse,
                              unsigned char *object_index);
+unsigned char gbr_form_activate(gbr_runtime_t *runtime,
+                                unsigned char object_index);
+unsigned char gbr_form_click(gbr_runtime_t *runtime,
+                             unsigned int root_x, unsigned int root_y,
+                             unsigned int pointer_x, unsigned int pointer_y,
+                             unsigned char *object_index);
+unsigned char gbr_form_key(gbr_runtime_t *runtime,
+                           unsigned char current, unsigned char key,
+                           unsigned char reverse,
+                           unsigned char *object_index);
 
 #endif

@@ -82,6 +82,13 @@ transport, not a commitment to bank every GBR. A shared paged renderer can be
 reconsidered after the ABI review; the measured resident C renderer does not
 fit the current nucleus.
 
+Milestone 9 expanded the release FormRef tree and added an optional form-policy
+unit. The rejected mapper experiment was already within 216 bytes of its loader
+ceiling, so its reproduction target remains pinned to the original 306-byte
+`formref-m7.json` fixture and excludes the later checkbox/radio renderer. This
+keeps the measurements above reproducible without constraining the selected
+embedded path or pretending that the mapper placement regained headroom.
+
 ## Reproduce
 
 ```sh
