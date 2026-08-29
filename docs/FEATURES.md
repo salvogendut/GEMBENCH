@@ -83,7 +83,11 @@ backdrop, dragging icons, opening apps and menus:
   not grow Settings. Starfield controls speed and star count; XMatrix controls
   binary/Kana glyphs and speed, plus its main color on CPC and in MSX 16-color
   mode; Mountain controls speed, peak count, and hold time. The MSX selector
-  includes a native-color swatch. On MSX2 the video
+  includes a native-color swatch. On MSX2 the colour editor uses GEMBENCH's
+  compact app-linked VDI-lite profile for its surface and semantic
+  paper/text/edge/accent swatches. In preemptive builds it is a non-blocking
+  managed-window state, so compositor repaint, Save, Cancel, and Escape do not
+  nest a second polling loop. On MSX2 the video
   choices are labelled
   **4 colors** and **16 colors** (Screen 6 and Screen 7).
   **Return to Defaults** restores the complete target-specific configuration.

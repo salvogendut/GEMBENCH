@@ -33,6 +33,17 @@ This runs the compiler and golden-file tests, corruption checks, portable
 target-reader and object-runtime tests, and SDCC Z80 compile/size checks. Verify
 an individual binary with `python3 tools/gbrverify.py path/to/resource.gbr`.
 
+Run the VDI-lite host behavior and Z80 profile-size checks independently:
+
+```sh
+make gbvdi-check
+```
+
+Applications opt into the full context with `GB_VDI=1`, and may add
+`GB_VDI_RASTER=1` and `GB_VDI_TEXT=1`. `GBR_GRAPHICS=1` links the full context,
+raster profile, reader, and object runtime together. A code-tight application
+may instead use `GB_VDI_BASE=1`; it is mutually exclusive with the full profile.
+
 Rebuild only the example resource:
 
 ```sh
@@ -104,6 +115,19 @@ The same release path can be driven automatically in openMSX with
 `debug/gbr_object_openmsx.tcl`; the complete command and reference result are
 recorded in [OPENMSX-VALIDATION.md](OPENMSX-VALIDATION.md). Use absolute output
 paths when openMSX is installed as a Flatpak.
+
+Build and exercise the production VDI-lite migration with:
+
+```sh
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  tools/test_settings_vdi_openmsx.sh
+```
+
+The test honors `OPENMSX`, builds a disposable network-free image, launches the
+exact `SETTINGS.RAW`, opens Colours, and requires the VDI entry traces plus live
+editor state. Its final capture is `build/msx/settings-vdi.png`;
+`MSX_HEADLESS=1` skips only the screenshot.
 
 Build and exercise the resource-driven FormRef vertical slice with:
 

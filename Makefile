@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m7-resident-probe gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbevent-check gbregion-check gbscrap-check gbshell-check gbaccessory-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m7-resident-probe gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbvdi-check gbevent-check gbregion-check gbscrap-check gbshell-check gbaccessory-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -131,6 +131,9 @@ gbr-check:
 	$(PYTHON) -m unittest discover -s tests -v
 	bash tests/run_gbr_reader_tests.sh
 
+gbvdi-check:
+	bash tests/run_gbvdi_tests.sh
+
 gbevent-check:
 	bash tests/run_gbevent_tests.sh
 
@@ -160,7 +163,7 @@ $(GBR_EXAMPLE_OUTPUT): $(GBR_EXAMPLE_SOURCE) tools/gbrc.py
 distribution-check-fixtures:
 	bash tools/build_titlebarmod.sh
 
-check: gbr-check gbevent-check gbregion-check gbscrap-check gbshell-check gbaccessory-check gbr-example distribution-check-fixtures
+check: gbr-check gbvdi-check gbevent-check gbregion-check gbscrap-check gbshell-check gbaccessory-check gbr-example distribution-check-fixtures
 	git diff --check
 	$(PYTHON) tools/gen_pic_luts.py --check
 	$(PYTHON) tools/test_picconv.py

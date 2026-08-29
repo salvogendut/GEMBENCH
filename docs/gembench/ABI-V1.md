@@ -152,6 +152,20 @@ it. This is not a descriptor extension, and ordinary class registration neither
 reads nor modifies any argument byte. Exact handles remain short-lived and use
 the unchanged guarded send operation.
 
+### App-linked VDI-lite and resource graphics
+
+Milestone 16 is an additive source/runtime profile around GEMBENCH-1. It adds no
+resident jump, low-RAM cell, descriptor field, message, or binary record. The
+VDI context, pen map, raster descriptor, raster bytes, and GBR binding table are
+all caller-owned application data.
+
+ICON and IMAGE retain their frozen type numbers and the existing validation of
+the 16-bit type-specific `spec` field. The opt-in renderer uses that value only
+to resolve an application-owned binding. No pointer or payload is placed in the
+resource, and an older or non-graphics renderer may continue to reject the
+object. A future on-disk raster payload, palette record, pointer encoding, or
+different object layout would require a new resource version.
+
 ## Compatibility rules
 
 For GEMBENCH-1:
@@ -183,6 +197,7 @@ tools/test_visible_regions_openmsx.sh
 tools/test_typed_scrap_openmsx.sh
 tools/test_shell_service_openmsx.sh
 tools/test_desk_accessories_openmsx.sh
+tools/test_settings_vdi_openmsx.sh
 ```
 
 The resource placement evidence is in

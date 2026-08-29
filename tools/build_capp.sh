@@ -120,7 +120,24 @@ if [ "$GBR_FORM_ENGINE_FLAG" = "1" ]; then
     ALL_APPDEFS="$ALL_APPDEFS -DGBR_FORM_ENGINE"
 fi
 if [ "$GBR_OBJECT_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
+GBR_GRAPHICS_FLAG="${GBR_GRAPHICS:-0}"
+if [ "$GBR_GRAPHICS_FLAG" = "1" ]; then
+    GBR_OBJECT_FLAG=1
+    GBR_READER_FLAG=1
+    ALL_APPDEFS="$ALL_APPDEFS -DGBR_GRAPHICS_RUNTIME"
+fi
 GBR_MENU_FLAG="${GBR_MENUS:-0}"
+GB_VDI_FLAG="${GB_VDI:-0}"
+GB_VDI_BASE_FLAG="${GB_VDI_BASE:-0}"
+GB_VDI_RASTER_FLAG="${GB_VDI_RASTER:-0}"
+GB_VDI_TEXT_FLAG="${GB_VDI_TEXT:-0}"
+if [ "$GBR_GRAPHICS_FLAG" = "1" ]; then GB_VDI_RASTER_FLAG=1; fi
+if [ "$GB_VDI_RASTER_FLAG" = "1" ] || [ "$GB_VDI_TEXT_FLAG" = "1" ]; then
+    GB_VDI_FLAG=1
+fi
+if [ "$GB_VDI_BASE_FLAG" = "1" ]; then
+    ALL_APPDEFS="$ALL_APPDEFS -DGB_VDI_BASE_PROFILE"
+fi
 GB_EVENT_FLAG="${GB_EVENTS:-0}"
 GB_REGION_FLAG="${GB_REGIONS:-0}"
 GB_SCRAP_FLAG="${GB_SCRAP:-0}"
@@ -130,7 +147,7 @@ GB_SHELL_TARGET_FLAG="${GB_SHELL_TARGET:-0}"
 GB_SHELL_ACCESSORY_CLIENT_FLAG="${GB_SHELL_ACCESSORY_CLIENT:-0}"
 GB_SHELL_ACCESSORY_TARGET_FLAG="${GB_SHELL_ACCESSORY_TARGET:-0}"
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ]; then
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_VDI_FLAG" = "1" ] || [ "$GB_VDI_BASE_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
 NET_SRC="$GB/gbnet_stub.c"
@@ -168,6 +185,16 @@ if [ "$GBR_OBJECT_FLAG" = "1" ] &&
 fi
 if [ "$GBR_FORM_FLAG" = "1" ] && [ "$WIDGETS_FLAG" != "1" ]; then
     echo "ERROR: GBR_FORMS=1 requires WIDGETS=1" >&2
+    exit 1
+fi
+for value in "$GBR_GRAPHICS_FLAG" "$GB_VDI_FLAG" "$GB_VDI_BASE_FLAG" "$GB_VDI_RASTER_FLAG" "$GB_VDI_TEXT_FLAG"; do
+    if [ "$value" != "0" ] && [ "$value" != "1" ]; then
+        echo "ERROR: GBR_GRAPHICS and GB_VDI profile flags must be 0 or 1" >&2
+        exit 1
+    fi
+done
+if [ "$GB_VDI_BASE_FLAG" = "1" ] && [ "$GB_VDI_FLAG" = "1" ]; then
+    echo "ERROR: GB_VDI_BASE=1 and the full GB_VDI profile are mutually exclusive" >&2
     exit 1
 fi
 if [ "$GBR_FORM_ENGINE_FLAG" != "0" ] && [ "$GBR_FORM_ENGINE_FLAG" != "1" ]; then
@@ -336,6 +363,18 @@ fi
 if [ "$GBR_OBJECT_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbr_object.h" "$GBR_LIB/gbr_object.c")
 fi
+if [ "$GB_VDI_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbvdi.h" "$GBR_LIB/gbvdi.c")
+fi
+if [ "$GB_VDI_BASE_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbvdi.h" "$GBR_LIB/gbvdi_base.c")
+fi
+if [ "$GB_VDI_RASTER_FLAG" = "1" ]; then
+    deps+=("$GBR_LIB/gbvdi_raster.c")
+fi
+if [ "$GB_VDI_TEXT_FLAG" = "1" ]; then
+    deps+=("$GBR_LIB/gbvdi_text.c" "$GBR_LIB/gbvdi_text.s")
+fi
 if [ "$GBR_FORM_ENGINE_FLAG" = "1" ]; then
     deps+=("$GBR_LIB/gbr_form.c")
 fi
@@ -444,7 +483,12 @@ cache_key=$(printf '%s\n' \
     "GBR_OBJECTS=$GBR_OBJECT_FLAG" \
     "GBR_FORMS=$GBR_FORM_FLAG" \
     "GBR_FORM_ENGINE=$GBR_FORM_ENGINE_FLAG" \
+    "GBR_GRAPHICS=$GBR_GRAPHICS_FLAG" \
     "GBR_MENUS=$GBR_MENU_FLAG" \
+    "GB_VDI=$GB_VDI_FLAG" \
+    "GB_VDI_BASE=$GB_VDI_BASE_FLAG" \
+    "GB_VDI_RASTER=$GB_VDI_RASTER_FLAG" \
+    "GB_VDI_TEXT=$GB_VDI_TEXT_FLAG" \
     "GB_EVENTS=$GB_EVENT_FLAG" \
     "GB_REGIONS=$GB_REGION_FLAG" \
     "GB_SCRAP=$GB_SCRAP_FLAG" \
@@ -523,13 +567,36 @@ fi
 # CPC 320x200 extents, so on MSX windows would not drag past x=320 (#287).
 "$SDCC" -mz80 --fomit-frame-pointer $APP_CFLAGS $ALL_APPDEFS -I "$GB" $GBR_INCLUDE_FLAGS -c "$APP/main.c" -o "$work/main.rel"
 GBR_REL=""
+if [ "$GB_VDI_BASE_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer \
+        --max-allocs-per-node 100000 $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbvdi_base.c" \
+        -o "$work/gbvdi_base.rel"
+    GBR_REL="$GBR_REL $work/gbvdi_base.rel"
+fi
+if [ "$GB_VDI_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbvdi.c" -o "$work/gbvdi.rel"
+    GBR_REL="$GBR_REL $work/gbvdi.rel"
+fi
+if [ "$GB_VDI_RASTER_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbvdi_raster.c" -o "$work/gbvdi_raster.rel"
+    GBR_REL="$GBR_REL $work/gbvdi_raster.rel"
+fi
+if [ "$GB_VDI_TEXT_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbvdi_text.c" -o "$work/gbvdi_text.rel"
+    "$SDAS" -o "$work/gbvdi_text_call.rel" "$GBR_LIB/gbvdi_text.s"
+    GBR_REL="$GBR_REL $work/gbvdi_text.rel $work/gbvdi_text_call.rel"
+fi
 if [ "$GBR_READER_FLAG" = "1" ]; then
     GBR_READER_DEFS=""
     [ "$GBR_FIXED_TREE_FLAG" != "1" ] || GBR_READER_DEFS="$GBR_READER_DEFS -DGBR_READER_NO_FIND_TREE"
     [ "$GBR_EMBEDDED_FLAG" != "1" ] || GBR_READER_DEFS="$GBR_READER_DEFS -DGBR_READER_ACCESS_ONLY"
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $GBR_READER_DEFS $ALL_APPDEFS \
         -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_reader.c" -o "$work/gbr_reader.rel"
-    GBR_REL="$work/gbr_reader.rel"
+    GBR_REL="$GBR_REL $work/gbr_reader.rel"
 fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \

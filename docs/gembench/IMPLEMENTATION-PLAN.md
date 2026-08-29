@@ -1,6 +1,6 @@
 # GEMBENCH implementation plan
 
-Status: **Milestones 1-15 complete; GEMBENCH-1 frozen on 2026-08-29**.
+Status: **Milestones 1-16 complete; GEMBENCH-1 frozen on 2026-08-29**.
 
 This plan turns the goals in `DESIGN-ESTIMATE.md` into staged implementation
 work. The first proof of concept is expected to take approximately six to nine
@@ -53,6 +53,7 @@ baseline is recorded.
 | 13. Typed clipboard/scrap foundation (complete 2026-08-29; [#23](https://github.com/salvogendut/GEMBENCH/issues/23)) | Add bounded text, bitmap, icon, and file-list identities over the existing shared clipboard | 1 week | Typed and raw callers interoperate; mismatch/truncation tests, two-window openMSX interaction, and portable builds pass without reducing the 510-byte raw payload |
 | 14. Shell services and application messaging (complete 2026-08-29; [#25](https://github.com/salvogendut/GEMBENCH/issues/25)) | Add live service discovery and synchronous open, activate, close, and quit requests | 1 week | File Manager safely reuses and activates a live Notepad, preserves launch fallback, and host/openMSX plus portable builds pass without changing GEMBENCH-1 |
 | 15. On-demand Desk accessories (complete 2026-08-29; [#27](https://github.com/salvogendut/GEMBENCH/issues/27)) | Generate a bounded Desk catalog and add exact accessory identity over the live shell table | 1 week | Clock and Calculator launch only when selected, exact selection raises the correct live instance, close releases its page, and relaunch works without historical `.ACC` parsing or a process table |
+| 16. VDI-lite resource graphics (complete 2026-08-29; [#29](https://github.com/salvogendut/GEMBENCH/issues/29)) | Add caller-owned semantic drawing contexts and explicit GBR ICON/IMAGE raster bindings | 1 week | Settings uses the compact MSX2 profile; malformed/size/ownership tests, openMSX interaction, 1983 boot, and portable builds pass without changing GBR1 or resident jumps |
 
 ## Bootstrap work package
 
@@ -226,3 +227,29 @@ kernels are 11,194/12,772 bytes, one 256-byte resident allocation step above
 Milestone 14. The openMSX lifecycle trace observed IDs `1 2 1`, five exact
 finds, two sends, a maximum of three live windows, a one-page drop on Clock
 close, restoration on relaunch, and a cleared dispatch guard.
+
+Milestone 16 returns to GEM's graphics-device separation without introducing a
+resident VDI. `gbvdi` is an app-linked, caller-owned clip and four-role pen map
+over the existing drawing ABI. The full profile provides bounded fill, frame,
+packed four-bit raster, and aligned text; a compact base profile exposes only
+direct semantic fill/frame for code-tight applications. GBR ICON and IMAGE use
+their frozen 16-bit `spec` as an application binding identity. Pixel storage,
+mapping lifetime, and the binding table remain outside GBR1 and under the
+caller's ownership.
+
+Settings is the representative production migration. Its MSX2 colour editor
+uses the compact profile and, in preemptive builds, now remains ordinary
+managed-window state instead of entering a nested polling loop. CPC keeps its
+native colour primitives, PCW keeps its monochrome panel, and cooperative
+builds retain the existing modal implementation. No resident kernel entry,
+low-RAM cell, mapper owner, GBR byte, or frozen window field is added.
+
+The compact/core/raster/text/assembly-call profiles compile to
+586/1,137/1,078/579/12 bytes, and the graphics-enabled GBR object runtime is
+4,747 bytes. The migrated MSX2 Settings image is 15,276 bytes, leaves 148 bytes
+between loaded initializers and data and 852 bytes below the loader guard, and
+does not change the 11,194/12,772-byte Screen 6/7 kernels. openMSX observed one
+editor draw with exact VDI arguments, live state, the expected three-window
+z-order, and a clean Screen 7 capture. The complementary 1983 run reached frame
+6,002 with the Screen 7 register baseline intact. CPC Albireo/M4 card plus
+floppies and all three PCW disks also build successfully.

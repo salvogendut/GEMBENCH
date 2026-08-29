@@ -47,6 +47,11 @@ The completed foundation currently covers:
 - a generated, fixed-capacity MSX2 Desk menu whose Clock and Calculator launch
   on demand, reactivate by exact stable ID, and release their mapper page on
   close;
+- an app-linked VDI-lite drawing context with semantic pens, bounded clipping,
+  packed raster and aligned-text profiles, plus a compact base profile used by
+  the MSX2 Settings colour editor;
+- opt-in GBR ICON/IMAGE rendering through explicit caller-owned raster
+  bindings, without storing pointers or pixel payloads in GBR1;
 - a measured MSX2 auxiliary-resource prototype and resident-renderer fit probe,
   with the smaller embedded/app-linked placement retained for GBR v1;
 - explicitly versioned MSX2 window kinds with kernel-owned furniture, move, resize, and
@@ -140,6 +145,15 @@ and relaunch:
 ```sh
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   MSX_HEADLESS=1 tools/test_desk_accessories_openmsx.sh
+```
+
+Exercise the migrated Settings colour editor and require its VDI calls, managed
+editor state, live page, focus, z-order, and final Screen 7 capture:
+
+```sh
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  tools/test_settings_vdi_openmsx.sh
 ```
 
 Capture the reproducible pre-GBR baseline under the sibling `1983`

@@ -28,6 +28,11 @@ future semantic roles. Core controls and focus indication must remain readable
 using entries 0-3 alone, and focus must not rely on colour without a shape,
 outline, or inversion change.
 
+The VDI-lite names for these four roles are canvas, surface, edge, and accent.
+The full app-linked profile may remap them to Screen 7 entries 4-15, while its
+compact base profile deliberately preserves the direct 0-3 mapping used by
+Settings and other memory-tight panels.
+
 ## Logo references
 
 - `assets/GEMBENCH_ORIGINAL_LOGO.png` is the detailed mood board: faceted red

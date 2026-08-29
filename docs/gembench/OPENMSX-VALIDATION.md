@@ -514,3 +514,48 @@ python3 debug/gembench_baseline_1983.py --frames 6001
 make cpc
 make pcw
 ```
+
+## Milestone 16 VDI-lite Settings migration
+
+Milestone 16 was validated on 2026-08-29 with openMSX 21.0 and a disposable,
+network-free Nextor image. The driver copies the exact release
+`SETTINGS.RAW` to root-level `A.APP`, waits for the initial managed-window paint
+to return, moves the real keyboard-matrix pointer to Colours, and waits for the
+compositor-owned colour-editor draw to complete before capturing.
+
+The passing trace observed one VDI context initialization, five VDI fills, four
+VDI frames, one completed editor draw, live picker state 1, and the expected
+three-window z-order `0,1,2` with Settings focused in slot 2. The panel fill was
+`18,24,58,184,1`; the four native swatches used semantic pens 0-3 and edge pen
+2. The Settings code signature remained mapped throughout. The final capture at
+`build/msx/settings-vdi.png` shows Desktop colours with black Paper, white Text,
+grey Edge, and red Accent samples.
+
+The compact VDI profile compiles to 586 bytes. The full core, raster, text, and
+text-call profiles are 1,137, 1,078, 579, and 12 bytes. The graphics-enabled GBR
+object runtime is 4,747 bytes and its host corpus proves atomic missing,
+duplicate, unreferenced, truncated, dimension-mismatched, and misaligned
+failure, semantic raster runs, and outlined ICON state.
+
+`SETTINGS.APP` is 15,276 bytes. Loaded code and initializers end at `0x7BAC`,
+148 bytes before data at `0x7C40`; data/BSS ends at `0x7FFA`. The loader has 852
+bytes of raw-image headroom. Screen 6/7 kernels remain 11,194/12,772 bytes
+because every VDI component is app-linked.
+
+The complementary 1983 run reached frame 6,002 at PC `0xEE54`, SP `0xD8F2`,
+with VDP R0/R1 `0x0A`/`0x62`, 25 free mapper segments at entry, and the Screen 7
+baseline matched. CPC Settings builds its native path at 14,561 bytes and the
+Albireo/M4 card plus floppy distribution completes. PCW Settings builds its
+monochrome path at 12,957 bytes and all three PCW disks complete.
+
+```sh
+make gbvdi-check
+make check
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  tools/test_settings_vdi_openmsx.sh
+python3 debug/gembench_baseline_1983.py \
+  --ide-image QA/MSX/GBMSX.IMG --output-dir build/m16/1983 --frames 6001
+make cpc
+make pcw
+```
