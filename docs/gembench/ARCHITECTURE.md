@@ -110,6 +110,36 @@ and applications with costly setup keep the legacy single callback. CPC and PCW
 also keep that path. The representative MSX2 move skips 71.8% of the damaged
 Desktop area while the resident Screen 6/7 kernels remain unchanged.
 
+## Typed scrap
+
+Milestone 13 layers typed scrap over the resident raw clipboard instead of
+replacing it. `CLIP_LEN` remains at `0x3E00`, all 510 bytes from `0x3E02` through
+`0x3FFF` remain payload, and the existing `gb_clip_set()`, `gb_clip_get()`, and
+`gb_clip_len()` calls retain their meanings. MSX2 owns one private metadata byte,
+`SCRAP_TYPE` at `0x133D`, outside that payload.
+
+The ordering rule is the synchronization contract. A raw write clears the type
+before publishing its new length and data. A typed write also clears the old
+type first and writes the new type only after the complete bounded payload is
+visible. Readers normalize an empty clipboard or an unknown/stale tag to
+`GB_SCRAP_UNTYPED`. Text, bitmap, icon, and file-list are the supported typed
+identities; mismatch returns without copying or changing the destination.
+Oversized typed input is explicitly truncated to 510 bytes and reports that
+result rather than silently wrapping.
+
+`gbscrap` is an MSX2 app-linked source API; it adds no jump-table slot, resource
+record, managed-window field, or persistent process. Code-constrained text
+clients may link the set/type-only adapter and continue using the resident raw
+length/get calls after accepting text or legacy untyped data. Notepad is the
+first migration and deliberately accepts raw text from older applications.
+
+A mapper-backed scrap page is not yet justified. The existing segment allocator
+is coupled to live application windows, and there is no ownership-neutral
+desktop service that can retain and release a payload safely after its producer
+closes. Holding a segment today would reduce the number of concurrent windows
+for capacity that common text transfers do not need. Persistent disk scrap,
+shell integration, and desk-accessory routing are separate future milestones.
+
 ## Integration boundary
 
 The repository contains GeoBench's complete history and runtime foundation. The

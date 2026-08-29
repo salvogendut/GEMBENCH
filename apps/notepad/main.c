@@ -17,6 +17,9 @@
  * n_close. The modal popups (menu, Load, confirm) still poll themselves. Click our window
  * to focus it; the view scrolls to keep the caret visible. */
 #include "gb.h"
+#ifdef GB_TYPED_SCRAP
+#include "gbscrap.h"
+#endif
 
 #define NP_MAX    4096           /* editable text capacity - restored to 4096 (#142): the
                                     shared clipboard (gb_clip_*) replaced the local clip[512],
@@ -499,12 +502,17 @@ static void select_all(void)
 }
 
 /* copy_sel / paste_clip / select_all are the framework's Edit-menu hooks (#142): the
- * standard Edit menu (Select All / Copy / Paste) is added by gb_doc, and copy/paste go
- * through the SHARED clipboard (gb_clip_*) so they work across apps. */
+ * standard Edit menu (Select All / Copy / Paste) is added by gb_doc. GEMBENCH's
+ * MSX2 build labels its payload as text; portable and old callers retain the raw
+ * shared clipboard contract. */
 static void copy_sel(void)
 {
     if (!sel_on || sel_a >= sel_b) return;
+#ifdef GB_TYPED_SCRAP
+    (void)gb_scrap_set(GB_SCRAP_TEXT, buf + sel_a, sel_b - sel_a);
+#else
     gb_clip_set(buf + sel_a, sel_b - sel_a);
+#endif
 }
 
 /* paste_clip: replace any selection with the clipboard, inserted at the caret. No local
@@ -513,10 +521,21 @@ static void paste_clip(void)
 {
     unsigned int n;
     char *s, *d, *lo;
+#ifdef GB_TYPED_SCRAP
+    unsigned char scrap_type = gb_scrap_type();
+    if (scrap_type != GB_SCRAP_TEXT && scrap_type != GB_SCRAP_UNTYPED)
+        return;
+    n = gb_clip_len();
+    if (!n) return;
+#endif
     if (sel_on && sel_a < sel_b) delete_range(sel_a, sel_b);   /* caret -> sel_a */
     sel_on = 0;
+#ifndef GB_TYPED_SCRAP
     n = gb_clip_len();
     if (!n || len >= NP_MAX) return;
+#else
+    if (len >= NP_MAX) return;
+#endif
     if (n > NP_MAX - len) n = NP_MAX - len;                    /* clamp (avoids len+n wrap) */
     /* open a gap of n at the caret, copying end-first. Pointer walk, NOT the index
        form buf[i-1+n]=buf[i-1]: under --fomit-frame-pointer SDCC spilled that loop's

@@ -123,8 +123,10 @@ if [ "$GBR_OBJECT_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
 GBR_MENU_FLAG="${GBR_MENUS:-0}"
 GB_EVENT_FLAG="${GB_EVENTS:-0}"
 GB_REGION_FLAG="${GB_REGIONS:-0}"
+GB_SCRAP_FLAG="${GB_SCRAP:-0}"
+GB_SCRAP_TEXT_ONLY_FLAG="${GB_SCRAP_TEXT_ONLY:-0}"
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ]; then
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
 NET_SRC="$GB/gbnet_stub.c"
@@ -182,6 +184,25 @@ if [ "$GB_REGION_FLAG" != "0" ] && [ "$GB_REGION_FLAG" != "1" ]; then
 fi
 if [ "$GB_REGION_FLAG" = "1" ]; then
     ALL_APPDEFS="$ALL_APPDEFS -DGB_VISIBLE_REGIONS"
+fi
+if [ "$GB_SCRAP_FLAG" != "0" ] && [ "$GB_SCRAP_FLAG" != "1" ]; then
+    echo "ERROR: GB_SCRAP must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_SCRAP_FLAG" = "1" ]; then
+    case " $ALL_APPDEFS " in
+        *" -DGB_MSX2 "*) ;;
+        *) echo "ERROR: GB_SCRAP=1 is MSX2-only" >&2; exit 1 ;;
+    esac
+    ALL_APPDEFS="$ALL_APPDEFS -DGB_TYPED_SCRAP"
+fi
+if [ "$GB_SCRAP_TEXT_ONLY_FLAG" != "0" ] && [ "$GB_SCRAP_TEXT_ONLY_FLAG" != "1" ]; then
+    echo "ERROR: GB_SCRAP_TEXT_ONLY must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_SCRAP_TEXT_ONLY_FLAG" = "1" ] && [ "$GB_SCRAP_FLAG" != "1" ]; then
+    echo "ERROR: GB_SCRAP_TEXT_ONLY=1 requires GB_SCRAP=1" >&2
+    exit 1
 fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
@@ -296,6 +317,14 @@ fi
 if [ "$GB_REGION_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbregion.h" "$GBR_LIB/gbregion.c")
 fi
+if [ "$GB_SCRAP_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbscrap.h")
+    if [ "$GB_SCRAP_TEXT_ONLY_FLAG" = "1" ]; then
+        deps+=("$GBR_LIB/gbscrap_text.s")
+    else
+        deps+=("$GBR_LIB/gbscrap.c")
+    fi
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -372,6 +401,8 @@ cache_key=$(printf '%s\n' \
     "GBR_MENUS=$GBR_MENU_FLAG" \
     "GB_EVENTS=$GB_EVENT_FLAG" \
     "GB_REGIONS=$GB_REGION_FLAG" \
+    "GB_SCRAP=$GB_SCRAP_FLAG" \
+    "GB_SCRAP_TEXT_ONLY=$GB_SCRAP_TEXT_ONLY_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -484,6 +515,15 @@ if [ "$GB_REGION_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size $ALL_APPDEFS \
         -I "$GBR_INCLUDE" -c "$GBR_LIB/gbregion.c" -o "$work/gbregion.rel"
     GBR_REL="$GBR_REL $work/gbregion.rel"
+fi
+if [ "$GB_SCRAP_FLAG" = "1" ]; then
+    if [ "$GB_SCRAP_TEXT_ONLY_FLAG" = "1" ]; then
+        "$SDAS" -o "$work/gbscrap.rel" "$GBR_LIB/gbscrap_text.s"
+    else
+        "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+            -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbscrap.c" -o "$work/gbscrap.rel"
+    fi
+    GBR_REL="$GBR_REL $work/gbscrap.rel"
 fi
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then

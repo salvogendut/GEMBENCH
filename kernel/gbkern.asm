@@ -1903,6 +1903,10 @@ k_setname
 ; k_clip_set (GB_CLIPSET): copy DE bytes from HL into the clipboard, clamped to CLIP_CAP.
 ; HL = src (caller page, mapped), DE = length.
 k_clip_set
+                ifdef PLATFORM_MSX
+                xor   a                        ; every raw writer invalidates typed metadata
+                ld    (SCRAP_TYPE),a           ; before publishing the new length/payload
+                endif
                 or    a                        ; clamp DE to CLIP_CAP
                 push  hl                        ; save src
                 ld    hl,CLIP_CAP

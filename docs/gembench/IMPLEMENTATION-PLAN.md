@@ -1,6 +1,6 @@
 # GEMBENCH implementation plan
 
-Status: **Milestones 1-12 complete; GEMBENCH-1 frozen on 2026-08-29**.
+Status: **Milestones 1-13 complete; GEMBENCH-1 frozen on 2026-08-29**.
 
 This plan turns the goals in `DESIGN-ESTIMATE.md` into staged implementation
 work. The first proof of concept is expected to take approximately six to nine
@@ -50,6 +50,7 @@ baseline is recorded.
 | 10. Resource menus (complete 2026-08-29; [#17](https://github.com/salvogendut/GEMBENCH/issues/17)) | Generate menu labels, actions, state, and shortcuts from GBR source metadata | 1 week | File Manager's MSX2 View popup is resource-driven; pointer and keyboard traces pass without changing GBR1 |
 | 11. Multi-event subscriptions (complete 2026-08-29; [#19](https://github.com/salvogendut/GEMBENCH/issues/19)) | Add bounded, opt-in keyboard, pointer, timer, and WM aggregation | 1 week | Clock consumes combined event records; host and openMSX interaction traces pass without changing GEMBENCH-1 |
 | 12. Visible-region repainting (complete 2026-08-29; [#21](https://github.com/salvogendut/GEMBENCH/issues/21)) | Subtract opaque higher windows with a fixed-capacity, app-linked iterator | 1 week | Desktop redraws less covered area; deterministic fallback, host geometry, openMSX overlap, and portable builds pass without changing GEMBENCH-1 |
+| 13. Typed clipboard/scrap foundation (complete 2026-08-29; [#23](https://github.com/salvogendut/GEMBENCH/issues/23)) | Add bounded text, bitmap, icon, and file-list identities over the existing shared clipboard | 1 week | Typed and raw callers interoperate; mismatch/truncation tests, two-window openMSX interaction, and portable builds pass without reducing the 510-byte raw payload |
 
 ## Bootstrap work package
 
@@ -169,3 +170,15 @@ openMSX observed a 70-byte maximum stack delta below `gb_visible_begin()`, a
 4.973 ms calculation, clean move/top/close captures, and a final one-window
 Desktop. Screen 6/7 kernels remain 10,682/12,260 bytes; CPC and PCW retain the
 legacy Desktop callback.
+Milestone 13 preserves the exact `gb_clip_*` storage contract and its 510-byte
+payload. MSX2 adds one private type byte at `0x133D`; raw writes clear it, typed
+writes publish it only after the complete payload, and unknown or stale values
+normalize to untyped. The full app-linked API compiles to 552 bytes with no
+static data. Notepad uses a 100-byte set/type adapter because its 4 KiB document
+buffer leaves only 11 bytes between loaded code and data after integration; its
+image grows by 122 bytes to 12,097. The Screen 6/7 kernels remain
+10,682/12,260 bytes. A disposable openMSX image launches two independent
+Notepads and proves typed copy, atomic bitmap rejection, and typed text paste.
+Mapper-backed payloads remain deferred: the current mapper allocator is tied to
+application-window ownership, so retaining a scrap page would consume a scarce
+live-window segment without a lifecycle-neutral owner or release contract.

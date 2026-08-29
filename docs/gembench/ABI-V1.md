@@ -99,6 +99,28 @@ original single damage rectangle. Capacity exhaustion or an ambiguous window
 identity deterministically performs one legacy-clipped iteration, so frozen
 window registration and callback meanings do not change.
 
+### App-linked typed scrap
+
+Milestone 13 does not change GEMBENCH-1. The MSX2 `gbscrap` header is an
+application-linked source API over the existing resident `gb_clip_*` calls.
+The raw length remains at `0x3E00`, the raw payload remains exactly 510 bytes at
+`0x3E02-0x3FFF`, and the three existing clipboard jump-table entries do not
+move or change meaning. No GBR byte, managed-window descriptor, callback,
+message value, or registration selector is added.
+
+The implementation owns one private MSX low-RAM byte at `0x133D`. It is mapped
+and overlap-checked with the other implementation cells, but it is not a public
+address or a frozen application ABI. Raw `gb_clip_set()` clears the metadata;
+therefore an old writer is observed as `GB_SCRAP_UNTYPED`, never as stale typed
+data. A typed writer publishes its tag after the raw payload is complete.
+Unknown tags also normalize to untyped.
+
+Text, bitmap, icon, and file-list identities plus the bounded status values are
+source-contract constants. Applications using them must be rebuilt with the
+implementation and must not exchange `gb_scrap_info_t` as a persistent binary
+record. The compact Notepad adapter exports only `gb_scrap_set()` and
+`gb_scrap_type()`; clients needing query/get/clear link the complete runtime.
+
 ## Compatibility rules
 
 For GEMBENCH-1:
@@ -127,6 +149,7 @@ tools/test_formref_openmsx.sh
 tools/test_window_kinds_openmsx.sh
 tools/test_multi_event_openmsx.sh
 tools/test_visible_regions_openmsx.sh
+tools/test_typed_scrap_openmsx.sh
 ```
 
 The resource placement evidence is in

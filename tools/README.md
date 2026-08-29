@@ -79,6 +79,10 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   `GB_REGIONS=1` links the four-rectangle visible-region iterator; callers own
   its 40-byte state and capacity overflow restores the legacy damage clip. The
   release build currently enables it only for the MSX2 Desktop.
+  `GB_SCRAP=1` links the bounded MSX2 typed-scrap API over the unchanged
+  510-byte resident clipboard. `GB_SCRAP_TEXT_ONLY=1` selects the 100-byte
+  set/type adapter for clients that keep using raw length/get after checking
+  text or legacy-untyped input; it requires `GB_SCRAP=1`.
   `SOUND=1` links the target-specific PSG/beeper primitives into that app only;
   it does not add a resident kernel service.
   `REPAINTTOP=1` links the three-byte `gb_repaint_top()` binding for an opaque
@@ -102,6 +106,10 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   disposable Nextor image and asserts combined timer, keyboard, pointer, and
   window delivery through real matrix input. `MSX_HEADLESS=1` keeps the trace
   assertions without a display.
+- **`test_typed_scrap_openmsx.sh`** — launches two byte-identical Notepads from
+  a disposable network-free Nextor image, copies typed text through the real
+  Edit menu, proves bitmap mismatch is atomic, and then accepts the text paste.
+  It does not require the optional openMSXnet `unapinet` extension.
 - **`gbrc.py` / `gbrverify.py`** — compile deterministic GBR v1 resources and
   strictly verify binary resources. `gbrc.py --c-header` can also emit a C blob,
   section/count constants, and source-only object IDs for embedded resources;

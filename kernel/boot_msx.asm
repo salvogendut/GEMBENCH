@@ -13,6 +13,7 @@ kernel_main
                 ld    hl,0                    ; empty the shared clipboard (#142)
                 ld    (CLIP_LEN),hl
                 xor   a                       ; UI_MODAL boots as TPA garbage under DOS
+                ld    (SCRAP_TYPE),a          ; raw/empty until a typed scrap writer publishes
                 ld    (UI_MODAL),a           ; (menu_dispatch would swallow EVERY top-bar
                                               ; click as "a dialog is up", #287)
                 call  msx_video_init         ; 212 lines, 16x16 sprites, parked pointer
