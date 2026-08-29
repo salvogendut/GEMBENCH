@@ -88,6 +88,28 @@ pulse rather than a window event; other subscribed messages retain their
 existing type and three-byte payload. Legacy applications continue to consume
 the original callback directly.
 
+## Visible-region repainting
+
+Milestone 12 leaves the kernel's bottom-up compositor and single damage clip
+unchanged. The MSX2 Desktop alone links `gbregion` and, at the start of its
+existing repaint callback, intersects that damage with its own window and
+subtracts opaque windows above it. It redraws once per resulting clip; every
+other application still receives exactly one callback per compositor pass.
+
+The caller owns two four-rectangle arrays plus the original damage rectangle
+and four control bytes, for a fixed 40-byte state. No allocation, resident
+state, public low-RAM cell, or jump-table slot is added. Subtraction emits top,
+bottom, left, and right pieces in a stable order. More than four pieces, an
+invalid window table, an unknown application page, or duplicate windows in one
+page selects one iteration with the original damage clip. Exhaustion and
+explicit early exit restore that clip before the compositor continues.
+
+This is deliberately an app-linked source contract rather than a new frozen
+binary ABI. It suits an inexpensive opaque backdrop; streaming image renderers
+and applications with costly setup keep the legacy single callback. CPC and PCW
+also keep that path. The representative MSX2 move skips 71.8% of the damaged
+Desktop area while the resident Screen 6/7 kernels remain unchanged.
+
 ## Integration boundary
 
 The repository contains GeoBench's complete history and runtime foundation. The

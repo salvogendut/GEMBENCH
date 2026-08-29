@@ -76,6 +76,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   requires `APPDEFS=-DGB_MSX2` and is omitted from legacy-only applications.
   `GB_EVENTS=1` links the bounded `gbevent` subscription adapter; callers own
   its state and it adds no resident kernel or low-RAM allocation.
+  `GB_REGIONS=1` links the four-rectangle visible-region iterator; callers own
+  its 40-byte state and capacity overflow restores the legacy damage clip. The
+  release build currently enables it only for the MSX2 Desktop.
   `SOUND=1` links the target-specific PSG/beeper primitives into that app only;
   it does not add a resident kernel service.
   `REPAINTTOP=1` links the three-byte `gb_repaint_top()` binding for an opaque

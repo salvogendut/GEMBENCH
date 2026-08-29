@@ -122,8 +122,9 @@ fi
 if [ "$GBR_OBJECT_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
 GBR_MENU_FLAG="${GBR_MENUS:-0}"
 GB_EVENT_FLAG="${GB_EVENTS:-0}"
+GB_REGION_FLAG="${GB_REGIONS:-0}"
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ]; then
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
 NET_SRC="$GB/gbnet_stub.c"
@@ -174,6 +175,13 @@ fi
 if [ "$GB_EVENT_FLAG" != "0" ] && [ "$GB_EVENT_FLAG" != "1" ]; then
     echo "ERROR: GB_EVENTS must be 0 or 1" >&2
     exit 1
+fi
+if [ "$GB_REGION_FLAG" != "0" ] && [ "$GB_REGION_FLAG" != "1" ]; then
+    echo "ERROR: GB_REGIONS must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_REGION_FLAG" = "1" ]; then
+    ALL_APPDEFS="$ALL_APPDEFS -DGB_VISIBLE_REGIONS"
 fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
@@ -285,6 +293,9 @@ fi
 if [ "$GB_EVENT_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbevent.h" "$GBR_LIB/gbevent.c")
 fi
+if [ "$GB_REGION_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbregion.h" "$GBR_LIB/gbregion.c")
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -360,6 +371,7 @@ cache_key=$(printf '%s\n' \
     "GBR_FORM_ENGINE=$GBR_FORM_ENGINE_FLAG" \
     "GBR_MENUS=$GBR_MENU_FLAG" \
     "GB_EVENTS=$GB_EVENT_FLAG" \
+    "GB_REGIONS=$GB_REGION_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -465,6 +477,13 @@ if [ "$GB_EVENT_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
         -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbevent.c" -o "$work/gbevent.rel"
     GBR_REL="$GBR_REL $work/gbevent.rel"
+fi
+if [ "$GB_REGION_FLAG" = "1" ]; then
+    # This leaf runtime never calls the kernel, so keeping SDCC's frame pointer
+    # is safe and currently saves more than 500 bytes on Z80.
+    "$SDCC" -mz80 --opt-code-size $ALL_APPDEFS \
+        -I "$GBR_INCLUDE" -c "$GBR_LIB/gbregion.c" -o "$work/gbregion.rel"
+    GBR_REL="$GBR_REL $work/gbregion.rel"
 fi
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then

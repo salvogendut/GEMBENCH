@@ -25,14 +25,14 @@ PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
 GEMBENCH_BASELINE="${GEMBENCH_BASELINE:-0}"
 GEMBENCH_M7_BANKED="${GEMBENCH_M7_BANKED:-0}"
 BASELINE_APPDEFS=""
-DESKTOP_DATA_LOC="0x7300"
+DESKTOP_DATA_LOC="0x7900"
 NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
 NOTEPAD_DATA_LOC="0x6F48"
 NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
 NOTEPAD_SCROLL=1
 if [ "$GEMBENCH_BASELINE" = "1" ]; then
     BASELINE_APPDEFS="-DGEMBENCH_BASELINE"
-    DESKTOP_DATA_LOC="0x7500"
+    DESKTOP_DATA_LOC="0x7A00"
 elif [ "$GEMBENCH_BASELINE" != "0" ]; then
     echo "GEMBENCH_BASELINE must be 0 or 1" >&2
     exit 2
@@ -118,7 +118,7 @@ python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjon
 if [ "$PREEMPTIVE" = "1" ]; then
     TASK_ROOT=1 TASK_RUNTIME_RAW=build/msx/GBSCHED.RAW \
         TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2 $BASELINE_APPDEFS" \
-        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 \
+        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
     if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
         TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
@@ -126,7 +126,7 @@ if [ "$PREEMPTIVE" = "1" ]; then
     fi
 else
     APPDEFS="-DGB_MSX2 $BASELINE_APPDEFS" BASELINE="$GEMBENCH_BASELINE" \
-        DATA_LOC=0x7100 DOC=1 TITLEBAR=1 \
+        DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 fi
 python3 tools/gbrc.py apps/filemgr/view_menu.json --output build/msx/FILEMGR_MENU.GBR --menu-header apps/filemgr/view_menu_gbr.h --symbol-prefix FILEMGR_VIEW
