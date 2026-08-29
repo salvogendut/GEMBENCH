@@ -27,6 +27,7 @@
 #define UI_OP_PICKFILE 3
 #define UI_OP_PICKDIR  4
 #define UI_OP_BROWSER  5
+#define UI_OP_GBR_MENU 6
 #define UI_OP_BSAVE_AS 8
 #define UI_OP_ABOUT    24
 #define UI_OP_SIZE     25
@@ -263,6 +264,16 @@ void main(void)
         if (n > 16) n = 16;
         for (i = 0; i < n; i++) { labels[i] = p; while (*p) p++; p++; }
         UI_RES = gb_popup(UI_COL, UI_LINE, labels, n);
+
+    } else if (UI_OP == UI_OP_GBR_MENU) {
+        const char *labels[8];
+        const unsigned char *state = (const unsigned char *)UI_NAME;
+        unsigned char n = UI_N;
+        if (n > 8) n = 8;
+        p = UI_TEXT;
+        for (i = 0; i < n; i++) { labels[i] = p; while (*p) p++; p++; }
+        UI_RES = gb_popup(UI_COL, UI_LINE, labels, n);
+        if (UI_RES < n && (state[UI_RES] & 0x01)) UI_RES = 0xFF;
 
     } else if (UI_OP == UI_OP_PROMPT) {
         char buf[16];

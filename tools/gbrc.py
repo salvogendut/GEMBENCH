@@ -60,6 +60,7 @@ KNOWN_STATE_MASK = sum(STATE_BITS.values())
 
 OBJECT_KEYS = {
     "id",
+    "shortcut",
     "type",
     "x",
     "y",
@@ -71,6 +72,15 @@ OBJECT_KEYS = {
     "spec",
     "children",
 }
+
+MENU_MAGIC = b"GBRM"
+MENU_VERSION = 1
+MENU_MAX_ITEMS = 8
+MENU_MAX_LABEL = 20
+MENU_STATE_DISABLED = 0x01
+MENU_STATE_CHECKED = 0x02
+MENU_STATE_RADIO = 0x04
+MENU_STATE_CHECKBOX = 0x08
 
 C_IDENTIFIER = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 
@@ -171,6 +181,23 @@ def _bits(value: Any, names: dict[str, int], location: str) -> int:
     return result
 
 
+def _shortcut(value: Any, location: str) -> int:
+    """Validate source-only keyboard metadata and return its ASCII byte."""
+    if value is None:
+        return 0
+    if not isinstance(value, str) or len(value) != 1:
+        raise ResourceError(f"{location}: expected one printable ASCII character")
+    try:
+        encoded = value.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise ResourceError(
+            f"{location}: expected one printable ASCII character"
+        ) from exc
+    if encoded[0] < 0x20 or encoded[0] > 0x7E:
+        raise ResourceError(f"{location}: expected one printable ASCII character")
+    return encoded[0]
+
+
 def _flatten_object(
     source: Any,
     parent: int,
@@ -201,6 +228,7 @@ def _flatten_object(
         if object_id in object_ids:
             raise ResourceError(f"{location}.id: duplicate object id {object_id}")
         object_ids[object_id] = index
+    _shortcut(obj.get("shortcut"), f"{location}.shortcut")
     records.append(
         ObjectRecord(
             parent=parent,
@@ -375,6 +403,137 @@ def render_c_header(blob: bytes, object_ids: dict[str, int], prefix: str) -> str
         lines.append(f"    {chunk},")
     lines.extend(("};", "#endif /* GEMBENCH_GBR_METADATA_ONLY */", "",
                   f"#endif /* {guard} */", ""))
+    return "\n".join(lines)
+
+
+def render_menu_header(
+    document: Any, object_ids: dict[str, int], prefix: str
+) -> str:
+    """Render one compact, code-only menu descriptor from canonical GBR source.
+
+    ``id`` and ``shortcut`` are source metadata: neither changes the frozen GBR1
+    bytes. The generated GBRM descriptor is an application-link format, not a
+    new disk resource ABI.
+    """
+    if not isinstance(prefix, str) or not C_IDENTIFIER.fullmatch(prefix):
+        raise ResourceError("symbol prefix must be an uppercase C identifier")
+    root = _mapping(document, "document")
+    trees = _list(root.get("trees"), "document.trees")
+    if len(trees) != 1:
+        raise ResourceError("menu headers require exactly one resource tree")
+    tree = _mapping(trees[0], "document.trees[0]")
+    title = tree.get("name")
+    if not isinstance(title, str):
+        raise ResourceError("document.trees[0].name: expected a string")
+    try:
+        title_bytes = title.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise ResourceError("menu title must be printable ASCII") from exc
+    if not 1 <= len(title_bytes) <= 8 or any(
+        byte < 0x20 or byte > 0x7E for byte in title_bytes
+    ):
+        raise ResourceError("menu title must be 1..8 printable ASCII characters")
+
+    menu_root = _mapping(tree.get("root"), "document.trees[0].root")
+    if menu_root.get("type") != "box":
+        raise ResourceError("menu root must be a box object")
+    children = _list(
+        menu_root.get("children", []), "document.trees[0].root.children"
+    )
+    if not 1 <= len(children) <= MENU_MAX_ITEMS:
+        raise ResourceError(
+            f"menu must contain 1..{MENU_MAX_ITEMS} immediate child items"
+        )
+
+    descriptor = bytearray(MENU_MAGIC)
+    descriptor.extend((MENU_VERSION, len(children), len(title_bytes)))
+    descriptor.extend(title_bytes)
+    shortcuts: set[int] = set()
+    checked_radio = False
+    item_ids: list[tuple[str, int]] = []
+    for index, source_item in enumerate(children):
+        location = f"document.trees[0].root.children[{index}]"
+        item = _mapping(source_item, location)
+        item_id = item.get("id")
+        if not isinstance(item_id, str) or item_id not in object_ids:
+            raise ResourceError(f"{location}.id: menu items require a unique object id")
+        if item.get("children", []):
+            raise ResourceError(f"{location}: nested menu items are not supported")
+        type_name = item.get("type")
+        if type_name not in {"button", "checkbox", "radio"}:
+            raise ResourceError(
+                f"{location}.type: menu item must be button, checkbox, or radio"
+            )
+        flags = _bits(item.get("flags", []), FLAG_BITS, f"{location}.flags")
+        if not flags & FLAG_BITS["selectable"]:
+            raise ResourceError(f"{location}.flags: menu item must be selectable")
+        if flags & FLAG_BITS["hidden"]:
+            raise ResourceError(f"{location}.flags: hidden menu items are not supported")
+        if type_name == "radio" and not flags & FLAG_BITS["radio"]:
+            raise ResourceError(f"{location}.flags: radio menu items require the radio flag")
+        if type_name != "radio" and flags & FLAG_BITS["radio"]:
+            raise ResourceError(f"{location}.flags: only radio menu items may use the radio flag")
+        state = _bits(item.get("state", []), STATE_BITS, f"{location}.state")
+        if state & (STATE_BITS["selected"] | STATE_BITS["outlined"] | STATE_BITS["shadowed"]):
+            raise ResourceError(
+                f"{location}.state: selected, outlined, and shadowed are not menu states"
+            )
+        text_value = item.get("text")
+        if not isinstance(text_value, str):
+            raise ResourceError(f"{location}.text: menu items require text")
+        try:
+            label = text_value.encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise ResourceError(f"{location}.text: menu label must be printable ASCII") from exc
+        if not 1 <= len(label) <= MENU_MAX_LABEL or any(
+            byte < 0x20 or byte > 0x7E for byte in label
+        ):
+            raise ResourceError(
+                f"{location}.text: menu label must be 1..{MENU_MAX_LABEL} printable ASCII characters"
+            )
+        shortcut = _shortcut(item.get("shortcut"), f"{location}.shortcut")
+        folded = shortcut | 0x20 if 0x41 <= shortcut <= 0x5A else shortcut
+        if folded and folded in shortcuts:
+            raise ResourceError(f"{location}.shortcut: duplicate menu shortcut")
+        if folded:
+            shortcuts.add(folded)
+
+        popup_state = 0
+        if state & STATE_BITS["disabled"]:
+            popup_state |= MENU_STATE_DISABLED
+        if state & STATE_BITS["checked"]:
+            popup_state |= MENU_STATE_CHECKED
+        if type_name == "radio":
+            if state & STATE_BITS["checked"] and checked_radio:
+                raise ResourceError(f"{location}.state: only one radio item may start checked")
+            checked_radio = checked_radio or bool(state & STATE_BITS["checked"])
+            popup_state |= MENU_STATE_RADIO
+        elif type_name == "checkbox":
+            popup_state |= MENU_STATE_CHECKBOX
+        object_index = object_ids[item_id]
+        descriptor.extend((object_index, popup_state, shortcut, len(label)))
+        descriptor.extend(label)
+        item_ids.append((item_id, object_index))
+
+    guard = f"GEMBENCH_GENERATED_{prefix}_MENU_H"
+    array_name = f"{prefix.lower()}_menu_gbrm"
+    lines = [
+        "/* Generated by tools/gbrc.py; do not edit. */",
+        f"#ifndef {guard}",
+        f"#define {guard}",
+        "",
+        f"#define {prefix}_MENU_SIZE {len(descriptor)}u",
+        f"#define {prefix}_MENU_ITEM_COUNT {len(children)}u",
+    ]
+    for name, object_index in item_ids:
+        lines.append(f"#define {name} {object_index}u")
+    lines.extend(("", f"static const unsigned char {array_name}[] = {{"))
+    for offset in range(0, len(descriptor), 12):
+        chunk = ", ".join(
+            f"0x{byte:02x}" for byte in descriptor[offset : offset + 12]
+        )
+        lines.append(f"    {chunk},")
+    lines.extend(("};", "", f"#endif /* {guard} */", ""))
     return "\n".join(lines)
 
 
@@ -566,7 +725,10 @@ def _parser() -> argparse.ArgumentParser:
         "--c-header", type=Path, help="optional generated C blob/object-ID header"
     )
     parser.add_argument(
-        "--symbol-prefix", help="uppercase prefix used by --c-header"
+        "--menu-header", type=Path, help="optional generated GBRM menu header"
+    )
+    parser.add_argument(
+        "--symbol-prefix", help="uppercase prefix used by generated headers"
     )
     return parser
 
@@ -574,9 +736,12 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        if (args.c_header is None) != (args.symbol_prefix is None):
-            raise ResourceError("--c-header and --symbol-prefix must be used together")
-        blob, object_ids = compile_document_with_ids(load_source(args.source))
+        if (args.c_header is not None or args.menu_header is not None) and args.symbol_prefix is None:
+            raise ResourceError("generated headers require --symbol-prefix")
+        if args.c_header is None and args.menu_header is None and args.symbol_prefix is not None:
+            raise ResourceError("--symbol-prefix requires a generated header")
+        document = load_source(args.source)
+        blob, object_ids = compile_document_with_ids(document)
         verify_blob(blob)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_bytes(blob)
@@ -584,6 +749,12 @@ def main(argv: list[str] | None = None) -> int:
             args.c_header.parent.mkdir(parents=True, exist_ok=True)
             args.c_header.write_text(
                 render_c_header(blob, object_ids, args.symbol_prefix),
+                encoding="ascii",
+            )
+        if args.menu_header is not None:
+            args.menu_header.parent.mkdir(parents=True, exist_ok=True)
+            args.menu_header.write_text(
+                render_menu_header(document, object_ids, args.symbol_prefix),
                 encoding="ascii",
             )
     except (OSError, ResourceError) as exc:

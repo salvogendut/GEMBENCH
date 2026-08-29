@@ -62,6 +62,50 @@ unsigned char gb_popup(unsigned char col, unsigned char line,
     return run_ui();
 }
 
+/* Generated GBRM menus use UI_OP 6. UI_TEXT carries decorated NUL labels while
+ * UI_NAME carries the live state bytes. This reuses the proven paged popup and
+ * costs no second modal loop in GBUI.MOD's tight 8 KiB page. */
+#ifdef GBR_MENU_RUNTIME
+unsigned char gb_resource_menu_popup(unsigned char col,
+                                     const unsigned char *descriptor,
+                                     unsigned int size,
+                                     const unsigned char *state)
+{
+    char *out = UI_TEXT;
+    const unsigned char *item;
+    unsigned char i, j, n, title_len;
+    if (!descriptor || !state || size < 7 || descriptor[0] != 'G' ||
+        descriptor[1] != 'B' || descriptor[2] != 'R' || descriptor[3] != 'M')
+        return 0xFF;
+    n = descriptor[5];
+    title_len = descriptor[6];
+    item = descriptor + 7 + title_len;
+    UI_OP = 6; UI_COL = col; UI_LINE = 8; UI_N = n;
+    for (i = 0; i < n; i++) {
+        UI_NAME[i] = (char)state[i];
+        if (state[i] & 0x04) {
+            *out++ = (state[i] & 0x01) ? '{' : '(';
+            *out++ = (state[i] & 0x02) ? 'x' : ' ';
+            *out++ = (state[i] & 0x01) ? '}' : ')';
+            *out++ = ' ';
+        } else if (state[i] & 0x08) {
+            *out++ = (state[i] & 0x01) ? '{' : '[';
+            *out++ = (state[i] & 0x02) ? 'x' : ' ';
+            *out++ = (state[i] & 0x01) ? '}' : ']';
+            *out++ = ' ';
+        } else if (state[i] & 0x01) {
+            *out++ = '-'; *out++ = '-'; *out++ = ' '; *out++ = ' ';
+        } else {
+            *out++ = ' '; *out++ = ' '; *out++ = ' '; *out++ = ' ';
+        }
+        for (j = 0; j < item[3]; j++) *out++ = (char)item[4 + j];
+        *out++ = 0;
+        item += (unsigned char)(4u + item[3]);
+    }
+    return run_ui();
+}
+#endif
+
 /* gb_alert: a click-to-dismiss notice. Reuses gb_popup (already paged in the module)
    as the box - the two lines ARE the "rows"; any click closes it and the return value
    is ignored. Centered horizontally for the typical width (#153). */

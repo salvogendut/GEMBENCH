@@ -89,12 +89,15 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   checkbox/radio mutation, default Save, and trace assertions under openMSX.
   `MSX_HEADLESS=1` skips screenshots while retaining the complete logic trace.
 - **`test_window_kinds_openmsx.sh`** — drives the real MSX2 File Manager through
-  kernel-owned maximise/restore, move, and resize gestures, verifies the
-  append-only geometry messages, and captures the final Screen 7 window. Its
-  headless mode retains all geometry/message assertions.
+  pointer selection from the generated View popup, `I`/`L`/`F` shortcut and
+  checked/radio transitions, then kernel-owned maximise/restore, move, and
+  resize gestures. It verifies the menu state and append-only geometry messages
+  and captures the final Screen 7 window. Headless mode retains all assertions.
 - **`gbrc.py` / `gbrverify.py`** — compile deterministic GBR v1 resources and
   strictly verify binary resources. `gbrc.py --c-header` can also emit a C blob,
-  section/count constants, and source-only object IDs for embedded resources.
+  section/count constants, and source-only object IDs for embedded resources;
+  `--menu-header` emits bounded code-only `GBRM` menu metadata without changing
+  the canonical `.GBR` bytes.
 - **`build_savercfg.sh <app_dir> <out.RAW>`** — builds
   `apps/<saver>/config.c` as an 8 KB-bounded paged configuration companion at
   `#6000`. Package the result with the same stem as its saver (`XMATRIX.MOD`

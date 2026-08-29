@@ -31,6 +31,8 @@ The completed foundation currently covers:
 - source-only object IDs, deterministic C-header generation, field objects,
   live text bindings, and cyclic keyboard focus;
 - an MSX2 FormRef dialog whose drawing and hit geometry come from embedded GBR;
+- a generated MSX2 File Manager View menu with resource-owned labels, stable
+  action IDs, checked/radio state, pointer selection, and `F`/`I`/`L` shortcuts;
 - a measured MSX2 auxiliary-resource prototype and resident-renderer fit probe,
   with the smaller embedded/app-linked placement retained for GBR v1;
 - explicitly versioned MSX2 window kinds with kernel-owned furniture, move, resize, and

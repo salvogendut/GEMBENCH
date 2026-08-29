@@ -286,3 +286,35 @@ python3 debug/gembench_baseline_1983.py \
 make gembench-msx-banked
 MSX_HEADLESS=1 tools/test_formref_openmsx.sh
 ```
+
+## Milestone 10 resource menus
+
+Milestone 10 was validated on 2026-08-29 with a 127-byte canonical File Manager
+View resource and its generated 42-byte `GBRM` descriptor. The descriptor and
+source-only `F`, `I`, and `L` shortcuts do not alter any GBR1 byte. The target
+runtime compiles to 1,879 bytes with caller-owned state; malformed magic,
+lengths, state bits, duplicate identities/shortcuts, and trailing bytes fail
+before a menu title is registered.
+
+The release MSX2 File Manager is 14,416 bytes (1,167 bytes over the Milestone 8
+baseline, with its fit guard still passing). `GBUI.MOD` grows from 5,953 to
+6,063 bytes; the Screen 6/7 kernels remain 10,682/12,260 bytes. The openMSX
+trace opened View through the real pointer path, selected List, exercised the
+Icons/List radio shortcuts and Fullscreen checkbox shortcut, restored the
+window, then passed the existing maximise/move/resize sequence. Its menu trace
+was `POINTER_LIST ICONS LIST FULLSCREEN RESTORED`.
+
+1983 independently reached frame 6,002 at PC `0x247A`, SP `0xD8EA`, with VDP
+R0/R1 `0x0A`/`0x62` and the expected mapper registers. Full MSX2, CPC card/disk,
+and PCW disk builds passed. CPC and PCW retain their prior `gb_doc` File Manager
+menu after their page budget rejected linking the MSX2 menu runtime.
+
+```sh
+make check
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_window_kinds_openmsx.sh
+python3 debug/gembench_baseline_1983.py --frames 6001
+make cpc
+make pcw
+```

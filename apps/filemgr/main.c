@@ -14,6 +14,10 @@
  * rect-clipped repaint); the contents - views, grid, scrollbar - are drawn here
  * with gb_dir*, gb_blite, gb_fill/gb_frame/gb_text. No kernel changes. */
 #include "gb.h"
+#ifdef GB_MSX2
+#include "gbr_menu.h"
+#include "view_menu_gbr.h"
+#endif
 
 #define DEF_X    4            /* window position */
 #define DEF_Y    26
@@ -97,6 +101,9 @@ static unsigned char nsel;        /* 0 = none, else selected index + 1    */
 static unsigned char dc_idx;      /* index of the last click              */
 static unsigned char dc_timer;
 static unsigned char view = V_ICONS;   /* default = icon view (GEOBENCH.CFG VIEW=) */
+#ifdef GB_MSX2
+static gbr_menu_t view_menu;
+#endif
 static unsigned char my_drive;         /* the drive this window browses (#65) */
 static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
 #ifdef GB_MSX2
@@ -123,9 +130,8 @@ static unsigned char list_state;
 #define CFG_BUF_SIZE 512
 static unsigned int cfglen;
 
-/* The top bar is the gb_doc View menu (#142): Fullscreen (framework) + "Icons / List".
-   Going up a directory is the ".." entry in the listing (not a menu item). FM has no
-   document, so it gets no File menu. */
+/* MSX2 generates the top bar from view_menu.json; CPC/PCW retain gb_doc. Going
+   up a directory is the ".." listing entry; File Manager has no File menu. */
 static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Fullscreen */
 
 /* Sorted listing cache (#118): the directory is streamed once into these arrays in
@@ -1038,22 +1044,31 @@ static void sb_drag(void)
     }
 }
 
-/* fm_view: the gb_doc View menu's app items (after Fullscreen). 0 = toggle the
-   list/icons layout (persisted to GEOBENCH.CFG). "Up" is no longer a menu item -
-   it's the ".." entry in the listing now (#142). */
+#ifdef GB_MSX2
+static void fm_set_view(unsigned char next)
+{
+    if (view == next) return;
+    view = next;
+    cfg_save_view();
+    top = 0; nsel = 0;
+    clamp_top();
+    gb_wm_damage(win_x, win_y, win_w, win_h);
+}
+#else
 static void fm_view(unsigned char item)
 {
-    if (item == 0) {                      /* Icons / List: toggle + persist */
+    if (item == 0) {
         view ^= 1;
         cfg_save_view();
         top = 0; nsel = 0;
         clamp_top();
         gb_curhide();
-        gb_fill(CT_X, CT_Y, CT_W, CT_H, 0);   /* icons<->list must repaint over a blank content rect */
+        gb_fill(CT_X, CT_Y, CT_W, CT_H, 0);
         draw_body();
         gb_curshow();
     }
 }
+#endif
 
 /* fm_fullscreen: View > Fullscreen - cover the screen and restore the prior
    geometry on exit; the listing reflows to the new size (#142). */
@@ -1074,11 +1089,23 @@ static void fm_fullscreen(unsigned char on)
                                              vacated - leaving a ghost scrollbar/listing behind (#156) */
 }
 
+#ifdef GB_MSX2
+static void fm_menu_action(unsigned char object_id)
+{
+    if (object_id == FILEMGR_VIEW_FULLSCREEN)
+        fm_fullscreen(gbr_menu_checked(&view_menu, FILEMGR_VIEW_FULLSCREEN));
+    else if (object_id == FILEMGR_VIEW_ICONS)
+        fm_set_view(V_ICONS);
+    else if (object_id == FILEMGR_VIEW_LIST)
+        fm_set_view(V_LIST);
+}
+#else
 static const char *const fm_view_items[] = { "Icons / List", 0 };
-static const gb_doc_t fmdoc = {          /* no document -> no File menu, just View */
+static const gb_doc_t fmdoc = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, fm_fullscreen, fm_view_items, fm_view
 };
+#endif
 
 #ifdef GB_PREEMPTIVE
 /* A copy stays on the root task because every filesystem operation is kernel-owned.
@@ -1226,7 +1253,7 @@ static unsigned char copy_file(void)
 #endif
 
 /* on_event: a file dropped here from another window is copied onto our drive (#65);
-   a top-bar menu click goes to the framework's View handler (#142). */
+   a top-bar click arms the target's View menu. */
 static void on_event(void)
 {
     sync_rect();
@@ -1253,13 +1280,20 @@ static void on_event(void)
 #ifdef GB_PREEMPTIVE
     if (copy_state != COPY_IDLE || gb_drop_claimed()) return;
 #endif
-    gb_doc_event();                       /* the View menu (Fullscreen / Icons-List / Up) */
+#ifdef GB_MSX2
+    if (gb_msg.type == GB_MSG_MENU) gbr_menu_arm(&view_menu, gb_msg.p0);
+#else
+    gb_doc_event();
+#endif
 }
 
 /* on_frame (#146): the WM handled close/drag/grip routing; re-assert our drive, tick the
    double-click timer, and run the View menu framework. */
 static void fm_frame(void)
 {
+#ifdef GB_MSX2
+    unsigned char key, object_id;
+#endif
     sync_rect();
     gb_set_drive(my_drive);              /* re-assert our drive each focused frame (#65) */
 #ifdef GB_PREEMPTIVE
@@ -1269,7 +1303,20 @@ static void fm_frame(void)
     if (appicon_step()) return;
 #endif
     if (dc_timer) dc_timer--;
-    if (gb_doc_frame()) { gb_restore_parent(); return; }   /* a View menu ran (#142) */
+#ifdef GB_MSX2
+    while ((key = gb_getkey()) != 0)
+        if (gbr_menu_shortcut(&view_menu, key, &object_id)) {
+            fm_menu_action(object_id);
+            gb_restore_parent();
+            return;
+        }
+    if (gbr_menu_run(&view_menu, &object_id)) {
+        fm_menu_action(object_id);
+        gb_restore_parent();
+    }
+#else
+    if (gb_doc_frame()) { gb_restore_parent(); return; }
+#endif
 }
 
 /* on_close (#146): no document to save -> just close. */
@@ -1290,8 +1337,12 @@ static void fm_close(void)
         list_state = LIST_IDLE;
     }
 #endif
+#ifdef GB_MSX2
+    gb_wm_close();
+#else
     if (gb_doc_close()) gb_wm_close();
     else gb_restore_parent();
+#endif
 }
 
 #ifndef GB_MSX2
@@ -1456,7 +1507,12 @@ void main(void)
 #endif
     /* Register first (no draw, focus) so gb_set_name/fs_load target our window
        for the config read below. */
-    gb_doc(&fmdoc);              /* View menu (Fullscreen / Icons-List); no File (#142) */
+#ifdef GB_MSX2
+    gbr_menu_init(&view_menu, filemgr_view_menu_gbrm,
+                  FILEMGR_VIEW_MENU_SIZE, 10);
+#else
+    gb_doc(&fmdoc);
+#endif
     gb_set_drive(my_drive);
     /* Open at the drive ROOT. The kernel's directory position is a single global
        (fs_dir_clus / dir stack); a previously-open window may have left it in a
@@ -1465,6 +1521,11 @@ void main(void)
        root on both backends; DIRSTACK is 4 deep) so the listing matches fm_path. */
     { unsigned char k; for (k = 0; k < 4; k++) gb_back(); }
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
+#ifdef GB_MSX2
+    gbr_menu_set_checked(&view_menu,
+                         view == V_ICONS ? FILEMGR_VIEW_ICONS : FILEMGR_VIEW_LIST,
+                         1);
+#endif
 #ifdef GB_PREEMPTIVE
     fmmw.title = title_buf;
     list_start();                /* scan first; list_step publishes one complete paint */

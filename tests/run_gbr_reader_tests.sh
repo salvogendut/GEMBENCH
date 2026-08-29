@@ -19,6 +19,12 @@ trap 'rm -rf "$test_tmp"' EXIT
     -o "$test_tmp/test_gbr_object"
 "$test_tmp/test_gbr_object"
 
+"$CC" -Wall -Wextra -Werror -std=c99 -DGBR_MENU_HOST_TEST \
+    -I include/gembench -I apps/filemgr \
+    tests/test_gbr_menu.c lib/gembench/gbr_menu.c \
+    -o "$test_tmp/test_gbr_menu"
+"$test_tmp/test_gbr_menu"
+
 # Link the same behavioral suite across the proposed placement boundary: the
 # application-side state/hit/focus half and the renderer-only resident half.
 # Rename the renderer's private geometry copy so the two halves can coexist in
@@ -63,6 +69,19 @@ if (( access_bytes > 1024 )); then
     exit 1
 fi
 echo "ok   embedded GBR accessor compiles for Z80 with SDCC ($access_bytes bytes, no static data)"
+
+"$SDCC" -mz80 --opt-code-size -DGBR_MENU_HOST_TEST -I include/gembench \
+    -c lib/gembench/gbr_menu.c -o "$test_tmp/gbr_menu.rel"
+test -s "$test_tmp/gbr_menu.rel"
+menu_hex="$(awk '$1 == "A" && $2 == "_CODE" { print $4; exit }' \
+    "$test_tmp/gbr_menu.rel")"
+test -n "$menu_hex"
+menu_bytes=$((16#$menu_hex))
+if (( menu_bytes > 2048 )); then
+    echo "FAIL GBR menu runtime is $menu_bytes bytes (2048-byte budget)" >&2
+    exit 1
+fi
+echo "ok   GBR menu runtime compiles for Z80 with SDCC ($menu_bytes bytes, caller-owned state)"
 
 "$SDCC" -mz80 --opt-code-size -DGB_MSX2 -I include/gembench -I lib/gb \
     -c lib/gembench/gbr_object.c -o "$test_tmp/gbr_object.rel"

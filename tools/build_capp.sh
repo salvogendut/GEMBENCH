@@ -120,8 +120,11 @@ if [ "$GBR_FORM_ENGINE_FLAG" = "1" ]; then
     ALL_APPDEFS="$ALL_APPDEFS -DGBR_FORM_ENGINE"
 fi
 if [ "$GBR_OBJECT_FLAG" = "1" ]; then GBR_READER_FLAG=1; fi
+GBR_MENU_FLAG="${GBR_MENUS:-0}"
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ]; then GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"; fi
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ]; then
+    GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
+fi
 NET_SRC="$GB/gbnet_stub.c"
 case " $ALL_APPDEFS " in
     *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
@@ -161,6 +164,10 @@ if [ "$GBR_FORM_FLAG" = "1" ] && [ "$WIDGETS_FLAG" != "1" ]; then
 fi
 if [ "$GBR_FORM_ENGINE_FLAG" != "0" ] && [ "$GBR_FORM_ENGINE_FLAG" != "1" ]; then
     echo "ERROR: GBR_FORM_ENGINE must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GBR_MENU_FLAG" != "0" ] && [ "$GBR_MENU_FLAG" != "1" ]; then
+    echo "ERROR: GBR_MENUS must be 0 or 1" >&2
     exit 1
 fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
@@ -267,6 +274,9 @@ fi
 if [ "$GBR_FORM_ENGINE_FLAG" = "1" ]; then
     deps+=("$GBR_LIB/gbr_form.c")
 fi
+if [ "$GBR_MENU_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbr_menu.h" "$GBR_LIB/gbr_menu.c")
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -285,7 +295,7 @@ fi
 if grep -Rqs 'gbhtml\.h' "$APP"; then
     deps+=("$GB/gbhtml.h")
 fi
-if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
+if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ]; then
     deps+=("$GB/gbui_stub.c")
 fi
 if [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
@@ -340,6 +350,7 @@ cache_key=$(printf '%s\n' \
     "GBR_OBJECTS=$GBR_OBJECT_FLAG" \
     "GBR_FORMS=$GBR_FORM_FLAG" \
     "GBR_FORM_ENGINE=$GBR_FORM_ENGINE_FLAG" \
+    "GBR_MENUS=$GBR_MENU_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -436,6 +447,11 @@ if [ "$GBR_FORM_ENGINE_FLAG" = "1" ]; then
         -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_form.c" -o "$work/gbr_form.rel"
     GBR_REL="$GBR_REL $work/gbr_form.rel"
 fi
+if [ "$GBR_MENU_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbr_menu.c" -o "$work/gbr_menu.rel"
+    GBR_REL="$GBR_REL $work/gbr_menu.rel"
+fi
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then
     GBWIN_DEFS=""
@@ -529,8 +545,10 @@ fi
 #   SIZEPROMPT=1               -> gbsizedlg.c (opt-in two-field dimensions stub)
 #   DOC=1                      -> gbdoc.c too (the document/File-menu framework)
 DLG_REL=""
-if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
-    "$SDCC" -mz80 --fomit-frame-pointer $HELPER_CFLAGS $ALL_APPDEFS -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
+if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ]; then
+    DLG_DEFS=""
+    [ "$GBR_MENU_FLAG" != "1" ] || DLG_DEFS="-DGBR_MENU_RUNTIME"
+    "$SDCC" -mz80 --fomit-frame-pointer $HELPER_CFLAGS $DLG_DEFS $ALL_APPDEFS -I "$GB" -c "$GB/gbui_stub.c" -o "$work/gbui_stub.rel"
     DLG_REL="$work/gbui_stub.rel"
 fi
 # DOC=1 = the full document framework; DOCRO=1 = a READ-ONLY variant (-DGBDOC_RO) that

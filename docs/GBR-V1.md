@@ -19,6 +19,7 @@ Each tree has a name and one nested root object. Supported object keys are:
 | Key | Meaning |
 | --- | --- |
 | `id` | Optional source-only C identifier for this flattened object |
+| `shortcut` | Optional source-only printable ASCII shortcut for generated menus |
 | `type` | Required object type name |
 | `x`, `w` | Horizontal pixel geometry, `0..511` |
 | `y`, `h` | Vertical pixel geometry, `0..255` |
@@ -35,6 +36,11 @@ indices; `255` means no object.
 `id` values must be unique C identifiers. They do not add bytes to GBR v1;
 `gbrc.py --c-header ... --symbol-prefix ...` emits their flattened indices,
 the resource blob, counts, and section offsets into a deterministic C header.
+Likewise, `shortcut` is validated source metadata and adds no GBR1 byte.
+`gbrc.py --menu-header ... --symbol-prefix ...` accepts one bounded menu tree
+and emits a compact `GBRM` application-link descriptor containing its title,
+labels, generated object identities, initial menu state, and shortcuts. `GBRM`
+is generated C metadata, not a second disk resource format or a GBR1 ABI change.
 
 The object types are `box`, `text`, `string`, `button`, `field`, `icon`, `image`,
 `checkbox`, `radio`, and `user`. Their numeric identities are frozen. The
@@ -160,9 +166,11 @@ Other object types may use the field as a bounded type-specific value.
 
 ## Deliberate omissions
 
-Version 1 does not yet encode icon or raster payloads, editable-field templates,
+Version 1 does not encode icon or raster payloads, editable-field templates,
 keyboard shortcuts, palette roles, user-object callbacks, or menu-specific
-metadata. Those need target runtime designs before binary fields are assigned.
+metadata in its binary records. Milestone 10's source-only shortcut and generated
+menu descriptor deliberately assign no binary field. Any future on-disk form of
+that metadata still needs a new target runtime design and version boundary.
 
 The existing numeric identities for those format-only object types are
 reserved, not permission to silently assign a new record interpretation. Any

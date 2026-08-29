@@ -39,7 +39,8 @@ metadata without implicit drawing behavior. Applications not linking the form
 engine may continue to interpret the same metadata explicitly.
 
 The C runtime descriptor, embedded-versus-mapper storage, renderer placement,
-and generated source identifiers are not bytes in the GBR1 file ABI. Milestone
+generated source identifiers, source-only shortcuts, and generated `GBRM` menu
+descriptors are not bytes in the GBR1 file ABI. Milestone
 7 selected embedded resources and app-linked rendering for small resources;
 the opt-in mapper transport remains an implementation experiment.
 

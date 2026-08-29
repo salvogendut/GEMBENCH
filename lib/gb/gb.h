@@ -358,6 +358,13 @@ void gb_menu(const void *def);
  *   popup erased to the backdrop - repaint your window after. */
 unsigned char gb_popup(unsigned char col, unsigned char line,
                        const char *const *labels, unsigned char n);
+/* Internal bridge used by the generated GBR menu runtime. The descriptor has
+ * already passed gbr_menu_init's all-or-nothing validation; the app stub packs
+ * its decorated labels and live state into the paged GBUI service. */
+unsigned char gb_resource_menu_popup(unsigned char col,
+                                     const unsigned char *descriptor,
+                                     unsigned int size,
+                                     const unsigned char *state);
 unsigned char gb_prompt(const char *caption, char *buf, unsigned char maxlen);
 /* One modal panel containing two framed three-digit fields, displayed as
  * "width by height". The pointed values seed the fields and receive the accepted
