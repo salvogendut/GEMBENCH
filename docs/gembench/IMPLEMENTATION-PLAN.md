@@ -1,6 +1,6 @@
 # GEMBENCH implementation plan
 
-Status: **Milestones 1-9 complete; Milestone 10 in progress; GEMBENCH-1 frozen on 2026-08-29**.
+Status: **Milestones 1-11 complete; GEMBENCH-1 frozen on 2026-08-29**.
 
 This plan turns the goals in `DESIGN-ESTIMATE.md` into staged implementation
 work. The first proof of concept is expected to take approximately six to nine
@@ -47,7 +47,8 @@ baseline is recorded.
 | 7. Banking decision (complete 2026-08-29) | Prototype an auxiliary resource segment and resident renderer | 1 week | Measurements compare resident and app-linked implementations |
 | 8. Review (complete 2026-08-29) | Evaluate size, responsiveness, and maintainability | 2-3 days | GEMBENCH-1 is frozen after an explicit window-ABI revision |
 | 9. Resource forms (complete 2026-08-29; [#15](https://github.com/salvogendut/GEMBENCH/issues/15)) | Add checkbox/radio rendering, common form behavior, and a production resource panel | 1-2 weeks | FormRef exercises shared semantics and Calculator draws/routes its MSX2 panel from GBR |
-| 10. Resource menus ([#17](https://github.com/salvogendut/GEMBENCH/issues/17)) | Generate menu labels, actions, state, and shortcuts from GBR source metadata | 1 week | File Manager's MSX2 View popup is resource-driven; pointer and keyboard traces pass without changing GBR1 |
+| 10. Resource menus (complete 2026-08-29; [#17](https://github.com/salvogendut/GEMBENCH/issues/17)) | Generate menu labels, actions, state, and shortcuts from GBR source metadata | 1 week | File Manager's MSX2 View popup is resource-driven; pointer and keyboard traces pass without changing GBR1 |
+| 11. Multi-event subscriptions (complete 2026-08-29; [#19](https://github.com/salvogendut/GEMBENCH/issues/19)) | Add bounded, opt-in keyboard, pointer, timer, and WM aggregation | 1 week | Clock consumes combined event records; host and openMSX interaction traces pass without changing GEMBENCH-1 |
 
 ## Bootstrap work package
 
@@ -148,4 +149,12 @@ MSX2 Calculator panel. Milestone 10 keeps GBR1 frozen: source-only shortcuts and
 object IDs generate a bounded `GBRM` application descriptor, while live menu
 state remains caller-owned. File Manager is the first production menu slice on
 MSX2; CPC and PCW retain `gb_doc` after their 16 KiB fit gate rejected the added
-runtime.
+runtime. Milestone 11 adds an app-linked multi-event adapter without a resident
+queue, kernel slot, or low-RAM cell. Its caller-owned subscription and result
+occupy 6 and 9 bytes; pointer motion and timer expiry coalesce into the current
+callback record, and at most one key is consumed per frame. The runtime compiles
+to 860 bytes, and the migrated MSX2 Clock grows from 10,112 to 11,288 bytes.
+The current SDCC output uses at most 31 additional stack bytes below
+`gb_event_collect()` entry while sampling the leaf input accessors. Screen 6/7
+kernels remain 10,682/12,260 bytes. CPC and PCW build the unchanged legacy Clock
+event path and do not link the adapter.

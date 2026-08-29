@@ -1,7 +1,7 @@
 # GEMBENCH architecture
 
-This document describes the intended GEMBENCH boundaries. It is a starting
-contract for implementation, not a claim that the target runtime exists yet.
+This document describes the implemented GEMBENCH boundaries and the constraints
+for extending them.
 
 ## Layers
 
@@ -60,7 +60,8 @@ or unconstrained dynamic structures.
 
 ## Runtime invariants
 
-- Keep hot event, object, window, and drawing primitives resident.
+- Keep existing hot input, window, and drawing primitives resident; measure new
+  policy layers before assigning them resident space.
 - Use fixed-capacity queues and tables with explicit overflow behaviour.
 - Merge redundant redraw and pointer events.
 - Keep filesystem, firmware, mapper, and painting operations atomic.
@@ -69,6 +70,23 @@ or unconstrained dynamic structures.
   use, and repaint latency after every milestone.
 - Treat V9938 as the baseline unless an Omega-only V9958 requirement is made
   explicit.
+
+## Event delivery
+
+Milestone 11 retains the existing window procedure as the scheduling and
+delivery boundary. An MSX2 application may link `gbevent` and feed each
+`gb_msg_t` callback to `gb_event_collect()`. A six-byte caller-owned
+subscription selects keyboard, pointer, timer, and window classes; a nine-byte
+caller-owned record can report several classes from the same callback.
+
+There is no hidden queue, allocator, resident state, new jump-table slot, or
+low-RAM cell. A frame callback samples the published pointer position once,
+drains at most one key, and produces at most one timer expiry. Only the latest
+pointer position survives between callbacks, so redundant movement is
+naturally coalesced and event storage cannot grow. `GB_MSG_FRAME` is a sampling
+pulse rather than a window event; other subscribed messages retain their
+existing type and three-byte payload. Legacy applications continue to consume
+the original callback directly.
 
 ## Integration boundary
 

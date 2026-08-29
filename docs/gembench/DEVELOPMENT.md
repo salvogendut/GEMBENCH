@@ -150,6 +150,20 @@ the app-linked runtime. A malformed `GBRM` descriptor fails atomically before
 registering a top-bar title. CPC and PCW retain their existing `gb_doc` menu
 path because adding the MSX runtime would exceed their 16 KiB File Manager page.
 
+Exercise the non-blocking multi-event production slice with:
+
+```sh
+make gbevent-check
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_multi_event_openmsx.sh
+```
+
+The disposable-image driver launches the byte-identical built Clock through
+File Manager. It verifies that timer frames continue, `S` reaches the keyboard
+class and toggles seconds, pointer movement is observed, and a real pointer
+click reaches Clock without losing the associated window callback.
+
 Use 1983 as the complementary boot, mapper, and image-layout integration check:
 
 ```sh
@@ -255,3 +269,34 @@ Run the machine-readable compatibility audit independently with:
 ```sh
 make gembench-abi-check
 ```
+
+## Multi-event subscriptions
+
+MSX2 applications opt in by building with `GB_EVENTS=1`, including
+`gbevent.h`, and owning both pieces of state:
+
+```c
+static gb_event_subscription_t subscription;
+static gb_event_t event;
+
+gb_event_init(&subscription, GB_EVENT_ALL, 1);
+
+if (gb_event_collect(&subscription, &event, m) & GB_EVENT_TIMER)
+    update_clock();
+```
+
+Call `gb_event_collect()` once at the start of the existing window procedure.
+On `GB_MSG_FRAME`, the adapter reads at most one buffered key, samples the
+already-published pointer once, and decrements the subscription timer once.
+Pointer movement and timer expiry are represented at most once in that output
+record. A non-frame message may combine `GB_EVENT_POINTER` and
+`GB_EVENT_WINDOW`, so inspect the class bits independently and apply the
+application's explicit priority. The record is cleared on every call and must
+be consumed before the next callback.
+
+The subscription is six bytes and the event record nine bytes. The current
+SDCC build emits 860 bytes of code and no static data. Its deepest generated
+path uses 31 stack bytes below `gb_event_collect()` entry while calling the
+leaf `gb_mx()`/`gb_my()` accessors. The adapter remains application-linked and
+outside the frozen GEMBENCH-1 binary ABI. Clock enables it only for MSX2; CPC
+and PCW retain the original callback switch.

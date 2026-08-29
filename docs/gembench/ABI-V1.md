@@ -69,6 +69,21 @@ The five kind bits and the `GB_MSG_MOVED`, `GB_MSG_SIZED`, and
 off. CPC and PCW expose only the legacy registration contract and keep their
 existing app-owned geometry behavior.
 
+### App-linked event aggregation
+
+Milestone 11 does not extend the frozen binary ABI. `gbevent` is an optional
+application-linked source API over the existing input accessors and
+`gb_msg_t` callback. It adds no resource bytes, managed-window tail, kernel
+jump-table slot, public low-RAM cell, or resident state. Applications using it
+must be rebuilt with the implementation and must not treat its C structure
+layout as a cross-version binary exchange format.
+
+The current implementation nevertheless machine-checks its bounded footprint:
+the caller owns a six-byte subscription and nine-byte output record, unknown
+class bits are rejected atomically, and a timer class requires a non-zero
+period. Legacy callbacks, message values, and registration entry points retain
+their frozen meanings.
+
 ## Compatibility rules
 
 For GEMBENCH-1:
@@ -95,6 +110,7 @@ make check
 make gembench-msx
 tools/test_formref_openmsx.sh
 tools/test_window_kinds_openmsx.sh
+tools/test_multi_event_openmsx.sh
 ```
 
 The resource placement evidence is in

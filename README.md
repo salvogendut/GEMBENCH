@@ -33,6 +33,9 @@ The completed foundation currently covers:
 - an MSX2 FormRef dialog whose drawing and hit geometry come from embedded GBR;
 - a generated MSX2 File Manager View menu with resource-owned labels, stable
   action IDs, checked/radio state, pointer selection, and `F`/`I`/`L` shortcuts;
+- an opt-in, non-blocking MSX2 event adapter that combines keyboard, pointer,
+  timer, and window-manager activity in one caller-owned record, demonstrated
+  by Clock;
 - a measured MSX2 auxiliary-resource prototype and resident-renderer fit probe,
   with the smaller embedded/app-linked placement retained for GBR v1;
 - explicitly versioned MSX2 window kinds with kernel-owned furniture, move, resize, and
@@ -87,6 +90,13 @@ maximise/restore, move, resize, and geometry messages:
 
 ```sh
 tools/test_window_kinds_openmsx.sh
+```
+
+Exercise Clock's combined keyboard, pointer, timer, and window subscription:
+
+```sh
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_multi_event_openmsx.sh
 ```
 
 Capture the reproducible pre-GBR baseline under the sibling `1983`
