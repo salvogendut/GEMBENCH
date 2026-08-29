@@ -391,3 +391,38 @@ python3 debug/gembench_baseline_1983.py --frames 6001
 make cpc
 make pcw
 ```
+
+## Milestone 13 typed clipboard/scrap
+
+Milestone 13 was validated on 2026-08-29 with openMSX 21.0 and a disposable,
+network-free Nextor image containing byte-identical `A.APP` and `B.APP` aliases
+of the release MSX2 Notepad. The real pointer path types `SCRAP13`, invokes
+Edit > Select All and Edit > Copy in the source, moves that window, raises File
+Manager, and opens a second Notepad.
+
+The copied resident payload is type 1 (text), length 7, and exactly `SCRAP13`.
+The driver changes only the private tag to type 2 (bitmap), invokes the
+destination Paste action, and observes identical destination length and bytes
+at `paste_clip()` entry and its common return. Restoring type 1 and invoking
+Paste again appends exactly seven bytes. Both paste calls traverse the real
+menu and application callback; the final window count is four. The driver
+samples low RAM only in its normal primary-slot mapping and identifies Notepad
+callbacks by their built image signature.
+
+The full runtime compiles to 552 Z80 code bytes with no static data. Notepad's
+compact set/type profile is 100 bytes; the release `NOTEPAD.APP` is 12,097
+bytes, versus 11,975 before migration. Loaded code and initializers end at
+`0x6F3D`, data begins at `0x6F48`, and the 4 KiB document buffer remains intact.
+The Screen 6/7 kernels remain 10,682/12,260 bytes; the added private low-RAM
+cell passes the MSX map overlap check.
+
+```sh
+make gbscrap-check
+make check
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_typed_scrap_openmsx.sh
+python3 debug/gembench_baseline_1983.py --frames 6001
+make cpc
+make pcw
+```

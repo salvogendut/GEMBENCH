@@ -342,3 +342,51 @@ Set `MSX_HEADLESS=1` to skip screenshots. A rendered run writes its trace to
 `build/msx/visible-regions-screens/`. The test waits for the Desktop callback
 to return and then drains asynchronous V9938 commands and File Manager icon
 probes before capturing visual evidence.
+
+## Typed clipboard/scrap
+
+MSX2 applications build the complete bounded API with `GB_SCRAP=1` and include
+`gbscrap.h`:
+
+```c
+unsigned int copied;
+char text[80];
+
+if (gb_scrap_get(GB_SCRAP_TEXT, text, sizeof text, &copied) == GB_SCRAP_OK)
+    consume_text(text, copied);
+```
+
+`gb_scrap_set()` accepts text, bitmap, icon, or file-list payloads. It reports
+truncation above `GB_SCRAP_CAPACITY` (510) and publishes the type only after the
+payload is complete. `gb_scrap_get()` copies nothing on a type mismatch and
+always initializes the caller's copied count. `GB_SCRAP_ANY` accepts typed or
+legacy untyped data. Use `gb_scrap_clear()` to clear both payload and metadata.
+
+`GB_SCRAP_TEXT_ONLY=1` requires `GB_SCRAP=1` and links the 100-byte
+set/type-only adapter instead of the full runtime. It is for tight clients such
+as Notepad that label their own writes, call `gb_scrap_type()` before paste, and
+then use the existing resident `gb_clip_len()`/`gb_clip_get()` path. This profile
+does not export query/get/clear. Both flags are MSX2-only; CPC and PCW continue
+to compile their raw clipboard path unchanged.
+
+Run the host semantics and target footprint gate with:
+
+```sh
+make gbscrap-check
+```
+
+The suite covers empty, typed, raw, stale, exact-capacity, oversized,
+truncated-read, invalid-argument, mismatch, clear, and corrupt-length cases.
+After `make gembench-msx`, exercise two independent Notepad windows through the
+real pointer and Edit menus with:
+
+```sh
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_typed_scrap_openmsx.sh
+```
+
+The driver copies `SCRAP13` as typed text, verifies a bitmap-tagged paste leaves
+the destination unchanged from function entry to return, restores the text tag,
+and verifies the seven-byte append. Its disposable image removes `UNAPINET.COM`
+and runs with `MSX_UNAPI=0`, so the check does not require the optional
+`unapinet` extension.

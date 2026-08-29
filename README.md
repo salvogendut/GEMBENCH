@@ -39,6 +39,8 @@ The completed foundation currently covers:
 - a four-rectangle, allocation-free MSX2 visible-region iterator that lets the
   Desktop skip opaque covered areas and restores the legacy damage clip on
   capacity exhaustion;
+- a bounded MSX2 typed-scrap layer for text, bitmap, icon, and file-list data
+  that preserves the complete 510-byte raw clipboard and accepts legacy text;
 - a measured MSX2 auxiliary-resource prototype and resident-renderer fit probe,
   with the smaller embedded/app-linked placement retained for GBR v1;
 - explicitly versioned MSX2 window kinds with kernel-owned furniture, move, resize, and
@@ -108,6 +110,14 @@ topped, and closed:
 ```sh
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   tools/test_visible_regions_openmsx.sh
+```
+
+Exercise typed copy, atomic type rejection, and accepted text paste through two
+real Notepad windows:
+
+```sh
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_typed_scrap_openmsx.sh
 ```
 
 Capture the reproducible pre-GBR baseline under the sibling `1983`

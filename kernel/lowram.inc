@@ -95,6 +95,9 @@ POLL_FLAGS      equ   #1308        ; last poll: flags (bit0 click, bit1 quit, bi
 MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *count
                                    ; #1335..#1337: fs_cur_drive/fs_boot_drive/fls_browse
 KCFG_FRAMEPEN   equ   #133C        ; Edge pen, or Text/Accent when Edge matches Paper
+                ifdef PLATFORM_MSX
+SCRAP_TYPE      equ   #133D        ; GEMBENCH typed-scrap tag; raw GB_CLIPSET clears it
+                endif
 REPAINT_HDLR    equ   #1340        ; retired per-depth repaint handlers (8 bytes).
                                    ; PREEMPTIVE reuses this dead block for scheduler state,
                                    ; so the experimental scheduler consumes no new low RAM.
