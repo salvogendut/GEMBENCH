@@ -36,6 +36,9 @@ The completed foundation currently covers:
 - an opt-in, non-blocking MSX2 event adapter that combines keyboard, pointer,
   timer, and window-manager activity in one caller-owned record, demonstrated
   by Clock;
+- a four-rectangle, allocation-free MSX2 visible-region iterator that lets the
+  Desktop skip opaque covered areas and restores the legacy damage clip on
+  capacity exhaustion;
 - a measured MSX2 auxiliary-resource prototype and resident-renderer fit probe,
   with the smaller embedded/app-linked placement retained for GBR v1;
 - explicitly versioned MSX2 window kinds with kernel-owned furniture, move, resize, and
@@ -97,6 +100,14 @@ Exercise Clock's combined keyboard, pointer, timer, and window subscription:
 ```sh
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   MSX_HEADLESS=1 tools/test_multi_event_openmsx.sh
+```
+
+Exercise bounded Desktop repainting while File Manager and Clock are moved,
+topped, and closed:
+
+```sh
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  tools/test_visible_regions_openmsx.sh
 ```
 
 Capture the reproducible pre-GBR baseline under the sibling `1983`

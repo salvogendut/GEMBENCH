@@ -84,6 +84,21 @@ class bits are rejected atomically, and a timer class requires a non-zero
 period. Legacy callbacks, message values, and registration entry points retain
 their frozen meanings.
 
+### App-linked visible regions
+
+Milestone 12 also leaves GEMBENCH-1 unchanged. `gbregion` is an optional
+application-linked source API over the existing damage clip and window table.
+Its four-rectangle capacity, 40-byte caller-owned state, and C structure layout
+are implementation details, not a cross-version binary exchange format. It
+adds no resource bytes, managed-window tail, message value, kernel jump-table
+slot, resident state, or public low-RAM allocation.
+
+Legacy repaint callbacks retain their one-call behavior. The MSX2 Desktop opts
+in at build time; CPC, PCW, and all other release applications retain the
+original single damage rectangle. Capacity exhaustion or an ambiguous window
+identity deterministically performs one legacy-clipped iteration, so frozen
+window registration and callback meanings do not change.
+
 ## Compatibility rules
 
 For GEMBENCH-1:
@@ -111,6 +126,7 @@ make gembench-msx
 tools/test_formref_openmsx.sh
 tools/test_window_kinds_openmsx.sh
 tools/test_multi_event_openmsx.sh
+tools/test_visible_regions_openmsx.sh
 ```
 
 The resource placement evidence is in

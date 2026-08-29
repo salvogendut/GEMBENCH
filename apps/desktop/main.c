@@ -14,6 +14,9 @@
  * backdrop is a solid colour, so the drag outline erases by redrawing in the
  * backdrop pen - no save-under needed. */
 #include "gb.h"
+#ifdef GB_VISIBLE_REGIONS
+#include "gbregion.h"
+#endif
 #include "gbtitle.h"
 
 #define IC_W    8             /* icon width  (byte cols) = 32 px */
@@ -769,11 +772,9 @@ static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsig
     }
 }
 
-static void paint(void)
+static void paint_region(void)
 {
     unsigned char i;
-    ss_cfg_init();                             /* #219: re-read SAVER=/SAVERTIME= - a Settings change
-                                                  applies live (this fires when Settings closes) */
     wp_backdrop(0, 8, GB_COLS, GB_LINES - 8);                /* backdrop: wallpaper if loaded, else tile/solid (#128) */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
@@ -785,6 +786,30 @@ static void paint(void)
        blue hole. The repaint bracket now draws the pointer once, LAST. Standalone
        callers (System menu, boot) gb_curshow themselves. */
 }
+
+static void paint(void)
+{
+    ss_cfg_init();                             /* #219: re-read SAVER=/SAVERTIME= - a Settings change
+                                                  applies live (this fires when Settings closes) */
+    paint_region();
+}
+
+/* Milestone 12: only the MSX2 Desktop opts into bounded visible-region
+   iteration. Other applications and the portable desktops retain one callback
+   per compositor pass, which is important for renderers that stream data or
+   have expensive per-draw setup. */
+#ifdef GB_VISIBLE_REGIONS
+static gb_visible_state_t desktop_regions;
+static void paint_visible(void)
+{
+    ss_cfg_init();
+    if (!gb_visible_begin(&desktop_regions)) return;
+    do paint_region(); while (gb_visible_next(&desktop_regions));
+}
+#define DESKTOP_REPAINT paint_visible
+#else
+#define DESKTOP_REPAINT paint
+#endif
 
 /* select_icon: move the red selection frame to icon (NONE clears it), erasing the
    previous one in place so we never leave a stray frame behind (#153). */
@@ -1266,7 +1291,7 @@ static void on_frame(void)
    full paint() (restacked behind any window), on_event = file-drop + the System menu.
    menu = 0: the gb_doc framework installs the "System" title dynamically (#142). Its
    rect spans the screen so it is the bottom catch-all for click-to-focus. */
-static const gb_win_t deskwin = { 0, 8, GB_COLS, GB_LINES - 8, on_frame, paint, on_event, 0 };
+static const gb_win_t deskwin = { 0, 8, GB_COLS, GB_LINES - 8, on_frame, DESKTOP_REPAINT, on_event, 0 };
 
 void main(void)
 {

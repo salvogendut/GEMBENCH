@@ -1,6 +1,6 @@
 # GEMBENCH implementation plan
 
-Status: **Milestones 1-11 complete; GEMBENCH-1 frozen on 2026-08-29**.
+Status: **Milestones 1-12 complete; GEMBENCH-1 frozen on 2026-08-29**.
 
 This plan turns the goals in `DESIGN-ESTIMATE.md` into staged implementation
 work. The first proof of concept is expected to take approximately six to nine
@@ -49,6 +49,7 @@ baseline is recorded.
 | 9. Resource forms (complete 2026-08-29; [#15](https://github.com/salvogendut/GEMBENCH/issues/15)) | Add checkbox/radio rendering, common form behavior, and a production resource panel | 1-2 weeks | FormRef exercises shared semantics and Calculator draws/routes its MSX2 panel from GBR |
 | 10. Resource menus (complete 2026-08-29; [#17](https://github.com/salvogendut/GEMBENCH/issues/17)) | Generate menu labels, actions, state, and shortcuts from GBR source metadata | 1 week | File Manager's MSX2 View popup is resource-driven; pointer and keyboard traces pass without changing GBR1 |
 | 11. Multi-event subscriptions (complete 2026-08-29; [#19](https://github.com/salvogendut/GEMBENCH/issues/19)) | Add bounded, opt-in keyboard, pointer, timer, and WM aggregation | 1 week | Clock consumes combined event records; host and openMSX interaction traces pass without changing GEMBENCH-1 |
+| 12. Visible-region repainting (complete 2026-08-29; [#21](https://github.com/salvogendut/GEMBENCH/issues/21)) | Subtract opaque higher windows with a fixed-capacity, app-linked iterator | 1 week | Desktop redraws less covered area; deterministic fallback, host geometry, openMSX overlap, and portable builds pass without changing GEMBENCH-1 |
 
 ## Bootstrap work package
 
@@ -158,3 +159,13 @@ The current SDCC output uses at most 31 additional stack bytes below
 `gb_event_collect()` entry while sampling the leaf input accessors. Screen 6/7
 kernels remain 10,682/12,260 bytes. CPC and PCW build the unchanged legacy Clock
 event path and do not link the adapter.
+Milestone 12 similarly stays outside the resident kernel and frozen ABI. The
+MSX2 Desktop owns a 40-byte, four-rectangle iterator, subtracts higher opaque
+windows from its active damage rectangle, and atomically restores the original
+single clip if capacity or window identity is ambiguous. The helper compiles to
+1,581 bytes with no static data. In the reference move, 3,472 of 12,320 damaged
+byte-column/line cells remained visible, so 8,848 cells (71.8%) were skipped.
+openMSX observed a 70-byte maximum stack delta below `gb_visible_begin()`, a
+4.973 ms calculation, clean move/top/close captures, and a final one-window
+Desktop. Screen 6/7 kernels remain 10,682/12,260 bytes; CPC and PCW retain the
+legacy Desktop callback.

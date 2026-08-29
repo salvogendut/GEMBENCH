@@ -350,3 +350,44 @@ python3 debug/gembench_baseline_1983.py --frames 6001
 make cpc
 make pcw
 ```
+
+## Milestone 12 visible-region repainting
+
+Milestone 12 was validated on 2026-08-29 with openMSX 21.0 and a disposable
+Nextor image containing `CLOCK.APP` as root-level `A.APP`. The real pointer path
+opens File Manager, moves it, launches Clock, tops File Manager, and closes both
+windows. Captures are delayed until the Desktop repaint returns and the V9938
+command engine plus File Manager icon probes have drained. The moved, overlapped,
+topped, File-Manager-closed, and final Desktop frames contain no holes or stale
+pixels; the window count returns to one.
+
+The four-rectangle helper compiles to 1,581 Z80 code bytes with no static or
+resident data. Desktop owns 40 bytes of iterator state and is 14,517 bytes,
+versus 12,909 before migration. Its loaded image ends at `0x78B5`, data/BSS at
+`0x7A65`, and the preemptive stack snapshot remains reserved at
+`0x7F00-0x7FFF`, leaving 1,179 bytes before that reserve. Screen 6/7 kernels
+remain 10,682/12,260 bytes. CPC and PCW do not link the helper.
+
+The reference move damaged `(4,8,70,176)`: 12,320 byte-column/line cells. Two
+visible rectangles totalled 3,472 cells, skipping 8,848 covered cells (71.8%).
+The complete trace contained two optimized passes, one fully covered no-draw
+pass, and no capacity fallback. `gb_visible_begin()` peaked at 4.973 ms and 70
+stack bytes below entry; the longest Desktop clipped-paint pass in the workflow
+was 488.018 ms. Host tests separately force the deterministic four-piece and
+capacity-exhausted fallback cases.
+
+The complementary 1983 run reached frame 6,002 at PC `0x247A`, SP `0xD8EA`,
+with VDP R0/R1 `0x0A`/`0x62`, 25 free mapper segments at entry, and one idle
+busy application page. Complete MSX2, CPC card/disk, and PCW disk builds passed;
+the portable targets retain their legacy repaint callback.
+
+```sh
+make gbregion-check
+make check
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  tools/test_visible_regions_openmsx.sh
+python3 debug/gembench_baseline_1983.py --frames 6001
+make cpc
+make pcw
+```
