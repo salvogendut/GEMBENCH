@@ -83,6 +83,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   510-byte resident clipboard. `GB_SCRAP_TEXT_ONLY=1` selects the 100-byte
   set/type adapter for clients that keep using raw length/get after checking
   text or legacy-untyped input; it requires `GB_SCRAP=1`.
+  `GB_SHELL_TARGET=1` links MSX2 service registration; `GB_SHELL_CLIENT=1`
+  links discovery, synchronous delivery, and the combined request helper. Both
+  profiles require `APPDEFS=-DGB_MSX2` and add no application-side queue.
   `SOUND=1` links the target-specific PSG/beeper primitives into that app only;
   it does not add a resident kernel service.
   `REPAINTTOP=1` links the three-byte `gb_repaint_top()` binding for an opaque
@@ -110,6 +113,12 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   a disposable network-free Nextor image, copies typed text through the real
   Edit menu, proves bitmap mismatch is atomic, and then accepts the text paste.
   It does not require the optional openMSXnet `unapinet` extension.
+- **`test_shell_service_openmsx.sh`** — opens two disposable text documents
+  through the real File Manager path and proves the second request raises and
+  reuses the original Notepad. It asserts registration/discovery/send counts,
+  document and 8.3-name replacement, stable window count, cleared dispatch
+  guard, caller-bank recovery, and target-entry stack delta without requiring
+  the optional openMSXnet extension.
 - **`gbrc.py` / `gbrverify.py`** — compile deterministic GBR v1 resources and
   strictly verify binary resources. `gbrc.py --c-header` can also emit a C blob,
   section/count constants, and source-only object IDs for embedded resources;

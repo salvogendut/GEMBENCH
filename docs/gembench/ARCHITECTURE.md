@@ -134,11 +134,45 @@ length/get calls after accepting text or legacy untyped data. Notepad is the
 first migration and deliberately accepts raw text from older applications.
 
 A mapper-backed scrap page is not yet justified. The existing segment allocator
-is coupled to live application windows, and there is no ownership-neutral
-desktop service that can retain and release a payload safely after its producer
-closes. Holding a segment today would reduce the number of concurrent windows
-for capacity that common text transfers do not need. Persistent disk scrap,
-shell integration, and desk-accessory routing are separate future milestones.
+is coupled to live application windows, and the shell service does not retain
+payloads or own mapper pages. Holding a segment today would reduce the number of
+concurrent windows for capacity that common text transfers do not need.
+Persistent disk scrap and desk-accessory routing remain separate future work.
+
+## Shell services
+
+Milestone 14 adds a bounded MSX2-only coordination layer over the existing live
+window table. It is deliberately not a process manager. A window may advertise
+one of seven coarse service classes in private flag bits 5-7 after completing
+normal WM registration. Discovery scans the fixed eight-slot z-order from top
+to bottom and returns an opaque slot-plus-one handle. Handles are short-lived
+and callers should normally use `gb_shell_request()`, which discovers and sends
+within one callback turn.
+
+Delivery is synchronous, queue-free, and non-reentrant. The kernel validates the
+handle, request, live flag, service registration, and callback before changing
+focus. An open request first copies its required fixed 11-byte 8.3 argument into
+the existing synchronous drag-name scratch. The kernel then sets one private
+low-RAM guard byte, raises and maps the target, sends `GB_MSG_SHELL` through its
+ordinary window procedure, restores the caller's mapper bank, clears the guard,
+and repaints. The target writes an explicit result in `gb_msg.p1`; nested sends
+return busy without mutating focus or arguments. No resident queue, allocator,
+payload buffer, mapper segment, or polling loop is introduced.
+
+The standard requests are open, activate, close, and quit. Notepad registers the
+text-editor class. It accepts a replacement document only when bounded storage
+I/O is idle and the current document is clean; busy or dirty state rejects the
+request before changing the name or contents. Accepted open starts the same
+512-byte-per-frame loader used at startup. Close and quit reuse the existing
+save-confirmation path. File Manager treats provider absence as the legacy
+launch path and treats a live provider's busy/rejected response as an atomic
+activation rather than creating a duplicate editor.
+
+The implementation appends `GB_MSG_SHELL` after the frozen window messages and
+adds the MSX-only `GB_SHELL` jump at `0x80C0`. It does not alter GBR1 bytes, the
+legacy 12-byte window descriptor, the explicit 13-byte kind descriptor, or any
+existing jump address. CPC and PCW neither export nor link the service and retain
+their existing launch behavior.
 
 ## Integration boundary
 

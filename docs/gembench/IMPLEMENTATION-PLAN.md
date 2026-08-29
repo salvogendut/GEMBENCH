@@ -1,6 +1,6 @@
 # GEMBENCH implementation plan
 
-Status: **Milestones 1-13 complete; GEMBENCH-1 frozen on 2026-08-29**.
+Status: **Milestones 1-14 complete; GEMBENCH-1 frozen on 2026-08-29**.
 
 This plan turns the goals in `DESIGN-ESTIMATE.md` into staged implementation
 work. The first proof of concept is expected to take approximately six to nine
@@ -51,6 +51,7 @@ baseline is recorded.
 | 11. Multi-event subscriptions (complete 2026-08-29; [#19](https://github.com/salvogendut/GEMBENCH/issues/19)) | Add bounded, opt-in keyboard, pointer, timer, and WM aggregation | 1 week | Clock consumes combined event records; host and openMSX interaction traces pass without changing GEMBENCH-1 |
 | 12. Visible-region repainting (complete 2026-08-29; [#21](https://github.com/salvogendut/GEMBENCH/issues/21)) | Subtract opaque higher windows with a fixed-capacity, app-linked iterator | 1 week | Desktop redraws less covered area; deterministic fallback, host geometry, openMSX overlap, and portable builds pass without changing GEMBENCH-1 |
 | 13. Typed clipboard/scrap foundation (complete 2026-08-29; [#23](https://github.com/salvogendut/GEMBENCH/issues/23)) | Add bounded text, bitmap, icon, and file-list identities over the existing shared clipboard | 1 week | Typed and raw callers interoperate; mismatch/truncation tests, two-window openMSX interaction, and portable builds pass without reducing the 510-byte raw payload |
+| 14. Shell services and application messaging (complete 2026-08-29; [#25](https://github.com/salvogendut/GEMBENCH/issues/25)) | Add live service discovery and synchronous open, activate, close, and quit requests | 1 week | File Manager safely reuses and activates a live Notepad, preserves launch fallback, and host/openMSX plus portable builds pass without changing GEMBENCH-1 |
 
 ## Bootstrap work package
 
@@ -182,3 +183,21 @@ Notepads and proves typed copy, atomic bitmap rejection, and typed text paste.
 Mapper-backed payloads remain deferred: the current mapper allocator is tied to
 application-window ownership, so retaining a scrap page would consume a scarce
 live-window segment without a lifecycle-neutral owner or release contract.
+Milestone 14 adds the first bounded desktop service without a process table or
+queue. A live MSX2 window advertises one coarse class in three previously unused
+private window-flag bits; top-to-bottom discovery returns a short-lived opaque
+handle, and one guarded synchronous dispatch raises/maps the target, calls its
+existing window procedure, restores the caller bank, and repaints. Open,
+activate, close, and quit have explicit result values; an editor that is busy or
+dirty rejects replacement atomically. File Manager now asks a live text editor
+before checking the mapper-page limit, while absence retains the existing
+Notepad launch path. The release Screen 6/7 kernels grow by 256 bytes to
+10,938/12,516 bytes and use one private MSX low-RAM guard byte. File Manager is
+14,506 bytes; its request helper and client binding are 27 and 16 bytes.
+Notepad's registration binding is five bytes, and the app remains a full 4 KiB
+editor at 12,070 bytes after applying its existing size optimisation to helper
+units. The openMSX trace observed a
+four-byte stack delta from `GB_SHELL` entry to the Notepad procedure, one
+delivery, unchanged window count, caller-bank recovery, and the requested
+second document. The extension is MSX2-only and append-only: GBR1, the 12/13-byte
+window descriptors, all old jump addresses, and CPC/PCW behavior remain intact.

@@ -20,6 +20,9 @@
 #ifdef GB_TYPED_SCRAP
 #include "gbscrap.h"
 #endif
+#ifdef GB_SHELL_SERVICES
+#include "gbshell.h"
+#endif
 
 #define NP_MAX    4096           /* editable text capacity - restored to 4096 (#142): the
                                     shared clipboard (gb_clip_*) replaced the local clip[512],
@@ -878,6 +881,9 @@ static void n_proc(void)
         case GB_MSG_DRAG:  n_drag();  break;
         case GB_MSG_MENU:
         case GB_MSG_DROP:  on_menu(); break;
+#ifdef GB_SHELL_SERVICES
+        case GB_MSG_SHELL: on_menu(); break;
+#endif
     }
 }
 
@@ -891,6 +897,9 @@ void main(void)
 
     caret_vis = 1; blink_ctr = 0; arr_prev = 0; arr_rep = 0;
     gb_wm_managed(&npmw);                        /* register FIRST (no draw): captures our arg */
+#ifdef GB_SHELL_SERVICES
+    (void)gb_shell_register(GB_SHELL_CLASS_TEXT_EDITOR);
+#endif
     gb_doc(&npdoc);                              /* standard File + Edit menus; adopts the name */
 #ifdef GBDOC_BOUNDED_IO
     len = 0; cur = 0; view_first = 0;

@@ -132,3 +132,6 @@ GB_ONEVENT_ENTRY equ k_noop
                 jp    k_backdrop             ; GB_BACKDROP    #80B7 fill a rect with the desktop backdrop (#128)
                 jp    k_reload               ; GB_RELOAD      #80BA re-apply font/icons/cursor/backdrop (#185)
                 jp    k_net                  ; GB_NET         #80BD run active paged net module -> BC=GBNET_RES (#238/#259)
+                ifdef PLATFORM_MSX
+                jp    k_shell                ; GB_SHELL       #80C0 bounded GEMBENCH shell service
+                endif

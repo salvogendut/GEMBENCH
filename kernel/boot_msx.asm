@@ -14,6 +14,7 @@ kernel_main
                 ld    (CLIP_LEN),hl
                 xor   a                       ; UI_MODAL boots as TPA garbage under DOS
                 ld    (SCRAP_TYPE),a          ; raw/empty until a typed scrap writer publishes
+                ld    (SHELL_BUSY),a          ; no shell callback is active at boot
                 ld    (UI_MODAL),a           ; (menu_dispatch would swallow EVERY top-bar
                                               ; click as "a dialog is up", #287)
                 call  msx_video_init         ; 212 lines, 16x16 sprites, parked pointer
