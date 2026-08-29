@@ -50,13 +50,41 @@ mapper transport remains opt-in for future large-resource experiments; see
 
 ## Resource ownership
 
-`.GBR` is the native, build-time resource format. Version 1 starts with strings
-and object trees. Menus, icons, images, shortcuts, and theme metadata will be
-added only when their target runtime contracts are ready.
+`.GBR` is the native, build-time resource format. Version 1 contains strings
+and object trees. Menu behavior remains generated application metadata;
+Milestone 16 implements the already reserved ICON and IMAGE object identities
+through explicit application bindings rather than adding payload records.
 
 The host compiler owns source validation and emits direct, bounded target data.
 The Z80 runtime must not parse JSON, historical GEM `.RSC` files, host pointers,
 or unconstrained dynamic structures.
+
+## VDI-lite graphics
+
+Milestone 16 adds a small application-linked graphics-device boundary without
+moving drawing policy into the resident kernel. Horizontal coordinates are the
+existing four-pixel VDP cells; vertical coordinates are lines. A caller-owned
+eight-byte context contains one rectangular clip and four semantic pen roles:
+canvas, surface, edge, and accent. The full profile validates and remaps those
+roles, clips fills, rejects partially clipped frames, renders packed four-bit
+cell rasters in coalesced runs, and aligns bounded text. Values 4-15 may be used
+as direct Screen 7 pens while roles 0-3 preserve the black/white/grey/red base.
+
+The compact base profile retains the same context layout but links only
+initialization, clipped fill, and atomic frame calls. Its role values map
+directly to the four base pens, so the otherwise unused `pens` bytes are not
+initialized. Settings uses this profile because its application bank is tight.
+Neither profile owns static state, VRAM, a mapper page, a queue, or a kernel
+jump.
+
+GBR graphics are explicit and bank-safe. An ICON or IMAGE object's frozen
+`spec` selects one entry in a caller-owned binding table. That entry points to a
+bounded raster descriptor and packed data whose lifetime the application must
+maintain for every draw. Binding validates dimensions and rejects missing,
+duplicate, unreferenced, truncated, or mismatched entries before publishing the
+table. Drawing preflights every graphic in the tree before the first object is
+painted, so a bad graphic cannot leave a partial tree. No host pointer, target
+pointer, pixel payload, palette, or mapping lifetime is encoded in GBR1.
 
 ## Runtime invariants
 

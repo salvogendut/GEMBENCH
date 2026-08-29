@@ -2,6 +2,9 @@
 #define GEMBENCH_GBR_OBJECT_H
 
 #include "gbr.h"
+#ifdef GBR_GRAPHICS_RUNTIME
+#include "gbvdi.h"
+#endif
 
 #define GBR_RT_OK                  0u
 #define GBR_RT_ERR_ARGUMENT        1u
@@ -10,6 +13,7 @@
 #define GBR_RT_ERR_OBJECT          4u
 #define GBR_RT_ERR_COORDINATE      5u
 #define GBR_RT_ERR_UNSUPPORTED     6u
+#define GBR_RT_ERR_GRAPHIC         7u
 
 #define GBR_HIT_NONE             255u
 #define GBR_TEXT_OVERRIDE_MAX     31u
@@ -50,6 +54,16 @@ typedef struct gbr_text_binding {
     const char *text;
 } gbr_text_binding_t;
 
+#ifdef GBR_GRAPHICS_RUNTIME
+/* ICON and IMAGE keep their frozen 16-bit `spec` as an application-owned
+ * identity.  A binding resolves that identity to bounded packed raster data;
+ * no pointer or payload is stored in GBR1. */
+typedef struct gbr_graphic_binding {
+    unsigned int spec;
+    const gb_vdi_raster_t *raster;
+} gbr_graphic_binding_t;
+#endif
+
 /* Mutable object state lives outside the immutable resource. The caller owns
  * one unsigned-int slot per resource object, which is normally application RAM
  * while a larger GBR payload may reside in a temporarily mapped segment. */
@@ -60,6 +74,11 @@ typedef struct gbr_runtime {
     unsigned char state_count;
     const gbr_text_binding_t *text_bindings;
     unsigned char text_binding_count;
+#ifdef GBR_GRAPHICS_RUNTIME
+    const gb_vdi_context_t *graphics_context;
+    const gbr_graphic_binding_t *graphic_bindings;
+    unsigned char graphic_binding_count;
+#endif
 } gbr_runtime_t;
 
 unsigned char gbr_runtime_init(gbr_runtime_t *runtime,
@@ -74,6 +93,12 @@ unsigned char gbr_object_rect(const gbr_runtime_t *runtime,
 unsigned char gbr_bind_text(gbr_runtime_t *runtime,
                             const gbr_text_binding_t *bindings,
                             unsigned char binding_count);
+#ifdef GBR_GRAPHICS_RUNTIME
+unsigned char gbr_bind_graphics(gbr_runtime_t *runtime,
+                                const gb_vdi_context_t *context,
+                                const gbr_graphic_binding_t *bindings,
+                                unsigned char binding_count);
+#endif
 unsigned char gbr_draw_tree(const gbr_runtime_t *runtime,
                             unsigned int root_x, unsigned int root_y);
 unsigned char gbr_hit_test(const gbr_runtime_t *runtime,

@@ -45,7 +45,9 @@ is generated C metadata, not a second disk resource format or a GBR1 ABI change.
 The object types are `box`, `text`, `string`, `button`, `field`, `icon`, `image`,
 `checkbox`, `radio`, and `user`. Their numeric identities are frozen. The
 GEMBENCH-1 renderer implements box, text, string, button, field, checkbox, and
-radio. Icon, image, and user remain format-only reservations; a visible instance
+radio. The opt-in Milestone-16 graphics profile also implements icon and image
+by resolving their bounded `spec` through an explicit caller-owned raster
+binding. User remains a format-only reservation; a visible unsupported object
 is rejected before any partial tree draw.
 
 Checkbox and radio behavior is an additive runtime implementation of the
@@ -164,14 +166,22 @@ the field at offset 8 as a string index. The compiler rejects a raw `spec` on
 those types, and readers reject a non-`65535` index outside the string table.
 Other object types may use the field as a bounded type-specific value.
 
+For the opt-in graphics runtime, ICON and IMAGE interpret that already bounded
+value as an application binding identity. The binding table, raster descriptor,
+packed pixels, palette mapping, and storage lifetime are not GBR1 records. The
+runtime validates the complete table and every graphic's dimensions and screen
+placement before painting any object. A reader or renderer that does not opt in
+continues to reject visible ICON and IMAGE objects as unsupported.
+
 ## Deliberate omissions
 
 Version 1 does not encode icon or raster payloads, editable-field templates,
 keyboard shortcuts, palette roles, user-object callbacks, or menu-specific
 metadata in its binary records. Milestone 10's source-only shortcut and generated
-menu descriptor deliberately assign no binary field. Any future on-disk form of
-that metadata still needs a new target runtime design and version boundary.
+menu descriptor and Milestone 16's application-owned graphics bindings
+deliberately add no binary field. Any future on-disk form of that metadata still
+needs a new target runtime design and version boundary.
 
-The existing numeric identities for those format-only object types are
-reserved, not permission to silently assign a new record interpretation. Any
-incompatible payload or layout requires a new resource version.
+The remaining reserved identities are not permission to silently assign a new
+record interpretation. Any incompatible payload or layout requires a new
+resource version.

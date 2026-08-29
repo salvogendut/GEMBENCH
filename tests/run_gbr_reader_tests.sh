@@ -19,6 +19,13 @@ trap 'rm -rf "$test_tmp"' EXIT
     -o "$test_tmp/test_gbr_object"
 "$test_tmp/test_gbr_object"
 
+"$CC" -Wall -Wextra -Werror -std=c99 -DGB_MSX2 \
+    -DGBR_GRAPHICS_RUNTIME -I include/gembench -I lib/gb \
+    tests/test_gbr_graphics.c lib/gembench/gbr_reader.c \
+    lib/gembench/gbr_object.c lib/gembench/gbvdi.c \
+    lib/gembench/gbvdi_raster.c -o "$test_tmp/test_gbr_graphics"
+"$test_tmp/test_gbr_graphics"
+
 "$CC" -Wall -Wextra -Werror -std=c99 -DGBR_MENU_HOST_TEST \
     -I include/gembench -I apps/filemgr \
     tests/test_gbr_menu.c lib/gembench/gbr_menu.c \
@@ -94,6 +101,20 @@ if (( object_bytes > 4096 )); then
     exit 1
 fi
 echo "ok   GBR object runtime compiles for Z80 with SDCC ($object_bytes bytes, no static data)"
+
+"$SDCC" -mz80 --opt-code-size -DGB_MSX2 -DGBR_GRAPHICS_RUNTIME \
+    -I include/gembench -I lib/gb \
+    -c lib/gembench/gbr_object.c -o "$test_tmp/gbr_graphics.rel"
+test -s "$test_tmp/gbr_graphics.rel"
+graphics_hex="$(awk '$1 == "A" && $2 == "_CODE" { print $4; exit }' \
+    "$test_tmp/gbr_graphics.rel")"
+test -n "$graphics_hex"
+graphics_bytes=$((16#$graphics_hex))
+if (( graphics_bytes > 6144 )); then
+    echo "FAIL GBR graphics runtime is $graphics_bytes bytes (6144-byte budget)" >&2
+    exit 1
+fi
+echo "ok   GBR graphics runtime compiles for Z80 with SDCC ($graphics_bytes bytes, caller-owned state)"
 
 "$SDCC" -mz80 --opt-code-size -DGB_MSX2 -DGBR_FORM_RUNTIME \
     -I include/gembench -I lib/gb \

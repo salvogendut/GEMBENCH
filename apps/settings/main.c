@@ -35,6 +35,9 @@
 #include "gbcfg.h"
 #include "gbsavercfg.h"
 #include "gbtitle.h"
+#ifdef GB_MSX2
+#include "gbvdi.h"
+#endif
 
 #define TITLE_H   14
 #define DEF_X     18
@@ -89,6 +92,9 @@
 static unsigned char win_x, win_y, win_w, win_h;
 static unsigned char titlebar_repaint;
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
+#if defined(GB_PREEMPTIVE) && !defined(GB_PCW)
+static void colp_draw(void);   /* a compositor repaint must preserve the active editor */
+#endif
 static void draw_selector(unsigned char row, const char *value);
 static void saver_value(char *dst);       /* forward: s_draw shows the current SAVERTIME= (#219) */
 static void ss_module_value(char *dst);   /* forward: s_draw shows the current SAVER= module (#219) */
@@ -149,6 +155,7 @@ static unsigned char stem_drive[MAXST];       /* source drive for each media ent
 
 #ifdef GB_PREEMPTIVE
 #define PICK_IDLE       0
+#define PICK_COLOURS    1
 #define PICK_BACK       2
 #define PICK_FIND_FIRST 3
 #define PICK_FIND_NEXT  4
@@ -684,6 +691,12 @@ static void s_draw(void)
     unsigned char r;
     char val[16];
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
+#if defined(GB_PREEMPTIVE) && !defined(GB_PCW)
+    if (picker_state == PICK_COLOURS) {
+        colp_draw();
+        return;
+    }
+#endif
     gb_fill(win_x, (unsigned char)(win_y + TITLE_H), win_w,
             (unsigned char)(win_h - TITLE_H), 1);          /* white panel */
     for (r = 0; r < NROWS; r++) {
@@ -894,32 +907,105 @@ static void colp_stepper(unsigned char i)    /* draw pen i's ink number (00-26) 
 /* colp_swatch: a small colour sample for pens 0-3 (#216). The hardware border is
    not a drawable bitmap pen, so its row uses a marked swatch; the real screen
    border remains its exact live preview. */
-static void colp_swatch(unsigned char i)
+static void colp_swatch(unsigned char i
+#ifdef GB_MSX2
+                        , const gb_vdi_context_t *graphics
+#endif
+                       )
 {
     unsigned char x = (unsigned char)(win_x + 21), y = colp_y(i);
+#ifdef GB_MSX2
+    gb_vdi_fill(graphics, x, y, 3, 8, i);
+    gb_vdi_frame(graphics, x, y, 3, 8, GB_VDI_ROLE_EDGE);
+#else
     if (i < 4) gb_fill(x, y, 3, 8, i);
     else {
         gb_fill(x, y, 3, 8, 1);
         gb_textbw((unsigned char)(x + 1), y, "/");
     }
     gb_frame(x, y, 3, 8, 2);
+#endif
 }
 
 static void colp_draw(void)
 {
     unsigned char i, by = (unsigned char)(win_y + win_h - 11);
+#ifdef GB_MSX2
+    gb_vdi_context_t graphics;
+    gb_vdi_init(&graphics, win_x, (unsigned char)(win_y + TITLE_H), win_w,
+                (unsigned char)(win_h - TITLE_H));
+    gb_vdi_fill(&graphics, win_x, (unsigned char)(win_y + TITLE_H), win_w,
+                (unsigned char)(win_h - TITLE_H), GB_VDI_ROLE_SURFACE);
+#else
     gb_fill(win_x, (unsigned char)(win_y + TITLE_H), win_w,
             (unsigned char)(win_h - TITLE_H), 1);
+#endif
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + TITLE_H + 1), "Desktop colours");
     for (i = 0; i < NEDITPEN; i++) {
         gb_textbw((unsigned char)(win_x + 1),  colp_y(i), pen_lbl[i]);
         colp_stepper(i);
-        colp_swatch(i);                          /* #216: live colour sample (pens 0-3) */
+        colp_swatch(i
+#ifdef GB_MSX2
+                    , &graphics
+#endif
+                   );                           /* #216: live colour sample (pens 0-3) */
     }
     gb_textbw((unsigned char)(win_x + 1), by, "Save");
     gb_textbw((unsigned char)(win_x + 8), by, "Cancel");
 }
 
+#ifdef GB_PREEMPTIVE
+/* A managed callback must return to the scheduler.  Keep the colour editor as
+ * window state instead of nesting its own gb_poll loop; picker_state=1 was
+ * deliberately unused by the asynchronous file picker. */
+static void colours_finish(unsigned char save)
+{
+    unsigned char i;
+    if (save) cfg_set_inks(ink_cur);
+    else {
+        for (i = 0; i < NEDITPEN; i++) apply_colour(i, ink_orig[i]);
+    }
+    picker_state = PICK_IDLE;
+    titlebar_repaint = 1;
+}
+
+static void colours_begin(void)
+{
+    unsigned char i;
+    cfg_get_inks(ink_cur);
+    for (i = 0; i < NPEN; i++) ink_orig[i] = ink_cur[i];
+    picker_state = PICK_COLOURS;
+    titlebar_repaint = 1;
+}
+
+static void colours_click(void)
+{
+    unsigned char i;
+    unsigned char mx = gb_mx(), my = gb_my();
+    unsigned char by = (unsigned char)(win_y + win_h - 11);
+    if (my >= by && my < by + 8) {
+        if (mx >= win_x + 1 && mx < win_x + 7) colours_finish(1);
+        else if (mx >= win_x + 8 && mx < win_x + 18) colours_finish(0);
+        return;
+    }
+    for (i = 0; i < NEDITPEN; i++) {
+        unsigned char ry = colp_y(i);
+        unsigned char part = gb_stepper_hit(
+            (unsigned char)(win_x + 10), (unsigned char)(ry - 1),
+            10, STEP_H, mx, my);
+        if (part == GB_STEPPER_DEC)
+            ink_cur[i] = (unsigned char)((ink_cur[i] == 0) ?
+                                         26 : ink_cur[i] - 1);
+        else if (part == GB_STEPPER_INC)
+            ink_cur[i] = (unsigned char)((ink_cur[i] >= 26) ?
+                                         0 : ink_cur[i] + 1);
+        else continue;
+        apply_colour(i, ink_cur[i]);
+        gb_curhide(); colp_stepper(i); gb_curshow();
+        return;
+    }
+}
+#else
 /* colours_dialog: modal 4-pen editor. Each -/+ steps a pen's CPC ink (0-26, wrapping)
    and applies it live. Save writes INKS= and keeps the live palette (so it also takes
    effect at once); Cancel / ESC restore the inks the dialog opened with. */
@@ -973,6 +1059,7 @@ static void colours_dialog(void)
     gb_modal_set(0);
     gb_restore_parent();       /* palette roles changed: redraw every managed frame */
 }
+#endif
 #endif
 
 /* ---- screensaver: module (SAVER=) + idle timeout (SAVERTIME=, #219) ---------- */
@@ -1405,6 +1492,9 @@ static void s_click(void)
 {
     unsigned char mx, my, r;
 #ifdef GB_PREEMPTIVE
+#ifndef GB_PCW
+    if (picker_state == PICK_COLOURS) { colours_click(); return; }
+#endif
     if (picker_state != PICK_IDLE) return;
 #endif
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
@@ -1419,7 +1509,11 @@ static void s_click(void)
     {
         unsigned char ry = row_y(COLOUR_ROW);
         if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
+#ifdef GB_PREEMPTIVE
+            colours_begin();
+#else
             colours_dialog();
+#endif
             return;
         }
     }
@@ -1482,7 +1576,7 @@ static void s_drag(void)
 static void s_frame(void)
 {
 #ifdef GB_PREEMPTIVE
-    if (picker_state != PICK_IDLE) {
+    if (picker_state != PICK_IDLE && picker_state != PICK_COLOURS) {
         picker_step();
         return;
     }
@@ -1498,6 +1592,12 @@ static void s_frame(void)
 static void s_close(void)
 {
 #ifdef GB_PREEMPTIVE
+#ifndef GB_PCW
+    if (picker_state == PICK_COLOURS) {
+        colours_finish(0);
+        return;
+    }
+#endif
     picker_cancel();
 #endif
     gb_wm_close();

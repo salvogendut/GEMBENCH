@@ -57,6 +57,37 @@ static unsigned char object_blocked(const gbr_runtime_t *runtime,
     return 1;
 }
 
+#ifdef GBR_GRAPHICS_RUNTIME
+static unsigned char graphic_type(unsigned char type)
+{
+    return (unsigned char)(type == GBR_TYPE_ICON || type == GBR_TYPE_IMAGE);
+}
+
+static const gbr_graphic_binding_t *graphic_binding(
+    const gbr_runtime_t *runtime, unsigned int spec)
+{
+    unsigned char index;
+    for (index = 0; index < runtime->graphic_binding_count; index++)
+        if (runtime->graphic_bindings[index].spec == spec)
+            return &runtime->graphic_bindings[index];
+    return 0;
+}
+
+static unsigned char graphic_ready(const gbr_runtime_t *runtime,
+                                   const gbr_object_t *object)
+{
+    const gbr_graphic_binding_t *binding;
+    if (runtime->graphics_context == 0 ||
+        !gb_vdi_valid(runtime->graphics_context))
+        return 0;
+    binding = graphic_binding(runtime, object->spec);
+    return (unsigned char)(binding != 0 &&
+        gb_vdi_raster_valid(binding->raster) &&
+        object->w == (unsigned int)binding->raster->width_cells * 4u &&
+        object->h == binding->raster->height);
+}
+#endif
+
 #ifdef GBR_FORM_RUNTIME
 #ifndef GBR_RENDERER_ONLY
 static unsigned char text_type(unsigned char type)
@@ -294,6 +325,29 @@ static unsigned char draw_object(const gbr_runtime_t *runtime,
                 flags |= GB_WIDGET_FOCUSED;
             gb_button(x, y, w, h, label, flags);
             return GBR_RT_OK;
+#ifdef GBR_GRAPHICS_RUNTIME
+        case GBR_TYPE_ICON:
+        case GBR_TYPE_IMAGE:
+        {
+            const gbr_graphic_binding_t *binding =
+                graphic_binding(runtime, object.spec);
+            if (binding == 0 || (rect.x & 3u) != 0 ||
+                rect.x >= GB_XPIX || rect.y >= GB_LINES ||
+                !gb_vdi_raster(runtime->graphics_context,
+                               (unsigned char)(rect.x >> 2),
+                               (unsigned char)rect.y, binding->raster))
+                return GBR_RT_ERR_GRAPHIC;
+            if (object.type == GBR_TYPE_ICON &&
+                (state & (GBR_STATE_SELECTED | GBR_STATE_OUTLINED)) &&
+                !gb_vdi_frame(runtime->graphics_context,
+                              (unsigned char)(rect.x >> 2),
+                              (unsigned char)rect.y,
+                              (unsigned char)(rect.w >> 2),
+                              (unsigned char)rect.h, GB_VDI_ROLE_ACCENT))
+                return GBR_RT_ERR_GRAPHIC;
+            return GBR_RT_OK;
+        }
+#endif
 #ifdef GBR_FORM_RUNTIME
         case GBR_TYPE_FIELD:
             if (!screen_rect(&rect, &x, &y, &w, &h)) return GBR_RT_OK;
@@ -344,12 +398,74 @@ unsigned char gbr_runtime_init(gbr_runtime_t *runtime,
     runtime->state_count = state_count;
     runtime->text_bindings = 0;
     runtime->text_binding_count = 0;
+#ifdef GBR_GRAPHICS_RUNTIME
+    runtime->graphics_context = 0;
+    runtime->graphic_bindings = 0;
+    runtime->graphic_binding_count = 0;
+#endif
     for (index = 0; index < resource->object_count; index++) {
         if (!gbr_object_at(resource, (unsigned char)index, &object))
             return GBR_RT_ERR_OBJECT;
         states[index] = object.state;
     }
     return GBR_RT_OK;
+}
+#endif
+
+#if defined(GBR_GRAPHICS_RUNTIME) && !defined(GBR_RENDERER_ONLY)
+unsigned char gbr_bind_graphics(gbr_runtime_t *runtime,
+                                const gb_vdi_context_t *context,
+                                const gbr_graphic_binding_t *bindings,
+                                unsigned char binding_count)
+{
+    gbr_object_t object;
+    const gbr_graphic_binding_t *binding;
+    unsigned int index;
+    unsigned int end;
+    unsigned char current;
+    unsigned char previous;
+    unsigned char referenced;
+    if (runtime == 0 || runtime->resource == 0 || !gb_vdi_valid(context) ||
+        binding_count > runtime->tree.object_count ||
+        (binding_count != 0 && bindings == 0))
+        return 0;
+    for (current = 0; current < binding_count; current++) {
+        if (bindings[current].spec == GBR_NONE16 ||
+            !gb_vdi_raster_valid(bindings[current].raster))
+            return 0;
+        for (previous = 0; previous < current; previous++)
+            if (bindings[previous].spec == bindings[current].spec) return 0;
+        referenced = 0;
+        end = (unsigned int)runtime->tree.root + runtime->tree.object_count;
+        for (index = runtime->tree.root; index < end; index++) {
+            if (!gbr_object_at(runtime->resource, (unsigned char)index, &object))
+                return 0;
+            if (graphic_type(object.type) &&
+                object.spec == bindings[current].spec)
+                referenced = 1;
+        }
+        if (!referenced) return 0;
+    }
+    end = (unsigned int)runtime->tree.root + runtime->tree.object_count;
+    for (index = runtime->tree.root; index < end; index++) {
+        if (!gbr_object_at(runtime->resource, (unsigned char)index, &object))
+            return 0;
+        if (!graphic_type(object.type)) continue;
+        binding = 0;
+        for (current = 0; current < binding_count; current++)
+            if (bindings[current].spec == object.spec) {
+                binding = &bindings[current];
+                break;
+            }
+        if (binding == 0 ||
+            object.w != (unsigned int)binding->raster->width_cells * 4u ||
+            object.h != binding->raster->height)
+            return 0;
+    }
+    runtime->graphics_context = context;
+    runtime->graphic_bindings = bindings;
+    runtime->graphic_binding_count = binding_count;
+    return 1;
 }
 #endif
 
@@ -425,8 +541,23 @@ unsigned char gbr_draw_tree(const gbr_runtime_t *runtime,
         if (object_blocked(runtime, (unsigned char)index, 0)) continue;
         if (!gbr_object_at(runtime->resource, (unsigned char)index, &object))
             return GBR_RT_ERR_OBJECT;
+#ifdef GBR_GRAPHICS_RUNTIME
+        if (graphic_type(object.type)) {
+            gbr_rect_t rect;
+            if (!graphic_ready(runtime, &object) ||
+                !gbr_object_rect(runtime, (unsigned char)index,
+                                 root_x, root_y, &rect) ||
+                (rect.x & 3u) != 0 || rect.x >= GB_XPIX ||
+                rect.y >= GB_LINES || rect.w > GB_XPIX - rect.x ||
+                rect.h > GB_LINES - rect.y)
+                return GBR_RT_ERR_GRAPHIC;
+        }
+#endif
         if (object.type != GBR_TYPE_BOX && object.type != GBR_TYPE_TEXT &&
             object.type != GBR_TYPE_STRING && object.type != GBR_TYPE_BUTTON
+#ifdef GBR_GRAPHICS_RUNTIME
+            && object.type != GBR_TYPE_ICON && object.type != GBR_TYPE_IMAGE
+#endif
 #ifdef GBR_FORM_RUNTIME
             && object.type != GBR_TYPE_FIELD
 #ifndef GBR_M7_LEGACY_FORMS
