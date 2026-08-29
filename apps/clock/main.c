@@ -15,6 +15,8 @@
 #include "gb.h"
 #ifdef GB_MSX2
 #include "gbevent.h"
+#include "gbshell.h"
+#include "gbdesk_catalog.h"
 #endif
 
 #define DEF_X    24
@@ -409,6 +411,10 @@ static void c_drag(void)
 static void c_proc(void)
 {
 #ifdef GB_MSX2
+    if (gb_msg.type == GB_MSG_SHELL) {
+        clk_event();
+        return;
+    }
     if (!gb_event_collect(&clock_events, &clock_event, &gb_msg)) return;
 
     if ((clock_event.classes & GB_EVENT_KEY) != 0 &&
@@ -456,5 +462,8 @@ void main(void)
     gb_wm_managed(&cmw);                         /* register (no draw yet) (#146) */
     gb_doc(&clkdoc);                             /* View > Fullscreen (#142) */
     gb_menu_add("Options", opt_items, 2, opt_action);
+#ifdef GB_MSX2
+    (void)gb_shell_register_accessory(GB_DESK_ACCESSORY_CLOCK_ID);
+#endif
     gb_restore_parent();                         /* first paint: WM chrome + c_draw */
 }

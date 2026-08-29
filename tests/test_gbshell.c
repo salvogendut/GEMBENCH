@@ -7,6 +7,7 @@ static unsigned int failures;
 static unsigned char mock_handle;
 static unsigned char mock_result;
 static unsigned char find_class;
+static unsigned char find_accessory_id;
 static unsigned char send_handle;
 static unsigned char send_request;
 static const char *send_argument;
@@ -26,6 +27,12 @@ unsigned char gb_shell_find(unsigned char service_class)
     return mock_handle;
 }
 
+unsigned char gb_shell_find_accessory(unsigned char accessory_id)
+{
+    find_accessory_id = accessory_id;
+    return mock_handle;
+}
+
 unsigned char gb_shell_send(unsigned char handle, unsigned char request,
                             const char *argument11)
 {
@@ -41,6 +48,7 @@ static void reset(unsigned char handle, unsigned char result)
     mock_handle = handle;
     mock_result = result;
     find_class = 0;
+    find_accessory_id = 0;
     send_handle = 0;
     send_request = 0;
     send_argument = NULL;
@@ -84,6 +92,19 @@ int main(void)
           "target rejection remains distinct from provider absence");
     check(send_calls == 1 && send_argument == NULL,
           "argument-free lifecycle requests retain a null argument");
+
+    reset(3, GB_SHELL_OK);
+    result = gb_shell_request_accessory(2, GB_SHELL_ACTIVATE);
+    check(result == GB_SHELL_OK && find_accessory_id == 2,
+          "exact accessory request discovers the stable catalog ID");
+    check(send_calls == 1 && send_handle == 3 &&
+              send_request == GB_SHELL_ACTIVATE && send_argument == NULL,
+          "exact accessory activation is delivered without an argument");
+
+    reset(0, GB_SHELL_OK);
+    result = gb_shell_request_accessory(1, GB_SHELL_ACTIVATE);
+    check(result == GB_SHELL_NOT_FOUND && send_calls == 0,
+          "missing exact accessory retains the on-demand launch path");
 
     if (failures) return 1;
     puts("gbshell contract tests: ok");

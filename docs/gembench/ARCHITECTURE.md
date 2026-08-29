@@ -174,6 +174,28 @@ legacy 12-byte window descriptor, the explicit 13-byte kind descriptor, or any
 existing jump address. CPC and PCW neither export nor link the service and retain
 their existing launch behavior.
 
+## Desk accessories
+
+Milestone 15 keeps accessories as ordinary banked `.APP` files. The host build
+validates `apps/desktop/accessories.json` against a fixed capacity and generates
+the Desktop labels, stable nonzero IDs, and padded 8.3 APP names. The target does
+not scan storage, parse historical GEM `.ACC` files, preload binaries, or retain
+catalog state in the kernel.
+
+Selecting a Desk row first performs an exact accessory lookup. A live match is
+raised through the existing synchronous `GB_SHELL_ACTIVATE` path; only absence
+falls back to `gb_wm_open()`. Closing the window follows the normal WM path and
+returns the application page, so later selection loads the APP again. Clock's
+desktop icon uses the same helper and therefore cannot create a second Clock.
+
+Exact identity appends register/find operations to the existing MSX2 shell jump.
+The coarse accessory class remains in private flag bits 5-7. The stable ID uses
+byte 10 of the existing private per-window launch argument only after an
+accessory explicitly registers and after its startup argument has been consumed.
+Ordinary class registration never reads or modifies that byte, and document
+providers retain all eleven filename bytes. This adds no low-RAM allocation,
+window slot, process record, queue, retained payload, or mapper owner.
+
 ## Integration boundary
 
 The repository contains GeoBench's complete history and runtime foundation. The
