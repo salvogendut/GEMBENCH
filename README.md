@@ -41,6 +41,9 @@ The completed foundation currently covers:
   capacity exhaustion;
 - a bounded MSX2 typed-scrap layer for text, bitmap, icon, and file-list data
   that preserves the complete 510-byte raw clipboard and accepts legacy text;
+- bounded MSX2 shell discovery and synchronous open/activate/close/quit
+  messaging, with File Manager reusing a clean live Notepad instead of opening
+  a duplicate;
 - a measured MSX2 auxiliary-resource prototype and resident-renderer fit probe,
   with the smaller embedded/app-linked placement retained for GBR v1;
 - explicitly versioned MSX2 window kinds with kernel-owned furniture, move, resize, and
@@ -118,6 +121,14 @@ real Notepad windows:
 ```sh
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   MSX_HEADLESS=1 tools/test_typed_scrap_openmsx.sh
+```
+
+Exercise File Manager's launch fallback and live-Notepad reuse through two real
+text-document opens:
+
+```sh
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_shell_service_openmsx.sh
 ```
 
 Capture the reproducible pre-GBR baseline under the sibling `1983`

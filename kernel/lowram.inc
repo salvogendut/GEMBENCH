@@ -88,6 +88,8 @@ GB_MSG_DRAG     equ   7
 GB_MSG_MOVED    equ   8            ; kernel-owned move completed: p0=x, p1=y
 GB_MSG_SIZED    equ   9            ; kernel-owned resize completed: p0=w, p1=h
 GB_MSG_MAXIMIZED equ  10           ; maximise/restore: p0=1/0, p1=w, p2=h
+GB_MSG_SHELL    equ   11           ; append-only shell request: p0=request,
+                                   ; p1=response, p2=reserved
                                    ; (DnD, #62); name at WM_DRAGNAME, pos at POLL_MX/MY
 POLL_MX         equ   #1306        ; last poll: cursor byte column (mx)
 POLL_MY         equ   #1307        ; last poll: cursor line (my)
@@ -97,6 +99,7 @@ MENU_DEF        equ   #1310        ; app menu: count, then {col, 8-byte label} *
 KCFG_FRAMEPEN   equ   #133C        ; Edge pen, or Text/Accent when Edge matches Paper
                 ifdef PLATFORM_MSX
 SCRAP_TYPE      equ   #133D        ; GEMBENCH typed-scrap tag; raw GB_CLIPSET clears it
+SHELL_BUSY      equ   #133E        ; nonzero during synchronous shell delivery
                 endif
 REPAINT_HDLR    equ   #1340        ; retired per-depth repaint handlers (8 bytes).
                                    ; PREEMPTIVE reuses this dead block for scheduler state,
@@ -164,6 +167,7 @@ MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the
 MW_MANAGED      equ   2            ; WM_FR_FLAGS bit: this window is kernel-managed (#146)
                 ifdef PLATFORM_MSX
 MW_KIND_V1      equ   16           ; WM_FR_FLAGS: explicit kind-v1 registration accepted
+WM_SHELL_MASK   equ   #E0          ; opt-in shell service class in flag bits 5..7
 GB_WK_TITLE     equ   1            ; appended gb_mwin_t.kind bits (GEMBENCH v1)
 GB_WK_CLOSE     equ   2
 GB_WK_MAXIMIZE  equ   4

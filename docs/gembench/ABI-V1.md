@@ -121,6 +121,29 @@ implementation and must not exchange `gb_scrap_info_t` as a persistent binary
 record. The compact Notepad adapter exports only `gb_scrap_set()` and
 `gb_scrap_type()`; clients needing query/get/clear link the complete runtime.
 
+### Append-only shell services
+
+Milestone 14 is a compatible extension around GEMBENCH-1, not a revision of its
+frozen records. MSX2 appends `GB_MSG_SHELL` as message value 11 and appends the
+`GB_SHELL` register/find/send jump at `0x80C0`. No older message value or kernel
+jump address moves. An existing window procedure may ignore the new message in
+the same way it ignores any callback it did not subscribe to.
+
+Service identity is private window-manager metadata, not a descriptor tail. A
+provider registers one encoded class in unused window-entry flag bits 5-7 only
+after its ordinary 12- or 13-byte registration has completed. The kernel never
+reads beyond either frozen descriptor. Discovery returns an opaque short-lived
+handle; delivery validates it against the current fixed-capacity live table and
+callback before use.
+
+Open, activate, close, and quit are bounded synchronous requests with explicit
+success, absence, stale, busy, invalid, no-handler, and rejected results. Open
+uses an 11-byte 8.3 argument valid only during the callback. One private MSX
+low-RAM byte at `0x133E` rejects nested delivery; there is no queue, retained
+payload, new mapper owner, or process record. Applications using `gbshell.h`
+must be rebuilt and must not persist or exchange handles. CPC and PCW do not
+export this MSX2-only jump.
+
 ## Compatibility rules
 
 For GEMBENCH-1:
@@ -150,6 +173,7 @@ tools/test_window_kinds_openmsx.sh
 tools/test_multi_event_openmsx.sh
 tools/test_visible_regions_openmsx.sh
 tools/test_typed_scrap_openmsx.sh
+tools/test_shell_service_openmsx.sh
 ```
 
 The resource placement evidence is in

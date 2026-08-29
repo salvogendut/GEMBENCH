@@ -390,3 +390,46 @@ the destination unchanged from function entry to return, restores the text tag,
 and verifies the seven-byte append. Its disposable image removes `UNAPINET.COM`
 and runs with `MSX_UNAPI=0`, so the check does not require the optional
 `unapinet` extension.
+
+## Shell services
+
+MSX2 applications include `gbshell.h` and link one of two deliberately small
+profiles. `GB_SHELL_TARGET=1` adds only service registration; a provider calls it
+after normal window registration and handles `GB_MSG_SHELL` in its existing
+procedure. `GB_SHELL_CLIENT=1` adds discovery, send, and the combined request
+helper. Both flags are MSX2-only.
+
+```c
+unsigned char result = gb_shell_request(
+    GB_SHELL_CLASS_TEXT_EDITOR, GB_SHELL_OPEN, name11);
+
+if (result == GB_SHELL_NOT_FOUND)
+    launch_editor();
+```
+
+Handles are opaque and short-lived; prefer `gb_shell_request()` to storing one.
+Delivery is synchronous and non-reentrant. During `GB_SHELL_OPEN`, the target
+may read the fixed 11-byte name through `gb_shell_argument` and returns a status
+in `gb_msg.p1`. A busy or dirty editor should reject without changing its
+document. `GB_SHELL_ACTIVATE`, `GB_SHELL_CLOSE`, and `GB_SHELL_QUIT` carry no
+argument. There is no background queue to drain.
+
+File Manager enables the client profile and Notepad the target profile in the
+release MSX2 build. To exercise host contracts and the real reuse path:
+
+```sh
+make gbshell-check
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_shell_service_openmsx.sh
+```
+
+The disposable openMSX image omits `UNAPINET.COM`, creates `A.TXT` and `B.TXT`,
+opens both through File Manager, and requires one Notepad slot to load first
+`FIRST14` and then `SECOND14`. It checks registration, two discoveries, exactly
+one send/callback, the final target argument, cleared re-entry guard, restored
+stack, and unchanged window count. For a manual check, build and boot normally,
+open two `.TXT` files in succession from File Manager, and verify that the same
+Notepad is raised and changes documents rather than creating a second window.
+Then edit the document and try another `.TXT`: the same dirty Notepad should be
+raised with its current contents unchanged, proving rejection is atomic.

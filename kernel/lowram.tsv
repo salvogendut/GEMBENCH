@@ -56,6 +56,7 @@ base          0x3E00  0x3FFF  clipboard               -             shared clipb
 
 msx           0x1291  0x1295  msx_picture_state       msx_pic_cursor third/fourth picture banks, packing mode, and source stride
 msx           0x133D  0x133D  typed_scrap_tag         -             private type for the shared raw clipboard; GB_CLIPSET invalidates it
+msx           0x133E  0x133E  shell_dispatch_guard    -             nonzero only during synchronous Milestone-14 application delivery
 
 # Non-ROM IDE recovery profile. Archived, but kept visible because it shares
 # the same low-RAM pool and has historically been revived for tests.

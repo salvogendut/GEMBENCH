@@ -426,3 +426,48 @@ python3 debug/gembench_baseline_1983.py --frames 6001
 make cpc
 make pcw
 ```
+
+## Milestone 14 shell services
+
+Milestone 14 was validated on 2026-08-29 with openMSX 21.0 and a disposable,
+network-free Nextor image containing root-level `A.TXT` (`FIRST14`) and `B.TXT`
+(`SECOND14`). The driver opens the first drive and both documents through the
+real File Manager pointer path. The first lookup finds no text editor and
+retains the legacy Notepad launch. Notepad registers service class `0x20`; after
+File Manager is raised again, the second lookup resolves the live editor and
+delivers one open request.
+
+The passing trace observed one registration, two discoveries, one send, and one
+target callback. The live window count stayed at three (Desktop, File Manager,
+and one Notepad), focus returned to that original Notepad slot, its document
+changed to exactly `SECOND14`, and both its per-window name and the synchronous
+shell argument were `B       TXT`. The non-reentry guard returned to zero and
+the final stack pointer was `0xD8EA`. Instrumentation measured `SP=0xD8E1` at
+the `GB_SHELL` send entry and `SP=0xD8DD` at the real Notepad procedure, a
+four-byte dispatch delta.
+
+The release Screen 6/7 kernels are 10,938/12,516 bytes, exactly 256 bytes above
+Milestone 13, and allocate one private MSX low-RAM guard byte at `0x133E`.
+`FILEMGR.APP` is 14,506 bytes, with 182 bytes between its loaded image and data;
+`NOTEPAD.APP` is 12,070 bytes, keeps its 4 KiB document buffer, has 34 bytes
+between code/initializers and data, and ends data/BSS seven bytes below
+`0x8000`. The request helper, client binding, and target registration binding
+compile to 27, 16, and five Z80 bytes. No queue, retained mapper segment, or
+additional window slot exists.
+
+The complementary 1983 run reached frame 6,002 at PC `0x247A`, SP `0xD8EA`,
+with VDP R0/R1 `0x0A`/`0x62`, 25 free mapper segments at entry, and the Screen 7
+baseline matched. Full CPC Albireo/M4 card and floppy packaging plus all three
+PCW disks also built successfully; those targets do not export or link the
+MSX-only shell entry and retain their legacy document-launch behavior.
+
+```sh
+make gbshell-check
+make check
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_shell_service_openmsx.sh
+python3 debug/gembench_baseline_1983.py --frames 6001
+make cpc
+make pcw
+```

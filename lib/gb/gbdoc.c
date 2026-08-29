@@ -12,6 +12,9 @@
  * first; in on_frame call gb_doc_frame() and repaint your window if it returns 1.
  */
 #include "gb.h"
+#ifdef GB_SHELL_SERVICES
+#include "gbshell.h"
+#endif
 
 #define DOC_MAXTITLES 4              /* File + up to 3 app titles */
 
@@ -45,6 +48,7 @@ static void set_name(const char *n11);
 
 static void do_new_now(void);
 static void do_load_now(void);
+static unsigned char doc_io_start_load(unsigned char after);
 #endif
 
 static const char     *g_label[DOC_MAXTITLES];
@@ -213,6 +217,38 @@ static void set_name(const char *n11)
 unsigned char gb_doc_event(void)
 {
     unsigned char i, col;
+#ifdef GB_SHELL_SERVICES
+    if (gb_msg.type == GB_MSG_SHELL) {
+        if (gb_msg.p0 == GB_SHELL_ACTIVATE) {
+            gb_msg.p1 = GB_SHELL_OK;
+        } else if (gb_msg.p0 == GB_SHELL_OPEN) {
+#ifdef GBDOC_BOUNDED_IO
+            if (DOC_IO_STATE != DOC_IO_IDLE || gb_drop_claimed()) {
+                gb_msg.p1 = GB_SHELL_BUSY;
+            } else if (g_dirty) {
+                gb_msg.p1 = GB_SHELL_REJECTED;
+            } else {
+                set_name(gb_shell_argument);
+                DOC_IO_LAUNCH = 0;
+                gb_msg.p1 = doc_io_start_load(DOC_AFTER_NONE)
+                    ? GB_SHELL_OK : GB_SHELL_BUSY;
+            }
+#else
+            gb_msg.p1 = GB_SHELL_BAD_REQUEST;
+#endif
+        } else if (gb_msg.p0 == GB_SHELL_CLOSE || gb_msg.p0 == GB_SHELL_QUIT) {
+            if (gb_doc_close()) {
+                gb_msg.p1 = GB_SHELL_OK;
+                gb_wm_close();
+            } else {
+                gb_msg.p1 = GB_SHELL_REJECTED;
+            }
+        } else {
+            gb_msg.p1 = GB_SHELL_BAD_REQUEST;
+        }
+        return 1;
+    }
+#endif
     if (gb_msg.type != GB_MSG_MENU) return 0;
 #ifdef GBDOC_BOUNDED_IO
     if (DOC_IO_STATE != DOC_IO_IDLE) return 1;

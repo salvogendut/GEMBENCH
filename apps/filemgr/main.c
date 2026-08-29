@@ -14,6 +14,9 @@
  * rect-clipped repaint); the contents - views, grid, scrollbar - are drawn here
  * with gb_dir*, gb_blite, gb_fill/gb_frame/gb_text. No kernel changes. */
 #include "gb.h"
+#ifdef GB_SHELL_SERVICES
+#include "gbshell.h"
+#endif
 #ifdef GB_MSX2
 #include "gbr_menu.h"
 #include "view_menu_gbr.h"
@@ -999,12 +1002,18 @@ static void open_entry(unsigned char idx)
     char *e;
     dir_seek(order[idx]);          /* sorted display index -> raw entry (sets attr/cluster) */
     if (gb_isdir()) { path_push(fullname()); gb_chdir(); relist(); return; }
-    if (gb_wm_full()) {            /* every app bank is taken - say so, don't dead-click (#153) */
+    nsel = 0;
+    e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
+#ifdef GB_SHELL_SERVICES
+    if ((ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G')) &&
+        gb_shell_request(GB_SHELL_CLASS_TEXT_EDITOR, GB_SHELL_OPEN, e)
+            != GB_SHELL_NOT_FOUND)
+        return;                    /* reuse/activate the live editor; rejection is atomic */
+#endif
+    if (gb_wm_full()) {            /* reuse was attempted first, even with a full bank pool */
         gb_alert("Sorry, not enough RAM", "to run more apps.");
         return;
     }
-    nsel = 0;
-    e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
     if (ext_is(e, 'A', 'P', 'P') || ext_is(e, 'S', 'A', 'V'))
         gb_wm_open(e);                          /* #234: run the app/screensaver image itself */
     else if (ext_is(e, 'I', 'S', 'T') || ext_is(e, 'S', 'P', 'R'))

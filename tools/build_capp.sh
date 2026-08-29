@@ -125,8 +125,10 @@ GB_EVENT_FLAG="${GB_EVENTS:-0}"
 GB_REGION_FLAG="${GB_REGIONS:-0}"
 GB_SCRAP_FLAG="${GB_SCRAP:-0}"
 GB_SCRAP_TEXT_ONLY_FLAG="${GB_SCRAP_TEXT_ONLY:-0}"
+GB_SHELL_CLIENT_FLAG="${GB_SHELL_CLIENT:-0}"
+GB_SHELL_TARGET_FLAG="${GB_SHELL_TARGET:-0}"
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ]; then
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
 NET_SRC="$GB/gbnet_stub.c"
@@ -203,6 +205,21 @@ fi
 if [ "$GB_SCRAP_TEXT_ONLY_FLAG" = "1" ] && [ "$GB_SCRAP_FLAG" != "1" ]; then
     echo "ERROR: GB_SCRAP_TEXT_ONLY=1 requires GB_SCRAP=1" >&2
     exit 1
+fi
+if [ "$GB_SHELL_CLIENT_FLAG" != "0" ] && [ "$GB_SHELL_CLIENT_FLAG" != "1" ]; then
+    echo "ERROR: GB_SHELL_CLIENT must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_SHELL_TARGET_FLAG" != "0" ] && [ "$GB_SHELL_TARGET_FLAG" != "1" ]; then
+    echo "ERROR: GB_SHELL_TARGET must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ]; then
+    case " $ALL_APPDEFS " in
+        *" -DGB_MSX2 "*) ;;
+        *) echo "ERROR: GEMBENCH shell services are MSX2-only" >&2; exit 1 ;;
+    esac
+    ALL_APPDEFS="$ALL_APPDEFS -DGB_SHELL_SERVICES"
 fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
@@ -325,6 +342,12 @@ if [ "$GB_SCRAP_FLAG" = "1" ]; then
         deps+=("$GBR_LIB/gbscrap.c")
     fi
 fi
+if [ "$GB_SHELL_CLIENT_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbshell.h" "$GBR_LIB/gbshell.c" "$GBR_LIB/gbshell_client.s")
+fi
+if [ "$GB_SHELL_TARGET_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbshell.h" "$GBR_LIB/gbshell_register.s")
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -403,6 +426,8 @@ cache_key=$(printf '%s\n' \
     "GB_REGIONS=$GB_REGION_FLAG" \
     "GB_SCRAP=$GB_SCRAP_FLAG" \
     "GB_SCRAP_TEXT_ONLY=$GB_SCRAP_TEXT_ONLY_FLAG" \
+    "GB_SHELL_CLIENT=$GB_SHELL_CLIENT_FLAG" \
+    "GB_SHELL_TARGET=$GB_SHELL_TARGET_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -525,6 +550,16 @@ if [ "$GB_SCRAP_FLAG" = "1" ]; then
     fi
     GBR_REL="$GBR_REL $work/gbscrap.rel"
 fi
+if [ "$GB_SHELL_CLIENT_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GBR_INCLUDE" -c "$GBR_LIB/gbshell.c" -o "$work/gbshell.rel"
+    "$SDAS" -o "$work/gbshell_client.rel" "$GBR_LIB/gbshell_client.s"
+    GBR_REL="$GBR_REL $work/gbshell.rel $work/gbshell_client.rel"
+fi
+if [ "$GB_SHELL_TARGET_FLAG" = "1" ]; then
+    "$SDAS" -o "$work/gbshell_register.rel" "$GBR_LIB/gbshell_register.s"
+    GBR_REL="$GBR_REL $work/gbshell_register.rel"
+fi
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then
     GBWIN_DEFS=""
@@ -628,7 +663,7 @@ fi
 # omits the Save/Save As path, so a viewer-style app saves that code room (#144).
 if [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
     RO=""; [ "$DOCRO_FLAG" = "1" ] && RO="-DGBDOC_RO"
-    "$SDCC" -mz80 --fomit-frame-pointer $RO $ALL_APPDEFS -I "$GB" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
+    "$SDCC" -mz80 --fomit-frame-pointer $RO $ALL_APPDEFS -I "$GB" -I "$GBR_INCLUDE" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
     DLG_REL="$DLG_REL $work/gbdoc.rel"
 fi
 # NET=1 uses the target's gb_net_* backend. CPC calls the active paged GBNET
