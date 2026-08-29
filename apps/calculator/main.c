@@ -4,6 +4,8 @@
 #ifdef GB_MSX2
 #include "gbr_object.h"
 #include "calculator_gbr.h"
+#include "gbshell.h"
+#include "gbdesk_catalog.h"
 #endif
 
 #define DEF_X       ((GB_COLS - WIN_W) / 2)
@@ -383,6 +385,19 @@ static void calculator_drag(void)
 
 static void calculator_proc(void)
 {
+#ifdef GB_MSX2
+    if (gb_msg.type == GB_MSG_SHELL) {
+        if (gb_msg.p0 == GB_SHELL_ACTIVATE) {
+            gb_msg.p1 = GB_SHELL_OK;
+        } else if (gb_msg.p0 == GB_SHELL_CLOSE || gb_msg.p0 == GB_SHELL_QUIT) {
+            gb_msg.p1 = GB_SHELL_OK;
+            gb_wm_close();
+        } else {
+            gb_msg.p1 = GB_SHELL_BAD_REQUEST;
+        }
+        return;
+    }
+#endif
     switch (gb_msg.type) {
         case GB_MSG_DRAW:  calculator_draw();  break;
         case GB_MSG_CLICK: calculator_click(); break;
@@ -406,6 +421,9 @@ void main(void)
         CALCULATOR_OBJECT_COUNT) == GBR_RT_OK);
 #endif
     gb_wm_managed(&calculator_window);
+#ifdef GB_MSX2
+    (void)gb_shell_register_accessory(GB_DESK_ACCESSORY_CALCULATOR_ID);
+#endif
     for (n = 64; n; n--) if (!gb_getkey()) break;
     gb_restore_parent();
 }

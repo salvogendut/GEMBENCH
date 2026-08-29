@@ -471,3 +471,46 @@ python3 debug/gembench_baseline_1983.py --frames 6001
 make cpc
 make pcw
 ```
+
+## Milestone 15 Desk accessories
+
+Milestone 15 was validated on 2026-08-29 with openMSX 21.0 and a disposable,
+network-free Nextor image. The driver used real keyboard-matrix pointer input to
+open the generated `Desk` popup, launch Clock and Calculator, reselect
+Calculator and Clock, close Clock through its title gadget, and select Clock
+again after release.
+
+The passing trace recorded registrations for stable IDs `1 2 1`, exact lookup
+IDs `1 2 2 1 1`, and exactly two sends for the two live activations. Clock used
+slot 1 and Calculator slot 2; the window count never exceeded three. Closing
+Clock reduced busy mapper-pool pages from four to three (the Desktop wallpaper
+owns the non-window page), and relaunch restored four. The final Clock retained
+class `0xA0` and exact ID 1, the shell guard was zero, and the final SP was
+`0xD8E5` in the reference run.
+
+The release catalog contains two of four fixed slots. `DESKTOP.APP` is 14,679
+bytes; loaded code and initializers end at `0x7957`, nine bytes before data at
+`0x7960`, while data ends at `0x7AC6`, 1,082 bytes below the preemptive stack
+reserve. `CLOCK.APP` is 11,377 bytes with image/data ends `0x6C71`/`0x6DE3`;
+`CALC.APP` is 12,048 bytes with image/data ends `0x6F10`/`0x766C`. File Manager
+and Notepad remain 14,506/12,070 bytes. The Screen 6/7 kernels are
+11,194/12,772 bytes and still use only the Milestone-14 shell guard byte; exact
+identity adds no low-RAM range.
+
+The complementary 1983 run reached frame 6,002 at PC `0xEE54`, SP `0xD8F2`,
+with VDP R0/R1 `0x0A`/`0x62`, 25 free mapper segments at entry, and one idle
+busy application page. Full CPC Albireo/M4 card and floppy packaging plus all
+three PCW disks built successfully; their application behavior remains
+unchanged because Desk accessories are an MSX2-only shell extension.
+
+```sh
+make gbaccessory-check
+make gbshell-check
+make check
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_desk_accessories_openmsx.sh
+python3 debug/gembench_baseline_1983.py --frames 6001
+make cpc
+make pcw
+```

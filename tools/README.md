@@ -119,6 +119,13 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   document and 8.3-name replacement, stable window count, cleared dispatch
   guard, caller-bank recovery, and target-entry stack delta without requiring
   the optional openMSXnet extension.
+- **`gen_desk_accessories.py`** — validates the fixed-capacity build-time Desk
+  catalog and generates stable IDs, labels, and padded APP names in
+  `gbdesk_catalog.h`; `--check` detects stale generated metadata.
+- **`test_desk_accessories_openmsx.sh`** — selects Clock and Calculator through
+  the generated Desk popup, proves exact activation never duplicates either
+  window, closes Clock through its real gadget, observes one mapper page return,
+  and relaunches it. The disposable image does not require openMSXnet.
 - **`gbrc.py` / `gbrverify.py`** — compile deterministic GBR v1 resources and
   strictly verify binary resources. `gbrc.py --c-header` can also emit a C blob,
   section/count constants, and source-only object IDs for embedded resources;

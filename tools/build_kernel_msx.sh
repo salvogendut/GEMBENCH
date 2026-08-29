@@ -25,7 +25,7 @@ PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
 GEMBENCH_BASELINE="${GEMBENCH_BASELINE:-0}"
 GEMBENCH_M7_BANKED="${GEMBENCH_M7_BANKED:-0}"
 BASELINE_APPDEFS=""
-DESKTOP_DATA_LOC="0x7900"
+DESKTOP_DATA_LOC="0x7960"       # Milestone 15 Desk catalog/client crosses the old 0x7900 split
 NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
 NOTEPAD_DATA_LOC="0x6F48"
 NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
@@ -115,18 +115,21 @@ python3 tools/gblib_subset.py \
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
+python3 tools/gen_desk_accessories.py apps/desktop/accessories.json \
+    --output include/gembench/gbdesk_catalog.h
 if [ "$PREEMPTIVE" = "1" ]; then
     TASK_ROOT=1 TASK_RUNTIME_RAW=build/msx/GBSCHED.RAW \
-        TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2 $BASELINE_APPDEFS" \
-        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 \
+        TASK_STACK_RESERVE=256 \
+        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_SHELL_CLIENT=1 GB_SHELL_ACCESSORY_CLIENT=1 \
+        APPDEFS="-DGB_MSX2 -DGB_DESK_ACCESSORIES $BASELINE_APPDEFS" \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
     if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
         TASK=1 TASK_STACK_RESERVE=256 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
             tools/build_capp.sh apps/taskdemo build/msx/TASKDEMO.RAW
     fi
 else
-    APPDEFS="-DGB_MSX2 $BASELINE_APPDEFS" BASELINE="$GEMBENCH_BASELINE" \
-        DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 \
+    APPDEFS="-DGB_MSX2 -DGB_DESK_ACCESSORIES $BASELINE_APPDEFS" BASELINE="$GEMBENCH_BASELINE" \
+        DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_SHELL_CLIENT=1 GB_SHELL_ACCESSORY_CLIENT=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 fi
 python3 tools/gbrc.py apps/filemgr/view_menu.json --output build/msx/FILEMGR_MENU.GBR --menu-header apps/filemgr/view_menu_gbr.h --symbol-prefix FILEMGR_VIEW
@@ -144,11 +147,11 @@ fi
 APP_ICON=apps/iconed/icon.asm GBLIB_SRC="$ICONED_GBLIB" APPDEFS="-DGB_MSX2 -DGBUI_APPICON_PICKER -DGBDOC_BOUNDED_IO" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7200 DOC=1 BUTTON=1 REPAINTTOP=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x6A40 DOCRO=1 SCROLL16=1 REPAINTTOP=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
 APP_ICON="$PAINT_APP_DIR/icon.asm" APP_ICON16="$PAINT_APP_DIR/icon16.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7DA0 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 GB_EVENTS=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 GB_EVENTS=1 GB_SHELL_ACCESSORY_TARGET=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
 python3 tools/gbrc.py apps/calculator/calculator.json --output build/msx/CALCULATOR.GBR --c-header apps/calculator/calculator_gbr.h --symbol-prefix CALCULATOR
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 BUTTON=1 GBR_OBJECTS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/calculator build/msx/CALC.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 BUTTON=1 GBR_OBJECTS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 GB_SHELL_ACCESSORY_TARGET=1 tools/build_capp.sh apps/calculator build/msx/CALC.RAW
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
 if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
     python3 tools/gbrc.py apps/formref/formref-m7.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_m7_gbr.h --symbol-prefix FORMREF

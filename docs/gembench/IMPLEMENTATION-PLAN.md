@@ -1,6 +1,6 @@
 # GEMBENCH implementation plan
 
-Status: **Milestones 1-14 complete; GEMBENCH-1 frozen on 2026-08-29**.
+Status: **Milestones 1-15 complete; GEMBENCH-1 frozen on 2026-08-29**.
 
 This plan turns the goals in `DESIGN-ESTIMATE.md` into staged implementation
 work. The first proof of concept is expected to take approximately six to nine
@@ -52,6 +52,7 @@ baseline is recorded.
 | 12. Visible-region repainting (complete 2026-08-29; [#21](https://github.com/salvogendut/GEMBENCH/issues/21)) | Subtract opaque higher windows with a fixed-capacity, app-linked iterator | 1 week | Desktop redraws less covered area; deterministic fallback, host geometry, openMSX overlap, and portable builds pass without changing GEMBENCH-1 |
 | 13. Typed clipboard/scrap foundation (complete 2026-08-29; [#23](https://github.com/salvogendut/GEMBENCH/issues/23)) | Add bounded text, bitmap, icon, and file-list identities over the existing shared clipboard | 1 week | Typed and raw callers interoperate; mismatch/truncation tests, two-window openMSX interaction, and portable builds pass without reducing the 510-byte raw payload |
 | 14. Shell services and application messaging (complete 2026-08-29; [#25](https://github.com/salvogendut/GEMBENCH/issues/25)) | Add live service discovery and synchronous open, activate, close, and quit requests | 1 week | File Manager safely reuses and activates a live Notepad, preserves launch fallback, and host/openMSX plus portable builds pass without changing GEMBENCH-1 |
+| 15. On-demand Desk accessories (complete 2026-08-29; [#27](https://github.com/salvogendut/GEMBENCH/issues/27)) | Generate a bounded Desk catalog and add exact accessory identity over the live shell table | 1 week | Clock and Calculator launch only when selected, exact selection raises the correct live instance, close releases its page, and relaunch works without historical `.ACC` parsing or a process table |
 
 ## Bootstrap work package
 
@@ -201,3 +202,27 @@ four-byte stack delta from `GB_SHELL` entry to the Notepad procedure, one
 delivery, unchanged window count, caller-bank recovery, and the requested
 second document. The extension is MSX2-only and append-only: GBR1, the 12/13-byte
 window descriptors, all old jump addresses, and CPC/PCW behavior remain intact.
+Milestone 15 builds on that service without turning it into a process manager.
+`apps/desktop/accessories.json` has a fixed capacity of four and currently emits
+two stable entries, Clock ID 1 and Calculator ID 2. The MSX2 Desktop adds the
+generated Desk popup, asks for an exact live ID before checking page capacity,
+and launches the catalog's normal `.APP` only when no provider exists. Exact
+registration and lookup append operations 3 and 4 to the existing `GB_SHELL`
+jump. An explicitly registered accessory stores its nonzero ID in byte 10 of
+its already private per-window launch argument after startup has consumed that
+argument; ordinary services and document names are not changed. No low-RAM
+cell, queue, process record, permanent mapper page, `.ACC` parser, or frozen
+descriptor field is added.
+
+The generated catalog is 2/4 entries. Desktop is 14,679 bytes with nine bytes
+between loaded image and data and 1,082 bytes below its preemptive stack reserve;
+Clock is 11,377 bytes and Calculator 12,048. File Manager and Notepad remain at
+their Milestone-14 sizes of 14,506 and 12,070 bytes because accessory adapters
+are separate opt-in objects. The accessory request, exact-find, and
+exact-register adapters compile to 21, six, and six bytes. Exact registration
+needs at most six stack bytes below `GB_SHELL` entry and exact lookup two;
+synchronous delivery is the unchanged Milestone-14 send path. Screen 6/7
+kernels are 11,194/12,772 bytes, one 256-byte resident allocation step above
+Milestone 14. The openMSX lifecycle trace observed IDs `1 2 1`, five exact
+finds, two sends, a maximum of three live windows, a one-page drop on Clock
+close, restoration on relaunch, and a cleared dispatch guard.

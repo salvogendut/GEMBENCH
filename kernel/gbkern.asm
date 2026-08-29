@@ -3043,6 +3043,8 @@ wmo_fail
 ;   0 register: B = encoded service class (#20..#E0), current focus opts in
 ;   1 find:     B = service class, returns A = opaque slot+1 handle or zero
 ;   2 send:     B = handle, C = request, HL = optional 11-byte open argument
+;   3 accessory register: C = nonzero stable accessory ID, current focus opts in
+;   4 accessory find:     C = accessory ID, returns exact handle or zero
 ;
 ; Delivery is deliberately queue-free.  A one-byte guard rejects re-entry, the
 ; target is raised and mapped, and its normal window callback receives
@@ -3051,6 +3053,9 @@ wmo_fail
 GB_SHELL_REGISTER equ 0
 GB_SHELL_FIND     equ 1
 GB_SHELL_SEND     equ 2
+GB_SHELL_REGISTER_ACCESSORY equ 3
+GB_SHELL_FIND_ACCESSORY equ 4
+GB_SHELL_ACCESSORY_CLASS equ #A0
 GB_SHELL_OPEN     equ 1
 GB_SHELL_QUIT     equ 4
 GB_SHELL_OK       equ 0
@@ -3065,7 +3070,11 @@ k_shell
                 dec   a
                 jr    z,ksh_find
                 dec   a
-                jr    z,ksh_send
+                jp    z,ksh_send
+                dec   a
+                jr    z,ksh_register_accessory
+                dec   a
+                jr    z,ksh_find_accessory
 ksh_bad         ld    a,GB_SHELL_BAD
                 ret
 
@@ -3097,10 +3106,40 @@ ksh_register
 ksh_nohandler   ld    a,GB_SHELL_NOHANDLER
                 ret
 
+; Exact accessory identity extends the coarse class without allocating a
+; process table.  Accessory apps have no launch document, so byte 10 of their
+; existing private per-window argument is available as a stable nonzero ID.
+; Ordinary service registration never reads or modifies that byte.
+ksh_register_accessory
+                ld    a,c
+                or    a
+                jr    z,ksh_bad
+                push  bc
+                ld    b,GB_SHELL_ACCESSORY_CLASS
+                call  ksh_register
+                pop   bc
+                or    a
+                ret   nz
+                ld    a,(WM_FOCUS)
+                call  wm_entry
+                ld    de,WM_FR_ARG+10
+                add   hl,de
+                ld    (hl),c
+                xor   a
+                ret
+
 ; Search z-order from top to bottom so a class with several instances resolves
 ; to the most recently active compatible window.  Handles are slot+1; zero is
 ; therefore an unambiguous not-found result.
 ksh_find
+                ld    c,0                           ; coarse lookup: no exact ID
+                jr    kshf_start
+ksh_find_accessory
+                ld    a,c
+                or    a
+                ret   z
+                ld    b,GB_SHELL_ACCESSORY_CLASS
+kshf_start
                 ld    a,b
                 and   WM_SHELL_MASK
                 ret   z
@@ -3127,6 +3166,15 @@ kshf_loop
                 ld    a,(wm_slot)
                 cp    b
                 jr    nz,kshf_loop
+                ld    a,c                           ; an exact accessory lookup also
+                or    a                             ; matches its private stable ID
+                jr    z,kshf_found
+                ld    de,WM_FR_ARG-WM_FR_FLAGS+10
+                add   hl,de
+                ld    a,(hl)
+                cp    c
+                jr    nz,kshf_loop
+kshf_found
                 ld    a,(wm_rp_i)
                 inc   a
                 ret

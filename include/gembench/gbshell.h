@@ -40,8 +40,18 @@
 /* Register the focused/calling window as a provider of one service class. */
 unsigned char gb_shell_register(unsigned char service_class);
 
+/*
+ * Register the focused window as one exact Desk accessory.  IDs are non-zero,
+ * build-time catalog values; this does not create a process record or retain a
+ * mapper page.
+ */
+unsigned char gb_shell_register_accessory(unsigned char accessory_id);
+
 /* Return an opaque slot+1 handle for the topmost matching app, or zero. */
 unsigned char gb_shell_find(unsigned char service_class);
+
+/* Return the handle for one exact live Desk accessory, or zero. */
+unsigned char gb_shell_find_accessory(unsigned char accessory_id);
 
 /*
  * Deliver a request to a handle returned by gb_shell_find().  `argument11` is
@@ -55,5 +65,9 @@ unsigned char gb_shell_send(unsigned char handle, unsigned char request,
 unsigned char gb_shell_request(unsigned char service_class,
                                unsigned char request,
                                const char *argument11);
+
+/* Find one exact accessory and deliver an argument-free lifecycle request. */
+unsigned char gb_shell_request_accessory(unsigned char accessory_id,
+                                         unsigned char request);
 
 #endif

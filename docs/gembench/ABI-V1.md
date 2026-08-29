@@ -144,6 +144,14 @@ payload, new mapper owner, or process record. Applications using `gbshell.h`
 must be rebuilt and must not persist or exchange handles. CPC and PCW do not
 export this MSX2-only jump.
 
+Milestone 15 appends exact Desk-accessory operations 3 and 4 to that same jump;
+all existing operations and addresses keep their meanings. An exact accessory
+retains the `0xA0` coarse class and stores its nonzero build-time ID in byte 10
+of the existing private per-window launch argument after startup has consumed
+it. This is not a descriptor extension, and ordinary class registration neither
+reads nor modifies any argument byte. Exact handles remain short-lived and use
+the unchanged guarded send operation.
+
 ## Compatibility rules
 
 For GEMBENCH-1:
@@ -174,6 +182,7 @@ tools/test_multi_event_openmsx.sh
 tools/test_visible_regions_openmsx.sh
 tools/test_typed_scrap_openmsx.sh
 tools/test_shell_service_openmsx.sh
+tools/test_desk_accessories_openmsx.sh
 ```
 
 The resource placement evidence is in

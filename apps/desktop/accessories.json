@@ -1,0 +1,17 @@
+{
+  "capacity": 4,
+  "accessories": [
+    {
+      "symbol": "CLOCK",
+      "id": 1,
+      "label": "Clock",
+      "app": "CLOCK.APP"
+    },
+    {
+      "symbol": "CALCULATOR",
+      "id": 2,
+      "label": "Calculator",
+      "app": "CALC.APP"
+    }
+  ]
+}

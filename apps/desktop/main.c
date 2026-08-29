@@ -18,6 +18,11 @@
 #include "gbregion.h"
 #endif
 #include "gbtitle.h"
+#ifdef GB_DESK_ACCESSORIES
+#include "gbshell.h"
+#define GB_DESK_CATALOG_DATA
+#include "gbdesk_catalog.h"
+#endif
 
 #define IC_W    8             /* icon width  (byte cols) = 32 px */
 #define IC_H    32            /* icon height (lines)             */
@@ -94,6 +99,9 @@ static unsigned char menu_refresh;           /* refocus after a child window clo
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 static unsigned char want_about;             /* System>About: 1=menu selected, 2=open next frame (#409) */
+#ifdef GB_DESK_ACCESSORIES
+static unsigned char want_accessory;         /* Desk selection + 1, deferred past popup repaint */
+#endif
 #ifdef GB_PREEMPTIVE_DIAGNOSTIC
 static unsigned char preemptive_diagnostic_started;
 static unsigned char preemptive_diagnostic_refresh;
@@ -1039,10 +1047,9 @@ static void drop(void)
                                                    aren't erased by our backdrop fill (#65) */
 }
 
-/* The "System" menu now rides the shared gb_doc menu system (#142): the desktop
-   registers an empty document (no File/Edit/View) and adds one "System" title with
-   gb_menu_add, so its dropdown renders with the same framed/reverse-video hover look
-   as every app's menus - one menu path for the whole UI. */
+/* The top-bar menus ride the shared gb_doc menu system (#142). The desktop
+   registers an empty document (no File/Edit/View), then adds Desk on MSX2 and
+   System everywhere, keeping one dropdown path for the whole UI. */
 #define FP_COL    (GB_COLS - 26) /* Ram-Usage footprint column - left of the clock */
 static const gb_doc_t deskdoc = { 0 };        /* no document -> gb_doc adds no titles */
 
@@ -1114,6 +1121,37 @@ static void sys_action(unsigned char sel)
     }
 }
 
+#ifdef GB_DESK_ACCESSORIES
+static void accessory_action(unsigned char sel)
+{
+    if (sel < GB_DESK_ACCESSORY_COUNT) want_accessory = (unsigned char)(sel + 1);
+}
+
+/* Activate the exact live accessory before considering mapper capacity.  Only
+   absence launches a normal banked APP; a live target's explicit error never
+   creates a duplicate instance. */
+static void open_accessory(unsigned char index)
+{
+    unsigned char result;
+    if (index >= GB_DESK_ACCESSORY_COUNT) return;
+    result = gb_shell_request_accessory(gb_desk_accessory_ids[index],
+                                        GB_SHELL_ACTIVATE);
+    if (result != GB_SHELL_NOT_FOUND) return;
+    if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
+    else gb_wm_open(gb_desk_accessory_apps[index]);
+}
+#endif
+
+static void desktop_menu_init(void)
+{
+    gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
+#ifdef GB_DESK_ACCESSORIES
+    gb_menu_add("Desk", gb_desk_accessory_labels, GB_DESK_ACCESSORY_COUNT,
+                accessory_action);
+#endif
+    gb_menu_add("System", sys_items, 7, sys_action);
+}
+
 /* on_event: kernel callback (issue #32). Fires when the user clicks the
    kernel-owned top bar; proves the kernel->app round-trip by showing the
    message payload (the clicked column) in the hint line. */
@@ -1160,8 +1198,7 @@ static void on_frame(void)
                                                     rebuild the desktop menu state so stale focus/menu
                                                     pointers cannot leave System unclickable. */
         menu_inited = 1;
-        gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
-        gb_menu_add("System", sys_items, 7, sys_action);
+        desktop_menu_init();
     }
 #if !defined(GB_MSX2) && !defined(GB_PCW)
     if (first_paint) {
@@ -1184,9 +1221,8 @@ static void on_frame(void)
     if (menu_refresh && background_changed()) { /* backdrop/wallpaper changed while a child was up:
                                                     reload outside wm_repaint_all, then repaint once. */
         background_init();
-        gb_doc(&deskdoc);                        /* keep the desktop menu definition fresh after the
+        desktop_menu_init();                     /* keep the desktop menu definition fresh after the
                                                     reload before we repaint the desktop. */
-        gb_menu_add("System", sys_items, 7, sys_action);
         repaint_stack();
         menu_refresh = 0;
         return;
@@ -1227,6 +1263,13 @@ static void on_frame(void)
             return;
         }
         repaint_stack();                   /* restore existing windows and widen the popup clip */
+#ifdef GB_DESK_ACCESSORIES
+        if (want_accessory) {
+            unsigned char index = (unsigned char)(want_accessory - 1);
+            want_accessory = 0;
+            open_accessory(index);
+        }
+#endif
         if (want_settings) {                  /* System>Settings: now safe to open on top (#129) */
             want_settings = 0;
             if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
@@ -1266,15 +1309,25 @@ static void on_frame(void)
     if (icon == NONE) { select_icon(NONE); return; }   /* click empty space -> deselect (#153) */
 
     if (dc_timer && dc_idx == icon) {      /* second click -> open */
-        unsigned char opens = ic_drive[icon] || icon == IDX_CLOCK;
-        if (opens && gb_wm_full())                           /* no free bank -> say so (#153) */
+#ifdef GB_DESK_ACCESSORIES
+        if (ic_drive[icon] && gb_wm_full())                  /* no free bank -> say so (#153) */
+#else
+        if ((ic_drive[icon] || icon == IDX_CLOCK) && gb_wm_full())
+#endif
             gb_alert("Sorry, not enough RAM", "to run more apps.");
         else if (ic_drive[icon]) {                           /* browse that drive (#65): */
             select_icon(NONE);                               /* opening clears the selection (#153) */
             gb_set_drive(icon);                              /* icon idx 0/1/2 = drive slot */
             gb_wm_open("FILEMGR APP");
         }
-        else if (icon == IDX_CLOCK) { select_icon(NONE); gb_wm_open("CLOCK   APP"); } /* clock (#72) */
+        else if (icon == IDX_CLOCK) {
+            select_icon(NONE);
+#ifdef GB_DESK_ACCESSORIES
+            open_accessory(GB_DESK_ACCESSORY_CLOCK_INDEX);
+#else
+            gb_wm_open("CLOCK   APP");
+#endif
+        } /* clock (#72), or exact Desk activation on MSX2 */
         dc_timer = 0;
         held_prev = 0;
     } else {                               /* first click: select + arm; the lift waits for movement (#153) */

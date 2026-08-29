@@ -28,7 +28,8 @@ backdrop, dragging icons, opening apps and menus:
   via `BACKDROP=`, or a plain colour), top bar (RAM probe + clock), draggable
   labelled icons that erase cleanly back to the pattern, a System menu (Ram Usage /
   Refresh Media / Tidy Icons / Settings / Activate screensaver / About GEOBENCH /
-  Exit to DOS).
+  Exit to DOS). On MSX2, a generated **Desk** menu launches Clock and Calculator
+  on demand and raises the exact existing accessory when selected again.
   Settings opens from the System menu — it no longer needs its own desktop icon.
 - **File manager** — double-click the Disk icon to open a window listing the
   drive; a type icon + name per file (**list** or **icon** view), entries **sorted

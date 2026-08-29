@@ -127,8 +127,10 @@ GB_SCRAP_FLAG="${GB_SCRAP:-0}"
 GB_SCRAP_TEXT_ONLY_FLAG="${GB_SCRAP_TEXT_ONLY:-0}"
 GB_SHELL_CLIENT_FLAG="${GB_SHELL_CLIENT:-0}"
 GB_SHELL_TARGET_FLAG="${GB_SHELL_TARGET:-0}"
+GB_SHELL_ACCESSORY_CLIENT_FLAG="${GB_SHELL_ACCESSORY_CLIENT:-0}"
+GB_SHELL_ACCESSORY_TARGET_FLAG="${GB_SHELL_ACCESSORY_TARGET:-0}"
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ]; then
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
 NET_SRC="$GB/gbnet_stub.c"
@@ -214,7 +216,19 @@ if [ "$GB_SHELL_TARGET_FLAG" != "0" ] && [ "$GB_SHELL_TARGET_FLAG" != "1" ]; the
     echo "ERROR: GB_SHELL_TARGET must be 0 or 1" >&2
     exit 1
 fi
-if [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ]; then
+if [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" != "0" ] && [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" != "1" ]; then
+    echo "ERROR: GB_SHELL_ACCESSORY_CLIENT must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" != "0" ] && [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" != "1" ]; then
+    echo "ERROR: GB_SHELL_ACCESSORY_TARGET must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] && [ "$GB_SHELL_CLIENT_FLAG" != "1" ]; then
+    echo "ERROR: GB_SHELL_ACCESSORY_CLIENT=1 requires GB_SHELL_CLIENT=1" >&2
+    exit 1
+fi
+if [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
         *" -DGB_MSX2 "*) ;;
         *) echo "ERROR: GEMBENCH shell services are MSX2-only" >&2; exit 1 ;;
@@ -348,6 +362,12 @@ fi
 if [ "$GB_SHELL_TARGET_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbshell.h" "$GBR_LIB/gbshell_register.s")
 fi
+if [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbshell.h" "$GBR_LIB/gbaccessory.c" "$GBR_LIB/gbshell_accessory_client.s")
+fi
+if [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbshell.h" "$GBR_LIB/gbshell_accessory_register.s")
+fi
 if [ "$TASK_FLAG" = "1" ]; then
     deps+=("$GB/gbtask.s")
 fi
@@ -365,6 +385,9 @@ if grep -Rqs 'gbhttp\.h' "$APP"; then
 fi
 if grep -Rqs 'gbhtml\.h' "$APP"; then
     deps+=("$GB/gbhtml.h")
+fi
+if grep -Rqs 'gbdesk_catalog\.h' "$APP"; then
+    deps+=("$GBR_INCLUDE/gbdesk_catalog.h")
 fi
 if [ "$DIALOGS_FLAG" = "1" ] || [ "$PROMPT_FLAG" = "1" ] || [ "$PICKER_FLAG" = "1" ] || [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ]; then
     deps+=("$GB/gbui_stub.c")
@@ -428,6 +451,8 @@ cache_key=$(printf '%s\n' \
     "GB_SCRAP_TEXT_ONLY=$GB_SCRAP_TEXT_ONLY_FLAG" \
     "GB_SHELL_CLIENT=$GB_SHELL_CLIENT_FLAG" \
     "GB_SHELL_TARGET=$GB_SHELL_TARGET_FLAG" \
+    "GB_SHELL_ACCESSORY_CLIENT=$GB_SHELL_ACCESSORY_CLIENT_FLAG" \
+    "GB_SHELL_ACCESSORY_TARGET=$GB_SHELL_ACCESSORY_TARGET_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -559,6 +584,16 @@ fi
 if [ "$GB_SHELL_TARGET_FLAG" = "1" ]; then
     "$SDAS" -o "$work/gbshell_register.rel" "$GBR_LIB/gbshell_register.s"
     GBR_REL="$GBR_REL $work/gbshell_register.rel"
+fi
+if [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GBR_INCLUDE" -c "$GBR_LIB/gbaccessory.c" -o "$work/gbaccessory.rel"
+    "$SDAS" -o "$work/gbshell_accessory_client.rel" "$GBR_LIB/gbshell_accessory_client.s"
+    GBR_REL="$GBR_REL $work/gbaccessory.rel $work/gbshell_accessory_client.rel"
+fi
+if [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ]; then
+    "$SDAS" -o "$work/gbshell_accessory_register.rel" "$GBR_LIB/gbshell_accessory_register.s"
+    GBR_REL="$GBR_REL $work/gbshell_accessory_register.rel"
 fi
 GBWIN_REL=""
 if [ "$GBWIN_FLAG" = "1" ]; then

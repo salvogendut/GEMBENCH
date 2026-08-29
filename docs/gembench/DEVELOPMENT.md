@@ -399,6 +399,12 @@ after normal window registration and handles `GB_MSG_SHELL` in its existing
 procedure. `GB_SHELL_CLIENT=1` adds discovery, send, and the combined request
 helper. Both flags are MSX2-only.
 
+Desk accessories use two additional isolated profiles so existing File Manager
+and Notepad binaries do not grow. `GB_SHELL_ACCESSORY_TARGET=1` adds exact
+registration; `GB_SHELL_ACCESSORY_CLIENT=1` adds exact discovery and the
+argument-free request helper and requires the ordinary client for send. Clock
+and Calculator use the target profile, while the MSX2 Desktop uses the client.
+
 ```c
 unsigned char result = gb_shell_request(
     GB_SHELL_CLASS_TEXT_EDITOR, GB_SHELL_OPEN, name11);
@@ -433,3 +439,32 @@ open two `.TXT` files in succession from File Manager, and verify that the same
 Notepad is raised and changes documents rather than creating a second window.
 Then edit the document and try another `.TXT`: the same dirty Notepad should be
 raised with its current contents unchanged, proving rejection is atomic.
+
+## Desk accessory catalog
+
+Edit `apps/desktop/accessories.json` to change the bounded MSX2 Desk catalog.
+Every entry needs a unique nonzero ID, uppercase symbol, printable label, and
+uppercase 1-8 character `.APP` name. Capacity is explicit and cannot exceed ten
+popup rows. Regenerate or verify the committed header with:
+
+```sh
+python3 tools/gen_desk_accessories.py apps/desktop/accessories.json \
+  --output include/gembench/gbdesk_catalog.h
+make gbaccessory-check
+```
+
+The release catalog has capacity four and currently contains Clock and
+Calculator. Both are ordinary apps and consume no mapper page until selected.
+For the authoritative lifecycle check:
+
+```sh
+make gembench-msx
+OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
+  MSX_HEADLESS=1 tools/test_desk_accessories_openmsx.sh
+```
+
+The driver launches both rows through the real popup, selects each again to
+prove exact activation with no duplicate, closes Clock through the window
+gadget, observes one busy mapper page return, and relaunches Clock. A manual
+check follows the same sequence from the Desktop's `Desk` title. The existing
+Clock desktop icon is another route through the same exact activation helper.
