@@ -92,6 +92,20 @@ tools/run_msx.sh QA/MSX/Floppies/GEOBENCH.DSK
 MSX_SHOTS="25 40" tools/run_msx.sh # headless: screenshots into build/msx/
 ```
 
+## Runtime capabilities and expanded-memory ownership
+
+Architecture Milestone 1 decouples the retained 16 KiB mapper-page pool from
+the eight-window compositor limit. MSX2 applications can opt into a versioned
+runtime capability record, a generation-tagged application identity, and opaque
+owned page handles. On the reference 512 KiB setup, the current boot retains 25
+pages and normally leaves 23 free at the idle Desktop; these are measurements,
+not fixed requirements.
+
+Build the development diagnostic with `make gembench-m1-sysinfo`, or run its
+complete close/reopen lifecycle with `make gembench-m1-openmsx`. See
+[Architecture Milestone 1](gembench/ARCHITECTURE-M1-MSX.md) for the ABI,
+ownership rules, compatibility mirror, and test procedure.
+
 `run_msx.sh` uses a native `openmsx` from `$PATH`, the Flatpak
 (`org.openmsx.openMSX`) as a fallback, or an explicit `OPENMSX="…"` override.
 

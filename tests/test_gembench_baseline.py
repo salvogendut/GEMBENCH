@@ -7,6 +7,34 @@ from pathlib import Path
 from tools import gembench_baseline as baseline
 
 
+def seed_architecture(
+    memory: bytearray, *, memory_pages: int = 32, pool_pages: int = 8, free_pages: int = 7
+) -> None:
+    def put(address: int, value: int) -> None:
+        memory[address - baseline.GLUE_DUMP_START] = value & 0xFF
+
+    def put_word(address: int, value: int) -> None:
+        put(address, value)
+        put(address + 1, value >> 8)
+
+    put(baseline.MSX_PAGE_TOTAL, pool_pages)
+    put(baseline.MSX_PAGE_FREE, free_pages)
+    put(baseline.MSX_SYSINFO, baseline.MSX_SYSINFO_SIZE)
+    put(baseline.MSX_SYSINFO + 1, 1)
+    put(baseline.MSX_SYSINFO + 2, 1)
+    put(baseline.MSX_SYSINFO + 4, 1)
+    put(baseline.MSX_SYSINFO + 5, 7)
+    put_word(baseline.MSX_SYSINFO + 6, 512)
+    put_word(baseline.MSX_SYSINFO + 8, 212)
+    put(baseline.MSX_SYSINFO + 10, 4)
+    put(baseline.MSX_SYSINFO + 11, 16)
+    put(baseline.MSX_SYSINFO + 12, memory_pages)
+    put(baseline.MSX_SYSINFO + 13, pool_pages)
+    put(baseline.MSX_SYSINFO + 14, free_pages)
+    put(baseline.MSX_SYSINFO + 15, baseline.WM_MAXWIN)
+    put_word(baseline.MSX_SYSINFO + 16, baseline.MSX_M1_REQUIRED_CAPABILITIES)
+
+
 class BaselineTests(unittest.TestCase):
     def make_tree(self, root: Path) -> None:
         card = root / "QA" / "MSX" / "CARD"
@@ -33,6 +61,7 @@ class BaselineTests(unittest.TestCase):
 
     def test_runtime_parser_reads_1983_state_and_low_ram(self) -> None:
         memory = bytearray(baseline.GLUE_DUMP_LENGTH)
+        seed_architecture(memory)
 
         def put(address: int, value: int) -> None:
             memory[address - baseline.GLUE_DUMP_START] = value
@@ -68,6 +97,7 @@ class BaselineTests(unittest.TestCase):
 
     def test_runtime_parser_reads_diagnostic_probes(self) -> None:
         memory = bytearray(baseline.GLUE_DUMP_LENGTH)
+        seed_architecture(memory)
 
         def put(address: int, value: int) -> None:
             memory[address - baseline.GLUE_DUMP_START] = value
@@ -117,6 +147,7 @@ class BaselineTests(unittest.TestCase):
 
     def test_runtime_parser_measures_injected_keyboard_response(self) -> None:
         memory = bytearray(baseline.GLUE_DUMP_LENGTH)
+        seed_architecture(memory)
 
         def put(address: int, value: int) -> None:
             memory[address - baseline.GLUE_DUMP_START] = value
@@ -180,6 +211,7 @@ class BaselineTests(unittest.TestCase):
 
     def test_required_diagnostic_probes_are_rejected_when_missing(self) -> None:
         memory = bytearray(baseline.GLUE_DUMP_LENGTH)
+        seed_architecture(memory)
         memory[baseline.MSX_TOTSEG - baseline.GLUE_DUMP_START] = 32
         memory[baseline.MSX_FREESEG - baseline.GLUE_DUMP_START] = 25
         memory[baseline.MSX_PAGE_DATA - baseline.GLUE_DUMP_START] = 4
@@ -203,6 +235,7 @@ class BaselineTests(unittest.TestCase):
 
     def test_non_desktop_runtime_is_rejected(self) -> None:
         memory = bytearray(baseline.GLUE_DUMP_LENGTH)
+        seed_architecture(memory)
         memory[baseline.MSX_TOTSEG - baseline.GLUE_DUMP_START] = 32
         memory[baseline.MSX_FREESEG - baseline.GLUE_DUMP_START] = 28
         memory[baseline.MSX_PAGE_DATA - baseline.GLUE_DUMP_START] = 4
@@ -226,6 +259,7 @@ class BaselineTests(unittest.TestCase):
 
     def test_wrong_mapper_size_is_rejected(self) -> None:
         memory = bytearray(baseline.GLUE_DUMP_LENGTH)
+        seed_architecture(memory, memory_pages=16)
         memory[baseline.MSX_TOTSEG - baseline.GLUE_DUMP_START] = 16
         memory[baseline.MSX_FREESEG - baseline.GLUE_DUMP_START] = 12
         memory[baseline.MSX_PAGE_DATA - baseline.GLUE_DUMP_START] = 4
@@ -269,7 +303,9 @@ class BaselineTests(unittest.TestCase):
             "mapper_total_segments": 32,
             "mapper_free_segments_at_entry": 25,
             "app_pool_pages": 8,
+            "free_app_pool_pages": 7,
             "idle_busy_app_pages": 1,
+            "sysinfo": None,
             "vram_nonzero_bytes": 6484,
             "diagnostic_probes": {
                 "phase": 4,

@@ -63,6 +63,52 @@ MSX_GBR_DST     equ   #C190        ; caller destination after app restore (word)
 MSX_GBR_LEN     equ   #C192        ; requested byte count, 1..32
 MSX_GBR_BUF     equ   #C1A0        ; 32-byte resident transfer buffer
 MSX_GBR_MAXREAD equ   32
+; Architecture milestone 1 (#31): mapper pages and application owners are
+; separate from the eight-entry window table.  Handles are 16-bit values whose
+; low byte is slot+1 and whose high byte is a nonzero generation.  The native
+; mapper segment stays private to the kernel.
+MSX_PAGE_MAX       equ #20          ; at most 32 complete 16 KiB pages
+MSX_PAGE_NATIVE    equ #C200        ; 32 native mapper segment numbers
+MSX_PAGE_STATE     equ #C220        ; 0 free / 1 allocated
+MSX_PAGE_OWNER     equ #C240        ; owning identity low byte (slot+1)
+MSX_PAGE_OWNER_GEN equ #C260        ; owning identity generation
+MSX_PAGE_GEN       equ #C280        ; page-handle generation
+MSX_PAGE_PURPOSE   equ #C2A0        ; GB_PAGE_* purpose
+MSX_OWNER_ACTIVE   equ #C2C0        ; 8 owner slots, independent of windows
+MSX_OWNER_GEN      equ #C2C8        ; owner-handle generations
+MSX_WIN_OWNER      equ #C2D0        ; owner low byte for each WM slot
+MSX_WIN_OWNER_GEN  equ #C2D8        ; owner generation for each WM slot
+MSX_PENDING_OWNER  equ #C2E0        ; owner being loaded before WM registration
+MSX_CLOSE_OWNER    equ #C2E2        ; close-path owner scratch
+MSX_PAGE_TOTAL     equ #C2E4        ; pages retained from DOS, including TPA P1
+MSX_PAGE_FREE      equ #C2E5        ; currently unallocated retained pages
+MSX_ALLOC_OWNER    equ #C2E6        ; allocator scratch: owner handle
+MSX_ALLOC_PURPOSE  equ #C2E8        ; allocator scratch: requested purpose
+MSX_ALLOC_HANDLE   equ #C2E9        ; allocator/free scratch: page handle
+MSX_ALLOC_NATIVE   equ #C2EB        ; legacy-claim scratch: native segment
+MSX_ALLOC_INDEX    equ #C2EC        ; legacy-claim scratch: pool index
+
+; Read-only, versioned GB_SYSINFO v1 record returned by GB_SYSINFO. The free
+; page byte follows allocator changes and is also refreshed on every query;
+; all other fields are fixed at boot.
+MSX_SYSINFO        equ #C2F0
+MSX_SYSINFO_SIZE   equ 20
+MSX_SYS_SIZE       equ MSX_SYSINFO+0
+MSX_SYS_VERSION    equ MSX_SYSINFO+1
+MSX_SYS_ABI_MAJOR  equ MSX_SYSINFO+2
+MSX_SYS_ABI_MINOR  equ MSX_SYSINFO+3
+MSX_SYS_PLATFORM   equ MSX_SYSINFO+4
+MSX_SYS_VIDEO_MODE equ MSX_SYSINFO+5
+MSX_SYS_WIDTH      equ MSX_SYSINFO+6
+MSX_SYS_HEIGHT     equ MSX_SYSINFO+8
+MSX_SYS_PACKING    equ MSX_SYSINFO+10
+MSX_SYS_COLOURS    equ MSX_SYSINFO+11
+MSX_SYS_MEM_PAGES  equ MSX_SYSINFO+12
+MSX_SYS_POOL_TOTAL equ MSX_SYSINFO+13
+MSX_SYS_POOL_FREE  equ MSX_SYSINFO+14
+MSX_SYS_MAX_WINDOWS equ MSX_SYSINFO+15
+MSX_SYS_CAPS       equ MSX_SYSINFO+16
+MSX_SYS_RESERVED   equ MSX_SYSINFO+18
 ; NOTE (#287 M1 debugging): DOS 2 / Nextor's kernel data occupies page 3 well
 ; below #F380 (the mapper jump table itself sits around #F200, jumping into
 ; code near #EC00) - the DOS 1 "system area starts at #F380" rule does NOT

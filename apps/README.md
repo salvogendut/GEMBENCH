@@ -39,6 +39,7 @@ preempted.
 | shell    | `SHELL.APP`    | fullscreen command shell with `ls`, `cd`, `pwd`, `cat`, `cp`, `rm`, `clear`, `help`, and `exit`; supports A/B/C paths and streamed arbitrary-size file copies |
 | timesync | `TIMESYNC.APP` | PCW desktop helper — reads PerryNet's firmware clock with `TIME_GET` when `TIMESYNC=true`, then applies `TIMEZONE=+/-H` |
 | diskutil | `DISKUTIL.APP` | CPC physical AMSDOS formatter and MSX2 FAT12 quick formatter; not shipped on PCW |
+| sysinfo | `SYSINFO.APP` | development-only MSX2 Architecture Milestone 1 diagnostic for runtime capabilities, owner identity, page generations, free counts, and close-time reclamation (`make gembench-m1-sysinfo`) |
 
 Most sources live under `apps/<name>/`. `PAINT.APP` and `BASIC.APP` are built
 from sibling `GB-PAINT` and `GB-BASIC` checkouts and staged into the same

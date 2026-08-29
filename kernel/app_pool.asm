@@ -1,5 +1,9 @@
 ; kernel/app_pool.asm - detected bank-page pool for resident windows and modules.
 
+                ifdef PLATFORM_MSX
+                include "msx_page_pool.asm"
+                else
+
 ; app_pool_init (#84): build the app-page pool from the detected bank count
 ; (md_banks). Index 0..2 = bank 0 blocks 1..3 (#C5..#C7; block 0 is PAGE_DATA);
 ; then each further bank contributes all four blocks (&C4 + bank*8 + block), the
@@ -97,3 +101,4 @@ wfp_scan        ld    a,(hl)
 wfp_hit         xor   a
                 ld    (de),a                       ; clear the parallel busy flag
                 ret
+                endif                          ; PLATFORM_MSX

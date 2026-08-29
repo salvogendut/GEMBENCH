@@ -166,6 +166,20 @@ resource, and an older or non-graphics renderer may continue to reject the
 object. A future on-disk raster payload, palette record, pointer encoding, or
 different object layout would require a new resource version.
 
+### Append-only architecture foundation
+
+Architecture Milestone 1 ([#31](https://github.com/salvogendut/GEMBENCH/issues/31))
+appends three MSX2 jumps after `GB_SHELL`: `GB_SYSINFO` at `0x80C3`, `GB_OWNER`
+at `0x80C6`, and `GB_PAGE` at `0x80C9`. No existing jump, message, GBR record,
+or managed-window byte moves. CPC and PCW do not export these entries yet.
+
+`GB_SYSINFO` v1 has a versioned 20-byte minimum prefix. Owner and page values
+are opaque, generation-tagged 16-bit runtime handles; neither is a persistent
+identifier or a native mapper segment. Applications opt into the C bindings
+with `SYS=1`, so existing application binaries and non-users retain their prior
+layout. The exact MSX ownership and allocator contract is documented in
+[ARCHITECTURE-M1-MSX.md](ARCHITECTURE-M1-MSX.md).
+
 ## Compatibility rules
 
 For GEMBENCH-1:

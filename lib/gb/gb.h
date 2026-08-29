@@ -298,6 +298,69 @@ unsigned char gb_fs_save(char *buf, unsigned int len);   /* save opened file -> 
 unsigned char gb_fs_free_kib(unsigned int *kib);          /* free space in KiB; 1 known */
 unsigned char gb_getkey(void);        /* typed char from the keyboard, 0 if none  */
 
+/* Architecture milestone 1 (#31). The public record and opaque handles are
+ * target-neutral; this first implementation is available on MSX2 only. A page
+ * handle deliberately does not reveal the native mapper segment. Future
+ * transfer/call-gate services will consume it without exposing mapper policy. */
+typedef unsigned int gb_owner_t;
+typedef unsigned int gb_page_t;
+
+#define GB_PLATFORM_MSX2 1u
+
+#define GB_PACKING_2BPP 2u
+#define GB_PACKING_4BPP 4u
+
+#define GB_CAP_WINDOWS       0x0001u
+#define GB_CAP_EVENTS        0x0002u
+#define GB_CAP_FILESYSTEM    0x0004u
+#define GB_CAP_SHELL         0x0008u
+#define GB_CAP_NETWORK       0x0010u
+#define GB_CAP_GBR           0x0020u
+#define GB_CAP_PAGE_ALLOC    0x0040u
+#define GB_CAP_OWNER_ID      0x0080u
+#define GB_CAP_RUNTIME_VIDEO 0x0100u
+
+#define GB_PAGE_UNSPECIFIED 0u
+#define GB_PAGE_APPLICATION 1u
+#define GB_PAGE_RESOURCE    2u
+#define GB_PAGE_DOCUMENT    3u
+#define GB_PAGE_CACHE       4u
+#define GB_PAGE_SCRAP       5u
+#define GB_PAGE_TEMPORARY   6u
+
+#define GB_PAGE_OK              0u
+#define GB_PAGE_ERR_UNSUPPORTED 1u
+#define GB_PAGE_ERR_STALE       2u
+#define GB_PAGE_ERR_OWNER       3u
+#define GB_PAGE_ERR_FREE        4u
+#define GB_PAGE_ERR_NOMEM       5u
+#define GB_PAGE_ERR_BADARG      6u
+
+typedef struct {
+    unsigned char size;          /* stable prefix size, currently 20 */
+    unsigned char version;       /* GB_SYSINFO v1 */
+    unsigned char abi_major;     /* frozen GEMBENCH ABI major */
+    unsigned char abi_minor;
+    unsigned char platform;      /* GB_PLATFORM_* */
+    unsigned char video_mode;    /* native backend mode (MSX Screen 6/7) */
+    unsigned int width_pixels;
+    unsigned int height_pixels;
+    unsigned char packing;       /* logical bits per pixel */
+    unsigned char colours;
+    unsigned char memory_pages;  /* physical 16 KiB mapper segments */
+    unsigned char pool_pages;    /* pages retained by the general allocator */
+    unsigned char free_pages;
+    unsigned char max_windows;   /* independent compositor capacity */
+    unsigned int capabilities;   /* GB_CAP_* */
+    unsigned int reserved;
+} gb_sysinfo_t;
+
+const gb_sysinfo_t *gb_sysinfo(void);
+gb_owner_t gb_owner_current(void);
+gb_page_t gb_page_alloc(unsigned char purpose);
+unsigned char gb_page_free(gb_page_t page);
+unsigned char gb_page_check(gb_page_t page);
+
 /* Event callback (issue #32): the kernel calls the window's registered handler when
  * an event it owns occurs - e.g. a click in the top bar (GB_MSG_MENU). Registration
  * is via the gb_win_t on_event / gb_mwin_t proc descriptor fields (#274 retired the

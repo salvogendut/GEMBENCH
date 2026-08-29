@@ -81,7 +81,7 @@ def main(argv: list[str]) -> int:
         str(screenshot_path),
         "--dump-state",
         "--dump-ram",
-        "0xC000:96",
+        "0xC000:784",  # through the Milestone-1 page pool and GB_SYSINFO record
     ]
     if args.input_response:
         command.extend(

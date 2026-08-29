@@ -257,54 +257,18 @@ mtr_slot        db    0
                 dw    INIPLT
                 ret
 
-; app_pool_init: APP_PAGES[0] = the TPA's own page-1 segment (the desktop rides
-; it for free), then ALL_SEG until the pool is full or DOS runs dry. On a stock
-; 128K machine that yields 1 window (the desktop) + whatever DOS left over.
-app_pool_init
-                ld    hl,APP_PAGES
-                ld    a,(MSX_TPASEG)
-                ld    (hl),a
-                inc   hl
-                ld    c,1                     ; C = entries so far
-api_more
-                ld    a,c
-                cp    WM_MAXWIN
-                jr    nc,api_done
-                push  hl
-                push  bc
-                xor   a                       ; ALL_SEG a user segment
-                ld    b,a
-                ld    hl,(MSX_ALLSEG)
-                call  jp_hl
-                pop   bc
-                pop   hl
-                jr    c,api_done             ; DOS has no more -> pool complete
-                ld    (hl),a
-                inc   hl
-                inc   c
-                jr    api_more
-api_done
-                ld    a,c
-                ld    (APP_NPAGES),a
-                ld    hl,APP_BUSY            ; mark every page free
-                ld    de,APP_BUSY+1
-                ld    bc,WM_MAXWIN-1
-                ld    (hl),0
-                ldir
-                ret
-
 ; msx_free_segments: FRE_SEG the PAGE_DATA segment + every pool segment except
-; APP_PAGES[0] (that one is the TPA's own). Exit path only.
+; MSX_PAGE_NATIVE[0] (that one is the TPA's own). Exit path only.
 msx_free_segments
                 ld    a,(MSX_PAGE_DATA)
                 call  mfs_free
-                ld    a,(APP_NPAGES)
+                ld    a,(MSX_PAGE_TOTAL)
                 or    a
                 ret   z
                 dec   a
                 ret   z                       ; only the TPA entry
                 ld    b,a                     ; B = count above [0]
-                ld    hl,APP_PAGES+1
+                ld    hl,MSX_PAGE_NATIVE+1
 mfs_loop
                 ld    a,(hl)
                 push  hl

@@ -863,10 +863,20 @@ boot_desktop
                 ld    hl,name_desktop
                 ld    de,fs_req_name
                 call  copy11
+                ifdef PLATFORM_MSX
+                call  owner_alloc
+                ret   nc
+                ld    (MSX_PENDING_OWNER),de
+                ld    b,GB_PAGE_APPLICATION
+                call  page_alloc_owned
+                jr    nc,bd_owner_fail
+                ld    (wm_open_page),a
+                else
                 call  wm_alloc_page
                 or    a
                 ret   z
                 ld    c,a
+                endif
                 ld    a,(bank_cur)
                 push  af
                 xor   a
@@ -875,7 +885,11 @@ boot_desktop
                 ld    l,a
                 ld    (APP_HANDLER),hl
                 di
+                ifdef PLATFORM_MSX
+                ld    a,(wm_open_page)
+                else
                 ld    a,c
+                endif
                 call  bank_set
                 ld    hl,APP_LOAD_MAX             ; keep sector/record padding below app data RAM
                 ld    (fs_load_max),hl
@@ -888,10 +902,22 @@ boot_desktop
                 di
 bd_done         pop   af
                 call  bank_set
+                ifdef PLATFORM_MSX
+                ld    de,(MSX_PENDING_OWNER)
+                ld    a,d
+                or    e
+                call  nz,owner_release
+                else
                 ld    a,c
                 call  wm_free_page
+                endif
                 ei
                 ret
+                ifdef PLATFORM_MSX
+bd_owner_fail   ld    de,(MSX_PENDING_OWNER)
+                call  owner_release
+                ret
+                endif
 
                 ifdef WM_GADGETS
 ; --- #164 banked Viewer picture buffer ------------------------------------------------------
@@ -1516,6 +1542,7 @@ kpe_native16    ld    a,(PIC_EDIT_OFF)
 kpe_get         ld    a,(PIC_PAGE)
                 or    a
                 ret   z
+                call  page_claim_legacy_native
                 ld    a,(bank_cur)
                 push  af
                 call  kpe_pic_to_tmp
@@ -1535,6 +1562,7 @@ kpe_get         ld    a,(PIC_PAGE)
 kpe_put         ld    a,(PIC_PAGE)
                 or    a
                 ret   z
+                call  page_claim_legacy_native
                 ld    hl,(PIC_EDIT_BUF)
                 ld    de,PIC_TMP
                 ld    bc,PIC_TILE_SZ
@@ -1551,6 +1579,7 @@ kpe_put         ld    a,(PIC_PAGE)
 kpe_chunk       ld    a,(PIC_PAGE)
                 or    a
                 ret   z
+                call  page_claim_legacy_native
                 ld    a,(bank_cur)
                 push  af
                 ld    hl,(PIC_EDIT_OFF)
@@ -1566,6 +1595,7 @@ kpe_chunk       ld    a,(PIC_PAGE)
 kpe_write       ld    a,(PIC_PAGE)
                 or    a
                 ret   z
+                call  page_claim_legacy_native
                 ld    a,(bank_cur)
                 push  af
                 ld    hl,(PIC_EDIT_OFF)
@@ -2236,6 +2266,9 @@ wm_register
                 inc   de                            ; entry+14 = arg: capture the pending
                 ld    hl,launch_arg               ; launch arg as this window's own file
                 call  copy11
+                ifdef PLATFORM_MSX
+                call  owner_bind_pending_window   ; parallel owner identity; WM entry stays frozen
+                endif
                 ld    a,(wm_slot)                 ; focus + append the new window (z-top)
                 ld    (WM_FOCUS),a
                 jr    wm_z_append                  ; A = slot; tail-call (rets to wm_register's caller)
@@ -3000,9 +3033,21 @@ k_wm_launch_as
                 ld    de,fs_req_name
                 call  copy11
 wm_open_go
+                ld    a,(WM_NWIN)                 ; memory pages and window slots are independent
+                cp    WM_MAXWIN
+                ret   nc
+                ifdef PLATFORM_MSX
+                call  owner_alloc
+                ret   nc
+                ld    (MSX_PENDING_OWNER),de
+                ld    b,GB_PAGE_APPLICATION
+                call  page_alloc_owned
+                jr    nc,wmo_owner_fail
+                else
                 call  wm_alloc_page
                 or    a
                 ret   z                            ; no free page
+                endif
                 ld    (wm_open_page),a
                 ld    a,(bank_cur)
                 ld    (wm_open_back),a
@@ -3027,15 +3072,31 @@ wmo_loaded      jr    nc,wmo_fail
                 di
                 ld    a,(wm_open_back)
                 call  bank_set
+                ifdef PLATFORM_MSX
+                ld    de,(MSX_PENDING_OWNER)      ; a non-registering/bad app cannot leak its owner
+                ld    a,d
+                or    e
+                call  nz,owner_release
+                endif
                 ei
                 ret
 wmo_fail
                 ld    a,(wm_open_back)
                 call  bank_set
+                ifdef PLATFORM_MSX
+                ld    de,(MSX_PENDING_OWNER)
+                call  owner_release              ; also releases the primary code page
+                else
                 ld    a,(wm_open_page)
                 call  wm_free_page
+                endif
                 ei
                 ret
+                ifdef PLATFORM_MSX
+wmo_owner_fail  ld    de,(MSX_PENDING_OWNER)
+                call  owner_release
+                ret
+                endif
 
                 ifdef PLATFORM_MSX
 ; k_shell (GB_SHELL): bounded synchronous shell services for GEMBENCH MSX2.
@@ -3283,6 +3344,18 @@ ksh_busy       ld    a,GB_SHELL_BUSY_RES
 k_wm_close
                 ld    a,(WM_FOCUS)
                 ld    c,a                          ; C = slot being closed
+                ifdef PLATFORM_MSX
+                ld    hl,MSX_WIN_OWNER
+                add   a,l
+                ld    l,a
+                ld    e,(hl)
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    d,(hl)
+                ld    (MSX_CLOSE_OWNER),de
+                endif
                 call  wm_set_clip                 ; damage only the rectangle being exposed;
                                                   ; B = page, HL = closing entry+4
                 ld    a,b                          ; page
@@ -3311,7 +3384,21 @@ kwc_not_task
                 call  bank_set                     ; wm_map_focus mapped the new focus, but the
                                                   ; closing handler must return in its own page;
                                                   ; bank_set preserves A for wm_free_page
+                ifdef PLATFORM_MSX
+                push  af                           ; retain raw page for the ownerless fallback
+                ld    de,(MSX_CLOSE_OWNER)
+                ld    a,d
+                or    e
+                jr    z,kwc_raw_free
+                pop   af                           ; owner teardown finds every page by handle owner
+                call  owner_release               ; primary + resource pages, generation invalidated
+                jr    kwc_repaint
+kwc_raw_free    pop   af                           ; defensive legacy window without an owner
+                call  wm_free_page
+kwc_repaint
+                else
                 call  wm_free_page                 ; release it (z-order already updated)
+                endif
                 jp    wm_repaint_all               ; repaint remaining layers only inside that rect
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to

@@ -182,9 +182,10 @@ buffer leaves only 11 bytes between loaded code and data after integration; its
 image grows by 122 bytes to 12,097. The Screen 6/7 kernels remain
 10,682/12,260 bytes. A disposable openMSX image launches two independent
 Notepads and proves typed copy, atomic bitmap rejection, and typed text paste.
-Mapper-backed payloads remain deferred: the current mapper allocator is tied to
-application-window ownership, so retaining a scrap page would consume a scarce
-live-window segment without a lifecycle-neutral owner or release contract.
+Mapper-backed payloads were deferred here because the original mapper allocator
+was tied to application-window ownership. Architecture Milestone 1 in issue #31
+subsequently adds lifecycle-neutral owned pages on MSX2; typed scrap still waits
+for a bounded cross-page transfer/message contract before using them.
 Milestone 14 adds the first bounded desktop service without a process table or
 queue. A live MSX2 window advertises one coarse class in three previously unused
 private window-flag bits; top-to-bottom discovery returns a short-lived opaque

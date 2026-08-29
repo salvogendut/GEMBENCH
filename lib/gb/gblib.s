@@ -437,7 +437,7 @@ _gb_wm_damage:
 ; A window == one busy bank, so full <=> WM_NWIN >= APP_NPAGES. Reads kernel low RAM
 ; directly (no kernel call), like gb_mx (#153).
 _gb_wm_full:
-        ld      a, (0x1437)     ; APP_NPAGES (total app banks)
+        ld      a, (0x1437)     ; APP_NPAGES (window-compatible app banks, max 8)
         ld      b, a
         ld      a, (0x1350)     ; WM_NWIN (live windows = busy banks)
         cp      b               ; CF=1 if WM_NWIN < APP_NPAGES (room)

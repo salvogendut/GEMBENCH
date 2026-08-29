@@ -111,13 +111,13 @@ kgs_free
                 ld    a,1
                 ret
 
-; A = page. Return NZ only when it is a currently claimed app-pool segment.
+; A = native mapper segment. Return NZ only when the general allocator owns it.
 kgs_page_busy
                 ld    b,a
-                ld    a,(APP_NPAGES)
+                ld    a,(MSX_PAGE_TOTAL)
                 ld    c,a
-                ld    hl,APP_PAGES
-                ld    de,APP_BUSY
+                ld    hl,MSX_PAGE_NATIVE
+                ld    de,MSX_PAGE_STATE
 kgs_page_loop
                 ld    a,c
                 or    a
