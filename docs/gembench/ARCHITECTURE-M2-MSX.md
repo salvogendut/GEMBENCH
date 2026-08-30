@@ -161,9 +161,10 @@ mirrors while the authoritative class and exact accessory identity live in the
 application record.
 
 The Paint run opens a real 176x176 `.PIC`, observes Toolchest and Preview under
-one owner/code page, opens Canvas as the third owned window, closes Canvas alone,
-closes the document while Toolchest survives, and finally quits. It finishes at
-two baseline windows/owners and restores all mapper pages used by Paint.
+one owner/code page, opens Canvas as the third owned window, and drags all three
+panes before continuing to interact with them. It closes Canvas alone, closes
+the document while Toolchest survives, and finally quits. It finishes at two
+baseline windows/owners and restores all mapper pages used by Paint.
 
 ## Target boundary
 

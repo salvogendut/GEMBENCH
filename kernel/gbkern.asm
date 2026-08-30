@@ -2659,8 +2659,15 @@ mwf_content_hook
 ; Kernel-owned outline gestures for explicit v1 kinds. They deliberately retain the
 ; established app helper's interaction: the window is lifted only after actual
 ; movement, a red outline follows the held pointer, and one compositor repaint
-; restores the stack on release.
+; restores the stack on release. GB_APP also exposes the geometry engine to a
+; legacy gb_win_t callback, whose entry+5 is an on_frame pointer rather than a
+; managed descriptor. That path must not dispatch GB_MSG_MOVED through mw_hook.
+mw_move_silent
+                xor   a
+                jr    mwm_mode
 mw_move
+                ld    a,1
+mwm_mode        ld    (mwm_notify),a
                 ld    a,(WM_FOCUS)
                 call  wm_entry
                 push  hl
@@ -2771,9 +2778,12 @@ mwm_done        ld    a,(ghost_on)
                 ld    (GB_MSG+2),a
                 xor   a
                 ld    (GB_MSG+3),a
+                ld    a,(mwm_notify)
+                or    a
+                jr    z,mwm_repaint
                 ld    a,GB_MSG_MOVED
                 call  mw_hook
-                jp    wm_repaint_all
+mwm_repaint     jp    wm_repaint_all
 
 mw_resize
                 ld    a,(WM_FOCUS)
@@ -2925,6 +2935,7 @@ mw_do_close
                 jp    mw_hook
 
 mw_desc         dw    0                       ; scratch: the focused managed window's descriptor
+mwm_notify      db    0                       ; nonzero only for a real managed descriptor
 
 ; wm_free_slot: -> A = lowest table slot whose alive flag is clear, or #FF.
 wm_free_slot

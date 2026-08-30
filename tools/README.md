@@ -126,8 +126,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   transient second window, stale generation rejection, and complete cleanup.
 - **`test_m2_paint_openmsx.sh`** — opens an actual `.PIC` in the in-tree Paint,
   observes its Toolchest, Preview, and Canvas under one application/code page,
-  closes the picture windows independently, and proves final window, owner,
-  and mapper-page counts return to baseline.
+  drags and continues using all three windows, closes the picture windows
+  independently, and proves final window, owner, and mapper-page counts return
+  to baseline.
 - **`gen_desk_accessories.py`** — validates the fixed-capacity build-time Desk
   catalog and generates stable IDs, labels, and padded APP names in
   `gbdesk_catalog.h`; `--check` detects stale generated metadata.

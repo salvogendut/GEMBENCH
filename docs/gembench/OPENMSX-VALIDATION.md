@@ -259,9 +259,11 @@ page were reclaimed on each close. The reference pool contained 25 pages.
 The Paint trace launched a real 176x176 `LOGO.PIC` through the normal File
 Manager document path. Toolchest/Preview/Canvas occupied window slots 2/3/4,
 shared application owner `0x0103` and one code page, and reached three windows
-inside Paint. Closing Canvas left two Paint windows, closing Preview released
-the document while Toolchest remained, and closing Toolchest returned to the
-two baseline windows/owners. Free mapper pages returned from 22 to 22.
+inside Paint. The trace dragged Toolchest from x=98 to 95, Preview from x=1 to
+2, and Canvas from x=39 to 54 before continuing to use each pane. Closing
+Canvas left two Paint windows, closing Preview released the document while
+Toolchest remained, and closing Toolchest returned to the two baseline
+windows/owners. Free mapper pages returned from 22 to 22.
 
 The run also found and fixed Paint's launch-order bug: loading `PAINT.IST`
 could replace the focused window argument before `.PIC` recognition. Paint now
@@ -269,6 +271,12 @@ claims the launch document first and restores its name after loading the tool
 resource. Its MSX image is 15,710 bytes versus the imported 15,753-byte
 single-workspace baseline. The preemptive Screen 6/7 kernels are
 13,242/14,820 bytes; `GBSCHED.RAW` remains 503/512 bytes.
+
+Manual testing then found that `gb_window_drag()` reused the managed-window
+completion callback on a legacy `gb_win_t` and returned a rectangle last
+published by a repainted managed sibling. The legacy service now skips the
+invalid managed callback and republishes the dragged window after repaint.
+The three-pane drag trace prevents both failures from recurring.
 
 ```sh
 make gembench-msx

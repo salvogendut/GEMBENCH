@@ -23,6 +23,16 @@ set p2_work_slot -1
 set p2_work_generation 0
 set p2_max_nwin 0
 set p2_refocused 0
+set p2_tool_initial {}
+set p2_tool_moved {}
+set p2_preview_initial {}
+set p2_preview_moved {}
+set p2_work_initial {}
+set p2_work_moved {}
+set p2_drag_slot -1
+set p2_drag_before {}
+set p2_drag_mask 0
+set p2_drag_callback ""
 
 proc p2_word {address} {
     expr {[peek $address] + 256 * [peek [expr {$address + 1}]]}
@@ -37,6 +47,12 @@ proc p2_owner_count {} {
 }
 
 proc p2_entry {slot} { expr {0x1352 + 25 * $slot} }
+
+proc p2_rect {slot} {
+    set entry [p2_entry $slot]
+    list [peek [expr {$entry + 1}]] [peek [expr {$entry + 2}]] \
+         [peek [expr {$entry + 3}]] [peek [expr {$entry + 4}]]
+}
 
 proc p2_slot_owner {slot} {
     expr {[peek [expr {0xC2D0 + $slot}]] |
@@ -82,6 +98,14 @@ proc p2_finish {status} {
     puts $out "PREVIEW_SLOT=$::p2_preview_slot"
     puts $out "WORK_SLOT=$::p2_work_slot"
     puts $out "WORK_GENERATION=$::p2_work_generation"
+    puts $out "TOOL_INITIAL=$::p2_tool_initial"
+    puts $out "TOOL_MOVED=$::p2_tool_moved"
+    puts $out "PREVIEW_INITIAL=$::p2_preview_initial"
+    puts $out "PREVIEW_MOVED=$::p2_preview_moved"
+    puts $out "WORK_INITIAL=$::p2_work_initial"
+    puts $out "WORK_MOVED=$::p2_work_moved"
+    if {$::p2_tool_slot >= 0} { puts $out "TOOL_RECT=[p2_rect $::p2_tool_slot]" }
+    if {$::p2_preview_slot >= 0} { puts $out "PREVIEW_RECT=[p2_rect $::p2_preview_slot]" }
     puts $out "INITIAL_FREE=$::p2_initial_free"
     puts $out "FINAL_FREE=[peek 0xC2E5]"
     puts $out "ACTIVE_OWNERS=[p2_owner_count]"
@@ -168,6 +192,76 @@ proc p2_double_click {callback} {
     after time 0.06 [list p2_double_first_up $callback]
 }
 
+proc p2_pane_drag_done {} {
+    set ::p2_deadline [expr {[machine_info time] + 10.0}]
+    after time 1.0 p2_pane_drag_wait
+}
+
+proc p2_pane_drag_wait {} {
+    if {![p2_lowram_ready]} {
+        if {[machine_info time] >= $::p2_deadline} {
+            p2_finish "FAIL Paint pane drag left the kernel unresponsive"
+        } else {
+            after time 0.05 p2_pane_drag_wait
+        }
+        return
+    }
+    set current [p2_rect $::p2_drag_slot]
+    if {$current ne $::p2_drag_before} {
+        if {$::p2_drag_slot == $::p2_tool_slot} {
+            set ::p2_tool_moved $current
+        } elseif {$::p2_drag_slot == $::p2_preview_slot} {
+            set ::p2_preview_moved $current
+        } elseif {$::p2_drag_slot == $::p2_work_slot} {
+            set ::p2_work_moved $current
+        }
+        after time 1.0 $::p2_drag_callback
+    } elseif {[machine_info time] >= $::p2_deadline} {
+        p2_finish "FAIL Paint pane drag geometry did not change"
+    } else {
+        after time 0.1 p2_pane_drag_wait
+    }
+}
+
+proc p2_pane_drag_release {} {
+    catch {keymatrixup 8 $::p2_drag_mask}
+    after time 0.10 {keymatrixup 8 0x01; after time 1.0 p2_pane_drag_done}
+}
+
+proc p2_pane_drag_start {slot mask callback} {
+    set ::p2_drag_slot $slot
+    set ::p2_drag_before [p2_rect $slot]
+    set ::p2_drag_mask $mask
+    set ::p2_drag_callback $callback
+    keymatrixdown 8 0x01
+    after time 0.12 [list keymatrixdown 8 $mask]
+    after time 0.45 p2_pane_drag_release
+}
+
+proc p2_open_canvas_after_preview_drag {} {
+    set entry [p2_entry $::p2_preview_slot]
+    set ::p2_deadline [expr {[machine_info time] + 30.0}]
+    p2_move_to [expr {[peek [expr {$entry + 1}]] + 12}] \
+               [expr {[peek [expr {$entry + 2}]] + 35}] \
+               {p2_click p2_wait_work}
+}
+
+proc p2_close_canvas_after_drag {} {
+    set entry [p2_entry $::p2_work_slot]
+    set ::p2_deadline [expr {[machine_info time] + 20.0}]
+    p2_move_to [expr {[peek [expr {$entry + 1}]] + 2}] \
+               [expr {[peek [expr {$entry + 2}]] + 6}] \
+               {p2_click p2_close_work_done}
+}
+
+proc p2_close_preview_after_tool_drag {} {
+    set entry [p2_entry $::p2_preview_slot]
+    set ::p2_deadline [expr {[machine_info time] + 20.0}]
+    p2_move_to [expr {[peek [expr {$entry + 1}]] + 2}] \
+               [expr {[peek [expr {$entry + 2}]] + 6}] \
+               {p2_click p2_close_preview_done}
+}
+
 proc p2_close_tool_done {} {
     if {![p2_lowram_ready]} {
         after time 0.05 p2_close_tool_done
@@ -217,11 +311,13 @@ proc p2_close_work_done {} {
             p2_finish "FAIL independent Canvas close"
             return
         }
-        set entry [p2_entry $::p2_preview_slot]
+        set ::p2_tool_initial [p2_rect $::p2_tool_slot]
+        set entry [p2_entry $::p2_tool_slot]
         set ::p2_deadline [expr {[machine_info time] + 20.0}]
-        p2_move_to [expr {[peek [expr {$entry + 1}]] + 2}] \
+        p2_move_to [expr {[peek [expr {$entry + 1}]] + 12}] \
                    [expr {[peek [expr {$entry + 2}]] + 6}] \
-                   {p2_click p2_close_preview_done}
+                   [list p2_pane_drag_start $::p2_tool_slot 0x10 \
+                         p2_close_preview_after_tool_drag]
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Canvas close timeout"
     } else { after time 0.1 p2_close_work_done }
@@ -248,10 +344,12 @@ proc p2_wait_work {} {
             p2_finish "FAIL Canvas ownership/code page"
             return
         }
+        set ::p2_work_initial [p2_rect $::p2_work_slot]
         set ::p2_deadline [expr {[machine_info time] + 20.0}]
-        p2_move_to [expr {[peek [expr {$entry + 1}]] + 2}] \
+        p2_move_to [expr {[peek [expr {$entry + 1}]] + 12}] \
                    [expr {[peek [expr {$entry + 2}]] + 6}] \
-                   {p2_click p2_close_work_done}
+                   [list p2_pane_drag_start $::p2_work_slot 0x80 \
+                         p2_close_canvas_after_drag]
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Canvas did not register"
     } else { after time 0.1 p2_wait_work }
@@ -307,11 +405,13 @@ proc p2_wait_paint {} {
             p2_finish "FAIL Paint application/window records"
             return
         }
+        set ::p2_preview_initial [p2_rect $::p2_preview_slot]
         set entry [p2_entry $::p2_preview_slot]
         set ::p2_deadline [expr {[machine_info time] + 30.0}]
         p2_move_to [expr {[peek [expr {$entry + 1}]] + 12}] \
-                   [expr {[peek [expr {$entry + 2}]] + 35}] \
-                   {p2_click p2_wait_work}
+                   [expr {[peek [expr {$entry + 2}]] + 6}] \
+                   [list p2_pane_drag_start $::p2_preview_slot 0x80 \
+                         p2_open_canvas_after_preview_drag]
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Paint Toolchest/Preview did not register"
     } else { after time 0.1 p2_wait_paint }

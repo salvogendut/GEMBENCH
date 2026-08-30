@@ -1342,7 +1342,10 @@ kapp_window_drag
                 ld    a,(WM_FOCUS)
                 call  wm_entry
                 call  mw_publish
-                call  mw_move
+                call  mw_move_silent          ; legacy gb_win_t: no managed-descriptor callback
+                ld    a,(WM_FOCUS)             ; repaint visits managed siblings and publishes
+                call  wm_entry                 ; their rectangles; restore the dragged legacy
+                call  mw_publish               ; result before gb_wm_x/y return to the caller
                 xor   a
                 ret
 
