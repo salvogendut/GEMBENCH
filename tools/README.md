@@ -127,12 +127,16 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`test_m1_architecture_openmsx.sh`** — exercises the versioned MSX2
   architecture APIs, including mapper ownership, application records, a
   transient second window, the deferred FIFO/cancellation/delivery contract,
-  stale generation rejection, and complete cleanup. `make
-  gembench-m3-openmsx` runs this diagnostic and the two-mode loader smoke.
+  filesystem contexts, stale generation rejection, and complete cleanup. `make
+  gembench-m4-openmsx` runs this diagnostic and the two-mode loader smoke.
 - **`test_m3_boot_modes_openmsx.sh`** — boots disposable, network-free Screen 6
-  and Screen 7 images and requires a live Desktop, sysinfo v3, the retained
+  and Screen 7 images and requires a live Desktop, sysinfo v4, the retained
   mapper pool, and an empty deferred queue. It guards the fixed 16,128-byte
   child-COM loader window; `make gembench-m3-boot-openmsx` runs it alone.
+- **`build_fsctxmod.sh` / `run_gbfsctx_tests.sh`** — build the paged MSX2
+  filesystem-context provider and verify its four-context, 512-byte,
+  append-only public contract. The live architecture test additionally proves
+  independent File Manager enumeration, offset isolation, and owner teardown.
 - **`test_m2_paint_openmsx.sh`** — opens an actual `.PIC` in the in-tree Paint,
   observes its Toolchest, Preview, and Canvas under one application/code page,
   drags and continues using all three windows, verifies application geometry and

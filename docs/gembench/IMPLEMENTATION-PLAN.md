@@ -295,3 +295,28 @@ filesystem-handle contract can carry its 11-byte filename. The diagnostic and
 Desk openMSX probes cover no nested send, exact exhaustion, cancellation, FIFO
 delivery, teardown purge, generation reuse, and real no-duplicate activation.
 CPC/PCW remain unchanged.
+
+Architecture Milestone 4 in issue #37 implements the first explicit filesystem
+context slice on MSX2. `GB_FSCTX` is appended at `0x80D2`; four opaque,
+generation-tagged records retain owner, drive, path, raw 8.3 name, sequential
+offset, and independent directory FIB state. The root task serializes native
+DOS calls and advances at most 512 bytes per transfer. Stale/foreign handles,
+global exhaustion, cancellation, and owner cleanup have explicit results.
+
+Sysinfo v4 retains the complete v1-v3 prefixes, appends context/transfer/API
+capacity, and advertises `GB_CAP_FS_CONTEXTS`. The branchy 2,024-byte provider
+is loaded as `GBFSCTX.MOD`; only its guarded dispatcher and four-record owner
+cleanup scan are resident. Relocating the native 64-byte directory FIB into the
+fixed page-3 architecture area keeps the Screen 7 loader within its enforced
+16,128-byte window at 16,125 bytes.
+
+MSX2 File Manager is the first production migration. Each instance owns a
+context, four-entry incremental directory batches retain their own FIB, and
+inherited file operations explicitly reactivate the instance's path. An exact
+generated `gblib` subset keeps the full preemptive application within its 16
+KiB bank.
+
+The host and openMSX diagnostics cover concurrent File Manager ownership,
+independent offsets, bounded read/write, handle reuse, and teardown of a
+deliberately leaked context. Notepad, Browser, arbitrary seek/query operations,
+and CPC/PCW providers remain later work.

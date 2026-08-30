@@ -93,7 +93,7 @@ MSX_ALLOC_INDEX    equ #C2EC        ; legacy-claim scratch: pool index
 ; all other fields are fixed at boot.
 MSX_SYSINFO        equ #C2F0
 MSX_SYSINFO_V1_SIZE equ 20
-MSX_SYSINFO_SIZE   equ 28
+MSX_SYSINFO_SIZE   equ 32
 MSX_SYS_SIZE       equ MSX_SYSINFO+0
 MSX_SYS_VERSION    equ MSX_SYSINFO+1
 MSX_SYS_ABI_MAJOR  equ MSX_SYSINFO+2
@@ -118,42 +118,70 @@ MSX_SYS_MSG_QUEUE  equ MSX_SYSINFO+24
 MSX_SYS_MSG_INLINE equ MSX_SYSINFO+25
 MSX_SYS_MSG_VERSION equ MSX_SYSINFO+26
 MSX_SYS_RESERVED3  equ MSX_SYSINFO+27
+MSX_SYS_FS_CONTEXTS equ MSX_SYSINFO+28
+MSX_SYS_FS_TRANSFER equ MSX_SYSINFO+29 ; word: bounded bytes advanced per call
+MSX_SYS_FS_VERSION  equ MSX_SYSINFO+31
 
 ; Architecture milestone 2 (#32): the M1 owner identity is now the public
 ; handle of a real fixed-capacity application record. Window records retain
 ; compositor state and point back to one of these applications; several window
 ; slots may therefore share one code page and lifecycle.
-MSX_APP_CODE_NATIVE equ #C30C       ; primary code mapper segment
-MSX_APP_CODE_PAGE   equ #C314       ; primary gb_page_t low byte
-MSX_APP_CODE_GEN    equ #C31C       ; primary gb_page_t generation
-MSX_APP_WINDOW_COUNT equ #C324      ; live window slots owned by the app
-MSX_APP_PRIMARY_WIN equ #C32C       ; primary window slot, #FF when windowless
-MSX_APP_FLAGS       equ #C334       ; published/root/terminating lifecycle flags
-MSX_APP_SERVICE     equ #C33C       ; app-owned shell service class
-MSX_APP_ACCESSORY   equ #C344       ; app-owned exact Desk accessory ID
-MSX_APP_WORKER_WIN  equ #C34C       ; optional worker window slot, #FF if none
-MSX_WIN_GEN         equ #C354       ; generation for each reused WM slot
-MSX_APP_SLOT        equ #C35C       ; lifecycle scratch: app/remaining count
-MSX_WINDOW_HANDLE   equ #C35D       ; lifecycle scratch: generation-tagged window
-MSX_WINDOW_SLOT     equ #C35F       ; lifecycle scratch: WM slot
-MSX_CALLER_BANK     equ #C360       ; lifecycle scratch: caller mapper segment
-MSX_APP_REMAIN      equ #C361       ; lifecycle scratch: remaining windows
-MSX_APP_TABLE_END   equ #C362
+MSX_APP_CODE_NATIVE equ #C310       ; primary code mapper segment
+MSX_APP_CODE_PAGE   equ #C318       ; primary gb_page_t low byte
+MSX_APP_CODE_GEN    equ #C320       ; primary gb_page_t generation
+MSX_APP_WINDOW_COUNT equ #C328      ; live window slots owned by the app
+MSX_APP_PRIMARY_WIN equ #C330       ; primary window slot, #FF when windowless
+MSX_APP_FLAGS       equ #C338       ; published/root/terminating lifecycle flags
+MSX_APP_SERVICE     equ #C340       ; app-owned shell service class
+MSX_APP_ACCESSORY   equ #C348       ; app-owned exact Desk accessory ID
+MSX_APP_WORKER_WIN  equ #C350       ; optional worker window slot, #FF if none
+MSX_WIN_GEN         equ #C358       ; generation for each reused WM slot
+MSX_APP_SLOT        equ #C360       ; lifecycle scratch: app/remaining count
+MSX_WINDOW_HANDLE   equ #C361       ; lifecycle scratch: generation-tagged window
+MSX_WINDOW_SLOT     equ #C363       ; lifecycle scratch: WM slot
+MSX_CALLER_BANK     equ #C364       ; lifecycle scratch: caller mapper segment
+MSX_APP_REMAIN      equ #C365       ; lifecycle scratch: remaining windows
+MSX_APP_TABLE_END   equ #C366
 
 ; Architecture milestone 3 (#35): application-level deferred endpoints and a
 ; bounded FIFO. Queue records are sender owner, receiver owner, type, p0, p1,
 ; p2. The current record remains stable only while its handler is running.
-MSX_DEFER_HANDLER_LO equ #C362       ; eight application handler low bytes
-MSX_DEFER_HANDLER_HI equ #C36A       ; eight application handler high bytes
-MSX_DEFER_COUNT      equ #C372       ; occupied FIFO records (0..8)
-MSX_DEFER_BUSY       equ #C373       ; nonzero only during root-task delivery
-MSX_DEFER_CURRENT    equ #C374       ; eight-byte record visible to the handler
-MSX_DEFER_QUEUE      equ #C37C       ; eight records x eight bytes
-MSX_DEFER_SEND       equ #C3BC       ; six-byte sender/receiver/input scratch
-MSX_DEFER_PURGE_OWNER equ #C3C2      ; owner matched by queue compaction
-MSX_DEFER_INDEX      equ #C3C4       ; queue compaction cursor
-MSX_DEFER_ACTIVATE   equ #C3C5       ; deferred focus request, #FF means none
-MSX_ARCH_TABLE_END   equ #C3C6
+MSX_DEFER_HANDLER_LO equ #C366       ; eight application handler low bytes
+MSX_DEFER_HANDLER_HI equ #C36E       ; eight application handler high bytes
+MSX_DEFER_COUNT      equ #C376       ; occupied FIFO records (0..8)
+MSX_DEFER_BUSY       equ #C377       ; nonzero only during root-task delivery
+MSX_DEFER_CURRENT    equ #C378       ; eight-byte record visible to the handler
+MSX_DEFER_QUEUE      equ #C380       ; eight records x eight bytes
+MSX_DEFER_SEND       equ #C3C0       ; six-byte sender/receiver/input scratch
+MSX_DEFER_PURGE_OWNER equ #C3C6      ; owner matched by queue compaction
+MSX_DEFER_INDEX      equ #C3C8       ; queue compaction cursor
+MSX_DEFER_ACTIVATE   equ #C3C9       ; deferred focus request, #FF means none
+
+; Architecture milestone 4 (#37): fixed marshalling, four owner-safe filesystem
+; contexts and a private snapshot of the MSX-DOS directory FIB. GBFSCTX.MOD is
+; paged at #6000, so all state that must survive its reloads remains here.
+MSX_FSCTX_REQ          equ #C3D0       ; 32-byte request/result header
+MSX_FSCTX_OP           equ MSX_FSCTX_REQ+0
+MSX_FSCTX_STATUS       equ MSX_FSCTX_REQ+1
+MSX_FSCTX_HANDLE       equ MSX_FSCTX_REQ+2
+MSX_FSCTX_OWNER        equ MSX_FSCTX_REQ+4
+MSX_FSCTX_DRIVE        equ MSX_FSCTX_REQ+6
+MSX_FSCTX_FLAGS        equ MSX_FSCTX_REQ+7
+MSX_FSCTX_LENGTH       equ MSX_FSCTX_REQ+8
+MSX_FSCTX_ACTUAL       equ MSX_FSCTX_REQ+10
+MSX_FSCTX_OFFSET       equ MSX_FSCTX_REQ+12 ; 32-bit little-endian
+MSX_FSCTX_SIZE         equ MSX_FSCTX_REQ+16 ; 32-bit little-endian
+MSX_FSCTX_ATTR         equ MSX_FSCTX_REQ+20
+MSX_FSCTX_AUX          equ MSX_FSCTX_REQ+21
+MSX_FSCTX_TRANSFER     equ #C400       ; one bounded 512-byte data/string transfer
+MSX_FSCTX_TRANSFER_MAX equ 512
+MSX_FSCTX_TABLE        equ #C600       ; four 144-byte private context records
+MSX_FSCTX_RECORD_SIZE  equ 144
+MSX_FSCTX_MAX          equ 4
+MSX_FSCTX_PENDING      equ #C840       ; 64-byte pending launch-context transfer
+MSX_FSCTX_DIAG         equ #C880       ; module/cleanup diagnostic counters
+MSX_FSCTX_FIB          equ #C8A0       ; active MSX-DOS 2 64-byte directory FIB
+MSX_ARCH_TABLE_END     equ #C8E0
 ; NOTE (#287 M1 debugging): DOS 2 / Nextor's kernel data occupies page 3 well
 ; below #F380 (the mapper jump table itself sits around #F200, jumping into
 ; code near #EC00) - the DOS 1 "system area starts at #F380" rule does NOT

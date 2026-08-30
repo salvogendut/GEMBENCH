@@ -112,6 +112,9 @@ python3 tools/gblib_subset.py \
 ICONED_GBLIB="build/msx/GBLIBICONED.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$ICONED_GBLIB" apps/iconed/gblib.symbols
+FILEMGR_GBLIB="build/msx/GBLIBFILEMGR.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$FILEMGR_GBLIB" apps/filemgr/gblib.symbols
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
@@ -133,7 +136,7 @@ else
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 fi
 python3 tools/gbrc.py apps/filemgr/view_menu.json --output build/msx/FILEMGR_MENU.GBR --menu-header apps/filemgr/view_menu_gbr.h --symbol-prefix FILEMGR_VIEW
-APPDEFS="-DGB_MSX2" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x7960 DIALOGS=1 GBR_MENUS=1 SCROLL=1 REPAINTTOP=1 GBWIN=0 WINDOW_KIND=1 GB_SHELL_CLIENT=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+GBLIB_SRC="$FILEMGR_GBLIB" APPDEFS="-DGB_MSX2 -DGB_FSCTX_DIRECTORY_ONLY -DGB_FSCTX_BATCH_ONLY" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x79F8 DIALOGS=1 GBR_MENUS=1 SCROLL=1 REPAINTTOP=1 GBWIN=0 WINDOW_KIND=1 GB_SHELL_CLIENT=1 GB_FSCTX=1 SYS=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
 APP_ICON=apps/notepad/icon.asm GBLIB_SRC="$NOTEPAD_GBLIB" APPDEFS="-DGB_MSX2 $NOTEPAD_APPDEFS" APP_CFLAGS="$NOTEPAD_CFLAGS" HELPER_CFLAGS="$NOTEPAD_CFLAGS" DATA_LOC="$NOTEPAD_DATA_LOC" DOC=1 REPAINTTOP="$NOTEPAD_SCROLL" GB_SCRAP=1 GB_SCRAP_TEXT_ONLY=1 GB_SHELL_TARGET=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 GB_VDI_BASE=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
@@ -191,6 +194,7 @@ tools/build_uimod.sh                             # -> build/GBUI.RAW (dialogs/me
 APPDEFS="-DGB_MSX2" tools/build_appickmod.sh build/msx/GBAPICK.RAW
 tools/build_webmod.sh build/msx/GBWEB.RAW        # Browser cache/config helper
 APPDEFS="-DGB_MSX2" tools/build_imgmod.sh build/msx/GBIMG.RAW # Browser inline-image helper
+tools/build_fsctxmod.sh build/msx/GBFSCTX.RAW     # M4 explicit filesystem contexts
 
 # --- assets ------------------------------------------------------------------
 python3 tools/genfont.py build/msx/DEFAULT.FNT           # 1bpp glyphs: shared format
@@ -366,6 +370,7 @@ cp build/GBUI.RAW       QA/MSX/CARD/GBENCH/GBUI.MOD
 cp build/msx/GBAPICK.RAW QA/MSX/CARD/GBENCH/GBAPICK.MOD
 cp build/msx/GBWEB.RAW  QA/MSX/CARD/GBENCH/GBWEB.MOD
 cp build/msx/GBIMG.RAW  QA/MSX/CARD/GBENCH/GBIMG.MOD
+cp build/msx/GBFSCTX.RAW QA/MSX/CARD/GBENCH/GBFSCTX.MOD
 cp build/msx/SPLASH.BIN  QA/MSX/CARD/GBENCH/SPLASH.MOD
 cp build/msx/SPLASHD.BIN QA/MSX/CARD/GBENCH/SPLASHD.MOD
 cp build/msx/GBTITLE.RAW QA/MSX/CARD/GBENCH/GBTITLE.MOD

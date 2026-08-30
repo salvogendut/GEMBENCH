@@ -12,7 +12,7 @@ proc m3_probe_finish {} {
     puts $out "POOL_TOTAL=[peek 0xC2E4]"
     puts $out "SYS_SIZE=[peek 0xC2F0]"
     puts $out "SYS_VERSION=[peek 0xC2F1]"
-    puts $out "DEFER_COUNT=[peek 0xC372]"
+    puts $out "DEFER_COUNT=[peek 0xC376]"
     close $out
     catch {screenshot -raw $::env(GEMBENCH_M3_BOOT_SCREENSHOT)}
     exit

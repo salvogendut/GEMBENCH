@@ -22,8 +22,8 @@ for mode in 6 7; do
     tools/run_msx.sh "$stage/mode-$mode.img"
     grep -qx 'NWIN=1' "$GEMBENCH_M3_BOOT_OUTPUT"
     grep -qx 'POOL_TOTAL=25' "$GEMBENCH_M3_BOOT_OUTPUT"
-    grep -qx 'SYS_SIZE=28' "$GEMBENCH_M3_BOOT_OUTPUT"
-    grep -qx 'SYS_VERSION=3' "$GEMBENCH_M3_BOOT_OUTPUT"
+    grep -qx 'SYS_SIZE=32' "$GEMBENCH_M3_BOOT_OUTPUT"
+    grep -qx 'SYS_VERSION=4' "$GEMBENCH_M3_BOOT_OUTPUT"
     grep -qx 'DEFER_COUNT=0' "$GEMBENCH_M3_BOOT_OUTPUT"
 done
 

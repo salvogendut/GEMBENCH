@@ -323,6 +323,7 @@ typedef unsigned int gb_window_t;
 #define GB_CAP_APPLICATIONS  0x0200u
 #define GB_CAP_MULTI_WINDOW  0x0400u
 #define GB_CAP_DEFERRED_MSG  0x0800u
+#define GB_CAP_FS_CONTEXTS   0x1000u
 
 #define GB_PAGE_UNSPECIFIED 0u
 #define GB_PAGE_APPLICATION 1u
@@ -341,8 +342,8 @@ typedef unsigned int gb_window_t;
 #define GB_PAGE_ERR_BADARG      6u
 
 typedef struct {
-    unsigned char size;          /* stable v1 prefix is 20; currently 28 */
-    unsigned char version;       /* GB_SYSINFO v3 */
+    unsigned char size;          /* stable v1 prefix is 20; currently 32 */
+    unsigned char version;       /* GB_SYSINFO v4 */
     unsigned char abi_major;     /* frozen GEMBENCH ABI major */
     unsigned char abi_minor;
     unsigned char platform;      /* GB_PLATFORM_* */
@@ -365,6 +366,9 @@ typedef struct {
     unsigned char message_inline_bytes;
     unsigned char message_api_version;
     unsigned char reserved3;
+    unsigned char filesystem_contexts;
+    unsigned int filesystem_transfer_bytes;
+    unsigned char filesystem_api_version;
 } gb_sysinfo_t;
 
 #define GB_APP_OK              0u

@@ -13,14 +13,14 @@ these services yet.
 
 `GB_SYSINFO` at `0x80C3` returns `DE` pointing to a resident, read-only
 `gb_sysinfo_t`. The first byte is the record size and the second is the record
-version. Milestones 2 and 3 append fields without changing this 20-byte v1
-prefix; the current kernel returns the v3 record documented in
-[ARCHITECTURE-M3-MSX.md](ARCHITECTURE-M3-MSX.md).
+version. Milestones 2-4 append fields without changing this 20-byte v1 prefix;
+the current kernel returns the v4 record documented in
+[ARCHITECTURE-M4-MSX.md](ARCHITECTURE-M4-MSX.md).
 
 | Offset | Bytes | v1 field |
 | ---: | ---: | --- |
-| 0 | 1 | record size (`20` for v1; currently `28`) |
-| 1 | 1 | record version (`1`; currently `3`) |
+| 0 | 1 | record size (`20` for v1; currently `32`) |
+| 1 | 1 | record version (`1`; currently `4`) |
 | 2 | 2 | GEMBENCH ABI major/minor (`1.0`) |
 | 4 | 1 | platform (`GB_PLATFORM_MSX2`) |
 | 5 | 1 | native video mode (`6` or `7`) |
@@ -101,9 +101,10 @@ private page/owner tables and the current public capability record:
 - loader/close/allocator scratch and pool totals; and
 - the stable 20-byte `GB_SYSINFO` v1 prefix plus the four-byte v2 suffix.
 
-Milestone 3 extends sysinfo through `0xC30B`, moves the private application/
-window block to `0xC30C-0xC361`, and appends deferred-message metadata through
-`0xC3C5`.
+Milestone 4 extends sysinfo through `0xC30F`, moves the private application/
+window block to `0xC310-0xC365` and deferred-message metadata through
+`0xC3C9`, then uses the remaining fixed architecture area through `0xC8DF` for
+bounded filesystem contexts.
 
 This storage is outside the application page and does not consume another
 mapper segment. Native segment values and table addresses are implementation
@@ -125,7 +126,7 @@ Build and exercise it with:
 ```sh
 make gembench-m1-sysinfo
 make gembench-m1-openmsx
-make gembench-m2-openmsx
+make gembench-m4-openmsx
 python3 debug/gembench_baseline_1983.py --output-dir build/m1-1983
 ```
 
@@ -142,5 +143,6 @@ Only the `PLATFORM_MSX` kernel includes `kernel/msx_page_pool.asm`, and `SYS=1`
 rejects non-MSX application builds. The public C types and operation names are
 kept target-neutral so later CPC/PCW backends can implement the same contract,
 but those targets must not claim `GB_CAP_PAGE_ALLOC`, `GB_CAP_OWNER_ID`,
-`GB_CAP_APPLICATIONS`, `GB_CAP_MULTI_WINDOW`, or the new jump-table calls until
-their own implementations and tests exist.
+`GB_CAP_APPLICATIONS`, `GB_CAP_MULTI_WINDOW`, `GB_CAP_DEFERRED_MSG`,
+`GB_CAP_FS_CONTEXTS`, or the new jump-table calls until their own
+implementations and tests exist.

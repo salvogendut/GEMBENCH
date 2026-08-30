@@ -58,6 +58,9 @@ The completed foundation currently covers:
   resize, and maximise/restore gestures, demonstrated by File Manager;
 - a bounded generation-safe deferred application-message FIFO, with Desk
   accessory activation as its first production client;
+- four owner-safe MSX2 filesystem contexts with independent drive, path,
+  directory enumeration, and sequential offset state, first used by File
+  Manager and advanced in bounded 512-byte calls;
 - a machine-checked GEMBENCH-1 freeze for the GBR1 and managed-window ABIs;
 - committed golden data and corruption tests; and
 - an MSX2-only black, white, grey, and red Screen 7 visual foundation.

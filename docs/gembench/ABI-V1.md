@@ -179,7 +179,7 @@ application identity, while generation-tagged window handles allow several
 frozen compositor records to share one application/code page. The complete
 20-byte sysinfo v1 prefix is unchanged; its v2 record appends four
 application-capacity bytes and advertises application/multi-window capability.
-Milestone 3 retains that prefix in the current v3 record.
+Milestones 3 and 4 retain that prefix in the current v4 record.
 
 `GB_SYSINFO` has a stable, versioned 20-byte minimum prefix. Owner, page, and
 window values are opaque, generation-tagged 16-bit runtime handles; none is a
@@ -202,6 +202,19 @@ send, or cancel. Full/stale/no-handler/context errors are explicit; unregister
 and owner teardown remove queued sender and receiver entries. The exact MSX2
 contract is documented in
 [ARCHITECTURE-M3-MSX.md](ARCHITECTURE-M3-MSX.md).
+
+Architecture Milestone 4 ([#37](https://github.com/salvogendut/GEMBENCH/issues/37))
+appends `GB_FSCTX` at `0x80D2` and the four-byte sysinfo v4 suffix. Existing
+jump addresses, messages, window/resource records, and the complete v1-v3
+sysinfo prefixes do not move. Context and directory-entry structures are
+source API values, not persistent formats.
+
+The MSX2 implementation provides four opaque generation-tagged contexts with
+explicit owner, drive, path, raw 8.3 name, sequential offset, and directory FIB
+state. Native DOS calls remain serialized and each transfer advances at most
+512 bytes on the root task. Stale and foreign handles are rejected; owner
+teardown invalidates every matching context. The exact contract is documented
+in [ARCHITECTURE-M4-MSX.md](ARCHITECTURE-M4-MSX.md).
 
 ## Compatibility rules
 
@@ -228,7 +241,8 @@ make gembench-abi-check
 make check
 make gembench-msx
 make gbdefer-check
-make gembench-m3-openmsx
+make gbfsctx-check
+make gembench-m4-openmsx
 tools/test_formref_openmsx.sh
 tools/test_window_kinds_openmsx.sh
 tools/test_multi_event_openmsx.sh

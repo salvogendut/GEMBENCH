@@ -15,6 +15,10 @@
 ; Architecture milestone 3 (#35) adds an eight-entry application FIFO. Senders
 ; copy four inline bytes into page-3 RAM and return; one message is delivered by
 ; the root loop on a later turn. Application generation is the endpoint identity.
+;
+; Architecture milestone 4 (#37) adds four explicit filesystem contexts behind
+; a tiny resident dispatcher and the paged GBFSCTX.MOD implementation. Contexts
+; retain drive/path/name/offset and directory FIB state independently.
 
 ; This source is assembled in two passes. The normal app_pool include emits the
 ; owner/page/application runtime, while GB_DEFER_LATE emits only the deferred
@@ -49,6 +53,15 @@ GB_DEFER_ERR_FULL     equ 4
 GB_DEFER_ERR_BADARG   equ 5
 GB_DEFER_ERR_CONTEXT  equ 6
 
+GB_FSCTX_OK              equ 0
+GB_FSCTX_ERR_UNSUPPORTED equ 1
+GB_FSCTX_ERR_STALE       equ 2
+GB_FSCTX_ERR_OWNER       equ 3
+GB_FSCTX_ERR_FULL        equ 4
+GB_FSCTX_ERR_BADARG      equ 5
+GB_FSCTX_ERR_IO          equ 6
+GB_FSCTX_ERR_CONTEXT     equ 7
+
 GB_PAGE_UNSPECIFIED   equ 0
 GB_PAGE_APPLICATION   equ 1
 GB_PAGE_RESOURCE      equ 2
@@ -66,7 +79,7 @@ GB_PAGE_ERR_NOMEM     equ 5
 GB_PAGE_ERR_BADARG    equ 6
 
 GB_PLATFORM_MSX2      equ 1
-GB_SYSINFO_V3         equ 3
+GB_SYSINFO_V4         equ 4
 GB_PACKING_2BPP       equ 2
 GB_PACKING_4BPP       equ 4
 
@@ -82,7 +95,8 @@ GB_CAP_RUNTIME_VIDEO  equ #0100
 GB_CAP_APPLICATIONS   equ #0200
 GB_CAP_MULTI_WINDOW   equ #0400
 GB_CAP_DEFERRED_MSG   equ #0800
-GB_CAPS_MSX_M3        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO|GB_CAP_APPLICATIONS|GB_CAP_MULTI_WINDOW|GB_CAP_DEFERRED_MSG
+GB_CAP_FS_CONTEXTS    equ #1000
+GB_CAPS_MSX_M4        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO|GB_CAP_APPLICATIONS|GB_CAP_MULTI_WINDOW|GB_CAP_DEFERRED_MSG|GB_CAP_FS_CONTEXTS
 
 ; app_pool_init: retain the TPA page-1 segment plus every available mapper
 ; segment, up to MSX_PAGE_MAX.  PAGE_DATA was already allocated separately by
@@ -185,7 +199,7 @@ mpcf_next       inc   c
 sysinfo_init
                 ld    a,MSX_SYSINFO_SIZE
                 ld    (MSX_SYS_SIZE),a
-                ld    a,GB_SYSINFO_V3
+                ld    a,GB_SYSINFO_V4
                 ld    (MSX_SYS_VERSION),a
                 ld    a,1                     ; frozen GEMBENCH-1 ABI
                 ld    (MSX_SYS_ABI_MAJOR),a
@@ -220,7 +234,7 @@ sysinfo_init
                 ld    (MSX_SYS_POOL_FREE),a
                 ld    a,WM_MAXWIN
                 ld    (MSX_SYS_MAX_WINDOWS),a
-                ld    hl,GB_CAPS_MSX_M3
+                ld    hl,GB_CAPS_MSX_M4
                 ld    (MSX_SYS_CAPS),hl
                 ld    hl,0
                 ld    (MSX_SYS_RESERVED),hl
@@ -240,6 +254,10 @@ sysinfo_init
                 ld    (MSX_SYS_MSG_VERSION),a
                 xor   a
                 ld    (MSX_SYS_RESERVED3),a
+                ld    hl,MSX_FSCTX_MAX         ; max contexts, transfer low byte (0)
+                ld    (MSX_SYS_FS_CONTEXTS),hl
+                ld    hl,#0102                 ; transfer high byte (512), API v1
+                ld    (MSX_SYS_FS_TRANSFER+1),hl
                 ret
 
 ; app_record_reset: C = application slot. Clear every reusable field while
@@ -969,9 +987,11 @@ mpcl_gen_ok     ld    (hl),a
 owner_release
                 ld    (MSX_ALLOC_OWNER),de
                 call  owner_validate
-                jr    nc,mor_stale
+                jp    nc,mor_stale
                 ld    de,(MSX_ALLOC_OWNER)      ; queued sender/receiver endpoints die atomically
                 call  defer_purge_owner
+                ld    de,(MSX_ALLOC_OWNER)
+                call  fsctx_owner_cleanup       ; no file context survives its application
                 ld    a,(MSX_PAGE_TOTAL)
                 ld    b,a
                 ld    c,0
@@ -1372,7 +1392,7 @@ defer_record_ptr
                 add   a,a
                 add   a,a
                 add   a,a
-                add   a,#7C
+                add   a,#80
                 ld    l,a
                 ld    h,#C3
                 ret
@@ -1553,6 +1573,72 @@ defer_dispatch_one
                 ld    a,c
                 call  wm_raise
                 jp    wm_repaint_top
+
+; Architecture Milestone 4 public gate. The application binding marshals only
+; fixed-size values and at most 512 bytes into page-3 RAM. The paged module owns
+; all branchy filesystem policy; the resident path only captures the implicit
+; generation-tagged caller and rejects worker-task entry.
+k_fsctx
+                ld    (MSX_FSCTX_OP),a
+                cp    #FE                     ; private module leaf: path in native-FIB workspace
+                jr    z,kfsctx_chdir
+                if PREEMPTIVE_CONTEXT
+                ld    a,(SCHED_CURRENT)
+                or    a
+                jr    nz,kfsctx_context
+                endif
+                call  owner_current
+                ld    (MSX_FSCTX_OWNER),de
+                ld    a,d
+                or    e
+                jr    z,kfsctx_context
+                ld    hl,gbfsctx_modname
+                call  run_data_module
+                jr    c,kfsctx_result
+                ld    a,GB_FSCTX_ERR_UNSUPPORTED
+                jr    kfsctx_store
+kfsctx_context ld    a,GB_FSCTX_ERR_CONTEXT
+kfsctx_store   ld    (MSX_FSCTX_STATUS),a
+kfsctx_result  ld    a,(MSX_FSCTX_STATUS)
+                ld    de,(MSX_FSCTX_HANDLE)
+                ret
+; A paged module cannot execute even one instruction after BDOS has restored
+; the process TPA bank. Keep _CHDIR resident, then re-map PAGE_DATA before RET.
+; Return the native zero/nonzero DOS result directly to GBFSCTX.MOD.
+kfsctx_chdir   ei
+                push  ix
+                ld    c,#5A
+                ld    de,MSX_FSCTX_FIB
+                call  BDOS
+                pop   ix
+                push  af
+                call  fsmx_restore_page
+                pop   af
+                ret
+gbfsctx_modname db   "GBFSCTX MOD"
+
+; Owner teardown cannot depend on storage or on the paged module still being
+; loadable. Four fixed records are cheap to scan resident; no native DOS handle
+; remains open between bounded calls, so invalidating matching records is the
+; complete close/cancel action. The one-shot launch transfer owns no resource
+; and is overwritten/consumed by the next prepare/adopt pair.
+fsctx_owner_cleanup
+                ld    ix,MSX_FSCTX_TABLE
+                ld    b,MSX_FSCTX_MAX
+kfoc_loop      ld    a,(ix+0)
+                or    a
+                jr    z,kfoc_next
+                ld    a,(MSX_ALLOC_OWNER)
+                cp    (ix+2)
+                jr    nz,kfoc_next
+                ld    a,(MSX_ALLOC_OWNER+1)
+                cp    (ix+3)
+                jr    nz,kfoc_next
+                ld    (ix+0),0
+kfoc_next      ld    de,MSX_FSCTX_RECORD_SIZE
+                add   ix,de
+                djnz  kfoc_loop
+                ret
 
                 endif
                 ifndef GB_DEFER_LATE
