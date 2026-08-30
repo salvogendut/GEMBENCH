@@ -270,7 +270,7 @@ could replace the focused window argument before `.PIC` recognition. Paint now
 claims the launch document first and restores its name after loading the tool
 resource. Its MSX image is 15,792 bytes versus the imported 15,753-byte
 single-workspace baseline. The preemptive Screen 6/7 kernels are
-13,242/14,820 bytes; `GBSCHED.RAW` remains 503/512 bytes.
+13,498/15,076 bytes; `GBSCHED.RAW` remains 503/512 bytes.
 
 Manual testing then found that `gb_window_drag()` reused the managed-window
 completion callback on a legacy `gb_win_t` and returned a rectangle last
@@ -284,7 +284,10 @@ the freeze, stale-coordinate, and old-position residue failures from recurring.
 
 The follow-up interaction pass bounds repaint work on the 3.58 MHz target.
 The compositor skips window callbacks whose rectangles do not intersect the
-current damage; Paint changes only the old/new tool borders, commits live
+current damage. A focus raise damages only the union of areas that higher
+windows formerly obscured, so switching between disjoint Paint panes performs
+no repaint and overlapping panes redraw only their newly exposed intersection.
+Paint changes only the old/new tool borders, commits live
 pencil and spray strokes without repainting already-drawn Canvas cells, and
 updates selector feedback at quarter-steps plus one exact release repaint.
 Bulk edits still request a composited redraw because they can replace the whole

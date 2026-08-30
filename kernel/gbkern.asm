@@ -3680,9 +3680,10 @@ wm_map_focus
                 jp    menu_install                 ; install the focused window's menu
 
 ; wm_focus_click: if a fresh click landed on a window other than the focused one,
-; move focus there. App windows also rise to the z-top (and the stack repaints) if
-; not already on top; the desktop (slot 0) stays pinned at the bottom. The click is
-; not consumed - it is then delivered to the newly focused window's on_frame.
+; move focus there. App windows also rise to the z-top; only the parts previously
+; obscured by windows above them are damaged. Disjoint sibling panes therefore
+; switch with no repaint. The desktop (slot 0) stays pinned at the bottom. The
+; click is not consumed - it is then delivered to the new window's on_frame.
 wm_focus_click
                 ld    a,(POLL_FLAGS)
                 bit   0,a
@@ -3706,11 +3707,140 @@ wm_focus_click
                 ld    a,(hl)
                 cp    c
                 ret   z
-                ld    a,c
+                ifdef PLATFORM_MSX
+                ld    a,c                          ; retain the old z-order while deriving
+                ld    (wm_slot),a                  ; newly exposed overlap damage
+                call  wm_focus_damage
+                ld    a,(wm_slot)
                 call  wm_raise                     ; bring it to the front
-                ld    a,c                          ; damage = the raised window's rect
+                ld    a,(clip_w)                   ; no former overlap -> screen is already right
+                or    a
+                ret   z
+                else
+                ld    a,c
+                call  wm_raise
+                ld    a,c                          ; legacy targets repaint the raised window
                 call  wm_set_clip
+                endif
                 jp    wm_repaint_top               ; opaque top window: avoid repainting layers through it
+
+                ifdef PLATFORM_MSX
+; wm_focus_damage: derive the bounding union of intersections between the clicked
+; window and every window above it in the old z-order. wm_hit_test left its index
+; in wm_hz and wm_slot holds its slot. The clicked surface is already correct
+; everywhere it was visible, so only these formerly obscured pixels need drawing.
+wm_focus_damage
+                ld    a,(wm_slot)
+                call  wm_entry
+                inc   hl
+                ld    a,(hl)                       ; clicked rect -> fb_*
+                ld    (fb_x),a
+                inc   hl
+                ld    a,(hl)
+                ld    (fb_y),a
+                inc   hl
+                ld    a,(hl)
+                ld    (fb_w),a
+                inc   hl
+                ld    a,(hl)
+                ld    (fb_h),a
+                ld    a,#FF                        ; no union yet
+                ld    (sp_x),a
+wfd_next        ld    a,(wm_hz)
+                inc   a
+                ld    (wm_hz),a
+                ld    hl,WM_NWIN
+                cp    (hl)
+                jp    nc,wfd_done
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                call  wm_entry
+                inc   hl
+                ld    a,(hl)                       ; old higher window -> clip
+                ld    (clip_x),a
+                inc   hl
+                ld    a,(hl)
+                ld    (clip_y),a
+                inc   hl
+                ld    a,(hl)
+                ld    (clip_w),a
+                inc   hl
+                ld    a,(hl)
+                ld    (clip_h),a
+                call  clip_fb_copy                 ; fbw_* = clicked INTERSECT higher
+                jr    c,wfd_next
+                ld    a,(sp_x)
+                inc   a
+                jr    nz,wfd_union
+                ld    a,(fbw_x)                    ; first intersection seeds x/y/end-x/end-y
+                ld    (sp_x),a
+                ld    b,a
+                ld    a,(fbw_w)
+                add   a,b
+                ld    (ss_w),a
+                ld    a,(fbw_y)
+                ld    (sp_y),a
+                ld    b,a
+                ld    a,(fbw_h)
+                add   a,b
+                ld    (ss_h),a
+                jr    wfd_next
+wfd_union       ld    a,(fbw_x)                    ; left = min(left, intersection left)
+                ld    b,a
+                ld    a,(sp_x)
+                cp    b
+                jr    c,wfd_right
+                jr    z,wfd_right
+                ld    a,b
+                ld    (sp_x),a
+wfd_right       ld    a,(fbw_w)                    ; right = max(right, intersection right)
+                add   a,b
+                ld    b,a
+                ld    a,(ss_w)
+                cp    b
+                jr    nc,wfd_top
+                ld    a,b
+                ld    (ss_w),a
+wfd_top         ld    a,(fbw_y)                    ; top = min(top, intersection top)
+                ld    b,a
+                ld    a,(sp_y)
+                cp    b
+                jr    c,wfd_bottom
+                jr    z,wfd_bottom
+                ld    a,b
+                ld    (sp_y),a
+wfd_bottom      ld    a,(fbw_h)                    ; bottom = max(bottom, intersection bottom)
+                add   a,b
+                ld    b,a
+                ld    a,(ss_h)
+                cp    b
+                jp    nc,wfd_next
+                ld    a,b
+                ld    (ss_h),a
+                jp    wfd_next
+wfd_done        ld    a,(sp_x)
+                inc   a
+                jr    z,wfd_empty
+                dec   a
+                ld    (clip_x),a
+                ld    b,a
+                ld    a,(ss_w)
+                sub   b
+                ld    (clip_w),a
+                ld    a,(sp_y)
+                ld    (clip_y),a
+                ld    b,a
+                ld    a,(ss_h)
+                sub   b
+                ld    (clip_h),a
+                ret
+wfd_empty       xor   a
+                ld    (clip_w),a
+                ld    (clip_h),a
+                ret
+                endif                              ; PLATFORM_MSX focus damage
 
 ; wm_hit_test: -> A = slot of the top-most window whose rect contains the pointer
 ; (POLL_MX, POLL_MY), scanning z-order top->bottom; CF set if none.
@@ -3967,6 +4097,7 @@ wra_l           ld    a,(wm_rp_i)
                 pop   hl                            ; HL = entry
                 bit   0,a                          ; alive?
                 jr    z,wra_next                   ; dead -> skip (z-order should exclude it)
+                ifdef PLATFORM_MSX
                 push  af                           ; skip callbacks whose window cannot touch the
                 push  hl                           ; current damage rectangle. Besides saving work,
                 inc   hl                           ; this keeps app-native blits outside that damage
@@ -3981,6 +4112,7 @@ wra_l           ld    a,(wm_rp_i)
                 pop   hl
                 jr    c,wra_culled
                 pop   af
+                endif
                 push  af                           ; keep flags across bank_set
                 ld    a,(hl)                       ; page
                 call  bank_set                     ; (preserves HL = entry)
@@ -4001,7 +4133,9 @@ wra_legacy
                 jr    z,wra_next                   ; no handler
                 call  md_call
                 jr    wra_next
+                ifdef PLATFORM_MSX
 wra_culled      pop   af
+                endif
 wra_next        ld    a,(wm_rp_i)
                 inc   a
                 ld    (wm_rp_i),a

@@ -136,7 +136,7 @@ service/accessory values, eight window generations, and lifecycle scratch.
 Together with Milestone 1, the private architecture area spans
 `0xC200-0xC35D`, below the fixed glue ceiling at `0xC900`.
 
-The release preemptive kernels build to 13,242 bytes (Screen 6) and 14,820 bytes
+The release preemptive kernels build to 13,498 bytes (Screen 6) and 15,076 bytes
 (Screen 7). The scheduler remains exactly 503/512 bytes. The compositor and
 application tables are both bounded to eight, while the mapper pool remains an
 independent runtime quantity (25 pages on the reference 512 KiB configuration).

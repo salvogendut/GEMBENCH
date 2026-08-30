@@ -42,6 +42,10 @@ set p2_canvas_clean_hash 0
 set p2_tool_app_pos {}
 set p2_preview_app_pos {}
 set p2_work_app_pos {}
+set p2_count_pane_repaints 0
+set p2_tool_repaints 0
+set p2_preview_repaints 0
+set p2_work_repaints 0
 
 set p2_repaint_start [expr {$::env(GEMBENCH_M2_REPAINT_START)}]
 set p2_repaint_done [expr {$::env(GEMBENCH_M2_REPAINT_DONE)}]
@@ -51,6 +55,9 @@ set p2_preview_x_addr [expr {$::env(GEMBENCH_M2_PREVIEW_X)}]
 set p2_preview_y_addr [expr {$::env(GEMBENCH_M2_PREVIEW_Y)}]
 set p2_work_x_addr [expr {$::env(GEMBENCH_M2_WORK_X)}]
 set p2_work_y_addr [expr {$::env(GEMBENCH_M2_WORK_Y)}]
+set p2_repaint_tool [expr {$::env(GEMBENCH_M2_REPAINT_TOOL)}]
+set p2_repaint_preview [expr {$::env(GEMBENCH_M2_REPAINT_PREVIEW)}]
+set p2_repaint_work [expr {$::env(GEMBENCH_M2_REPAINT_WORK)}]
 
 proc p2_owner_count {} {
     set count 0
@@ -93,6 +100,15 @@ proc p2_trace_repaint {phase} {
     } elseif {$phase eq "done"} {
         set ::p2_repaint_done_generation $::p2_repaint_generation
         set ::p2_repaint_active 0
+    }
+    set ::pause off
+}
+
+proc p2_trace_pane_repaint {pane} {
+    if {$::p2_count_pane_repaints} {
+        if {$pane eq "tool"} { incr ::p2_tool_repaints }
+        if {$pane eq "preview"} { incr ::p2_preview_repaints }
+        if {$pane eq "work"} { incr ::p2_work_repaints }
     }
     set ::pause off
 }
@@ -152,6 +168,9 @@ proc p2_finish {status} {
     puts $out "TOOL_APP_POS=$::p2_tool_app_pos"
     puts $out "PREVIEW_APP_POS=$::p2_preview_app_pos"
     puts $out "WORK_APP_POS=$::p2_work_app_pos"
+    puts $out "FOCUS_TOOL_REPAINTS=$::p2_tool_repaints"
+    puts $out "FOCUS_PREVIEW_REPAINTS=$::p2_preview_repaints"
+    puts $out "FOCUS_WORK_REPAINTS=$::p2_work_repaints"
     if {$::p2_tool_slot >= 0} { puts $out "TOOL_RECT=[p2_rect $::p2_tool_slot]" }
     if {$::p2_preview_slot >= 0} { puts $out "PREVIEW_RECT=[p2_rect $::p2_preview_slot]" }
     puts $out "INITIAL_FREE=$::p2_initial_free"
@@ -260,7 +279,8 @@ proc p2_pane_drag_wait {} {
         # Paint and asks the compositor to repair the union damage. Do not
         # inspect VRAM or start another pointer gesture in that interval.
         if {$::p2_repaint_active ||
-            $::p2_repaint_done_generation <= $::p2_drag_repaint_generation} {
+            $::p2_repaint_done_generation <= $::p2_drag_repaint_generation ||
+            [peek 0x134F] != [peek [p2_entry $::p2_drag_slot]]} {
             if {[machine_info time] >= $::p2_deadline} {
                 p2_finish "FAIL Paint pane drag repaint did not complete"
             } else {
@@ -315,12 +335,41 @@ proc p2_pane_drag_release {} {
     after time 0.10 {keymatrixup 8 0x01; after time 1.0 p2_pane_drag_done}
 }
 
+proc p2_tool_focus_wait {} {
+    if {[peek 0x1351] != $::p2_tool_slot} {
+        if {[machine_info time] >= $::p2_deadline} {
+            p2_finish "FAIL Toolchest focus timeout"
+        } else {
+            after time 0.02 p2_tool_focus_wait
+        }
+        return
+    }
+    set ::p2_count_pane_repaints 0
+    if {$::p2_tool_repaints != 0 || $::p2_preview_repaints != 0 ||
+        $::p2_work_repaints != 0} {
+        p2_finish "FAIL disjoint Toolchest focus triggered repaint"
+        return
+    }
+    keymatrixdown 8 $::p2_drag_mask
+    after time 0.45 p2_pane_drag_release
+}
+
 proc p2_pane_drag_start {slot mask callback} {
     set ::p2_drag_slot $slot
     set ::p2_drag_before [p2_rect $slot]
     set ::p2_drag_mask $mask
     set ::p2_drag_callback $callback
     set ::p2_drag_repaint_generation $::p2_repaint_generation
+    if {$slot == $::p2_tool_slot && [peek 0x1351] != $slot} {
+        set ::p2_tool_repaints 0
+        set ::p2_preview_repaints 0
+        set ::p2_work_repaints 0
+        set ::p2_count_pane_repaints 1
+        set ::p2_deadline [expr {[machine_info time] + 10.0}]
+        keymatrixdown 8 0x01
+        after time 0.02 p2_tool_focus_wait
+        return
+    }
     keymatrixdown 8 0x01
     after time 0.12 [list keymatrixdown 8 $mask]
     after time 0.45 p2_pane_drag_release
@@ -575,4 +624,7 @@ proc p2_start {} {
 
 debug set_bp $p2_repaint_start {} {p2_trace_repaint start}
 debug set_bp $p2_repaint_done {} {p2_trace_repaint done}
+debug set_bp $p2_repaint_tool {} {p2_trace_pane_repaint tool}
+debug set_bp $p2_repaint_preview {} {p2_trace_pane_repaint preview}
+debug set_bp $p2_repaint_work {} {p2_trace_pane_repaint work}
 after time 62.0 p2_start

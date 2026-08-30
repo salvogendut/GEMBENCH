@@ -270,7 +270,7 @@ Canvas are three real compositor windows sharing one application/code page.
 Canvas closes alone, document close removes Preview/Canvas and its document
 page, and Quit releases the remaining Toolchest and owner. Moving the shared
 drag engine resident makes Paint 15,710 bytes, 43 bytes smaller than its
-single-workspace baseline. Screen 6/7 kernels are 13,242/14,820 bytes and the
+single-workspace baseline. Screen 6/7 kernels are 13,498/15,076 bytes and the
 scheduler remains 503/512 bytes. The API and Paint openMSX tests validate stale
 window rejection, owner/window generation reuse, three-window ownership,
 independent close, document survival, application teardown, and mapper-page

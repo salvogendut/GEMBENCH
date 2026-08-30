@@ -39,6 +39,18 @@ paint_data_address() {
     printf '0x%X' "$((paint_data_base + offset))"
 }
 
+paint_code_address() {
+    local linked_main object_main offset
+    linked_main="$(awk '$2 == "_main" { print $3; exit }' \
+        build/msx-obj/paint/app.noi)"
+    object_main="$(awk '$2 == "_main" { print "0x" $3; exit }' \
+        build/msx-obj/paint/main.sym)"
+    offset="$(awk -v symbol="$1" '$2 == symbol { print "0x" $3; exit }' \
+        build/msx-obj/paint/main.sym)"
+    [ -n "$linked_main" ] && [ -n "$object_main" ] && [ -n "$offset" ] || return 1
+    printf '0x%X' "$((linked_main - object_main + offset))"
+}
+
 export GEMBENCH_M2_PAINT_OUTPUT="$PWD/build/msx/m2-paint-openmsx.txt"
 export GEMBENCH_M2_PAINT_SCREENSHOT="$PWD/build/msx/m2-paint-openmsx.png"
 export GEMBENCH_M2_REPAINT_START="$(symbol_address WM_REPAINT_ALL)"
@@ -49,6 +61,9 @@ export GEMBENCH_M2_PREVIEW_X="$(paint_data_address _pv_x)"
 export GEMBENCH_M2_PREVIEW_Y="$(paint_data_address _pv_y)"
 export GEMBENCH_M2_WORK_X="$(paint_data_address _wk_x)"
 export GEMBENCH_M2_WORK_Y="$(paint_data_address _wk_y)"
+export GEMBENCH_M2_REPAINT_TOOL="$(paint_code_address _repaint_tool_window)"
+export GEMBENCH_M2_REPAINT_PREVIEW="$(paint_code_address _repaint_preview_window)"
+export GEMBENCH_M2_REPAINT_WORK="$(paint_code_address _repaint_work_window)"
 [ -n "$GEMBENCH_M2_REPAINT_START" ] && [ -n "$GEMBENCH_M2_REPAINT_DONE" ] || {
     echo "ERROR: repaint symbols are missing from build/msx/gbkernm7.sym" >&2
     exit 1
