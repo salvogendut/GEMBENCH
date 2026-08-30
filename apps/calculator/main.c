@@ -5,6 +5,9 @@
 #include "gbr_object.h"
 #include "calculator_gbr.h"
 #include "gbshell.h"
+#ifdef GB_DEFER_MESSAGES
+#include "gbdefer.h"
+#endif
 #include "gbdesk_catalog.h"
 #endif
 
@@ -386,6 +389,15 @@ static void calculator_drag(void)
 static void calculator_proc(void)
 {
 #ifdef GB_MSX2
+#ifdef GB_DEFER_MESSAGES
+    if (gb_msg.type == GB_MSG_DEFER) {
+        const gb_defer_message_t *message = gb_defer_current();
+        if (message && message->type == GB_DEFER_SHELL &&
+            message->p0 == GB_SHELL_ACTIVATE)
+            gb_defer_activate();
+        return;
+    }
+#endif
     if (gb_msg.type == GB_MSG_SHELL) {
         if (gb_msg.p0 == GB_SHELL_ACTIVATE) {
             gb_msg.p1 = GB_SHELL_OK;
@@ -423,6 +435,9 @@ void main(void)
     gb_wm_managed(&calculator_window);
 #ifdef GB_MSX2
     (void)gb_shell_register_accessory(GB_DESK_ACCESSORY_CALCULATOR_ID);
+#ifdef GB_DEFER_MESSAGES
+    (void)gb_defer_register(calculator_proc);
+#endif
 #endif
     for (n = 64; n; n--) if (!gb_getkey()) break;
     gb_restore_parent();

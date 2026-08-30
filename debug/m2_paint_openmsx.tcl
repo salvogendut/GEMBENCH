@@ -451,7 +451,7 @@ proc p2_close_preview_done {} {
         return
     }
     if {[peek 0x1350] == 3} {
-        if {[peek [expr {0xC320 + $::p2_app_slot}]] != 1 ||
+        if {[peek [expr {0xC324 + $::p2_app_slot}]] != 1 ||
             [peek 0xC2E5] != $::p2_initial_free - 1 ||
             [p2_slot_owner $::p2_tool_slot] != $::p2_owner} {
             p2_finish "FAIL document-window teardown"
@@ -473,7 +473,7 @@ proc p2_close_work_done {} {
         return
     }
     if {[peek 0x1350] == 4} {
-        if {[peek [expr {0xC320 + $::p2_app_slot}]] != 2 ||
+        if {[peek [expr {0xC324 + $::p2_app_slot}]] != 2 ||
             [p2_slot_owner $::p2_work_slot] != 0 ||
             [peek [expr {[p2_entry $::p2_work_slot] + 13}]] & 1} {
             p2_finish "FAIL independent Canvas close"
@@ -499,13 +499,13 @@ proc p2_wait_work {} {
     set nwin [peek 0x1350]
     if {$nwin > $::p2_max_nwin} { set ::p2_max_nwin $nwin }
     if {$nwin == 5 &&
-        [peek [expr {0xC320 + $::p2_app_slot}]] == 3} {
+        [peek [expr {0xC324 + $::p2_app_slot}]] == 3} {
         set ::p2_work_slot [p2_owned_slot $::p2_owner 42 175]
         if {$::p2_work_slot < 0} {
             p2_finish "FAIL Canvas record missing"
             return
         }
-        set ::p2_work_generation [peek [expr {0xC350 + $::p2_work_slot}]]
+        set ::p2_work_generation [peek [expr {0xC354 + $::p2_work_slot}]]
         set entry [p2_entry $::p2_work_slot]
         if {$::p2_work_generation == 0 ||
             [peek $entry] != [peek [p2_entry $::p2_tool_slot]]} {
@@ -536,7 +536,7 @@ proc p2_wait_paint {} {
         # launch-document job receives frames and can publish Preview.
         for {set app 0} {$app < 8} {incr app} {
             if {[peek [expr {0xC2C0 + $app}]] != 0 &&
-                [peek [expr {0xC320 + $app}]] == 1 && $app > 1} {
+                [peek [expr {0xC324 + $app}]] == 1 && $app > 1} {
                 set owner [expr {($app + 1) |
                     ([peek [expr {0xC2C8 + $app}]] << 8)}]
                 set slot [p2_owned_slot $owner 29 126]
@@ -554,7 +554,7 @@ proc p2_wait_paint {} {
     if {$nwin == 4} {
         for {set app 0} {$app < 8} {incr app} {
             if {[peek [expr {0xC2C0 + $app}]] != 0 &&
-                [peek [expr {0xC320 + $app}]] == 2} {
+                [peek [expr {0xC324 + $app}]] == 2} {
                 set ::p2_app_slot $app
                 set ::p2_owner [expr {($app + 1) |
                     ([peek [expr {0xC2C8 + $app}]] << 8)}]
@@ -568,7 +568,7 @@ proc p2_wait_paint {} {
             [peek 0xC2E5] != $::p2_initial_free - 2 ||
             [peek [p2_entry $::p2_tool_slot]] !=
                 [peek [p2_entry $::p2_preview_slot]] ||
-            [peek [expr {0xC308 + $::p2_app_slot}]] !=
+            [peek [expr {0xC30C + $::p2_app_slot}]] !=
                 [peek [p2_entry $::p2_tool_slot]]} {
             # WM_NWIN changes while registration is still binding the parallel
             # owner record. Give that short critical section time to finish.

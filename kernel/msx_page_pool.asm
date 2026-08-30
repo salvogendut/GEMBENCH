@@ -11,6 +11,17 @@
 ; application records. Windows retain their frozen compositor layout and point
 ; to an application through the parallel MSX_WIN_OWNER table. A single code page
 ; may consequently own several generation-tagged window slots.
+;
+; Architecture milestone 3 (#35) adds an eight-entry application FIFO. Senders
+; copy four inline bytes into page-3 RAM and return; one message is delivered by
+; the root loop on a later turn. Application generation is the endpoint identity.
+
+; This source is assembled in two passes. The normal app_pool include emits the
+; owner/page/application runtime, while GB_DEFER_LATE emits only the deferred
+; runtime after the MSX screen driver's page-aligned lookup tables. Keeping that
+; late block out of alignment padding is required by the #0100..#3FFF child-COM
+; loader window, especially for Screen 7.
+                ifndef GB_DEFER_LATE
 
 GB_OWNER_MAX          equ 8
 GB_APP_MAX            equ GB_OWNER_MAX
@@ -27,6 +38,16 @@ GB_APP_ERR_OWNER      equ 3
 GB_APP_ERR_FULL       equ 4
 GB_APP_ERR_ROOT       equ 5
 GB_APP_ERR_BADARG     equ 6
+
+GB_DEFER_MAX          equ 8
+GB_DEFER_RECORD_SIZE  equ 8
+GB_DEFER_OK           equ 0
+GB_DEFER_ERR_UNSUPPORTED equ 1
+GB_DEFER_ERR_STALE    equ 2
+GB_DEFER_ERR_NO_HANDLER equ 3
+GB_DEFER_ERR_FULL     equ 4
+GB_DEFER_ERR_BADARG   equ 5
+GB_DEFER_ERR_CONTEXT  equ 6
 
 GB_PAGE_UNSPECIFIED   equ 0
 GB_PAGE_APPLICATION   equ 1
@@ -45,7 +66,7 @@ GB_PAGE_ERR_NOMEM     equ 5
 GB_PAGE_ERR_BADARG    equ 6
 
 GB_PLATFORM_MSX2      equ 1
-GB_SYSINFO_V2         equ 2
+GB_SYSINFO_V3         equ 3
 GB_PACKING_2BPP       equ 2
 GB_PACKING_4BPP       equ 4
 
@@ -60,7 +81,8 @@ GB_CAP_OWNER_ID       equ #0080
 GB_CAP_RUNTIME_VIDEO  equ #0100
 GB_CAP_APPLICATIONS   equ #0200
 GB_CAP_MULTI_WINDOW   equ #0400
-GB_CAPS_MSX_M2        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO|GB_CAP_APPLICATIONS|GB_CAP_MULTI_WINDOW
+GB_CAP_DEFERRED_MSG   equ #0800
+GB_CAPS_MSX_M3        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO|GB_CAP_APPLICATIONS|GB_CAP_MULTI_WINDOW|GB_CAP_DEFERRED_MSG
 
 ; app_pool_init: retain the TPA page-1 segment plus every available mapper
 ; segment, up to MSX_PAGE_MAX.  PAGE_DATA was already allocated separately by
@@ -68,7 +90,7 @@ GB_CAPS_MSX_M2        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_
 app_pool_init
                 ld    hl,MSX_PAGE_STATE
                 ld    de,MSX_PAGE_STATE+1
-                ld    bc,MSX_APP_TABLE_END-MSX_PAGE_STATE-1
+                ld    bc,MSX_ARCH_TABLE_END-MSX_PAGE_STATE-1
                 ld    (hl),0
                 ldir
                 ld    hl,MSX_PAGE_NATIVE
@@ -163,7 +185,7 @@ mpcf_next       inc   c
 sysinfo_init
                 ld    a,MSX_SYSINFO_SIZE
                 ld    (MSX_SYS_SIZE),a
-                ld    a,GB_SYSINFO_V2
+                ld    a,GB_SYSINFO_V3
                 ld    (MSX_SYS_VERSION),a
                 ld    a,1                     ; frozen GEMBENCH-1 ABI
                 ld    (MSX_SYS_ABI_MAJOR),a
@@ -198,7 +220,7 @@ sysinfo_init
                 ld    (MSX_SYS_POOL_FREE),a
                 ld    a,WM_MAXWIN
                 ld    (MSX_SYS_MAX_WINDOWS),a
-                ld    hl,GB_CAPS_MSX_M2
+                ld    hl,GB_CAPS_MSX_M3
                 ld    (MSX_SYS_CAPS),hl
                 ld    hl,0
                 ld    (MSX_SYS_RESERVED),hl
@@ -210,6 +232,14 @@ sysinfo_init
                 ld    (MSX_SYS_MAX_APP_WINDOWS),a
                 xor   a
                 ld    (MSX_SYS_RESERVED2),a
+                ld    a,GB_DEFER_MAX
+                ld    (MSX_SYS_MSG_QUEUE),a
+                ld    a,4
+                ld    (MSX_SYS_MSG_INLINE),a
+                ld    a,1
+                ld    (MSX_SYS_MSG_VERSION),a
+                xor   a
+                ld    (MSX_SYS_RESERVED3),a
                 ret
 
 ; app_record_reset: C = application slot. Clear every reusable field while
@@ -261,6 +291,16 @@ app_record_reset
                 add   a,l
                 ld    l,a
                 ld    (hl),#FF
+                ld    hl,MSX_DEFER_HANDLER_LO
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_DEFER_HANDLER_HI
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
                 ret
 
 ; owner_alloc -> DE = generation-tagged application handle, CF set; DE=0, NC
@@ -930,6 +970,8 @@ owner_release
                 ld    (MSX_ALLOC_OWNER),de
                 call  owner_validate
                 jr    nc,mor_stale
+                ld    de,(MSX_ALLOC_OWNER)      ; queued sender/receiver endpoints die atomically
+                call  defer_purge_owner
                 ld    a,(MSX_PAGE_TOTAL)
                 ld    b,a
                 ld    c,0
@@ -1095,6 +1137,425 @@ kpg_check       push  hl
 kpg_no_owner    ld    a,GB_PAGE_ERR_OWNER
                 ret
 
+                endif
+                ifdef GB_DEFER_LATE
+; GB_DEFER #80CF (Architecture Milestone 3): bounded asynchronous application
+; messages. Operations are append-only and MSX2-only:
+;   A=0, HL=handler       register/unregister the current application endpoint
+;   A=1, HL=send record   enqueue receiver,type,p0,p1,p2 (sender is implicit)
+;   A=2                   DE=current eight-byte delivery record, or zero
+;   A=3                   A=free queue records
+;   A=4, B=service class  DE=topmost matching application owner, or zero
+;   A=5, C=accessory ID   DE=matching accessory application owner, or zero
+;   A=6                   cancel all messages queued by the current application
+k_defer
+                or    a
+                jp    z,kdefer_register
+                dec   a
+                jp    z,kdefer_send
+                dec   a
+                jp    z,kdefer_current
+                dec   a
+                jp    z,kdefer_free
+                dec   a
+                jp    z,kdefer_find_service
+                dec   a
+                jp    z,kdefer_find_accessory
+                dec   a
+                jp    z,kdefer_cancel_all
+kdefer_bad     ld    a,GB_DEFER_ERR_BADARG
+                ret
+
+kdefer_register
+                if PREEMPTIVE_CONTEXT
+                ld    a,(SCHED_CURRENT)
+                or    a
+                jp    nz,kdefer_context          ; workers cannot publish callbacks
+                endif
+                ld    (MSX_DEFER_SEND+4),hl
+                call  owner_current
+                call  owner_validate
+                jp    nc,kdefer_context
+                ld    (MSX_DEFER_SEND),de
+                ld    hl,(MSX_DEFER_SEND+4)
+                ld    a,h
+                or    l
+                jr    z,kdr_unregister
+                ld    a,h                       ; callbacks must live in the mapped app page
+                cp    #40
+                jr    c,kdefer_bad
+                cp    #80
+                jr    nc,kdefer_bad
+kdr_store      ld    a,e
+                dec   a
+                ld    c,a
+                ld    hl,MSX_DEFER_HANDLER_LO
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_DEFER_SEND+4)
+                ld    (hl),a
+                ld    hl,MSX_DEFER_HANDLER_HI
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_DEFER_SEND+5)
+                ld    (hl),a
+                xor   a
+                ret
+kdr_unregister ld    de,(MSX_DEFER_SEND)
+                call  defer_purge_owner          ; cancel both directions before unpublishing
+                xor   a
+                ld    (MSX_DEFER_SEND+4),a
+                ld    (MSX_DEFER_SEND+5),a
+                ld    de,(MSX_DEFER_SEND)
+                jr    kdr_store
+
+; Validate the caller-page six-byte record before copying it. Queue entries are
+; strictly FIFO; validation precedes the capacity check, so stale/no-handler is
+; deterministic even when the queue is full.
+kdefer_send
+                if PREEMPTIVE_CONTEXT
+                ld    a,(SCHED_CURRENT)
+                or    a
+                jp    nz,kdefer_context          ; root-task application callbacks only
+                endif
+                ld    (MSX_DEFER_SEND+4),hl
+                ld    a,h
+                cp    #40
+                jp    c,kdefer_bad
+                cp    #80
+                jr    c,kds_page1_pointer
+                cp    MSX_APP_FIXED_BOTTOM/256
+                jp    c,kdefer_bad               ; reject kernel glue/scheduler fixed RAM
+                push  hl
+                ld    de,5                       ; the complete six-byte record must remain TPA
+                add   hl,de
+                ex    de,hl
+                ld    hl,(BOOT_SP)               ; stable copy of the DOS/Nextor TPA ceiling
+                or    a
+                sbc   hl,de
+                pop   hl
+                jp    c,kdefer_bad
+                jp    z,kdefer_bad               ; ceiling itself belongs to DOS
+                jr    kds_pointer_ok
+kds_page1_pointer
+                cp    #7F
+                jr    nz,kds_pointer_ok
+                ld    a,l
+                cp    #FB                       ; record through HL+5 must remain below #8000
+                jp    nc,kdefer_bad
+kds_pointer_ok push  hl
+                call  owner_current
+                call  owner_validate
+                pop   hl                        ; owner validation clobbers HL
+                jp    nc,kdefer_context
+                ld    (MSX_DEFER_SEND),de       ; implicit sender
+                ld    e,(hl)
+                inc   hl
+                ld    d,(hl)
+                inc   hl
+                ld    a,(hl)                    ; type zero is reserved/invalid
+                or    a
+                jp    z,kdefer_bad
+                ld    (MSX_DEFER_SEND+2),de
+                call  owner_validate
+                jp    nc,kdefer_stale
+                ld    a,e
+                dec   a
+                ld    c,a
+                ld    hl,MSX_APP_FLAGS
+                add   a,l
+                ld    l,a
+                bit   2,(hl)
+                jp    nz,kdefer_stale
+                ld    hl,MSX_DEFER_HANDLER_LO
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    b,(hl)
+                ld    hl,MSX_DEFER_HANDLER_HI
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                or    b
+                jp    z,kdefer_no_handler
+                ld    a,(MSX_DEFER_COUNT)
+                cp    GB_DEFER_MAX
+                jp    nc,kdefer_full
+                push  af                        ; destination = queue + count*8
+                add   a,a
+                add   a,a
+                add   a,a
+                ld    e,a
+                ld    d,0
+                ld    hl,MSX_DEFER_QUEUE
+                add   hl,de
+                ex    de,hl
+                ld    hl,MSX_DEFER_SEND         ; sender + receiver
+                ld    bc,4
+                ldir
+                ld    hl,(MSX_DEFER_SEND+4)     ; type + four-byte inline tail
+                inc   hl
+                inc   hl
+                ld    bc,4
+                ldir
+                pop   af
+                inc   a
+                ld    (MSX_DEFER_COUNT),a       ; publish only after all bytes are copied
+                xor   a
+                ret
+
+kdefer_current
+                ld    a,(MSX_DEFER_BUSY)
+                or    a
+                jr    z,kdefer_no_current
+                ld    de,MSX_DEFER_CURRENT
+                ret
+kdefer_no_current
+                ld    de,0
+                ret
+
+kdefer_free    ld    a,(MSX_DEFER_COUNT)
+                ld    b,a
+                ld    a,GB_DEFER_MAX
+                sub   b
+                ret
+
+kdefer_find_service
+                ld    c,0
+                call  ksh_find
+                jr    kdefer_owner_for_handle
+kdefer_find_accessory
+                call  ksh_find_accessory
+kdefer_owner_for_handle
+                or    a
+                jr    z,kdefer_no_current
+                dec   a
+                ld    c,a
+                ld    hl,MSX_WIN_OWNER
+                add   a,l
+                ld    l,a
+                ld    e,(hl)
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    d,(hl)
+                call  owner_validate
+                ret   c
+                jr    kdefer_no_current
+
+kdefer_cancel_all
+                if PREEMPTIVE_CONTEXT
+                ld    a,(SCHED_CURRENT)
+                or    a
+                jp    nz,kdefer_context          ; queue ownership belongs to root apps
+                endif
+                call  owner_current
+                call  owner_validate
+                jr    nc,kdefer_context
+                jp    defer_cancel_sender
+
+kdefer_stale   ld    a,GB_DEFER_ERR_STALE
+                ret
+kdefer_no_handler
+                ld    a,GB_DEFER_ERR_NO_HANDLER
+                ret
+kdefer_full    ld    a,GB_DEFER_ERR_FULL
+                ret
+kdefer_context ld    a,GB_DEFER_ERR_CONTEXT
+                ret
+
+; A=index -> HL=queue record. The queue stays within one #C3xx page.
+defer_record_ptr
+                add   a,a
+                add   a,a
+                add   a,a
+                add   a,#7C
+                ld    l,a
+                ld    h,#C3
+                ret
+
+; Remove compact record C and retain FIFO order. Count is decremented before
+; the bounded overlap-safe left shift (at most 56 bytes).
+defer_remove_index
+                ld    a,(MSX_DEFER_COUNT)
+                dec   a
+                ld    (MSX_DEFER_COUNT),a
+                sub   c                         ; records after the removed one
+                ret   z
+                ld    b,a
+                ld    a,c
+                call  defer_record_ptr
+                push  hl                        ; destination
+                ld    de,GB_DEFER_RECORD_SIZE
+                add   hl,de                     ; source
+                pop   de
+                ld    a,b
+                add   a,a
+                add   a,a
+                add   a,a
+                ld    c,a
+                ld    b,0
+                ldir
+                ret
+
+; Compact messages matching an owner. Mode zero removes both sender and receiver
+; (teardown/unregister); mode one removes only sender (explicit cancellation).
+; Returns the number removed in A.
+defer_purge_owner
+                xor   a
+                jr    defer_purge_start
+defer_cancel_sender
+                ld    a,1
+defer_purge_start
+                ld    (MSX_DEFER_SEND+4),a      ; match mode
+                ld    (MSX_DEFER_PURGE_OWNER),de
+                xor   a
+                ld    (MSX_DEFER_INDEX),a
+                ld    (MSX_DEFER_SEND+5),a      ; removed count
+defer_purge_loop
+                ld    a,(MSX_DEFER_INDEX)
+                ld    c,a
+                ld    a,(MSX_DEFER_COUNT)
+                cp    c
+                jr    z,defer_purge_done
+                jr    c,defer_purge_done
+                ld    a,c
+                call  defer_record_ptr
+                ld    de,(MSX_DEFER_PURGE_OWNER)
+                ld    a,(hl)                    ; sender low/generation
+                cp    e
+                jr    nz,defer_purge_receiver
+                inc   hl
+                ld    a,(hl)
+                cp    d
+                jr    z,defer_purge_remove
+                dec   hl
+defer_purge_receiver
+                ld    a,(MSX_DEFER_SEND+4)
+                or    a
+                jr    nz,defer_purge_keep
+                inc   hl
+                inc   hl                        ; receiver low/generation
+                ld    a,(hl)
+                cp    e
+                jr    nz,defer_purge_keep
+                inc   hl
+                ld    a,(hl)
+                cp    d
+                jr    nz,defer_purge_keep
+defer_purge_remove
+                ld    a,(MSX_DEFER_INDEX)
+                ld    c,a
+                call  defer_remove_index
+                ld    hl,MSX_DEFER_SEND+5
+                inc   (hl)
+                jr    defer_purge_loop          ; compacted next record has same index
+defer_purge_keep
+                ld    hl,MSX_DEFER_INDEX
+                inc   (hl)
+                jr    defer_purge_loop
+defer_purge_done
+                ld    a,(MSX_DEFER_SEND+5)
+                ret
+
+; Called exactly once per WM root-loop turn. The queue head is copied and
+; removed before validation/callback, so handlers may enqueue replies without
+; nesting delivery or corrupting the stable current record.
+defer_dispatch_one
+                ld    a,(MSX_DEFER_BUSY)
+                or    a
+                ret   nz
+                ld    a,(MSX_DEFER_COUNT)
+                or    a
+                ret   z
+                ld    hl,MSX_DEFER_QUEUE
+                ld    de,MSX_DEFER_CURRENT
+                ld    bc,GB_DEFER_RECORD_SIZE
+                ldir
+                ld    c,0
+                call  defer_remove_index
+                ld    de,(MSX_DEFER_CURRENT+2)
+                call  owner_validate
+                ret   nc                        ; stale receiver: deterministic drop
+                ld    a,e
+                dec   a
+                ld    c,a
+                ld    hl,MSX_APP_FLAGS
+                add   a,l
+                ld    l,a
+                bit   2,(hl)
+                ret   nz                        ; terminating endpoints never run
+                ld    hl,MSX_DEFER_HANDLER_LO
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    e,(hl)
+                ld    hl,MSX_DEFER_HANDLER_HI
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    d,(hl)
+                ld    a,d
+                or    e
+                ret   z
+                ex    de,hl                     ; HL=handler
+                ld    a,c
+                ld    de,MSX_APP_CODE_NATIVE
+                add   a,e
+                ld    e,a
+                ld    a,(de)
+                or    a
+                ret   z
+                ld    c,a                       ; target native mapper segment
+                ld    a,(MSX_DEFER_CURRENT+2)  ; precompute receiver's primary window
+                dec   a
+                ld    de,MSX_APP_PRIMARY_WIN
+                add   a,e
+                ld    e,a
+                ld    a,(de)
+                ld    (MSX_DEFER_ACTIVATE),a
+                ld    a,1
+                ld    (MSX_DEFER_BUSY),a
+                ld    a,(bank_cur)
+                push  af
+                ld    a,c
+                call  bank_set                  ; preserves HL=handler
+                ld    a,GB_MSG_DEFER
+                ld    (GB_MSG),a
+                ld    a,(MSX_DEFER_CURRENT+4)
+                ld    (GB_MSG+1),a
+                ld    a,(MSX_DEFER_CURRENT+5)
+                ld    (GB_MSG+2),a
+                xor   a                         ; handler response: nonzero requests activation
+                ld    (GB_MSG+3),a
+                call  md_call
+                pop   af
+                call  bank_set
+                xor   a
+                ld    (MSX_DEFER_BUSY),a
+                ld    a,(GB_MSG+3)
+                or    a
+                ret   z
+                ld    a,(MSX_DEFER_ACTIVATE)
+                cp    #FF
+                ret   z
+                ld    c,a
+                call  wm_entry
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                bit   0,(hl)
+                ret   z
+                ld    a,c
+                call  wm_set_clip                ; repaint only the raised endpoint window
+                ld    a,c
+                call  wm_raise
+                jp    wm_repaint_top
+
+                endif
+                ifndef GB_DEFER_LATE
 ; app_mark_root_current: the first Desktop registration owns the immortal root
 ; application. Explicit quit rejects this record.
 app_mark_root_current
@@ -1350,3 +1811,4 @@ kapp_root       ld   a,GB_APP_ERR_ROOT
                 ret
 kapp_owner      ld   a,GB_APP_ERR_OWNER
                 ret
+                endif

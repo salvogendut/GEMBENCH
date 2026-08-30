@@ -493,3 +493,40 @@ prove exact activation with no duplicate, closes Clock through the window
 gadget, observes one busy mapper page return, and relaunches Clock. A manual
 check follows the same sequence from the Desktop's `Desk` title. The existing
 Clock desktop icon is another route through the same exact activation helper.
+
+## Deferred application messages
+
+MSX2 applications opt in with `GB_DEFER=1` and include `gbdefer.h`. Register one
+application handler after normal window/application publication, discover or
+retain a short-lived `gb_owner_t`, and enqueue a fixed inline message:
+
+```c
+static void on_deferred(void)
+{
+    const gb_defer_message_t *message = gb_defer_current();
+    if (message && message->type == MY_MESSAGE) handle(message->p0);
+}
+
+gb_defer_send_t message = { target, MY_MESSAGE, value, 0, 0 };
+gb_defer_register(on_deferred);
+if (gb_defer_send(&message) == GB_DEFER_ERR_FULL) retry_later();
+```
+
+Send copies six caller bytes and returns; the root loop invokes at most one
+recipient on a later turn. The handler must return promptly and may enqueue a
+reply. It must not poll or retain the pointer returned by
+`gb_defer_current()`. `gb_defer_cancel_all()` cancels the caller's queued
+outbound messages. Closing/unregistering cancels both directions.
+The send structure may be ordinary mapped data or a C local on the fixed MSX
+stack; the kernel range-checks and copies it during the call.
+
+Desk accessory activation is the production example. `gb_defer_activate()` is
+valid only inside a deferred handler and asks the root to raise/repaint the
+application's primary window after the callback returns.
+
+```sh
+make gbdefer-check
+make gembench-m3-openmsx
+make gembench-m3-boot-openmsx  # Screen 6/7 loader smoke without the API diagnostic
+MSX_HEADLESS=1 tools/test_desk_accessories_openmsx.sh
+```

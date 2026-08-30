@@ -90,6 +90,7 @@ GB_MSG_SIZED    equ   9            ; kernel-owned resize completed: p0=w, p1=h
 GB_MSG_MAXIMIZED equ  10           ; maximise/restore: p0=1/0, p1=w, p2=h
 GB_MSG_SHELL    equ   11           ; append-only shell request: p0=request,
                                    ; p1=response, p2=reserved
+GB_MSG_DEFER    equ   12           ; deferred app message; full record in page-3 glue
                                    ; (DnD, #62); name at WM_DRAGNAME, pos at POLL_MX/MY
 POLL_MX         equ   #1306        ; last poll: cursor byte column (mx)
 POLL_MY         equ   #1307        ; last poll: cursor line (my)

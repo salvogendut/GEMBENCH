@@ -120,7 +120,7 @@ python3 tools/gen_desk_accessories.py apps/desktop/accessories.json \
 if [ "$PREEMPTIVE" = "1" ]; then
     TASK_ROOT=1 TASK_RUNTIME_RAW=build/msx/GBSCHED.RAW \
         TASK_STACK_RESERVE=256 \
-        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_SHELL_CLIENT=1 GB_SHELL_ACCESSORY_CLIENT=1 \
+        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_DEFER=1 \
         APPDEFS="-DGB_MSX2 -DGB_DESK_ACCESSORIES $BASELINE_APPDEFS" \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
     if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
@@ -129,7 +129,7 @@ if [ "$PREEMPTIVE" = "1" ]; then
     fi
 else
     APPDEFS="-DGB_MSX2 -DGB_DESK_ACCESSORIES $BASELINE_APPDEFS" BASELINE="$GEMBENCH_BASELINE" \
-        DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_SHELL_CLIENT=1 GB_SHELL_ACCESSORY_CLIENT=1 \
+        DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_DEFER=1 \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 fi
 python3 tools/gbrc.py apps/filemgr/view_menu.json --output build/msx/FILEMGR_MENU.GBR --menu-header apps/filemgr/view_menu_gbr.h --symbol-prefix FILEMGR_VIEW
@@ -147,11 +147,11 @@ fi
 APP_ICON=apps/iconed/icon.asm GBLIB_SRC="$ICONED_GBLIB" APPDEFS="-DGB_MSX2 -DGBUI_APPICON_PICKER -DGBDOC_BOUNDED_IO" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7200 DOC=1 BUTTON=1 REPAINTTOP=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x6A40 DOCRO=1 SCROLL16=1 REPAINTTOP=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
 APP_ICON="$PAINT_APP_DIR/icon.asm" APP_ICON16="$PAINT_APP_DIR/icon16.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7DB0 PICKER=1 SIZEPROMPT=1 SYS=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
-APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 GB_EVENTS=1 GB_SHELL_ACCESSORY_TARGET=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 GB_EVENTS=1 GB_SHELL_ACCESSORY_TARGET=1 GB_DEFER=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
 python3 tools/gbrc.py apps/calculator/calculator.json --output build/msx/CALCULATOR.GBR --c-header apps/calculator/calculator_gbr.h --symbol-prefix CALCULATOR
-APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 BUTTON=1 GBR_OBJECTS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 GB_SHELL_ACCESSORY_TARGET=1 tools/build_capp.sh apps/calculator build/msx/CALC.RAW
+APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 BUTTON=1 GBR_OBJECTS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 GB_SHELL_ACCESSORY_TARGET=1 GB_DEFER=1 tools/build_capp.sh apps/calculator build/msx/CALC.RAW
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
 if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
     python3 tools/gbrc.py apps/formref/formref-m7.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_m7_gbr.h --symbol-prefix FORMREF
@@ -239,12 +239,28 @@ make -C "$GB_BASIC_DIR" raws-msx GEOBENCH="$GEOBENCH_ROOT"
 rm -f build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW build/msx/GBKERN7.RAW \
       build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM
 
+# The DOS child loader places a mode-specific COM at #0100..#3FFF. Crossing
+# that boundary overwrites its tail before control reaches the kernel (Screen 7
+# exposed this first in M3), so fail the build instead of producing broken media.
+MSX_CHILD_COM_MAX=$((0x3FFF - 0x0100 + 1))
+check_child_com_size() {
+    local image=$1
+    local size
+    size=$(stat -c %s "$image")
+    if (( size > MSX_CHILD_COM_MAX )); then
+        echo "ERROR: $image is $size bytes; child-COM ceiling is $MSX_CHILD_COM_MAX" >&2
+        exit 1
+    fi
+    echo "$image: $size/$MSX_CHILD_COM_MAX bytes in child-COM window"
+}
+
 # Compatibility backend: Screen 6, four native colours.
 ( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DGEMBENCH_BASELINE="$GEMBENCH_BASELINE" -s -o gbkernm ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: GBKERNM.RAW not produced (rasm errors above)" >&2; exit 1; }
 cp build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm )
 [ -s build/msx/GBMSX.COM ] || { echo "ERROR: Screen-6 loader stub not produced" >&2; exit 1; }
+check_child_com_size build/msx/GBMSX.COM
 mv build/msx/GBMSX.COM build/msx/GBMSX6.COM
 
 # Extended backend: Screen 7, with sixteen-colour Viewer support.
@@ -254,6 +270,7 @@ rm -f build/msx/GBKERNM.RAW
 cp build/msx/GBKERNM.RAW build/msx/GBKERN7.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_stub.asm -DMSX_SCREEN7=1 )
 [ -s build/msx/GBMSX.COM ] || { echo "ERROR: Screen-7 loader stub not produced" >&2; exit 1; }
+check_child_com_size build/msx/GBMSX.COM
 mv build/msx/GBMSX.COM build/msx/GBMSX7.COM
 
 # GBMSX.COM reads MSXMODE= and chain-loads one of the mode-specific images.

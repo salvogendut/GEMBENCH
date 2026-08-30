@@ -1,4 +1,6 @@
 ;; gbsys.s - opt-in MSX2 architecture bindings (Milestones 1-2, #31/#32).
+;; GB_SYSINFO returns the compatible v3 record after Milestone 3 (#35); the
+;; separate gbdefer.s keeps deferred-message users from linking every M1/M2 call.
 ;;
 ;; Link with SYS=1. Keeping these calls out of the monolithic gblib.s preserves
 ;; the byte layout of applications that do not use the new architecture API.

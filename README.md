@@ -54,8 +54,10 @@ The completed foundation currently covers:
   bindings, without storing pointers or pixel payloads in GBR1;
 - a measured MSX2 auxiliary-resource prototype and resident-renderer fit probe,
   with the smaller embedded/app-linked placement retained for GBR v1;
-- explicitly versioned MSX2 window kinds with kernel-owned furniture, move, resize, and
-  maximise/restore gestures, demonstrated by File Manager;
+- explicitly versioned MSX2 window kinds with kernel-owned furniture, move,
+  resize, and maximise/restore gestures, demonstrated by File Manager;
+- a bounded generation-safe deferred application-message FIFO, with Desk
+  accessory activation as its first production client;
 - a machine-checked GEMBENCH-1 freeze for the GBR1 and managed-window ABIs;
 - committed golden data and corruption tests; and
 - an MSX2-only black, white, grey, and red Screen 7 visual foundation.

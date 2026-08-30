@@ -177,8 +177,9 @@ Architecture Milestone 2 ([#32](https://github.com/salvogendut/GEMBENCH/issues/3
 appends `GB_APP` at `0x80CC`. The existing owner becomes an independent
 application identity, while generation-tagged window handles allow several
 frozen compositor records to share one application/code page. The complete
-20-byte sysinfo v1 prefix is unchanged; the current v2 record appends four
+20-byte sysinfo v1 prefix is unchanged; its v2 record appends four
 application-capacity bytes and advertises application/multi-window capability.
+Milestone 3 retains that prefix in the current v3 record.
 
 `GB_SYSINFO` has a stable, versioned 20-byte minimum prefix. Owner, page, and
 window values are opaque, generation-tagged 16-bit runtime handles; none is a
@@ -187,6 +188,20 @@ bindings with `SYS=1`, so existing application binaries and non-users retain
 their prior layout. The exact MSX contracts are documented in
 [ARCHITECTURE-M1-MSX.md](ARCHITECTURE-M1-MSX.md) and
 [ARCHITECTURE-M2-MSX.md](ARCHITECTURE-M2-MSX.md).
+
+Architecture Milestone 3 ([#35](https://github.com/salvogendut/GEMBENCH/issues/35))
+appends `GB_DEFER` at `0x80CF`, `GB_MSG_DEFER` as value 12, and the four-byte
+sysinfo v3 suffix. Existing jump addresses, messages, window/resource records,
+and the complete v1/v2 sysinfo prefixes do not move. The new six-byte send and
+eight-byte delivery records are source API values, not persistent file
+formats. Endpoints are the existing generation-tagged application owners.
+
+Delivery is root-loop-only, bounded to one of eight FIFO entries per turn, and
+never occurs inside the send call. Preemptible compute workers cannot publish,
+send, or cancel. Full/stale/no-handler/context errors are explicit; unregister
+and owner teardown remove queued sender and receiver entries. The exact MSX2
+contract is documented in
+[ARCHITECTURE-M3-MSX.md](ARCHITECTURE-M3-MSX.md).
 
 ## Compatibility rules
 
@@ -212,6 +227,8 @@ For GEMBENCH-1:
 make gembench-abi-check
 make check
 make gembench-msx
+make gbdefer-check
+make gembench-m3-openmsx
 tools/test_formref_openmsx.sh
 tools/test_window_kinds_openmsx.sh
 tools/test_multi_event_openmsx.sh
