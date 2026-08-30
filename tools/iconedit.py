@@ -7,8 +7,8 @@ tools/test_iconed_codec.py for the encoding rules.
 
   * .IST  v2 icon set: header(16) + dir(count*4: off u16le, w_bytes u8, h u8)
           + bitmaps. Each icon keeps its own size; mixed sizes are allowed.
-  * .APP  GBAP v1/v2 preamble: executable JP + one canonical 32x32 Mode-1
-          icon and, in v2, an optional native Screen-7 icon. Saving preserves
+  * .APP  GBAP v1/v2/v3 preamble: executable JP + one canonical 32x32 Mode-1
+          icon and, in v2/v3, an optional native Screen-7 icon. Saving preserves
           every non-icon executable byte and unedited resource.
   * .ASM  RASM icon source: one labelled Mode-1 or native MSX Screen-7 bitmap
           with <label>_w and <label>_h dimensions. Mode 7 adds

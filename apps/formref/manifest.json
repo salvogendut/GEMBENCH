@@ -1,0 +1,18 @@
+{
+  "application_id": "FORMREF",
+  "profile": "target-z80",
+  "platforms": ["msx2"],
+  "minimum_abi": [1, 0],
+  "minimum_sysinfo": [1, 20],
+  "required_capabilities": [
+    "windows",
+    "events",
+    "gbr",
+    "runtime-video",
+    "applications"
+  ],
+  "service_id": 0,
+  "lifecycle": ["windowed"],
+  "minimum_pages": 1,
+  "preferred_pages": 1
+}

@@ -1,6 +1,6 @@
-# Embedded APP icon format
+# GBAP application preamble
 
-GEOBENCH applications may begin with an optional `GBAP` executable preamble.
+GEMBENCH applications may begin with an optional `GBAP` executable preamble.
 The first three bytes remain a Z80 `JP` to the relocated application entry, so
 the kernel continues launching every `.APP` at `#4000`. Headerless applications
 remain valid and use their mapped or generic `.IST` icon.
@@ -88,9 +88,91 @@ therefore sufficient to opt an application into a native 16-colour icon. CPC
 and PCW continue to embed only the canonical fallback unless `APP_ICON16` is
 passed explicitly.
 
+## GBAP v3 manifest
+
+V3 preserves the v2 icon directory and uses header bytes 14-15 as the offset of
+a platform-neutral application manifest. The on-disk order is:
+
+1. the common 16-byte header;
+2. the eight-byte icon entries;
+3. one 40-byte `GBM3` manifest;
+4. one or more twelve-byte typed segment descriptors;
+5. the icon payloads; and
+6. the fixed-origin primary image at the outer `JP` target.
+
+The manifest is:
+
+| Manifest offset | Size | Meaning |
+|---:|---:|---|
+| 0 | 4 | ASCII `GBM3` |
+| 4 | 1 | manifest size, currently `40` |
+| 5 | 1 | manifest version, currently `1` |
+| 6 | 1 | profile: `1` target-Z80, `2` portable-Z80 |
+| 7 | 1 | platform mask: bit 0 CPC, bit 1 MSX2, bit 2 PCW |
+| 8 | 2 | minimum GEMBENCH ABI major/minor |
+| 10 | 2 | minimum `GB_SYSINFO` version/record size |
+| 12 | 2 | required `GB_CAP_*` mask |
+| 14 | 8 | stable uppercase application identity, space padded |
+| 22 | 2 | provided service ID, or zero |
+| 24 | 2 | lifecycle flags: windowed/windowless/accessory/service |
+| 26 | 1 | minimum total 16 KiB pages |
+| 27 | 1 | preferred total pages |
+| 28 | 1 | segment count |
+| 29 | 1 | segment entry size, currently `12` |
+| 30 | 2 | segment directory offset from APP start |
+| 32 | 2 | primary entry offset from `#4000` |
+| 34 | 2 | complete loaded image length |
+| 36 | 2 | package flags, currently zero |
+| 38 | 2 | reserved, zero |
+
+Each segment descriptor is:
+
+| Segment offset | Size | Meaning |
+|---:|---:|---|
+| 0 | 1 | type: primary code, secondary code, resource, or data |
+| 1 | 1 | platform mask |
+| 2 | 1 | required/executable/read-only flags |
+| 3 | 1 | compression (`0` = none) |
+| 4 | 2 | file offset |
+| 6 | 2 | stored length |
+| 8 | 2 | unpacked length |
+| 10 | 2 | fixed load address |
+
+Milestone 5 accepts one required, executable, uncompressed primary descriptor.
+The other descriptor types reserve a stable contract for later mapper-backed
+resources and secondary code; the M5 runtime does not map or execute them.
+
+A dual-icon v3 preamble is 852 bytes and enters at `#4354`. Build one with:
+
+```sh
+APP_ICON=apps/example/icon.asm \
+APP_ICON16=apps/example/icon16.asm \
+APP_MANIFEST=apps/example/manifest.json \
+APPDEFS="-DGB_MSX2" \
+tools/build_capp.sh apps/example build/msx/EXAMPLE.RAW
+```
+
+The JSON source names the stable identity, target or portable profile,
+platforms, minimum ABI/sysinfo, required capabilities, lifecycle, and page
+policy. `tools/embed_app_icon.py` validates the complete generated package
+deterministically. `check` reports its identity and segment count.
+
+On MSX2, `APP_MANIFEST` also selects the standard guarded v3 startup. It checks
+the executable manifest and primary descriptor against resident `GB_SYSINFO`
+before C initialization or window/application publication. A failed guard
+returns directly to the existing loader, which releases the pending owner and
+primary page. Headerless/v1/v2 startup is byte-for-byte unchanged. CPC/PCW v3
+execution remains deferred until those targets implement equivalent capability
+and page/application services.
+
+The `portable-z80` profile is a packaging promise, not automatic portability.
+A compile-once binary must additionally restrict itself to the frozen common
+ABI, runtime geometry/capabilities, portable GBR/VDI data, and a common memory
+layout on every platform named in its mask.
+
 ## Resident-set impact
 
-A portable APP header costs 272 bytes. Removing one 32x32 icon from an IST
+A portable v1 APP header costs 272 bytes. Removing one 32x32 icon from an IST
 saves 260 bytes: 256 bitmap bytes and its four-byte directory entry. Moving an
 application icon out of both `DEFAULT.IST` and `REFINED.IST` therefore saves a
 net 248 raw distribution bytes and, more importantly, 260 bytes from the icon
@@ -105,9 +187,10 @@ current `DEFAULT.IST` and `REFINED.IST` each contain **21 slots** and occupy
 **5,284 bytes**. Clock, Desktop, File Manager, and shared file-type/device icons
 remain resident. At the format level, before application-specific code-size
 reductions, moving the nine v1 icons still reduces the combined raw distribution
-payload by 2,232 bytes.
+payload by 2,232 bytes. A dual four-/sixteen-colour v2 header costs 800 bytes;
+adding the M5 manifest and primary descriptor raises that to 852 bytes.
 
-`tools/iconedit.py` opens either ASM source and both resources inside a v2 APP.
+`tools/iconedit.py` opens either ASM source and both resources inside a v2/v3 APP.
 Use Previous/Next to switch variants. `ICONED.APP` edits both variants on MSX
 Screen 7; on other targets and in MSX Screen 6 it exposes the portable icon and
 preserves the native resource. Its whole-document ceiling is 7,168 bytes.

@@ -1,7 +1,8 @@
 # SymbOS-inspired architecture improvements
 
-Status: **active roadmap**. Improvements 1-5 are implemented on MSX2 through
-Architecture Milestones 1-4; improvements 6-8 remain proposed. CPC and PCW
+Status: **active roadmap**. Improvements 1-5 are implemented on MSX2;
+Milestone 5 implements the uncompressed-primary slice of improvement 6; and
+improvements 7-8 remain proposed. CPC and PCW
 parity remains governed by `CPC-PCW-BACKPORT-PLAN.md`.
 
 This document records the highest-value architectural improvements identified
@@ -114,7 +115,12 @@ Acceptance requires pre-allocation compatibility rejection, all-segment
 validation before publication, rollback on any failed load, and identical
 runtime segments from compressed and uncompressed packages.
 
-Estimated difficulty: **medium-high**.
+Estimated difficulty: **medium-high**. MSX2 status: **first slice implemented
+in Milestone 5** with a platform-neutral manifest, strict deterministic tooling,
+a guarded fixed-origin primary segment, and transactional pre-publication
+rollback. Inspecting the manifest currently consumes the primary allocation;
+storage-side pre-allocation scanning, compression, and additional runtime
+segments remain deferred.
 
 ## 7. Application-owned secondary-code call gate
 

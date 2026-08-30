@@ -71,6 +71,13 @@ DOS calls serialized and bounded. File Manager is the first production
 migration; the append-only v4 capability record and paged implementation are
 documented in [ARCHITECTURE-M4-MSX.md](ARCHITECTURE-M4-MSX.md).
 
+Architecture Milestone 5 adds the platform-neutral GBAP v3 application
+manifest and typed segment directory. MSX2 validates its first uncompressed
+fixed-origin primary package before publication and rolls back the pending
+owner/page on rejection without growing the resident kernel. FormRef is the
+reference package; the exact format, guard boundary, and portability limits are
+documented in [ARCHITECTURE-M5-MSX.md](ARCHITECTURE-M5-MSX.md).
+
 ## Resource ownership
 
 `.GBR` is the native, build-time resource format. Version 1 contains strings

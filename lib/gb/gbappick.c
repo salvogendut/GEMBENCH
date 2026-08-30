@@ -3,7 +3,7 @@
  * .IST and .SPR files are listed immediately. Embedded APP icons have their own
  * row because validating every APP before drawing the first dialog is painfully
  * slow on floppy media. Inside that view an .APP is listed only when its preamble
- * contains an optional GBAP v1/v2 icon. Probing a file can disturb a backend's
+ * contains an optional GBAP v1/v2/v3 icon. Probing a file can disturb a backend's
  * directory enumerator, so the scan resumes by name after each probe.
  */
 #include "gb.h"
@@ -107,8 +107,8 @@ static unsigned char has_gbap(const char *raw)
     if (version == 1)
         return (unsigned char)(PROBE_BUF[8] == 1
             && PROBE_BUF[9] == APPICON_WB && PROBE_BUF[10] == APPICON_H);
-    /* GBAP v2 requires the portable fallback in resource slot zero. */
-    return (unsigned char)(version == 2 && PROBE_BUF[8]
+    /* GBAP v2/v3 require the portable fallback in resource slot zero. */
+    return (unsigned char)((version == 2 || version == 3) && PROBE_BUF[8]
         && PROBE_BUF[APPICON_OFF] == 1
         && PROBE_BUF[APPICON_OFF + 1] == APPICON_WB
         && PROBE_BUF[APPICON_OFF + 2] == APPICON_H);
@@ -170,7 +170,7 @@ unsigned char gb_drawappicon(const char *raw, unsigned char x,
             || data[13] != APPICON_OFF || data[14] != 0
             || got < APPICON_OFF + APPICON_LEN)
             return 0;
-    } else if (data[7] == 2) {
+    } else if (data[7] == 2 || data[7] == 3) {
         total = (unsigned int)data[10] | ((unsigned int)data[11] << 8);
         if (!data[8] || data[8] > 2 || data[9] != 8
             || data[12] != APPICON_OFF || data[13] != 0 || total > got)

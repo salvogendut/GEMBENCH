@@ -320,3 +320,21 @@ The host and openMSX diagnostics cover concurrent File Manager ownership,
 independent offsets, bounded read/write, handle reuse, and teardown of a
 deliberately leaked context. Notepad, Browser, arbitrary seek/query operations,
 and CPC/PCW providers remain later work.
+
+Architecture Milestone 5 in issue #39 implements the first GBAP v3 package
+slice on MSX2. V3 preserves the executable JP and v2 icon directory, then adds
+a platform-neutral `GBM3` manifest with stable application/service identity,
+target or portable profile, platform/capability/ABI requirements, lifecycle and
+page policy, image/entry bounds, and typed fixed-origin segment descriptors.
+The deterministic host builder strictly validates the finished image while
+headerless, v1, and v2 packages retain their existing bytes and startup.
+
+With only three resident Screen-7 bytes free, the uncompressed primary segment
+uses an application-linked standard guard. It queries `GB_SYSINFO` before C
+initialization or publication; an incompatible or malformed package returns to
+the existing loader, which releases its pending owner and primary page. MSX2
+FormRef is the first reference package at 16,120/16,128 bytes. The openMSX test
+proves valid publication and exact owner/page/window rollback after an
+incompatible platform mask. Storage-side pre-allocation scanning, compression,
+additional mapped segments, the secondary-code call gate, and CPC/PCW runtime
+acceptance remain subsequent work.
