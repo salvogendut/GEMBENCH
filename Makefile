@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m2-sysinfo gembench-m2-openmsx gembench-m2-paint-openmsx gembench-m3-openmsx gembench-m3-boot-openmsx gembench-m7-resident-probe gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbdefer-check gbshell-check gbaccessory-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m2-sysinfo gembench-m2-openmsx gembench-m2-paint-openmsx gembench-m3-openmsx gembench-m3-boot-openmsx gembench-m4-sysinfo gembench-m4-openmsx gembench-m7-resident-probe gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbdefer-check gbfsctx-check gbshell-check gbaccessory-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -28,10 +28,10 @@ gembench-msx: msx
 gembench-msx-banked:
 	GEMBENCH_M7_BANKED=1 bash tools/build_kernel_msx.sh
 
-# Development-only Architecture Milestones 1-3 API diagnostic. Copy the resulting
+# Development-only Architecture Milestones 1-4 API diagnostic. Copy the resulting
 # SYSINFO.APP into /GBENCH on an MSX distribution image to run it.
 gembench-m1-sysinfo:
-	SYS=1 GB_DEFER=1 GBWIN=0 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
+	SYS=1 GB_DEFER=1 GB_FSCTX=1 GBWIN=0 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
 		tools/build_capp.sh apps/sysinfo build/msx/SYSINFO.RAW
 
 gembench-m1-openmsx: gembench-m1-sysinfo
@@ -49,6 +49,10 @@ gembench-m3-openmsx:
 
 gembench-m3-boot-openmsx:
 	bash tools/test_m3_boot_modes_openmsx.sh
+
+gembench-m4-sysinfo: gembench-m1-sysinfo
+
+gembench-m4-openmsx: gembench-m1-openmsx
 
 gembench-m2-paint-openmsx:
 	bash tools/test_m2_paint_openmsx.sh
@@ -174,6 +178,9 @@ gbshell-check:
 gbdefer-check:
 	bash tests/run_gbdefer_tests.sh
 
+gbfsctx-check:
+	bash tests/run_gbfsctx_tests.sh
+
 gbaccessory-check:
 	$(PYTHON) tools/gen_desk_accessories.py apps/desktop/accessories.json \
 		--output include/gembench/gbdesk_catalog.h --check
@@ -191,7 +198,7 @@ $(GBR_EXAMPLE_OUTPUT): $(GBR_EXAMPLE_SOURCE) tools/gbrc.py
 distribution-check-fixtures:
 	bash tools/build_titlebarmod.sh
 
-check: gbr-check gbvdi-check gbevent-check gbregion-check gbscrap-check gbshell-check gbdefer-check gbaccessory-check gbr-example distribution-check-fixtures
+check: gbr-check gbvdi-check gbevent-check gbregion-check gbscrap-check gbshell-check gbdefer-check gbfsctx-check gbaccessory-check gbr-example distribution-check-fixtures
 	git diff --check
 	$(PYTHON) tools/gen_pic_luts.py --check
 	$(PYTHON) tools/test_picconv.py

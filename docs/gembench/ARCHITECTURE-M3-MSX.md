@@ -88,8 +88,10 @@ made re-entrant.
 
 ## Capability record v3
 
-The complete 20-byte v1 and 24-byte v2 prefixes are unchanged. `GB_SYSINFO` v3
-is 28 bytes and advertises `GB_CAP_DEFERRED_MSG` (`0x0800`). Its suffix is:
+The complete 20-byte v1 and 24-byte v2 prefixes are unchanged. Milestone 3
+introduced a 28-byte `GB_SYSINFO` v3 record advertising
+`GB_CAP_DEFERRED_MSG` (`0x0800`). Milestone 4 now returns v4 with this complete
+v3 prefix unchanged. Its v3 suffix is:
 
 | Offset | Bytes | v3 field |
 | ---: | ---: | --- |
@@ -103,8 +105,8 @@ new jump.
 
 ## Resident storage
 
-Extending sysinfo moves the private Milestone-2 application block to
-`0xC30C-0xC361`. The deferred layer occupies `0xC362-0xC3C5`: sixteen handler
+The later v4 suffix moves the private Milestone-2 application block to
+`0xC310-0xC365`. The deferred layer now occupies `0xC366-0xC3C9`: sixteen handler
 bytes, count/guard state, the stable current record, 64 FIFO bytes, and bounded
 compaction scratch. All addresses are private implementation details below the
 existing page-3 glue ceiling at `0xC900`; no mapper page or frozen window field
@@ -152,7 +154,7 @@ two queued activations, no duplicate applications, clean close/relaunch, and an
 empty/non-busy queue at completion.
 
 The mode smoke boots separate network-free images through `GBMSX6.COM` and
-`GBMSX7.COM`, then checks a live Desktop, sysinfo v3, mapper capacity, and an
+`GBMSX7.COM`, then checks a live Desktop, the current sysinfo record, mapper capacity, and an
 empty deferred queue. This catches child-loader truncation independently of the
 queue contract diagnostic.
 

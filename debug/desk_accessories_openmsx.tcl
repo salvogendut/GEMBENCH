@@ -94,8 +94,8 @@ proc da_finish {status} {
     puts $out "FINAL_NWIN=[peek 0x1350]"
     puts $out "FINAL_FOCUS=[peek 0x1351]"
     puts $out "SHELL_BUSY=[peek 0x133E]"
-    puts $out "DEFER_COUNT=[peek 0xC372]"
-    puts $out "DEFER_BUSY=[peek 0xC373]"
+    puts $out "DEFER_COUNT=[peek 0xC376]"
+    puts $out "DEFER_BUSY=[peek 0xC377]"
     puts $out [format "FINAL_PC=%04X" [reg PC]]
     puts $out [format "FINAL_SP=%04X" [reg SP]]
     close $out
@@ -308,7 +308,7 @@ proc da_wait_clock_relaunched {} {
                 $::da_closed_busy == ($::da_before_close_busy - 1) &&
                 $::da_final_busy == $::da_before_close_busy &&
                 $::da_max_nwin == 3 && [peek 0x133E] == 0 &&
-                [peek 0xC372] == 0 && [peek 0xC373] == 0} {
+                [peek 0xC376] == 0 && [peek 0xC377] == 0} {
                 da_finish PASS
                 return
             }

@@ -228,4 +228,5 @@ GB_OWNER        equ   GB_KERNEL+198 ; #80C6  current generation-tagged owner han
 GB_PAGE         equ   GB_KERNEL+201 ; #80C9  opaque 16 KiB page allocate/free/check.
 GB_APP          equ   GB_KERNEL+204 ; #80CC  MSX2 application/window lifecycle (#32).
 GB_DEFER        equ   GB_KERNEL+207 ; #80CF  MSX2 bounded deferred application messages (#35).
+GB_FSCTX        equ   GB_KERNEL+210 ; #80D2  MSX2 explicit filesystem contexts (#37).
                 endif

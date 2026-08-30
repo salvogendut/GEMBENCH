@@ -530,3 +530,42 @@ make gembench-m3-openmsx
 make gembench-m3-boot-openmsx  # Screen 6/7 loader smoke without the API diagnostic
 MSX_HEADLESS=1 tools/test_desk_accessories_openmsx.sh
 ```
+
+## Explicit filesystem contexts
+
+MSX2 applications opt in with `GB_FSCTX=1` and include `gbfsctx.h`. Allocate a
+context, set its path and raw 11-byte name explicitly, and retain the opaque
+handle only for the current application lifetime:
+
+```c
+gb_fsctx_t context = gb_fsctx_open(gb_get_drive());
+gb_fsctx_set_path(context, "\\DOCS");
+gb_fsctx_set_name(context, "NOTES   TXT");
+while ((got = gb_fsctx_read(context, buffer, sizeof(buffer))) != 0)
+    consume(buffer, got);
+gb_fsctx_close(context);
+```
+
+Reads and writes are sequential and bounded to 512 bytes per call. Directory
+enumeration is also context-owned: interleaving another client cannot replace
+the saved FIB. `gb_fsctx_dir_batch()` fetches up to four packed entries per
+module call; its fixed-buffer result is valid until the next context call.
+Calls are root-task operations and must not be issued by a preemptible compute
+worker. Applications should test sysinfo v4 size plus `GB_CAP_FS_CONTEXTS`
+before depending on the appended kernel jump.
+
+File Manager is the first production client. It uses the directory-only
+binding profile and activates its explicit path immediately before inherited
+legacy copy/file calls. Build the release image and run the complete ownership,
+offset, stale-handle, cleanup, and live File Manager test with:
+
+```sh
+make gbfsctx-check
+make gembench-msx
+make gembench-m4-openmsx
+```
+
+For a manual check, open two File Manager windows on the same drive, enter a
+subdirectory in one, and let both listings finish. Refresh or navigate either
+window; the other must retain its own path and enumeration. CPC and PCW do not
+support `GB_FSCTX=1` yet.

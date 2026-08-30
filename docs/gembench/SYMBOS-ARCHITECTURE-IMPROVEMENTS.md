@@ -1,7 +1,7 @@
 # SymbOS-inspired architecture improvements
 
-Status: **active roadmap**. Improvements 1-4 are implemented on MSX2 through
-Architecture Milestones 1-3; improvements 5-8 remain proposed. CPC and PCW
+Status: **active roadmap**. Improvements 1-5 are implemented on MSX2 through
+Architecture Milestones 1-4; improvements 6-8 remain proposed. CPC and PCW
 parity remains governed by `CPC-PCW-BACKPORT-PLAN.md`.
 
 This document records the highest-value architectural improvements identified
@@ -92,7 +92,11 @@ cannot redirect another load; cancellable Notepad/Browser jobs; termination
 cleanup; and one public contract exercised by CPC Albireo/M4/floppy, MSX
 Nextor, and PCW floppy tests.
 
-Estimated difficulty: **high**.
+Estimated difficulty: **high**. MSX2 status: **first explicit-context slice
+implemented in Milestone 4**, including independent File Manager enumeration,
+bounded sequential transfer, launch handoff, and owner teardown. Notepad,
+Browser, arbitrary seek/query operations, and CPC/PCW providers remain later
+adopters.
 
 ## 6. GBAP v3 application manifest
 

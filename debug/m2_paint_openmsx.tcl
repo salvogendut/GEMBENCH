@@ -58,6 +58,48 @@ set p2_work_y_addr [expr {$::env(GEMBENCH_M2_WORK_Y)}]
 set p2_repaint_tool [expr {$::env(GEMBENCH_M2_REPAINT_TOOL)}]
 set p2_repaint_preview [expr {$::env(GEMBENCH_M2_REPAINT_PREVIEW)}]
 set p2_repaint_work [expr {$::env(GEMBENCH_M2_REPAINT_WORK)}]
+set p2_fm_total [expr {$::env(GEMBENCH_M2_FM_TOTAL)}]
+set p2_fm_names [expr {$::env(GEMBENCH_M2_FM_NAMES)}]
+set p2_fm_order [expr {$::env(GEMBENCH_M2_FM_ORDER)}]
+set p2_fm_list_state [expr {$::env(GEMBENCH_M2_FM_LIST_STATE)}]
+set p2_fm_view [expr {$::env(GEMBENCH_M2_FM_VIEW)}]
+set p2_fm_top [expr {$::env(GEMBENCH_M2_FM_TOP)}]
+set p2_fm_nsel [expr {$::env(GEMBENCH_M2_FM_NSEL)}]
+set p2_fm_dc_idx [expr {$::env(GEMBENCH_M2_FM_DC_IDX)}]
+set p2_fm_dc_timer [expr {$::env(GEMBENCH_M2_FM_DC_TIMER)}]
+set p2_k_poll [expr {$::env(GEMBENCH_M2_K_POLL)}]
+set p2_paint_main [expr {$::env(GEMBENCH_M2_PAINT_MAIN)}]
+set p2_filemgr_open [expr {$::env(GEMBENCH_M2_FM_OPEN_ENTRY)}]
+set p2_picture_index -1
+set p2_picture_target {}
+set p2_filemgr_open_hits 0
+set p2_paint_main_hits 0
+set p2_poll_events {}
+set p2_poll_bp ""
+
+proc p2_poll_after {delay callback} {
+    after time $delay [list p2_poll_arm $callback]
+}
+
+proc p2_poll_arm {callback} {
+    lappend ::p2_poll_events $callback
+    if {$::p2_poll_bp eq ""} {
+        set ::p2_poll_bp [debug set_bp $::p2_k_poll {} {p2_poll_tick}]
+    }
+}
+
+proc p2_poll_tick {} {
+    debug remove_bp $::p2_poll_bp
+    set ::p2_poll_bp ""
+    set callbacks $::p2_poll_events
+    set ::p2_poll_events {}
+    set failed ""
+    foreach callback $callbacks {
+        if {[catch {uplevel #0 $callback} message]} {set failed $message; break}
+    }
+    set ::pause off
+    if {$failed ne ""} {p2_finish "ERROR poll callback: $failed"}
+}
 
 proc p2_owner_count {} {
     set count 0
@@ -68,6 +110,28 @@ proc p2_owner_count {} {
 }
 
 proc p2_entry {slot} { expr {0x1352 + 25 * $slot} }
+
+proc p2_filemgr_mapped {} {
+    set focus [peek 0x1351]
+    expr {$focus < 8 && [peek 0x134F] == [peek [p2_entry $focus]]}
+}
+
+proc p2_filemgr_picture_index {} {
+    for {set i 0} {$i < [peek $::p2_fm_total]} {incr i} {
+        set raw [peek [expr {$::p2_fm_order + $i}]]
+        set base [expr {$::p2_fm_names + $raw * 11}]
+        set expected {65 32 32 32 32 32 32 32 80 73 67}
+        set match 1
+        for {set j 0} {$j < 11} {incr j} {
+            if {[peek [expr {$base + $j}]] != [lindex $expected $j]} {
+                set match 0
+                break
+            }
+        }
+        if {$match} {return $i}
+    }
+    return -1
+}
 
 proc p2_rect {slot} {
     set entry [p2_entry $slot]
@@ -110,6 +174,16 @@ proc p2_trace_pane_repaint {pane} {
         if {$pane eq "preview"} { incr ::p2_preview_repaints }
         if {$pane eq "work"} { incr ::p2_work_repaints }
     }
+    set ::pause off
+}
+
+proc p2_trace_filemgr_open {} {
+    if {[p2_filemgr_mapped]} {incr ::p2_filemgr_open_hits}
+    set ::pause off
+}
+
+proc p2_trace_paint_main {} {
+    incr ::p2_paint_main_hits
     set ::pause off
 }
 
@@ -179,6 +253,16 @@ proc p2_finish {status} {
     puts $out "LIVE_WINDOWS=[peek 0x1350]"
     puts $out "FOCUS=[peek 0x1351]"
     puts $out "MAX_WINDOWS=$::p2_max_nwin"
+    puts $out "PICTURE_INDEX=$::p2_picture_index"
+    puts $out "PICTURE_TARGET=$::p2_picture_target"
+    puts $out "FILEMGR_VIEW=[peek $::p2_fm_view]"
+    puts $out "FILEMGR_TOTAL=[peek $::p2_fm_total]"
+    puts $out "FILEMGR_TOP=[peek $::p2_fm_top]"
+    puts $out "FILEMGR_NSEL=[peek $::p2_fm_nsel]"
+    puts $out "FILEMGR_DC_IDX=[peek $::p2_fm_dc_idx]"
+    puts $out "FILEMGR_DC_TIMER=[peek $::p2_fm_dc_timer]"
+    puts $out "FILEMGR_OPEN_HITS=$::p2_filemgr_open_hits"
+    puts $out "PAINT_MAIN_HITS=$::p2_paint_main_hits"
     puts $out [format "FINAL_PC=%04X" [reg PC]]
     close $out
     if {$status ne "PASS"} { catch {screenshot -raw $::p2_screenshot} }
@@ -246,22 +330,22 @@ proc p2_double_second_up {callback} {
 
 proc p2_double_second {callback} {
     keymatrixdown 8 0x01
-    after time 0.06 [list p2_double_second_up $callback]
+    after time 0.16 [list p2_double_second_up $callback]
 }
 
 proc p2_double_first_up {callback} {
     keymatrixup 8 0x01
-    after time 0.10 [list p2_double_second $callback]
+    after time 0.20 [list p2_double_second $callback]
 }
 
 proc p2_double_click {callback} {
     keymatrixdown 8 0x01
-    after time 0.06 [list p2_double_first_up $callback]
+    after time 0.16 [list p2_double_first_up $callback]
 }
 
 proc p2_pane_drag_done {} {
     set ::p2_deadline [expr {[machine_info time] + 10.0}]
-    after time 1.0 p2_pane_drag_wait
+    p2_poll_after 1.0 p2_pane_drag_wait
 }
 
 proc p2_pane_drag_wait {} {
@@ -269,7 +353,7 @@ proc p2_pane_drag_wait {} {
         if {[machine_info time] >= $::p2_deadline} {
             p2_finish "FAIL Paint pane drag left the kernel unresponsive"
         } else {
-            after time 0.05 p2_pane_drag_wait
+            p2_poll_after 0.002 p2_pane_drag_wait
         }
         return
     }
@@ -284,7 +368,7 @@ proc p2_pane_drag_wait {} {
             if {[machine_info time] >= $::p2_deadline} {
                 p2_finish "FAIL Paint pane drag repaint did not complete"
             } else {
-                after time 0.1 p2_pane_drag_wait
+                p2_poll_after 0.1 p2_pane_drag_wait
             }
             return
         }
@@ -322,11 +406,11 @@ proc p2_pane_drag_wait {} {
                 return
             }
         }
-        after time 1.0 $::p2_drag_callback
+        p2_poll_after 1.0 $::p2_drag_callback
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Paint pane drag geometry did not change"
     } else {
-        after time 0.1 p2_pane_drag_wait
+        p2_poll_after 0.1 p2_pane_drag_wait
     }
 }
 
@@ -336,11 +420,15 @@ proc p2_pane_drag_release {} {
 }
 
 proc p2_pane_focus_wait {} {
+    if {![p2_lowram_ready]} {
+        p2_poll_after 0.002 p2_pane_focus_wait
+        return
+    }
     if {[peek 0x1351] != $::p2_drag_slot} {
         if {[machine_info time] >= $::p2_deadline} {
             p2_finish "FAIL Paint pane focus timeout"
         } else {
-            after time 0.02 p2_pane_focus_wait
+            p2_poll_after 0.02 p2_pane_focus_wait
         }
         return
     }
@@ -365,6 +453,10 @@ proc p2_pane_focus_wait {} {
 }
 
 proc p2_pane_drag_start {slot mask callback} {
+    if {![p2_lowram_ready]} {
+        p2_poll_after 0.0 [list p2_pane_drag_start $slot $mask $callback]
+        return
+    }
     set ::p2_drag_slot $slot
     set ::p2_drag_before [p2_rect $slot]
     set ::p2_drag_mask $mask
@@ -379,7 +471,7 @@ proc p2_pane_drag_start {slot mask callback} {
         set ::p2_count_pane_repaints 1
         set ::p2_deadline [expr {[machine_info time] + 10.0}]
         keymatrixdown 8 0x01
-        after time 0.02 p2_pane_focus_wait
+        p2_poll_after 0.02 p2_pane_focus_wait
         return
     }
     keymatrixdown 8 0x01
@@ -419,7 +511,7 @@ proc p2_close_preview_activated {} {
         if {[machine_info time] >= $::p2_deadline} {
             p2_finish "FAIL Preview activation low-RAM timeout"
         } else {
-            after time 0.05 p2_close_preview_activated
+            p2_poll_after 0.002 p2_close_preview_activated
         }
         return
     }
@@ -432,7 +524,7 @@ proc p2_close_preview_activated {} {
 
 proc p2_close_tool_done {} {
     if {![p2_lowram_ready]} {
-        after time 0.05 p2_close_tool_done
+        p2_poll_after 0.002 p2_close_tool_done
         return
     }
     if {[peek 0x1350] == 2} {
@@ -442,16 +534,16 @@ proc p2_close_tool_done {} {
         } else { p2_finish "PASS" }
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Toolchest close timeout"
-    } else { after time 0.1 p2_close_tool_done }
+    } else { p2_poll_after 0.1 p2_close_tool_done }
 }
 
 proc p2_close_preview_done {} {
     if {![p2_lowram_ready]} {
-        after time 0.05 p2_close_preview_done
+        p2_poll_after 0.002 p2_close_preview_done
         return
     }
     if {[peek 0x1350] == 3} {
-        if {[peek [expr {0xC324 + $::p2_app_slot}]] != 1 ||
+        if {[peek [expr {0xC328 + $::p2_app_slot}]] != 1 ||
             [peek 0xC2E5] != $::p2_initial_free - 1 ||
             [p2_slot_owner $::p2_tool_slot] != $::p2_owner} {
             p2_finish "FAIL document-window teardown"
@@ -464,16 +556,16 @@ proc p2_close_preview_done {} {
                    {p2_click p2_close_tool_done}
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Preview close timeout"
-    } else { after time 0.1 p2_close_preview_done }
+    } else { p2_poll_after 0.1 p2_close_preview_done }
 }
 
 proc p2_close_work_done {} {
     if {![p2_lowram_ready]} {
-        after time 0.05 p2_close_work_done
+        p2_poll_after 0.002 p2_close_work_done
         return
     }
     if {[peek 0x1350] == 4} {
-        if {[peek [expr {0xC324 + $::p2_app_slot}]] != 2 ||
+        if {[peek [expr {0xC328 + $::p2_app_slot}]] != 2 ||
             [p2_slot_owner $::p2_work_slot] != 0 ||
             [peek [expr {[p2_entry $::p2_work_slot] + 13}]] & 1} {
             p2_finish "FAIL independent Canvas close"
@@ -488,24 +580,24 @@ proc p2_close_work_done {} {
                          p2_close_preview_after_tool_drag]
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Canvas close timeout"
-    } else { after time 0.1 p2_close_work_done }
+    } else { p2_poll_after 0.1 p2_close_work_done }
 }
 
 proc p2_wait_work {} {
     if {![p2_lowram_ready]} {
-        after time 0.05 p2_wait_work
+        p2_poll_after 0.002 p2_wait_work
         return
     }
     set nwin [peek 0x1350]
     if {$nwin > $::p2_max_nwin} { set ::p2_max_nwin $nwin }
     if {$nwin == 5 &&
-        [peek [expr {0xC324 + $::p2_app_slot}]] == 3} {
+        [peek [expr {0xC328 + $::p2_app_slot}]] == 3} {
         set ::p2_work_slot [p2_owned_slot $::p2_owner 42 175]
         if {$::p2_work_slot < 0} {
             p2_finish "FAIL Canvas record missing"
             return
         }
-        set ::p2_work_generation [peek [expr {0xC354 + $::p2_work_slot}]]
+        set ::p2_work_generation [peek [expr {0xC358 + $::p2_work_slot}]]
         set entry [p2_entry $::p2_work_slot]
         if {$::p2_work_generation == 0 ||
             [peek $entry] != [peek [p2_entry $::p2_tool_slot]]} {
@@ -520,12 +612,12 @@ proc p2_wait_work {} {
                          p2_close_canvas_after_drag]
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Canvas did not register"
-    } else { after time 0.1 p2_wait_work }
+    } else { p2_poll_after 0.1 p2_wait_work }
 }
 
 proc p2_wait_paint {} {
     if {![p2_lowram_ready]} {
-        after time 0.05 p2_wait_paint
+        p2_poll_after 0.002 p2_wait_paint
         return
     }
     set nwin [peek 0x1350]
@@ -536,7 +628,7 @@ proc p2_wait_paint {} {
         # launch-document job receives frames and can publish Preview.
         for {set app 0} {$app < 8} {incr app} {
             if {[peek [expr {0xC2C0 + $app}]] != 0 &&
-                [peek [expr {0xC324 + $app}]] == 1 && $app > 1} {
+                [peek [expr {0xC328 + $app}]] == 1 && $app > 1} {
                 set owner [expr {($app + 1) |
                     ([peek [expr {0xC2C8 + $app}]] << 8)}]
                 set slot [p2_owned_slot $owner 29 126]
@@ -554,7 +646,7 @@ proc p2_wait_paint {} {
     if {$nwin == 4} {
         for {set app 0} {$app < 8} {incr app} {
             if {[peek [expr {0xC2C0 + $app}]] != 0 &&
-                [peek [expr {0xC324 + $app}]] == 2} {
+                [peek [expr {0xC328 + $app}]] == 2} {
                 set ::p2_app_slot $app
                 set ::p2_owner [expr {($app + 1) |
                     ([peek [expr {0xC2C8 + $app}]] << 8)}]
@@ -568,14 +660,14 @@ proc p2_wait_paint {} {
             [peek 0xC2E5] != $::p2_initial_free - 2 ||
             [peek [p2_entry $::p2_tool_slot]] !=
                 [peek [p2_entry $::p2_preview_slot]] ||
-            [peek [expr {0xC30C + $::p2_app_slot}]] !=
+            [peek [expr {0xC310 + $::p2_app_slot}]] !=
                 [peek [p2_entry $::p2_tool_slot]]} {
             # WM_NWIN changes while registration is still binding the parallel
             # owner record. Give that short critical section time to finish.
             if {[machine_info time] >= $::p2_deadline} {
                 p2_finish "FAIL Paint application/window records"
             } else {
-                after time 0.05 p2_wait_paint
+                p2_poll_after 0.05 p2_wait_paint
             }
             return
         }
@@ -588,7 +680,7 @@ proc p2_wait_paint {} {
                          p2_open_canvas_after_preview_drag]
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Paint Toolchest/Preview did not register"
-    } else { after time 0.1 p2_wait_paint }
+    } else { p2_poll_after 0.1 p2_wait_paint }
 }
 
 proc p2_launch_paint {} {
@@ -598,19 +690,35 @@ proc p2_launch_paint {} {
 
 proc p2_filemgr_ready {} {
     if {![p2_lowram_ready]} {
-        after time 0.05 p2_filemgr_ready
+        p2_poll_after 0.002 p2_filemgr_ready
         return
     }
     if {[peek 0x1350] == 2 && [peek 0x1351] == 1 &&
         [peek 0x144A] == 56 && [peek 0x144B] == 158} {
-        set ::p2_initial_free [peek 0xC2E5]
-        # Three folders fill row one. HELLO.GBR is the first app-ranked item
-        # on row two; A.PIC is the next cell because pictures sort immediately
-        # after applications/resources.
-        after time 3.0 {p2_move_to 33 104 p2_launch_paint}
+        if {[p2_filemgr_mapped] && [peek $::p2_fm_list_state] == 0} {
+            set index [p2_filemgr_picture_index]
+            if {$index >= 0} {
+                set ::p2_picture_index $index
+                set ::p2_initial_free [peek 0xC2E5]
+                set x [peek 0x1448]
+                set y [peek 0x1449]
+                if {[peek $::p2_fm_view] == 1} {
+                    set cell_w [expr {([peek 0x144A] - 5) / 3}]
+                    set target_x [expr {$x + 4 + ($index % 3) * $cell_w + $cell_w / 2}]
+                    set target_y [expr {$y + 14 + ($index / 3) * 44 + 16}]
+                } else {
+                    set target_x [expr {$x + 12}]
+                    set target_y [expr {$y + 14 + $index * 18 + 8}]
+                }
+                set ::p2_picture_target [list $target_x $target_y]
+                p2_poll_after 0.5 [list p2_move_to $target_x $target_y p2_launch_paint]
+                return
+            }
+        }
+        p2_poll_after 0.002 p2_filemgr_ready
     } elseif {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL File Manager did not register"
-    } else { after time 0.1 p2_filemgr_ready }
+    } else { p2_poll_after 0.1 p2_filemgr_ready }
 }
 
 proc p2_open_drive {} {
@@ -621,8 +729,8 @@ proc p2_open_drive {} {
 proc p2_desktop_ready {} {
     if {[peek 0x1350] == 1 && [peek 0x1351] == 0 &&
         [peek 0x1306] <= 127 && [peek 0x1307] <= 211 &&
-        [p2_owner_count] == 1 && [peek 0xC2F0] == 24 &&
-        [peek 0xC2F1] == 2} {
+        [p2_owner_count] == 1 && [peek 0xC2F0] == 32 &&
+        [peek 0xC2F1] == 4} {
         set ppi [debug read ioports 0xA8]
         set secondary [peek 0xFFFF]
         set candidate [expr {($ppi << 8) | $secondary}]
@@ -642,12 +750,12 @@ proc p2_desktop_ready {} {
     }
     if {[machine_info time] >= $::p2_deadline} {
         p2_finish "FAIL Desktop slot discovery"
-    } else { after time 0.013 p2_desktop_ready }
+    } else { p2_poll_after 0.013 p2_desktop_ready }
 }
 
 proc p2_start {} {
     set ::p2_deadline [expr {[machine_info time] + 30.0}]
-    p2_desktop_ready
+    p2_poll_after 0.0 p2_desktop_ready
 }
 
 debug set_bp $p2_repaint_start {} {p2_trace_repaint start}
@@ -655,4 +763,6 @@ debug set_bp $p2_repaint_done {} {p2_trace_repaint done}
 debug set_bp $p2_repaint_tool {} {p2_trace_pane_repaint tool}
 debug set_bp $p2_repaint_preview {} {p2_trace_pane_repaint preview}
 debug set_bp $p2_repaint_work {} {p2_trace_pane_repaint work}
+debug set_bp $p2_filemgr_open {} {p2_trace_filemgr_open}
+debug set_bp $p2_paint_main {} {p2_trace_paint_main}
 after time 62.0 p2_start

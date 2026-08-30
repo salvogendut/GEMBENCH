@@ -853,7 +853,10 @@ fsmx_total      dw    0
 fsmx_cwdsl      db    92                      ; "\" prefix, falls into the CWD buffer
 fsmx_cwd        ds    64                      ; _GETCD result (no leading slash)
 fsmx_path       ds    16                      ; "FILENAME.EXT",0
-fsmx_fib        ds    64                      ; the _FFIRST/_FNEXT fileinfo block
+; The active FIB lives in fixed page-3 RAM. Architecture Milestone 4 snapshots
+; it per filesystem context from GBFSCTX.MOD; relocating the mutable block also
+; reclaims 64 bytes in both mode-specific child COM images.
+fsmx_fib        equ   MSX_FSCTX_FIB
 fs_dir_clus     ds    4                       ; dummy: k_copy_begin/end context swap
 
 ; fixed low-RAM cells: the same contract addresses as the CPC dispatcher

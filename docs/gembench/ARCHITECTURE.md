@@ -8,7 +8,7 @@ for extending them.
 ```text
 GEMBENCH desktop, accessories, and applications
 ------------------------------------------------
-Objects | Resources | Forms | Menus | Events | Shell | Owned pages
+Objects | Resources | Forms | Menus | Events | Shell | Owned pages | FS contexts
 ------------------------------------------------
 GeoBench libgb and stable kernel jump table
 ------------------------------------------------
@@ -63,6 +63,13 @@ while application quit closes all windows and owned pages. Shell service and
 worker identity now follow the application. The implemented MSX-only lifecycle,
 sysinfo v2 suffix, and in-tree Paint migration are documented in
 [ARCHITECTURE-M2-MSX.md](ARCHITECTURE-M2-MSX.md).
+
+Architecture Milestone 3 adds an eight-record, generation-safe deferred control
+message FIFO. Milestone 4 then gives each MSX2 storage client an explicit
+generation-tagged drive/path/name/offset/directory context while keeping native
+DOS calls serialized and bounded. File Manager is the first production
+migration; the append-only v4 capability record and paged implementation are
+documented in [ARCHITECTURE-M4-MSX.md](ARCHITECTURE-M4-MSX.md).
 
 ## Resource ownership
 

@@ -19,6 +19,7 @@
 #endif
 #ifdef GB_MSX2
 #include "gbr_menu.h"
+#include "gbfsctx.h"
 #include "view_menu_gbr.h"
 #endif
 
@@ -106,6 +107,7 @@ static unsigned char dc_timer;
 static unsigned char view = V_ICONS;   /* default = icon view (GEOBENCH.CFG VIEW=) */
 #ifdef GB_MSX2
 static gbr_menu_t view_menu;
+static gb_fsctx_t fs_context;
 #endif
 static unsigned char my_drive;         /* the drive this window browses (#65) */
 static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
@@ -204,7 +206,11 @@ __endasm;
 static char *dir_seek(unsigned char idx)
 {
     unsigned char i;
-    char *p = gb_dir1();
+    char *p;
+#ifdef GB_MSX2
+    if (fs_context) (void)gb_fsctx_activate(fs_context);
+#endif
+    p = gb_dir1();
     for (i = 0; i < idx && p; i++) p = gb_dirn();
     return p;
 }
@@ -370,6 +376,38 @@ static void path_pop(void)                       /* drop the last "/component" *
    drive root (fm_path empty -> no parent). */
 static unsigned char up_avail(void) { return (unsigned char)(fm_path[0] != 0); }
 
+#ifdef GB_MSX2
+/* The native DOS backend remains serialized, but each File Manager now keeps
+ * its own drive/path/FIB record. Activate only when a legacy file operation
+ * immediately consumes the current directory; enumeration itself is private. */
+static void fm_activate(void)
+{
+    if (fs_context) (void)gb_fsctx_activate(fs_context);
+    else gb_set_drive(my_drive);
+}
+
+static void fm_context_path(void)
+{
+    if (fs_context) (void)gb_fsctx_set_path(fs_context, fm_path);
+}
+
+static unsigned char fm_free_kib(void)
+{
+    return fs_context ? gb_fsctx_free_kib(fs_context, &free_kib)
+                      : gb_fs_free_kib(&free_kib);
+}
+#else
+static void fm_activate(void) { gb_set_drive(my_drive); }
+static char *fm_dir(unsigned char first)
+{
+    char *p = first ? gb_dir1() : gb_dirn();
+    return p ? gb_entname() : 0;
+}
+static unsigned char fm_entry_isdir(void) { return gb_isdir(); }
+static void fm_context_path(void) { }
+static unsigned char fm_free_kib(void) { return gb_fs_free_kib(&free_kib); }
+#endif
+
 static void append_ch(char *dst, unsigned char *i, char ch)
 {
     if (*i < TITLE_MAX) dst[(*i)++] = ch;
@@ -508,11 +546,11 @@ static unsigned char ext_eq(const char *ext, const char *want)
 }
 
 /* entry_icon: the current entry (name + gb_isdir) -> its DEFAULT.IST slot. */
-static unsigned char entry_icon(const char *name)
+static unsigned char entry_icon(const char *name, unsigned char directory)
 {
     char ext[4];
     unsigned char icon;
-    if (gb_isdir()) return ICON_FOLDER;
+    if (directory) return ICON_FOLDER;
     if (name_is(name, "GBKERN")) return ICON_GEOBENCH;   /* the kernel binary */
     ext_of(name, ext);
     if (ext_eq(ext, "BAS")) return ICON_BASIC;
@@ -733,8 +771,9 @@ static void list_start(void)
 
 static void list_step(void)
 {
-    unsigned char n = 0, i, j, raw;
-    char *p, *e, *d;
+    unsigned char n, i, j, raw;
+    const gb_fsctx_entry_t *batch;
+    char *e, *d;
 
     if (list_state == LIST_WAIT) {
         if (gb_drop_claimed()) return;
@@ -742,8 +781,7 @@ static void list_step(void)
         list_state = LIST_FIRST;
     }
     if (list_state == LIST_FREE) {
-        gb_set_drive(my_drive);
-        free_known = gb_fs_free_kib(&free_kib);
+        free_known = fm_free_kib();
         gb_drop_release();
         list_state = LIST_IDLE;
         win_title();
@@ -753,23 +791,24 @@ static void list_step(void)
         return;
     }
 
-    gb_set_drive(my_drive);
-    p = (list_state == LIST_FIRST) ? gb_dir1() : gb_dirn();
-    while (p && total < MAX_ENT && n < LIST_BATCH) {
+    n = gb_fsctx_dir_batch(fs_context,
+                           (unsigned char)(list_state == LIST_FIRST));
+    batch = gb_fsctx_batch_entries();
+    for (i = 0; i < n && total < MAX_ENT; i++) {
         raw = total;
-        d = NAME_AT(raw); e = gb_entname();
-        for (i = 0; i < 11; i++) d[i] = e[i];
-        icons[raw] = entry_icon(name83(e));
+        d = NAME_AT(raw); e = (char *)batch[i].name;
+        { unsigned char k; for (k = 0; k < 11; k++) d[k] = e[k]; }
+        icons[raw] = entry_icon(name83(e),
+            (unsigned char)((batch[i].attributes & GB_FSCTX_ATTR_DIRECTORY) != 0));
         j = raw;
         while (j && entry_less(raw, order[j - 1])) {
             order[j] = order[j - 1];
             j--;
         }
         order[j] = raw;
-        total++; n++;
-        if (n < LIST_BATCH && total < MAX_ENT) p = gb_dirn();
+        total++;
     }
-    list_state = (!p || total == MAX_ENT) ? LIST_FREE : LIST_NEXT;
+    list_state = (n < LIST_BATCH || total == MAX_ENT) ? LIST_FREE : LIST_NEXT;
 }
 #else
 /* build_list: stream the directory into the cache (raw order, with each entry's type
@@ -777,18 +816,33 @@ static void list_step(void)
 static void build_list(void)
 {
     unsigned char n = 0, i, j, v;
-    char *p, *e;
-    gb_set_drive(my_drive);
-    p = gb_dir1();
+#ifdef GB_MSX2
+    unsigned char count, first = 1, k;
+    const gb_fsctx_entry_t *batch = gb_fsctx_batch_entries();
+    do {
+        count = gb_fsctx_dir_batch(fs_context, first);
+        first = 0;
+        for (k = 0; k < count && n < MAX_ENT; k++) {
+            char *d = NAME_AT(n), *e = (char *)batch[k].name;
+            for (i = 0; i < 11; i++) d[i] = e[i];
+            icons[n] = entry_icon(name83(e),
+                (unsigned char)((batch[k].attributes & GB_FSCTX_ATTR_DIRECTORY) != 0));
+            order[n] = n;
+            n++;
+        }
+    } while (count == GB_FSCTX_DIRECTORY_BATCH && n < MAX_ENT);
+#else
+    char *p = fm_dir(1), *e;
     while (p && n < MAX_ENT) {
         char *d = NAME_AT(n);
-        e = gb_entname();
+        e = p;
         for (i = 0; i < 11; i++) d[i] = e[i];
-        icons[n] = entry_icon(name83(e));   /* uses gb_isdir() of the current entry */
+        icons[n] = entry_icon(name83(e), fm_entry_isdir());
         order[n] = n;
         n++;
-        p = gb_dirn();
+        p = fm_dir(0);
     }
+#endif
     total = n;
     for (i = 1; i < n; i++) {                /* insertion sort the permutation */
         v = order[i]; j = i;
@@ -888,8 +942,6 @@ static void select_entry(unsigned char pos)
 /* draw_body: the window CONTENT (scrollbar + listing + grip); the WM drew the frame (#146). */
 static void draw_body(void)
 {
-    gb_set_drive(my_drive);              /* this window's drive (#65) - a repaint may run
-                                            while another window's drive is active */
     draw_scrollbar();
     if (view == V_ICONS) draw_icons_view();
     else                 draw_list_view();
@@ -929,7 +981,7 @@ static unsigned char appicon_step(void)
         if ((state & APPICON_SLOTMASK) == ICON_APP
             && (state & (APPICON_UNKNOWN | APPICON_PENDING))) {
             icon_req_raw = raw;
-            gb_set_drive(my_drive);
+            fm_activate();
             gb_curhide();
             icons[raw] = module_draw_icon()
                 ? (unsigned char)(APPICON_EMBEDDED | ICON_APP) : ICON_APP;
@@ -968,7 +1020,7 @@ static void relist(void)
     list_start();
 #else
     build_list();              /* stream + sort the directory (sets total) (#118) */
-    free_known = gb_fs_free_kib(&free_kib);
+    free_known = fm_free_kib();
     top = 0; nsel = 0;
     clamp_top();
     win_title();               /* the path changed -> refresh the title buffer (#146) */
@@ -977,7 +1029,17 @@ static void relist(void)
 }
 
 /* go_up: ascend to the parent directory (the ".." entry / old View>Up). */
-static void go_up(void) { gb_back(); path_pop(); relist(); }
+static void go_up(void)
+{
+#ifdef GB_MSX2
+    path_pop();
+    fm_context_path();
+#else
+    gb_back();
+    path_pop();
+#endif
+    relist();
+}
 
 /* ext_is: does the positioned entry's raw 11-byte 8.3 name end in this extension? */
 static unsigned char ext_is(const char *e, char a, char b, char c)
@@ -1001,7 +1063,16 @@ static void open_entry(unsigned char idx)
 {
     char *e;
     dir_seek(order[idx]);          /* sorted display index -> raw entry (sets attr/cluster) */
-    if (gb_isdir()) { path_push(fullname()); gb_chdir(); relist(); return; }
+    if (gb_isdir()) {
+        path_push(fullname());
+#ifdef GB_MSX2
+        fm_context_path();
+#else
+        gb_chdir();
+#endif
+        relist();
+        return;
+    }
     nsel = 0;
     e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
 #ifdef GB_SHELL_SERVICES
@@ -1137,7 +1208,7 @@ static void copy_start(void)
 static void copy_remove_partial(void)
 {
     if (!copy_created) return;
-    gb_set_drive(my_drive);
+    fm_activate();
     gb_file_delete(gb_dragname);
 }
 
@@ -1182,7 +1253,7 @@ static void copy_step(void)
     }
     if (copy_state != COPY_TRANSFER) return;
 
-    gb_set_drive(my_drive);
+    fm_activate();
     gb_copy_begin();
     gb_set_name(gb_dragname);
     FS_LOAD_OFS[0] = (unsigned char)copy_ofs_lo;
@@ -1198,7 +1269,7 @@ static void copy_step(void)
     }
     if (got > GB_COPYMAX) got = GB_COPYMAX;
 
-    gb_set_drive(my_drive);
+    fm_activate();
     gb_set_name(gb_dragname);
     FS_XFLAGS = (copy_ofs_lo || copy_ofs_hi) ? 0x06 : 0x04;
     if (!copy_created) copy_created = 1;
@@ -1232,7 +1303,7 @@ static unsigned char copy_file(void)
     unsigned char  first = 1;
 
     for (;;) {
-        gb_set_drive(my_drive);                 /* so copy_end restores to our drive */
+        fm_activate();                          /* so copy_end restores to our context */
         gb_copy_begin();                        /* -> drag source drive/dir */
         gb_set_name(gb_dragname);
         FS_LOAD_OFS[0] = (unsigned char)ofs_lo;
@@ -1243,7 +1314,7 @@ static unsigned char copy_file(void)
         gb_copy_end();                          /* -> our drive/dir */
         if (got == 0) { FS_XFLAGS = 0; return (unsigned char)!first; }  /* EOF ok / empty fail */
         if (got > GB_COPYMAX) got = GB_COPYMAX;  /* defensive: never save past the staging chunk */
-        gb_set_drive(my_drive);
+        fm_activate();
         gb_set_name(gb_dragname);
         FS_XFLAGS = first ? 0x04 : 0x06;        /* chunk-save create first, append after */
         FSV_DIAG = 0xEE;                         /* floppy diag: unchanged => writer didn't run */
@@ -1296,15 +1367,16 @@ static void on_event(void)
 #endif
 }
 
-/* on_frame (#146): the WM handled close/drag/grip routing; re-assert our drive, tick the
-   double-click timer, and run the View menu framework. */
+/* on_frame (#146): the WM handled close/drag/grip routing; tick the
+   double-click timer and run the View menu framework. Storage paths activate
+   their context at the operation boundary instead of loading GBFSCTX.MOD on
+   every idle frame. */
 static void fm_frame(void)
 {
 #ifdef GB_MSX2
     unsigned char key, object_id;
 #endif
     sync_rect();
-    gb_set_drive(my_drive);              /* re-assert our drive each focused frame (#65) */
 #ifdef GB_PREEMPTIVE
     if (copy_state != COPY_IDLE) { copy_step(); return; }
     if (list_state != LIST_IDLE) { list_step(); return; }
@@ -1376,7 +1448,6 @@ static void fm_click(void)
     unsigned char mx, my, idx;
 
     sync_rect();
-    gb_set_drive(my_drive);
     mx = gb_mx();
     my = gb_my();
 
@@ -1511,6 +1582,13 @@ void main(void)
     fmmw.y = win_y;
 #ifdef GB_MSX2
     gb_wm_managed_kind(&fmmw_kind); /* explicit v1 kind registration; no legacy overread */
+    fs_context = gb_fsctx_open(my_drive);
+    if (!fs_context) {
+        gb_alert("File Manager unavailable", "No filesystem context");
+        (void)gb_app_quit();
+        return;
+    }
+    (void)gb_fsctx_set_path(fs_context, "");
 #else
     gb_wm_managed(&fmmw);
 #endif
@@ -1522,7 +1600,7 @@ void main(void)
 #else
     gb_doc(&fmdoc);
 #endif
-    gb_set_drive(my_drive);
+    fm_activate();
     /* Open at the drive ROOT. The kernel's directory position is a single global
        (fs_dir_clus / dir stack); a previously-open window may have left it in a
        subdir, so reopening this drive would list that subdir - and with fm_path
@@ -1540,7 +1618,7 @@ void main(void)
     list_start();                /* scan first; list_step publishes one complete paint */
 #else
     build_list();                /* stream + sort the directory (sets total) (#118) */
-    free_known = gb_fs_free_kib(&free_kib);
+    free_known = fm_free_kib();
     top = 0;
     clamp_top();
     fmmw.title = win_title();    /* build "<drive><path>" before the first paint (#146) */

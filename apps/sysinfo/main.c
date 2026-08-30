@@ -1,4 +1,4 @@
-/* SYSINFO.APP - MSX2 Architecture Milestones 1-3 diagnostic (#31, #32, #35).
+/* SYSINFO.APP - MSX2 Architecture Milestones 1-4 diagnostic (#31/#32/#35/#37).
  *
  * This development-only app exercises the public capability, owner, and opaque
  * page APIs. One cache page is deliberately left allocated: closing the window
@@ -8,6 +8,9 @@
 #include "gb.h"
 #ifdef GB_DEFER_MESSAGES
 #include "gbdefer.h"
+#endif
+#ifdef GB_FILESYSTEM_CONTEXTS
+#include "gbfsctx.h"
 #endif
 
 #define WIN_X 34
@@ -29,7 +32,9 @@
 #define TEST_WIN_ADD 0x800
 #define TEST_WIN_CLOSE 0x1000
 #define TEST_APP_API 0x2000
-#define TEST_ALL    0x3FFF
+#define TEST_FSCTX 0x4000
+#define TEST_FSCTX_STALE 0x8000
+#define TEST_ALL    0xFFFF
 
 #define LEGACY_PAGE_COUNT (*(volatile unsigned char *)0x1437)
 #define LEGACY_PAGE_NATIVE ((volatile unsigned char *)0x1438)
@@ -47,6 +52,17 @@ static unsigned char initial_free;
 static unsigned char final_free;
 static gb_owner_t owner;
 static gb_page_t retained_page;
+#ifdef GB_FILESYSTEM_CONTEXTS
+volatile unsigned char fsctx_tests;
+#define FSCTX_TEST_SYSINFO 0x01
+#define FSCTX_TEST_FULL    0x02
+#define FSCTX_TEST_OFFSET  0x04
+#define FSCTX_TEST_RW      0x08
+#define FSCTX_TEST_STALE   0x10
+#define FSCTX_TEST_REUSE   0x20
+#define FSCTX_TEST_CLEAN   0x40
+#define FSCTX_TEST_ALL     0x7F
+#endif
 #ifdef GB_DEFER_MESSAGES
 volatile unsigned char defer_tests;
 static unsigned char defer_seen;
@@ -106,7 +122,7 @@ static void test_deferred_messages(void)
     if (!gb_defer_current() &&
         gb_defer_slots_free() == GB_DEFER_QUEUE_CAPACITY)
         defer_tests |= DEFER_TEST_CONTEXT;
-    if (info->size == sizeof(gb_sysinfo_t) && info->version == 3 &&
+    if (info->size == sizeof(gb_sysinfo_t) && info->version == 4 &&
         info->message_queue_capacity == GB_DEFER_QUEUE_CAPACITY &&
         info->message_inline_bytes == GB_DEFER_INLINE_BYTES &&
         info->message_api_version == GB_DEFER_API_VERSION &&
@@ -139,6 +155,74 @@ static void test_deferred_messages(void)
     defer_heartbeat.receiver = owner;
     defer_heartbeat.type = DEFER_HEARTBEAT;
     defer_heartbeat.p0 = defer_heartbeat.p1 = defer_heartbeat.p2 = 0;
+}
+#endif
+
+#ifdef GB_FILESYSTEM_CONTEXTS
+static const char fsctx_name[11] = {
+    'G','B','F','S','T','E','S','T','T','M','P'
+};
+
+static void test_filesystem_contexts(void)
+{
+    const gb_sysinfo_t *info = gb_sysinfo();
+    gb_fsctx_t context[GB_FSCTX_CAPACITY];
+    gb_fsctx_t stale, replacement;
+    char first[2], second[2];
+    static const char payload[2] = { 'M', '4' };
+    unsigned char i, allocated = 0;
+
+    fsctx_tests = 0;
+    if (info->size == sizeof(gb_sysinfo_t) && info->version == 4 &&
+        info->filesystem_contexts == GB_FSCTX_CAPACITY &&
+        info->filesystem_transfer_bytes == GB_FSCTX_TRANSFER_MAX &&
+        info->filesystem_api_version == GB_FSCTX_API_VERSION &&
+        (info->capabilities & GB_CAP_FS_CONTEXTS))
+        fsctx_tests |= FSCTX_TEST_SYSINFO;
+
+    for (i = 0; i < GB_FSCTX_CAPACITY; i++) {
+        context[i] = gb_fsctx_open(0);
+        if (context[i]) allocated++;
+    }
+    /* File Manager owns one context while it launches this diagnostic.  Three
+     * free slots therefore proves the advertised four-slot global pool; a
+     * leaked context from the previous launch would reduce this to two. */
+    if (allocated >= GB_FSCTX_CAPACITY - 1 && !gb_fsctx_open(0) &&
+        gb_fsctx_status() == GB_FSCTX_ERR_FULL)
+        fsctx_tests |= FSCTX_TEST_FULL;
+
+    if (context[0] && context[1] &&
+        gb_fsctx_set_name(context[0], fsctx_name) == GB_FSCTX_OK &&
+        gb_fsctx_set_name(context[1], fsctx_name) == GB_FSCTX_OK &&
+        gb_fsctx_write(context[0], payload, 2) == GB_FSCTX_OK &&
+        gb_fsctx_rewind(context[0]) == GB_FSCTX_OK &&
+        gb_fsctx_read(context[0], first, 1) == 1 && first[0] == 'M' &&
+        gb_fsctx_read(context[1], second, 1) == 1 && second[0] == 'M') {
+        fsctx_tests |= FSCTX_TEST_OFFSET | FSCTX_TEST_RW;
+    }
+
+    stale = context[0];
+    if (stale && gb_fsctx_close(stale) == GB_FSCTX_OK &&
+        gb_fsctx_set_path(stale, "") == GB_FSCTX_ERR_STALE)
+        fsctx_tests |= FSCTX_TEST_STALE;
+    replacement = gb_fsctx_open(0);
+    if (replacement && replacement != stale)
+        fsctx_tests |= FSCTX_TEST_REUSE;
+    context[0] = replacement;
+
+    if (context[1]) {
+        (void)gb_fsctx_activate(context[1]);
+        (void)gb_file_delete(fsctx_name);
+    }
+    for (i = 0; i < GB_FSCTX_CAPACITY; i++)
+        if (context[i]) (void)gb_fsctx_close(context[i]);
+    if (gb_fsctx_open(0)) {
+        /* Leave one live context intentionally. Owner teardown must reclaim it,
+         * and the second launch's free-pool probe proves the cleanup. */
+        fsctx_tests |= FSCTX_TEST_CLEAN;
+    }
+    if (fsctx_tests == FSCTX_TEST_ALL)
+        tests |= TEST_FSCTX | TEST_FSCTX_STALE;
 }
 #endif
 
@@ -264,7 +348,7 @@ static void test_application(void)
     gb_window_t primary = gb_window_current();
     gb_window_t probe;
 
-    if (info->size == sizeof(gb_sysinfo_t) && info->version == 3 &&
+    if (info->size == sizeof(gb_sysinfo_t) && info->version == 4 &&
         info->max_applications == 8 &&
         info->application_record_version == 1 &&
         info->max_windows_per_application == 8 &&
@@ -305,7 +389,7 @@ static void draw(void)
 
     gb_fill(gb_wm_x(), (unsigned char)(gb_wm_y() + 14), WIN_W,
             (unsigned char)(WIN_H - 14), 1);
-    gb_textbw(x, y, "GB_SYSINFO v3   MSX Screen");
+    gb_textbw(x, y, "GB_SYSINFO v4   MSX Screen");
     hex8(value, info->video_mode);
     gb_textbw((unsigned char)(x + 51), y, value);
     hex16(value, owner);
@@ -325,9 +409,9 @@ static void draw(void)
     draw_result(x, (unsigned char)(y + 81), "Stale generation", TEST_STALE);
     draw_result(x, (unsigned char)(y + 94), "Free count restored", TEST_RESTORE);
     draw_result(x, (unsigned char)(y + 107), "Owner-held cache", TEST_LEAK);
-    draw_result(x, (unsigned char)(y + 120), "Owner/pages/windows",
+    draw_result(x, (unsigned char)(y + 120), "Owner/windows/fsctx",
                 TEST_FOREIGN|TEST_LEGACY|TEST_EXHAUST|TEST_SYSINFO_V2|
-                TEST_WIN_ADD|TEST_WIN_CLOSE|TEST_APP_API);
+                TEST_WIN_ADD|TEST_WIN_CLOSE|TEST_APP_API|TEST_FSCTX|TEST_FSCTX_STALE);
 }
 
 static void proc(void)
@@ -347,6 +431,9 @@ void main(void)
     gb_wm_managed(&window);
     test_pages();
     test_application();
+#ifdef GB_FILESYSTEM_CONTEXTS
+    test_filesystem_contexts();
+#endif
 #ifdef GB_DEFER_MESSAGES
     test_deferred_messages();
 #endif
