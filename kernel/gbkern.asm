@@ -3682,19 +3682,39 @@ wm_map_focus
 ; wm_focus_click: if a fresh click landed on a window other than the focused one,
 ; move focus there. App windows also rise to the z-top; only the parts previously
 ; obscured by windows above them are damaged. Disjoint sibling panes therefore
-; switch with no repaint. The desktop (slot 0) stays pinned at the bottom. The
-; click is not consumed - it is then delivered to the new window's on_frame.
+; switch with no repaint. On MSX, a click that activates another window in the
+; same application is consumed: the new pane receives frames immediately, but
+; editing starts with the next press instead of reusing the activation press.
+; The desktop (slot 0) stays pinned at the bottom.
 wm_focus_click
                 ld    a,(POLL_FLAGS)
                 bit   0,a
                 ret   z                            ; no fresh click
                 call  wm_hit_test                  ; CF set = no window hit (e.g. top bar)
                 ret   c
+                ifdef PLATFORM_MSX
+                ld    (wm_slot),a                  ; clicked slot survives wm_entry below
+                endif
                 ld    b,a
                 ld    a,(WM_FOCUS)
                 cp    b
                 ret   z                            ; already focused -> deliver
+                ifdef PLATFORM_MSX
+                call  wm_entry                     ; consume activation between sibling panes
+                ld    a,(hl)                       ; (same application/code page)
+                ld    (wm_open_back),a
+                ld    a,(wm_slot)
+                call  wm_entry
+                ld    a,(wm_open_back)
+                cp    (hl)
+                jr    nz,wfc_activate
+                ld    a,(POLL_FLAGS)
+                res   0,a
+                ld    (POLL_FLAGS),a
+wfc_activate    ld    a,(wm_slot)
+                else
                 ld    a,b
+                endif
                 ld    (WM_FOCUS),a               ; focus the clicked window
                 or    a
                 ret   z                            ; desktop: keep it at the bottom
@@ -3709,7 +3729,6 @@ wm_focus_click
                 ret   z
                 ifdef PLATFORM_MSX
                 ld    a,c                          ; retain the old z-order while deriving
-                ld    (wm_slot),a                  ; newly exposed overlap damage
                 call  wm_focus_damage
                 ld    a,(wm_slot)
                 call  wm_raise                     ; bring it to the front

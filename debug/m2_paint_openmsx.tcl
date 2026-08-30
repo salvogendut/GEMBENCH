@@ -335,23 +335,33 @@ proc p2_pane_drag_release {} {
     after time 0.10 {keymatrixup 8 0x01; after time 1.0 p2_pane_drag_done}
 }
 
-proc p2_tool_focus_wait {} {
-    if {[peek 0x1351] != $::p2_tool_slot} {
+proc p2_pane_focus_wait {} {
+    if {[peek 0x1351] != $::p2_drag_slot} {
         if {[machine_info time] >= $::p2_deadline} {
-            p2_finish "FAIL Toolchest focus timeout"
+            p2_finish "FAIL Paint pane focus timeout"
         } else {
-            after time 0.02 p2_tool_focus_wait
+            after time 0.02 p2_pane_focus_wait
         }
         return
     }
     set ::p2_count_pane_repaints 0
     if {$::p2_tool_repaints != 0 || $::p2_preview_repaints != 0 ||
         $::p2_work_repaints != 0} {
-        p2_finish "FAIL disjoint Toolchest focus triggered repaint"
+        p2_finish "FAIL disjoint Paint pane focus triggered repaint"
         return
     }
-    keymatrixdown 8 $::p2_drag_mask
-    after time 0.45 p2_pane_drag_release
+    if {[p2_rect $::p2_drag_slot] ne $::p2_drag_before} {
+        p2_finish "FAIL activation press reached Paint pane"
+        return
+    }
+    # The activation press is consumed for an application sibling. Release it,
+    # then make a second press to begin the intended title drag.
+    keymatrixup 8 0x01
+    after time 0.10 {
+        keymatrixdown 8 0x01
+        after time 0.12 [list keymatrixdown 8 $::p2_drag_mask]
+        after time 0.45 p2_pane_drag_release
+    }
 }
 
 proc p2_pane_drag_start {slot mask callback} {
@@ -360,14 +370,16 @@ proc p2_pane_drag_start {slot mask callback} {
     set ::p2_drag_mask $mask
     set ::p2_drag_callback $callback
     set ::p2_drag_repaint_generation $::p2_repaint_generation
-    if {$slot == $::p2_tool_slot && [peek 0x1351] != $slot} {
+    set focus [peek 0x1351]
+    if {$focus != $slot &&
+        [peek [p2_entry $focus]] == [peek [p2_entry $slot]]} {
         set ::p2_tool_repaints 0
         set ::p2_preview_repaints 0
         set ::p2_work_repaints 0
         set ::p2_count_pane_repaints 1
         set ::p2_deadline [expr {[machine_info time] + 10.0}]
         keymatrixdown 8 0x01
-        after time 0.02 p2_tool_focus_wait
+        after time 0.02 p2_pane_focus_wait
         return
     }
     keymatrixdown 8 0x01
@@ -399,7 +411,23 @@ proc p2_close_preview_after_tool_drag {} {
     set ::p2_deadline [expr {[machine_info time] + 20.0}]
     p2_move_to [expr {[peek [expr {$entry + 1}]] + 2}] \
                [expr {[peek [expr {$entry + 2}]] + 6}] \
-               {p2_click p2_close_preview_done}
+               {p2_click p2_close_preview_activated}
+}
+
+proc p2_close_preview_activated {} {
+    if {![p2_lowram_ready]} {
+        if {[machine_info time] >= $::p2_deadline} {
+            p2_finish "FAIL Preview activation low-RAM timeout"
+        } else {
+            after time 0.05 p2_close_preview_activated
+        }
+        return
+    }
+    if {[peek 0x1351] != $::p2_preview_slot || [peek 0x1350] != 4} {
+        p2_finish "FAIL Preview activation press was not consumed"
+        return
+    }
+    p2_click p2_close_preview_done
 }
 
 proc p2_close_tool_done {} {

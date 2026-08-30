@@ -614,7 +614,9 @@ void gb_alert(const char *l1, const char *l2);  /* modal message box, click to d
  * gb_mx/gb_my - do NOT call gb_poll inside it), and on a click hit-tests the
  * rects to switch focus. on_repaint redraws the whole window with no input;
  * on_event handles a top-bar click (0 = none). The rect (x,y,w,h) is the
- * window's screen area used for click-to-focus.
+ * window's screen area used for click-to-focus. On MSX2, the press that moves
+ * focus between windows owned by the same application is activation-only; the
+ * newly focused pane receives editing input from the next press.
  *
  *   gb_wm_run   - the ROOT window (desktop): register + enter the loop (no return).
  *   gb_wm_open  - open an app as a new co-resident window on top (non-blocking).

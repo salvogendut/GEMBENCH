@@ -287,6 +287,9 @@ The compositor skips window callbacks whose rectangles do not intersect the
 current damage. A focus raise damages only the union of areas that higher
 windows formerly obscured, so switching between disjoint Paint panes performs
 no repaint and overlapping panes redraw only their newly exposed intersection.
+The activation press between Paint siblings is consumed before `on_frame`, so
+focusing Canvas, Preview, or Toolchest cannot also start an edit or request its
+follow-up full restore; the next press performs the pane action.
 Paint changes only the old/new tool borders, commits live
 pencil and spray strokes without repainting already-drawn Canvas cells, and
 updates selector feedback at quarter-steps plus one exact release repaint.
