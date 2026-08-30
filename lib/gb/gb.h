@@ -382,6 +382,9 @@ unsigned char gb_window_close(gb_window_t window);
 unsigned char gb_window_check(gb_window_t window);
 unsigned char gb_window_slots_free(void);
 unsigned char gb_app_window_count(void);
+/* Run the resident outline gesture for the focused legacy gb_win_t. On
+ * success, copy gb_wm_x/y into application-owned geometry and then call
+ * gb_restore_parent(); the retained union damage covers old and new rects. */
 unsigned char gb_window_drag(void);
 
 /* Event callback (issue #32): the kernel calls the window's registered handler when

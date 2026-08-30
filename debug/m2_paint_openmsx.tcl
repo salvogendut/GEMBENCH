@@ -33,10 +33,24 @@ set p2_drag_slot -1
 set p2_drag_before {}
 set p2_drag_mask 0
 set p2_drag_callback ""
+set p2_drag_repaint_generation 0
+set p2_repaint_generation 0
+set p2_repaint_done_generation 0
+set p2_repaint_active 0
+set p2_canvas_under_hash 0
+set p2_canvas_clean_hash 0
+set p2_tool_app_pos {}
+set p2_preview_app_pos {}
+set p2_work_app_pos {}
 
-proc p2_word {address} {
-    expr {[peek $address] + 256 * [peek [expr {$address + 1}]]}
-}
+set p2_repaint_start [expr {$::env(GEMBENCH_M2_REPAINT_START)}]
+set p2_repaint_done [expr {$::env(GEMBENCH_M2_REPAINT_DONE)}]
+set p2_tool_x_addr [expr {$::env(GEMBENCH_M2_TOOL_X)}]
+set p2_tool_y_addr [expr {$::env(GEMBENCH_M2_TOOL_Y)}]
+set p2_preview_x_addr [expr {$::env(GEMBENCH_M2_PREVIEW_X)}]
+set p2_preview_y_addr [expr {$::env(GEMBENCH_M2_PREVIEW_Y)}]
+set p2_work_x_addr [expr {$::env(GEMBENCH_M2_WORK_X)}]
+set p2_work_y_addr [expr {$::env(GEMBENCH_M2_WORK_Y)}]
 
 proc p2_owner_count {} {
     set count 0
@@ -52,6 +66,35 @@ proc p2_rect {slot} {
     set entry [p2_entry $slot]
     list [peek [expr {$entry + 1}]] [peek [expr {$entry + 2}]] \
          [peek [expr {$entry + 3}]] [peek [expr {$entry + 4}]]
+}
+
+# The release Screen 7 backend stores two VRAM bytes per logical byte-column
+# in 256-byte rows.
+# A rolling hash over a vacated strip makes the drag test assert compositor
+# cleanup, rather than merely trusting that the window record moved.
+proc p2_vram_hash {x y w h} {
+    set hash 2166136261
+    for {set row 0} {$row < $h} {incr row} {
+        for {set col 0} {$col < $w} {incr col} {
+            set address [expr {($y + $row) * 256 + ($x + $col) * 2}]
+            foreach offset {0 1} {
+                set value [debug read VRAM [expr {$address + $offset}]]
+                set hash [expr {(($hash ^ $value) * 16777619) & 0xFFFFFFFF}]
+            }
+        }
+    }
+    return $hash
+}
+
+proc p2_trace_repaint {phase} {
+    if {$phase eq "start"} {
+        incr ::p2_repaint_generation
+        set ::p2_repaint_active 1
+    } elseif {$phase eq "done"} {
+        set ::p2_repaint_done_generation $::p2_repaint_generation
+        set ::p2_repaint_active 0
+    }
+    set ::pause off
 }
 
 proc p2_slot_owner {slot} {
@@ -104,6 +147,11 @@ proc p2_finish {status} {
     puts $out "PREVIEW_MOVED=$::p2_preview_moved"
     puts $out "WORK_INITIAL=$::p2_work_initial"
     puts $out "WORK_MOVED=$::p2_work_moved"
+    puts $out [format "CANVAS_UNDER_HASH=%08X" $::p2_canvas_under_hash]
+    puts $out [format "CANVAS_CLEAN_HASH=%08X" $::p2_canvas_clean_hash]
+    puts $out "TOOL_APP_POS=$::p2_tool_app_pos"
+    puts $out "PREVIEW_APP_POS=$::p2_preview_app_pos"
+    puts $out "WORK_APP_POS=$::p2_work_app_pos"
     if {$::p2_tool_slot >= 0} { puts $out "TOOL_RECT=[p2_rect $::p2_tool_slot]" }
     if {$::p2_preview_slot >= 0} { puts $out "PREVIEW_RECT=[p2_rect $::p2_preview_slot]" }
     puts $out "INITIAL_FREE=$::p2_initial_free"
@@ -208,12 +256,51 @@ proc p2_pane_drag_wait {} {
     }
     set current [p2_rect $::p2_drag_slot]
     if {$current ne $::p2_drag_before} {
+        # k_wm_setpos publishes geometry before the legacy callback returns to
+        # Paint and asks the compositor to repair the union damage. Do not
+        # inspect VRAM or start another pointer gesture in that interval.
+        if {$::p2_repaint_active ||
+            $::p2_repaint_done_generation <= $::p2_drag_repaint_generation} {
+            if {[machine_info time] >= $::p2_deadline} {
+                p2_finish "FAIL Paint pane drag repaint did not complete"
+            } else {
+                after time 0.1 p2_pane_drag_wait
+            }
+            return
+        }
         if {$::p2_drag_slot == $::p2_tool_slot} {
             set ::p2_tool_moved $current
+            set ::p2_tool_app_pos [list [peek $::p2_tool_x_addr] [peek $::p2_tool_y_addr]]
+            if {[lrange $current 0 1] ne $::p2_tool_app_pos} {
+                p2_finish "FAIL Toolchest application geometry is stale"
+                return
+            }
         } elseif {$::p2_drag_slot == $::p2_preview_slot} {
             set ::p2_preview_moved $current
+            set ::p2_preview_app_pos [list [peek $::p2_preview_x_addr] \
+                [peek $::p2_preview_y_addr]]
+            if {[lrange $current 0 1] ne $::p2_preview_app_pos} {
+                p2_finish "FAIL Preview application geometry is stale"
+                return
+            }
         } elseif {$::p2_drag_slot == $::p2_work_slot} {
             set ::p2_work_moved $current
+            set ::p2_work_app_pos [list [peek $::p2_work_x_addr] \
+                [peek $::p2_work_y_addr]]
+            if {[lrange $current 0 1] ne $::p2_work_app_pos} {
+                p2_finish "FAIL Canvas application geometry is stale"
+                return
+            }
+            if {[lindex $current 0] <= [lindex $::p2_work_initial 0]} {
+                p2_finish "FAIL Canvas did not move right for cleanup check"
+                return
+            }
+            set ::p2_canvas_clean_hash [p2_vram_hash \
+                [lindex $::p2_work_initial 0] 140 1 67]
+            if {$::p2_canvas_clean_hash != $::p2_canvas_under_hash} {
+                p2_finish "FAIL Canvas old position was not repainted"
+                return
+            }
         }
         after time 1.0 $::p2_drag_callback
     } elseif {[machine_info time] >= $::p2_deadline} {
@@ -233,12 +320,16 @@ proc p2_pane_drag_start {slot mask callback} {
     set ::p2_drag_before [p2_rect $slot]
     set ::p2_drag_mask $mask
     set ::p2_drag_callback $callback
+    set ::p2_drag_repaint_generation $::p2_repaint_generation
     keymatrixdown 8 0x01
     after time 0.12 [list keymatrixdown 8 $mask]
     after time 0.45 p2_pane_drag_release
 }
 
 proc p2_open_canvas_after_preview_drag {} {
+    # The lower part of Canvas's old left edge lies over a stable inactive
+    # File Manager region. It must be byte-identical after Canvas moves away.
+    set ::p2_canvas_under_hash [p2_vram_hash 39 140 1 67]
     set entry [p2_entry $::p2_preview_slot]
     set ::p2_deadline [expr {[machine_info time] + 30.0}]
     p2_move_to [expr {[peek [expr {$entry + 1}]] + 12}] \
@@ -402,7 +493,13 @@ proc p2_wait_paint {} {
                 [peek [p2_entry $::p2_preview_slot]] ||
             [peek [expr {0xC308 + $::p2_app_slot}]] !=
                 [peek [p2_entry $::p2_tool_slot]]} {
-            p2_finish "FAIL Paint application/window records"
+            # WM_NWIN changes while registration is still binding the parallel
+            # owner record. Give that short critical section time to finish.
+            if {[machine_info time] >= $::p2_deadline} {
+                p2_finish "FAIL Paint application/window records"
+            } else {
+                after time 0.05 p2_wait_paint
+            }
             return
         }
         set ::p2_preview_initial [p2_rect $::p2_preview_slot]
@@ -476,4 +573,6 @@ proc p2_start {} {
     p2_desktop_ready
 }
 
+debug set_bp $p2_repaint_start {} {p2_trace_repaint start}
+debug set_bp $p2_repaint_done {} {p2_trace_repaint done}
 after time 62.0 p2_start

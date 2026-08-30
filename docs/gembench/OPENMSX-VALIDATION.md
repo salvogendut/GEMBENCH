@@ -268,15 +268,27 @@ windows/owners. Free mapper pages returned from 22 to 22.
 The run also found and fixed Paint's launch-order bug: loading `PAINT.IST`
 could replace the focused window argument before `.PIC` recognition. Paint now
 claims the launch document first and restores its name after loading the tool
-resource. Its MSX image is 15,710 bytes versus the imported 15,753-byte
+resource. Its MSX image is 15,792 bytes versus the imported 15,753-byte
 single-workspace baseline. The preemptive Screen 6/7 kernels are
 13,242/14,820 bytes; `GBSCHED.RAW` remains 503/512 bytes.
 
 Manual testing then found that `gb_window_drag()` reused the managed-window
 completion callback on a legacy `gb_win_t` and returned a rectangle last
-published by a repainted managed sibling. The legacy service now skips the
-invalid managed callback and republishes the dragged window after repaint.
-The three-pane drag trace prevents both failures from recurring.
+published by a repainted managed sibling. It also repainted before Paint could
+store the new pane coordinates, leaving a copy at the old position. The legacy
+service now skips the invalid managed callback and defers its union-damage
+repaint until the application has recorded the new geometry. The three-pane
+drag regression waits for compositor completion, compares every application
+position with its window record, and hashes the vacated Canvas edge to prevent
+the freeze, stale-coordinate, and old-position residue failures from recurring.
+
+The follow-up interaction pass bounds repaint work on the 3.58 MHz target.
+The compositor skips window callbacks whose rectangles do not intersect the
+current damage; Paint changes only the old/new tool borders, commits live
+pencil and spray strokes without repainting already-drawn Canvas cells, and
+updates selector feedback at quarter-steps plus one exact release repaint.
+Bulk edits still request a composited redraw because they can replace the whole
+tile and may originate from a Toolchest or menu window above Canvas.
 
 ```sh
 make gembench-msx

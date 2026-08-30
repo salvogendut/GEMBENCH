@@ -1680,10 +1680,13 @@ static void continue_stroke(void)
 {
     unsigned char x, y;
     if (!(gb_flags() & GB_FIRE)) {
-        stroke_active = 0;
 #ifdef GB_MSX2
+        /* finish_change commits first and deliberately skips repaint while the
+         * live stroke flag is set; the Canvas cells are already on screen. */
         finish_change();
+        stroke_active = 0;
 #else
+        stroke_active = 0;
         finish_change();
 #ifdef GB_PCW
         refresh_preview_selection();
@@ -1829,6 +1832,12 @@ static void drag_selector(void)
         tile_x = (unsigned int)nx;
         tile_y = (unsigned int)ny;
         clamp_tile_origin();
+#ifdef GB_MSX2
+        /* A full Preview blit is expensive at 3.58 MHz. Track every pointer
+         * position, but refresh feedback on quarter steps and once on release. */
+        if ((((unsigned char)tile_x + (unsigned char)tile_y) & 3) != 0)
+            continue;
+#endif
         gb_curhide();
         draw_preview();
 #ifndef GB_MSX2
@@ -1836,6 +1845,9 @@ static void drag_selector(void)
 #endif
         gb_curshow();
     }
+#ifdef GB_MSX2
+    gb_curhide(); draw_preview(); gb_curshow();
+#endif
     if (!load_tile()) {
         gb_alert("Paint error", "Could not read tile");
         return;
@@ -2303,6 +2315,7 @@ static void move_pane(unsigned char *x, unsigned char *y,
     if (gb_window_drag() == GB_APP_OK) {
         *x = gb_wm_x();
         *y = gb_wm_y();
+        gb_restore_parent();
     }
 }
 #else
@@ -2516,7 +2529,7 @@ static void choose_pen(unsigned char pen)
 {
 #ifdef GB_MSX2
     if (pen > 3 && loaded && pic_mode != 7) {
-        gb_alert("Four-color picture", "Pens 0-3 only");
+        gb_alert("4-color image", "Pens 0-3");
         return;
     }
 #endif
@@ -2531,8 +2544,11 @@ static void tool_action(unsigned char index)
     else if (index == TOOL_COPY) copy_selection();
     else if (index == TOOL_PASTE) paste_selection();
     else {
+        gb_curhide();
+        gb_frame(tool_x(current_tool), tool_y(current_tool), TOOL_WB, TOOL_H, 2);
         current_tool = index;
-        gb_curhide(); draw_toolchest(); gb_curshow();
+        gb_frame(tool_x(index), tool_y(index), TOOL_WB, TOOL_H, 3);
+        gb_curshow();
     }
 }
 
@@ -2968,7 +2984,7 @@ void main(void)
         return;
     }
     if (MSX_SCRMOD != 7) {
-        gb_alert("PAINT needs Mode 7", "Select 16 colors");
+        gb_alert("Mode 7 required", "Use 16 colors");
         (void)gb_app_quit();
         return;
     }

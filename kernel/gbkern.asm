@@ -2780,10 +2780,10 @@ mwm_done        ld    a,(ghost_on)
                 ld    (GB_MSG+3),a
                 ld    a,(mwm_notify)
                 or    a
-                jr    z,mwm_repaint
+                ret   z                          ; legacy caller records geometry, then repaints
                 ld    a,GB_MSG_MOVED
                 call  mw_hook
-mwm_repaint     jp    wm_repaint_all
+                jp    wm_repaint_all
 
 mw_resize
                 ld    a,(WM_FOCUS)
@@ -3967,6 +3967,20 @@ wra_l           ld    a,(wm_rp_i)
                 pop   hl                            ; HL = entry
                 bit   0,a                          ; alive?
                 jr    z,wra_next                   ; dead -> skip (z-order should exclude it)
+                push  af                           ; skip callbacks whose window cannot touch the
+                push  hl                           ; current damage rectangle. Besides saving work,
+                inc   hl                           ; this keeps app-native blits outside that damage
+                ld    b,(hl)                       ; from repainting unrelated panes.
+                inc   hl
+                ld    c,(hl)
+                inc   hl
+                ld    d,(hl)
+                inc   hl
+                ld    e,(hl)
+                call  rect_cull
+                pop   hl
+                jr    c,wra_culled
+                pop   af
                 push  af                           ; keep flags across bank_set
                 ld    a,(hl)                       ; page
                 call  bank_set                     ; (preserves HL = entry)
@@ -3986,6 +4000,8 @@ wra_legacy
                 or    l
                 jr    z,wra_next                   ; no handler
                 call  md_call
+                jr    wra_next
+wra_culled      pop   af
 wra_next        ld    a,(wm_rp_i)
                 inc   a
                 ld    (wm_rp_i),a
