@@ -9,8 +9,8 @@
  * Three file types, told apart by content (no filename needed):
  *   .IST icon set  - "GBIS" header, a directory, then each icon's bitmap. Edited in
  *                    place (never resized); Prev/Next walk the set.
- *   .APP application - optional "GBAP" v1/v2 executable preamble containing a
- *                    canonical 32x32 icon and, in v2, an optional native
+ *   .APP application - optional "GBAP" v1/v2/v3 executable preamble containing
+ *                    a canonical 32x32 icon and, in v2/v3, an optional native
  *                    Screen-7 sixteen-colour icon. The executable is preserved.
  *   .SPR cursor    - on CPC/PCW, a 256-byte sprite: two pre-shifted phases
  *                    (shift 0, shift 2) with mask,data INTERLEAVED per column.
@@ -490,7 +490,7 @@ static unsigned char sniff_app(void)
             return 0;
         add_app_resource(APP_CODEC_MODE1, APPICON_WB, APPICON_H,
                          APPICON_LEN, APPICON_OFF, filelen);
-    } else if (buf[7] == 2) {
+    } else if (buf[7] == 2 || buf[7] == 3) {
         n = buf[8];
         total = (unsigned int)buf[10] | ((unsigned int)buf[11] << 8);
         if (!n || n > 8 || buf[9] != 8 || buf[12] != APPICON_OFF

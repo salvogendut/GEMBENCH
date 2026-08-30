@@ -569,3 +569,26 @@ For a manual check, open two File Manager windows on the same drive, enter a
 subdirectory in one, and let both listings finish. Refresh or navigate either
 window; the other must retain its own path and enumeration. CPC and PCW do not
 support `GB_FSCTX=1` yet.
+
+## GBAP v3 application manifests
+
+Set `APP_MANIFEST=path/manifest.json` together with `APP_ICON` on an MSX2 C
+application build. The JSON declares the stable application ID, profile,
+platform mask, minimum ABI/sysinfo, required capabilities, lifecycle, and page
+policy. The builder emits the typed primary descriptor, validates the finished
+package, and links the standard pre-publication guard.
+
+```sh
+make gembench-m5-manifest
+python3 tools/embed_app_icon.py check build/msx/FORMREF.RAW
+make gembench-m5-openmsx
+```
+
+The final command launches both a valid FormRef and an incompatible copy under
+openMSX. The latter must reach the guard but not `main`, publish no window, and
+restore the pending owner and free-page count. See
+`docs/gembench/ARCHITECTURE-M5-MSX.md` and `docs/APP_ICON_FORMAT.md` for the
+binary contract. Do not mark an application `portable-z80` merely because its
+source builds on several targets: one binary also needs the frozen common ABI,
+runtime geometry/capability decisions, portable resources, and a common fixed
+memory layout.

@@ -100,7 +100,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   optional `GBAP` executable preamble without changing the kernel launch ABI;
   `APP_ICON16=path/icon16.asm` adds an explicit native Screen-7 variant. For
   app-owned `icon.asm` sources, an adjacent `icon16.asm` is detected
-  automatically by MSX builds only.
+  automatically by MSX builds only. `APP_MANIFEST=path/manifest.json` emits a
+  strictly validated GBAP v3 manifest/primary descriptor and selects the
+  guarded startup; that execution path is currently MSX2-only.
 - **`test_formref_openmsx.sh`** — builds a disposable Nextor image and drives the
   resource-backed MSX2 FormRef through pointer launch, keyboard focus,
   checkbox/radio mutation, default Save, and trace assertions under openMSX.

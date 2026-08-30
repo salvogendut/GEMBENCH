@@ -158,10 +158,13 @@ APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 BUTTON=1 GBR_OBJECTS=1 GBR_FIXED_TREE=1 GBR_
 APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
 if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
     python3 tools/gbrc.py apps/formref/formref-m7.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_m7_gbr.h --symbol-prefix FORMREF
+    # The M7 comparison profile is already over the M5 guarded-primary budget;
+    # keep its historical v2 package. The ordinary embedded release is the v3
+    # architecture reference and remains the default.
     APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2 -DGBR_BANKED -DGBR_M7_LEGACY_FORMS -DGEMBENCH_GBR_METADATA_ONLY" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7E50 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORMS=1 GBR_FIXED_TREE=1 GBR_BANKED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
 else
     python3 tools/gbrc.py apps/formref/formref.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_gbr.h --symbol-prefix FORMREF
-    APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7E90 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORM_ENGINE=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+    APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APP_MANIFEST=apps/formref/manifest.json APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7F00 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORM_ENGINE=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
 fi
 python3 tools/gbrc.py examples/hello-dialog.json --output build/msx/HELLO.GBR
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7000 BUTTON=1 GBR_OBJECTS=1 tools/build_capp.sh apps/gbrdemo build/msx/GBRDEMO.RAW

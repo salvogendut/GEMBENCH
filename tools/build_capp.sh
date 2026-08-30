@@ -7,7 +7,8 @@
 # Linked: crt0 FIRST (so _start is at #4000), then main, then the libgb trampolines.
 # APP_ICON=<canonical 32x32 icon.asm> reserves a GBAP v1 preamble. Adding
 # APP_ICON16=<native Screen-7 icon.asm> emits a GBAP v2 dual-icon preamble.
-# Its JP keeps the kernel's #4000 entry ABI unchanged in either format.
+# APP_MANIFEST=<manifest.json> upgrades an MSX2 build to a guarded GBAP v3
+# package. Its JP keeps the kernel's #4000 entry ABI unchanged in every format.
 #
 #   tools/build_capp.sh [app_dir] [out.RAW]
 #   tools/build_capp.sh apps/chello build/CHELLO.RAW   (defaults)
@@ -26,6 +27,7 @@ GLOBAL_APPDEFS="${GLOBAL_APPDEFS:-}"
 ALL_APPDEFS="$GLOBAL_APPDEFS ${APPDEFS:-}"
 APP_ICON="${APP_ICON:-}"
 APP_ICON16="${APP_ICON16:-}"
+APP_MANIFEST="${APP_MANIFEST:-}"
 LOAD_LIMIT="${LOAD_LIMIT:-0x7F00}"
 TASK_STACK_RESERVE="${TASK_STACK_RESERVE:-0}"
 TASK_FLAG="${TASK:-0}"
@@ -42,6 +44,7 @@ BIN="$(dirname "$(command -v "$SDCC")")"   # sdasz80 / makebin sit beside sdcc
 SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
 CODE_LOC="0x4000"
+CRT0_SRC="$GB/crt0.s"
 # Adding icon16.asm beside an app-owned icon.asm automatically upgrades only
 # the MSX build to a dual-resource GBAP v2 header. CPC and PCW retain v1.
 case " $ALL_APPDEFS " in
@@ -56,10 +59,26 @@ if [ -n "$APP_ICON16" ] && [ -z "$APP_ICON" ]; then
     echo "ERROR: APP_ICON16 requires the portable APP_ICON fallback" >&2
     exit 1
 fi
+if [ -n "$APP_MANIFEST" ]; then
+    if [ -z "$APP_ICON" ]; then
+        echo "ERROR: APP_MANIFEST requires the portable APP_ICON fallback" >&2
+        exit 1
+    fi
+    case " $ALL_APPDEFS " in
+        *" -DGB_MSX2 "*) ;;
+        *) echo "ERROR: GBAP v3 guarded startup is currently MSX2-only" >&2; exit 1 ;;
+    esac
+    CRT0_SRC="$GB/crt0_v3_msx.s"
+fi
 if [ -n "$APP_ICON" ]; then
     icon_args=("$APP_ICON")
     if [ -n "$APP_ICON16" ]; then icon_args+=("$APP_ICON16"); fi
-    APP_PREAMBLE_SIZE=$(python3 tools/embed_app_icon.py size "${icon_args[@]}")
+    if [ -n "$APP_MANIFEST" ]; then
+        APP_PREAMBLE_SIZE=$(python3 tools/embed_app_icon.py size-v3 \
+            "$APP_MANIFEST" "${icon_args[@]}")
+    else
+        APP_PREAMBLE_SIZE=$(python3 tools/embed_app_icon.py size "${icon_args[@]}")
+    fi
     CODE_LOC=$(printf '0x%X' $((0x4000 + APP_PREAMBLE_SIZE)))
 fi
 
@@ -328,7 +347,7 @@ if [ "$SYS_FLAG" = "1" ]; then
     esac
 fi
 
-deps=("$0" "tools/build_cache.sh" "tools/check_app_layout.py" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
+deps=("$0" "tools/build_cache.sh" "tools/check_app_layout.py" "$CRT0_SRC" "$GBLIB_SRC" "$GB/gb.h")
 if [ "$WINDOW_KIND_FLAG" = "1" ]; then
     deps+=("$GB/gbwindow_kind.s")
 fi
@@ -337,6 +356,9 @@ if [ -n "$APP_ICON" ]; then
 fi
 if [ -n "$APP_ICON16" ]; then
     deps+=("$APP_ICON16")
+fi
+if [ -n "$APP_MANIFEST" ]; then
+    deps+=("$APP_MANIFEST")
 fi
 if [ "$GBWIN_FLAG" = "1" ]; then
     deps+=("$GB/gbwin.c")
@@ -484,10 +506,12 @@ fi
 
 stamp="$OUT.stamp"
 cache_key=$(printf '%s\n' \
-    "build_capp.v2" \
+    "build_capp.v3" \
     "APP=$APP" \
     "APP_ICON=$APP_ICON" \
     "APP_ICON16=$APP_ICON16" \
+    "APP_MANIFEST=$APP_MANIFEST" \
+    "CRT0_SRC=$CRT0_SRC" \
     "CODE_LOC=$CODE_LOC" \
     "DATA_LOC=$DATA_LOC" \
     "APPDEFS=$ALL_APPDEFS" \
@@ -560,7 +584,7 @@ if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
     exit 0
 fi
 
-"$SDAS" -o "$work/crt0.rel"  "$GB/crt0.s"
+"$SDAS" -o "$work/crt0.rel"  "$CRT0_SRC"
 "$SDAS" -o "$work/gblib.rel" "$GBLIB_SRC"
 WINDOW_KIND_REL=""
 if [ "$WINDOW_KIND_FLAG" = "1" ]; then
@@ -859,7 +883,13 @@ python3 tools/check_app_layout.py "$work/app.map" \
 # makebin emits a flat image from #0000; the app lives at #4000 -> strip low 16K.
 tail -c +16385 "$work/app.bin" > "$work/app.raw"
 if [ -n "$APP_ICON" ]; then
-    if [ -n "$APP_ICON16" ]; then
+    if [ -n "$APP_MANIFEST" ] && [ -n "$APP_ICON16" ]; then
+        python3 tools/embed_app_icon.py inject-v3 \
+            "$APP_MANIFEST" "$APP_ICON" "$APP_ICON16" "$work/app.raw" "$OUT"
+    elif [ -n "$APP_MANIFEST" ]; then
+        python3 tools/embed_app_icon.py inject-v3 \
+            "$APP_MANIFEST" "$APP_ICON" "$work/app.raw" "$OUT"
+    elif [ -n "$APP_ICON16" ]; then
         python3 tools/embed_app_icon.py inject \
             "$APP_ICON" "$APP_ICON16" "$work/app.raw" "$OUT"
     else

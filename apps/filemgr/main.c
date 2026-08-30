@@ -75,8 +75,8 @@
 #define COPY_CANCELLED 5
 #endif
 
-/* Optional GBAP executable preamble (#426/#428). V1 has one portable icon; V2
-   has a resource directory and may add a native MSX Screen-7 icon. */
+/* Optional GBAP executable preamble (#426/#428/#39). V1 has one portable icon;
+   V2/V3 share the icon resource directory and may add a native Screen-7 icon. */
 #define APPICON_UNKNOWN  0x80
 #define APPICON_EMBEDDED 0x40
 #define APPICON_PENDING  0x20
@@ -643,7 +643,7 @@ static unsigned char appicon_load(unsigned char raw)
             return 0;
         appicon_codec = APPICON_MODE1;
         appicon_off = APPICON_OFF;
-    } else if (data[7] == 2) {
+    } else if (data[7] == 2 || data[7] == 3) {
         total = (unsigned int)data[10] | ((unsigned int)data[11] << 8);
         if (!data[8] || data[8] > 2 || data[9] != 8
             || data[12] != APPICON_OFF || data[13] != 0 || total > got)
