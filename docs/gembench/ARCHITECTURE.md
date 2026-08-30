@@ -86,6 +86,14 @@ stack. FormRef moves a real renderer into that page; owner teardown reclaims it
 automatically. The ABI and portability boundary are documented in
 [ARCHITECTURE-M6-MSX.md](ARCHITECTURE-M6-MSX.md).
 
+Architecture Milestone 7 composes these foundations into a bounded shared
+service lifecycle. MSX2 clients acquire generation-tagged leases, communicate
+through the deferred FIFO, and release references; Desktop reconciles vanished
+owners and stops a windowless provider after the final reference. The first
+provider shares UNAPI discovery/probing with Telnet while socket data remains
+client-local. The contract is documented in
+[ARCHITECTURE-M7-MSX.md](ARCHITECTURE-M7-MSX.md).
+
 ## Resource ownership
 
 `.GBR` is the native, build-time resource format. Version 1 contains strings

@@ -113,11 +113,11 @@ MSX_SYS_RESERVED   equ MSX_SYSINFO+18
 MSX_SYS_MAX_APPS   equ MSX_SYSINFO+20
 MSX_SYS_APP_VERSION equ MSX_SYSINFO+21
 MSX_SYS_MAX_APP_WINDOWS equ MSX_SYSINFO+22
-MSX_SYS_RESERVED2  equ MSX_SYSINFO+23
+MSX_SYS_RESERVED2 equ MSX_SYSINFO+23
 MSX_SYS_MSG_QUEUE  equ MSX_SYSINFO+24
 MSX_SYS_MSG_INLINE equ MSX_SYSINFO+25
 MSX_SYS_MSG_VERSION equ MSX_SYSINFO+26
-MSX_SYS_RESERVED3  equ MSX_SYSINFO+27
+MSX_SYS_RESERVED3 equ MSX_SYSINFO+27
 MSX_SYS_FS_CONTEXTS equ MSX_SYSINFO+28
 MSX_SYS_FS_TRANSFER equ MSX_SYSINFO+29 ; word: bounded bytes advanced per call
 MSX_SYS_FS_VERSION  equ MSX_SYSINFO+31
@@ -180,6 +180,18 @@ MSX_FSCTX_RECORD_SIZE  equ 144
 MSX_FSCTX_MAX          equ 4
 MSX_FSCTX_PENDING      equ #C840       ; 64-byte pending launch-context transfer
 MSX_FSCTX_DIAG         equ #C880       ; module/cleanup diagnostic counters
+; Architecture Milestone 7 (#43): two seven-byte providers, three four-byte
+; generation-tagged client leases, then one serialization and diagnostic byte.
+; This consumes the unused tail of the M4 diagnostic reservation and does not
+; move the active FIB or the M6 secondary gate.
+MSX_SERVICE_PROVIDERS   equ #C884
+MSX_SERVICE_PROVIDER_SIZE equ 7
+MSX_SERVICE_PROVIDER_MAX equ 2
+MSX_SERVICE_LEASES      equ #C892
+MSX_SERVICE_LEASE_SIZE  equ 4
+MSX_SERVICE_LEASE_MAX   equ 3
+MSX_SERVICE_LOCK        equ #C89E
+MSX_SERVICE_DIAG        equ #C89F
 MSX_FSCTX_FIB          equ #C8A0       ; active MSX-DOS 2 64-byte directory FIB
 MSX_ARCH_TABLE_END     equ #C8E0
 ; Architecture Milestone 6 (#41): an application installs one of two verified

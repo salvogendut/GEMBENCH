@@ -19,6 +19,10 @@
  *                 loop runs the recv/keyboard pump until Ctrl-] / ESC / disconnect.
  */
 #include "gb.h"
+#ifdef GB_SERVICE_MANAGER
+#include "gbdefer.h"
+#include "gbservice.h"
+#endif
 #ifdef GB_MSX2
 #define TELNET_HAS_NET        1
 #define TELNET_HAS_GBNET      1
@@ -64,14 +68,17 @@
 #define FS_COLS  80        /* Mode 2: 640px / 8 = 80 cols */
 #define FS_ROWS  25        /* Mode 2: 200px / 8 = 25 rows */
 #endif
-#if WIN_COLS > FS_COLS
+#if !TELNET_HAS_FULLSCREEN
+#define GRID_MAX_COLS WIN_COLS
+#define GRID_MAX_ROWS WIN_ROWS
+#elif WIN_COLS > FS_COLS
 #define GRID_MAX_COLS WIN_COLS
 #else
 #define GRID_MAX_COLS FS_COLS
 #endif
-#if WIN_ROWS > FS_ROWS
+#if TELNET_HAS_FULLSCREEN && WIN_ROWS > FS_ROWS
 #define GRID_MAX_ROWS WIN_ROWS
-#else
+#elif TELNET_HAS_FULLSCREEN
 #define GRID_MAX_ROWS FS_ROWS
 #endif
 /* the windowed terminal lives in a screen-sized managed window; the grid sits in its
@@ -1327,8 +1334,62 @@ static const unsigned char netcfg[22] = {
 #define ST_DONE 2          /* server disconnected; grid frozen, reconnect via the menu */
 
 static unsigned char state;
+#ifdef GB_SERVICE_MANAGER
+#define SVC_IDLE    0u
+#define SVC_WAITING 1u
+#define SVC_READY   2u
+#define SVC_FAILED  3u
+static gb_service_t network_service;
+static unsigned char service_state, service_error;
+
+static void release_network_service(void)
+{
+    if (network_service) {
+        (void)gb_service_release(network_service);
+        network_service = 0;
+    }
+    service_state = SVC_IDLE;
+}
+
+static void service_message(void)
+{
+    const gb_defer_message_t *message = gb_defer_current();
+    if (!message || message->type != GB_DEFER_SERVICE ||
+        message->p0 != GB_SERVICE_MSG_RESPONSE ||
+        message->p1 != GB_SERVICE_NET_PROBE ||
+        message->sender != gb_service_find(GB_SERVICE_NETWORK) ||
+        service_state != SVC_WAITING)
+        return;
+    service_error = message->p2;
+    service_state = service_error == GB_SERVICE_OK ? SVC_READY : SVC_FAILED;
+}
+
+static unsigned char begin_network_service(void)
+{
+    unsigned char result;
+    result = gb_service_acquire(GB_SERVICE_NETWORK, GB_SERVICE_NETWORK_APP,
+                                &network_service);
+    if (result == GB_SERVICE_OK)
+        result = gb_service_request(network_service, GB_SERVICE_NET_PROBE, 0);
+    if (result != GB_SERVICE_OK) {
+        service_error = result;
+        if (network_service) (void)gb_service_release(network_service);
+        network_service = 0;
+        service_state = SVC_FAILED;
+        return 0;
+    }
+    service_state = SVC_WAITING;
+    return 1;
+}
+#endif
 #ifndef GB_PCW
+#ifdef GB_MSX2
+/* The UNAPI receive shim accepts bounded pulls; 128 bytes keeps the MSX task
+ * inside its lower-16K image after adding the shared-service client. */
+static unsigned char rbuf[128];
+#else
 static unsigned char rbuf[256];
+#endif
 #endif
 
 /* recv-poll throttle (#238/#259): each gb_net_recv is a paged module call, so polling it
@@ -1524,6 +1585,9 @@ static void close_session(void)
     if (transport == TR_SERIAL && (state == ST_RUN || state == ST_DONE)) serial_modem_hangup();
 #endif
     state = ST_IDLE;
+#ifdef GB_SERVICE_MANAGER
+    release_network_service();
+#endif
 }
 
 /* common session start (transport-agnostic); the caller does the transport-specific
@@ -1539,9 +1603,8 @@ static void start_session(void)
 /* ---- the Telnet top-bar menu (#238) ---------------------------------------- */
 #if TELNET_HAS_NET
 /* Connect over TCP: host:port dialog + DNS, then the telnet WILL handshake. */
-static void action_connect(void)
+static void action_connect_ready(void)
 {
-    if (state == ST_RUN || state == ST_DONE) close_session();
     gb_modal_set(1);                          /* a self-polling dialog is up */
     if (do_connect()) {
         transport = TR_NET;
@@ -1557,6 +1620,18 @@ static void action_connect(void)
 #endif
     } else state = ST_IDLE;
     gb_modal_set(0);
+}
+
+static void action_connect(void)
+{
+    if (state == ST_RUN || state == ST_DONE) close_session();
+#ifdef GB_SERVICE_MANAGER
+    if (service_state == SVC_WAITING) return;
+    release_network_service();
+    (void)begin_network_service();
+#else
+    action_connect_ready();
+#endif
 }
 #endif
 
@@ -1757,6 +1832,25 @@ static void net_frame(void)
 
 static void t_frame(void)
 {
+#ifdef GB_SERVICE_MANAGER
+    if (service_state == SVC_READY) {
+        service_state = SVC_IDLE;
+        action_connect_ready();
+        if (state != ST_RUN) release_network_service();
+        return;
+    }
+    if (service_state == SVC_FAILED) {
+        unsigned char error = service_error;
+        release_network_service();
+        if (error == GB_SERVICE_ERR_FULL)
+            gb_alert("Network busy", "service leases full");
+        else if (error == GB_SERVICE_ERR_QUEUE)
+            gb_alert("Network busy", "message queue full");
+        else
+            gb_alert("No network", "UNAPI service unavailable");
+        return;
+    }
+#endif
 #if defined(TELNET_DEMO) && TELNET_HAS_FULLSCREEN && !defined(TELNET_DEMO_WINDOWED)
     if (state == ST_IDLE) {                 /* offline Mode-2 80x25 render check (takeover) */
         gb_curhide();
@@ -1833,6 +1927,11 @@ static const gb_mwin_t tmw = {
 void main(void)
 {
     state = ST_IDLE;
+#ifdef GB_SERVICE_MANAGER
+    network_service = 0;
+    service_state = SVC_IDLE;
+    service_error = GB_SERVICE_OK;
+#endif
 #ifdef GB_PCW
     transport = TR_SERIAL;
     want_fs = 0; fs_label();
@@ -1847,6 +1946,13 @@ void main(void)
     want_fs = 0; fs_label();
 #endif
     gb_wm_managed(&tmw);                        /* register (no draw yet) (#146) */
+#ifdef GB_SERVICE_MANAGER
+    if (gb_defer_register(service_message) != GB_DEFER_OK) {
+        gb_alert("No services", "deferred handler unavailable");
+        gb_wm_close();
+        return;
+    }
+#endif
     gb_doc(&telnetdoc);                          /* enable the menu framework (#142) */
 #ifdef GB_MSX2
     gb_menu_add("Telnet", (const char *const *)telnet_items, 2, on_menu);

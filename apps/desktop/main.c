@@ -18,6 +18,9 @@
 #include "gbregion.h"
 #endif
 #include "gbtitle.h"
+#ifdef GB_SERVICE_MANAGER
+#include "gbservice.h"
+#endif
 #ifdef GB_DESK_ACCESSORIES
 #include "gbshell.h"
 #ifdef GB_DEFER_MESSAGES
@@ -926,6 +929,12 @@ static void baseline_probe(void)
 static void bar_draw(void)
 {
     unsigned char msig, i;
+#ifdef GB_SERVICE_MANAGER
+    /* Root-owned M7 collection remains live even while another application or
+       a fullscreen surface has focus. It scans three leases and queues at most
+       one provider stop, so this hook stays bounded. */
+    gb_service_collect();
+#endif
     if (*WM_FS) { bar_wasfs = 1; return; }    /* fullscreen: the borderless window owns lines 0-7 */
     if (bar_wasfs) {                          /* just exited fullscreen (e.g. the saver closed) -> */
         bar_wasfs = 0; bar_init = 0;          /* force a full bar redraw, and restart the idle count */

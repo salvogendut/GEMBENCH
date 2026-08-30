@@ -656,3 +656,46 @@ make gembench-msx
 make gembench-m5-openmsx
 make gembench-m6-openmsx
 ```
+
+## Architecture Milestone 7 shared services
+
+Architecture Milestone 7 was validated on 2026-08-30 with openMSX 21.0 and a
+disposable network-free 512 KiB Nextor image. The test opens a controller
+through the real Desktop/File Manager path, then loads three additional clients
+and the guarded windowless `NETSVC.APP` provider.
+
+The reference trace was:
+
+```text
+STATUS=PASS
+ROLLBACK_STATUS=10
+ACQUIRE_A=0
+DUPLICATE_A=9
+ACQUIRE_B=0
+FOREIGN_B=3
+ACQUIRE_C=0
+ACQUIRE_D=4
+STALE_B=2
+REFS=3,2,1,0
+PROVIDER_SEEN=1
+PROVIDER_GONE=1
+OWNERS=2,2,2
+LEASES=0,0
+PROVIDERS=0
+LOCK=0
+SYSINFO=5,7FFF
+RESP_STATUS=11,11,11
+```
+
+Status 10 is the deliberately non-registering provider rollback. The three
+probe replies return 11 because openMSXnet is intentionally absent; receiving
+all three proves the actual provider path ran. Client B then quits without
+release, Desktop collects its stale lease, C and A explicitly release, and the
+zero-reference provider unloads. Pages/owners return to their pre-scenario
+count and both provider slots plus all three leases are empty.
+
+```sh
+python3 -m unittest tests.test_service_manager -v
+make gembench-msx
+make gembench-m7-service-openmsx
+```

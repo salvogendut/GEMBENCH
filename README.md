@@ -203,6 +203,7 @@ python3 tools/gbrc.py examples/hello-dialog.json \
 - [Bootstrap validation results](docs/gembench/BOOTSTRAP-RESULTS.md)
 - [Current MSX2 baseline](docs/gembench/BASELINE.md)
 - [Milestone 7 banking decision](docs/gembench/M7-BANKING-DECISION.md)
+- [Architecture Milestone 7 shared services](docs/gembench/ARCHITECTURE-M7-MSX.md)
 - [Frozen GEMBENCH-1 ABI](docs/gembench/ABI-V1.md)
 - [openMSX reference validation](docs/gembench/OPENMSX-VALIDATION.md)
 - [Baseline measurement workflow](docs/gembench/DEVELOPMENT.md)

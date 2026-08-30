@@ -47,7 +47,7 @@ MSX_PAGE_FREE = 0xC2E5
 MSX_SYSINFO = 0xC2F0
 MSX_SYSINFO_SIZE = 32
 MSX_PAGE_MAX = 32
-MSX_M4_REQUIRED_CAPABILITIES = 0x1FC0
+MSX_M7_REQUIRED_CAPABILITIES = 0x5FC0
 BASELINE_PHASE = 0xC02A
 BASELINE_STACK_MAX = 0xC02B
 BASELINE_STACK_FAULT = 0xC02C
@@ -448,7 +448,7 @@ def collect_runtime(
     if sysinfo is not None:
         expected_sysinfo = {
             "size": MSX_SYSINFO_SIZE,
-            "version": 4,
+            "version": 5,
             "abi_major": 1,
             "abi_minor": 0,
             "platform": 1,
@@ -480,12 +480,12 @@ def collect_runtime(
             if sysinfo[name] != expected
         ]
         if mismatches:
-            errors.append("invalid GB_SYSINFO v4: " + ", ".join(mismatches))
+            errors.append("invalid GB_SYSINFO v5: " + ", ".join(mismatches))
         if (
-            sysinfo["capabilities"] & MSX_M4_REQUIRED_CAPABILITIES
-        ) != MSX_M4_REQUIRED_CAPABILITIES:
+            sysinfo["capabilities"] & MSX_M7_REQUIRED_CAPABILITIES
+        ) != MSX_M7_REQUIRED_CAPABILITIES:
             errors.append(
-                "GB_SYSINFO lacks the M4 page, owner, application, multi-window, deferred-message, filesystem-context, or video capabilities"
+                "GB_SYSINFO lacks the M7 page, owner, application, multi-window, deferred-message, filesystem-context, service-manager, or video capabilities"
             )
     if require_probes:
         if probes is None:

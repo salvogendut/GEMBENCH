@@ -21,6 +21,7 @@ gb_wm_close
 gb_wm_damage
 gb_wm_h
 gb_wm_managed
+gb_wm_open
 gb_wm_setpos
 gb_wm_setsize
 gb_wm_w

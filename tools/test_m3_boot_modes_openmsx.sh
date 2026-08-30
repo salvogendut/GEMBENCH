@@ -17,13 +17,14 @@ for mode in 6 7; do
     export GEMBENCH_M3_BOOT_SCREENSHOT="$PWD/build/msx/m3-boot-mode-$mode.png"
     export MSX_UNAPI=0
     export MSX_MOUSE=0
+    export MSX_HEADLESS=1
     export SDL_AUDIODRIVER=dummy
     export MSX_SCRIPT=debug/m3_boot_probe.tcl
     tools/run_msx.sh "$stage/mode-$mode.img"
     grep -qx 'NWIN=1' "$GEMBENCH_M3_BOOT_OUTPUT"
     grep -qx 'POOL_TOTAL=25' "$GEMBENCH_M3_BOOT_OUTPUT"
     grep -qx 'SYS_SIZE=32' "$GEMBENCH_M3_BOOT_OUTPUT"
-    grep -qx 'SYS_VERSION=4' "$GEMBENCH_M3_BOOT_OUTPUT"
+    grep -qx 'SYS_VERSION=5' "$GEMBENCH_M3_BOOT_OUTPUT"
     grep -qx 'DEFER_COUNT=0' "$GEMBENCH_M3_BOOT_OUTPUT"
 done
 

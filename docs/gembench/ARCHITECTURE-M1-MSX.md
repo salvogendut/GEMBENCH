@@ -14,13 +14,13 @@ these services yet.
 `GB_SYSINFO` at `0x80C3` returns `DE` pointing to a resident, read-only
 `gb_sysinfo_t`. The first byte is the record size and the second is the record
 version. Milestones 2-4 append fields without changing this 20-byte v1 prefix;
-the current kernel returns the v4 record documented in
-[ARCHITECTURE-M4-MSX.md](ARCHITECTURE-M4-MSX.md).
+the current kernel returns the layout-compatible v5 record documented in
+[ARCHITECTURE-M7-MSX.md](ARCHITECTURE-M7-MSX.md).
 
 | Offset | Bytes | v1 field |
 | ---: | ---: | --- |
 | 0 | 1 | record size (`20` for v1; currently `32`) |
-| 1 | 1 | record version (`1`; currently `4`) |
+| 1 | 1 | record version (`1`; currently `5`) |
 | 2 | 2 | GEMBENCH ABI major/minor (`1.0`) |
 | 4 | 1 | platform (`GB_PLATFORM_MSX2`) |
 | 5 | 1 | native video mode (`6` or `7`) |

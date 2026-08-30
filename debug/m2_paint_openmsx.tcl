@@ -730,7 +730,7 @@ proc p2_desktop_ready {} {
     if {[peek 0x1350] == 1 && [peek 0x1351] == 0 &&
         [peek 0x1306] <= 127 && [peek 0x1307] <= 211 &&
         [p2_owner_count] == 1 && [peek 0xC2F0] == 32 &&
-        [peek 0xC2F1] == 4} {
+        [peek 0xC2F1] == 5} {
         set ppi [debug read ioports 0xA8]
         set secondary [peek 0xFFFF]
         set candidate [expr {($ppi << 8) | $secondary}]

@@ -1,9 +1,9 @@
 # SymbOS-inspired architecture improvements
 
-Status: **active roadmap**. Improvements 1-5 are implemented on MSX2;
+Status: **implemented roadmap on MSX2**. Improvements 1-5 are implemented;
 Milestone 5 implements the uncompressed-primary slice of improvement 6;
-improvement 7 is implemented in Milestone 6; and improvement 8 remains
-proposed. CPC and PCW
+improvement 7 is implemented in Milestone 6; and the first bounded control-plane
+slice of improvement 8 is implemented in Milestone 7. CPC and PCW
 parity remains governed by `CPC-PCW-BACKPORT-PLAN.md`.
 
 This document records the highest-value architectural improvements identified
@@ -160,6 +160,13 @@ selection, safe multi-client sharing, rollback on provider failure, complete
 unload cleanup, and no nested synchronous callbacks.
 
 Estimated difficulty: **high after improvements 1-5**.
+
+MSX2 status: **implemented in Milestone 7** with two windowless provider slots,
+three generation-tagged client leases, first-acquire launch and rollback,
+deferred request/reply/lifecycle messages, Desktop stale-owner collection, and
+final unload. `NETSVC.APP` plus Telnet exercise the real UNAPI control plane.
+Socket/bulk-session sharing, Browser adoption, and CPC/PCW providers remain
+later work.
 
 ## Recommended dependency order
 

@@ -179,7 +179,7 @@ application identity, while generation-tagged window handles allow several
 frozen compositor records to share one application/code page. The complete
 20-byte sysinfo v1 prefix is unchanged; its v2 record appends four
 application-capacity bytes and advertises application/multi-window capability.
-Milestones 3 and 4 retain that prefix in the current v4 record.
+Milestones 3, 4, and 7 retain that prefix in the current v5 record.
 
 `GB_SYSINFO` has a stable, versioned 20-byte minimum prefix. Owner, page, and
 window values are opaque, generation-tagged 16-bit runtime handles; none is a
@@ -215,6 +215,21 @@ state. Native DOS calls remain serialized and each transfer advances at most
 512 bytes on the root task. Stale and foreign handles are rejected; owner
 teardown invalidates every matching context. The exact contract is documented
 in [ARCHITECTURE-M4-MSX.md](ARCHITECTURE-M4-MSX.md).
+
+Architecture Milestone 7 ([#43](https://github.com/salvogendut/GEMBENCH/issues/43))
+adds `GB_CAP_SERVICE_MANAGER` and advances the unchanged 32-byte sysinfo record
+to v5. Both legacy reserved bytes remain zero. Service capacities, message
+operations, and errors are source-level constants in `gbservice.h`; no frozen
+jump-table entry, window record, persistent format, or existing deferred type
+moves. Deferred type 2 is now reserved for service lifecycle/request/reply
+traffic.
+
+Service and lease handles are runtime generation-tagged ownership values. A
+client may not transfer its lease to another owner or persist it. Provider
+selection, first-client launch, rollback, reference release, stale-owner
+collection, and final stop are observable policy; the current fixed MSX table
+addresses are private implementation details. The exact contract is documented
+in [ARCHITECTURE-M7-MSX.md](ARCHITECTURE-M7-MSX.md).
 
 ## Compatibility rules
 

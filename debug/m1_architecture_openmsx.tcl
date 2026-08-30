@@ -322,12 +322,12 @@ proc m1_double_click {callback} {
 
 proc m1_validate_sysinfo {} {
     expr {
-        [m1_mem 0xC2F0] == 32 && [m1_mem 0xC2F1] == 4 &&
+        [m1_mem 0xC2F0] == 32 && [m1_mem 0xC2F1] == 5 &&
         [m1_mem 0xC2F4] == 1 && [m1_mem 0xC2F5] == 7 &&
         [m1_word 0xC2F6] == 512 && [m1_word 0xC2F8] == 212 &&
         [m1_mem 0xC2FA] == 4 && [m1_mem 0xC2FB] == 16 &&
         [m1_mem 0xC2FD] == [m1_mem 0xC2E4] &&
-        ([m1_word 0xC300] & 0x1FC0) == 0x1FC0 &&
+        ([m1_word 0xC300] & 0x5FC0) == 0x5FC0 &&
         [m1_mem 0xC304] == 8 && [m1_mem 0xC305] == 1 &&
         [m1_mem 0xC306] == 8 && [m1_mem 0xC307] == 0 &&
         [m1_mem 0xC308] == 8 && [m1_mem 0xC309] == 4 &&
