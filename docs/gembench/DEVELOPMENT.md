@@ -187,7 +187,12 @@ OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
 The disposable-image driver launches the byte-identical built Clock through
 File Manager. It verifies that timer frames continue, `S` reaches the keyboard
 class and toggles seconds, pointer movement is observed, and a real pointer
-click reaches Clock without losing the associated window callback.
+click reaches Clock without losing the associated window callback. It then
+raises File Manager, requires Clock redraws with zero additional focused
+frames, verifies alternating hand/seconds damage and a continuously displayed
+hardware pointer, and hashes their overlap before and after to prove the
+foreground is preserved. `make gembench-m8-timer-openmsx` is the build-and-test alias. See
+`ARCHITECTURE-M8-MSX.md` for the worker/root contract.
 
 Use 1983 as the complementary boot, mapper, and image-layout integration check:
 

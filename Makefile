@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m2-sysinfo gembench-m2-openmsx gembench-m2-paint-openmsx gembench-m3-openmsx gembench-m3-boot-openmsx gembench-m4-sysinfo gembench-m4-openmsx gembench-m5-manifest gembench-m5-openmsx gembench-m6-manifest gembench-m6-openmsx gembench-m7-resident-probe gembench-m7-service-probes gembench-m7-service-openmsx gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbdefer-check gbfsctx-check gbshell-check gbaccessory-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m2-sysinfo gembench-m2-openmsx gembench-m2-paint-openmsx gembench-m3-openmsx gembench-m3-boot-openmsx gembench-m4-sysinfo gembench-m4-openmsx gembench-m5-manifest gembench-m5-openmsx gembench-m6-manifest gembench-m6-openmsx gembench-m7-resident-probe gembench-m7-service-probes gembench-m7-service-openmsx gembench-m8-timer-openmsx gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbdefer-check gbfsctx-check gbshell-check gbaccessory-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -93,6 +93,11 @@ gembench-m7-service-probes:
 
 gembench-m7-service-openmsx: gembench-msx gembench-m7-service-probes
 	bash tools/test_m7_service_openmsx.sh
+
+# Architecture M8 (#45): prove that Clock's app-owned worker requests bounded
+# compositor damage while File Manager remains focused above it.
+gembench-m8-timer-openmsx: gembench-msx
+	bash tools/test_multi_event_openmsx.sh
 
 gembench-abi-check:
 	$(PYTHON) tools/check_gembench_abi.py

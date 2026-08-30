@@ -45,8 +45,35 @@ export GEMBENCH_EVENT_C_FRAME="$(hexsum "$code_base" "0x$(symbol_offset _c_frame
 export GEMBENCH_EVENT_C_CLICK="$(hexsum "$code_base" "0x$(symbol_offset _c_click)")"
 export GEMBENCH_EVENT_AFTER_COLLECT="$(hexsum "$code_base" "$(call_return_offset _gb_event_collect)")"
 export GEMBENCH_EVENT_SHOW_SEC="$(hexsum "$data_base" "0x$(symbol_offset _show_sec)")"
+export GEMBENCH_EVENT_TIMER_PART="$(hexsum "$data_base" "0x$(symbol_offset _timer_part)")"
+export GEMBENCH_EVENT_TIMER_DIGIT_DUE="$(hexsum "$data_base" "0x$(symbol_offset _timer_digit_due)")"
+export GEMBENCH_EVENT_TIMER_WINDOW="$(hexsum "$data_base" "0x$(symbol_offset _timer_window)")"
 export GEMBENCH_EVENT_SUBSCRIPTION="$(hexsum "$data_base" "0x$(symbol_offset _clock_events)")"
 export GEMBENCH_EVENT_RECORD="$(hexsum "$data_base" "0x$(symbol_offset _clock_event)")"
+export GEMBENCH_EVENT_TIMER_COLLECT="$(awk '$1 == "DEF" && $2 == "_gb_timer_collect" { print $3; found=1; exit } END { if (!found) exit 1 }' build/msx-obj/desktop/app.noi)"
+export GEMBENCH_EVENT_K_POLL="0x$(awk '$1 == "K_POLL" { value=$2; sub(/^#/, "", value); print value; found=1; exit } END { if (!found) exit 1 }' build/msx/gbkernm7.sym)"
+
+fm_sym=build/msx-obj/filemgr/main.sym
+fm_noi=build/msx-obj/filemgr/app.noi
+fm_data_abs=$(awk '$1 == "DEF" && $2 == "s__DATA" { print $3; exit }' "$fm_noi")
+fm_initialized_abs=$(awk '$1 == "DEF" && $2 == "s__INITIALIZED" { print $3; exit }' "$fm_noi")
+fm_data_address() {
+    local record area offset base
+    record=$(awk -v symbol="$1" '$2 == symbol { print $1, $3; exit }' "$fm_sym")
+    [ -n "$record" ] || return 1
+    read -r area offset <<< "$record"
+    case "$area" in
+        1) base=$fm_data_abs ;;
+        2) base=$fm_initialized_abs ;;
+        *) return 1 ;;
+    esac
+    printf '0x%X' "$((base + 0x$offset))"
+}
+export GEMBENCH_EVENT_FM_TOTAL="$(fm_data_address _total)"
+export GEMBENCH_EVENT_FM_NAMES="$(fm_data_address _names)"
+export GEMBENCH_EVENT_FM_ORDER="$(fm_data_address _order)"
+export GEMBENCH_EVENT_FM_LIST_STATE="$(fm_data_address _list_state)"
+export GEMBENCH_EVENT_FM_VIEW="$(fm_data_address _view)"
 
 main_file_offset=$((main_abs - 0x4000))
 read -r sig0 sig1 sig2 < <(od -An -t u1 -j "$main_file_offset" -N 3 build/msx/CLOCK.RAW)

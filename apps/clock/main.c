@@ -16,6 +16,9 @@
 #ifdef GB_MSX2
 #include "gbevent.h"
 #include "gbshell.h"
+#ifdef GB_APP_TIMERS
+#include "gbtimer.h"
+#endif
 #ifdef GB_DEFER_MESSAGES
 #include "gbdefer.h"
 #endif
@@ -34,6 +37,15 @@ static unsigned char win_x = DEF_X, win_y = DEF_Y;
 static unsigned char win_w = DEF_W, win_h = DEF_H;  /* live size (resizeable) */
 static unsigned char show_sec;               /* 0 = H:M (minute refresh), 1 = +seconds */
 static unsigned char ph, pm, ps, pshow, have_prev;  /* previous h/m/s + show state */
+#ifdef GB_APP_TIMERS
+static unsigned char dh, dm, ds, dshow;       /* independently painted digital state */
+static unsigned char timer_part, timer_window;
+static unsigned char timer_h, timer_m, timer_s;
+static unsigned char timer_digit_due;
+#define TIMER_HANDS   1
+#define TIMER_SECONDS 2
+#define TIMER_DIGITAL 3
+#endif
 static unsigned char fs_px, fs_py, fs_pw, fs_ph;    /* geometry saved across Fullscreen (#142) */
 #ifdef GB_MSX2
 static gb_event_subscription_t clock_events;
@@ -110,6 +122,33 @@ __asm
     ret
 __endasm;
 }
+
+/* GB_LINE starts the V9938 command asynchronously. A normal Clock paint follows
+   it with clipped fills/text (which wait for CE), but a hands-only timer paint
+   must explicitly finish its last line before the compositor restores a higher
+   window. Otherwise that late line can punch through the foreground. */
+#ifdef GB_MSX2
+static void line_wait(void) __naked
+{
+__asm
+    di
+    ld   a, #2
+    out  (#0x99), a
+    ld   a, #0x8F
+    out  (#0x99), a
+001$:
+    in   a, (#0x99)
+    rrca
+    jr   c, 001$
+    xor  a
+    out  (#0x99), a
+    ld   a, #0x8F
+    out  (#0x99), a
+    ei
+    ret
+__endasm;
+}
+#endif
 static void line(int x0, int y0, int x1, int y1, unsigned char pen)
 {
     GLINE_X0 = (unsigned int)x0; GLINE_Y0 = (unsigned int)y0;
@@ -195,19 +234,109 @@ static char dig[9];
 static void put2(char *p, unsigned char v) { p[0] = '0' + v / 10; p[1] = '0' + v % 10; }
 static void draw_digital(unsigned char h, unsigned char m, unsigned char s)
 {
-    unsigned char x = (unsigned char)(win_x + (win_w - (show_sec ? 12 : 8)) / 2);
+    unsigned char width = show_sec ? 12 : 8;
+    unsigned char x = (unsigned char)(win_x + (win_w - width) / 2);
     put2(dig, h); dig[2] = ':'; put2(dig + 3, m);
     if (show_sec) { dig[5] = ':'; put2(dig + 6, s); dig[8] = 0; }
     else dig[5] = 0;
-    gb_fill((unsigned char)(win_x + (win_w - 16) / 2), dig_y, 16, 8, 0);
+    gb_fill(x, dig_y, width, 8, 0);
     gb_text(x, dig_y, dig);
 }
 
+/* The seconds pair starts after six 6-pixel glyphs: exactly nine byte columns.
+   Updating it independently leaves HH:MM and both separators untouched. */
+static void draw_seconds(unsigned char s)
+{
+    unsigned char x = (unsigned char)(win_x + (win_w - 12) / 2 + 9);
+    put2(dig, s); dig[2] = 0;
+    gb_fill(x, dig_y, 3, 8, 0);
+    gb_text(x, dig_y, dig);
+}
+
+#ifndef GB_MSX2
 static unsigned char cursor_over(void)
 {
     unsigned char mx = gb_mx(), my = gb_my();
     return (unsigned char)(mx >= win_x && mx < win_x + win_w && my >= win_y && my < win_y + win_h);
 }
+#endif
+
+#ifdef GB_APP_TIMERS
+static int damage_l, damage_r, damage_t, damage_b;
+
+static void damage_endpoint(unsigned char pos, unsigned char len)
+{
+    int x = px_at(pos, len), y = py_at(pos, len);
+    if (x < damage_l) damage_l = x;
+    if (x > damage_r) damage_r = x;
+    if (y < damage_t) damage_t = y;
+    if (y > damage_b) damage_b = y;
+}
+
+/* A compositor paint first exposes the underlying desktop. Include every old
+   and new hand in the hand rectangle so c_draw can reconstruct crossings after
+   that clear without issuing an unclipped V9938 line outside the damage area. */
+static void timer_damage_hands(unsigned char h, unsigned char m, unsigned char s)
+{
+    unsigned char x, right;
+    damage_l = damage_r = cx;
+    damage_t = damage_b = cy;
+    damage_endpoint(hourpos(ph, pm), l_hour);
+    damage_endpoint(pm, l_min);
+    if (pshow) damage_endpoint(ps, l_sec);
+    damage_endpoint(hourpos(h, m), l_hour);
+    damage_endpoint(m, l_min);
+    if (show_sec) damage_endpoint(s, l_sec);
+    x = (unsigned char)(damage_l >> 2);
+    right = (unsigned char)((damage_r + 4) >> 2);
+    timer_part = TIMER_HANDS;
+    gb_timer_damage(x, (unsigned char)damage_t,
+                    (unsigned char)(right - x),
+                    (unsigned char)(damage_b - damage_t + 1));
+}
+
+/* Pure worker callback: observe only app-owned state and root-refreshed fixed
+   time bytes, then publish an atomic damage request. Drawing and compositor
+   entry remain on the root task. */
+static void clock_timer(void)
+{
+    unsigned char h, m, s;
+    if (!have_prev) return;
+    if (GB_TIMER_OWNER) return;                 /* keep part/snapshot paired with its rect */
+    timer_window = (unsigned char)(GB_TIMER_TASK_SLOT + 1);
+    h = bin(GB_TIMER_HOUR); m = bin(GB_TIMER_MINUTE); s = bin(GB_TIMER_SECOND);
+    timer_h = h; timer_m = m; timer_s = s;
+    if (timer_digit_due) {
+        if (show_sec && h == dh && m == dm && dshow) {
+            timer_part = TIMER_SECONDS;
+            gb_timer_damage((unsigned char)(win_x + (win_w - 12) / 2 + 9),
+                            dig_y, 3, 8);
+        } else {
+            unsigned char width = show_sec ? 12 : 8;
+            timer_part = TIMER_DIGITAL;
+            gb_timer_damage((unsigned char)(win_x + (win_w - width) / 2),
+                            dig_y, width, 8);
+        }
+        return;
+    }
+    if (h != ph || m != pm || (show_sec && s != ps) || show_sec != pshow) {
+        timer_damage_hands(h, m, s);
+        return;
+    }
+    if (h == dh && m == dm && show_sec == dshow &&
+        (!show_sec || s == ds)) return;
+    if (show_sec && h == dh && m == dm && dshow) {
+        timer_part = TIMER_SECONDS;
+        gb_timer_damage((unsigned char)(win_x + (win_w - 12) / 2 + 9),
+                        dig_y, 3, 8);
+    } else {
+        unsigned char width = show_sec ? 12 : 8;
+        timer_part = TIMER_DIGITAL;
+        gb_timer_damage((unsigned char)(win_x + (win_w - width) / 2),
+                        dig_y, width, 8);
+    }
+}
+#endif
 
 /* on_draw (#146): the WM already drew the frame/title/close; paint just the content
    (face + hands + digital + grip). The face rescales to the live window rect. */
@@ -216,6 +345,29 @@ static void c_draw(void)
     unsigned char h, m, s;
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
     relayout();
+#ifdef GB_APP_TIMERS
+    if (GB_TIMER_ACTIVE_FOR(timer_window)) {
+        h = timer_h; m = timer_m; s = timer_s;
+        if (timer_part == TIMER_HANDS) {
+            hands(h, m, s, show_sec, 1, 3);
+            line_wait();
+            ph = h; pm = m; ps = s; pshow = show_sec; have_prev = 1;
+            timer_digit_due = 1;
+        } else if (timer_part == TIMER_SECONDS) {
+            draw_seconds(s);
+            dh = h; dm = m; ds = s; dshow = show_sec;
+            timer_digit_due = 0;
+        } else if (timer_part == TIMER_DIGITAL) {
+            draw_digital(h, m, s);
+            dh = h; dm = m; ds = s; dshow = show_sec;
+            timer_digit_due = 0;
+        }
+        return;
+    }
+    /* A move/resize or another ordinary repaint supersedes a request computed
+       against the old geometry. The worker will republish only if still stale. */
+    if (GB_TIMER_OWNER == timer_window) GB_TIMER_OWNER = 0;
+#endif
     gb_time();
     h = bin(gb_hour); m = bin(gb_min); s = bin(gb_sec);
     draw_face();
@@ -223,6 +375,10 @@ static void c_draw(void)
     draw_digital(h, m, s);
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip (#81) */
     ph = h; pm = m; ps = s; pshow = show_sec; have_prev = 1;
+#ifdef GB_APP_TIMERS
+    dh = h; dm = m; ds = s; dshow = show_sec;
+    timer_digit_due = 0;
+#endif
 }
 
 /* tick: move the hands without touching the face. Only lifts the pointer if it is
@@ -230,13 +386,26 @@ static void c_draw(void)
 static void tick(void)
 {
     unsigned char h = bin(gb_hour), m = bin(gb_min), s = bin(gb_sec);
+#ifndef GB_MSX2
     unsigned char co = cursor_over();
     if (co) gb_curhide();
+#endif
     if (have_prev) hands(ph, pm, ps, pshow, 0, 0);  /* erase old hands (background) */
     hands(h, m, s, show_sec, 1, 3);                 /* white hands, red second */
+#ifdef GB_APP_TIMERS
+    if (show_sec && dshow && h == dh && m == dm) draw_seconds(s);
+    else draw_digital(h, m, s);
+#else
     draw_digital(h, m, s);
+#endif
+#ifndef GB_MSX2
     if (co) gb_curshow();
+#endif
     ph = h; pm = m; ps = s; pshow = show_sec; have_prev = 1;
+#ifdef GB_APP_TIMERS
+    dh = h; dm = m; ds = s; dshow = show_sec;
+    timer_digit_due = 0;
+#endif
 }
 
 /* changed: has the displayed time advanced (minute, or second when shown)? */
@@ -463,6 +632,9 @@ static void c_proc(void)
 
 static const gb_mwin_t cmw = {
     DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, c_proc, "Clock"
+#ifdef GB_APP_TIMERS
+    , clock_timer
+#endif
 };
 
 void main(void)
@@ -481,4 +653,7 @@ void main(void)
 #endif
 #endif
     gb_restore_parent();                         /* first paint: WM chrome + c_draw */
+#ifdef GB_APP_TIMERS
+    gb_task_enable();                            /* worker observes time; root still owns drawing */
+#endif
 }

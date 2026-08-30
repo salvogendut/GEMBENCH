@@ -22,7 +22,9 @@ Clock — all co-resident under the kernel window manager on a V9938.
   a **hardware sprite pointer** and VDP-command drawing (`GB_SETINK` palette
   mapping, `GB_LINE`).
 - **Input:** joystick / keyboard pointer, plus the standard **MSX mouse** in
-  joystick port 1 (GTPAD). The clock is 50/60 Hz aware.
+  joystick port 1 (GTPAD). The clock is 50/60 Hz aware; in the release
+  preemptive build its watch face continues updating while another window has
+  focus, through root-composited background damage.
 - **Ported so far:** Desktop, File Manager, Notepad, Settings, ICONED, Paint,
   Viewer (with portable `.PIC` files translated while drawing), Shell, XAOS,
   Calculator, Mahjong,

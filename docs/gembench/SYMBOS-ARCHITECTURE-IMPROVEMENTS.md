@@ -3,8 +3,9 @@
 Status: **implemented roadmap on MSX2**. Improvements 1-5 are implemented;
 Milestone 5 implements the uncompressed-primary slice of improvement 6;
 improvement 7 is implemented in Milestone 6; and the first bounded control-plane
-slice of improvement 8 is implemented in Milestone 7. CPC and PCW
-parity remains governed by `CPC-PCW-BACKPORT-PLAN.md`.
+slice of improvement 8 is implemented in Milestone 7. Milestone 8 adds the
+first generation-safe application-owned visual timer slice. CPC and PCW
+parity remains listed in `FUTURE-IMPROVEMENTS.md`.
 
 This document records the highest-value architectural improvements identified
 while comparing GEMBENCH with SymbOS. The intent is to borrow useful separation
@@ -60,7 +61,9 @@ deterministic focus/repaint/shell/accessory/scheduler lifecycle.
 
 Estimated difficulty: **high**. MSX2 status: **minimum identity implemented in
 Milestone 1; useful multi-window ownership and application lifecycle implemented
-in Milestone 2**. Further worker/timer/service ownership is incremental.
+in Milestone 2; worker identity and generation-safe visual timer damage
+implemented in Milestone 8**. Multiple timer registrations and richer periodic
+control messages remain incremental.
 
 ## 4. Small deferred-message layer
 
@@ -207,4 +210,4 @@ target backends, and the existing bank-safe application model.
 - Current GEMBENCH architecture: `ARCHITECTURE.md`
 - Current runtime architecture: `../ARCHITECTURE.md`
 - Current scheduler contract: `../PREEMPTIVE_MULTITASKING.md`
-- CPC/PCW parity plan: `CPC-PCW-BACKPORT-PLAN.md`
+- Remaining MSX2 and CPC/PCW work: `FUTURE-IMPROVEMENTS.md`
