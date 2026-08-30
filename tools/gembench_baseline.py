@@ -36,12 +36,18 @@ SCREEN7_POINTER_RESOURCE_BYTES = (
 )
 
 GLUE_DUMP_START = 0xC000
-GLUE_DUMP_LENGTH = 0x60
+GLUE_DUMP_LENGTH = 0x310
 MSX_TICK = 0xC000
 MSX_TPASEG = 0xC018
 MSX_TOTSEG = 0xC019
 MSX_FREESEG = 0xC01A
 MSX_PAGE_DATA = 0xC020
+MSX_PAGE_TOTAL = 0xC2E4
+MSX_PAGE_FREE = 0xC2E5
+MSX_SYSINFO = 0xC2F0
+MSX_SYSINFO_SIZE = 24
+MSX_PAGE_MAX = 32
+MSX_M2_REQUIRED_CAPABILITIES = 0x07C0
 BASELINE_PHASE = 0xC02A
 BASELINE_STACK_MAX = 0xC02B
 BASELINE_STACK_FAULT = 0xC02C
@@ -243,6 +249,35 @@ def word_at(memory: dict[int, int], address: int) -> int | None:
     return low | high << 8
 
 
+def parse_sysinfo(memory: dict[int, int]) -> dict[str, int] | None:
+    """Read the optional versioned architecture capability record."""
+    size = byte_at(memory, MSX_SYSINFO)
+    if not size:
+        return None
+    return {
+        "size": size,
+        "version": byte_at(memory, MSX_SYSINFO + 1) or 0,
+        "abi_major": byte_at(memory, MSX_SYSINFO + 2) or 0,
+        "abi_minor": byte_at(memory, MSX_SYSINFO + 3) or 0,
+        "platform": byte_at(memory, MSX_SYSINFO + 4) or 0,
+        "video_mode": byte_at(memory, MSX_SYSINFO + 5) or 0,
+        "width_pixels": word_at(memory, MSX_SYSINFO + 6) or 0,
+        "height_pixels": word_at(memory, MSX_SYSINFO + 8) or 0,
+        "packing": byte_at(memory, MSX_SYSINFO + 10) or 0,
+        "colours": byte_at(memory, MSX_SYSINFO + 11) or 0,
+        "memory_pages": byte_at(memory, MSX_SYSINFO + 12) or 0,
+        "pool_pages": byte_at(memory, MSX_SYSINFO + 13) or 0,
+        "free_pages": byte_at(memory, MSX_SYSINFO + 14) or 0,
+        "max_windows": byte_at(memory, MSX_SYSINFO + 15) or 0,
+        "capabilities": word_at(memory, MSX_SYSINFO + 16) or 0,
+        "reserved": word_at(memory, MSX_SYSINFO + 18) or 0,
+        "max_applications": byte_at(memory, MSX_SYSINFO + 20) or 0,
+        "application_record_version": byte_at(memory, MSX_SYSINFO + 21) or 0,
+        "max_windows_per_application": byte_at(memory, MSX_SYSINFO + 22) or 0,
+        "reserved2": byte_at(memory, MSX_SYSINFO + 23) or 0,
+    }
+
+
 def bcd_byte(value: int | None) -> int | None:
     if value is None or value & 0x0F > 9 or value >> 4 > 9:
         return None
@@ -279,12 +314,9 @@ def collect_runtime(
     memory = parse_memory_dump(text)
     total_segments = byte_at(memory, MSX_TOTSEG)
     free_segments_at_entry = byte_at(memory, MSX_FREESEG)
-    if free_segments_at_entry is None:
-        app_pages = None
-    else:
-        # One segment is allocated for PAGE_DATA before the pool is built. The
-        # pool then reuses the TPA segment and allocates at most seven more.
-        app_pages = 1 + min(WM_MAXWIN - 1, max(0, free_segments_at_entry - 1))
+    app_pages = byte_at(memory, MSX_PAGE_TOTAL)
+    free_app_pages = byte_at(memory, MSX_PAGE_FREE)
+    sysinfo = parse_sysinfo(memory)
     probes: dict[str, Any] | None = None
     if byte_at(memory, BASELINE_COOKIE) == BASELINE_COOKIE_VALUE:
         full_ticks = rtc_elapsed_ticks(
@@ -360,10 +392,17 @@ def collect_runtime(
             "tpa_segment": byte_at(memory, MSX_TPASEG),
             "page_data_segment": byte_at(memory, MSX_PAGE_DATA),
             "app_pool_pages": app_pages,
-            "idle_busy_app_pages": 1 if app_pages else None,
-            # PAGE_DATA consumes one ALL_SEG allocation.  The app pool contains
-            # the existing TPA segment plus APP_NPAGES-1 ALL_SEG allocations,
-            # hence the number held from DOS is exactly APP_NPAGES.
+            "free_app_pool_pages": free_app_pages,
+            "sysinfo": sysinfo,
+            "idle_busy_app_pages": (
+                app_pages - free_app_pages
+                if app_pages is not None and free_app_pages is not None
+                else None
+            ),
+            # PAGE_DATA consumes one separate ALL_SEG allocation. The general
+            # pool retains the existing TPA segment plus every additional
+            # segment obtained during its boot scan, so its own held count is
+            # exactly the recorded pool total.
             "mapper_segments_held_by_gembench": app_pages,
             "screen7_register_baseline": (
                 runtime["vdp_r0"] == 0x0A and runtime["vdp_r1"] == 0x62
@@ -391,8 +430,49 @@ def collect_runtime(
         errors.append(f"implausible or missing free mapper segment count: {free_segments_at_entry}")
     if runtime["page_data_segment"] is None:
         errors.append("PAGE_DATA segment was not captured")
-    if app_pages is None or not 1 <= app_pages <= WM_MAXWIN:
+    if app_pages is None or not 1 <= app_pages <= MSX_PAGE_MAX:
         errors.append(f"implausible or missing app-pool size: {app_pages}")
+    if (
+        free_app_pages is None
+        or app_pages is None
+        or not 0 <= free_app_pages <= app_pages
+    ):
+        errors.append(f"implausible or missing free app-page count: {free_app_pages}")
+    if sysinfo is not None:
+        expected_sysinfo = {
+            "size": MSX_SYSINFO_SIZE,
+            "version": 2,
+            "abi_major": 1,
+            "abi_minor": 0,
+            "platform": 1,
+            "video_mode": 7,
+            "width_pixels": 512,
+            "height_pixels": 212,
+            "packing": 4,
+            "colours": 16,
+            "memory_pages": total_segments,
+            "pool_pages": app_pages,
+            "free_pages": free_app_pages,
+            "max_windows": WM_MAXWIN,
+            "reserved": 0,
+            "max_applications": 8,
+            "application_record_version": 1,
+            "max_windows_per_application": WM_MAXWIN,
+            "reserved2": 0,
+        }
+        mismatches = [
+            f"{name}={sysinfo[name]!r} (expected {expected!r})"
+            for name, expected in expected_sysinfo.items()
+            if sysinfo[name] != expected
+        ]
+        if mismatches:
+            errors.append("invalid GB_SYSINFO v2: " + ", ".join(mismatches))
+        if (
+            sysinfo["capabilities"] & MSX_M2_REQUIRED_CAPABILITIES
+        ) != MSX_M2_REQUIRED_CAPABILITIES:
+            errors.append(
+                "GB_SYSINFO lacks the M2 page, owner, application, multi-window, or video capabilities"
+            )
     if require_probes:
         if probes is None:
             errors.append("diagnostic probe cookie was not captured")
@@ -598,8 +678,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"{runtime['mapper_segments_held_by_gembench'] if runtime['mapper_segments_held_by_gembench'] is not None else 'not captured'}.",
                 f"- Mapper segments total / free at GEMBENCH entry: "
                 f"{runtime['mapper_total_segments']} / {runtime['mapper_free_segments_at_entry']}.",
-                f"- Derived app-pool pages / idle busy pages: "
+                f"- General app-pool pages / free / idle busy: "
                 f"{runtime['app_pool_pages'] if runtime['app_pool_pages'] is not None else 'not captured'} / "
+                f"{runtime['free_app_pool_pages'] if runtime['free_app_pool_pages'] is not None else 'not captured'} / "
                 f"{runtime['idle_busy_app_pages'] if runtime['idle_busy_app_pages'] is not None else 'not captured'}.",
                 f"- Non-zero VRAM bytes in the captured desktop frame: {runtime['vram_nonzero_bytes']:,} "
                 "(an occupancy signal, not an allocation limit).",
@@ -623,6 +704,13 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- Page-1 TPA / PAGE_DATA segments: {runtime['tpa_segment']} / {runtime['page_data_segment']}",
             ]
         )
+        if runtime.get("sysinfo") is not None:
+            info = runtime["sysinfo"]
+            lines.append(
+                f"- GB_SYSINFO v{info['version']}: {info['width_pixels']}x{info['height_pixels']}, "
+                f"{info['colours']} colours, {info['pool_pages']} pool pages, "
+                f"capabilities `{info['capabilities']:#06x}`."
+            )
         if probes is None:
             lines.append(
                 "- Scheduler stack high-water: not captured; run the diagnostic probe target."

@@ -191,6 +191,7 @@ geobench/
 │   ├── filemgr/       #   scrolling file manager (multi-drive, drag-and-drop, Trash)
 │   ├── notepad/       #   text editor (File/Edit/View menus, copy/paste, .BAS CR+LF)
 │   ├── iconed/        #   icon/cursor editor for .IST sets and .SPR cursors
+│   ├── paint/         #   GEMBENCH-owned MSX2 Paint variant
 │   ├── xaos/          #   fixed-point Mandelbrot generator (.PIC export)
 │   ├── viewer/        #   banked/demand-streamed .PIC image viewer
 │   ├── clock/         #   analog clock window
@@ -201,6 +202,8 @@ geobench/
 └── tools/            # host-side build/asset tooling (build_kernel.sh, build_rom.sh, ...)
 ```
 
-`PAINT.APP` and `BASIC.APP` are owned by the sibling `GB-PAINT` and `GB-BASIC`
-repositories and staged by the distribution build. Normal and preemptive
-release media do not require a GEOBENCH ROM.
+The MSX2 `PAINT.APP` source is owned in-tree so its application/window lifecycle
+can evolve with GEMBENCH; CPC and PCW still take Paint from the sibling
+`GB-PAINT` repository. `BASIC.APP` is owned by the sibling `GB-BASIC` repository
+and staged by the distribution build. Normal and preemptive release media do
+not require a GEOBENCH ROM.

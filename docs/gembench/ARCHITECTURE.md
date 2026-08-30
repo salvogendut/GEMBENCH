@@ -8,7 +8,7 @@ for extending them.
 ```text
 GEMBENCH desktop, accessories, and applications
 ------------------------------------------------
-Objects | Resources | Forms | Menus | Events | Shell
+Objects | Resources | Forms | Menus | Events | Shell | Owned pages
 ------------------------------------------------
 GeoBench libgb and stable kernel jump table
 ------------------------------------------------
@@ -47,6 +47,22 @@ that placement-independent resource format and replaced the prototype
 window-tail probe with an explicit registration contract. The bounded MSX2
 mapper transport remains opt-in for future large-resource experiments; see
 [M7-BANKING-DECISION.md](M7-BANKING-DECISION.md) and [ABI-V1.md](ABI-V1.md).
+
+Architecture Milestone 1 decouples page capacity from the eight-window table on
+MSX2. `GB_SYSINFO` reports the versioned runtime geometry, memory counts, and
+capabilities; generation-tagged owners bind the mapped application page to its
+existing window; and opaque generation-tagged page handles carry purpose and
+ownership without exposing mapper segment IDs. Owner teardown reclaims all new
+allocator pages. The foundation is documented in
+[ARCHITECTURE-M1-MSX.md](ARCHITECTURE-M1-MSX.md).
+
+Architecture Milestone 2 promotes each owner to an independent application
+record. Parallel generation-tagged window handles let several frozen compositor
+records share one code page; closing one window no longer releases siblings,
+while application quit closes all windows and owned pages. Shell service and
+worker identity now follow the application. The implemented MSX-only lifecycle,
+sysinfo v2 suffix, and in-tree Paint migration are documented in
+[ARCHITECTURE-M2-MSX.md](ARCHITECTURE-M2-MSX.md).
 
 ## Resource ownership
 
@@ -161,11 +177,13 @@ clients may link the set/type-only adapter and continue using the resident raw
 length/get calls after accepting text or legacy untyped data. Notepad is the
 first migration and deliberately accepts raw text from older applications.
 
-A mapper-backed scrap page is not yet justified. The existing segment allocator
-is coupled to live application windows, and the shell service does not retain
-payloads or own mapper pages. Holding a segment today would reduce the number of
-concurrent windows for capacity that common text transfers do not need.
-Persistent disk scrap and desk-accessory routing remain separate future work.
+A mapper-backed scrap page is still not justified for the current 510-byte
+payload. Architecture Milestone 1 now provides owned pages independently of
+window capacity, but its public handles intentionally expose no native mapper
+segment and no cross-page transfer service. Typed scrap remains in resident low
+RAM until a later bounded transfer/message contract supplies useful persistence
+or routing rather than merely moving a small payload. Persistent disk scrap and
+desk-accessory routing remain separate future work.
 
 ## Shell services
 

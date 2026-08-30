@@ -246,6 +246,59 @@ make cpc
 make pcw
 ```
 
+## Architecture Milestone 2 application/window ownership
+
+Architecture Milestone 2 was validated on 2026-08-30 with openMSX 21.0 and a
+disposable 512 KiB Nextor image. The extended SYSINFO diagnostic created a
+second window in one application, checked owner/count/free-slot state, closed
+it through its generation-tagged handle, rejected that stale handle, then
+closed and reopened the application. The owner and primary window generations
+both advanced from 1 to 2; the deliberately retained cache page and application
+page were reclaimed on each close. The reference pool contained 25 pages.
+
+The Paint trace launched a real 176x176 `LOGO.PIC` through the normal File
+Manager document path. Toolchest/Preview/Canvas occupied window slots 2/3/4,
+shared application owner `0x0103` and one code page, and reached three windows
+inside Paint. The trace dragged Toolchest from x=98 to 95, Preview from x=1 to
+2, and Canvas from x=39 to 54 before continuing to use each pane. Closing
+Canvas left two Paint windows, closing Preview released the document while
+Toolchest remained, and closing Toolchest returned to the two baseline
+windows/owners. Free mapper pages returned from 22 to 22.
+
+The run also found and fixed Paint's launch-order bug: loading `PAINT.IST`
+could replace the focused window argument before `.PIC` recognition. Paint now
+claims the launch document first and restores its name after loading the tool
+resource. Its MSX image is 15,792 bytes versus the imported 15,753-byte
+single-workspace baseline. The preemptive Screen 6/7 kernels are
+13,498/15,076 bytes; `GBSCHED.RAW` remains 503/512 bytes.
+
+Manual testing then found that `gb_window_drag()` reused the managed-window
+completion callback on a legacy `gb_win_t` and returned a rectangle last
+published by a repainted managed sibling. It also repainted before Paint could
+store the new pane coordinates, leaving a copy at the old position. The legacy
+service now skips the invalid managed callback and defers its union-damage
+repaint until the application has recorded the new geometry. The three-pane
+drag regression waits for compositor completion, compares every application
+position with its window record, and hashes the vacated Canvas edge to prevent
+the freeze, stale-coordinate, and old-position residue failures from recurring.
+
+The follow-up interaction pass bounds repaint work on the 3.58 MHz target.
+The compositor skips window callbacks whose rectangles do not intersect the
+current damage. A focus raise damages only the union of areas that higher
+windows formerly obscured, so switching between disjoint Paint panes performs
+no repaint and overlapping panes redraw only their newly exposed intersection.
+Paint changes only the old/new tool borders, commits live
+pencil and spray strokes without repainting already-drawn Canvas cells, and
+updates selector feedback at quarter-steps plus one exact release repaint.
+Bulk edits still request a composited redraw because they can replace the whole
+tile and may originate from a Toolchest or menu window above Canvas.
+
+```sh
+make gembench-msx
+make gembench-m2-openmsx
+make gembench-m2-paint-openmsx
+```
+
 ## Milestone 9 resource forms
 
 Milestone 9 was validated on 2026-08-29 with the normal embedded/app-linked

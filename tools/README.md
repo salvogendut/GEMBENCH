@@ -22,6 +22,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`build_kernel_msx.sh`** — builds the `GBMSX.COM` video-mode selector,
   `GBMSX6.COM`, `GBMSX7.COM`, the MSX2 app/module payload, and the bootable
   Nextor `QA/MSX/GBMSX.IMG`, plus the two 720K images under `QA/MSX/Floppies/`.
+  Its Paint application and tool artwork are maintained in-tree under
+  `apps/paint/` and `assets/paint/`.
   The dependency fetcher supplies a local openMSXnet
   `UNAPINET.COM`, which is staged before `GBMSX.COM`; `MSX_UNAPI_TSR` overrides
   it, and an explicitly empty value omits it. The standalone staged TSR and
@@ -119,6 +121,15 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   document and 8.3-name replacement, stable window count, cleared dispatch
   guard, caller-bank recovery, and target-entry stack delta without requiring
   the optional openMSXnet extension.
+- **`test_m1_architecture_openmsx.sh`** — exercises the versioned MSX2
+  architecture APIs, including mapper ownership, application records, a
+  transient second window, stale generation rejection, and complete cleanup.
+- **`test_m2_paint_openmsx.sh`** — opens an actual `.PIC` in the in-tree Paint,
+  observes its Toolchest, Preview, and Canvas under one application/code page,
+  drags and continues using all three windows, verifies application geometry and
+  vacated-screen cleanup after each compositor pass, closes the picture windows
+  independently, and proves final window, owner, and mapper-page counts return
+  to baseline.
 - **`gen_desk_accessories.py`** — validates the fixed-capacity build-time Desk
   catalog and generates stable IDs, labels, and padded APP names in
   `gbdesk_catalog.h`; `--check` detects stale generated metadata.

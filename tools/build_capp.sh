@@ -104,6 +104,7 @@ SIZEPROMPT_FLAG="${SIZEPROMPT:-0}"
 APP_PROBE_FLAG="${APP_PROBE:-0}"
 REPAINTTOP_FLAG="${REPAINTTOP:-0}"
 BASELINE_FLAG="${BASELINE:-0}"
+SYS_FLAG="${SYS:-0}"
 GBR_READER_FLAG="${GBR_READER:-0}"
 GBR_FIXED_TREE_FLAG="${GBR_FIXED_TREE:-0}"
 GBR_EMBEDDED_FLAG="${GBR_EMBEDDED:-0}"
@@ -292,6 +293,16 @@ if [ "$BASELINE_FLAG" != "0" ] && [ "$BASELINE_FLAG" != "1" ]; then
     echo "ERROR: BASELINE must be 0 or 1" >&2
     exit 1
 fi
+if [ "$SYS_FLAG" != "0" ] && [ "$SYS_FLAG" != "1" ]; then
+    echo "ERROR: SYS must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$SYS_FLAG" = "1" ]; then
+    case " $ALL_APPDEFS " in
+        *" -DGB_MSX2 "*) ;;
+        *) echo "ERROR: SYS=1 is currently MSX2-only" >&2; exit 1 ;;
+    esac
+fi
 
 deps=("$0" "tools/build_cache.sh" "tools/check_app_layout.py" "$GB/crt0.s" "$GBLIB_SRC" "$GB/gb.h")
 if [ "$WINDOW_KIND_FLAG" = "1" ]; then
@@ -353,6 +364,9 @@ if [ "$REPAINTTOP_FLAG" = "1" ]; then
 fi
 if [ "$BASELINE_FLAG" = "1" ]; then
     deps+=("$GB/gbbaseline.s")
+fi
+if [ "$SYS_FLAG" = "1" ]; then
+    deps+=("$GB/gbsys.s")
 fi
 if [ "$GBR_READER_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbr.h" "$GBR_LIB/gbr_reader.c")
@@ -500,6 +514,7 @@ cache_key=$(printf '%s\n' \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
+    "SYS=$SYS_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
     "APP_CFLAGS=$APP_CFLAGS" \
     "HELPER_CFLAGS=$HELPER_CFLAGS" \
@@ -540,6 +555,11 @@ BASELINE_REL=""
 if [ "$BASELINE_FLAG" = "1" ]; then
     "$SDAS" -o "$work/gbbaseline.rel" "$GB/gbbaseline.s"
     BASELINE_REL="$work/gbbaseline.rel"
+fi
+SYS_REL=""
+if [ "$SYS_FLAG" = "1" ]; then
+    "$SDAS" -o "$work/gbsys.rel" "$GB/gbsys.s"
+    SYS_REL="$work/gbsys.rel"
 fi
 TASK_REL=""
 if [ "$TASK_FLAG" = "1" ]; then
@@ -777,7 +797,7 @@ fi
 "$SDCC" -mz80 --no-std-crt0 --code-loc "$CODE_LOC" --data-loc "$DATA_LOC" \
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
-    $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $GBR_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $TASK_REL $TASK_ROOT_REL \
+    $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $GBR_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $SYS_REL $TASK_REL $TASK_ROOT_REL \
     $WINDOW_KIND_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places

@@ -134,4 +134,8 @@ GB_ONEVENT_ENTRY equ k_noop
                 jp    k_net                  ; GB_NET         #80BD run active paged net module -> BC=GBNET_RES (#238/#259)
                 ifdef PLATFORM_MSX
                 jp    k_shell                ; GB_SHELL       #80C0 bounded GEMBENCH shell service
+                jp    k_sysinfo              ; GB_SYSINFO     #80C3 versioned runtime capabilities (#31)
+                jp    k_owner_current        ; GB_OWNER       #80C6 current generation-tagged owner
+                jp    k_page                 ; GB_PAGE        #80C9 opaque 16 KiB page allocator
+                jp    k_app                  ; GB_APP         #80CC application/window lifecycle
                 endif

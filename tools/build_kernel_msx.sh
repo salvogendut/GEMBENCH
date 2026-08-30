@@ -81,13 +81,13 @@ fi
 
 mkdir -p build/msx
 
-GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
-PAINT_APP_DIR="$GB_PAINT_DIR/apps/paint"
-if [ -f "$PAINT_APP_DIR/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
-    PAINT_ASSET_DIR="$GB_PAINT_DIR/assets/paint"
-else
-    echo "ERROR: GB-PAINT checkout not found at $GB_PAINT_DIR" >&2
-    echo "Set GB_PAINT_DIR=/path/to/GB-PAINT or clone it next to geobench." >&2
+# GEMBENCH owns its MSX2 Paint variant. The standalone GB-PAINT repository
+# remains the GEOBENCH source and is intentionally not modified by GEMBENCH's
+# application/window ownership work.
+PAINT_APP_DIR="apps/paint"
+PAINT_ASSET_DIR="assets/paint"
+if [ ! -f "$PAINT_APP_DIR/main.c" ] || [ ! -d "$PAINT_ASSET_DIR" ]; then
+    echo "ERROR: in-tree GEMBENCH Paint sources are incomplete" >&2
     exit 1
 fi
 GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
@@ -146,7 +146,7 @@ else
 fi
 APP_ICON=apps/iconed/icon.asm GBLIB_SRC="$ICONED_GBLIB" APPDEFS="-DGB_MSX2 -DGBUI_APPICON_PICKER -DGBDOC_BOUNDED_IO" APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7200 DOC=1 BUTTON=1 REPAINTTOP=1 tools/build_capp.sh apps/iconed build/msx/ICONED.RAW
 APP_ICON=apps/viewer/icon.asm GBLIB_SRC="$VIEWER_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x6A40 DOCRO=1 SCROLL16=1 REPAINTTOP=1 tools/build_capp.sh apps/viewer build/msx/VIEWER.RAW
-APP_ICON="$PAINT_APP_DIR/icon.asm" APP_ICON16="$PAINT_APP_DIR/icon16.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7DA0 PICKER=1 SIZEPROMPT=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
+APP_ICON="$PAINT_APP_DIR/icon.asm" APP_ICON16="$PAINT_APP_DIR/icon16.asm" GBLIB_SRC="$PAINT_GBLIB" APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" HELPER_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7DB0 PICKER=1 SIZEPROMPT=1 SYS=1 GBWIN=0 tools/build_capp.sh "$PAINT_APP_DIR" build/msx/PAINT.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 DOC=1 WIDGETS=1 STEPPER=1 FORM=1 TIMESET=1 GB_EVENTS=1 GB_SHELL_ACCESSORY_TARGET=1 tools/build_capp.sh apps/clock build/msx/CLOCK.RAW
 APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/build_capp.sh apps/shell build/msx/SHELL.RAW
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW

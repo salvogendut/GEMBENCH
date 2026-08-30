@@ -4,9 +4,10 @@ The **Amstrad CPC** build is below; the **MSX2** build is in
 [Building for MSX2](#building-for-msx2), and PCW-specific media details are in
 [The PCW target](PCW.md#what-ships-where). All three share the RASM kernel +
 SDCC apps and are normally built inside the project distrobox (RASM, SDCC,
-`mtools`/`dosfstools` on `PATH`). Full distribution builds also require sibling
-`GB-PAINT` and `GB-BASIC` checkouts; override their locations with
-`GB_PAINT_DIR=` and `GB_BASIC_DIR=`.
+`mtools`/`dosfstools` on `PATH`). The MSX2 Paint source is bundled in GEMBENCH;
+full builds still require the sibling `GB-BASIC` checkout. CPC and PCW retain
+their standalone `GB-PAINT` dependency. Override those external locations with
+`GB_PAINT_DIR=` and `GB_BASIC_DIR=` where applicable.
 
 ## Amstrad CPC
 

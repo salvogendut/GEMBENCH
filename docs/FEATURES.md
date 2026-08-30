@@ -54,13 +54,14 @@ backdrop, dragging icons, opening apps and menus:
   Screen 7. Saving the configured active `.IST` reloads it immediately and
   repaints the desktop; inactive sets take effect when selected in Settings.
   The Python editor also edits the canonical ASM sources directly.
-- **Paint** — the separately maintained GB-PAINT application uses an Area
-  Selector, a magnified 20x20 work canvas, and a floating toolchest. It supports
+- **Paint** — the in-tree GEMBENCH MSX2 application uses an Area Selector, a
+  magnified 20x20 work canvas, and a floating toolchest. It supports
   pencil and shape tools, fill, spray, line, selection/clipboard operations and
   undo; edits are reflected in the selected picture area. New chooses explicit
   dimensions, while Load/Save use bounded GBPC v2 `.PIC` files. MSX Paint
   requires 16-color mode and is the only build that opens native 16-color
-  pictures. Tool icons live in `PAINT.IST`.
+  pictures. Tool icons live in `PAINT.IST`. CPC and PCW continue using the
+  separately maintained GB-PAINT application.
 - **Viewer** — open `.PIC` images in a window sized to the picture. File > Load
   selects another picture and View > Fullscreen maximises it; windows remain
   draggable and resizeable, with horizontal and vertical scrolling. Viewer uses

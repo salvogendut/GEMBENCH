@@ -1,0 +1,3002 @@
+/*
+ * PAINT.APP - a banked, three-window GEMBENCH picture editor.
+ *
+ * On MSX2, Paint is the first application to exercise the Milestone-2 process
+ * model: three compositor windows share one application record and code page.
+ * The portable source retains the old single-workspace fallback for targets
+ * that do not yet implement GB_APP and generation-tagged window handles.
+ *
+ *   Toolchest    always visible and always painted on top
+ *   Area selector 1:1 scrollable picture preview with a fixed 20x20 navigator
+ *   Canvas       the selected 20x20 pixels enlarged to a 160x160 work area
+ *
+ * The document itself lives in one borrowed 16 KiB application-pool page.
+ * Only the selected 20x20 pixels and undo snapshot are retained in
+ * this application page. Mode-1 pictures are portable across CPC/MSX/PCW;
+ * mode-7 pictures and sixteen-colour editing are accepted only by MSX Paint
+ * running under Screen 7.
+ */
+#include "gb.h"
+
+#define TITLE_H 14
+#define PIC_HDR 14
+#define DOC_MAX 0x4000U
+
+#define APP_NPAGES    (*(volatile unsigned char *)0x1437)
+#define APP_PAGES     ((volatile unsigned char *)0x1438)
+#define APP_BUSY      ((volatile unsigned char *)0x1440)
+#define PIC_PAGE_K    (*(volatile unsigned char *)0x130B)
+#define PIC_PAGE2_K   (*(volatile unsigned char *)0x1348)
+#define PIC_SIZE_K    (*(volatile unsigned int  *)0x1349)
+#define PIC_WB_K      (*(volatile unsigned char *)0x130C)
+#define PIC_H_K       (*(volatile unsigned int  *)0x130D)
+#define PIC_OFF_K     (*(volatile unsigned char *)0x130F)
+#define FS_LOAD_OFS   ((volatile unsigned char *)0x144C)
+#define FS_XFLAGS_K   (*(volatile unsigned char *)0x144F)
+#define FS_SAVE_LEN_K (*(volatile unsigned int  *)0x14FD)
+#define UI_MODAL_K    (*(volatile unsigned char *)0x1705)
+
+#ifdef GB_MSX2
+#define PIC_PAGE3_K   (*(volatile unsigned char *)0x1291)
+#define PIC_PAGE4_K   (*(volatile unsigned char *)0x1292)
+#define PIC_MODE_K    (*(volatile unsigned char *)0x1293)
+#define PIC_STRIDE_K  (*(volatile unsigned int  *)0x1294)
+#define MSX_SCRMOD    (*(volatile unsigned char *)0xFCAF)
+#endif
+
+#define TILE_SIDE 20
+#define TILE_PIXELS (TILE_SIDE * TILE_SIDE)
+#define TILE_PACKED (TILE_PIXELS / 2)
+#define WORK_SCALE 8
+#define WORK_PIXELS (TILE_SIDE * WORK_SCALE)
+#define WORK_WB (WORK_PIXELS / 4)
+#define PAINT_CLIP_MAGIC 0x50
+#define PAINT_CLIP_MAX (TILE_PIXELS + 3)
+
+/* PAINT.IST order. Action tools are buttons rather than persistent modes. */
+#define TOOL_PENCIL  0
+#define TOOL_LINE    1
+#define TOOL_RECT    2
+#define TOOL_RECTF   3
+#define TOOL_CIRCLE  4
+#define TOOL_CIRCLEF 5
+#define TOOL_BUCKET  6
+#define TOOL_SPRAY   7
+#define TOOL_SELECT  8
+#define TOOL_CUT     9
+#define TOOL_COPY   10
+#define TOOL_PASTE  11
+#define TOOL_UNDO   12
+#define N_TOOLS     13
+
+#define TOOL_WB 6
+#define TOOL_H  21
+#define TOOL_STEP_X 7                 /* 24 px icon + one 4 px byte-column gutter */
+#define TOOL_STEP_Y 23                /* 21 px icon + two scan-line gutter */
+#define TOOL_ROWS 4
+
+#define TC_W 29
+#define TC_H 126
+#define PV_W 33
+#define PV_H 92
+#define WK_W (WORK_WB + 2)
+#define WK_H (TITLE_H + WORK_PIXELS + 1)
+#define SB_W 3
+#define HSB_H 6
+
+#define PANE_PREVIEW 0
+#define PANE_WORK    1
+#define PANE_TOOL    2
+
+#define IST_MAX 1800
+#define TOOL_BITS_PER ((TOOL_WB * 4 * TOOL_H) / 8)
+#define TOOL_BITS_LEN (N_TOOLS * TOOL_BITS_PER)
+/* Keep packed tool artwork above the bounded file-I/O staging area. The CPC
+ * picture helper uses only the lower 2500 bytes of gb_copybuf; every Paint file
+ * transfer is capped below this cache on all targets. A clobbered marker simply
+ * causes PAINT.IST to be reloaded before the next Toolchest repaint. */
+#define TOOL_CACHE_MARK 0xA7
+#define TOOL_CACHE_OFFSET (GB_COPYMAX - TOOL_BITS_LEN - 2)
+#define TOOL_CACHE ((unsigned char *)gb_copybuf + TOOL_CACHE_OFFSET)
+#define TOOL_BITS (TOOL_CACHE + 1)
+#define PAINT_IO_MAX 512
+#define NATIVE_STAGE ((unsigned char *)gb_copybuf + 1024)
+
+#define IO_IDLE 0
+#define IO_LOAD 1
+#define IO_NEW  2
+#define IO_SAVE 3
+
+#define AFTER_NONE      0
+#define AFTER_NEW       1
+#define AFTER_LOAD      2
+#define AFTER_CLOSE_DOC 3
+#define AFTER_CLOSE_APP 4
+
+#define CONFIRM_CANCEL 0
+#define CONFIRM_NOW    1
+#define CONFIRM_WAIT   2
+
+/* The executable icon preamble is no longer needed after entry. Reuse nine of
+ * its payload bytes for transient job state instead of consuming scarce app
+ * data space on dual-icon MSX builds. */
+#define io_job         (*(volatile unsigned char *)0x4010)
+#define io_after       (*(volatile unsigned char *)0x4011)
+#define io_first       (*(volatile unsigned char *)0x4012)
+#define io_off         (*(volatile unsigned int  *)0x4013)
+#define pending_width  (*(volatile unsigned int  *)0x4015)
+#define pending_height (*(volatile unsigned int  *)0x4017)
+
+static unsigned char tc_x, tc_y;
+static unsigned char pv_x, pv_y;
+static unsigned char wk_x, wk_y;
+static unsigned char front_pane;
+static unsigned char work_visible;
+#ifdef GB_MSX2
+static gb_window_t tool_window_handle;
+static gb_window_t preview_window_handle;
+static gb_window_t work_window_handle;
+#endif
+
+static unsigned char doc_page;
+static unsigned int doc_len;
+static unsigned int pic_width;
+static unsigned int pic_height;
+static unsigned int pic_stride;
+static unsigned char pic_wb;
+static unsigned char pic_off;
+static unsigned char pic_mode;
+static unsigned char loaded;
+static unsigned char named;
+static unsigned char dirty;
+static char cur_name[11];
+static char launch_name[11];
+
+static unsigned int scroll_x;
+static unsigned int scroll_y;
+static unsigned int tile_x;
+static unsigned int tile_y;
+static unsigned char tile[TILE_PIXELS];
+/* Undo retains all sixteen MSX pens while using one nibble per source pixel.
+ * Its 200 bytes reuse the consumed executable-icon payload after app entry;
+ * 0x4030 follows the I/O/drag scratch and ends safely below code at 0x4110. */
+#define undo_tile ((unsigned char *)0x4030)
+static unsigned char undo_valid;
+static unsigned char work_sel_on;
+static unsigned char work_sel_x0, work_sel_y0, work_sel_x1, work_sel_y1;
+
+static unsigned char current_tool;
+static unsigned char current_pen;
+static unsigned char stroke_active;
+static unsigned char stroke_x, stroke_y;
+static unsigned char random_state = 0x5D;
+
+static unsigned char ist_ok;
+static unsigned char pv_view_x, pv_view_y, pv_view_w, pv_view_h;
+static unsigned char pv_image_x, pv_image_y;
+static unsigned char pv_hbar_x, pv_hbar_y, pv_hbar_w;
+static unsigned char want_menu;
+
+static void repaint_all(void);
+static void draw_toolchest(void);
+static void draw_preview(void);
+static void draw_work(void);
+static void close_app(void);
+static unsigned char save_document(unsigned char after);
+static unsigned char commit_tile(void);
+static unsigned char unpack_mode1(unsigned char value, unsigned char pixel);
+static void do_load(void);
+#ifdef GB_PCW
+static void refresh_preview_selection(void);
+#endif
+#ifdef GB_MSX2
+static unsigned char open_preview_window(void);
+static unsigned char open_work_window(void);
+static void close_picture_windows(void);
+#endif
+
+/* ---- exact-pixel line primitive ------------------------------------------ */
+
+static volatile unsigned int fx0, fy0, fx1, fy1;
+static volatile unsigned char fpen;
+
+#if defined(GB_MSX2) || defined(GB_PCW)
+#ifdef GB_PCW
+#define GLINE_BASE 0x0F10
+#else
+#define GLINE_BASE 0xC030
+#endif
+#define GLINE_X0  (*(volatile unsigned int  *)(GLINE_BASE + 0))
+#define GLINE_Y0  (*(volatile unsigned int  *)(GLINE_BASE + 2))
+#define GLINE_X1  (*(volatile unsigned int  *)(GLINE_BASE + 4))
+#define GLINE_Y1  (*(volatile unsigned int  *)(GLINE_BASE + 6))
+#define GLINE_PEN (*(volatile unsigned char *)(GLINE_BASE + 8))
+static void fw_line(void) __naked
+{
+__asm
+    call 0x8009
+    ret
+__endasm;
+}
+
+static void line(int x0, int y0, int x1, int y1, unsigned char pen)
+{
+    GLINE_X0 = (unsigned int)x0;
+    GLINE_Y0 = (unsigned int)y0;
+    GLINE_X1 = (unsigned int)x1;
+    GLINE_Y1 = (unsigned int)y1;
+    GLINE_PEN = pen;
+    fw_line();
+}
+
+#ifdef GB_PCW
+static void fw_frame(void) __naked
+{
+__asm
+    ld   a, (_fpen)
+    ld   (0x0f18), a
+    ld   hl, (_fx0)
+    ld   (0x0f10), hl
+    ld   hl, (_fy0)
+    ld   (0x0f12), hl
+    ld   (0x0f16), hl
+    ld   hl, (_fx1)
+    ld   (0x0f14), hl
+    call 0x8009
+    ld   hl, (_fy1)
+    ld   (0x0f12), hl
+    ld   (0x0f16), hl
+    call 0x8009
+    ld   hl, (_fx0)
+    ld   (0x0f10), hl
+    ld   (0x0f14), hl
+    ld   hl, (_fy0)
+    ld   (0x0f12), hl
+    call 0x8009
+    ld   hl, (_fx1)
+    ld   (0x0f10), hl
+    ld   (0x0f14), hl
+    call 0x8009
+    ret
+__endasm;
+}
+#else
+static void fw_frame(void) __naked
+{
+__asm
+    ld   a, (_fpen)
+    ld   (0xc038), a
+    ld   hl, (_fx0)
+    ld   (0xc030), hl
+    ld   hl, (_fy0)
+    ld   (0xc032), hl
+    ld   (0xc036), hl
+    ld   hl, (_fx1)
+    ld   (0xc034), hl
+    call 0x8009
+    ld   hl, (_fy1)
+    ld   (0xc032), hl
+    ld   (0xc036), hl
+    call 0x8009
+    ld   hl, (_fx0)
+    ld   (0xc030), hl
+    ld   (0xc034), hl
+    ld   hl, (_fy0)
+    ld   (0xc032), hl
+    call 0x8009
+    ld   hl, (_fx1)
+    ld   (0xc030), hl
+    ld   (0xc034), hl
+    call 0x8009
+    ret
+__endasm;
+}
+#endif
+#else
+static void fw_line(void) __naked
+{
+__asm
+    ld   a, (_fpen)
+    call 0xBBDE
+    ld   de, (_fx0)
+    ld   hl, (_fy0)
+    call 0xBBC0
+    ld   de, (_fx1)
+    ld   hl, (_fy1)
+    call 0xBBF6
+    ret
+__endasm;
+}
+
+static void line(int x0, int y0, int x1, int y1, unsigned char pen)
+{
+    fx0 = (unsigned int)(x0 * 2);
+    fy0 = (unsigned int)((199 - y0) * 2);
+    fx1 = (unsigned int)(x1 * 2);
+    fy1 = (unsigned int)((199 - y1) * 2);
+    fpen = pen;
+    fw_line();
+}
+
+static void fw_frame(void) __naked
+{
+__asm
+    ld   hl, (_fx0)
+    add  hl, hl
+    ld   (_fx0), hl
+    ld   hl, (_fx1)
+    add  hl, hl
+    ld   (_fx1), hl
+    ld   hl, #199
+    ld   de, (_fy0)
+    xor  a
+    sbc  hl, de
+    add  hl, hl
+    ld   (_fy0), hl
+    ld   hl, #199
+    ld   de, (_fy1)
+    xor  a
+    sbc  hl, de
+    add  hl, hl
+    ld   (_fy1), hl
+
+    ld   a, (_fpen)
+    call 0xBBDE
+    ld   de, (_fx0)
+    ld   hl, (_fy0)
+    call 0xBBC0
+    ld   de, (_fx1)
+    call 0xBBF6
+    ld   de, (_fx0)
+    ld   hl, (_fy1)
+    call 0xBBC0
+    ld   de, (_fx1)
+    call 0xBBF6
+    ld   de, (_fx0)
+    ld   hl, (_fy0)
+    call 0xBBC0
+    ld   de, (_fx0)
+    ld   hl, (_fy1)
+    call 0xBBF6
+    ld   de, (_fx1)
+    ld   hl, (_fy0)
+    call 0xBBC0
+    ld   de, (_fx1)
+    ld   hl, (_fy1)
+    call 0xBBF6
+    ret
+__endasm;
+}
+#endif
+
+/* ---- small helpers ------------------------------------------------------- */
+
+static void copy11(char *dst, const char *src)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++) dst[i] = src[i];
+}
+
+static unsigned char launch_is_pic(void)
+{
+    return (unsigned char)(launch_name[8] == 'P' &&
+                           launch_name[9] == 'I' &&
+                           launch_name[10] == 'C');
+}
+
+static void to_83(const char *src, char *dst)
+{
+    unsigned char i = 0, j;
+    for (j = 0; j < 11; j++) dst[j] = ' ';
+    for (j = 0; j < 8 && src[i] && src[i] != '.'; j++)
+        dst[j] = src[i++];
+    while (src[i] && src[i] != '.') i++;
+    if (src[i] == '.') {
+        i++;
+        for (j = 0; j < 3 && src[i]; j++) dst[8 + j] = src[i++];
+    }
+    if (dst[8] == ' ') {
+        dst[8] = 'P';
+        dst[9] = 'I';
+        dst[10] = 'C';
+    }
+}
+
+static unsigned char inside(unsigned char x, unsigned char y,
+                            unsigned char w, unsigned char h,
+                            unsigned char mx, unsigned char my)
+{
+    return (unsigned char)(mx >= x && mx < (unsigned char)(x + w) &&
+                           my >= y && my < (unsigned char)(y + h));
+}
+
+static unsigned char close_hit(unsigned char x, unsigned char y,
+                               unsigned char mx, unsigned char my)
+{
+    return (unsigned char)(mx >= (unsigned char)(x + 1) &&
+                           mx <  (unsigned char)(x + 4) &&
+                           my >= (unsigned char)(y + 2) &&
+                           my <  (unsigned char)(y + 12));
+}
+
+static unsigned char title_hit(unsigned char x, unsigned char y,
+                               unsigned char w,
+                               unsigned char mx, unsigned char my)
+{
+    return (unsigned char)(mx >= x && mx < (unsigned char)(x + w) &&
+                           my >= y && my < (unsigned char)(y + TITLE_H));
+}
+
+static void clear_name(void)
+{
+    unsigned char i;
+    for (i = 0; i < 11; i++) cur_name[i] = ' ';
+}
+
+static const char *tool_title(void)
+{
+    return dirty ? "Toolchest *" : "Toolchest";
+}
+
+/* ---- portable Mode-1 resource display ----------------------------------- */
+
+#ifdef GB_PCW
+static unsigned char pcw_byte(unsigned char value)
+{
+    unsigned char i, pen, native = 0;
+    for (i = 0; i < 4; i++) {
+        pen = (unsigned char)(((value >> (7 - i)) & 1) |
+                              (((value >> (3 - i)) & 1) << 1));
+        native |= (unsigned char)(pen << (6 - 2 * i));
+    }
+    return (unsigned char)(((native & 0x55) << 1) |
+                           (((native ^ 0xFF) & 0xAA) >> 1));
+}
+#endif
+
+static void blit_mode1(unsigned char x, unsigned char y,
+                       unsigned char w, unsigned char h,
+                       const unsigned char *source,
+                       unsigned char stride)
+{
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    unsigned char row;
+    if (w == stride) {
+        gb_restorerect(x, y, w, h, source);
+        return;
+    }
+    for (row = 0; row < h; row++) {
+        gb_restorerect(x, (unsigned char)(y + row), w, 1, source);
+        source += stride;
+    }
+#else
+    unsigned char row;
+#ifdef GB_PCW
+    unsigned char col;
+#endif
+    for (row = 0; row < h; row++) {
+#ifdef GB_MSX2
+        gb_pic_edit_buf = (unsigned int)source;
+        gb_pic_edit_off = (unsigned int)NATIVE_STAGE;
+        FS_SAVE_LEN_K = w;
+        if (!gb_pic_edit(GB_PICEDIT_NATIVE)) return;
+#else
+        for (col = 0; col < w; col++) NATIVE_STAGE[col] = pcw_byte(source[col]);
+#endif
+        gb_restorerect(x, (unsigned char)(y + row), w, 1, NATIVE_STAGE);
+        source += stride;
+    }
+#endif
+}
+
+#ifdef GB_MSX2
+static void native_blit(unsigned char x, unsigned char y,
+                        unsigned char w, unsigned char h,
+                        unsigned char *source)
+{
+    gb_pic_edit_buf = (unsigned int)source;
+    gb_pic_edit_off = (unsigned int)x | ((unsigned int)y << 8);
+    FS_SAVE_LEN_K = (unsigned int)w | ((unsigned int)h << 8);
+    (void)gb_pic_edit(GB_PICEDIT_NATIVE16);
+}
+
+static void native_solid(unsigned char x, unsigned char y,
+                         unsigned char w, unsigned char h,
+                         unsigned char pen)
+{
+    unsigned int i, length = (unsigned int)w * 2U * h;
+    unsigned char value = (unsigned char)((pen << 4) | pen);
+    for (i = 0; i < length; i++) ((unsigned char *)gb_copybuf)[i] = value;
+    native_blit(x, y, w, h, (unsigned char *)gb_copybuf);
+}
+#endif
+
+/* ---- PAINT.IST ----------------------------------------------------------- */
+
+static void load_tools(void)
+{
+    unsigned int got, off;
+    unsigned char icon, x, y, value, nibble;
+    unsigned char *source = (unsigned char *)gb_copybuf;
+    unsigned char *dest = TOOL_BITS;
+    TOOL_CACHE[0] = 0;
+    TOOL_CACHE[TOOL_BITS_LEN + 1] = 0;
+    gb_set_name("PAINT   IST");
+    got = gb_fs_load((char *)source, IST_MAX);
+    ist_ok = (unsigned char)(got >= 16 && source[0] == 'G' &&
+        source[1] == 'B' && source[2] == 'I' && source[3] == 'S' &&
+        source[4] == 2 && source[5] >= N_TOOLS);
+    if (ist_ok) {
+        for (icon = 0; icon < N_TOOLS; icon++) {
+            unsigned int entry = 16U + (unsigned int)icon * 4U;
+            off = (unsigned int)source[entry] |
+                  ((unsigned int)source[entry + 1] << 8);
+            if (source[entry + 2] != TOOL_WB || source[entry + 3] != TOOL_H ||
+                off + TOOL_WB * TOOL_H > got) {
+                ist_ok = 0;
+                break;
+            }
+            for (y = 0; y < TOOL_H; y++)
+                for (x = 0; x < TOOL_WB; x += 2) {
+                    value = source[off + (unsigned int)y * TOOL_WB + x];
+                    nibble = (unsigned char)((value >> 4) & ~value & 15);
+                    value = source[off + (unsigned int)y * TOOL_WB + x + 1];
+                    *dest++ = (unsigned char)((nibble << 4) |
+                        ((value >> 4) & ~value & 15));
+                }
+        }
+    }
+    if (ist_ok) {
+        TOOL_CACHE[0] = TOOL_CACHE_MARK;
+        TOOL_CACHE[TOOL_BITS_LEN + 1] = (unsigned char)~TOOL_CACHE_MARK;
+    }
+    if (named) gb_set_name(cur_name);
+}
+
+static void ensure_tools(void)
+{
+    if (TOOL_CACHE[0] != TOOL_CACHE_MARK ||
+        TOOL_CACHE[TOOL_BITS_LEN + 1] != (unsigned char)~TOOL_CACHE_MARK)
+        load_tools();
+}
+
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+static void load_picedit_helper(void)
+{
+    unsigned int got, i;
+    unsigned char *source;
+    unsigned char *dest = (unsigned char *)0x1600;
+    gb_set_name("DEFAULT SPR");
+    got = gb_fs_load(gb_copybuf, 512);
+    if (named) gb_set_name(cur_name);
+    if (got <= 256) return;
+    got -= 256;
+    if (got > 256) got = 256;
+    source = (unsigned char *)gb_copybuf + 256;
+    for (i = 0; i < got; i++) dest[i] = source[i];
+}
+#endif
+
+/* ---- borrowed document page --------------------------------------------- */
+
+static void select_document(void)
+{
+    PIC_PAGE_K = doc_page;
+    PIC_PAGE2_K = 0;
+    PIC_SIZE_K = doc_len;
+    PIC_WB_K = pic_wb;
+    PIC_H_K = pic_height;
+    PIC_OFF_K = pic_off;
+#ifdef GB_MSX2
+    PIC_PAGE3_K = 0;
+    PIC_PAGE4_K = 0;
+    PIC_MODE_K = pic_mode;
+    PIC_STRIDE_K = pic_stride;
+#endif
+}
+
+static unsigned char document_xfer(unsigned int off, void *buffer,
+                                   unsigned int length, unsigned char op)
+{
+    if (!doc_page || !length || off >= DOC_MAX ||
+        length > (unsigned int)(DOC_MAX - off)) return 0;
+    select_document();
+    gb_pic_edit_buf = (unsigned int)buffer;
+    gb_pic_edit_off = off;
+    FS_SAVE_LEN_K = length;
+#if defined(GB_MSX2) || defined(GB_PCW)
+    return gb_pic_edit(op);
+#else
+    if (gb_pic_edit(op)) return 1;
+    load_picedit_helper();
+    select_document();
+    gb_pic_edit_buf = (unsigned int)buffer;
+    gb_pic_edit_off = off;
+    FS_SAVE_LEN_K = length;
+    return gb_pic_edit(op);
+#endif
+}
+
+static unsigned char document_read(unsigned int off, void *buffer,
+                                   unsigned int length)
+{
+    return document_xfer(off, buffer, length, GB_PICEDIT_CHUNK);
+}
+
+static unsigned char document_write(unsigned int off, const void *buffer,
+                                    unsigned int length)
+{
+    return document_xfer(off, (void *)buffer, length, GB_PICEDIT_WRITE);
+}
+
+static unsigned char allocate_document_page(void)
+{
+    unsigned char i;
+    for (i = 0; i < APP_NPAGES; i++) {
+        if (!APP_BUSY[i]) {
+            APP_BUSY[i] = 1;
+            doc_page = APP_PAGES[i];
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void release_document_page(void)
+{
+    if (!doc_page) return;
+    select_document();
+    gb_pic_close();
+    doc_page = 0;
+}
+
+static void reset_editor_state(void)
+{
+    loaded = 0;
+    named = 0;
+    dirty = 0;
+    work_visible = 0;
+    undo_valid = 0;
+    work_sel_on = 0;
+    stroke_active = 0;
+    scroll_x = scroll_y = 0;
+    tile_x = tile_y = 0;
+    clear_name();
+}
+
+static void close_document(void)
+{
+    release_document_page();
+    reset_editor_state();
+#ifdef GB_MSX2
+    close_picture_windows();
+#endif
+}
+
+static unsigned char unpack_mode1(unsigned char value, unsigned char pixel)
+{
+    return (unsigned char)(((value >> (7 - pixel)) & 1) |
+                           (((value >> (3 - pixel)) & 1) << 1));
+}
+
+static unsigned char replace_mode1(unsigned char value, unsigned char pixel,
+                                   unsigned char pen)
+{
+    value &= (unsigned char)~((1 << (7 - pixel)) | (1 << (3 - pixel)));
+    if (pen & 1) value |= (unsigned char)(1 << (7 - pixel));
+    if (pen & 2) value |= (unsigned char)(1 << (3 - pixel));
+    return value;
+}
+
+static unsigned char transfer_tile(unsigned char write)
+{
+    unsigned char row, col, first, last, count, span, position;
+    unsigned int remain, i;
+    unsigned char *buf = (unsigned char *)gb_copybuf;
+    unsigned char *pixel;
+
+    if (!write)
+        for (i = 0; i < TILE_PIXELS; i++) tile[i] = 1;
+    if (!loaded) return 0;
+    if (tile_x >= pic_width || tile_y >= pic_height) return 0;
+    remain = pic_width - tile_x;
+    count = (unsigned char)(remain > TILE_SIDE ? TILE_SIDE : remain);
+    if (pic_mode == 7) {
+        first = (unsigned char)(tile_x >> 1);
+        last = (unsigned char)((tile_x + count - 1) >> 1);
+        position = (unsigned char)tile_x & 1;
+    } else {
+        first = (unsigned char)(tile_x >> 2);
+        last = (unsigned char)((tile_x + count - 1) >> 2);
+        position = (unsigned char)tile_x & 3;
+    }
+    span = (unsigned char)(last - first + 1);
+    /* SDCC's high-allocation pass folds the three-term row offset through a
+       stack address on Z80. Keep the live offset in fixed scratch words. */
+    fx1 = tile_y;
+    fx0 = fx1 * pic_stride;
+    fx0 += pic_off;
+    fx0 += first;
+    for (row = 0; row < TILE_SIDE && fx1 < pic_height; row++) {
+        if (!document_read(fx0, buf, span))
+            return 0;
+        pixel = &tile[(unsigned int)row * TILE_SIDE];
+        for (col = 0; col < count; col++) {
+            unsigned char packed = (unsigned char)(position + col);
+            if (pic_mode == 7) {
+                unsigned char *value = &buf[packed >> 1];
+                if (write) {
+                    if (packed & 1)
+                        *value = (unsigned char)((*value & 0xF0) | *pixel);
+                    else
+                        *value = (unsigned char)((*value & 0x0F) |
+                                                 (*pixel << 4));
+                } else {
+                    *pixel = (unsigned char)((packed & 1) ?
+                                             (*value & 15) : (*value >> 4));
+                }
+            } else {
+                unsigned char index = packed >> 2;
+                if (write)
+                    buf[index] = replace_mode1(buf[index],
+                        (unsigned char)(packed & 3), *pixel);
+                else
+                    *pixel = unpack_mode1(buf[index],
+                                         (unsigned char)(packed & 3));
+            }
+            pixel++;
+        }
+        if (write && !document_write(fx0, buf, span))
+            return 0;
+        fx1++;
+        fx0 += pic_stride;
+    }
+    if (write) dirty = 1;
+    if (!write) {
+        undo_valid = 0;
+        work_sel_on = 0;
+    }
+    return 1;
+}
+
+static unsigned char load_tile(void)
+{
+    return transfer_tile(0);
+}
+
+static unsigned char commit_tile(void)
+{
+    return transfer_tile(1);
+}
+
+/* ---- drawing ------------------------------------------------------------- */
+
+static unsigned char tool_x(unsigned char index)
+{
+    return (unsigned char)(tc_x + 1 + (index & 3) * TOOL_STEP_X);
+}
+
+static unsigned char tool_y(unsigned char index)
+{
+    return (unsigned char)(tc_y + TITLE_H +
+                           (index >> 2) * TOOL_STEP_Y);
+}
+
+static void draw_tool_icon(unsigned char index)
+{
+    unsigned char x, y, bits, value;
+    unsigned char *source = &TOOL_BITS[(unsigned int)index * TOOL_BITS_PER];
+    unsigned char *out = (unsigned char *)gb_copybuf;
+    for (y = 0; y < TOOL_H; y++)
+        for (x = 0; x < TOOL_WB; x += 2) {
+            bits = *source++;
+            value = bits >> 4;
+            *out++ = (unsigned char)((value << 4) | (~value & 15));
+            value = bits & 15;
+            *out++ = (unsigned char)((value << 4) | (~value & 15));
+        }
+    blit_mode1(tool_x(index), tool_y(index), TOOL_WB, TOOL_H,
+               (unsigned char *)gb_copybuf, TOOL_WB);
+}
+
+static void draw_swatch(unsigned char index, unsigned char x,
+                        unsigned char y, unsigned char w,
+                        unsigned char h)
+{
+#ifdef GB_MSX2
+    native_solid(x, y, w, h, index);
+#else
+    gb_fill(x, y, w, h, index);
+#endif
+    gb_frame(x, y, w, h, 2);
+    if (index == current_pen)
+        gb_frame(x, (unsigned char)(y - 1), w,
+                 (unsigned char)(h + 2), 3);
+}
+
+static void draw_toolchest(void)
+{
+    unsigned char i;
+    unsigned char py = (unsigned char)(tc_y + TITLE_H +
+                                       TOOL_ROWS * TOOL_STEP_Y + 1);
+    ensure_tools();
+    gb_window(tc_x, tc_y, TC_W, TC_H, tool_title());
+    if (ist_ok) for (i = 0; i < N_TOOLS; i++) draw_tool_icon(i);
+    for (i = 0; i < N_TOOLS; i++)
+        gb_frame(tool_x(i), tool_y(i), TOOL_WB, TOOL_H,
+                 (i == current_tool) ? 3 : 2);
+#ifdef GB_MSX2
+    for (i = 0; i < 16; i++)
+        draw_swatch(i,
+            (unsigned char)(tc_x + 1 + (i & 7) * 3),
+            (unsigned char)(py + (i >> 3) * 9), 3, 8);
+#else
+    for (i = 0; i < 4; i++)
+        draw_swatch(i, (unsigned char)(tc_x + 1 + i * 6), py, 6, 9);
+#endif
+}
+
+/* Compact 16-bit scroll tracks. A fixed five-pixel thumb keeps the mapper small
+ * while still making the full document range reachable on very tall pictures. */
+static unsigned char scroll_scale(unsigned int value, unsigned int limit,
+                                  unsigned char travel)
+{
+    if (!limit || value >= limit) return travel;
+    while (limit > 255U) {
+        value >>= 1;
+        limit = (unsigned int)((limit + 1U) >> 1);
+    }
+    return (unsigned char)((value * travel) / limit);
+}
+
+static unsigned int scroll_value(unsigned char origin, unsigned char track,
+                                 unsigned int total, unsigned int page,
+                                 unsigned char pointer)
+{
+    unsigned char rel, travel;
+    unsigned int limit, q, r;
+    if (page >= total || track <= 5) return 0;
+    travel = (unsigned char)(track - 5);
+    if (pointer <= (unsigned char)(origin + 2)) return 0;
+    rel = (unsigned char)(pointer - origin - 2);
+    limit = total - page;
+    if (rel >= travel) return limit;
+    q = limit / travel;
+    r = limit % travel;
+    return (unsigned int)((unsigned int)rel * q +
+                          ((unsigned int)rel * r) / travel);
+}
+
+static void draw_vscroll(unsigned char x, unsigned char y,
+                         unsigned char w, unsigned char h,
+                         unsigned int pos, unsigned int total,
+                         unsigned int page)
+{
+    unsigned char start = 0, length = h;
+    if (page < total && h > 5) {
+        length = 5;
+        start = scroll_scale(pos, total - page, (unsigned char)(h - length));
+    }
+    gb_fill(x, y, w, h, 1);
+    if (w > 2)
+        gb_fill((unsigned char)(x + 1), (unsigned char)(y + start),
+                (unsigned char)(w - 2), length, 3);
+}
+
+static void draw_hscroll(unsigned char x, unsigned char y,
+                         unsigned char w, unsigned char h,
+                         unsigned int pos, unsigned int total,
+                         unsigned int page)
+{
+    unsigned char start = 0, length = w;
+    if (page < total && w > 5) {
+        length = 5;
+        start = scroll_scale(pos, total - page, (unsigned char)(w - length));
+    }
+    gb_fill(x, y, w, h, 1);
+    if (h > 2)
+        gb_fill((unsigned char)(x + start), (unsigned char)(y + 1),
+                length, (unsigned char)(h - 2), 3);
+}
+
+static void layout_preview(void)
+{
+    unsigned char body_w = (unsigned char)(PV_W - 2 - SB_W);
+    unsigned char body_h = (unsigned char)(PV_H - TITLE_H - 1 - HSB_H);
+    pv_view_x = (unsigned char)(pv_x + 1 + SB_W);
+    pv_view_y = (unsigned char)(pv_y + TITLE_H);
+    pv_view_w = body_w;
+    pv_view_h = body_h;
+    pv_hbar_x = pv_view_x;
+    pv_hbar_y = (unsigned char)(pv_view_y + body_h);
+    pv_hbar_w = body_w;
+    if (loaded) {
+        unsigned int maxx = (pic_wb > body_w) ? pic_wb - body_w : 0;
+        unsigned int maxy = (pic_height > body_h) ? pic_height - body_h : 0;
+        if (scroll_x > maxx) scroll_x = maxx;
+        if (scroll_y > maxy) scroll_y = maxy;
+        pv_image_x = (unsigned char)(pv_view_x +
+            ((pic_wb < body_w) ? (unsigned char)((body_w - pic_wb) >> 1) : 0));
+        pv_image_y = (unsigned char)(pv_view_y +
+            ((pic_height < body_h) ?
+             (unsigned char)((body_h - (unsigned char)pic_height) >> 1) : 0));
+    } else {
+        pv_image_x = pv_view_x;
+        pv_image_y = pv_view_y;
+    }
+}
+
+static void draw_selector(void)
+{
+    if (!loaded) return;
+    fx0 = scroll_x;
+    fx0 <<= 2;
+    if (tile_x < fx0 || tile_y < scroll_y) return;
+    fx1 = tile_x;
+    fx1 -= fx0;
+    fy0 = tile_y;
+    fy0 -= scroll_y;
+    if (fx1 + TILE_SIDE > (unsigned int)pv_view_w * 4U ||
+        fy0 + TILE_SIDE > pv_view_h) return;
+    fx0 = pv_image_x;
+    fx0 <<= 2;
+    fx0 += fx1;
+    fx1 = fx0 + TILE_SIDE - 1;
+    fy0 += pv_image_y;
+    fy1 = fy0 + TILE_SIDE - 1;
+    fpen = 3;
+    fw_frame();
+}
+
+static void draw_preview(void)
+{
+    unsigned char draw_w, rows;
+    unsigned int remain, source;
+    gb_window(pv_x, pv_y, PV_W, PV_H, "Area selector");
+    layout_preview();
+    gb_fill((unsigned char)(pv_x + 1), (unsigned char)(pv_y + TITLE_H),
+            (unsigned char)(PV_W - 2), (unsigned char)(PV_H - TITLE_H - 1), 1);
+    if (!loaded) {
+        gb_textbw((unsigned char)(pv_x + 4),
+                  (unsigned char)(pv_y + TITLE_H + 8), "File > New or Load");
+        return;
+    }
+    draw_w = (unsigned char)((pic_wb - scroll_x > pv_view_w) ?
+                            pv_view_w : pic_wb - scroll_x);
+    remain = pic_height - scroll_y;
+    rows = (unsigned char)(remain > pv_view_h ? pv_view_h : remain);
+    source = pic_off + scroll_y * pic_stride +
+             (pic_mode == 7 ? scroll_x * 2U : scroll_x);
+    if (draw_w && rows) {
+        select_document();
+#ifdef GB_MSX2
+        gb_pic_blit(pv_image_x, pv_image_y, draw_w, rows, source);
+#else
+        if (draw_w == pic_wb) {
+            gb_pic_blit(pv_image_x, pv_image_y, draw_w, rows, source);
+        } else {
+            fpen = pv_image_y;
+            do {
+                gb_pic_blit(pv_image_x, fpen, draw_w, 1, source);
+                source += pic_stride;
+                fpen++;
+            } while (--rows);
+        }
+#endif
+    }
+    draw_vscroll((unsigned char)(pv_x + 1), pv_view_y, SB_W, pv_view_h,
+                 scroll_y, pic_height, pv_view_h);
+    draw_hscroll(pv_hbar_x, pv_hbar_y, pv_hbar_w, HSB_H,
+                 scroll_x, pic_wb, pv_view_w);
+    draw_selector();
+}
+
+static unsigned char mode1_solid(unsigned char pen)
+{
+    return (unsigned char)(((pen & 1) ? 0xF0 : 0) |
+                           ((pen & 2) ? 0x0F : 0));
+}
+
+static void draw_work_bitmap(void)
+{
+    unsigned char sy, repeat, sx, p0, p1, value;
+#ifdef GB_MSX2
+    unsigned char n;
+#endif
+    unsigned char *out = (unsigned char *)gb_copybuf;
+    unsigned char *source;
+#ifdef GB_MSX2
+    if (pic_mode == 7) {
+        for (sy = 0; sy < TILE_SIDE; sy++) {
+            out = (unsigned char *)gb_copybuf;
+            for (repeat = 0; repeat < WORK_SCALE; repeat++) {
+                source = &tile[(unsigned int)sy * TILE_SIDE];
+                for (sx = 0; sx < TILE_SIDE; sx++) {
+                    p0 = *source++;
+                    value = (unsigned char)((p0 << 4) | p0);
+                    for (n = 0; n < WORK_SCALE / 2; n++) *out++ = value;
+                }
+            }
+            native_blit((unsigned char)(wk_x + 1),
+                        (unsigned char)(wk_y + TITLE_H + sy * WORK_SCALE),
+                        WORK_WB, WORK_SCALE, (unsigned char *)gb_copybuf);
+        }
+        return;
+    }
+#endif
+    for (sy = 0; sy < TILE_SIDE; sy++) {
+        out = (unsigned char *)gb_copybuf;
+        for (repeat = 0; repeat < WORK_SCALE; repeat++) {
+            source = &tile[(unsigned int)sy * TILE_SIDE];
+            for (sx = 0; sx < TILE_SIDE; sx += 2) {
+                p0 = *source++;
+                p1 = *source++;
+                value = mode1_solid(p0);
+                *out++ = value;
+                *out++ = value;
+                value = mode1_solid(p1);
+                *out++ = value;
+                *out++ = value;
+            }
+        }
+        blit_mode1((unsigned char)(wk_x + 1),
+                   (unsigned char)(wk_y + TITLE_H + sy * WORK_SCALE),
+                   WORK_WB, WORK_SCALE, (unsigned char *)gb_copybuf, WORK_WB);
+    }
+}
+
+static void draw_work_grid(void)
+{
+    unsigned char i;
+    int left = (int)(wk_x + 1) * 4;
+    int top = wk_y + TITLE_H;
+    for (i = 1; i < TILE_SIDE; i++) {
+        line(left + i * WORK_SCALE, top,
+             left + i * WORK_SCALE, top + WORK_PIXELS - 1, 2);
+        line(left, top + i * WORK_SCALE,
+             left + WORK_PIXELS - 1, top + i * WORK_SCALE, 2);
+    }
+}
+
+static void normalize_work_selection(void)
+{
+    unsigned char value;
+    if (work_sel_x0 > work_sel_x1) {
+        value = work_sel_x0; work_sel_x0 = work_sel_x1; work_sel_x1 = value;
+    }
+    if (work_sel_y0 > work_sel_y1) {
+        value = work_sel_y0; work_sel_y0 = work_sel_y1; work_sel_y1 = value;
+    }
+}
+
+static void draw_work_selection(void)
+{
+    if (!work_sel_on) return;
+    fx0 = (unsigned int)(wk_x + 1);
+    fx0 <<= 2;
+    fx1 = work_sel_x0;
+    fx1 *= WORK_SCALE;
+    fx0 += fx1;
+    fy0 = (unsigned int)(wk_y + TITLE_H);
+    fy1 = work_sel_y0;
+    fy1 *= WORK_SCALE;
+    fy0 += fy1;
+    fx1 = (unsigned int)(work_sel_x1 - work_sel_x0 + 1);
+    fx1 *= WORK_SCALE;
+    fx1 += fx0;
+    fx1--;
+    fy1 = (unsigned int)(work_sel_y1 - work_sel_y0 + 1);
+    fy1 *= WORK_SCALE;
+    fy1 += fy0;
+    fy1--;
+    fpen = 3;
+    fw_frame();
+}
+
+static void draw_work(void)
+{
+    if (!work_visible) return;
+    gb_window(wk_x, wk_y, WK_W, (unsigned char)WK_H, "Canvas 8x");
+    draw_work_bitmap();
+    draw_work_grid();
+    draw_work_selection();
+}
+
+#ifndef GB_MSX2
+static void repaint_picture_panes(void)
+{
+    if (loaded) {
+        if (work_visible && front_pane == PANE_PREVIEW) {
+            draw_work();
+            draw_preview();
+        } else {
+            draw_preview();
+            draw_work();
+        }
+    }
+}
+
+static void repaint_all(void)
+{
+    gb_curhide();
+    repaint_picture_panes();
+    draw_toolchest();
+    gb_curshow();
+}
+#else
+static void repaint_tool_window(void)
+{
+    gb_curhide(); draw_toolchest(); gb_curshow();
+}
+
+static void repaint_preview_window(void)
+{
+    gb_curhide(); draw_preview(); gb_curshow();
+}
+
+static void repaint_work_window(void)
+{
+    gb_curhide(); draw_work(); gb_curshow();
+}
+#endif
+
+static void draw_work_cell(unsigned char x, unsigned char y)
+{
+    unsigned char row;
+    int left = (int)(wk_x + 1) * 4 + x * WORK_SCALE;
+    int top = wk_y + TITLE_H + y * WORK_SCALE;
+    unsigned char pen = tile[(unsigned int)y * TILE_SIDE + x];
+    for (row = 0; row < WORK_SCALE; row++)
+    line(left, top + row, left + WORK_SCALE - 1, top + row, pen);
+    line(left, top, left + WORK_SCALE - 1, top, 2);
+    line(left, top, left, top + WORK_SCALE - 1, 2);
+}
+
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+/* Paint one changed source pixel into the unobscured 1:1 preview. CPC cannot
+ * retain a backing store for the three panes, so avoid touching pixels covered
+ * by the foreground Canvas/Toolchest and leave the red navigator border alone. */
+static void draw_preview_pixel(unsigned char x, unsigned char y) __naked
+{
+    x; y;
+__asm
+    ; SDCC passes x in A and y in L. Preserve both for the tile lookup.
+    ld   c,a
+    ld   b,l
+    or   a
+    ret  z
+    cp   #19
+    ret  z
+    ld   a,b
+    or   a
+    ret  z
+    cp   #19
+    ret  z
+
+    ; Logical preview X = image origin + tile X + cell X - byte scroll * 4.
+    ld   hl,(_scroll_x)
+    add  hl,hl
+    add  hl,hl
+    ex   de,hl
+    ld   hl,(_tile_x)
+    or   a
+    sbc  hl,de
+    ld   a,(_pv_image_x)
+    add  a,a
+    add  a,a
+    ld   e,a
+    ld   d,#0
+    add  hl,de
+    ld   e,c
+    ld   d,#0
+    add  hl,de
+    push hl                         ; logical X for pane-coverage tests
+    add  hl,hl                     ; CPC firmware X coordinate
+    ld   (_fx0),hl
+    ld   (_fx1),hl
+
+    ; Logical preview Y = image origin + tile Y + cell Y - line scroll.
+    ld   hl,(_tile_y)
+    ld   de,(_scroll_y)
+    or   a
+    sbc  hl,de
+    ld   a,(_pv_image_y)
+    add  a,l
+    add  a,b
+    ld   e,a                       ; E = logical Y
+    ld   a,#199
+    sub  e
+    ld   l,a
+    ld   h,#0
+    add  hl,hl                     ; CPC firmware Y coordinate
+    ld   (_fy0),hl
+    ld   (_fy1),hl
+
+    pop  hl                        ; byte column = logical X / 4
+    srl  h
+    rr   l
+    srl  h
+    rr   l
+    ld   d,l                       ; D = byte column, E = logical Y
+
+    ; Do not paint through the foreground Canvas.
+    ld   a,(_work_visible)
+    or   a
+    jr   z,dpv_tool
+    ld   a,(_front_pane)
+    dec  a
+    jr   nz,dpv_tool
+    ld   a,d
+    ld   hl,#_wk_x
+    cp   (hl)
+    jr   c,dpv_tool
+    ld   a,(hl)
+    add  a,#42
+    cp   d
+    jr   c,dpv_tool
+    jr   z,dpv_tool
+    ld   a,e
+    ld   hl,#_wk_y
+    cp   (hl)
+    jr   c,dpv_tool
+    ld   a,(hl)
+    add  a,#175
+    cp   e
+    ret  nc
+
+dpv_tool:
+    ; The Toolchest is always the topmost pane.
+    ld   a,d
+    ld   hl,#_tc_x
+    cp   (hl)
+    jr   c,dpv_draw
+    ld   a,(hl)
+    add  a,#29
+    cp   d
+    jr   c,dpv_draw
+    jr   z,dpv_draw
+    ld   a,e
+    ld   hl,#_tc_y
+    cp   (hl)
+    jr   c,dpv_draw
+    ld   a,(hl)
+    add  a,#126
+    cp   e
+    ret  nc
+
+dpv_draw:
+    ; pen = tile[y * 20 + x], then plot a zero-length firmware line.
+    ld   l,b
+    ld   h,#0
+    add  hl,hl
+    add  hl,hl
+    ld   e,l
+    ld   d,h
+    add  hl,hl
+    add  hl,hl
+    add  hl,de
+    ld   e,c
+    ld   d,#0
+    add  hl,de
+    ld   de,#_tile
+    add  hl,de
+    ld   a,(hl)
+    ld   (_fpen),a
+    call _fw_line
+    ret
+__endasm;
+}
+#endif
+
+/* ---- work tools ---------------------------------------------------------- */
+
+static void save_undo(void)
+{
+    unsigned int i;
+    for (i = 0; i < TILE_PACKED; i++)
+        undo_tile[i] = (unsigned char)((tile[i << 1] << 4) |
+                                      tile[(i << 1) + 1]);
+    undo_valid = 1;
+}
+
+static void restore_undo_base(void)
+{
+    unsigned int i;
+    unsigned char value;
+    for (i = 0; i < TILE_PACKED; i++) {
+        value = undo_tile[i];
+        tile[i << 1] = value >> 4;
+        tile[(i << 1) + 1] = value & 15;
+    }
+}
+
+static void set_tile_pixel(signed char x, signed char y)
+{
+    if (x >= 0 && x < TILE_SIDE && y >= 0 && y < TILE_SIDE)
+        tile[(unsigned int)y * TILE_SIDE + (unsigned char)x] = current_pen;
+}
+
+static void tile_line(signed char x0, signed char y0,
+                      signed char x1, signed char y1,
+                      unsigned char live)
+{
+    signed char dx = x1 > x0 ? x1 - x0 : x0 - x1;
+    signed char sx = x0 < x1 ? 1 : -1;
+    signed char dy = -(y1 > y0 ? y1 - y0 : y0 - y1);
+    signed char sy = y0 < y1 ? 1 : -1;
+    signed char err = dx + dy;
+    for (;;) {
+        set_tile_pixel(x0, y0);
+        if (live) {
+            draw_work_cell((unsigned char)x0, (unsigned char)y0);
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+            draw_preview_pixel((unsigned char)x0, (unsigned char)y0);
+#endif
+        }
+        if (x0 == x1 && y0 == y1) break;
+        {
+            signed char twice = (signed char)(err << 1);
+            if (twice >= dy) { err += dy; x0 += sx; }
+            if (twice <= dx) { err += dx; y0 += sy; }
+        }
+    }
+}
+
+static void tile_rect(signed char x0, signed char y0,
+                      signed char x1, signed char y1,
+                      unsigned char filled)
+{
+    signed char x, y, value;
+    if (x0 > x1) { value = x0; x0 = x1; x1 = value; }
+    if (y0 > y1) { value = y0; y0 = y1; y1 = value; }
+    if (filled) {
+        for (y = y0; y <= y1; y++)
+            for (x = x0; x <= x1; x++) set_tile_pixel(x, y);
+    } else {
+        for (x = x0; x <= x1; x++) {
+            set_tile_pixel(x, y0);
+            set_tile_pixel(x, y1);
+        }
+        for (y = y0; y <= y1; y++) {
+            set_tile_pixel(x0, y);
+            set_tile_pixel(x1, y);
+        }
+    }
+}
+
+static unsigned char small_sqrt(unsigned int value)
+{
+    unsigned char root = 0;
+    while ((unsigned int)(root + 1) * (root + 1) <= value) root++;
+    return root;
+}
+
+static void tile_span(signed char y, signed char x0, signed char x1)
+{
+    while (x0 <= x1) set_tile_pixel(x0++, y);
+}
+
+static void tile_circle(signed char cx, signed char cy,
+                        unsigned char radius, unsigned char filled)
+{
+    signed char x = radius, y = 0;
+    signed char err = (signed char)(1 - radius);
+    if (!radius) { set_tile_pixel(cx, cy); return; }
+    while (x >= y) {
+        if (filled) {
+            tile_span((signed char)(cy + y), (signed char)(cx - x),
+                      (signed char)(cx + x));
+            tile_span((signed char)(cy - y), (signed char)(cx - x),
+                      (signed char)(cx + x));
+            tile_span((signed char)(cy + x), (signed char)(cx - y),
+                      (signed char)(cx + y));
+            tile_span((signed char)(cy - x), (signed char)(cx - y),
+                      (signed char)(cx + y));
+        } else {
+            set_tile_pixel(cx + x, cy + y);
+            set_tile_pixel(cx - x, cy + y);
+            set_tile_pixel(cx + x, cy - y);
+            set_tile_pixel(cx - x, cy - y);
+            set_tile_pixel(cx + y, cy + x);
+            set_tile_pixel(cx - y, cy + x);
+            set_tile_pixel(cx + y, cy - x);
+            set_tile_pixel(cx - y, cy - x);
+        }
+        y++;
+        if (err < 0) err = (signed char)(err + 2 * y + 1);
+        else {
+            x--;
+            err = (signed char)(err + 2 * (y - x) + 1);
+        }
+    }
+}
+
+static void flood_fill(unsigned char x, unsigned char y)
+{
+    unsigned int value, sp = 0;
+    unsigned char px, py;
+    unsigned char *stack = (unsigned char *)gb_copybuf;
+    unsigned char target = tile[(unsigned int)y * TILE_SIDE + x];
+    if (target == current_pen) return;
+    value = (unsigned int)y * TILE_SIDE + x;
+    tile[value] = current_pen;
+    stack[sp++] = x;
+    stack[sp++] = y;
+    while (sp) {
+        py = stack[--sp];
+        px = stack[--sp];
+        value = (unsigned int)py * TILE_SIDE + px;
+        if (px && tile[value - 1] == target) {
+            tile[value - 1] = current_pen;
+            stack[sp++] = px - 1;
+            stack[sp++] = py;
+        }
+        if (px + 1 < TILE_SIDE && tile[value + 1] == target) {
+            tile[value + 1] = current_pen;
+            stack[sp++] = px + 1;
+            stack[sp++] = py;
+        }
+        if (py && tile[value - TILE_SIDE] == target) {
+            tile[value - TILE_SIDE] = current_pen;
+            stack[sp++] = px;
+            stack[sp++] = py - 1;
+        }
+        if (py + 1 < TILE_SIDE && tile[value + TILE_SIDE] == target) {
+            tile[value + TILE_SIDE] = current_pen;
+            stack[sp++] = px;
+            stack[sp++] = py + 1;
+        }
+    }
+}
+
+static unsigned char next_random(void)
+{
+    random_state = (unsigned char)((random_state >> 1) ^
+        ((random_state & 1) ? 0xB8 : 0));
+    return random_state;
+}
+
+static void spray_at(unsigned char x, unsigned char y)
+{
+    unsigned char i;
+    for (i = 0; i < 3; i++) {
+        signed char dx = (signed char)(next_random() % 5) - 2;
+        signed char dy = (signed char)(next_random() % 5) - 2;
+        int px = (int)x + dx;
+        int py = (int)y + dy;
+        if (px >= 0 && px < TILE_SIDE && py >= 0 && py < TILE_SIDE) {
+            set_tile_pixel(px, py);
+            draw_work_cell((unsigned char)px, (unsigned char)py);
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+            draw_preview_pixel((unsigned char)px, (unsigned char)py);
+#endif
+        }
+    }
+}
+
+static void finish_change(void)
+{
+    if (!commit_tile()) gb_alert("Paint error", "Could not write tile");
+    if (stroke_active) return;
+#ifdef GB_MSX2
+    gb_restore_parent();
+#else
+    gb_curhide();
+    repaint_picture_panes();
+    gb_curshow();
+#endif
+}
+
+static void do_undo(void)
+{
+    unsigned int i;
+    unsigned char value, replacement;
+    if (!work_visible || !undo_valid) return;
+    for (i = 0; i < TILE_PACKED; i++) {
+        value = undo_tile[i];
+        replacement = (unsigned char)((tile[i << 1] << 4) |
+                                      tile[(i << 1) + 1]);
+        tile[i << 1] = value >> 4;
+        tile[(i << 1) + 1] = value & 15;
+        undo_tile[i] = replacement;
+    }
+    finish_change();
+}
+
+static void copy_selection(void)
+{
+    unsigned char x, y, clip_w, clip_h;
+    unsigned char *clip = (unsigned char *)gb_copybuf;
+    if (!work_visible) return;
+    if (!work_sel_on) {
+        work_sel_x0 = work_sel_y0 = 0;
+        work_sel_x1 = work_sel_y1 = TILE_SIDE - 1;
+    }
+    normalize_work_selection();
+    clip_w = (unsigned char)(work_sel_x1 - work_sel_x0 + 1);
+    clip_h = (unsigned char)(work_sel_y1 - work_sel_y0 + 1);
+    clip[0] = PAINT_CLIP_MAGIC;
+    clip[1] = clip_w;
+    clip[2] = clip_h;
+    for (y = 0; y < clip_h; y++)
+        for (x = 0; x < clip_w; x++)
+            clip[3U + (unsigned int)y * TILE_SIDE + x] =
+                tile[(unsigned int)(work_sel_y0 + y) * TILE_SIDE +
+                     work_sel_x0 + x];
+    gb_clip_set((char *)clip, PAINT_CLIP_MAX);
+}
+
+static void cut_selection(void)
+{
+    unsigned char x, y;
+    if (!work_visible) return;
+    copy_selection();
+    save_undo();
+    for (y = work_sel_y0; y <= work_sel_y1; y++)
+        for (x = work_sel_x0; x <= work_sel_x1; x++)
+            tile[(unsigned int)y * TILE_SIDE + x] = 1;
+    finish_change();
+}
+
+static void paste_selection(void)
+{
+    unsigned int length;
+    unsigned char x, y, clip_w, clip_h, ox = 0, oy = 0;
+    unsigned char *clip = (unsigned char *)gb_copybuf;
+    if (!work_visible) return;
+    length = gb_clip_get((char *)clip, PAINT_CLIP_MAX);
+    if (length != PAINT_CLIP_MAX || clip[0] != PAINT_CLIP_MAGIC) return;
+    clip_w = clip[1];
+    clip_h = clip[2];
+    if (!clip_w || clip_w > TILE_SIDE ||
+        !clip_h || clip_h > TILE_SIDE) return;
+    if (work_sel_on) { ox = work_sel_x0; oy = work_sel_y0; }
+    if (clip_w > (unsigned char)(TILE_SIDE - ox))
+        clip_w = (unsigned char)(TILE_SIDE - ox);
+    if (clip_h > (unsigned char)(TILE_SIDE - oy))
+        clip_h = (unsigned char)(TILE_SIDE - oy);
+    save_undo();
+    for (y = 0; y < clip_h; y++)
+        for (x = 0; x < clip_w; x++)
+            tile[(unsigned int)(oy + y) * TILE_SIDE + ox + x] =
+                clip[3U + (unsigned int)y * TILE_SIDE + x];
+    finish_change();
+}
+
+static unsigned char work_point(unsigned char *x, unsigned char *y,
+                                unsigned char clamp)
+{
+    int px = (int)gb_mxp() - (int)(wk_x + 1) * 4;
+    int py = (int)gb_my() - (int)(wk_y + TITLE_H);
+    if (!clamp &&
+        (px < 0 || py < 0 || px >= WORK_PIXELS || py >= WORK_PIXELS))
+        return 0;
+    if (px < 0) px = 0;
+    if (py < 0) py = 0;
+    if (px >= WORK_PIXELS) px = WORK_PIXELS - 1;
+    if (py >= WORK_PIXELS) py = WORK_PIXELS - 1;
+    *x = (unsigned char)(px / WORK_SCALE);
+    *y = (unsigned char)(py / WORK_SCALE);
+    return 1;
+}
+
+static void apply_shape(unsigned char sx, unsigned char sy,
+                        unsigned char ex, unsigned char ey)
+{
+    if (current_tool == TOOL_LINE) tile_line(sx, sy, ex, ey, 0);
+    else if (current_tool == TOOL_RECT) tile_rect(sx, sy, ex, ey, 0);
+    else if (current_tool == TOOL_RECTF) tile_rect(sx, sy, ex, ey, 1);
+    else {
+        signed char dx = (signed char)ex - (signed char)sx;
+        signed char dy = (signed char)ey - (signed char)sy;
+        tile_circle(sx, sy,
+            small_sqrt((unsigned int)(dx * dx + dy * dy)),
+            (unsigned char)(current_tool == TOOL_CIRCLEF));
+    }
+}
+
+static void drag_shape(unsigned char sx, unsigned char sy)
+{
+    unsigned char ex = sx, ey = sy, nx, ny;
+    unsigned char flags;
+    save_undo();
+    for (;;) {
+        flags = gb_poll();
+        if (!(flags & GB_FIRE)) break;
+        work_point(&nx, &ny, 1);
+        if (nx == ex && ny == ey) continue;
+        ex = nx; ey = ny;
+        restore_undo_base();
+        apply_shape(sx, sy, ex, ey);
+        gb_curhide();
+        draw_work();
+        gb_curshow();
+    }
+    restore_undo_base();
+    apply_shape(sx, sy, ex, ey);
+    finish_change();
+}
+
+static void drag_work_selection(unsigned char sx, unsigned char sy)
+{
+    unsigned char nx = sx, ny = sy, flags;
+    work_sel_on = 1;
+    work_sel_x0 = work_sel_x1 = sx;
+    work_sel_y0 = work_sel_y1 = sy;
+    for (;;) {
+        flags = gb_poll();
+        if (!(flags & GB_FIRE)) break;
+        work_point(&nx, &ny, 1);
+        if (nx == work_sel_x1 && ny == work_sel_y1) continue;
+        work_sel_x1 = nx;
+        work_sel_y1 = ny;
+        gb_curhide();
+        draw_work();
+        gb_curshow();
+    }
+    work_sel_x1 = nx;
+    work_sel_y1 = ny;
+    normalize_work_selection();
+    gb_restore_parent();
+}
+
+static void start_work_action(void)
+{
+    unsigned char x, y;
+    if (!work_point(&x, &y, 0)) return;
+    if (current_tool == TOOL_SELECT) {
+        drag_work_selection(x, y);
+        return;
+    }
+    if (current_tool == TOOL_BUCKET) {
+        save_undo();
+        flood_fill(x, y);
+        finish_change();
+        return;
+    }
+    if (current_tool == TOOL_LINE || current_tool == TOOL_RECT ||
+        current_tool == TOOL_RECTF || current_tool == TOOL_CIRCLE ||
+        current_tool == TOOL_CIRCLEF) {
+        drag_shape(x, y);
+        return;
+    }
+    if (current_tool == TOOL_PENCIL || current_tool == TOOL_SPRAY) {
+        save_undo();
+        stroke_active = 1;
+        stroke_x = x; stroke_y = y;
+        gb_curhide();
+        if (current_tool == TOOL_PENCIL) {
+            set_tile_pixel(x, y);
+            draw_work_cell(x, y);
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+            draw_preview_pixel(x, y);
+#endif
+        } else spray_at(x, y);
+        gb_curshow();
+    }
+}
+
+static void continue_stroke(void)
+{
+    unsigned char x, y;
+    if (!(gb_flags() & GB_FIRE)) {
+#ifdef GB_MSX2
+        /* finish_change commits first and deliberately skips repaint while the
+         * live stroke flag is set; the Canvas cells are already on screen. */
+        finish_change();
+        stroke_active = 0;
+#else
+        stroke_active = 0;
+        finish_change();
+#ifdef GB_PCW
+        refresh_preview_selection();
+#endif
+#endif
+        return;
+    }
+    work_point(&x, &y, 1);
+    gb_curhide();
+    if (current_tool == TOOL_PENCIL) {
+        if (x != stroke_x || y != stroke_y) {
+            tile_line(stroke_x, stroke_y, x, y, 1);
+            stroke_x = x; stroke_y = y;
+        }
+    } else {
+        spray_at(x, y);
+        stroke_x = x; stroke_y = y;
+    }
+    gb_curshow();
+}
+
+/* ---- preview interaction ------------------------------------------------- */
+
+static unsigned char selector_screen(int *left, int *top)
+{
+    int relx, rely;
+    layout_preview();
+    relx = (int)tile_x - (int)(scroll_x * 4U);
+    rely = (int)tile_y - (int)scroll_y;
+    *left = (int)pv_image_x * 4 + relx;
+    *top = pv_image_y + rely;
+    return (unsigned char)(relx >= 0 && rely >= 0 &&
+        relx + TILE_SIDE <= (int)pv_view_w * 4 &&
+        rely + TILE_SIDE <= pv_view_h);
+}
+
+#ifdef GB_PCW
+static void refresh_preview_selection(void) __naked
+{
+__asm
+    ; clip x = preview x + floor(tile x / 4) - horizontal byte scroll
+    ld   hl, (_tile_x)
+    srl  h
+    rr   l
+    srl  h
+    rr   l
+    ld   de, (_scroll_x)
+    or   a
+    sbc  hl, de
+    ld   a, (_pv_image_x)
+    add  a, l
+    ld   b, a
+    add  a, #6
+    ld   c, a
+
+    ; App panes have no backing store. If either foreground pane begins
+    ; within this patch, leave the hidden preview to the next normal repaint.
+    ld   a, (_wk_x)
+    cp   c
+    ret  c
+    ret  z
+    ld   a, (_tc_x)
+    cp   c
+    ret  c
+    ret  z
+
+    ; Hide under the old full clip, then restrict all preview drawing to the
+    ; six byte-columns that cover an arbitrarily aligned 20-pixel selector.
+    push bc
+    call _gb_curhide
+    pop  bc
+    ld   a, b
+    ld   (0x1338), a
+    ld   hl, (_tile_y)
+    ld   de, (_scroll_y)
+    or   a
+    sbc  hl, de
+    ld   a, (_pv_image_y)
+    add  a, l
+    ld   (0x1339), a
+    ld   hl, #0x1406
+    ld   (0x133a), hl
+    call _draw_preview
+
+    xor  a
+    ld   (0x1338), a
+    ld   (0x1339), a
+__endasm;
+__asm
+    ld   hl, #0xf85a
+__endasm;
+__asm
+    ld   (0x133a), hl
+    call _gb_curshow
+    ret
+__endasm;
+}
+#endif
+
+static void clamp_tile_origin(void)
+{
+    unsigned int maxx = pic_width > TILE_SIDE ? pic_width - TILE_SIDE : 0;
+    unsigned int maxy = pic_height > TILE_SIDE ? pic_height - TILE_SIDE : 0;
+    if (tile_x > maxx) tile_x = maxx;
+    if (tile_y > maxy) tile_y = maxy;
+}
+
+static void drag_selector(void)
+{
+    int left, top, px, py, nx, ny;
+    int grabx = TILE_SIDE / 2, graby = TILE_SIDE / 2;
+    unsigned char flags;
+    unsigned int source_x, source_y;
+
+    layout_preview();
+    px = (int)gb_mxp();
+    py = gb_my();
+    if (selector_screen(&left, &top) &&
+        px >= left && px < left + TILE_SIDE &&
+        py >= top && py < top + TILE_SIDE) {
+        grabx = px - left;
+        graby = py - top;
+    } else {
+        source_x = scroll_x * 4U +
+                   (unsigned int)(px - (int)pv_image_x * 4);
+        source_y = scroll_y + (unsigned int)(py - pv_image_y);
+        tile_x = source_x > TILE_SIDE / 2 ?
+                 source_x - TILE_SIDE / 2 : 0;
+        tile_y = source_y > TILE_SIDE / 2 ?
+                 source_y - TILE_SIDE / 2 : 0;
+        clamp_tile_origin();
+    }
+    for (;;) {
+        flags = gb_poll();
+        if (!(flags & GB_FIRE)) break;
+        px = (int)gb_mxp() - (int)pv_image_x * 4 - grabx;
+        py = (int)gb_my() - pv_image_y - graby;
+        nx = (int)(scroll_x * 4U) + px;
+        ny = (int)scroll_y + py;
+        if (nx < 0) nx = 0;
+        if (ny < 0) ny = 0;
+        if ((unsigned int)nx == tile_x && (unsigned int)ny == tile_y) continue;
+        tile_x = (unsigned int)nx;
+        tile_y = (unsigned int)ny;
+        clamp_tile_origin();
+#ifdef GB_MSX2
+        /* A full Preview blit is expensive at 3.58 MHz. Track every pointer
+         * position, but refresh feedback on quarter steps and once on release. */
+        if ((((unsigned char)tile_x + (unsigned char)tile_y) & 3) != 0)
+            continue;
+#endif
+        gb_curhide();
+        draw_preview();
+#ifndef GB_MSX2
+        draw_toolchest();
+#endif
+        gb_curshow();
+    }
+#ifdef GB_MSX2
+    gb_curhide(); draw_preview(); gb_curshow();
+#endif
+    if (!load_tile()) {
+        gb_alert("Paint error", "Could not read tile");
+        return;
+    }
+    work_visible = 1;
+    front_pane = PANE_WORK;
+#ifdef GB_MSX2
+    if (!open_work_window()) work_visible = 0;
+#endif
+    gb_restore_parent();
+}
+
+static void drag_vscroll(void)
+{
+    unsigned int value;
+    unsigned char flags;
+    do {
+        value = scroll_value(pv_view_y, pv_view_h,
+                             pic_height, pv_view_h, gb_my());
+        if (value != scroll_y) {
+            tile_y += value - scroll_y;
+            scroll_y = value;
+            clamp_tile_origin();
+            gb_curhide(); draw_preview();
+#ifndef GB_MSX2
+            draw_toolchest();
+#endif
+            gb_curshow();
+        }
+        flags = gb_poll();
+    } while (flags & GB_FIRE);
+    load_tile();
+    gb_restore_parent();
+}
+
+static void drag_hscroll(void)
+{
+    unsigned int value;
+    unsigned char flags;
+    do {
+        value = scroll_value(pv_hbar_x, pv_hbar_w,
+                             pic_wb, pv_view_w, gb_mx());
+        if (value != scroll_x) {
+            tile_x += (value - scroll_x) << 2;
+            scroll_x = value;
+            clamp_tile_origin();
+            gb_curhide(); draw_preview();
+#ifndef GB_MSX2
+            draw_toolchest();
+#endif
+            gb_curshow();
+        }
+        flags = gb_poll();
+    } while (flags & GB_FIRE);
+    load_tile();
+    gb_restore_parent();
+}
+
+/* ---- files --------------------------------------------------------------- */
+
+static const char *const pic_exts[] = { "PIC", 0 };
+static char prompt_name[16];
+
+static unsigned char parse_header(const unsigned char *header,
+                                  unsigned int got) __naked
+{
+    (void)header; (void)got;
+__asm
+    ; HL=header, DE=bytes read. Preserve no caller registers; return A.
+    ld   a,d
+    or   a
+    jr   nz,ph_got6
+    ld   a,e
+    cp   #6
+    jp   c,ph_bad
+ph_got6:
+    ld   a,(hl)
+    cp   #'G'
+    jp   nz,ph_bad
+    inc  hl
+    ld   a,(hl)
+    cp   #'B'
+    jp   nz,ph_bad
+    inc  hl
+    ld   a,(hl)
+    cp   #'P'
+    jp   nz,ph_bad
+    inc  hl
+    ld   a,(hl)
+    cp   #'C'
+    jp   nz,ph_bad
+    inc  hl                         ; header byte 4
+    ld   a,(hl)
+    cp   #2
+    jr   nz,ph_v1
+
+    ld   a,d
+    or   a
+    jr   nz,ph_v2_size
+    ld   a,e
+    cp   #14
+    jp   c,ph_bad
+ph_v2_size:
+    inc  hl                         ; mode
+    ld   a,(hl)
+    cp   #1
+    jr   z,ph_v2_mode
+    cp   #7
+    jp   nz,ph_bad
+__endasm;
+#ifndef GB_MSX2
+__asm
+    xor  a
+    ret
+__endasm;
+#endif
+__asm
+ph_v2_mode:
+    ld   (_pic_mode),a
+    inc  hl                         ; width low
+    ld   c,(hl)
+    inc  hl
+    ld   b,(hl)
+    inc  hl                         ; height low
+    ld   a,b
+    or   c
+    jp   z,ph_bad
+    ld   a,b                        ; width <= 512
+    cp   #2
+    jr   c,ph_width_ok
+    jp   nz,ph_bad
+    ld   a,c
+    or   a
+    jp   nz,ph_bad
+ph_width_ok:
+    ld   (_pic_width),bc
+    push hl
+    ld   h,b
+    ld   l,c
+    inc  hl
+    inc  hl
+    inc  hl
+    srl  h
+    rr   l
+    srl  h
+    rr   l
+    ld   a,l
+    ld   (_pic_wb),a
+    ld   a,(_pic_mode)
+    cp   #7
+    jr   nz,ph_stride_wb
+    ld   h,b
+    ld   l,c
+    inc  hl
+    srl  h
+    rr   l
+    jr   ph_stride_ready
+ph_stride_wb:
+    ld   a,(_pic_wb)
+    ld   l,a
+    ld   h,#0
+ph_stride_ready:
+    ld   (_pic_stride),hl
+    pop  hl                         ; height low
+    ld   e,(hl)
+    inc  hl
+    ld   d,(hl)
+    ld   a,d
+    or   e
+    jp   z,ph_bad
+    ld   (_pic_height),de
+    ld   a,#14
+    jr   ph_geometry
+
+ph_v1:
+    or   a
+    jp   z,ph_bad
+    ld   (_pic_wb),a
+    ld   l,a
+    ld   h,#0
+    ld   (_pic_stride),hl
+    add  hl,hl
+    add  hl,hl
+    ld   (_pic_width),hl
+    ld   a,#1
+    ld   (_pic_mode),a
+    ; The original header pointer is gb_copybuf for every bounded load.
+    ld   hl,#0x2205
+    ld   e,(hl)
+    ld   d,#0
+    ld   a,e
+    or   a
+    jp   z,ph_bad
+    ld   (_pic_height),de
+    ld   a,#6
+
+ph_geometry:
+    ld   (_pic_off),a
+    ld   c,a
+    ld   b,#0
+    push bc                         ; preserve bitmap offset
+    ld   hl,#0x4000
+    or   a
+    sbc  hl,bc
+    ld   de,(_pic_stride)
+    call __divuint                  ; DE = maximum legal height
+    ld   hl,(_pic_height)
+    or   a
+    sbc  hl,de
+    jr   c,ph_fits
+    jr   z,ph_fits
+    pop  bc
+    xor  a
+    ret
+ph_fits:
+    ld   hl,(_pic_stride)
+    ld   de,(_pic_height)
+    call __mulint                   ; DE = bitmap byte length
+    pop  bc
+    ex   de,hl
+    add  hl,bc
+    ld   (_doc_len),hl
+    ld   a,#1
+    ret
+ph_bad:
+    xor  a
+    ret
+__endasm;
+}
+
+static unsigned char begin_job(unsigned char job)
+{
+    if (gb_drop_claimed()) {
+        gb_alert("Storage busy", "Try again shortly");
+        return 0;
+    }
+    gb_drop_claim();
+    io_job = job;
+    io_after = AFTER_NONE;
+    io_first = 1;
+    io_off = 0;
+    return 1;
+}
+
+static void stop_job(unsigned char discard_output)
+{
+    unsigned char job = io_job;
+    io_job = IO_IDLE;
+    FS_XFLAGS_K = 0;
+    if (job == IO_SAVE && discard_output && !io_first) {
+        gb_set_name(cur_name);
+        gb_file_delete(cur_name);
+        UI_MODAL_K = 0;
+    }
+    gb_drop_release();
+    if (job == IO_LOAD || job == IO_NEW) close_document();
+}
+
+static void job_error(const char *title, const char *message)
+{
+    stop_job(1);
+    gb_alert(title, message);
+    gb_restore_parent();
+}
+
+static void io_error(void)
+{
+    job_error("Paint I/O failed", "Check file or disk");
+}
+
+static unsigned int read_chunk(unsigned int off, unsigned int max)
+{
+    unsigned int got;
+    gb_set_name(cur_name);
+    FS_LOAD_OFS[0] = (unsigned char)off;
+    FS_LOAD_OFS[1] = (unsigned char)(off >> 8);
+    FS_LOAD_OFS[2] = 0;
+    FS_XFLAGS_K = 1;
+    got = gb_fs_load(gb_copybuf, max);
+    FS_XFLAGS_K = 0;
+    UI_MODAL_K = 0;
+    return got;
+}
+
+static unsigned char start_load(const char *name)
+{
+    if (!begin_job(IO_LOAD)) return 0;
+    close_document();
+    copy11(cur_name, name);
+    named = 1;
+    doc_len = DOC_MAX;
+    if (!allocate_document_page()) {
+        stop_job(0);
+        gb_alert("Picture not loaded", "No free picture bank");
+        return 0;
+    }
+    return 1;
+}
+
+static unsigned char start_new(unsigned int width, unsigned int height)
+{
+    unsigned char *header = (unsigned char *)gb_copybuf;
+    if (!begin_job(IO_NEW)) return 0;
+    close_document();
+#ifdef GB_MSX2
+    pic_mode = 7;
+    pic_stride = width >> 1;
+#else
+    pic_mode = 1;
+    pic_stride = (width + 3U) >> 2;
+#endif
+    pic_width = width;
+    pic_height = height;
+    pic_wb = (unsigned char)((width + 3U) >> 2);
+    pic_off = PIC_HDR;
+    doc_len = PIC_HDR + pic_stride * height;
+    if (!allocate_document_page()) {
+        stop_job(0);
+        gb_alert("New picture failed", "No free picture bank");
+        return 0;
+    }
+    header[0] = 'G'; header[1] = 'B'; header[2] = 'P'; header[3] = 'C';
+    header[4] = 2; header[5] = pic_mode;
+    header[6] = (unsigned char)width;
+    header[7] = (unsigned char)(width >> 8);
+    header[8] = (unsigned char)height;
+    header[9] = (unsigned char)(height >> 8);
+    header[10] = 1; header[11] = 26; header[12] = 0; header[13] = 6;
+    if (!document_write(0, header, PIC_HDR)) {
+        io_error();
+        return 0;
+    }
+    io_off = PIC_HDR;
+    return 1;
+}
+
+static unsigned char start_save(unsigned char after)
+{
+    if (!loaded || !named || !begin_job(IO_SAVE)) return 0;
+    io_after = after;
+    return 1;
+}
+
+static unsigned char save_as(unsigned char after)
+{
+    char raw[11];
+    if (!loaded) return 0;
+    if (!gb_pickdir(pic_exts)) return 0;
+    if (!gb_prompt("Save picture as:", prompt_name, 12)) return 0;
+    to_83(prompt_name, raw);
+    copy11(cur_name, raw);
+    named = 1;
+    gb_set_name(cur_name);
+    return start_save(after);
+}
+
+static unsigned char save_document(unsigned char after)
+{
+    if (!loaded) return 0;
+    if (!named) return save_as(after);
+    return start_save(after);
+}
+
+static const char *const confirm_items[] = {
+    "Save", "Don't Save", "Cancel"
+};
+
+static unsigned char confirm_discard(unsigned char after)
+{
+    unsigned char choice;
+    if (!dirty) return CONFIRM_NOW;
+    choice = gb_popup(28, 80, confirm_items, 3);
+    if (choice == 0)
+        return save_document(after) ? CONFIRM_WAIT : CONFIRM_CANCEL;
+    if (choice == 1) return CONFIRM_NOW;
+    return CONFIRM_CANCEL;
+}
+
+static void do_new(void)
+{
+    unsigned int width = 100, height = 100, stride;
+    unsigned char action;
+    if (!gb_size_prompt(&width, &height)) return;
+    if (!width || width > 512 || !height) {
+        gb_alert("Invalid dimensions", "Width 1..512");
+        return;
+    }
+#ifdef GB_MSX2
+    if ((width & 3) || height > 255) {
+        gb_alert("Invalid Mode 7 size", "Width /4, height <=255");
+        return;
+    }
+    stride = width >> 1;
+#else
+    stride = (width + 3U) >> 2;
+#endif
+    if (!stride || height > (unsigned int)((DOC_MAX - PIC_HDR) / stride)) {
+        gb_alert("Picture too large", "16K maximum");
+        return;
+    }
+    pending_width = width;
+    pending_height = height;
+    action = confirm_discard(AFTER_NEW);
+    if (action == CONFIRM_NOW && start_new(width, height))
+        gb_restore_parent();
+}
+
+static void do_load(void)
+{
+    char name[11];
+    unsigned char action = confirm_discard(AFTER_LOAD);
+    if (action != CONFIRM_NOW) return;
+    if (!gb_pickfile(name, pic_exts)) return;
+    if (start_load(name)) gb_restore_parent();
+}
+
+/* ---- menus and window interaction --------------------------------------- */
+
+#define MENU_FILE_X 10
+#define MENU_EDIT_X 18
+static const unsigned char menu_def[] = {
+    2,
+    MENU_FILE_X, 'F','i','l','e',0,0,0,0,
+    MENU_EDIT_X, 'E','d','i','t',0,0,0,0
+};
+static const char *const file_items[] = {
+    "New", "Load", "Save", "Save As", "Quit"
+};
+static const char *const edit_items[] = {
+    "Undo", "Cut", "Copy", "Paste"
+};
+
+static unsigned char menu_title_hit(unsigned char col, unsigned char start)
+{
+    return (unsigned char)(col >= start && col < (unsigned char)(start + 7));
+}
+
+static void run_menu(void)
+{
+    unsigned char menu = want_menu;
+    unsigned char choice;
+    want_menu = 0;
+    if (menu == 1) {
+        choice = gb_popup(MENU_FILE_X, 8, file_items, 5);
+        if (choice == 0) do_new();
+        else if (choice == 1) do_load();
+        else if (choice == 2) save_document(AFTER_NONE);
+        else if (choice == 3) save_as(AFTER_NONE);
+        else if (choice == 4) { close_app(); return; }
+    } else if (menu == 2) {
+        choice = gb_popup(MENU_EDIT_X, 8, edit_items, 4);
+        if (choice == 0) do_undo();
+        else if (choice == 1) cut_selection();
+        else if (choice == 2) copy_selection();
+        else if (choice == 3) paste_selection();
+    }
+    gb_restore_parent();
+}
+
+#ifdef GB_MSX2
+static void move_pane(unsigned char *x, unsigned char *y,
+                      unsigned char w, unsigned char h)
+{
+    (void)w; (void)h;
+    if (gb_window_drag() == GB_APP_OK) {
+        *x = gb_wm_x();
+        *y = gb_wm_y();
+        gb_restore_parent();
+    }
+}
+#else
+static void move_pane(unsigned char *x, unsigned char *y,
+                      unsigned char w, unsigned char h) __naked
+{
+    (void)x; (void)y; (void)w; (void)h;
+__asm
+    ; Transient state lives in the consumed executable-icon payload. The app
+    ; data area is full on dual-icon MSX builds, and these bytes are dead after
+    ; entry just like the bounded-I/O state at 0x4010.
+    ld   (0x4019),hl                  ; x pointer
+    ld   (0x401b),de                  ; y pointer
+    ld   a,(hl)
+    ld   (0x401d),a                   ; original/last x
+    ld   (0x401f),a
+    ld   a,(de)
+    ld   (0x401e),a                   ; original/last y
+    ld   (0x4020),a
+    ld   hl,#2
+    add  hl,sp
+    ld   a,(hl)
+    ld   (0x4023),a                   ; pane width
+    inc  hl
+    ld   a,(hl)
+    ld   (0x4024),a                   ; pane height
+    call _gb_mx
+    ld   b,a
+    ld   a,(0x401d)
+    ld   c,a
+    ld   a,b
+    sub  c
+    ld   (0x4025),a                   ; pointer grab x
+    call _gb_my
+    ld   b,a
+    ld   a,(0x401e)
+    ld   c,a
+    ld   a,b
+    sub  c
+    ld   (0x4026),a                   ; pointer grab y
+    xor  a
+    ld   (0x4027),a                   ; moved
+
+mp_loop:
+    call _gb_poll
+    ld   (0x4028),a                   ; flags
+
+    call _gb_mx
+    ld   c,a
+    ld   a,(0x4025)
+    ld   b,a
+    ld   a,c
+    sub  b
+    jr   nc,mp_x_nonneg
+    xor  a
+mp_x_nonneg:
+    ld   b,a                          ; candidate x
+    ld   a,#GB_COLS
+    ld   c,a
+    ld   a,(0x4023)
+    ld   e,a
+    ld   a,c
+    sub  e                            ; maximum x
+    cp   b
+    jr   nc,mp_x_ok
+    ld   b,a
+mp_x_ok:
+    ld   a,b
+    ld   (0x4021),a                   ; next x
+
+    call _gb_my
+    ld   c,a
+    ld   a,(0x4026)
+    ld   b,a
+    ld   a,c
+    sub  b
+    jr   nc,mp_y_nonneg
+    ld   a,#8
+mp_y_nonneg:
+    cp   #8
+    jr   nc,mp_y_top
+    ld   a,#8
+mp_y_top:
+    ld   b,a                          ; candidate y
+    ld   a,#GB_LINES
+    ld   c,a
+    ld   a,(0x4024)
+    ld   e,a
+    ld   a,c
+    sub  e                            ; maximum y
+    cp   b
+    jr   nc,mp_y_ok
+    ld   b,a
+mp_y_ok:
+    ld   a,b
+    ld   (0x4022),a                   ; next y
+
+    ld   a,(0x401f)
+    ld   b,a
+    ld   a,(0x4021)
+    cp   b
+    jr   nz,mp_changed
+    ld   a,(0x4020)
+    ld   b,a
+    ld   a,(0x4022)
+    cp   b
+    jr   z,mp_next
+mp_changed:
+    ld   a,(0x4027)
+    or   a
+    jr   z,mp_draw
+    ld   a,(0x401f)
+    ld   (0x4029),a
+    ld   a,(0x4020)
+    ld   (0x402a),a
+    ld   a,(0x4021)
+    ld   (0x402b),a
+    ld   a,(0x4022)
+    ld   (0x402c),a
+    ld   a,#TITLE_H
+    ld   (0x402d),a
+    call mp_damage
+    call _gb_restore_parent
+
+mp_draw:
+    call _gb_curhide
+    ld   a,(0x4021)
+    ld   b,a
+    ld   a,(0x4022)
+    ld   c,a
+    ld   a,(0x4023)
+    ld   d,a
+    ld   e,#TITLE_H
+    ld   a,#3
+    call 0x8021                       ; GB_FRAME
+    call _gb_curshow
+    ld   a,(0x4021)
+    ld   (0x401f),a
+    ld   a,(0x4022)
+    ld   (0x4020),a
+    ld   a,#1
+    ld   (0x4027),a
+
+mp_next:
+    ld   a,(0x4028)
+    and  #GB_FIRE
+    jp   nz,mp_loop
+    ld   a,(0x4027)
+    or   a
+    jr   z,mp_return
+
+    ld   hl,(0x4019)
+    ld   a,(0x401f)
+    ld   (hl),a
+    ld   hl,(0x401b)
+    ld   a,(0x4020)
+    ld   (hl),a
+    ld   a,(0x401d)
+    ld   (0x4029),a
+    ld   a,(0x401e)
+    ld   (0x402a),a
+    ld   a,(0x401f)
+    ld   (0x402b),a
+    ld   a,(0x4020)
+    ld   (0x402c),a
+    ld   a,(0x4024)
+    ld   (0x402d),a
+    call mp_damage
+    call _gb_restore_parent
+
+mp_return:
+    pop  hl                           ; discard packed w/h after return address
+    pop  af
+    jp   (hl)
+
+    ; Damage = bounding rectangle of (ax,ay) and (bx,by), using the pane width
+    ; and caller-selected height. k_wm_damage leaves the next compositor repaint
+    ; clipped to this rectangle.
+mp_damage:
+    ld   a,(0x4029)                   ; ax
+    ld   c,a
+    ld   a,(0x402b)                   ; bx
+    cp   c
+    jr   nc,mp_dx_ordered
+    ld   c,a                          ; left=bx, right starts at ax
+    ld   a,(0x4029)
+mp_dx_ordered:
+    ld   hl,#0x4023                   ; pane width
+    add  a,(hl)
+    sub  c
+    ld   e,a
+    ld   a,(0x402a)                   ; ay
+    ld   b,a
+    ld   a,(0x402c)                   ; by
+    cp   b
+    jr   nc,mp_dy_ordered
+    ld   b,a                          ; top=by, bottom starts at ay
+    ld   a,(0x402a)
+mp_dy_ordered:
+    ld   hl,#0x402d                   ; damage height
+    add  a,(hl)
+    sub  b
+    ld   d,a
+    call 0x80b4                       ; GB_WMDAMAGE: C=x B=y E=w D=h
+    ret
+__endasm;
+}
+#endif
+
+static void choose_pen(unsigned char pen)
+{
+#ifdef GB_MSX2
+    if (pen > 3 && loaded && pic_mode != 7) {
+        gb_alert("4-color image", "Pens 0-3");
+        return;
+    }
+#endif
+    current_pen = pen;
+    gb_curhide(); draw_toolchest(); gb_curshow();
+}
+
+static void tool_action(unsigned char index)
+{
+    if (index == TOOL_UNDO) do_undo();
+    else if (index == TOOL_CUT) cut_selection();
+    else if (index == TOOL_COPY) copy_selection();
+    else if (index == TOOL_PASTE) paste_selection();
+    else {
+        gb_curhide();
+        gb_frame(tool_x(current_tool), tool_y(current_tool), TOOL_WB, TOOL_H, 2);
+        current_tool = index;
+        gb_frame(tool_x(index), tool_y(index), TOOL_WB, TOOL_H, 3);
+        gb_curshow();
+    }
+}
+
+static void toolchest_click(unsigned char mx, unsigned char my)
+{
+    unsigned char i;
+    unsigned char py = (unsigned char)(tc_y + TITLE_H +
+                                       TOOL_ROWS * TOOL_STEP_Y + 1);
+    if (title_hit(tc_x, tc_y, TC_W, mx, my)) {
+        if (close_hit(tc_x, tc_y, mx, my)) close_app();
+        else move_pane(&tc_x, &tc_y, TC_W, TC_H);
+        return;
+    }
+    for (i = 0; i < N_TOOLS; i++) {
+        if (inside(tool_x(i), tool_y(i), TOOL_WB, TOOL_H, mx, my)) {
+            tool_action(i);
+            return;
+        }
+    }
+#ifdef GB_MSX2
+    if (my >= py && my < (unsigned char)(py + 18) &&
+        mx >= (unsigned char)(tc_x + 1) &&
+        mx < (unsigned char)(tc_x + 25)) {
+        i = (unsigned char)((my - py >= 9 ? 8 : 0) +
+                            (unsigned char)(mx - tc_x - 1) / 3U);
+        if (i < 16) choose_pen(i);
+    }
+#else
+    if (my >= py && my < (unsigned char)(py + 9) &&
+        mx >= (unsigned char)(tc_x + 1) &&
+        mx < (unsigned char)(tc_x + 25)) {
+        i = (unsigned char)((mx - tc_x - 1) / 6);
+        if (i < 4) choose_pen(i);
+    }
+#endif
+}
+
+static void preview_click(unsigned char mx, unsigned char my)
+{
+    front_pane = PANE_PREVIEW;
+    if (title_hit(pv_x, pv_y, PV_W, mx, my)) {
+        if (close_hit(pv_x, pv_y, mx, my)) {
+            unsigned char action = confirm_discard(AFTER_CLOSE_DOC);
+            if (action == CONFIRM_NOW) {
+                close_document();
+                gb_restore_parent();
+            }
+        } else move_pane(&pv_x, &pv_y, PV_W, PV_H);
+        return;
+    }
+    layout_preview();
+    if (inside((unsigned char)(pv_x + 1), pv_view_y, SB_W, pv_view_h,
+               mx, my)) {
+        drag_vscroll();
+        return;
+    }
+    if (inside(pv_hbar_x, pv_hbar_y, pv_hbar_w, HSB_H, mx, my)) {
+        drag_hscroll();
+        return;
+    }
+    if (my >= pv_image_y && my < (unsigned char)(pv_image_y + pv_view_h) &&
+        gb_mxp() >= (unsigned int)pv_image_x * 4U &&
+        gb_mxp() < (unsigned int)(pv_image_x + pv_view_w) * 4U)
+        drag_selector();
+}
+
+static void work_click(unsigned char mx, unsigned char my)
+{
+    front_pane = PANE_WORK;
+    if (title_hit(wk_x, wk_y, WK_W, mx, my)) {
+        if (close_hit(wk_x, wk_y, mx, my)) {
+            work_visible = 0;
+#ifdef GB_MSX2
+            if (work_window_handle) {
+                gb_window_t handle = work_window_handle;
+                work_window_handle = 0;
+                (void)gb_window_close(handle);
+                return;
+            }
+#endif
+            gb_restore_parent();
+        } else move_pane(&wk_x, &wk_y, WK_W, (unsigned char)WK_H);
+        return;
+    }
+    start_work_action();
+}
+
+#ifndef GB_MSX2
+static void handle_click(void)
+{
+    unsigned char mx = gb_mx(), my = gb_my();
+    if (inside(tc_x, tc_y, TC_W, TC_H, mx, my)) {
+        toolchest_click(mx, my);
+        return;
+    }
+    if (!loaded) return;
+    if (work_visible && front_pane == PANE_WORK &&
+        inside(wk_x, wk_y, WK_W, (unsigned char)WK_H, mx, my)) {
+        work_click(mx, my);
+        return;
+    }
+    if (inside(pv_x, pv_y, PV_W, PV_H, mx, my)) {
+        preview_click(mx, my);
+        return;
+    }
+    if (work_visible &&
+        inside(wk_x, wk_y, WK_W, (unsigned char)WK_H, mx, my))
+        work_click(mx, my);
+}
+#endif
+
+static void close_app(void)
+{
+    unsigned char action = confirm_discard(AFTER_CLOSE_APP);
+    if (action == CONFIRM_CANCEL) {
+        gb_restore_parent();
+        return;
+    }
+    if (action == CONFIRM_WAIT) return;
+    release_document_page();
+    FS_XFLAGS_K = 0;
+#ifdef GB_MSX2
+    (void)gb_app_quit();
+#else
+    gb_wm_close();
+#endif
+}
+
+static void finish_open(unsigned char fresh)
+{
+    if (!fresh && io_off < doc_len) {
+        io_error();
+        return;
+    }
+    if (!fresh) doc_len = io_off;
+    io_job = IO_IDLE;
+    gb_drop_release();
+    loaded = 1;
+    dirty = fresh;
+    if (fresh) {
+        named = 0;
+        clear_name();
+    }
+    scroll_x = scroll_y = tile_x = tile_y = 0;
+    work_visible = work_sel_on = undo_valid = 0;
+    front_pane = PANE_PREVIEW;
+    select_document();
+    if (fresh) {
+        if (!load_tile()) {
+            close_document();
+            gb_alert("New picture failed", "Could not read canvas");
+        } else {
+            work_visible = 1;
+            front_pane = PANE_WORK;
+        }
+    }
+#ifdef GB_MSX2
+    if (loaded && !open_preview_window()) {
+        close_document();
+        gb_alert("Picture not opened", "No free window slot");
+    } else if (work_visible && !open_work_window()) {
+        work_visible = 0;
+        gb_alert("Canvas not opened", "No free window slot");
+    }
+#endif
+    gb_restore_parent();
+}
+
+static void finish_save(void)
+{
+    unsigned char after = io_after;
+    io_job = IO_IDLE;
+    io_after = AFTER_NONE;
+    FS_XFLAGS_K = 0;
+    gb_drop_release();
+    dirty = 0;
+    undo_valid = 0;
+    if (after == AFTER_NEW) start_new(pending_width, pending_height);
+    else if (after == AFTER_LOAD) do_load();
+    else if (after == AFTER_CLOSE_DOC) {
+        close_document();
+        gb_restore_parent();
+    } else if (after == AFTER_CLOSE_APP) {
+        release_document_page();
+#ifdef GB_MSX2
+        gb_app_quit();
+#else
+        gb_wm_close();
+#endif
+    } else gb_restore_parent();
+}
+
+static void step_job(void)
+{
+    unsigned int take, got, i;
+    unsigned char blank;
+    if (io_job == IO_LOAD) {
+        if (io_off == DOC_MAX) {
+            if (read_chunk(io_off, 1))
+                io_error();
+            else finish_open(0);
+            return;
+        }
+        take = DOC_MAX - io_off;
+        if (take > PAINT_IO_MAX) take = PAINT_IO_MAX;
+        got = read_chunk(io_off, take);
+        if (io_first) {
+            if (!parse_header((unsigned char *)gb_copybuf, got)) {
+                io_error();
+                return;
+            }
+            io_first = 0;
+        }
+        if (got && !document_write(io_off, gb_copybuf, got)) {
+            io_error();
+            return;
+        }
+        io_off += got;
+        if (got < take) finish_open(0);
+        return;
+    }
+    if (io_job == IO_NEW) {
+        take = doc_len - io_off;
+        if (take > PAINT_IO_MAX) take = PAINT_IO_MAX;
+        blank = pic_mode == 7 ? 0x11 : 0xF0;
+        for (i = 0; i < take; i++)
+            ((unsigned char *)gb_copybuf)[i] = blank;
+        if (!document_write(io_off, gb_copybuf, take)) {
+            io_error();
+            return;
+        }
+        io_off += take;
+        if (io_off == doc_len) finish_open(1);
+        return;
+    }
+    take = doc_len - io_off;
+    if (take > PAINT_IO_MAX) take = PAINT_IO_MAX;
+    if (!document_read(io_off, gb_copybuf, take)) {
+        io_error();
+        return;
+    }
+    gb_set_name(cur_name);
+    FS_XFLAGS_K = io_first ? 0x04 : 0x06;
+    if (!gb_fs_save(gb_copybuf, take)) {
+        io_first = 0;
+        io_error();
+        return;
+    }
+    io_first = 0;
+    FS_XFLAGS_K = 0;
+    UI_MODAL_K = 0;
+    io_off += take;
+    if (io_off == doc_len) finish_save();
+}
+
+static void paint_event(void)
+{
+    unsigned char col;
+    if (gb_msg.type != GB_MSG_MENU) return;
+    col = gb_msg.p0;
+    if (menu_title_hit(col, MENU_FILE_X)) want_menu = 1;
+    else if (menu_title_hit(col, MENU_EDIT_X)) want_menu = 2;
+}
+
+#ifdef GB_MSX2
+static void paint_window_frame(unsigned char pane)
+{
+    unsigned char flags, mx, my;
+    if (io_job != IO_IDLE) {
+        flags = gb_flags();
+        if ((flags & GB_QUIT) || gb_getkey() == 27) {
+            stop_job(1);
+            gb_restore_parent();
+        } else step_job();
+        return;
+    }
+    if (want_menu) {
+        run_menu();
+        return;
+    }
+    flags = gb_flags();
+    if (flags & GB_QUIT) {
+        close_app();
+        return;
+    }
+    if (stroke_active) {
+        continue_stroke();
+        return;
+    }
+    if (!(flags & GB_CLICK)) return;
+    mx = gb_mx();
+    my = gb_my();
+    if (pane == PANE_TOOL) toolchest_click(mx, my);
+    else if (pane == PANE_PREVIEW) preview_click(mx, my);
+    else work_click(mx, my);
+}
+
+static void tool_window_frame(void) { paint_window_frame(PANE_TOOL); }
+static void preview_window_frame(void) { paint_window_frame(PANE_PREVIEW); }
+static void work_window_frame(void) { paint_window_frame(PANE_WORK); }
+
+static const gb_win_t tool_window = {
+    GB_COLS - TC_W - 1, 12, TC_W, TC_H,
+    tool_window_frame, repaint_tool_window, paint_event, menu_def
+};
+
+static const gb_win_t preview_window = {
+    1, 12, PV_W, PV_H,
+    preview_window_frame, repaint_preview_window, paint_event, menu_def
+};
+
+static const gb_win_t work_window = {
+    39, 32, WK_W, (unsigned char)WK_H,
+    work_window_frame, repaint_work_window, paint_event, menu_def
+};
+
+static gb_window_t register_paint_window(const gb_win_t *window,
+                                         unsigned char x, unsigned char y)
+{
+    unsigned char count = gb_app_window_count();
+    gb_window_t handle;
+    if (!gb_window_slots_free()) return 0;
+    gb_wm_add(window);
+    if (gb_app_window_count() != (unsigned char)(count + 1)) return 0;
+    handle = gb_window_current();
+    if (!handle || gb_window_check(handle) != GB_APP_OK) return 0;
+    gb_wm_setpos(x, y);
+    return handle;
+}
+
+static unsigned char open_tool_window(void)
+{
+    if (!tool_window_handle)
+        tool_window_handle = register_paint_window(&tool_window, tc_x, tc_y);
+    return (unsigned char)(tool_window_handle != 0);
+}
+
+static unsigned char open_preview_window(void)
+{
+    if (!preview_window_handle)
+        preview_window_handle = register_paint_window(&preview_window, pv_x, pv_y);
+    return (unsigned char)(preview_window_handle != 0);
+}
+
+static unsigned char open_work_window(void)
+{
+    if (!work_window_handle)
+        work_window_handle = register_paint_window(&work_window, wk_x, wk_y);
+    return (unsigned char)(work_window_handle != 0);
+}
+
+static void close_picture_windows(void)
+{
+    gb_window_t handle;
+    if (work_window_handle) {
+        handle = work_window_handle;
+        work_window_handle = 0;
+        (void)gb_window_close(handle);
+    }
+    if (preview_window_handle) {
+        handle = preview_window_handle;
+        preview_window_handle = 0;
+        (void)gb_window_close(handle);
+    }
+}
+#else
+static void paint_frame(void)
+{
+    unsigned char flags;
+    if (io_job != IO_IDLE) {
+        flags = gb_flags();
+        if ((flags & GB_QUIT) || gb_getkey() == 27) {
+            stop_job(1);
+            gb_restore_parent();
+        } else step_job();
+        return;
+    }
+    if (want_menu) {
+        run_menu();
+        return;
+    }
+    flags = gb_flags();
+    if (flags & GB_QUIT) {
+        close_app();
+        return;
+    }
+    if (stroke_active) {
+        continue_stroke();
+        return;
+    }
+    if (flags & GB_CLICK) handle_click();
+}
+
+static const gb_win_t paint_window = {
+    0, 8, GB_COLS, GB_LINES - 8,
+    paint_frame, repaint_all, paint_event, menu_def
+};
+#endif
+
+static void initial_layout(void)
+{
+    tc_x = (unsigned char)(GB_COLS - TC_W - 1);
+    tc_y = 12;
+    pv_x = 1;
+    pv_y = 12;
+#ifdef GB_MSX2
+    wk_x = 39;
+    wk_y = 32;
+#else
+#ifdef GB_PCW
+    wk_x = 34;
+    wk_y = 64;
+#else
+    wk_x = 25;
+    wk_y = 24;
+#endif
+#endif
+}
+
+void main(void)
+{
+    unsigned char i;
+    io_job = IO_IDLE;
+    reset_editor_state();
+    current_tool = TOOL_PENCIL;
+    current_pen = 2;
+    front_pane = PANE_PREVIEW;
+    initial_layout();
+#ifdef GB_MSX2
+    tool_window_handle = preview_window_handle = work_window_handle = 0;
+    if (!open_tool_window()) {
+        (void)gb_app_quit();
+        return;
+    }
+    if (MSX_SCRMOD != 7) {
+        gb_alert("Mode 7 required", "Use 16 colors");
+        (void)gb_app_quit();
+        return;
+    }
+#else
+    gb_wm_add(&paint_window);
+#endif
+    gb_get_name(launch_name);
+    if (launch_is_pic()) start_load(launch_name);
+    load_tools();
+#if !defined(GB_MSX2) && !defined(GB_PCW)
+    load_picedit_helper();
+#endif
+    for (i = 64; i; i--) if (!gb_getkey()) break;
+    gb_restore_parent();
+}

@@ -863,10 +863,21 @@ boot_desktop
                 ld    hl,name_desktop
                 ld    de,fs_req_name
                 call  copy11
+                ifdef PLATFORM_MSX
+                call  owner_alloc
+                ret   nc
+                ld    (MSX_PENDING_OWNER),de
+                ld    b,GB_PAGE_APPLICATION
+                call  page_alloc_owned
+                jr    nc,bd_owner_fail
+                call  app_bind_code_page
+                ld    (wm_open_page),a
+                else
                 call  wm_alloc_page
                 or    a
                 ret   z
                 ld    c,a
+                endif
                 ld    a,(bank_cur)
                 push  af
                 xor   a
@@ -875,7 +886,11 @@ boot_desktop
                 ld    l,a
                 ld    (APP_HANDLER),hl
                 di
+                ifdef PLATFORM_MSX
+                ld    a,(wm_open_page)
+                else
                 ld    a,c
+                endif
                 call  bank_set
                 ld    hl,APP_LOAD_MAX             ; keep sector/record padding below app data RAM
                 ld    (fs_load_max),hl
@@ -888,10 +903,22 @@ boot_desktop
                 di
 bd_done         pop   af
                 call  bank_set
+                ifdef PLATFORM_MSX
+                ld    de,(MSX_PENDING_OWNER)
+                ld    a,d
+                or    e
+                call  nz,owner_release
+                else
                 ld    a,c
                 call  wm_free_page
+                endif
                 ei
                 ret
+                ifdef PLATFORM_MSX
+bd_owner_fail   ld    de,(MSX_PENDING_OWNER)
+                call  owner_release
+                ret
+                endif
 
                 ifdef WM_GADGETS
 ; --- #164 banked Viewer picture buffer ------------------------------------------------------
@@ -1516,6 +1543,7 @@ kpe_native16    ld    a,(PIC_EDIT_OFF)
 kpe_get         ld    a,(PIC_PAGE)
                 or    a
                 ret   z
+                call  page_claim_legacy_native
                 ld    a,(bank_cur)
                 push  af
                 call  kpe_pic_to_tmp
@@ -1535,6 +1563,7 @@ kpe_get         ld    a,(PIC_PAGE)
 kpe_put         ld    a,(PIC_PAGE)
                 or    a
                 ret   z
+                call  page_claim_legacy_native
                 ld    hl,(PIC_EDIT_BUF)
                 ld    de,PIC_TMP
                 ld    bc,PIC_TILE_SZ
@@ -1551,6 +1580,7 @@ kpe_put         ld    a,(PIC_PAGE)
 kpe_chunk       ld    a,(PIC_PAGE)
                 or    a
                 ret   z
+                call  page_claim_legacy_native
                 ld    a,(bank_cur)
                 push  af
                 ld    hl,(PIC_EDIT_OFF)
@@ -1566,6 +1596,7 @@ kpe_chunk       ld    a,(PIC_PAGE)
 kpe_write       ld    a,(PIC_PAGE)
                 or    a
                 ret   z
+                call  page_claim_legacy_native
                 ld    a,(bank_cur)
                 push  af
                 ld    hl,(PIC_EDIT_OFF)
@@ -2222,7 +2253,13 @@ wm_focus_top
 wm_register
                 ld    (wm_desc),hl
                 call  wm_free_slot               ; A = first dead slot
+                cp    #FF
+                ret   z                          ; compositor full: publish nothing
                 ld    (wm_slot),a
+                ifdef PLATFORM_MSX
+                call  window_generation_next
+                ld    a,(wm_slot)
+                endif
                 call  wm_entry                    ; HL = WM_TABLE[slot]
                 ld    a,(bank_cur)               ; +0 page = caller
                 ld    (hl),a
@@ -2236,9 +2273,14 @@ wm_register
                 inc   de                            ; entry+14 = arg: capture the pending
                 ld    hl,launch_arg               ; launch arg as this window's own file
                 call  copy11
+                ifdef PLATFORM_MSX
+                call  owner_bind_pending_window   ; parallel owner identity; WM entry stays frozen
+                endif
                 ld    a,(wm_slot)                 ; focus + append the new window (z-top)
                 ld    (WM_FOCUS),a
-                jr    wm_z_append                  ; A = slot; tail-call (rets to wm_register's caller)
+                call  wm_z_append
+                scf
+                ret
 
 ; ===== managed windows (#146): the kernel owns the chrome ====================
 ; k_wm_managed (GB_WMMANAGED): HL = a gb_mwin_t descriptor in the caller's page;
@@ -2258,6 +2300,14 @@ k_wm_managed
                                              ; page, focus, z-order, arg, flags=alive; copies
                                              ; desc[0..11] -> entry+1..12). wm_register stashed
                                              ; the desc ptr in wm_desc. Now patch for managed:
+                ifdef PLATFORM_MSX
+                jr    c,kwm_registered
+                pop   af
+                ret
+kwm_registered
+                else
+                ret   nc
+                endif
                 ld    a,(WM_FOCUS)           ; the just-registered window
                 call  wm_entry               ; HL = entry
                 ifdef PLATFORM_MSX
@@ -2298,6 +2348,15 @@ kwm_kind_done
                                              ; flag means wm_repaint_all skips it; MENU (entry+
                                              ; 11,12) temporarily contains task_worker but gb_doc
                                              ; replaces it before the app returns to the WM loop
+                ifdef PLATFORM_MSX
+                ld    hl,(wm_desc)
+                ld    de,10
+                add   hl,de
+                ld    a,(hl)
+                inc   hl
+                or    (hl)
+                call  nz,app_mark_worker_current
+                endif
                 ld    a,(WM_FOCUS)           ; publish MW_RECT so the app can read gb_wm_x/y/w/h
                 call  wm_entry               ; in main, but DON'T draw yet: the app loads its
                 call  mw_publish             ; content then calls gb_restore_parent for the first
@@ -2600,8 +2659,15 @@ mwf_content_hook
 ; Kernel-owned outline gestures for explicit v1 kinds. They deliberately retain the
 ; established app helper's interaction: the window is lifted only after actual
 ; movement, a red outline follows the held pointer, and one compositor repaint
-; restores the stack on release.
+; restores the stack on release. GB_APP also exposes the geometry engine to a
+; legacy gb_win_t callback, whose entry+5 is an on_frame pointer rather than a
+; managed descriptor. That path must not dispatch GB_MSG_MOVED through mw_hook.
+mw_move_silent
+                xor   a
+                jr    mwm_mode
 mw_move
+                ld    a,1
+mwm_mode        ld    (mwm_notify),a
                 ld    a,(WM_FOCUS)
                 call  wm_entry
                 push  hl
@@ -2712,6 +2778,9 @@ mwm_done        ld    a,(ghost_on)
                 ld    (GB_MSG+2),a
                 xor   a
                 ld    (GB_MSG+3),a
+                ld    a,(mwm_notify)
+                or    a
+                ret   z                          ; legacy caller records geometry, then repaints
                 ld    a,GB_MSG_MOVED
                 call  mw_hook
                 jp    wm_repaint_all
@@ -2866,8 +2935,9 @@ mw_do_close
                 jp    mw_hook
 
 mw_desc         dw    0                       ; scratch: the focused managed window's descriptor
+mwm_notify      db    0                       ; nonzero only for a real managed descriptor
 
-; wm_free_slot: -> A = lowest table slot whose alive flag is clear.
+; wm_free_slot: -> A = lowest table slot whose alive flag is clear, or #FF.
 wm_free_slot
                 ld    hl,WM_TABLE+WM_FR_FLAGS
                 ld    de,WM_ESZ
@@ -2880,7 +2950,7 @@ wfs_l           ld    a,(hl)
                 ld    a,c
                 cp    WM_MAXWIN
                 jr    c,wfs_l
-                ld    c,WM_MAXWIN-1               ; full (shouldn't happen) -> reuse last
+                ld    c,#FF
 wfs_found       ld    a,c
                 ret
 
@@ -2888,6 +2958,9 @@ wfs_found       ld    a,c
 ; master loop. Never returns.
 k_wm_run
                 call  wm_register
+                ifdef PLATFORM_MSX
+                call  app_mark_root_current
+                endif
                 if PREEMPTIVE_CONTEXT
                 xor   a                           ; first registration is always root slot zero
                 ld    (SCHED_CURRENT),a
@@ -3000,9 +3073,22 @@ k_wm_launch_as
                 ld    de,fs_req_name
                 call  copy11
 wm_open_go
+                ld    a,(WM_NWIN)                 ; memory pages and window slots are independent
+                cp    WM_MAXWIN
+                ret   nc
+                ifdef PLATFORM_MSX
+                call  owner_alloc
+                ret   nc
+                ld    (MSX_PENDING_OWNER),de
+                ld    b,GB_PAGE_APPLICATION
+                call  page_alloc_owned
+                jr    nc,wmo_owner_fail
+                call  app_bind_code_page
+                else
                 call  wm_alloc_page
                 or    a
                 ret   z                            ; no free page
+                endif
                 ld    (wm_open_page),a
                 ld    a,(bank_cur)
                 ld    (wm_open_back),a
@@ -3027,15 +3113,31 @@ wmo_loaded      jr    nc,wmo_fail
                 di
                 ld    a,(wm_open_back)
                 call  bank_set
+                ifdef PLATFORM_MSX
+                ld    de,(MSX_PENDING_OWNER)      ; a non-registering/bad app cannot leak its owner
+                ld    a,d
+                or    e
+                call  nz,owner_release
+                endif
                 ei
                 ret
 wmo_fail
                 ld    a,(wm_open_back)
                 call  bank_set
+                ifdef PLATFORM_MSX
+                ld    de,(MSX_PENDING_OWNER)
+                call  owner_release              ; also releases the primary code page
+                else
                 ld    a,(wm_open_page)
                 call  wm_free_page
+                endif
                 ei
                 ret
+                ifdef PLATFORM_MSX
+wmo_owner_fail  ld    de,(MSX_PENDING_OWNER)
+                call  owner_release
+                ret
+                endif
 
                 ifdef PLATFORM_MSX
 ; k_shell (GB_SHELL): bounded synchronous shell services for GEMBENCH MSX2.
@@ -3084,7 +3186,7 @@ ksh_register
                 ld    a,b
                 and   WM_SHELL_MASK
                 jr    z,ksh_bad
-                ld    c,a
+                ld    (wm_slot),a                  ; app-owned class; window flags stay a mirror
                 ld    a,(WM_FOCUS)
                 call  wm_entry
                 push  hl
@@ -3095,6 +3197,19 @@ ksh_register
                 or    (hl)
                 pop   hl
                 jr    z,ksh_nohandler
+                call  owner_current
+                call  owner_validate
+                jr    nc,ksh_bad
+                ld    a,e
+                dec   a
+                ld    hl,MSX_APP_SERVICE
+                add   a,l
+                ld    l,a
+                ld    a,(wm_slot)
+                ld    (hl),a
+                ld    c,a
+                ld    a,(WM_FOCUS)
+                call  wm_entry
                 ld    de,WM_FR_FLAGS
                 add   hl,de
                 ld    a,(hl)
@@ -3120,6 +3235,17 @@ ksh_register_accessory
                 pop   bc
                 or    a
                 ret   nz
+                push  bc
+                call  owner_current
+                call  owner_validate
+                pop   bc
+                jr    nc,ksh_bad
+                ld    a,e
+                dec   a
+                ld    hl,MSX_APP_ACCESSORY
+                add   a,l
+                ld    l,a
+                ld    (hl),c
                 ld    a,(WM_FOCUS)
                 call  wm_entry
                 ld    de,WM_FR_ARG+10
@@ -3144,6 +3270,8 @@ kshf_start
                 and   WM_SHELL_MASK
                 ret   z
                 ld    (wm_slot),a                  ; requested encoded class
+                ld    a,c
+                ld    (MSX_APP_SLOT),a             ; optional exact accessory ID
                 ld    a,(WM_NWIN)
                 ld    (wm_hz),a                    ; z-order cursor, top to bottom
 kshf_loop
@@ -3157,20 +3285,26 @@ kshf_loop
                 ld    l,a
                 ld    a,(hl)
                 ld    (wm_rp_i),a                 ; candidate slot (repaint is not active)
-                call  wm_entry
-                ld    de,WM_FR_FLAGS
-                add   hl,de
-                ld    a,(hl)
-                and   WM_SHELL_MASK
+                call  app_service_for_window
                 ld    b,a
                 ld    a,(wm_slot)
                 cp    b
                 jr    nz,kshf_loop
-                ld    a,c                           ; an exact accessory lookup also
+                ld    a,(MSX_APP_SLOT)              ; an exact accessory lookup also
                 or    a                             ; matches its private stable ID
                 jr    z,kshf_found
-                ld    de,WM_FR_ARG-WM_FR_FLAGS+10
-                add   hl,de
+                ld    c,a
+                ld    a,(wm_rp_i)
+                ld    hl,MSX_WIN_OWNER
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                or    a
+                jr    z,kshf_loop
+                dec   a
+                ld    hl,MSX_APP_ACCESSORY
+                add   a,l
+                ld    l,a
                 ld    a,(hl)
                 cp    c
                 jr    nz,kshf_loop
@@ -3206,7 +3340,9 @@ ksh_send
                 ld    a,(hl)
                 bit   0,a
                 jr    z,ksh_pop_stale
-                and   WM_SHELL_MASK
+                ld    a,(GB_MSG+3)
+                call  app_service_for_window
+                or    a
                 jr    z,ksh_pop_stale
                 pop   hl
                 push  hl
@@ -3281,8 +3417,88 @@ ksh_busy       ld    a,GB_SHELL_BUSY_RES
 ; on_frame must return immediately after. Mapping is unchanged on return so the
 ; closing on_frame can still execute (its page content survives until reused).
 k_wm_close
+                ifdef PLATFORM_MSX
+                ld    a,(WM_FOCUS)
+                ld    c,a
+                jp    msx_window_close_slot
+
+; Close one MSX window slot while keeping its application alive whenever it
+; still owns another window. This is also the internal target of GB_APP's
+; generation-checked close operation. C = live slot owned by the caller.
+msx_window_close_slot
+                ld    a,c
+                ld    (MSX_WINDOW_SLOT),a
+                ld    a,(bank_cur)
+                ld    (MSX_CALLER_BANK),a
+                ld    a,c
+                ld    hl,MSX_WIN_OWNER
+                add   a,l
+                ld    l,a
+                ld    e,(hl)
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    d,(hl)
+                ld    (MSX_CLOSE_OWNER),de
+                ld    a,c
+                call  wm_set_clip                 ; B = shared application code page
+                ld    a,b
+                ld    (MSX_ALLOC_NATIVE),a
+                ld    de,WM_FR_FLAGS-4
+                add   hl,de
+                if PREEMPTIVE_CONTEXT
+                bit   3,(hl)
+                jr    z,mkwc_not_task
+                push  hl
+                ld    hl,SCHED_RUNNABLE
+                dec   (hl)
+                pop   hl
+mkwc_not_task
+                endif
+                ld    (hl),0                       ; dead before identity detaches
+                ld    a,(MSX_WINDOW_SLOT)
+                ld    c,a
+                call  wm_z_remove
+                ld    de,(MSX_CLOSE_OWNER)
+                ld    a,(MSX_WINDOW_SLOT)
+                ld    c,a
+                call  app_window_detach
+                ld    (MSX_APP_REMAIN),a
+                call  wm_focus_top
+                cpl
+                ld    (WM_FPREV),a
+                call  wm_map_focus
+                ld    a,(MSX_CALLER_BANK)
+                call  bank_set                     ; closing callback must finish in its code page
+                ld    de,(MSX_CLOSE_OWNER)
+                ld    a,d
+                or    e
+                jr    z,mkwc_raw_free
+                ld    a,(MSX_APP_REMAIN)
+                or    a
+                jr    nz,mkwc_repaint               ; another owned window keeps the app alive
+                call  owner_release                 ; last window: legacy one-window lifecycle
+                jr    mkwc_repaint
+mkwc_raw_free   ld   a,(MSX_ALLOC_NATIVE)
+                call  wm_free_page
+mkwc_repaint    jp   wm_repaint_all
+
+                else
                 ld    a,(WM_FOCUS)
                 ld    c,a                          ; C = slot being closed
+                ifdef PLATFORM_MSX
+                ld    hl,MSX_WIN_OWNER
+                add   a,l
+                ld    l,a
+                ld    e,(hl)
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    d,(hl)
+                ld    (MSX_CLOSE_OWNER),de
+                endif
                 call  wm_set_clip                 ; damage only the rectangle being exposed;
                                                   ; B = page, HL = closing entry+4
                 ld    a,b                          ; page
@@ -3311,8 +3527,23 @@ kwc_not_task
                 call  bank_set                     ; wm_map_focus mapped the new focus, but the
                                                   ; closing handler must return in its own page;
                                                   ; bank_set preserves A for wm_free_page
+                ifdef PLATFORM_MSX
+                push  af                           ; retain raw page for the ownerless fallback
+                ld    de,(MSX_CLOSE_OWNER)
+                ld    a,d
+                or    e
+                jr    z,kwc_raw_free
+                pop   af                           ; owner teardown finds every page by handle owner
+                call  owner_release               ; primary + resource pages, generation invalidated
+                jr    kwc_repaint
+kwc_raw_free    pop   af                           ; defensive legacy window without an owner
+                call  wm_free_page
+kwc_repaint
+                else
                 call  wm_free_page                 ; release it (z-order already updated)
+                endif
                 jp    wm_repaint_all               ; repaint remaining layers only inside that rect
+                endif                              ; PLATFORM_MSX multi-window close
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
 ; (x,y), so click-to-focus follows a window the app has dragged. Also sets the fill
@@ -3449,9 +3680,10 @@ wm_map_focus
                 jp    menu_install                 ; install the focused window's menu
 
 ; wm_focus_click: if a fresh click landed on a window other than the focused one,
-; move focus there. App windows also rise to the z-top (and the stack repaints) if
-; not already on top; the desktop (slot 0) stays pinned at the bottom. The click is
-; not consumed - it is then delivered to the newly focused window's on_frame.
+; move focus there. App windows also rise to the z-top; only the parts previously
+; obscured by windows above them are damaged. Disjoint sibling panes therefore
+; switch with no repaint. The desktop (slot 0) stays pinned at the bottom. The
+; click is not consumed - it is then delivered to the new window's on_frame.
 wm_focus_click
                 ld    a,(POLL_FLAGS)
                 bit   0,a
@@ -3475,11 +3707,140 @@ wm_focus_click
                 ld    a,(hl)
                 cp    c
                 ret   z
-                ld    a,c
+                ifdef PLATFORM_MSX
+                ld    a,c                          ; retain the old z-order while deriving
+                ld    (wm_slot),a                  ; newly exposed overlap damage
+                call  wm_focus_damage
+                ld    a,(wm_slot)
                 call  wm_raise                     ; bring it to the front
-                ld    a,c                          ; damage = the raised window's rect
+                ld    a,(clip_w)                   ; no former overlap -> screen is already right
+                or    a
+                ret   z
+                else
+                ld    a,c
+                call  wm_raise
+                ld    a,c                          ; legacy targets repaint the raised window
                 call  wm_set_clip
+                endif
                 jp    wm_repaint_top               ; opaque top window: avoid repainting layers through it
+
+                ifdef PLATFORM_MSX
+; wm_focus_damage: derive the bounding union of intersections between the clicked
+; window and every window above it in the old z-order. wm_hit_test left its index
+; in wm_hz and wm_slot holds its slot. The clicked surface is already correct
+; everywhere it was visible, so only these formerly obscured pixels need drawing.
+wm_focus_damage
+                ld    a,(wm_slot)
+                call  wm_entry
+                inc   hl
+                ld    a,(hl)                       ; clicked rect -> fb_*
+                ld    (fb_x),a
+                inc   hl
+                ld    a,(hl)
+                ld    (fb_y),a
+                inc   hl
+                ld    a,(hl)
+                ld    (fb_w),a
+                inc   hl
+                ld    a,(hl)
+                ld    (fb_h),a
+                ld    a,#FF                        ; no union yet
+                ld    (sp_x),a
+wfd_next        ld    a,(wm_hz)
+                inc   a
+                ld    (wm_hz),a
+                ld    hl,WM_NWIN
+                cp    (hl)
+                jp    nc,wfd_done
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                call  wm_entry
+                inc   hl
+                ld    a,(hl)                       ; old higher window -> clip
+                ld    (clip_x),a
+                inc   hl
+                ld    a,(hl)
+                ld    (clip_y),a
+                inc   hl
+                ld    a,(hl)
+                ld    (clip_w),a
+                inc   hl
+                ld    a,(hl)
+                ld    (clip_h),a
+                call  clip_fb_copy                 ; fbw_* = clicked INTERSECT higher
+                jr    c,wfd_next
+                ld    a,(sp_x)
+                inc   a
+                jr    nz,wfd_union
+                ld    a,(fbw_x)                    ; first intersection seeds x/y/end-x/end-y
+                ld    (sp_x),a
+                ld    b,a
+                ld    a,(fbw_w)
+                add   a,b
+                ld    (ss_w),a
+                ld    a,(fbw_y)
+                ld    (sp_y),a
+                ld    b,a
+                ld    a,(fbw_h)
+                add   a,b
+                ld    (ss_h),a
+                jr    wfd_next
+wfd_union       ld    a,(fbw_x)                    ; left = min(left, intersection left)
+                ld    b,a
+                ld    a,(sp_x)
+                cp    b
+                jr    c,wfd_right
+                jr    z,wfd_right
+                ld    a,b
+                ld    (sp_x),a
+wfd_right       ld    a,(fbw_w)                    ; right = max(right, intersection right)
+                add   a,b
+                ld    b,a
+                ld    a,(ss_w)
+                cp    b
+                jr    nc,wfd_top
+                ld    a,b
+                ld    (ss_w),a
+wfd_top         ld    a,(fbw_y)                    ; top = min(top, intersection top)
+                ld    b,a
+                ld    a,(sp_y)
+                cp    b
+                jr    c,wfd_bottom
+                jr    z,wfd_bottom
+                ld    a,b
+                ld    (sp_y),a
+wfd_bottom      ld    a,(fbw_h)                    ; bottom = max(bottom, intersection bottom)
+                add   a,b
+                ld    b,a
+                ld    a,(ss_h)
+                cp    b
+                jp    nc,wfd_next
+                ld    a,b
+                ld    (ss_h),a
+                jp    wfd_next
+wfd_done        ld    a,(sp_x)
+                inc   a
+                jr    z,wfd_empty
+                dec   a
+                ld    (clip_x),a
+                ld    b,a
+                ld    a,(ss_w)
+                sub   b
+                ld    (clip_w),a
+                ld    a,(sp_y)
+                ld    (clip_y),a
+                ld    b,a
+                ld    a,(ss_h)
+                sub   b
+                ld    (clip_h),a
+                ret
+wfd_empty       xor   a
+                ld    (clip_w),a
+                ld    (clip_h),a
+                ret
+                endif                              ; PLATFORM_MSX focus damage
 
 ; wm_hit_test: -> A = slot of the top-most window whose rect contains the pointer
 ; (POLL_MX, POLL_MY), scanning z-order top->bottom; CF set if none.
@@ -3736,6 +4097,22 @@ wra_l           ld    a,(wm_rp_i)
                 pop   hl                            ; HL = entry
                 bit   0,a                          ; alive?
                 jr    z,wra_next                   ; dead -> skip (z-order should exclude it)
+                ifdef PLATFORM_MSX
+                push  af                           ; skip callbacks whose window cannot touch the
+                push  hl                           ; current damage rectangle. Besides saving work,
+                inc   hl                           ; this keeps app-native blits outside that damage
+                ld    b,(hl)                       ; from repainting unrelated panes.
+                inc   hl
+                ld    c,(hl)
+                inc   hl
+                ld    d,(hl)
+                inc   hl
+                ld    e,(hl)
+                call  rect_cull
+                pop   hl
+                jr    c,wra_culled
+                pop   af
+                endif
                 push  af                           ; keep flags across bank_set
                 ld    a,(hl)                       ; page
                 call  bank_set                     ; (preserves HL = entry)
@@ -3755,6 +4132,10 @@ wra_legacy
                 or    l
                 jr    z,wra_next                   ; no handler
                 call  md_call
+                jr    wra_next
+                ifdef PLATFORM_MSX
+wra_culled      pop   af
+                endif
 wra_next        ld    a,(wm_rp_i)
                 inc   a
                 ld    (wm_rp_i),a
