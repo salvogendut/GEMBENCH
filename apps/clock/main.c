@@ -16,6 +16,9 @@
 #ifdef GB_MSX2
 #include "gbevent.h"
 #include "gbshell.h"
+#ifdef GB_DEFER_MESSAGES
+#include "gbdefer.h"
+#endif
 #include "gbdesk_catalog.h"
 #endif
 
@@ -411,6 +414,15 @@ static void c_drag(void)
 static void c_proc(void)
 {
 #ifdef GB_MSX2
+#ifdef GB_DEFER_MESSAGES
+    if (gb_msg.type == GB_MSG_DEFER) {
+        const gb_defer_message_t *message = gb_defer_current();
+        if (message && message->type == GB_DEFER_SHELL &&
+            message->p0 == GB_SHELL_ACTIVATE)
+            gb_defer_activate();
+        return;
+    }
+#endif
     if (gb_msg.type == GB_MSG_SHELL) {
         clk_event();
         return;
@@ -464,6 +476,9 @@ void main(void)
     gb_menu_add("Options", opt_items, 2, opt_action);
 #ifdef GB_MSX2
     (void)gb_shell_register_accessory(GB_DESK_ACCESSORY_CLOCK_ID);
+#ifdef GB_DEFER_MESSAGES
+    (void)gb_defer_register(c_proc);
+#endif
 #endif
     gb_restore_parent();                         /* first paint: WM chrome + c_draw */
 }

@@ -13,14 +13,14 @@ these services yet.
 
 `GB_SYSINFO` at `0x80C3` returns `DE` pointing to a resident, read-only
 `gb_sysinfo_t`. The first byte is the record size and the second is the record
-version. Milestone 2 has now appended four bytes without changing this 20-byte
-v1 prefix; the current kernel returns the v2 record documented in
-[ARCHITECTURE-M2-MSX.md](ARCHITECTURE-M2-MSX.md).
+version. Milestones 2 and 3 append fields without changing this 20-byte v1
+prefix; the current kernel returns the v3 record documented in
+[ARCHITECTURE-M3-MSX.md](ARCHITECTURE-M3-MSX.md).
 
 | Offset | Bytes | v1 field |
 | ---: | ---: | --- |
-| 0 | 1 | record size (`20` for v1; currently `24`) |
-| 1 | 1 | record version (`1`; currently `2`) |
+| 0 | 1 | record size (`20` for v1; currently `28`) |
+| 1 | 1 | record version (`1`; currently `3`) |
 | 2 | 2 | GEMBENCH ABI major/minor (`1.0`) |
 | 4 | 1 | platform (`GB_PLATFORM_MSX2`) |
 | 5 | 1 | native video mode (`6` or `7`) |
@@ -101,7 +101,9 @@ private page/owner tables and the current public capability record:
 - loader/close/allocator scratch and pool totals; and
 - the stable 20-byte `GB_SYSINFO` v1 prefix plus the four-byte v2 suffix.
 
-Milestone 2 appends application/window metadata through `0xC35D`.
+Milestone 3 extends sysinfo through `0xC30B`, moves the private application/
+window block to `0xC30C-0xC361`, and appends deferred-message metadata through
+`0xC3C5`.
 
 This storage is outside the application page and does not consume another
 mapper segment. Native segment values and table addresses are implementation

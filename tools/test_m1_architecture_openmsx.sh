@@ -24,6 +24,7 @@ export GEMBENCH_M1_INITIAL="$(hexsum "$data_abs" "0x$(symbol_offset _initial_fre
 export GEMBENCH_M1_FINAL="$(hexsum "$data_abs" "0x$(symbol_offset _final_free)")"
 export GEMBENCH_M1_OWNER="$(hexsum "$data_abs" "0x$(symbol_offset _owner)")"
 export GEMBENCH_M1_RETAINED="$(hexsum "$data_abs" "0x$(symbol_offset _retained_page)")"
+export GEMBENCH_M3_TESTS="$(hexsum "$data_abs" "0x$(symbol_offset _defer_tests)")"
 export GEMBENCH_M1_OUTPUT="$PWD/build/msx/m1-architecture-openmsx.txt"
 export GEMBENCH_M1_SCREENSHOT="$PWD/build/msx/m1-architecture.png"
 export MSX_UNAPI=0

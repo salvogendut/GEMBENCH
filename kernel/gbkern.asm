@@ -2971,6 +2971,9 @@ wm_loop
                 call  wm_map_focus               ; bank focused page; APP_HANDLER = its
                 call  k_poll                      ; on_event, so a top-bar click reaches
                 call  wm_focus_click             ; the right app. then route the click.
+                ifdef PLATFORM_MSX
+                call  defer_dispatch_one         ; one bounded, non-nested app message per turn
+                endif
                 call  wm_map_focus               ; focus may have changed
                 call  clip_set_full              ; #281: each window's frame starts from a full clip.
                                                  ; A direct-drawing full-screen app (a .SAV saver) never
@@ -4426,6 +4429,10 @@ k_mxp
                 include "../lib/msx/input.asm"
                 include "../lib/msx/fs.asm"     ; MSX-DOS 2 BDOS backend
                 include "../lib/msx/bank.asm"   ; mapper-segment paging (PUT_P1)
+                ; Assemble the M3 FIFO after the screen driver's aligned LUTs so
+                ; Screen 7 remains within the child-COM loader's #3FFF ceiling.
+GB_DEFER_LATE   equ 1
+                include "msx_page_pool.asm"
                 else
                 ifdef PLATFORM_PCW
                 include "clock_pcw.asm"        ; software clock (poll-paced, #331)

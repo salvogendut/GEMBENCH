@@ -25,6 +25,7 @@ set da_choice_y 0
 set da_choice_callback ""
 set da_focus_callback ""
 set da_register_hits 0
+set da_defer_register_hits 0
 set da_find_hits 0
 set da_send_hits 0
 set da_register_ids {}
@@ -78,6 +79,7 @@ proc da_finish {status} {
     set out [open $::da_output w]
     puts $out "STATUS=$status"
     puts $out "REGISTER_HITS=$::da_register_hits"
+    puts $out "DEFER_REGISTER_HITS=$::da_defer_register_hits"
     puts $out "REGISTER_IDS=$::da_register_ids"
     puts $out "EXACT_FIND_HITS=$::da_find_hits"
     puts $out "EXACT_FIND_IDS=$::da_find_ids"
@@ -92,6 +94,8 @@ proc da_finish {status} {
     puts $out "FINAL_NWIN=[peek 0x1350]"
     puts $out "FINAL_FOCUS=[peek 0x1351]"
     puts $out "SHELL_BUSY=[peek 0x133E]"
+    puts $out "DEFER_COUNT=[peek 0xC372]"
+    puts $out "DEFER_BUSY=[peek 0xC373]"
     puts $out [format "FINAL_PC=%04X" [reg PC]]
     puts $out [format "FINAL_SP=%04X" [reg SP]]
     close $out
@@ -103,10 +107,18 @@ proc da_api_hit {} {
     if {$op == 3} {
         incr ::da_register_hits
         lappend ::da_register_ids [reg C]
-    } elseif {$op == 4} {
+    }
+    set ::pause off
+}
+
+proc da_defer_api_hit {} {
+    set op [reg A]
+    if {$op == 0} {
+        incr ::da_defer_register_hits
+    } elseif {$op == 5} {
         incr ::da_find_hits
         lappend ::da_find_ids [reg C]
-    } elseif {$op == 2} {
+    } elseif {$op == 1} {
         incr ::da_send_hits
     }
     set ::pause off
@@ -290,11 +302,13 @@ proc da_wait_clock_relaunched {} {
         set ::da_final_accessory_ok [da_accessory_ok $slot 1]
         if {$::da_final_accessory_ok} {
             set ::da_final_busy [da_busy_count]
-            if {$::da_register_hits == 3 && $::da_find_hits == 5 &&
+            if {$::da_register_hits == 3 && $::da_defer_register_hits == 3 &&
+                $::da_find_hits == 5 &&
                 $::da_send_hits == 2 &&
                 $::da_closed_busy == ($::da_before_close_busy - 1) &&
                 $::da_final_busy == $::da_before_close_busy &&
-                $::da_max_nwin == 3 && [peek 0x133E] == 0} {
+                $::da_max_nwin == 3 && [peek 0x133E] == 0 &&
+                [peek 0xC372] == 0 && [peek 0xC373] == 0} {
                 da_finish PASS
                 return
             }
@@ -323,4 +337,5 @@ proc da_start {} {
 }
 
 debug set_bp 0x80C0 {} {da_api_hit}
+debug set_bp 0x80CF {} {da_defer_api_hit}
 after time 62.0 da_start

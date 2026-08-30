@@ -1,4 +1,4 @@
-/* SYSINFO.APP - MSX2 Architecture Milestones 1-2 diagnostic (#31, #32).
+/* SYSINFO.APP - MSX2 Architecture Milestones 1-3 diagnostic (#31, #32, #35).
  *
  * This development-only app exercises the public capability, owner, and opaque
  * page APIs. One cache page is deliberately left allocated: closing the window
@@ -6,6 +6,9 @@
  * same initial free-page count.
  */
 #include "gb.h"
+#ifdef GB_DEFER_MESSAGES
+#include "gbdefer.h"
+#endif
 
 #define WIN_X 34
 #define WIN_Y 28
@@ -44,10 +47,100 @@ static unsigned char initial_free;
 static unsigned char final_free;
 static gb_owner_t owner;
 static gb_page_t retained_page;
+#ifdef GB_DEFER_MESSAGES
+volatile unsigned char defer_tests;
+static unsigned char defer_seen;
+static unsigned char defer_expected;
+static gb_defer_send_t defer_heartbeat;
+
+#define DEFER_TEST_CONTEXT  0x01
+#define DEFER_TEST_REGISTER 0x02
+#define DEFER_TEST_FULL     0x04
+#define DEFER_TEST_CANCEL   0x08
+#define DEFER_TEST_FIFO     0x10
+#define DEFER_TEST_OWNER    0x20
+#define DEFER_TEST_BADARG   0x40
+#define DEFER_TEST_LATER    0x80
+#define DEFER_TEST_ALL      0xFF
+#define DEFER_TEST_TYPE     0x40
+#define DEFER_HEARTBEAT     0x41
+#endif
 
 static void probe_frame(void) { }
 static void probe_repaint(void) { }
 static void probe_event(void) { }
+
+#ifdef GB_DEFER_MESSAGES
+static void defer_handler(void)
+{
+    const gb_defer_message_t *message = gb_defer_current();
+
+    if (gb_msg.type != GB_MSG_DEFER || !message) return;
+    defer_tests |= DEFER_TEST_LATER;
+    if (message->sender == owner && message->receiver == owner)
+        defer_tests |= DEFER_TEST_OWNER;
+    if (message->type == DEFER_TEST_TYPE) {
+        if (message->p0 == defer_expected) {
+            defer_expected++;
+            defer_seen++;
+        }
+        if (defer_seen == GB_DEFER_QUEUE_CAPACITY)
+            defer_tests |= DEFER_TEST_FIFO;
+    }
+
+    /* Keep a bounded self-message pending after the initial FIFO drains. The
+     * lifecycle probe closes this app and checks that owner teardown purges it. */
+    if (message->type == DEFER_HEARTBEAT || defer_seen)
+        (void)gb_defer_send(&defer_heartbeat);
+}
+
+static void test_deferred_messages(void)
+{
+    const gb_sysinfo_t *info = gb_sysinfo();
+    gb_defer_send_t message;
+    unsigned char i;
+
+    defer_tests = 0;
+    defer_seen = 0;
+    defer_expected = 1;
+    if (!gb_defer_current() &&
+        gb_defer_slots_free() == GB_DEFER_QUEUE_CAPACITY)
+        defer_tests |= DEFER_TEST_CONTEXT;
+    if (info->size == sizeof(gb_sysinfo_t) && info->version == 3 &&
+        info->message_queue_capacity == GB_DEFER_QUEUE_CAPACITY &&
+        info->message_inline_bytes == GB_DEFER_INLINE_BYTES &&
+        info->message_api_version == GB_DEFER_API_VERSION &&
+        (info->capabilities & GB_CAP_DEFERRED_MSG) != 0 &&
+        gb_defer_register(defer_handler) == GB_DEFER_OK)
+        defer_tests |= DEFER_TEST_REGISTER;
+
+    message.receiver = owner;
+    message.type = 0;
+    message.p0 = message.p1 = message.p2 = 0;
+    if (gb_defer_send(&message) == GB_DEFER_ERR_BADARG)
+        defer_tests |= DEFER_TEST_BADARG;
+    message.type = DEFER_TEST_TYPE;
+    for (i = 1; i <= GB_DEFER_QUEUE_CAPACITY; i++) {
+        message.p0 = i;
+        if (gb_defer_send(&message) != GB_DEFER_OK) break;
+    }
+    if (i == GB_DEFER_QUEUE_CAPACITY + 1 && !defer_seen &&
+        gb_defer_slots_free() == 0 &&
+        gb_defer_send(&message) == GB_DEFER_ERR_FULL)
+        defer_tests |= DEFER_TEST_FULL;
+    if (gb_defer_cancel_all() == GB_DEFER_QUEUE_CAPACITY &&
+        gb_defer_slots_free() == GB_DEFER_QUEUE_CAPACITY)
+        defer_tests |= DEFER_TEST_CANCEL;
+    for (i = 1; i <= GB_DEFER_QUEUE_CAPACITY; i++) {
+        message.p0 = i;
+        (void)gb_defer_send(&message);
+    }
+
+    defer_heartbeat.receiver = owner;
+    defer_heartbeat.type = DEFER_HEARTBEAT;
+    defer_heartbeat.p0 = defer_heartbeat.p1 = defer_heartbeat.p2 = 0;
+}
+#endif
 
 static const gb_win_t probe_window = {
     100, 36, 18, 28, probe_frame, probe_repaint, probe_event, 0
@@ -171,7 +264,7 @@ static void test_application(void)
     gb_window_t primary = gb_window_current();
     gb_window_t probe;
 
-    if (info->size == sizeof(gb_sysinfo_t) && info->version == 2 &&
+    if (info->size == sizeof(gb_sysinfo_t) && info->version == 3 &&
         info->max_applications == 8 &&
         info->application_record_version == 1 &&
         info->max_windows_per_application == 8 &&
@@ -212,7 +305,7 @@ static void draw(void)
 
     gb_fill(gb_wm_x(), (unsigned char)(gb_wm_y() + 14), WIN_W,
             (unsigned char)(WIN_H - 14), 1);
-    gb_textbw(x, y, "GB_SYSINFO v2   MSX Screen");
+    gb_textbw(x, y, "GB_SYSINFO v3   MSX Screen");
     hex8(value, info->video_mode);
     gb_textbw((unsigned char)(x + 51), y, value);
     hex16(value, owner);
@@ -254,5 +347,8 @@ void main(void)
     gb_wm_managed(&window);
     test_pages();
     test_application();
+#ifdef GB_DEFER_MESSAGES
+    test_deferred_messages();
+#endif
     gb_restore_parent();
 }

@@ -147,8 +147,9 @@ GB_SHELL_CLIENT_FLAG="${GB_SHELL_CLIENT:-0}"
 GB_SHELL_TARGET_FLAG="${GB_SHELL_TARGET:-0}"
 GB_SHELL_ACCESSORY_CLIENT_FLAG="${GB_SHELL_ACCESSORY_CLIENT:-0}"
 GB_SHELL_ACCESSORY_TARGET_FLAG="${GB_SHELL_ACCESSORY_TARGET:-0}"
+GB_DEFER_FLAG="${GB_DEFER:-0}"
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_VDI_FLAG" = "1" ] || [ "$GB_VDI_BASE_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ]; then
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_VDI_FLAG" = "1" ] || [ "$GB_VDI_BASE_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ] || [ "$GB_DEFER_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
 NET_SRC="$GB/gbnet_stub.c"
@@ -263,6 +264,17 @@ if [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "
     esac
     ALL_APPDEFS="$ALL_APPDEFS -DGB_SHELL_SERVICES"
 fi
+if [ "$GB_DEFER_FLAG" != "0" ] && [ "$GB_DEFER_FLAG" != "1" ]; then
+    echo "ERROR: GB_DEFER must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_DEFER_FLAG" = "1" ]; then
+    case " $ALL_APPDEFS " in
+        *" -DGB_MSX2 "*) ;;
+        *) echo "ERROR: GB_DEFER=1 is currently MSX2-only" >&2; exit 1 ;;
+    esac
+    ALL_APPDEFS="$ALL_APPDEFS -DGB_DEFER_MESSAGES"
+fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
         *" -DGB_MSX2 "*) ;;
@@ -367,6 +379,9 @@ if [ "$BASELINE_FLAG" = "1" ]; then
 fi
 if [ "$SYS_FLAG" = "1" ]; then
     deps+=("$GB/gbsys.s")
+fi
+if [ "$GB_DEFER_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbdefer.h" "$GBR_LIB/gbdefer.s")
 fi
 if [ "$GBR_READER_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbr.h" "$GBR_LIB/gbr_reader.c")
@@ -511,6 +526,7 @@ cache_key=$(printf '%s\n' \
     "GB_SHELL_TARGET=$GB_SHELL_TARGET_FLAG" \
     "GB_SHELL_ACCESSORY_CLIENT=$GB_SHELL_ACCESSORY_CLIENT_FLAG" \
     "GB_SHELL_ACCESSORY_TARGET=$GB_SHELL_ACCESSORY_TARGET_FLAG" \
+    "GB_DEFER=$GB_DEFER_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -560,6 +576,11 @@ SYS_REL=""
 if [ "$SYS_FLAG" = "1" ]; then
     "$SDAS" -o "$work/gbsys.rel" "$GB/gbsys.s"
     SYS_REL="$work/gbsys.rel"
+fi
+DEFER_REL=""
+if [ "$GB_DEFER_FLAG" = "1" ]; then
+    "$SDAS" -o "$work/gbdefer.rel" "$GBR_LIB/gbdefer.s"
+    DEFER_REL="$work/gbdefer.rel"
 fi
 TASK_REL=""
 if [ "$TASK_FLAG" = "1" ]; then
@@ -798,7 +819,7 @@ fi
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
     $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $GBR_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $SYS_REL $TASK_REL $TASK_ROOT_REL \
-    $WINDOW_KIND_REL "$work/gblib.rel" -o "$work/app.ihx"
+    $WINDOW_KIND_REL $DEFER_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
 # AFTER the code) must end below data-loc - otherwise the RAM data area starts inside

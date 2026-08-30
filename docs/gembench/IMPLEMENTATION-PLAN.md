@@ -275,3 +275,23 @@ scheduler remains 503/512 bytes. The API and Paint openMSX tests validate stale
 window rejection, owner/window generation reuse, three-window ownership,
 independent close, document survival, application teardown, and mapper-page
 restoration. CPC/PCW remain unchanged pending their planned backends.
+
+Architecture Milestone 3 in issue #35 implements the bounded deferred-message
+slice on MSX2. `GB_DEFER` is appended at `0x80CF`; generation-tagged
+applications register one endpoint handler and exchange eight-byte FIFO records
+with four inline payload bytes. Enqueue never maps or calls the recipient. The
+root loop removes and delivers at most one record per turn, restores the caller
+bank, and performs any requested window activation only after the handler
+returns. Full, stale, no-handler, bad-argument, and context failures are
+explicit; cancellation and owner teardown compact the queue deterministically.
+
+Sysinfo v3 retains its 20-byte v1 and 24-byte v2 prefixes, appends queue/API
+capacity, and advertises `GB_CAP_DEFERRED_MSG`. Desktop Desk activation is the
+production migration: live Clock/Calculator applications are discovered as
+owner endpoints and activated asynchronously, while absence still launches the
+normal APP. Desktop drops its old synchronous accessory client and shrinks by
+44 bytes. The synchronous Notepad open path remains until a bulk page or
+filesystem-handle contract can carry its 11-byte filename. The diagnostic and
+Desk openMSX probes cover no nested send, exact exhaustion, cancellation, FIFO
+delivery, teardown purge, generation reuse, and real no-duplicate activation.
+CPC/PCW remain unchanged.

@@ -81,8 +81,9 @@ persistent IDs and not compositor slots.
 
 ## Capability record v2
 
-`GB_SYSINFO` retains its complete 20-byte v1 prefix and now returns a 24-byte v2
-record. The appended bytes are:
+Milestone 2 introduced a 24-byte v2 record while retaining the complete 20-byte
+v1 prefix. Milestone 3 now returns v3 with this v2 prefix unchanged. Its v2
+suffix is:
 
 | Offset | Bytes | v2 field |
 | ---: | ---: | --- |
@@ -130,11 +131,13 @@ exposed.
 
 ## Resident storage and limits
 
-The Milestone-2 private tables occupy fixed page-3 RAM at `0xC308-0xC35D`:
+Milestone 2 originally placed its private tables at `0xC308-0xC35D`. Sysinfo v3
+uses the former first four bytes, so the same private layout now occupies
+`0xC30C-0xC361`:
 application code-page metadata, counts, primary/worker slots, flags,
 service/accessory values, eight window generations, and lifecycle scratch.
 Together with Milestone 1, the private architecture area spans
-`0xC200-0xC35D`, below the fixed glue ceiling at `0xC900`.
+`0xC200-0xC361`, below the fixed glue ceiling at `0xC900`.
 
 The release preemptive kernels build to 13,498 bytes (Screen 6) and 15,076 bytes
 (Screen 7). The scheduler remains exactly 503/512 bytes. The compositor and

@@ -88,6 +88,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   `GB_SHELL_TARGET=1` links MSX2 service registration; `GB_SHELL_CLIENT=1`
   links discovery, synchronous delivery, and the combined request helper. Both
   profiles require `APPDEFS=-DGB_MSX2` and add no application-side queue.
+  `GB_DEFER=1` links the 36-byte MSX2 deferred-message binding, exposes
+  `gbdefer.h`, and defines `GB_DEFER_MESSAGES`; the resident kernel owns the
+  fixed eight-record FIFO.
   `SOUND=1` links the target-specific PSG/beeper primitives into that app only;
   it does not add a resident kernel service.
   `REPAINTTOP=1` links the three-byte `gb_repaint_top()` binding for an opaque
@@ -123,7 +126,13 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   the optional openMSXnet extension.
 - **`test_m1_architecture_openmsx.sh`** — exercises the versioned MSX2
   architecture APIs, including mapper ownership, application records, a
-  transient second window, stale generation rejection, and complete cleanup.
+  transient second window, the deferred FIFO/cancellation/delivery contract,
+  stale generation rejection, and complete cleanup. `make
+  gembench-m3-openmsx` runs this diagnostic and the two-mode loader smoke.
+- **`test_m3_boot_modes_openmsx.sh`** — boots disposable, network-free Screen 6
+  and Screen 7 images and requires a live Desktop, sysinfo v3, the retained
+  mapper pool, and an empty deferred queue. It guards the fixed 16,128-byte
+  child-COM loader window; `make gembench-m3-boot-openmsx` runs it alone.
 - **`test_m2_paint_openmsx.sh`** — opens an actual `.PIC` in the in-tree Paint,
   observes its Toolchest, Preview, and Canvas under one application/code page,
   drags and continues using all three windows, verifies application geometry and
@@ -134,9 +143,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   catalog and generates stable IDs, labels, and padded APP names in
   `gbdesk_catalog.h`; `--check` detects stale generated metadata.
 - **`test_desk_accessories_openmsx.sh`** — selects Clock and Calculator through
-  the generated Desk popup, proves exact activation never duplicates either
-  window, closes Clock through its real gadget, observes one mapper page return,
-  and relaunches it. The disposable image does not require openMSXnet.
+  the generated Desk popup, proves deferred exact activation never duplicates
+  either window, closes Clock through its real gadget, observes one mapper page
+  return, and relaunches it. The disposable image does not require openMSXnet.
 - **`gbrc.py` / `gbrverify.py`** — compile deterministic GBR v1 resources and
   strictly verify binary resources. `gbrc.py --c-header` can also emit a C blob,
   section/count constants, and source-only object IDs for embedded resources;

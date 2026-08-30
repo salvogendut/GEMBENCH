@@ -45,9 +45,9 @@ MSX_PAGE_DATA = 0xC020
 MSX_PAGE_TOTAL = 0xC2E4
 MSX_PAGE_FREE = 0xC2E5
 MSX_SYSINFO = 0xC2F0
-MSX_SYSINFO_SIZE = 24
+MSX_SYSINFO_SIZE = 28
 MSX_PAGE_MAX = 32
-MSX_M2_REQUIRED_CAPABILITIES = 0x07C0
+MSX_M3_REQUIRED_CAPABILITIES = 0x0FC0
 BASELINE_PHASE = 0xC02A
 BASELINE_STACK_MAX = 0xC02B
 BASELINE_STACK_FAULT = 0xC02C
@@ -275,6 +275,10 @@ def parse_sysinfo(memory: dict[int, int]) -> dict[str, int] | None:
         "application_record_version": byte_at(memory, MSX_SYSINFO + 21) or 0,
         "max_windows_per_application": byte_at(memory, MSX_SYSINFO + 22) or 0,
         "reserved2": byte_at(memory, MSX_SYSINFO + 23) or 0,
+        "message_queue_capacity": byte_at(memory, MSX_SYSINFO + 24) or 0,
+        "message_inline_bytes": byte_at(memory, MSX_SYSINFO + 25) or 0,
+        "message_api_version": byte_at(memory, MSX_SYSINFO + 26) or 0,
+        "reserved3": byte_at(memory, MSX_SYSINFO + 27) or 0,
     }
 
 
@@ -441,7 +445,7 @@ def collect_runtime(
     if sysinfo is not None:
         expected_sysinfo = {
             "size": MSX_SYSINFO_SIZE,
-            "version": 2,
+            "version": 3,
             "abi_major": 1,
             "abi_minor": 0,
             "platform": 1,
@@ -459,6 +463,10 @@ def collect_runtime(
             "application_record_version": 1,
             "max_windows_per_application": WM_MAXWIN,
             "reserved2": 0,
+            "message_queue_capacity": 8,
+            "message_inline_bytes": 4,
+            "message_api_version": 1,
+            "reserved3": 0,
         }
         mismatches = [
             f"{name}={sysinfo[name]!r} (expected {expected!r})"
@@ -466,12 +474,12 @@ def collect_runtime(
             if sysinfo[name] != expected
         ]
         if mismatches:
-            errors.append("invalid GB_SYSINFO v2: " + ", ".join(mismatches))
+            errors.append("invalid GB_SYSINFO v3: " + ", ".join(mismatches))
         if (
-            sysinfo["capabilities"] & MSX_M2_REQUIRED_CAPABILITIES
-        ) != MSX_M2_REQUIRED_CAPABILITIES:
+            sysinfo["capabilities"] & MSX_M3_REQUIRED_CAPABILITIES
+        ) != MSX_M3_REQUIRED_CAPABILITIES:
             errors.append(
-                "GB_SYSINFO lacks the M2 page, owner, application, multi-window, or video capabilities"
+                "GB_SYSINFO lacks the M3 page, owner, application, multi-window, deferred-message, or video capabilities"
             )
     if require_probes:
         if probes is None:

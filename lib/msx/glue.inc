@@ -93,7 +93,7 @@ MSX_ALLOC_INDEX    equ #C2EC        ; legacy-claim scratch: pool index
 ; all other fields are fixed at boot.
 MSX_SYSINFO        equ #C2F0
 MSX_SYSINFO_V1_SIZE equ 20
-MSX_SYSINFO_SIZE   equ 24
+MSX_SYSINFO_SIZE   equ 28
 MSX_SYS_SIZE       equ MSX_SYSINFO+0
 MSX_SYS_VERSION    equ MSX_SYSINFO+1
 MSX_SYS_ABI_MAJOR  equ MSX_SYSINFO+2
@@ -114,27 +114,46 @@ MSX_SYS_MAX_APPS   equ MSX_SYSINFO+20
 MSX_SYS_APP_VERSION equ MSX_SYSINFO+21
 MSX_SYS_MAX_APP_WINDOWS equ MSX_SYSINFO+22
 MSX_SYS_RESERVED2  equ MSX_SYSINFO+23
+MSX_SYS_MSG_QUEUE  equ MSX_SYSINFO+24
+MSX_SYS_MSG_INLINE equ MSX_SYSINFO+25
+MSX_SYS_MSG_VERSION equ MSX_SYSINFO+26
+MSX_SYS_RESERVED3  equ MSX_SYSINFO+27
 
 ; Architecture milestone 2 (#32): the M1 owner identity is now the public
 ; handle of a real fixed-capacity application record. Window records retain
 ; compositor state and point back to one of these applications; several window
 ; slots may therefore share one code page and lifecycle.
-MSX_APP_CODE_NATIVE equ #C308       ; primary code mapper segment
-MSX_APP_CODE_PAGE   equ #C310       ; primary gb_page_t low byte
-MSX_APP_CODE_GEN    equ #C318       ; primary gb_page_t generation
-MSX_APP_WINDOW_COUNT equ #C320      ; live window slots owned by the app
-MSX_APP_PRIMARY_WIN equ #C328       ; primary window slot, #FF when windowless
-MSX_APP_FLAGS       equ #C330       ; published/root/terminating lifecycle flags
-MSX_APP_SERVICE     equ #C338       ; app-owned shell service class
-MSX_APP_ACCESSORY   equ #C340       ; app-owned exact Desk accessory ID
-MSX_APP_WORKER_WIN  equ #C348       ; optional worker window slot, #FF if none
-MSX_WIN_GEN         equ #C350       ; generation for each reused WM slot
-MSX_APP_SLOT        equ #C358       ; lifecycle scratch: app/remaining count
-MSX_WINDOW_HANDLE   equ #C359       ; lifecycle scratch: generation-tagged window
-MSX_WINDOW_SLOT     equ #C35B       ; lifecycle scratch: WM slot
-MSX_CALLER_BANK     equ #C35C       ; lifecycle scratch: caller mapper segment
-MSX_APP_REMAIN      equ #C35D       ; lifecycle scratch: remaining windows
-MSX_APP_TABLE_END   equ #C35E
+MSX_APP_CODE_NATIVE equ #C30C       ; primary code mapper segment
+MSX_APP_CODE_PAGE   equ #C314       ; primary gb_page_t low byte
+MSX_APP_CODE_GEN    equ #C31C       ; primary gb_page_t generation
+MSX_APP_WINDOW_COUNT equ #C324      ; live window slots owned by the app
+MSX_APP_PRIMARY_WIN equ #C32C       ; primary window slot, #FF when windowless
+MSX_APP_FLAGS       equ #C334       ; published/root/terminating lifecycle flags
+MSX_APP_SERVICE     equ #C33C       ; app-owned shell service class
+MSX_APP_ACCESSORY   equ #C344       ; app-owned exact Desk accessory ID
+MSX_APP_WORKER_WIN  equ #C34C       ; optional worker window slot, #FF if none
+MSX_WIN_GEN         equ #C354       ; generation for each reused WM slot
+MSX_APP_SLOT        equ #C35C       ; lifecycle scratch: app/remaining count
+MSX_WINDOW_HANDLE   equ #C35D       ; lifecycle scratch: generation-tagged window
+MSX_WINDOW_SLOT     equ #C35F       ; lifecycle scratch: WM slot
+MSX_CALLER_BANK     equ #C360       ; lifecycle scratch: caller mapper segment
+MSX_APP_REMAIN      equ #C361       ; lifecycle scratch: remaining windows
+MSX_APP_TABLE_END   equ #C362
+
+; Architecture milestone 3 (#35): application-level deferred endpoints and a
+; bounded FIFO. Queue records are sender owner, receiver owner, type, p0, p1,
+; p2. The current record remains stable only while its handler is running.
+MSX_DEFER_HANDLER_LO equ #C362       ; eight application handler low bytes
+MSX_DEFER_HANDLER_HI equ #C36A       ; eight application handler high bytes
+MSX_DEFER_COUNT      equ #C372       ; occupied FIFO records (0..8)
+MSX_DEFER_BUSY       equ #C373       ; nonzero only during root-task delivery
+MSX_DEFER_CURRENT    equ #C374       ; eight-byte record visible to the handler
+MSX_DEFER_QUEUE      equ #C37C       ; eight records x eight bytes
+MSX_DEFER_SEND       equ #C3BC       ; six-byte sender/receiver/input scratch
+MSX_DEFER_PURGE_OWNER equ #C3C2      ; owner matched by queue compaction
+MSX_DEFER_INDEX      equ #C3C4       ; queue compaction cursor
+MSX_DEFER_ACTIVATE   equ #C3C5       ; deferred focus request, #FF means none
+MSX_ARCH_TABLE_END   equ #C3C6
 ; NOTE (#287 M1 debugging): DOS 2 / Nextor's kernel data occupies page 3 well
 ; below #F380 (the mapper jump table itself sits around #F200, jumping into
 ; code near #EC00) - the DOS 1 "system area starts at #F380" rule does NOT
@@ -142,3 +161,4 @@ MSX_APP_TABLE_END   equ #C35E
 ; sets SP from it, and everything fixed here stays at #C000..#C8FF, which the
 ; stub verifies is below that ceiling.
 MSX_GLUE_TOP    equ   #C900        ; end of the fixed glue area (stub-verified < TPA top)
+MSX_APP_FIXED_BOTTOM equ #CB00     ; first app-usable fixed RAM after 512B scheduler slot

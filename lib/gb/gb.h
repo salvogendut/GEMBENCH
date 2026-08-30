@@ -322,6 +322,7 @@ typedef unsigned int gb_window_t;
 #define GB_CAP_RUNTIME_VIDEO 0x0100u
 #define GB_CAP_APPLICATIONS  0x0200u
 #define GB_CAP_MULTI_WINDOW  0x0400u
+#define GB_CAP_DEFERRED_MSG  0x0800u
 
 #define GB_PAGE_UNSPECIFIED 0u
 #define GB_PAGE_APPLICATION 1u
@@ -340,8 +341,8 @@ typedef unsigned int gb_window_t;
 #define GB_PAGE_ERR_BADARG      6u
 
 typedef struct {
-    unsigned char size;          /* stable v1 prefix is 20; currently 24 */
-    unsigned char version;       /* GB_SYSINFO v2 */
+    unsigned char size;          /* stable v1 prefix is 20; currently 28 */
+    unsigned char version;       /* GB_SYSINFO v3 */
     unsigned char abi_major;     /* frozen GEMBENCH ABI major */
     unsigned char abi_minor;
     unsigned char platform;      /* GB_PLATFORM_* */
@@ -360,6 +361,10 @@ typedef struct {
     unsigned char application_record_version;
     unsigned char max_windows_per_application;
     unsigned char reserved2;
+    unsigned char message_queue_capacity;
+    unsigned char message_inline_bytes;
+    unsigned char message_api_version;
+    unsigned char reserved3;
 } gb_sysinfo_t;
 
 #define GB_APP_OK              0u
@@ -417,6 +422,7 @@ typedef struct {
 #define GB_MSG_MOVED 8   /* kernel move completed: p0=x, p1=y                        */
 #define GB_MSG_SIZED 9   /* kernel resize completed: p0=w, p1=h                      */
 #define GB_MSG_MAXIMIZED 10 /* kernel maximise/restore: p0=1/0, p1=w, p2=h           */
+#define GB_MSG_DEFER 12     /* application-level deferred message; use gb_defer_current */
 #define gb_dragname ((const char *)0x1423)  /* mirrors WM_DRAGNAME in kernel/lowram.inc */
 #define gb_drop_claim()   (*(volatile unsigned char *)0x142F |= 0x80)
 #define gb_drop_release() (*(volatile unsigned char *)0x142F &= 0x7F)
