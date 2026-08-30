@@ -1,0 +1,18 @@
+{
+  "application_id": "NETSVC",
+  "profile": "target-z80",
+  "platforms": ["msx2"],
+  "minimum_abi": [1, 0],
+  "minimum_sysinfo": [5, 32],
+  "required_capabilities": [
+    "network",
+    "owner-identity",
+    "applications",
+    "deferred-messages",
+    "service-manager"
+  ],
+  "service_id": 1,
+  "lifecycle": ["windowless", "service"],
+  "minimum_pages": 1,
+  "preferred_pages": 1
+}

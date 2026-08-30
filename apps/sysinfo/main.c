@@ -1,4 +1,4 @@
-/* SYSINFO.APP - MSX2 Architecture Milestones 1-4 diagnostic (#31/#32/#35/#37).
+/* SYSINFO.APP - MSX2 architecture capability diagnostic (#31/#32/#35/#37/#43).
  *
  * This development-only app exercises the public capability, owner, and opaque
  * page APIs. One cache page is deliberately left allocated: closing the window
@@ -122,7 +122,7 @@ static void test_deferred_messages(void)
     if (!gb_defer_current() &&
         gb_defer_slots_free() == GB_DEFER_QUEUE_CAPACITY)
         defer_tests |= DEFER_TEST_CONTEXT;
-    if (info->size == sizeof(gb_sysinfo_t) && info->version == 4 &&
+    if (info->size == sizeof(gb_sysinfo_t) && info->version == 5 &&
         info->message_queue_capacity == GB_DEFER_QUEUE_CAPACITY &&
         info->message_inline_bytes == GB_DEFER_INLINE_BYTES &&
         info->message_api_version == GB_DEFER_API_VERSION &&
@@ -173,7 +173,7 @@ static void test_filesystem_contexts(void)
     unsigned char i, allocated = 0;
 
     fsctx_tests = 0;
-    if (info->size == sizeof(gb_sysinfo_t) && info->version == 4 &&
+    if (info->size == sizeof(gb_sysinfo_t) && info->version == 5 &&
         info->filesystem_contexts == GB_FSCTX_CAPACITY &&
         info->filesystem_transfer_bytes == GB_FSCTX_TRANSFER_MAX &&
         info->filesystem_api_version == GB_FSCTX_API_VERSION &&
@@ -348,12 +348,14 @@ static void test_application(void)
     gb_window_t primary = gb_window_current();
     gb_window_t probe;
 
-    if (info->size == sizeof(gb_sysinfo_t) && info->version == 4 &&
+    if (info->size == sizeof(gb_sysinfo_t) && info->version == 5 &&
         info->max_applications == 8 &&
         info->application_record_version == 1 &&
         info->max_windows_per_application == 8 &&
-        (info->capabilities & (GB_CAP_APPLICATIONS | GB_CAP_MULTI_WINDOW)) ==
-            (GB_CAP_APPLICATIONS | GB_CAP_MULTI_WINDOW))
+        (info->capabilities & (GB_CAP_APPLICATIONS | GB_CAP_MULTI_WINDOW |
+                              GB_CAP_SERVICE_MANAGER)) ==
+            (GB_CAP_APPLICATIONS | GB_CAP_MULTI_WINDOW |
+             GB_CAP_SERVICE_MANAGER))
         tests |= TEST_SYSINFO_V2;
     if (count == 1 && primary && gb_window_check(primary) == GB_APP_OK &&
         gb_app_publish() == GB_APP_OK && gb_window_drag() == GB_APP_OK)
@@ -389,7 +391,7 @@ static void draw(void)
 
     gb_fill(gb_wm_x(), (unsigned char)(gb_wm_y() + 14), WIN_W,
             (unsigned char)(WIN_H - 14), 1);
-    gb_textbw(x, y, "GB_SYSINFO v4   MSX Screen");
+    gb_textbw(x, y, "GB_SYSINFO v5   MSX Screen");
     hex8(value, info->video_mode);
     gb_textbw((unsigned char)(x + 51), y, value);
     hex16(value, owner);

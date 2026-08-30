@@ -551,7 +551,7 @@ enumeration is also context-owned: interleaving another client cannot replace
 the saved FIB. `gb_fsctx_dir_batch()` fetches up to four packed entries per
 module call; its fixed-buffer result is valid until the next context call.
 Calls are root-task operations and must not be issued by a preemptible compute
-worker. Applications should test sysinfo v4 size plus `GB_CAP_FS_CONTEXTS`
+worker. Applications should test the stable sysinfo prefix plus `GB_CAP_FS_CONTEXTS`
 before depending on the appended kernel jump.
 
 File Manager is the first production client. It uses the directory-only
@@ -612,3 +612,30 @@ busy, stale, foreign, invalid-entry, and terminating-app cases return explicit
 status codes. There is no manual close: generation-tagged owner teardown
 reclaims the secondary page. See
 `docs/gembench/ARCHITECTURE-M6-MSX.md` for the complete ABI and budgets.
+
+## MSX2 shared services
+
+Use `GB_SERVICE_CLIENT=1` for clients, `GB_SERVICE_PROVIDER=1` for a windowless
+provider, or `GB_SERVICE_COLLECTOR=1` only for the Desktop/root policy. All
+three profiles are MSX2-only and imply sysinfo plus deferred-message bindings.
+Applications must test `GB_CAP_SERVICE_MANAGER`; v5 keeps the v4 record size and
+reserved bytes unchanged.
+
+Clients register a deferred handler, acquire by functional ID and provider
+name, send bounded requests, and release every successful handle. A provider
+registers after its deferred handler, publishes windowlessly, validates each
+sender with `gb_service_provider_accept()`, replies asynchronously, and quits
+only when `gb_service_provider_should_stop()` is true. Do not send application
+pointers or bulk data in the three request bytes.
+
+```sh
+python3 -m unittest tests.test_service_manager -v
+make gembench-msx
+make gembench-m7-service-openmsx
+```
+
+For a manual production check, run a network-enabled image, open Telnet, and
+choose **Telnet > Connect (UNAPI)...**. The provider is launched and probed
+before the host dialog appears. Cancelling or disconnecting releases the lease;
+after the final client, the windowless provider unloads. See
+`ARCHITECTURE-M7-MSX.md` for lifecycle, memory layout, and limitations.

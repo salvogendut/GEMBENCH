@@ -25,7 +25,8 @@ PREEMPTIVE_DIAGNOSTIC="${PREEMPTIVE_DIAGNOSTIC:-0}"
 GEMBENCH_BASELINE="${GEMBENCH_BASELINE:-0}"
 GEMBENCH_M7_BANKED="${GEMBENCH_M7_BANKED:-0}"
 BASELINE_APPDEFS=""
-DESKTOP_DATA_LOC="0x7960"       # Milestone 15 Desk catalog/client crosses the old 0x7900 split
+DESKTOP_DATA_LOC="0x7D80"       # M7 root collector; data still ends below the 0x7F00 task stack
+DESKTOP_SERVICE_COLLECTOR=1
 NOTEPAD_APPDEFS="-DGBDOC_BOUNDED_IO"
 NOTEPAD_DATA_LOC="0x6F48"
 NOTEPAD_CFLAGS="--opt-code-size --max-allocs-per-node 100000"
@@ -33,6 +34,7 @@ NOTEPAD_SCROLL=1
 if [ "$GEMBENCH_BASELINE" = "1" ]; then
     BASELINE_APPDEFS="-DGEMBENCH_BASELINE"
     DESKTOP_DATA_LOC="0x7A00"
+    DESKTOP_SERVICE_COLLECTOR=0
 elif [ "$GEMBENCH_BASELINE" != "0" ]; then
     echo "GEMBENCH_BASELINE must be 0 or 1" >&2
     exit 2
@@ -126,7 +128,7 @@ python3 tools/gen_desk_accessories.py apps/desktop/accessories.json \
 if [ "$PREEMPTIVE" = "1" ]; then
     TASK_ROOT=1 TASK_RUNTIME_RAW=build/msx/GBSCHED.RAW \
         TASK_STACK_RESERVE=256 \
-        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_DEFER=1 \
+        BASELINE="$GEMBENCH_BASELINE" DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_DEFER=1 GB_SERVICE_COLLECTOR="$DESKTOP_SERVICE_COLLECTOR" \
         APPDEFS="-DGB_MSX2 -DGB_DESK_ACCESSORIES $BASELINE_APPDEFS" \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
     if [ "$PREEMPTIVE_DIAGNOSTIC" = "1" ]; then
@@ -135,7 +137,7 @@ if [ "$PREEMPTIVE" = "1" ]; then
     fi
 else
     APPDEFS="-DGB_MSX2 -DGB_DESK_ACCESSORIES $BASELINE_APPDEFS" BASELINE="$GEMBENCH_BASELINE" \
-        DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_DEFER=1 \
+        DATA_LOC="$DESKTOP_DATA_LOC" DOC=1 TITLEBAR=1 GB_REGIONS=1 GB_DEFER=1 GB_SERVICE_COLLECTOR="$DESKTOP_SERVICE_COLLECTOR" \
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 fi
 python3 tools/gbrc.py apps/filemgr/view_menu.json --output build/msx/FILEMGR_MENU.GBR --menu-header apps/filemgr/view_menu_gbr.h --symbol-prefix FILEMGR_VIEW
@@ -158,7 +160,14 @@ APP_ICON=apps/shell/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x6D00 SCROLL=1 tools/
 APP_ICON=apps/mahjong/icon.asm APPDEFS="-DGB_MSX2" DATA_LOC=0x7100 DIALOGS=1 tools/build_capp.sh apps/mahjong build/msx/MAHJONG.RAW
 python3 tools/gbrc.py apps/calculator/calculator.json --output build/msx/CALCULATOR.GBR --c-header apps/calculator/calculator_gbr.h --symbol-prefix CALCULATOR
 APPDEFS="-DGB_MSX2" DATA_LOC=0x7600 BUTTON=1 GBR_OBJECTS=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 GB_SHELL_ACCESSORY_TARGET=1 GB_DEFER=1 tools/build_capp.sh apps/calculator build/msx/CALC.RAW
-APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_MSX2" DATA_LOC=0x7300 NET=1 DOC=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
+APP_ICON=apps/telnet/icon.asm APP_MANIFEST=apps/netsvc/manifest.json \
+    APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" \
+    DATA_LOC=0x7000 NET=1 GBWIN=0 GB_SERVICE_PROVIDER=1 \
+    tools/build_capp.sh apps/netsvc build/msx/NETSVC.RAW
+APP_ICON=apps/telnet/icon.asm GBLIB_SRC="$TELNET_GBLIB" APPDEFS="-DGB_MSX2" \
+    APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" \
+    HELPER_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7600 NET=1 DOC=1 \
+    GB_SERVICE_CLIENT=1 tools/build_capp.sh apps/telnet build/msx/TELNET.RAW
 if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
     python3 tools/gbrc.py apps/formref/formref-m7.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_m7_gbr.h --symbol-prefix FORMREF
     # The M7 comparison profile is already over the M5 guarded-primary budget;
@@ -323,6 +332,7 @@ cp build/msx/PAINT.IST    QA/MSX/CARD/GBENCH/PAINT.IST
 cp build/msx/SHELL.RAW    QA/MSX/CARD/GBENCH/SHELL.APP
 cp build/msx/MAHJONG.RAW  QA/MSX/CARD/GBENCH/MAHJONG.APP
 cp build/msx/CALC.RAW     QA/MSX/CARD/GBENCH/CALC.APP
+cp build/msx/NETSVC.RAW   QA/MSX/CARD/GBENCH/NETSVC.APP
 cp build/msx/TELNET.RAW   QA/MSX/CARD/GBENCH/TELNET.APP
 cp build/msx/BROWSER.RAW  QA/MSX/CARD/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/CARD/GBENCH/BRSAVE.APP

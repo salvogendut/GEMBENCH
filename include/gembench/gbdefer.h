@@ -19,9 +19,10 @@
 #define GB_DEFER_ERR_BADARG     5u
 #define GB_DEFER_ERR_CONTEXT    6u
 
-/* Type 1 is reserved for deferred shell lifecycle requests. Values 32..255
- * are application-defined. */
+/* Types 1 and 2 are reserved for shell and shared-service lifecycle requests.
+ * Values 32..255 are application-defined. */
 #define GB_DEFER_SHELL          1u
+#define GB_DEFER_SERVICE        2u
 #define GB_DEFER_APP_MIN       32u
 
 typedef struct {

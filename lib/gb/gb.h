@@ -325,6 +325,7 @@ typedef unsigned int gb_window_t;
 #define GB_CAP_DEFERRED_MSG  0x0800u
 #define GB_CAP_FS_CONTEXTS   0x1000u
 #define GB_CAP_SECONDARY_CODE 0x2000u
+#define GB_CAP_SERVICE_MANAGER 0x4000u
 
 #define GB_PAGE_UNSPECIFIED 0u
 #define GB_PAGE_APPLICATION 1u
@@ -345,7 +346,7 @@ typedef unsigned int gb_window_t;
 
 typedef struct {
     unsigned char size;          /* stable v1 prefix is 20; currently 32 */
-    unsigned char version;       /* GB_SYSINFO v4 */
+    unsigned char version;       /* GB_SYSINFO v5 */
     unsigned char abi_major;     /* frozen GEMBENCH ABI major */
     unsigned char abi_minor;
     unsigned char platform;      /* GB_PLATFORM_* */

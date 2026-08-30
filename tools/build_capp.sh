@@ -192,8 +192,18 @@ GB_SHELL_ACCESSORY_CLIENT_FLAG="${GB_SHELL_ACCESSORY_CLIENT:-0}"
 GB_SHELL_ACCESSORY_TARGET_FLAG="${GB_SHELL_ACCESSORY_TARGET:-0}"
 GB_DEFER_FLAG="${GB_DEFER:-0}"
 GB_FSCTX_FLAG="${GB_FSCTX:-0}"
+GB_SERVICE_CLIENT_FLAG="${GB_SERVICE_CLIENT:-0}"
+GB_SERVICE_PROVIDER_FLAG="${GB_SERVICE_PROVIDER:-0}"
+GB_SERVICE_COLLECTOR_FLAG="${GB_SERVICE_COLLECTOR:-0}"
+if [ "$GB_SERVICE_CLIENT_FLAG" = "1" ] ||
+   [ "$GB_SERVICE_PROVIDER_FLAG" = "1" ] ||
+   [ "$GB_SERVICE_COLLECTOR_FLAG" = "1" ]; then
+    SYS_FLAG=1
+    GB_DEFER_FLAG=1
+    ALL_APPDEFS="$ALL_APPDEFS -DGB_SERVICE_MANAGER"
+fi
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_VDI_FLAG" = "1" ] || [ "$GB_VDI_BASE_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ] || [ "$GB_DEFER_FLAG" = "1" ] || [ "$GB_FSCTX_FLAG" = "1" ] || [ "$GB_SECONDARY_FLAG" = "1" ]; then
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_VDI_FLAG" = "1" ] || [ "$GB_VDI_BASE_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ] || [ "$GB_DEFER_FLAG" = "1" ] || [ "$GB_FSCTX_FLAG" = "1" ] || [ "$GB_SECONDARY_FLAG" = "1" ] || [ "$GB_SERVICE_CLIENT_FLAG" = "1" ] || [ "$GB_SERVICE_PROVIDER_FLAG" = "1" ] || [ "$GB_SERVICE_COLLECTOR_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
 NET_SRC="$GB/gbnet_stub.c"
@@ -329,6 +339,21 @@ if [ "$GB_FSCTX_FLAG" = "1" ]; then
         *) echo "ERROR: GB_FSCTX=1 is currently MSX2-only" >&2; exit 1 ;;
     esac
     ALL_APPDEFS="$ALL_APPDEFS -DGB_FILESYSTEM_CONTEXTS"
+fi
+for service_flag in "$GB_SERVICE_CLIENT_FLAG" "$GB_SERVICE_PROVIDER_FLAG" \
+                    "$GB_SERVICE_COLLECTOR_FLAG"; do
+    if [ "$service_flag" != "0" ] && [ "$service_flag" != "1" ]; then
+        echo "ERROR: GB_SERVICE_* flags must be 0 or 1" >&2
+        exit 1
+    fi
+done
+if [ "$GB_SERVICE_CLIENT_FLAG" = "1" ] ||
+   [ "$GB_SERVICE_PROVIDER_FLAG" = "1" ] ||
+   [ "$GB_SERVICE_COLLECTOR_FLAG" = "1" ]; then
+    case " $ALL_APPDEFS " in
+        *" -DGB_MSX2 "*) ;;
+        *) echo "ERROR: the shared-service manager is currently MSX2-only" >&2; exit 1 ;;
+    esac
 fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
@@ -532,6 +557,18 @@ fi
 if [ "$NET_FLAG" = "1" ]; then
     deps+=("$NET_SRC")
 fi
+if [ "$GB_SERVICE_CLIENT_FLAG" = "1" ]; then
+    deps+=("$GBR_LIB/gbservice_client.c" "$GBR_LIB/gbservice_internal.h"
+           "$GBR_INCLUDE/gbservice.h")
+fi
+if [ "$GB_SERVICE_PROVIDER_FLAG" = "1" ]; then
+    deps+=("$GBR_LIB/gbservice_provider.c" "$GBR_LIB/gbservice_internal.h"
+           "$GBR_INCLUDE/gbservice.h")
+fi
+if [ "$GB_SERVICE_COLLECTOR_FLAG" = "1" ]; then
+    deps+=("$GBR_LIB/gbservice_collect.c" "$GBR_LIB/gbservice_internal.h"
+           "$GBR_INCLUDE/gbservice.h")
+fi
 
 stamp="$OUT.stamp"
 cache_key=$(printf '%s\n' \
@@ -597,6 +634,9 @@ cache_key=$(printf '%s\n' \
     "GB_SHELL_ACCESSORY_TARGET=$GB_SHELL_ACCESSORY_TARGET_FLAG" \
     "GB_DEFER=$GB_DEFER_FLAG" \
     "GB_FSCTX=$GB_FSCTX_FLAG" \
+    "GB_SERVICE_CLIENT=$GB_SERVICE_CLIENT_FLAG" \
+    "GB_SERVICE_PROVIDER=$GB_SERVICE_PROVIDER_FLAG" \
+    "GB_SERVICE_COLLECTOR=$GB_SERVICE_COLLECTOR_FLAG" \
     "TASK=$TASK_FLAG" \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
@@ -672,6 +712,25 @@ if [ "$GB_FSCTX_FLAG" = "1" ]; then
     "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
         -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbfsctx.c" -o "$work/gbfsctx.rel"
     FSCTX_REL="$work/gbfsctx.rel $work/gbfsctx_call.rel"
+fi
+SERVICE_REL=""
+if [ "$GB_SERVICE_CLIENT_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $HELPER_CFLAGS $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbservice_client.c" \
+        -o "$work/gbservice_client.rel"
+    SERVICE_REL="$SERVICE_REL $work/gbservice_client.rel"
+fi
+if [ "$GB_SERVICE_PROVIDER_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $HELPER_CFLAGS $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbservice_provider.c" \
+        -o "$work/gbservice_provider.rel"
+    SERVICE_REL="$SERVICE_REL $work/gbservice_provider.rel"
+fi
+if [ "$GB_SERVICE_COLLECTOR_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $HELPER_CFLAGS $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbservice_collect.c" \
+        -o "$work/gbservice_collect.rel"
+    SERVICE_REL="$SERVICE_REL $work/gbservice_collect.rel"
 fi
 TASK_REL=""
 if [ "$TASK_FLAG" = "1" ]; then
@@ -910,7 +969,7 @@ fi
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
     $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $GBR_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $SYS_REL $TASK_REL $TASK_ROOT_REL \
-    $WINDOW_KIND_REL $DEFER_REL $FSCTX_REL $SECONDARY_REL "$work/gblib.rel" -o "$work/app.ihx"
+    $WINDOW_KIND_REL $DEFER_REL $FSCTX_REL $SERVICE_REL $SECONDARY_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
 # AFTER the code) must end below data-loc - otherwise the RAM data area starts inside

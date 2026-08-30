@@ -96,6 +96,7 @@ CAPABILITIES = {
     "deferred-messages": 0x0800,
     "filesystem-contexts": 0x1000,
     "secondary-code": 0x2000,
+    "service-manager": 0x4000,
 }
 LIFECYCLE = {
     "windowed": 0x0001,
@@ -488,7 +489,7 @@ def _parse_package(data):
             raise ValueError("invalid GBAP v3 manifest bounds")
         capabilities = struct.unpack_from("<H", block, 12)[0]
         lifecycle = struct.unpack_from("<H", block, 24)[0]
-        if (capabilities & ~0x3FFF or not lifecycle or lifecycle & ~0x000F
+        if (capabilities & ~0x7FFF or not lifecycle or lifecycle & ~0x000F
                 or block[26] == 0 or block[27] < block[26]
                 or not bytes(block[14:22]).strip(b" ")
                 or any(value not in range(0x20, 0x7F) for value in block[14:22])):
