@@ -298,12 +298,13 @@ unsigned char gb_fs_save(char *buf, unsigned int len);   /* save opened file -> 
 unsigned char gb_fs_free_kib(unsigned int *kib);          /* free space in KiB; 1 known */
 unsigned char gb_getkey(void);        /* typed char from the keyboard, 0 if none  */
 
-/* Architecture milestone 1 (#31). The public record and opaque handles are
- * target-neutral; this first implementation is available on MSX2 only. A page
- * handle deliberately does not reveal the native mapper segment. Future
- * transfer/call-gate services will consume it without exposing mapper policy. */
+/* Architecture milestones 1-2 (#31/#32). The public record and opaque handles
+ * are target-neutral; this first implementation is available on MSX2 only. A
+ * page handle deliberately does not reveal the native mapper segment, and a
+ * window handle combines its stable slot with a reuse generation. */
 typedef unsigned int gb_owner_t;
 typedef unsigned int gb_page_t;
+typedef unsigned int gb_window_t;
 
 #define GB_PLATFORM_MSX2 1u
 
@@ -319,6 +320,8 @@ typedef unsigned int gb_page_t;
 #define GB_CAP_PAGE_ALLOC    0x0040u
 #define GB_CAP_OWNER_ID      0x0080u
 #define GB_CAP_RUNTIME_VIDEO 0x0100u
+#define GB_CAP_APPLICATIONS  0x0200u
+#define GB_CAP_MULTI_WINDOW  0x0400u
 
 #define GB_PAGE_UNSPECIFIED 0u
 #define GB_PAGE_APPLICATION 1u
@@ -337,8 +340,8 @@ typedef unsigned int gb_page_t;
 #define GB_PAGE_ERR_BADARG      6u
 
 typedef struct {
-    unsigned char size;          /* stable prefix size, currently 20 */
-    unsigned char version;       /* GB_SYSINFO v1 */
+    unsigned char size;          /* stable v1 prefix is 20; currently 24 */
+    unsigned char version;       /* GB_SYSINFO v2 */
     unsigned char abi_major;     /* frozen GEMBENCH ABI major */
     unsigned char abi_minor;
     unsigned char platform;      /* GB_PLATFORM_* */
@@ -352,14 +355,34 @@ typedef struct {
     unsigned char free_pages;
     unsigned char max_windows;   /* independent compositor capacity */
     unsigned int capabilities;   /* GB_CAP_* */
-    unsigned int reserved;
+    unsigned int reserved;       /* zero in the v1 prefix */
+    unsigned char max_applications;
+    unsigned char application_record_version;
+    unsigned char max_windows_per_application;
+    unsigned char reserved2;
 } gb_sysinfo_t;
+
+#define GB_APP_OK              0u
+#define GB_APP_ERR_UNSUPPORTED 1u
+#define GB_APP_ERR_STALE       2u
+#define GB_APP_ERR_OWNER       3u
+#define GB_APP_ERR_FULL        4u
+#define GB_APP_ERR_ROOT        5u
+#define GB_APP_ERR_BADARG      6u
 
 const gb_sysinfo_t *gb_sysinfo(void);
 gb_owner_t gb_owner_current(void);
 gb_page_t gb_page_alloc(unsigned char purpose);
 unsigned char gb_page_free(gb_page_t page);
 unsigned char gb_page_check(gb_page_t page);
+unsigned char gb_app_publish(void);
+unsigned char gb_app_quit(void);
+gb_window_t gb_window_current(void);
+unsigned char gb_window_close(gb_window_t window);
+unsigned char gb_window_check(gb_window_t window);
+unsigned char gb_window_slots_free(void);
+unsigned char gb_app_window_count(void);
+unsigned char gb_window_drag(void);
 
 /* Event callback (issue #32): the kernel calls the window's registered handler when
  * an event it owns occurs - e.g. a click in the top bar (GB_MSG_MENU). Registration

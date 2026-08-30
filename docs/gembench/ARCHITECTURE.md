@@ -53,9 +53,16 @@ MSX2. `GB_SYSINFO` reports the versioned runtime geometry, memory counts, and
 capabilities; generation-tagged owners bind the mapped application page to its
 existing window; and opaque generation-tagged page handles carry purpose and
 ownership without exposing mapper segment IDs. Owner teardown reclaims all new
-allocator pages. The complete MSX-only contract and the remaining one-window-
-per-application limitation are in
+allocator pages. The foundation is documented in
 [ARCHITECTURE-M1-MSX.md](ARCHITECTURE-M1-MSX.md).
+
+Architecture Milestone 2 promotes each owner to an independent application
+record. Parallel generation-tagged window handles let several frozen compositor
+records share one code page; closing one window no longer releases siblings,
+while application quit closes all windows and owned pages. Shell service and
+worker identity now follow the application. The implemented MSX-only lifecycle,
+sysinfo v2 suffix, and in-tree Paint migration are documented in
+[ARCHITECTURE-M2-MSX.md](ARCHITECTURE-M2-MSX.md).
 
 ## Resource ownership
 

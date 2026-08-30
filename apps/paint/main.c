@@ -1,9 +1,10 @@
 /*
- * PAINT.APP - a banked, three-pane GEOBENCH picture editor.
+ * PAINT.APP - a banked, three-window GEMBENCH picture editor.
  *
- * Paint owns one invisible full-screen WM workspace and draws three ordinary
- * GEOBENCH windows inside it. This avoids registering several windows against
- * one application page (closing any such window would release the shared page):
+ * On MSX2, Paint is the first application to exercise the Milestone-2 process
+ * model: three compositor windows share one application record and code page.
+ * The portable source retains the old single-workspace fallback for targets
+ * that do not yet implement GB_APP and generation-tagged window handles.
  *
  *   Toolchest    always visible and always painted on top
  *   Area selector 1:1 scrollable picture preview with a fixed 20x20 navigator
@@ -85,6 +86,7 @@
 
 #define PANE_PREVIEW 0
 #define PANE_WORK    1
+#define PANE_TOOL    2
 
 #define IST_MAX 1800
 #define TOOL_BITS_PER ((TOOL_WB * 4 * TOOL_H) / 8)
@@ -130,6 +132,11 @@ static unsigned char pv_x, pv_y;
 static unsigned char wk_x, wk_y;
 static unsigned char front_pane;
 static unsigned char work_visible;
+#ifdef GB_MSX2
+static gb_window_t tool_window_handle;
+static gb_window_t preview_window_handle;
+static gb_window_t work_window_handle;
+#endif
 
 static unsigned char doc_page;
 static unsigned int doc_len;
@@ -179,8 +186,13 @@ static unsigned char save_document(unsigned char after);
 static unsigned char commit_tile(void);
 static unsigned char unpack_mode1(unsigned char value, unsigned char pixel);
 static void do_load(void);
-#if defined(GB_MSX2) || defined(GB_PCW)
+#ifdef GB_PCW
 static void refresh_preview_selection(void);
+#endif
+#ifdef GB_MSX2
+static unsigned char open_preview_window(void);
+static unsigned char open_work_window(void);
+static void close_picture_windows(void);
 #endif
 
 /* ---- exact-pixel line primitive ------------------------------------------ */
@@ -365,10 +377,11 @@ static void copy11(char *dst, const char *src)
     for (i = 0; i < 11; i++) dst[i] = src[i];
 }
 
-static unsigned char is_pic_name(const char *name)
+static unsigned char launch_is_pic(void)
 {
-    return (unsigned char)(name[8] == 'P' && name[9] == 'I' &&
-                           name[10] == 'C');
+    return (unsigned char)(launch_name[8] == 'P' &&
+                           launch_name[9] == 'I' &&
+                           launch_name[10] == 'C');
 }
 
 static void to_83(const char *src, char *dst)
@@ -655,6 +668,9 @@ static void close_document(void)
 {
     release_document_page();
     reset_editor_state();
+#ifdef GB_MSX2
+    close_picture_windows();
+#endif
 }
 
 static unsigned char unpack_mode1(unsigned char value, unsigned char pixel)
@@ -1086,6 +1102,7 @@ static void draw_work(void)
     draw_work_selection();
 }
 
+#ifndef GB_MSX2
 static void repaint_picture_panes(void)
 {
     if (loaded) {
@@ -1106,6 +1123,22 @@ static void repaint_all(void)
     draw_toolchest();
     gb_curshow();
 }
+#else
+static void repaint_tool_window(void)
+{
+    gb_curhide(); draw_toolchest(); gb_curshow();
+}
+
+static void repaint_preview_window(void)
+{
+    gb_curhide(); draw_preview(); gb_curshow();
+}
+
+static void repaint_work_window(void)
+{
+    gb_curhide(); draw_work(); gb_curshow();
+}
+#endif
 
 static void draw_work_cell(unsigned char x, unsigned char y)
 {
@@ -1445,9 +1478,13 @@ static void finish_change(void)
 {
     if (!commit_tile()) gb_alert("Paint error", "Could not write tile");
     if (stroke_active) return;
+#ifdef GB_MSX2
+    gb_restore_parent();
+#else
     gb_curhide();
     repaint_picture_panes();
     gb_curshow();
+#endif
 }
 
 static void do_undo(void)
@@ -1643,10 +1680,14 @@ static void continue_stroke(void)
 {
     unsigned char x, y;
     if (!(gb_flags() & GB_FIRE)) {
-        finish_change();
         stroke_active = 0;
-#if defined(GB_MSX2) || defined(GB_PCW)
+#ifdef GB_MSX2
+        finish_change();
+#else
+        finish_change();
+#ifdef GB_PCW
         refresh_preview_selection();
+#endif
 #endif
         return;
     }
@@ -1679,7 +1720,7 @@ static unsigned char selector_screen(int *left, int *top)
         rely + TILE_SIDE <= pv_view_h);
 }
 
-#if defined(GB_MSX2) || defined(GB_PCW)
+#ifdef GB_PCW
 static void refresh_preview_selection(void) __naked
 {
 __asm
@@ -1731,15 +1772,9 @@ __asm
     ld   (0x1338), a
     ld   (0x1339), a
 __endasm;
-#ifdef GB_MSX2
-__asm
-    ld   hl, #0xd480
-__endasm;
-#else
 __asm
     ld   hl, #0xf85a
 __endasm;
-#endif
 __asm
     ld   (0x133a), hl
     call _gb_curshow
@@ -1796,7 +1831,9 @@ static void drag_selector(void)
         clamp_tile_origin();
         gb_curhide();
         draw_preview();
+#ifndef GB_MSX2
         draw_toolchest();
+#endif
         gb_curshow();
     }
     if (!load_tile()) {
@@ -1805,6 +1842,9 @@ static void drag_selector(void)
     }
     work_visible = 1;
     front_pane = PANE_WORK;
+#ifdef GB_MSX2
+    if (!open_work_window()) work_visible = 0;
+#endif
     gb_restore_parent();
 }
 
@@ -1819,7 +1859,11 @@ static void drag_vscroll(void)
             tile_y += value - scroll_y;
             scroll_y = value;
             clamp_tile_origin();
-            gb_curhide(); draw_preview(); draw_toolchest(); gb_curshow();
+            gb_curhide(); draw_preview();
+#ifndef GB_MSX2
+            draw_toolchest();
+#endif
+            gb_curshow();
         }
         flags = gb_poll();
     } while (flags & GB_FIRE);
@@ -1838,7 +1882,11 @@ static void drag_hscroll(void)
             tile_x += (value - scroll_x) << 2;
             scroll_x = value;
             clamp_tile_origin();
-            gb_curhide(); draw_preview(); draw_toolchest(); gb_curshow();
+            gb_curhide(); draw_preview();
+#ifndef GB_MSX2
+            draw_toolchest();
+#endif
+            gb_curshow();
         }
         flags = gb_poll();
     } while (flags & GB_FIRE);
@@ -2247,6 +2295,17 @@ static void run_menu(void)
     gb_restore_parent();
 }
 
+#ifdef GB_MSX2
+static void move_pane(unsigned char *x, unsigned char *y,
+                      unsigned char w, unsigned char h)
+{
+    (void)w; (void)h;
+    if (gb_window_drag() == GB_APP_OK) {
+        *x = gb_wm_x();
+        *y = gb_wm_y();
+    }
+}
+#else
 static void move_pane(unsigned char *x, unsigned char *y,
                       unsigned char w, unsigned char h) __naked
 {
@@ -2451,6 +2510,7 @@ mp_dy_ordered:
     ret
 __endasm;
 }
+#endif
 
 static void choose_pen(unsigned char pen)
 {
@@ -2545,6 +2605,14 @@ static void work_click(unsigned char mx, unsigned char my)
     if (title_hit(wk_x, wk_y, WK_W, mx, my)) {
         if (close_hit(wk_x, wk_y, mx, my)) {
             work_visible = 0;
+#ifdef GB_MSX2
+            if (work_window_handle) {
+                gb_window_t handle = work_window_handle;
+                work_window_handle = 0;
+                (void)gb_window_close(handle);
+                return;
+            }
+#endif
             gb_restore_parent();
         } else move_pane(&wk_x, &wk_y, WK_W, (unsigned char)WK_H);
         return;
@@ -2552,6 +2620,7 @@ static void work_click(unsigned char mx, unsigned char my)
     start_work_action();
 }
 
+#ifndef GB_MSX2
 static void handle_click(void)
 {
     unsigned char mx = gb_mx(), my = gb_my();
@@ -2573,6 +2642,7 @@ static void handle_click(void)
         inside(wk_x, wk_y, WK_W, (unsigned char)WK_H, mx, my))
         work_click(mx, my);
 }
+#endif
 
 static void close_app(void)
 {
@@ -2584,7 +2654,11 @@ static void close_app(void)
     if (action == CONFIRM_WAIT) return;
     release_document_page();
     FS_XFLAGS_K = 0;
+#ifdef GB_MSX2
+    (void)gb_app_quit();
+#else
     gb_wm_close();
+#endif
 }
 
 static void finish_open(unsigned char fresh)
@@ -2615,6 +2689,15 @@ static void finish_open(unsigned char fresh)
             front_pane = PANE_WORK;
         }
     }
+#ifdef GB_MSX2
+    if (loaded && !open_preview_window()) {
+        close_document();
+        gb_alert("Picture not opened", "No free window slot");
+    } else if (work_visible && !open_work_window()) {
+        work_visible = 0;
+        gb_alert("Canvas not opened", "No free window slot");
+    }
+#endif
     gb_restore_parent();
 }
 
@@ -2634,7 +2717,11 @@ static void finish_save(void)
         gb_restore_parent();
     } else if (after == AFTER_CLOSE_APP) {
         release_document_page();
+#ifdef GB_MSX2
+        gb_app_quit();
+#else
         gb_wm_close();
+#endif
     } else gb_restore_parent();
 }
 
@@ -2701,6 +2788,117 @@ static void step_job(void)
     if (io_off == doc_len) finish_save();
 }
 
+static void paint_event(void)
+{
+    unsigned char col;
+    if (gb_msg.type != GB_MSG_MENU) return;
+    col = gb_msg.p0;
+    if (menu_title_hit(col, MENU_FILE_X)) want_menu = 1;
+    else if (menu_title_hit(col, MENU_EDIT_X)) want_menu = 2;
+}
+
+#ifdef GB_MSX2
+static void paint_window_frame(unsigned char pane)
+{
+    unsigned char flags, mx, my;
+    if (io_job != IO_IDLE) {
+        flags = gb_flags();
+        if ((flags & GB_QUIT) || gb_getkey() == 27) {
+            stop_job(1);
+            gb_restore_parent();
+        } else step_job();
+        return;
+    }
+    if (want_menu) {
+        run_menu();
+        return;
+    }
+    flags = gb_flags();
+    if (flags & GB_QUIT) {
+        close_app();
+        return;
+    }
+    if (stroke_active) {
+        continue_stroke();
+        return;
+    }
+    if (!(flags & GB_CLICK)) return;
+    mx = gb_mx();
+    my = gb_my();
+    if (pane == PANE_TOOL) toolchest_click(mx, my);
+    else if (pane == PANE_PREVIEW) preview_click(mx, my);
+    else work_click(mx, my);
+}
+
+static void tool_window_frame(void) { paint_window_frame(PANE_TOOL); }
+static void preview_window_frame(void) { paint_window_frame(PANE_PREVIEW); }
+static void work_window_frame(void) { paint_window_frame(PANE_WORK); }
+
+static const gb_win_t tool_window = {
+    GB_COLS - TC_W - 1, 12, TC_W, TC_H,
+    tool_window_frame, repaint_tool_window, paint_event, menu_def
+};
+
+static const gb_win_t preview_window = {
+    1, 12, PV_W, PV_H,
+    preview_window_frame, repaint_preview_window, paint_event, menu_def
+};
+
+static const gb_win_t work_window = {
+    39, 32, WK_W, (unsigned char)WK_H,
+    work_window_frame, repaint_work_window, paint_event, menu_def
+};
+
+static gb_window_t register_paint_window(const gb_win_t *window,
+                                         unsigned char x, unsigned char y)
+{
+    unsigned char count = gb_app_window_count();
+    gb_window_t handle;
+    if (!gb_window_slots_free()) return 0;
+    gb_wm_add(window);
+    if (gb_app_window_count() != (unsigned char)(count + 1)) return 0;
+    handle = gb_window_current();
+    if (!handle || gb_window_check(handle) != GB_APP_OK) return 0;
+    gb_wm_setpos(x, y);
+    return handle;
+}
+
+static unsigned char open_tool_window(void)
+{
+    if (!tool_window_handle)
+        tool_window_handle = register_paint_window(&tool_window, tc_x, tc_y);
+    return (unsigned char)(tool_window_handle != 0);
+}
+
+static unsigned char open_preview_window(void)
+{
+    if (!preview_window_handle)
+        preview_window_handle = register_paint_window(&preview_window, pv_x, pv_y);
+    return (unsigned char)(preview_window_handle != 0);
+}
+
+static unsigned char open_work_window(void)
+{
+    if (!work_window_handle)
+        work_window_handle = register_paint_window(&work_window, wk_x, wk_y);
+    return (unsigned char)(work_window_handle != 0);
+}
+
+static void close_picture_windows(void)
+{
+    gb_window_t handle;
+    if (work_window_handle) {
+        handle = work_window_handle;
+        work_window_handle = 0;
+        (void)gb_window_close(handle);
+    }
+    if (preview_window_handle) {
+        handle = preview_window_handle;
+        preview_window_handle = 0;
+        (void)gb_window_close(handle);
+    }
+}
+#else
 static void paint_frame(void)
 {
     unsigned char flags;
@@ -2728,19 +2926,11 @@ static void paint_frame(void)
     if (flags & GB_CLICK) handle_click();
 }
 
-static void paint_event(void)
-{
-    unsigned char col;
-    if (gb_msg.type != GB_MSG_MENU) return;
-    col = gb_msg.p0;
-    if (menu_title_hit(col, MENU_FILE_X)) want_menu = 1;
-    else if (menu_title_hit(col, MENU_EDIT_X)) want_menu = 2;
-}
-
 static const gb_win_t paint_window = {
     0, 8, GB_COLS, GB_LINES - 8,
     paint_frame, repaint_all, paint_event, menu_def
 };
+#endif
 
 static void initial_layout(void)
 {
@@ -2766,25 +2956,31 @@ void main(void)
 {
     unsigned char i;
     io_job = IO_IDLE;
-    gb_wm_add(&paint_window);
-#ifdef GB_MSX2
-    if (MSX_SCRMOD != 7) {
-        gb_alert("PAINT needs Mode 7", "Select 16 colors");
-        gb_wm_close();
-        return;
-    }
-#endif
     reset_editor_state();
     current_tool = TOOL_PENCIL;
     current_pen = 2;
     front_pane = PANE_PREVIEW;
     initial_layout();
+#ifdef GB_MSX2
+    tool_window_handle = preview_window_handle = work_window_handle = 0;
+    if (!open_tool_window()) {
+        (void)gb_app_quit();
+        return;
+    }
+    if (MSX_SCRMOD != 7) {
+        gb_alert("PAINT needs Mode 7", "Select 16 colors");
+        (void)gb_app_quit();
+        return;
+    }
+#else
+    gb_wm_add(&paint_window);
+#endif
     gb_get_name(launch_name);
+    if (launch_is_pic()) start_load(launch_name);
     load_tools();
 #if !defined(GB_MSX2) && !defined(GB_PCW)
     load_picedit_helper();
 #endif
-    if (is_pic_name(launch_name)) start_load(launch_name);
     for (i = 64; i; i--) if (!gb_getkey()) break;
     gb_restore_parent();
 }

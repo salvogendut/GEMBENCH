@@ -26,3 +26,6 @@ gb_pic_close
 gb_restore_parent
 gb_wm_add
 gb_wm_close
+gb_wm_setpos
+gb_wm_x
+gb_wm_y

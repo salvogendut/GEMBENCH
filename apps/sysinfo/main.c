@@ -1,4 +1,4 @@
-/* SYSINFO.APP - MSX2 Architecture Milestone 1 diagnostic (#31).
+/* SYSINFO.APP - MSX2 Architecture Milestones 1-2 diagnostic (#31, #32).
  *
  * This development-only app exercises the public capability, owner, and opaque
  * page APIs. One cache page is deliberately left allocated: closing the window
@@ -22,7 +22,11 @@
 #define TEST_LEGACY 0x80
 #define TEST_EXHAUST 0x100
 #define TEST_FOREIGN 0x200
-#define TEST_ALL    0x3FF
+#define TEST_SYSINFO_V2 0x400
+#define TEST_WIN_ADD 0x800
+#define TEST_WIN_CLOSE 0x1000
+#define TEST_APP_API 0x2000
+#define TEST_ALL    0x3FFF
 
 #define LEGACY_PAGE_COUNT (*(volatile unsigned char *)0x1437)
 #define LEGACY_PAGE_NATIVE ((volatile unsigned char *)0x1438)
@@ -40,6 +44,14 @@ static unsigned char initial_free;
 static unsigned char final_free;
 static gb_owner_t owner;
 static gb_page_t retained_page;
+
+static void probe_frame(void) { }
+static void probe_repaint(void) { }
+static void probe_event(void) { }
+
+static const gb_win_t probe_window = {
+    100, 36, 18, 28, probe_frame, probe_repaint, probe_event, 0
+};
 
 static char hex_digit(unsigned char value)
 {
@@ -151,6 +163,38 @@ static void test_pages(void)
     final_free = gb_sysinfo()->free_pages;
 }
 
+static void test_application(void)
+{
+    const gb_sysinfo_t *info = gb_sysinfo();
+    unsigned char count = gb_app_window_count();
+    unsigned char free_slots = gb_window_slots_free();
+    gb_window_t primary = gb_window_current();
+    gb_window_t probe;
+
+    if (info->size == sizeof(gb_sysinfo_t) && info->version == 2 &&
+        info->max_applications == 8 &&
+        info->application_record_version == 1 &&
+        info->max_windows_per_application == 8 &&
+        (info->capabilities & (GB_CAP_APPLICATIONS | GB_CAP_MULTI_WINDOW)) ==
+            (GB_CAP_APPLICATIONS | GB_CAP_MULTI_WINDOW))
+        tests |= TEST_SYSINFO_V2;
+    if (count == 1 && primary && gb_window_check(primary) == GB_APP_OK &&
+        gb_app_publish() == GB_APP_OK && gb_window_drag() == GB_APP_OK)
+        tests |= TEST_APP_API;
+
+    gb_wm_add(&probe_window);
+    probe = gb_window_current();
+    if (probe && probe != primary && gb_window_check(probe) == GB_APP_OK &&
+        gb_app_window_count() == 2 &&
+        gb_window_slots_free() == (unsigned char)(free_slots - 1))
+        tests |= TEST_WIN_ADD;
+    if (probe && gb_window_close(probe) == GB_APP_OK &&
+        gb_window_check(probe) == GB_APP_ERR_STALE &&
+        gb_app_window_count() == 1 && gb_window_current() == primary &&
+        gb_window_slots_free() == free_slots)
+        tests |= TEST_WIN_CLOSE;
+}
+
 static void draw_result(unsigned char x, unsigned char y,
                         const char *label, unsigned int mask)
 {
@@ -168,7 +212,7 @@ static void draw(void)
 
     gb_fill(gb_wm_x(), (unsigned char)(gb_wm_y() + 14), WIN_W,
             (unsigned char)(WIN_H - 14), 1);
-    gb_textbw(x, y, "GB_SYSINFO v1   MSX Screen");
+    gb_textbw(x, y, "GB_SYSINFO v2   MSX Screen");
     hex8(value, info->video_mode);
     gb_textbw((unsigned char)(x + 51), y, value);
     hex16(value, owner);
@@ -188,8 +232,9 @@ static void draw(void)
     draw_result(x, (unsigned char)(y + 81), "Stale generation", TEST_STALE);
     draw_result(x, (unsigned char)(y + 94), "Free count restored", TEST_RESTORE);
     draw_result(x, (unsigned char)(y + 107), "Owner-held cache", TEST_LEAK);
-    draw_result(x, (unsigned char)(y + 120), "Owner/legacy/exhaust",
-                TEST_FOREIGN|TEST_LEGACY|TEST_EXHAUST);
+    draw_result(x, (unsigned char)(y + 120), "Owner/pages/windows",
+                TEST_FOREIGN|TEST_LEGACY|TEST_EXHAUST|TEST_SYSINFO_V2|
+                TEST_WIN_ADD|TEST_WIN_CLOSE|TEST_APP_API);
 }
 
 static void proc(void)
@@ -208,5 +253,6 @@ void main(void)
     retained_page = 0;
     gb_wm_managed(&window);
     test_pages();
+    test_application();
     gb_restore_parent();
 }

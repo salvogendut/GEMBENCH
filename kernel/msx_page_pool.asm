@@ -6,8 +6,27 @@
 ; existing resident picture/GBR paths keep using wm_alloc_page/wm_free_page as
 ; privileged compatibility helpers; their allocations still receive the owner
 ; of the focused application and are reclaimed when that owner closes.
+;
+; Architecture milestone 2 (#32) promotes those owners into independent
+; application records. Windows retain their frozen compositor layout and point
+; to an application through the parallel MSX_WIN_OWNER table. A single code page
+; may consequently own several generation-tagged window slots.
 
 GB_OWNER_MAX          equ 8
+GB_APP_MAX            equ GB_OWNER_MAX
+
+GB_APP_F_PUBLISHED    equ 1
+GB_APP_F_ROOT         equ 2
+GB_APP_F_TERMINATING  equ 4
+GB_APP_F_WINDOWLESS   equ 8
+
+GB_APP_OK             equ 0
+GB_APP_ERR_UNSUPPORTED equ 1
+GB_APP_ERR_STALE      equ 2
+GB_APP_ERR_OWNER      equ 3
+GB_APP_ERR_FULL       equ 4
+GB_APP_ERR_ROOT       equ 5
+GB_APP_ERR_BADARG     equ 6
 
 GB_PAGE_UNSPECIFIED   equ 0
 GB_PAGE_APPLICATION   equ 1
@@ -26,7 +45,7 @@ GB_PAGE_ERR_NOMEM     equ 5
 GB_PAGE_ERR_BADARG    equ 6
 
 GB_PLATFORM_MSX2      equ 1
-GB_SYSINFO_V1         equ 1
+GB_SYSINFO_V2         equ 2
 GB_PACKING_2BPP       equ 2
 GB_PACKING_4BPP       equ 4
 
@@ -39,7 +58,9 @@ GB_CAP_GBR            equ #0020
 GB_CAP_PAGE_ALLOC     equ #0040
 GB_CAP_OWNER_ID       equ #0080
 GB_CAP_RUNTIME_VIDEO  equ #0100
-GB_CAPS_MSX_M1        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO
+GB_CAP_APPLICATIONS   equ #0200
+GB_CAP_MULTI_WINDOW   equ #0400
+GB_CAPS_MSX_M2        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO|GB_CAP_APPLICATIONS|GB_CAP_MULTI_WINDOW
 
 ; app_pool_init: retain the TPA page-1 segment plus every available mapper
 ; segment, up to MSX_PAGE_MAX.  PAGE_DATA was already allocated separately by
@@ -47,7 +68,7 @@ GB_CAPS_MSX_M1        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_
 app_pool_init
                 ld    hl,MSX_PAGE_STATE
                 ld    de,MSX_PAGE_STATE+1
-                ld    bc,MSX_SYSINFO+MSX_SYSINFO_SIZE-MSX_PAGE_STATE-1
+                ld    bc,MSX_APP_TABLE_END-MSX_PAGE_STATE-1
                 ld    (hl),0
                 ldir
                 ld    hl,MSX_PAGE_NATIVE
@@ -142,7 +163,7 @@ mpcf_next       inc   c
 sysinfo_init
                 ld    a,MSX_SYSINFO_SIZE
                 ld    (MSX_SYS_SIZE),a
-                ld    a,GB_SYSINFO_V1
+                ld    a,GB_SYSINFO_V2
                 ld    (MSX_SYS_VERSION),a
                 ld    a,1                     ; frozen GEMBENCH-1 ABI
                 ld    (MSX_SYS_ABI_MAJOR),a
@@ -177,13 +198,74 @@ sysinfo_init
                 ld    (MSX_SYS_POOL_FREE),a
                 ld    a,WM_MAXWIN
                 ld    (MSX_SYS_MAX_WINDOWS),a
-                ld    hl,GB_CAPS_MSX_M1
+                ld    hl,GB_CAPS_MSX_M2
                 ld    (MSX_SYS_CAPS),hl
                 ld    hl,0
                 ld    (MSX_SYS_RESERVED),hl
+                ld    a,GB_APP_MAX
+                ld    (MSX_SYS_MAX_APPS),a
+                ld    a,1
+                ld    (MSX_SYS_APP_VERSION),a
+                ld    a,WM_MAXWIN
+                ld    (MSX_SYS_MAX_APP_WINDOWS),a
+                xor   a
+                ld    (MSX_SYS_RESERVED2),a
                 ret
 
-; owner_alloc -> DE = generation-tagged owner handle, CF set; DE=0, NC if full.
+; app_record_reset: C = application slot. Clear every reusable field while
+; preserving the independent active/generation pair.
+app_record_reset
+                xor   a
+                ld    hl,MSX_APP_CODE_NATIVE
+                add   a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_APP_CODE_PAGE
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_APP_CODE_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_APP_WINDOW_COUNT
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_APP_FLAGS
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_APP_SERVICE
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_APP_ACCESSORY
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_APP_PRIMARY_WIN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),#FF
+                ld    hl,MSX_APP_WORKER_WIN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),#FF
+                ret
+
+; owner_alloc -> DE = generation-tagged application handle, CF set; DE=0, NC
+; if the fixed application table is full. GB_OWNER remains a source-compatible
+; name for this same identity.
 owner_alloc
                 ld    hl,MSX_OWNER_ACTIVE
                 ld    b,GB_OWNER_MAX
@@ -211,6 +293,9 @@ moa_gen_ok     ld    (hl),a
                 ld    a,c
                 inc   a
                 ld    e,a
+                push  de
+                call  app_record_reset
+                pop   de
                 scf
                 ret
 
@@ -241,9 +326,257 @@ owner_validate
 mov_bad         or    a                       ; clear carry
                 ret
 
-; owner_current -> DE = pending loader owner, mapped application owner, focused
-; window owner, or zero. The mapped page is authoritative during callbacks for
-; windows below the focus in z-order.
+; app_bind_code_page: A = native mapper segment and DE = page handle returned
+; by page_alloc_owned. Publish them in the pending application record. Returns
+; A = native segment so loader call sites can continue unchanged.
+app_bind_code_page
+                ld    (MSX_ALLOC_NATIVE),a
+                ld    (MSX_ALLOC_HANDLE),de
+                ld    de,(MSX_PENDING_OWNER)
+                call  owner_validate
+                jr    nc,mabcp_done
+                ld    a,e
+                dec   a
+                ld    c,a
+                ld    hl,MSX_APP_CODE_NATIVE
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_ALLOC_NATIVE)
+                ld    (hl),a
+                ld    hl,MSX_APP_CODE_PAGE
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_ALLOC_HANDLE)
+                ld    (hl),a
+                ld    hl,MSX_APP_CODE_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_ALLOC_HANDLE+1)
+                ld    (hl),a
+mabcp_done     ld    a,(MSX_ALLOC_NATIVE)
+                ret
+
+; window_generation_next: A = reusable WM slot -> DE = new opaque window
+; handle. A generation is advanced before the slot is published alive.
+window_generation_next
+                ld    c,a
+                ld    hl,MSX_WIN_GEN
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                inc   a
+                jr    nz,mwgn_ok
+                inc   a
+mwgn_ok         ld    (hl),a
+                ld    d,a
+                ld    a,c
+                inc   a
+                ld    e,a
+                ret
+
+; window_handle_slot: A = live slot -> DE = generation-tagged handle.
+window_handle_slot
+                ld    c,a
+                ld    hl,MSX_WIN_GEN
+                add   a,l
+                ld    l,a
+                ld    d,(hl)
+                ld    a,c
+                inc   a
+                ld    e,a
+                ret
+
+; app_window_attach: A = WM slot, DE = application. Bind the parallel window
+; owner link, increment the application window count, and publish its first
+; primary window. Returns CF on success.
+app_window_attach
+                ld    (MSX_WINDOW_SLOT),a
+                ld    (MSX_ALLOC_OWNER),de
+                call  owner_validate
+                ret   nc
+                ld    a,e
+                dec   a
+                ld    (MSX_APP_SLOT),a
+                ld    c,a
+                ld    a,(MSX_WINDOW_SLOT)
+                ld    b,a
+                ld    hl,MSX_WIN_OWNER
+                add   a,l
+                ld    l,a
+                ld    (hl),e
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,b
+                add   a,l
+                ld    l,a
+                ld    (hl),d
+                ld    hl,MSX_APP_WINDOW_COUNT
+                ld    a,c
+                add   a,l
+                ld    l,a
+                inc   (hl)
+                ld    hl,MSX_APP_PRIMARY_WIN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    #FF
+                jr    nz,mawa_primary_ok
+                ld    a,b
+                ld    (hl),a
+mawa_primary_ok ld   hl,MSX_APP_FLAGS
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                and   #FF-GB_APP_F_WINDOWLESS
+                or    GB_APP_F_PUBLISHED
+                ld    (hl),a
+                scf
+                ret
+
+; app_window_detach: C = WM slot, DE = owning application. Clear the parallel
+; link and update primary/worker metadata. Returns A = remaining window count.
+app_window_detach
+                ld    a,c
+                ld    (MSX_WINDOW_SLOT),a
+                ld    (MSX_ALLOC_OWNER),de
+                call  owner_validate
+                jp    nc,mawd_none
+                ld    a,e
+                dec   a
+                ld    (MSX_APP_SLOT),a
+                ld    b,a
+                ld    hl,MSX_APP_WINDOW_COUNT
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                or    a
+                jr    z,mawd_counted
+                dec   (hl)
+                dec   a
+mawd_counted    ld   (MSX_APP_REMAIN),a
+                ld    a,(MSX_WINDOW_SLOT)
+                ld    c,a
+                ld    hl,MSX_WIN_OWNER
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),0
+                ld    hl,MSX_APP_WORKER_WIN
+                ld    a,b
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    c
+                jr    nz,mawd_primary
+                ld    (hl),#FF
+mawd_primary    ld   hl,MSX_APP_PRIMARY_WIN
+                ld    a,b
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    c
+                jr    nz,mawd_flags
+                ld    (hl),#FF
+                ld    a,(MSX_ALLOC_OWNER)
+                ld    e,a
+                ld    a,(MSX_ALLOC_OWNER+1)
+                ld    d,a
+                ld    b,WM_MAXWIN
+                ld    c,0
+mawd_find       ld   hl,MSX_WIN_OWNER
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    e
+                jr    nz,mawd_next
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    d
+                jr    nz,mawd_next
+                ld    a,(MSX_APP_SLOT)
+                ld    hl,MSX_APP_PRIMARY_WIN
+                add   a,l
+                ld    l,a
+                ld    (hl),c
+                jr    mawd_flags
+mawd_next       inc   c
+                djnz  mawd_find
+mawd_flags      ld   a,(MSX_APP_REMAIN)
+                or    a
+                jr    nz,mawd_done
+                ld    a,(MSX_APP_SLOT)
+                ld    hl,MSX_APP_FLAGS
+                add   a,l
+                ld    l,a
+                set   3,(hl)
+mawd_done       ld   a,(MSX_APP_REMAIN)
+                ret
+mawd_none       xor  a
+                ret
+
+; window_validate_owned: HL = opaque window handle, DE = current application.
+; Returns A=GB_APP_OK and C=slot, or an explicit stale/owner result.
+window_validate_owned
+                ld    (MSX_WINDOW_HANDLE),hl
+                ld    (MSX_ALLOC_OWNER),de
+                call  owner_validate
+                jr    nc,mwvo_owner
+                ld    hl,(MSX_WINDOW_HANDLE)
+                ld    a,l
+                or    a
+                jr    z,mwvo_stale
+                dec   a
+                cp    WM_MAXWIN
+                jr    nc,mwvo_stale
+                ld    c,a
+                ld    hl,MSX_WIN_GEN
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_WINDOW_HANDLE+1)
+                cp    (hl)
+                jr    nz,mwvo_stale
+                ld    a,c
+                call  wm_entry
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                bit   0,(hl)
+                jr    z,mwvo_stale
+                ld    de,(MSX_ALLOC_OWNER)
+                ld    hl,MSX_WIN_OWNER
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    e
+                jr    nz,mwvo_owner
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    d
+                jr    nz,mwvo_owner
+                xor   a
+                ret
+mwvo_stale      ld   a,GB_APP_ERR_STALE
+                ret
+mwvo_owner      ld   a,GB_APP_ERR_OWNER
+                ret
+
+; owner_current -> DE = pending loader application, mapped application, focused
+; window application, or zero. The mapped page is authoritative during
+; callbacks for windows below the focus in z-order.
 owner_current
                 ld    de,(MSX_PENDING_OWNER)
                 ld    a,d
@@ -272,8 +605,9 @@ moc_validate    call  owner_validate
 moc_none        ld    de,0
                 ret
 
-; owner_bind_pending_window: attach the pending owner (or the owner already
-; associated with the caller page) to wm_slot, then consume the pending handle.
+; owner_bind_pending_window: attach the pending application (or the application
+; already associated with the caller page) to wm_slot, then consume the pending
+; handle. Later windows from the same mapped code page take the second path.
 owner_bind_pending_window
                 ld    de,(MSX_PENDING_OWNER)
                 ld    a,d
@@ -285,16 +619,8 @@ owner_bind_pending_window
                 or    e
                 ret   z
 mob_have        ld    a,(wm_slot)
-                ld    c,a
-                ld    hl,MSX_WIN_OWNER
-                add   a,l
-                ld    l,a
-                ld    (hl),e
-                ld    hl,MSX_WIN_OWNER_GEN
-                ld    a,c
-                add   a,l
-                ld    l,a
-                ld    (hl),d
+                call  app_window_attach
+                ret   nc
                 ld    hl,0
                 ld    (MSX_PENDING_OWNER),hl
                 ret
@@ -641,6 +967,10 @@ mor_next        pop   bc
                 add   a,l
                 ld    l,a
                 ld    (hl),0
+                ld    a,e
+                dec   a
+                ld    c,a
+                call  app_record_reset
                 ld    b,WM_MAXWIN
                 ld    c,0
 mor_windows     ld    hl,MSX_WIN_OWNER
@@ -709,7 +1039,7 @@ mwf_scan        ld    a,(hl)
                 ret
 mwf_hit         jp    page_release_index
 
-; GB_SYSINFO #80C3: return an immutable v1 record in page-3 RAM. Only the free
+; GB_SYSINFO #80C3: return an immutable versioned record in page-3 RAM. Only the free
 ; count is dynamic, so refresh it at the query boundary.
 k_sysinfo
                 call  page_count_free
@@ -763,4 +1093,260 @@ kpg_check       push  hl
                 jr    z,kpg_no_owner
                 jp    page_check_owned
 kpg_no_owner    ld    a,GB_PAGE_ERR_OWNER
+                ret
+
+; app_mark_root_current: the first Desktop registration owns the immortal root
+; application. Explicit quit rejects this record.
+app_mark_root_current
+                call  owner_current
+                call  owner_validate
+                ret   nc
+                ld    a,e
+                dec   a
+                ld    hl,MSX_APP_FLAGS
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                or    GB_APP_F_PUBLISHED|GB_APP_F_ROOT
+                ld    (hl),a
+                ret
+
+; app_mark_worker_current: record which window supplies the application-owned
+; worker callback. The fixed scheduler still snapshots by window slot, but the
+; application table is authoritative for lifecycle cleanup and allows only one
+; worker registration per application in this milestone.
+app_mark_worker_current
+                call  owner_current
+                call  owner_validate
+                ret   nc
+                ld    a,e
+                dec   a
+                ld    c,a
+                ld    hl,MSX_APP_WORKER_WIN
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    #FF
+                ret   nz
+                ld    a,(WM_FOCUS)
+                ld    (hl),a
+                ret
+
+; app_service_for_window: A = WM slot -> A = owning application's registered
+; shell service class, or zero for an ownerless/stale window.
+app_service_for_window
+                cp    WM_MAXWIN
+                jr    nc,masfw_none
+                ld    c,a
+                ld    hl,MSX_WIN_OWNER
+                add   a,l
+                ld    l,a
+                ld    e,(hl)
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    d,(hl)
+                call  owner_validate
+                jr    nc,masfw_none
+                ld    a,e
+                dec   a
+                ld    hl,MSX_APP_SERVICE
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                ret
+masfw_none      xor  a
+                ret
+
+; app_find_window: DE = application -> A = one owned slot, CF; NC when none.
+app_find_window
+                ld    (MSX_ALLOC_OWNER),de
+                ld    b,WM_MAXWIN
+                ld    c,0
+mafw_scan       ld   hl,MSX_WIN_OWNER
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_ALLOC_OWNER)
+                cp    (hl)
+                jr    nz,mafw_next
+                ld    hl,MSX_WIN_OWNER_GEN
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_ALLOC_OWNER+1)
+                cp    (hl)
+                jr    nz,mafw_next
+                ld    a,c
+                scf
+                ret
+mafw_next       inc  c
+                djnz  mafw_scan
+                xor   a
+                ret
+
+; GB_APP #80CC dispatcher (MSX2 Architecture Milestone 2):
+;   A=0                    -> DE=current application handle
+;   A=1                    -> A=status, publish a windowless application
+;   A=2                    -> A=status, terminate current application
+;   A=3                    -> DE=current focused window handle
+;   A=4, HL=window handle  -> A=status, close an owned window
+;   A=5, HL=window handle  -> A=status, validate an owned window
+;   A=6                    -> A=free compositor window slots
+;   A=7                    -> A=current application live-window count
+;   A=8                    -> A=status, drag the focused owned window
+k_app
+                or    a
+                jp    z,owner_current
+                dec   a
+                jr    z,kapp_publish
+                dec   a
+                jr    z,kapp_quit
+                dec   a
+                jp    z,kapp_window_current
+                dec   a
+                jp    z,kapp_window_close
+                dec   a
+                jp    z,kapp_window_check
+                dec   a
+                jp    z,kapp_window_free
+                dec   a
+                jp    z,kapp_window_count
+                dec   a
+                jp    z,kapp_window_drag
+                ld    a,GB_APP_ERR_BADARG
+                ret
+
+kapp_publish    call  owner_current
+                call  owner_validate
+                jp    nc,kapp_owner
+                ld    a,e
+                dec   a
+                ld    c,a
+                ld    hl,MSX_APP_FLAGS
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                or    GB_APP_F_PUBLISHED
+                ld    (hl),a
+                ld    hl,MSX_APP_WINDOW_COUNT
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                or    a
+                jr    nz,kapp_publish_done
+                ld    hl,MSX_APP_FLAGS
+                ld    a,c
+                add   a,l
+                ld    l,a
+                set   3,(hl)
+kapp_publish_done
+                ld    hl,0
+                ld    (MSX_PENDING_OWNER),hl
+                xor   a
+                ret
+
+kapp_quit       call  owner_current
+                call  owner_validate
+                jp    nc,kapp_owner
+                ld    (MSX_CLOSE_OWNER),de
+                ld    a,e
+                dec   a
+                ld    c,a
+                ld    hl,MSX_APP_FLAGS
+                add   a,l
+                ld    l,a
+                bit   1,(hl)
+                jp    nz,kapp_root
+                set   2,(hl)
+kapp_quit_windows
+                ld    de,(MSX_CLOSE_OWNER)
+                call  app_find_window
+                jr    nc,kapp_quit_release
+                ld    c,a
+                call  msx_window_close_slot
+                ld    de,(MSX_CLOSE_OWNER)
+                call  owner_validate
+                jr    c,kapp_quit_windows
+                xor   a
+                ret
+kapp_quit_release
+                ld    de,(MSX_CLOSE_OWNER)
+                call  owner_release
+                xor   a
+                ret
+
+kapp_window_current
+                call  owner_current
+                ld    (MSX_ALLOC_OWNER),de
+                call  owner_validate
+                jr    nc,kapp_window_none
+                ld    a,(WM_FOCUS)
+                cp    WM_MAXWIN
+                jr    nc,kapp_window_none
+                call  window_handle_slot
+                ld    (MSX_WINDOW_HANDLE),de
+                ex    de,hl
+                ld    de,(MSX_ALLOC_OWNER)
+                call  window_validate_owned
+                or    a
+                jr    nz,kapp_window_none
+                ld    de,(MSX_WINDOW_HANDLE)
+                ret
+kapp_window_none
+                ld    de,0
+                ret
+
+kapp_window_close
+                push  hl
+                call  owner_current
+                pop   hl
+                call  window_validate_owned
+                ret   nz
+                call  msx_window_close_slot
+                xor   a
+                ret
+
+kapp_window_check
+                push  hl
+                call  owner_current
+                pop   hl
+                jp    window_validate_owned
+
+kapp_window_free
+                ld    a,(WM_NWIN)
+                ld    b,a
+                ld    a,WM_MAXWIN
+                sub   b
+                ret
+
+kapp_window_count
+                call  owner_current
+                call  owner_validate
+                jp    nc,kapp_owner
+                ld    a,e
+                dec   a
+                ld    hl,MSX_APP_WINDOW_COUNT
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                ret
+
+kapp_window_drag
+                call  kapp_window_current
+                ld    a,d
+                or    e
+                jr    z,kapp_owner
+                ld    a,(WM_FOCUS)
+                call  wm_entry
+                call  mw_publish
+                call  mw_move
+                xor   a
+                ret
+
+kapp_root       ld   a,GB_APP_ERR_ROOT
+                ret
+kapp_owner      ld   a,GB_APP_ERR_OWNER
                 ret

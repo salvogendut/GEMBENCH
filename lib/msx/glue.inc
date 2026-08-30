@@ -88,11 +88,12 @@ MSX_ALLOC_HANDLE   equ #C2E9        ; allocator/free scratch: page handle
 MSX_ALLOC_NATIVE   equ #C2EB        ; legacy-claim scratch: native segment
 MSX_ALLOC_INDEX    equ #C2EC        ; legacy-claim scratch: pool index
 
-; Read-only, versioned GB_SYSINFO v1 record returned by GB_SYSINFO. The free
+; Read-only, versioned GB_SYSINFO record returned by GB_SYSINFO. The free
 ; page byte follows allocator changes and is also refreshed on every query;
 ; all other fields are fixed at boot.
 MSX_SYSINFO        equ #C2F0
-MSX_SYSINFO_SIZE   equ 20
+MSX_SYSINFO_V1_SIZE equ 20
+MSX_SYSINFO_SIZE   equ 24
 MSX_SYS_SIZE       equ MSX_SYSINFO+0
 MSX_SYS_VERSION    equ MSX_SYSINFO+1
 MSX_SYS_ABI_MAJOR  equ MSX_SYSINFO+2
@@ -109,6 +110,31 @@ MSX_SYS_POOL_FREE  equ MSX_SYSINFO+14
 MSX_SYS_MAX_WINDOWS equ MSX_SYSINFO+15
 MSX_SYS_CAPS       equ MSX_SYSINFO+16
 MSX_SYS_RESERVED   equ MSX_SYSINFO+18
+MSX_SYS_MAX_APPS   equ MSX_SYSINFO+20
+MSX_SYS_APP_VERSION equ MSX_SYSINFO+21
+MSX_SYS_MAX_APP_WINDOWS equ MSX_SYSINFO+22
+MSX_SYS_RESERVED2  equ MSX_SYSINFO+23
+
+; Architecture milestone 2 (#32): the M1 owner identity is now the public
+; handle of a real fixed-capacity application record. Window records retain
+; compositor state and point back to one of these applications; several window
+; slots may therefore share one code page and lifecycle.
+MSX_APP_CODE_NATIVE equ #C308       ; primary code mapper segment
+MSX_APP_CODE_PAGE   equ #C310       ; primary gb_page_t low byte
+MSX_APP_CODE_GEN    equ #C318       ; primary gb_page_t generation
+MSX_APP_WINDOW_COUNT equ #C320      ; live window slots owned by the app
+MSX_APP_PRIMARY_WIN equ #C328       ; primary window slot, #FF when windowless
+MSX_APP_FLAGS       equ #C330       ; published/root/terminating lifecycle flags
+MSX_APP_SERVICE     equ #C338       ; app-owned shell service class
+MSX_APP_ACCESSORY   equ #C340       ; app-owned exact Desk accessory ID
+MSX_APP_WORKER_WIN  equ #C348       ; optional worker window slot, #FF if none
+MSX_WIN_GEN         equ #C350       ; generation for each reused WM slot
+MSX_APP_SLOT        equ #C358       ; lifecycle scratch: app/remaining count
+MSX_WINDOW_HANDLE   equ #C359       ; lifecycle scratch: generation-tagged window
+MSX_WINDOW_SLOT     equ #C35B       ; lifecycle scratch: WM slot
+MSX_CALLER_BANK     equ #C35C       ; lifecycle scratch: caller mapper segment
+MSX_APP_REMAIN      equ #C35D       ; lifecycle scratch: remaining windows
+MSX_APP_TABLE_END   equ #C35E
 ; NOTE (#287 M1 debugging): DOS 2 / Nextor's kernel data occupies page 3 well
 ; below #F380 (the mapper jump table itself sits around #F200, jumping into
 ; code near #EC00) - the DOS 1 "system area starts at #F380" rule does NOT

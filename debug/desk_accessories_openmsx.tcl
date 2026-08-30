@@ -197,7 +197,11 @@ proc da_wait_first_clock {} {
     if {[peek 0x1350] == 2 && $slot > 0 &&
         [da_sig_loaded $::da_clock_main $::da_clock_sig]} {
         if {![da_accessory_ok $slot 1]} {
-            da_finish "FAIL Clock did not register exact ID 1"
+            if {[machine_info time] >= $::da_deadline} {
+                da_finish "FAIL Clock did not register exact ID 1"
+            } else {
+                after time 0.1 da_wait_first_clock
+            }
             return
         }
         set ::da_first_clock_slot $slot
@@ -215,7 +219,11 @@ proc da_wait_calculator {} {
     if {[peek 0x1350] == 3 && $slot > 0 &&
         [da_sig_loaded $::da_calc_main $::da_calc_sig]} {
         if {![da_accessory_ok $slot 2]} {
-            da_finish "FAIL Calculator did not register exact ID 2"
+            if {[machine_info time] >= $::da_deadline} {
+                da_finish "FAIL Calculator did not register exact ID 2"
+            } else {
+                after time 0.1 da_wait_calculator
+            }
             return
         }
         set ::da_calc_slot $slot

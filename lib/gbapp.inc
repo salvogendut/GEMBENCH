@@ -223,7 +223,8 @@ GB_RELOAD       equ   GB_KERNEL+186 ; #80BA  reload font/icons/cursor/backdrop.
 GB_NET          equ   GB_KERNEL+189 ; #80BD  run active paged network module; BC=GBNET_RES.
                 ifdef PLATFORM_MSX
 GB_SHELL        equ   GB_KERNEL+192 ; #80C0  GEMBENCH shell register/find/send service.
-GB_SYSINFO      equ   GB_KERNEL+195 ; #80C3  MSX2 v1 runtime capability record (#31).
+GB_SYSINFO      equ   GB_KERNEL+195 ; #80C3  MSX2 versioned runtime capabilities (#31/#32).
 GB_OWNER        equ   GB_KERNEL+198 ; #80C6  current generation-tagged owner handle.
 GB_PAGE         equ   GB_KERNEL+201 ; #80C9  opaque 16 KiB page allocate/free/check.
+GB_APP          equ   GB_KERNEL+204 ; #80CC  MSX2 application/window lifecycle (#32).
                 endif

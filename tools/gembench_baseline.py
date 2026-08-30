@@ -45,9 +45,9 @@ MSX_PAGE_DATA = 0xC020
 MSX_PAGE_TOTAL = 0xC2E4
 MSX_PAGE_FREE = 0xC2E5
 MSX_SYSINFO = 0xC2F0
-MSX_SYSINFO_SIZE = 20
+MSX_SYSINFO_SIZE = 24
 MSX_PAGE_MAX = 32
-MSX_M1_REQUIRED_CAPABILITIES = 0x01C0
+MSX_M2_REQUIRED_CAPABILITIES = 0x07C0
 BASELINE_PHASE = 0xC02A
 BASELINE_STACK_MAX = 0xC02B
 BASELINE_STACK_FAULT = 0xC02C
@@ -250,7 +250,7 @@ def word_at(memory: dict[int, int], address: int) -> int | None:
 
 
 def parse_sysinfo(memory: dict[int, int]) -> dict[str, int] | None:
-    """Read the optional Architecture Milestone 1 capability prefix."""
+    """Read the optional versioned architecture capability record."""
     size = byte_at(memory, MSX_SYSINFO)
     if not size:
         return None
@@ -271,6 +271,10 @@ def parse_sysinfo(memory: dict[int, int]) -> dict[str, int] | None:
         "max_windows": byte_at(memory, MSX_SYSINFO + 15) or 0,
         "capabilities": word_at(memory, MSX_SYSINFO + 16) or 0,
         "reserved": word_at(memory, MSX_SYSINFO + 18) or 0,
+        "max_applications": byte_at(memory, MSX_SYSINFO + 20) or 0,
+        "application_record_version": byte_at(memory, MSX_SYSINFO + 21) or 0,
+        "max_windows_per_application": byte_at(memory, MSX_SYSINFO + 22) or 0,
+        "reserved2": byte_at(memory, MSX_SYSINFO + 23) or 0,
     }
 
 
@@ -437,7 +441,7 @@ def collect_runtime(
     if sysinfo is not None:
         expected_sysinfo = {
             "size": MSX_SYSINFO_SIZE,
-            "version": 1,
+            "version": 2,
             "abi_major": 1,
             "abi_minor": 0,
             "platform": 1,
@@ -451,6 +455,10 @@ def collect_runtime(
             "free_pages": free_app_pages,
             "max_windows": WM_MAXWIN,
             "reserved": 0,
+            "max_applications": 8,
+            "application_record_version": 1,
+            "max_windows_per_application": WM_MAXWIN,
+            "reserved2": 0,
         }
         mismatches = [
             f"{name}={sysinfo[name]!r} (expected {expected!r})"
@@ -458,12 +466,12 @@ def collect_runtime(
             if sysinfo[name] != expected
         ]
         if mismatches:
-            errors.append("invalid GB_SYSINFO v1: " + ", ".join(mismatches))
+            errors.append("invalid GB_SYSINFO v2: " + ", ".join(mismatches))
         if (
-            sysinfo["capabilities"] & MSX_M1_REQUIRED_CAPABILITIES
-        ) != MSX_M1_REQUIRED_CAPABILITIES:
+            sysinfo["capabilities"] & MSX_M2_REQUIRED_CAPABILITIES
+        ) != MSX_M2_REQUIRED_CAPABILITIES:
             errors.append(
-                "GB_SYSINFO lacks page-allocation, owner-identity, or runtime-video capability"
+                "GB_SYSINFO lacks the M2 page, owner, application, multi-window, or video capabilities"
             )
     if require_probes:
         if probes is None:

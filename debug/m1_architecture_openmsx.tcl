@@ -51,7 +51,7 @@ proc m1_window_owner_gen {owner} {
     for {set i 0} {$i < 8} {incr i} {
         if {[peek [expr {0xC2D0 + $i}]] == $owner_slot &&
             [peek [expr {0xC2D8 + $i}]] == $owner_gen} {
-            return $owner_gen
+            return [peek [expr {0xC350 + $i}]]
         }
     }
     return 0
@@ -183,12 +183,14 @@ proc m1_double_click {callback} {
 
 proc m1_validate_sysinfo {} {
     expr {
-        [peek 0xC2F0] == 20 && [peek 0xC2F1] == 1 &&
+        [peek 0xC2F0] == 24 && [peek 0xC2F1] == 2 &&
         [peek 0xC2F4] == 1 && [peek 0xC2F5] == 7 &&
         [m1_word 0xC2F6] == 512 && [m1_word 0xC2F8] == 212 &&
         [peek 0xC2FA] == 4 && [peek 0xC2FB] == 16 &&
         [peek 0xC2FD] == [peek 0xC2E4] &&
-        ([m1_word 0xC300] & 0x01C0) == 0x01C0
+        ([m1_word 0xC300] & 0x07C0) == 0x07C0 &&
+        [peek 0xC304] == 8 && [peek 0xC305] == 1 &&
+        [peek 0xC306] == 8 && [peek 0xC307] == 0
     }
 }
 
@@ -199,7 +201,7 @@ proc m1_wait_first {} {
         } else { after time 0.002 m1_wait_first }
         return
     }
-    if {[peek 0x1350] >= 3 && [m1_word $::m1_tests] == 0x03FF} {
+    if {[peek 0x1350] >= 3 && [m1_word $::m1_tests] == 0x3FFF} {
         set ::m1_first_owner [m1_word $::m1_owner]
         set ::m1_first_gen [peek 0xC2CA]
         set ::m1_first_window_gen [m1_window_owner_gen $::m1_first_owner]
@@ -207,7 +209,7 @@ proc m1_wait_first {} {
         set ::m1_first_final [peek $::m1_final]
         if {![m1_validate_sysinfo] || $::m1_first_owner == 0 ||
             $::m1_first_gen != (($::m1_first_owner >> 8) & 0xFF) ||
-            $::m1_first_window_gen != $::m1_first_gen ||
+            $::m1_first_window_gen == 0 ||
             $::m1_first_final != $::m1_first_initial - 1 ||
             [m1_word $::m1_retained] == 0 ||
             [peek 0xC2E5] != $::m1_first_final || [m1_owner_count] != 3} {
@@ -255,7 +257,7 @@ proc m1_wait_second {} {
         } else { after time 0.002 m1_wait_second }
         return
     }
-    if {[peek 0x1350] >= 3 && [m1_word $::m1_tests] == 0x03FF} {
+    if {[peek 0x1350] >= 3 && [m1_word $::m1_tests] == 0x3FFF} {
         set ::m1_second_owner [m1_word $::m1_owner]
         set ::m1_second_gen [peek 0xC2CA]
         set ::m1_second_window_gen [m1_window_owner_gen $::m1_second_owner]
@@ -265,7 +267,8 @@ proc m1_wait_second {} {
             ($::m1_second_owner & 0xFF) != ($::m1_first_owner & 0xFF) ||
             $::m1_closed_gen != $::m1_first_gen ||
             $::m1_second_gen != (($::m1_second_owner >> 8) & 0xFF) ||
-            $::m1_second_window_gen != $::m1_second_gen ||
+            $::m1_second_window_gen == 0 ||
+            $::m1_second_window_gen == $::m1_first_window_gen ||
             $::m1_second_initial != $::m1_first_initial ||
             $::m1_second_final != $::m1_first_final} {
             m1_finish "FAIL generation/reopen"

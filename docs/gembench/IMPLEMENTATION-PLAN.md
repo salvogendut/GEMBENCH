@@ -254,3 +254,24 @@ editor draw with exact VDI arguments, live state, the expected three-window
 z-order, and a clean Screen 7 capture. The complementary 1983 run reached frame
 6,002 with the Screen 7 register baseline intact. CPC Albireo/M4 card plus
 floppies and all three PCW disks also build successfully.
+
+Architecture Milestone 2 in issue #32 implements the next SymbOS-review slice
+on MSX2 only. The eight Milestone-1 owners are now application records with a
+primary code page, live-window count, primary/worker slots, lifecycle flags,
+and application-owned shell/accessory metadata. The frozen eight-entry window
+table gains only parallel application and generation arrays in fixed page-3
+RAM. `GB_APP` is appended at `0x80CC`; generation-tagged window close/check,
+free-slot/count queries, bounded windowless publication, application quit, and
+resident outline drag are opt-in through `SYS=1`. Sysinfo keeps its 20-byte v1
+prefix and appends a four-byte v2 application-capacity suffix.
+
+The in-tree MSX2 Paint is the production migration: Toolchest, Preview, and
+Canvas are three real compositor windows sharing one application/code page.
+Canvas closes alone, document close removes Preview/Canvas and its document
+page, and Quit releases the remaining Toolchest and owner. Moving the shared
+drag engine resident makes Paint 15,710 bytes, 43 bytes smaller than its
+single-workspace baseline. Screen 6/7 kernels are 13,242/14,820 bytes and the
+scheduler remains 503/512 bytes. The API and Paint openMSX tests validate stale
+window rejection, owner/window generation reuse, three-window ownership,
+independent close, document survival, application teardown, and mapper-page
+restoration. CPC/PCW remain unchanged pending their planned backends.

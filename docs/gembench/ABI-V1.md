@@ -173,12 +173,20 @@ appends three MSX2 jumps after `GB_SHELL`: `GB_SYSINFO` at `0x80C3`, `GB_OWNER`
 at `0x80C6`, and `GB_PAGE` at `0x80C9`. No existing jump, message, GBR record,
 or managed-window byte moves. CPC and PCW do not export these entries yet.
 
-`GB_SYSINFO` v1 has a versioned 20-byte minimum prefix. Owner and page values
-are opaque, generation-tagged 16-bit runtime handles; neither is a persistent
-identifier or a native mapper segment. Applications opt into the C bindings
-with `SYS=1`, so existing application binaries and non-users retain their prior
-layout. The exact MSX ownership and allocator contract is documented in
-[ARCHITECTURE-M1-MSX.md](ARCHITECTURE-M1-MSX.md).
+Architecture Milestone 2 ([#32](https://github.com/salvogendut/GEMBENCH/issues/32))
+appends `GB_APP` at `0x80CC`. The existing owner becomes an independent
+application identity, while generation-tagged window handles allow several
+frozen compositor records to share one application/code page. The complete
+20-byte sysinfo v1 prefix is unchanged; the current v2 record appends four
+application-capacity bytes and advertises application/multi-window capability.
+
+`GB_SYSINFO` has a stable, versioned 20-byte minimum prefix. Owner, page, and
+window values are opaque, generation-tagged 16-bit runtime handles; none is a
+persistent identifier or a native mapper segment. Applications opt into the C
+bindings with `SYS=1`, so existing application binaries and non-users retain
+their prior layout. The exact MSX contracts are documented in
+[ARCHITECTURE-M1-MSX.md](ARCHITECTURE-M1-MSX.md) and
+[ARCHITECTURE-M2-MSX.md](ARCHITECTURE-M2-MSX.md).
 
 ## Compatibility rules
 

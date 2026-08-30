@@ -246,6 +246,36 @@ make cpc
 make pcw
 ```
 
+## Architecture Milestone 2 application/window ownership
+
+Architecture Milestone 2 was validated on 2026-08-30 with openMSX 21.0 and a
+disposable 512 KiB Nextor image. The extended SYSINFO diagnostic created a
+second window in one application, checked owner/count/free-slot state, closed
+it through its generation-tagged handle, rejected that stale handle, then
+closed and reopened the application. The owner and primary window generations
+both advanced from 1 to 2; the deliberately retained cache page and application
+page were reclaimed on each close. The reference pool contained 25 pages.
+
+The Paint trace launched a real 176x176 `LOGO.PIC` through the normal File
+Manager document path. Toolchest/Preview/Canvas occupied window slots 2/3/4,
+shared application owner `0x0103` and one code page, and reached three windows
+inside Paint. Closing Canvas left two Paint windows, closing Preview released
+the document while Toolchest remained, and closing Toolchest returned to the
+two baseline windows/owners. Free mapper pages returned from 22 to 22.
+
+The run also found and fixed Paint's launch-order bug: loading `PAINT.IST`
+could replace the focused window argument before `.PIC` recognition. Paint now
+claims the launch document first and restores its name after loading the tool
+resource. Its MSX image is 15,710 bytes versus the imported 15,753-byte
+single-workspace baseline. The preemptive Screen 6/7 kernels are
+13,242/14,820 bytes; `GBSCHED.RAW` remains 503/512 bytes.
+
+```sh
+make gembench-msx
+make gembench-m2-openmsx
+make gembench-m2-paint-openmsx
+```
+
 ## Milestone 9 resource forms
 
 Milestone 9 was validated on 2026-08-29 with the normal embedded/app-linked

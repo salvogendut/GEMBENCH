@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m7-resident-probe gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbvdi-check gbevent-check gbregion-check gbscrap-check gbshell-check gbaccessory-check gbr-example check test
+.PHONY: all cpc cpc-preemptive cpc-cooperative msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies pcw pcw-preemptive pcw-cooperative pcw-preemptive-diagnostic gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m2-sysinfo gembench-m2-openmsx gembench-m2-paint-openmsx gembench-m7-resident-probe gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbvdi-check gbevent-check gbregion-check gbscrap-check gbshell-check gbaccessory-check gbr-example check test
 .NOTPARALLEL:
 
 all: cpc msx pcw
@@ -28,7 +28,7 @@ gembench-msx: msx
 gembench-msx-banked:
 	GEMBENCH_M7_BANKED=1 bash tools/build_kernel_msx.sh
 
-# Development-only Architecture Milestone 1 API diagnostic. Copy the resulting
+# Development-only Architecture Milestones 1-2 API diagnostic. Copy the resulting
 # SYSINFO.APP into /GBENCH on an MSX distribution image to run it.
 gembench-m1-sysinfo:
 	SYS=1 GBWIN=0 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 \
@@ -36,6 +36,15 @@ gembench-m1-sysinfo:
 
 gembench-m1-openmsx: gembench-m1-sysinfo
 	bash tools/test_m1_architecture_openmsx.sh
+
+# M2 names document the extended application/window coverage while retaining
+# the M1 targets as compatibility aliases for existing validation commands.
+gembench-m2-sysinfo: gembench-m1-sysinfo
+
+gembench-m2-openmsx: gembench-m1-openmsx
+
+gembench-m2-paint-openmsx:
+	bash tools/test_m2_paint_openmsx.sh
 
 gembench-m7-resident-probe:
 	bash tools/build_gbr_resident_probe.sh

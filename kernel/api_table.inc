@@ -137,4 +137,5 @@ GB_ONEVENT_ENTRY equ k_noop
                 jp    k_sysinfo              ; GB_SYSINFO     #80C3 versioned runtime capabilities (#31)
                 jp    k_owner_current        ; GB_OWNER       #80C6 current generation-tagged owner
                 jp    k_page                 ; GB_PAGE        #80C9 opaque 16 KiB page allocator
+                jp    k_app                  ; GB_APP         #80CC application/window lifecycle
                 endif

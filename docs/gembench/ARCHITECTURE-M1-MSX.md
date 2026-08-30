@@ -13,13 +13,14 @@ these services yet.
 
 `GB_SYSINFO` at `0x80C3` returns `DE` pointing to a resident, read-only
 `gb_sysinfo_t`. The first byte is the record size and the second is the record
-version, so a future record may append fields without changing this 20-byte v1
-prefix.
+version. Milestone 2 has now appended four bytes without changing this 20-byte
+v1 prefix; the current kernel returns the v2 record documented in
+[ARCHITECTURE-M2-MSX.md](ARCHITECTURE-M2-MSX.md).
 
 | Offset | Bytes | v1 field |
 | ---: | ---: | --- |
-| 0 | 1 | record size (`20`) |
-| 1 | 1 | record version (`1`) |
+| 0 | 1 | record size (`20` for v1; currently `24`) |
+| 1 | 1 | record version (`1`; currently `2`) |
 | 2 | 2 | GEMBENCH ABI major/minor (`1.0`) |
 | 4 | 1 | platform (`GB_PLATFORM_MSX2`) |
 | 5 | 1 | native video mode (`6` or `7`) |
@@ -53,11 +54,10 @@ authoritative owner; focus is only a fallback. Closing the application's current
 window releases every page with that owner and advances the generation before
 the owner slot can be reused.
 
-This is only the minimum identity required by Milestone 1. The current lifecycle
-still assumes one primary managed window per loaded application. Multiple
-windows per application, windowless applications, independent application
-records, workers, queues, and service ownership belong to improvement 3 and
-later milestones.
+This was the minimum identity required by Milestone 1. Milestone 2 promotes it
+to an independent application record and permits multiple windows per code
+page. Queues, process hierarchies, priorities, and multiple workers remain
+later work; see [ARCHITECTURE-M2-MSX.md](ARCHITECTURE-M2-MSX.md).
 
 ## General page allocator
 
@@ -92,14 +92,16 @@ teardown can reclaim it. Pages 8 through 31 exist only in the new allocator.
 
 ## Resident metadata
 
-MSX page-3 RAM from `0xC200` through `0xC303` holds the private tables and the
-public capability record:
+The original MSX page-3 RAM allocation from `0xC200` through `0xC307` holds the
+private page/owner tables and the current public capability record:
 
 - 32 native segment, state, owner, owner-generation, page-generation, and
   purpose bytes;
 - eight active owner/generation pairs and eight parallel window-owner pairs;
 - loader/close/allocator scratch and pool totals; and
-- the 20-byte `GB_SYSINFO` v1 record.
+- the stable 20-byte `GB_SYSINFO` v1 prefix plus the four-byte v2 suffix.
+
+Milestone 2 appends application/window metadata through `0xC35D`.
 
 This storage is outside the application page and does not consume another
 mapper segment. Native segment values and table addresses are implementation
@@ -121,20 +123,22 @@ Build and exercise it with:
 ```sh
 make gembench-m1-sysinfo
 make gembench-m1-openmsx
+make gembench-m2-openmsx
 python3 debug/gembench_baseline_1983.py --output-dir build/m1-1983
 ```
 
 The openMSX lifecycle test opens the diagnostic twice and verifies capability
 fields, allocation/check/free, exhaustion, legacy-mirror isolation, foreign and
 double-free rejection, page generation invalidation, owner generation reuse,
-and bulk cleanup of a deliberately retained cache page. The complementary 1983
-run verifies boot, mapper discovery, the 25-page pool on the reference 512 KiB
-configuration, and the resident v1 record.
+multi-window attach/close, and bulk cleanup of a deliberately retained cache
+page. The complementary 1983 run verifies boot, mapper discovery, the 25-page
+pool on the reference 512 KiB configuration, and the resident versioned record.
 
 ## Target boundary
 
 Only the `PLATFORM_MSX` kernel includes `kernel/msx_page_pool.asm`, and `SYS=1`
 rejects non-MSX application builds. The public C types and operation names are
 kept target-neutral so later CPC/PCW backends can implement the same contract,
-but those targets must not claim `GB_CAP_PAGE_ALLOC`, `GB_CAP_OWNER_ID`, or the
-new jump-table calls until their own implementations and tests exist.
+but those targets must not claim `GB_CAP_PAGE_ALLOC`, `GB_CAP_OWNER_ID`,
+`GB_CAP_APPLICATIONS`, `GB_CAP_MULTI_WINDOW`, or the new jump-table calls until
+their own implementations and tests exist.

@@ -121,6 +121,13 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   document and 8.3-name replacement, stable window count, cleared dispatch
   guard, caller-bank recovery, and target-entry stack delta without requiring
   the optional openMSXnet extension.
+- **`test_m1_architecture_openmsx.sh`** — exercises the versioned MSX2
+  architecture APIs, including mapper ownership, application records, a
+  transient second window, stale generation rejection, and complete cleanup.
+- **`test_m2_paint_openmsx.sh`** — opens an actual `.PIC` in the in-tree Paint,
+  observes its Toolchest, Preview, and Canvas under one application/code page,
+  closes the picture windows independently, and proves final window, owner,
+  and mapper-page counts return to baseline.
 - **`gen_desk_accessories.py`** — validates the fixed-capacity build-time Desk
   catalog and generates stable IDs, labels, and padded APP names in
   `gbdesk_catalog.h`; `--check` detects stale generated metadata.
