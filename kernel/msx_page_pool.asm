@@ -69,6 +69,7 @@ GB_PAGE_DOCUMENT      equ 3
 GB_PAGE_CACHE         equ 4
 GB_PAGE_SCRAP         equ 5
 GB_PAGE_TEMPORARY     equ 6
+GB_PAGE_SECONDARY_CODE equ 7
 
 GB_PAGE_OK            equ 0
 GB_PAGE_ERR_UNSUPPORTED equ 1
@@ -96,7 +97,8 @@ GB_CAP_APPLICATIONS   equ #0200
 GB_CAP_MULTI_WINDOW   equ #0400
 GB_CAP_DEFERRED_MSG   equ #0800
 GB_CAP_FS_CONTEXTS    equ #1000
-GB_CAPS_MSX_M4        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO|GB_CAP_APPLICATIONS|GB_CAP_MULTI_WINDOW|GB_CAP_DEFERRED_MSG|GB_CAP_FS_CONTEXTS
+GB_CAP_SECONDARY_CODE equ #2000
+GB_CAPS_MSX_M4        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO|GB_CAP_APPLICATIONS|GB_CAP_MULTI_WINDOW|GB_CAP_DEFERRED_MSG|GB_CAP_FS_CONTEXTS|GB_CAP_SECONDARY_CODE
 
 ; app_pool_init: retain the TPA page-1 segment plus every available mapper
 ; segment, up to MSX_PAGE_MAX.  PAGE_DATA was already allocated separately by
@@ -1128,7 +1130,7 @@ k_page
                 ld    a,GB_PAGE_ERR_BADARG
                 ret
 kpg_alloc       ld    a,b
-                cp    GB_PAGE_TEMPORARY+1
+                cp    GB_PAGE_SECONDARY_CODE+1
                 jr    nc,kpg_alloc_bad
                 push  bc                       ; owner lookup scans the page pool
                 call  owner_current

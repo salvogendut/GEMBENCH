@@ -26,9 +26,10 @@ four-bit pixels per byte).
 
 V3 places a 40-byte ``GBM3`` manifest immediately after the icon directory,
 followed by twelve-byte typed segment descriptors and then the icon payloads.
-The first descriptor describes the fixed-origin primary image. The descriptor
-shape also admits resource, data, and secondary-code segments in later
-milestones without changing the manifest.
+The first descriptor describes the fixed-origin primary image. Architecture
+Milestone 6 optionally appends one uncompressed fixed-origin secondary-code
+image to the same file. The complete package still fits the existing loader;
+startup copies the appended bytes into an owned mapper page before publication.
 """
 
 import json
@@ -94,6 +95,7 @@ CAPABILITIES = {
     "multi-window": 0x0400,
     "deferred-messages": 0x0800,
     "filesystem-contexts": 0x1000,
+    "secondary-code": 0x2000,
 }
 LIFECYCLE = {
     "windowed": 0x0001,
@@ -261,6 +263,52 @@ def _read_manifest_spec(path):
             f"{path}: page counts must satisfy 1 <= minimum_pages <= "
             "preferred_pages <= 255"
         )
+    secondary = spec.get("secondary_code")
+    secondary_spec = None
+    if secondary is not None:
+        if not isinstance(secondary, dict):
+            raise ValueError(f"{path}: secondary_code must be an object")
+        unknown_keys = set(secondary) - {"platforms", "required", "load_address"}
+        if unknown_keys:
+            raise ValueError(
+                f"{path}: unknown secondary_code fields: "
+                f"{', '.join(sorted(unknown_keys))}"
+            )
+        secondary_platforms = secondary.get("platforms", platform_names)
+        if (not isinstance(secondary_platforms, list)
+                or not secondary_platforms):
+            raise ValueError(
+                f"{path}: secondary_code platforms must be a non-empty array"
+            )
+        unknown = [name for name in secondary_platforms if name not in PLATFORMS]
+        if unknown:
+            raise ValueError(
+                f"{path}: unknown secondary_code platforms: "
+                f"{', '.join(map(str, unknown))}"
+            )
+        secondary_mask = 0
+        for name in secondary_platforms:
+            secondary_mask |= PLATFORMS[name]
+        if secondary_mask & ~platform_mask:
+            raise ValueError(
+                f"{path}: secondary_code platforms must be in the package mask"
+            )
+        required = secondary.get("required", True)
+        load_address = secondary.get("load_address", APP_BASE)
+        if not isinstance(required, bool):
+            raise ValueError(f"{path}: secondary_code required must be boolean")
+        if not required:
+            raise ValueError(f"{path}: M6 secondary_code must be required")
+        if load_address != APP_BASE:
+            raise ValueError(
+                f"{path}: M6 secondary_code load_address must be 0x4000"
+            )
+        secondary_spec = {
+            "platforms": secondary_mask,
+            "flags": SEGMENT_EXECUTABLE | SEGMENT_REQUIRED,
+            "load_address": load_address,
+        }
+
     return {
         "application_id": app_id,
         "profile": PROFILES[profile_name],
@@ -272,30 +320,46 @@ def _read_manifest_spec(path):
         "lifecycle": lifecycle,
         "minimum_pages": minimum_pages,
         "preferred_pages": preferred_pages,
+        "secondary_code": secondary_spec,
     }
 
 
-def _v3_layout(icon_count):
+def _v3_layout(icon_count, segment_count=1):
     manifest_offset = HEADER_SIZE + icon_count * DIR_ENTRY_SIZE
     segment_offset = manifest_offset + MANIFEST_SIZE
-    payload_offset = segment_offset + SEGMENT_ENTRY_SIZE
+    payload_offset = segment_offset + segment_count * SEGMENT_ENTRY_SIZE
     return manifest_offset, segment_offset, payload_offset
 
 
-def v3_preamble_size(icon16=False):
+def v3_preamble_size(icon16=False, segment_count=1):
     count = 2 if icon16 else 1
-    _, _, payload_offset = _v3_layout(count)
+    _, _, payload_offset = _v3_layout(count, segment_count)
     return payload_offset + ICON_SIZE + (ICON7_SIZE if icon16 else 0)
 
 
-def _v3_preamble(icon, icon16, spec, image_size):
+def _v3_preamble(icon, icon16, spec, primary_size, secondary=None):
     resources = [(CODEC_MODE1, ICON_WB, icon)]
     if icon16 is not None:
         resources.append((CODEC_SCREEN7, ICON7_WB, icon16))
-    manifest_offset, segment_offset, payload_offset = _v3_layout(len(resources))
+    secondary_spec = spec["secondary_code"]
+    if (secondary_spec is None) != (secondary is None):
+        raise ValueError(
+            "manifest secondary_code and supplied secondary payload must agree"
+        )
+    segment_count = 1 + (1 if secondary is not None else 0)
+    manifest_offset, segment_offset, payload_offset = _v3_layout(
+        len(resources), segment_count
+    )
     total = payload_offset + sum(len(bitmap) for _, _, bitmap in resources)
-    if image_size < total or image_size > 0xFFFF:
+    secondary_size = len(secondary) if secondary is not None else 0
+    image_size = primary_size + secondary_size
+    if (primary_size < total or image_size > 0xFFFF
+            or secondary is not None and not secondary):
         raise ValueError("linked image has an invalid GBAP v3 length")
+    if (secondary is not None
+            and (len(secondary) < 8 or secondary[0] != 0xC3
+                 or secondary[3:7] != b"GBS3" or secondary[7] != 1)):
+        raise ValueError("secondary payload lacks the GBS3 v1 entry prefix")
 
     directory = bytearray(len(resources) * DIR_ENTRY_SIZE)
     payload = bytearray()
@@ -317,16 +381,26 @@ def _v3_preamble(icon, icon16, spec, image_size):
     manifest[14:22] = spec["application_id"].encode("ascii").ljust(8, b" ")
     struct.pack_into("<HH", manifest, 22, spec["service_id"], spec["lifecycle"])
     manifest[26:30] = bytes((spec["minimum_pages"], spec["preferred_pages"],
-                             1, SEGMENT_ENTRY_SIZE))
+                             segment_count, SEGMENT_ENTRY_SIZE))
     struct.pack_into("<HHHH", manifest, 30, segment_offset, total, image_size, 0)
 
-    segment = bytearray(SEGMENT_ENTRY_SIZE)
-    segment[0:4] = bytes((SEGMENT_PRIMARY, spec["platforms"],
-                          SEGMENT_REQUIRED | SEGMENT_EXECUTABLE,
-                          COMPRESSION_NONE))
-    code_length = image_size - total
-    struct.pack_into("<HHHH", segment, 4, total, code_length, code_length,
+    segments = bytearray(segment_count * SEGMENT_ENTRY_SIZE)
+    segments[0:4] = bytes((SEGMENT_PRIMARY, spec["platforms"],
+                           SEGMENT_REQUIRED | SEGMENT_EXECUTABLE,
+                           COMPRESSION_NONE))
+    code_length = primary_size - total
+    struct.pack_into("<HHHH", segments, 4, total, code_length, code_length,
                      APP_BASE + total)
+    if secondary is not None:
+        pos = SEGMENT_ENTRY_SIZE
+        segments[pos:pos + 4] = bytes((
+            SEGMENT_SECONDARY_CODE, secondary_spec["platforms"],
+            secondary_spec["flags"], COMPRESSION_NONE,
+        ))
+        struct.pack_into(
+            "<HHHH", segments, pos + 4, primary_size, secondary_size,
+            secondary_size, secondary_spec["load_address"]
+        )
 
     header = bytearray(HEADER_SIZE)
     entry = APP_BASE + total
@@ -334,7 +408,7 @@ def _v3_preamble(icon, icon16, spec, image_size):
     header[3:7] = MAGIC
     header[7:10] = bytes((VERSION_V3, len(resources), DIR_ENTRY_SIZE))
     struct.pack_into("<HHH", header, 10, total, HEADER_SIZE, manifest_offset)
-    return bytes(header + directory + manifest + segment + payload)
+    return bytes(header + directory + manifest + segments + payload)
 
 
 def make_preamble(icon, icon16=None):
@@ -347,12 +421,12 @@ def make_preamble(icon, icon16=None):
     return _v2_preamble(icon, icon16)
 
 
-def make_v3_preamble(icon, manifest, image_size, icon16=None):
+def make_v3_preamble(icon, manifest, primary_size, icon16=None, secondary=None):
     if len(icon) != ICON_SIZE:
         raise ValueError("invalid four-colour APP icon length")
     if icon16 is not None and len(icon16) != ICON7_SIZE:
         raise ValueError("invalid sixteen-colour APP icon length")
-    return _v3_preamble(icon, icon16, manifest, image_size)
+    return _v3_preamble(icon, icon16, manifest, primary_size, secondary)
 
 
 def _parse_package(data):
@@ -414,7 +488,7 @@ def _parse_package(data):
             raise ValueError("invalid GBAP v3 manifest bounds")
         capabilities = struct.unpack_from("<H", block, 12)[0]
         lifecycle = struct.unpack_from("<H", block, 24)[0]
-        if (capabilities & ~0x1FFF or not lifecycle or lifecycle & ~0x000F
+        if (capabilities & ~0x3FFF or not lifecycle or lifecycle & ~0x000F
                 or block[26] == 0 or block[27] < block[26]
                 or not bytes(block[14:22]).strip(b" ")
                 or any(value not in range(0x20, 0x7F) for value in block[14:22])):
@@ -422,6 +496,7 @@ def _parse_package(data):
 
         segments = []
         primary = 0
+        secondary = 0
         occupied_segments = []
         for index in range(segment_count):
             pos = segment_offset + index * segment_size
@@ -431,7 +506,8 @@ def _parse_package(data):
             )
             if (kind not in (SEGMENT_PRIMARY, SEGMENT_SECONDARY_CODE,
                              SEGMENT_RESOURCE, SEGMENT_DATA)
-                    or not platforms or segflags & ~0x07
+                    or not platforms or platforms & ~block[7]
+                    or segflags & ~0x07
                     or compression != COMPRESSION_NONE or stored != unpacked
                     or not stored or file_offset < total
                     or file_offset + stored > image_size):
@@ -447,14 +523,33 @@ def _parse_package(data):
                         or file_offset != total
                         or load_address != APP_BASE + total):
                     raise ValueError("invalid GBAP v3 primary segment")
+            elif kind == SEGMENT_SECONDARY_CODE:
+                secondary += 1
+                required_exec = SEGMENT_REQUIRED | SEGMENT_EXECUTABLE
+                if ((segflags & required_exec) != required_exec
+                        or load_address != APP_BASE or stored < 8
+                        or data[file_offset] != 0xC3
+                        or data[file_offset + 3:file_offset + 7] != b"GBS3"
+                        or data[file_offset + 7] != 1):
+                    raise ValueError("invalid GBAP v3 secondary-code segment")
             segments.append({
                 "type": kind, "platforms": platforms, "flags": segflags,
                 "compression": compression, "offset": file_offset,
                 "stored_length": stored, "unpacked_length": unpacked,
                 "load_address": load_address,
             })
-        if primary != 1:
-            raise ValueError("GBAP v3 requires exactly one primary segment")
+        if primary != 1 or secondary > 1:
+            raise ValueError(
+                "GBAP v3 requires one primary and at most one secondary-code segment"
+            )
+        occupied_segments.sort()
+        cursor = total
+        for start, end in occupied_segments:
+            if start != cursor:
+                raise ValueError("GBAP v3 segment image is not contiguous")
+            cursor = end
+        if cursor != image_size:
+            raise ValueError("GBAP v3 segments do not cover the package image")
         resource_floor = segment_offset + segment_count * segment_size
         manifest = {
             "profile": block[6], "platforms": block[7],
@@ -538,13 +633,20 @@ def inject(icon_path, raw_path, out_path, icon16_path=None):
         target.write(raw)
 
 
-def inject_v3(manifest_path, icon_path, raw_path, out_path, icon16_path=None):
+def inject_v3(manifest_path, icon_path, raw_path, out_path, icon16_path=None,
+              secondary_path=None):
     icon = parse_icon(icon_path, CODEC_MODE1)
     icon16 = parse_icon(icon16_path, CODEC_SCREEN7) if icon16_path else None
     manifest = _read_manifest_spec(manifest_path)
     with open(raw_path, "rb") as source:
         raw = bytearray(source.read())
-    preamble = make_v3_preamble(icon, manifest, len(raw), icon16)
+    secondary = None
+    if secondary_path:
+        with open(secondary_path, "rb") as source:
+            secondary = source.read()
+    preamble = make_v3_preamble(
+        icon, manifest, len(raw), icon16, secondary
+    )
     if len(raw) < len(preamble):
         raise ValueError(f"{raw_path}: linked image is shorter than the APP preamble")
     padding = raw[:len(preamble)]
@@ -553,9 +655,10 @@ def inject_v3(manifest_path, icon_path, raw_path, out_path, icon16_path=None):
             f"{raw_path}: linked image does not reserve {len(preamble)} bytes at 0x4000"
         )
     raw[:len(preamble)] = preamble
-    parse_manifest(raw)
+    package = raw + (secondary or b"")
+    parse_manifest(package)
     with open(out_path, "wb") as target:
-        target.write(raw)
+        target.write(package)
 
 
 def main(argv):
@@ -565,11 +668,12 @@ def main(argv):
         print(len(make_preamble(icon, icon16)))
         return
     if argv[1:2] == ["size-v3"] and len(argv) in (4, 5):
-        _read_manifest_spec(argv[2])
+        manifest = _read_manifest_spec(argv[2])
         parse_icon(argv[3], CODEC_MODE1)
         if len(argv) == 5:
             parse_icon(argv[4], CODEC_SCREEN7)
-        print(v3_preamble_size(len(argv) == 5))
+        segment_count = 1 + (manifest["secondary_code"] is not None)
+        print(v3_preamble_size(len(argv) == 5, segment_count))
         return
     if argv[1:2] == ["inject"] and len(argv) in (5, 6):
         if len(argv) == 5:
@@ -577,11 +681,23 @@ def main(argv):
         else:
             inject(argv[2], argv[4], argv[5], argv[3])
         return
-    if argv[1:2] == ["inject-v3"] and len(argv) in (6, 7):
-        if len(argv) == 6:
-            inject_v3(argv[2], argv[3], argv[4], argv[5])
+    if argv[1:2] == ["inject-v3"]:
+        args = argv[2:]
+        secondary_path = None
+        if "--secondary" in args:
+            index = args.index("--secondary")
+            if index + 1 >= len(args):
+                raise ValueError("--secondary requires a payload path")
+            secondary_path = args[index + 1]
+            del args[index:index + 2]
+        if len(args) == 4:
+            inject_v3(args[0], args[1], args[2], args[3],
+                      secondary_path=secondary_path)
+        elif len(args) == 5:
+            inject_v3(args[0], args[1], args[3], args[4], args[2],
+                      secondary_path)
         else:
-            inject_v3(argv[2], argv[3], argv[5], argv[6], argv[4])
+            raise ValueError("invalid inject-v3 arguments")
         return
     if argv[1:2] == ["check"] and len(argv) == 3:
         with open(argv[2], "rb") as source:
@@ -603,7 +719,8 @@ def main(argv):
         "       embed_app_icon.py size-v3 <manifest.json> <icon4.asm> "
         "[icon16.asm]\n"
         "       embed_app_icon.py inject-v3 <manifest.json> <icon4.asm> "
-        "[icon16.asm] <linked.raw> <out.APP>\n"
+        "[icon16.asm] <linked.raw> <out.APP> "
+        "[--secondary <segment.raw>]\n"
         "       embed_app_icon.py check <file.APP>"
     )
 

@@ -7,9 +7,10 @@
 ;; before main publishes a window makes the existing loader release its pending
 ;; owner and page transactionally.
 ;;
-;; M5 intentionally accepts one uncompressed fixed-origin primary segment. The
-;; v3 descriptor format already names later resource/data/secondary-code kinds;
-;; their mapping/call gate belongs to the following milestone.
+;; M6 retains the uncompressed fixed-origin primary and optionally accepts one
+;; required fixed-origin secondary-code descriptor. The complete serialized
+;; package remains below the loader ceiling; main copies that second payload to
+;; an owned page before publishing its first window.
         .module crt0_v3_msx
         .globl  _main
         .globl  l__INITIALIZER
@@ -29,7 +30,7 @@ _start::
         call    _main
         ret
 
-;; Return A=1 only for a well-formed, compatible M5 package.
+;; Return A=1 only for a compatible M5 primary or M6 two-segment package.
 gbap3_guard:
         ;; The outer JP has already entered this guard. Version/count and the
         ;; exact manifest position are the executable fields needed here; the
@@ -93,8 +94,10 @@ gbap3_guard:
         or      a
         jp      z,gbap3_bad
         ld      a,(ix+28)
-        cp      #1                     ; M5: one primary segment
-        jp      nz,gbap3_bad
+        or      a
+        jp      z,gbap3_bad
+        cp      #3                     ; M5 primary, optional M6 secondary
+        jp      nc,gbap3_bad
         ld      a,(ix+29)
         cp      #12
         jp      nz,gbap3_bad
@@ -200,10 +203,61 @@ gbap3_abi_ok:
         cp      (ix+11)
         jp      nz,gbap3_bad
 
-        ;; preamble + stored primary bytes must equal manifest image size.
+        ;; The primary occupies the first contiguous image range. A one-segment
+        ;; M5 package ends there; an M6 package follows it with exactly one
+        ;; required executable secondary image at fixed origin 0x4000.
+        ld      l,(ix+4)
+        ld      h,(ix+5)
         ld      e,(ix+6)
         ld      d,(ix+7)
-        ld      hl,(0x400a)
+        add     hl,de
+        ex      de,hl                   ; DE = one-past-primary file offset
+        ld      a,(0x400e)
+        add     a,#28                   ; manifest segment count
+        ld      l,a
+        ld      h,#0x40
+        ld      a,(hl)
+        cp      #1
+        jr      z,gbap3_primary_only
+        cp      #2
+        jp      nz,gbap3_bad
+        ld      a,(ix+12)
+        cp      #2                      ; secondary code
+        jp      nz,gbap3_bad
+        bit     1,(ix+13)               ; available on MSX2
+        jp      z,gbap3_bad
+        ld      a,(ix+14)
+        and     #3                      ; required + executable
+        cp      #3
+        jp      nz,gbap3_bad
+        ld      a,(ix+15)
+        or      a                       ; compression none
+        jp      nz,gbap3_bad
+        ld      a,(ix+16)
+        cp      e                       ; secondary follows primary exactly
+        jp      nz,gbap3_bad
+        ld      a,(ix+17)
+        cp      d
+        jp      nz,gbap3_bad
+        ld      a,(ix+18)
+        or      (ix+19)
+        jp      z,gbap3_bad
+        ld      a,(ix+18)
+        cp      (ix+20)
+        jp      nz,gbap3_bad
+        ld      a,(ix+19)
+        cp      (ix+21)
+        jp      nz,gbap3_bad
+        ld      a,(ix+22)
+        or      a
+        jp      nz,gbap3_bad
+        ld      a,(ix+23)
+        cp      #0x40
+        jp      nz,gbap3_bad
+        ld      l,(ix+16)
+        ld      h,(ix+17)
+        ld      e,(ix+18)
+        ld      d,(ix+19)
         add     hl,de
         ld      a,l
         cp      c
@@ -211,6 +265,15 @@ gbap3_abi_ok:
         ld      a,h
         cp      b
         jp      nz,gbap3_bad
+        jr      gbap3_good
+gbap3_primary_only:
+        ld      a,e
+        cp      c
+        jp      nz,gbap3_bad
+        ld      a,d
+        cp      b
+        jp      nz,gbap3_bad
+gbap3_good:
         ld      a,#1
         ret
 gbap3_bad:

@@ -615,3 +615,44 @@ python3 debug/gembench_baseline_1983.py \
 make cpc
 make pcw
 ```
+
+## Architecture Milestone 6 secondary-code gate
+
+Architecture Milestone 6 was validated on 2026-08-30 with openMSX 21.0 and a
+disposable network-free 512 KiB Nextor image. The driver replaces File Manager
+with the exact release FormRef package, so Desktop exercises the ordinary v3
+guard, pending owner, whole-file loader, and first-window publication path.
+
+A page-3 diagnostic trampoline runs only while FormRef's primary bank is
+mapped. It observes the expected results for out-of-range entry `5`, nested
+busy `4`, stale generation `2`, foreign owner `3`, and terminating application
+`9`. FormRef's normal draw then enters secondary offset 8 once through the real
+gate. The reference trace recorded:
+
+```text
+GATE_SP=D8EF
+ENTRY_SP=D8EB
+RETURN_SP=D8EF
+PRIMARY_BANK=06
+SECONDARY_BANK=07
+RETURN_BANK=06
+SECONDARY_HANDLE=0104
+SECONDARY_OWNER=0102
+```
+
+The fixed secondary return word was `0xC8F5`; the untouched primary return word
+and stack pointer matched at the gate's final `RET`. The owned page carried
+purpose 7 and the same owner/generation metadata as FormRef. Free pages moved
+from 23 to 21 while FormRef was live, then returned to 23 with one owner and one
+window after clicking its real close gadget.
+
+FormRef's linked primary is 15,799 bytes, its secondary is 227 bytes, and the
+complete package is 16,026/16,128 bytes. The Screen 6 and Screen 7 child COMs
+remain 14,547 and 16,125 bytes; the latter retains its three-byte margin.
+
+```sh
+python3 tools/test_appicon.py
+make gembench-msx
+make gembench-m5-openmsx
+make gembench-m6-openmsx
+```

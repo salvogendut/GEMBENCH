@@ -28,6 +28,7 @@ ALL_APPDEFS="$GLOBAL_APPDEFS ${APPDEFS:-}"
 APP_ICON="${APP_ICON:-}"
 APP_ICON16="${APP_ICON16:-}"
 APP_MANIFEST="${APP_MANIFEST:-}"
+APP_SECONDARY="${APP_SECONDARY:-}"
 LOAD_LIMIT="${LOAD_LIMIT:-0x7F00}"
 TASK_STACK_RESERVE="${TASK_STACK_RESERVE:-0}"
 TASK_FLAG="${TASK:-0}"
@@ -69,6 +70,16 @@ if [ -n "$APP_MANIFEST" ]; then
         *) echo "ERROR: GBAP v3 guarded startup is currently MSX2-only" >&2; exit 1 ;;
     esac
     CRT0_SRC="$GB/crt0_v3_msx.s"
+fi
+if [ -n "$APP_SECONDARY" ]; then
+    if [ -z "$APP_MANIFEST" ]; then
+        echo "ERROR: APP_SECONDARY requires APP_MANIFEST" >&2
+        exit 1
+    fi
+    case " $ALL_APPDEFS " in
+        *" -DGB_MSX2 "*) ;;
+        *) echo "ERROR: APP_SECONDARY is currently MSX2-only" >&2; exit 1 ;;
+    esac
 fi
 if [ -n "$APP_ICON" ]; then
     icon_args=("$APP_ICON")
@@ -124,6 +135,19 @@ APP_PROBE_FLAG="${APP_PROBE:-0}"
 REPAINTTOP_FLAG="${REPAINTTOP:-0}"
 BASELINE_FLAG="${BASELINE:-0}"
 SYS_FLAG="${SYS:-0}"
+GB_SECONDARY_FLAG="${GB_SECONDARY:-0}"
+if [ -n "$APP_SECONDARY" ]; then GB_SECONDARY_FLAG=1; fi
+if [ "$GB_SECONDARY_FLAG" != "0" ] && [ "$GB_SECONDARY_FLAG" != "1" ]; then
+    echo "ERROR: GB_SECONDARY must be 0 or 1" >&2
+    exit 1
+fi
+if [ "$GB_SECONDARY_FLAG" = "1" ] && [ -z "$APP_SECONDARY" ]; then
+    echo "ERROR: GB_SECONDARY=1 requires APP_SECONDARY" >&2
+    exit 1
+fi
+if [ "$GB_SECONDARY_FLAG" = "1" ]; then
+    ALL_APPDEFS="$ALL_APPDEFS -DGB_SECONDARY_RUNTIME"
+fi
 GBR_READER_FLAG="${GBR_READER:-0}"
 GBR_FIXED_TREE_FLAG="${GBR_FIXED_TREE:-0}"
 GBR_EMBEDDED_FLAG="${GBR_EMBEDDED:-0}"
@@ -169,7 +193,7 @@ GB_SHELL_ACCESSORY_TARGET_FLAG="${GB_SHELL_ACCESSORY_TARGET:-0}"
 GB_DEFER_FLAG="${GB_DEFER:-0}"
 GB_FSCTX_FLAG="${GB_FSCTX:-0}"
 GBR_INCLUDE_FLAGS=""
-if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_VDI_FLAG" = "1" ] || [ "$GB_VDI_BASE_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ] || [ "$GB_DEFER_FLAG" = "1" ] || [ "$GB_FSCTX_FLAG" = "1" ]; then
+if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_VDI_FLAG" = "1" ] || [ "$GB_VDI_BASE_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ] || [ "$GB_DEFER_FLAG" = "1" ] || [ "$GB_FSCTX_FLAG" = "1" ] || [ "$GB_SECONDARY_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
 NET_SRC="$GB/gbnet_stub.c"
@@ -414,6 +438,11 @@ fi
 if [ "$SYS_FLAG" = "1" ]; then
     deps+=("$GB/gbsys.s")
 fi
+if [ "$GB_SECONDARY_FLAG" = "1" ]; then
+    deps+=("$GBR_INCLUDE/gbsecondary.h" "$GBR_LIB/gbsecondary.c" \
+           "$GBR_LIB/gbsecondary.s" "$GBR_LIB/gbsecondary_sys.s" \
+           "$APP_SECONDARY")
+fi
 if [ "$GB_DEFER_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbdefer.h" "$GBR_LIB/gbdefer.s")
 fi
@@ -511,6 +540,7 @@ cache_key=$(printf '%s\n' \
     "APP_ICON=$APP_ICON" \
     "APP_ICON16=$APP_ICON16" \
     "APP_MANIFEST=$APP_MANIFEST" \
+    "APP_SECONDARY=$APP_SECONDARY" \
     "CRT0_SRC=$CRT0_SRC" \
     "CODE_LOC=$CODE_LOC" \
     "DATA_LOC=$DATA_LOC" \
@@ -571,6 +601,7 @@ cache_key=$(printf '%s\n' \
     "TASK_ROOT=$TASK_ROOT_FLAG" \
     "TASK_RUNTIME_RAW=$TASK_RUNTIME_RAW" \
     "SYS=$SYS_FLAG" \
+    "GB_SECONDARY=$GB_SECONDARY_FLAG" \
     "GBLIB_SRC=$GBLIB_SRC" \
     "APP_CFLAGS=$APP_CFLAGS" \
     "HELPER_CFLAGS=$HELPER_CFLAGS" \
@@ -616,6 +647,19 @@ SYS_REL=""
 if [ "$SYS_FLAG" = "1" ]; then
     "$SDAS" -o "$work/gbsys.rel" "$GB/gbsys.s"
     SYS_REL="$work/gbsys.rel"
+fi
+SECONDARY_REL=""
+if [ "$GB_SECONDARY_FLAG" = "1" ]; then
+    "$SDCC" -mz80 --opt-code-size --fomit-frame-pointer $ALL_APPDEFS \
+        -I "$GB" -I "$GBR_INCLUDE" -c "$GBR_LIB/gbsecondary.c" \
+        -o "$work/gbsecondary.rel"
+    "$SDAS" -o "$work/gbsecondary_gate.rel" "$GBR_LIB/gbsecondary.s"
+    SECONDARY_SYS_REL=""
+    if [ "$SYS_FLAG" = "0" ]; then
+        "$SDAS" -o "$work/gbsecondary_sys.rel" "$GBR_LIB/gbsecondary_sys.s"
+        SECONDARY_SYS_REL="$work/gbsecondary_sys.rel"
+    fi
+    SECONDARY_REL="$work/gbsecondary.rel $work/gbsecondary_gate.rel $SECONDARY_SYS_REL"
 fi
 DEFER_REL=""
 if [ "$GB_DEFER_FLAG" = "1" ]; then
@@ -866,7 +910,7 @@ fi
     "$work/crt0.rel" "$work/main.rel" $GBWIN_REL $WIDGETS_REL $ACTIONS_REL $SCROLL_REL $SCROLL16_REL \
     $TOGGLE_REL $STEPPER_REL $SELECTOR_REL $SLIDER_REL $FORM_REL \
     $FORM_SELECT_REL $TIMESET_REL $SOUND_REL $SIZEPROMPT_REL $TITLEBAR_REL $DLG_REL $GBR_REL $APP_PROBE_REL $REPAINTTOP_REL $BASELINE_REL $SYS_REL $TASK_REL $TASK_ROOT_REL \
-    $WINDOW_KIND_REL $DEFER_REL $FSCTX_REL "$work/gblib.rel" -o "$work/app.ihx"
+    $WINDOW_KIND_REL $DEFER_REL $FSCTX_REL $SECONDARY_REL "$work/gblib.rel" -o "$work/app.ihx"
 # STABILITY GUARD: the app must fit its 16K page. The whole LOADED IMAGE
 # (_CODE + the startup tails _GSINIT/_GSFINAL/_INITIALIZER, which the linker places
 # AFTER the code) must end below data-loc - otherwise the RAM data area starts inside
@@ -884,11 +928,17 @@ python3 tools/check_app_layout.py "$work/app.map" \
 tail -c +16385 "$work/app.bin" > "$work/app.raw"
 if [ -n "$APP_ICON" ]; then
     if [ -n "$APP_MANIFEST" ] && [ -n "$APP_ICON16" ]; then
-        python3 tools/embed_app_icon.py inject-v3 \
-            "$APP_MANIFEST" "$APP_ICON" "$APP_ICON16" "$work/app.raw" "$OUT"
+        v3_args=("$APP_MANIFEST" "$APP_ICON" "$APP_ICON16" "$work/app.raw" "$OUT")
+        if [ -n "$APP_SECONDARY" ]; then
+            v3_args+=(--secondary "$APP_SECONDARY")
+        fi
+        python3 tools/embed_app_icon.py inject-v3 "${v3_args[@]}"
     elif [ -n "$APP_MANIFEST" ]; then
-        python3 tools/embed_app_icon.py inject-v3 \
-            "$APP_MANIFEST" "$APP_ICON" "$work/app.raw" "$OUT"
+        v3_args=("$APP_MANIFEST" "$APP_ICON" "$work/app.raw" "$OUT")
+        if [ -n "$APP_SECONDARY" ]; then
+            v3_args+=(--secondary "$APP_SECONDARY")
+        fi
+        python3 tools/embed_app_icon.py inject-v3 "${v3_args[@]}"
     elif [ -n "$APP_ICON16" ]; then
         python3 tools/embed_app_icon.py inject \
             "$APP_ICON" "$APP_ICON16" "$work/app.raw" "$OUT"
@@ -897,6 +947,10 @@ if [ -n "$APP_ICON" ]; then
     fi
 else
     cp "$work/app.raw" "$OUT"
+fi
+if [ -n "$APP_SECONDARY" ] && (( $(stat -c%s "$OUT") > 0x3F00 )); then
+    echo "ERROR: GBAP v3 package $(stat -c%s "$OUT") bytes exceeds the MSX loader ceiling" >&2
+    exit 1
 fi
 gb_write_stamp "$stamp" "$cache_key"
 echo "Built $OUT ($(stat -c%s "$OUT") bytes) from $APP"

@@ -1,8 +1,9 @@
 # SymbOS-inspired architecture improvements
 
 Status: **active roadmap**. Improvements 1-5 are implemented on MSX2;
-Milestone 5 implements the uncompressed-primary slice of improvement 6; and
-improvements 7-8 remain proposed. CPC and PCW
+Milestone 5 implements the uncompressed-primary slice of improvement 6;
+improvement 7 is implemented in Milestone 6; and improvement 8 remains
+proposed. CPC and PCW
 parity remains governed by `CPC-PCW-BACKPORT-PLAN.md`.
 
 This document records the highest-value architectural improvements identified
@@ -136,6 +137,12 @@ CPC/MSX2/PCW; and moving one real component out of its primary bank with
 measurable recovered headroom.
 
 Estimated difficulty: **high**.
+
+MSX2 status: **implemented in Milestone 6** with one optional uncompressed
+secondary image, a root-only app-linked fixed-RAM gate, explicit rejection of
+bad owner/generation/entry/nesting/teardown, exact owner cleanup, and a real
+FormRef renderer moved out of its primary bank. CPC/PCW providers and
+storage-side segmented loading remain deferred.
 
 ## 8. Shared-service manager
 

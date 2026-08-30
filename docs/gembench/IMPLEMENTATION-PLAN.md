@@ -338,3 +338,20 @@ proves valid publication and exact owner/page/window rollback after an
 incompatible platform mask. Storage-side pre-allocation scanning, compression,
 additional mapped segments, the secondary-code call gate, and CPC/PCW runtime
 acceptance remain subsequent work.
+
+Architecture Milestone 6 in issue #41 implements the MSX2 secondary-code slice
+of the GBAP v3 contract. A required type-2 descriptor appends one uncompressed,
+fixed-origin image; guarded startup validates it, then app-linked policy copies
+it through the fixed transfer area into an owned purpose-7 mapper page. The
+31-byte fixed-RAM trampoline rejects unsafe context, nesting, stale/foreign
+handles, invalid entries, and teardown, and restores the original stack and
+mapper segment exactly.
+
+FormRef moves its 227-byte window-summary renderer into the first secondary
+image. Its linked primary ends at 15,799 bytes (329 bytes of primary-bank
+headroom), while the complete whole-file package is 16,026/16,128 bytes. The
+unchanged Screen 7 kernel remains 16,125/16,128 bytes. Host package tests plus a
+dedicated openMSX lifecycle driver cover the rejection matrix, real entry,
+bank/stack restoration, purpose metadata, and two-page owner cleanup. CPC/PCW
+providers and storage-side segmented reads remain part of the backport/future
+loader work.

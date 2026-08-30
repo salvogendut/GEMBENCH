@@ -182,6 +182,14 @@ MSX_FSCTX_PENDING      equ #C840       ; 64-byte pending launch-context transfer
 MSX_FSCTX_DIAG         equ #C880       ; module/cleanup diagnostic counters
 MSX_FSCTX_FIB          equ #C8A0       ; active MSX-DOS 2 64-byte directory FIB
 MSX_ARCH_TABLE_END     equ #C8E0
+; Architecture Milestone 6 (#41): an application installs one of two verified
+; mapper stubs here while its primary page is visible. The load stub copies a
+; bounded chunk from MSX_FSCTX_TRANSFER into an owned secondary page; after
+; loading, the 31-byte call stub fits the reserved 32-byte slot and restores both
+; PUT_P1 and BANK_CUR before returning to primary code. Requests reuse the
+; serialized filesystem header only while no filesystem operation is active.
+MSX_SECONDARY_GATE     equ #C8E0
+MSX_SECONDARY_GATE_END equ #C900
 ; NOTE (#287 M1 debugging): DOS 2 / Nextor's kernel data occupies page 3 well
 ; below #F380 (the mapper jump table itself sits around #F200, jumping into
 ; code near #EC00) - the DOS 1 "system area starts at #F380" rule does NOT

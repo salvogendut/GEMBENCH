@@ -324,6 +324,7 @@ typedef unsigned int gb_window_t;
 #define GB_CAP_MULTI_WINDOW  0x0400u
 #define GB_CAP_DEFERRED_MSG  0x0800u
 #define GB_CAP_FS_CONTEXTS   0x1000u
+#define GB_CAP_SECONDARY_CODE 0x2000u
 
 #define GB_PAGE_UNSPECIFIED 0u
 #define GB_PAGE_APPLICATION 1u
@@ -332,6 +333,7 @@ typedef unsigned int gb_window_t;
 #define GB_PAGE_CACHE       4u
 #define GB_PAGE_SCRAP       5u
 #define GB_PAGE_TEMPORARY   6u
+#define GB_PAGE_SECONDARY_CODE 7u
 
 #define GB_PAGE_OK              0u
 #define GB_PAGE_ERR_UNSUPPORTED 1u

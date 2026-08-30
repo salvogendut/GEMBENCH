@@ -5,6 +5,10 @@
 
 #ifdef GB_MSX2
 #include "gbr_object.h"
+#ifdef GB_SECONDARY_RUNTIME
+#include "gbsecondary.h"
+#include "secondary.h"
+#endif
 #ifdef GBR_BANKED
 #include "gbr_bank.h"
 #endif
@@ -77,6 +81,9 @@ static gbr_runtime_t form_runtime;
 static unsigned int form_states[FORMREF_OBJECT_COUNT];
 static unsigned char form_tree;
 static unsigned char resource_ready;
+#ifdef GB_SECONDARY_RUNTIME
+gb_secondary_t form_secondary;
+#endif
 #ifdef GBR_M7_LEGACY_FORMS
 static char draft_level_text[2];
 static gbr_text_binding_t form_bindings[3] = {
@@ -385,6 +392,18 @@ static void open_form(void)
 
 static void app_draw(void)
 {
+#ifdef GB_SECONDARY_RUNTIME
+    volatile unsigned char *transfer = gb_secondary_transfer();
+    unsigned char n;
+    win_x = gb_wm_x(); win_y = gb_wm_y();
+    transfer[0] = win_x;
+    transfer[1] = win_y;
+    transfer[2] = saved_autosave;
+    transfer[3] = saved_layout;
+    transfer[4] = resource_ready;
+    for (n = 0; n < 13; n++) transfer[5 + n] = (unsigned char)saved_name[n];
+    (void)gb_secondary_call(&form_secondary, FORMREF_SECONDARY_DRAW);
+#else
 #if !defined(GB_MSX2) || defined(GBR_M7_LEGACY_FORMS)
     char level[8] = "Level ";
 #endif
@@ -412,6 +431,7 @@ static void app_draw(void)
               0
 #endif
     );
+#endif
 }
 
 static void app_click(void)
@@ -429,11 +449,18 @@ static void app_click(void)
 
 static void app_drag(void)
 {
+#ifdef GB_SECONDARY_RUNTIME
+    if (gb_window_drag() == GB_APP_OK) {
+        win_x = gb_wm_x(); win_y = gb_wm_y();
+        gb_restore_parent();
+    }
+#else
     win_x = gb_wm_x(); win_y = gb_wm_y();
     if (gb_drag_window(&win_x, &win_y, gb_wm_w(), gb_wm_h())) {
         gb_wm_setpos(win_x, win_y);
         gb_restore_parent();
     }
+#endif
 }
 
 static void app_proc(void)
@@ -458,6 +485,9 @@ static const gb_mwin_t appwin = {
 void main(void)
 {
     unsigned char n;
+#ifdef GB_SECONDARY_RUNTIME
+    if (gb_secondary_open(&form_secondary) != GB_SECONDARY_OK) return;
+#endif
 #ifdef GB_MSX2
     resource_ready = form_resource_open();
 #endif

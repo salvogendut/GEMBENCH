@@ -27,7 +27,9 @@ GBAP v3 retains the outer Z80 `JP` and v2 icon directory, then adds a fixed
 The M5 loader accepts exactly one uncompressed fixed-origin primary segment.
 The descriptor vocabulary is intentionally wider so future mapper-backed
 resources and the secondary-code call gate do not require GBAP v4. ZX0,
-secondary execution, and relocation are not implemented or advertised here.
+secondary execution, and relocation were not implemented or advertised in M5;
+Milestone 6 now activates one optional MSX2 secondary-code descriptor without
+changing the M5 primary-only package contract.
 
 `tools/embed_app_icon.py` is the canonical generator and strict parser. Its
 source JSON validation rejects unknown names, invalid identities, page-policy
@@ -99,7 +101,7 @@ owner/page/window. The incompatible package reaches the guard but not `main`;
 window/owner counts remain at one, the free-page count returns exactly to its
 initial value, and the pending owner is zero.
 
-## Portability boundary and next milestone
+## Portability boundary and follow-up
 
 V3 makes compile-once applications representable, not automatic. A true
 `portable-z80` package must use only the frozen common ABI, runtime
@@ -107,6 +109,7 @@ geometry/capabilities, portable GBR/VDI resources, and an agreed fixed memory
 layout on every target in its mask. CPC/PCW still need the M1-M5 service
 backports before they can truthfully accept such a binary.
 
-Architecture Milestone 6 can now implement the application-owned secondary
-code call gate against the v3 descriptor/owner/page contracts, initially on
-MSX2 and without expanding the primary application into a relocatable model.
+Architecture Milestone 6 implements the application-owned secondary-code call
+gate against these descriptor/owner/page contracts, initially on MSX2 and
+without expanding the primary application into a relocatable model. See
+[ARCHITECTURE-M6-MSX.md](ARCHITECTURE-M6-MSX.md).
