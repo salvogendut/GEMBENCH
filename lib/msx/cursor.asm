@@ -132,6 +132,9 @@ baseline_old_sy db    0
 
 ; cursor_erase: park the sprites below the display.
 cursor_erase
+                ld    a,(MSX_TIMER_OWNER)      ; a timer-only compositor pass cannot
+                or    a                        ; contaminate this hardware-sprite pointer,
+                ret   m                        ; so keep it visible instead of blinking it
                 ld    a,(cur_paintlock)
                 or    a
                 ret   nz
@@ -142,12 +145,10 @@ cursor_erase
                 di
                 ld    a,217                   ; sprite 0 y: parked
                 out   (VDP_DATA),a
-                ei
-                ld    hl,SPR_ATTR+4
-                call  vdp_setwr16
-                di
-                ld    a,217                   ; sprite 1 y: parked
-                out   (VDP_DATA),a
+                out   (VDP_DATA),a            ; x/pattern/colour are immaterial while
+                out   (VDP_DATA),a            ; parked and cursor_draw replaces all eight
+                out   (VDP_DATA),a            ; attribute bytes before showing the pointer
+                out   (VDP_DATA),a            ; sprite 1 y: parked
                 ei
                 ret
 

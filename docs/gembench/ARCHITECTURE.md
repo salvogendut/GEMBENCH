@@ -94,6 +94,14 @@ provider shares UNAPI discovery/probing with Telnet while socket data remains
 client-local. The contract is documented in
 [ARCHITECTURE-M7-MSX.md](ARCHITECTURE-M7-MSX.md).
 
+Architecture Milestone 8 gives the existing app-owned worker model one bounded
+visual-timer path on MSX2. Clock's pure worker publishes a coalesced,
+generation-tagged damage rectangle; Desktop validates and consumes it on the
+root task, then uses the normal bottom-up compositor. Input and
+`GB_MSG_FRAME` remain focused-only, and no drawing or kernel call enters worker
+context. The contract is documented in
+[ARCHITECTURE-M8-MSX.md](ARCHITECTURE-M8-MSX.md).
+
 ## Resource ownership
 
 `.GBR` is the native, build-time resource format. Version 1 contains strings

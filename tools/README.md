@@ -122,8 +122,11 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   and captures the final Screen 7 window. Headless mode retains all assertions.
 - **`test_multi_event_openmsx.sh`** — launches the built MSX2 Clock from a
   disposable Nextor image and asserts combined timer, keyboard, pointer, and
-  window delivery through real matrix input. `MSX_HEADLESS=1` keeps the trace
-  assertions without a display.
+  window delivery through real matrix input. It then raises File Manager above
+  Clock and proves app-owned background damage updates Clock without focused
+  frames, focus theft, pointer parking, static-face redraws, or foreground pixel
+  changes. `MSX_HEADLESS=1` keeps the
+  trace assertions without a display.
 - **`test_typed_scrap_openmsx.sh`** — launches two byte-identical Notepads from
   a disposable network-free Nextor image, copies typed text through the real
   Edit menu, proves bitmap mismatch is atomic, and then accepts the text paste.

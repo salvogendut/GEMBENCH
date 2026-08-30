@@ -25,6 +25,9 @@
 #include "gbshell.h"
 #ifdef GB_DEFER_MESSAGES
 #include "gbdefer.h"
+#ifdef GB_APP_TIMER_COLLECTOR
+#include "gbtimer.h"
+#endif
 #endif
 #define GB_DESK_CATALOG_DATA
 #include "gbdesk_catalog.h"
@@ -935,6 +938,10 @@ static void bar_draw(void)
        one provider stop, so this hook stays bounded. */
     gb_service_collect();
 #endif
+#ifdef GB_APP_TIMER_COLLECTOR
+    gb_timer_collect();                         /* consume worker damage on the root task */
+#endif
+    gb_time();                                  /* also refreshes fixed bytes used by timer workers */
     if (*WM_FS) { bar_wasfs = 1; return; }    /* fullscreen: the borderless window owns lines 0-7 */
     if (bar_wasfs) {                          /* just exited fullscreen (e.g. the saver closed) -> */
         bar_wasfs = 0; bar_init = 0;          /* force a full bar redraw, and restart the idle count */
@@ -950,7 +957,7 @@ static void bar_draw(void)
     msig = 0;                                  /* menu titles: redraw when MENU_DEF changes */
     for (i = 0; i < (unsigned char)(MENU_DEF[0] * 9 + 1) && i < 40; i++) msig += MENU_DEF[i];
     if (msig != bar_msig) { bar_msig = msig; bar_menu(); }
-    gb_time();                                 /* clock: redraw when the displayed time changes */
+                                              /* clock: redraw when the displayed time changes */
     if (gb_hour != bar_hour || gb_min != bar_min) {
         bar_hour = gb_hour;
         bar_min = gb_min;

@@ -113,12 +113,16 @@ maximise/restore, move, resize, and geometry messages:
 tools/test_window_kinds_openmsx.sh
 ```
 
-Exercise Clock's combined keyboard, pointer, timer, and window subscription:
+Exercise Clock's combined keyboard, pointer, timer, and window subscription,
+then prove its graphical face continues repainting behind a focused File
+Manager without altering the foreground pixels:
 
 ```sh
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   MSX_HEADLESS=1 tools/test_multi_event_openmsx.sh
 ```
+
+The equivalent build-and-test target is `make gembench-m8-timer-openmsx`.
 
 Exercise bounded Desktop repainting while File Manager and Clock are moved,
 topped, and closed:

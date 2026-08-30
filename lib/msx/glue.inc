@@ -156,6 +156,13 @@ MSX_DEFER_SEND       equ #C3C0       ; six-byte sender/receiver/input scratch
 MSX_DEFER_PURGE_OWNER equ #C3C6      ; owner matched by queue compaction
 MSX_DEFER_INDEX      equ #C3C8       ; queue compaction cursor
 MSX_DEFER_ACTIVATE   equ #C3C9       ; deferred focus request, #FF means none
+; Architecture Milestone 8 (#45): one root-consumed repaint mailbox. A pure
+; application worker writes x/y/w/h plus its window generation, then publishes
+; owner slot+1 last. The Desktop validates that identity before calling the
+; ordinary compositor, so close/reuse cannot repaint for a stale worker.
+MSX_TIMER_OWNER      equ #C3CA       ; 0 empty, 1..8 pending, #81..#88 active source
+MSX_TIMER_RECT       equ #C3CB       ; x, y, w, h
+MSX_TIMER_GEN        equ #C3CF       ; generation of MSX_TIMER_OWNER
 
 ; Architecture milestone 4 (#37): fixed marshalling, four owner-safe filesystem
 ; contexts and a private snapshot of the MSX-DOS directory FIB. GBFSCTX.MOD is

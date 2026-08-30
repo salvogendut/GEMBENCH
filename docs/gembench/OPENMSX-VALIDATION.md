@@ -699,3 +699,46 @@ python3 -m unittest tests.test_service_manager -v
 make gembench-msx
 make gembench-m7-service-openmsx
 ```
+
+## Architecture Milestone 8 background visual timers
+
+Architecture Milestone 8 was validated on 2026-08-30 with openMSX 21.0 and a
+disposable network-free 512 KiB Nextor image. The driver launches the exact
+release Clock through File Manager, enables seconds through real matrix input,
+then raises File Manager over Clock and leaves it focused for 4.2 emulated
+seconds.
+
+The Clock worker published generation-tagged damage into the single coalesced
+mailbox. Desktop consumed it on the root task and entered the ordinary clipped,
+bottom-up compositor. The reference trace recorded:
+
+```text
+STATUS=PASS
+FILEMGR_SLOT=1
+CLOCK_SLOT=2
+BACKGROUND_DRAW_DELTA=4
+BACKGROUND_FRAME_DELTA=0
+BACKGROUND_HASH_RECT=24 26 16 48
+BACKGROUND_HASH=3671906385,3671906385
+BACKGROUND_DAMAGE_HITS=4
+BACKGROUND_DAMAGE_RECTS={29 73 16 17} {40 126 3 8} {28 73 17 15} {40 126 3 8}
+BACKGROUND_TIMER_PARTS=1 2 1 2
+BACKGROUND_POINTER_PARKED=0
+FOCUS=1
+RUNNABLE=2
+TIMER_OWNER=0
+```
+
+Thus Clock repainted without receiving a focused frame, File Manager retained
+focus, the foreground-owned overlap remained bit-identical, and timer damage
+alternated between a small hand box and the exact `3x8` seconds field. The static
+face, unchanged digits, furniture, and hardware pointer were untouched. The
+mailbox was empty after collection. Screen 6/7 child COM sizes were
+14,548/16,126 bytes; Clock and Desktop measured 12,736/15,760 bytes.
+
+```sh
+python3 -m unittest tests.test_background_timer -v
+make gembench-msx
+OPENMSX='distrobox enter my-distrobox -- openmsx' \
+  MSX_HEADLESS=1 make gembench-m8-timer-openmsx
+```

@@ -51,6 +51,12 @@ The worker may only operate on its own computation state. It must not call the
 kernel, paged modules, firmware, storage, drawing, or other shared UI services.
 The compositor-side `proc` samples worker state when it paints.
 
+GEMBENCH Architecture Milestone 8 adds one MSX2 worker-to-root visual-damage
+mailbox without relaxing that rule. Clock's worker performs fixed-RAM stores
+only; Desktop validates the publishing window identity and invokes the
+compositor on the root task. The channel coalesces, carries no general callback,
+and leaves ordinary frame/input delivery focused-only.
+
 The CPC, MSX2, and PCW timers can interrupt a worker that never yields. They cannot
 preempt the resident kernel, a paged module, firmware, storage code, or the
 compositor. Blocking I/O therefore still blocks the system at this stage.
