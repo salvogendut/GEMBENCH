@@ -103,6 +103,14 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   automatically by MSX builds only. `APP_MANIFEST=path/manifest.json` emits a
   strictly validated GBAP v3 manifest/primary descriptor and selects the
   guarded startup; that execution path is currently MSX2-only.
+  `APP_SECONDARY=path/segment.raw` additionally emits the M6 secondary-code
+  descriptor and links the app-side loader/gate policy; build its fixed-origin,
+  data-free image with `build_secondary.sh`.
+- **`test_m6_secondary_openmsx.sh`** — launches the normal packaged FormRef
+  through a disposable Nextor image, verifies invalid-entry, nested, stale,
+  foreign-owner, and teardown rejection, then requires exact stack/mapper
+  restoration through the real secondary renderer and two-page owner cleanup
+  through the real close gadget.
 - **`test_formref_openmsx.sh`** — builds a disposable Nextor image and drives the
   resource-backed MSX2 FormRef through pointer launch, keyboard focus,
   checkbox/radio mutation, default Save, and trace assertions under openMSX.

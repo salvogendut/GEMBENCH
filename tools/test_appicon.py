@@ -77,18 +77,37 @@ def main():
             dual_original[32:DUAL_PREAMBLE_SIZE]
 
         manifest_spec = _read_manifest_spec("apps/formref/manifest.json")
-        v3_size = v3_preamble_size(True)
+        secondary = bytes((0xC3, 0x08, 0x40)) + b"GBS3" + bytes((1,)) + \
+            bytes((0xAF, 0xC9))
+        v3_size = v3_preamble_size(True, 2)
         v3_original = make_v3_preamble(
-            icon, manifest_spec, v3_size + len(executable), icon16
-        ) + executable
+            icon, manifest_spec, v3_size + len(executable), icon16, secondary
+        ) + executable + secondary
         assert v3_original[7] == VERSION_V3
         assert valid_preamble(v3_original)
         v3_manifest = parse_manifest(v3_original)
         assert v3_manifest["application_id"] == "FORMREF"
         assert v3_manifest["platforms"] == 2
         assert v3_manifest["entry_offset"] == v3_size
-        assert len(v3_manifest["segments"]) == 1
+        assert len(v3_manifest["segments"]) == 2
         assert v3_manifest["segments"][0]["offset"] == v3_size
+        assert v3_manifest["segments"][1]["type"] == 2
+        assert v3_manifest["segments"][1]["offset"] == \
+            v3_size + len(executable)
+
+        # The original M5 primary-only package remains valid after the M6
+        # descriptor extension.
+        m5_spec = dict(manifest_spec)
+        m5_spec["secondary_code"] = None
+        m5_spec["required_capabilities"] &= ~0x2000
+        m5_size = v3_preamble_size(True, 1)
+        m5_original = make_v3_preamble(
+            icon, m5_spec, m5_size + len(executable), icon16
+        ) + executable
+        m5_manifest = parse_manifest(m5_original)
+        assert m5_manifest["entry_offset"] == m5_size
+        assert len(m5_manifest["segments"]) == 1
+        assert m5_manifest["segments"][0]["type"] == 1
 
         v3_path = os.path.join(tmp, "V3.APP")
         with open(v3_path, "wb") as target:
@@ -99,13 +118,15 @@ def main():
         with open(v3_path, "rb") as source:
             v3_edited = source.read()
         assert parse_manifest(v3_edited) == v3_manifest
-        assert v3_edited[v3_size:] == executable
+        assert v3_edited[v3_size:] == executable + secondary
 
         for offset, value in (
             (7, 4),                         # unsupported outer version
             (32 + 7, 0),                    # no compatible platform
             (32 + 34, 0),                   # false image length
-            (32 + 40 + 3, 1),               # unsupported compression
+            (32 + 40 + 3, 1),               # unsupported primary compression
+            (32 + 40 + 12 + 2, 0),          # secondary not executable/required
+            (v3_size + len(executable) + 3, 0),  # bad GBS3 prefix
         ):
             broken = bytearray(v3_original)
             broken[offset] = value

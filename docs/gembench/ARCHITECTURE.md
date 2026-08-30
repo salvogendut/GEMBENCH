@@ -78,6 +78,14 @@ owner/page on rejection without growing the resident kernel. FormRef is the
 reference package; the exact format, guard boundary, and portability limits are
 documented in [ARCHITECTURE-M5-MSX.md](ARCHITECTURE-M5-MSX.md).
 
+Architecture Milestone 6 activates the optional GBAP v3 secondary-code
+descriptor on MSX2. An app-linked, fixed-RAM call gate validates the opaque
+owner/generation/purpose and entry offset, marshals through a fixed transfer
+record, maps and calls one owned page, and restores the exact primary bank and
+stack. FormRef moves a real renderer into that page; owner teardown reclaims it
+automatically. The ABI and portability boundary are documented in
+[ARCHITECTURE-M6-MSX.md](ARCHITECTURE-M6-MSX.md).
+
 ## Resource ownership
 
 `.GBR` is the native, build-time resource format. Version 1 contains strings

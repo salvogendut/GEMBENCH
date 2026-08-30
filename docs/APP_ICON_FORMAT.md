@@ -139,8 +139,12 @@ Each segment descriptor is:
 | 10 | 2 | fixed load address |
 
 Milestone 5 accepts one required, executable, uncompressed primary descriptor.
-The other descriptor types reserve a stable contract for later mapper-backed
-resources and secondary code; the M5 runtime does not map or execute them.
+Milestone 6 optionally appends one required, executable, uncompressed MSX2
+secondary-code descriptor at fixed origin `#4000`. Its file range follows the
+primary exactly, ends at the manifest image size, and begins with `JP entry`,
+ASCII `GBS3`, version `1`. Startup copies it into an owned purpose-7 mapper page
+and calls only validated entry offsets through the fixed-RAM gate. Resource and
+data descriptors remain reserved for later runtime work.
 
 A dual-icon v3 preamble is 852 bytes and enters at `#4354`. Build one with:
 
@@ -148,6 +152,20 @@ A dual-icon v3 preamble is 852 bytes and enters at `#4354`. Build one with:
 APP_ICON=apps/example/icon.asm \
 APP_ICON16=apps/example/icon16.asm \
 APP_MANIFEST=apps/example/manifest.json \
+APPDEFS="-DGB_MSX2" \
+tools/build_capp.sh apps/example build/msx/EXAMPLE.RAW
+```
+
+Adding the second descriptor makes a dual-icon M6 preamble 864 bytes and moves
+the primary entry to `#4360`. An M6 package supplies the secondary source and
+declares its platform/load policy in the JSON manifest:
+
+```sh
+bash tools/build_secondary.sh apps/example/secondary.s build/msx/EXAMPLE.SEC
+APP_ICON=apps/example/icon.asm \
+APP_ICON16=apps/example/icon16.asm \
+APP_MANIFEST=apps/example/manifest.json \
+APP_SECONDARY=build/msx/EXAMPLE.SEC \
 APPDEFS="-DGB_MSX2" \
 tools/build_capp.sh apps/example build/msx/EXAMPLE.RAW
 ```

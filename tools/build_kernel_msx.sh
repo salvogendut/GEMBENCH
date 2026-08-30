@@ -115,6 +115,9 @@ python3 tools/gblib_subset.py \
 FILEMGR_GBLIB="build/msx/GBLIBFILEMGR.s"
 python3 tools/gblib_subset.py \
     lib/gb/gblib.s "$FILEMGR_GBLIB" apps/filemgr/gblib.symbols
+FORMREF_GBLIB="build/msx/GBLIBFORMREF.s"
+python3 tools/gblib_subset.py \
+    lib/gb/gblib.s "$FORMREF_GBLIB" apps/formref/gblib.symbols
 
 # --- the C apps, compiled with the MSX geometry ------------------------------
 python3 tools/png2mahjong.py assets/katakana.png assets/hiragana.png apps/mahjong/kana.h
@@ -164,7 +167,8 @@ if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
     APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APPDEFS="-DGB_MSX2 -DGBR_BANKED -DGBR_M7_LEGACY_FORMS -DGEMBENCH_GBR_METADATA_ONLY" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7E50 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORMS=1 GBR_FIXED_TREE=1 GBR_BANKED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
 else
     python3 tools/gbrc.py apps/formref/formref.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_gbr.h --symbol-prefix FORMREF
-    APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APP_MANIFEST=apps/formref/manifest.json APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7F00 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORM_ENGINE=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+    bash tools/build_secondary.sh apps/formref/secondary.s build/msx/FORMREF.SEC
+    GBLIB_SRC="$FORMREF_GBLIB" APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APP_MANIFEST=apps/formref/manifest.json APP_SECONDARY=build/msx/FORMREF.SEC APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7F00 GBWIN=0 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORM_ENGINE=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
 fi
 python3 tools/gbrc.py examples/hello-dialog.json --output build/msx/HELLO.GBR
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7000 BUTTON=1 GBR_OBJECTS=1 tools/build_capp.sh apps/gbrdemo build/msx/GBRDEMO.RAW

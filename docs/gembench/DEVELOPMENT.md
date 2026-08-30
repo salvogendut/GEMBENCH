@@ -592,3 +592,23 @@ binary contract. Do not mark an application `portable-z80` merely because its
 source builds on several targets: one binary also needs the frozen common ABI,
 runtime geometry/capability decisions, portable resources, and a common fixed
 memory layout.
+
+## MSX2 GBAP v3 secondary code
+
+Add a `secondary_code` object to an MSX2 v3 manifest and pass its assembled raw
+image as `APP_SECONDARY`. The secondary must be fixed at `0x4000`, start with
+the `GBS3` v1 prefix, own no data in the replaced page, and communicate through
+`gb_secondary_transfer()` rather than primary/secondary pointers.
+
+```sh
+bash tools/build_secondary.sh apps/formref/secondary.s build/msx/FORMREF.SEC
+make gembench-m6-manifest
+make gembench-m6-openmsx
+```
+
+Call `gb_secondary_open()` before publishing the first window and retain its
+opaque handle for `gb_secondary_call()`. Calls are synchronous and root-only;
+busy, stale, foreign, invalid-entry, and terminating-app cases return explicit
+status codes. There is no manual close: generation-tagged owner teardown
+reclaims the secondary page. See
+`docs/gembench/ARCHITECTURE-M6-MSX.md` for the complete ABI and budgets.

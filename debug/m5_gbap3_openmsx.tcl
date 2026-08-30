@@ -9,7 +9,8 @@ set m5_mode $::env(GEMBENCH_M5_MODE)
 set m5_output $::env(GEMBENCH_M5_OUTPUT)
 set m5_k_poll [expr {$::env(GEMBENCH_M5_K_POLL)}]
 set m5_main [expr {$::env(GEMBENCH_M5_MAIN)}]
-set m5_entry 0x4354
+set m5_entry [expr {$::env(GEMBENCH_M5_ENTRY)}]
+set m5_pages [expr {$::env(GEMBENCH_M5_PAGES)}]
 set m5_deadline 0
 set m5_target_x 0
 set m5_target_y 0
@@ -185,7 +186,7 @@ proc m5_wait_result {} {
     if {$::m5_mode eq "good"} {
         if {$::m5_guard_hits >= 1 && $::m5_main_hits >= 1 &&
             $windows == 2 && $owners == 2 &&
-            $free + 1 == $::m5_initial_free && $pending == 0} {
+            $free + $::m5_pages == $::m5_initial_free && $pending == 0} {
             m5_finish PASS
             return
         }

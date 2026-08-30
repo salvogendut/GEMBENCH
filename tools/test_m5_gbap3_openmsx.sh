@@ -15,6 +15,8 @@ python3 tools/embed_app_icon.py check build/msx/FORMREF.RAW | grep -q 'GBAP v3'
 
 export GEMBENCH_M5_K_POLL="0x$(awk '$1 == "K_POLL" { value=$2; sub(/^#/, "", value); print value; exit }' build/msx/gbkernm7.sym)"
 export GEMBENCH_M5_MAIN="$(awk '$2 == "_main" { print $3; exit }' build/msx-obj/formref/app.noi)"
+export GEMBENCH_M5_ENTRY="$(awk '$2 == "_start" { print $3; exit }' build/msx-obj/formref/app.noi)"
+export GEMBENCH_M5_PAGES="$(python3 -c 'import pathlib,sys; sys.path.insert(0,"tools"); from embed_app_icon import parse_manifest; print(parse_manifest(pathlib.Path("build/msx/FORMREF.RAW").read_bytes())["minimum_pages"])')"
 export MSX_UNAPI=0
 export MSX_MOUSE=0
 export MSX_HEADLESS=1
