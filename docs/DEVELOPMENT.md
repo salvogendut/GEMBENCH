@@ -300,7 +300,8 @@ line in the pack assembly or stage it into the card distribution as appropriate)
      `assets/<name>.png` in any image editor (keep the 4-colour desktop palette),
      then run **`tools/regen_icons.sh`**. It re-runs `png2cpc` for committed
      resident `lib/icon_*.asm` and app-owned `apps/*/icon.asm` sources from their
-     recorded PNG and size. Paint-specific tool icons live in GB-PAINT.
+     recorded PNG and size. GEMBENCH's MSX2 Paint-specific tool icons live in
+     `assets/paint/`; CPC and PCW retain the standalone GB-PAINT sources.
      Rebuild (`tools/build_kernel.sh`) and `packicons` repacks `build/DEFAULT.IST`.
      Note: the build does **not** auto-convert `assets/` — `build/DEFAULT.IST` is a
      gitignored artifact regenerated from the committed `lib/icon_*.asm`, so a PNG

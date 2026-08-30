@@ -81,13 +81,13 @@ fi
 
 mkdir -p build/msx
 
-GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
-PAINT_APP_DIR="$GB_PAINT_DIR/apps/paint"
-if [ -f "$PAINT_APP_DIR/main.c" ] && [ -d "$GB_PAINT_DIR/assets/paint" ]; then
-    PAINT_ASSET_DIR="$GB_PAINT_DIR/assets/paint"
-else
-    echo "ERROR: GB-PAINT checkout not found at $GB_PAINT_DIR" >&2
-    echo "Set GB_PAINT_DIR=/path/to/GB-PAINT or clone it next to geobench." >&2
+# GEMBENCH owns its MSX2 Paint variant. The standalone GB-PAINT repository
+# remains the GEOBENCH source and is intentionally not modified by GEMBENCH's
+# application/window ownership work.
+PAINT_APP_DIR="apps/paint"
+PAINT_ASSET_DIR="assets/paint"
+if [ ! -f "$PAINT_APP_DIR/main.c" ] || [ ! -d "$PAINT_ASSET_DIR" ]; then
+    echo "ERROR: in-tree GEMBENCH Paint sources are incomplete" >&2
     exit 1
 fi
 GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"

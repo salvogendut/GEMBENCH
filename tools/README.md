@@ -22,6 +22,8 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`build_kernel_msx.sh`** — builds the `GBMSX.COM` video-mode selector,
   `GBMSX6.COM`, `GBMSX7.COM`, the MSX2 app/module payload, and the bootable
   Nextor `QA/MSX/GBMSX.IMG`, plus the two 720K images under `QA/MSX/Floppies/`.
+  Its Paint application and tool artwork are maintained in-tree under
+  `apps/paint/` and `assets/paint/`.
   The dependency fetcher supplies a local openMSXnet
   `UNAPINET.COM`, which is staged before `GBMSX.COM`; `MSX_UNAPI_TSR` overrides
   it, and an explicitly empty value omits it. The standalone staged TSR and
