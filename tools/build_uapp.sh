@@ -13,6 +13,10 @@ APP_ICON16="${APP_ICON16:-}"
 GBLIB_SYMBOLS="${GBLIB_SYMBOLS:-$APP/gblib.symbols}"
 GBLIB_UNIVERSAL="lib/gb/gblib_universal.symbols"
 APP_CFLAGS="${APP_CFLAGS:-}"
+UNIVERSAL_TASK="${UNIVERSAL_TASK:-0}"
+UNIVERSAL_WINDOW_KIND="${UNIVERSAL_WINDOW_KIND:-0}"
+UNIVERSAL_ACCESSORY="${UNIVERSAL_ACCESSORY:-0}"
+UNIVERSAL_MENU="${UNIVERSAL_MENU:-0}"
 DATA_LOC="${DATA_LOC:-0x7000}"
 LOAD_LIMIT="0x7F00"
 
@@ -34,6 +38,13 @@ if (( DATA_LOC < 0x4000 || DATA_LOC > 0x7F00 )); then
     echo "ERROR: universal DATA_LOC must be in 0x4000..0x7F00" >&2
     exit 2
 fi
+for feature in "$UNIVERSAL_TASK" "$UNIVERSAL_WINDOW_KIND" "$UNIVERSAL_ACCESSORY" \
+    "$UNIVERSAL_MENU"; do
+    [ "$feature" = 0 ] || [ "$feature" = 1 ] || {
+        echo "ERROR: universal feature flags must be 0 or 1" >&2
+        exit 2
+    }
+done
 
 SDCC="${SDCC:-sdcc}"
 BIN="$(dirname "$(command -v "$SDCC")")"
@@ -56,14 +67,38 @@ python3 tools/gblib_subset.py lib/gb/gblib.s "$work/gblib.s" \
 "$SDAS" -o "$work/crt0_v4.rel" lib/gb/crt0_v4.s
 "$SDAS" -o "$work/gbsys.rel" lib/gb/gbsys.s
 "$SDAS" -o "$work/gblib.rel" "$work/gblib.s"
+"$SDAS" -o "$work/gbuniversal_draw.rel" lib/gb/gbuniversal_draw.s
+extra_rels=()
+if [ "$UNIVERSAL_TASK" = 1 ]; then
+    "$SDAS" -o "$work/gbtask.rel" lib/gb/gbtask.s
+    extra_rels+=("$work/gbtask.rel")
+fi
+if [ "$UNIVERSAL_WINDOW_KIND" = 1 ]; then
+    "$SDAS" -o "$work/gbwindow_kind.rel" lib/gb/gbwindow_kind.s
+    extra_rels+=("$work/gbwindow_kind.rel")
+fi
+if [ "$UNIVERSAL_ACCESSORY" = 1 ]; then
+    "$SDAS" -o "$work/gbdefer.rel" lib/gembench/gbdefer.s
+    "$SDAS" -o "$work/gbshell_accessory_register.rel" \
+        lib/gembench/gbshell_accessory_register.s
+    extra_rels+=("$work/gbdefer.rel" "$work/gbshell_accessory_register.rel")
+fi
+if [ "$UNIVERSAL_MENU" = 1 ]; then
+    "$SDCC" -mz80 --std-c99 --opt-code-size --fomit-frame-pointer \
+        -DGB_UNIVERSAL -I lib/gb -c lib/gb/gbuniversal_menu.c \
+        -o "$work/gbuniversal_menu.rel"
+    extra_rels+=("$work/gbuniversal_menu.rel")
+fi
 "$SDCC" -mz80 --std-c99 --opt-code-size --fomit-frame-pointer \
-    -DGB_UNIVERSAL $APP_CFLAGS -I lib/gb -c "$APP/main.c" -o "$work/main.rel"
+    -DGB_UNIVERSAL $APP_CFLAGS -I lib/gb -I include/gembench \
+    -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --std-c99 --opt-code-size --fomit-frame-pointer \
     -DGB_UNIVERSAL -I lib/gb -c lib/gb/gbuniversal.c -o "$work/gbuniversal.rel"
 
 "$SDCC" -mz80 --no-std-crt0 --code-loc "$CODE_LOC" --data-loc "$DATA_LOC" \
     "$work/crt0_v4.rel" "$work/main.rel" "$work/gbuniversal.rel" \
-    "$work/gbsys.rel" "$work/gblib.rel" -o "$work/app.ihx"
+    "$work/gbsys.rel" "$work/gblib.rel" "$work/gbuniversal_draw.rel" \
+    "${extra_rels[@]}" -o "$work/app.ihx"
 python3 tools/check_app_layout.py "$work/app.map" --app "$APP" \
     --data-loc "$DATA_LOC" --load-limit "$LOAD_LIMIT" --task-stack-reserve 256
 

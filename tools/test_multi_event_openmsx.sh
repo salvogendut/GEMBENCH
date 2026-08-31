@@ -11,10 +11,8 @@ cd "$(dirname "$0")/.."
     echo "ERROR: Clock symbols are missing; run 'make geobench-msx' first" >&2
     exit 1
 }
-cmp -s build/msx/CLOCK.RAW QA/MSX/CARD/GBENCH/CLOCK.APP || {
-    echo "ERROR: staged CLOCK.APP does not match build/msx/CLOCK.RAW; run 'make geobench-msx' first" >&2
-    exit 1
-}
+# This historical M8 probe deliberately exercises the retained legacy build.
+# The release card now stages build/universal/CLOCK.APP.
 
 sym=build/msx-obj/clock/main.sym
 noi=build/msx-obj/clock/app.noi

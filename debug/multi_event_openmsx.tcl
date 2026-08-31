@@ -1,6 +1,6 @@
 # Exercise Clock's GEMBENCH multi-event subscription through the shipped MSX2
 # window manager.  A root-level A.APP alias keeps File Manager navigation
-# deterministic; the payload is the exact staged CLOCK.RAW.
+# deterministic; the payload is the retained legacy Clock regression build.
 
 set throttle off
 set pause_on_lost_focus false

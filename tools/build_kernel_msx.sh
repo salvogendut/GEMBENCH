@@ -264,8 +264,12 @@ rm -f build/msx/GBAPV4.RAW
 ( cd build/msx && "$RASM" ../../kernel/msx_gbap4.asm )
 [ -s build/msx/GBAPV4.RAW ] || { echo "ERROR: GBAPV4.RAW not produced" >&2; exit 1; }
 
-# Build the compile-once conformance application that exercises the gate.
+# Build the compile-once conformance and first production applications.
 bash tools/build_uapp.sh apps/abiprobe build/universal/ABIPROBE.APP
+UNIVERSAL_WINDOW_KIND=1 UNIVERSAL_ACCESSORY=1 UNIVERSAL_MENU=1 DATA_LOC=0x7600 \
+    bash tools/build_uapp.sh apps/ucalculator build/universal/CALC.APP
+UNIVERSAL_TASK=1 UNIVERSAL_WINDOW_KIND=1 UNIVERSAL_ACCESSORY=1 UNIVERSAL_MENU=1 DATA_LOC=0x7300 \
+    bash tools/build_uapp.sh apps/uclock build/universal/CLOCK.APP
 
 # --- the two kernels, their stubs, and the small next-boot selector ----------
 # RASM exits 0 even on assembly errors, so stale outputs would silently ship:
@@ -345,7 +349,7 @@ cp build/msx/PAINT.RAW    QA/MSX/CARD/GBENCH/PAINT.APP
 cp build/msx/PAINT.IST    QA/MSX/CARD/GBENCH/PAINT.IST
 cp build/msx/SHELL.RAW    QA/MSX/CARD/GBENCH/SHELL.APP
 cp build/msx/MAHJONG.RAW  QA/MSX/CARD/GBENCH/MAHJONG.APP
-cp build/msx/CALC.RAW     QA/MSX/CARD/GBENCH/CALC.APP
+cp build/universal/CALC.APP QA/MSX/CARD/GBENCH/CALC.APP
 cp build/msx/NETSVC.RAW   QA/MSX/CARD/GBENCH/NETSVC.APP
 cp build/msx/TELNET.RAW   QA/MSX/CARD/GBENCH/TELNET.APP
 cp build/msx/BROWSER.RAW  QA/MSX/CARD/GBENCH/BROWSER.APP
@@ -375,7 +379,7 @@ for bas in "$GB_BASIC_DIR"/examples/*.BAS; do
     [ -e "$bas" ] || continue
     sed 's/$/\r/' "$bas" > "QA/MSX/CARD/GBENCH/$(basename "$bas")"
 done
-cp build/msx/CLOCK.RAW    QA/MSX/CARD/GBENCH/CLOCK.APP
+cp build/universal/CLOCK.APP QA/MSX/CARD/GBENCH/CLOCK.APP
 cp build/msx/SQUARES.RAW  QA/MSX/CARD/GBENCH/SQUARES.SAV
 cp build/msx/ANT.RAW      QA/MSX/CARD/GBENCH/ANT.SAV
 cp build/msx/DECO.RAW     QA/MSX/CARD/GBENCH/DECO.SAV
@@ -404,6 +408,8 @@ cp build/msx/GBIMG.RAW  QA/MSX/CARD/GBENCH/GBIMG.MOD
 cp build/msx/GBFSCTX.RAW QA/MSX/CARD/GBENCH/GBFSCTX.MOD
 cp build/msx/GBAPV4.RAW QA/MSX/CARD/GBENCH/GBAPV4.MOD
 cp build/universal/ABIPROBE.APP QA/MSX/CARD/GBENCH/ABIPROBE.APP
+cmp -s build/universal/CALC.APP QA/MSX/CARD/GBENCH/CALC.APP
+cmp -s build/universal/CLOCK.APP QA/MSX/CARD/GBENCH/CLOCK.APP
 python3 tools/test_geobench_v2_msx_gate.py \
     --staged QA/MSX/CARD/GBENCH/ABIPROBE.APP
 cp build/msx/SPLASH.BIN  QA/MSX/CARD/GBENCH/SPLASH.MOD

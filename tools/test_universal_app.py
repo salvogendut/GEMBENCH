@@ -84,6 +84,7 @@ def check_auditor(temp: Path) -> None:
         "obj/main.rel [ main ]\n"
         "obj/gbuniversal.rel\n"
         "                  [ gbuniversal ]\n"
+        "obj/gbuniversal_draw.rel [ gbuniversal_draw ]\n"
         "obj/gbsys.rel [ gbsys ]\n"
         "obj/gblib.rel [ gblib_subset ]\n",
         encoding="ascii",

@@ -150,7 +150,7 @@ gb4_icon_count_ok
                 jp    nz,gb4_reject
                 ld    a,(ix+14)
                 ld    b,a
-                and   #F0
+                and   #80                      ; high-capability bits 0..6 assigned
                 jp    nz,gb4_reject
                 ld    a,b
                 and   #03                      ; universal-loader + runtime-geometry
@@ -163,7 +163,7 @@ gb4_icon_count_ok
                 and   #80
                 jp    nz,gb4_reject
                 ld    a,(ix+18)
-                and   #C0                      ; six assigned high capabilities
+                and   #80                      ; seven assigned high capabilities
                 jp    nz,gb4_reject
                 ld    a,(ix+19)
                 or    a

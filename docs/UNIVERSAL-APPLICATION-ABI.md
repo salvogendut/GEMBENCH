@@ -161,6 +161,7 @@ uses. The existing low-word capability assignments remain unchanged; v2 adds:
 | `0x00080000` | normalised portable input |
 | `0x00100000` | portable filesystem semantics |
 | `0x00200000` | typed package resources |
+| `0x00400000` | generation-safe background visual timers |
 
 A kernel must not advertise one of these bits until its implementation passes
 the corresponding cross-platform tests. The old 16-bit `capabilities` field is
@@ -203,13 +204,21 @@ line, while `gb_mxp()` returns the full 16-bit pixel X in the range reported by
 sysinfo. Key input is normalised to the documented character/control set;
 machine-specific keys are optional events.
 
+The universal SDK includes a bounded save-under dropdown for application
+top-bar menus. It is built from the inherited menu, poll, cursor, semantic draw,
+and canonical save/restore calls, and keeps its transient pixel buffer inside
+the application page. This avoids exposing the target-era GBUI low-RAM
+marshalling block as part of the compile-once ABI.
+
 ## Resident mailbox
 
 Some current libgb operations are implemented with fixed resident cells rather
 than a kernel call. Their small common layout is therefore acknowledged by v2:
 time, the four-byte callback message, the last poll result, boot drive, drag
-name/claim, and the live managed-window rectangle. Exact ranges are in the
-authority file.
+name/claim, the live managed-window rectangle, the semantic-line command, and
+the generation-safe background-damage publisher. Exact ranges are in the
+authority file. Low records sit below the application page; records shared
+with video/scheduler leaves live in the common resident region at `#C000+`.
 
 Only universal libgb may encode those addresses. Application source uses
 accessors, and callback-scoped values may not be cached after the callback. All
@@ -312,6 +321,7 @@ the icon-editor round trip, verifies every v6 C-field offset, and rejects
 target-specific source, generated assembly, or linked modules. MSX2 Gate 2 adds
 `make geobench-v2-msx-gate-check` and `make geobench-v2-msx-openmsx`; the latter
 proves success and pre-entry rollback through the ordinary loader. The current
-MSX implementation advertises the first four high capabilities and admits the
-mandatory primary-only profile. Portable filesystem/package-resource bits and
-external v4 segments remain gated for later work.
+MSX implementation advertises the four Gate-2 baseline capabilities plus
+generation-safe background visual timers, and admits the mandatory primary-only
+profile. Portable filesystem/package-resource bits and external v4 segments
+remain gated for later work.

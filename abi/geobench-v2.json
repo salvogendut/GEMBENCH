@@ -19,6 +19,7 @@
     "application_base": 16384,
     "application_limit_exclusive": 32512,
     "maximum_primary_image_bytes": 16128,
+    "resident_high_base": 49152,
     "kernel_table_base": 32768,
     "kernel_slot_bytes": 3,
     "kernel_table_last_v1_slot": 32978,
@@ -139,7 +140,8 @@
       "portable-drawing": 262144,
       "portable-input": 524288,
       "portable-filesystem": 1048576,
-      "package-resources": 2097152
+      "package-resources": 2097152,
+      "background-timers": 4194304
     }
   },
   "mailbox": {
@@ -152,6 +154,11 @@
       {"name": "drag-name", "address": 5155, "size": 11, "access": "drop-callback-read-only"},
       {"name": "drop-claim", "address": 5167, "size": 1, "access": "bit7-callback-read-write"},
       {"name": "managed-window-rect", "address": 5192, "size": 4, "access": "callback-scoped-read-only"}
+      ,
+      {"name": "line-command", "address": 49200, "size": 9, "access": "universal-libgb-write-before-GB_LINE"},
+      {"name": "semantic-text-command", "address": 49209, "size": 6, "access": "universal-libgb-write-before-GB_TEXT"},
+      {"name": "timer-dropped", "address": 49644, "size": 1, "access": "worker-read-clear"},
+      {"name": "timer-damage", "address": 50122, "size": 6, "access": "generation-tagged-publish-owner-last"}
     ]
   },
   "jump_table": {

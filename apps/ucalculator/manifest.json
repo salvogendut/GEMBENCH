@@ -1,0 +1,26 @@
+{
+  "application_id": "CALC",
+  "profile": "universal-z80",
+  "platforms": ["cpc", "msx2", "pcw"],
+  "minimum_abi": [2, 0],
+  "minimum_sysinfo": [6, 48],
+  "required_capabilities": [
+    "windows",
+    "events",
+    "shell",
+    "owner-identity",
+    "runtime-video",
+    "applications",
+    "multi-window",
+    "deferred-messages",
+    "universal-loader",
+    "runtime-geometry",
+    "portable-drawing",
+    "portable-input"
+  ],
+  "optional_capabilities": [],
+  "service_id": 2,
+  "lifecycle": ["windowed", "accessory"],
+  "minimum_pages": 1,
+  "preferred_pages": 1
+}
