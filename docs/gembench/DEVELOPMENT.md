@@ -12,9 +12,8 @@ details remain authoritative in `docs/DEVELOPMENT.md` and `docs/BUILDING.md`.
 - mtools and dosfstools for generated MSX media
 
 The host resource compiler requires no third-party Python packages. The full
-MSX distribution uses the in-tree GEMBENCH Paint source plus the sibling
-GB-BASIC repository and the dependencies documented by the inherited GeoBench
-build.
+MSX distribution uses the in-tree GEMBENCH Paint and GB-BASIC sources plus the
+dependencies documented by the inherited GeoBench build.
 
 ## Commands
 
@@ -149,8 +148,7 @@ screenshots disabled.
 The release MSX2 Calculator is the first production panel migrated to GBR. Run
 `make gembench-msx`, launch `CALC.APP`, and verify that pointer activation and
 keyboard arithmetic agree; its twenty button labels and hit rectangles now come
-from `apps/calculator/calculator.json`. CPC and PCW deliberately keep the prior
-panel path as compatibility controls.
+from `apps/calculator/calculator.json`.
 
 Exercise the first explicitly registered MSX2 window kind with:
 
@@ -169,11 +167,10 @@ Screen 7 capture is written to `build/msx/window-kinds.png`.
 `MSX_HEADLESS=1` retains the geometry and message assertions without requesting
 the capture.
 
-The menu source is `apps/filemgr/view_menu.json`. The MSX build compiles its
+The menu source is `apps/filemgr/view_menu.json`. The build compiles its
 ordinary frozen `.GBR` for verification and a code-only `view_menu_gbr.h` for
 the app-linked runtime. A malformed `GBRM` descriptor fails atomically before
-registering a top-bar title. CPC and PCW retain their existing `gb_doc` menu
-path because adding the MSX runtime would exceed their 16 KiB File Manager page.
+registering a top-bar title.
 
 Exercise the non-blocking multi-event production slice with:
 
@@ -328,8 +325,7 @@ The subscription is six bytes and the event record nine bytes. The current
 SDCC build emits 860 bytes of code and no static data. Its deepest generated
 path uses 31 stack bytes below `gb_event_collect()` entry while calling the
 leaf `gb_mx()`/`gb_my()` accessors. The adapter remains application-linked and
-outside the frozen GEMBENCH-1 binary ABI. Clock enables it only for MSX2; CPC
-and PCW retain the original callback switch.
+outside the frozen GEMBENCH-1 binary ABI. Clock enables it in its normal build.
 
 ## Visible-region repainting
 
@@ -391,8 +387,7 @@ legacy untyped data. Use `gb_scrap_clear()` to clear both payload and metadata.
 set/type-only adapter instead of the full runtime. It is for tight clients such
 as Notepad that label their own writes, call `gb_scrap_type()` before paste, and
 then use the existing resident `gb_clip_len()`/`gb_clip_get()` path. This profile
-does not export query/get/clear. Both flags are MSX2-only; CPC and PCW continue
-to compile their raw clipboard path unchanged.
+does not export query/get/clear.
 
 Run the host semantics and target footprint gate with:
 
@@ -567,8 +562,7 @@ make gembench-m4-openmsx
 
 For a manual check, open two File Manager windows on the same drive, enter a
 subdirectory in one, and let both listings finish. Refresh or navigate either
-window; the other must retain its own path and enumeration. CPC and PCW do not
-support `GB_FSCTX=1` yet.
+window; the other must retain its own path and enumeration.
 
 ## GBAP v3 application manifests
 

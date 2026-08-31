@@ -1,5 +1,12 @@
 ; Standalone fixed-RAM scheduler payload for issue #477.
 
+                ifdef PLATFORM_PCW
+                assert 0,"GEMBENCH only builds the MSX2 scheduler"
+                endif
+                ifndef PLATFORM_MSX
+PLATFORM_MSX    equ   1
+                endif
+
 PREEMPTIVE      equ   1
 PREEMPTIVE_CONTEXT equ 1
                 ifndef PREEMPTIVE_TIMER
@@ -9,22 +16,8 @@ PREEMPTIVE_TIMER equ  1
 PREEMPTIVE_SWITCH equ 1
                 endif
 
-                ifdef PLATFORM_MSX
                 include "../lib/msx/glue.inc"
-                else
-                ifdef PLATFORM_PCW
-                include "../lib/pcw/glue.inc"
-                endif
-                endif
                 include "lowram.inc"
                 include "scheduler.asm"
 
-                ifdef PLATFORM_MSX
                 save  "build/msx/GBSCHED.RAW",SCHED_BASE,sched_image_end-SCHED_BASE
-                else
-                ifdef PLATFORM_PCW
-                save  "build/pcw/GBSCHED.RAW",SCHED_BASE,sched_image_end-SCHED_BASE
-                else
-                save  "build/GBSCHED.RAW",SCHED_BASE,sched_image_end-SCHED_BASE
-                endif
-                endif

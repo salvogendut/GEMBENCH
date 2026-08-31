@@ -595,7 +595,7 @@ CLIP_PATH = os.path.join(tempfile.gettempdir(), "geobench_iconedit_clip.json")
 # The .IST format stores each icon's size but NOT its name - an icon's meaning
 # comes from its POSITION in the set, the order the desktop loads them in. These
 # tables mirror that order so the editor can label each slot. KEEP IN SYNC with
-# the packicons.py argument lists in tools/build_kernel.sh (the source of truth).
+# the packicons.py argument lists in tools/build_kernel_msx.sh (the source of truth).
 #
 # Desktop icon sets (DEFAULT.IST, REFINED.IST, any ICONS= set) - 21 resident
 # system/file-type slots. Application-owned icons live in GBAP headers.

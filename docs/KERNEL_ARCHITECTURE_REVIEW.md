@@ -6,7 +6,8 @@ Date: 2026-06-28
 > 2026-06-28 cleanup pass. Several items called out below have since been
 > implemented or partially implemented; use `docs/ARCHITECTURE.md`,
 > `kernel/README.md`, `kernel/lowram.tsv`, and `lib/gbapp.inc` as the current
-> contracts.
+> contracts. Paths for retired CPC/PCW code refer to the preserved
+> `archive/cpc-pcw-targets` branch and are not present in the active MSX2 tree.
 
 This review focuses on the resident kernel architecture, size pressure, and
 modularity. It was based on the tree as it stood on the date above:

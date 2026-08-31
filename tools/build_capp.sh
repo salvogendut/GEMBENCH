@@ -40,14 +40,22 @@ TASK_RUNTIME_RAW="${TASK_RUNTIME_RAW:-}"
 # data-heavy app (VIEWER) keeps the low split. (#97)
 DATA_LOC="${DATA_LOC:-0x6200}"
 
+case " $ALL_APPDEFS " in
+    *" -DGB_MSX2 "*) ;;
+    *) echo "ERROR: GEMBENCH applications only build for MSX2 (-DGB_MSX2 required)" >&2; exit 2 ;;
+esac
+case " $ALL_APPDEFS " in
+    *" -DGB_PCW "*) echo "ERROR: the PCW target is retired; see archive/cpc-pcw-targets" >&2; exit 2 ;;
+esac
+
 SDCC="${SDCC:-sdcc}"
 BIN="$(dirname "$(command -v "$SDCC")")"   # sdasz80 / makebin sit beside sdcc
 SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
 CODE_LOC="0x4000"
 CRT0_SRC="$GB/crt0.s"
-# Adding icon16.asm beside an app-owned icon.asm automatically upgrades only
-# the MSX build to a dual-resource GBAP v2 header. CPC and PCW retain v1.
+# Adding icon16.asm beside an app-owned icon.asm automatically upgrades the
+# MSX2 build to a dual-resource GBAP v2 header.
 case " $ALL_APPDEFS " in
     *" -DGB_MSX2 "*)
         if [ -n "$APP_ICON" ] && [ -z "$APP_ICON16" ]; then
@@ -93,15 +101,7 @@ if [ -n "$APP_ICON" ]; then
     CODE_LOC=$(printf '0x%X' $((0x4000 + APP_PREAMBLE_SIZE)))
 fi
 
-# Keep target-specific object files apart. CPC, MSX and PCW builds may run close
-# together (or concurrently outside the top-level Makefile); sharing main.rel
-# allowed one target to link another target's conditional drawing code. That is
-# fatal on MSX for CPC apps that write directly to #C000.
-case " $ALL_APPDEFS " in
-    *" -DGB_MSX2 "*) work="build/msx-obj/$(basename "$APP")" ;;
-    *" -DGB_PCW "*)  work="build/pcw-obj/$(basename "$APP")" ;;
-    *)                work="build/$(basename "$APP")" ;;
-esac
+work="build/msx-obj/$(basename "$APP")"
 mkdir -p "$work"
 mkdir -p "$(dirname "$OUT")"
 . tools/build_cache.sh
@@ -132,6 +132,10 @@ SOUND_FLAG="${SOUND:-0}"
 TITLEBAR_FLAG="${TITLEBAR:-0}"
 SIZEPROMPT_FLAG="${SIZEPROMPT:-0}"
 APP_PROBE_FLAG="${APP_PROBE:-0}"
+if [ "$APP_PROBE_FLAG" != "0" ]; then
+    echo "ERROR: APP_PROBE belonged to the retired CPC target" >&2
+    exit 2
+fi
 REPAINTTOP_FLAG="${REPAINTTOP:-0}"
 BASELINE_FLAG="${BASELINE:-0}"
 SYS_FLAG="${SYS:-0}"
@@ -214,10 +218,7 @@ GBR_INCLUDE_FLAGS=""
 if [ "$GBR_READER_FLAG" = "1" ] || [ "$GBR_MENU_FLAG" = "1" ] || [ "$GB_VDI_FLAG" = "1" ] || [ "$GB_VDI_BASE_FLAG" = "1" ] || [ "$GB_EVENT_FLAG" = "1" ] || [ "$GB_REGION_FLAG" = "1" ] || [ "$GB_SCRAP_FLAG" = "1" ] || [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ] || [ "$GB_DEFER_FLAG" = "1" ] || [ "$GB_FSCTX_FLAG" = "1" ] || [ "$GB_SECONDARY_FLAG" = "1" ] || [ "$GB_SERVICE_CLIENT_FLAG" = "1" ] || [ "$GB_SERVICE_PROVIDER_FLAG" = "1" ] || [ "$GB_SERVICE_COLLECTOR_FLAG" = "1" ] || [ "$GB_TIMER_FLAG" = "1" ] || [ "$GB_TIMER_COLLECTOR_FLAG" = "1" ]; then
     GBR_INCLUDE_FLAGS="-I $GBR_INCLUDE"
 fi
-NET_SRC="$GB/gbnet_stub.c"
-case " $ALL_APPDEFS " in
-    *" -DGB_MSX2 "*) NET_SRC="$GB/gbnet_unapi_stub.c" ;;
-esac
+NET_SRC="$GB/gbnet_unapi_stub.c"
 
 if [ "$FORM_FLAG" = "1" ] && [ "$WIDGETS_FLAG" != "1" ]; then
     echo "ERROR: FORM=1 requires WIDGETS=1" >&2
@@ -479,9 +480,6 @@ fi
 if [ "$SIZEPROMPT_FLAG" = "1" ]; then
     deps+=("$GB/gbsizedlg.c")
 fi
-if [ "$APP_PROBE_FLAG" = "1" ]; then
-    deps+=("$GB/gbapprobe.s")
-fi
 if [ "$REPAINTTOP_FLAG" = "1" ]; then
     deps+=("$GB/gbrepaint.s")
 fi
@@ -699,16 +697,6 @@ if [ "$WINDOW_KIND_FLAG" = "1" ]; then
     WINDOW_KIND_REL="$work/gbwindow_kind.rel"
 fi
 APP_PROBE_REL=""
-if [ "$APP_PROBE_FLAG" = "1" ]; then
-    case " $ALL_APPDEFS " in
-        *" -DGB_MSX2 "*|*" -DGB_PCW "*)
-            echo "ERROR: APP_PROBE is the CPC-only whole-APP preamble reader" >&2
-            exit 1
-            ;;
-    esac
-    "$SDAS" -o "$work/gbapprobe.rel" "$GB/gbapprobe.s"
-    APP_PROBE_REL="$work/gbapprobe.rel"
-fi
 REPAINTTOP_REL=""
 if [ "$REPAINTTOP_FLAG" = "1" ]; then
     "$SDAS" -o "$work/gbrepaint.rel" "$GB/gbrepaint.s"
@@ -800,7 +788,7 @@ fi
 # APPDEFS (e.g. -DGB_MSX2) MUST reach every libgb C unit, not just main.c: gb.h
 # derives GB_COLS/GB_LINES/GB_XPIX from it, and gbwin.c/gbdoc.c clamp window
 # drag/resize + fullscreen to those extents. Omitting it built libgb with the
-# CPC 320x200 extents, so on MSX windows would not drag past x=320 (#287).
+# legacy 320x200 extents, so on MSX windows would not drag past x=320 (#287).
 "$SDCC" -mz80 --fomit-frame-pointer $APP_CFLAGS $ALL_APPDEFS -I "$GB" $GBR_INCLUDE_FLAGS -c "$APP/main.c" -o "$work/main.rel"
 GBR_REL=""
 if [ "$GB_VDI_BASE_FLAG" = "1" ]; then
@@ -1004,8 +992,7 @@ if [ "$DOC_FLAG" = "1" ] || [ "$DOCRO_FLAG" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer $RO $ALL_APPDEFS -I "$GB" -I "$GBR_INCLUDE" -c "$GB/gbdoc.c" -o "$work/gbdoc.rel"
     DLG_REL="$DLG_REL $work/gbdoc.rel"
 fi
-# NET=1 uses the target's gb_net_* backend. CPC calls the active paged GBNET
-# module; MSX apps call a discovered TCP/IP UNAPI implementation directly.
+# NET=1 calls a discovered TCP/IP UNAPI implementation directly.
 if [ "$NET_FLAG" = "1" ]; then
     "$SDCC" -mz80 --fomit-frame-pointer $ALL_APPDEFS -I "$GB" -c "$NET_SRC" -o "$work/gbnet_stub.rel"
     DLG_REL="$DLG_REL $work/gbnet_stub.rel"
@@ -1021,7 +1008,7 @@ fi
 # it and gsinit zeroes its own code as it runs -> instant reboot (bit NOTEPAD: a
 # _CODE-only check passed while _GSINIT overlapped _DATA). And data+bss must end below
 # the kernel (#8000). LOAD_LIMIT mirrors the target's app loader ceiling; it is
-# #7F00 by default and #7F80 only for PCW Browser's record-rounded image.
+# #7F00 by default.
 python3 tools/check_app_layout.py "$work/app.map" \
     --app "$APP" --data-loc "$DATA_LOC" --load-limit "$LOAD_LIMIT" \
     --task-stack-reserve "$TASK_STACK_RESERVE"

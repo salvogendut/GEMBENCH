@@ -33,16 +33,10 @@ __pycache__/
 QA/MSX/CARD/UNAPINET.COM
 QA/MSX/CARD/UNAPI.TXT
 
-# Generated card, ROM, and MSX dependency artifacts.
-QA/CPC/GEOBENCH.IMG
-rom/GEOBENCH.ROM
-rom/GBALB.ROM
+# Generated MSX dependency and disk-image artifacts.
 QA/MSXDEPS/
 QA/MSX/GBMSX.IMG
 !QA/MSX/Floppies/
 !QA/MSX/Floppies/*.DSK
 !assets/msx/
 !assets/msx/MSXDOS2.BIN
-
-# Raw emulator captures remain local; curated media belongs in screenshots/.
-screenshots/1984-*.gif

@@ -3,7 +3,7 @@
 # PNGs in assets/, so a visual edit flows into either the resident DEFAULT icon
 # set or an app-owned GBAP icon on the next build.
 #
-# The build (tools/build_kernel.sh -> packicons.py) bundles the committed
+# The build (tools/build_kernel_msx.sh -> packicons.py) bundles the committed
 # lib/icon_*.asm into build/DEFAULT.IST and apps/*/icon.asm into application
 # headers; it does NOT re-run png2cpc. Run this after editing a PNG, then rebuild.
 #
@@ -46,4 +46,4 @@ for asm in "${files[@]}"; do
     python3 tools/png2cpc.py "$src" "$asm" "$label" "$size"
     n=$((n + 1))
 done
-echo "regenerated $n icon source(s). Now rebuild:  tools/build_kernel.sh"
+echo "regenerated $n icon source(s). Now rebuild: tools/build_kernel_msx.sh"

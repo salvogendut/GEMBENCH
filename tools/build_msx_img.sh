@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # tools/build_msx_img.sh - build a bootable Nextor FAT16 hard-disk image for the
-# MSX2 target (issue #287). Mirrors tools/build_card_img.sh (the CPC card): a
+# MSX2 target (issue #287): a
 # 32 MB image, MBR partition (type 0x06) at sector 32, FAT16, filled from a
 # staging directory. Nextor's Sunrise IDE driver boots NEXTOR.SYS/COMMAND2.COM
 # from the partition root, so the same image is both boot and payload media.
 #
 # Usage: tools/build_msx_img.sh [staging-dir] [out.img]
 #   staging dir default: QA/MSX/CARD (falls back to a minimal QA/MSXDEPS boot set)
-#   output default:      QA/MSX/GBMSX.IMG (local artifact, git-ignored like GEOBENCH.IMG)
+#   output default:      QA/MSX/GBMSX.IMG (local artifact, git-ignored)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

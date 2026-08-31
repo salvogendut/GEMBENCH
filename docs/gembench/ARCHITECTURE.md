@@ -189,8 +189,8 @@ are folded by application owner and drive task priority, parking fully occluded
 visual workers without destroying their contexts.
 
 The engine resides in the expanded app-carried page-3 scheduler slot because
-the Screen 7 child COM had insufficient room. CPC and PCW retain the legacy
-path. See [ARCHITECTURE-M9-MSX.md](ARCHITECTURE-M9-MSX.md) for invariants,
+the Screen 7 child COM had insufficient room. See
+[ARCHITECTURE-M9-MSX.md](ARCHITECTURE-M9-MSX.md) for invariants,
 placement, measurements, and validation.
 
 ## Typed scrap
@@ -254,10 +254,9 @@ launch path and treats a live provider's busy/rejected response as an atomic
 activation rather than creating a duplicate editor.
 
 The implementation appends `GB_MSG_SHELL` after the frozen window messages and
-adds the MSX-only `GB_SHELL` jump at `0x80C0`. It does not alter GBR1 bytes, the
+adds the `GB_SHELL` jump at `0x80C0`. It does not alter GBR1 bytes, the
 legacy 12-byte window descriptor, the explicit 13-byte kind descriptor, or any
-existing jump address. CPC and PCW neither export nor link the service and retain
-their existing launch behavior.
+existing jump address.
 
 ## Desk accessories
 

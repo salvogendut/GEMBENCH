@@ -104,7 +104,7 @@ static void ss_module_value(char *dst);   /* forward: s_draw shows the current S
    system/file-type slots. Exact matching also rejects legacy 25-slot sets whose
    positional meanings no longer align. A small toolchest like PAINT.IST (5 tool
    icons) stays filtered out. Keep this in step with the
-   GBIS count of build/DEFAULT.IST (tools/build_kernel.sh packicons list) - if it drifts
+   GBIS count of build/DEFAULT.IST (tools/build_kernel_msx.sh packicons list) - if it drifts
    ABOVE the real count, every full set is dropped and the Icons picker shows "No files
    found" (#209). */
 #define MIN_IST_ICONS 21

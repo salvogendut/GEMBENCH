@@ -8,8 +8,8 @@ Milestone 2.
 The copy is deliberate. GB-PAINT remains the separately maintained GEOBENCH
 application for CPC, MSX2, and PCW, while this directory may adopt GEMBENCH's
 new MSX2 application/window ownership API without changing or conditionally
-complicating the GEOBENCH application. GEMBENCH's CPC and PCW builds continue
-to use the standalone repository for now.
+complicating the GEOBENCH application. GEMBENCH builds this in-tree copy and
+has no dependency on the standalone repository.
 
 Application-owned source lives here. Paint tool artwork lives in
 `../../assets/paint/`, with the complete source sheet at

@@ -66,8 +66,7 @@ kernel jump-table address did not change.
 
 The five kind bits and the `GB_MSG_MOVED`, `GB_MSG_SIZED`, and
 `GB_MSG_MAXIMIZED` values and payloads are frozen. Unknown kind bits are masked
-off. CPC and PCW expose only the legacy registration contract and keep their
-existing app-owned geometry behavior.
+off.
 
 ### App-linked event aggregation
 
@@ -95,11 +94,10 @@ slot, resident state, or public low-RAM allocation.
 
 The historical library remains buildable and keeps its deterministic fallback,
 so its source contract does not change. Architecture Milestone 9 no longer
-links it into the release Desktop: MSX2 visibility is now a global kernel policy
+links it into the release Desktop: visibility is now a global kernel policy
 and a callback may be invoked once per exact visible fragment, or not at all
 when fully covered. This changes scheduling/compositing policy without changing
 the frozen descriptor, callback address, message values, or registration ABI.
-CPC and PCW retain the original single-damage compositor.
 
 ### App-linked typed scrap
 
@@ -143,8 +141,7 @@ success, absence, stale, busy, invalid, no-handler, and rejected results. Open
 uses an 11-byte 8.3 argument valid only during the callback. One private MSX
 low-RAM byte at `0x133E` rejects nested delivery; there is no queue, retained
 payload, new mapper owner, or process record. Applications using `gbshell.h`
-must be rebuilt and must not persist or exchange handles. CPC and PCW do not
-export this MSX2-only jump.
+must be rebuilt and must not persist or exchange handles.
 
 Milestone 15 appends exact Desk-accessory operations 3 and 4 to that same jump;
 all existing operations and addresses keep their meanings. An exact accessory
@@ -171,9 +168,9 @@ different object layout would require a new resource version.
 ### Append-only architecture foundation
 
 Architecture Milestone 1 ([#31](https://github.com/salvogendut/GEMBENCH/issues/31))
-appends three MSX2 jumps after `GB_SHELL`: `GB_SYSINFO` at `0x80C3`, `GB_OWNER`
+appends three jumps after `GB_SHELL`: `GB_SYSINFO` at `0x80C3`, `GB_OWNER`
 at `0x80C6`, and `GB_PAGE` at `0x80C9`. No existing jump, message, GBR record,
-or managed-window byte moves. CPC and PCW do not export these entries yet.
+or managed-window byte moves.
 
 Architecture Milestone 2 ([#32](https://github.com/salvogendut/GEMBENCH/issues/32))
 appends `GB_APP` at `0x80CC`. The existing owner becomes an independent

@@ -1,0 +1,8 @@
+build/
+dist/
+*.ppm
+*.png
+!docs/**/*.png
+!assets/icon.png
+.geo-pin/
+__pycache__/

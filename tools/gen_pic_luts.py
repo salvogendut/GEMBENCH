@@ -9,7 +9,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = {
     "msx": ROOT / "lib/msx/pic_lut.inc",
-    "pcw": ROOT / "lib/pcw/pic_lut.inc",
 }
 MSX_SCREEN7_LUT = ROOT / "lib/msx/screen7_lut.inc"
 
@@ -22,16 +21,10 @@ def mode1_to_screen6(byte: int) -> int:
     return out
 
 
-def pcw_permute(byte: int) -> int:
-    return (((byte & 0x55) << 1) | (((byte ^ 0xFF) & 0xAA) >> 1)) & 0xFF
-
-
 def tables(target: str) -> tuple[list[int], list[int]]:
     forward = []
     for byte in range(256):
         native = mode1_to_screen6(byte)
-        if target == "pcw":
-            native = pcw_permute(native)
         forward.append(native)
     if len(set(forward)) != 256:
         raise ValueError(f"{target}: byte mapping is not reversible")

@@ -1,5 +1,10 @@
 # Bootstrap validation results
 
+> **Historical result:** this file records the initial imported target matrix
+> and sibling-repository workflow. The current build is MSX2-only and both
+> GB-PAINT and GB-BASIC are now in-tree. See
+> [MSX2-ONLY.md](../MSX2-ONLY.md).
+
 Status: **passed on 2026-08-28**.
 
 These results validate merge commit `088436a`, whose parents are the GEMBENCH

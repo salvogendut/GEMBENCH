@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build the app-carried fixed-RAM scheduler payload for one target.
+# Build the MSX2 app-carried fixed-RAM scheduler payload.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 RASM="${RASM:-rasm}"
-target="${1:-cpc}"
+target="${1:-msx}"
 PREEMPTIVE_TIMER="${PREEMPTIVE_TIMER:-1}"
 PREEMPTIVE_SWITCH="${PREEMPTIVE_SWITCH:-1}"
 GEMBENCH_BASELINE="${GEMBENCH_BASELINE:-0}"
@@ -22,28 +22,14 @@ if [ "$GEMBENCH_BASELINE" != 0 ] && [ "$GEMBENCH_BASELINE" != 1 ]; then
     exit 2
 fi
 
-case "$target" in
-    cpc)
-        out="build/GBSCHED.RAW"
-        defs=()
-        ;;
-    msx)
-        out="build/msx/GBSCHED.RAW"
-        defs=(-DPLATFORM_MSX=1)
-        limit=1536
-        ;;
-    pcw)
-        out="build/pcw/GBSCHED.RAW"
-        defs=(-DPLATFORM_PCW=1)
-        limit=512
-        ;;
-    *)
-        echo "usage: $0 {cpc|msx|pcw}" >&2
-        exit 2
-        ;;
-esac
-
-: "${limit:=512}"
+if [ "$target" != msx ]; then
+    echo "usage: $0 [msx]" >&2
+    echo "GEMBENCH only builds the MSX2 scheduler" >&2
+    exit 2
+fi
+out="build/msx/GBSCHED.RAW"
+defs=(-DPLATFORM_MSX=1)
+limit=1536
 
 mkdir -p "$(dirname "$out")"
 rm -f "$out"

@@ -12,12 +12,12 @@ for value and shape; target assets reduce them to crisp palette entries.
 
 The GEMBENCH MSX2 interface must remain coherent with four logical pens:
 
-| Pen | Role | CPC ink | Reference RGB | Intended use |
-| ---: | --- | ---: | --- | --- |
-| 0 | Canvas | 0 | `#000000` | Desktop, window work areas, overscan border, negative space |
-| 1 | Light | 26 | `#FFFFFF` | Primary text, highlights, bright icon planes |
-| 2 | Structure | 13 | `#929292` | Frames, shadows, secondary text, control depth |
-| 3 | Accent | 6 | `#FF0000` | Focus, selection, active controls, alerts, signature planes |
+| Pen | Role | Reference RGB | Intended use |
+| ---: | --- | --- | --- |
+| 0 | Canvas | `#000000` | Desktop, window work areas, border, negative space |
+| 1 | Light | `#FFFFFF` | Primary text, highlights, bright icon planes |
+| 2 | Structure | `#929292` | Frames, shadows, secondary text, control depth |
+| 3 | Accent | `#FF0000` | Focus, selection, active controls, alerts, signature planes |
 
 Black is the default background and border. Red should identify state or
 structure rather than become a second background. White carries primary
@@ -49,10 +49,8 @@ white keyline, red mass, and sparse grey depth before considering extra Screen
 
 ## Scope
 
-This direction applies to GEMBENCH's fixed MSX2 target. The inherited CPC and
-PCW compatibility builds retain their existing palettes, assets, and defaults.
-Shared source must gate visual changes on the MSX2 target so this branch does
-not silently retheme those distributions.
+This direction applies to GEMBENCH's fixed MSX2 target. The retired CPC and PCW
+implementations are preserved only on `archive/cpc-pcw-targets`.
 
 ## Interface rules
 

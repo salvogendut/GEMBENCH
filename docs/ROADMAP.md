@@ -1,34 +1,35 @@
-# Roadmap
+# GEMBENCH roadmap
 
-GEOBENCH has working CPC, MSX2, and PCW distributions. Completed platform and
-format milestones belong in [Features](FEATURES.md) and the Git history rather
-than in a growing checklist here.
+GEMBENCH now develops one MSX2 system rather than maintaining several hardware
+targets. The immediate roadmap is therefore architectural depth, performance,
+and application quality on the fixed 512 KiB mapper / 128 KiB VRAM baseline.
 
-## Current priorities
+## Near term
 
-1. **Finish runtime hardening.** Continue converting user-visible long-running
-   work to bounded root jobs or safe pure workers, and reduce unnecessary full
-   desktop repaints. See [Preemptive multitasking](PREEMPTIVE_MULTITASKING.md)
-   and the [application audit](PREEMPTIVE_APP_AUDIT.md).
-2. **Application robustness.** Improve error reporting and resource lifecycle
-   in Viewer, Browser, Paint, BASIC, and network applications. Viewer currently
-   supports two simultaneous picture windows in the normal desktop flow; a
-   third launch needs explicit resource handling and feedback.
-3. **Desktop organization.** Add richer drawer/folder behavior and persistent
-   spatial arrangement without enlarging the resident kernel unnecessarily.
-4. **Modular configuration.** Add same-stem configuration modules only where a
-   screensaver or application has useful options; keep Settings and the kernel
-   independent of feature-specific controls.
-5. **Platform validation.** Keep emulator tests paired with real-hardware checks
-   for CPC storage/network boards, MSX mouse/joystick and UNAPI transports, and
-   PCW floppy/serial hardware.
+1. Continue reducing full-screen and full-window redraws through exact component
+   damage and visible-region callbacks.
+2. Move more application UI descriptions into deterministic GBR resources and
+   VDI-lite semantic drawing.
+3. Harden multi-window ownership, deferred delivery, timer coalescing, service
+   lifecycle, and close/reuse paths.
+4. Expand automated openMSX workflows for Paint, File Manager, Clock, Settings,
+   Browser/Telnet, and bundled GB-BASIC.
+5. Audit the remaining inherited code and documentation for assumptions that no
+   longer apply to the fixed MSX2 target.
 
-## Longer-term investigations
+## Medium term
 
-- A constrained MSX1 port, documented separately in [MSX1_port.md](MSX1_port.md).
-- More app-carried 16-color icons and MSX Screen-7-aware application artwork.
-- Additional external applications that use the reusable UI and document
-  helpers without adding resident bytes.
+- improve Screen 7 use beyond the four-pen base without weakening Screen 6;
+- add richer declarative menus/forms and more GEM-like application conventions;
+- reduce resident and child-COM pressure, especially the nearly full Screen 7
+  kernel image;
+- improve TCP/IP UNAPI service sharing and bounded asynchronous clients;
+- expand hardware validation beyond the emulator reference environment;
+- stabilize a documented third-party MSX2 application SDK.
 
-This list is intentionally short. GitHub issues are the authority for scoped
-implementation work and its acceptance criteria.
+## Retired ports
+
+CPC and PCW are not active roadmap targets. Their last working tree is preserved
+on `archive/cpc-pcw-targets`. A future port effort would begin from that branch
+and must be proposed as a new project decision rather than constraining current
+MSX2 work. See [MSX2-ONLY.md](MSX2-ONLY.md).

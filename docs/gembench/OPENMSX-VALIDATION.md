@@ -1,5 +1,10 @@
 # openMSX reference validation
 
+> **Historical validation log:** entries below record the target matrix that
+> existed when each milestone was measured. CPC/PCW commands in those entries
+> were retired on 2026-08-31 and are available only on
+> `archive/cpc-pcw-targets`; they are not current build instructions.
+
 openMSX is the reference emulator for the MSX2 timing baseline. The newer 1983
 emulator remains the automated integration target, but its timing results are
 compared against openMSX before they are accepted.
