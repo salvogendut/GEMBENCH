@@ -1,24 +1,24 @@
-# GEMBENCH
+# GEOBENCH
 
-GEMBENCH is a native evolution of GeoBench for the Omega MSX2. It combines
-GeoBench's Z80 kernel, banked application model, and hardware backends with the
+GEOBENCH is a native graphical desktop and application environment for the
+Omega MSX2. It combines its Z80 kernel, banked application model, and hardware
+backends with the
 declarative resources and consistent desktop conventions associated with
 Digital Research GEM.
 
 This is not an x86 GEM emulator, an AES compatibility layer, or a loader for
-historical GEM applications. GEMBENCH borrows interaction and architecture
+historical GEM applications. GEOBENCH borrows interaction and architecture
 ideas while retaining a native Z80 ABI and independently implemented BSD code
 and artwork.
 
-![GEMBENCH black, white, grey, and red desktop under openMSX](screenshots/GEMBENCH-Mode7.png)
+![GEOBENCH on MSX2 Screen 7](screenshots/MSX-Mode7.png)
 
 ## Status
 
-The repository contains the complete GeoBench foundation, imported with history
-from upstream commit `6309ff3`, plus the first GEMBENCH-specific visual layer:
-an MSX2-only black, white, grey, and red base palette with original boot and
-desktop logo assets. The measured pre-theme runtime baseline remains recorded
-for comparison.
+The repository contains the complete GEOBENCH foundation plus the GEM-inspired
+resource, multitasking, ownership, messaging, and compositor work developed
+during the archived GEMBENCH phase. The public identity is once again the
+original GEOBENCH blue, white, black, and red palette and lollipop logo.
 
 The completed foundation currently covers:
 
@@ -64,9 +64,10 @@ The completed foundation currently covers:
 - four owner-safe MSX2 filesystem contexts with independent drive, path,
   directory enumeration, and sequential offset state, first used by File
   Manager and advanced in bounded 512-byte calls;
-- a machine-checked GEMBENCH-1 freeze for the GBR1 and managed-window ABIs;
+- a machine-checked `GEMBENCH-1` compatibility freeze for the GBR1 and
+  managed-window ABIs;
 - committed golden data and corruption tests; and
-- an MSX2-only black, white, grey, and red Screen 7 visual foundation.
+- the canonical GEOBENCH blue, white, black, and red Screen 6/7 identity.
 
 The first resource and managed-window ABI is frozen. New incompatible resource
 or window work must cross an explicit version boundary.
@@ -80,7 +81,7 @@ or window work must cross an explicit version boundary.
 - MSX-DOS2 or Nextor
 - RainBIOS as a supported validation environment
 
-GEMBENCH has no active CPC or PCW build, media, or release target. The last
+GEOBENCH has no active CPC or PCW build, media, or release target. The last
 multi-platform tree is preserved on the remote `archive/cpc-pcw-targets` branch
 in case either port is reconstructed later. See
 [the MSX2-only policy](docs/MSX2-ONLY.md).
@@ -96,7 +97,7 @@ make check
 Build the fixed-target MSX distribution:
 
 ```sh
-make gembench-msx
+make geobench-msx
 ```
 
 To exercise the object runtime, open the first desktop drive and double-click
@@ -165,7 +166,7 @@ Exercise the migrated Settings colour editor and require its VDI calls, managed
 editor state, live page, focus, z-order, and final Screen 7 capture:
 
 ```sh
-make gembench-msx
+make geobench-msx
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   tools/test_settings_vdi_openmsx.sh
 ```
@@ -184,7 +185,7 @@ make gembench-baseline-probes-1983
 ```
 
 The probe target preserves release artifact measurements in the report and
-does not add instrumentation to normal GEMBENCH builds.
+does not add instrumentation to normal GEOBENCH builds.
 
 Complete the baseline with input-response measurements under three runnable
 tasks, using openMSX for the reference pointer result:
@@ -218,7 +219,7 @@ python3 tools/gbrc.py examples/hello-dialog.json \
 - [openMSX reference validation](docs/gembench/OPENMSX-VALIDATION.md)
 - [Baseline measurement workflow](docs/gembench/DEVELOPMENT.md)
 - [Visual direction and base palette](docs/gembench/VISUAL-DIRECTION.md)
-- [GEMBENCH architecture](docs/gembench/ARCHITECTURE.md)
+- [GEOBENCH architecture](docs/gembench/ARCHITECTURE.md)
 - [GBR version 1](docs/GBR-V1.md)
 - [GeoBench foundation architecture](docs/ARCHITECTURE.md)
 - [Development workflow](docs/DEVELOPMENT.md)
@@ -238,7 +239,7 @@ The exact bootstrap base and reproduction procedure are recorded in
 
 ## Licensing
 
-GEMBENCH is released under the [BSD 3-Clause License](LICENSE), matching
-GeoBench. OpenGEM and FreeGEM remain GPL-licensed references: GEMBENCH behaviour,
+GEOBENCH is released under the [BSD 3-Clause License](LICENSE). OpenGEM and
+FreeGEM remain GPL-licensed references: GEOBENCH behaviour,
 code, artwork, and resources must be independently implemented unless separately
 reviewed compatible material carries a clear provenance record.

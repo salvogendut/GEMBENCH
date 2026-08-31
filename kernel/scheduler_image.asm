@@ -1,7 +1,7 @@
 ; Standalone fixed-RAM scheduler payload for issue #477.
 
                 ifdef PLATFORM_PCW
-                assert 0,"GEMBENCH only builds the MSX2 scheduler"
+                assert 0,"GEOBENCH only builds the MSX2 scheduler"
                 endif
                 ifndef PLATFORM_MSX
 PLATFORM_MSX    equ   1

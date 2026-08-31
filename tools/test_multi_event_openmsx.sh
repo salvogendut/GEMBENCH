@@ -4,15 +4,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 [ -s build/msx/CLOCK.RAW ] || {
-    echo "ERROR: build/msx/CLOCK.RAW is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: build/msx/CLOCK.RAW is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 [ -s build/msx-obj/clock/app.noi ] || {
-    echo "ERROR: Clock symbols are missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: Clock symbols are missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 cmp -s build/msx/CLOCK.RAW QA/MSX/CARD/GBENCH/CLOCK.APP || {
-    echo "ERROR: staged CLOCK.APP does not match build/msx/CLOCK.RAW; run 'make gembench-msx' first" >&2
+    echo "ERROR: staged CLOCK.APP does not match build/msx/CLOCK.RAW; run 'make geobench-msx' first" >&2
     exit 1
 }
 

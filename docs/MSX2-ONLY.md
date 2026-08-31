@@ -1,6 +1,6 @@
 # MSX2-only target policy
 
-As of 31 August 2026, GEMBENCH targets MSX2 only.
+As of 31 August 2026, GEOBENCH targets MSX2 only.
 
 The active tree builds and releases for an MSX2 with a V9938/V9958, 128 KiB of
 VRAM, at least 512 KiB of mapper RAM, and MSX-DOS 2 or Nextor. The top-level
@@ -16,7 +16,7 @@ on the remote branch:
 archive/cpc-pcw-targets
 ```
 
-That branch is the restoration point if either port is rebuilt. New GEMBENCH
+That branch is the restoration point if either port is rebuilt. New GEOBENCH
 code must not add CPC or PCW build targets to the active tree.
 
 Some source names and formats retain historical terms such as “CPC Mode 1.”

@@ -1,13 +1,13 @@
 # Development guide
 
-GEMBENCH development targets MSX2 only. Start with [BUILDING.md](BUILDING.md)
+GEOBENCH development targets MSX2 only. Start with [BUILDING.md](BUILDING.md)
 and [MSX2-ONLY.md](MSX2-ONLY.md).
 
 ## Normal loop
 
 ```sh
 make check
-make gembench-msx
+make geobench-msx
 MSX_UNAPI=0 tools/run_msx.sh QA/MSX/GBMSX.IMG
 ```
 

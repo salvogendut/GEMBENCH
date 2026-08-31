@@ -1,4 +1,4 @@
-# GEMBENCH libraries
+# GEOBENCH libraries
 
 The active runtime libraries are split into three groups:
 
@@ -14,5 +14,5 @@ The active runtime libraries are split into three groups:
 clients. `screen_clip.asm` is shared by the two MSX video modes. The root icon
 ASM files are canonical four-pen resources packaged into `DEFAULT.IST`.
 
-GEMBENCH no longer contains CPC or PCW runtime backends. Their final working
+GEOBENCH no longer contains CPC or PCW runtime backends. Their final working
 versions are preserved on `archive/cpc-pcw-targets`.

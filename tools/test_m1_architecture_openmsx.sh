@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 make gembench-m1-sysinfo
 [ -d QA/MSX/CARD/GBENCH ] || {
-    echo "ERROR: QA/MSX/CARD is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: QA/MSX/CARD is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 

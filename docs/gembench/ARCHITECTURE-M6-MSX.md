@@ -105,7 +105,7 @@ storage-side segmented loading remains future work.
 ```sh
 make gembench-m6-manifest
 python3 tools/test_appicon.py
-make gembench-msx
+make geobench-msx
 make gembench-m5-openmsx
 make gembench-m6-openmsx
 ```

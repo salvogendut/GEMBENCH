@@ -4,11 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 [ -s build/msx/FILEMGR.RAW ] && [ -s build/msx/NOTEPAD.RAW ] || {
-    echo "ERROR: MSX apps are missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: MSX apps are missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 [ -s build/msx/gbkernm7.sym ] || {
-    echo "ERROR: Screen-7 kernel symbols are missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: Screen-7 kernel symbols are missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 cmp -s build/msx/FILEMGR.RAW QA/MSX/CARD/GBENCH/FILEMGR.APP

@@ -80,7 +80,7 @@ through every active timer pass.
 
 ```sh
 python3 -m unittest tests.test_background_timer -v
-make gembench-msx
+make geobench-msx
 OPENMSX='distrobox enter my-distrobox -- openmsx' \
   MSX_HEADLESS=1 make gembench-m8-timer-openmsx
 ```

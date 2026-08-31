@@ -1,5 +1,5 @@
 /*
- * PAINT.APP - a banked, three-window GEMBENCH picture editor.
+ * PAINT.APP - a banked, three-window GEOBENCH picture editor.
  *
  * On MSX2, Paint is the first application to exercise the Milestone-2 process
  * model: three compositor windows share one application record and code page.

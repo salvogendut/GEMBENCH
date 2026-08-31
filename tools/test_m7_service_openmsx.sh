@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 [ -d QA/MSX/CARD/GBENCH ] || {
-    echo "ERROR: QA/MSX/CARD is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: QA/MSX/CARD is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 for image in FAILSVC SVCTSTA SVCTSTB SVCTSTC SVCTSTD NETSVC; do

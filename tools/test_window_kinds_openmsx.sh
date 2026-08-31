@@ -4,11 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 [ -d QA/MSX/CARD/GBENCH ] || {
-    echo "ERROR: QA/MSX/CARD is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: QA/MSX/CARD is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 [ -s build/msx-obj/filemgr/main.sym ] || {
-    echo "ERROR: File Manager symbols are missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: File Manager symbols are missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 

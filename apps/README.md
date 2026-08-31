@@ -1,13 +1,13 @@
-# GEMBENCH applications
+# GEOBENCH applications
 
 Each application is an SDCC Z80 binary built for MSX2 at
 `0x4000–0x7FFF`. It calls the resident kernel through `lib/gb` and may opt into
-GEMBENCH resource and service libraries explicitly.
+the resource and service libraries explicitly.
 
 The full distribution build is authoritative:
 
 ```sh
-make gembench-msx
+make geobench-msx
 ```
 
 For a direct build, always select MSX2:
@@ -27,7 +27,7 @@ data/BSS, and optional worker stacks fit below `0x8000`.
 - `filemgr` — drives, directories, list/icon views, file operations, launch
   contexts, and shell discovery;
 - `notepad` — text documents, menus, bounded I/O, and typed scrap;
-- `paint` — GEMBENCH-owned multi-window Paint;
+- `paint` — GEOBENCH-owned multi-window Paint;
 - `settings` — colours, visual resources, and MSX video configuration;
 - `viewer`, `browser`, `telnet` — pictures, HTTP content, and terminal access;
 - `iconed` — icon-set and MSX2 sprite editing;

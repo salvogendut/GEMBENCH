@@ -93,11 +93,11 @@ embedded path or pretending that the mapper placement regained headroom.
 
 ```sh
 # Selected distribution and interaction path
-MSX_UNAPI_TSR= make gembench-msx
+MSX_UNAPI_TSR= make geobench-msx
 tools/test_formref_openmsx.sh
 
 # Auxiliary-segment comparison
-MSX_UNAPI_TSR= make gembench-msx-banked
+MSX_UNAPI_TSR= make geobench-msx-banked
 tools/test_formref_openmsx.sh
 
 # Resident candidate map and fit result

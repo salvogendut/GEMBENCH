@@ -114,7 +114,7 @@ clients; this milestone does not claim that they have already migrated.
 
 ```sh
 make gbfsctx-check
-make gembench-msx
+make geobench-msx
 make gembench-m4-openmsx
 ```
 

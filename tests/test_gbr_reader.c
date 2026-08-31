@@ -57,7 +57,7 @@ static void test_navigation(void)
           "first-child and sibling navigation works");
     check(gbr_string_at(&resource, (unsigned char)object.spec, &string) &&
               string.length == 19 &&
-              !memcmp(resource.data + string.offset, "Welcome to GEMBENCH", 19),
+              !memcmp(resource.data + string.offset, "Welcome to GEOBENCH", 19),
           "object string is exposed as a bounded offset");
     check(!gbr_tree_at(&resource, 1, &tree) &&
               !gbr_object_at(&resource, 3, &object) &&

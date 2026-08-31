@@ -140,7 +140,7 @@ static void test_geometry_and_draw(void)
           "root box converts pixels to four-pixel columns");
     check(calls[1].type == CALL_FRAME && calls[1].value == 2,
           "ordinary box uses the edge role");
-    check(calls[2].type == CALL_TEXT && !strcmp(calls[2].text, "Welcome to GEMBE") &&
+    check(calls[2].type == CALL_TEXT && !strcmp(calls[2].text, "Welcome to GEOBE") &&
               calls[3].type == CALL_TEXT && !strcmp(calls[3].text, "NCH"),
           "length-prefixed text draws in bounded chunks");
     check(calls[4].type == CALL_BUTTON && calls[4].x == 54 && calls[4].y == 118 &&

@@ -1,6 +1,6 @@
 # Preemptive application workers on MSX2
 
-GEMBENCH release builds use an app-carried, fixed-RAM scheduler for opted-in
+GEOBENCH release builds use an app-carried, fixed-RAM scheduler for opted-in
 pure application workers. The desktop root task remains responsible for the
 kernel, filesystem, window manager, compositor, input, and paged modules.
 

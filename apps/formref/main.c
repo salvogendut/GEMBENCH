@@ -1,5 +1,5 @@
 /* FORMREF.APP - development reference for reusable form composition (#420).
- * GEMBENCH/MSX2 draws and hit-tests the dialog from a GBR resource. */
+ * GEOBENCH/MSX2 draws and hit-tests the dialog from a GBR resource. */
 #include "gb.h"
 
 #ifdef GB_MSX2

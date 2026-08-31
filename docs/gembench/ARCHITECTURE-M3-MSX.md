@@ -137,7 +137,7 @@ or filesystem-handle contract can carry its 11-byte document name safely.
 
 ```sh
 make gbdefer-check
-make gembench-msx
+make geobench-msx
 make gembench-m3-openmsx
 make gembench-m3-boot-openmsx  # faster loader smoke only: Screen 6 and Screen 7
 MSX_HEADLESS=1 tools/test_desk_accessories_openmsx.sh

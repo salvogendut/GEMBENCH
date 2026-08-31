@@ -33,10 +33,6 @@ def main() -> None:
         for path in source_pictures:
             picture_mode(path)
         pictures = {path.name.upper(): path.read_bytes() for path in source_pictures}
-        logo = ROOT / "assets/msx/GEMLOGO.PIC"
-        if not logo.is_file():
-            raise ValueError("assets/msx/GEMLOGO.PIC: missing GEMBENCH wallpaper")
-        pictures["LOGO.PIC"] = logo.read_bytes()
 
         backdrops = catalog(ROOT / "assets/backdrops", ".BDP")
         titlebars = catalog(ROOT / "assets/titlebars", ".TBR")
@@ -90,7 +86,7 @@ def main() -> None:
     except (OSError, ValueError) as error:
         sys.exit(str(error))
 
-    print(f"MSX2 pictures: {len(pictures)} staged (GEMBENCH LOGO override active)")
+    print(f"MSX2 pictures: {len(pictures)} canonical GEOBENCH assets staged")
     print(
         f"MSX2 visual catalogs: {len(backdrops)} backdrops, "
         f"{len(titlebars)} title bars, {len(gadgets)} gadget themes"

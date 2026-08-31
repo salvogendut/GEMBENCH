@@ -1,6 +1,6 @@
-# GEMBENCH roadmap
+# GEOBENCH roadmap
 
-GEMBENCH now develops one MSX2 system rather than maintaining several hardware
+GEOBENCH now develops one MSX2 system rather than maintaining several hardware
 targets. The immediate roadmap is therefore architectural depth, performance,
 and application quality on the fixed 512 KiB mapper / 128 KiB VRAM baseline.
 

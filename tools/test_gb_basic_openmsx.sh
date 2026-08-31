@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 BASIC_DIR=components/gb-basic
 [ -s QA/MSX/GBMSX.IMG ] || {
-    echo "ERROR: QA/MSX/GBMSX.IMG is missing; run make gembench-msx first" >&2
+    echo "ERROR: QA/MSX/GBMSX.IMG is missing; run make geobench-msx first" >&2
     exit 1
 }
 

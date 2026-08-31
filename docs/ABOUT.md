@@ -1,7 +1,7 @@
-# About GEMBENCH
+# About GEOBENCH
 
-GEMBENCH is a native graphical desktop and application environment for MSX2.
-It evolves the GeoBench Z80 foundation with interaction and architecture ideas
+GEOBENCH is a native graphical desktop and application environment for MSX2.
+It combines its Z80 foundation with interaction and architecture ideas
 associated with Digital Research GEM while retaining its own ABI, file formats,
 BSD-licensed implementation, and original artwork.
 
@@ -12,13 +12,13 @@ historical GEM applications.
 
 - Z80 at the normal MSX2 clock
 - V9938 or V9958 with 128 KiB VRAM
-- Screen 6 or Screen 7; Screen 7 is the GEMBENCH visual baseline
+- Screen 6 or Screen 7; Screen 7 is the primary visual baseline
 - at least 512 KiB mapper RAM
 - MSX-DOS 2 or Nextor storage services
 - keyboard, joystick, or MSX mouse input
 - TCP/IP UNAPI networking when a provider is installed
 
-GEMBENCH is MSX2-only. CPC and PCW support stopped on 31 August 2026; the last
+GEOBENCH is MSX2-only. CPC and PCW support stopped on 31 August 2026; the last
 multi-platform tree is retained on `archive/cpc-pcw-targets`. Details are in
 [MSX2-ONLY.md](MSX2-ONLY.md).
 
@@ -35,14 +35,15 @@ workers at lower priority, and parks fully covered visual workers. The global
 compositor emits only visible damage and clips repaint callbacks to exposed
 regions.
 
-GEMBENCH packages both its Paint variant and GB-BASIC in-tree. The standard
+GEOBENCH packages both its Paint variant and GB-BASIC in-tree. The standard
 build therefore does not depend on sibling source repositories.
 
 ## Visual direction
 
-The default desktop uses black, white, grey, and red. Screen 7 permits richer
-application artwork while retaining semantic UI pens and the four-colour base.
-The GEMBENCH kernel mark and desktop logo replace inherited GeoBench branding.
+The default desktop uses the canonical GEOBENCH blue, white, black, and red
+logical pens. Screen 7 permits richer application artwork while retaining
+those semantic UI roles. The lollipop mark supplies the boot splash, wallpaper,
+and kernel/module icon.
 
 ## Project layout
 
@@ -50,7 +51,7 @@ The GEMBENCH kernel mark and desktop logo replace inherited GeoBench branding.
 apps/                  MSX2 applications and screensavers
 assets/                canonical and MSX2-native visual assets
 components/gb-basic/   bundled editor, interpreter, engine, and examples
-include/gembench/      public GEMBENCH resource/application interfaces
+include/gembench/      frozen resource/application interface namespace
 kernel/                resident Z80 kernel and modules
 lib/gb/                application ABI and C/assembly bindings
 lib/gembench/          GEM-like resources and services
@@ -61,6 +62,6 @@ tools/                 MSX2 build, validation, asset, and emulator tools
 
 ## License
 
-GEMBENCH uses the BSD 3-Clause License. GEM and SymbOS are behavioural and
+GEOBENCH uses the BSD 3-Clause License. GEM and SymbOS are behavioural and
 architectural references only; code and art must be independently implemented
 unless separately reviewed material has compatible licensing and provenance.

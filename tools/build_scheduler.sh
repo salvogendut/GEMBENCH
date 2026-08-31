@@ -24,7 +24,7 @@ fi
 
 if [ "$target" != msx ]; then
     echo "usage: $0 [msx]" >&2
-    echo "GEMBENCH only builds the MSX2 scheduler" >&2
+    echo "GEOBENCH only builds the MSX2 scheduler" >&2
     exit 2
 fi
 out="build/msx/GBSCHED.RAW"

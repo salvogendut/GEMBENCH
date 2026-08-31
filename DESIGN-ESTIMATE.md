@@ -366,13 +366,11 @@ selection, disabled text and alert colours rather than exposing fixed palette
 numbers to applications. Native sixteen-colour icons and resources can replace
 the portable four-pen asset boundary used by GeoBench.
 
-The MSX2 base identity is fixed to four colours: black, white, grey and red. Black is
-the desktop canvas and border, white is the primary light/text colour, grey is
-secondary structure and shadow, and red is the active/focus accent. This base
-must remain legible without entries 4-15; Screen 7 may use those additional
-entries for richer imagery and later semantic states. This does not retheme the
-inherited CPC or PCW compatibility builds. The detailed visual rules
-and source-logo roles are recorded in `docs/gembench/VISUAL-DIRECTION.md`.
+The active MSX2 identity uses the canonical GEOBENCH blue, white, black and red
+logical pens and lollipop mark. Screen 7 may use entries 4-15 for richer imagery
+while the four base roles remain legible. The superseded black/white/grey/red
+GEMBENCH experiment is preserved on `archive/gembench-msx2-identity`; current
+rules are recorded in `docs/gembench/VISUAL-DIRECTION.md`.
 
 The second portion of 128 KiB VRAM should be evaluated for:
 

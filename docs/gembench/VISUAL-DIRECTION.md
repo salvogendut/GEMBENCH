@@ -1,69 +1,42 @@
-# GEMBENCH visual direction
+# GEOBENCH visual identity
 
-Status: **base direction fixed on 2026-08-28**.
+Status: **restored from the canonical GEOBENCH tree on 2026-08-31**.
 
-GEMBENCH uses a pixel-native, late-1980s industrial visual language derived
-from the repository's three logo concepts. It favours hard geometry, strong
-negative space, bright keylines, and deliberate checker or ordered dithering.
-Soft gradients and antialiased edges in the large concept art are references
-for value and shape; target assets reduce them to crisp palette entries.
+GEOBENCH uses its original pixel-native lollipop identity and four logical
+desktop pens. The source of truth is the clean sibling checkout `../geobench`
+at commit `c6728bb0b2656c651636fb18c8d5773f8adb832a`.
 
 ## Base palette
 
-The GEMBENCH MSX2 interface must remain coherent with four logical pens:
+| Pen | Role | CPC ink | Reference RGB | Intended use |
+| ---: | --- | ---: | --- | --- |
+| 0 | Desktop | 1 | `#000080` | Desktop, backdrop, ordinary blue surfaces |
+| 1 | Light | 26 | `#FFFFFF` | Text, highlights, bright icon planes |
+| 2 | Dark | 0 | `#000000` | Outlines, title bars, shadows, dark app canvases |
+| 3 | Accent | 6 | `#FF0000` | Focus, selection, active controls, alerts |
 
-| Pen | Role | Reference RGB | Intended use |
-| ---: | --- | --- | --- |
-| 0 | Canvas | `#000000` | Desktop, window work areas, border, negative space |
-| 1 | Light | `#FFFFFF` | Primary text, highlights, bright icon planes |
-| 2 | Structure | `#929292` | Frames, shadows, secondary text, control depth |
-| 3 | Accent | `#FF0000` | Focus, selection, active controls, alerts, signature planes |
+The default `INKS=` value is `1,26,0,6,1`: the four UI pens followed by the
+blue border. Screen 7 retains entries 4–15 for native pictures and richer app
+artwork; core controls must remain readable using entries 0–3.
 
-Black is the default background and border. Red should identify state or
-structure rather than become a second background. White carries primary
-legibility; grey supplies depth without introducing a blue cast.
+VDI-lite calls these roles canvas, surface, edge, and accent. Those semantic
+names remain useful even though the restored palette is blue/white/black/red.
 
-Screen 7 retains palette entries 4-15 for native pictures, richer icons, and
-future semantic roles. Core controls and focus indication must remain readable
-using entries 0-3 alone, and focus must not rely on colour without a shape,
-outline, or inversion change.
+## Identity assets
 
-The VDI-lite names for these four roles are canvas, surface, edge, and accent.
-The full app-linked profile may remap them to Screen 7 entries 4-15, while its
-compact base profile deliberately preserves the direct 0-3 mapping used by
-Settings and other memory-tight panels.
+- `logo.png` is the full GEOBENCH lollipop wordmark used by the repository.
+- `assets/SPLASH.png` is the compact lollipop source used by the boot splash.
+- `assets/pictures/LOGO.PIC` is the canonical desktop wallpaper.
+- `lib/icon_geobench.asm` supplies the lollipop icon for the kernel and `.MOD`
+  files through the default icon set.
 
-## Logo references
+The build stages these canonical assets directly. There is no target-specific
+wallpaper override or alternate black-background splash pipeline.
 
-- `assets/GEMBENCH_ORIGINAL_LOGO.png` is the detailed mood board: faceted red
-  geometry, metallic grey structure, bright white highlights, and checker
-  texture.
-- `assets/GEMBENCH_LOGO.png` is the cleaner wordmark and desktop-wallpaper
-  source. Its simplified silhouette survives reduction to the four-pen target.
-- `assets/GEMBENCH_KERNEL.png` is the compact emblem and boot-splash source.
+## Compatibility history
 
-These are original GEMBENCH assets and remain source references. Conversion to
-target formats must be deterministic and should preserve the black silhouette,
-white keyline, red mass, and sparse grey depth before considering extra Screen
-7 colours.
-
-## Scope
-
-This direction applies to GEMBENCH's fixed MSX2 target. The retired CPC and PCW
-implementations are preserved only on `archive/cpc-pcw-targets`.
-
-## Interface rules
-
-- Use black for the persistent desktop canvas and uncluttered work areas.
-- Use white for primary labels and the brightest one-pixel edges.
-- Use grey for inactive structure, shadows, separators, and secondary detail.
-- Use red for focus, selection, pressed state, and a small number of strong
-  chrome accents.
-- Prefer one-pixel outlines, square corners, geometric facets, and explicit
-  checker/ordered dithering over simulated smooth shading.
-- Keep text contrast measurable in the four-colour base before adding Screen 7
-  embellishment.
-
-The first rollout changes the MSX2 kernel/config defaults, adds opt-in asset tooling,
-uses the compact emblem during boot, and derives the default wallpaper from the
-clean wordmark. Native sixteen-colour UI roles remain a later measured step.
+The black/white/grey/red GEMBENCH identity and its gem-shaped logo are preserved
+on `archive/gembench-msx2-identity`. The frozen `GEMBENCH-1` ABI name and the
+`include/gembench/`, `lib/gembench/`, and `docs/gembench/` paths remain as
+technical compatibility identifiers; they do not define the public product
+name or visual identity.

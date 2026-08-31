@@ -1,4 +1,4 @@
-# GEMBENCH tools
+# GEOBENCH tools
 
 The active toolchain builds and validates the MSX2 target only. Retired CPC and
 PCW tools are available on `archive/cpc-pcw-targets`.
@@ -32,7 +32,7 @@ PCW tools are available on `archive/cpc-pcw-targets`.
 - `packicons.py`, `ist_*` — create and modify canonical icon sets.
 - `iconedit.py`, `patternedit.py`, `titlebaredit.py` — interactive asset editors.
 - `genfont.py` — generate the default 6×8 font.
-- `make_bootsplash.py` — compose the kernel splash from GEMBENCH artwork.
+- `make_bootsplash.py` — compose the kernel splash from GEOBENCH artwork.
 - `png2backdrop.py`, `png2mahjong.py`, `png2catclock.py` — specialized assets.
 - `gen_pic_luts.py` — generate MSX2 reversible picture conversion tables.
 
@@ -52,4 +52,4 @@ build target.
   regression capture.
 
 Run the complete host gate with `make check` and the complete target build with
-`make gembench-msx`.
+`make geobench-msx`.

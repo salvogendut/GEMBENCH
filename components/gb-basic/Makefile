@@ -1,4 +1,4 @@
-# GB-BASIC — GEMBENCH's MSX2 GW-BASIC-style BASIC.
+# GB-BASIC — GEOBENCH's MSX2 GW-BASIC-style BASIC.
 # Deliverable: dist/GBBASIC-MSX.DSK.
 GEOBENCH ?= ../..
 export GEOBENCH

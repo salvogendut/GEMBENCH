@@ -12,7 +12,7 @@ details remain authoritative in `docs/DEVELOPMENT.md` and `docs/BUILDING.md`.
 - mtools and dosfstools for generated MSX media
 
 The host resource compiler requires no third-party Python packages. The full
-MSX distribution uses the in-tree GEMBENCH Paint and GB-BASIC sources plus the
+MSX distribution uses the in-tree GEOBENCH Paint and GB-BASIC sources plus the
 dependencies documented by the inherited GeoBench build.
 
 ## Commands
@@ -84,7 +84,7 @@ desktop with `GEMBENCH_BASELINE=1` and the existing preemptive TASKDEMO stress
 workers. The diagnostic timer uses the MSX2 RP-5C01 seconds-test clock at
 16,384 Hz, giving a 5.27-second unambiguous measurement window. The target uses
 a disposable RTC because the accelerated clock changes its visible time. The
-diagnostic code and TASKDEMO apps are absent from a normal `make gembench-msx`
+diagnostic code and TASKDEMO apps are absent from a normal `make geobench-msx`
 build.
 
 Measure pointer and keyboard response with the same three runnable tasks:
@@ -103,7 +103,7 @@ requiring visible VDP/UI changes before acknowledging either response.
 Build the fixed-target distribution:
 
 ```sh
-make gembench-msx
+make geobench-msx
 ```
 
 The MSX build stages `HELLO.GBR` in the drive root and `GBRDEMO.APP` in
@@ -119,7 +119,7 @@ paths when openMSX is installed as a Flatpak.
 Build and exercise the production VDI-lite migration with:
 
 ```sh
-make gembench-msx
+make geobench-msx
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   tools/test_settings_vdi_openmsx.sh
 ```
@@ -146,14 +146,14 @@ Set `MSX_HEADLESS=1` to run every logic assertion with renderer-dependent
 screenshots disabled.
 
 The release MSX2 Calculator is the first production panel migrated to GBR. Run
-`make gembench-msx`, launch `CALC.APP`, and verify that pointer activation and
+`make geobench-msx`, launch `CALC.APP`, and verify that pointer activation and
 keyboard arithmetic agree; its twenty button labels and hit rectangles now come
 from `apps/calculator/calculator.json`.
 
 Exercise the first explicitly registered MSX2 window kind with:
 
 ```sh
-make gembench-msx
+make geobench-msx
 tools/test_window_kinds_openmsx.sh
 ```
 
@@ -176,7 +176,7 @@ Exercise the non-blocking multi-event production slice with:
 
 ```sh
 make gbevent-check
-make gembench-msx
+make geobench-msx
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   MSX_HEADLESS=1 tools/test_multi_event_openmsx.sh
 ```
@@ -230,7 +230,7 @@ kernel jump table. Its public interface is `include/gembench/gbr_object.h`:
 - tree roots are placed by the caller in Screen 7 pixel coordinates, while
   child coordinates are relative to their parents;
 - visible box, text/string, and button objects draw through existing libgb
-  primitives and semantic black/white/grey/red pen roles;
+  primitives and semantic blue/white/black/red pen roles;
 - hidden ancestors suppress drawing and hit testing, while disabled ancestors
   additionally suppress hits; and
 - hit testing returns the deepest selectable object, resolving equal-depth
@@ -254,13 +254,13 @@ Milestone 7 retained that placement after measurement. Build the experimental
 mapper-backed comparison and the non-installed resident candidate with:
 
 ```sh
-MSX_UNAPI_TSR= make gembench-msx-banked
+MSX_UNAPI_TSR= make geobench-msx-banked
 tools/test_formref_openmsx.sh
 make gembench-m7-resident-probe
 ```
 
 The optional banked build keeps Milestone 7's original 306-byte resource fixture
-for reproducible comparison. The normal `make gembench-msx` does not install the
+for reproducible comparison. The normal `make geobench-msx` does not install the
 mapper service or stage `FORMREF.GBR`. See
 [M7-BANKING-DECISION.md](M7-BANKING-DECISION.md) for the size, stack,
 interaction, and emulator results.
@@ -352,7 +352,7 @@ and its host checks, but the release Desktop no longer builds with
 make gbregion-check
 ```
 
-After `make gembench-msx`, run the Clock occlusion and PAINT multi-window
+After `make geobench-msx`, run the Clock occlusion and PAINT multi-window
 workflows through the compatibility entry point:
 
 ```sh
@@ -397,7 +397,7 @@ make gbscrap-check
 
 The suite covers empty, typed, raw, stale, exact-capacity, oversized,
 truncated-read, invalid-argument, mismatch, clear, and corrupt-length cases.
-After `make gembench-msx`, exercise two independent Notepad windows through the
+After `make geobench-msx`, exercise two independent Notepad windows through the
 real pointer and Edit menus with:
 
 ```sh
@@ -445,7 +445,7 @@ release MSX2 build. To exercise host contracts and the real reuse path:
 
 ```sh
 make gbshell-check
-make gembench-msx
+make geobench-msx
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   MSX_HEADLESS=1 tools/test_shell_service_openmsx.sh
 ```
@@ -478,7 +478,7 @@ Calculator. Both are ordinary apps and consume no mapper page until selected.
 For the authoritative lifecycle check:
 
 ```sh
-make gembench-msx
+make geobench-msx
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   MSX_HEADLESS=1 tools/test_desk_accessories_openmsx.sh
 ```
@@ -556,7 +556,7 @@ offset, stale-handle, cleanup, and live File Manager test with:
 
 ```sh
 make gbfsctx-check
-make gembench-msx
+make geobench-msx
 make gembench-m4-openmsx
 ```
 
@@ -624,7 +624,7 @@ pointers or bulk data in the three request bytes.
 
 ```sh
 python3 -m unittest tests.test_service_manager -v
-make gembench-msx
+make geobench-msx
 make gembench-m7-service-openmsx
 ```
 

@@ -4,11 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 [ -s build/msx/SETTINGS.RAW ] || {
-    echo "ERROR: build/msx/SETTINGS.RAW is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: build/msx/SETTINGS.RAW is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 [ -s build/msx-obj/settings/app.noi ] || {
-    echo "ERROR: Settings linker symbols are missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: Settings linker symbols are missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 

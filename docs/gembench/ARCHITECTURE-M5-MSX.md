@@ -89,7 +89,7 @@ the manifest, segment directory, and executable byte-for-byte.
 ```sh
 make gembench-m5-manifest
 python3 tools/test_appicon.py
-make gembench-msx
+make geobench-msx
 make gembench-m5-openmsx
 ```
 
