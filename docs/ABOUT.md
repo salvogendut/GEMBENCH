@@ -1,7 +1,8 @@
 # About GEOBENCH
 
-GEOBENCH is a native graphical desktop and application environment for MSX2.
-It combines its Z80 foundation with interaction and architecture ideas
+GEOBENCH is a native graphical desktop and application environment for Z80
+machines, with a production MSX2 target and an experimental CPC reference
+port. It combines its Z80 foundation with interaction and architecture ideas
 associated with Digital Research GEM while retaining its own ABI, file formats,
 BSD-licensed implementation, and original artwork.
 
@@ -18,10 +19,9 @@ historical GEM applications.
 - keyboard, joystick, or MSX mouse input
 - TCP/IP UNAPI networking when a provider is installed
 
-The current release is MSX2-only. CPC and PCW support stopped on 31 August 2026
-and the last multi-platform tree is retained on `archive/cpc-pcw-targets`. The
-project now plans to restore CPC and then PCW around one compile-once native
-application ABI, rather than restoring the old per-target application builds.
+The current release remains MSX2. CPC Gate 3 now supplies a 512 KiB Mode-1
+reference build around one compile-once native application ABI; PCW remains on
+the archived multi-platform tree at `archive/cpc-pcw-targets` until Gate 5.
 See [MSX2-ONLY.md](MSX2-ONLY.md) and the
 [universal ABI proposal](UNIVERSAL-APPLICATION-ABI.md).
 
@@ -52,7 +52,7 @@ and kernel/module icon.
 
 ```text
 apps/                  MSX2 applications and screensavers
-assets/                canonical and MSX2-native visual assets
+assets/                canonical and target-native visual assets
 components/gb-basic/   bundled editor, interpreter, engine, and examples
 include/gembench/      frozen resource/application interface namespace
 kernel/                resident Z80 kernel and modules
@@ -60,7 +60,8 @@ lib/gb/                application ABI and C/assembly bindings
 lib/gembench/          GEM-like resources and services
 lib/msx/               V9938, input, mapper, and MSX-DOS backends
 QA/MSX/                committed release staging and floppy images
-tools/                 MSX2 build, validation, asset, and emulator tools
+QA/CPC/                experimental CPC card and floppy staging
+tools/                 build, validation, asset, and emulator tools
 ```
 
 ## License

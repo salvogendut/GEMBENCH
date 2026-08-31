@@ -41,8 +41,8 @@ TASK_RUNTIME_RAW="${TASK_RUNTIME_RAW:-}"
 DATA_LOC="${DATA_LOC:-0x6200}"
 
 case " $ALL_APPDEFS " in
-    *" -DGB_MSX2 "*) ;;
-    *) echo "ERROR: GEOBENCH applications only build for MSX2 (-DGB_MSX2 required)" >&2; exit 2 ;;
+    *" -DGB_MSX2 "*|*" -DGB_CPC "*) ;;
+    *) echo "ERROR: target bootstrap applications require -DGB_MSX2 or -DGB_CPC" >&2; exit 2 ;;
 esac
 case " $ALL_APPDEFS " in
     *" -DGB_PCW "*) echo "ERROR: the PCW target is retired; see archive/cpc-pcw-targets" >&2; exit 2 ;;
@@ -101,7 +101,10 @@ if [ -n "$APP_ICON" ]; then
     CODE_LOC=$(printf '0x%X' $((0x4000 + APP_PREAMBLE_SIZE)))
 fi
 
-work="build/msx-obj/$(basename "$APP")"
+case " $ALL_APPDEFS " in
+    *" -DGB_CPC "*) work="build/cpc-obj/$(basename "$APP")" ;;
+    *)              work="build/msx-obj/$(basename "$APP")" ;;
+esac
 mkdir -p "$work"
 mkdir -p "$(dirname "$OUT")"
 . tools/build_cache.sh
@@ -132,10 +135,6 @@ SOUND_FLAG="${SOUND:-0}"
 TITLEBAR_FLAG="${TITLEBAR:-0}"
 SIZEPROMPT_FLAG="${SIZEPROMPT:-0}"
 APP_PROBE_FLAG="${APP_PROBE:-0}"
-if [ "$APP_PROBE_FLAG" != "0" ]; then
-    echo "ERROR: APP_PROBE belonged to the retired CPC target" >&2
-    exit 2
-fi
 REPAINTTOP_FLAG="${REPAINTTOP:-0}"
 BASELINE_FLAG="${BASELINE:-0}"
 SYS_FLAG="${SYS:-0}"
@@ -480,6 +479,9 @@ fi
 if [ "$SIZEPROMPT_FLAG" = "1" ]; then
     deps+=("$GB/gbsizedlg.c")
 fi
+if [ "$APP_PROBE_FLAG" = "1" ]; then
+    deps+=("$GB/gbapprobe.s")
+fi
 if [ "$REPAINTTOP_FLAG" = "1" ]; then
     deps+=("$GB/gbrepaint.s")
 fi
@@ -697,6 +699,14 @@ if [ "$WINDOW_KIND_FLAG" = "1" ]; then
     WINDOW_KIND_REL="$work/gbwindow_kind.rel"
 fi
 APP_PROBE_REL=""
+if [ "$APP_PROBE_FLAG" = "1" ]; then
+    case " $ALL_APPDEFS " in
+        *" -DGB_CPC "*) ;;
+        *) echo "ERROR: APP_PROBE is the CPC-only whole-APP preamble reader" >&2; exit 1 ;;
+    esac
+    "$SDAS" -o "$work/gbapprobe.rel" "$GB/gbapprobe.s"
+    APP_PROBE_REL="$work/gbapprobe.rel"
+fi
 REPAINTTOP_REL=""
 if [ "$REPAINTTOP_FLAG" = "1" ]; then
     "$SDAS" -o "$work/gbrepaint.rel" "$GB/gbrepaint.s"

@@ -46,12 +46,13 @@ base          0x1700  0x1712  module_control_header   modal_1700    GBFAT/FLOPPY
 base          0x1710  0x174F  module_path_buffer      modal_1700    M4SAVE/FLOPPYSV card path prefix; never live during GBUI
 base          0x1800  0x19FF  fs_sector_buffer        -             shared 512-byte sector buffer
 base          0x1A00  0x21FF  fs_directory_buffer     fs_1c00       floppy directory buffer; IDE ROM state may overlay #1C00
-base          0x2200  0x3BFF  module_data_buffer      module_data   preemptive GBFAT/FLOPPYSV/GBNET 6.5-KiB bulk transfer data; cooperative builds extend through 0x3DFF
+base          0x2200  0x3BFF  module_data_buffer      module_data   target-neutral 6.5-KiB bulk transfer data; CPC v6 reserves the following 512 bytes
 base          0x2200  0x2872  browser_pcw_transient   module_data   PCW Browser transport, protocol, render, and fallback buffers
 base          0x2900  0x32FF  browser_source_buffers  module_data   Browser offline-read buffer and 2-KiB source-cache staging block
 base          0x3300  0x3887  browser_transient       module_data   Browser protocol, render, and fallback buffers; above GBNET max I/O
 base          0x3900  0x3AE6  browser_shared_state    module_data   Browser/GBUI/GBWEB/GBIMG cache, proxy, GET-form, request, resource, image/table scan/retry, live screen mode, viewport, and error state
-base          0x3C00  0x3DFF  scheduler_runtime       -             app-carried scheduler in preemptive CPC/PCW builds; cooperative builds reuse this range as transfer data
+msx,preemptive 0x3C00  0x3DFF  scheduler_runtime       -             app-carried scheduler in preemptive builds
+cpc           0x3C00  0x3DFF  cpc_architecture       -             cooperative CPC sysinfo, identities, and 31-entry page allocator
 base          0x3E00  0x3FFF  clipboard               -             shared clipboard length and data
 
 msx           0x1291  0x1295  msx_picture_state       msx_pic_cursor third/fourth picture banks, packing mode, and source stride

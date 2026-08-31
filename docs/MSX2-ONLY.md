@@ -1,33 +1,34 @@
-# Current MSX2-only implementation state
+# Current target implementation state
 
-As of 31 August 2026, the active GEOBENCH tree builds and releases MSX2 only.
+As of 31 August 2026, GEOBENCH builds the production MSX2 target and an
+experimental CPC reference target. PCW remains absent.
 
-The active tree builds and releases for an MSX2 with a V9938/V9958, 128 KiB of
-VRAM, at least 512 KiB of mapper RAM, and MSX-DOS 2 or Nextor. The top-level
-`make`, application helpers, scheduler builder, GB-BASIC component, committed
-QA media, and release checks expose only this target.
+The default `make` and release path remain an MSX2 with a V9938/V9958, 128 KiB
+VRAM, at least 512 KiB mapper RAM, and MSX-DOS 2 or Nextor. Its scheduler,
+GB-BASIC component, full application catalog, and release checks remain
+MSX2-specific.
 
-CPC and PCW build scripts, target backends, staged media, diagnostics, and
-target-specific documentation were removed in issue #50. The last working
-multi-platform tree—including the newly vendored GB-BASIC source—is preserved
-on the remote branch:
+CPC and PCW were removed in issue #50. The former multi-platform tree remains
+preserved on the remote branch:
 
 ```text
 archive/cpc-pcw-targets
 ```
 
-That branch is the restoration point for the new ports. This is no longer a
-permanent target policy: issue #54 will reintroduce CPC after issue #55 defines
-and implements a compile-once MSX2/CPC/PCW application ABI. PCW follows in a
-later port. Until those gates pass, CPC/PCW targets must not be exposed as
-working release builds.
+Gate 3 / issue 54-A now restores the CPC kernel, Mode-1 renderer, 512 KiB bank
+allocator, AMSDOS floppy, and unified M4/Albireo card. `ABIPROBE.APP`,
+`CLOCK.APP`, and `CALC.APP` are copied from `build/universal` without target
+recompilation and are byte-identical to the MSX2 media. The CPC Desktop and File
+Manager are transitional target-native boot shells, not a claim of complete
+application parity.
 
 The new direction is specified in
 [UNIVERSAL-APPLICATION-ABI.md](UNIVERSAL-APPLICATION-ABI.md) and its
-[migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md). The active MSX2 build
-continues unchanged while that work is developed on feature branches.
+[migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md). PCW follows as Gate 5
+after the CPC ABI is accepted; it must not be exposed as a working build before
+then.
 
 Some source names and formats retain historical terms such as “CPC Mode 1.”
-They describe the canonical four-pen byte packing inherited by MSX2 assets;
-they do not indicate an active CPC target. Portable algorithms and file formats
-remain where the MSX2 build consumes them.
+They describe the canonical four-pen packing shared by the CPC source format
+and the MSX2 transcoder. Portable algorithms and file formats remain common;
+hardware drivers and kernels stay target-specific.

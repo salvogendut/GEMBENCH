@@ -1,12 +1,14 @@
 # GEOBENCH tools
 
-The active toolchain builds and validates the MSX2 target only. Retired CPC and
-PCW tools are available on `archive/cpc-pcw-targets`.
+The active toolchain builds the production MSX2 target and the experimental CPC
+Gate-3 reference target. PCW tools remain on `archive/cpc-pcw-targets`.
 
 ## Distribution and execution
 
 - `build_kernel_msx.sh` — complete MSX2 apps, kernel, assets, card tree, hard
   disk image, and floppy build.
+- `build_kernel_cpc.sh` — CPC kernel, AMSDOS floppy, and unified M4/Albireo
+  card/image build against the compile-once ABI.
 - `build_msx_img.sh` — create the partitioned FAT16 hard-disk image.
 - `build_msx_floppy.sh` — create the FAT12 system and extras disks.
 - `fetch_msx_deps.sh` — fetch/stage Nextor, openMSXnet, and test-machine inputs.
@@ -15,7 +17,7 @@ PCW tools are available on `archive/cpc-pcw-targets`.
 
 ## Kernel, modules, and applications
 
-- `build_capp.sh` — build one `-DGB_MSX2` SDCC application with explicit
+- `build_capp.sh` — build one legacy `-DGB_MSX2` or CPC bootstrap application with explicit
   optional library profiles and strict code/data/stack limits.
 - `build_uapp.sh` — build one byte-identical `GB_UNIVERSAL` GBAP v4 application
   for MSX2 and the future CPC/PCW kernels, with no target build define.
@@ -50,12 +52,14 @@ build target.
 - `check_gembench_abi.py`, `check_geobench_v2_abi.py`, `check_abi_table.py`,
   `check_app_layout.py` — frozen ABI, proposed universal ABI, and binary-layout
   guards.
-- `check_lowram_map.py --profile msx` — fixed low-RAM overlap audit.
+- `check_lowram_map.py --profile msx|cpc` — fixed low-RAM overlap audit.
 - `check_pic_distribution.py`, `check_msx_floppies.py` — committed media audits.
 - `test_*_openmsx.sh` — target workflows for windows, compositor visibility,
   timers, resources, services, typed scrap, Paint, Settings, and GB-BASIC.
 - `test_geobench_v2_msx_gate.py` and `test_geobench_v2_msx_openmsx.sh` — Gate-2
   sysinfo/module/package checks and real loader success/rollback coverage.
+- `test_cpc_universal_stage.py` and `debug/cpc_universal_1984.py` — CPC media
+  identity/header audit and real 1984 launch/drag workflow.
 - `gembench_baseline.py` plus `debug/gembench_*` — 1983/openMSX measurement and
   regression capture.
 

@@ -1,6 +1,7 @@
 # GEOBENCH architecture
 
-GEOBENCH is currently an MSX2-only banked desktop. The detailed evolution of
+GEOBENCH is a banked Z80 desktop with a production MSX2 kernel and an
+experimental CPC reference kernel. The detailed evolution of
 its GEM-like services is recorded under the historical `docs/gembench/`
 namespace; this document describes the active runtime and build boundaries.
 The experimental compile-once MSX2/CPC/PCW boundary is separate and documented in
@@ -28,8 +29,10 @@ is under `lib/msx/` and `kernel/*_msx.asm`:
 - mapper segment allocation and page switching;
 - H.TIMI-paced clock and preemptive worker scheduling.
 
-The production build is `tools/build_kernel_msx.sh`. No CPC or PCW builder or
-release media exists in the active tree yet; see [MSX2-ONLY.md](MSX2-ONLY.md).
+The production build is `tools/build_kernel_msx.sh`. The Gate-3 CPC builder is
+`tools/build_kernel_cpc.sh`; it swaps in CPC firmware graphics/input, AMSDOS
+plus M4/Albireo storage, and gate-array bank switching while retaining the
+fixed kernel table. PCW has no active builder; see [MSX2-ONLY.md](MSX2-ONLY.md).
 
 ## Applications and ABI
 
@@ -38,7 +41,8 @@ Applications are SDCC C programs linked with assembly trampolines from
 the fixed kernel jump table at `0x8000`. The frozen public contracts are
 documented in [gembench/ABI-V1.md](gembench/ABI-V1.md).
 
-`tools/build_capp.sh` requires `-DGB_MSX2`. Optional link profiles add bounded
+Legacy bootstrap applications use `-DGB_MSX2` or `-DGB_CPC`. Compile-once
+applications use `GB_UNIVERSAL` and no target define. Optional MSX link profiles add bounded
 documents, widgets, GBR objects/forms/menus, VDI-lite drawing, typed scrap,
 shell discovery, deferred messages, filesystem contexts, shared services,
 secondary resources, and timers.
@@ -81,9 +85,12 @@ bounded; no runtime heap is required.
 
 ## Distribution
 
-`QA/MSX/CARD` is the committed loose release tree. The build also creates a
+`QA/MSX/CARD` is the committed loose production tree. The build also creates a
 bootable FAT16 hard-disk image and two FAT12 floppy images. System files live in
-`GBENCH/`, pictures in `PICS/`, and development programs in `DIAG/`.
+`GBENCH/`, pictures in `PICS/`, and development programs in `DIAG/`. The CPC
+reference distribution uses `QA/CPC/CARD` and
+`QA/CPC/Floppies/GEOBENCH.DSK`; its card contains separate M4 and Albireo
+kernels but the same universal application files.
 
 Canonical four-pen assets retain the inherited Mode-1 byte packing and are
 converted by the MSX2 renderer. This is a file-format choice, not another

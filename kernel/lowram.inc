@@ -153,9 +153,24 @@ WM_DRAGDIR      equ   #1433        ; source directory cluster (4 bytes), capture
 ; --- app bank-page pool (#84): built at boot from the detected RAM. The old fixed
 ; 3-bit page bitmap (first expansion bank only) is gone; the pool now spans every
 ; detected bank, capped at WM_MAXWIN. The desktop (first claim) always gets [0]. ---
+                ifdef PLATFORM_CPC
+; Cooperative CPC builds reuse the dormant #3C00 scheduler block for their
+; v6 record and a 31-entry expansion-page pool. 512K machines expose 27 app/
+; resource pages after PAGE_DATA instead of truncating the allocator to the
+; eight compositor slots.
+CPC_SYSINFO     equ   #3C00
+CPC_PAGE_MAX    equ   31
+APP_NPAGES      equ   #1437        ; retain the legacy public byte read by CPC apps
+APP_PAGES       equ   #3C41
+APP_BUSY        equ   #3C60
+CPC_PAGE_GEN    equ   #3C80
+CPC_WIN_GEN     equ   #3C9F        ; eight compositor-slot generations
+CPC_GATE_NAME   equ   #3CA7        ; saved 8.3 launch name while GBAPV4.MOD loads
+                else
 APP_NPAGES      equ   #1437        ; usable app-page count (3 on 128K, up to WM_MAXWIN)
 APP_PAGES       equ   #1438        ; WM_MAXWIN port values; [0] = PAGE_APP0 (#C5, desktop)
 APP_BUSY        equ   #1440        ; WM_MAXWIN busy flags (0 free / 1 busy), parallel
+                endif
 MW_RECT         equ   #1448        ; managed window (#146): the WM publishes the focused
                                    ; managed window's live x,y,w,h here before each hook
                                    ; so the app reads its rect with gb_wm_x/y/w/h

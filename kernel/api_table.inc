@@ -28,9 +28,7 @@ PICEDIT_ENTRY   equ   PICEDIT_BASE
                 jp    k_line                 ; GB_LINE: software Bresenham from the
                                              ; PCW_GLINE cells (lib/pcw/screen.asm, #331)
                 else
-                jp    k_noop                 ; GB_LINE slot inert on CPC - the resident kernel
-                                             ; is full; CLOCK drives GRA_* firmware directly
-                                             ; there. #287 (was GB_QUIT dead stub, #148)
+                jp    k_cpc_line             ; GB_LINE: semantic CPC Mode-1 firmware line
                 endif
                 endif
                 jp    gb_text_draw           ; GB_TEXT   #800C
@@ -140,4 +138,14 @@ GB_ONEVENT_ENTRY equ k_noop
                 jp    k_app                  ; GB_APP         #80CC application/window lifecycle
                 jp    k_defer                ; GB_DEFER       #80CF bounded deferred app messages
                 jp    k_fsctx                ; GB_FSCTX       #80D2 explicit filesystem contexts
+                else
+                ifdef PLATFORM_CPC
+                jp    k_ret0                 ; GB_SHELL       capability-typed unsupported stub
+                jp    k_cpc_sysinfo          ; GB_SYSINFO     CPC v6 runtime record
+                jp    k_cpc_owner            ; GB_OWNER       generation-tagged focused owner
+                jp    k_cpc_page             ; GB_PAGE        opaque CPC expansion-page service
+                jp    k_cpc_app              ; GB_APP         CPC application/window lifecycle
+                jp    k_ret1                 ; GB_DEFER       typed unsupported status
+                jp    k_ret1                 ; GB_FSCTX       typed unsupported status
+                endif
                 endif

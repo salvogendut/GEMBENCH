@@ -45,7 +45,7 @@ The desktop loads `.APP`, `.SAV`, `.MOD`, `.GBR`, `.PIC`, `.IST`, `.SPR`,
 historical Mode-1 byte packing and are decoded by the MSX2 kernel; native
 Screen 7 variants may supply sixteen-colour resources.
 
-GEOBENCH has no active CPC or PCW target yet. See
-[MSX2-ONLY.md](MSX2-ONLY.md) for the preservation branch/current build state
-and [UNIVERSAL-APPLICATION-ABI.md](UNIVERSAL-APPLICATION-ABI.md) for the staged
-MSX2/CPC/PCW direction.
+The experimental CPC target currently provides the universal ABI Probe, Clock,
+and Calculator over a native CPC bootstrap desktop. PCW remains absent. See
+[MSX2-ONLY.md](MSX2-ONLY.md) for the target state and
+[GEOBENCH-V2-GATE3-CPC.md](GEOBENCH-V2-GATE3-CPC.md) for CPC coverage.

@@ -11,9 +11,9 @@
 ; the 6x8 font, whose glyphs live in PAGE_DATA. Strings come from the caller's
 ; page, so they are copied to a resident scratch BEFORE swapping to the font.
 ;
-; Build: tools/build_kernel_msx.sh. GEOBENCH is an MSX2-only system.
+; Build: tools/build_kernel_msx.sh (MSX2) or tools/build_kernel_cpc.sh (CPC).
 
-; PLATFORM_MSX (#287): the sole target is an MSX-DOS 2 /
+; PLATFORM_MSX (#287): builds the MSX-DOS 2 /
 ; Nextor application with a selectable V9938 Screen 6 or Screen 7 driver,
 ; mapper-segment banking and BDOS storage. GBMSX.COM selects the mode-specific
 ; image at boot. The kernel body (WM, services, menus) is shared; the
@@ -21,8 +21,15 @@
                 ifdef PLATFORM_PCW
                 assert 0,"GEOBENCH no longer builds a PCW target; see archive/cpc-pcw-targets"
                 endif
+                ifdef PLATFORM_CPC
+                ifdef PLATFORM_MSX
+                assert 0,"PLATFORM_CPC and PLATFORM_MSX are mutually exclusive"
+                endif
+                endif
+                ifndef PLATFORM_CPC
                 ifndef PLATFORM_MSX
 PLATFORM_MSX    equ   1
+                endif
                 endif
                 include "../lib/gbapp.inc"
                 ifdef PLATFORM_MSX
@@ -97,8 +104,10 @@ WM_GADGETS      equ   1                        ; (no resident storage drivers)
                 ifdef PLATFORM_PCW             ; #331: the fresh PCW kernel likewise
 WM_GADGETS      equ   1
                 else
+                ifndef CPC_COMPACT
                 if GB_ROM_REQ | STORAGE_ALBIREO | STORAGE_M4
 WM_GADGETS      equ   1
+                endif
                 endif
                 endif
                 endif
@@ -283,6 +292,10 @@ k_noop                                         ; shared no-op for dead ABI slots
                 ret                            ; GB_PRINT/QUIT/LAUNCH/XORFRAME/ONREPAINT/WMLAUNCH/ONEVENT
 k_ret0          xor   a                        ; shared "return 0" (e.g. GB_PICOPEN when a kernel
                 ret                            ; has no banked-picture support, #164)
+                ifdef PLATFORM_CPC
+k_ret1          ld    a,1                      ; typed unsupported status for optional services
+                ret
+                endif
 
 ; to_data / from_data: save the caller's bank page and map PAGE_DATA (the font /
 ; icon page), then restore it. One shared save slot (dp_save) - these swaps are
@@ -1799,6 +1812,9 @@ kpc_first       ld    a,(PIC_PAGE)
                 endif
 
                 include "app_pool.asm"
+                ifdef PLATFORM_CPC
+                include "cpc_arch.asm"
+                endif
                 ifdef PLATFORM_MSX
                 ifdef GEMBENCH_GBR_BANKING
                 include "gbr_bank.asm"
@@ -2263,6 +2279,17 @@ wm_register
                 ifdef PLATFORM_MSX
                 call  window_generation_next
                 ld    a,(wm_slot)
+                else
+                ifdef PLATFORM_CPC
+                ld    hl,CPC_WIN_GEN
+                add   a,l
+                ld    l,a
+                inc   (hl)
+                jr    nz,wmr_generation_ready
+                inc   (hl)                         ; generation zero is never a valid handle
+wmr_generation_ready
+                ld    a,(wm_slot)
+                endif
                 endif
                 call  wm_entry                    ; HL = WM_TABLE[slot]
                 ld    a,(bank_cur)               ; +0 page = caller
@@ -3102,6 +3129,10 @@ wm_open_go
                 di
                 ld    a,(wm_open_page)
                 call  bank_set
+                ifdef PLATFORM_CPC
+                call  cpc_gbap4_gate_load
+                jr    nc,wmo_fail
+                endif
                 ld    hl,APP_LOAD_MAX
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
@@ -3118,6 +3149,12 @@ wmo_loaded      jr    nc,wmo_fail
                 ifdef PLATFORM_MSX
                 call  MSX_GBAP4_GATE            ; v4 validates before outer JP/publication
                 jr    nc,wmo_fail               ; owner/page rollback is shared and complete
+                else
+                ifdef PLATFORM_CPC
+                call  cpc_page_count_free       ; validator reads the live v6 free-page byte
+                call  CPC_GBAP4_GATE
+                jr    nc,wmo_fail
+                endif
                 endif
                 ei
                 call  APP_BASE                    ; main -> GB_WMADD + paint, then ret
@@ -4478,6 +4515,7 @@ STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the sta
                 else
                 assert HIMEM-kern_end>=STACK_RESERVE,"GBKERN too big - reclaim resident bytes (see #104)"
                 endif
+                save  "../build/cpc/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
 
 ; --- scratch buffers live in LOW RAM (always the main bank, below the stack) -----
 ; They used to sit just above kern_end, but as the kernel grew they landed in the
@@ -4493,6 +4531,7 @@ fs_secbuf       equ   #1800            ; IDE sector buffer / aliased AMSDOS writ
 fsam_buf        equ   #1A00            ; floppy whole-directory buffer
                 ifndef PLATFORM_MSX
                 ifndef PLATFORM_PCW             ; (#331: PCW files are staged by mkpcwdsk)
+                ifdef CPC_LEGACY_PACKAGE
                                                 ; The packaging incbins below are
                                                 ; never loaded at runtime, only read
                                                 ; by `save`. The payload outgrew a
@@ -4551,5 +4590,6 @@ npd_imgend
                 ; Main leaves room for the header-aware ICONED picker (#426).
                 save  "build/HAND.SPR",cur_hand_data,cur_hand_end-cur_hand_data
                 save  "build/GBKERN.RAW",GB_KERNEL,kern_end-GB_KERNEL
+                endif                          ; CPC_LEGACY_PACKAGE
                 endif                          ; (ifndef PLATFORM_PCW: CPC packaging tail)
                 endif                          ; (ifndef PLATFORM_MSX: CPC packaging tail)

@@ -1,8 +1,9 @@
 # GEOBENCH
 
-GEOBENCH is a native graphical desktop and application environment for the
-Omega MSX2. It combines its Z80 kernel, banked application model, and hardware
-backends with the
+GEOBENCH is a native graphical desktop and application environment for Z80
+machines. MSX2 is the production target; an experimental Amstrad CPC reference
+port now exercises the same compile-once application ABI. GEOBENCH combines its
+banked kernel and hardware backends with the
 declarative resources and consistent desktop conventions associated with
 Digital Research GEM.
 
@@ -72,7 +73,9 @@ The completed foundation currently covers:
 The first resource and managed-window ABI is frozen. New incompatible resource
 or window work must cross an explicit version boundary.
 
-## Current build target
+## Current build targets
+
+The production/default target is:
 
 - Omega MSX2 at approximately 3.58 MHz
 - 512 KiB mapper RAM
@@ -81,11 +84,14 @@ or window work must cross an explicit version boundary.
 - MSX-DOS2 or Nextor
 - RainBIOS as a supported validation environment
 
-GEOBENCH currently has no active CPC or PCW build, media, or release target. The
-last multi-platform tree is preserved on `archive/cpc-pcw-targets`. CPC is to be
-reintroduced after the compile-once GEOBENCH-2 ABI is implemented; PCW follows
-as a separate port. See the [current target state](docs/MSX2-ONLY.md) and the
-[universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).
+The experimental CPC target assumes a CPC 6128-class machine with 512 KiB RAM,
+uses Mode 1 at 320x200 with four semantic pens, and produces both an AMSDOS
+floppy and a shared M4/Albireo card tree. It stages the byte-identical universal
+ABI Probe, Clock, and Calculator packages; Desktop and File Manager remain
+target-native bootstrap shells during the migration. PCW is still absent. See
+the [current target state](docs/MSX2-ONLY.md), the
+[Gate-3 CPC notes](docs/GEOBENCH-V2-GATE3-CPC.md), and the
+[universal ABI](docs/UNIVERSAL-APPLICATION-ABI.md).
 
 ## Build and check
 
@@ -99,6 +105,13 @@ Build the fixed-target MSX distribution:
 
 ```sh
 make geobench-msx
+```
+
+Build and validate the CPC reference distribution with 1984:
+
+```sh
+make cpc-check
+make cpc-1984
 ```
 
 To exercise the object runtime, open the first desktop drive and double-click

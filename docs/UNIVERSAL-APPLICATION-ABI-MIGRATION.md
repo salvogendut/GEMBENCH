@@ -1,9 +1,9 @@
 # Universal application ABI migration plan
 
 This plan implements the experimental GEOBENCH-2 ABI in
-[`UNIVERSAL-APPLICATION-ABI.md`](UNIVERSAL-APPLICATION-ABI.md). Issue #54 (CPC
-reintegration) remains parked until the common SDK, loader contract, and proof
-application exist, so the CPC port does not recreate target-specific app builds.
+[`UNIVERSAL-APPLICATION-ABI.md`](UNIVERSAL-APPLICATION-ABI.md). Gate 3 / issue
+54-A resumes CPC only after the common SDK, loader contract, and proof
+application exist, so portable applications are not rebuilt per target.
 
 ## Gate 0: accept and freeze the proposal
 
@@ -67,6 +67,11 @@ Exit: openMSX and 1983 run `build/universal/ABIPROBE.APP`; rejection tests leak
 no mapper pages, windows, owners, or filesystem contexts.
 
 ## Gate 3: CPC reintegration against the ABI
+
+Status: implemented by issue 54-A for the 512 KiB CPC reference bootstrap.
+`make cpc-check` audits both storage kernels and byte identity;
+`make cpc-1984` boots and launches the proof, then verifies a managed-window
+drag through guest state.
 
 - Resume issue #54 from its parked branch, rebasing only after the v2 SDK is
   stable.

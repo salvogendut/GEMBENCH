@@ -1,8 +1,8 @@
 # Development guide
 
-The active development/build loop currently targets MSX2. Start with
-[BUILDING.md](BUILDING.md) and [MSX2-ONLY.md](MSX2-ONLY.md). Work intended for
-the future CPC/PCW targets must follow the compile-once contract in
+The production development loop targets MSX2; CPC Gate 3 adds a reference
+cross-target loop. Start with [BUILDING.md](BUILDING.md) and
+[MSX2-ONLY.md](MSX2-ONLY.md). Portable CPC/PCW application work must follow the compile-once contract in
 [UNIVERSAL-APPLICATION-ABI.md](UNIVERSAL-APPLICATION-ABI.md), not add a second
 target-specific application build.
 
@@ -12,6 +12,8 @@ target-specific application build.
 make check
 make geobench-msx
 MSX_UNAPI=0 tools/run_msx.sh QA/MSX/GBMSX.IMG
+make cpc-check
+make cpc-1984
 ```
 
 Use openMSX as the reference emulator and 1983 for additional development

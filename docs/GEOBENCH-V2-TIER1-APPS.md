@@ -1,10 +1,10 @@
 # GEOBENCH-2 first production universal applications
 
 Issue #60 migrates Calculator and Clock from target-compiled payloads to one
-GBAP v4 byte sequence for MSX2, CPC, and PCW. The current MSX2 distribution
-stages `build/universal/CALC.APP` and `build/universal/CLOCK.APP` unchanged. The
-legacy target builds remain available under `build/msx/*.RAW` as regression
-fixtures while the other runtimes are reintroduced.
+GBAP v4 byte sequence for MSX2, CPC, and PCW. The MSX2 and experimental CPC
+distributions stage `build/universal/CALC.APP` and
+`build/universal/CLOCK.APP` unchanged. Legacy target builds remain available
+under `build/msx/*.RAW` as regression fixtures while PCW is reintroduced.
 
 Calculator shares the existing fixed-point arithmetic core and uses only
 runtime geometry, semantic drawing, normalized input, managed-window, and

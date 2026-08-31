@@ -816,7 +816,7 @@ unsigned char gb_get_drive(void);
 void gb_copy_begin(void);
 void gb_copy_end(void);
 #define gb_copybuf ((char *)0x2200)
-#ifdef GB_PREEMPTIVE
+#if defined(GB_PREEMPTIVE) || defined(GB_CPC)
 #define GB_COPYMAX 0x1A00
 #else
 #define GB_COPYMAX 0x1C00

@@ -1,10 +1,9 @@
 # Building, deploying, and running GEOBENCH
 
-The active GEOBENCH tree currently builds MSX2 only. The archived CPC/PCW tree
-is preserved on `archive/cpc-pcw-targets`; see the
-[current target state](MSX2-ONLY.md). Do not infer a working CPC/PCW build from
-the universal ABI design documents: those targets return only after their
-implementation gates pass.
+The default and production GEOBENCH target is MSX2. The tree also builds an
+experimental CPC Gate-3 reference target against the compile-once GEOBENCH-2
+ABI. PCW remains archived on `archive/cpc-pcw-targets`; see the
+[current target state](MSX2-ONLY.md).
 
 ## Requirements
 
@@ -13,6 +12,7 @@ implementation gates pass.
 - Python 3
 - dosfstools and mtools
 - openMSX for reference emulation
+- 1984 for automated CPC validation (expected at `../1984/1984`)
 
 The project distrobox normally provides these tools.
 
@@ -47,6 +47,17 @@ make gb-basic
 asset consistency checks. `make app APP=mahjong` and
 `make app APP=calculator` perform registered fast MSX2 rebuilds.
 
+Build the CPC floppy, M4/Albireo card tree, and ignored FAT image with:
+
+```sh
+make cpc
+make cpc-check
+```
+
+`cpc-check` rebuilds the target, audits AMSDOS headers and both card kernels,
+checks the CPC low-RAM map, and proves that Probe, Clock, and Calculator are
+byte-identical on the MSX2 card, CPC card, and CPC floppy.
+
 The bundled Paint and GB-BASIC sources are both in this repository. A complete
 build therefore has no sibling-project source dependency.
 
@@ -57,6 +68,10 @@ build therefore has no sibling-project source dependency.
 - `QA/MSX/GBMSX.IMG` — ignored, bootable 32 MiB FAT16 hard-disk image.
 - `QA/MSX/Floppies/GEOBENCH.DSK` — bootable 720 KiB FAT12 system disk.
 - `QA/MSX/Floppies/EXTRAS.DSK` — 720 KiB picture-gallery disk.
+- `QA/CPC/Floppies/GEOBENCH.DSK` — CPC DATA disk with the reference runtime.
+- `QA/CPC/CARD/` — shared M4/Albireo tree; `GB.BAS` selects `GBM4.BIN` or
+  `GBALB.BIN` through `M4DETECT.BIN`.
+- `QA/CPC/GEOBENCH.IMG` — ignored 32 MiB FAT16 image built from the CPC card.
 
 The floppy includes Nextor and openMSXnet notices. It does not include
 proprietary `MSXDOS2.SYS`; supply a Nextor kernel ROM or your own licensed DOS2
@@ -109,3 +124,24 @@ reads `MSXMODE=6|7` from `GEOBENCH.CFG` and starts the corresponding kernel.
 
 The supported baseline is an MSX2 with V9938/V9958, 128 KiB VRAM, and at least
 512 KiB mapper RAM. See [MSX2.md](MSX2.md) for the runtime design.
+
+## Run on CPC with 1984
+
+The automated Gate-3 workflow boots the floppy, opens File Manager, launches
+the universal ABI probe, and verifies a real managed-window drag from guest
+memory:
+
+```sh
+make cpc-1984
+```
+
+For an interactive run:
+
+```sh
+../1984/1984 --config=/dev/null --6128 --memory=512 \
+  --disk-a=QA/CPC/Floppies/GEOBENCH.DSK --autostart=GB
+```
+
+Open Disk A and double-click `ABIPROBE.APP`. On a floppy, keep Fire held during
+the first title drag while the 209-byte CPC interaction module is loaded; card
+storage makes that transition much shorter.

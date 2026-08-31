@@ -1,7 +1,8 @@
 # GEOBENCH roadmap
 
-The active GEOBENCH release remains MSX2 while a common native application ABI
-is designed for staged CPC and PCW reintroduction. Architectural depth and
+The active GEOBENCH release remains MSX2 while the common native application
+ABI is proven by an experimental CPC reference target and prepared for PCW.
+Architectural depth and
 application quality continue on the 512 KiB MSX2 baseline without creating new
 target-specific application binaries.
 
@@ -15,7 +16,8 @@ target-specific application binaries.
    lifecycle, and close/reuse paths.
 4. Expand automated openMSX workflows for Paint, File Manager, Clock, Settings,
    Browser/Telnet, and bundled GB-BASIC.
-5. Implement and validate the proposed GEOBENCH-2 universal SDK/package on MSX2.
+5. Harden the CPC Gate-3 bootstrap and migrate applications only through the
+   GEOBENCH-2 universal SDK/package.
 
 ## Medium term
 
@@ -29,8 +31,8 @@ target-specific application binaries.
 
 ## Platform restoration
 
-CPC and PCW are not active build targets today. Their last working tree is
-preserved on `archive/cpc-pcw-targets`. CPC restoration (issue #54) is paused
-behind the universal application ABI (issue #55), then PCW is restored as the
-third implementation. See [MSX2-ONLY.md](MSX2-ONLY.md) and the
+CPC Gate 3 is active as an experimental 512 KiB reference target with AMSDOS,
+M4, and Albireo media. PCW remains preserved on `archive/cpc-pcw-targets` and
+returns as Gate 5 after the common ABI is accepted. See
+[MSX2-ONLY.md](MSX2-ONLY.md) and the
 [universal ABI migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md).

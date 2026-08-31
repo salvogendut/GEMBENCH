@@ -40,11 +40,11 @@ for gdt in assets/gadgets/*.GDT; do
     name="$(basename "$gdt" | tr 'a-z' 'A-Z')"
     cp "$gdt" "build/gadgets/$name"
 done
-rm -f build/GBTITLE.PAY build/msx/GBTITLE.RAW
-"$RASM" kernel/modules/gbtitle.asm -DPLATFORM_MSX=1
+rm -f build/GBTITLE.PAY build/GBTITLE.RAW build/msx/GBTITLE.RAW
+"$RASM" kernel/modules/gbtitle.asm
+"$RASM" kernel/modules/gbtitle_install.asm
 "$RASM" kernel/modules/gbtitle_install.asm -DPLATFORM_MSX=1 -DTITLE_NATIVE=1
-[ -s build/msx/GBTITLE.RAW ] || {
-    echo "ERROR: build/msx/GBTITLE.RAW not produced" >&2
-    exit 1
-}
-echo "Built build/msx/GBTITLE.RAW with $TITLEBAR_TBR + $GADGET_GDT fallback; staged TBR/GDT assets"
+for module in build/GBTITLE.RAW build/msx/GBTITLE.RAW; do
+    [ -s "$module" ] || { echo "ERROR: $module not produced" >&2; exit 1; }
+done
+echo "Built CPC/MSX GBTITLE.RAW with $TITLEBAR_TBR + $GADGET_GDT fallback; staged TBR/GDT assets"

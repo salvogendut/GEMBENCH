@@ -36,6 +36,7 @@ QA/MSX/CARD/UNAPI.TXT
 # Generated MSX dependency and disk-image artifacts.
 QA/MSXDEPS/
 QA/MSX/GBMSX.IMG
+QA/CPC/GEOBENCH.IMG
 !QA/MSX/Floppies/
 !QA/MSX/Floppies/*.DSK
 !assets/msx/

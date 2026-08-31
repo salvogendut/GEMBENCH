@@ -37,7 +37,11 @@ api_bank        ld    a,d
                 add   a,4
                 ld    (api_end),a              ; sentinel = base + 4 (one past block 3)
 api_blk         ld    a,c
+                ifdef PLATFORM_CPC
+                cp    CPC_PAGE_MAX
+                else
                 cp    WM_MAXWIN
+                endif
                 jr    nc,api_done             ; list full -> stop
                 ld    (hl),e                    ; store this block's port value
                 inc   hl
@@ -52,7 +56,11 @@ api_done        ld    a,c
                 ld    (APP_NPAGES),a
                 ld    hl,APP_BUSY              ; mark every page free
                 ld    de,APP_BUSY+1
+                ifdef PLATFORM_CPC
+                ld    bc,CPC_PAGE_MAX-1
+                else
                 ld    bc,WM_MAXWIN-1
+                endif
                 ld    (hl),0
                 ldir
                 ret
