@@ -42,7 +42,7 @@ DATA_LOC="${DATA_LOC:-0x6200}"
 
 case " $ALL_APPDEFS " in
     *" -DGB_MSX2 "*) ;;
-    *) echo "ERROR: GEMBENCH applications only build for MSX2 (-DGB_MSX2 required)" >&2; exit 2 ;;
+    *) echo "ERROR: GEOBENCH applications only build for MSX2 (-DGB_MSX2 required)" >&2; exit 2 ;;
 esac
 case " $ALL_APPDEFS " in
     *" -DGB_PCW "*) echo "ERROR: the PCW target is retired; see archive/cpc-pcw-targets" >&2; exit 2 ;;
@@ -323,7 +323,7 @@ fi
 if [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
         *" -DGB_MSX2 "*) ;;
-        *) echo "ERROR: GEMBENCH shell services are MSX2-only" >&2; exit 1 ;;
+        *) echo "ERROR: GEOBENCH shell services are MSX2-only" >&2; exit 1 ;;
     esac
     ALL_APPDEFS="$ALL_APPDEFS -DGB_SHELL_SERVICES"
 fi

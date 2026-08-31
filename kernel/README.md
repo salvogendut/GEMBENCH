@@ -1,4 +1,4 @@
-# GEMBENCH kernel
+# GEOBENCH kernel
 
 `gbkern.asm` is the MSX2 resident kernel. It assembles with the fixed jump table
 at `0x8000`, the window manager/compositor, mapper ownership, resource/module
@@ -15,6 +15,6 @@ Important split units include:
 - `app_pool.asm`, `gbr_bank.asm` — application and auxiliary resource pages;
 - `api_table.inc`, `lowram.inc` — frozen calls and fixed shared contracts.
 
-Build only through `tools/build_kernel_msx.sh` (normally `make gembench-msx`).
+Build only through `tools/build_kernel_msx.sh` (normally `make geobench-msx`).
 The source rejects a PCW platform define and defaults to MSX2 when assembled.
 CPC/PCW kernel sources are preserved on `archive/cpc-pcw-targets`.

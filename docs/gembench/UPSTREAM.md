@@ -44,7 +44,7 @@ Resolve the four expected add/add conflicts at `.gitignore`, `LICENSE`,
 
 ```sh
 make check
-make gembench-msx
+make geobench-msx
 ```
 
 The staged MSX configuration must continue to contain `MSXMODE=7`. Any future

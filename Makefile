@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies gb-basic gb-basic-msx gb-basic-openmsx gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m2-sysinfo gembench-m2-openmsx gembench-m2-paint-openmsx gembench-m3-openmsx gembench-m3-boot-openmsx gembench-m4-sysinfo gembench-m4-openmsx gembench-m5-manifest gembench-m5-openmsx gembench-m6-manifest gembench-m6-openmsx gembench-m7-resident-probe gembench-m7-service-probes gembench-m7-service-openmsx gembench-m8-timer-openmsx gembench-abi-check gembench-theme-assets gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbdefer-check gbfsctx-check gbshell-check gbaccessory-check gbr-example check test
+.PHONY: all msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies gb-basic gb-basic-msx gb-basic-openmsx geobench-msx geobench-msx-banked gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m2-sysinfo gembench-m2-openmsx gembench-m2-paint-openmsx gembench-m3-openmsx gembench-m3-boot-openmsx gembench-m4-sysinfo gembench-m4-openmsx gembench-m5-manifest gembench-m5-openmsx gembench-m6-manifest gembench-m6-openmsx gembench-m7-resident-probe gembench-m7-service-probes gembench-m7-service-openmsx gembench-m8-timer-openmsx gembench-abi-check gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbdefer-check gbfsctx-check gbshell-check gbaccessory-check gbr-example check test
 .NOTPARALLEL:
 
 all: msx
@@ -15,19 +15,23 @@ gb-basic: gb-basic-msx
 gb-basic-msx:
 	$(MAKE) -C components/gb-basic raws-msx GEOBENCH=$(CURDIR)
 
-gb-basic-openmsx: gembench-msx
+gb-basic-openmsx: geobench-msx
 	bash tools/test_gb_basic_openmsx.sh
 
 msx:
 	bash tools/build_kernel_msx.sh
 
-# GEMBENCH's fixed-target entry point. Keep the upstream alias during bootstrap.
-gembench-msx: msx
+# Canonical fixed-target entry point. The GEMBENCH-era alias remains so recorded
+# milestone commands and external scripts do not break.
+geobench-msx: msx
+gembench-msx: geobench-msx
 
 # Milestone-7 comparison image: auxiliary mapper resource with the existing
 # app-linked renderer. The ordinary release remains embedded/app-linked.
-gembench-msx-banked:
+geobench-msx-banked:
 	GEMBENCH_M7_BANKED=1 bash tools/build_kernel_msx.sh
+
+gembench-msx-banked: geobench-msx-banked
 
 # Development-only Architecture Milestones 1-4 API diagnostic. Copy the resulting
 # SYSINFO.APP into /GBENCH on an MSX distribution image to run it.
@@ -102,11 +106,6 @@ gembench-m8-timer-openmsx: gembench-msx
 
 gembench-abi-check:
 	$(PYTHON) tools/check_gembench_abi.py
-
-# Reproduce the MSX2-only four-pen wallpaper from the clean logo source.
-gembench-theme-assets:
-	$(PYTHON) tools/picconv.py assets/GEMBENCH_LOGO.png \
-		assets/msx/GEMLOGO.PIC --gembench -d ordered -w 176 --height 176
 
 # Generate a static report from the staged distribution. The 1983 target adds
 # guarded mapper/VRAM boot telemetry plus a desktop screenshot.

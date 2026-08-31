@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 for app in DESKTOP CLOCK CALC; do
     [ -s "build/msx/$app.RAW" ] || {
-        echo "ERROR: build/msx/$app.RAW is missing; run 'make gembench-msx' first" >&2
+        echo "ERROR: build/msx/$app.RAW is missing; run 'make geobench-msx' first" >&2
         exit 1
     }
 done

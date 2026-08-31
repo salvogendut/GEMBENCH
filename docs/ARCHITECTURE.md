@@ -1,8 +1,8 @@
-# GEMBENCH architecture
+# GEOBENCH architecture
 
-GEMBENCH is an MSX2-only banked desktop. The detailed evolution of its GEM-like
-services is recorded under `docs/gembench/`; this document describes the active
-runtime and build boundaries.
+GEOBENCH is an MSX2-only banked desktop. The detailed evolution of its GEM-like
+services is recorded under the historical `docs/gembench/` namespace; this
+document describes the active runtime and build boundaries.
 
 ## Memory and ownership
 

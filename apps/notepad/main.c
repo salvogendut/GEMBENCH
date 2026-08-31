@@ -505,7 +505,7 @@ static void select_all(void)
 }
 
 /* copy_sel / paste_clip / select_all are the framework's Edit-menu hooks (#142): the
- * standard Edit menu (Select All / Copy / Paste) is added by gb_doc. GEMBENCH's
+ * standard Edit menu (Select All / Copy / Paste) is added by gb_doc. GEOBENCH's
  * MSX2 build labels its payload as text; portable and old callers retain the raw
  * shared clipboard contract. */
 static void copy_sel(void)

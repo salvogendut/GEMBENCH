@@ -11,7 +11,7 @@
 ; the 6x8 font, whose glyphs live in PAGE_DATA. Strings come from the caller's
 ; page, so they are copied to a resident scratch BEFORE swapping to the font.
 ;
-; Build: tools/build_kernel_msx.sh. GEMBENCH is an MSX2-only system.
+; Build: tools/build_kernel_msx.sh. GEOBENCH is an MSX2-only system.
 
 ; PLATFORM_MSX (#287): the sole target is an MSX-DOS 2 /
 ; Nextor application with a selectable V9938 Screen 6 or Screen 7 driver,
@@ -19,7 +19,7 @@
 ; image at boot. The kernel body (WM, services, menus) is shared; the
 ; platform-specific pieces swap at the include sites below.
                 ifdef PLATFORM_PCW
-                assert 0,"GEMBENCH no longer builds a PCW target; see archive/cpc-pcw-targets"
+                assert 0,"GEOBENCH no longer builds a PCW target; see archive/cpc-pcw-targets"
                 endif
                 ifndef PLATFORM_MSX
 PLATFORM_MSX    equ   1
@@ -137,17 +137,10 @@ THEMED_GADGETS  equ   0
                 endif
 
 ; --- palette -------------------------------------------------------------
-                ifdef PLATFORM_MSX
-INK_DESKTOP     equ   0            ; GEMBENCH: black -> pen 0 (canvas)
-INK_LIGHT       equ   26           ; white -> pen 1 (text)
-INK_DARK        equ   13           ; grey  -> pen 2 (structure / shadow)
-INK_ACCENT      equ   6            ; red   -> pen 3 (accents)
-                else
-INK_DESKTOP     equ   1            ; inherited targets: blue -> pen 0
+INK_DESKTOP     equ   1            ; GEOBENCH blue -> pen 0 (desktop / backdrop)
 INK_LIGHT       equ   26           ; white -> pen 1
-INK_DARK        equ   0            ; black -> pen 2
+INK_DARK        equ   0            ; black -> pen 2 (outlines / title bar)
 INK_ACCENT      equ   6            ; red   -> pen 3
-                endif
 pal_def         db    INK_DESKTOP,INK_LIGHT,INK_DARK,INK_ACCENT,INK_DESKTOP  ; default INKS= seed (+border)
 ; set_palette: apply the 4 Mode-1 pens from KCFG_INKS (INKS=, or the defaults seeded
 ; above). Each ink is reloaded from memory per pen so it survives SCR_SET_INK's clobber.

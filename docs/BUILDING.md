@@ -1,6 +1,6 @@
-# Building, deploying, and running GEMBENCH
+# Building, deploying, and running GEOBENCH
 
-GEMBENCH builds for MSX2 only. The retired CPC/PCW tree is preserved on
+GEOBENCH builds for MSX2 only. The retired CPC/PCW tree is preserved on
 `archive/cpc-pcw-targets`; see [the target policy](MSX2-ONLY.md).
 
 ## Requirements
@@ -27,7 +27,7 @@ Build the complete distribution with either command:
 
 ```sh
 make
-make gembench-msx
+make geobench-msx
 ```
 
 The default release uses the preemptive app-worker scheduler. Useful variants
@@ -65,13 +65,13 @@ The standard build stages `QA/MSXDEPS/UNAPINET.COM` when present. Override it
 with:
 
 ```sh
-MSX_UNAPI_TSR=/path/to/UNAPINET.COM make gembench-msx
+MSX_UNAPI_TSR=/path/to/UNAPINET.COM make geobench-msx
 ```
 
 Build explicitly without the guest TSR with:
 
 ```sh
-MSX_UNAPI_TSR= make gembench-msx
+MSX_UNAPI_TSR= make geobench-msx
 ```
 
 ## Run in openMSX

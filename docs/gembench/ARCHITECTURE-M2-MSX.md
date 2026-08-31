@@ -148,7 +148,7 @@ independent runtime quantity (25 pages on the reference 512 KiB configuration).
 ## Validation
 
 ```sh
-make gembench-msx
+make geobench-msx
 make gembench-m2-openmsx
 make gembench-m2-paint-openmsx
 MSX_HEADLESS=1 tools/test_shell_service_openmsx.sh

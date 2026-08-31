@@ -108,7 +108,7 @@ stable `service_id`, and windowless/service lifecycle flags.
 
 ```sh
 python3 -m unittest tests.test_service_manager -v
-make gembench-msx
+make geobench-msx
 make gembench-m7-service-openmsx
 ```
 

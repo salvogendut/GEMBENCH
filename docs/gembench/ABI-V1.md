@@ -253,7 +253,7 @@ For GEMBENCH-1:
 ```sh
 make gembench-abi-check
 make check
-make gembench-msx
+make geobench-msx
 make gbdefer-check
 make gbfsctx-check
 make gembench-m4-openmsx

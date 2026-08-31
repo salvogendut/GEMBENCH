@@ -122,7 +122,7 @@ eight-byte context contains one rectangular clip and four semantic pen roles:
 canvas, surface, edge, and accent. The full profile validates and remaps those
 roles, clips fills, rejects partially clipped frames, renders packed four-bit
 cell rasters in coalesced runs, and aligns bounded text. Values 4-15 may be used
-as direct Screen 7 pens while roles 0-3 preserve the black/white/grey/red base.
+as direct Screen 7 pens while roles 0-3 preserve the blue/white/black/red base.
 
 The compact base profile retains the same context layout but links only
 initialization, clipped fill, and atomic frame calls. Its role values map

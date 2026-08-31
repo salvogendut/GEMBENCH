@@ -4,15 +4,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 [ -s build/msx/NOTEPAD.RAW ] || {
-    echo "ERROR: build/msx/NOTEPAD.RAW is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: build/msx/NOTEPAD.RAW is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 [ -s build/msx-obj/notepad/app.noi ] || {
-    echo "ERROR: Notepad symbols are missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: Notepad symbols are missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 cmp -s build/msx/NOTEPAD.RAW QA/MSX/CARD/GBENCH/NOTEPAD.APP || {
-    echo "ERROR: staged NOTEPAD.APP does not match build/msx/NOTEPAD.RAW; run 'make gembench-msx' first" >&2
+    echo "ERROR: staged NOTEPAD.APP does not match build/msx/NOTEPAD.RAW; run 'make geobench-msx' first" >&2
     exit 1
 }
 

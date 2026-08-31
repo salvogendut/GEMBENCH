@@ -1,5 +1,5 @@
 /* GBRDEMO.APP - MSX2 proof that visible UI geometry and state come from a
- * validated external GEMBENCH resource rather than application drawing code. */
+ * validated external GEOBENCH resource rather than application drawing code. */
 #include "gb.h"
 #include "gbr_object.h"
 

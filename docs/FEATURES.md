@@ -1,6 +1,6 @@
-# GEMBENCH features
+# GEOBENCH features
 
-GEMBENCH is an MSX2 desktop with a black, white, grey, and red base theme,
+GEOBENCH is an MSX2 desktop with its blue, white, black, and red base theme,
 Screen 6/7 support, mapper-backed applications, and MSX-DOS 2/Nextor storage.
 
 ## Desktop and system
@@ -18,7 +18,7 @@ Screen 6/7 support, mapper-backed applications, and MSX-DOS 2/Nextor storage.
 - File Manager with list/icon views, sorting, scrolling, navigation, copy, move,
   delete, launch contexts, and live-app reuse;
 - Notepad with document menus, bounded I/O, typed text scrap, and shell service;
-- GEMBENCH-owned multi-window Paint;
+- GEOBENCH-owned multi-window Paint;
 - Viewer and Browser with bounded image/content rendering;
 - Icon editor for icon sets and MSX2 sprites;
 - Telnet and Browser networking through TCP/IP UNAPI;
@@ -36,7 +36,7 @@ Screen 6/7 support, mapper-backed applications, and MSX-DOS 2/Nextor storage.
 - generation-safe page, window, context, and service handles;
 - bounded deferred messages, shell discovery, typed scrap, filesystem
   contexts, shared-service leases, and app timers;
-- frozen GEMBENCH-1 resource and managed-window ABI.
+- frozen `GEMBENCH-1` resource and managed-window compatibility ABI.
 
 ## Formats
 
@@ -45,5 +45,5 @@ The desktop loads `.APP`, `.SAV`, `.MOD`, `.GBR`, `.PIC`, `.IST`, `.SPR`,
 historical Mode-1 byte packing and are decoded by the MSX2 kernel; native
 Screen 7 variants may supply sixteen-colour resources.
 
-GEMBENCH has no active CPC or PCW target. See
+GEOBENCH has no active CPC or PCW target. See
 [MSX2-ONLY.md](MSX2-ONLY.md) for the preservation branch and policy.

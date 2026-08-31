@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 [ -d QA/MSX/CARD/GBENCH ] || {
-    echo "ERROR: QA/MSX/CARD is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: QA/MSX/CARD is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 [ -s assets/pictures/LOGO.PIC ] || {
@@ -12,15 +12,15 @@ cd "$(dirname "$0")/.."
     exit 1
 }
 [ -s build/msx/PAINT.RAW ] || {
-    echo "ERROR: build/msx/PAINT.RAW is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: build/msx/PAINT.RAW is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 [ -s build/msx/gbkernm7.sym ] || {
-    echo "ERROR: build/msx/gbkernm7.sym is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: build/msx/gbkernm7.sym is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 [ -s build/msx-obj/paint/app.noi ] && [ -s build/msx-obj/paint/main.sym ] || {
-    echo "ERROR: Paint symbols are missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: Paint symbols are missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 

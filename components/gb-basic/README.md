@@ -1,7 +1,7 @@
 # GB-BASIC
 
-GB-BASIC is GEMBENCH's MSX2-native, GW-BASIC-flavoured BASIC. It is bundled
-in-tree so the normal GEMBENCH build has no sibling-repository dependency.
+GB-BASIC is GEOBENCH's MSX2-native, GW-BASIC-flavoured BASIC. It is bundled
+in-tree so the normal GEOBENCH build has no sibling-repository dependency.
 
 It consists of:
 
@@ -27,7 +27,7 @@ The default `GEOBENCH=../..` builds against the enclosing checkout. RASM, SDCC,
 `make raws-msx` and stages the three runtime files plus the example programs.
 
 `BASRUN2.BIN` must remain beside the applications and programs because BASRUN
-loads the overlay from its current directory. The shipped GEMBENCH MSX2 media
+loads the overlay from its current directory. The shipped GEOBENCH MSX2 media
 already has the correct layout.
 
 ## Runtime notes
@@ -41,4 +41,4 @@ simultaneous File Manager copy while a BASIC program is active.
 
 The imported source revision and its one imported working-tree icon change are
 recorded in [PROVENANCE.md](PROVENANCE.md). This component is distributed under
-GEMBENCH's BSD 3-Clause license; see [LICENSE](LICENSE).
+GEOBENCH's BSD 3-Clause license; see [LICENSE](LICENSE).

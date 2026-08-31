@@ -4,7 +4,7 @@
 # directory may hold more than one .c file (build_capp.sh compiles only main.c).
 #
 #   tools/build_app.sh <app_dir> <out.RAW>
-#   env: GEOBENCH   path to the GEMBENCH checkout (default ../..)
+#   env: GEOBENCH   path to the GEOBENCH checkout (default ../..)
 #        DATA_LOC   app data split (default 0x6200): code #4000..DATA_LOC,
 #                   data DATA_LOC..#7FFF
 #        APPDEFS    extra defines for EVERY unit; -DGB_MSX2 is required and

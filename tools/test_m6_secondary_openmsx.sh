@@ -4,11 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 [ -d QA/MSX/CARD/GBENCH ] || {
-    echo "ERROR: QA/MSX/CARD is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: QA/MSX/CARD is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 [ -s build/msx/FORMREF.RAW ] && [ -s build/msx-obj/formref/app.noi ] || {
-    echo "ERROR: M6 FormRef is missing; run 'make gembench-msx' first" >&2
+    echo "ERROR: M6 FormRef is missing; run 'make geobench-msx' first" >&2
     exit 1
 }
 python3 tools/embed_app_icon.py check build/msx/FORMREF.RAW | \
