@@ -172,25 +172,26 @@ the original callback directly.
 
 ## Visible-region repainting
 
-Milestone 12 leaves the kernel's bottom-up compositor and single damage clip
-unchanged. The MSX2 Desktop alone links `gbregion` and, at the start of its
-existing repaint callback, intersects that damage with its own window and
-subtracts opaque windows above it. It redraws once per resulting clip; every
-other application still receives exactly one callback per compositor pass.
+The original Milestone 12 experiment left the compositor unchanged and linked a
+bounded four-rectangle `gbregion` iterator into the MSX2 Desktop alone. That
+source API remains available for compatibility and host geometry tests, but it
+is no longer linked into the release Desktop.
 
-The caller owns two four-rectangle arrays plus the original damage rectangle
-and four control bytes, for a fixed 40-byte state. No allocation, resident
-state, public low-RAM cell, or jump-table slot is added. Subtraction emits top,
-bottom, left, and right pieces in a stable order. More than four pieces, an
-invalid window table, an unknown application page, or duplicate windows in one
-page selects one iteration with the original damage clip. Exhaustion and
-explicit early exit restore that clip before the compositor continues.
+Architecture Milestone 9 moves visibility into the global MSX2 compositor.
+Every surface is intersected with the source damage and all higher opaque
+windows are subtracted by an exact horizontal-band iterator. There is no fixed
+fragment capacity or unsafe fallback. Fully covered surfaces receive no draw
+callback. Move damage covers the old/new endpoint envelope so destructive
+rubber-band outlines cannot leave intermediate pixels behind. Focus damage is
+the exact union of the complete old/new focused windows, with overlap removed
+and both sources clipped against the final stack. The same visibility states
+are folded by application owner and drive task priority, parking fully occluded
+visual workers without destroying their contexts.
 
-This is deliberately an app-linked source contract rather than a new frozen
-binary ABI. It suits an inexpensive opaque backdrop; streaming image renderers
-and applications with costly setup keep the legacy single callback. CPC and PCW
-also keep that path. The representative MSX2 move skips 71.8% of the damaged
-Desktop area while the resident Screen 6/7 kernels remain unchanged.
+The engine resides in the expanded app-carried page-3 scheduler slot because
+the Screen 7 child COM had insufficient room. CPC and PCW retain the legacy
+path. See [ARCHITECTURE-M9-MSX.md](ARCHITECTURE-M9-MSX.md) for invariants,
+placement, measurements, and validation.
 
 ## Typed scrap
 

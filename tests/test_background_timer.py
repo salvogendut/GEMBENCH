@@ -15,6 +15,7 @@ class TimerMailbox:
         self.owner_slot = 0
         self.generation = 0
         self.rect = (0, 0, 0, 0)
+        self.dropped_slot = 0
 
     def publish(self, slot: int, generation: int,
                 rect: tuple[int, int, int, int]) -> bool:
@@ -25,13 +26,18 @@ class TimerMailbox:
         self.owner_slot = slot + 1  # publish identity last
         return True
 
-    def collect(self, live: dict[int, int]) -> tuple[int, int, int, int] | None:
+    def collect(self, live: dict[int, int], visible: bool = True
+                ) -> tuple[int, int, int, int] | None:
         if not self.owner_slot:
             return None
         if self.owner_slot & 0x80:  # recursive Desktop callback during consume
             return None
         slot = self.owner_slot - 1
         if live.get(slot) != self.generation:
+            self.owner_slot = 0
+            return None
+        if not visible:
+            self.dropped_slot = self.owner_slot
             self.owner_slot = 0
             return None
         snapshot = self.rect  # owner remains published while the root snapshots
@@ -65,12 +71,20 @@ class BackgroundTimerTests(unittest.TestCase):
         self.assertIsNone(mailbox.collect({2: 8}))
         self.assertEqual(mailbox.owner_slot, 0)
 
+    def test_fully_occluded_component_is_acknowledged_without_paint(self) -> None:
+        mailbox = TimerMailbox()
+        self.assertTrue(mailbox.publish(2, 7, (40, 126, 3, 8)))
+        self.assertIsNone(mailbox.collect({2: 7}, visible=False))
+        self.assertEqual(mailbox.owner_slot, 0)
+        self.assertEqual(mailbox.dropped_slot, 3)
+
     def test_fixed_layout_and_build_guards(self) -> None:
         glue = (ROOT / "lib/msx/glue.inc").read_text()
         expected = {
             "MSX_TIMER_OWNER": 0xC3CA,
             "MSX_TIMER_RECT": 0xC3CB,
             "MSX_TIMER_GEN": 0xC3CF,
+            "MSX_TIMER_DROPPED": 0xC1EC,
         }
         for symbol, address in expected.items():
             match = re.search(rf"^{symbol}\s+equ\s+#([0-9A-Fa-f]+)",

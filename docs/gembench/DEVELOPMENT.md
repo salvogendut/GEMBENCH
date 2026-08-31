@@ -333,45 +333,40 @@ and PCW retain the original callback switch.
 
 ## Visible-region repainting
 
-An application that benefits from repeated clipped drawing builds with
-`GB_REGIONS=1`, includes `gbregion.h`, owns one persistent iterator, and loops
-inside its existing repaint callback:
+Architecture Milestone 9 applies exact visible-region clipping to every MSX2
+window in the kernel. Applications must not add their own covered-window loop.
+A repaint callback can run several times with disjoint clips during one pass,
+and it can be skipped entirely while its surface is fully covered. Keep setup
+bounded and make all drawing obey the published clip.
 
-```c
-static gb_visible_state_t regions;
+Report the smallest semantic change with `gb_wm_damage()` before
+`gb_restore_parent()`. The compositor intersects that damage with the window and
+its exact visible region. Geometry operations need no app assistance: move uses
+the old/new endpoint envelope to repair destructive drag outlines, while a focus
+change repaints the complete old and new windows through an overlap-free
+two-source union. Whole-window and whole-screen damage remain appropriate for
+initial paint, document replacement, resize/fullscreen layout, and global
+palette changes.
 
-if (gb_visible_begin(&regions))
-    do draw_current_clip(); while (gb_visible_next(&regions));
-```
-
-Call `gb_visible_end()` only when leaving the loop early. Normal exhaustion
-restores the original damage clip automatically. Do not recursively begin on
-the same state. Four rectangles are available; a fifth piece, a corrupt table,
-an unknown page, or two windows registered from the calling page selects the
-original single damage clip. This makes overflow deterministic and prevents a
-partial region set from reaching drawing code.
-
-The release build enables this only for the MSX2 Desktop. Its inexpensive
-backdrop and icons benefit from repeated clips; renderers that stream data or
-repeat expensive setup retain one callback. Host geometry and the Z80 footprint
-check run with:
+The older opt-in `gbregion` library remains available for source compatibility
+and its host checks, but the release Desktop no longer builds with
+`GB_REGIONS=1`:
 
 ```sh
 make gbregion-check
 ```
 
-After `make gembench-msx`, run the reference move/top/close workflow with:
+After `make gembench-msx`, run the Clock occlusion and PAINT multi-window
+workflows through the compatibility entry point:
 
 ```sh
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
   tools/test_visible_regions_openmsx.sh
 ```
 
-Set `MSX_HEADLESS=1` to skip screenshots. A rendered run writes its trace to
-`build/msx/visible-regions-openmsx.txt` and settled captures to
-`build/msx/visible-regions-screens/`. The test waits for the Desktop callback
-to return and then drains asynchronous V9938 commands and File Manager icon
-probes before capturing visual evidence.
+Set `MSX_HEADLESS=1` for automated runs. The aggregate result is written to
+`build/msx/visible-regions-openmsx.txt`; detailed traces are in
+`build/msx/multi-event-openmsx.txt` and `build/msx/m2-paint-openmsx.txt`.
 
 ## Typed clipboard/scrap
 

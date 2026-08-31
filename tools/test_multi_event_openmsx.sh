@@ -43,6 +43,7 @@ export GEMBENCH_EVENT_MAIN="$main_abs"
 export GEMBENCH_EVENT_C_DRAW="$(hexsum "$code_base" "0x$(symbol_offset _c_draw)")"
 export GEMBENCH_EVENT_C_FRAME="$(hexsum "$code_base" "0x$(symbol_offset _c_frame)")"
 export GEMBENCH_EVENT_C_CLICK="$(hexsum "$code_base" "0x$(symbol_offset _c_click)")"
+export GEMBENCH_EVENT_CLOCK_WORKER="$(hexsum "$code_base" "0x$(symbol_offset _clock_timer)")"
 export GEMBENCH_EVENT_AFTER_COLLECT="$(hexsum "$code_base" "$(call_return_offset _gb_event_collect)")"
 export GEMBENCH_EVENT_SHOW_SEC="$(hexsum "$data_base" "0x$(symbol_offset _show_sec)")"
 export GEMBENCH_EVENT_TIMER_PART="$(hexsum "$data_base" "0x$(symbol_offset _timer_part)")"
@@ -52,6 +53,7 @@ export GEMBENCH_EVENT_SUBSCRIPTION="$(hexsum "$data_base" "0x$(symbol_offset _cl
 export GEMBENCH_EVENT_RECORD="$(hexsum "$data_base" "0x$(symbol_offset _clock_event)")"
 export GEMBENCH_EVENT_TIMER_COLLECT="$(awk '$1 == "DEF" && $2 == "_gb_timer_collect" { print $3; found=1; exit } END { if (!found) exit 1 }' build/msx-obj/desktop/app.noi)"
 export GEMBENCH_EVENT_K_POLL="0x$(awk '$1 == "K_POLL" { value=$2; sub(/^#/, "", value); print value; found=1; exit } END { if (!found) exit 1 }' build/msx/gbkernm7.sym)"
+export GEMBENCH_EVENT_PAINTLOCK="0x$(awk '$1 == "CUR_PAINTLOCK" { value=$2; sub(/^#/, "", value); print value; found=1; exit } END { if (!found) exit 1 }' build/msx/gbkernm7.sym)"
 
 fm_sym=build/msx-obj/filemgr/main.sym
 fm_noi=build/msx-obj/filemgr/app.noi

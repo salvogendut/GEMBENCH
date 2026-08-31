@@ -93,11 +93,13 @@ are implementation details, not a cross-version binary exchange format. It
 adds no resource bytes, managed-window tail, message value, kernel jump-table
 slot, resident state, or public low-RAM allocation.
 
-Legacy repaint callbacks retain their one-call behavior. The MSX2 Desktop opts
-in at build time; CPC, PCW, and all other release applications retain the
-original single damage rectangle. Capacity exhaustion or an ambiguous window
-identity deterministically performs one legacy-clipped iteration, so frozen
-window registration and callback meanings do not change.
+The historical library remains buildable and keeps its deterministic fallback,
+so its source contract does not change. Architecture Milestone 9 no longer
+links it into the release Desktop: MSX2 visibility is now a global kernel policy
+and a callback may be invoked once per exact visible fragment, or not at all
+when fully covered. This changes scheduling/compositing policy without changing
+the frozen descriptor, callback address, message values, or registration ABI.
+CPC and PCW retain the original single-damage compositor.
 
 ### App-linked typed scrap
 

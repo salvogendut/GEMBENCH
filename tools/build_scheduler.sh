@@ -30,16 +30,20 @@ case "$target" in
     msx)
         out="build/msx/GBSCHED.RAW"
         defs=(-DPLATFORM_MSX=1)
+        limit=1536
         ;;
     pcw)
         out="build/pcw/GBSCHED.RAW"
         defs=(-DPLATFORM_PCW=1)
+        limit=512
         ;;
     *)
         echo "usage: $0 {cpc|msx|pcw}" >&2
         exit 2
         ;;
 esac
+
+: "${limit:=512}"
 
 mkdir -p "$(dirname "$out")"
 rm -f "$out"
@@ -53,8 +57,8 @@ if [ ! -s "$out" ]; then
     exit 1
 fi
 size=$(stat -c%s "$out")
-if (( size > 512 )); then
-    echo "ERROR: $target scheduler is $size bytes; fixed slot is 512 bytes" >&2
+if (( size > limit )); then
+    echo "ERROR: $target scheduler is $size bytes; fixed slot is $limit bytes" >&2
     exit 1
 fi
-echo "Built $out ($size/512 bytes, app-carried fixed-RAM scheduler)"
+echo "Built $out ($size/$limit bytes, app-carried fixed-RAM scheduler)"

@@ -12,6 +12,7 @@ set me_output $::env(GEMBENCH_EVENT_OUTPUT)
 set me_c_draw [me_env_addr GEMBENCH_EVENT_C_DRAW]
 set me_c_frame [me_env_addr GEMBENCH_EVENT_C_FRAME]
 set me_c_click [me_env_addr GEMBENCH_EVENT_C_CLICK]
+set me_clock_worker [me_env_addr GEMBENCH_EVENT_CLOCK_WORKER]
 set me_after_collect [me_env_addr GEMBENCH_EVENT_AFTER_COLLECT]
 set me_main [me_env_addr GEMBENCH_EVENT_MAIN]
 set me_sig0 [me_env_addr GEMBENCH_EVENT_SIG0]
@@ -25,6 +26,7 @@ set me_subscription [me_env_addr GEMBENCH_EVENT_SUBSCRIPTION]
 set me_event [me_env_addr GEMBENCH_EVENT_RECORD]
 set me_timer_collect [me_env_addr GEMBENCH_EVENT_TIMER_COLLECT]
 set me_k_poll [me_env_addr GEMBENCH_EVENT_K_POLL]
+set me_paintlock [me_env_addr GEMBENCH_EVENT_PAINTLOCK]
 set me_fm_total [me_env_addr GEMBENCH_EVENT_FM_TOTAL]
 set me_fm_names [me_env_addr GEMBENCH_EVENT_FM_NAMES]
 set me_fm_order [me_env_addr GEMBENCH_EVENT_FM_ORDER]
@@ -41,6 +43,7 @@ set me_app_target {}
 set me_filemgr_slot -1
 set me_clock_slot -1
 set me_frame_hits 0
+set me_worker_hits 0
 set me_click_hits 0
 set me_pointer_window_hits 0
 set me_key_hits 0
@@ -67,8 +70,20 @@ set me_bg_timer_parts {}
 set me_bg_digit_due {}
 set me_bg_timer_windows {}
 set me_bg_active_owners {}
+set me_bg_validation {}
 set me_bg_pointer_parked 0
 set me_bg_recording 0
+set me_hidden_worker_start 0
+set me_hidden_draw_start 0
+set me_hidden_damage_start 0
+set me_hidden_hash_start 0
+set me_hidden_hash_final 0
+set me_hidden_pixels {}
+set me_hidden_diff {}
+set me_hidden_rect {}
+set me_hidden_worker_delta -1
+set me_hidden_draw_delta -1
+set me_hidden_damage_delta -1
 set me_poll_events {}
 set me_poll_bp ""
 
@@ -128,6 +143,36 @@ proc me_vram_hash {x y w h} {
     return $hash
 }
 
+proc me_vram_pixels {x y w h} {
+    set pixels {}
+    for {set row 0} {$row < $h} {incr row} {
+        for {set col 0} {$col < $w} {incr col} {
+            set address [expr {($y + $row) * 256 + ($x + $col) * 2}]
+            lappend pixels [debug read VRAM $address]
+            lappend pixels [debug read VRAM [expr {$address + 1}]]
+        }
+    }
+    return $pixels
+}
+
+proc me_vram_diff {before x y w h} {
+    set after [me_vram_pixels $x $y $w $h]
+    set diff {}
+    set count [llength $after]
+    for {set i 0} {$i < $count} {incr i} {
+        set old [lindex $before $i]
+        set new [lindex $after $i]
+        if {$old != $new} {
+            set pixel [expr {$i / 2}]
+            lappend diff [list [expr {$x + ($pixel % $w)}] \
+                                    [expr {$y + ($pixel / $w)}] \
+                                    [expr {$i & 1}] $old $new]
+            if {[llength $diff] >= 32} {break}
+        }
+    }
+    return $diff
+}
+
 proc me_filemgr_mapped {} {
     set focus [peek 0x1351]
     expr {$focus < 8 && [peek 0x134F] == [peek [me_entry $focus]]}
@@ -170,6 +215,7 @@ proc me_capture_state {} {
 
 proc me_finish {status} {
     me_release_all
+    catch {screenshot -raw $::me_output.png}
     set handle [open $::me_output w]
     puts $handle "STATUS=$status"
     puts $handle "DRAW_HITS=$::me_draw_hits"
@@ -177,8 +223,10 @@ proc me_finish {status} {
     puts $handle "APP_INDEX=$::me_app_index"
     puts $handle "APP_TARGET=$::me_app_target"
     puts $handle "FILEMGR_SLOT=$::me_filemgr_slot"
+    if {$::me_filemgr_slot >= 0} {puts $handle "FILEMGR_RECT=[me_rect $::me_filemgr_slot]"}
     puts $handle "CLOCK_SLOT=$::me_clock_slot"
     puts $handle "TIMER_HITS=$::me_frame_hits"
+    puts $handle "WORKER_HITS=$::me_worker_hits"
     puts $handle "POINTER_CLICK_HITS=$::me_click_hits"
     puts $handle "POINTER_WINDOW_HITS=$::me_pointer_window_hits"
     puts $handle "KEY_HITS=$::me_key_hits"
@@ -200,7 +248,14 @@ proc me_finish {status} {
     puts $handle "BACKGROUND_DIGIT_DUE=$::me_bg_digit_due"
     puts $handle "BACKGROUND_TIMER_WINDOWS=$::me_bg_timer_windows"
     puts $handle "BACKGROUND_ACTIVE_OWNERS=$::me_bg_active_owners"
+    puts $handle "BACKGROUND_VALIDATION=$::me_bg_validation"
     puts $handle "BACKGROUND_POINTER_PARKED=$::me_bg_pointer_parked"
+    puts $handle "HIDDEN_WORKER_DELTA=$::me_hidden_worker_delta"
+    puts $handle "HIDDEN_DRAW_DELTA=$::me_hidden_draw_delta"
+    puts $handle "HIDDEN_DAMAGE_DELTA=$::me_hidden_damage_delta"
+    puts $handle "HIDDEN_HASH_RECT=$::me_hidden_rect"
+    puts $handle "HIDDEN_HASH=$::me_hidden_hash_start,$::me_hidden_hash_final"
+    puts $handle "HIDDEN_DIFF=$::me_hidden_diff"
     puts $handle "LIVE_WINDOWS=[peek 0x1350]"
     puts $handle "FOCUS=[peek 0x1351]"
     puts $handle "RUNNABLE=[peek 0x1344]"
@@ -210,6 +265,19 @@ proc me_finish {status} {
     puts $handle "FINAL_POINTER=[peek 0x1306],[peek 0x1307]"
     puts $handle [format "FINAL_PC=%04X" [reg PC]]
     puts $handle [format "FINAL_SP=%04X" [reg SP]]
+    set surface_visibility {}
+    set task_visibility {}
+    for {set i 0} {$i < 8} {incr i} {
+        lappend surface_visibility [peek [expr {0xC1C0 + $i}]]
+        lappend task_visibility [peek [expr {0xC1C8 + $i}]]
+    }
+    puts $handle "SURFACE_VISIBILITY=$surface_visibility"
+    puts $handle "TASK_VISIBILITY=$task_visibility"
+    set region_state {}
+    for {set address 0xC1D0} {$address <= 0xC1DF} {incr address} {
+        lappend region_state [peek $address]
+    }
+    puts $handle "REGION_STATE=$region_state"
     close $handle
     exit
 }
@@ -333,31 +401,98 @@ proc me_background_check {} {
         me_finish "FAIL background timer changed focus"
     } elseif {$::me_bg_frame_delta != 0} {
         me_finish "FAIL unfocused Clock received focused frames"
-    } elseif {$::me_bg_draw_delta < 2} {
-        me_finish "FAIL unfocused Clock did not repaint"
+    } elseif {$::me_bg_draw_delta != 0} {
+        me_finish "FAIL occluded Clock component repainted"
     } elseif {$::me_bg_damage_hits < 2 ||
               [lsearch -exact $::me_bg_damage_rects $::me_bg_expected_damage] < 0} {
         me_finish "FAIL timer did not isolate the seconds digits"
     } elseif {$bad_damage} {
         me_finish "FAIL timer damage escaped its changed content"
-    } elseif {[lsearch -exact $::me_bg_timer_parts 1] < 0 ||
-              [lsearch -exact $::me_bg_timer_parts 2] < 0} {
-        me_finish "FAIL timer did not split hands and seconds"
+    } elseif {[llength $::me_bg_active_owners] != 0} {
+        me_finish "FAIL occluded component entered a draw callback"
     } elseif {$::me_bg_pointer_parked} {
         me_finish "FAIL timer repaint parked the hardware pointer"
     } elseif {$::me_bg_hash_final != $::me_bg_hash_start} {
         me_finish "FAIL background repaint damaged foreground"
-    } elseif {[peek 0x1344] < 2} {
-        me_finish "FAIL Clock worker stopped while unfocused"
     } else {
+        me_hidden_begin
+    }
+}
+
+# Maximise File Manager over Clock, then prove both paint and worker execution
+# stop for the fully occluded application. Restoring File Manager must expose a
+# current-time Clock through the ordinary compositor without replaying ticks.
+proc me_hidden_begin {} {
+    set ::me_bg_recording 0
+    lassign [me_rect $::me_filemgr_slot] x y w h
+    set ::me_deadline [expr {[machine_info time] + 10.0}]
+    me_move_to [expr {$x + $w - 2}] [expr {$y + 4}] me_hidden_max_click
+}
+
+proc me_hidden_max_click {} {
+    me_click me_hidden_wait
+}
+
+proc me_hidden_wait {} {
+    set rect [me_rect $::me_filemgr_slot]
+    if {$rect eq {0 8 128 204} && [peek $::me_paintlock] == 0 &&
+        [peek [expr {0xC1C0 + $::me_clock_slot}]] == 0 &&
+        [peek [expr {0xC1C8 + $::me_clock_slot}]] == 0 && [peek 0xC3CA] == 0} {
+        set ::me_hidden_rect [me_rect $::me_clock_slot]
+        lassign $::me_hidden_rect x y w h
+        set ::me_hidden_hash_start [me_vram_hash $x $y $w $h]
+        set ::me_hidden_pixels [me_vram_pixels $x $y $w $h]
+        set ::me_hidden_worker_start $::me_worker_hits
+        set ::me_hidden_draw_start $::me_draw_hits
+        set ::me_hidden_damage_start $::me_bg_damage_hits
+        after time 3.0 me_hidden_check
+    } elseif {[machine_info time] >= $::me_deadline} {
+        me_finish "FAIL Clock did not become fully occluded"
+    } else {
+        after time 0.1 me_hidden_wait
+    }
+}
+
+proc me_hidden_check {} {
+    lassign $::me_hidden_rect x y w h
+    set ::me_hidden_hash_final [me_vram_hash $x $y $w $h]
+    set ::me_hidden_diff [me_vram_diff $::me_hidden_pixels $x $y $w $h]
+    set ::me_hidden_worker_delta [expr {$::me_worker_hits - $::me_hidden_worker_start}]
+    set ::me_hidden_draw_delta [expr {$::me_draw_hits - $::me_hidden_draw_start}]
+    set ::me_hidden_damage_delta [expr {$::me_bg_damage_hits - $::me_hidden_damage_start}]
+    if {$::me_hidden_worker_delta != 0} {
+        me_finish "FAIL fully occluded Clock received worker CPU"
+    } elseif {$::me_hidden_draw_delta != 0 || $::me_hidden_damage_delta != 0} {
+        me_finish "FAIL fully occluded Clock generated paint work"
+    } elseif {$::me_hidden_hash_final != $::me_hidden_hash_start} {
+        me_finish "FAIL hidden Clock disturbed foreground pixels"
+    } else {
+        set ::me_deadline [expr {[machine_info time] + 10.0}]
+        me_move_to 126 12 me_hidden_restore_click
+    }
+}
+
+proc me_hidden_restore_click {} {
+    me_click me_hidden_restore_wait
+}
+
+proc me_hidden_restore_wait {} {
+    if {[me_rect $::me_filemgr_slot] ne {0 8 128 204} &&
+        [peek [expr {0xC1C0 + $::me_clock_slot}]] != 0 &&
+        $::me_draw_hits > $::me_hidden_draw_start} {
         me_finish PASS
+    } elseif {[machine_info time] >= $::me_deadline} {
+        me_finish "FAIL exposed Clock did not repaint current state"
+    } else {
+        after time 0.1 me_hidden_restore_wait
     }
 }
 
 proc me_background_focused {} {
-    if {[peek 0x1351] != $::me_filemgr_slot} {
+    if {[peek 0x1351] != $::me_filemgr_slot ||
+        [peek $::me_paintlock] != 0 || ![me_filemgr_mapped]} {
         if {[machine_info time] >= $::me_deadline} {
-            me_finish "FAIL File Manager did not take focus"
+            me_finish "FAIL File Manager focus repaint did not complete"
         } else {
             after time 0.1 me_background_focused
         }
@@ -391,6 +526,7 @@ proc me_background_focused {} {
     set ::me_bg_digit_due {}
     set ::me_bg_timer_windows {}
     set ::me_bg_active_owners {}
+    set ::me_bg_validation {}
     set ::me_bg_pointer_parked 0
     set ::me_bg_recording 1
     set ::me_bg_hash_start [me_vram_hash $left $top $w $h]
@@ -477,6 +613,10 @@ proc me_launch_clock {} {
         }
         set ::pause off
     }
+    debug set_bp $::me_clock_worker {} {
+        if {[me_is_loaded]} {incr ::me_worker_hits}
+        set ::pause off
+    }
     debug set_bp $::me_c_click {} {
         if {[me_is_loaded]} {incr ::me_click_hits; me_capture_state}
         set ::pause off
@@ -539,6 +679,12 @@ debug set_bp $me_timer_collect {} {
         set ::me_bg_damage_rect [list \
             [peek 0xC3CB] [peek 0xC3CC] [peek 0xC3CD] [peek 0xC3CE]]
         lappend ::me_bg_damage_rects $::me_bg_damage_rect
+        set owner [peek 0xC3CA]
+        set slot [expr {$owner - 1}]
+        lappend ::me_bg_validation [list \
+            [peek 0xC3CF] [peek [expr {0xC358 + $slot}]] \
+            [peek [expr {0xC2D0 + $slot}]] [peek [expr {0xC1C0 + $slot}]] \
+            [peek 0x130A]]
     }
     set ::pause off
 }

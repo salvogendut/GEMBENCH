@@ -302,8 +302,24 @@ static void clock_timer(void)
 {
     unsigned char h, m, s;
     if (!have_prev) return;
-    if (GB_TIMER_OWNER) return;                 /* keep part/snapshot paired with its rect */
     timer_window = (unsigned char)(GB_TIMER_TASK_SLOT + 1);
+    if (GB_TIMER_DROPPED == timer_window) {
+        GB_TIMER_DROPPED = 0;
+        /* The component was entirely behind opaque windows. Advance the same
+           snapshots a successful draw would have advanced, then let the next
+           worker slice consider another independently visible component. A
+           later ordinary window repaint reconstructs everything from gb_time. */
+        if (timer_part == TIMER_HANDS) {
+            ph = timer_h; pm = timer_m; ps = timer_s;
+            pshow = show_sec; have_prev = 1;
+            timer_digit_due = 1;
+        } else {
+            dh = timer_h; dm = timer_m; ds = timer_s;
+            dshow = show_sec;
+            timer_digit_due = 0;
+        }
+    }
+    if (GB_TIMER_OWNER) return;                 /* keep part/snapshot paired with its rect */
     h = bin(GB_TIMER_HOUR); m = bin(GB_TIMER_MINUTE); s = bin(GB_TIMER_SECOND);
     timer_h = h; timer_m = m; timer_s = s;
     if (timer_digit_due) {
@@ -346,6 +362,7 @@ static void c_draw(void)
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
     relayout();
 #ifdef GB_APP_TIMERS
+    if (GB_TIMER_DROPPED == timer_window) GB_TIMER_DROPPED = 0;
     if (GB_TIMER_ACTIVE_FOR(timer_window)) {
         h = timer_h; m = timer_m; s = timer_s;
         if (timer_part == TIMER_HANDS) {

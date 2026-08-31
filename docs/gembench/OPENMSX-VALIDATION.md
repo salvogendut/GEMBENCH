@@ -284,9 +284,10 @@ the freeze, stale-coordinate, and old-position residue failures from recurring.
 
 The follow-up interaction pass bounds repaint work on the 3.58 MHz target.
 The compositor skips window callbacks whose rectangles do not intersect the
-current damage. A focus raise damages only the union of areas that higher
-windows formerly obscured, so switching between disjoint Paint panes performs
-no repaint and overlapping panes redraw only their newly exposed intersection.
+current damage. A focus transition damages the exact union of the complete old
+and new focus rectangles. Both endpoints therefore redraw their focus-dependent
+furniture and content immediately; overlap is emitted once and the gap between
+disjoint panes is not repainted.
 The activation press between Paint siblings is consumed before `on_frame`, so
 focusing Canvas, Preview, or Toolchest cannot also start an edit or request its
 follow-up full restore; the next press performs the pane action.
@@ -408,6 +409,10 @@ make pcw
 ```
 
 ## Milestone 12 visible-region repainting
+
+This section records the historical Desktop-only `gbregion` validation. The
+release integration and `tools/test_visible_regions_openmsx.sh` were superseded
+by Architecture Milestone 9; current global results are recorded below.
 
 Milestone 12 was validated on 2026-08-29 with openMSX 21.0 and a disposable
 Nextor image containing `CLOCK.APP` as root-level `A.APP`. The real pointer path
@@ -741,4 +746,46 @@ python3 -m unittest tests.test_background_timer -v
 make gembench-msx
 OPENMSX='distrobox enter my-distrobox -- openmsx' \
   MSX_HEADLESS=1 make gembench-m8-timer-openmsx
+```
+
+## Architecture Milestone 9 visibility compositor
+
+Architecture Milestone 9 was validated on 2026-08-31 with openMSX 21.0 and the
+normal network-free 512 KiB Nextor test image. The global compositor test opens
+Clock, raises File Manager over it, first checks partial component occlusion,
+then maximises File Manager until Clock is completely covered. During the
+three-second hidden interval the result was:
+
+```text
+STATUS=PASS
+BACKGROUND_DRAW_DELTA=0
+BACKGROUND_FRAME_DELTA=0
+BACKGROUND_HASH=3671906385,3671906385
+BACKGROUND_POINTER_PARKED=0
+HIDDEN_WORKER_DELTA=0
+HIDDEN_DRAW_DELTA=0
+HIDDEN_DAMAGE_DELTA=0
+HIDDEN_HASH=900810233,900810233
+HIDDEN_DIFF=
+```
+
+Clock therefore consumed neither worker CPU nor draw callbacks while hidden,
+and its covering foreground remained bit-identical. Restoring File Manager
+made Clock visible and produced a current-time repaint through the normal
+compositor. The PAINT workflow independently moved Toolchest, Preview, and
+Canvas/work panes, verified clean old positions, and required repaint callbacks
+for both focus endpoints plus a full-window clip for every newly focused pane.
+
+The host geometry model compares 500 deterministic random rectangle stacks to
+pixel subtraction, verifies move endpoint-envelope coverage, and verifies the
+exact disjoint old/new focus union. Normal and diagnostic scheduler images
+measure 1,448/1,536 and 1,457/1,536 bytes. The release Screen 6/7 child COMs
+measure 14,548/16,126 bytes; Desktop and Clock are 15,141/12,836 bytes.
+
+```sh
+python3 -m unittest tests.test_visibility_compositor -v
+python3 -m unittest tests.test_background_timer -v
+make gembench-msx
+OPENMSX='distrobox enter my-distrobox -- openmsx' \
+  MSX_HEADLESS=1 tools/test_visible_regions_openmsx.sh
 ```
