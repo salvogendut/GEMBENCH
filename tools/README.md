@@ -17,13 +17,18 @@ PCW tools are available on `archive/cpc-pcw-targets`.
 
 - `build_capp.sh` — build one `-DGB_MSX2` SDCC application with explicit
   optional library profiles and strict code/data/stack limits.
+- `build_uapp.sh` — build one byte-identical `GB_UNIVERSAL` GBAP v4 application
+  for the future MSX2/CPC/PCW kernels, with no target build define.
 - `build_scheduler.sh` — build the MSX2 fixed-RAM app-worker scheduler.
 - `build_cfgmod.sh`, `build_uimod.sh`, `build_appickmod.sh`, `build_webmod.sh`,
   `build_imgmod.sh`, and `build_fsctxmod.sh` — active paged modules.
 - `build_titlebarmod.sh` — build the MSX2 title/gadget installer and stage themes.
 - `build_secondary.sh` — build application secondary mapper payloads.
 - `gblib_subset.py` — derive a per-app trampoline subset from `gblib.s`.
-- `embed_app_icon.py` — build/check GBAP application preambles and manifests.
+- `embed_app_icon.py` — build/check GBAP application preambles, v4 manifests,
+  32-bit segment ranges, and whole-package CRCs.
+- `check_universal_app.py` — reject target source, direct hardware/absolute
+  access, and target-specific linked modules from a universal application.
 
 ## Resources and assets
 
@@ -42,8 +47,9 @@ build target.
 
 ## Checks and emulator workflows
 
-- `check_gembench_abi.py`, `check_abi_table.py`, `check_app_layout.py` — ABI and
-  binary-layout guards.
+- `check_gembench_abi.py`, `check_geobench_v2_abi.py`, `check_abi_table.py`,
+  `check_app_layout.py` — frozen ABI, proposed universal ABI, and binary-layout
+  guards.
 - `check_lowram_map.py --profile msx` — fixed low-RAM overlap audit.
 - `check_pic_distribution.py`, `check_msx_floppies.py` — committed media audits.
 - `test_*_openmsx.sh` — target workflows for windows, compositor visibility,
@@ -53,3 +59,7 @@ build target.
 
 Run the complete host gate with `make check` and the complete target build with
 `make geobench-msx`.
+
+Run only the experimental compile-once gate with `make geobench-v2-sdk-check`.
+It deterministically builds `build/universal/ABIPROBE.APP`; it does not yet make
+that file executable on the current MSX kernel.

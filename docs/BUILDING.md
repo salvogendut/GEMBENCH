@@ -1,7 +1,10 @@
 # Building, deploying, and running GEOBENCH
 
-GEOBENCH builds for MSX2 only. The retired CPC/PCW tree is preserved on
-`archive/cpc-pcw-targets`; see [the target policy](MSX2-ONLY.md).
+The active GEOBENCH tree currently builds MSX2 only. The archived CPC/PCW tree
+is preserved on `archive/cpc-pcw-targets`; see the
+[current target state](MSX2-ONLY.md). Do not infer a working CPC/PCW build from
+the universal ABI design documents: those targets return only after their
+implementation gates pass.
 
 ## Requirements
 

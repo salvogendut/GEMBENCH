@@ -1,8 +1,9 @@
 # GEOBENCH roadmap
 
-GEOBENCH now develops one MSX2 system rather than maintaining several hardware
-targets. The immediate roadmap is therefore architectural depth, performance,
-and application quality on the fixed 512 KiB mapper / 128 KiB VRAM baseline.
+The active GEOBENCH release remains MSX2 while a common native application ABI
+is designed for staged CPC and PCW reintroduction. Architectural depth and
+application quality continue on the 512 KiB MSX2 baseline without creating new
+target-specific application binaries.
 
 ## Near term
 
@@ -14,8 +15,7 @@ and application quality on the fixed 512 KiB mapper / 128 KiB VRAM baseline.
    lifecycle, and close/reuse paths.
 4. Expand automated openMSX workflows for Paint, File Manager, Clock, Settings,
    Browser/Telnet, and bundled GB-BASIC.
-5. Audit the remaining inherited code and documentation for assumptions that no
-   longer apply to the fixed MSX2 target.
+5. Implement and validate the proposed GEOBENCH-2 universal SDK/package on MSX2.
 
 ## Medium term
 
@@ -27,9 +27,10 @@ and application quality on the fixed 512 KiB mapper / 128 KiB VRAM baseline.
 - expand hardware validation beyond the emulator reference environment;
 - stabilize a documented third-party MSX2 application SDK.
 
-## Retired ports
+## Platform restoration
 
-CPC and PCW are not active roadmap targets. Their last working tree is preserved
-on `archive/cpc-pcw-targets`. A future port effort would begin from that branch
-and must be proposed as a new project decision rather than constraining current
-MSX2 work. See [MSX2-ONLY.md](MSX2-ONLY.md).
+CPC and PCW are not active build targets today. Their last working tree is
+preserved on `archive/cpc-pcw-targets`. CPC restoration (issue #54) is paused
+behind the universal application ABI (issue #55), then PCW is restored as the
+third implementation. See [MSX2-ONLY.md](MSX2-ONLY.md) and the
+[universal ABI migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md).

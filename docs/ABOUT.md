@@ -18,9 +18,12 @@ historical GEM applications.
 - keyboard, joystick, or MSX mouse input
 - TCP/IP UNAPI networking when a provider is installed
 
-GEOBENCH is MSX2-only. CPC and PCW support stopped on 31 August 2026; the last
-multi-platform tree is retained on `archive/cpc-pcw-targets`. Details are in
-[MSX2-ONLY.md](MSX2-ONLY.md).
+The current release is MSX2-only. CPC and PCW support stopped on 31 August 2026
+and the last multi-platform tree is retained on `archive/cpc-pcw-targets`. The
+project now plans to restore CPC and then PCW around one compile-once native
+application ABI, rather than restoring the old per-target application builds.
+See [MSX2-ONLY.md](MSX2-ONLY.md) and the
+[universal ABI proposal](UNIVERSAL-APPLICATION-ABI.md).
 
 ## System shape
 

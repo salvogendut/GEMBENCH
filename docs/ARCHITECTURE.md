@@ -1,8 +1,10 @@
 # GEOBENCH architecture
 
-GEOBENCH is an MSX2-only banked desktop. The detailed evolution of its GEM-like
-services is recorded under the historical `docs/gembench/` namespace; this
-document describes the active runtime and build boundaries.
+GEOBENCH is currently an MSX2-only banked desktop. The detailed evolution of
+its GEM-like services is recorded under the historical `docs/gembench/`
+namespace; this document describes the active runtime and build boundaries.
+The experimental compile-once MSX2/CPC/PCW boundary is separate and documented in
+[UNIVERSAL-APPLICATION-ABI.md](UNIVERSAL-APPLICATION-ABI.md).
 
 ## Memory and ownership
 
@@ -27,7 +29,7 @@ is under `lib/msx/` and `kernel/*_msx.asm`:
 - H.TIMI-paced clock and preemptive worker scheduling.
 
 The production build is `tools/build_kernel_msx.sh`. No CPC or PCW builder or
-release media exists in the active tree; see [MSX2-ONLY.md](MSX2-ONLY.md).
+release media exists in the active tree yet; see [MSX2-ONLY.md](MSX2-ONLY.md).
 
 ## Applications and ABI
 
@@ -40,6 +42,11 @@ documented in [gembench/ABI-V1.md](gembench/ABI-V1.md).
 documents, widgets, GBR objects/forms/menus, VDI-lite drawing, typed scrap,
 shell discovery, deferred messages, filesystem contexts, shared services,
 secondary resources, and timers.
+
+GEOBENCH-2 has an experimental `GB_UNIVERSAL` SDK, runtime-geometry accessors,
+a v6 sysinfo C record, a guarded startup, and a deterministic GBAP v4 packer.
+The current kernel still exposes v5 and does not advertise or load v4 until the
+MSX reference implementation passes the next migration gate.
 
 ## Windowing, compositor, and scheduling
 
