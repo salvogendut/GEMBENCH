@@ -1,0 +1,217 @@
+/* basrun.h - GB-BASIC runtime: shared types, config knobs, cross-module decls.
+ *
+ * BASRUN.APP runs a GW-BASIC-flavored program in a 40x20 character console
+ * window. The interpreter executes as a resumable state machine driven from
+ * GB_MSG_FRAME (the kernel WM owns the master loop). Every buffer below is a
+ * static pool - no malloc - and every size is a knob for the fit-check ladder.
+ */
+#ifndef BASRUN_H
+#define BASRUN_H
+
+#include "gb.h"
+
+/* ---- console geometry ------------------------------------------------------
+ * 40 cols x 6px = 240px = 60 byte cols; 20 rows x 8px = 160 lines.
+ * Window: 1 byte col border + 2 inset each side; title bar 14px + 2px gap. */
+#define CON_COLS  40
+#define CON_ROWS  20
+#define WIN_X     8
+#define WIN_Y     14
+#define WIN_W     64
+#define WIN_H     178
+#define CX        ((unsigned char)(gb_wm_x() + 2))   /* content origin, live (drag) */
+#define CY        ((unsigned char)(gb_wm_y() + 16))
+
+/* ---- capacity knobs (fit-check ladder adjusts these) ---------------------- */
+#define PROG_MAX  1728            /* program text cap */
+#define PROG_SLK  0               /* loader sector spill lands in grid (pre-clear) */
+#define NVARS     36              /* numeric scalars */
+#define SVARS     8               /* string variables */
+#define SSTR_CAP  25              /* max string length */
+#define NARRS     8               /* DIM'd arrays */
+#define APOOL     40              /* floats in the array pool */
+#define FORS      8               /* FOR nesting */
+#define GOSUBS    8               /* GOSUB nesting */
+#define STRTMP    192             /* per-statement string scratch arena */
+#define INBUF     56              /* INPUT line buffer */
+
+/* ---- big buffers live in kernel low RAM, not the 16K bank -------------------
+ * 0x2200..0x3DFF is the module bulk-transfer buffer (gb_copybuf): idle except
+ * during File Manager copies / saves / card-module streaming. BASRUN parks the
+ * program text, console grid and string scratch there - gb_fs_load straight
+ * into 0x2200 is the File Manager's own blessed pattern on every backend.
+ * Caveat (documented in the README): file transfers performed by OTHER windows
+ * while a program is running share this RAM and can disturb the program. */
+#define LR_BASE     0x2200
+#define LR_ENGINE   LR_BASE          /* BASRUN2.BIN overlay: code 0x2200..0x2F7F */
+#define LR_ENGDATA  0x2FC0           /* engine state: fac_err, gfx jobs, FAC/ARG */
+#define LR_PROG     0x3010                               /* PROG_MAX + PROG_SLK  */
+#define LR_GRID   (LR_PROG + PROG_MAX + PROG_SLK)        /* CON_ROWS*CON_COLS    */
+#define LR_STRTMP (LR_GRID + CON_ROWS * CON_COLS)        /* STRTMP               */
+#define LR_INBUF  (LR_STRTMP + STRTMP)                   /* INBUF + 4            */
+#define LR_ROWBUF (LR_INBUF + INBUF + 4)                 /* CON_COLS + 4         */
+#define LR_NVAR   (LR_ROWBUF + CON_COLS + 4)             /* NVARS * 6            */
+#define LR_APOOL  (LR_NVAR + NVARS * 6)                  /* APOOL * 4            */
+#define LR_FORS   (LR_APOOL + APOOL * 4)                 /* FORS * 14            */
+#define LR_GOSUB  (LR_FORS + FORS * 14)                  /* GOSUBS * 4           */
+#define LR_SVAR   (LR_GOSUB + GOSUBS * 4)                /* SVARS * (SSTR_CAP+3) */
+
+/* Run handoff (RAM, no disk): the editor (BASIC.APP) writes the program here and
+ * launches BASRUN, which copies it to prog[] instead of loading a .BAS - so Run
+ * needs no save/filename. The cells sit ABOVE the engine-load transient (the CPC
+ * AMSDOS loader reads whole sectors incl. the 128-byte header, up to ~0x3000)
+ * and get consumed once, so a later file-launch can't misread stale RAM. These
+ * literals are duplicated in apps/basic/main.c - keep them in sync. */
+#define HANDOFF_MAGIC ((volatile unsigned char *)0x3400)  /* "GBRN" set by editor */
+#define HANDOFF_LEN   (*(volatile unsigned int *)0x3404)  /* program length       */
+#define HANDOFF_PROG  ((char *)0x3410)                    /* program text (\n)    */
+#define LR_END    (LR_SVAR + SVARS * (SSTR_CAP + 3))     /* end-exclusive <= 3E00 */
+#if LR_END > 0x3E00
+#error "BASRUN low-RAM workspace exceeds the kernel transfer buffer"
+#endif
+#define prog      ((char *)LR_PROG)
+#define grid      ((char *)LR_GRID)
+#define strtmp    ((char *)LR_STRTMP)
+#define inbuf     ((char *)LR_INBUF)
+#define rowbuf    ((char *)LR_ROWBUF)
+
+/* ---- interpreter states ---------------------------------------------------- */
+#define ST_IDLE   0               /* nothing loaded */
+#define ST_RUN    1               /* executing statements */
+#define ST_INPUT  2               /* INPUT line editor active */
+#define ST_END    3               /* finished ("Ok"/"Break"/error) - key closes */
+#define ST_GFX    4               /* incremental graphics operation active */
+
+/* ---- value ----------------------------------------------------------------- */
+/* Numbers are 4-byte packed MBF singles (GW-BASIC SNG format); C never does
+ * arithmetic on them directly - everything goes through the fac.s engine. */
+typedef struct { unsigned char b[4]; } num_t;
+
+#define VT_NUM 0
+#define VT_STR 1
+typedef struct {
+    unsigned char t;              /* VT_NUM / VT_STR */
+    num_t n;
+    const char *s;                /* NOT NUL-terminated (may point into prog) */
+    unsigned char sl;             /* string length */
+} val_t;
+
+/* ---- the MBF float engine (fac.s) ------------------------------------------- */
+void f_ld(const void *m);         /* FAC <- packed */
+void f_arg(const void *m);        /* ARG <- packed */
+void f_st(void *m);               /* packed <- FAC */
+void f_fac2arg(void);             /* ARG <- FAC */
+void f_add(void);                 /* FAC = FAC + ARG */
+void f_sub(void);                 /* FAC = FAC - ARG */
+void f_mul(void);
+void f_div(void);
+signed char f_cmp(void);          /* sign of FAC - ARG: 1 / 0 / -1 */
+signed char f_sgn(void);          /* sign of FAC */
+void f_neg(void);
+signed char f_exp(void);          /* FAC's binary exponent (0 for 0) */
+void f_scale(signed char k);      /* FAC *= 2^k */
+void f_floor(void);
+int  f_toi(void);                 /* FAC -> int16, round-to-nearest (destroys FAC) */
+void f_fromi(int v);
+unsigned char f_in(const char **pp);   /* parse decimal at *pp -> FAC; 1 = digits */
+void f_out(char *dst);            /* GW-style format of FAC (destroys FAC/ARG) */
+#define fac_err (*(volatile unsigned char *)LR_ENGDATA)  /* engine error latch */
+
+/* graphics parameter cells (fac.s data head) + overlay entries (gfx.s) */
+#define GFX_X0  (*(volatile int *)(LR_ENGDATA + 1))
+#define GFX_Y0  (*(volatile int *)(LR_ENGDATA + 3))
+#define GFX_X1  (*(volatile int *)(LR_ENGDATA + 5))
+#define GFX_Y1  (*(volatile int *)(LR_ENGDATA + 7))
+#define GFX_PEN (*(volatile unsigned char *)(LR_ENGDATA + 9))
+void g_pset(void);
+unsigned char g_line(void);       /* 1 = complete, 0 = continue with g_step */
+unsigned char g_box(void);
+unsigned char g_boxf(void);
+unsigned char g_circle(void);
+unsigned char g_step(void);       /* advance one bounded graphics unit */
+
+#define FCHK() fchk()
+
+/* ---- error codes ------------------------------------------------------------ */
+#define E_NONE   0
+#define E_SYNTAX 1
+#define E_ULINE  2                /* Undefined line number */
+#define E_TYPE   3                /* Type mismatch */
+#define E_DIV0   4
+#define E_OVF    5                /* Overflow */
+#define E_SUBSC  6                /* Subscript out of range */
+#define E_RETWG  7                /* RETURN without GOSUB */
+#define E_NEXTWF 8                /* NEXT without FOR */
+#define E_ODATA  9                /* Out of DATA */
+#define E_MEM    10               /* Out of memory */
+#define E_STRSP  11               /* Out of string space */
+#define E_IFC    12               /* Illegal function call */
+#define E_DUPDEF 13               /* Duplicate Definition */
+
+/* ---- console (main.c) ------------------------------------------------------- */
+void con_clear(void);
+void con_putc(char c);
+void con_puts(const char *s);           /* NUL-terminated */
+void con_putsn(const char *s, unsigned char n);
+void con_nl(void);
+void con_tab_zone(void);                /* PRINT ',' -> next 14-col zone */
+void con_tab_to(unsigned char col);     /* TAB(n): space-fill to column n (0-based) */
+void con_locate(unsigned char row, unsigned char col);
+void con_flush(void);                   /* repaint dirty rows (once per frame) */
+extern unsigned char con_row, con_col;
+extern unsigned char scroll_count;      /* scrolls this frame (frame budget cap) */
+
+/* ---- shared interpreter state ----------------------------------------------- */
+extern unsigned int prog_len;
+extern const char *ip;                  /* execution position in prog */
+extern unsigned int cur_line;           /* current line number (errors, GOTO cache) */
+extern unsigned char g_err;             /* pending error code (0 = none) */
+extern unsigned char g_state;           /* ST_* */
+extern unsigned char pending_key;       /* 1-char pushback (Ctrl-C probe vs INKEY$) */
+extern unsigned int frame_ctr;          /* frames since start (RANDOMIZE seed) */
+
+void err(unsigned char code);           /* raise (first error wins) */
+
+/* interp.c */
+void run_reset(void);                   /* clear vars/stacks, ip = prog start */
+void exec_stmt(void);                   /* execute one statement at ip */
+void report_error(void);                /* print "<msg> in <line>", -> ST_END */
+const char *find_line(unsigned int no); /* line seek (0 = not found) */
+num_t *var_slot(char n0, char n1);      /* numeric scalar, created on demand */
+unsigned char input_store(void);        /* parse inbuf -> INPUT vars; 1 = ok */
+
+/* expr.c */
+void eval(val_t *v);                    /* full expression at ip */
+unsigned char eval_num(val_t *v);       /* numeric expr; 0 = error raised */
+void sk(void);                          /* skip spaces */
+unsigned char kw(const char *k);        /* case-insensitive keyword match + skip */
+unsigned char at_end(void);             /* ip at ':' / newline / NUL */
+unsigned char get_ident(char *n2, unsigned char *is_str);
+void strtmp_reset(void);                /* reset the per-statement string arena */
+char *strtmp_alloc(unsigned char n);
+extern unsigned char in_len;            /* INPUT editor fill (inbuf is low RAM) */
+
+/* interp.c storage (also used by expr.c) */
+num_t *arr_slot(char n0, char n1, int idx);      /* array element (auto-DIM 10) */
+void arr_dim(char n0, char n1, unsigned int nelem);   /* DIM A(n) */
+void svar_get(const char *n2, val_t *v);         /* string variable read */
+void svar_set(const char *n2, const val_t *v);   /* string variable write */
+unsigned char str_func(val_t *v);                /* string functions; 1 = consumed */
+
+/* val.c - number helpers over the engine */
+void fmt_num(const num_t *n, char *dst);   /* GW-style formatting (dst >= 16) */
+void rnd_fac(signed char mode);            /* RND -> FAC (mode <0 seed, 0 repeat, >0 next) */
+void rnd_seed(unsigned int s);
+int  num_toi(const num_t *n);              /* rounded int16 (raises E_OVF) */
+void num_fromi(num_t *n, int v);
+
+/* fmath.c - SQR/SIN/COS/TAN over the engine (result in FAC) */
+void fn_sqr(void);                         /* FAC = sqrt(FAC) */
+void fn_sin(void);
+void fn_cos(void);
+void fn_tan(void);
+
+/* fchk: raise a latched engine error (function, not macro - ~35 call sites) */
+void fchk(void);
+
+#endif

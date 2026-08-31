@@ -22,7 +22,7 @@ preempted.
 | notepad  | `NOTEPAD.APP`  | text editor (word-wrap, File/Edit/View, saves `.BAS` CR+LF) |
 | iconed   | `ICONED.APP`   | `.IST` icon-set / `.SPR` cursor / embedded `.APP` icon editor |
 | paint    | `PAINT.APP`    | GBPC v2 bitmap editor; the MSX2 source is maintained in-tree for GEMBENCH's multi-window architecture, with a three-pane 20x20 area selector, magnified canvas, and toolchest |
-| basic    | `BASIC.APP` / `BASRUN.APP` | external GB-BASIC editor and GW-BASIC-flavoured runtime, with examples and a graphics overlay |
+| basic    | `BASIC.APP` / `BASRUN.APP` | bundled GB-BASIC editor and GW-BASIC-flavoured runtime, with examples and a graphics overlay |
 | xaos     | `XAOS.APP`     | fractal generator, exports portable `.PIC` files |
 | mahjong  | `MAHJONG.APP`  | Kana Mahjong solitaire with selectable Katakana/Hiragana tiles, solvable Turtle deals, Undo and Hint |
 | calculator | `CALC.APP`   | fixed-point desktop calculator with basic arithmetic, percentage and square root |
@@ -44,10 +44,10 @@ preempted.
 Most sources live under `apps/<name>/`. The MSX2 `PAINT.APP` source and tool
 artwork now live under `apps/paint/` and `assets/paint/`; CPC and PCW continue
 to consume the standalone `GB-PAINT` repository so GEMBENCH-specific lifecycle
-changes cannot alter their GEOBENCH application. `BASIC.APP` is built from the
-sibling `GB-BASIC` checkout and staged into the distributions. GB-BASIC supplies
-its editor, runtime, numeric/graphics overlay, and examples; `.BAS` files open
-in `BASIC.APP`. Set `GB_BASIC_DIR` when that repository is not adjacent.
+changes cannot alter their GEOBENCH application. GB-BASIC lives under
+`components/gb-basic/` and supplies the editor, runtime, numeric/graphics
+overlay, and examples staged into every distribution; `.BAS` files open in
+`BASIC.APP`.
 
 `TASKDEMO.APP` is a development-only preemption diagnostic and is not staged in
 the distributions. Its worker intentionally never yields; build it with

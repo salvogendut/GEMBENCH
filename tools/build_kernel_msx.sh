@@ -96,10 +96,9 @@ if [ ! -f "$PAINT_APP_DIR/main.c" ] || [ ! -d "$PAINT_ASSET_DIR" ]; then
     echo "ERROR: in-tree GEMBENCH Paint sources are incomplete" >&2
     exit 1
 fi
-GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
+GB_BASIC_DIR="components/gb-basic"
 if [ ! -f "$GB_BASIC_DIR/Makefile" ] || [ ! -d "$GB_BASIC_DIR/apps/basic" ]; then
-    echo "ERROR: GB-BASIC checkout not found at $GB_BASIC_DIR" >&2
-    echo "Set GB_BASIC_DIR=/path/to/GB-BASIC or clone it next to geobench." >&2
+    echo "ERROR: in-tree GB-BASIC sources are incomplete at $GB_BASIC_DIR" >&2
     exit 1
 fi
 GEOBENCH_ROOT="$(pwd)"

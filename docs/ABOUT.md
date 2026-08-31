@@ -147,9 +147,9 @@ GEOBENCH does **not** run ordinary machine-code `.BIN` programs inside a
 managed window. Those programs expect to own the machine under BASIC or DOS,
 so the File Manager reports that they must be run after leaving GEOBENCH.
 
-`.BAS` files are different: when the separately maintained **GB-BASIC** package
-is installed, double-clicking a `.BAS` file opens it in `BASIC.APP`. GEOBENCH's
-native executable formats remain `.APP` applications and `.SAV` screensavers.
+`.BAS` files are different: the bundled **GB-BASIC** package opens them in
+`BASIC.APP`. GEOBENCH's native executable formats remain `.APP` applications
+and `.SAV` screensavers.
 
 This was an early aspiration ("layer on top of DOS, launch the existing
 catalogue"), but coaxing software that assumes total machine ownership into a
@@ -196,6 +196,8 @@ geobench/
 │   ├── viewer/        #   banked/demand-streamed .PIC image viewer
 │   ├── clock/         #   analog clock window
 │   └── settings/      #   control panel: config/media picker + desktop colours
+├── components/
+│   └── gb-basic/      # bundled BASIC editor, runtime, engine and examples
 ├── rom/               # optional CPC ROM/offload sources
 ├── assets/            # icon/cursor/picture sources + sample files (WELCOME.TXT)
 ├── docs/              # architecture, development, archive notes, review docs
@@ -204,6 +206,6 @@ geobench/
 
 The MSX2 `PAINT.APP` source is owned in-tree so its application/window lifecycle
 can evolve with GEMBENCH; CPC and PCW still take Paint from the sibling
-`GB-PAINT` repository. `BASIC.APP` is owned by the sibling `GB-BASIC` repository
+`GB-PAINT` repository. GB-BASIC is owned in-tree under `components/gb-basic/`
 and staged by the distribution build. Normal and preemptive release media do
 not require a GEOBENCH ROM.

@@ -24,8 +24,8 @@ reference resources — not dependencies, and not vendored into this repo.
   **Why it matters:** GEOBENCH calls the firmware for screen, keyboard, and disk.
   This is the authoritative reference for the **TXT/GRA VDU vectors** and the
   CAS/AMSDOS file paths the kernel uses. (Note: GEOBENCH does **not** contain
-  legacy machine-code `.BIN` software; `.BAS` files may be opened by the
-  separately maintained GB-BASIC application.)
+  legacy machine-code `.BIN` software; `.BAS` files may be opened by the bundled
+  GB-BASIC application.)
 
 ## Locomotive BASIC
 

@@ -13,8 +13,9 @@ bash tools/build_kernel_pcw.sh          # -> GEOBENCH.DSK + COMPANION.DSK + EXTR
 ~/Dev/1985/1985 --config debug/1985-pcw.conf --disk-a QA/PCW/Floppies/GEOBENCH.DSK
 ```
 
-The distribution build expects matching `../GB-PAINT` and `../GB-BASIC`
-checkouts. Set `GB_PAINT_DIR=` or `GB_BASIC_DIR=` when they live elsewhere.
+The distribution build uses the bundled `components/gb-basic/` source. It still
+expects a matching `../GB-PAINT` checkout; set `GB_PAINT_DIR=` when Paint lives
+elsewhere.
 
 Headless smoke test:
 

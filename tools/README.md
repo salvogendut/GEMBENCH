@@ -18,7 +18,7 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   (e.g. `EXTRA_RASM="-DGB_ROM_REQ=1"` for the ROM-offload kernel).
 - **`build_kernel_pcw.sh`** — builds the standalone PCW boot disk, companion
   disk, and 720K `EXTRAS.DSK`. The extras build stages the PCW payloads from
-  sibling GB-PAINT and GB-BASIC checkouts.
+  the sibling GB-PAINT checkout and bundled `components/gb-basic/` source.
 - **`build_kernel_msx.sh`** — builds the `GBMSX.COM` video-mode selector,
   `GBMSX6.COM`, `GBMSX7.COM`, the MSX2 app/module payload, and the bootable
   Nextor `QA/MSX/GBMSX.IMG`, plus the two 720K images under `QA/MSX/Floppies/`.
@@ -42,6 +42,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   (`MSX_DISTROBOX` overrides the name). `MSX_UNAPI=0` disables the extension.
   Passing a `.DSK` mounts it in drive A; `MSX_DISKB` optionally mounts a second
   floppy on machine definitions that expose drive B.
+- **`test_gb_basic_openmsx.sh`** — builds the bundled BASRUN built-in graphics
+  program, boots it as a saver in a private headless image, and verifies the
+  window geometry, low-RAM engine overlay, and program load.
 - **`m4detect.asm`** — a tiny BASIC-callable detector that asks the firmware
   (`KL_FIND_COMMAND`) whether an M4 ROM RSX is installed. The staged `GB.BAS` loads
   it as `M4DETECT.BIN` and uses its result to pick `GBM4` vs `GBALB`.
@@ -184,7 +187,7 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`rebuild_app.sh <name>`** — performs a focused cross-platform rebuild and
   distribution refresh for a registered application. Use
   `make app APP=mahjong` after changing Mahjongg code or its embedded icon; it
-  skips kernels, unrelated applications, pictures, and external GB-BASIC/GB-PAINT
+  skips kernels, unrelated applications, pictures, and full GB-BASIC/GB-PAINT
   builds while refreshing the companion disks and existing FAT images.
 - **`package_cpc_companion.sh` / `package_pcw_companion.sh`** — repack only the
   corresponding companion disk from existing application payloads. Full and

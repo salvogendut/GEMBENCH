@@ -42,10 +42,10 @@ backdrop, dragging icons, opening apps and menus:
 - **Notepad** — a text editor: type/edit, word-wrap, click or cursor keys to place
   the caret, **File / Edit / View** menus (New/Load/Save/Save As, copy/paste,
   Fullscreen). Saves `.BAS` with CR+LF so CPC BASIC can load them.
-- **GB-BASIC** — a separately maintained GW-BASIC-flavoured editor/runtime.
+- **GB-BASIC** — a bundled GW-BASIC-flavoured editor/runtime.
   Double-clicking a `.BAS` file opens it in `BASIC.APP`; Run launches the
   co-resident console and its bounded numeric/graphics overlay. Programs and
-  examples are staged from the sibling GB-BASIC repository.
+  examples are built from `components/gb-basic/` and staged with GEMBENCH.
 - **ICONED** — an icon/cursor editor for `.IST` sets, `.SPR` cursors, and optional
   icons embedded in `GBAP` `.APP` files (magnified canvas, pen palette, Prev/Next,
   undo, New/Load/Save/Save As, View > Fullscreen). Its Load dialog hides legacy

@@ -37,10 +37,9 @@ else
     echo "Set GB_PAINT_DIR=/path/to/GB-PAINT or clone it next to geobench." >&2
     exit 1
 fi
-GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
+GB_BASIC_DIR="components/gb-basic"
 if [ ! -f "$GB_BASIC_DIR/Makefile" ] || [ ! -d "$GB_BASIC_DIR/apps/basic" ]; then
-    echo "ERROR: GB-BASIC checkout not found at $GB_BASIC_DIR" >&2
-    echo "Set GB_BASIC_DIR=/path/to/GB-BASIC or clone it next to geobench." >&2
+    echo "ERROR: in-tree GB-BASIC sources are incomplete at $GB_BASIC_DIR" >&2
     exit 1
 fi
 GEOBENCH_ROOT="$(pwd)"
@@ -323,7 +322,7 @@ echo "  + $FLOPPY_QA/EXTRAS.DSK (picture gallery + secondary title/gadget themes
 echo "Building GB-BASIC CPC payload from $GB_BASIC_DIR"
 mkdir -p "$GB_BASIC_DIR/build" "$GB_BASIC_DIR/build/basic"
 make -C "$GB_BASIC_DIR" raws GEOBENCH="$GEOBENCH_ROOT"
-GB_BASIC_DIR="$GB_BASIC_DIR" tools/stage_dist.sh "$CARD_QA" # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH
+tools/stage_dist.sh "$CARD_QA" # GB.BAS auto-detect + GBALB.BIN + GBM4.BIN + /GBENCH
 # A ready-to-flash card image (partitioned FAT16) for the Albireo CH376 card and M4 image mode.
 tools/build_card_img.sh "$CARD_QA" "$CARD_IMG"
 

@@ -20,7 +20,7 @@ cd "$(dirname "$0")/.."
 
 RASM="${RASM:-rasm}"
 GB_PAINT_DIR="${GB_PAINT_DIR:-../GB-PAINT}"
-GB_BASIC_DIR="${GB_BASIC_DIR:-../GB-BASIC}"
+GB_BASIC_DIR="components/gb-basic"
 command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
 command -v sdcc >/dev/null || { echo "ERROR: sdcc not on PATH" >&2; exit 1; }
 
@@ -57,8 +57,7 @@ RASM="$RASM" bash tools/build_titlebarmod.sh
     exit 1
 }
 [ -f "$GB_BASIC_DIR/Makefile" ] || {
-    echo "ERROR: GB-BASIC checkout not found at $GB_BASIC_DIR" >&2
-    echo "Set GB_BASIC_DIR=/path/to/GB-BASIC or clone it next to geobench." >&2
+    echo "ERROR: in-tree GB-BASIC sources are incomplete at $GB_BASIC_DIR" >&2
     exit 1
 }
 

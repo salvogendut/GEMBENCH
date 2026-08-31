@@ -12,9 +12,8 @@ details remain authoritative in `docs/DEVELOPMENT.md` and `docs/BUILDING.md`.
 - mtools and dosfstools for generated MSX media
 
 The host resource compiler requires no third-party Python packages. The full
-MSX distribution uses the in-tree GEMBENCH Paint source plus the sibling
-GB-BASIC repository and the dependencies documented by the inherited GeoBench
-build.
+MSX distribution uses the in-tree GEMBENCH Paint and GB-BASIC sources plus the
+dependencies documented by the inherited GeoBench build.
 
 ## Commands
 

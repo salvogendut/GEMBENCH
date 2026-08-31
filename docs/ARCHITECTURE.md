@@ -207,8 +207,8 @@ the level of asset reload, storage, and window-manager primitives.
 - **Flat-ish content layout.** Nested subdirectories deeper than one level are
   not a supported storage workflow today; see [`File_Manager_Issue.md`](File_Manager_Issue.md).
 - **Legacy machine-code software is not contained.** Ordinary `.BIN` programs
-  still require leaving GEOBENCH. `.BAS` files open in the external GB-BASIC
-  application when that package is staged.
+  still require leaving GEOBENCH. `.BAS` files open in the bundled GB-BASIC
+  application staged with every distribution.
 
 ## CPC booting and distribution
 

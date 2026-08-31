@@ -4,10 +4,9 @@ The **Amstrad CPC** build is below; the **MSX2** build is in
 [Building for MSX2](#building-for-msx2), and PCW-specific media details are in
 [The PCW target](PCW.md#what-ships-where). All three share the RASM kernel +
 SDCC apps and are normally built inside the project distrobox (RASM, SDCC,
-`mtools`/`dosfstools` on `PATH`). The MSX2 Paint source is bundled in GEMBENCH;
-full builds still require the sibling `GB-BASIC` checkout. CPC and PCW retain
-their standalone `GB-PAINT` dependency. Override those external locations with
-`GB_PAINT_DIR=` and `GB_BASIC_DIR=` where applicable.
+`mtools`/`dosfstools` on `PATH`). GB-BASIC and the MSX2 Paint source are bundled
+in GEMBENCH. CPC and PCW retain only their standalone `GB-PAINT` dependency;
+override that external location with `GB_PAINT_DIR=` when applicable.
 
 ## Amstrad CPC
 
@@ -32,6 +31,11 @@ set `PREEMPTIVE=0` explicitly for a cooperative build.
 `make formref` builds only the CPC, MSX2, and PCW reusable-form reference
 binaries for quick UI iteration; `make sndtest` likewise builds only the
 three app-linked sound diagnostics.
+`make gb-basic` builds the bundled BASIC editor, runtime, and engine overlay for
+all three targets without rebuilding the distributions; its target-specific
+forms are `gb-basic-cpc`, `gb-basic-msx`, and `gb-basic-pcw`.
+`make gb-basic-openmsx` boots a private MSX image and verifies that BASRUN loads
+its engine overlay and starts the built-in graphics program.
 
 Window title motifs are standalone 56-byte `.TBR` assets, while the close and
 maximize pair is a standalone 50-byte `.GDT`. Both are selected independently
