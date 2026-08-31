@@ -281,8 +281,12 @@ def main() -> int:
         if occupied & addresses:
             errors.append(f"mailbox.{region['name']}: overlaps another public region")
         occupied |= addresses
-        if max(addresses) >= execution["application_base"]:
-            errors.append(f"mailbox.{region['name']}: is not resident below the app page")
+        below_app = max(addresses) < execution["application_base"]
+        high_resident = min(addresses) >= execution["resident_high_base"]
+        if not (below_app or high_resident):
+            errors.append(
+                f"mailbox.{region['name']}: is outside the low/high resident regions"
+            )
 
     check_slots(authority, errors)
     check_capabilities(authority, errors)

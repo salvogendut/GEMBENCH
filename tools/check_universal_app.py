@@ -41,7 +41,10 @@ FORBIDDEN_MODULE = re.compile(
     r"(?:^|[_-])(?:msx|cpc|pcw|unapi|bios|firmware|native)(?:$|[_-])",
     re.IGNORECASE,
 )
-REQUIRED_MODULES = {"crt0_v4", "gbuniversal", "gbsys", "gblib_subset", "main"}
+REQUIRED_MODULES = {
+    "crt0_v4", "gbuniversal", "gbuniversal_draw", "gbsys",
+    "gblib_subset", "main",
+}
 
 
 def source_files(paths: list[Path]) -> list[Path]:

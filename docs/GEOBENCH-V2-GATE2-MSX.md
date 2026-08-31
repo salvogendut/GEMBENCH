@@ -10,8 +10,8 @@ application path.
 32 bytes are byte-for-byte the v5 layout; the former `0xC2F0` cell remains an
 unpublished v5 shadow for old diagnostic tools. The suffix reports:
 
-- capability high word `0x000F`: universal loader, runtime geometry, portable
-  semantic drawing, and portable input;
+- capability high word `0x004F`: universal loader, runtime geometry, portable
+  semantic drawing/input, and generation-safe background visual timers;
 - 128 columns by 212 lines, four pixels per column and four semantic pens;
 - application range `0x4000..0x7EFF`, kernel table `0x8000`;
 - universal ABI 2.0, profile 3 (`universal-z80`).

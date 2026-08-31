@@ -129,6 +129,7 @@ CAPABILITIES_V4 = {
     "portable-input": 0x00080000,
     "portable-filesystem": 0x00100000,
     "package-resources": 0x00200000,
+    "background-timers": 0x00400000,
 }
 LIFECYCLE = {
     "windowed": 0x0001,

@@ -539,7 +539,8 @@ kl_go
                 ld    (vc_clr),a              ; LINE colour = the 2-bit pen value
                 ld    a,#70                   ; LINE command, IMP logical op
                 ld    (vc_cmd),a
-                jp    vdp_hmmv                ; same R#17-indirect block streamer
+                call  vdp_hmmv                ; publish command, then honour the universal
+                jp    vdp_wait_ce              ; synchronous semantic-line contract
 
 ; --- k_cls (GB_CLS): clear the whole bitmap to pen 0 -------------------------
 k_cls

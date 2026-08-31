@@ -3,28 +3,26 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-for app in DESKTOP CLOCK CALC; do
-    [ -s "build/msx/$app.RAW" ] || {
-        echo "ERROR: build/msx/$app.RAW is missing; run 'make geobench-msx' first" >&2
-        exit 1
-    }
-done
+[ -s build/msx/DESKTOP.RAW ]
+[ -s build/universal/CLOCK.APP ]
+[ -s build/universal/CALC.APP ]
 cmp -s build/msx/DESKTOP.RAW QA/MSX/CARD/GBENCH/DESKTOP.APP
-cmp -s build/msx/CLOCK.RAW QA/MSX/CARD/GBENCH/CLOCK.APP
-cmp -s build/msx/CALC.RAW QA/MSX/CARD/GBENCH/CALC.APP
+cmp -s build/universal/CLOCK.APP QA/MSX/CARD/GBENCH/CLOCK.APP
+cmp -s build/universal/CALC.APP QA/MSX/CARD/GBENCH/CALC.APP
 
 app_signature() {
-    local app="$1" stem="$2" noi main offset
-    noi="build/msx-obj/$stem/app.noi"
+    local image="$1" noi="$2" main offset
     main=$(awk '$1 == "DEF" && $2 == "_main" { print $3; found=1; exit }
         END { if (!found) exit 1 }' "$noi")
     offset=$((main - 0x4000))
     printf '%s ' "$main"
-    od -An -t u1 -j "$offset" -N 3 "build/msx/$app.RAW"
+    od -An -t u1 -j "$offset" -N 3 "$image"
 }
 
-read -r clock_main clock_sig0 clock_sig1 clock_sig2 < <(app_signature CLOCK clock)
-read -r calc_main calc_sig0 calc_sig1 calc_sig2 < <(app_signature CALC calculator)
+read -r clock_main clock_sig0 clock_sig1 clock_sig2 < <(app_signature \
+    build/universal/CLOCK.APP build/universal-obj/uclock/app.noi)
+read -r calc_main calc_sig0 calc_sig1 calc_sig2 < <(app_signature \
+    build/universal/CALC.APP build/universal-obj/ucalculator/app.noi)
 export GEMBENCH_ACCESSORY_CLOCK_MAIN="$clock_main"
 export GEMBENCH_ACCESSORY_CLOCK_SIG0="$clock_sig0"
 export GEMBENCH_ACCESSORY_CLOCK_SIG1="$clock_sig1"
@@ -45,6 +43,7 @@ printf 'GBMSX\r\n' > "$stage/card/AUTOEXEC.BAT"
 tools/build_msx_img.sh "$stage/card" "$stage/desk-accessories.img"
 
 export GEMBENCH_ACCESSORY_OUTPUT="$PWD/build/msx/desk-accessories-openmsx.txt"
+export GEMBENCH_ACCESSORY_SCREENSHOT="$PWD/build/msx/desk-accessories-openmsx.png"
 export MSX_UNAPI=0
 export MSX_MOUSE=0
 export SDL_AUDIODRIVER=dummy

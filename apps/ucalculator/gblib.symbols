@@ -1,0 +1,14 @@
+gb_fill
+gb_frame
+gb_getkey
+gb_menu
+gb_poll
+gb_curhide
+gb_curshow
+gb_saverect
+gb_restorerect
+gb_mx
+gb_my
+gb_restore_parent
+gb_wm_close
+gb_wm_damage

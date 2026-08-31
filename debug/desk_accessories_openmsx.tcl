@@ -7,6 +7,7 @@ set pause off
 proc da_env {name} { expr {$::env($name) + 0} }
 
 set da_output $::env(GEMBENCH_ACCESSORY_OUTPUT)
+set da_screenshot $::env(GEMBENCH_ACCESSORY_SCREENSHOT)
 set da_failure_png [file join [file dirname $da_output] desk-accessories-failure.png]
 set da_clock_main [da_env GEMBENCH_ACCESSORY_CLOCK_MAIN]
 set da_clock_sig [list [da_env GEMBENCH_ACCESSORY_CLOCK_SIG0] \
@@ -37,6 +38,12 @@ set da_closed_busy -1
 set da_final_busy -1
 set da_max_nwin 1
 set da_final_accessory_ok -1
+set da_clock_text_hits 0
+set da_calc_text_hits 0
+set da_clock_border_ok 0
+set da_calc_border_ok 0
+set da_clock_menu_ok 0
+set da_calc_menu_ok 0
 
 proc da_entry {slot} { expr {0x1352 + 25 * $slot} }
 
@@ -58,6 +65,41 @@ proc da_busy_count {} {
         if {[peek [expr {0x1440 + $i}]] != 0} { incr count }
     }
     return $count
+}
+
+proc da_menu_clock_ok {} {
+    expr {[peek 0x1310] == 2 &&
+          [peek 0x1311] == 10 && [peek 0x1312] == 86 &&
+          [peek 0x1313] == 105 && [peek 0x1314] == 101 &&
+          [peek 0x1315] == 119 && [peek 0x131A] == 17 &&
+          [peek 0x131B] == 79 && [peek 0x131C] == 112}
+}
+
+proc da_menu_calc_ok {} {
+    expr {[peek 0x1310] == 1 &&
+          [peek 0x1311] == 10 && [peek 0x1312] == 69 &&
+          [peek 0x1313] == 100 && [peek 0x1314] == 105 &&
+          [peek 0x1315] == 116}
+}
+
+# Release media boots Screen 7: each logical four-pixel column is two native
+# VRAM bytes.  Pen 2 is nibble value 2, hence 0x22 on both bytes.  Sampling the
+# side and bottom edges catches an app repaint that overwrites WM-owned chrome.
+proc da_border_ok {slot} {
+    set entry [da_entry $slot]
+    set x [peek [expr {$entry + 1}]]
+    set y [peek [expr {$entry + 2}]]
+    set w [peek [expr {$entry + 3}]]
+    set h [peek [expr {$entry + 4}]]
+    foreach point [list [list $x [expr {$y + 20}]] \
+                         [list [expr {$x + $w - 1}] [expr {$y + 20}]] \
+                         [list [expr {$x + 5}] [expr {$y + $h - 1}]]] {
+        lassign $point px py
+        set address [expr {$py * 256 + $px * 2}]
+        if {[debug read VRAM $address] != 0x22 ||
+            [debug read VRAM [expr {$address + 1}]] != 0x22} { return 0 }
+    }
+    return 1
 }
 
 proc da_lowram_ready {} {
@@ -90,6 +132,12 @@ proc da_finish {status} {
     puts $out "CLOSED_BUSY_PAGES=$::da_closed_busy"
     puts $out "FINAL_BUSY_PAGES=$::da_final_busy"
     puts $out "FINAL_ACCESSORY_OK=$::da_final_accessory_ok"
+    puts $out "CLOCK_TEXT_HITS=$::da_clock_text_hits"
+    puts $out "CALCULATOR_TEXT_HITS=$::da_calc_text_hits"
+    puts $out "CLOCK_BORDER_OK=$::da_clock_border_ok"
+    puts $out "CALCULATOR_BORDER_OK=$::da_calc_border_ok"
+    puts $out "CLOCK_MENU_OK=$::da_clock_menu_ok"
+    puts $out "CALCULATOR_MENU_OK=$::da_calc_menu_ok"
     puts $out "MAX_NWIN=$::da_max_nwin"
     puts $out "FINAL_NWIN=[peek 0x1350]"
     puts $out "FINAL_FOCUS=[peek 0x1351]"
@@ -120,6 +168,18 @@ proc da_defer_api_hit {} {
         lappend ::da_find_ids [reg C]
     } elseif {$op == 1} {
         incr ::da_send_hits
+    }
+    set ::pause off
+}
+
+proc da_text_hit {} {
+    if {[da_sig_loaded $::da_clock_main $::da_clock_sig] &&
+        [reg D] == 1 && [reg E] == 0} {
+        incr ::da_clock_text_hits
+    } elseif {[da_sig_loaded $::da_calc_main $::da_calc_sig] &&
+              (([reg D] == 2 && [reg E] == 1) ||
+               ([reg D] == 3 && [reg E] == 2))} {
+        incr ::da_calc_text_hits
     }
     set ::pause off
 }
@@ -207,13 +267,20 @@ proc da_wait_first_clock {} {
     if {![da_lowram_ready]} { after time 0.002 da_wait_first_clock; return }
     set slot [peek 0x1351]
     if {[peek 0x1350] == 2 && $slot > 0 &&
-        [da_sig_loaded $::da_clock_main $::da_clock_sig]} {
+        [da_sig_loaded $::da_clock_main $::da_clock_sig] &&
+        $::da_clock_text_hits > 0} {
         if {![da_accessory_ok $slot 1]} {
             if {[machine_info time] >= $::da_deadline} {
                 da_finish "FAIL Clock did not register exact ID 1"
             } else {
                 after time 0.1 da_wait_first_clock
             }
+            return
+        }
+        set ::da_clock_border_ok [da_border_ok $slot]
+        set ::da_clock_menu_ok [da_menu_clock_ok]
+        if {!$::da_clock_border_ok || !$::da_clock_menu_ok} {
+            da_finish "FAIL Clock visual/menu contract"
             return
         }
         set ::da_first_clock_slot $slot
@@ -229,7 +296,8 @@ proc da_wait_calculator {} {
     if {![da_lowram_ready]} { after time 0.002 da_wait_calculator; return }
     set slot [peek 0x1351]
     if {[peek 0x1350] == 3 && $slot > 0 &&
-        [da_sig_loaded $::da_calc_main $::da_calc_sig]} {
+        [da_sig_loaded $::da_calc_main $::da_calc_sig] &&
+        $::da_calc_text_hits >= 21} {
         if {![da_accessory_ok $slot 2]} {
             if {[machine_info time] >= $::da_deadline} {
                 da_finish "FAIL Calculator did not register exact ID 2"
@@ -238,13 +306,24 @@ proc da_wait_calculator {} {
             }
             return
         }
+        set ::da_calc_border_ok [da_border_ok $slot]
+        set ::da_calc_menu_ok [da_menu_calc_ok]
+        if {!$::da_calc_border_ok || !$::da_calc_menu_ok} {
+            da_finish "FAIL Calculator visual/menu contract"
+            return
+        }
         set ::da_calc_slot $slot
-        da_focus_desktop {da_choose_accessory 1 da_wait_calculator_reused}
+        after time 0.5 da_capture_calculator
     } elseif {[machine_info time] >= $::da_deadline} {
         da_finish "FAIL Calculator did not launch from Desk"
     } else {
         after time 0.1 da_wait_calculator
     }
+}
+
+proc da_capture_calculator {} {
+    catch {screenshot -raw $::da_screenshot}
+    after time 0.5 {da_focus_desktop {da_choose_accessory 1 da_wait_calculator_reused}}
 }
 
 proc da_wait_calculator_reused {} {
@@ -305,6 +384,9 @@ proc da_wait_clock_relaunched {} {
             if {$::da_register_hits == 3 && $::da_defer_register_hits == 3 &&
                 $::da_find_hits == 5 &&
                 $::da_send_hits == 2 &&
+                $::da_clock_text_hits > 0 && $::da_calc_text_hits >= 21 &&
+                $::da_clock_border_ok && $::da_calc_border_ok &&
+                $::da_clock_menu_ok && $::da_calc_menu_ok &&
                 $::da_closed_busy == ($::da_before_close_busy - 1) &&
                 $::da_final_busy == $::da_before_close_busy &&
                 $::da_max_nwin == 3 && [peek 0x133E] == 0 &&
@@ -338,4 +420,5 @@ proc da_start {} {
 
 debug set_bp 0x80C0 {} {da_api_hit}
 debug set_bp 0x80CF {} {da_defer_api_hit}
+debug set_bp 0x800C {} {da_text_hit}
 after time 62.0 da_start

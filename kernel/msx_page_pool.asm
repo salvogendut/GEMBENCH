@@ -104,13 +104,14 @@ GB_CAPS_MSX_M4        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_
 
 ; GEOBENCH-2 high capability word. The MSX2 reference target advertises only
 ; services proved by this gate: transactional universal loading, runtime
-; geometry, semantic drawing and portable input. Portable filesystem/package
-; resource services remain unadvertised until their own conformance gates.
+; geometry, semantic drawing/input, and generation-safe background timers.
+; Portable filesystem/package resources remain gated.
 GB_CAP_UNIVERSAL_LOADER equ #0001
 GB_CAP_RUNTIME_GEOMETRY equ #0002
 GB_CAP_PORTABLE_DRAWING equ #0004
 GB_CAP_PORTABLE_INPUT   equ #0008
-GB_CAPS_HIGH_MSX_V6     equ GB_CAP_UNIVERSAL_LOADER|GB_CAP_RUNTIME_GEOMETRY|GB_CAP_PORTABLE_DRAWING|GB_CAP_PORTABLE_INPUT
+GB_CAP_BACKGROUND_TIMERS equ #0040
+GB_CAPS_HIGH_MSX_V6     equ GB_CAP_UNIVERSAL_LOADER|GB_CAP_RUNTIME_GEOMETRY|GB_CAP_PORTABLE_DRAWING|GB_CAP_PORTABLE_INPUT|GB_CAP_BACKGROUND_TIMERS
 
 ; app_pool_init: retain the TPA page-1 segment plus every available mapper
 ; segment, up to MSX_PAGE_MAX.  PAGE_DATA was already allocated separately by

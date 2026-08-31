@@ -48,6 +48,7 @@
 #define GB_CAP_PORTABLE_INPUT    0x00080000UL
 #define GB_CAP_PORTABLE_FS       0x00100000UL
 #define GB_CAP_PACKAGE_RESOURCES 0x00200000UL
+#define GB_CAP_BACKGROUND_TIMERS 0x00400000UL
 
 #define GB_UNIVERSAL_ABI_MAJOR 2u
 #define GB_UNIVERSAL_ABI_MINOR 0u
@@ -119,6 +120,14 @@ typedef struct {
     unsigned char h;
 } gb_rect_t;
 
+/* Portable extension of the frozen managed-window descriptor. Furniture and
+ * move/resize gestures are kernel-owned, so the same descriptor works on each
+ * conforming target without app-linked drag code. */
+typedef struct {
+    gb_mwin_t window;
+    unsigned char kind;
+} gb_mwin_kind_t;
+
 /* The returned sysinfo pointer is resident/read-only for the process lifetime.
  * NULL means that the running kernel has not published the complete v6 suffix. */
 const gb_sysinfo_v6_t *gb_universal_sysinfo(void);
@@ -131,15 +140,45 @@ unsigned int gb_screen_width_pixels(void);
 unsigned int gb_screen_height_pixels(void);
 unsigned char gb_screen_pixels_per_column(void);
 unsigned char gb_screen_semantic_pens(void);
+unsigned int gb_pixel_aspect_x_256(void);
 
 void gb_message_read(gb_msg_t *message);
 void gb_message_set_p1(unsigned char value);
+void gb_message_set_p2(unsigned char value);
 void gb_time_read(gb_time_snapshot_t *snapshot);
+void gb_time_observe(gb_time_snapshot_t *snapshot);
 unsigned char gb_boot_drive_current(void);
 void gb_drag_name_read(char *name11);
 void gb_drop_claim_current(void);
 void gb_drop_release_current(void);
 unsigned char gb_drop_is_claimed(void);
 void gb_window_rect(gb_rect_t *rect);
+
+/* Pixel-coordinate semantic line. The call completes before returning. */
+void gb_line(unsigned int x0, unsigned int y0,
+             unsigned int x1, unsigned int y1, unsigned char pen);
+void gb_text_semantic(unsigned char x, unsigned char y, const char *text,
+                      unsigned char pen, unsigned char paper);
+
+/* Small save-under dropdown used by compile-once top-bar menus. Call it from
+ * GB_MSG_FRAME after a GB_MSG_MENU callback has armed the desired title. */
+unsigned char gb_universal_popup(unsigned char x,
+                                 const char *const *labels,
+                                 unsigned char count);
+unsigned char gb_universal_popup_active(void);
+void gb_universal_popup_close(void);
+
+/* Background visual timer contract. The worker only observes the root-owned
+ * time snapshot and publishes bounded damage for its generation-tagged window.
+ * Drawing remains in the normal root/compositor callback. */
+unsigned char gb_timer_damage_for(gb_window_t window, unsigned char x,
+                                  unsigned char y, unsigned char w,
+                                  unsigned char h);
+unsigned char gb_timer_active_for(gb_window_t window);
+unsigned char gb_timer_take_dropped(gb_window_t window);
+unsigned char gb_timer_busy(void);
+void gb_timer_cancel(gb_window_t window);
+
+void gb_wm_managed_kind(const gb_mwin_kind_t *desc);
 
 #endif
