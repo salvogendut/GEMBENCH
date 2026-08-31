@@ -120,12 +120,19 @@ MSX_ALLOC_HANDLE   equ #C2E9        ; allocator/free scratch: page handle
 MSX_ALLOC_NATIVE   equ #C2EB        ; legacy-claim scratch: native segment
 MSX_ALLOC_INDEX    equ #C2EC        ; legacy-claim scratch: pool index
 
-; Read-only, versioned GB_SYSINFO record returned by GB_SYSINFO. The free
-; page byte follows allocator changes and is also refreshed on every query;
-; all other fields are fixed at boot.
-MSX_SYSINFO        equ #C2F0
+; Compatibility shadow of the former v5 record. GB_SYSINFO no longer returns
+; this address, but keeping the exact prefix here preserves old diagnostics
+; that inspected the page-3 architecture map directly.
+MSX_SYSINFO_V5_SHADOW equ #C2F0
+
+; Read-only, versioned GB_SYSINFO record returned by GB_SYSINFO. The v6 record
+; is relocated after the scheduler because the old 32-byte cell is followed
+; immediately by application tables and cannot grow in place. The first 32
+; bytes remain the exact v5 prefix; the free-page byte is refreshed on queries.
+MSX_SYSINFO        equ #CF00
 MSX_SYSINFO_V1_SIZE equ 20
-MSX_SYSINFO_SIZE   equ 32
+MSX_SYSINFO_V5_SIZE equ 32
+MSX_SYSINFO_SIZE   equ 48
 MSX_SYS_SIZE       equ MSX_SYSINFO+0
 MSX_SYS_VERSION    equ MSX_SYSINFO+1
 MSX_SYS_ABI_MAJOR  equ MSX_SYSINFO+2
@@ -153,6 +160,24 @@ MSX_SYS_RESERVED3 equ MSX_SYSINFO+27
 MSX_SYS_FS_CONTEXTS equ MSX_SYSINFO+28
 MSX_SYS_FS_TRANSFER equ MSX_SYSINFO+29 ; word: bounded bytes advanced per call
 MSX_SYS_FS_VERSION  equ MSX_SYSINFO+31
+MSX_SYS_CAPS_HIGH   equ MSX_SYSINFO+32
+MSX_SYS_COLUMNS     equ MSX_SYSINFO+34
+MSX_SYS_LINES       equ MSX_SYSINFO+35
+MSX_SYS_PIXELS_COLUMN equ MSX_SYSINFO+36
+MSX_SYS_SEMANTIC_PENS equ MSX_SYSINFO+37
+MSX_SYS_APP_BASE    equ MSX_SYSINFO+38
+MSX_SYS_APP_LIMIT   equ MSX_SYSINFO+40
+MSX_SYS_KERNEL_BASE equ MSX_SYSINFO+42
+MSX_SYS_UNIVERSAL_MAJOR equ MSX_SYSINFO+44
+MSX_SYS_UNIVERSAL_MINOR equ MSX_SYSINFO+45
+MSX_SYS_UNIVERSAL_PROFILE equ MSX_SYSINFO+46
+MSX_SYS_RESERVED4   equ MSX_SYSINFO+47
+
+; Gate-2 GBAP v4 validator. It is loaded from the project-owned GBAPV4.MOD at
+; boot and executes from fixed page-3 RAM while an application page is mapped.
+MSX_GBAP4_GATE      equ #CF30
+MSX_GBAP4_GATE_LIMIT equ #D400
+MSX_GBAP4_GATE_SIZE equ 1201
 
 ; Architecture milestone 2 (#32): the M1 owner identity is now the public
 ; handle of a real fixed-capacity application record. Window records retain
@@ -245,7 +270,7 @@ MSX_SECONDARY_GATE_END equ #C900
 ; below #F380 (the mapper jump table itself sits around #F200, jumping into
 ; code near #EC00) - the DOS 1 "system area starts at #F380" rule does NOT
 ; hold. The real TPA ceiling is the BDOS entry pointer at #0006/7: the stub
-; sets SP from it, and everything fixed here stays at #C000..#C8FF, which the
-; stub verifies is below that ceiling.
-MSX_GLUE_TOP    equ   #C900        ; end of the fixed glue area (stub-verified < TPA top)
-MSX_APP_FIXED_BOTTOM equ #CF00     ; first app-usable fixed RAM after 1.5K scheduler/WM slot
+; sets SP from it, and everything fixed here stays below #D400, which the stub
+; verifies is below that ceiling.
+MSX_GLUE_TOP    equ   #D400        ; fixed tables + scheduler + sysinfo + v4 gate
+MSX_APP_FIXED_BOTTOM equ #D400     ; first app-usable fixed RAM after v4 validator

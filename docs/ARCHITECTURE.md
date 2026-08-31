@@ -45,8 +45,9 @@ secondary resources, and timers.
 
 GEOBENCH-2 has an experimental `GB_UNIVERSAL` SDK, runtime-geometry accessors,
 a v6 sysinfo C record, a guarded startup, and a deterministic GBAP v4 packer.
-The current kernel still exposes v5 and does not advertise or load v4 until the
-MSX reference implementation passes the next migration gate.
+The MSX2 reference runtime now exposes the append-only v6 record and admits the
+primary-only v4 profile through a boot-verified, transactional pre-entry gate;
+see [GEOBENCH-V2-GATE2-MSX.md](GEOBENCH-V2-GATE2-MSX.md).
 
 ## Windowing, compositor, and scheduling
 
@@ -65,6 +66,8 @@ partially visible, then nonvisual/background work.
 
 - GBR1 stores deterministic strings, objects, trees, menus, and forms.
 - GBAP v3 packages a guarded application manifest and optional secondary data.
+- GBAP v4 packages compile-once applications; MSX2 Gate 2 admits the mandatory
+  common primary segment and rejects unimplemented external v4 segments.
 - VDI-lite provides semantic pens, clipping, raster operations, and text.
 - Typed scrap carries text, bitmap, icon, and file-list payloads.
 - Shell services discover, activate, open, close, and quit live applications.

@@ -27,6 +27,8 @@ kernel_main
                 call  set_palette
                 call  k_cls                   ; pen-0 desktop while loading
                 call  fs_init
+                call  gbap4_gate_load         ; mandatory pre-entry universal-package gate
+                jp    nc,mmi_fatal             ; no mapper allocations exist yet
                 call  input_init
                 call  msx_mem_init           ; PAGE_DATA segment + KCFG_MEMKB
                 call  cfg_boot               ; parse GEOBENCH.CFG (paged C module)
@@ -99,6 +101,34 @@ km_finish                                      ; reached by k_exit's longjmp
                 call  msx_text_restore       ; text mode + stock palette for the DOS prompt
                 ld    c,_TERM0               ; clean exit to COMMAND2
                 jp    BDOS
+
+; Load the strict GBAP v4 validator into fixed page-3 RAM. Keeping this internal
+; module outside the page-2 resident image preserves Screen-7 kernel headroom;
+; the boot-time signature check prevents an absent/truncated gate from ever
+; being advertised through sysinfo v6.
+gbap4_gate_load
+                ld    hl,name_gbap4_gate
+                ld    de,fs_req_name
+                call  copy11
+                ld    hl,MSX_GBAP4_GATE
+                ld    (fs_load_dst),hl
+                ld    hl,MSX_GBAP4_GATE_LIMIT-MSX_GBAP4_GATE
+                ld    (fs_load_max),hl
+                call  fs_load_sys
+                ret   nc
+                ld    hl,(fs_ent_size)
+                ld    de,MSX_GBAP4_GATE_SIZE
+                or    a
+                sbc   hl,de
+                ret   nz
+                ld    hl,(MSX_GBAP4_GATE+3)
+                ld    de,#4247                 ; "GB"
+                or    a
+                sbc   hl,de
+                ret   nz
+                scf
+                ret
+name_gbap4_gate db    "GBAPV4  MOD"
 
                 ifdef GB_FSTEST
 ; msx_fstest (#287): exercise the BDOS write path exactly as gb_fs_save/the

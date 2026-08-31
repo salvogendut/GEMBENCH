@@ -258,6 +258,15 @@ python3 tools/png2cpc.py --platform msx2 build/msx/SPLASHD_BUILD.png build/msx/S
 echo "Building GB-BASIC MSX payload from $GB_BASIC_DIR"
 make -C "$GB_BASIC_DIR" raws-msx GEOBENCH="$GEOBENCH_ROOT"
 
+# Build the fixed page-3 GBAP v4 validator independently of the resident
+# page-2 kernels. Both video backends load this exact internal module at boot.
+rm -f build/msx/GBAPV4.RAW
+( cd build/msx && "$RASM" ../../kernel/msx_gbap4.asm )
+[ -s build/msx/GBAPV4.RAW ] || { echo "ERROR: GBAPV4.RAW not produced" >&2; exit 1; }
+
+# Build the compile-once conformance application that exercises the gate.
+bash tools/build_uapp.sh apps/abiprobe build/universal/ABIPROBE.APP
+
 # --- the two kernels, their stubs, and the small next-boot selector ----------
 # RASM exits 0 even on assembly errors, so stale outputs would silently ship:
 # remove them first and require fresh files after each pass.
@@ -393,6 +402,10 @@ cp build/msx/GBAPICK.RAW QA/MSX/CARD/GBENCH/GBAPICK.MOD
 cp build/msx/GBWEB.RAW  QA/MSX/CARD/GBENCH/GBWEB.MOD
 cp build/msx/GBIMG.RAW  QA/MSX/CARD/GBENCH/GBIMG.MOD
 cp build/msx/GBFSCTX.RAW QA/MSX/CARD/GBENCH/GBFSCTX.MOD
+cp build/msx/GBAPV4.RAW QA/MSX/CARD/GBENCH/GBAPV4.MOD
+cp build/universal/ABIPROBE.APP QA/MSX/CARD/GBENCH/ABIPROBE.APP
+python3 tools/test_geobench_v2_msx_gate.py \
+    --staged QA/MSX/CARD/GBENCH/ABIPROBE.APP
 cp build/msx/SPLASH.BIN  QA/MSX/CARD/GBENCH/SPLASH.MOD
 cp build/msx/SPLASHD.BIN QA/MSX/CARD/GBENCH/SPLASHD.MOD
 cp build/msx/GBTITLE.RAW QA/MSX/CARD/GBENCH/GBTITLE.MOD

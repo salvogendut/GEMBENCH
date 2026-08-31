@@ -9,8 +9,8 @@
  * Three file types, told apart by content (no filename needed):
  *   .IST icon set  - "GBIS" header, a directory, then each icon's bitmap. Edited in
  *                    place (never resized); Prev/Next walk the set.
- *   .APP application - optional "GBAP" v1/v2/v3 executable preamble containing
- *                    a canonical 32x32 icon and, in v2/v3, an optional native
+ *   .APP application - optional "GBAP" v1/v2/v3/v4 preamble containing
+ *                    a canonical 32x32 icon and, in v2/v3/v4, an optional native
  *                    Screen-7 sixteen-colour icon. The executable is preserved.
  *   .SPR cursor    - on CPC/PCW, a 256-byte sprite: two pre-shifted phases
  *                    (shift 0, shift 2) with mask,data INTERLEAVED per column.

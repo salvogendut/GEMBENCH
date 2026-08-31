@@ -44,6 +44,10 @@ with the same hash, and malformed-package tests cover every offset/length edge.
 
 ## Gate 2: MSX2 reference implementation
 
+Status: implemented by issue #58 for the mandatory primary-only package
+profile. Portable filesystem/package-resource capability bits and external v4
+segments remain intentionally unadvertised for a later gate.
+
 - Append the v6 sysinfo suffix without changing its 32-byte prefix.
 - Make the current MSX slots through `GB_FSCTX` unconditional at their fixed
   addresses and give every optional service a typed unsupported result.

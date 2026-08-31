@@ -18,7 +18,7 @@ PCW tools are available on `archive/cpc-pcw-targets`.
 - `build_capp.sh` — build one `-DGB_MSX2` SDCC application with explicit
   optional library profiles and strict code/data/stack limits.
 - `build_uapp.sh` — build one byte-identical `GB_UNIVERSAL` GBAP v4 application
-  for the future MSX2/CPC/PCW kernels, with no target build define.
+  for MSX2 and the future CPC/PCW kernels, with no target build define.
 - `build_scheduler.sh` — build the MSX2 fixed-RAM app-worker scheduler.
 - `build_cfgmod.sh`, `build_uimod.sh`, `build_appickmod.sh`, `build_webmod.sh`,
   `build_imgmod.sh`, and `build_fsctxmod.sh` — active paged modules.
@@ -54,6 +54,8 @@ build target.
 - `check_pic_distribution.py`, `check_msx_floppies.py` — committed media audits.
 - `test_*_openmsx.sh` — target workflows for windows, compositor visibility,
   timers, resources, services, typed scrap, Paint, Settings, and GB-BASIC.
+- `test_geobench_v2_msx_gate.py` and `test_geobench_v2_msx_openmsx.sh` — Gate-2
+  sysinfo/module/package checks and real loader success/rollback coverage.
 - `gembench_baseline.py` plus `debug/gembench_*` — 1983/openMSX measurement and
   regression capture.
 
@@ -61,5 +63,6 @@ Run the complete host gate with `make check` and the complete target build with
 `make geobench-msx`.
 
 Run only the experimental compile-once gate with `make geobench-v2-sdk-check`.
-It deterministically builds `build/universal/ABIPROBE.APP`; it does not yet make
-that file executable on the current MSX kernel.
+It deterministically builds `build/universal/ABIPROBE.APP`. Run
+`make geobench-v2-msx-gate-check` for the MSX admission contract or
+`make geobench-v2-msx-openmsx` for the full emulator workflow.

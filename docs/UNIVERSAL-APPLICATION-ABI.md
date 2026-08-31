@@ -309,5 +309,9 @@ current slots, GBAP v4 records, and current SDCC structure offsets. The
 Gate-1 check also builds `build/universal/ABIPROBE.APP` twice, compares the
 complete bytes, validates GBM4 bounds and CRC, corrupts every record class, checks
 the icon-editor round trip, verifies every v6 C-field offset, and rejects
-target-specific source, generated assembly, or linked modules. Emulator tests
-remain a Gate-2 requirement before any kernel advertises the new capability bits.
+target-specific source, generated assembly, or linked modules. MSX2 Gate 2 adds
+`make geobench-v2-msx-gate-check` and `make geobench-v2-msx-openmsx`; the latter
+proves success and pre-entry rollback through the ordinary loader. The current
+MSX implementation advertises the first four high capabilities and admits the
+mandatory primary-only profile. Portable filesystem/package-resource bits and
+external v4 segments remain gated for later work.

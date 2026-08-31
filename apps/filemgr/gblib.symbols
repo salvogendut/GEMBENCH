@@ -10,6 +10,7 @@ gb_drag_start
 gb_entname
 gb_file_delete
 gb_fill
+gb_flags
 gb_frame
 gb_fs_free_kib
 gb_fs_load

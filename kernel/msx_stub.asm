@@ -37,7 +37,7 @@ start
                 jp    BDOS
 dos_ok
                 ld    hl,(#0006)             ; the TPA ceiling must clear the page-3
-                ld    de,MSX_GLUE_TOP        ; glue at #C000..#C8FF
+                ld    de,MSX_GLUE_TOP        ; fixed architecture state through #D3FF
                 or    a
                 sbc   hl,de
                 jr    nc,tpa_ok
