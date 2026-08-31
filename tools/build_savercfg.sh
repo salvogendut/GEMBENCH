@@ -23,10 +23,10 @@ SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
 
 case " ${APPDEFS:-} " in
-    *" -DGB_MSX2 "*) work="build/msx-obj/savercfg-$(basename "$APP")" ;;
-    *" -DGB_PCW "*)  work="build/pcw-obj/savercfg-$(basename "$APP")" ;;
-    *)                work="build/savercfg-$(basename "$APP")" ;;
+    *" -DGB_MSX2 "*) ;;
+    *) echo "ERROR: screensaver configuration modules only build for MSX2" >&2; exit 2 ;;
 esac
+work="build/msx-obj/savercfg-$(basename "$APP")"
 mkdir -p "$work"
 mkdir -p "$(dirname "$OUT")"
 . tools/build_cache.sh

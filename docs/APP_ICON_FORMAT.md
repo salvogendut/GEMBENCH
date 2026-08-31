@@ -7,7 +7,7 @@ remain valid and use their mapped or generic `.IST` icon.
 
 All embedded icons are 32x32 pixels:
 
-- codec `1`: portable four-colour CPC Mode-1 packing, 8 bytes per row and
+- codec `1`: canonical four-colour Mode-1 packing, 8 bytes per row and
   256 bytes total;
 - codec `7`: native MSX Screen-7 packing, two four-bit pixels per byte,
   16 bytes per row and 512 bytes total.
@@ -78,15 +78,12 @@ appicon16
                 ; ...512 bytes total
 ```
 
-File Manager selects codec 7 only while the MSX is running Screen 7. MSX
-Screen 6, CPC, and PCW use codec 1. All targets preserve resources they do not
-display when saving an APP.
+File Manager selects codec 7 only while the MSX is running Screen 7. Screen 6
+uses codec 1. File operations preserve resources they do not display.
 
 When `APP_ICON=apps/name/icon.asm` is supplied, `build_capp.sh` automatically
-uses an adjacent `apps/name/icon16.asm` on MSX builds. Adding that file later is
-therefore sufficient to opt an application into a native 16-colour icon. CPC
-and PCW continue to embed only the canonical fallback unless `APP_ICON16` is
-passed explicitly.
+uses an adjacent `apps/name/icon16.asm`. Adding that file later is therefore
+sufficient to opt an application into a native 16-colour icon.
 
 ## GBAP v3 manifest
 
@@ -108,7 +105,7 @@ The manifest is:
 | 4 | 1 | manifest size, currently `40` |
 | 5 | 1 | manifest version, currently `1` |
 | 6 | 1 | profile: `1` target-Z80, `2` portable-Z80 |
-| 7 | 1 | platform mask: bit 0 CPC, bit 1 MSX2, bit 2 PCW |
+| 7 | 1 | platform mask: bit 1 MSX2; bits 0 and 2 are reserved legacy assignments |
 | 8 | 2 | minimum GEMBENCH ABI major/minor |
 | 10 | 2 | minimum `GB_SYSINFO` version/record size |
 | 12 | 2 | required `GB_CAP_*` mask |
@@ -179,9 +176,8 @@ On MSX2, `APP_MANIFEST` also selects the standard guarded v3 startup. It checks
 the executable manifest and primary descriptor against resident `GB_SYSINFO`
 before C initialization or window/application publication. A failed guard
 returns directly to the existing loader, which releases the pending owner and
-primary page. Headerless/v1/v2 startup is byte-for-byte unchanged. CPC/PCW v3
-execution remains deferred until those targets implement equivalent capability
-and page/application services.
+primary page. Headerless/v1/v2 startup is byte-for-byte unchanged. The active
+runtime accepts only packages whose platform mask includes MSX2.
 
 The `portable-z80` profile is a packaging promise, not automatic portability.
 A compile-once binary must additionally restrict itself to the frozen common

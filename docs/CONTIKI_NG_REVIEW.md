@@ -9,6 +9,8 @@ Implementation is tracked by [issue #367](https://github.com/salvogendut/geobenc
 > HTTP parser, WGET, and text-first Browser proposed here have since been
 > implemented. Use [Features](FEATURES.md) and the current `gb_net_*` sources for
 > the shipped behavior; the remainder of this document records the design input.
+> CPC/PCW transports mentioned below are retired and preserved on
+> `archive/cpc-pcw-targets`; the active MSX2 system uses TCP/IP UNAPI.
 
 ## Short conclusion
 

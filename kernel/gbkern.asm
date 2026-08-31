@@ -11,13 +11,19 @@
 ; the 6x8 font, whose glyphs live in PAGE_DATA. Strings come from the caller's
 ; page, so they are copied to a resident scratch BEFORE swapping to the font.
 ;
-; Build: tools/build_kernel.sh   Run: 1984 --memory=128 --disk-a=build/gbkern.dsk --autostart=GBKERN
+; Build: tools/build_kernel_msx.sh. GEMBENCH is an MSX2-only system.
 
-; PLATFORM_MSX (#287): -DPLATFORM_MSX=1 builds the MSX2 target - an MSX-DOS 2 /
+; PLATFORM_MSX (#287): the sole target is an MSX-DOS 2 /
 ; Nextor application with a selectable V9938 Screen 6 or Screen 7 driver,
 ; mapper-segment banking and BDOS storage. GBMSX.COM selects the mode-specific
 ; image at boot. The kernel body (WM, services, menus) is shared; the
 ; platform-specific pieces swap at the include sites below.
+                ifdef PLATFORM_PCW
+                assert 0,"GEMBENCH no longer builds a PCW target; see archive/cpc-pcw-targets"
+                endif
+                ifndef PLATFORM_MSX
+PLATFORM_MSX    equ   1
+                endif
                 include "../lib/gbapp.inc"
                 ifdef PLATFORM_MSX
                 include "../lib/msx/bios.inc"

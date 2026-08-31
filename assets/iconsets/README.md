@@ -1,16 +1,14 @@
 # Custom icon sets
 
-Drop tracked `.IST` icon-set files here and they are automatically staged for the
-CPC card and MSX distributions. The CPC build copies them into
-`QA/CPC/CARD/GBENCH/` via `stage_dist.sh`; MSX copies the same files into its
-`GBENCH/` folder unchanged. The space-constrained PCW boot disk stages its selected
-sets (currently `REFINED.IST`) from this same canonical source. MSX and PCW let the
-kernel transcode a selected set to native display bytes when it is loaded.
+Drop tracked `.IST` icon-set files here and the MSX2 build automatically stages
+them into `QA/MSX/CARD/GBENCH/`. The kernel transcodes a selected canonical set
+to native display bytes when it is loaded.
 
 `build/DEFAULT.IST` is a gitignored build artifact regenerated from the ordered
 system/file-type `lib/icon_*.asm` sources
-each build in all desktop targets; it stays canonical (Mode-1) so it is shared by all
-platforms. Tracked sets in this folder are version-controlled and never regenerated.
+each build; it stays in canonical Mode-1 packing so Screen 6 and Screen 7 can
+decode the same resource. Tracked sets in this folder are version-controlled and
+never regenerated.
 
 ## Make / edit a set
 
@@ -51,7 +49,7 @@ tools/ist_replace_slot.py assets/iconsets/MYSET.IST 13 lib/icon_sd.asm
 
 ## Use it on the desktop
 
-Select the set in the boot config `GEOBENCH.CFG` (written by `stage_dist.sh`):
+Select the set in the boot config `GEOBENCH.CFG`:
 
 ```
 ICONS=MYSET
@@ -72,7 +70,7 @@ edited through `apps/<name>/icon.asm` or the APP itself:
 ```
 # edit assets/<name>.png in any image editor (32x32, the desktop 4-colour palette)
 tools/regen_icons.sh            # png2cpc every assets/*.png -> lib/icon_*.asm
-tools/build_kernel.sh           # repacks build/DEFAULT.IST + the card
+tools/build_kernel_msx.sh       # repacks build/msx/DEFAULT.IST + the card
 ```
 
 See `docs/DEVELOPMENT.md` for the full icon pipeline.

@@ -479,7 +479,7 @@ static const char *win_title(void)               /* "Disk C/path 32MiB free" -> 
     return title_buf;
 }
 
-/* DEFAULT.IST slot order (matches the packicons line in tools/build_kernel.sh).
+/* DEFAULT.IST slot order (matches the packicons line in tools/build_kernel_msx.sh).
    The file -> icon mapping lives here now, not in the kernel (#103). */
 #define ICON_FLOPPY 0         /* floppy drive icon (first packicons entry); DISKUTIL.APP reuses it */
 #define ICON_CLOCK 1

@@ -30,10 +30,7 @@ class InTreeGbBasicTests(unittest.TestCase):
 
     def test_production_builds_cannot_redirect_to_a_sibling_checkout(self) -> None:
         scripts = [
-            ROOT / "tools" / "build_kernel.sh",
             ROOT / "tools" / "build_kernel_msx.sh",
-            ROOT / "tools" / "build_kernel_pcw.sh",
-            ROOT / "tools" / "stage_dist.sh",
         ]
         for script in scripts:
             source = script.read_text()

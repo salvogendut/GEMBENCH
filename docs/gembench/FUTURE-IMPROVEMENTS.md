@@ -58,17 +58,10 @@ milestones.
 The recommended next MSX2 milestone is a bounded network-session/data service
 plus Browser adoption.
 
-## CPC and PCW parity
+## Retired ports
 
-Backport the portable contracts for all eight improvements to CPC and PCW,
-assuming at least 512 KiB RAM while retaining their native graphics, storage,
-banking, and network backends. This includes:
-
-- capability queries and general owned-page allocation;
-- application/window ownership and deferred messages;
-- explicit filesystem contexts;
-- GBAP v3 loading and the secondary-code call gate; and
-- shared-service providers using CPC M4/Albireo networking and PCW PerryNet.
-
-Each target must advertise a capability only after equivalent lifecycle,
-failure, cleanup, packaging, and emulator tests pass on that target.
+CPC and PCW parity is no longer an active GEMBENCH milestone. The prior target
+code and backport assumptions are preserved on `archive/cpc-pcw-targets`. If a
+port is restarted later, it must begin as a new project decision and demonstrate
+equivalent lifecycle, failure, cleanup, packaging, and emulator tests before it
+advertises any GEMBENCH capability.

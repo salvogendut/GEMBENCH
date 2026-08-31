@@ -7,6 +7,10 @@ This audit records how each GEOBENCH application fits the default preemptive
 runtime. It does not assume that every application should become a scheduled
 worker; most UI and I/O code remains a bounded root job.
 
+Target matrices in this dated audit are historical. GEMBENCH now builds only
+MSX2; the CPC/PCW code used by the original audit is preserved on
+`archive/cpc-pcw-targets`.
+
 ## Responsiveness contract
 
 GEOBENCH has three valid application execution models:

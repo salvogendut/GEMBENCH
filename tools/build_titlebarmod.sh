@@ -16,7 +16,7 @@ command -v "$RASM" >/dev/null || { echo "ERROR: rasm not on PATH" >&2; exit 1; }
     exit 1
 }
 
-mkdir -p build build/msx build/pcw
+mkdir -p build build/msx
 cat "$TITLEBAR_TBR" "$GADGET_GDT" > build/TITLEBAR.TBR
 rm -rf build/titlebars
 mkdir -p build/titlebars
@@ -40,12 +40,11 @@ for gdt in assets/gadgets/*.GDT; do
     name="$(basename "$gdt" | tr 'a-z' 'A-Z')"
     cp "$gdt" "build/gadgets/$name"
 done
-rm -f build/GBTITLE.PAY build/GBTITLE.RAW build/msx/GBTITLE.RAW build/pcw/GBTITLE.RAW
-"$RASM" kernel/modules/gbtitle.asm
-"$RASM" kernel/modules/gbtitle_install.asm
+rm -f build/GBTITLE.PAY build/msx/GBTITLE.RAW
+"$RASM" kernel/modules/gbtitle.asm -DPLATFORM_MSX=1
 "$RASM" kernel/modules/gbtitle_install.asm -DPLATFORM_MSX=1 -DTITLE_NATIVE=1
-"$RASM" kernel/modules/gbtitle_install.asm -DPLATFORM_PCW=1 -DTITLE_NATIVE=1
-for module in build/GBTITLE.RAW build/msx/GBTITLE.RAW build/pcw/GBTITLE.RAW; do
-    [ -s "$module" ] || { echo "ERROR: $module not produced" >&2; exit 1; }
-done
-echo "Built build/GBTITLE.RAW with $TITLEBAR_TBR + $GADGET_GDT fallback; staged TBR/GDT assets"
+[ -s build/msx/GBTITLE.RAW ] || {
+    echo "ERROR: build/msx/GBTITLE.RAW not produced" >&2
+    exit 1
+}
+echo "Built build/msx/GBTITLE.RAW with $TITLEBAR_TBR + $GADGET_GDT fallback; staged TBR/GDT assets"

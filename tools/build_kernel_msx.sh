@@ -3,9 +3,8 @@
 # the GBMSX.COM next-boot selector, and the M1 app/asset set. Stage everything
 # into QA/MSX/CARD and pack it into the bootable Nextor image QA/MSX/GBMSX.IMG.
 #
-# Kept separate from tools/build_kernel.sh (that script is CPC-DSK-entangled
-# and wipes its own QA outputs); the shared pieces (apps via build_capp.sh,
-# GBCFG via build_cfgmod.sh, the Python asset tools) are reused. Portable GBPC
+# The shared pieces (apps via build_capp.sh, GBCFG via build_cfgmod.sh, and the
+# Python asset tools) are reused. Portable GBPC
 # v2 pictures, icon sets, and backdrop tiles remain canonical and are translated
 # to native bytes by the kernel at display/load time.
 #
@@ -242,11 +241,11 @@ python3 tools/packicons.py build/msx/PAINT.IST \
 "$RASM" kernel/modules/picedit_low.asm >/dev/null
 # The MSX pointer is a hand-edited 66-byte V9938 hardware sprite. Keep the
 # target-specific source under assets and stage it under the configured default
-# cursor name; CPC and PCW continue to derive their software cursors separately.
+# cursor name.
 [ -s assets/thinner.SPR ] || { echo "ERROR: missing MSX cursor assets/thinner.SPR" >&2; exit 1; }
 cp assets/thinner.SPR build/msx/DEFAULT.SPR
 
-# Bootsplash (#196/#287): the CPC lollipop, transcoded to the packed four-pen
+# Bootsplash (#196/#287): the GEMBENCH kernel mark, transcoded to the packed four-pen
 # MSX UI format shared by both video backends. The MSX
 # kernel does not incbin it (that is CPC-only) - boot_splash loads SPLASH.MOD
 # from disk, so we just stage that compact bitmap. DEBUG=TRUE selects the
@@ -409,7 +408,7 @@ for gdt in build/gadgets/*.GDT; do
 done
 
 # --- drop-in assets: canonical backdrops/iconsets/pictures are copied unchanged,
-# mirroring the CPC build's globs (build_kernel.sh / stage_dist.sh) so a file
+# mirroring the complete asset catalog so a file
 # dropped in ships on both distros. Names are uppercased 8.3. (#287/#388)
 for bdp in assets/backdrops/*.BDP; do            # backdrop tiles (BACKDROP=<name>)
     [ -e "$bdp" ] || continue

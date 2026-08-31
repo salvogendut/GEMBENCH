@@ -80,8 +80,10 @@ or window work must cross an explicit version boundary.
 - MSX-DOS2 or Nextor
 - RainBIOS as a supported validation environment
 
-CPC and PCW sources are retained during bootstrap, but compatibility with those
-machines does not constrain new GEMBENCH APIs, resources, or layouts.
+GEMBENCH has no active CPC or PCW build, media, or release target. The last
+multi-platform tree is preserved on the remote `archive/cpc-pcw-targets` branch
+in case either port is reconstructed later. See
+[the MSX2-only policy](docs/MSX2-ONLY.md).
 
 ## Build and check
 

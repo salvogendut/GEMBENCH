@@ -7,8 +7,8 @@
 #   env: GEOBENCH   path to the GEMBENCH checkout (default ../..)
 #        DATA_LOC   app data split (default 0x6200): code #4000..DATA_LOC,
 #                   data DATA_LOC..#7FFF
-#        APPDEFS    extra defines for EVERY unit (e.g. -DGB_MSX2/-DGB_PCW — must reach
-#                   libgb C too: gb.h derives GB_COLS/GB_LINES from it, #287)
+#        APPDEFS    extra defines for EVERY unit; -DGB_MSX2 is required and
+#                   must reach libgb C too because gb.h derives its geometry.
 #        DOC=1      link gbui_stub + gbdoc (the File-menu document framework)
 #        APP_ICON   canonical four-colour icon.asm to embed in a GBAP header
 #        APP_ICON16 optional native MSX Screen-7 icon.asm; an adjacent file is
@@ -32,22 +32,17 @@ BIN="$(dirname "$(command -v "$SDCC")")"    # sdasz80 / makebin sit beside sdcc
 SDAS="$BIN/sdasz80"
 MAKEBIN="$BIN/makebin"
 
-suffix=""
-case "${APPDEFS:-}" in
-    *GB_PCW*)  suffix="-pcw" ;;
-    *GB_MSX2*) suffix="-msx" ;;
+case " ${APPDEFS:-} " in
+    *" -DGB_MSX2 "*) ;;
+    *) echo "ERROR: bundled GB-BASIC only builds for MSX2 (-DGB_MSX2 required)" >&2; exit 2 ;;
 esac
-work="${BUILD_DIR:-build/$(basename "$APP")$suffix}"
+work="${BUILD_DIR:-build/$(basename "$APP")-msx}"
 CODE_LOC=0x4000
 
-case " ${APPDEFS:-} " in
-    *" -DGB_MSX2 "*)
-        if [ -n "$APP_ICON" ] && [ -z "$APP_ICON16" ]; then
-            icon16_candidate="$(dirname "$APP_ICON")/icon16.asm"
-            [ ! -f "$icon16_candidate" ] || APP_ICON16="$icon16_candidate"
-        fi
-        ;;
-esac
+if [ -n "$APP_ICON" ] && [ -z "$APP_ICON16" ]; then
+    icon16_candidate="$(dirname "$APP_ICON")/icon16.asm"
+    [ ! -f "$icon16_candidate" ] || APP_ICON16="$icon16_candidate"
+fi
 if [ -n "$APP_ICON16" ] && [ -z "$APP_ICON" ]; then
     echo "ERROR: APP_ICON16 requires APP_ICON" >&2
     exit 1

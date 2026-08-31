@@ -8,10 +8,9 @@ OUT="${1:-build/BASRUN2.BIN}"
 SDCC="${SDCC:-sdcc}"
 BIN="$(dirname "$(command -v "$SDCC")")"
 work="$(dirname "$OUT")/engine"
-MSX2="${MSX2:-0}"
-PCW="${PCW:-0}"
+MSX2=1
 mkdir -p "$work" "$(dirname "$OUT")"
-printf 'MSX2 = %s\nPCW = %s\n' "$MSX2" "$PCW" > "$work/plat.inc"
+printf 'MSX2 = 1\nPCW = 0\n' > "$work/plat.inc"
 "$BIN/sdasz80" -o "$work/fac.rel" apps/basrun/fac.s
 "$BIN/sdasz80" -I"$work" -o "$work/gfx.rel" apps/basrun/gfx.s
 "$BIN/sdldz80" -n -m -i "$work/fac.ihx" -b _CODE=0x2200 -b _DATA=0x2FC0 "$work/fac.rel" "$work/gfx.rel"
