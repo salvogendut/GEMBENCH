@@ -35,5 +35,7 @@ described in [BUILDING.md](BUILDING.md).
 - **SDCC** — <https://sdcc.sourceforge.net/>
   C compiler used for applications and app-linked libraries.
 
-The retired CPC and PCW implementation and its platform references are
-preserved in the Git branch `archive/cpc-pcw-targets`.
+The archived CPC and PCW implementation and its platform references are
+preserved in `archive/cpc-pcw-targets`; it is the implementation baseline for
+the staged ports in the
+[universal ABI migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md).

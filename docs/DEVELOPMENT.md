@@ -1,7 +1,10 @@
 # Development guide
 
-GEOBENCH development targets MSX2 only. Start with [BUILDING.md](BUILDING.md)
-and [MSX2-ONLY.md](MSX2-ONLY.md).
+The active development/build loop currently targets MSX2. Start with
+[BUILDING.md](BUILDING.md) and [MSX2-ONLY.md](MSX2-ONLY.md). Work intended for
+the future CPC/PCW targets must follow the compile-once contract in
+[UNIVERSAL-APPLICATION-ABI.md](UNIVERSAL-APPLICATION-ABI.md), not add a second
+target-specific application build.
 
 ## Normal loop
 

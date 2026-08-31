@@ -42,8 +42,9 @@ build target.
 
 ## Checks and emulator workflows
 
-- `check_gembench_abi.py`, `check_abi_table.py`, `check_app_layout.py` — ABI and
-  binary-layout guards.
+- `check_gembench_abi.py`, `check_geobench_v2_abi.py`, `check_abi_table.py`,
+  `check_app_layout.py` — frozen ABI, proposed universal ABI, and binary-layout
+  guards.
 - `check_lowram_map.py --profile msx` — fixed low-RAM overlap audit.
 - `check_pic_distribution.py`, `check_msx_floppies.py` — committed media audits.
 - `test_*_openmsx.sh` — target workflows for windows, compositor visibility,

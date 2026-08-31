@@ -184,6 +184,22 @@ A compile-once binary must additionally restrict itself to the frozen common
 ABI, runtime geometry/capabilities, portable GBR/VDI data, and a common memory
 layout on every platform named in its mask.
 
+## Proposed GBAP v4 universal package
+
+Issue #55 reserves version 4/profile 3 (`universal-z80`) for a genuinely
+byte-identical MSX2/CPC/PCW package. It keeps this 16-byte outer header and icon
+directory, replaces GBM3 with a 64-byte `GBM4` manifest, widens capabilities to
+32 bits, uses 20-byte segment records with 32-bit file ranges, and adds the ABI
+identity `GEOBNCH2`, package size, and CRC-32.
+
+V4 permits presentation-specific resources in the one common file, but every
+executable segment is common to all three platforms. Its primary image still
+loads at `#4000` and now observes the strict common exclusive limit `#7F00`.
+The exact proposed records, loader transaction, and compatibility rules are in
+[`UNIVERSAL-APPLICATION-ABI.md`](UNIVERSAL-APPLICATION-ABI.md) and
+[`abi/geobench-v2.json`](../abi/geobench-v2.json). The current packer and kernel
+do not emit or advertise v4 yet.
+
 ## Resident-set impact
 
 A portable v1 APP header costs 272 bytes. Removing one 32x32 icon from an IST

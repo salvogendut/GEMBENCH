@@ -1,6 +1,6 @@
-# MSX2-only target policy
+# Current MSX2-only implementation state
 
-As of 31 August 2026, GEOBENCH targets MSX2 only.
+As of 31 August 2026, the active GEOBENCH tree builds and releases MSX2 only.
 
 The active tree builds and releases for an MSX2 with a V9938/V9958, 128 KiB of
 VRAM, at least 512 KiB of mapper RAM, and MSX-DOS 2 or Nextor. The top-level
@@ -16,8 +16,16 @@ on the remote branch:
 archive/cpc-pcw-targets
 ```
 
-That branch is the restoration point if either port is rebuilt. New GEOBENCH
-code must not add CPC or PCW build targets to the active tree.
+That branch is the restoration point for the new ports. This is no longer a
+permanent target policy: issue #54 will reintroduce CPC after issue #55 defines
+and implements a compile-once MSX2/CPC/PCW application ABI. PCW follows in a
+later port. Until those gates pass, CPC/PCW targets must not be exposed as
+working release builds.
+
+The new direction is specified in
+[UNIVERSAL-APPLICATION-ABI.md](UNIVERSAL-APPLICATION-ABI.md) and its
+[migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md). The active MSX2 build
+continues unchanged while that work is developed on feature branches.
 
 Some source names and formats retain historical terms such as “CPC Mode 1.”
 They describe the canonical four-pen byte packing inherited by MSX2 assets;

@@ -72,7 +72,7 @@ The completed foundation currently covers:
 The first resource and managed-window ABI is frozen. New incompatible resource
 or window work must cross an explicit version boundary.
 
-## Fixed target
+## Current build target
 
 - Omega MSX2 at approximately 3.58 MHz
 - 512 KiB mapper RAM
@@ -81,10 +81,11 @@ or window work must cross an explicit version boundary.
 - MSX-DOS2 or Nextor
 - RainBIOS as a supported validation environment
 
-GEOBENCH has no active CPC or PCW build, media, or release target. The last
-multi-platform tree is preserved on the remote `archive/cpc-pcw-targets` branch
-in case either port is reconstructed later. See
-[the MSX2-only policy](docs/MSX2-ONLY.md).
+GEOBENCH currently has no active CPC or PCW build, media, or release target. The
+last multi-platform tree is preserved on `archive/cpc-pcw-targets`. CPC is to be
+reintroduced after the compile-once GEOBENCH-2 ABI is implemented; PCW follows
+as a separate port. See the [current target state](docs/MSX2-ONLY.md) and the
+[universal ABI proposal](docs/UNIVERSAL-APPLICATION-ABI.md).
 
 ## Build and check
 
