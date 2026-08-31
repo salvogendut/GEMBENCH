@@ -6,7 +6,7 @@ are referenced. Memory-constrained applications can list the gb_* entry points
 they use in a manifest and link the generated object instead of all of gblib.s.
 
 Usage:
-    gblib_subset.py lib/gb/gblib.s build/GBLIBAPP.s app/gblib.symbols
+    gblib_subset.py lib/gb/gblib.s build/GBLIBAPP.s app/gblib.symbols [...]
 """
 
 import re
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 
-def read_symbols(path):
+def read_symbol_file(path):
     symbols = []
     for line in Path(path).read_text(encoding="ascii").splitlines():
         name = line.split("#", 1)[0].strip()
@@ -30,9 +30,16 @@ def read_symbols(path):
     return symbols
 
 
-def generate(source_path, manifest_path):
+def read_symbols(paths):
+    symbols = []
+    for path in paths:
+        symbols.extend(read_symbol_file(path))
+    return symbols
+
+
+def generate(source_path, manifest_paths):
     lines = Path(source_path).read_text(encoding="ascii").splitlines(keepends=True)
-    wanted = set(read_symbols(manifest_path))
+    wanted = set(read_symbols(manifest_paths))
     starts = []
     for index, line in enumerate(lines):
         match = re.match(r"^(_gb_[A-Za-z0-9_]+):", line)
@@ -48,7 +55,8 @@ def generate(source_path, manifest_path):
     missing = wanted - blocks.keys()
     if missing:
         raise ValueError(
-            f"{manifest_path}: symbols absent from {source_path}: "
+            f"{', '.join(map(str, manifest_paths))}: symbols absent from "
+            f"{source_path}: "
             + ", ".join(sorted(missing))
         )
 
@@ -70,19 +78,20 @@ def generate(source_path, manifest_path):
 
 
 def main(argv):
-    if len(argv) != 4:
+    if len(argv) < 4:
         raise SystemExit(
-            "usage: gblib_subset.py <gblib.s> <output.s> <symbols-file>"
+            "usage: gblib_subset.py <gblib.s> <output.s> <symbols-file> [...]"
         )
-    source, output, manifest = argv[1:]
-    generated = generate(source, manifest)
+    source, output, *manifests = argv[1:]
+    symbols = set(read_symbols(manifests))
+    generated = generate(source, manifests)
     target = Path(output)
     if target.exists() and target.read_text(encoding="ascii") == generated:
         print(f"{output}: current")
         return
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(generated, encoding="ascii")
-    print(f"{output}: {len(read_symbols(manifest))} ABI trampolines")
+    print(f"{output}: {len(symbols)} ABI trampolines")
 
 
 if __name__ == "__main__":

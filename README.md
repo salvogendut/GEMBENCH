@@ -85,7 +85,7 @@ GEOBENCH currently has no active CPC or PCW build, media, or release target. The
 last multi-platform tree is preserved on `archive/cpc-pcw-targets`. CPC is to be
 reintroduced after the compile-once GEOBENCH-2 ABI is implemented; PCW follows
 as a separate port. See the [current target state](docs/MSX2-ONLY.md) and the
-[universal ABI proposal](docs/UNIVERSAL-APPLICATION-ABI.md).
+[universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).
 
 ## Build and check
 

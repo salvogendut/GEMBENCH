@@ -1,6 +1,7 @@
 # GEOBENCH-2 universal application ABI
 
-Status: proposed for issue #55. The machine-readable authority is
+Status: experimental after the issue #56 SDK/package implementation. The
+machine-readable authority is
 [`abi/geobench-v2.json`](../abi/geobench-v2.json). Nothing in this document is
 advertised by a released kernel until the implementation gates in the migration
 plan have passed.
@@ -295,14 +296,18 @@ run as an unguarded legacy binary.
 
 ## Conformance
 
-The ABI design checker is:
+The ABI and Gate-1 SDK/package checks are:
 
 ```sh
 python3 tools/check_geobench_v2_abi.py
+make geobench-v2-sdk-check
 ```
 
-It verifies the frozen inheritance, scalar/page arithmetic, platform masks,
+The design checker verifies the frozen inheritance, scalar/page arithmetic, platform masks,
 contiguous record layouts, capability bits, the v5 sysinfo prefix, all 71
 current slots, GBAP v4 records, and current SDCC structure offsets. The
-implementation phase adds a package validator, a forbidden-dependency audit,
-and emulator tests before any kernel advertises the new capability bits.
+Gate-1 check also builds `build/universal/ABIPROBE.APP` twice, compares the
+complete bytes, validates GBM4 bounds and CRC, corrupts every record class, checks
+the icon-editor round trip, verifies every v6 C-field offset, and rejects
+target-specific source, generated assembly, or linked modules. Emulator tests
+remain a Gate-2 requirement before any kernel advertises the new capability bits.

@@ -1,11 +1,14 @@
 # Universal application ABI migration plan
 
-This plan implements the proposed GEOBENCH-2 ABI in
+This plan implements the experimental GEOBENCH-2 ABI in
 [`UNIVERSAL-APPLICATION-ABI.md`](UNIVERSAL-APPLICATION-ABI.md). Issue #54 (CPC
 reintegration) remains parked until the common SDK, loader contract, and proof
 application exist, so the CPC port does not recreate target-specific app builds.
 
 ## Gate 0: accept and freeze the proposal
+
+Status: complete for the experimental implementation. The major version remains
+unfrozen until the MSX2 and CPC reference kernels run the identical proof file.
 
 - Review `abi/geobench-v2.json`, especially the common `#4000-#7EFF` image,
   four-pixel columns, semantic PCW rendering, v6 sysinfo suffix, and GBAP v4.
@@ -17,6 +20,11 @@ application exist, so the CPC port does not recreate target-specific app builds.
 Exit: the design checker passes and issue #55 records the accepted choices.
 
 ## Gate 1: universal SDK and package tools
+
+Status: implemented for host conformance in issue #56. Run
+`make geobench-v2-sdk-check`; it produces
+`build/universal/ABIPROBE.APP`. The artifact is deliberately not staged into
+MSX media until the transactional Gate-2 loader exists.
 
 - Add `GB_UNIVERSAL` libgb headers and one common trampoline set.
 - Replace public compile-time extents with sysinfo-backed accessors such as

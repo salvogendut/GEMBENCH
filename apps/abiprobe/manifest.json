@@ -1,0 +1,29 @@
+{
+  "application_id": "ABIPROBE",
+  "profile": "universal-z80",
+  "platforms": ["cpc", "msx2", "pcw"],
+  "minimum_abi": [2, 0],
+  "minimum_sysinfo": [6, 48],
+  "required_capabilities": [
+    "windows",
+    "events",
+    "owner-identity",
+    "runtime-video",
+    "applications",
+    "multi-window",
+    "universal-loader",
+    "runtime-geometry",
+    "portable-drawing",
+    "portable-input"
+  ],
+  "optional_capabilities": [
+    "filesystem",
+    "gbr",
+    "portable-filesystem",
+    "package-resources"
+  ],
+  "service_id": 0,
+  "lifecycle": ["windowed"],
+  "minimum_pages": 1,
+  "preferred_pages": 1
+}

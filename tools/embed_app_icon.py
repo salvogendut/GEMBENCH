@@ -5,7 +5,10 @@ GBAP v1 contains one canonical four-colour icon. GBAP v2 adds a resource
 directory so an APP can carry both the portable four-colour icon and an
 optional native MSX Screen-7 sixteen-colour variant. GBAP v3 retains that icon
 directory and adds a platform-neutral application manifest plus typed segment
-descriptors. Headerless, v1, and v2 applications remain valid.
+descriptors. GBAP v4 profile 3 is the GEOBENCH-2 universal package: it widens
+capabilities and file ranges, identifies the ABI explicitly, and protects the
+complete package with CRC-32. Headerless, v1, v2, and v3 applications remain
+valid.
 
 The common v2/v3 header is:
 
@@ -36,11 +39,13 @@ import json
 import re
 import struct
 import sys
+import zlib
 
 MAGIC = b"GBAP"
 VERSION_V1 = 1
 VERSION_V2 = 2
 VERSION_V3 = 3
+VERSION_V4 = 4
 CODEC_MODE1 = 1
 CODEC_SCREEN7 = 7
 HEADER_SIZE = 16
@@ -72,6 +77,24 @@ SEGMENT_REQUIRED = 0x01
 SEGMENT_EXECUTABLE = 0x02
 COMPRESSION_NONE = 0
 
+MANIFEST4_MAGIC = b"GBM4"
+MANIFEST4_VERSION = 1
+MANIFEST4_SIZE = 64
+SEGMENT4_ENTRY_SIZE = 20
+PROFILE_UNIVERSAL_Z80 = 3
+UNIVERSAL_PLATFORM_MASK = PLATFORM_CPC | PLATFORM_MSX2 | PLATFORM_PCW
+UNIVERSAL_ABI_ID = b"GEOBNCH2"
+UNIVERSAL_ABI_MAJOR = 2
+UNIVERSAL_ABI_MINOR = 0
+UNIVERSAL_SYSINFO_VERSION = 6
+UNIVERSAL_SYSINFO_SIZE = 48
+UNIVERSAL_IMAGE_LIMIT = 0x7F00
+SELECTOR_COMMON = 0
+SELECTOR_PRESENTATION_CODEC = 1
+SELECTOR_PLATFORM_MASK = 2
+SEGMENT_READ_ONLY = 0x04
+CRC32_OFFSET = 56
+
 PROFILES = {
     "target-z80": PROFILE_TARGET_Z80,
     "portable-z80": PROFILE_PORTABLE_Z80,
@@ -97,6 +120,15 @@ CAPABILITIES = {
     "filesystem-contexts": 0x1000,
     "secondary-code": 0x2000,
     "service-manager": 0x4000,
+}
+CAPABILITIES_V4 = {
+    **CAPABILITIES,
+    "universal-loader": 0x00010000,
+    "runtime-geometry": 0x00020000,
+    "portable-drawing": 0x00040000,
+    "portable-input": 0x00080000,
+    "portable-filesystem": 0x00100000,
+    "package-resources": 0x00200000,
 }
 LIFECYCLE = {
     "windowed": 0x0001,
@@ -325,6 +357,144 @@ def _read_manifest_spec(path):
     }
 
 
+def _capability_mask(path, key, names, table):
+    if not isinstance(names, list):
+        raise ValueError(f"{path}: {key} must be an array")
+    mask = 0
+    for name in names:
+        if not isinstance(name, str) or name not in table:
+            raise ValueError(f"{path}: unknown {key} name {name!r}")
+        bit = table[name]
+        if mask & bit:
+            raise ValueError(f"{path}: duplicate {key} name {name!r}")
+        mask |= bit
+    return mask
+
+
+def _read_v4_manifest_spec(path):
+    """Read the strict JSON source for a GEOBENCH-2 universal package."""
+    with open(path, encoding="utf-8") as source:
+        spec = json.load(source)
+    if not isinstance(spec, dict):
+        raise ValueError(f"{path}: manifest root must be an object")
+    allowed = {
+        "application_id", "profile", "platforms", "minimum_abi",
+        "minimum_sysinfo", "required_capabilities", "optional_capabilities",
+        "service_id", "lifecycle", "minimum_pages", "preferred_pages",
+        "secondary_code",
+    }
+    unknown_keys = set(spec) - allowed
+    if unknown_keys:
+        raise ValueError(
+            f"{path}: unknown GBAP v4 fields: {', '.join(sorted(unknown_keys))}"
+        )
+
+    app_id = spec.get("application_id", "")
+    if (not isinstance(app_id, str) or not 1 <= len(app_id) <= 8
+            or not re.fullmatch(r"[A-Z0-9_]+", app_id)):
+        raise ValueError(
+            f"{path}: application_id must be 1-8 uppercase ASCII letters, "
+            "digits, or underscores"
+        )
+    if spec.get("profile") != "universal-z80":
+        raise ValueError(f"{path}: GBAP v4 profile must be universal-z80")
+
+    platform_names = spec.get("platforms")
+    if (not isinstance(platform_names, list)
+            or len(platform_names) != len(PLATFORMS)
+            or any(not isinstance(name, str) or name not in PLATFORMS
+                   for name in platform_names)
+            or len(set(platform_names)) != len(PLATFORMS)):
+        raise ValueError(
+            f"{path}: universal-z80 platforms must name cpc, msx2, and pcw once"
+        )
+
+    minimum_abi = spec.get("minimum_abi", [UNIVERSAL_ABI_MAJOR,
+                                             UNIVERSAL_ABI_MINOR])
+    minimum_sysinfo = spec.get("minimum_sysinfo", [UNIVERSAL_SYSINFO_VERSION,
+                                                     UNIVERSAL_SYSINFO_SIZE])
+    if minimum_abi != [UNIVERSAL_ABI_MAJOR, UNIVERSAL_ABI_MINOR]:
+        raise ValueError(f"{path}: GBAP v4 minimum_abi must be [2, 0]")
+    if minimum_sysinfo != [UNIVERSAL_SYSINFO_VERSION, UNIVERSAL_SYSINFO_SIZE]:
+        raise ValueError(f"{path}: GBAP v4 minimum_sysinfo must be [6, 48]")
+
+    required = _capability_mask(
+        path, "required_capabilities", spec.get("required_capabilities", []),
+        CAPABILITIES_V4,
+    )
+    optional = _capability_mask(
+        path, "optional_capabilities", spec.get("optional_capabilities", []),
+        CAPABILITIES_V4,
+    )
+    universal_floor = (CAPABILITIES_V4["universal-loader"]
+                       | CAPABILITIES_V4["runtime-geometry"])
+    if required & universal_floor != universal_floor:
+        raise ValueError(
+            f"{path}: GBAP v4 requires universal-loader and runtime-geometry"
+        )
+    if required & optional:
+        raise ValueError(f"{path}: required and optional capabilities overlap")
+
+    lifecycle_names = spec.get("lifecycle", ["windowed"])
+    lifecycle = _capability_mask(path, "lifecycle", lifecycle_names, LIFECYCLE)
+    if not lifecycle:
+        raise ValueError(f"{path}: lifecycle must not be empty")
+    service_id = spec.get("service_id", 0)
+    minimum_pages = spec.get("minimum_pages", 1)
+    preferred_pages = spec.get("preferred_pages", minimum_pages)
+    if (not isinstance(service_id, int) or isinstance(service_id, bool)
+            or not 0 <= service_id <= 0xFFFF):
+        raise ValueError(f"{path}: service_id must be a 16-bit integer")
+    if (not isinstance(minimum_pages, int) or isinstance(minimum_pages, bool)
+            or not 1 <= minimum_pages <= 255
+            or not isinstance(preferred_pages, int)
+            or isinstance(preferred_pages, bool)
+            or not minimum_pages <= preferred_pages <= 255):
+        raise ValueError(
+            f"{path}: page counts must satisfy 1 <= minimum_pages <= "
+            "preferred_pages <= 255"
+        )
+
+    secondary = spec.get("secondary_code")
+    secondary_spec = None
+    if secondary is not None:
+        if not isinstance(secondary, dict):
+            raise ValueError(f"{path}: secondary_code must be an object")
+        unknown = set(secondary) - {"required", "load_address"}
+        if unknown:
+            raise ValueError(
+                f"{path}: unknown secondary_code fields: "
+                f"{', '.join(sorted(unknown))}"
+            )
+        if secondary.get("required", True) is not True:
+            raise ValueError(f"{path}: v4 secondary_code must be required")
+        if secondary.get("load_address", APP_BASE) != APP_BASE:
+            raise ValueError(f"{path}: v4 secondary_code must load at 0x4000")
+        if minimum_pages < 2:
+            raise ValueError(
+                f"{path}: secondary_code requires at least two total pages"
+            )
+        secondary_spec = {
+            "flags": SEGMENT_REQUIRED | SEGMENT_EXECUTABLE,
+            "load_address": APP_BASE,
+        }
+
+    return {
+        "application_id": app_id,
+        "profile": PROFILE_UNIVERSAL_Z80,
+        "platforms": UNIVERSAL_PLATFORM_MASK,
+        "minimum_abi": tuple(minimum_abi),
+        "minimum_sysinfo": tuple(minimum_sysinfo),
+        "required_capabilities": required,
+        "optional_capabilities": optional,
+        "service_id": service_id,
+        "lifecycle": lifecycle,
+        "minimum_pages": minimum_pages,
+        "preferred_pages": preferred_pages,
+        "secondary_code": secondary_spec,
+    }
+
+
 def _v3_layout(icon_count, segment_count=1):
     manifest_offset = HEADER_SIZE + icon_count * DIR_ENTRY_SIZE
     segment_offset = manifest_offset + MANIFEST_SIZE
@@ -412,6 +582,139 @@ def _v3_preamble(icon, icon16, spec, primary_size, secondary=None):
     return bytes(header + directory + manifest + segments + payload)
 
 
+def _v4_layout(icon_count, segment_count=1):
+    manifest_offset = HEADER_SIZE + icon_count * DIR_ENTRY_SIZE
+    segment_offset = manifest_offset + MANIFEST4_SIZE
+    payload_offset = segment_offset + segment_count * SEGMENT4_ENTRY_SIZE
+    return manifest_offset, segment_offset, payload_offset
+
+
+def v4_preamble_size(icon16=False, segment_count=1):
+    count = 2 if icon16 else 1
+    _, _, payload_offset = _v4_layout(count, segment_count)
+    return payload_offset + ICON_SIZE + (ICON7_SIZE if icon16 else 0)
+
+
+def _v4_preamble(icon, icon16, spec, primary_size, package_size,
+                 secondary=None):
+    resources = [(CODEC_MODE1, ICON_WB, icon)]
+    if icon16 is not None:
+        resources.append((CODEC_SCREEN7, ICON7_WB, icon16))
+    secondary_spec = spec["secondary_code"]
+    if (secondary_spec is None) != (secondary is None):
+        raise ValueError(
+            "manifest secondary_code and supplied secondary payload must agree"
+        )
+    segment_count = 1 + (1 if secondary is not None else 0)
+    manifest_offset, segment_offset, payload_offset = _v4_layout(
+        len(resources), segment_count
+    )
+    total = payload_offset + sum(len(bitmap) for _, _, bitmap in resources)
+    if (primary_size < total or APP_BASE + primary_size > UNIVERSAL_IMAGE_LIMIT
+            or package_size < primary_size):
+        raise ValueError("linked image has an invalid GBAP v4 length")
+    if (secondary is not None
+            and (len(secondary) < 8 or secondary[0] != 0xC3
+                 or secondary[3:7] != b"GBS4" or secondary[7] != 1)):
+        raise ValueError("secondary payload lacks the GBS4 v1 entry prefix")
+
+    directory = bytearray(len(resources) * DIR_ENTRY_SIZE)
+    payload = bytearray()
+    offset = payload_offset
+    for index, (codec, width, bitmap) in enumerate(resources):
+        pos = index * DIR_ENTRY_SIZE
+        directory[pos:pos + 4] = bytes((codec, width, ICON_H, 0))
+        struct.pack_into("<HH", directory, pos + 4, len(bitmap), offset)
+        payload.extend(bitmap)
+        offset += len(bitmap)
+
+    required = spec["required_capabilities"]
+    optional = spec["optional_capabilities"]
+    manifest = bytearray(MANIFEST4_SIZE)
+    manifest[0:4] = MANIFEST4_MAGIC
+    manifest[4:8] = bytes((MANIFEST4_SIZE, MANIFEST4_VERSION,
+                           PROFILE_UNIVERSAL_Z80, UNIVERSAL_PLATFORM_MASK))
+    manifest[8:12] = bytes((*spec["minimum_abi"],
+                            *spec["minimum_sysinfo"]))
+    struct.pack_into(
+        "<HHHH", manifest, 12,
+        required & 0xFFFF, (required >> 16) & 0xFFFF,
+        optional & 0xFFFF, (optional >> 16) & 0xFFFF,
+    )
+    manifest[20:28] = spec["application_id"].encode("ascii").ljust(8, b" ")
+    struct.pack_into("<HH", manifest, 28, spec["service_id"], spec["lifecycle"])
+    manifest[32:36] = bytes((spec["minimum_pages"], spec["preferred_pages"],
+                             segment_count, SEGMENT4_ENTRY_SIZE))
+    struct.pack_into(
+        "<HHHH", manifest, 36, segment_offset, total, primary_size, 0
+    )
+    manifest[44:52] = UNIVERSAL_ABI_ID
+    struct.pack_into("<II", manifest, 52, package_size, 0)
+
+    segments = bytearray(segment_count * SEGMENT4_ENTRY_SIZE)
+    segments[0:4] = bytes((SEGMENT_PRIMARY, SELECTOR_COMMON,
+                           SEGMENT_REQUIRED | SEGMENT_EXECUTABLE,
+                           COMPRESSION_NONE))
+    struct.pack_into(
+        "<HHIII", segments, 4, 0, APP_BASE, 0, primary_size, primary_size
+    )
+    if secondary is not None:
+        pos = SEGMENT4_ENTRY_SIZE
+        segments[pos:pos + 4] = bytes((
+            SEGMENT_SECONDARY_CODE, SELECTOR_COMMON,
+            secondary_spec["flags"], COMPRESSION_NONE,
+        ))
+        struct.pack_into(
+            "<HHIII", segments, pos + 4, 0, secondary_spec["load_address"],
+            primary_size, len(secondary), len(secondary),
+        )
+
+    header = bytearray(HEADER_SIZE)
+    entry = APP_BASE + total
+    header[0:3] = bytes((0xC3, entry & 0xFF, entry >> 8))
+    header[3:7] = MAGIC
+    header[7:10] = bytes((VERSION_V4, len(resources), DIR_ENTRY_SIZE))
+    struct.pack_into("<HHH", header, 10, total, HEADER_SIZE, manifest_offset)
+    return bytes(header + directory + manifest + segments + payload)
+
+
+def make_v4_preamble(icon, manifest, primary_size, package_size, icon16=None,
+                     secondary=None):
+    if len(icon) != ICON_SIZE:
+        raise ValueError("invalid four-colour APP icon length")
+    if icon16 is not None and len(icon16) != ICON7_SIZE:
+        raise ValueError("invalid sixteen-colour APP icon length")
+    return _v4_preamble(
+        icon, icon16, manifest, primary_size, package_size, secondary
+    )
+
+
+def _v4_crc32(data, manifest_offset):
+    image = bytearray(data)
+    image[manifest_offset + CRC32_OFFSET:
+          manifest_offset + CRC32_OFFSET + 4] = b"\0\0\0\0"
+    return zlib.crc32(image) & 0xFFFFFFFF
+
+
+def refresh_v4_crc(data):
+    """Recompute a GBAP v4 package CRC after a resource-only edit."""
+    if (len(data) < HEADER_SIZE or data[0] != 0xC3 or data[3:7] != MAGIC
+            or data[7] != VERSION_V4):
+        raise ValueError("application is not a GBAP v4 package")
+    manifest_offset = struct.unpack_from("<H", data, 14)[0]
+    if (manifest_offset + MANIFEST4_SIZE > len(data)
+            or data[manifest_offset:manifest_offset + 4] != MANIFEST4_MAGIC):
+        raise ValueError("invalid GBAP v4 manifest while updating CRC")
+    package_size = struct.unpack_from("<I", data, manifest_offset + 52)[0]
+    if package_size != len(data):
+        raise ValueError("GBAP v4 package size changed")
+    struct.pack_into(
+        "<I", data, manifest_offset + CRC32_OFFSET,
+        _v4_crc32(data, manifest_offset),
+    )
+    return data
+
+
 def make_preamble(icon, icon16=None):
     if len(icon) != ICON_SIZE:
         raise ValueError("invalid four-colour APP icon length")
@@ -428,6 +731,199 @@ def make_v3_preamble(icon, manifest, primary_size, icon16=None, secondary=None):
     if icon16 is not None and len(icon16) != ICON7_SIZE:
         raise ValueError("invalid sixteen-colour APP icon length")
     return _v3_preamble(icon, icon16, manifest, primary_size, secondary)
+
+
+def _parse_v4_package(data):
+    count = data[8]
+    entry_size = data[9]
+    total, directory_offset, manifest_offset = struct.unpack_from("<HHH", data, 10)
+    resource_directory_end = directory_offset + count * entry_size
+    if (count == 0 or count > 8 or entry_size != DIR_ENTRY_SIZE
+            or directory_offset != HEADER_SIZE
+            or manifest_offset != resource_directory_end
+            or manifest_offset + MANIFEST4_SIZE > total
+            or len(data) < total):
+        raise ValueError("invalid GBAP v4 header")
+
+    block = data[manifest_offset:manifest_offset + MANIFEST4_SIZE]
+    if (block[0:4] != MANIFEST4_MAGIC or block[4] != MANIFEST4_SIZE
+            or block[5] != MANIFEST4_VERSION
+            or block[6] != PROFILE_UNIVERSAL_Z80
+            or block[7] != UNIVERSAL_PLATFORM_MASK):
+        raise ValueError("invalid GBAP v4 manifest prefix")
+    if (tuple(block[8:10]) != (UNIVERSAL_ABI_MAJOR, UNIVERSAL_ABI_MINOR)
+            or tuple(block[10:12]) != (UNIVERSAL_SYSINFO_VERSION,
+                                       UNIVERSAL_SYSINFO_SIZE)):
+        raise ValueError("invalid GBAP v4 ABI requirement")
+
+    required_low, required_high, optional_low, optional_high = struct.unpack_from(
+        "<HHHH", block, 12
+    )
+    required = required_low | (required_high << 16)
+    optional = optional_low | (optional_high << 16)
+    known_capabilities = 0
+    for value in CAPABILITIES_V4.values():
+        known_capabilities |= value
+    universal_floor = (CAPABILITIES_V4["universal-loader"]
+                       | CAPABILITIES_V4["runtime-geometry"])
+    if (required & universal_floor != universal_floor
+            or required & optional
+            or (required | optional) & ~known_capabilities):
+        raise ValueError("invalid GBAP v4 capability policy")
+
+    identity_raw = bytes(block[20:28])
+    identity = identity_raw.rstrip(b" ")
+    if (not identity or not re.fullmatch(rb"[A-Z0-9_]+", identity)
+            or identity_raw != identity.ljust(8, b" ")):
+        raise ValueError("invalid GBAP v4 application identity")
+    service_id, lifecycle = struct.unpack_from("<HH", block, 28)
+    if not lifecycle or lifecycle & ~0x000F:
+        raise ValueError("invalid GBAP v4 lifecycle")
+
+    minimum_pages, preferred_pages, segment_count, segment_size = block[32:36]
+    segment_offset, entry_offset, primary_size, flags = struct.unpack_from(
+        "<HHHH", block, 36
+    )
+    package_size, package_crc = struct.unpack_from("<II", block, 52)
+    if (minimum_pages == 0 or preferred_pages < minimum_pages
+            or segment_count == 0 or segment_count > 32
+            or segment_size != SEGMENT4_ENTRY_SIZE
+            or segment_offset != manifest_offset + MANIFEST4_SIZE
+            or segment_offset + segment_count * segment_size > total
+            or entry_offset != total
+            or primary_size < total
+            or APP_BASE + primary_size > UNIVERSAL_IMAGE_LIMIT
+            or flags or block[44:52] != UNIVERSAL_ABI_ID
+            or package_size != len(data)
+            or any(block[60:64])):
+        raise ValueError("invalid GBAP v4 manifest bounds")
+    entry = APP_BASE + entry_offset
+    if data[1] != (entry & 0xFF) or data[2] != (entry >> 8):
+        raise ValueError("GBAP v4 entry point does not match the manifest")
+    if package_crc != _v4_crc32(data, manifest_offset):
+        raise ValueError("invalid GBAP v4 package CRC")
+
+    segments = []
+    primary_count = 0
+    secondary_count = 0
+    occupied = []
+    for index in range(segment_count):
+        pos = segment_offset + index * segment_size
+        kind, selector_type, segflags, compression = data[pos:pos + 4]
+        selector_value, load_address, file_offset, stored, unpacked = \
+            struct.unpack_from("<HHIII", data, pos + 4)
+        if (kind not in (SEGMENT_PRIMARY, SEGMENT_SECONDARY_CODE,
+                         SEGMENT_RESOURCE, SEGMENT_DATA)
+                or selector_type not in (SELECTOR_COMMON,
+                                         SELECTOR_PRESENTATION_CODEC,
+                                         SELECTOR_PLATFORM_MASK)
+                or segflags & ~(SEGMENT_REQUIRED | SEGMENT_EXECUTABLE
+                                | SEGMENT_READ_ONLY)
+                or compression != COMPRESSION_NONE or not stored
+                or stored != unpacked or file_offset + stored > package_size):
+            raise ValueError(f"invalid GBAP v4 segment {index}")
+        if selector_type == SELECTOR_COMMON and selector_value:
+            raise ValueError(f"invalid GBAP v4 common selector {index}")
+        if (selector_type == SELECTOR_PRESENTATION_CODEC
+                and selector_value not in (CODEC_MODE1, CODEC_SCREEN7)):
+            raise ValueError(f"invalid GBAP v4 presentation selector {index}")
+        if (selector_type == SELECTOR_PLATFORM_MASK
+                and (not selector_value
+                     or selector_value & ~UNIVERSAL_PLATFORM_MASK
+                     or segflags & SEGMENT_EXECUTABLE)):
+            raise ValueError(f"invalid GBAP v4 platform selector {index}")
+        if kind == SEGMENT_PRIMARY:
+            primary_count += 1
+            if (index != 0 or selector_type != SELECTOR_COMMON
+                    or segflags != (SEGMENT_REQUIRED | SEGMENT_EXECUTABLE)
+                    or file_offset != 0 or stored != primary_size
+                    or load_address != APP_BASE):
+                raise ValueError("invalid GBAP v4 primary segment")
+        else:
+            if file_offset < primary_size or load_address != (
+                    APP_BASE if kind == SEGMENT_SECONDARY_CODE else 0):
+                raise ValueError(f"invalid GBAP v4 segment placement {index}")
+            occupied.append((file_offset, file_offset + stored))
+            if kind == SEGMENT_SECONDARY_CODE:
+                secondary_count += 1
+                if (selector_type != SELECTOR_COMMON
+                        or segflags != (SEGMENT_REQUIRED | SEGMENT_EXECUTABLE)
+                        or stored < 8 or data[file_offset] != 0xC3
+                        or data[file_offset + 3:file_offset + 7] != b"GBS4"
+                        or data[file_offset + 7] != 1):
+                    raise ValueError("invalid GBAP v4 secondary-code segment")
+            elif segflags & SEGMENT_EXECUTABLE:
+                raise ValueError(f"non-code GBAP v4 segment {index} is executable")
+        segments.append({
+            "type": kind,
+            "selector_type": selector_type,
+            "selector_value": selector_value,
+            "flags": segflags,
+            "compression": compression,
+            "load_address": load_address,
+            "offset": file_offset,
+            "stored_length": stored,
+            "unpacked_length": unpacked,
+        })
+    if primary_count != 1 or secondary_count > 1:
+        raise ValueError(
+            "GBAP v4 requires one primary and at most one secondary-code segment"
+        )
+    occupied.sort()
+    cursor = primary_size
+    for start, end in occupied:
+        if start != cursor:
+            raise ValueError("GBAP v4 segment image is not contiguous")
+        cursor = end
+    if cursor != package_size:
+        raise ValueError("GBAP v4 segments do not cover the package")
+
+    resource_floor = segment_offset + segment_count * segment_size
+    resources = []
+    occupied_resources = []
+    for index in range(count):
+        pos = directory_offset + index * entry_size
+        codec, width, height, resource_flags = data[pos:pos + 4]
+        length, offset = struct.unpack_from("<HH", data, pos + 4)
+        expected_width = ICON_WB if codec == CODEC_MODE1 else \
+            ICON7_WB if codec == CODEC_SCREEN7 else 0
+        if (not expected_width or width != expected_width or height != ICON_H
+                or resource_flags or length != width * height
+                or offset < resource_floor or offset + length > total):
+            raise ValueError(f"invalid GBAP v4 icon resource {index}")
+        if any(offset < end and offset + length > start
+               for start, end in occupied_resources):
+            raise ValueError("overlapping GBAP v4 icon resources")
+        occupied_resources.append((offset, offset + length))
+        resources.append({
+            "codec": codec, "wbytes": width, "height": height,
+            "length": length, "offset": offset,
+        })
+    if resources[0]["codec"] != CODEC_MODE1:
+        raise ValueError("GBAP v4 resource 0 must be the portable icon")
+    if len({item["codec"] for item in resources}) != len(resources):
+        raise ValueError("duplicate GBAP v4 icon codec")
+
+    manifest = {
+        "version": VERSION_V4,
+        "profile": block[6],
+        "platforms": block[7],
+        "minimum_abi": tuple(block[8:10]),
+        "minimum_sysinfo": tuple(block[10:12]),
+        "required_capabilities": required,
+        "optional_capabilities": optional,
+        "application_id": identity.decode("ascii"),
+        "service_id": service_id,
+        "lifecycle": lifecycle,
+        "minimum_pages": minimum_pages,
+        "preferred_pages": preferred_pages,
+        "entry_offset": entry_offset,
+        "primary_image_size": primary_size,
+        "image_size": package_size,
+        "package_crc32": package_crc,
+        "segments": segments,
+    }
+    return total, resources, manifest
 
 
 def _parse_package(data):
@@ -447,6 +943,8 @@ def _parse_package(data):
             "codec": CODEC_MODE1, "wbytes": ICON_WB, "height": ICON_H,
             "length": ICON_SIZE, "offset": HEADER_SIZE,
         }], None
+    if version == VERSION_V4:
+        return _parse_v4_package(data)
     if version not in (VERSION_V2, VERSION_V3):
         raise ValueError(f"unsupported GBAP version {version}")
 
@@ -601,10 +1099,10 @@ def parse_resources(data):
 
 
 def parse_manifest(data):
-    """Return the GBAP v3 manifest dictionary, or raise ValueError."""
+    """Return a GBAP v3/v4 manifest dictionary, or raise ValueError."""
     _, _, manifest = _parse_package(data)
     if manifest is None:
-        raise ValueError("application does not carry a GBAP v3 manifest")
+        raise ValueError("application does not carry a GBAP manifest")
     return manifest
 
 
@@ -662,6 +1160,36 @@ def inject_v3(manifest_path, icon_path, raw_path, out_path, icon16_path=None,
         target.write(package)
 
 
+def inject_v4(manifest_path, icon_path, raw_path, out_path, icon16_path=None,
+              secondary_path=None):
+    icon = parse_icon(icon_path, CODEC_MODE1)
+    icon16 = parse_icon(icon16_path, CODEC_SCREEN7) if icon16_path else None
+    manifest = _read_v4_manifest_spec(manifest_path)
+    with open(raw_path, "rb") as source:
+        raw = bytearray(source.read())
+    secondary = None
+    if secondary_path:
+        with open(secondary_path, "rb") as source:
+            secondary = source.read()
+    package_size = len(raw) + (len(secondary) if secondary is not None else 0)
+    preamble = make_v4_preamble(
+        icon, manifest, len(raw), package_size, icon16, secondary
+    )
+    if len(raw) < len(preamble):
+        raise ValueError(f"{raw_path}: linked image is shorter than the APP preamble")
+    padding = raw[:len(preamble)]
+    if padding[0] not in (0x00, 0xFF) or any(value != padding[0] for value in padding):
+        raise ValueError(
+            f"{raw_path}: linked image does not reserve {len(preamble)} bytes at 0x4000"
+        )
+    raw[:len(preamble)] = preamble
+    package = raw + (secondary or b"")
+    refresh_v4_crc(package)
+    parse_manifest(package)
+    with open(out_path, "wb") as target:
+        target.write(package)
+
+
 def main(argv):
     if argv[1:2] == ["size"] and len(argv) in (3, 4):
         icon = parse_icon(argv[2], CODEC_MODE1)
@@ -675,6 +1203,14 @@ def main(argv):
             parse_icon(argv[4], CODEC_SCREEN7)
         segment_count = 1 + (manifest["secondary_code"] is not None)
         print(v3_preamble_size(len(argv) == 5, segment_count))
+        return
+    if argv[1:2] == ["size-v4"] and len(argv) in (4, 5):
+        manifest = _read_v4_manifest_spec(argv[2])
+        parse_icon(argv[3], CODEC_MODE1)
+        if len(argv) == 5:
+            parse_icon(argv[4], CODEC_SCREEN7)
+        segment_count = 1 + (manifest["secondary_code"] is not None)
+        print(v4_preamble_size(len(argv) == 5, segment_count))
         return
     if argv[1:2] == ["inject"] and len(argv) in (5, 6):
         if len(argv) == 5:
@@ -700,13 +1236,31 @@ def main(argv):
         else:
             raise ValueError("invalid inject-v3 arguments")
         return
+    if argv[1:2] == ["inject-v4"]:
+        args = argv[2:]
+        secondary_path = None
+        if "--secondary" in args:
+            index = args.index("--secondary")
+            if index + 1 >= len(args):
+                raise ValueError("--secondary requires a payload path")
+            secondary_path = args[index + 1]
+            del args[index:index + 2]
+        if len(args) == 4:
+            inject_v4(args[0], args[1], args[2], args[3],
+                      secondary_path=secondary_path)
+        elif len(args) == 5:
+            inject_v4(args[0], args[1], args[3], args[4], args[2],
+                      secondary_path)
+        else:
+            raise ValueError("invalid inject-v4 arguments")
+        return
     if argv[1:2] == ["check"] and len(argv) == 3:
         with open(argv[2], "rb") as source:
             data = source.read()
         total, resources = parse_resources(data)
         codecs = "/".join(str(item["codec"]) for item in resources)
         detail = ""
-        if data[7] == VERSION_V3:
+        if data[7] in (VERSION_V3, VERSION_V4):
             manifest = parse_manifest(data)
             detail = (f", app {manifest['application_id']}, "
                       f"segments {len(manifest['segments'])}")
@@ -720,6 +1274,11 @@ def main(argv):
         "       embed_app_icon.py size-v3 <manifest.json> <icon4.asm> "
         "[icon16.asm]\n"
         "       embed_app_icon.py inject-v3 <manifest.json> <icon4.asm> "
+        "[icon16.asm] <linked.raw> <out.APP> "
+        "[--secondary <segment.raw>]\n"
+        "       embed_app_icon.py size-v4 <manifest.json> <icon4.asm> "
+        "[icon16.asm]\n"
+        "       embed_app_icon.py inject-v4 <manifest.json> <icon4.asm> "
         "[icon16.asm] <linked.raw> <out.APP> "
         "[--secondary <segment.raw>]\n"
         "       embed_app_icon.py check <file.APP>"

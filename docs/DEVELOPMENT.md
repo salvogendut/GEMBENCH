@@ -35,6 +35,17 @@ profile explicit so application size and ownership remain auditable.
 Every app must keep loaded code below `DATA_LOC`, data/BSS below `0x8000`, and
 the task stack clear. The builder prints and validates these boundaries.
 
+For compile-once development, use `lib/gb/gbuniversal.h` and the dedicated gate:
+
+```sh
+make geobench-v2-sdk-check
+```
+
+This builds `apps/abiprobe` with only `GB_UNIVERSAL`, audits its source,
+generated assembly and link map, validates the GBAP v4 package and CRC, and
+proves a second build is byte-identical. It is not an emulator test yet because
+the production MSX kernel intentionally rejects v4 until Gate 2 is complete.
+
 Use `make app APP=mahjong` or `make app APP=calculator` for the registered fast
 rebuild paths. A full build is required when kernel, shared modules, assets, or
 distribution layout changes.

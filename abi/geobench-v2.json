@@ -1,6 +1,6 @@
 {
   "abi": "GEOBENCH-2",
-  "status": "proposed",
+  "status": "experimental",
   "issue": 55,
   "purpose": "One native Z80 application package for MSX2, CPC, and PCW",
   "inherits": {

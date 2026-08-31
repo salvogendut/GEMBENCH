@@ -1,0 +1,7 @@
+# Internal dependencies of lib/gb/gbuniversal.c. The universal builder always
+# merges these with the application's explicit public-call manifest.
+gb_time
+gb_wm_h
+gb_wm_w
+gb_wm_x
+gb_wm_y

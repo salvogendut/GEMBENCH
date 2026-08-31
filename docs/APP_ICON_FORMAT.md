@@ -184,9 +184,9 @@ A compile-once binary must additionally restrict itself to the frozen common
 ABI, runtime geometry/capabilities, portable GBR/VDI data, and a common memory
 layout on every platform named in its mask.
 
-## Proposed GBAP v4 universal package
+## GBAP v4 universal package
 
-Issue #55 reserves version 4/profile 3 (`universal-z80`) for a genuinely
+Issue #55 defines version 4/profile 3 (`universal-z80`) for a genuinely
 byte-identical MSX2/CPC/PCW package. It keeps this 16-byte outer header and icon
 directory, replaces GBM3 with a 64-byte `GBM4` manifest, widens capabilities to
 32 bits, uses 20-byte segment records with 32-bit file ranges, and adds the ABI
@@ -195,10 +195,19 @@ identity `GEOBNCH2`, package size, and CRC-32.
 V4 permits presentation-specific resources in the one common file, but every
 executable segment is common to all three platforms. Its primary image still
 loads at `#4000` and now observes the strict common exclusive limit `#7F00`.
-The exact proposed records, loader transaction, and compatibility rules are in
+The exact records, loader transaction, and compatibility rules are in
 [`UNIVERSAL-APPLICATION-ABI.md`](UNIVERSAL-APPLICATION-ABI.md) and
-[`abi/geobench-v2.json`](../abi/geobench-v2.json). The current packer and kernel
-do not emit or advertise v4 yet.
+[`abi/geobench-v2.json`](../abi/geobench-v2.json). Gate 1 emits and validates v4:
+
+```sh
+make geobench-v2-abiprobe
+python3 tools/embed_app_icon.py check build/universal/ABIPROBE.APP
+```
+
+`tools/build_uapp.sh` compiles with `GB_UNIVERSAL`, reserves the guarded v4
+preamble, audits the source, generated assembly, and linked modules, then writes
+the CRC-protected package. The current MSX kernel does not load or advertise v4;
+that is the next migration gate.
 
 ## Resident-set impact
 
@@ -220,7 +229,9 @@ reductions, moving the nine v1 icons still reduces the combined raw distribution
 payload by 2,232 bytes. A dual four-/sixteen-colour v2 header costs 800 bytes;
 adding the M5 manifest and primary descriptor raises that to 852 bytes.
 
-`tools/iconedit.py` opens either ASM source and both resources inside a v2/v3 APP.
+`tools/iconedit.py` opens either ASM source and both resources inside a v2/v3/v4
+APP. A v4 save recomputes the whole-package CRC while preserving executable and
+unedited resource bytes.
 Use Previous/Next to switch variants. `ICONED.APP` edits both variants on MSX
 Screen 7; on other targets and in MSX Screen 6 it exposes the portable icon and
 preserves the native resource. Its whole-document ceiling is 7,168 bytes.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the proposed GEOBENCH-2 universal application ABI authority."""
+"""Validate the experimental GEOBENCH-2 universal application ABI authority."""
 
 from __future__ import annotations
 
@@ -220,8 +220,9 @@ def main() -> int:
     inherited = json.loads(INHERITED.read_text(encoding="utf-8"))
     errors: list[str] = []
 
-    if authority.get("abi") != "GEOBENCH-2" or authority.get("status") != "proposed":
-        errors.append("authority must identify the proposed GEOBENCH-2 ABI")
+    if (authority.get("abi") != "GEOBENCH-2"
+            or authority.get("status") != "experimental"):
+        errors.append("authority must identify the experimental GEOBENCH-2 ABI")
     if inherited.get("abi") != authority["inherits"]["abi"]:
         errors.append("inherits.abi does not identify the frozen manifest")
     if inherited.get("status") != "frozen":

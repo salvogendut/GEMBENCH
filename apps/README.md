@@ -58,5 +58,17 @@ broad set speculatively.
 native Screen 7 icon. `APP_MANIFEST=` creates a guarded GBAP v3 package, and
 `APP_SECONDARY=` adds a verified secondary mapper payload.
 
+The experimental compile-once profile is separate from those MSX2 packages:
+
+```sh
+make geobench-v2-abiprobe
+make geobench-v2-sdk-check
+```
+
+`apps/abiprobe` demonstrates the `GB_UNIVERSAL` source boundary, runtime
+geometry, semantic pens, managed repaint, and GBAP v4 manifest. Its resulting
+file is host-verifiable but will not run until the MSX Gate-2 loader and v6
+sysinfo implementation land.
+
 Public APIs and frozen contracts are documented in `include/gembench/`,
 `lib/gb/gb.h`, and `docs/gembench/ABI-V1.md`.

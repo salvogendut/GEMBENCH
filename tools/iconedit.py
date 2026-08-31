@@ -7,9 +7,10 @@ tools/test_iconed_codec.py for the encoding rules.
 
   * .IST  v2 icon set: header(16) + dir(count*4: off u16le, w_bytes u8, h u8)
           + bitmaps. Each icon keeps its own size; mixed sizes are allowed.
-  * .APP  GBAP v1/v2/v3 preamble: executable JP + one canonical 32x32 Mode-1
-          icon and, in v2/v3, an optional native Screen-7 icon. Saving preserves
-          every non-icon executable byte and unedited resource.
+  * .APP  GBAP v1/v2/v3/v4 preamble: executable JP + one canonical 32x32 Mode-1
+          icon and, in v2/v3/v4, an optional native Screen-7 icon. Saving
+          preserves every non-icon executable byte and unedited resource; v4
+          package CRC is updated after an icon edit.
   * .ASM  RASM icon source: one labelled Mode-1 or native MSX Screen-7 bitmap
           with <label>_w and <label>_h dimensions. Mode 7 adds
           <label>_mode equ 7 and packs two 4-bit pixels per byte. Four-colour
@@ -42,7 +43,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from embed_app_icon import (CODEC_MODE1, CODEC_SCREEN7, ICON_H, ICON_WB,
-                            parse_resources)
+                            parse_resources, refresh_v4_crc)
 
 # --- portable .IST pixel packing: canonical CPC Mode 1 on every target --------
 # PLATFORM only selects the .SPR cursor codec below; it never changes .IST data.
@@ -566,6 +567,8 @@ def save_app_icon(path, icons, data):
             raise ValueError(f"unsupported APP icon codec {codec}")
         start = resource["offset"]
         data[start:start + resource["length"]] = bitmap
+    if data[7] == 4:
+        refresh_v4_crc(data)
     with open(path, "wb") as target:
         target.write(data)
 
