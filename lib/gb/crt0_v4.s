@@ -118,11 +118,13 @@ gbap4_guard:
         ld      a,(iy+1)
         cp      (ix+10)
         jp      c,gbap4_bad
-        ld      a,(iy+2)
+        ;; The inherited prefix remains GEMBENCH-1. Universal ABI identity is
+        ;; append-only in the v6 suffix, so compare the manifest against it.
+        ld      a,(iy+44)
         cp      (ix+8)
         jp      c,gbap4_bad
         jr      nz,gbap4_abi_ok
-        ld      a,(iy+3)
+        ld      a,(iy+45)
         cp      (ix+9)
         jp      c,gbap4_bad
 gbap4_abi_ok:
@@ -176,6 +178,9 @@ gbap4_abi_ok:
         jp      nz,gbap4_bad
         ld      a,(iy+44)
         cp      #2
+        jp      nz,gbap4_bad
+        ld      a,(iy+45)
+        or      a
         jp      nz,gbap4_bad
         ld      a,(iy+46)
         cp      #3

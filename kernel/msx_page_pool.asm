@@ -81,6 +81,7 @@ GB_PAGE_ERR_BADARG    equ 6
 
 GB_PLATFORM_MSX2      equ 1
 GB_SYSINFO_V5         equ 5
+GB_SYSINFO_V6         equ 6
 GB_PACKING_2BPP       equ 2
 GB_PACKING_4BPP       equ 4
 
@@ -100,6 +101,16 @@ GB_CAP_FS_CONTEXTS    equ #1000
 GB_CAP_SECONDARY_CODE equ #2000
 GB_CAP_SERVICE_MANAGER equ #4000
 GB_CAPS_MSX_M4        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO|GB_CAP_APPLICATIONS|GB_CAP_MULTI_WINDOW|GB_CAP_DEFERRED_MSG|GB_CAP_FS_CONTEXTS|GB_CAP_SECONDARY_CODE|GB_CAP_SERVICE_MANAGER
+
+; GEOBENCH-2 high capability word. The MSX2 reference target advertises only
+; services proved by this gate: transactional universal loading, runtime
+; geometry, semantic drawing and portable input. Portable filesystem/package
+; resource services remain unadvertised until their own conformance gates.
+GB_CAP_UNIVERSAL_LOADER equ #0001
+GB_CAP_RUNTIME_GEOMETRY equ #0002
+GB_CAP_PORTABLE_DRAWING equ #0004
+GB_CAP_PORTABLE_INPUT   equ #0008
+GB_CAPS_HIGH_MSX_V6     equ GB_CAP_UNIVERSAL_LOADER|GB_CAP_RUNTIME_GEOMETRY|GB_CAP_PORTABLE_DRAWING|GB_CAP_PORTABLE_INPUT
 
 ; app_pool_init: retain the TPA page-1 segment plus every available mapper
 ; segment, up to MSX_PAGE_MAX.  PAGE_DATA was already allocated separately by
@@ -197,12 +208,13 @@ mpcf_next       inc   c
                 ld    a,d
                 ld    (MSX_PAGE_FREE),a
                 ld    (MSX_SYS_POOL_FREE),a
+                ld    (MSX_SYSINFO_V5_SHADOW+14),a
                 ret
 
 sysinfo_init
                 ld    a,MSX_SYSINFO_SIZE
                 ld    (MSX_SYS_SIZE),a
-                ld    a,GB_SYSINFO_V5
+                ld    a,GB_SYSINFO_V6
                 ld    (MSX_SYS_VERSION),a
                 ld    a,1                     ; frozen GEMBENCH-1 ABI
                 ld    (MSX_SYS_ABI_MAJOR),a
@@ -261,6 +273,39 @@ sysinfo_init
                 ld    (MSX_SYS_FS_CONTEXTS),hl
                 ld    hl,#0102                 ; transfer high byte (512), API v1
                 ld    (MSX_SYS_FS_TRANSFER+1),hl
+                ld    hl,GB_CAPS_HIGH_MSX_V6
+                ld    (MSX_SYS_CAPS_HIGH),hl
+                ld    a,128
+                ld    (MSX_SYS_COLUMNS),a
+                ld    a,212
+                ld    (MSX_SYS_LINES),a
+                ld    a,4
+                ld    (MSX_SYS_PIXELS_COLUMN),a
+                ld    (MSX_SYS_SEMANTIC_PENS),a
+                ld    hl,APP_BASE
+                ld    (MSX_SYS_APP_BASE),hl
+                ld    hl,#7F00
+                ld    (MSX_SYS_APP_LIMIT),hl
+                ld    hl,GB_KERNEL
+                ld    (MSX_SYS_KERNEL_BASE),hl
+                ld    a,2
+                ld    (MSX_SYS_UNIVERSAL_MAJOR),a
+                xor   a
+                ld    (MSX_SYS_UNIVERSAL_MINOR),a
+                ld    a,3
+                ld    (MSX_SYS_UNIVERSAL_PROFILE),a
+                xor   a
+                ld    (MSX_SYS_RESERVED4),a
+
+                ; Preserve the old page-3 map as an unpublished v5 shadow.
+                ld    hl,MSX_SYSINFO
+                ld    de,MSX_SYSINFO_V5_SHADOW
+                ld    bc,MSX_SYSINFO_V5_SIZE
+                ldir
+                ld    a,MSX_SYSINFO_V5_SIZE
+                ld    (MSX_SYSINFO_V5_SHADOW),a
+                ld    a,GB_SYSINFO_V5
+                ld    (MSX_SYSINFO_V5_SHADOW+1),a
                 ret
 
 ; app_record_reset: C = application slot. Clear every reusable field while

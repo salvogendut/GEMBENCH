@@ -43,8 +43,16 @@ make geobench-v2-sdk-check
 
 This builds `apps/abiprobe` with only `GB_UNIVERSAL`, audits its source,
 generated assembly and link map, validates the GBAP v4 package and CRC, and
-proves a second build is byte-identical. It is not an emulator test yet because
-the production MSX kernel intentionally rejects v4 until Gate 2 is complete.
+proves a second build is byte-identical. Gate 2 adds the MSX runtime checks:
+
+```sh
+make geobench-v2-msx-gate-check
+make geobench-v2-msx-openmsx
+```
+
+The latter launches the exact staged `ABIPROBE.APP` and a malformed copy through
+the ordinary owner/page loader, checking successful publication and complete
+pre-entry rollback.
 
 Use `make app APP=mahjong` or `make app APP=calculator` for the registered fast
 rebuild paths. A full build is required when kernel, shared modules, assets, or

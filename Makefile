@@ -3,7 +3,7 @@ PYTHON ?= python3
 GBR_EXAMPLE_SOURCE := examples/hello-dialog.json
 GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
-.PHONY: all msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies gb-basic gb-basic-msx gb-basic-openmsx geobench-msx geobench-msx-banked gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m2-sysinfo gembench-m2-openmsx gembench-m2-paint-openmsx gembench-m3-openmsx gembench-m3-boot-openmsx gembench-m4-sysinfo gembench-m4-openmsx gembench-m5-manifest gembench-m5-openmsx gembench-m6-manifest gembench-m6-openmsx gembench-m7-resident-probe gembench-m7-service-probes gembench-m7-service-openmsx gembench-m8-timer-openmsx gembench-abi-check geobench-v2-abi-check geobench-v2-abiprobe geobench-v2-sdk-check gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbdefer-check gbfsctx-check gbshell-check gbaccessory-check gbr-example check test
+.PHONY: all msx msx-preemptive msx-cooperative msx-preemptive-diagnostic msx-floppies gb-basic gb-basic-msx gb-basic-openmsx geobench-msx geobench-msx-banked gembench-msx gembench-msx-banked gembench-m1-sysinfo gembench-m1-openmsx gembench-m2-sysinfo gembench-m2-openmsx gembench-m2-paint-openmsx gembench-m3-openmsx gembench-m3-boot-openmsx gembench-m4-sysinfo gembench-m4-openmsx gembench-m5-manifest gembench-m5-openmsx gembench-m6-manifest gembench-m6-openmsx gembench-m7-resident-probe gembench-m7-service-probes gembench-m7-service-openmsx gembench-m8-timer-openmsx gembench-abi-check geobench-v2-abi-check geobench-v2-abiprobe geobench-v2-sdk-check geobench-v2-msx-gate-check geobench-v2-msx-openmsx gembench-baseline-report gembench-baseline-1983 gembench-baseline-probes-1983 gembench-baseline-input-1983 gembench-baseline-input-openmsx app formref formref-banked sndtest taskdemo titlebar-editor distribution-check-fixtures gbr-check gbdefer-check gbfsctx-check gbshell-check gbaccessory-check gbr-example check test
 .NOTPARALLEL:
 
 all: msx
@@ -119,6 +119,14 @@ geobench-v2-sdk-check: geobench-v2-abi-check geobench-v2-abiprobe
 	$(PYTHON) tools/test_gbap4.py
 	$(PYTHON) tools/test_universal_app.py
 
+geobench-v2-msx-gate-check: geobench-v2-abiprobe
+	mkdir -p build/msx
+	cd build/msx && rasm ../../kernel/msx_gbap4.asm
+	python3 tools/test_geobench_v2_msx_gate.py
+
+geobench-v2-msx-openmsx: geobench-msx
+	bash tools/test_geobench_v2_msx_openmsx.sh
+
 # Generate a static report from the staged distribution. The 1983 target adds
 # guarded mapper/VRAM boot telemetry plus a desktop screenshot.
 gembench-baseline-report: gbr-example
@@ -230,7 +238,7 @@ $(GBR_EXAMPLE_OUTPUT): $(GBR_EXAMPLE_SOURCE) tools/gbrc.py
 distribution-check-fixtures:
 	bash tools/build_titlebarmod.sh
 
-check: gbr-check gbvdi-check gbevent-check gbregion-check gbscrap-check gbshell-check gbdefer-check gbfsctx-check gbaccessory-check geobench-v2-sdk-check gbr-example distribution-check-fixtures
+check: gbr-check gbvdi-check gbevent-check gbregion-check gbscrap-check gbshell-check gbdefer-check gbfsctx-check gbaccessory-check geobench-v2-sdk-check geobench-v2-msx-gate-check gbr-example distribution-check-fixtures
 	git diff --check
 	$(PYTHON) tools/gen_pic_luts.py --check
 	$(PYTHON) tools/test_picconv.py

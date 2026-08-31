@@ -20,7 +20,7 @@ def seed_architecture(
     put(baseline.MSX_PAGE_TOTAL, pool_pages)
     put(baseline.MSX_PAGE_FREE, free_pages)
     put(baseline.MSX_SYSINFO, baseline.MSX_SYSINFO_SIZE)
-    put(baseline.MSX_SYSINFO + 1, 5)
+    put(baseline.MSX_SYSINFO + 1, 6)
     put(baseline.MSX_SYSINFO + 2, 1)
     put(baseline.MSX_SYSINFO + 4, 1)
     put(baseline.MSX_SYSINFO + 5, 7)
@@ -42,6 +42,16 @@ def seed_architecture(
     put(baseline.MSX_SYSINFO + 28, 4)
     put_word(baseline.MSX_SYSINFO + 29, 512)
     put(baseline.MSX_SYSINFO + 31, 1)
+    put_word(baseline.MSX_SYSINFO + 32, 0x000F)
+    put(baseline.MSX_SYSINFO + 34, 128)
+    put(baseline.MSX_SYSINFO + 35, 212)
+    put(baseline.MSX_SYSINFO + 36, 4)
+    put(baseline.MSX_SYSINFO + 37, 4)
+    put_word(baseline.MSX_SYSINFO + 38, baseline.APP_BANK_START)
+    put_word(baseline.MSX_SYSINFO + 40, baseline.APP_LOAD_LIMIT)
+    put_word(baseline.MSX_SYSINFO + 42, 0x8000)
+    put(baseline.MSX_SYSINFO + 44, 2)
+    put(baseline.MSX_SYSINFO + 46, 3)
 
 
 class BaselineTests(unittest.TestCase):

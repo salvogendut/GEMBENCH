@@ -11,6 +11,8 @@ set m5_k_poll [expr {$::env(GEMBENCH_M5_K_POLL)}]
 set m5_main [expr {$::env(GEMBENCH_M5_MAIN)}]
 set m5_entry [expr {$::env(GEMBENCH_M5_ENTRY)}]
 set m5_pages [expr {$::env(GEMBENCH_M5_PAGES)}]
+set m5_bad_preentry [expr {[info exists ::env(GEMBENCH_M5_BAD_PREENTRY)]
+                           && $::env(GEMBENCH_M5_BAD_PREENTRY) ne "0"}]
 set m5_deadline 0
 set m5_target_x 0
 set m5_target_y 0
@@ -68,13 +70,23 @@ proc m5_poll_tick {} {
     set ::pause off
 }
 
+proc m5_candidate_mapped {} {
+    expr {[peek 0x4000] == 0xC3 && [peek 0x4003] == 0x47 &&
+          [peek 0x4004] == 0x42 && [peek 0x4005] == 0x41 &&
+          [peek 0x4006] == 0x50}
+}
+
 proc m5_trace_guard {} {
-    if {[peek 0xC2E0] || [peek 0xC2E1]} {incr ::m5_guard_hits}
+    if {([peek 0xC2E0] || [peek 0xC2E1]) && [m5_candidate_mapped]} {
+        incr ::m5_guard_hits
+    }
     set ::pause off
 }
 
 proc m5_trace_main {} {
-    if {[peek 0xC2E0] || [peek 0xC2E1]} {incr ::m5_main_hits}
+    if {([peek 0xC2E0] || [peek 0xC2E1]) && [m5_candidate_mapped]} {
+        incr ::m5_main_hits
+    }
     set ::pause off
 }
 
@@ -191,7 +203,8 @@ proc m5_wait_result {} {
             return
         }
     } else {
-        if {$::m5_guard_hits >= 1 && $::m5_main_hits == 0 &&
+        set expected_guard [expr {$::m5_bad_preentry ? 0 : 1}]
+        if {$::m5_guard_hits == $expected_guard && $::m5_main_hits == 0 &&
             $windows == 1 && $owners == 1 &&
             $free == $::m5_initial_free && $pending == 0} {
             m5_finish PASS

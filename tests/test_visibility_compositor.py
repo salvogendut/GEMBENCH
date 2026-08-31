@@ -123,7 +123,7 @@ class VisibilityCompositorTests(unittest.TestCase):
             "MSX_COMPOSITOR_EXTRA": 0xC1ED,
             "MSX_COMPOSITOR_SOURCE": 0xC1F3,
             "MSX_PAGE_NATIVE": 0xC200,
-            "MSX_APP_FIXED_BOTTOM": 0xCF00,
+            "MSX_APP_FIXED_BOTTOM": 0xD400,
         }
         for symbol, address in expected.items():
             match = re.search(rf"^{symbol}\s+equ\s+#([0-9A-Fa-f]+)",

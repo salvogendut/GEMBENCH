@@ -36,7 +36,7 @@ SCREEN7_POINTER_RESOURCE_BYTES = (
 )
 
 GLUE_DUMP_START = 0xC000
-GLUE_DUMP_LENGTH = 0x310
+GLUE_DUMP_LENGTH = 0xF30
 MSX_TICK = 0xC000
 MSX_TPASEG = 0xC018
 MSX_TOTSEG = 0xC019
@@ -44,8 +44,9 @@ MSX_FREESEG = 0xC01A
 MSX_PAGE_DATA = 0xC020
 MSX_PAGE_TOTAL = 0xC2E4
 MSX_PAGE_FREE = 0xC2E5
-MSX_SYSINFO = 0xC2F0
-MSX_SYSINFO_SIZE = 32
+MSX_SYSINFO_V5_SHADOW = 0xC2F0
+MSX_SYSINFO = 0xCF00
+MSX_SYSINFO_SIZE = 48
 MSX_PAGE_MAX = 32
 MSX_M7_REQUIRED_CAPABILITIES = 0x5FC0
 BASELINE_PHASE = 0xC02A
@@ -254,7 +255,7 @@ def parse_sysinfo(memory: dict[int, int]) -> dict[str, int] | None:
     size = byte_at(memory, MSX_SYSINFO)
     if not size:
         return None
-    return {
+    record = {
         "size": size,
         "version": byte_at(memory, MSX_SYSINFO + 1) or 0,
         "abi_major": byte_at(memory, MSX_SYSINFO + 2) or 0,
@@ -283,6 +284,22 @@ def parse_sysinfo(memory: dict[int, int]) -> dict[str, int] | None:
         "filesystem_transfer_bytes": word_at(memory, MSX_SYSINFO + 29) or 0,
         "filesystem_api_version": byte_at(memory, MSX_SYSINFO + 31) or 0,
     }
+    if size >= 48:
+        record.update({
+            "capabilities_high": word_at(memory, MSX_SYSINFO + 32) or 0,
+            "screen_columns": byte_at(memory, MSX_SYSINFO + 34) or 0,
+            "screen_lines": byte_at(memory, MSX_SYSINFO + 35) or 0,
+            "pixels_per_column": byte_at(memory, MSX_SYSINFO + 36) or 0,
+            "semantic_pens": byte_at(memory, MSX_SYSINFO + 37) or 0,
+            "application_base": word_at(memory, MSX_SYSINFO + 38) or 0,
+            "application_limit_exclusive": word_at(memory, MSX_SYSINFO + 40) or 0,
+            "kernel_table_base": word_at(memory, MSX_SYSINFO + 42) or 0,
+            "universal_abi_major": byte_at(memory, MSX_SYSINFO + 44) or 0,
+            "universal_abi_minor": byte_at(memory, MSX_SYSINFO + 45) or 0,
+            "universal_profile": byte_at(memory, MSX_SYSINFO + 46) or 0,
+            "reserved4": byte_at(memory, MSX_SYSINFO + 47) or 0,
+        })
+    return record
 
 
 def bcd_byte(value: int | None) -> int | None:
@@ -448,7 +465,7 @@ def collect_runtime(
     if sysinfo is not None:
         expected_sysinfo = {
             "size": MSX_SYSINFO_SIZE,
-            "version": 5,
+            "version": 6,
             "abi_major": 1,
             "abi_minor": 0,
             "platform": 1,
@@ -473,6 +490,18 @@ def collect_runtime(
             "filesystem_contexts": 4,
             "filesystem_transfer_bytes": 512,
             "filesystem_api_version": 1,
+            "capabilities_high": 0x000F,
+            "screen_columns": 128,
+            "screen_lines": 212,
+            "pixels_per_column": 4,
+            "semantic_pens": 4,
+            "application_base": APP_BANK_START,
+            "application_limit_exclusive": APP_LOAD_LIMIT,
+            "kernel_table_base": 0x8000,
+            "universal_abi_major": 2,
+            "universal_abi_minor": 0,
+            "universal_profile": 3,
+            "reserved4": 0,
         }
         mismatches = [
             f"{name}={sysinfo[name]!r} (expected {expected!r})"
@@ -480,7 +509,7 @@ def collect_runtime(
             if sysinfo[name] != expected
         ]
         if mismatches:
-            errors.append("invalid GB_SYSINFO v5: " + ", ".join(mismatches))
+            errors.append("invalid GB_SYSINFO v6: " + ", ".join(mismatches))
         if (
             sysinfo["capabilities"] & MSX_M7_REQUIRED_CAPABILITIES
         ) != MSX_M7_REQUIRED_CAPABILITIES:

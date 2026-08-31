@@ -35,6 +35,7 @@ static void click(void)
     gb_wm_damage((unsigned char)(rect.x + 4u),
                  (unsigned char)(rect.y + CONTENT_TOP + 40u),
                  (unsigned char)(rect.w - 8u), 6u);
+    gb_restore_parent();
 }
 
 static void window_proc(void)
@@ -44,7 +45,9 @@ static void window_proc(void)
     switch (message.type) {
         case GB_MSG_DRAW:  draw();             break;
         case GB_MSG_CLICK: click();            break;
-        case GB_MSG_DRAG:  (void)gb_window_drag(); break;
+        case GB_MSG_DRAG:
+            if (gb_window_drag() == GB_APP_OK) gb_restore_parent();
+            break;
         case GB_MSG_CLOSE: gb_wm_close();      break;
     }
 }
@@ -64,4 +67,5 @@ void main(void)
     probe_window.x = (unsigned char)((columns - PROBE_W) >> 1);
     probe_window.y = (unsigned char)((lines - PROBE_H) >> 1);
     gb_wm_managed(&probe_window);
+    gb_restore_parent();
 }

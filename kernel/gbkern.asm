@@ -3115,6 +3115,10 @@ wm_open_go
                 jr    wmo_loaded
 wmo_load_sys    call  fs_load_sys                 ; normal app open: boot-first, browse-fallback
 wmo_loaded      jr    nc,wmo_fail
+                ifdef PLATFORM_MSX
+                call  MSX_GBAP4_GATE            ; v4 validates before outer JP/publication
+                jr    nc,wmo_fail               ; owner/page rollback is shared and complete
+                endif
                 ei
                 call  APP_BASE                    ; main -> GB_WMADD + paint, then ret
                 di
