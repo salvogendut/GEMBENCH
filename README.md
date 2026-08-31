@@ -36,9 +36,10 @@ The completed foundation currently covers:
 - an opt-in, non-blocking MSX2 event adapter that combines keyboard, pointer,
   timer, and window-manager activity in one caller-owned record, demonstrated
   by Clock;
-- a four-rectangle, allocation-free MSX2 visible-region iterator that lets the
-  Desktop skip opaque covered areas and restores the legacy damage clip on
-  capacity exhaustion;
+- a global allocation-free MSX2 compositor that emits exact visible damage for
+  every application, skips fully covered callbacks, repairs the destructive
+  drag-outline sweep, and fully refreshes both focus endpoints without repainting
+  their bounding box;
 - a bounded MSX2 typed-scrap layer for text, bitmap, icon, and file-list data
   that preserves the complete 510-byte raw clipboard and accepts legacy text;
 - bounded MSX2 shell discovery and synchronous open/activate/close/quit
@@ -58,6 +59,8 @@ The completed foundation currently covers:
   resize, and maximise/restore gestures, demonstrated by File Manager;
 - a bounded generation-safe deferred application-message FIFO, with Desk
   accessory activation as its first production client;
+- owner-aggregated MSX2 visibility scheduling that prioritizes focused and
+  visible application workers and parks fully covered visual workers;
 - four owner-safe MSX2 filesystem contexts with independent drive, path,
   directory enumeration, and sequential offset state, first used by File
   Manager and advanced in bounded 512-byte calls;
@@ -114,8 +117,8 @@ tools/test_window_kinds_openmsx.sh
 ```
 
 Exercise Clock's combined keyboard, pointer, timer, and window subscription,
-then prove its graphical face continues repainting behind a focused File
-Manager without altering the foreground pixels:
+then prove partially covered component damage cannot alter the foreground and
+a fully covered Clock receives no worker CPU or repaint callbacks:
 
 ```sh
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
@@ -124,8 +127,8 @@ OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
 
 The equivalent build-and-test target is `make gembench-m8-timer-openmsx`.
 
-Exercise bounded Desktop repainting while File Manager and Clock are moved,
-topped, and closed:
+Exercise the global visibility compositor through both the Clock occlusion and
+multi-window PAINT move/focus workflows:
 
 ```sh
 OPENMSX='flatpak run --command=openmsx org.openmsx.openMSX' \
@@ -208,6 +211,7 @@ python3 tools/gbrc.py examples/hello-dialog.json \
 - [Current MSX2 baseline](docs/gembench/BASELINE.md)
 - [Milestone 7 banking decision](docs/gembench/M7-BANKING-DECISION.md)
 - [Architecture Milestone 7 shared services](docs/gembench/ARCHITECTURE-M7-MSX.md)
+- [Architecture Milestone 9 visibility-aware compositor and scheduling](docs/gembench/ARCHITECTURE-M9-MSX.md)
 - [Frozen GEMBENCH-1 ABI](docs/gembench/ABI-V1.md)
 - [openMSX reference validation](docs/gembench/OPENMSX-VALIDATION.md)
 - [Baseline measurement workflow](docs/gembench/DEVELOPMENT.md)

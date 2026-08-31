@@ -3,7 +3,7 @@
 ; This file is assembled by scheduler_image.asm, not included in GBKERN. The
 ; preemptive desktop carries the resulting image in its app page and copies it
 ; to SCHED_BASE before entering the window-manager loop. CPC/PCW reserve
-; #3C00-#3DFF; MSX uses fixed page-3 RAM at #C900.
+; #3C00-#3DFF; MSX uses #C900-#CEFF in fixed page-3 RAM.
 ;
 ; An active task continues to use the platform's existing fixed stack.  On a
 ; switch, only BOOT_SP-SP live bytes are copied into the owning app bank.  This
@@ -32,6 +32,12 @@ SCHED_TMP_TOP    equ   #1481
                 jp    sched_yield
                 jp    k_task_enable
                 jp    sched_irq_uninstall
+                ifdef PLATFORM_MSX
+                jp    sched_compositor_prepare
+                jp    sched_region_begin
+                jp    sched_region_next
+                jp    sched_region_test        ; test current clip for one source surface
+                endif
 
 sched_init_impl
                 xor   a
@@ -103,6 +109,80 @@ sched_stack_sampled
                 ld    de,TASK_STACK_DATA
                 ldir
 
+                ifdef PLATFORM_MSX
+                ; A worker always hands control back to slot zero, preserving a
+                ; root/compositor turn between compute slices.  From root, choose
+                ; owner-aggregated visibility tiers in order: focused, fully
+                ; visible, partially visible. Fully occluded visual workers are
+                ; parked without destroying their saved snapshot.
+                ld    a,(SCHED_CURRENT)
+                or    a
+                jr    z,sched_m9_select_worker
+                ld    c,0
+                ld    hl,WM_TABLE+WM_FR_FLAGS
+                ld    a,(hl)
+                and   WM_TASK_RUNNABLE|1
+                cp    WM_TASK_RUNNABLE|1
+                jr    z,sched_restore_slot
+                jr    sched_resume_old
+
+sched_m9_select_worker
+                ld    a,WM_VIS_FOCUSED
+                ld    (MSX_REGION_OWNER_MAX),a ; scheduler-private desired tier
+sched_m9_tier
+                ld    a,(SCHED_FLAGS)          ; last worker selected, 1..7
+                inc   a
+                cp    WM_MAXWIN
+                jr    c,sched_m9_cursor_ready
+                ld    a,1
+sched_m9_cursor_ready
+                ld    c,a
+                ld    a,WM_MAXWIN-1
+                ld    (MSX_REGION_SLOT_SCAN),a
+sched_m9_candidate
+                ld    a,c
+                call  sched_wm_entry
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                ld    a,(hl)
+                and   WM_TASK_RUNNABLE|1
+                cp    WM_TASK_RUNNABLE|1
+                jr    nz,sched_m9_next_candidate
+                ld    hl,MSX_TASK_VISIBILITY
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_REGION_OWNER_MAX)
+                cp    (hl)
+                jr    z,sched_m9_found
+sched_m9_next_candidate
+                inc   c
+                ld    a,c
+                cp    WM_MAXWIN
+                jr    c,sched_m9_count
+                ld    c,1
+sched_m9_count  ld    hl,MSX_REGION_SLOT_SCAN
+                dec   (hl)
+                jr    nz,sched_m9_candidate
+                ld    hl,MSX_REGION_OWNER_MAX
+                dec   (hl)
+                jr    nz,sched_m9_tier
+                jr    sched_resume_old
+sched_m9_found  ld    a,c
+                ld    (SCHED_FLAGS),a
+                call  sched_wm_entry
+                ld    de,WM_FR_FLAGS
+                add   hl,de
+                jr    sched_restore_slot
+
+                ; No eligible peer: the original fixed stack was not
+                ; overwritten, so resume it without copying back.
+sched_resume_old
+                pop   hl
+                ld    sp,hl
+                ret
+
+                else
                 ; Search the other seven slots round-robin. A runnable flag is
                 ; set only after its initial snapshot has been constructed. Build
                 ; the first entry pointer once and then advance it directly; the
@@ -139,6 +219,7 @@ sched_scan_wrap
                 ld    c,0
                 ld    hl,WM_TABLE+WM_FR_FLAGS
                 jr    sched_scan_count
+                endif
 
 sched_restore_slot
                 ld    a,c
@@ -336,6 +417,570 @@ sched_task_loop
 sched_task_sleep
                 call  sched_yield
                 jr    sched_task_loop
+
+                ifdef PLATFORM_MSX
+; ---- Architecture Milestone 9: exact visible damage -------------------------
+;
+; The Screen-7 resident child COM has no useful headroom.  Keep the compositor's
+; geometry engine in this app-carried, always-mapped page-3 image instead.  A
+; visible region is enumerated as horizontal bands split at every higher window
+; top/bottom edge.  Within a band, maximal uncovered x runs are emitted.  This
+; representation is exact for the WM's opaque rectangles and cannot overflow a
+; finite rectangle pool.
+WM_CLIP_X       equ #1338
+WM_CLIP_Y       equ #1339
+WM_CLIP_W       equ #133A
+WM_CLIP_H       equ #133B
+WM_VIS_HIDDEN   equ 0
+WM_VIS_PARTIAL  equ 1
+WM_VIS_FULL     equ 2
+WM_VIS_FOCUSED  equ 3
+
+; Capture one immutable source-damage rectangle for the complete z pass, then
+; refresh visibility. Every surface iterator restarts from this damage instead
+; of inheriting the last fragment emitted for the preceding surface.
+sched_compositor_prepare
+                ld    hl,WM_CLIP_X
+                ld    de,MSX_COMPOSITOR_DAMAGE
+                ld    bc,4
+                ldir
+                ld    hl,MSX_COMPOSITOR_EXTRA_PENDING
+                ld    a,(hl)
+                inc   hl
+                ld    (hl),a
+                dec   hl
+                ld    (hl),0
+                jp    sched_visibility_refresh
+
+; A = window slot. Restore the compositor source damage and start the iterator.
+sched_region_begin
+                push  af
+                xor   a                         ; begin with the primary damage source
+                ld    (MSX_COMPOSITOR_SOURCE),a
+                ld    hl,MSX_COMPOSITOR_DAMAGE
+                ld    de,WM_CLIP_X
+                ld    bc,4
+                ldir
+                pop   af
+                call  sched_region_begin_raw
+                ret   nz
+                jp    sched_region_advance_source
+; Intersect the current damage clip with that window, locate
+; it in z-order, then install the first effective visible fragment.  A=0/Z means
+; no visible damage; A=1/NZ means a fragment is active.
+sched_region_begin_raw
+                ld    (MSX_REGION_SLOT),a
+                ld    c,a
+                ld    a,(WM_NWIN)
+                or    a
+                jr    z,srb_empty
+                cp    WM_MAXWIN+1
+                jr    nc,srb_empty
+                ld    b,a
+                ld    hl,WM_Z
+                ld    d,0
+srb_find_z
+                ld    a,(hl)
+                cp    c
+                jr    z,srb_found_z
+                inc   hl
+                inc   d
+                djnz  srb_find_z
+srb_empty       xor   a
+                ret
+srb_found_z
+                ld    a,d
+                ld    (MSX_REGION_Z),a
+                ld    a,c
+                call  sched_wm_entry
+                inc   hl
+                ld    c,(hl)                  ; window x
+                inc   hl
+                ld    d,(hl)                  ; window y
+                inc   hl
+                ld    e,(hl)                  ; window width
+                inc   hl
+                ld    b,(hl)                  ; window height
+
+                ld    a,(WM_CLIP_X)           ; left = max(clip.x, window.x)
+                cp    c
+                jr    nc,srb_left_ready
+                ld    a,c
+srb_left_ready  ld    (MSX_REGION_LEFT),a
+                ld    a,(WM_CLIP_Y)           ; top = max(clip.y, window.y)
+                cp    d
+                jr    nc,srb_top_ready
+                ld    a,d
+srb_top_ready   ld    (MSX_REGION_TOP),a
+
+                ld    a,c                     ; window right
+                add   a,e
+                ld    e,a
+                ld    a,(WM_CLIP_X)           ; clip right
+                ld    c,a
+                ld    a,(WM_CLIP_W)
+                add   a,c
+                cp    e                       ; right = min(clip right, window right)
+                jr    c,srb_right_ready
+                ld    a,e
+srb_right_ready ld    (MSX_REGION_RIGHT),a
+
+                ld    a,d                     ; window bottom
+                add   a,b
+                ld    b,a
+                ld    a,(WM_CLIP_Y)           ; clip bottom
+                ld    c,a
+                ld    a,(WM_CLIP_H)
+                add   a,c
+                cp    b                       ; bottom = min(clip bottom, window bottom)
+                jr    c,srb_bottom_ready
+                ld    a,b
+srb_bottom_ready
+                ld    (MSX_REGION_BOTTOM),a
+                ld    hl,MSX_REGION_TOP
+                cp    (hl)
+                jr    c,srb_empty
+                jr    z,srb_empty
+                ld    a,(MSX_REGION_RIGHT)
+                ld    hl,MSX_REGION_LEFT
+                cp    (hl)
+                jr    c,srb_empty
+                jr    z,srb_empty
+
+                ld    a,(MSX_REGION_TOP)
+                ld    (MSX_REGION_Y),a
+                ld    (MSX_REGION_BAND_END),a ; force preparation of the first band
+                ld    a,(MSX_REGION_LEFT)
+                ld    (MSX_REGION_X),a
+                xor   a
+                ld    (MSX_REGION_COVERED),a
+                ld    (MSX_REGION_FRAGMENT_COUNT),a
+                jr    sched_region_seek
+
+; Continue an active iterator.  The original damage rectangle has already been
+; folded into the fixed base bounds, so each call only installs the next clip.
+sched_region_next
+                call  sched_region_seek
+                ret   nz
+sched_region_advance_source
+                ld    a,(MSX_COMPOSITOR_EXTRA_ACTIVE)
+                or    a
+                ret   z
+                ld    a,(MSX_COMPOSITOR_SOURCE)
+                or    a
+                jr    z,sras_load_extra
+                xor   a
+                ret
+sras_load_extra
+                inc   a
+                ld    (MSX_COMPOSITOR_SOURCE),a
+                ld    hl,MSX_COMPOSITOR_EXTRA
+                ld    de,WM_CLIP_X
+                ld    bc,4
+                ldir
+                ld    a,(MSX_REGION_SLOT)
+                jp    sched_region_begin_raw
+
+; Direct component-damage visibility tests do not participate in a pending
+; two-rectangle move pass.
+sched_region_test
+                push  af
+                xor   a
+                ld    (MSX_COMPOSITOR_SOURCE),a
+                pop   af
+                jp    sched_region_begin_raw
+
+sched_region_seek
+srs_band
+                ld    a,(MSX_REGION_Y)
+                ld    hl,MSX_REGION_BOTTOM
+                cp    (hl)
+                jp    nc,srb_empty
+                ld    hl,MSX_REGION_BAND_END
+                cp    (hl)
+                call  nc,sched_region_prepare_band
+
+                ld    a,(MSX_REGION_X)
+                ld    c,a
+srs_skip_covered
+                ld    a,(MSX_REGION_RIGHT)
+                cp    c
+                jr    z,srs_advance_band
+                jr    c,srs_advance_band
+                ld    a,c
+                call  sched_region_is_covered
+                or    a
+                jr    z,srs_run_start
+                inc   c
+                ld    a,c
+                ld    (MSX_REGION_X),a
+                jr    srs_skip_covered
+
+srs_run_start
+                ld    a,c
+                ld    (WM_CLIP_X),a            ; also serves as run-left scratch
+                inc   c
+srs_extend_run
+                ld    a,(MSX_REGION_RIGHT)
+                cp    c
+                jr    z,srs_emit
+                jr    c,srs_emit
+                ld    a,c
+                call  sched_region_is_covered
+                or    a
+                jr    nz,srs_emit
+                inc   c
+                jr    srs_extend_run
+
+srs_emit
+                ld    a,c
+                ld    (MSX_REGION_X),a
+                ld    hl,WM_CLIP_X
+                sub   (hl)
+                ld    (WM_CLIP_W),a
+                ld    a,(MSX_REGION_Y)
+                ld    (WM_CLIP_Y),a
+                ld    c,a
+                ld    a,(MSX_REGION_BAND_END)
+                sub   c
+                ld    (WM_CLIP_H),a
+                ld    hl,MSX_REGION_FRAGMENT_COUNT
+                inc   (hl)
+                ld    a,1
+                or    a
+                ret
+
+srs_advance_band
+                ld    a,(MSX_REGION_BAND_END)
+                ld    (MSX_REGION_Y),a
+                ld    a,(MSX_REGION_LEFT)
+                ld    (MSX_REGION_X),a
+                jr    srs_band
+
+; Choose the next vertical edge among all higher windows whose rectangles touch
+; the base horizontally.  An actual two-dimensional intersection also marks the
+; surface partial; this flag is consumed by the visibility classifier.
+sched_region_prepare_band
+                ld    a,(MSX_REGION_BOTTOM)
+                ld    (MSX_REGION_BAND_END),a
+                ld    a,(MSX_COMPOSITOR_SOURCE)
+                or    a
+                jr    z,srp_begin_windows
+                ; The second source is the old window rectangle. Treat the
+                ; primary/new rectangle as an opaque pseudo-cover so overlap is
+                ; emitted only once. Prime SCAN_Z one entry early: the shared
+                ; edge tail increments it before beginning real higher windows.
+                ld    a,(MSX_REGION_Z)
+                ld    (MSX_REGION_SCAN_Z),a
+                ld    hl,MSX_COMPOSITOR_DAMAGE
+                ld    c,(hl)                   ; primary left
+                inc   hl
+                ld    d,(hl)                   ; primary top
+                inc   hl
+                ld    a,c
+                add   a,(hl)
+                ld    e,a                      ; primary right
+                inc   hl
+                ld    a,d
+                add   a,(hl)
+                ld    b,a                      ; primary bottom
+                ld    a,(MSX_REGION_LEFT)
+                cp    e
+                jr    nc,srp_next_cover
+                ld    a,c
+                ld    hl,MSX_REGION_RIGHT
+                cp    (hl)
+                jr    nc,srp_next_cover
+                ld    a,(MSX_REGION_TOP)
+                cp    b
+                jr    nc,srp_edges
+                ld    a,d
+                ld    hl,MSX_REGION_BOTTOM
+                cp    (hl)
+                jr    nc,srp_edges
+                jr    srp_mark_and_edges
+srp_begin_windows
+                ld    a,(MSX_REGION_Z)
+                inc   a
+                ld    (MSX_REGION_SCAN_Z),a
+srp_cover_loop
+                ld    a,(MSX_REGION_SCAN_Z)
+                ld    hl,WM_NWIN
+                cp    (hl)
+                ret   nc
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                call  sched_wm_entry
+                inc   hl
+                ld    c,(hl)                   ; cover left
+                inc   hl
+                ld    d,(hl)                   ; cover top
+                inc   hl
+                ld    a,c
+                add   a,(hl)
+                ld    e,a                      ; cover right
+                inc   hl
+                ld    a,d
+                add   a,(hl)
+                ld    b,a                      ; cover bottom
+
+                ld    a,(MSX_REGION_LEFT)      ; horizontal intersection?
+                cp    e
+                jr    nc,srp_next_cover
+                ld    a,c
+                ld    hl,MSX_REGION_RIGHT
+                cp    (hl)
+                jr    nc,srp_next_cover
+                ld    a,(MSX_REGION_TOP)       ; vertical intersection with base?
+                cp    b
+                jr    nc,srp_edges
+                ld    a,d
+                ld    hl,MSX_REGION_BOTTOM
+                cp    (hl)
+                jr    nc,srp_edges
+srp_mark_and_edges
+                ld    a,1
+                ld    (MSX_REGION_COVERED),a
+
+srp_edges       ld    a,(MSX_REGION_Y)         ; cover top is a future band edge?
+                cp    d
+                jr    nc,srp_bottom_edge
+                ld    a,d
+                ld    hl,MSX_REGION_BAND_END
+                cp    (hl)
+                jr    nc,srp_bottom_edge
+                ld    (hl),a
+srp_bottom_edge ld    a,(MSX_REGION_Y)         ; cover bottom is a future edge?
+                cp    b
+                jr    nc,srp_next_cover
+                ld    a,b
+                ld    hl,MSX_REGION_BAND_END
+                cp    (hl)
+                jr    nc,srp_next_cover
+                ld    (hl),a
+srp_next_cover  ld    hl,MSX_REGION_SCAN_Z
+                inc   (hl)
+                jr    srp_cover_loop
+
+; A = x column. Return A=1/NZ if any higher opaque window contains (x,band_y),
+; otherwise A=0/Z.  WM_Z contains live slots only.
+sched_region_is_covered
+                push  bc                       ; caller keeps its x cursor in C
+                ld    (MSX_REGION_TEST_X),a
+                ld    a,(MSX_COMPOSITOR_SOURCE)
+                or    a
+                jr    z,sric_begin_windows
+                ld    hl,MSX_COMPOSITOR_DAMAGE
+                ld    a,(MSX_REGION_TEST_X)
+                cp    (hl)                     ; x < primary left
+                jr    c,sric_begin_windows
+                ld    c,(hl)
+                inc   hl
+                ld    d,(hl)                   ; primary top
+                inc   hl
+                ld    a,c
+                add   a,(hl)                   ; primary right
+                ld    c,a
+                ld    a,(MSX_REGION_TEST_X)
+                cp    c
+                jr    nc,sric_begin_windows
+                inc   hl
+                ld    a,(hl)                   ; primary height
+                add   a,d                      ; primary bottom
+                ld    c,a
+                ld    a,(MSX_REGION_Y)
+                cp    d
+                jr    c,sric_begin_windows
+                cp    c
+                jr    nc,sric_begin_windows
+                pop   bc
+                ld    a,1
+                or    a
+                ret
+sric_begin_windows
+                ld    a,(MSX_REGION_Z)
+                inc   a
+                ld    (MSX_REGION_SCAN_Z),a
+sric_loop
+                ld    a,(MSX_REGION_SCAN_Z)
+                ld    hl,WM_NWIN
+                cp    (hl)
+                jr    nc,sric_clear
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                call  sched_wm_entry
+                inc   hl
+                ld    c,(hl)                   ; left
+                inc   hl
+                ld    d,(hl)                   ; top
+                inc   hl
+                ld    a,c
+                add   a,(hl)
+                ld    e,a                      ; right
+                inc   hl
+                ld    a,d
+                add   a,(hl)
+                ld    b,a                      ; bottom
+                ld    a,(MSX_REGION_TEST_X)
+                cp    c
+                jr    c,sric_next
+                cp    e
+                jr    nc,sric_next
+                ld    a,(MSX_REGION_Y)
+                cp    d
+                jr    c,sric_next
+                cp    b
+                jr    nc,sric_next
+                pop   bc
+                ld    a,1
+                or    a
+                ret
+sric_next       ld    hl,MSX_REGION_SCAN_Z
+                inc   (hl)
+                jr    sric_loop
+sric_clear      pop   bc
+                xor   a
+                ret
+
+; Reclassify all surfaces after stacking/geometry damage.  The ordinary table
+; records surface visibility.  The scheduler table starts as a copy and then
+; folds all windows of a multi-window application into its designated worker
+; slot, so PAINT-like ownership has one scheduling rank.
+sched_visibility_refresh
+                ld    hl,WM_CLIP_X
+                ld    de,MSX_REGION_SAVED_CLIP
+                ld    bc,4
+                ldir
+                xor   a
+                ld    (WM_CLIP_X),a
+                ld    (WM_CLIP_Y),a
+                ld    a,128                    ; MSX2 logical byte columns (Screen 6/7)
+                ld    (WM_CLIP_W),a
+                ld    a,212
+                ld    (WM_CLIP_H),a
+                xor   a
+                ld    hl,MSX_WM_VISIBILITY
+                ld    de,MSX_WM_VISIBILITY+1
+                ld    bc,15
+                ld    (hl),a
+                ldir
+                ld    (MSX_REGION_REFRESH_Z),a
+svr_surface_loop
+                ld    a,(MSX_REGION_REFRESH_Z)
+                ld    hl,WM_NWIN
+                cp    (hl)
+                jr    nc,svr_aggregate
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)                   ; slot
+                ld    c,a
+                ld    a,(WM_FOCUS)
+                cp    c
+                ld    b,WM_VIS_FOCUSED
+                jr    z,svr_store_surface
+                xor   a                        ; each classification starts from
+                ld    (WM_CLIP_X),a            ; the complete screen, not the first
+                ld    (WM_CLIP_Y),a            ; fragment emitted for the prior slot
+                ld    a,128
+                ld    (WM_CLIP_W),a
+                ld    a,212
+                ld    (WM_CLIP_H),a
+                ld    a,c
+                call  sched_region_test
+                ld    b,WM_VIS_HIDDEN
+                or    a
+                jr    z,svr_reload_surface_slot
+                ld    b,WM_VIS_FULL
+                ld    a,(MSX_REGION_COVERED)
+                or    a
+                jr    z,svr_reload_surface_slot
+                ld    b,WM_VIS_PARTIAL
+svr_reload_surface_slot
+                ld    a,(MSX_REGION_SLOT)      ; iterator scratch freely uses C
+                ld    c,a
+svr_store_surface
+                ld    hl,MSX_WM_VISIBILITY
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),b
+                ld    hl,MSX_TASK_VISIBILITY
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    (hl),b
+                ld    hl,MSX_REGION_REFRESH_Z
+                inc   (hl)
+                jr    svr_surface_loop
+
+svr_aggregate
+                xor   a
+                ld    (MSX_REGION_OWNER_INDEX),a
+svr_owner_loop
+                ld    a,(MSX_REGION_OWNER_INDEX)
+                cp    8
+                jr    nc,svr_restore_clip
+                ld    hl,MSX_APP_WORKER_WIN
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                or    a                         ; slot zero is the root, never an app worker
+                jr    z,svr_next_owner
+                cp    WM_MAXWIN
+                jr    nc,svr_next_owner
+                ld    (MSX_REGION_WORKER_SLOT),a
+                ld    a,(MSX_REGION_OWNER_INDEX)
+                inc   a
+                ld    (MSX_REGION_OWNER_ID),a
+                xor   a
+                ld    (MSX_REGION_OWNER_MAX),a
+                ld    (MSX_REGION_SLOT_SCAN),a
+svr_owner_windows
+                ld    a,(MSX_REGION_SLOT_SCAN)
+                cp    WM_MAXWIN
+                jr    nc,svr_owner_store
+                ld    c,a
+                ld    hl,MSX_WIN_OWNER
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_REGION_OWNER_ID)
+                cp    (hl)
+                jr    nz,svr_owner_window_next
+                ld    hl,MSX_WM_VISIBILITY
+                ld    a,c
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_REGION_OWNER_MAX)
+                cp    (hl)
+                jr    nc,svr_owner_window_next
+                ld    a,(hl)
+                ld    (MSX_REGION_OWNER_MAX),a
+svr_owner_window_next
+                ld    hl,MSX_REGION_SLOT_SCAN
+                inc   (hl)
+                jr    svr_owner_windows
+svr_owner_store ld    a,(MSX_REGION_WORKER_SLOT)
+                ld    hl,MSX_TASK_VISIBILITY
+                add   a,l
+                ld    l,a
+                ld    a,(MSX_REGION_OWNER_MAX)
+                ld    (hl),a
+svr_next_owner  ld    hl,MSX_REGION_OWNER_INDEX
+                inc   (hl)
+                jr    svr_owner_loop
+
+svr_restore_clip
+                ld    hl,MSX_REGION_SAVED_CLIP
+                ld    de,WM_CLIP_X
+                ld    bc,4
+                ldir
+                ret
+                endif                          ; PLATFORM_MSX M9 region engine
 
                 ifdef PLATFORM_PCW
 ; GEOBENCH owns the PCW outright. Its FDC interrupt route remains disabled and
@@ -535,6 +1180,10 @@ sched_bank_set
 
 sched_image_end
                 ifndef SCHED_LIMIT
+                ifdef PLATFORM_MSX
+SCHED_LIMIT     equ   1536
+                else
 SCHED_LIMIT     equ   512
+                endif
                 endif
                 assert sched_image_end-SCHED_BASE<=SCHED_LIMIT,"scheduler exceeds fixed slot"

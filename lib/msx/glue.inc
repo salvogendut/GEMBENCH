@@ -63,6 +63,38 @@ MSX_GBR_DST     equ   #C190        ; caller destination after app restore (word)
 MSX_GBR_LEN     equ   #C192        ; requested byte count, 1..32
 MSX_GBR_BUF     equ   #C1A0        ; 32-byte resident transfer buffer
 MSX_GBR_MAXREAD equ   32
+; Architecture Milestone 9 (#47): compositor/scheduler visibility state.  This
+; occupies the previously unused tail before the page allocator.  The region
+; iterator emits exact horizontal bands directly, so it has no finite fragment
+; pool and therefore no unsafe "paint the original rectangle" overflow path.
+MSX_WM_VISIBILITY   equ #C1C0       ; eight surface states: hidden/partial/full/focus
+MSX_TASK_VISIBILITY equ #C1C8       ; owner-aggregated states used by the scheduler
+MSX_REGION_SLOT     equ #C1D0       ; active WM slot
+MSX_REGION_Z        equ #C1D1       ; active slot's z-order index
+MSX_REGION_LEFT     equ #C1D2       ; damage intersect window, exclusive right/bottom
+MSX_REGION_TOP      equ #C1D3
+MSX_REGION_RIGHT    equ #C1D4
+MSX_REGION_BOTTOM   equ #C1D5
+MSX_REGION_Y        equ #C1D6       ; current horizontal band
+MSX_REGION_BAND_END equ #C1D7
+MSX_REGION_X        equ #C1D8       ; next x within the band
+MSX_REGION_COVERED  equ #C1D9       ; a higher opaque surface intersects the base
+MSX_REGION_SCAN_Z   equ #C1DA       ; iterator scratch
+MSX_REGION_SAVED_CLIP equ #C1DB     ; four-byte clip saved by visibility refresh
+MSX_REGION_FRAGMENT_COUNT equ #C1DF ; diagnostic: fragments emitted in current pass
+MSX_REGION_TEST_X   equ #C1E0       ; band iterator scratch
+MSX_REGION_REFRESH_Z equ #C1E1
+MSX_REGION_OWNER_INDEX equ #C1E2
+MSX_REGION_OWNER_ID equ #C1E3
+MSX_REGION_WORKER_SLOT equ #C1E4
+MSX_REGION_OWNER_MAX equ #C1E5
+MSX_REGION_SLOT_SCAN equ #C1E6
+MSX_COMPOSITOR_DAMAGE equ #C1E8     ; immutable source damage for every z layer
+MSX_TIMER_DROPPED    equ #C1EC       ; slot+1 whose component damage was fully occluded
+MSX_COMPOSITOR_EXTRA equ #C1ED       ; old window rect pending after an exact move
+MSX_COMPOSITOR_EXTRA_PENDING equ #C1F1 ; nonzero until the next compositor prepare
+MSX_COMPOSITOR_EXTRA_ACTIVE equ #C1F2  ; immutable flag for the current z pass
+MSX_COMPOSITOR_SOURCE equ #C1F3       ; 0 primary damage, 1 old-move remainder
 ; Architecture milestone 1 (#31): mapper pages and application owners are
 ; separate from the eight-entry window table.  Handles are 16-bit values whose
 ; low byte is slot+1 and whose high byte is a nonzero generation.  The native
@@ -216,4 +248,4 @@ MSX_SECONDARY_GATE_END equ #C900
 ; sets SP from it, and everything fixed here stays at #C000..#C8FF, which the
 ; stub verifies is below that ceiling.
 MSX_GLUE_TOP    equ   #C900        ; end of the fixed glue area (stub-verified < TPA top)
-MSX_APP_FIXED_BOTTOM equ #CB00     ; first app-usable fixed RAM after 512B scheduler slot
+MSX_APP_FIXED_BOTTOM equ #CF00     ; first app-usable fixed RAM after 1.5K scheduler/WM slot

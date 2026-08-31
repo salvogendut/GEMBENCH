@@ -79,8 +79,9 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
   `GB_EVENTS=1` links the bounded `gbevent` subscription adapter; callers own
   its state and it adds no resident kernel or low-RAM allocation.
   `GB_REGIONS=1` links the four-rectangle visible-region iterator; callers own
-  its 40-byte state and capacity overflow restores the legacy damage clip. The
-  release build currently enables it only for the MSX2 Desktop.
+  its 40-byte state and capacity overflow restores the legacy damage clip. It
+  remains a compatibility option; Architecture M9 applies visibility globally
+  and the release MSX2 Desktop no longer links this helper.
   `GB_SCRAP=1` links the bounded MSX2 typed-scrap API over the unchanged
   510-byte resident clipboard. `GB_SCRAP_TEXT_ONLY=1` selects the 100-byte
   set/type adapter for clients that keep using raw length/get after checking
@@ -207,9 +208,11 @@ project's distrobox (which carries `rasm`, `sdcc`, `mtools`, `dosfstools`, ...).
 - **`check_lowram_map.py`** — validates the fixed low-RAM ownership map in
   `kernel/lowram.tsv` for accidental range overlaps.
 - **`build_scheduler.sh {cpc|msx|pcw}`** — assembles the release, app-carried
-  preemptive scheduler into a bounded 512-byte raw payload. `build_capp.sh`
-  embeds it in the root desktop when `TASK_ROOT=1`; the resulting runtime is
-  installed in fixed RAM and requires no GEOBENCH or M4 ROM. See
+  preemptive scheduler into a bounded raw payload: 512 bytes on CPC/PCW and
+  1,536 bytes on MSX2, whose Architecture M9 image also carries the visibility
+  compositor. `build_capp.sh` embeds it in the root desktop when `TASK_ROOT=1`;
+  the resulting runtime is installed in fixed RAM and requires no GEOBENCH or
+  M4 ROM. See
   `docs/PREEMPTIVE_MULTITASKING.md`. Explicit `*-cooperative` Make targets omit
   it for regression testing.
 - **`check_app_layout.py` / `test_app_layout.py`** — enforce the normal app

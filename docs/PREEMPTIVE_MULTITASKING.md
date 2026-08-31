@@ -16,13 +16,16 @@ they are not safe compute-worker candidates.
 ## Non-ROM Architecture
 
 Preemption does not use `GEOBENCH.ROM`, the M4 ROM, or a ROM-backed CPC kernel.
-`tools/build_scheduler.sh` assembles a target-specific scheduler payload of at
-most 512 bytes. The preemptive build embeds that payload in `DESKTOP.APP`; the
-desktop copies it to fixed RAM and initializes it before entering the window
-manager:
+`tools/build_scheduler.sh` assembles a target-specific scheduler payload. The
+preemptive build embeds that payload in `DESKTOP.APP`; the desktop copies it to
+fixed RAM and initializes it before entering the window manager:
 
 - CPC and PCW: `#3C00-#3DFF`;
-- MSX2: page-3 RAM at `#C900-#CAFF`.
+- MSX2: page-3 RAM at `#C900-#CEFF`.
+
+CPC and PCW retain a 512-byte limit. MSX2 Architecture Milestone 9 expands its
+slot to 1.5 KiB so the exact visible-region engine and visibility scheduler can
+remain outside the nearly full Screen 7 resident child COM.
 
 The same CPC binary model therefore works with floppy, Albireo, and M4 storage.
 `PREEMPTIVE=1` is deliberately rejected when `GB_ROM_REQ=1` so a development
@@ -56,6 +59,12 @@ mailbox without relaxing that rule. Clock's worker performs fixed-RAM stores
 only; Desktop validates the publishing window identity and invokes the
 compositor on the root task. The channel coalesces, carries no general callback,
 and leaves ordinary frame/input delivery focused-only.
+
+Architecture Milestone 9 classifies every MSX2 surface as hidden, partial,
+full, or focused and folds all surfaces owned by an application into its worker
+rank. The root chooses focused, fully visible, then partially visible workers;
+fully hidden visual workers retain their contexts but are not selected. Kernel,
+input, storage, network, and compositor work remains root-owned and runnable.
 
 The CPC, MSX2, and PCW timers can interrupt a worker that never yields. They cannot
 preempt the resident kernel, a paged module, firmware, storage code, or the
@@ -224,9 +233,10 @@ then use System > Exit to exercise the warm-boot vector restoration.
 - CPC claimed-drop handoff in `PREEMPTIVE=1`: **12 resident bytes**. The current
   Albireo kernel retains one byte above the required stack reserve; the M4
   kernel sits exactly at the enforced 256-byte reserve.
-- Scheduler image: **at most 512 bytes**, carried by the desktop and installed
-  in fixed RAM. The current PCW adapter occupies the complete 512-byte slot;
-  CPC and MSX2 retain a small amount of scheduler headroom.
+- Scheduler image: **at most 512 bytes on CPC/PCW and 1,536 bytes on MSX2**,
+  carried by the desktop and installed in fixed RAM. The current PCW adapter
+  occupies the complete 512-byte slot; the normal/diagnostic MSX2 images occupy
+  1,448/1,457 bytes.
 - Scheduler state: **0 new low-RAM bytes**, reusing eight retired bytes.
 - Participating application reserve: **256 bytes per app bank**.
 - CPC preemptive transfer buffer: **6.5 KiB** (`#2200-#3BFF`) instead of the
@@ -244,10 +254,12 @@ resident-kernel bytes.
   extended emulator stress test with exact 300 Hz firmware-time progression,
   a 32-byte maximum observed context, and no stack fault.
 - **MSX2:** the DOS IM-1 adapter, mapper-aware context switch, close/input
-  lifecycle, and exit restoration are implemented. Two simultaneous
-  non-yielding workers rotate with BIOS ticks advancing, a 32-byte maximum
-  observed context, and no stack fault. Closing each worker independently
-  returns focus and runnable count to the desktop before DOS-vector restoration.
+  lifecycle, exit restoration, and owner-aggregated visibility priority are
+  implemented. Fully occluded visual workers are parked; focused, fully
+  visible, and partially visible workers run in that order. Existing stress
+  tests retain a 32-byte maximum observed context and no stack fault. Closing
+  each worker independently returns focus and runnable count to the desktop
+  before DOS-vector restoration.
 - **PCW:** the ASIC 300 Hz timer adapter and warm-boot vector restoration are
   implemented. `1985` traces show deterministic root/task-A/task-B rotation
   while both workers remain in their non-yielding loops. Boot-time and app-load

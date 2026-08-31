@@ -173,6 +173,9 @@ openMSX observed a 70-byte maximum stack delta below `gb_visible_begin()`, a
 4.973 ms calculation, clean move/top/close captures, and a final one-window
 Desktop. Screen 6/7 kernels remain 10,682/12,260 bytes; CPC and PCW retain the
 legacy Desktop callback.
+This Desktop-only experiment was later superseded on MSX2 by Architecture
+Milestone 9's global, capacity-free visible-region compositor; the app-linked
+library remains available for source compatibility and host tests.
 Milestone 13 preserves the exact `gb_clip_*` storage contract and its 510-byte
 payload. MSX2 adds one private type byte at `0x133D`; raw writes clear it, typed
 writes publish it only after the complete payload, and unknown or stale values

@@ -46,6 +46,8 @@ set p2_count_pane_repaints 0
 set p2_tool_repaints 0
 set p2_preview_repaints 0
 set p2_work_repaints 0
+set p2_focus_old_slot -1
+set p2_focus_clips {}
 
 set p2_repaint_start [expr {$::env(GEMBENCH_M2_REPAINT_START)}]
 set p2_repaint_done [expr {$::env(GEMBENCH_M2_REPAINT_DONE)}]
@@ -173,8 +175,25 @@ proc p2_trace_pane_repaint {pane} {
         if {$pane eq "tool"} { incr ::p2_tool_repaints }
         if {$pane eq "preview"} { incr ::p2_preview_repaints }
         if {$pane eq "work"} { incr ::p2_work_repaints }
+        lappend ::p2_focus_clips [list $pane [list \
+            [peek 0x1338] [peek 0x1339] [peek 0x133A] [peek 0x133B]]]
     }
     set ::pause off
+}
+
+proc p2_pane_name {slot} {
+    if {$slot == $::p2_tool_slot} { return "tool" }
+    if {$slot == $::p2_preview_slot} { return "preview" }
+    if {$slot == $::p2_work_slot} { return "work" }
+    return ""
+}
+
+proc p2_pane_repaints {slot} {
+    set pane [p2_pane_name $slot]
+    if {$pane eq "tool"} { return $::p2_tool_repaints }
+    if {$pane eq "preview"} { return $::p2_preview_repaints }
+    if {$pane eq "work"} { return $::p2_work_repaints }
+    return 0
 }
 
 proc p2_trace_filemgr_open {} {
@@ -433,9 +452,14 @@ proc p2_pane_focus_wait {} {
         return
     }
     set ::p2_count_pane_repaints 0
-    if {$::p2_tool_repaints != 0 || $::p2_preview_repaints != 0 ||
-        $::p2_work_repaints != 0} {
-        p2_finish "FAIL disjoint Paint pane focus triggered repaint"
+    if {[p2_pane_repaints $::p2_drag_slot] == 0 ||
+        [p2_pane_repaints $::p2_focus_old_slot] == 0} {
+        p2_finish "FAIL Paint focus did not repaint both focus endpoints"
+        return
+    }
+    set target_clip [list [p2_pane_name $::p2_drag_slot] [p2_rect $::p2_drag_slot]]
+    if {[lsearch -exact $::p2_focus_clips $target_clip] < 0} {
+        p2_finish "FAIL newly focused Paint pane did not receive a full-window clip"
         return
     }
     if {[p2_rect $::p2_drag_slot] ne $::p2_drag_before} {
@@ -468,6 +492,8 @@ proc p2_pane_drag_start {slot mask callback} {
         set ::p2_tool_repaints 0
         set ::p2_preview_repaints 0
         set ::p2_work_repaints 0
+        set ::p2_focus_old_slot $focus
+        set ::p2_focus_clips {}
         set ::p2_count_pane_repaints 1
         set ::p2_deadline [expr {[machine_info time] + 10.0}]
         keymatrixdown 8 0x01

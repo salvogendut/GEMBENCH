@@ -17,6 +17,7 @@
 #define GB_TIMER_SECOND (*(volatile unsigned char *)0x1242u)
 #define GB_TIMER_TASK_SLOT (*(volatile unsigned char *)0x1342u)
 #define GB_TIMER_OWNER     (*(volatile unsigned char *)0xC3CAu)
+#define GB_TIMER_DROPPED   (*(volatile unsigned char *)0xC1ECu)
 
 /* While the root compositor consumes a request it retains the source identity
  * and sets bit 7. This lets the source distinguish its small timer redraw from

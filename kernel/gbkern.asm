@@ -46,6 +46,11 @@ PREEMPTIVE      equ   0             ; issue #477: opt-in scheduler while it is b
 PREEMPTIVE_CONTEXT equ 0            ; stack-copy engine; enabled by scheduler test builds
                 endif
                 assert !PREEMPTIVE_CONTEXT|PREEMPTIVE,"PREEMPTIVE_CONTEXT requires PREEMPTIVE=1"
+                ifdef PLATFORM_MSX
+MSX_VISIBLE_COMPOSITOR equ PREEMPTIVE_CONTEXT
+                else
+MSX_VISIBLE_COMPOSITOR equ 0
+                endif
 
 ; STORAGE_ALBIREO (#104): build-time drive-0 backend select. 0 (default) = the
 ; SYMBiFACE IDE FAT32 backend; 1 (pass -DSTORAGE_ALBIREO=1) = the Albireo CH376
@@ -3549,9 +3554,9 @@ kwc_repaint
                 endif                              ; PLATFORM_MSX multi-window close
 
 ; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
-; (x,y), so click-to-focus follows a window the app has dragged. Also sets the fill
-; clip to the damage = the bounding box of the old and new window rects, so the
-; following gb_restore_parent only repaints there (no full-screen flicker).
+; (x,y), so click-to-focus follows a window the app has dragged. The endpoint
+; envelope covers the destructive rubber-band path between the original and final
+; positions before the following gb_restore_parent reconstructs the stack.
 k_wm_setpos
                 ld    (sp_x),a                    ; new x
                 ld    a,l
@@ -3683,9 +3688,10 @@ wm_map_focus
                 jp    menu_install                 ; install the focused window's menu
 
 ; wm_focus_click: if a fresh click landed on a window other than the focused one,
-; move focus there. App windows also rise to the z-top; only the parts previously
-; obscured by windows above them are damaged. Disjoint sibling panes therefore
-; switch with no repaint. On MSX, a click that activates another window in the
+; move focus there. App windows also rise to the z-top. The MSX2 visible-region
+; compositor repaints the exact union of the old and new focus rectangles, so
+; both windows immediately redraw their active/inactive furniture without
+; touching unrelated desktop areas. On MSX, a click that activates another window in the
 ; same application is consumed: the new pane receives frames immediately, but
 ; editing starts with the next press instead of reusing the activation press.
 ; The desktop (slot 0) stays pinned at the bottom.
@@ -3714,11 +3720,35 @@ wm_focus_click
                 ld    a,(POLL_FLAGS)
                 res   0,a
                 ld    (POLL_FLAGS),a
-wfc_activate    ld    a,(wm_slot)
+wfc_activate
+                if MSX_VISIBLE_COMPOSITOR
+                ld    a,(WM_FOCUS)                ; sibling comparison no longer needs its page
+                ld    (wm_open_back),a             ; retain the old focus slot for exact damage
+                endif
+                ld    a,(wm_slot)
                 else
                 ld    a,b
                 endif
                 ld    (WM_FOCUS),a               ; focus the clicked window
+                if MSX_VISIBLE_COMPOSITOR
+                call  wm_focus_damage             ; exact old/new focus-window union
+                ld    a,(wm_slot)
+                or    a
+                jr    z,wfc_repaint_focus         ; desktop remains pinned at the bottom
+                ld    c,a                          ; c = clicked app slot
+                ld    a,(WM_NWIN)                 ; already the z-top? repaint focus state anyway
+                dec   a
+                ld    hl,WM_Z
+                add   a,l
+                ld    l,a
+                ld    a,(hl)
+                cp    c
+                jr    z,wfc_repaint_focus
+                ld    a,c
+                call  wm_raise                     ; bring it to the front
+wfc_repaint_focus
+                jp    wm_repaint_all               ; compositor clips every layer to the exact union
+                else
                 or    a
                 ret   z                            ; desktop: keep it at the bottom
                 ld    c,a                          ; c = clicked app slot
@@ -3730,139 +3760,47 @@ wfc_activate    ld    a,(wm_slot)
                 ld    a,(hl)
                 cp    c
                 ret   z
-                ifdef PLATFORM_MSX
-                ld    a,c                          ; retain the old z-order while deriving
-                call  wm_focus_damage
-                ld    a,(wm_slot)
-                call  wm_raise                     ; bring it to the front
-                ld    a,(clip_w)                   ; no former overlap -> screen is already right
-                or    a
-                ret   z
-                else
                 ld    a,c
                 call  wm_raise
                 ld    a,c                          ; legacy targets repaint the raised window
                 call  wm_set_clip
-                endif
                 jp    wm_repaint_top               ; opaque top window: avoid repainting layers through it
+                endif                              ; MSX_VISIBLE_COMPOSITOR
 
-                ifdef PLATFORM_MSX
-; wm_focus_damage: derive the bounding union of intersections between the clicked
-; window and every window above it in the old z-order. wm_hit_test left its index
-; in wm_hz and wm_slot holds its slot. The clicked surface is already correct
-; everywhere it was visible, so only these formerly obscured pixels need drawing.
+                if MSX_VISIBLE_COMPOSITOR
+; wm_focus_damage: make the new focus rectangle the primary source and the old
+; focus rectangle the second source. The compositor subtracts their overlap and
+; clips both against the post-focus z-order, yielding an exact visible union.
+; wm_open_back contains the old focus slot and wm_slot the new one. Desktop has
+; no focus furniture, so it is omitted when it is either endpoint.
 wm_focus_damage
+                xor   a
+                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a
                 ld    a,(wm_slot)
+                or    a
+                jr    nz,wfd_primary
+                ld    a,(wm_open_back)             ; app -> desktop: old app is primary
+wfd_primary
                 call  wm_entry
                 inc   hl
-                ld    a,(hl)                       ; clicked rect -> fb_*
-                ld    (fb_x),a
-                inc   hl
-                ld    a,(hl)
-                ld    (fb_y),a
-                inc   hl
-                ld    a,(hl)
-                ld    (fb_w),a
-                inc   hl
-                ld    a,(hl)
-                ld    (fb_h),a
-                ld    a,#FF                        ; no union yet
-                ld    (sp_x),a
-wfd_next        ld    a,(wm_hz)
-                inc   a
-                ld    (wm_hz),a
-                ld    hl,WM_NWIN
-                cp    (hl)
-                jp    nc,wfd_done
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
+                ld    de,clip_x
+                ld    bc,4
+                ldir
+                ld    a,(wm_slot)
+                or    a
+                ret   z                            ; app -> desktop: desktop has no furniture
+                ld    a,(wm_open_back)
+                or    a
+                ret   z                            ; desktop -> app: only the app changes appearance
                 call  wm_entry
                 inc   hl
-                ld    a,(hl)                       ; old higher window -> clip
-                ld    (clip_x),a
-                inc   hl
-                ld    a,(hl)
-                ld    (clip_y),a
-                inc   hl
-                ld    a,(hl)
-                ld    (clip_w),a
-                inc   hl
-                ld    a,(hl)
-                ld    (clip_h),a
-                call  clip_fb_copy                 ; fbw_* = clicked INTERSECT higher
-                jr    c,wfd_next
-                ld    a,(sp_x)
-                inc   a
-                jr    nz,wfd_union
-                ld    a,(fbw_x)                    ; first intersection seeds x/y/end-x/end-y
-                ld    (sp_x),a
-                ld    b,a
-                ld    a,(fbw_w)
-                add   a,b
-                ld    (ss_w),a
-                ld    a,(fbw_y)
-                ld    (sp_y),a
-                ld    b,a
-                ld    a,(fbw_h)
-                add   a,b
-                ld    (ss_h),a
-                jr    wfd_next
-wfd_union       ld    a,(fbw_x)                    ; left = min(left, intersection left)
-                ld    b,a
-                ld    a,(sp_x)
-                cp    b
-                jr    c,wfd_right
-                jr    z,wfd_right
-                ld    a,b
-                ld    (sp_x),a
-wfd_right       ld    a,(fbw_w)                    ; right = max(right, intersection right)
-                add   a,b
-                ld    b,a
-                ld    a,(ss_w)
-                cp    b
-                jr    nc,wfd_top
-                ld    a,b
-                ld    (ss_w),a
-wfd_top         ld    a,(fbw_y)                    ; top = min(top, intersection top)
-                ld    b,a
-                ld    a,(sp_y)
-                cp    b
-                jr    c,wfd_bottom
-                jr    z,wfd_bottom
-                ld    a,b
-                ld    (sp_y),a
-wfd_bottom      ld    a,(fbw_h)                    ; bottom = max(bottom, intersection bottom)
-                add   a,b
-                ld    b,a
-                ld    a,(ss_h)
-                cp    b
-                jp    nc,wfd_next
-                ld    a,b
-                ld    (ss_h),a
-                jp    wfd_next
-wfd_done        ld    a,(sp_x)
-                inc   a
-                jr    z,wfd_empty
-                dec   a
-                ld    (clip_x),a
-                ld    b,a
-                ld    a,(ss_w)
-                sub   b
-                ld    (clip_w),a
-                ld    a,(sp_y)
-                ld    (clip_y),a
-                ld    b,a
-                ld    a,(ss_h)
-                sub   b
-                ld    (clip_h),a
+                ld    de,MSX_COMPOSITOR_EXTRA
+                ld    bc,4
+                ldir
+                ld    a,1
+                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a
                 ret
-wfd_empty       xor   a
-                ld    (clip_w),a
-                ld    (clip_h),a
-                ret
-                endif                              ; PLATFORM_MSX focus damage
+                endif                              ; MSX_VISIBLE_COMPOSITOR focus damage
 
 ; wm_hit_test: -> A = slot of the top-most window whose rect contains the pointer
 ; (POLL_MX, POLL_MY), scanning z-order top->bottom; CF set if none.
@@ -4094,9 +4032,16 @@ wm_repaint_top
 wra_seed        ld    (wm_rp_i),a
                 ld    a,(bank_cur)
                 ld    (wm_rp_back),a
+                ifdef PLATFORM_MSX
+                if PREEMPTIVE_CONTEXT
+                call  SCHED_VIS_REFRESH_ENTRY ; cache surface/task ranks before painting
+                endif
+                endif
+                if !MSX_VISIBLE_COMPOSITOR
                 ld    a,(cur_supp)              ; #148: hide the pointer before the repaint so it
                 or    a                           ; can't pollute its save-under (else a later move
                 call  z,cursor_erase             ; restores stale content = a pointer-sized hole).
+                endif
                 ld    a,1                         ; lock the cursor for the whole loop: app on_draw
                 ld    (cur_paintlock),a           ; handlers also bracket with gb_curhide/show, and
                                                   ; that 2nd erase restores a stale save-under over
@@ -4111,6 +4056,14 @@ wra_l           ld    a,(wm_rp_i)
                 add   a,l
                 ld    l,a
                 ld    a,(hl)                       ; slot = WM_Z[i]
+                ifdef PLATFORM_MSX
+                if PREEMPTIVE_CONTEXT
+                call  SCHED_REGION_BEGIN_ENTRY     ; installs first exact visible damage fragment
+                or    a
+                jr    z,wra_next                   ; fully occluded: no callback and no VDP work
+wra_fragment    ld    a,(MSX_REGION_SLOT)
+                endif
+                endif
                 call  wm_entry                     ; HL = entry
                 push  hl                           ; #148 guard: never paint a dead slot
                 ld    de,WM_FR_FLAGS
@@ -4120,6 +4073,7 @@ wra_l           ld    a,(wm_rp_i)
                 bit   0,a                          ; alive?
                 jr    z,wra_next                   ; dead -> skip (z-order should exclude it)
                 ifdef PLATFORM_MSX
+                if !PREEMPTIVE_CONTEXT
                 push  af                           ; skip callbacks whose window cannot touch the
                 push  hl                           ; current damage rectangle. Besides saving work,
                 inc   hl                           ; this keeps app-native blits outside that damage
@@ -4135,6 +4089,7 @@ wra_l           ld    a,(wm_rp_i)
                 jr    c,wra_culled
                 pop   af
                 endif
+                endif
                 push  af                           ; keep flags across bank_set
                 ld    a,(hl)                       ; page
                 call  bank_set                     ; (preserves HL = entry)
@@ -4142,7 +4097,7 @@ wra_l           ld    a,(wm_rp_i)
                 bit   1,a                          ; managed?
                 jr    z,wra_legacy
                 call  wm_chrome_draw
-                jr    wra_next
+                jr    wra_painted
 wra_legacy
                 ld    de,WM_FR_REPAINT
                 add   hl,de
@@ -4152,11 +4107,21 @@ wra_legacy
                 ld    l,a
                 ld    a,h
                 or    l
-                jr    z,wra_next                   ; no handler
+                jr    z,wra_painted                ; no handler
                 call  md_call
-                jr    wra_next
+                jr    wra_painted
                 ifdef PLATFORM_MSX
+                if !PREEMPTIVE_CONTEXT
 wra_culled      pop   af
+                endif
+                endif
+wra_painted
+                ifdef PLATFORM_MSX
+                if PREEMPTIVE_CONTEXT
+                call  SCHED_REGION_NEXT_ENTRY
+                or    a
+                jr    nz,wra_fragment              ; same surface, next disjoint visible band
+                endif
                 endif
 wra_next        ld    a,(wm_rp_i)
                 inc   a
@@ -4185,6 +4150,12 @@ wra_done        ld    a,(wm_rp_back)
 k_wm_damage
                 ld    (clip_x),bc                 ; clip_x = x, clip_y = y
                 ld    (clip_w),de                 ; clip_w = w, clip_h = h
+                ifdef PLATFORM_MSX
+                if PREEMPTIVE_CONTEXT
+                xor   a                           ; explicit damage replaces any
+                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a ; unconsumed move union
+                endif
+                endif
                 ret
 
 ; clip_set_full: reset the fill clip to the whole screen (no clipping). Two word
