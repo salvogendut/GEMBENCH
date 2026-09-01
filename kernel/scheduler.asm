@@ -3,7 +3,7 @@
 ; This file is assembled by scheduler_image.asm, not included in GBKERN. The
 ; preemptive desktop carries the resulting image in its app page and copies it
 ; to SCHED_BASE before entering the window-manager loop. CPC/PCW reserve
-; #3C00-#3DFF; MSX uses #C900-#CEFF in fixed page-3 RAM.
+; #3000-#3DFF; MSX uses #C900-#CEFF in fixed page-3 RAM.
 ;
 ; An active task continues to use the platform's existing fixed stack.  On a
 ; switch, only BOOT_SP-SP live bytes are copied into the owning app bank.  This
@@ -15,6 +15,11 @@ TASK_STACK_LEN  equ   TASK_SNAPSHOT ; byte: saved stack length
 TASK_STACK_DATA equ   TASK_SNAPSHOT+1
 TASK_STACK_CAP  equ   255          ; includes interrupt-saved Z80 context
 TASK_STACK_SIZE equ   256          ; length byte plus TASK_STACK_CAP payload
+                ifdef PLATFORM_PCW
+VISIBLE_COMPOSITOR equ 0
+                else
+VISIBLE_COMPOSITOR equ 1           ; shared MSX2/CPC exact-region policy
+                endif
                 ifdef PLATFORM_MSX
 SCHED_QUANTUM_TICKS equ 2          ; 25/30 Hz slices from the 50/60 Hz MSX IRQ
                 else
@@ -32,11 +37,26 @@ SCHED_TMP_TOP    equ   #1481
                 jp    sched_yield
                 jp    k_task_enable
                 jp    sched_irq_uninstall
-                ifdef PLATFORM_MSX
+                if VISIBLE_COMPOSITOR
                 jp    sched_compositor_prepare
                 jp    sched_region_begin
                 jp    sched_region_next
                 jp    sched_region_test        ; test current clip for one source surface
+                ifdef PLATFORM_CPC
+                jp    sched_focus_damage
+                jp    sched_damage_axis
+                jp    sched_clip_full
+                jp    sched_set_clip
+                jp    sched_wm_entry
+                jp    sched_wm_damage
+                jp    sched_cpc_kind_register
+                jp    sched_cpc_owner_current
+                jp    sched_cpc_shell
+                jp    sched_cpc_defer
+                jp    sched_cpc_defer_dispatch
+                jp    sched_cpc_window_current
+                jp    sched_cpc_gbap4_gate_load
+                endif
                 endif
 
 sched_init_impl
@@ -109,7 +129,7 @@ sched_stack_sampled
                 ld    de,TASK_STACK_DATA
                 ldir
 
-                ifdef PLATFORM_MSX
+                if VISIBLE_COMPOSITOR
                 ; A worker always hands control back to slot zero, preserving a
                 ; root/compositor turn between compute slices.  From root, choose
                 ; owner-aggregated visibility tiers in order: focused, fully
@@ -418,7 +438,7 @@ sched_task_sleep
                 call  sched_yield
                 jr    sched_task_loop
 
-                ifdef PLATFORM_MSX
+                if VISIBLE_COMPOSITOR
 ; ---- Architecture Milestone 9: exact visible damage -------------------------
 ;
 ; The Screen-7 resident child COM has no useful headroom.  Keep the compositor's
@@ -435,6 +455,85 @@ WM_VIS_HIDDEN   equ 0
 WM_VIS_PARTIAL  equ 1
 WM_VIS_FULL     equ 2
 WM_VIS_FOCUSED  equ 3
+WM_SLOT         equ #12F9
+WM_OPEN_BACK    equ #12FB
+
+                ifdef PLATFORM_CPC
+; These compact geometry helpers are shared by the MSX2 and CPC resident
+; compositor. Keeping the CPC copy in its app-carried scheduler preserves the
+; guarded stack gap without changing semantics or the fixed API surface.
+sched_focus_damage
+                xor   a
+                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a
+                ld    a,(WM_SLOT)
+                or    a
+                jr    nz,sfd_primary
+                ld    a,(WM_OPEN_BACK)
+sfd_primary
+                call  sched_wm_entry
+                inc   hl
+                ld    de,WM_CLIP_X
+                ld    bc,4
+                ldir
+                ld    a,(WM_SLOT)
+                or    a
+                ret   z
+                ld    a,(WM_OPEN_BACK)
+                or    a
+                ret   z
+                call  sched_wm_entry
+                inc   hl
+                ld    de,MSX_COMPOSITOR_EXTRA
+                ld    bc,4
+                ldir
+                ld    a,1
+                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a
+                ret
+
+sched_damage_axis
+                cp    b
+                jr    nc,sda_oldmin
+                ld    d,a
+                ld    a,b
+                jr    sda_span
+sda_oldmin     ld    d,b
+sda_span       add   a,c
+                sub   d
+                ld    e,a
+                ret
+
+sched_clip_full
+                ld    bc,0
+                ld    (WM_CLIP_X),bc
+                ld    de,(SCR_LINES*256)|SCR_COLS
+                ld    (WM_CLIP_W),de
+                ret
+
+sched_set_clip
+                call  sched_wm_entry
+                ld    b,(hl)
+                inc   hl
+                ld    a,(hl)
+                ld    (WM_CLIP_X),a
+                inc   hl
+                ld    a,(hl)
+                ld    (WM_CLIP_Y),a
+                inc   hl
+                ld    a,(hl)
+                add   a,8
+                ld    (WM_CLIP_W),a
+                inc   hl
+                ld    a,(hl)
+                ld    (WM_CLIP_H),a
+                ret
+
+sched_wm_damage
+                ld    (WM_CLIP_X),bc
+                ld    (WM_CLIP_W),de
+                xor   a
+                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a
+                ret
+                endif
 
 ; Capture one immutable source-damage rectangle for the complete z pass, then
 ; refresh visibility. Every surface iterator restarts from this damage instead
@@ -858,9 +957,9 @@ sched_visibility_refresh
                 xor   a
                 ld    (WM_CLIP_X),a
                 ld    (WM_CLIP_Y),a
-                ld    a,128                    ; MSX2 logical byte columns (Screen 6/7)
+                ld    a,SCR_COLS
                 ld    (WM_CLIP_W),a
-                ld    a,212
+                ld    a,SCR_LINES
                 ld    (WM_CLIP_H),a
                 xor   a
                 ld    hl,MSX_WM_VISIBILITY
@@ -886,9 +985,9 @@ svr_surface_loop
                 xor   a                        ; each classification starts from
                 ld    (WM_CLIP_X),a            ; the complete screen, not the first
                 ld    (WM_CLIP_Y),a            ; fragment emitted for the prior slot
-                ld    a,128
+                ld    a,SCR_COLS
                 ld    (WM_CLIP_W),a
-                ld    a,212
+                ld    a,SCR_LINES
                 ld    (WM_CLIP_H),a
                 ld    a,c
                 call  sched_region_test
@@ -919,6 +1018,7 @@ svr_store_surface
                 jr    svr_surface_loop
 
 svr_aggregate
+                ifdef PLATFORM_MSX
                 xor   a
                 ld    (MSX_REGION_OWNER_INDEX),a
 svr_owner_loop
@@ -973,6 +1073,7 @@ svr_owner_store ld    a,(MSX_REGION_WORKER_SLOT)
 svr_next_owner  ld    hl,MSX_REGION_OWNER_INDEX
                 inc   (hl)
                 jr    svr_owner_loop
+                endif
 
 svr_restore_clip
                 ld    hl,MSX_REGION_SAVED_CLIP
@@ -980,7 +1081,7 @@ svr_restore_clip
                 ld    bc,4
                 ldir
                 ret
-                endif                          ; PLATFORM_MSX M9 region engine
+                endif                          ; shared MSX2/CPC M9 region engine
 
                 ifdef PLATFORM_PCW
 ; GEOBENCH owns the PCW outright. Its FDC interrupt route remains disabled and
@@ -1176,14 +1277,22 @@ sched_bank_set
                 ret
                 endif
 
+                ifdef PLATFORM_CPC
+                include "cpc_services.asm"
+                endif
+
                 endif                         ; PREEMPTIVE_CONTEXT
 
 sched_image_end
                 ifndef SCHED_LIMIT
-                ifdef PLATFORM_MSX
+                ifdef PLATFORM_CPC
+SCHED_LIMIT     equ   3584
+                else
+                if VISIBLE_COMPOSITOR
 SCHED_LIMIT     equ   1536
                 else
 SCHED_LIMIT     equ   512
+                endif
                 endif
                 endif
                 assert sched_image_end-SCHED_BASE<=SCHED_LIMIT,"scheduler exceeds fixed slot"

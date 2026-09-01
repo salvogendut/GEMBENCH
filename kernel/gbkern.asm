@@ -59,10 +59,15 @@ PREEMPTIVE      equ   0             ; issue #477: opt-in scheduler while it is b
 PREEMPTIVE_CONTEXT equ 0            ; stack-copy engine; enabled by scheduler test builds
                 endif
                 assert !PREEMPTIVE_CONTEXT|PREEMPTIVE,"PREEMPTIVE_CONTEXT requires PREEMPTIVE=1"
-                ifdef PLATFORM_MSX
-MSX_VISIBLE_COMPOSITOR equ PREEMPTIVE_CONTEXT
-                else
+                ifdef PLATFORM_PCW
 MSX_VISIBLE_COMPOSITOR equ 0
+                else
+MSX_VISIBLE_COMPOSITOR equ PREEMPTIVE_CONTEXT ; shared exact-region compositor
+                endif
+                ifdef PLATFORM_CPC
+CPC_SCHED_GEOMETRY equ MSX_VISIBLE_COMPOSITOR
+                else
+CPC_SCHED_GEOMETRY equ 0
                 endif
 
 ; STORAGE_ALBIREO (#104): build-time drive-0 backend select. 0 (default) = the
@@ -2324,6 +2329,9 @@ wmr_generation_ready
 ;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 proc +8 title
 ;   +10 task_worker (0 for normal managed windows)
 k_wm_managed
+                ifdef PLATFORM_CPC
+                ld    (CPC_KIND_SELECTOR),a
+                endif
                 ifdef PLATFORM_MSX
                 push  af                     ; preserve the registration selector
                 endif
@@ -2379,6 +2387,9 @@ kwm_kind_done
                                              ; flag means wm_repaint_all skips it; MENU (entry+
                                              ; 11,12) temporarily contains task_worker but gb_doc
                                              ; replaces it before the app returns to the WM loop
+                ifdef PLATFORM_CPC
+                call  CPC_KIND_REGISTER
+                endif
                 ifdef PLATFORM_MSX
                 ld    hl,(wm_desc)
                 ld    de,10
@@ -2570,9 +2581,11 @@ mwf_title
                 ret   z
                 jp    mw_move
 mwf_legacy_drag
-                endif
-                ld    a,GB_MSG_DRAG          ; otherwise a title-bar press -> drag the window
+                ld    a,GB_MSG_DRAG          ; legacy MSX app-linked drag helper
                 jp    mw_hook
+                else
+                jp    cpc_app_drag             ; compact CPC module owns title move/maximize
+                endif
                 ifdef WM_GADGETS
 ; mwf_max: the maximize/restore gadget does a WINDOWED maximize (chrome stays) - distinct from
 ; the borderless View>Fullscreen / 'F' (the app's on_fullscreen). Toggle the focused window
@@ -3004,6 +3017,10 @@ wm_loop
                 call  wm_focus_click             ; the right app. then route the click.
                 ifdef PLATFORM_MSX
                 call  defer_dispatch_one         ; one bounded, non-nested app message per turn
+                else
+                ifdef PLATFORM_CPC
+                call  SCHED_CPC_DISPATCH_ENTRY   ; same contract, fixed CPC runtime adapter
+                endif
                 endif
                 call  wm_map_focus               ; focus may have changed
                 call  clip_set_full              ; #281: each window's frame starts from a full clip.
@@ -3130,7 +3147,7 @@ wm_open_go
                 ld    a,(wm_open_page)
                 call  bank_set
                 ifdef PLATFORM_CPC
-                call  cpc_gbap4_gate_load
+                call  SCHED_CPC_GBAP_ENTRY
                 jr    nc,wmo_fail
                 endif
                 ld    hl,APP_LOAD_MAX
@@ -3678,6 +3695,9 @@ ss_h            equ   #124E
 
 ; damage_axis: B = old, A = new, C = size -> D = min(old,new), E = span =
 ; max(old,new) + size - min. The 1-D damage extent of a move. Preserves HL.
+                if CPC_SCHED_GEOMETRY
+damage_axis     equ   SCHED_DAMAGE_AXIS_ENTRY
+                else
 damage_axis
                 cp    b
                 jr    nc,dax_oldmin              ; new >= old -> min = old, max = new
@@ -3689,6 +3709,7 @@ dax_span        add   a,c                           ; max + size
                 sub   d                             ; - min
                 ld    e,a
                 ret
+                endif
 
 ; wm_map_focus: bank to the focused window's page and point APP_HANDLER at its
 ; on_event (so menu_dispatch in k_poll delivers top-bar clicks to the focused app).
@@ -3813,6 +3834,9 @@ wfc_repaint_focus
 ; clips both against the post-focus z-order, yielding an exact visible union.
 ; wm_open_back contains the old focus slot and wm_slot the new one. Desktop has
 ; no focus furniture, so it is omitted when it is either endpoint.
+                if CPC_SCHED_GEOMETRY
+wm_focus_damage equ   SCHED_FOCUS_DAMAGE_ENTRY
+                else
 wm_focus_damage
                 xor   a
                 ld    (MSX_COMPOSITOR_EXTRA_PENDING),a
@@ -3840,6 +3864,7 @@ wfd_primary
                 ld    a,1
                 ld    (MSX_COMPOSITOR_EXTRA_PENDING),a
                 ret
+                endif
                 endif                              ; MSX_VISIBLE_COMPOSITOR focus damage
 
 ; wm_hit_test: -> A = slot of the top-most window whose rect contains the pointer
@@ -4072,10 +4097,8 @@ wm_repaint_top
 wra_seed        ld    (wm_rp_i),a
                 ld    a,(bank_cur)
                 ld    (wm_rp_back),a
-                ifdef PLATFORM_MSX
-                if PREEMPTIVE_CONTEXT
+                if MSX_VISIBLE_COMPOSITOR
                 call  SCHED_VIS_REFRESH_ENTRY ; cache surface/task ranks before painting
-                endif
                 endif
                 if !MSX_VISIBLE_COMPOSITOR
                 ld    a,(cur_supp)              ; #148: hide the pointer before the repaint so it
@@ -4096,13 +4119,11 @@ wra_l           ld    a,(wm_rp_i)
                 add   a,l
                 ld    l,a
                 ld    a,(hl)                       ; slot = WM_Z[i]
-                ifdef PLATFORM_MSX
-                if PREEMPTIVE_CONTEXT
+                if MSX_VISIBLE_COMPOSITOR
                 call  SCHED_REGION_BEGIN_ENTRY     ; installs first exact visible damage fragment
                 or    a
                 jr    z,wra_next                   ; fully occluded: no callback and no VDP work
 wra_fragment    ld    a,(MSX_REGION_SLOT)
-                endif
                 endif
                 call  wm_entry                     ; HL = entry
                 push  hl                           ; #148 guard: never paint a dead slot
@@ -4156,12 +4177,10 @@ wra_culled      pop   af
                 endif
                 endif
 wra_painted
-                ifdef PLATFORM_MSX
-                if PREEMPTIVE_CONTEXT
+                if MSX_VISIBLE_COMPOSITOR
                 call  SCHED_REGION_NEXT_ENTRY
                 or    a
                 jr    nz,wra_fragment              ; same surface, next disjoint visible band
-                endif
                 endif
 wra_next        ld    a,(wm_rp_i)
                 inc   a
@@ -4187,28 +4206,33 @@ wra_done        ld    a,(wm_rp_back)
 ; dropdown's footprint (the part that overhangs other windows) and the window the
 ; menu action changed. Registers are pre-swapped by the trampoline for two word
 ; stores: C=x B=y (-> clip_x,clip_y) and E=w D=h (-> clip_w,clip_h).
+                if CPC_SCHED_GEOMETRY
+k_wm_damage     equ   SCHED_WM_DAMAGE_ENTRY
+                else
 k_wm_damage
                 ld    (clip_x),bc                 ; clip_x = x, clip_y = y
                 ld    (clip_w),de                 ; clip_w = w, clip_h = h
-                ifdef PLATFORM_MSX
-                if PREEMPTIVE_CONTEXT
-                xor   a                           ; explicit damage replaces any
-                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a ; unconsumed move union
-                endif
-                endif
                 ret
+                endif
 
 ; clip_set_full: reset the fill clip to the whole screen (no clipping). Two word
 ; stores (clobbers BC,DE - the only caller reloads A and ignores BC/DE, #153).
+                if CPC_SCHED_GEOMETRY
+clip_set_full   equ   SCHED_CLIP_FULL_ENTRY
+                else
 clip_set_full
                 ld    bc,0                       ; clip_x = 0, clip_y = 0
                 ld    (clip_x),bc
                 ld    de,(SCR_LINES*256)|SCR_COLS ; clip_w / clip_h = the full screen
                 ld    (clip_w),de
                 ret
+                endif
 
 ; wm_set_clip: A = slot -> set the fill clip to that window's rect plus one icon
 ; cell at the right. Returns B = page and HL = entry+4; close reuses both.
+                if CPC_SCHED_GEOMETRY
+wm_set_clip     equ   SCHED_SET_CLIP_ENTRY
+                else
 wm_set_clip
                 call  wm_entry                    ; HL = entry
                 ld    b,(hl)                       ; page for close
@@ -4226,8 +4250,12 @@ wm_set_clip
                 ld    a,(hl)
                 ld    (clip_h),a
                 ret
+                endif
 
 ; wm_entry: A = slot index -> HL = WM_TABLE + A*WM_ESZ. Clobbers A,B,DE.
+                if CPC_SCHED_GEOMETRY
+wm_entry        equ   SCHED_WM_ENTRY_ENTRY
+                else
 wm_entry
                 ld    hl,WM_TABLE
                 or    a
@@ -4238,6 +4266,7 @@ we_add
                 add   hl,de
                 djnz  we_add
                 ret
+                endif
 
 wm_desc         equ   #12F7        ; low-RAM WM scratch (see lowram.tsv)
 wm_slot         equ   #12F9

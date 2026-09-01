@@ -81,7 +81,11 @@ GB_BLITE_ENTRY  equ   k_ret0                 ; CPC/PCW retain the retired icon-m
                 if PREEMPTIVE_CONTEXT
 GB_ONEVENT_ENTRY equ SCHED_TASK_ENABLE_ENTRY ; #477: opt-in worker task in preemptive builds
                 else
+                ifdef PLATFORM_CPC
+GB_ONEVENT_ENTRY equ CPC_TASK_SERVICE        ; cooperative worker register/pump
+                else
 GB_ONEVENT_ENTRY equ k_noop
+                endif
                 endif
                 jp    GB_ONEVENT_ENTRY       ; GB_ONEVENT     #804B (GB_TASKENABLE under #477)
                 jp    k_menu                 ; GB_MENU        #804E
@@ -140,12 +144,12 @@ GB_ONEVENT_ENTRY equ k_noop
                 jp    k_fsctx                ; GB_FSCTX       #80D2 explicit filesystem contexts
                 else
                 ifdef PLATFORM_CPC
-                jp    k_ret0                 ; GB_SHELL       capability-typed unsupported stub
+                jp    SCHED_CPC_SHELL_ENTRY  ; GB_SHELL       shared shell contract
                 jp    k_cpc_sysinfo          ; GB_SYSINFO     CPC v6 runtime record
-                jp    k_cpc_owner            ; GB_OWNER       generation-tagged focused owner
+                jp    SCHED_CPC_OWNER_ENTRY  ; GB_OWNER       generation-tagged application owner
                 jp    k_cpc_page             ; GB_PAGE        opaque CPC expansion-page service
                 jp    k_cpc_app              ; GB_APP         CPC application/window lifecycle
-                jp    k_ret1                 ; GB_DEFER       typed unsupported status
-                jp    k_ret1                 ; GB_FSCTX       typed unsupported status
+                jp    SCHED_CPC_DEFER_ENTRY  ; GB_DEFER       bounded deferred app messages
+                jp    k_cpc_fsctx            ; GB_FSCTX       unsupported public API/private loader leaf
                 endif
                 endif

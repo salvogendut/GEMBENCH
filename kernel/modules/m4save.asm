@@ -47,7 +47,11 @@ M4_READCHUNK   equ   #0800
 PREEMPTIVE     equ   0
                 endif
                 if PREEMPTIVE
+                ifdef PLATFORM_CPC
+M4SV_MAX       equ   #0E00         ; #2200..#2FFF; scheduler starts at #3000
+                else
 M4SV_MAX       equ   #1A00
+                endif
                 else
 M4SV_MAX       equ   #1C00
                 endif

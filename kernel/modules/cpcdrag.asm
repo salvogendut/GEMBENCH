@@ -6,16 +6,37 @@ GB_POLL         equ   #801E
 GB_FRAME        equ   #8021
 GB_CURHIDE      equ   #8024
 GB_WMSETPOS     equ   #8066
+GB_WMSETSIZE    equ   #8099
+GB_WMDAMAGE     equ   #80B4
 GB_BACKDROP     equ   #80B7
+GB_RESTPAR      equ   #8057
 GB_CURSHOW      equ   #801B
 
 POLL_MX         equ   #1306
 POLL_MY         equ   #1307
 POLL_FLAGS      equ   #1308
 MW_RECT         equ   #1448
+                ifndef PREEMPTIVE
+PREEMPTIVE      equ   0
+                endif
+                if PREEMPTIVE
+CPC_MAXED       equ   #3EB2
+CPC_MAX_SAVE    equ   #3EB3
+                else
+CPC_MAXED       equ   #3CB2
+CPC_MAX_SAVE    equ   #3CB3
+                endif
 
                 org   #6000
 cpc_drag_entry
+                ld    a,(MW_RECT)
+                ld    hl,MW_RECT+2
+                add   a,(hl)
+                sub   4
+                ld    b,a
+                ld    a,(POLL_MX)
+                cp    b
+                jp    nc,cpc_maximize
                 ld    hl,MW_RECT
                 ld    de,drag_x
                 ld    bc,4
@@ -120,6 +141,48 @@ drag_done       ld    a,(drag_moved)
                 ld    l,a
                 ld    a,(drag_x)
                 call  GB_WMSETPOS
+                call  GB_RESTPAR
+                xor   a
+                ret
+
+; The compact resident CPC WM routes a title click through this module. A click
+; in the rightmost four byte-columns toggles the standard maximize gadget. Its
+; one saved rectangle matches the inherited resident implementation's contract.
+cpc_maximize
+                ld    a,(CPC_MAXED)
+                or    a
+                jr    nz,cpc_max_restore
+                ld    hl,MW_RECT
+                ld    de,CPC_MAX_SAVE
+                ld    bc,4
+                ldir
+                ld    a,1
+                ld    (CPC_MAXED),a
+                xor   a
+                ld    l,8
+                call  GB_WMSETPOS
+                ld    a,80
+                ld    l,192
+                call  GB_WMSETSIZE
+                jr    cpc_max_repaint
+cpc_max_restore
+                xor   a
+                ld    (CPC_MAXED),a
+                ld    a,(CPC_MAX_SAVE)
+                ld    hl,CPC_MAX_SAVE+1
+                ld    l,(hl)
+                call  GB_WMSETPOS
+                ld    a,(CPC_MAX_SAVE+2)
+                ld    hl,CPC_MAX_SAVE+3
+                ld    l,(hl)
+                call  GB_WMSETSIZE
+cpc_max_repaint
+                ld    b,0
+                ld    c,8
+                ld    d,80
+                ld    e,192
+                call  GB_WMDAMAGE
+                call  GB_RESTPAR
                 xor   a
                 ret
 

@@ -1,70 +1,60 @@
-; Cooperative CPC architecture shim for the compile-once GEOBENCH-2 ABI.
+; CPC architecture adapter for the compile-once GEOBENCH-2 ABI.
 ;
 ; The CPC resident kernel has only a guarded 256-byte stack gap below UniDOS,
-; so persistent metadata lives in the unused cooperative scheduler block at
-; #3C00. Code remains resident here; the larger GBAP v4 validator is loaded
+; so scheduling plus owner/shell/deferred services live in fixed low RAM at
+; #3000. Code remains resident here; the larger GBAP v4 validator is loaded
 ; into the ordinary #2200 module workspace only while admitting an app.
 
-                assert !PREEMPTIVE,"CPC v6 metadata currently requires the cooperative #3C00 block"
-
 CPC_SYSINFO_SIZE equ 48
+CPC_GBAP4_GATE   equ #2200
 
 ; Low-word capabilities implemented by the restored shared kernel plus this
 ; shim: windows, events, filesystem, page allocation, owner identity, runtime
 ; video, applications, and multiple windows.
-CPC_CAPS_LOW    equ   #07C7
+CPC_CAPS_LOW    equ   #0FCF
 ; High-word capabilities initially proved by the CPC gate: strict universal
 ; loading, runtime geometry, semantic drawing, and normalised pointer input.
-CPC_CAPS_HIGH   equ   #000F
+CPC_CAPS_HIGH   equ   #004F       ; universal core + shared background timers
 
-CPC_GBAP4_GATE      equ #2200
-CPC_GBAP4_GATE_SIZE equ 1201
-; The floppy backend admits AMSDOS files using their record-rounded size
-; before it strips the 128-byte header.  The 1201-byte gate therefore needs
-; three 512-byte staging sectors even though the validated payload ends at
-; #26B1.
-CPC_GBAP4_STAGE_SIZE equ #0600
+; Install the shared scheduler/service runtime before any boot-time geometry,
+; window-kind, owner, shell, deferred, or timer entry can be reached.
+cpc_scheduler_load
+                ld    hl,cpc_scheduler_name
+                ld    de,fs_req_name
+                call  copy11
+                ld    hl,SCHED_BASE
+                ld    (fs_load_dst),hl
+                ld    hl,3584
+                ld    (fs_load_max),hl
+                call  fs_load_sys
+                ret   nc
+                call  SCHED_INIT_ENTRY
+                scf
+                ret
+cpc_scheduler_name db "GBSCHED MOD"
 
-; Reload the strict validator before each launch.  Paged helpers share #2200,
-; so retaining it across arbitrary application activity would be unsafe.
-cpc_gbap4_gate_load
+; CPC-private leaf behind the otherwise unsupported GB_FSCTX slot. It gives the
+; fixed scheduler a bounded way to reload system modules while preserving the
+; pending application's 8.3 name. Public operations 0..n still return 1.
+k_cpc_fsctx
+                cp    #FE
+                jp    nz,k_ret1
+                ld    (fs_load_dst),de
+                ld    (fs_load_max),bc
+                push  hl
                 ld    hl,fs_req_name
                 ld    de,CPC_GATE_NAME
                 call  copy11
-                ld    hl,cpc_gbap4_name
+                pop   hl
                 ld    de,fs_req_name
                 call  copy11
-                ld    hl,CPC_GBAP4_GATE
-                ld    (fs_load_dst),hl
-                ld    hl,CPC_GBAP4_STAGE_SIZE
-                ld    (fs_load_max),hl
                 call  fs_load_sys
-                jr    nc,cpc_gbap4_bad
-                ld    hl,(fs_ent_size+2)
-                ld    a,h
-                or    l
-                jr    nz,cpc_gbap4_bad
-                ld    hl,(fs_ent_size)
-                ld    de,CPC_GBAP4_GATE_SIZE
-                or    a
-                sbc   hl,de
-                jr    nz,cpc_gbap4_bad
-                ld    hl,(CPC_GBAP4_GATE+3)
-                ld    de,#4247                 ; "GB"
-                or    a
-                sbc   hl,de
-                jr    nz,cpc_gbap4_bad
-                scf
-                jr    cpc_gbap4_restore
-cpc_gbap4_bad  or    a
-cpc_gbap4_restore
                 push  af
                 ld    hl,CPC_GATE_NAME
                 ld    de,fs_req_name
                 call  copy11
                 pop   af
                 ret
-cpc_gbap4_name db    "GBAPV4  MOD"
 
 ; cpc_arch_init: publish the immutable fields and seed generation arrays.
 cpc_arch_init
@@ -82,7 +72,8 @@ cpc_arch_init
                 ld    (CPC_SYSINFO+14),a
                 ld    hl,CPC_PAGE_GEN
                 ld    de,CPC_PAGE_GEN+1
-                ld    bc,CPC_PAGE_MAX+WM_MAXWIN-1 ; page + window generations
+                ld    bc,CPC_WIN_KIND+8-CPC_PAGE_GEN-1
+                                              ; generations + interaction/kind state
                 ld    (hl),0
                 ldir
                 ret
@@ -108,26 +99,6 @@ cpc_pcf_next   inc   hl
 k_cpc_sysinfo
                 call  cpc_page_count_free
                 ld    de,CPC_SYSINFO
-                ret
-
-; GB_OWNER: the restored CPC compositor has one code page per application.
-; Window slots therefore provide a compact generation-tagged identity until
-; the multi-window owner table is moved into this block later in Gate 3.
-k_cpc_owner
-                ld    a,(WM_NWIN)
-                or    a
-                jr    z,cpc_owner_none
-                ld    a,(WM_FOCUS)
-                ld    c,a
-                inc   a
-                ld    e,a                    ; low byte = one-based compositor slot
-                ld    hl,CPC_WIN_GEN
-                ld    a,c
-                add   a,l
-                ld    l,a
-                ld    d,(hl)                 ; high byte = nonzero reuse generation
-                ret
-cpc_owner_none ld    de,0
                 ret
 
 ; Validate HL as a live public page handle. CF=valid, C=zero-based index.
@@ -194,13 +165,7 @@ cpc_page_found ld    a,c
                 ld    hl,CPC_PAGE_GEN
                 ld    b,0
                 add   hl,bc
-                ld    a,(hl)
-                inc   a
-                jr    nz,cpc_page_gen_ok
-                inc   a
-cpc_page_gen_ok
-                ld    (hl),a
-                ld    d,a
+                ld    d,(hl)                 ; wm_alloc_page advanced this generation
                 ld    a,c
                 inc   a
                 ld    e,a
@@ -238,7 +203,7 @@ k_cpc_app
                 cp    2                      ; terminate current window
                 jr    z,cpc_app_quit
                 cp    3                      ; current window handle
-                jp    z,k_cpc_owner
+                jp    z,SCHED_CPC_WINDOW_ENTRY
                 cp    4                      ; close explicit handle (current only)
                 jr    z,cpc_app_close
                 cp    5                      ; validate window handle
@@ -255,7 +220,7 @@ cpc_app_quit   call  k_wm_close
 cpc_app_ok     xor   a
                 ret
 cpc_app_close  push  hl
-                call  k_cpc_owner
+                call  SCHED_CPC_WINDOW_ENTRY
                 pop   hl
                 or    a
                 sbc   hl,de
@@ -265,7 +230,7 @@ cpc_app_close  push  hl
                 xor   a
                 ret
 cpc_app_check  push  hl
-                call  k_cpc_owner
+                call  SCHED_CPC_WINDOW_ENTRY
                 pop   hl
                 or    a
                 sbc   hl,de
@@ -325,7 +290,7 @@ cpc_sysinfo_template
                 db    0,0,0,8                ; memory/pool/free patched, windows
                 dw    CPC_CAPS_LOW,0
                 db    8,1,8,0                ; apps, record ABI, windows/app, reserved
-                db    0,0,0,0                ; no deferred-message queue yet
+                db    8,4,1,0                ; shared bounded deferred-message contract
                 db    0
                 dw    512
                 db    1                      ; serialized filesystem API v1

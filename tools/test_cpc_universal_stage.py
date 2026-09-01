@@ -99,8 +99,26 @@ if (CPC_SYS / "GBDRAG.MOD").read_bytes() != (ROOT / "build" / "cpc" / "GBDRAG.RA
     raise SystemExit("CPC stage changed the managed-window drag module bytes")
 if (CPC_SYS / "M4SAVE.MOD").read_bytes() != (ROOT / "build" / "M4SAVE.RAW").read_bytes():
     raise SystemExit("CPC stage changed the M4 save module bytes")
+ui_module = (ROOT / "build" / "GBUI.RAW").read_bytes()
+if (CPC_SYS / "GBUI.MOD").read_bytes() != ui_module:
+    raise SystemExit("CPC card does not stage the shared GBUI module")
 
 disk_files = cpc_disk_files(CPC_DSK)
+floppy_ui = disk_files.get("GBUI.MOD")
+if floppy_ui is None or floppy_ui[128:128 + len(ui_module)] != ui_module:
+    raise SystemExit("CPC floppy does not stage the shared GBUI module")
+refined = (ROOT / "assets" / "iconsets" / "REFINED.IST").read_bytes()
+if (CPC_SYS / "REFINED.IST").read_bytes() != refined:
+    raise SystemExit("CPC card does not stage the canonical REFINED.IST")
+floppy_refined = disk_files.get("REFINED.IST")
+if floppy_refined is None or floppy_refined[128:128 + len(refined)] != refined:
+    raise SystemExit("CPC floppy does not stage the canonical REFINED.IST")
+if b"ICONS=REFINED\r\n" not in (CPC_CARD / "GEOBENCH.CFG").read_bytes():
+    raise SystemExit("CPC card does not select REFINED.IST")
+floppy_config = disk_files.get("GEOBENCH.CFG")
+if floppy_config is None or b"ICONS=REFINED\r\n" not in floppy_config[128:]:
+    raise SystemExit("CPC floppy does not select REFINED.IST")
+
 for name in ("ABIPROBE.APP", "CLOCK.APP", "CALC.APP"):
     source = UNIVERSAL / name
     staged = CPC_SYS / name

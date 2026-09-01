@@ -117,17 +117,36 @@ SCHED_FAULT     equ   #1347        ; non-zero when a context exceeds the 255-byt
                 ifdef PLATFORM_MSX
 SCHED_BASE      equ   #C900        ; fixed page-3 RAM, visible during H.TIMI/mapper calls
                 else
+                ifdef PLATFORM_CPC
+SCHED_BASE      equ   #3000        ; fixed low RAM; 3584B shared scheduler/services to #3DFF
+                else
 SCHED_BASE      equ   #3C00        ; fixed low RAM; top 512B of old module transfer area
+                endif
                 endif
 SCHED_INIT_ENTRY equ  SCHED_BASE
 SCHED_YIELD_ENTRY equ SCHED_BASE+3
 SCHED_TASK_ENABLE_ENTRY equ SCHED_BASE+6
 SCHED_IRQ_UNINSTALL_ENTRY equ SCHED_BASE+9
-                ifdef PLATFORM_MSX
+                ifndef PLATFORM_PCW
 SCHED_VIS_REFRESH_ENTRY equ SCHED_BASE+12
 SCHED_REGION_BEGIN_ENTRY equ SCHED_BASE+15
 SCHED_REGION_NEXT_ENTRY equ SCHED_BASE+18
 SCHED_DAMAGE_VISIBLE_ENTRY equ SCHED_BASE+21
+                ifdef PLATFORM_CPC
+SCHED_FOCUS_DAMAGE_ENTRY equ SCHED_BASE+24
+SCHED_DAMAGE_AXIS_ENTRY equ SCHED_BASE+27
+SCHED_CLIP_FULL_ENTRY equ SCHED_BASE+30
+SCHED_SET_CLIP_ENTRY equ SCHED_BASE+33
+SCHED_WM_ENTRY_ENTRY equ SCHED_BASE+36
+SCHED_WM_DAMAGE_ENTRY equ SCHED_BASE+39
+SCHED_CPC_KIND_ENTRY equ SCHED_BASE+42
+SCHED_CPC_OWNER_ENTRY equ SCHED_BASE+45
+SCHED_CPC_SHELL_ENTRY equ SCHED_BASE+48
+SCHED_CPC_DEFER_ENTRY equ SCHED_BASE+51
+SCHED_CPC_DISPATCH_ENTRY equ SCHED_BASE+54
+SCHED_CPC_WINDOW_ENTRY equ SCHED_BASE+57
+SCHED_CPC_GBAP_ENTRY equ SCHED_BASE+60
+                endif
                 endif
                 endif
 
@@ -154,18 +173,65 @@ WM_DRAGDIR      equ   #1433        ; source directory cluster (4 bytes), capture
 ; 3-bit page bitmap (first expansion bank only) is gone; the pool now spans every
 ; detected bank, capped at WM_MAXWIN. The desktop (first claim) always gets [0]. ---
                 ifdef PLATFORM_CPC
-; Cooperative CPC builds reuse the dormant #3C00 scheduler block for their
-; v6 record and a 31-entry expansion-page pool. 512K machines expose 27 app/
-; resource pages after PAGE_DATA instead of truncating the allocator to the
-; eight compositor slots.
-CPC_SYSINFO     equ   #3C00
+; CPC keeps the same shared scheduler semantics as MSX2. Its v6 record and
+; expansion-page identities therefore live after the scheduler in #3E00+.
+; Cooperative diagnostic builds retain the historical #3C00 placement.
+                if PREEMPTIVE
+CPC_ARCH_BASE   equ   #3E00
+                else
+CPC_ARCH_BASE   equ   #3C00
+                endif
+CPC_SYSINFO     equ   CPC_ARCH_BASE+#00
 CPC_PAGE_MAX    equ   31
 APP_NPAGES      equ   #1437        ; retain the legacy public byte read by CPC apps
-APP_PAGES       equ   #3C41
-APP_BUSY        equ   #3C60
-CPC_PAGE_GEN    equ   #3C80
-CPC_WIN_GEN     equ   #3C9F        ; eight compositor-slot generations
-CPC_GATE_NAME   equ   #3CA7        ; saved 8.3 launch name while GBAPV4.MOD loads
+APP_PAGES       equ   CPC_ARCH_BASE+#41
+APP_BUSY        equ   CPC_ARCH_BASE+#60
+CPC_PAGE_GEN    equ   CPC_ARCH_BASE+#80
+CPC_WIN_GEN     equ   CPC_ARCH_BASE+#9F ; eight compositor-slot generations
+CPC_GATE_NAME   equ   CPC_ARCH_BASE+#A7 ; saved 8.3 launch name while GBAPV4.MOD loads
+CPC_MAXED       equ   CPC_ARCH_BASE+#B2 ; compact interaction module maximize state
+CPC_MAX_SAVE    equ   CPC_ARCH_BASE+#B3 ; saved x,y,w,h for the maximized window
+CPC_KIND_SELECTOR equ CPC_ARCH_BASE+#B7
+CPC_WIN_KIND    equ   CPC_ARCH_BASE+#B8 ; eight explicit/legacy furniture masks
+                if PREEMPTIVE
+; Target aliases consumed by the shared exact-region scheduler. CPC currently
+; has one owner per window, so surface and task visibility use parallel slots.
+MSX_WM_VISIBILITY   equ #3EC0
+MSX_TASK_VISIBILITY equ #3EC8
+MSX_REGION_SLOT     equ #3ED0
+MSX_REGION_Z        equ #3ED1
+MSX_REGION_LEFT     equ #3ED2
+MSX_REGION_TOP      equ #3ED3
+MSX_REGION_RIGHT    equ #3ED4
+MSX_REGION_BOTTOM   equ #3ED5
+MSX_REGION_Y        equ #3ED6
+MSX_REGION_BAND_END equ #3ED7
+MSX_REGION_X        equ #3ED8
+MSX_REGION_COVERED  equ #3ED9
+MSX_REGION_SCAN_Z   equ #3EDA
+MSX_REGION_SAVED_CLIP equ #3EDB
+MSX_REGION_FRAGMENT_COUNT equ #3EDF
+MSX_REGION_TEST_X   equ #3EE0
+MSX_REGION_REFRESH_Z equ #3EE1
+MSX_REGION_OWNER_INDEX equ #3EE2
+MSX_REGION_OWNER_ID equ #3EE3
+MSX_REGION_WORKER_SLOT equ #3EE4
+MSX_REGION_OWNER_MAX equ #3EE5
+MSX_REGION_SLOT_SCAN equ #3EE6
+MSX_COMPOSITOR_DAMAGE equ #3EE8
+MSX_COMPOSITOR_EXTRA equ #3EEC
+MSX_COMPOSITOR_EXTRA_PENDING equ #3EF0
+MSX_COMPOSITOR_EXTRA_ACTIVE equ #3EF1
+MSX_COMPOSITOR_SOURCE equ #3EF2
+CPC_KIND_REGISTER equ SCHED_CPC_KIND_ENTRY ; shared fixed runtime window-kind adapter
+                else
+CPC_TASK_WORKER equ   #3CC0        ; cooperative diagnostic worker pointer
+CPC_TASK_SLOT   equ   #3CC2
+CPC_TIMER_DROPPED equ #3CC3
+CPC_TIMER_VIDEO equ #3CC4
+CPC_KIND_REGISTER equ #3D00
+CPC_TASK_SERVICE equ #3D31
+                endif
                 else
 APP_NPAGES      equ   #1437        ; usable app-page count (3 on 128K, up to WM_MAXWIN)
 APP_PAGES       equ   #1438        ; WM_MAXWIN port values; [0] = PAGE_APP0 (#C5, desktop)
@@ -209,9 +275,28 @@ CUR_LOW         equ   #1500        ; low-RAM cursor sprite buffer (#65): DEFAULT
                                    ; loaded here at boot so the bitmaps aren't resident
                                    ; (256B used; 512 reserved to #16FF for the sector copy)
 PICEDIT_BASE    equ   #1600        ; CPC GB_PICEDIT helper, appended to shipped .SPR files.
-CLIP_LEN        equ   #3E00        ; shared clipboard (#142): word = length, data #3E02..
-CLIP_DATA       equ   #3E02        ; #3FFF (510 bytes). Non-banked low RAM above gb_copybuf
-CLIP_CAP        equ   510          ; (which ends #3E00), so it survives app switches.
+; The compile-once timer mailbox is target-neutral fixed low RAM. It occupies
+; the top eight bytes so the same APP instructions run on MSX2 and CPC without
+; touching CPC screen RAM.
+GB_TIMER_DROPPED equ  #3FF8
+GB_TIMER_OWNER  equ   #3FF9
+GB_TIMER_RECT   equ   #3FFA
+GB_TIMER_GEN    equ   #3FFE
+                ifdef PLATFORM_CPC
+                if PREEMPTIVE
+CLIP_LEN        equ   #3F38        ; CPC architecture/region/kind data ends below this
+CLIP_DATA       equ   #3F3A
+CLIP_CAP        equ   GB_TIMER_DROPPED-CLIP_DATA
+                else
+CLIP_LEN        equ   #3E00
+CLIP_DATA       equ   #3E02
+CLIP_CAP        equ   GB_TIMER_DROPPED-CLIP_DATA
+                endif
+                else
+CLIP_LEN        equ   #3E00
+CLIP_DATA       equ   #3E02
+CLIP_CAP        equ   GB_TIMER_DROPPED-CLIP_DATA
+                endif
 ; Paged UI-dialog service (#142): apps marshal a request into this low-RAM block, the
 ; kernel pages in the GBUI module (#6000 in PAGE_DATA) and CALLs it; it renders the
 ; dialog (popup/prompt/file-picker) and writes the result back here. The file-write

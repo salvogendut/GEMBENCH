@@ -25,9 +25,9 @@
 #include "gbshell.h"
 #ifdef GB_DEFER_MESSAGES
 #include "gbdefer.h"
+#endif
 #ifdef GB_APP_TIMER_COLLECTOR
 #include "gbtimer.h"
-#endif
 #endif
 #define GB_DESK_CATALOG_DATA
 #include "gbdesk_catalog.h"
@@ -96,6 +96,13 @@ static char drive_lbl[3][7] = { "Disk A", "Disk B", "Disk C" };
 #endif
 static const unsigned char ic_drive[N_ICONS] = { 1, 1, 1, 0, 0 };      /* opens the file mgr */
 static unsigned char ic_present[N_ICONS] = { 1, 0, 0, 1, 1 };          /* drives set by poll */
+#ifndef GB_MSX2
+/* CPC floppy presence is a physical motor/recalibrate probe. Cache the result
+   from drive_poll(): repaint/config helpers must never repeat I/O while the
+   compositor has hidden the pointer and partially cleared its damage region. */
+static unsigned char drive_mask;
+static unsigned char boot_drive_cache = GB_DRIVE_C;
+#endif
 
 static unsigned char drag_active, drag_idx, out_x, out_y, grab_dx, grab_dy;
 static unsigned char drag_armed, arm_mx, arm_my;   /* pressed on an icon, not yet lifted (#153) */
@@ -150,6 +157,8 @@ static void drive_poll(void)
         else ic_slot[i] = ICON_CF;
     }
 #else
+    drive_mask = d;
+    boot_drive_cache = (d & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A;
     ic_present[IDX_C] = (d & GB_DRV_C) ? 1 : 0;
     ic_present[IDX_A] = (d & GB_DRV_A) ? 1 : 0;
     ic_present[IDX_B] = (d & GB_DRV_B) ? 1 : 0;
@@ -231,7 +240,7 @@ static unsigned char boot_drive(void)
 #ifdef GB_MSX2
     return gb_boot_drive;
 #else
-    return (gb_drives() & GB_DRV_C) ? GB_DRIVE_C : GB_DRIVE_A;
+    return boot_drive_cache;
 #endif
 }
 
@@ -240,7 +249,7 @@ static unsigned char drive_present(unsigned char d)
 #ifdef GB_MSX2
     return (unsigned char)(d < GB_MSX_DRIVE_COUNT);
 #else
-    unsigned char m = gb_drives();
+    unsigned char m = drive_mask;
     if (d == GB_DRIVE_A) return (unsigned char)((m & GB_DRV_A) != 0);
     if (d == GB_DRIVE_B) return (unsigned char)((m & GB_DRV_B) != 0);
     return (unsigned char)((m & GB_DRV_C) != 0);
@@ -792,11 +801,34 @@ static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsig
 static void paint_region(void)
 {
     unsigned char i;
+#ifdef GB_CPC
+    const unsigned char dx = *(volatile unsigned char *)0x1338;
+    const unsigned char dy = *(volatile unsigned char *)0x1339;
+    const unsigned char dw = *(volatile unsigned char *)0x133A;
+    const unsigned char dh = *(volatile unsigned char *)0x133B;
+    /* CPC has no VDP, so making the root callback damage-aware is a large CPU
+       saving: a Clock hand no longer re-blits the complete wallpaper and every
+       desktop icon merely because low-level primitives would clip the pixels. */
+    wp_backdrop(dx, dy, dw, dh);
+    for (i = 0; i < N_ICONS; i++)
+        if (ic_present[i] && ic_x[i] < (unsigned char)(dx + dw) &&
+            (unsigned char)(ic_x[i] + IC_W) > dx &&
+            ic_y[i] < (unsigned char)(dy + dh) &&
+            (unsigned char)(ic_y[i] + IC_H) > dy)
+            draw_icon(i);
+    if (sel_idx != NONE && ic_present[sel_idx] &&
+        ic_x[sel_idx] < (unsigned char)(dx + dw) &&
+        (unsigned char)(ic_x[sel_idx] + IC_W) > dx &&
+        ic_y[sel_idx] < (unsigned char)(dy + dh) &&
+        (unsigned char)(ic_y[sel_idx] + IC_H) > dy)
+        gb_frame(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H, 3);
+#else
     wp_backdrop(0, 8, GB_COLS, GB_LINES - 8);                /* backdrop: wallpaper if loaded, else tile/solid (#128) */
     for (i = 0; i < N_ICONS; i++)
         if (ic_present[i]) draw_icon(i);
     if (sel_idx != NONE && ic_present[sel_idx])    /* red selection frame (#153) */
         gb_frame(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H, 3);
+#endif
     /* #153: do NOT show the cursor here. As the WM's bottom on_repaint, paint()
        runs FIRST in wm_repaint_all - any window drawn on top would overwrite the
        pointer while its save-under still held the backdrop, so a later move left a
@@ -1173,6 +1205,9 @@ static void open_accessory(unsigned char index)
                                         GB_SHELL_ACTIVATE);
     if (result != GB_SHELL_NOT_FOUND) return;
 #endif
+    /* No live endpoint: both the synchronous and deferred transports launch
+       the same packaged application.  Its startup registration makes later
+       Desk selections exact activations instead of duplicate instances. */
     if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
     else gb_wm_open(gb_desk_accessory_apps[index]);
 }
@@ -1390,6 +1425,12 @@ void main(void)
     *WM_FS = 0;                                 /* clear the fullscreen flag at boot (low RAM is
                                                    uninitialised; bar_draw reads it every frame) */
     WM_OPEN_STRICT = 0;
+#if defined(GB_PREEMPTIVE) && !defined(GB_CPC)
+    /* MSX installs its app-carried fixed-RAM runtime before the first service.
+       The CPC kernel already loaded the same scheduler/compositor contract at
+       boot, before this application was admitted. */
+    gb_task_root_init();
+#endif
     chrome_init();                              /* install configured .TBR/.GDT before windows */
     drive_poll();                               /* drives present at boot -> icons (#65) */
 #ifdef GB_PCW
@@ -1413,9 +1454,6 @@ void main(void)
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;
-#ifdef GB_PREEMPTIVE
-    gb_task_root_init();                         /* install app-carried fixed-RAM scheduler */
-#endif
 #ifdef GEMBENCH_BASELINE
     BASELINE_PHASE = 0;
     BASELINE_STACK_MAX = 0;

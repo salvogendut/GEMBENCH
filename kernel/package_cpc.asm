@@ -41,6 +41,8 @@ font_img        incbin "../build/cpc/DEFAULT.FNT"
 font_img_e
 icons_img       incbin "../build/cpc/DEFAULT.IST"
 icons_img_e
+refined_img     incbin "../build/cpc/REFINED.IST"
+refined_img_e
 splash_img      incbin "../build/cpc/SPLASH.BIN"
 splash_img_e
 config_img      incbin "../build/cpc/GEOBENCH.CFG"
@@ -51,6 +53,7 @@ config_img_e
                 save  "GBTITLE.MOD",title_img,title_img_e-title_img,DSK,"../build/cpc/GEOBENCH.DSK"
                 save  "DEFAULT.FNT",font_img,font_img_e-font_img,DSK,"../build/cpc/GEOBENCH.DSK"
                 save  "DEFAULT.IST",icons_img,icons_img_e-icons_img,DSK,"../build/cpc/GEOBENCH.DSK"
+                save  "REFINED.IST",refined_img,refined_img_e-refined_img,DSK,"../build/cpc/GEOBENCH.DSK"
                 save  "SPLASH.MOD",splash_img,splash_img_e-splash_img,DSK,"../build/cpc/GEOBENCH.DSK"
                 save  "GEOBENCH.CFG",config_img,config_img_e-config_img,DSK,"../build/cpc/GEOBENCH.DSK"
 
@@ -62,7 +65,10 @@ config_img_e
                 org   #0100
 gate_img        incbin "../build/cpc/GBAPV4.RAW"
 gate_img_e
+scheduler_img   incbin "../build/cpc/GBSCHED.RAW"
+scheduler_img_e
                 save  "GBAPV4.MOD",gate_img,gate_img_e-gate_img,DSK,"../build/cpc/GEOBENCH.DSK"
+                save  "GBSCHED.MOD",scheduler_img,scheduler_img_e-scheduler_img,DSK,"../build/cpc/GEOBENCH.DSK"
                 edsk  putfile,"../build/cpc/GEOBENCH.DSK","../build/cpc/DEFAULT.SPR","DEFAULT.SPR"
                 endif
 
@@ -71,4 +77,11 @@ gate_img_e
 drag_img        incbin "../build/cpc/GBDRAG.RAW"
 drag_img_e
                 save  "GBDRAG.MOD",drag_img,drag_img_e-drag_img,DSK,"../build/cpc/GEOBENCH.DSK"
+                endif
+
+                if PACKAGE_PASS==6
+                org   #0100
+ui_img          incbin "../build/GBUI.RAW"
+ui_img_e
+                save  "GBUI.MOD",ui_img,ui_img_e-ui_img,DSK,"../build/cpc/GEOBENCH.DSK"
                 endif

@@ -410,7 +410,11 @@ FSV_TX_RES      equ   #170D
 FSV_TX_UNIT     equ   #170F
 FSV_TX_DATA     equ   #2200
                 if PREEMPTIVE
+                ifdef PLATFORM_CPC
+FSV_TX_MAX      equ   #0E00        ; CPC scheduler/services occupy #3000..#3DFF
+                else
 FSV_TX_MAX      equ   #1A00        ; 6.5 KiB cap; #3C00..#3DFF is scheduler RAM
+                endif
                 else
                 ifdef PLATFORM_CPC
 FSV_TX_MAX      equ   #1A00        ; CPC v6 architecture state occupies #3C00..#3DFF

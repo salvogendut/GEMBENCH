@@ -7,18 +7,19 @@
   "required_capabilities": [
     "windows",
     "events",
-    "shell",
     "owner-identity",
     "runtime-video",
     "applications",
     "multi-window",
-    "deferred-messages",
     "universal-loader",
     "runtime-geometry",
     "portable-drawing",
     "portable-input"
   ],
-  "optional_capabilities": [],
+  "optional_capabilities": [
+    "shell",
+    "deferred-messages"
+  ],
   "service_id": 2,
   "lifecycle": ["windowed", "accessory"],
   "minimum_pages": 1,

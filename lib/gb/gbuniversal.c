@@ -9,8 +9,8 @@
 #define U_DROP_CLAIM (*(volatile unsigned char *)0x142Fu)
 #define U_LINE       ((volatile unsigned char *)0xC030u)
 #define U_TEXT       ((volatile unsigned char *)0xC039u)
-#define U_TIMER_DROP (*(volatile unsigned char *)0xC1ECu)
-#define U_TIMER      ((volatile unsigned char *)0xC3CAu)
+#define U_TIMER_DROP (*(volatile unsigned char *)0x3FF8u)
+#define U_TIMER      ((volatile unsigned char *)0x3FF9u)
 
 void gb_line_exec(void);
 void gb_text_semantic_exec(void);
@@ -179,24 +179,37 @@ static void put_word(volatile unsigned char *out, unsigned int value)
 void gb_line(unsigned int x0, unsigned int y0,
              unsigned int x1, unsigned int y1, unsigned char pen)
 {
+    unsigned char i;
+    unsigned char saved[9];
+    /* The inherited MSX marshal cells are ordinary fixed RAM there but map to
+     * CPC video RAM.  Preserve those pixels around the synchronous kernel call
+     * so a compile-once line cannot punch holes in the desktop top bar. */
+    for (i = 0u; i != sizeof(saved); ++i) saved[i] = U_LINE[i];
     put_word(U_LINE + 0, x0);
     put_word(U_LINE + 2, y0);
     put_word(U_LINE + 4, x1);
     put_word(U_LINE + 6, y1);
     U_LINE[8] = (unsigned char)(pen & 3u);
     gb_line_exec();
+    for (i = 0u; i != sizeof(saved); ++i) U_LINE[i] = saved[i];
 }
 
 void gb_text_semantic(unsigned char x, unsigned char y, const char *text,
                       unsigned char pen, unsigned char paper)
 {
+    unsigned char i;
+    unsigned char saved[6];
     unsigned int pointer = (unsigned int)text;
+    /* U_TEXT immediately follows U_LINE in the same inherited MSX block and
+     * therefore needs the same CPC framebuffer protection. */
+    for (i = 0u; i != sizeof(saved); ++i) saved[i] = U_TEXT[i];
     U_TEXT[0] = x;
     U_TEXT[1] = y;
     U_TEXT[2] = (unsigned char)(pen & 3u);
     U_TEXT[3] = (unsigned char)(paper & 3u);
     put_word(U_TEXT + 4, pointer);
     gb_text_semantic_exec();
+    for (i = 0u; i != sizeof(saved); ++i) U_TEXT[i] = saved[i];
 }
 
 unsigned char gb_timer_damage_for(gb_window_t window, unsigned char x,

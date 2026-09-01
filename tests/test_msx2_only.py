@@ -39,7 +39,9 @@ class ActiveTargetTests(unittest.TestCase):
         scheduler_builder = (ROOT / "tools/build_scheduler.sh").read_text()
         kernel = (ROOT / "kernel/gbkern.asm").read_text()
         self.assertIn("-DGB_MSX2 or -DGB_CPC", app_builder)
-        self.assertIn('if [ "$target" != msx ]', scheduler_builder)
+        self.assertIn('msx)', scheduler_builder)
+        self.assertIn('cpc)', scheduler_builder)
+        self.assertIn('usage: $0 [msx|cpc]', scheduler_builder)
         self.assertIn("no longer builds a PCW target", kernel)
 
     def test_policy_records_the_cpc_gate_and_archival_branch(self) -> None:

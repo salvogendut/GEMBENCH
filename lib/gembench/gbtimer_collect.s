@@ -7,10 +7,10 @@
         .module gbtimer_collect
         .globl  _gb_timer_collect
 
-GB_TIMER_OWNER   = 0xC3CA
-GB_TIMER_RECT    = 0xC3CB
-GB_TIMER_GEN     = 0xC3CF
-GB_TIMER_DROPPED = 0xC1EC
+GB_TIMER_OWNER   = 0x3FF9
+GB_TIMER_RECT    = 0x3FFA
+GB_TIMER_GEN     = 0x3FFE
+GB_TIMER_DROPPED = 0x3FF8
 WM_FULLSCREEN   = 0x130A
 MSX_WIN_OWNER   = 0xC2D0
 MSX_WIN_GEN     = 0xC358

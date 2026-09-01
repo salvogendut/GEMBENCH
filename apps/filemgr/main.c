@@ -116,6 +116,23 @@ static char msx_drive_title[7] = "Disk A";
 #endif
 static unsigned char free_known;
 static unsigned int free_kib;
+#ifdef GB_CPC
+#define FM_CLIP_X (*(volatile unsigned char *)0x1338)
+#define FM_CLIP_Y (*(volatile unsigned char *)0x1339)
+#define FM_CLIP_W (*(volatile unsigned char *)0x133A)
+#define FM_CLIP_H (*(volatile unsigned char *)0x133B)
+static unsigned char damage_paint;
+
+static unsigned char damage_hits(unsigned char x, unsigned char y,
+                                 unsigned char w, unsigned char h)
+{
+    if (!damage_paint) return 1;
+    return (unsigned char)(x < (unsigned char)(FM_CLIP_X + FM_CLIP_W) &&
+        (unsigned char)(x + w) > FM_CLIP_X &&
+        y < (unsigned char)(FM_CLIP_Y + FM_CLIP_H) &&
+        (unsigned char)(y + h) > FM_CLIP_Y);
+}
+#endif
 #ifndef GB_PREEMPTIVE
 static unsigned int appicon_off;
 static unsigned char appicon_codec;
@@ -701,6 +718,17 @@ static void draw_entry_type(unsigned char raw, unsigned char x, unsigned char y,
     else      gb_icon(slot, x, y);
 #else
     unsigned char *bitmap;
+#ifdef GB_CPC
+    /* A compositor damage pass must remain storage-free. This covers UNKNOWN
+       as well as EMBEDDED: probing either state can enter the disk backend
+       while the pointer is hidden and the lower stack has already been
+       cleared. The next normal File Manager paint restores the custom icon. */
+    if (damage_paint && slot == ICON_APP) {
+        if (half) gb_icon_half(slot, x, y);
+        else      gb_icon(slot, x, y);
+        return;
+    }
+#endif
     if (slot == ICON_APP && (state & (APPICON_UNKNOWN | APPICON_EMBEDDED))) {
         if (appicon_load(raw)) {
             icons[raw] = (unsigned char)(APPICON_EMBEDDED | ICON_APP);
@@ -865,6 +893,9 @@ static void draw_list_view(void)
     for (i = 0; i < LVIS; i++) {                   /* draw from the sorted cache (#118) */
         p = (unsigned char)(top + i);
         y = CT_Y + i * ROW_H;
+#ifdef GB_CPC
+        if (!damage_hits(CT_X, y, CT_W, ROW_H)) continue;
+#endif
         gb_fill(CT_X, y, CT_W, ROW_H, 0);          /* clear stale rows/icons after scroll/repaint */
         if (p >= dt) continue;
         if (up && p == 0) {                        /* the ".." parent-dir entry (#142) */
@@ -895,6 +926,13 @@ static void draw_icons_view(void)
     for (r = 0; r < IVIS; r++) {
         cx = CT_X;
         for (c = 0; c < ICOLS; c++) {
+#ifdef GB_CPC
+            if (!damage_hits(cx, cy, cell_w, CELL_H - 1)) {
+                idx++;
+                cx = (unsigned char)(cx + cell_w);
+                continue;
+            }
+#endif
             gb_fill(cx, cy, cell_w, CELL_H - 1, 0);             /* clear whole cell before repaint */
             if (idx < dt) {
                 if (up && idx == 0) {                            /* the ".." entry (#142) */
@@ -954,6 +992,11 @@ static void draw_body(void)
    to refresh the listing without a full-stack repaint or a title change. */
 static void draw(void)
 {
+#ifdef GB_CPC
+    damage_paint = (unsigned char)!(FM_CLIP_X <= win_x && FM_CLIP_Y <= win_y &&
+        (unsigned char)(FM_CLIP_X + FM_CLIP_W) >= (unsigned char)(win_x + win_w) &&
+        (unsigned char)(FM_CLIP_Y + FM_CLIP_H) >= (unsigned char)(win_y + win_h));
+#endif
     gb_curhide();
     draw_body();
     gb_curshow();

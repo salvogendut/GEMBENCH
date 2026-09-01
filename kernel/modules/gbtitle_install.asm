@@ -12,6 +12,9 @@ DATA_GADGET_SIZE equ  50
 TITLE_READY     equ   #124F
 TITLE_VALID     equ   #1710
 TITLE_XFER      equ   #2200
+                ifndef PREEMPTIVE
+PREEMPTIVE      equ   0
+                endif
 
                 org   DATA_MODTOP
 gbtitle_install
@@ -83,10 +86,24 @@ gti_low         ld    a,(gti_spread)
 gti_ready
                 ld    a,1
                 ld    (TITLE_READY),a
+                ifdef CPC_SERVICES
+                ld    hl,cpc_service_payload
+                if PREEMPTIVE
+                ld    de,#3F00
+                else
+                ld    de,#3D00
+                endif
+                ld    bc,cpc_service_payload_e-cpc_service_payload
+                ldir
+                endif
                 ret
 
 gbtitle_payload incbin "../../build/GBTITLE.PAY"
 gbtitle_payload_e
+                ifdef CPC_SERVICES
+cpc_service_payload incbin "../../build/cpc/GBCPCSVC.RAW"
+cpc_service_payload_e
+                endif
 
                 ifdef TITLE_NATIVE
                 align 256

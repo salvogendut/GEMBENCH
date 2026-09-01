@@ -8,6 +8,13 @@ GBAP4_GATE_BASE        equ #2200
 GBAP4_GATE_LIMIT       equ #2700
 GBAP4_GATE_SIZE        equ 1201
 GBAP4_SYSINFO_SIZE     equ 48
+                ifndef PREEMPTIVE
+PREEMPTIVE             equ 0
+                endif
+                if PREEMPTIVE
+GBAP4_PAGE_FREE        equ #3E0E
+                else
 GBAP4_PAGE_FREE        equ #3C0E
+                endif
 
                 include "gbap4_gate_core.asm"

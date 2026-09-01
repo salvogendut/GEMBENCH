@@ -19,9 +19,14 @@ def main() -> None:
         raise SystemExit(f"empty scheduler payload: {args.payload}")
     if not 0 <= args.base <= 0xFFFF:
         raise SystemExit("scheduler base must fit in 16 bits")
-    # CPC/PCW builders retain their 512-byte fixed slot. MSX2 M9's distinct
-    # page-3 base identifies its 1.5 KiB scheduler/visibility-compositor slot.
-    limit = 1536 if args.base == 0xC900 else 512
+    # CPC also carries the target adapter for the shared owner/shell/deferred
+    # contract. MSX2 keeps those services resident in its fixed page-3 kernel.
+    if args.base == 0x3000:
+        limit = 3584
+    elif args.base == 0xC900:
+        limit = 1536
+    else:
+        limit = 512
     if len(data) > limit:
         raise SystemExit(
             f"scheduler payload is {len(data)} bytes; maximum is {limit}"

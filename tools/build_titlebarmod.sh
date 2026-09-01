@@ -41,8 +41,22 @@ for gdt in assets/gadgets/*.GDT; do
     cp "$gdt" "build/gadgets/$name"
 done
 rm -f build/GBTITLE.PAY build/GBTITLE.RAW build/msx/GBTITLE.RAW
-"$RASM" kernel/modules/gbtitle.asm
-"$RASM" kernel/modules/gbtitle_install.asm
+cpc_args=()
+title_args=()
+if [ "${CPC_PREEMPTIVE:-0}" = 1 ]; then
+    cpc_args+=(-DPREEMPTIVE=1)
+    title_args+=(-DPREEMPTIVE=1)
+fi
+if [ "${CPC_SERVICES:-0}" = 1 ]; then
+    [ -s build/cpc/GBCPCSVC.RAW ] || {
+        echo "ERROR: CPC_SERVICES=1 requires build/cpc/GBCPCSVC.RAW" >&2
+        exit 1
+    }
+    cpc_args+=(-DCPC_SERVICES=1 -DPREEMPTIVE=1)
+    title_args+=(-DPREEMPTIVE=1)
+fi
+"$RASM" kernel/modules/gbtitle.asm "${title_args[@]}"
+"$RASM" kernel/modules/gbtitle_install.asm "${cpc_args[@]}"
 "$RASM" kernel/modules/gbtitle_install.asm -DPLATFORM_MSX=1 -DTITLE_NATIVE=1
 for module in build/GBTITLE.RAW build/msx/GBTITLE.RAW; do
     [ -s "$module" ] || { echo "ERROR: $module not produced" >&2; exit 1; }

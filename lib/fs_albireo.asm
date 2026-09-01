@@ -466,7 +466,11 @@ ALBSV_TX_UNIT   equ   #170F
 ALBSV_TX_PATH   equ   #1710
 ALBSV_TX_DATA   equ   #2200
                 if PREEMPTIVE
+                ifdef PLATFORM_CPC
+ALBSV_TX_MAX    equ   #0E00        ; CPC scheduler/services occupy #3000..#3DFF
+                else
 ALBSV_TX_MAX    equ   #1A00
+                endif
                 else
                 ifdef PLATFORM_CPC
 ALBSV_TX_MAX    equ   #1A00

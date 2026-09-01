@@ -1,10 +1,9 @@
 ; Standalone fixed-RAM scheduler payload for issue #477.
 
-                ifdef PLATFORM_PCW
-                assert 0,"GEOBENCH only builds the MSX2 scheduler"
-                endif
                 ifndef PLATFORM_MSX
+                ifndef PLATFORM_CPC
 PLATFORM_MSX    equ   1
+                endif
                 endif
 
 PREEMPTIVE      equ   1
@@ -16,8 +15,15 @@ PREEMPTIVE_TIMER equ  1
 PREEMPTIVE_SWITCH equ 1
                 endif
 
+                ifdef PLATFORM_MSX
                 include "../lib/msx/glue.inc"
+                endif
+                include "../lib/gbapp.inc"
                 include "lowram.inc"
                 include "scheduler.asm"
 
+                ifdef PLATFORM_MSX
                 save  "build/msx/GBSCHED.RAW",SCHED_BASE,sched_image_end-SCHED_BASE
+                else
+                save  "build/cpc/GBSCHED.RAW",SCHED_BASE,sched_image_end-SCHED_BASE
+                endif

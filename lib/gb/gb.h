@@ -828,8 +828,8 @@ void gb_copy_end(void);
  * input / no gb_poll); use change-detection to avoid a wasteful per-frame repaint. */
 void gb_on_bar(void (*handler)(void));
 
-/* Development preemption runtime. TASK_ROOT=1 links the scheduler payload into
- * the desktop; this installs it in fixed RAM without a ROM or external module. */
+/* Development preemption runtime. TASK_ROOT=1 links the MSX scheduler payload
+ * into the desktop; CPC installs the same runtime as a kernel-owned module. */
 void gb_task_root_init(void);
 
 /* Shared TCP API (build_capp NET=1). CPC calls the active GBNET/GBNETM4 paged

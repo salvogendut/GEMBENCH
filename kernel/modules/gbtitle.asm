@@ -27,6 +27,15 @@ FB_X            equ   #14B8
 FB_Y            equ   #14B9
 FB_W            equ   #14BA
 FB_H            equ   #14BB
+WM_FOCUS        equ   #1351
+                ifndef PREEMPTIVE
+PREEMPTIVE      equ   0
+                endif
+                if PREEMPTIVE
+CPC_WIN_KIND    equ   #3EB8
+                else
+CPC_WIN_KIND    equ   #3CB8
+                endif
 
                 org   DATA_TITLE
 gbtitle_tile    incbin "../../build/TITLEBAR.TBR"
@@ -34,6 +43,12 @@ gbtitle_tile    incbin "../../build/TITLEBAR.TBR"
 
 gbtitle_entry
                 assert gbtitle_entry==DATA_TITLE_RUN,"GBTITLE CPC entry moved"
+                ld    a,(FB_X)
+                ld    (tb_win_x),a
+                ld    a,(FB_Y)
+                ld    (tb_win_y),a
+                ld    a,(FB_W)
+                ld    (tb_win_w),a
                 call  tb_clip
                 ret   c
                 ld    a,(FBW_H)
@@ -92,6 +107,86 @@ tb_no_wrap
                 dec   a
                 ld    (FB_ROWS),a
                 jr    nz,tb_row
+                ld    hl,DATA_TITLE+56       ; themed close gadget: 2 bytes x 10 lines
+                ld    a,(tb_win_x)
+                inc   a
+                ld    (FB_X),a
+                ld    a,(tb_win_y)
+                add   a,2
+                ld    (FB_Y),a
+                ld    a,2
+                ld    (FB_W),a
+                ld    a,10
+                ld    (FB_H),a
+                call  tb_gadget
+
+                ld    a,(WM_FOCUS)           ; explicit kinds may omit maximize
+                add   a,CPC_WIN_KIND & #FF
+                ld    l,a
+                ld    h,CPC_WIN_KIND >> 8
+                bit   2,(hl)
+                ret   z
+                                                ; themed maximize gadget: 3 bytes x 10 lines
+                ld    a,(tb_win_x)
+                ld    hl,tb_win_w
+                add   a,(hl)
+                sub   4
+                ld    (FB_X),a
+                ld    a,3
+                ld    (FB_W),a
+                ld    hl,DATA_TITLE+76
+
+; Draw a compact native CPC gadget from HL, clipped against the compositor's
+; active damage rectangle. The theme stores rows contiguously at FB_W bytes.
+tb_gadget
+                ld    (tb_src),hl
+                call  tb_clip
+                ret   c
+                ld    a,(FBW_H)
+                ld    (FB_ROWS),a
+                ld    a,(FBW_Y)
+                ld    (FB_CY),a
+tb_gadget_row
+                ld    a,(FBW_X)
+                ld    d,a
+                ld    a,(FB_CY)
+                ld    e,a
+                call  tb_scr_addr
+                push  hl                     ; screen destination
+
+                ld    a,(FB_CY)              ; source row * native gadget width
+                ld    hl,FB_Y
+                sub   (hl)
+                ld    e,a
+                add   a,a
+                ld    d,a                    ; 2 * row
+                ld    a,(FB_W)
+                cp    2
+                ld    a,d
+                jr    z,tb_gadget_row_offset
+                add   a,e                    ; 3 * row
+tb_gadget_row_offset
+                ld    e,a
+                ld    a,(FBW_X)              ; plus horizontal clipping offset
+                ld    hl,FB_X
+                sub   (hl)
+                add   a,e
+                ld    e,a
+                ld    d,0
+                ld    hl,(tb_src)
+                add   hl,de
+                pop   de                     ; DE = screen destination
+                ld    a,(FBW_W)
+                ld    c,a
+                ld    b,0
+                ldir
+                ld    a,(FB_CY)
+                inc   a
+                ld    (FB_CY),a
+                ld    a,(FB_ROWS)
+                dec   a
+                ld    (FB_ROWS),a
+                jr    nz,tb_gadget_row
                 ret
 
 ; D = byte column, E = line -> HL = CPC Mode-1 screen address.
@@ -190,7 +285,11 @@ tbc_empty      scf
                 ret
 
 tb_off         db    0
+tb_win_x       db    0
+tb_win_y       db    0
+tb_win_w       db    0
+tb_src         dw    0
 gbtitle_end
 
-                assert gbtitle_end-DATA_TITLE<=384,"GBTITLE payload exceeds reserved PAGE_DATA slot"
+                assert gbtitle_end-DATA_TITLE<=512,"GBTITLE payload exceeds reserved PAGE_DATA slot"
                 save  "build/GBTITLE.PAY",DATA_TITLE,gbtitle_end-DATA_TITLE

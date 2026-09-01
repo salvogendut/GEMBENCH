@@ -13,7 +13,7 @@
 GB_SCRAP_TYPE   = 0x133D
 GB_CLIP_LEN     = 0x3E00
 GB_CLIP_DATA    = 0x3E02
-GB_CLIP_CAP     = 0x01FE
+GB_CLIP_CAP     = 0x01F6
 
         .area _CODE
 

@@ -81,10 +81,10 @@ class BackgroundTimerTests(unittest.TestCase):
     def test_fixed_layout_and_build_guards(self) -> None:
         glue = (ROOT / "lib/msx/glue.inc").read_text()
         expected = {
-            "MSX_TIMER_OWNER": 0xC3CA,
-            "MSX_TIMER_RECT": 0xC3CB,
-            "MSX_TIMER_GEN": 0xC3CF,
-            "MSX_TIMER_DROPPED": 0xC1EC,
+            "MSX_TIMER_OWNER": 0x3FF9,
+            "MSX_TIMER_RECT": 0x3FFA,
+            "MSX_TIMER_GEN": 0x3FFE,
+            "MSX_TIMER_DROPPED": 0x3FF8,
         }
         for symbol, address in expected.items():
             match = re.search(rf"^{symbol}\s+equ\s+#([0-9A-Fa-f]+)",
@@ -95,8 +95,12 @@ class BackgroundTimerTests(unittest.TestCase):
         builder = (ROOT / "tools/build_capp.sh").read_text()
         self.assertIn('GB_TIMER=1 requires TASK=1', builder)
         self.assertIn('GB_TIMER_COLLECTOR=1 requires TASK_ROOT=1', builder)
-        self.assertIn('background application timers are currently MSX2-only',
+        self.assertIn('background application timers require the shared MSX2/CPC scheduler',
                       builder)
+
+        cpc_collector = (ROOT / "lib/gembench/gbtimer_collect_cpc.s").read_text()
+        self.assertIn("GB_TIMER_OWNER   = 0x3FF9", cpc_collector)
+        self.assertIn("GB_DAMAGE_VISIBLE = 0x3015", cpc_collector)
 
 
 if __name__ == "__main__":

@@ -88,6 +88,22 @@ wap_scan        ld    a,(hl)
                 xor   a                          ; none free
                 ret
 wap_take        ld    (hl),1                     ; mark busy
+                ifdef PLATFORM_CPC
+                ; Give every allocation (including an application code page) a
+                ; generation. GB_OWNER and GB_PAGE can then expose one shared
+                ; allocation identity, independent of focus or window count.
+                push  de
+                ld    a,(APP_NPAGES)
+                sub   b                          ; zero-based allocation index
+                ld    hl,CPC_PAGE_GEN
+                add   a,l
+                ld    l,a
+                inc   (hl)
+                jr    nz,wap_generation_ready
+                inc   (hl)                       ; generation zero is invalid
+wap_generation_ready
+                pop   de
+                endif
                 ld    a,(de)                      ; A = its port value
                 ret
 wm_free_page                                     ; A = port value to release

@@ -321,8 +321,8 @@ if [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] && [ "$GB_SHELL_CLIENT_FLAG" != "
 fi
 if [ "$GB_SHELL_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_TARGET_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_CLIENT_FLAG" = "1" ] || [ "$GB_SHELL_ACCESSORY_TARGET_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
-        *" -DGB_MSX2 "*) ;;
-        *) echo "ERROR: GEOBENCH shell services are MSX2-only" >&2; exit 1 ;;
+        *" -DGB_MSX2 "*|*" -DGB_CPC "*) ;;
+        *) echo "ERROR: GEOBENCH shell services require the MSX2/CPC shared runtime" >&2; exit 1 ;;
     esac
     ALL_APPDEFS="$ALL_APPDEFS -DGB_SHELL_SERVICES"
 fi
@@ -332,8 +332,8 @@ if [ "$GB_DEFER_FLAG" != "0" ] && [ "$GB_DEFER_FLAG" != "1" ]; then
 fi
 if [ "$GB_DEFER_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
-        *" -DGB_MSX2 "*) ;;
-        *) echo "ERROR: GB_DEFER=1 is currently MSX2-only" >&2; exit 1 ;;
+        *" -DGB_MSX2 "*|*" -DGB_CPC "*) ;;
+        *) echo "ERROR: GB_DEFER=1 requires the MSX2/CPC shared runtime" >&2; exit 1 ;;
     esac
     ALL_APPDEFS="$ALL_APPDEFS -DGB_DEFER_MESSAGES"
 fi
@@ -371,8 +371,8 @@ for timer_flag in "$GB_TIMER_FLAG" "$GB_TIMER_COLLECTOR_FLAG"; do
 done
 if [ "$GB_TIMER_FLAG" = "1" ] || [ "$GB_TIMER_COLLECTOR_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
-        *" -DGB_MSX2 "*) ;;
-        *) echo "ERROR: background application timers are currently MSX2-only" >&2; exit 1 ;;
+        *" -DGB_MSX2 "*|*" -DGB_CPC "*) ;;
+        *) echo "ERROR: background application timers require the shared MSX2/CPC scheduler" >&2; exit 1 ;;
     esac
 fi
 if [ "$GB_TIMER_FLAG" = "1" ] && [ "$TASK_FLAG" != "1" ]; then
@@ -380,8 +380,10 @@ if [ "$GB_TIMER_FLAG" = "1" ] && [ "$TASK_FLAG" != "1" ]; then
     exit 1
 fi
 if [ "$GB_TIMER_COLLECTOR_FLAG" = "1" ] && [ "$TASK_ROOT_FLAG" != "1" ]; then
-    echo "ERROR: GB_TIMER_COLLECTOR=1 requires TASK_ROOT=1" >&2
-    exit 1
+    case " $ALL_APPDEFS " in
+        *" -DGB_CPC "*) ;; # CPC kernel installs the external shared runtime
+        *) echo "ERROR: GB_TIMER_COLLECTOR=1 requires TASK_ROOT=1" >&2; exit 1 ;;
+    esac
 fi
 if [ "$GBR_BANKED_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
@@ -601,7 +603,11 @@ if [ "$GB_TIMER_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbtimer.h" "$GBR_LIB/gbtimer_damage.s")
 fi
 if [ "$GB_TIMER_COLLECTOR_FLAG" = "1" ]; then
-    deps+=("$GBR_INCLUDE/gbtimer.h" "$GBR_LIB/gbtimer_collect.s")
+    case " $ALL_APPDEFS " in
+        *" -DGB_CPC "*) TIMER_COLLECT_SRC="$GBR_LIB/gbtimer_collect_cpc.s" ;;
+        *)              TIMER_COLLECT_SRC="$GBR_LIB/gbtimer_collect.s" ;;
+    esac
+    deps+=("$GBR_INCLUDE/gbtimer.h" "$TIMER_COLLECT_SRC")
 fi
 
 stamp="$OUT.stamp"
@@ -760,7 +766,7 @@ if [ "$GB_TIMER_FLAG" = "1" ]; then
     TIMER_REL="$TIMER_REL $work/gbtimer_damage.rel"
 fi
 if [ "$GB_TIMER_COLLECTOR_FLAG" = "1" ]; then
-    "$SDAS" -o "$work/gbtimer_collect.rel" "$GBR_LIB/gbtimer_collect.s"
+    "$SDAS" -o "$work/gbtimer_collect.rel" "$TIMER_COLLECT_SRC"
     TIMER_REL="$TIMER_REL $work/gbtimer_collect.rel"
 fi
 if [ "$GB_SERVICE_PROVIDER_FLAG" = "1" ]; then
@@ -784,6 +790,7 @@ TASK_ROOT_REL=""
 if [ "$TASK_ROOT_FLAG" = "1" ]; then
     case " $ALL_APPDEFS " in
         *" -DGB_MSX2 "*) TASK_RUNTIME_BASE=0xC900 ;;
+        *" -DGB_CPC "*)  TASK_RUNTIME_BASE=0x3000 ;;
         *)               TASK_RUNTIME_BASE=0x3C00 ;;
     esac
     python3 tools/embed_scheduler.py "$TASK_RUNTIME_RAW" "$work/gbtaskroot.s" \

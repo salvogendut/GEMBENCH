@@ -6,9 +6,9 @@
         .module gbtimer_damage
         .globl  _gb_timer_damage
 
-GB_TIMER_OWNER   = 0xC3CA
-GB_TIMER_RECT    = 0xC3CB
-GB_TIMER_GEN     = 0xC3CF
+GB_TIMER_OWNER   = 0x3FF9
+GB_TIMER_RECT    = 0x3FFA
+GB_TIMER_GEN     = 0x3FFE
 WM_FULLSCREEN   = 0x130A
 SCHED_CURRENT    = 0x1342
 MSX_WIN_GEN      = 0xC358

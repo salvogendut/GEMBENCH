@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the MSX2 app-carried fixed-RAM scheduler payload.
+# Build the target's fixed-RAM scheduler payload.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -22,14 +22,22 @@ if [ "$GEMBENCH_BASELINE" != 0 ] && [ "$GEMBENCH_BASELINE" != 1 ]; then
     exit 2
 fi
 
-if [ "$target" != msx ]; then
-    echo "usage: $0 [msx]" >&2
-    echo "GEOBENCH only builds the MSX2 scheduler" >&2
-    exit 2
-fi
-out="build/msx/GBSCHED.RAW"
-defs=(-DPLATFORM_MSX=1)
-limit=1536
+case "$target" in
+    msx)
+        out="build/msx/GBSCHED.RAW"
+        defs=(-DPLATFORM_MSX=1)
+        limit=1536
+        ;;
+    cpc)
+        out="build/cpc/GBSCHED.RAW"
+        defs=(-DPLATFORM_CPC=1)
+        limit=3584
+        ;;
+    *)
+        echo "usage: $0 [msx|cpc]" >&2
+        exit 2
+        ;;
+esac
 
 mkdir -p "$(dirname "$out")"
 rm -f "$out"
@@ -47,4 +55,4 @@ if (( size > limit )); then
     echo "ERROR: $target scheduler is $size bytes; fixed slot is $limit bytes" >&2
     exit 1
 fi
-echo "Built $out ($size/$limit bytes, app-carried fixed-RAM scheduler)"
+echo "Built $out ($size/$limit bytes, fixed-RAM scheduler)"

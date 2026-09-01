@@ -90,7 +90,7 @@ MSX_REGION_WORKER_SLOT equ #C1E4
 MSX_REGION_OWNER_MAX equ #C1E5
 MSX_REGION_SLOT_SCAN equ #C1E6
 MSX_COMPOSITOR_DAMAGE equ #C1E8     ; immutable source damage for every z layer
-MSX_TIMER_DROPPED    equ #C1EC       ; slot+1 whose component damage was fully occluded
+MSX_TIMER_DROPPED    equ #3FF8       ; target-neutral dropped-component acknowledgement
 MSX_COMPOSITOR_EXTRA equ #C1ED       ; old window rect pending after an exact move
 MSX_COMPOSITOR_EXTRA_PENDING equ #C1F1 ; nonzero until the next compositor prepare
 MSX_COMPOSITOR_EXTRA_ACTIVE equ #C1F2  ; immutable flag for the current z pass
@@ -217,9 +217,9 @@ MSX_DEFER_ACTIVATE   equ #C3C9       ; deferred focus request, #FF means none
 ; application worker writes x/y/w/h plus its window generation, then publishes
 ; owner slot+1 last. The Desktop validates that identity before calling the
 ; ordinary compositor, so close/reuse cannot repaint for a stale worker.
-MSX_TIMER_OWNER      equ #C3CA       ; 0 empty, 1..8 pending, #81..#88 active source
-MSX_TIMER_RECT       equ #C3CB       ; x, y, w, h
-MSX_TIMER_GEN        equ #C3CF       ; generation of MSX_TIMER_OWNER
+MSX_TIMER_OWNER      equ #3FF9       ; 0 empty, 1..8 pending, #81..#88 active source
+MSX_TIMER_RECT       equ #3FFA       ; x, y, w, h
+MSX_TIMER_GEN        equ #3FFE       ; generation of MSX_TIMER_OWNER
 
 ; Architecture milestone 4 (#37): fixed marshalling, four owner-safe filesystem
 ; contexts and a private snapshot of the MSX-DOS directory FIB. GBFSCTX.MOD is

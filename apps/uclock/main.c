@@ -400,6 +400,10 @@ void main(void)
     gb_menu(clock_menu);
     (void)gb_shell_register_accessory(ACCESSORY_ID);
     (void)gb_defer_register(window_proc);
-    gb_restore_parent();
+    /* Register while the new window's data page is unquestionably current.
+       An M4 load can finish with a repaint-backed storage page as the kernel's
+       previous bank; the worker service maps by owner, but registration before
+       the first compositor pass also makes the lifecycle ordering explicit. */
     gb_task_enable();
+    gb_restore_parent();
 }

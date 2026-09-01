@@ -34,6 +34,12 @@ kernel_main
                 ld    a,(fs_boot_drive)      ; #134: on the card (drive 0), point the system dir
                 or    a                       ; at /GEOBENCH if present (else flat root); skip on
                 call  z,fs_sys_resolve       ; a floppy boot drive (no subdirectories)
+                ifdef PLATFORM_CPC
+                if PREEMPTIVE
+                call  cpc_scheduler_load     ; kernel-owned fixed runtime, before first service
+                jp    nc,km_finish            ; a missing/corrupt system module cannot boot safely
+                endif
+                endif
                 if SPIKE
                 ; #130 SPIKE harness (-DSPIKE=1): isolate the storage read - run the real
                 ; boot's pre-load setup, load DESKTOP.APP into a plain low buffer (no banking),
