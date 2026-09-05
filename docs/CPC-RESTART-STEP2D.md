@@ -110,10 +110,19 @@ expansion, Nextor/Sunrise IDE, private hard-disk diagnostic images and UNAPI off
 | Release universal Clock/Calculator accessories, Screen 6 and 7 | PASS: ten stacking checkpoints per run; Desk activation, menus/borders/text and close/relaunch; busy pages 4→3→4; final three windows, focus 1, stack-guard faults 0. |
 | Independent shared-policy assembly | PASS: six unittest methods, including subcases for low/high state (`2000`/`D800`), independent 16-byte records, 80×200 and 128×212 native geometry, deterministic output and invalid contract rejection. |
 | Existing geometry/source tests and corrected Clock harness | PASS: four compositor tests plus three Tcl predicate/dispatcher tests. |
+| Full `make check` in a clean worktree at `4e07980` | PASS, exit 0: all 101 discovered Python tests, plus the existing C/assembly runtime, universal SDK determinism, ABI/layout, asset/media and editor checks. |
 
 Independent providers are assembly fixtures, not executed CPC implementations.
 These regressions do not establish new multi-worker fairness or performance
 guarantees. No CPC emulator was run for this package.
+
+The full suite used `/tmp/geobench-71-check.MTcYgV`, with independent generated
+fixtures and no production build/media symlinks, through `my-distrobox` with
+`SDCC=/var/home/salvogendut/Dev/sdcc/bin/sdcc` and
+`SDAS=/var/home/salvogendut/Dev/sdcc/bin/sdasz80`. The log is
+`/tmp/geobench-71-make-check.log`. No check was relaxed for preserved, untracked
+workspace CPC QA artifacts; static MSX2 floppy-format audits do not boot an
+emulator and are unaffected by the CPC runtime storage rule.
 
 Reproduction (with matching MSX2 media and retained diagnostics built):
 
