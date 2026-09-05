@@ -135,5 +135,3 @@ static unsigned char gb_service_defer_status(unsigned char status)
         return GB_SERVICE_ERR_PROVIDER;
     return GB_SERVICE_ERR_BADARG;
 }
-
-

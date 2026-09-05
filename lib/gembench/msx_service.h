@@ -17,4 +17,3 @@
 #define GB_SERVICE_OWNER_MAX 8u
 #define GB_SERVICE_SCHED_CURRENT (*(volatile unsigned char *)GB_SERVICE_SCHED_ADDRESS)
 #endif
-

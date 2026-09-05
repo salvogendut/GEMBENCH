@@ -264,4 +264,3 @@ void main(void)
         default:              status(BADARG); break;
     }
 }
-

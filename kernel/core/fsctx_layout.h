@@ -44,4 +44,3 @@
 #define OP_ADOPT_LAUNCH  13u
 #define OP_DIR_BATCH     14u
 #endif
-
