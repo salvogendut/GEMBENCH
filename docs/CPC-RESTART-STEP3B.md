@@ -4,6 +4,10 @@ Date: 2026-09-05. Issue: [#66](https://github.com/salvogendut/GEMBENCH/issues/66
 following package 3A under [#65](https://github.com/salvogendut/GEMBENCH/issues/65).
 Branch: `feature/66-cpc-graphics-foundation`, based on `f3c779a`.
 
+Follow-up: [production ABI/SDK/MSX2 adoption](CPC-RESTART-STEP3B-ABI.md) is
+implemented and being validated under #67. The statements below describe the
+scope and results of the isolated #66 proof, not that later integration.
+
 The hardware/proposed-calling-boundary fixture is implemented. **Full step 3B
 is still open:** the public universal ABI, SDK and MSX2 runtime have not adopted
 this mechanism. No production code, application, capability or release media

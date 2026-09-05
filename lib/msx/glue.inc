@@ -51,6 +51,7 @@ GLINE_Y0        equ   #C032        ; (screen pixels, top-left origin) + pen byte
 GLINE_X1        equ   #C034        ; Page-3 cells so the clock's inline asm can fill
 GLINE_Y1        equ   #C036        ; them whatever segment its window has mapped.
 GLINE_PEN       equ   #C038
+MSX_TIMER_DROPPED_GEN equ #C03F     ; generation paired with legacy dropped slot
 MSX_ROWBUF      equ   #C080        ; 256-byte Screen-7 row buffer (#C080..#C17F)
 ; Milestone-7 GBR resource-segment request. Apps marshal only fixed-size values
 ; here; the resident service maps the resource, copies at most 32 bytes, and
@@ -175,9 +176,16 @@ MSX_SYS_RESERVED4   equ MSX_SYSINFO+47
 
 ; Gate-2 GBAP v4 validator. It is loaded from the project-owned GBAPV4.MOD at
 ; boot and executes from fixed page-3 RAM while an application page is mapped.
-MSX_GBAP4_GATE      equ #CF30
-MSX_GBAP4_GATE_LIMIT equ #D400
-MSX_GBAP4_GATE_SIZE equ 1201
+; Reuse child-COM storage only after boot has left it. This is never an IRQ
+; entry routine: BIOS interrupts restore DOS page 0 before returning here.
+; #CF30..#D3FF stays reserved; legacy fixed-RAM and stack bounds are unchanged.
+MSX_GBAP4_GATE      equ #0400
+MSX_GBAP4_GATE_LIMIT equ #1000
+MSX_GBAP4_GATE_SIZE equ 2079
+MSX_PARAMETER_ENTRY equ MSX_GBAP4_GATE+8
+MSX_MODULE_SYSINFO equ MSX_GBAP4_GATE+11
+MSX_MODULE_SYSINFO_QUERY equ MSX_GBAP4_GATE+14
+MSX_SYSINFO_LEGACY equ #0F00        ; ABI 2.0 CRT requires an exact minor=0 view
 
 ; Architecture milestone 2 (#32): the M1 owner identity is now the public
 ; handle of a real fixed-capacity application record. Window records retain

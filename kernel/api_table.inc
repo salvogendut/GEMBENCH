@@ -140,4 +140,5 @@ GB_ONEVENT_ENTRY equ k_noop
                 jp    k_app                  ; GB_APP         #80CC application/window lifecycle
                 jp    k_defer                ; GB_DEFER       #80CF bounded deferred app messages
                 jp    k_fsctx                ; GB_FSCTX       #80D2 explicit filesystem contexts
+                jp    MSX_PARAMETER_ENTRY    ; GB_PARAMS      #80D5 caller-owned universal parameters
                 endif

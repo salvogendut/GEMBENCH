@@ -1,6 +1,7 @@
 {
   "abi": "GEOBENCH-2",
   "status": "experimental",
+  "version": [2, 1],
   "issue": 55,
   "purpose": "One native Z80 application package for MSX2, CPC, and PCW",
   "inherits": {
@@ -141,7 +142,8 @@
       "portable-input": 524288,
       "portable-filesystem": 1048576,
       "package-resources": 2097152,
-      "background-timers": 4194304
+      "background-timers": 4194304,
+      "caller-parameters": 8388608
     }
   },
   "mailbox": {
@@ -154,12 +156,26 @@
       {"name": "drag-name", "address": 5155, "size": 11, "access": "drop-callback-read-only"},
       {"name": "drop-claim", "address": 5167, "size": 1, "access": "bit7-callback-read-write"},
       {"name": "managed-window-rect", "address": 5192, "size": 4, "access": "callback-scoped-read-only"}
-      ,
-      {"name": "line-command", "address": 49200, "size": 9, "access": "universal-libgb-write-before-GB_LINE"},
-      {"name": "semantic-text-command", "address": 49209, "size": 6, "access": "universal-libgb-write-before-GB_TEXT"},
-      {"name": "timer-dropped", "address": 49644, "size": 1, "access": "worker-read-clear"},
-      {"name": "timer-damage", "address": 50122, "size": 6, "access": "generation-tagged-publish-owner-last"}
     ]
+  },
+  "caller_parameters": {
+    "kernel_slot": 32981,
+    "version": 1,
+    "record_size": 16,
+    "registers": "HL=record in current primary, BC=16; A=status, E=boolean; other registers volatile; bank, SP, interrupt state and scheduler lock restored",
+    "fields": [
+      {"name": "operation", "offset": 0, "size": 1},
+      {"name": "version", "offset": 1, "size": 1},
+      {"name": "data", "offset": 2, "size": 14}
+    ],
+    "operations": {"line": 1, "text": 2, "timer-damage": 3, "timer-active": 4, "timer-dropped": 5, "timer-busy": 6, "timer-cancel": 7},
+    "statuses": {"ok": 0, "bad-argument": 1, "context": 2, "stale": 3, "owner": 4, "busy": 5, "unsupported": 6},
+    "line_data": "u16 x0,y0,x1,y1; u8 pen. Endpoints must be inside runtime geometry; pen 0..3.",
+    "text_data": "u8 column,line,pen,paper; u16 text_pointer; u8 length (0..48). Exactly length bytes copied, NUL-terminated privately before rendering; zero length does not dereference the pointer.",
+    "timer_data": "u16 window; damage additionally u8 x,y,w,h. Nonempty rectangle inside runtime geometry. Busy ignores data. Other operations require a live generation-tagged window owned by the mapped caller.",
+    "pointer_policy": "Entire record and nonempty text span must be within [0x4000,0x7F00), no wrap. Copy before banking; no retained pointers. Unused data bytes are ignored. SDK stages automatic stack records/text in app-primary storage under a critical section.",
+    "context_policy": "Root application callbacks may draw. Workers may only publish/query/cancel timer values; no rendering. Timers use the existing visible-damage collector and owner teardown, never a deferred pointer.",
+    "compatibility": "MSX2 continues accepting ABI 2.0 applications with their old private mailboxes. New SDK applications require ABI 2.1 and caller-parameters. Future CPC/PCW kernels must reject 2.0 packages that use the old framebuffer-aliasing convention; this revision alone does not claim those runtimes exist."
   },
   "jump_table": {
     "port_rule": "Every GEOBENCH-2 kernel exposes every inherited slot at the same address. Unsupported optional services use a typed failure stub and remain unadvertised.",
@@ -234,7 +250,8 @@
       {"name": "GB_PAGE", "address": 32969},
       {"name": "GB_APP", "address": 32972},
       {"name": "GB_DEFER", "address": 32975},
-      {"name": "GB_FSCTX", "address": 32978}
+      {"name": "GB_FSCTX", "address": 32978},
+      {"name": "GB_PARAMS", "address": 32981}
     ],
     "universal_source_forbidden_slots": [
       "GB_INIT",

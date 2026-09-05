@@ -114,7 +114,7 @@ def main() -> None:
     assert total == preamble_size
     assert len(resources) == 1 and resources[0]["codec"] == 1
     assert manifest["application_id"] == "ABIPROBE"
-    assert manifest["minimum_abi"] == (2, 0)
+    assert manifest["minimum_abi"] == (2, 1)
     assert manifest["minimum_sysinfo"] == (6, 48)
     assert manifest["entry_offset"] == preamble_size
     assert manifest["primary_image_size"] == len(package)
@@ -140,7 +140,13 @@ def main() -> None:
 
     manifest_offset = struct.unpack_from("<H", original, 14)[0]
     segment_offset = manifest_offset + MANIFEST4_SIZE
+    legacy = bytearray(original)
+    legacy[manifest_offset + 9] = 0
+    legacy[manifest_offset + 14] &= 0x7F
+    recalc_crc(legacy, manifest_offset)
+    assert parse_manifest(legacy)["minimum_abi"] == (2, 0)
     corruptions = (
+        (manifest_offset + 9, b"\x02", "future ABI minor"),
         (1, b"\x00", "outer entry"),
         (8, b"\x00", "resource count"),
         (manifest_offset + 6, b"\x02", "profile"),

@@ -180,8 +180,8 @@ gbap4_abi_ok:
         cp      #2
         jp      nz,gbap4_bad
         ld      a,(iy+45)
-        or      a
-        jp      nz,gbap4_bad
+        cp      #1                    ; ABI 2.1 or a compatible newer minor
+        jp      c,gbap4_bad
         ld      a,(iy+46)
         cp      #3
         jp      nz,gbap4_bad

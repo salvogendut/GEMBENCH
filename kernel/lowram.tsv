@@ -54,6 +54,7 @@ base          0x3900  0x3AE6  browser_shared_state    module_data   Browser/GBUI
 base          0x3C00  0x3DFF  scheduler_runtime       -             app-carried scheduler in preemptive CPC/PCW builds; cooperative builds reuse this range as transfer data
 base          0x3E00  0x3FFF  clipboard               -             shared clipboard length and data
 
+msx           0x0400  0x0FFF  msx_universal_module    -             GBAPV4 loader/parameter/init module; installed after leaving the child-COM image
 msx           0x1291  0x1295  msx_picture_state       msx_pic_cursor third/fourth picture banks, packing mode, and source stride
 msx           0x133D  0x133D  typed_scrap_tag         -             private type for the shared raw clipboard; GB_CLIPSET invalidates it
 msx           0x133E  0x133E  shell_dispatch_guard    -             nonzero only during synchronous Milestone-14 application delivery

@@ -161,7 +161,7 @@ def check_slots(authority: dict, errors: list[str]) -> None:
         if slot["name"] in names:
             errors.append(f"jump_table: duplicate slot {slot['name']}")
         names.add(slot["name"])
-    if slots[-1]["address"] != execution["kernel_table_last_v1_slot"]:
+    if slots[70]["address"] != execution["kernel_table_last_v1_slot"]:
         errors.append("execution.kernel_table_last_v1_slot does not match the slot list")
 
     table_slots = [
@@ -289,6 +289,12 @@ def main() -> int:
             )
 
     check_slots(authority, errors)
+    parameters = authority["caller_parameters"]
+    contiguous(parameters["fields"], parameters["record_size"], "parameters", errors)
+    if parameters["kernel_slot"] != authority["jump_table"]["slots"][-1]["address"]:
+        errors.append("caller_parameters does not identify the appended service")
+    if any(region["address"] >= 0xC000 for region in mailbox):
+        errors.append("universal mailboxes must not alias a CPC framebuffer")
     check_capabilities(authority, errors)
     check_target_layout(authority, errors)
 
@@ -298,7 +304,7 @@ def main() -> int:
             print(f"  {error}", file=sys.stderr)
         return 1
     print(
-        f"GEOBENCH-2 ABI design: {len(authority['jump_table']['slots'])} inherited slots, "
+        f"GEOBENCH-2 ABI design: {len(authority['jump_table']['slots'])} total slots, "
         f"{sysinfo['record_size']}-byte sysinfo v{sysinfo['record_version']}, "
         f"GBAP v{package['version']}: ok"
     )

@@ -49,9 +49,10 @@
 #define GB_CAP_PORTABLE_FS       0x00100000UL
 #define GB_CAP_PACKAGE_RESOURCES 0x00200000UL
 #define GB_CAP_BACKGROUND_TIMERS 0x00400000UL
+#define GB_CAP_CALLER_PARAMETERS 0x00800000UL
 
 #define GB_UNIVERSAL_ABI_MAJOR 2u
-#define GB_UNIVERSAL_ABI_MINOR 0u
+#define GB_UNIVERSAL_ABI_MINOR 1u
 #define GB_UNIVERSAL_SYSINFO_VERSION 6u
 #define GB_UNIVERSAL_SYSINFO_SIZE 48u
 #define GB_UNIVERSAL_PROFILE_NATIVE_Z80 3u
@@ -155,6 +156,35 @@ unsigned char gb_drop_is_claimed(void);
 void gb_window_rect(gb_rect_t *rect);
 
 /* Pixel-coordinate semantic line. The call completes before returning. */
+#define GB_PARAMS_SIZE 16u
+#define GB_PARAMS_VERSION 1u
+#define GB_PARAMS_LINE 1u
+#define GB_PARAMS_TEXT 2u
+#define GB_PARAMS_TIMER_DAMAGE 3u
+#define GB_PARAMS_TIMER_ACTIVE 4u
+#define GB_PARAMS_TIMER_DROPPED 5u
+#define GB_PARAMS_TIMER_BUSY 6u
+#define GB_PARAMS_TIMER_CANCEL 7u
+#define GB_PARAMS_OK 0u
+#define GB_PARAMS_BADARG 1u
+#define GB_PARAMS_CONTEXT 2u
+#define GB_PARAMS_STALE 3u
+#define GB_PARAMS_OWNER 4u
+#define GB_PARAMS_BUSY 5u
+#define GB_PARAMS_UNSUPPORTED 6u
+typedef struct {
+    unsigned char operation;
+    unsigned char version;
+    unsigned char data[14];
+} gb_params_t;
+typedef char gb_params_size_must_be_16[sizeof(gb_params_t) == 16 ? 1 : -1];
+
+/* Low-level ABI 2.1 call: record and pointed-to text must be in this app's
+ * primary page below 0x7F00, not on the kernel-owned stack. High result byte
+ * is GB_PARAMS_* status; low byte is a boolean. Prefer the typed wrappers,
+ * which safely stage automatic/stack data before entering this service. */
+unsigned int gb_parameters(const gb_params_t *request);
+
 void gb_line(unsigned int x0, unsigned int y0,
              unsigned int x1, unsigned int y1, unsigned char pen);
 void gb_text_semantic(unsigned char x, unsigned char y, const char *text,

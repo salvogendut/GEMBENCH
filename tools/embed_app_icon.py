@@ -85,7 +85,7 @@ PROFILE_UNIVERSAL_Z80 = 3
 UNIVERSAL_PLATFORM_MASK = PLATFORM_CPC | PLATFORM_MSX2 | PLATFORM_PCW
 UNIVERSAL_ABI_ID = b"GEOBNCH2"
 UNIVERSAL_ABI_MAJOR = 2
-UNIVERSAL_ABI_MINOR = 0
+UNIVERSAL_ABI_MINOR = 1
 UNIVERSAL_SYSINFO_VERSION = 6
 UNIVERSAL_SYSINFO_SIZE = 48
 UNIVERSAL_IMAGE_LIMIT = 0x7F00
@@ -130,6 +130,7 @@ CAPABILITIES_V4 = {
     "portable-filesystem": 0x00100000,
     "package-resources": 0x00200000,
     "background-timers": 0x00400000,
+    "caller-parameters": 0x00800000,
 }
 LIFECYCLE = {
     "windowed": 0x0001,
@@ -414,8 +415,8 @@ def _read_v4_manifest_spec(path):
                                              UNIVERSAL_ABI_MINOR])
     minimum_sysinfo = spec.get("minimum_sysinfo", [UNIVERSAL_SYSINFO_VERSION,
                                                      UNIVERSAL_SYSINFO_SIZE])
-    if minimum_abi != [UNIVERSAL_ABI_MAJOR, UNIVERSAL_ABI_MINOR]:
-        raise ValueError(f"{path}: GBAP v4 minimum_abi must be [2, 0]")
+    if minimum_abi not in ([2, 0], [2, 1]):
+        raise ValueError(f"{path}: GBAP v4 minimum_abi must be [2, 0] or [2, 1]")
     if minimum_sysinfo != [UNIVERSAL_SYSINFO_VERSION, UNIVERSAL_SYSINFO_SIZE]:
         raise ValueError(f"{path}: GBAP v4 minimum_sysinfo must be [6, 48]")
 
@@ -752,7 +753,7 @@ def _parse_v4_package(data):
             or block[6] != PROFILE_UNIVERSAL_Z80
             or block[7] != UNIVERSAL_PLATFORM_MASK):
         raise ValueError("invalid GBAP v4 manifest prefix")
-    if (tuple(block[8:10]) != (UNIVERSAL_ABI_MAJOR, UNIVERSAL_ABI_MINOR)
+    if (tuple(block[8:10]) not in ((2, 0), (2, 1))
             or tuple(block[10:12]) != (UNIVERSAL_SYSINFO_VERSION,
                                        UNIVERSAL_SYSINFO_SIZE)):
         raise ValueError("invalid GBAP v4 ABI requirement")

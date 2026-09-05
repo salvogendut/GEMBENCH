@@ -38,16 +38,17 @@ cleanup() { rm -rf -- "$stage"; }
 trap cleanup EXIT
 mkdir "$stage/card"
 cp -a QA/MSX/CARD/. "$stage/card/"
+sed -i "s/^MSXMODE=.*/MSXMODE=${MSX_TEST_MODE:-7}/" "$stage/card/GEOBENCH.CFG"
 rm -f -- "$stage/card/UNAPINET.COM" "$stage/card/UNAPI.TXT"
 printf 'GBMSX\r\n' > "$stage/card/AUTOEXEC.BAT"
 tools/build_msx_img.sh "$stage/card" "$stage/desk-accessories.img"
 
-export GEMBENCH_ACCESSORY_OUTPUT="$PWD/build/msx/desk-accessories-openmsx.txt"
-export GEMBENCH_ACCESSORY_SCREENSHOT="$PWD/build/msx/desk-accessories-openmsx.png"
+export GEMBENCH_ACCESSORY_OUTPUT="$PWD/build/msx/desk-accessories-${MSX_TEST_MODE:-7}-openmsx.txt"
+export GEMBENCH_ACCESSORY_SCREENSHOT="$PWD/build/msx/desk-accessories-${MSX_TEST_MODE:-7}-openmsx.png"
 export MSX_UNAPI=0
 export MSX_MOUSE=0
 export SDL_AUDIODRIVER=dummy
-export MSX_SCRIPT=debug/desk_accessories_openmsx.tcl
+export MSX_SCRIPT=${GEOBENCH_ACCESSORY_SCRIPT:-debug/desk_accessories_openmsx.tcl}
 tools/run_msx.sh "$stage/desk-accessories.img"
 
 sed -n '1,40p' "$GEMBENCH_ACCESSORY_OUTPUT"

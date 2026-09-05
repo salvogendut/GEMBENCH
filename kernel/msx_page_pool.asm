@@ -85,38 +85,7 @@ GB_PAGE_ERR_NOMEM     equ 5
 GB_PAGE_ERR_BADARG    equ 6
 
 GB_PLATFORM_MSX2      equ 1
-GB_SYSINFO_V5         equ 5
-GB_SYSINFO_V6         equ 6
-GB_PACKING_2BPP       equ 2
-GB_PACKING_4BPP       equ 4
-
-GB_CAP_WINDOWS        equ #0001
-GB_CAP_EVENTS         equ #0002
-GB_CAP_FILESYSTEM     equ #0004
-GB_CAP_SHELL          equ #0008
-GB_CAP_NETWORK        equ #0010
-GB_CAP_GBR            equ #0020
-GB_CAP_PAGE_ALLOC     equ #0040
-GB_CAP_OWNER_ID       equ #0080
-GB_CAP_RUNTIME_VIDEO  equ #0100
-GB_CAP_APPLICATIONS   equ #0200
-GB_CAP_MULTI_WINDOW   equ #0400
-GB_CAP_DEFERRED_MSG   equ #0800
-GB_CAP_FS_CONTEXTS    equ #1000
-GB_CAP_SECONDARY_CODE equ #2000
-GB_CAP_SERVICE_MANAGER equ #4000
-GB_CAPS_MSX_M4        equ GB_CAP_WINDOWS|GB_CAP_EVENTS|GB_CAP_FILESYSTEM|GB_CAP_SHELL|GB_CAP_NETWORK|GB_CAP_GBR|GB_CAP_PAGE_ALLOC|GB_CAP_OWNER_ID|GB_CAP_RUNTIME_VIDEO|GB_CAP_APPLICATIONS|GB_CAP_MULTI_WINDOW|GB_CAP_DEFERRED_MSG|GB_CAP_FS_CONTEXTS|GB_CAP_SECONDARY_CODE|GB_CAP_SERVICE_MANAGER
-
-; GEOBENCH-2 high capability word. The MSX2 reference target advertises only
-; services proved by this gate: transactional universal loading, runtime
-; geometry, semantic drawing/input, and generation-safe background timers.
-; Portable filesystem/package resources remain gated.
-GB_CAP_UNIVERSAL_LOADER equ #0001
-GB_CAP_RUNTIME_GEOMETRY equ #0002
-GB_CAP_PORTABLE_DRAWING equ #0004
-GB_CAP_PORTABLE_INPUT   equ #0008
-GB_CAP_BACKGROUND_TIMERS equ #0040
-GB_CAPS_HIGH_MSX_V6     equ GB_CAP_UNIVERSAL_LOADER|GB_CAP_RUNTIME_GEOMETRY|GB_CAP_PORTABLE_DRAWING|GB_CAP_PORTABLE_INPUT|GB_CAP_BACKGROUND_TIMERS
+                include "msx_capabilities.inc"
 
                 include "msx_owner_page.inc"
 
@@ -189,101 +158,12 @@ mpm_count_ok    or    a
                 include "core/page_count.asm"
 
 sysinfo_init
-                ld    a,MSX_SYSINFO_SIZE
-                ld    (MSX_SYS_SIZE),a
-                ld    a,GB_SYSINFO_V6
-                ld    (MSX_SYS_VERSION),a
-                ld    a,1                     ; frozen GEMBENCH-1 ABI
-                ld    (MSX_SYS_ABI_MAJOR),a
-                xor   a
-                ld    (MSX_SYS_ABI_MINOR),a
-                ld    a,GB_PLATFORM_MSX2
-                ld    (MSX_SYS_PLATFORM),a
                 ifdef MSX_SCREEN7
                 ld    a,7
-                ld    (MSX_SYS_VIDEO_MODE),a
-                ld    a,GB_PACKING_4BPP
-                ld    (MSX_SYS_PACKING),a
-                ld    a,16
-                ld    (MSX_SYS_COLOURS),a
                 else
                 ld    a,6
-                ld    (MSX_SYS_VIDEO_MODE),a
-                ld    a,GB_PACKING_2BPP
-                ld    (MSX_SYS_PACKING),a
-                ld    a,4
-                ld    (MSX_SYS_COLOURS),a
                 endif
-                ld    hl,512
-                ld    (MSX_SYS_WIDTH),hl
-                ld    hl,212
-                ld    (MSX_SYS_HEIGHT),hl
-                ld    a,(MSX_TOTSEG)
-                ld    (MSX_SYS_MEM_PAGES),a
-                ld    a,(MSX_PAGE_TOTAL)
-                ld    (MSX_SYS_POOL_TOTAL),a
-                ld    a,(MSX_PAGE_FREE)
-                ld    (MSX_SYS_POOL_FREE),a
-                ld    a,WM_MAXWIN
-                ld    (MSX_SYS_MAX_WINDOWS),a
-                ld    hl,GB_CAPS_MSX_M4
-                ld    (MSX_SYS_CAPS),hl
-                ld    hl,0
-                ld    (MSX_SYS_RESERVED),hl
-                ld    a,GB_APP_MAX
-                ld    (MSX_SYS_MAX_APPS),a
-                ld    a,1
-                ld    (MSX_SYS_APP_VERSION),a
-                ld    a,WM_MAXWIN
-                ld    (MSX_SYS_MAX_APP_WINDOWS),a
-                xor   a
-                ld    (MSX_SYS_RESERVED2),a
-                ld    a,GB_DEFER_MAX
-                ld    (MSX_SYS_MSG_QUEUE),a
-                ld    a,4
-                ld    (MSX_SYS_MSG_INLINE),a
-                ld    a,1
-                ld    (MSX_SYS_MSG_VERSION),a
-                xor   a
-                ld    (MSX_SYS_RESERVED3),a
-                ld    hl,MSX_FSCTX_MAX         ; max contexts, transfer low byte (0)
-                ld    (MSX_SYS_FS_CONTEXTS),hl
-                ld    hl,#0102                 ; transfer high byte (512), API v1
-                ld    (MSX_SYS_FS_TRANSFER+1),hl
-                ld    hl,GB_CAPS_HIGH_MSX_V6
-                ld    (MSX_SYS_CAPS_HIGH),hl
-                ld    a,128
-                ld    (MSX_SYS_COLUMNS),a
-                ld    a,212
-                ld    (MSX_SYS_LINES),a
-                ld    a,4
-                ld    (MSX_SYS_PIXELS_COLUMN),a
-                ld    (MSX_SYS_SEMANTIC_PENS),a
-                ld    hl,APP_BASE
-                ld    (MSX_SYS_APP_BASE),hl
-                ld    hl,#7F00
-                ld    (MSX_SYS_APP_LIMIT),hl
-                ld    hl,GB_KERNEL
-                ld    (MSX_SYS_KERNEL_BASE),hl
-                ld    a,2
-                ld    (MSX_SYS_UNIVERSAL_MAJOR),a
-                xor   a
-                ld    (MSX_SYS_UNIVERSAL_MINOR),a
-                ld    a,3
-                ld    (MSX_SYS_UNIVERSAL_PROFILE),a
-                xor   a
-                ld    (MSX_SYS_RESERVED4),a
-
-                ; Preserve the old page-3 map as an unpublished v5 shadow.
-                ld    hl,MSX_SYSINFO
-                ld    de,MSX_SYSINFO_V5_SHADOW
-                ld    bc,MSX_SYSINFO_V5_SIZE
-                ldir
-                ld    a,MSX_SYSINFO_V5_SIZE
-                ld    (MSX_SYSINFO_V5_SHADOW),a
-                ld    a,GB_SYSINFO_V5
-                ld    (MSX_SYSINFO_V5_SHADOW+1),a
-                ret
+                jp    MSX_MODULE_SYSINFO
 
                 include "core/owner_identity.asm"
 
@@ -594,10 +474,7 @@ mob_have        ld    a,(wm_slot)
 ; count is dynamic, so refresh it at the query boundary.
 k_sysinfo
                 call  page_count_free
-                ld    a,(MSX_PAGE_FREE)
-                ld    (MSX_SYS_POOL_FREE),a
-                ld    de,MSX_SYSINFO
-                ret
+                jp    MSX_MODULE_SYSINFO_QUERY
 
 ; GB_OWNER #80C6: return the generation-tagged current application identity.
 k_owner_current

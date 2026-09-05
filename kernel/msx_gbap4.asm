@@ -9,14 +9,24 @@
 ; page it owns. Optional external segments remain deliberately unsupported and
 ; the corresponding package-resources capability is not advertised.
 
+PLATFORM_MSX equ 1
                 include "../lib/gbapp.inc"
                 include "../lib/msx/glue.inc"
+PREEMPTIVE equ 1
+                include "lowram.inc"
+                include "msx_capabilities.inc"
+GB_PLATFORM_MSX2 equ 1
+GB_APP_MAX equ 8
+GB_DEFER_MAX equ 8
 
 fs_ent_size             equ #14E8
 
                 org   MSX_GBAP4_GATE
                 jp    gbap4_validate_loaded
-                db    "GBV4",1
+                db    "GBV4",2
+                jp    universal_parameters
+                jp    module_sysinfo_init
+                jp    module_sysinfo_query
 
 GBAP4_HEADER_SIZE       equ 16
 GBAP4_MANIFEST_SIZE     equ 64
@@ -134,8 +144,8 @@ gb4_icon_count_ok
                 cp    2
                 jp    nz,gb4_reject
                 ld    a,(ix+9)
-                or    a
-                jp    nz,gb4_reject
+                cp    2                        ; retain MSX ABI 2.0; add 2.1
+                jp    nc,gb4_reject
                 ld    a,(ix+10)
                 cp    6
                 jp    nz,gb4_reject
@@ -149,10 +159,6 @@ gb4_icon_count_ok
                 and   #80
                 jp    nz,gb4_reject
                 ld    a,(ix+14)
-                ld    b,a
-                and   #80                      ; high-capability bits 0..6 assigned
-                jp    nz,gb4_reject
-                ld    a,b
                 and   #03                      ; universal-loader + runtime-geometry
                 cp    #03
                 jp    nz,gb4_reject
@@ -161,9 +167,6 @@ gb4_icon_count_ok
                 jp    nz,gb4_reject
                 ld    a,(ix+17)
                 and   #80
-                jp    nz,gb4_reject
-                ld    a,(ix+18)
-                and   #80                      ; seven assigned high capabilities
                 jp    nz,gb4_reject
                 ld    a,(ix+19)
                 or    a
@@ -599,8 +602,10 @@ gb4_resource_offset dw 0
 gb4_icon_count      db 0
 gb4_expected_crc    ds 4,0
 gb4_crc_value       ds 4,0
+                include "msx_universal_parameters.asm"
+                include "msx_sysinfo_init.asm"
 gb4_gate_end
 
-                assert gb4_gate_end<=MSX_GBAP4_GATE_LIMIT,"GBAPV4.MOD exceeds fixed gate area"
-                assert gb4_gate_end-MSX_GBAP4_GATE==MSX_GBAP4_GATE_SIZE,"update fixed GBAPV4.MOD size"
-                save  "GBAPV4.RAW",MSX_GBAP4_GATE,gb4_gate_end-MSX_GBAP4_GATE
+                assert gb4_gate_end<=MSX_SYSINFO_LEGACY,"GBAPV4.MOD overlaps legacy sysinfo view"
+                assert gb4_gate_end-MSX_GBAP4_GATE==MSX_GBAP4_GATE_SIZE,"update module byte count"
+                save  "GBAPV4.RAW",MSX_GBAP4_GATE,MSX_GBAP4_GATE_SIZE

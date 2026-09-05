@@ -54,6 +54,14 @@ work="build/universal-obj/$(basename "$APP")"
 mkdir -p "$work" "$(dirname "$OUT")"
 
 icon_args=("$APP_ICON")
+# This SDK emits GB_PARAMS calls. Do not allow a manifest to claim ABI 2.0
+# compatibility: an older loader must reject it before reaching application code.
+python3 - "$APP_MANIFEST" <<'PY'
+import json, sys
+spec = json.load(open(sys.argv[1]))
+if spec.get("minimum_abi") != [2, 1] or "caller-parameters" not in spec.get("required_capabilities", []):
+    raise SystemExit("ERROR: this SDK requires minimum_abi [2, 1] and caller-parameters")
+PY
 if [ -n "$APP_ICON16" ]; then
     [ -f "$APP_ICON16" ] || { echo "ERROR: missing APP_ICON16 $APP_ICON16" >&2; exit 1; }
     icon_args+=("$APP_ICON16")

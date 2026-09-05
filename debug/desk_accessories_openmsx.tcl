@@ -3,6 +3,7 @@
 set throttle off
 set pause_on_lost_focus false
 set pause off
+after time 240 {da_finish "TIMEOUT harness watchdog"}
 
 proc da_env {name} { expr {$::env($name) + 0} }
 
@@ -95,9 +96,13 @@ proc da_border_ok {slot} {
                          [list [expr {$x + $w - 1}] [expr {$y + 20}]] \
                          [list [expr {$x + 5}] [expr {$y + $h - 1}]]] {
         lassign $point px py
-        set address [expr {$py * 256 + $px * 2}]
-        if {[debug read VRAM $address] != 0x22 ||
-            [debug read VRAM [expr {$address + 1}]] != 0x22} { return 0 }
+        if {[peek 0xCF05] == 7} {
+            set address [expr {$py * 256 + $px * 2}]
+            if {[debug read VRAM $address] != 0x22 ||
+                [debug read VRAM [expr {$address + 1}]] != 0x22} { return 0 }
+        } else {
+            if {[debug read VRAM [expr {$py * 128 + $px}]] != 0xAA} { return 0 }
+        }
     }
     return 1
 }
@@ -107,7 +112,8 @@ proc da_lowram_ready {} {
     if {$n > $::da_max_nwin && $n <= 8} { set ::da_max_nwin $n }
     expr {$::da_page0_slot >= 0 &&
           ([debug read ioports 0xA8] & 3) == $::da_page0_slot &&
-          [reg PC] >= 0x4000 && $n >= 1 && $n <= 8 && [peek 0x1351] < 8}
+          ([reg PC] >= 0x4000 || ([reg PC] >= 0x0400 && [reg PC] < 0x1000)) &&
+          $n >= 1 && $n <= 8 && [peek 0x1351] < 8}
 }
 
 proc da_release_all {} {
@@ -116,6 +122,7 @@ proc da_release_all {} {
 }
 
 proc da_finish {status} {
+    if {$status eq "PASS" && [peek 0x1347] != 0} {set status "FAIL scheduler stack fault"}
     da_release_all
     if {$status ne "PASS"} { catch {screenshot -raw $::da_failure_png} }
     set out [open $::da_output w]
@@ -139,6 +146,8 @@ proc da_finish {status} {
     puts $out "CLOCK_MENU_OK=$::da_clock_menu_ok"
     puts $out "CALCULATOR_MENU_OK=$::da_calc_menu_ok"
     puts $out "MAX_NWIN=$::da_max_nwin"
+    puts $out "STACK_MAX=[peek 0x1346]"
+    puts $out "STACK_FAULT=[peek 0x1347]"
     puts $out "FINAL_NWIN=[peek 0x1350]"
     puts $out "FINAL_FOCUS=[peek 0x1351]"
     puts $out "SHELL_BUSY=[peek 0x133E]"

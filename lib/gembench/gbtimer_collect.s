@@ -11,6 +11,7 @@ GB_TIMER_OWNER   = 0xC3CA
 GB_TIMER_RECT    = 0xC3CB
 GB_TIMER_GEN     = 0xC3CF
 GB_TIMER_DROPPED = 0xC1EC
+GB_TIMER_DROPPED_GEN = 0xC03F
 WM_FULLSCREEN   = 0x130A
 MSX_WIN_OWNER   = 0xC2D0
 MSX_WIN_GEN     = 0xC358
@@ -72,6 +73,8 @@ _gb_timer_collect::
         ld      (GB_TIMER_OWNER), a
         ret
 timer_occluded:
+        ld      a, (GB_TIMER_GEN)
+        ld      (GB_TIMER_DROPPED_GEN), a
         ld      a, (GB_TIMER_OWNER)     ; acknowledge a valid but invisible component
         ld      (GB_TIMER_DROPPED), a   ; so its worker can advance to another component
         jr      timer_stale
