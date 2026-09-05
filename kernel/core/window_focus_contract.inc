@@ -38,7 +38,8 @@
 ; FOCUS_REPAINT_TOP: tail legacy top-only repaint; hooks retain return mapping.
 ;
 ; CORE_Z_PRESERVE_SLOT selects the original append sequence (1 preserves A;
-; 0 is the historical cooperative sequence, returning the prior count in A).
+; 0 is the historical cooperative sequence, leaving the indexed low-address
+; byte in A rather than preserving the slot).
 ; CORE_FOCUS_VISIBLE_DAMAGE selects the existing compositor path. Normal
 ; shared desktop integration uses both=1; zero variants only preserve the
 ; existing MSX2 cooperative compatibility build, not a separate CPC policy.

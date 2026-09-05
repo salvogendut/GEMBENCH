@@ -88,12 +88,20 @@ to the staged ones. `QA/MSX/GBMSX.IMG` remains SHA-256
 | Added stacking assertions in the accessory workflow, both modes before and after | PASS: ten checkpoints per run, checking exact relative order, desktop pinning, no duplicate/dead/missing live slots, focused target, close fallback and slot reuse. Target addresses/stride come from `lowram.inc`. |
 | Existing visibility wrapper, before and after | Reports PASS for retained native Clock background/hidden updates and PAINT. The captured covered-area hashes remain stable and hidden worker/draw/damage deltas are zero. See the legacy diagnostic limitation below. |
 | Independent provider tests | PASS: five unittest methods including subcases; actual shared assembly with low/high state (`2000`/`D800`) and a different 16-byte window-record layout; normal/cooperative variants, deterministic output and negative state/capacity/index/option checks. |
+| Full `make check` in a clean worktree at `a4e20b5` | PASS, exit 0: 92 discovered Python tests, plus the existing C/assembly runtime, universal SDK determinism, ABI/layout, asset/media and editor checks. |
 
 The independent providers are assembly fixtures, not executed CPC kernels.
 No physical-machine, new CPC desktop or new portability/performance result is
 claimed. The tests preserve the existing ABI/layout checks; the compositor
 source check follows the moved focus include rather than requiring its old
 inline location.
+
+The full suite ran in `/tmp/geobench-70-check.TXowFR`, with independent build
+fixtures (no production media/build symlink), through `my-distrobox` using
+`SDCC=/var/home/salvogendut/Dev/sdcc/bin/sdcc` and
+`SDAS=/var/home/salvogendut/Dev/sdcc/bin/sdasz80`. The log is
+`/tmp/geobench-70-make-check.log`. No check was relaxed for the preserved,
+untracked workspace CPC QA artifacts.
 
 Two harness details matter when interpreting results:
 
