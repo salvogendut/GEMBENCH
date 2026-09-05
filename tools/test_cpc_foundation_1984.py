@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute the isolated CPC step-3A probe through 1984's M4 and pilot paths."""
+"""Execute isolated CPC step-3A/3B probes through 1984's M4 and pilot paths."""
 from __future__ import annotations
 
 import argparse
@@ -15,6 +15,7 @@ import threading
 import time
 
 from build_cpc_foundation import ROOT, VARIANTS, build
+from cpc_graphics_fixture import GRAPHICS_VARIANTS, verify_graphics
 
 
 def symbols(path: Path) -> dict[str, int]:
@@ -94,6 +95,10 @@ def run(variant: str, memory: int, emulator: Path) -> None:
     manifest = json.loads((media / "manifest.json").read_text())
     sym = symbols(Path(manifest["symbols"]))
     raw = (ROOT / "build/cpc-foundation" / variant / "FOUND.RAW").read_bytes()
+    graphics = variant in GRAPHICS_VARIANTS
+    signature = b"CPF3B\x01" if graphics else b"CPF3A\x01"
+    def check(data):
+        return verify_graphics(*snapshot(data), sym, raw) if graphics else verify(data, sym, raw)
     # Every launch uses a private PTY, log, snapshots and image copy. Never run
     # the emulator against someone's mounted release or parked CPC card.
     artifacts = Path(tempfile.mkdtemp(prefix="geobench-cpc-foundation-"))
@@ -151,21 +156,33 @@ def run(variant: str, memory: int, emulator: Path) -> None:
             send(f"snapshot-save {path}")
             data = path.read_bytes()
             _, ram = snapshot(data)
-            if ram[sym["magic"]:sym["magic"] + 6] != b"CPF3A\x01":
+            if ram[sym["magic"]:sym["magic"] + 6] != signature:
                 continue
             if ram[sym["phase"]] in (0xA5, 0xFF):
                 break
         else:
             raise AssertionError("probe did not finish within 4500 frames")
-        if variant == "normal" and memory == 512:
-            result = verify(data, sym, raw)
+        if variant in ("normal", "graphics") and memory == 512:
+            result = check(data)
             # Stable endpoint: no transient PASS before a reboot or later write.
             send("wait frames 150 200")
             send(f"snapshot-save {artifacts / 'stable.sna'}")
             stable = (artifacts / "stable.sna").read_bytes()
-            verify(stable, sym, raw)
+            check(stable)
             if snapshot(stable)[1] != ram:
                 raise AssertionError("RAM changed after completion")
+        elif graphics:
+            expected = {"graphics-bad-clip": "framebuffer checkpoint left-top-clip",
+                        "graphics-bad-cursor": "framebuffer checkpoint phase-1",
+                        "graphics-bad-copy": "failure=8"}[variant]
+            try:
+                check(data)
+            except AssertionError as error:
+                if expected not in str(error):
+                    raise
+                result = {"expected_failure": str(error)}
+            else:
+                raise AssertionError("graphics corruption fixture passed unexpectedly")
         else:
             expected = {"bad-bank": 2, "bad-register": 3, "bad-stack": 7}.get(variant, 1)
             if (ram[sym["phase"]], ram[sym["failure"]]) != (0xFF, expected):

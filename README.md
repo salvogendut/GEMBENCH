@@ -88,6 +88,8 @@ CPC ABI experiment is parked on `feature/54-reintegrate-cpc`; the
 a feature reference and shared-core extraction. Its isolated
 [step-3A M4 hardware probe](docs/CPC-RESTART-STEP3A.md) is available through
 `make diagnostic-cpc-foundation-1984`; it does not boot a desktop.
+The [3B graphics/pointer proof](docs/CPC-RESTART-STEP3B.md) runs through
+`make diagnostic-cpc-graphics-1984`, also using isolated M4 media.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

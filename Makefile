@@ -9,12 +9,18 @@ GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 all: msx
 
 # CPC restart step 3: isolated hardware diagnostics, not a release CPC target.
-.PHONY: diagnostic-cpc-foundation diagnostic-cpc-foundation-1984
+.PHONY: diagnostic-cpc-foundation diagnostic-cpc-foundation-1984 diagnostic-cpc-graphics diagnostic-cpc-graphics-1984
 diagnostic-cpc-foundation:
 	$(PYTHON) tools/build_cpc_foundation.py
 
 diagnostic-cpc-foundation-1984:
 	$(PYTHON) tools/test_cpc_foundation_1984.py
+
+diagnostic-cpc-graphics:
+	$(PYTHON) tools/build_cpc_foundation.py --variant graphics
+
+diagnostic-cpc-graphics-1984:
+	$(PYTHON) tools/test_cpc_foundation_1984.py --variant graphics
 
 # Build the bundled GB-BASIC editor, runtime and low-RAM engine independently
 # of the MSX2 distribution media.

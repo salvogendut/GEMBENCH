@@ -212,6 +212,12 @@ marshalling block as part of the compile-once ABI.
 
 ## Resident mailbox
 
+Restart finding (#66): the `#C000+` rows below describe the current MSX2
+experiment, not a viable CPC contract: they collide with CPC display RAM.
+The [caller-owned parameter proof](CPC-RESTART-STEP3B.md) validates a candidate
+replacement, but the authority, SDK and MSX2 runtime have not adopted it yet.
+Do not advertise CPC universal support by reusing those display addresses.
+
 Some current libgb operations are implemented with fixed resident cells rather
 than a kernel call. Their small common layout is therefore acknowledged by v2:
 time, the four-byte callback message, the last poll result, boot drive, drag

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build isolated step-3A CPC/M4 diagnostics, never release media.
+"""Build isolated step-3A/3B CPC/M4 diagnostics, never release media.
 
 AMSDOS header fields and FAT16/sector-32 layout follow the archived CPC
 tools/amsdos_header.py and tools/build_card_img.sh (56478578).
@@ -15,9 +15,11 @@ import shutil
 import subprocess
 import tempfile
 
+from cpc_graphics_fixture import GRAPHICS_VARIANTS, emit_vectors
+
 ROOT = Path(__file__).resolve().parents[1]
 VARIANTS = {"normal": None, "bad-bank": "FAULT_RESTORE",
-            "bad-register": "FAULT_REGISTER", "bad-stack": "FAULT_STACK"}
+            "bad-register": "FAULT_REGISTER", "bad-stack": "FAULT_STACK", **GRAPHICS_VARIANTS}
 
 
 def headed(raw: bytes, load: int) -> bytes:
@@ -43,8 +45,12 @@ def build(variant: str) -> Path:
     card = media / "CARD"
     work.mkdir(parents=True, exist_ok=True)
     card.mkdir(parents=True, exist_ok=True)
-    command = [assembler, str(ROOT / "debug/cpc_foundation/probe.asm"),
-               "-s", "-sq", "-o", "foundation"]
+    source = "probe.asm"
+    if variant in GRAPHICS_VARIANTS:
+        emit_vectors(work / "graphics_vectors.inc")
+        source = "graphics_probe.asm"
+    command = [assembler, str(ROOT / "debug/cpc_foundation" / source),
+               "-s", "-sq", "-o", "foundation", f"-I{work}"]
     if VARIANTS[variant]:
         command.append(f"-D{VARIANTS[variant]}=1")
     subprocess.run(command, cwd=work, check=True)
@@ -81,7 +87,8 @@ def build(variant: str) -> Path:
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "source_sha256": {
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted((ROOT / "debug/cpc_foundation").iterdir()) if path.is_file()
+            for path in [*sorted((ROOT / "debug/cpc_foundation").iterdir()),
+                         ROOT / "tools/cpc_graphics_fixture.py"] if path.is_file()
         },
         "raw_bytes": len(raw), "raw_sha256": hashlib.sha256(raw).hexdigest(),
         "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
