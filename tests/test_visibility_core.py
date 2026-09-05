@@ -63,7 +63,7 @@ class VisibilityBoundaryTests(unittest.TestCase):
             self.assertNotRegex(code, r"\b(?:MSX_\w+|WM_\w+|SCHED_\w+|PLATFORM_\w+|PREEMPTIVE\w*|sched_wm_entry|sched_bank_set)\b", name)
             self.assertNotRegex(code.lower(), r"\b(?:di|ei|in|out|halt|reti|retn|sp)\b", name)
 
-    def test_ordered_single_includes_leave_irq_mapping_and_drawing_in_provider(self):
+    def test_ordered_single_includes_leave_context_and_drawing_in_provider(self):
         scheduler = (ROOT / "kernel/scheduler.asm").read_text()
         for name in UNITS:
             self.assertEqual(scheduler.count(f'include "core/{name}"'), 1)
@@ -73,8 +73,8 @@ class VisibilityBoundaryTests(unittest.TestCase):
         for symbol in ("sched_switch_context", "sched_restore_slot", "sched_wm_entry"):
             self.assertRegex(scheduler, rf"(?m)^{symbol}\s*$")
         kernel = (ROOT / "kernel/gbkern.asm").read_text()
-        self.assertRegex(kernel, r"(?m)^wm_repaint_all\s*$")
-        self.assertRegex(kernel, r"(?m)^wm_focus_damage\s*$")
+        self.assertIn('include "core/window_repaint.asm"', kernel)
+        self.assertIn('include "core/window_focus_damage.asm"', kernel)
 
 
 @unittest.skipUnless(RASM, "RASM required for actual shared visibility assembly")

@@ -19,9 +19,12 @@ is extracted under #70, with unchanged normal/cooperative kernels and explicit
 before/after stacking assertions. [Visible regions/worker priority 2D](CPC-RESTART-STEP2D.md)
 is extracted under #71 with byte-identical scheduler code. The Clock poll-sampling
 correction and accessory pre-click snapshot guard were validated separately.
-Next extract WM damage construction and repaint dispatch; low-level context/IRQ
-adapters and deferred/timer/filesystem/service work remain. The isolated
-foundation proofs do not enable a CPC desktop.
+[WM damage/repaint 2E](CPC-RESTART-STEP2E.md) is extracted under #72, including
+move/resize and focus damage, explicit/window clips and bottom-up repaint
+dispatch, with unchanged normal/cooperative MSX2 kernels. Next extract deferred
+message/background-timer dispatch; low-level context/IRQ adapters and
+filesystem/service work also remain. The isolated foundation proofs do not
+enable a CPC desktop.
 The remaining step-2 shared-core packages still gate desktop integration;
 moving to hardware probes does not mark step 2 complete.
 

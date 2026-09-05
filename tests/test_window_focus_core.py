@@ -33,15 +33,15 @@ class FocusBoundaryTests(unittest.TestCase):
                                          "wm_map_focus", "wm_focus_click", "wm_hit_test",
                                          "wm_raise"})
 
-    def test_policy_is_included_once_and_damage_stays_in_provider(self):
+    def test_policy_is_included_once_and_uses_shared_damage_dispatch(self):
         kernel = (ROOT / "kernel/gbkern.asm").read_text()
         for name in UNITS:
             self.assertEqual(kernel.count(f'include "core/{name}"'), 1)
         for symbol in ("wm_z_append", "wm_z_remove", "wm_raise", "wm_focus_top",
                        "wm_map_focus", "wm_focus_click", "wm_hit_test"):
             self.assertNotRegex(kernel, rf"(?m)^{symbol}\s*$")
-        self.assertRegex(kernel, r"(?m)^wm_focus_damage\s*$")
-        self.assertRegex(kernel, r"(?m)^wm_repaint_all\s*$")
+        self.assertIn('include "core/window_focus_damage.asm"', kernel)
+        self.assertIn('include "core/window_repaint.asm"', kernel)
         # These addresses were moved, not reallocated or copied in the provider.
         layout = (ROOT / "kernel/lowram.inc").read_text()
         provider = (ROOT / "kernel/msx_window_focus.inc").read_text()

@@ -25,6 +25,11 @@ Important split units include:
   `core/window_visibility.asm`, `core/worker_select.asm` — shared damage-source
   iteration, visibility ranking and worker priority, bound through
   `msx_visibility.inc`; see the [step-2D report](../docs/CPC-RESTART-STEP2D.md);
+- `core/window_geometry.asm`, `core/window_focus_damage.asm`,
+  `core/window_damage.asm`, `core/window_repaint.asm` — shared move/resize/focus
+  damage, clip construction and repaint dispatch, with `msx_window_damage.inc`
+  record, pointer, bank, IRQ and drawing hooks;
+  see the [step-2E report](../docs/CPC-RESTART-STEP2E.md);
 - `assets.asm`, `config_module.asm`, `modules.asm` — resource loading;
 - `app_pool.asm`, `gbr_bank.asm` — application and auxiliary resource pages;
 - `api_table.inc`, `lowram.inc` — frozen calls and fixed shared contracts.

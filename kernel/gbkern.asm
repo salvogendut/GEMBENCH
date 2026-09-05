@@ -126,6 +126,7 @@ THEMED_GADGETS  equ   0
                 ifdef PLATFORM_MSX
                 include "msx_app_lifetime.inc"
                 include "msx_window_focus.inc"
+                include "msx_window_damage.inc"
                 endif
 
                 include "api_table.inc"
@@ -3447,140 +3448,12 @@ kwc_repaint
                 jp    wm_repaint_all               ; repaint remaining layers only inside that rect
                 endif                              ; PLATFORM_MSX multi-window close
 
-; k_wm_setpos (GB_WMSETPOS): A = x, L = y -> move the focused window's hit rect to
-; (x,y), so click-to-focus follows a window the app has dragged. The endpoint
-; envelope covers the destructive rubber-band path between the original and final
-; positions before the following gb_restore_parent reconstructs the stack.
-k_wm_setpos
-                ld    (sp_x),a                    ; new x
-                ld    a,l
-                ld    (sp_y),a                    ; new y
-                ld    a,(WM_FOCUS)
-                call  wm_entry                    ; HL = entry (+0); damage_axis keeps HL
-                inc   hl                            ; +1 old x
-                ld    b,(hl)
-                inc   hl
-                inc   hl                            ; +3 w
-                ld    c,(hl)
-                ld    a,(sp_x)
-                call  damage_axis                 ; D = min(ox,nx), E = span
-                ld    a,d
-                ld    (clip_x),a
-                ld    a,e
-                ld    (clip_w),a
-                dec   hl                            ; +2 old y
-                ld    b,(hl)
-                inc   hl
-                inc   hl                            ; +4 h
-                ld    c,(hl)
-                ld    a,(sp_y)
-                call  damage_axis
-                ld    a,d
-                ld    (clip_y),a
-                ld    a,e
-                ld    (clip_h),a
-                dec   hl                            ; +4 -> +1 (x)
-                dec   hl
-                dec   hl
-                ld    a,(sp_x)                     ; commit the new position
-                ld    (hl),a
-                inc   hl
-                ld    a,(sp_y)
-                ld    (hl),a
-                ret
-sp_x            equ   #124B        ; low-RAM WM scratch (see lowram.tsv)
-sp_y            equ   #124C
-
-; k_wm_setsize (GB_WMSETSIZE, #81): A = new w, L = new h. Resize the focused window's
-; rect (top-left stays put). Damage clip = its (x,y) covering max(old,new) size, so the
-; following gb_restore_parent repaints any area a shrink vacated.
-k_wm_setsize
-                ld    (ss_w),a
-                ld    a,l
-                ld    (ss_h),a
-                ld    a,(WM_FOCUS)
-                call  wm_entry                    ; HL = entry (+0 page)
-                inc   hl                            ; +1 x
-                ld    a,(hl)
-                ld    (clip_x),a                  ; clip x = window x (unchanged)
-                inc   hl                            ; +2 y
-                ld    a,(hl)
-                ld    (clip_y),a
-                inc   hl                            ; +3 w
-                ld    b,(hl)                       ; old w
-                ld    a,(ss_w)                     ; clip w = max(old, new)
-                cp    b
-                jr    nc,kss_w
-                ld    a,b
-kss_w
-                ld    (clip_w),a
-                ld    a,(ss_w)
-                ld    (hl),a                       ; commit new w
-                inc   hl                            ; +4 h
-                ld    b,(hl)                       ; old h
-                ld    a,(ss_h)
-                cp    b
-                jr    nc,kss_h
-                ld    a,b
-kss_h
-                ld    (clip_h),a
-                ld    a,(ss_h)
-                ld    (hl),a                       ; commit new h
-                ret
-ss_w            equ   #124D        ; low-RAM WM scratch (see lowram.tsv)
-ss_h            equ   #124E
-
-; damage_axis: B = old, A = new, C = size -> D = min(old,new), E = span =
-; max(old,new) + size - min. The 1-D damage extent of a move. Preserves HL.
-damage_axis
-                cp    b
-                jr    nc,dax_oldmin              ; new >= old -> min = old, max = new
-                ld    d,a                           ; min = new
-                ld    a,b                           ; max = old
-                jr    dax_span
-dax_oldmin      ld    d,b                           ; min = old (A = new = max)
-dax_span        add   a,c                           ; max + size
-                sub   d                             ; - min
-                ld    e,a
-                ret
+                include "core/window_geometry.asm"
 
                 include "core/window_focus_map.asm"
                 include "core/window_focus_click.asm"
 
-                if MSX_VISIBLE_COMPOSITOR
-; wm_focus_damage: make the new focus rectangle the primary source and the old
-; focus rectangle the second source. The compositor subtracts their overlap and
-; clips both against the post-focus z-order, yielding an exact visible union.
-; wm_open_back contains the old focus slot and wm_slot the new one. Desktop has
-; no focus furniture, so it is omitted when it is either endpoint.
-wm_focus_damage
-                xor   a
-                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a
-                ld    a,(wm_slot)
-                or    a
-                jr    nz,wfd_primary
-                ld    a,(wm_open_back)             ; app -> desktop: old app is primary
-wfd_primary
-                call  wm_entry
-                inc   hl
-                ld    de,clip_x
-                ld    bc,4
-                ldir
-                ld    a,(wm_slot)
-                or    a
-                ret   z                            ; app -> desktop: desktop has no furniture
-                ld    a,(wm_open_back)
-                or    a
-                ret   z                            ; desktop -> app: only the app changes appearance
-                call  wm_entry
-                inc   hl
-                ld    de,MSX_COMPOSITOR_EXTRA
-                ld    bc,4
-                ldir
-                ld    a,1
-                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a
-                ret
-                endif                              ; MSX_VISIBLE_COMPOSITOR focus damage
+                include "core/window_focus_damage.asm"
 
                 include "core/window_hit_test.asm"
 
@@ -3745,177 +3618,9 @@ ghost_on        equ   #124A        ; low-RAM WM scratch (see lowram.tsv)
 
                 include "core/window_raise.asm"
 
-; wm_repaint_all: repaint every window bottom-up (each in its own page, via its
-; on_repaint), then restore the caller's page. The cursor is left to the handlers:
-; each on_repaint redraws over the old pointer (a full backdrop fill, or a leading
-; gb_curhide) and ends with gb_curshow, so the cursor stays correct with no double
-; save-under here. WM_Z[0] is always the desktop, so its full paint runs first.
-wm_repaint_all
-                xor   a
-                jr    wra_seed
-; wm_repaint_top: repaint only the current z-top. Used after click-to-focus raises an
-; opaque managed window and through GB_REPAINTTOP for a newly published managed
-; window; redrawing lower layers first makes the stack visibly flash.
-wm_repaint_top
-                ld    a,(WM_NWIN)
-                dec   a
-wra_seed        ld    (wm_rp_i),a
-                ld    a,(bank_cur)
-                ld    (wm_rp_back),a
-                ifdef PLATFORM_MSX
-                if PREEMPTIVE_CONTEXT
-                call  SCHED_VIS_REFRESH_ENTRY ; cache surface/task ranks before painting
-                endif
-                endif
-                if !MSX_VISIBLE_COMPOSITOR
-                ld    a,(cur_supp)              ; #148: hide the pointer before the repaint so it
-                or    a                           ; can't pollute its save-under (else a later move
-                call  z,cursor_erase             ; restores stale content = a pointer-sized hole).
-                endif
-                ld    a,1                         ; lock the cursor for the whole loop: app on_draw
-                ld    (cur_paintlock),a           ; handlers also bracket with gb_curhide/show, and
-                                                  ; that 2nd erase restores a stale save-under over
-                                                  ; chrome a window drew earlier this pass (the XAOS
-                                                  ; title hole, on File>New AND drag). Bracket ONCE.
-                di                                ; Skip during a DnD ghost (cur_supp owns the screen)
-wra_l           ld    a,(wm_rp_i)
-                ld    hl,WM_NWIN
-                cp    (hl)
-                jr    nc,wra_done
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)                       ; slot = WM_Z[i]
-                ifdef PLATFORM_MSX
-                if PREEMPTIVE_CONTEXT
-                call  SCHED_REGION_BEGIN_ENTRY     ; installs first exact visible damage fragment
-                or    a
-                jr    z,wra_next                   ; fully occluded: no callback and no VDP work
-wra_fragment    ld    a,(MSX_REGION_SLOT)
-                endif
-                endif
-                call  wm_entry                     ; HL = entry
-                push  hl                           ; #148 guard: never paint a dead slot
-                ld    de,WM_FR_FLAGS
-                add   hl,de
-                ld    a,(hl)                       ; flags
-                pop   hl                            ; HL = entry
-                bit   0,a                          ; alive?
-                jr    z,wra_next                   ; dead -> skip (z-order should exclude it)
-                ifdef PLATFORM_MSX
-                if !PREEMPTIVE_CONTEXT
-                push  af                           ; skip callbacks whose window cannot touch the
-                push  hl                           ; current damage rectangle. Besides saving work,
-                inc   hl                           ; this keeps app-native blits outside that damage
-                ld    b,(hl)                       ; from repainting unrelated panes.
-                inc   hl
-                ld    c,(hl)
-                inc   hl
-                ld    d,(hl)
-                inc   hl
-                ld    e,(hl)
-                call  rect_cull
-                pop   hl
-                jr    c,wra_culled
-                pop   af
-                endif
-                endif
-                push  af                           ; keep flags across bank_set
-                ld    a,(hl)                       ; page
-                call  bank_set                     ; (preserves HL = entry)
-                pop   af                            ; #146: managed -> kernel draws chrome
-                bit   1,a                          ; managed?
-                jr    z,wra_legacy
-                call  wm_chrome_draw
-                jr    wra_painted
-wra_legacy
-                ld    de,WM_FR_REPAINT
-                add   hl,de
-                ld    a,(hl)
-                inc   hl
-                ld    h,(hl)
-                ld    l,a
-                ld    a,h
-                or    l
-                jr    z,wra_painted                ; no handler
-                call  md_call
-                jr    wra_painted
-                ifdef PLATFORM_MSX
-                if !PREEMPTIVE_CONTEXT
-wra_culled      pop   af
-                endif
-                endif
-wra_painted
-                ifdef PLATFORM_MSX
-                if PREEMPTIVE_CONTEXT
-                call  SCHED_REGION_NEXT_ENTRY
-                or    a
-                jr    nz,wra_fragment              ; same surface, next disjoint visible band
-                endif
-                endif
-wra_next        ld    a,(wm_rp_i)
-                inc   a
-                ld    (wm_rp_i),a
-                jr    wra_l
-wra_done        ld    a,(wm_rp_back)
-                call  bank_set
-                call  clip_set_full              ; repaints are clip-limited; restore the
-                ei                                ; full-screen clip for normal drawing
-                xor   a                           ; unlock: loop done, now show the pointer ONCE
-                ld    (cur_paintlock),a           ; over the final composited screen (fresh save-under)
-                ld    a,(cur_supp)              ; #148: ensure the pointer is up with a FRESH
-                or    a                           ; save-under over the just-repainted content.
-                call  z,cursor_show               ; GUARDED (#153): a handler that ends in gb_curshow
-                ret                                ; (e.g. the desktop paint) already drew it - don't
-                                                  ; redraw, or we'd save cur_bg OVER the cursor's own
-                                                  ; pixels and stamp a ghost on the next move.
+                include "core/window_repaint.asm"
 
-; k_wm_damage (GB_WMDAMAGE): set the repaint clip to a caller-supplied damage rect,
-; so the next gb_restore_parent only repaints that region instead of the whole
-; screen (#153 - kills the full-desktop flash after a dropdown menu). gb_popup
-; passes its box UNION the focused window's rect, so the repaint covers both the
-; dropdown's footprint (the part that overhangs other windows) and the window the
-; menu action changed. Registers are pre-swapped by the trampoline for two word
-; stores: C=x B=y (-> clip_x,clip_y) and E=w D=h (-> clip_w,clip_h).
-k_wm_damage
-                ld    (clip_x),bc                 ; clip_x = x, clip_y = y
-                ld    (clip_w),de                 ; clip_w = w, clip_h = h
-                ifdef PLATFORM_MSX
-                if PREEMPTIVE_CONTEXT
-                xor   a                           ; explicit damage replaces any
-                ld    (MSX_COMPOSITOR_EXTRA_PENDING),a ; unconsumed move union
-                endif
-                endif
-                ret
-
-; clip_set_full: reset the fill clip to the whole screen (no clipping). Two word
-; stores (clobbers BC,DE - the only caller reloads A and ignores BC/DE, #153).
-clip_set_full
-                ld    bc,0                       ; clip_x = 0, clip_y = 0
-                ld    (clip_x),bc
-                ld    de,(SCR_LINES*256)|SCR_COLS ; clip_w / clip_h = the full screen
-                ld    (clip_w),de
-                ret
-
-; wm_set_clip: A = slot -> set the fill clip to that window's rect plus one icon
-; cell at the right. Returns B = page and HL = entry+4; close reuses both.
-wm_set_clip
-                call  wm_entry                    ; HL = entry
-                ld    b,(hl)                       ; page for close
-                inc   hl                            ; +1 x
-                ld    a,(hl)
-                ld    (clip_x),a
-                inc   hl                            ; +2 y
-                ld    a,(hl)
-                ld    (clip_y),a
-                inc   hl                            ; +3 w. Bitmap/glyph clipping culls whole
-                ld    a,(hl)                        ; draw atoms: one which starts inside this
-                add   a,8                           ; damage may extend one 32px icon cell right.
-                ld    (clip_w),a
-                inc   hl                            ; +4 h
-                ld    a,(hl)
-                ld    (clip_h),a
-                ret
+                include "core/window_damage.asm"
 
 ; wm_entry: A = slot index -> HL = WM_TABLE + A*WM_ESZ. Clobbers A,B,DE.
 wm_entry
@@ -3931,8 +3636,6 @@ we_add
 
 wm_desc         equ   #12F7        ; low-RAM WM scratch (see lowram.tsv)
 wm_open_page    equ   #12FA
-wm_rp_back      equ   #12FD
-wm_rp_i         equ   #12FE
 
 ; menu_dispatch: called from k_poll. If a fresh click (D bit0) landed in the
 ; kernel-owned top bar and the app registered a handler, deliver a GB_MSG_MENU
@@ -4172,6 +3875,11 @@ GB_DEFER_LATE   equ 1
                 include "../lib/bank.asm"
                 endif                          ; (PLATFORM_PCW platform-include swap, #331)
                 endif                          ; (PLATFORM_MSX platform-include swap, #287)
+                include "core/window_damage_contract.inc"
+                assert CORE_CLIP_X==clip_x,"damage X must match the graphics driver"
+                assert CORE_CLIP_Y==clip_y,"damage Y must match the graphics driver"
+                assert CORE_CLIP_W==clip_w,"damage W must match the graphics driver"
+                assert CORE_CLIP_H==clip_h,"damage H must match the graphics driver"
 kern_end                                        ; GBKERN.BIN = #8000..kern_end only.
 
                 ifdef PLATFORM_MSX
