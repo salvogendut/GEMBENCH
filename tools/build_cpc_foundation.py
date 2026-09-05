@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build isolated step-3A/3B CPC/M4 diagnostics, never release media.
+"""Build isolated step-3A/3B/3C CPC/M4 diagnostics, never release media.
 
 AMSDOS header fields and FAT16/sector-32 layout follow the archived CPC
 tools/amsdos_header.py and tools/build_card_img.sh (56478578).
@@ -16,10 +16,12 @@ import subprocess
 import tempfile
 
 from cpc_graphics_fixture import GRAPHICS_VARIANTS, emit_vectors
+from cpc_storage_fixture import STORAGE_VARIANTS, FILES, emit_vectors as emit_storage
 
 ROOT = Path(__file__).resolve().parents[1]
 VARIANTS = {"normal": None, "bad-bank": "FAULT_RESTORE",
-            "bad-register": "FAULT_REGISTER", "bad-stack": "FAULT_STACK", **GRAPHICS_VARIANTS}
+            "bad-register": "FAULT_REGISTER", "bad-stack": "FAULT_STACK",
+            **GRAPHICS_VARIANTS, **STORAGE_VARIANTS}
 
 
 def headed(raw: bytes, load: int) -> bytes:
@@ -49,6 +51,9 @@ def build(variant: str) -> Path:
     if variant in GRAPHICS_VARIANTS:
         emit_vectors(work / "graphics_vectors.inc")
         source = "graphics_probe.asm"
+    if variant in STORAGE_VARIANTS:
+        emit_storage(work / "storage_vectors.inc", variant)
+        source = "storage_probe.asm"
     command = [assembler, str(ROOT / "debug/cpc_foundation" / source),
                "-s", "-sq", "-o", "foundation", f"-I{work}"]
     if VARIANTS[variant]:
@@ -58,6 +63,11 @@ def build(variant: str) -> Path:
     (card / "FOUND.BIN").write_bytes(headed(raw, 0x8000))
     boot = (ROOT / "debug/cpc_foundation/BOOT.BAS").read_text()
     (card / "BOOT.BAS").write_bytes(boot.replace("\n", "\r\n").encode("ascii"))
+    inputs = []
+    if variant in STORAGE_VARIANTS:
+        for name, data in FILES.items():
+            (card / name).write_bytes(data)
+            inputs.append(str(card / name))
     # Build a fresh image and replace only this diagnostic's own output.
     # Never copy arbitrary files left over in the staging directory.
     image = media / "FOUNDATION.IMG"
@@ -71,7 +81,7 @@ def build(variant: str) -> Path:
         subprocess.run(["mkfs.fat", "--invariant", "-F16", "--offset", "32",
                         "-n", "CPCPROBE", temporary], check=True)
         subprocess.run(["mcopy", "-i", temporary + "@@16384",
-                        str(card / "BOOT.BAS"), str(card / "FOUND.BIN"), "::/"],
+                        str(card / "BOOT.BAS"), str(card / "FOUND.BIN"), *inputs, "::/"],
                        env={**os.environ, "MTOOLS_SKIP_CHECK": "1"}, check=True)
         Path(temporary).replace(image)
     finally:
@@ -88,7 +98,8 @@ def build(variant: str) -> Path:
         "source_sha256": {
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in [*sorted((ROOT / "debug/cpc_foundation").iterdir()),
-                         ROOT / "tools/cpc_graphics_fixture.py"] if path.is_file()
+                         ROOT / "tools/cpc_graphics_fixture.py",
+                         ROOT / "tools/cpc_storage_fixture.py"] if path.is_file()
         },
         "raw_bytes": len(raw), "raw_sha256": hashlib.sha256(raw).hexdigest(),
         "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
