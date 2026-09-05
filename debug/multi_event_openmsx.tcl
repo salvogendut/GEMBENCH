@@ -5,6 +5,7 @@
 set throttle off
 set pause_on_lost_focus false
 set pause off
+after time 600 {me_finish "TIMEOUT harness watchdog"}
 
 proc me_env_addr {name} { expr {$::env($name) + 0} }
 
@@ -86,6 +87,10 @@ set me_hidden_draw_delta -1
 set me_hidden_damage_delta -1
 set me_poll_events {}
 set me_poll_bp ""
+set me_in_poll 0
+set me_poll_samples 0
+set me_restore_rect {}
+set me_restore_draw_start 0
 
 proc me_is_loaded {} {
     expr {[peek $::me_main] == $::me_sig0 &&
@@ -114,7 +119,14 @@ proc me_poll_tick {} {
     }
     set callbacks $::me_poll_events
     set ::me_poll_events {}
-    foreach callback $callbacks {uplevel #0 $callback}
+    set ::me_in_poll 1
+    incr ::me_poll_samples
+    foreach callback $callbacks {
+        if {[catch {uplevel #0 $callback} message]} {
+            me_finish "ERROR poll callback: $message"
+        }
+    }
+    set ::me_in_poll 0
     set ::pause off
 }
 
@@ -214,10 +226,17 @@ proc me_capture_state {} {
 }
 
 proc me_finish {status} {
+    if {$status eq "PASS" && !$::me_in_poll} {
+        set status "FAIL success sampled outside kernel poll"
+    }
     me_release_all
     catch {screenshot -raw $::me_output.png}
     set handle [open $::me_output w]
     puts $handle "STATUS=$status"
+    puts $handle "POLL_SAMPLES=$::me_poll_samples"
+    puts $handle "FINAL_SAMPLE_AT_POLL=$::me_in_poll"
+    puts $handle "RESTORE_EXPECTED_RECT=$::me_restore_rect"
+    puts $handle "RESTORE_DRAW_DELTA=[expr {$::me_draw_hits - $::me_restore_draw_start}]"
     puts $handle "DRAW_HITS=$::me_draw_hits"
     puts $handle "MAIN_HITS=$::me_main_hits"
     puts $handle "APP_INDEX=$::me_app_index"
@@ -290,12 +309,12 @@ proc me_move_tick {} {
     catch {keymatrixup 8 0x40}
     catch {keymatrixup 8 0x80}
     if {$x > 127 || $y > 211} {
-        after time 0.002 me_move_tick
+        me_poll_after 0.002 me_move_tick
         return
     }
     if {[expr {abs($x - $::me_target_x)}] <= 1 &&
         [expr {abs($y - $::me_target_y)}] <= 3} {
-        after time 0.12 me_move_settled
+        me_poll_after 0.12 me_move_settled
         return
     }
     if {[machine_info time] >= $::me_deadline} {
@@ -303,15 +322,19 @@ proc me_move_tick {} {
         return
     }
     if {$x < $::me_target_x - 1} {
-        keymatrixdown 8 0x80
+        set mask 0x80
     } elseif {$x > $::me_target_x + 1} {
-        keymatrixdown 8 0x10
+        set mask 0x10
     } elseif {$y < $::me_target_y - 3} {
-        keymatrixdown 8 0x40
+        set mask 0x40
     } else {
-        keymatrixdown 8 0x20
+        set mask 0x20
     }
-    after time 0.025 me_move_tick
+    # Use the proven PAINT/accessory harness pulses. Releasing on a timer
+    # prevents a delayed root poll from leaving an accelerating key held.
+    keymatrixdown 8 $mask
+    after time 0.08 [list keymatrixup 8 $mask]
+    me_poll_after 0.16 me_move_tick
 }
 
 proc me_move_settled {} {
@@ -321,9 +344,9 @@ proc me_move_settled {} {
     if {$x <= 127 && $y <= 211 &&
         [expr {abs($x - $::me_target_x)}] <= 1 &&
         [expr {abs($y - $::me_target_y)}] <= 3} {
-        after time 0.08 $::me_callback
+        me_poll_after 0.08 $::me_callback
     } else {
-        after time 0.002 me_move_tick
+        me_poll_after 0.002 me_move_tick
     }
 }
 
@@ -338,7 +361,7 @@ proc me_move_to {x y callback} {
 
 proc me_click_up {callback} {
     keymatrixup 8 0x01
-    after time 0.8 $callback
+    me_poll_after 0.8 $callback
 }
 
 proc me_click {callback} {
@@ -348,7 +371,7 @@ proc me_click {callback} {
 
 proc me_double_second_up {callback} {
     keymatrixup 8 0x01
-    after time 0.10 $callback
+    me_poll_after 0.10 $callback
 }
 
 proc me_double_second {callback} {
@@ -424,6 +447,7 @@ proc me_background_check {} {
 # current-time Clock through the ordinary compositor without replaying ticks.
 proc me_hidden_begin {} {
     set ::me_bg_recording 0
+    set ::me_restore_rect [me_rect $::me_filemgr_slot]
     lassign [me_rect $::me_filemgr_slot] x y w h
     set ::me_deadline [expr {[machine_info time] + 10.0}]
     me_move_to [expr {$x + $w - 2}] [expr {$y + 4}] me_hidden_max_click
@@ -445,11 +469,11 @@ proc me_hidden_wait {} {
         set ::me_hidden_worker_start $::me_worker_hits
         set ::me_hidden_draw_start $::me_draw_hits
         set ::me_hidden_damage_start $::me_bg_damage_hits
-        after time 3.0 me_hidden_check
+        me_poll_after 3.0 me_hidden_check
     } elseif {[machine_info time] >= $::me_deadline} {
         me_finish "FAIL Clock did not become fully occluded"
     } else {
-        after time 0.1 me_hidden_wait
+        me_poll_after 0.1 me_hidden_wait
     }
 }
 
@@ -473,18 +497,26 @@ proc me_hidden_check {} {
 }
 
 proc me_hidden_restore_click {} {
+    set ::me_restore_draw_start $::me_draw_hits
     me_click me_hidden_restore_wait
 }
 
-proc me_hidden_restore_wait {} {
-    if {[me_rect $::me_filemgr_slot] ne {0 8 128 204} &&
+proc me_restore_ready {} {
+    expr {$::me_in_poll && [peek 0x1350] == 3 &&
+        [peek 0x1351] == $::me_filemgr_slot &&
+        [peek $::me_paintlock] == 0 &&
+        [me_rect $::me_filemgr_slot] eq $::me_restore_rect &&
         [peek [expr {0xC1C0 + $::me_clock_slot}]] != 0 &&
-        $::me_draw_hits > $::me_hidden_draw_start} {
+        $::me_draw_hits > $::me_restore_draw_start}
+}
+
+proc me_hidden_restore_wait {} {
+    if {[me_restore_ready]} {
         me_finish PASS
     } elseif {[machine_info time] >= $::me_deadline} {
         me_finish "FAIL exposed Clock did not repaint current state"
     } else {
-        after time 0.1 me_hidden_restore_wait
+        me_poll_after 0.1 me_hidden_restore_wait
     }
 }
 
@@ -494,7 +526,7 @@ proc me_background_focused {} {
         if {[machine_info time] >= $::me_deadline} {
             me_finish "FAIL File Manager focus repaint did not complete"
         } else {
-            after time 0.1 me_background_focused
+            me_poll_after 0.1 me_background_focused
         }
         return
     }
@@ -563,7 +595,7 @@ proc me_key_release {} {
     keymatrixup 5 0x01
     # The S action repaints every live window; leave the 3.58 MHz target enough
     # emulated time to return to Clock before sampling its banked state.
-    after time 8.0 me_key_check
+    me_poll_after 8.0 me_key_check
 }
 
 proc me_type_key {} {
@@ -575,11 +607,11 @@ proc me_type_key {} {
 proc me_clock_ready {} {
     if {[me_is_loaded] && [peek 0x1350] >= 3 &&
         $::me_draw_hits >= 1 && $::me_frame_hits >= 2} {
-        after time 0.5 me_type_key
+        me_poll_after 0.5 me_type_key
     } elseif {[machine_info time] >= $::me_deadline} {
         me_finish "FAIL Clock did not enter multi-event loop"
     } else {
-        after time 0.1 me_clock_ready
+        me_poll_after 0.1 me_clock_ready
     }
 }
 
@@ -668,7 +700,7 @@ proc me_filemgr_ready {} {
     if {[machine_info time] >= $::me_deadline} {
         me_finish "FAIL staged A.APP was not listed"
     } else {
-        after time 0.05 me_filemgr_ready
+        me_poll_after 0.05 me_filemgr_ready
     }
 }
 
@@ -688,4 +720,4 @@ debug set_bp $me_timer_collect {} {
     }
     set ::pause off
 }
-after time 62.0 {me_move_to 4 40 me_open_drive}
+me_poll_after 62.0 {me_move_to 4 40 me_open_drive}
