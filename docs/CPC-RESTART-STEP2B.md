@@ -106,6 +106,7 @@ UNAPI disabled. No physical-machine or new CPC runtime result is claimed.
 | Desk/Clock/Calculator, Screen 6 and 7, before and after | PASS: menu registration and singleton lookup, borders/menu/text, close/relaunch allocation 4→3→4 busy pages; final focus 1, three windows, no deferred/shell busy state or stack-guard fault. |
 | Existing M7 service lifecycle, one run against the unchanged executable media | PASS: failed-start rollback without leak; windowless provider creation/removal, lease refs 3→2→1→0, stale cleanup; final two owners/windows, zero providers/leases, unlocked. Response status 11 is expected network-unavailable with UNAPI off, not a networking success claim. |
 | Independent lifetime provider checks | PASS: five unittest methods, including subcases. Actual shared assembly compiles with separate low (`0x2000`) and high (`0xD800`) state layouts and a different window-flags layout; invalid spans/index-page crossings are rejected. |
+| Full `make check` in a clean worktree at `36f877a` | PASS, exit 0: 87 discovered Python tests, plus the existing C/assembly runtime, universal SDK determinism, ABI, layout, asset, media and editor checks. |
 
 The independent providers are assembly/layout fixtures, not executed CPC
 kernels. The service diagnostic still observes the private v5 sysinfo shadow;
@@ -113,6 +114,13 @@ the architecture diagnostic separately checks the canonical v6 record. Root
 quit denial and every error permutation are not newly exercised by dedicated
 runtime tests here; their instructions are preserved by the exact comparison.
 Sampled accessory stack maxima vary with timing and are not worst-case bounds.
+
+The full suite ran in `/tmp/geobench-69-check.1X401v` using `my-distrobox`, with
+`SDCC=/var/home/salvogendut/Dev/sdcc/bin/sdcc` and
+`SDAS=/var/home/salvogendut/Dev/sdcc/bin/sdasz80`. Its log is
+`/tmp/geobench-69-make-check.log`. That worktree has independent generated
+fixtures and no production build/media symlink; no checks were relaxed for
+the workspace's preserved, untracked CPC artifacts.
 
 Reproduce the runtime checks after building matching MSX2 media and diagnostic
 dependencies:
