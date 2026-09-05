@@ -39,6 +39,7 @@ proc pp_begin {} {
     debug remove_bp $::pp_bp
     if {[peek 0xCF2D] != 1 || !([peek 0xCF20] & 0x80)} {error "ABI 2.1 not published"}
     set ::pp_regs [debug read_block "CPU regs" 0 28]
+    set ::pp_saved_iff [expr {[reg IFF] & 3}]
     set ::pp_sp [reg SP]
     set ::pp_stack [debug read_block memory [expr {$::pp_sp - 256}] 256]
     set ::pp_app [debug read_block memory 0x7E80 128]
@@ -122,7 +123,14 @@ proc pp_round {} {
 proc pp_next {} {
     if {[llength $::pp_cases] == 0} {
         if {$::pp_iff == 0} {set ::pp_iff 3; pp_round; return}
-        pp_finish
+        # Establish IFF using CPU instructions, not debugger writes to the
+        # synthetic IFF register (which need not be writable in an emulator).
+        poke 0x7ED0 [expr {$::pp_saved_iff ? 0xFB : 0xF3}]
+        poke 0x7ED1 0xC3
+        poke 0x7ED2 0xFE
+        poke 0x7ED3 3
+        set ::pp_finish_bp [debug set_bp 0x03FE {} {if {[catch {pp_finish} message]} {da_finish_base "FAIL parameters: $message"}; set ::pause off}]
+        reg PC 0x7ED0
         return
     }
     set ::pp_case [lindex $::pp_cases 0]
@@ -143,8 +151,11 @@ proc pp_next {} {
     poke [expr {[reg SP]+1}] 3
     reg HL $pointer
     reg BC $size
-    reg IFF $::pp_iff
-    reg PC 0x80D5
+    poke 0x7ED0 [expr {$::pp_iff ? 0xFB : 0xF3}]
+    poke 0x7ED1 0xC3
+    poke 0x7ED2 0xD5
+    poke 0x7ED3 0x80
+    reg PC 0x7ED0
 }
 proc pp_return {} {
     lassign $::pp_case name record status value pointer size writes worker
@@ -153,7 +164,9 @@ proc pp_return {} {
     }
     if {[reg SP] != $::pp_sp || ([reg IFF] & 3) != $::pp_iff ||
         [peek 0x134F] != $::pp_bank || [debug read ioports 0xFD] != $::pp_mapper ||
-        [peek 0x1340] != $::pp_case_lock} {error "$name changed SP/IFF/bank/lock"}
+        [peek 0x1340] != $::pp_case_lock} {
+        error "$name changed state: SP=[reg SP]/$::pp_sp IFF=[reg IFF]/$::pp_iff bank=[peek 0x134F]/$::pp_bank mapper=[debug read ioports 0xFD]/$::pp_mapper lock=[peek 0x1340]/$::pp_case_lock"
+    }
     for {set i 0} {$i < 8} {incr i} {
         if {[peek [expr {$::pp_canary+$i}]] != 0xA5} {error "$name stack canary"}
     }
@@ -167,6 +180,7 @@ proc pp_return {} {
 proc pp_finish {} {
     if {[debug read_block memory 0x0400 [string length $::pp_code]] ne $::pp_code} {error "module code corrupted"}
     debug remove_bp $::pp_return_bp
+    debug remove_bp $::pp_finish_bp
     debug write_block memory [expr {$::pp_sp-256}] $::pp_stack
     debug write_block memory 0x7E80 $::pp_app
     debug write_block memory 0xC3CA $::pp_timer

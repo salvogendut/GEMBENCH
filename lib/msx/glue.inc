@@ -174,8 +174,8 @@ MSX_SYS_UNIVERSAL_MINOR equ MSX_SYSINFO+45
 MSX_SYS_UNIVERSAL_PROFILE equ MSX_SYSINFO+46
 MSX_SYS_RESERVED4   equ MSX_SYSINFO+47
 
-; Gate-2 GBAP v4 validator. It is loaded from the project-owned GBAPV4.MOD at
-; boot and executes from fixed page-3 RAM while an application page is mapped.
+; GBAP v4 admission and ABI 2.1 parameter/sysinfo support. Loaded from the
+; project-owned GBAPV4.MOD into fixed low TPA while the application page stays mapped.
 ; Reuse child-COM storage only after boot has left it. This is never an IRQ
 ; entry routine: BIOS interrupts restore DOS page 0 before returning here.
 ; #CF30..#D3FF stays reserved; legacy fixed-RAM and stack bounds are unchanged.

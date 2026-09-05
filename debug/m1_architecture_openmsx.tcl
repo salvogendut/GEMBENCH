@@ -340,13 +340,13 @@ proc m1_validate_sysinfo {{base ""}} {
         [m1_mem [expr {$base+26}]] == 1 && [m1_mem [expr {$base+27}]] == 0 &&
         [m1_mem [expr {$base+28}]] == 4 && [m1_word [expr {$base+29}]] == 512 &&
         [m1_mem [expr {$base+31}]] == 1 &&
-        ([m1_word [expr {$base+32}]] & 0x004F) == 0x004F &&
+        ([m1_word [expr {$base+32}]] & 0x00CF) == 0x00CF &&
         [m1_mem [expr {$base+34}]] == 128 && [m1_mem [expr {$base+35}]] == 212 &&
         [m1_mem [expr {$base+36}]] == 4 && [m1_mem [expr {$base+37}]] == 4 &&
         [m1_word [expr {$base+38}]] == 0x4000 &&
         [m1_word [expr {$base+40}]] == 0x7F00 &&
         [m1_word [expr {$base+42}]] == 0x8000 &&
-        [m1_mem [expr {$base+44}]] == 2 && [m1_mem [expr {$base+45}]] == 0 &&
+        [m1_mem [expr {$base+44}]] == 2 && [m1_mem [expr {$base+45}]] == 1 &&
         [m1_mem [expr {$base+46}]] == 3 && [m1_mem [expr {$base+47}]] == 0
     }
 }

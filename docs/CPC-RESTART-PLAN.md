@@ -9,7 +9,8 @@ MSX2 kernels, passing host checks and before/after openMSX lifecycle validation.
 Step 3 has begun independently: [memory/interrupt package 3A](CPC-RESTART-STEP3A.md)
 is complete under issue #65. The [3B graphics/parameter proof](CPC-RESTART-STEP3B.md)
 is implemented under #66; [public ABI/SDK/runtime adoption](CPC-RESTART-STEP3B-ABI.md)
-is being validated under #67. Runtime M4 I/O (3C) remains open.
+is complete on MSX2 under #67, with Screen 6/7 regressions. Runtime M4 I/O
+(3C) is the next foundation package and remains open.
 The remaining step-2 shared-core packages still gate desktop integration;
 moving to hardware probes does not mark step 2 complete.
 

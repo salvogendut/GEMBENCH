@@ -59,7 +59,7 @@ def main() -> int:
 
     gate = args.gate.read_bytes()
     if len(gate) != gate_size or len(gate) > gate_limit - gate_base:
-        raise AssertionError("GBAPV4.MOD does not fit its fixed page-3 region")
+        raise AssertionError("GBAPV4.MOD does not fit its reserved low-TPA region")
     if gate[0] != 0xC3 or gate[3:8] != b"GBV4\x02":
         raise AssertionError("GBAPV4.MOD boot signature is invalid")
     entry = struct.unpack_from("<H", gate, 1)[0]

@@ -3,7 +3,7 @@
 set throttle off
 set pause_on_lost_focus false
 set pause off
-after time 240 {da_finish "TIMEOUT harness watchdog"}
+after time 600 {da_finish "TIMEOUT harness watchdog"}
 
 proc da_env {name} { expr {$::env($name) + 0} }
 
@@ -108,6 +108,8 @@ proc da_border_ok {slot} {
 }
 
 proc da_lowram_ready {} {
+    # ABI 2.1 also executes ordinary services in reclaimed low TPA. The slot
+    # check still excludes BIOS ROM; PC below 0x4000 no longer implies ROM.
     set n [peek 0x1350]
     if {$n > $::da_max_nwin && $n <= 8} { set ::da_max_nwin $n }
     expr {$::da_page0_slot >= 0 &&

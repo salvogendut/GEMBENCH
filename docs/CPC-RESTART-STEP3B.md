@@ -5,11 +5,11 @@ following package 3A under [#65](https://github.com/salvogendut/GEMBENCH/issues/
 Branch: `feature/66-cpc-graphics-foundation`, based on `f3c779a`.
 
 Follow-up: [production ABI/SDK/MSX2 adoption](CPC-RESTART-STEP3B-ABI.md) is
-implemented and being validated under #67. The statements below describe the
+implemented and validated under #67. The statements below describe the
 scope and results of the isolated #66 proof, not that later integration.
 
-The hardware/proposed-calling-boundary fixture is implemented. **Full step 3B
-is still open:** the public universal ABI, SDK and MSX2 runtime have not adopted
+At the end of #66 the hardware/proposed-calling-boundary fixture was implemented,
+but **full step 3B was still open:** the public ABI, SDK and MSX2 runtime had not adopted
 this mechanism. No production code, application, capability or release media
 is changed. This is not a CPC desktop, application loader or second UI policy
 implementation.
@@ -204,7 +204,10 @@ artifacts; those artifacts and the check were not altered. No new MSX2 emulator
 run was performed: its production code, ABI constants and release media are
 unchanged.
 
-## Remaining integration gates
+## Integration gates identified at #66
+
+The production-adoption requirement below was subsequently handled by #67;
+see its linked validation record. The CPC runtime-specific gates remain open.
 
 The experimental ABI still exposes MSX-specific `C030`, `C039`, `C1EC` and
 `C3CA` cells. This proof does not modify or legitimize those addresses on CPC.

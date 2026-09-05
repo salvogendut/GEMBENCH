@@ -96,4 +96,60 @@ Run `make check` in a clean worktree: the user's untracked `QA/CPC/` leftovers
 are deliberately preserved here and conflict with the release-only absence
 check. Temporary probe media must not replace release QA media.
 
-Validation results are recorded after the integration checks below.
+## Recorded results
+
+The implementation was committed as `9a2a8af`; the follow-up changes adjust
+test observers and record evidence. Toolchain: container SDCC 4.6.2 #16671,
+RASM 3.2.1 and openMSX 21.0, Philips NMS 8250, 512 KiB and Sunrise IDE/Nextor.
+Emulator tests use private network-disabled image copies, not the production
+CARD. No physical-hardware or newly ported CPC/PCW runtime result is claimed.
+
+- Full `make check` passed in `/tmp/geobench-67-check.f96NDd`: 76 discovered
+  Python tests, plus the C, assembly, SDK determinism/layout, ABI, asset and
+  media checks. Log: `/tmp/geobench-67-make-check.log`. SDCC and SDAS paths were
+  supplied explicitly, as in the earlier restart packages.
+- New Probe launch, corrupted-package pre-entry rejection and the actual
+  shipped ABI 2.0 Probe passed in both Screen 6 and 7. Rejected files never
+  entered their startup code and restored the baseline free-page/owner count.
+  Logs: `/tmp/geobench-67-admission-{6,7}.log`.
+- The real Desk/Clock/Calculator workflow passed in both modes: three
+  registrations, five exact lookups, two activation sends, correct window
+  borders/menus/text, no duplicate windows, busy pages `4 -> 3 -> 4` across
+  Clock close/relaunch. Scheduler fault stayed zero. Sampled worker snapshot
+  peaks were 64 and 42 bytes; these are observations, not worst-case bounds.
+- Each mode passed 90 injected parameter cases, including both DI and EI
+  entry, exact-end text, every defined status category exercised by the fixture,
+  timer state/ownership checks, mapping/lock/SP restoration and intact guards.
+  Each run also observed four actual worker publications and 460 root drawing
+  calls. Logs: `/tmp/geobench-67-parameters-{6,7}.log`.
+- Native ownership/page/deferred/filesystem-context lifecycle passed in Screen
+  7: owner and window generations advanced on reuse, final free pages returned
+  to 22, and 53 filesystem-context calls completed. Log:
+  `/tmp/geobench-67-native.log`.
+- Native PAINT multi-window lifecycle passed in Screen 7, including moving all
+  three windows, matched clean/exposed canvas hashes and free pages `22 -> 22`.
+  Log: `/tmp/geobench-67-paint.log`.
+
+The preserved pre-change Desk workflow also passed in the baseline worktree.
+The new observer initially stopped a still-progressing test at 240 emulated
+seconds; its watchdog now allows the full keyboard-pointer sequence. It also
+recognizes the low-TPA module as ordinary DOS-RAM execution. Native sysinfo
+expectations were updated to minor 1. Interrupt tests execute real DI/EI rather
+than assuming the emulator's synthetic IFF debug register is writable.
+
+The only production fixes required by the initial failed runs were the exact-
+capacity module packaging edge described above and the old/new CRT minor-
+version compatibility handling. The tests did not require a new focus policy.
+
+Shipped image SHA-256:
+`a0c6fb4c1cf0dc4e2d0e1f9fb29356c981c022ab4202f12cf7f4077d9cc6ae0b`.
+Universal application SHA-256 values:
+
+- ABI Probe: `a6a696cc0bef9caf69c38b6c44f8d8e50dbb7dd560c88e99feb9595993e0adfc`
+- Clock: `8d605d045087199769dea40bfdfc50009a2a50bf958ffbcc26e97cdfcdfef2f2`
+- Calculator: `5e1989d171052d751386b355b1204382c88bba69f4edc632ea65fafb8b7da8f5`
+
+The images contain the implementation above; rebuilding can change timestamps
+and build-id assets. The untracked `QA/CPC/` directory was left untouched.
+The next foundation gate is **3C: bounded runtime M4 read/write and failure
+handling**, not enabling the old CPC desktop experiment.
