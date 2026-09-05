@@ -58,10 +58,11 @@ milestones.
 The recommended next MSX2 milestone is a bounded network-session/data service
 plus Browser adoption.
 
-## Retired ports
+## Port restoration
 
-CPC and PCW parity is no longer an active GEMBENCH milestone. The prior target
-code and backport assumptions are preserved on `archive/cpc-pcw-targets`. If a
-port is restarted later, it must begin as a new project decision and demonstrate
-equivalent lifecycle, failure, cleanup, packaging, and emulator tests before it
-advertises any GEMBENCH capability.
+The prior target code is preserved on `archive/cpc-pcw-targets`. The CPC
+experiment under #54 remains parked on `feature/54-reintegrate-cpc`; issue #63
+now records a [five-step restart](../CPC-RESTART-PLAN.md) from working MSX2.
+Its [reference matrix](../CPC-RESTART-MSX2-REFERENCE.md) requires equivalent
+lifecycle, failure, cleanup, packaging, and emulator tests before claiming
+parity. PCW remains a later port under #62.

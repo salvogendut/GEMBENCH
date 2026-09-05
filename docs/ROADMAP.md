@@ -29,8 +29,17 @@ target-specific application binaries.
 
 ## Platform restoration
 
-CPC and PCW are not active build targets today. Their last working tree is
-preserved on `archive/cpc-pcw-targets`. CPC restoration (issue #54) is paused
-behind the universal application ABI (issue #55), then PCW is restored as the
-third implementation. See [MSX2-ONLY.md](MSX2-ONLY.md) and the
-[universal ABI migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md).
+CPC and PCW are not active release targets. Their earlier working tree is
+preserved on `archive/cpc-pcw-targets`; the first CPC ABI experiment is preserved
+on `feature/54-reintegrate-cpc` under issue #54.
+
+The [CPC restart plan](CPC-RESTART-PLAN.md), begun in issue #63, proceeds through
+five steps: define the MSX2 reference, extract shared policy on MSX2, prove the
+CPC hardware/memory foundation, integrate that core, then migrate applications
+and close the parity matrix. The [step-1 inventory](CPC-RESTART-MSX2-REFERENCE.md)
+and [baseline results](CPC-RESTART-BASELINE.md) distinguish implemented features
+from missing validation. PCW remains a later port under issue #62.
+
+See [MSX2-ONLY.md](MSX2-ONLY.md) and the
+[universal ABI migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md) for target
+status and the executable-format contract.

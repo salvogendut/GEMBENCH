@@ -16,11 +16,13 @@ on the remote branch:
 archive/cpc-pcw-targets
 ```
 
-That branch is the restoration point for the new ports. This is no longer a
-permanent target policy: issue #54 will reintroduce CPC after issue #55 defines
-and implements a compile-once MSX2/CPC/PCW application ABI. PCW follows in a
-later port. Until those gates pass, CPC/PCW targets must not be exposed as
-working release builds.
+That branch remains an archival source for the new ports. This is no longer a
+permanent target policy. The first CPC ABI experiment under issue #54 is parked
+on `feature/54-reintegrate-cpc` at `5647857`. Issue #63 starts the
+[five-step CPC restart](CPC-RESTART-PLAN.md) from working MSX2 `5ed8a15`, beginning
+with a behavioral reference and shared-core extraction. PCW follows under #62.
+Until their gates pass, CPC/PCW targets must not be exposed as working release
+builds.
 
 The new direction is specified in
 [UNIVERSAL-APPLICATION-ABI.md](UNIVERSAL-APPLICATION-ABI.md) and its

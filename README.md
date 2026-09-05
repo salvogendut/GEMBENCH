@@ -82,9 +82,11 @@ or window work must cross an explicit version boundary.
 - RainBIOS as a supported validation environment
 
 GEOBENCH currently has no active CPC or PCW build, media, or release target. The
-last multi-platform tree is preserved on `archive/cpc-pcw-targets`. CPC is to be
-reintroduced after the compile-once GEOBENCH-2 ABI is implemented; PCW follows
-as a separate port. See the [current target state](docs/MSX2-ONLY.md) and the
+last multi-platform tree is preserved on `archive/cpc-pcw-targets`. The first
+CPC ABI experiment is parked on `feature/54-reintegrate-cpc`; the
+[five-step CPC restart](docs/CPC-RESTART-PLAN.md) begins from working MSX2 with
+a feature reference and shared-core extraction. PCW follows as a separate port.
+See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).
 
 ## Build and check
