@@ -8,6 +8,8 @@ set m1_initial [expr {$::env(GEMBENCH_M1_INITIAL)}]
 set m1_final [expr {$::env(GEMBENCH_M1_FINAL)}]
 set m1_owner [expr {$::env(GEMBENCH_M1_OWNER)}]
 set m1_retained [expr {$::env(GEMBENCH_M1_RETAINED)}]
+set m1_sysinfo_pointer [expr {$::env(GEMBENCH_M1_SYSINFO)}]
+set m1_sysinfo_record [expr {$::env(GEMBENCH_M1_SYSINFO_RECORD)}]
 set m3_tests [expr {$::env(GEMBENCH_M3_TESTS)}]
 set m4_tests [expr {$::env(GEMBENCH_M4_TESTS)}]
 set fm_total [expr {$::env(GEMBENCH_FM_TOTAL)}]
@@ -320,20 +322,32 @@ proc m1_double_click {callback} {
     m1_after 0.16 [list m1_double_first_up $callback]
 }
 
-proc m1_validate_sysinfo {} {
+proc m1_validate_sysinfo {{base ""}} {
+    # At boot SYSINFO.APP is not loaded yet. Use the kernel symbol for the
+    # readiness check; after launch validate the pointer returned to the app.
+    if {$base eq ""} { set base $::m1_sysinfo_record }
     expr {
-        [m1_mem 0xC2F0] == 32 && [m1_mem 0xC2F1] == 5 &&
-        [m1_mem 0xC2F4] == 1 && [m1_mem 0xC2F5] == 7 &&
-        [m1_word 0xC2F6] == 512 && [m1_word 0xC2F8] == 212 &&
-        [m1_mem 0xC2FA] == 4 && [m1_mem 0xC2FB] == 16 &&
-        [m1_mem 0xC2FD] == [m1_mem 0xC2E4] &&
-        ([m1_word 0xC300] & 0x5FC0) == 0x5FC0 &&
-        [m1_mem 0xC304] == 8 && [m1_mem 0xC305] == 1 &&
-        [m1_mem 0xC306] == 8 && [m1_mem 0xC307] == 0 &&
-        [m1_mem 0xC308] == 8 && [m1_mem 0xC309] == 4 &&
-        [m1_mem 0xC30A] == 1 && [m1_mem 0xC30B] == 0 &&
-        [m1_mem 0xC30C] == 4 && [m1_word 0xC30D] == 512 &&
-        [m1_mem 0xC30F] == 1
+        $base != 0 &&
+        [m1_mem $base] == 48 && [m1_mem [expr {$base+1}]] == 6 &&
+        [m1_mem [expr {$base+4}]] == 1 && [m1_mem [expr {$base+5}]] == 7 &&
+        [m1_word [expr {$base+6}]] == 512 && [m1_word [expr {$base+8}]] == 212 &&
+        [m1_mem [expr {$base+10}]] == 4 && [m1_mem [expr {$base+11}]] == 16 &&
+        [m1_mem [expr {$base+13}]] == [m1_mem 0xC2E4] &&
+        ([m1_word [expr {$base+16}]] & 0x5FC0) == 0x5FC0 &&
+        [m1_mem [expr {$base+20}]] == 8 && [m1_mem [expr {$base+21}]] == 1 &&
+        [m1_mem [expr {$base+22}]] == 8 && [m1_mem [expr {$base+23}]] == 0 &&
+        [m1_mem [expr {$base+24}]] == 8 && [m1_mem [expr {$base+25}]] == 4 &&
+        [m1_mem [expr {$base+26}]] == 1 && [m1_mem [expr {$base+27}]] == 0 &&
+        [m1_mem [expr {$base+28}]] == 4 && [m1_word [expr {$base+29}]] == 512 &&
+        [m1_mem [expr {$base+31}]] == 1 &&
+        ([m1_word [expr {$base+32}]] & 0x004F) == 0x004F &&
+        [m1_mem [expr {$base+34}]] == 128 && [m1_mem [expr {$base+35}]] == 212 &&
+        [m1_mem [expr {$base+36}]] == 4 && [m1_mem [expr {$base+37}]] == 4 &&
+        [m1_word [expr {$base+38}]] == 0x4000 &&
+        [m1_word [expr {$base+40}]] == 0x7F00 &&
+        [m1_word [expr {$base+42}]] == 0x8000 &&
+        [m1_mem [expr {$base+44}]] == 2 && [m1_mem [expr {$base+45}]] == 0 &&
+        [m1_mem [expr {$base+46}]] == 3 && [m1_mem [expr {$base+47}]] == 0
     }
 }
 
@@ -362,7 +376,7 @@ proc m1_wait_first {} {
         set ::m1_first_window_gen [m1_window_owner_gen $::m1_first_owner]
         set ::m1_first_initial [m1_mem $::m1_initial]
         set ::m1_first_final [m1_mem $::m1_final]
-        if {![m1_validate_sysinfo] || $::m1_first_owner == 0 ||
+        if {![m1_validate_sysinfo [m1_word $::m1_sysinfo_pointer]] || $::m1_first_owner == 0 ||
             $::m1_first_gen != (($::m1_first_owner >> 8) & 0xFF) ||
             $::m1_first_window_gen == 0 ||
             $::m1_first_final != $::m1_first_initial - 1 ||
@@ -435,7 +449,8 @@ proc m1_wait_second {} {
         set ::m1_second_window_gen [m1_window_owner_gen $::m1_second_owner]
         set ::m1_second_initial [m1_mem $::m1_initial]
         set ::m1_second_final [m1_mem $::m1_final]
-        if {$::m1_second_owner == $::m1_first_owner ||
+        if {![m1_validate_sysinfo [m1_word $::m1_sysinfo_pointer]] ||
+            $::m1_second_owner == $::m1_first_owner ||
             ($::m1_second_owner & 0xFF) != ($::m1_first_owner & 0xFF) ||
             $::m1_closed_gen != $::m1_first_gen ||
             $::m1_second_gen != (($::m1_second_owner >> 8) & 0xFF) ||
