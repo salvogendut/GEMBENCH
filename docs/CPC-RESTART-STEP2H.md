@@ -111,6 +111,7 @@ private hard-disk images. No CPC emulator or floppy-backed runtime is involved.
 | Release Desk/Clock/Calculator presentation | Included in both-mode parameter runs: borders, text, menu activation and close/relaunch intact; ten stacking checks, pages `4→3→4`, final three windows/focus 1 and zero stack fault. |
 | New provider tests | Nine unittest methods PASS: actual filesystem client execution across four profiles and two state layouts; fixed-span/overlap rejection; real SDAS publisher and RASM parameter assembly with independent low/high state and 128×212, 80×200, 90×248 column/line geometries; negative layout/index/geometry/code-placement checks. |
 | Existing targeted checks | Four universal-parameter and four background-timer tests PASS; filesystem header/gate/module build checks PASS (three-byte native gate, 2,024-byte module). |
+| Full repository `make check` | PASS (exit 0) in a clean detached checkout at `c04ee97`: all 135 discovered Python tests, no skips, plus host-library suites, Z80 compilation/universal SDK builds, ABI and distribution audits. |
 
 The host client tests execute production C with fake synchronous calls; they do
 not establish Z80 integer sizes, packed structures or CPC storage correctness.
@@ -135,6 +136,11 @@ Local evidence: `/tmp/geobench-2h-baseline.GQUzGe`, pinned reference worktree
 `/tmp/geobench-75-{fs,clock}-{before,after}.{log,txt}` and
 `/tmp/geobench-75-params-{6,7}-{before,after}.log`. These paths are temporary
 evidence locations; the durable results are recorded here.
+
+Full-suite checkout: `/tmp/geobench-75-check.Qk7ZEZ`, with an independent clean
+build directory; log: `/tmp/geobench-75-make-check.log`. Its freshly assembled
+GBAPV4 module also matches the pinned baseline byte-for-byte. The static MSX
+floppy-distribution audit does not boot a floppy or run a CPC emulator.
 
 ## Next package
 
