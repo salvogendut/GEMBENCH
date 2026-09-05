@@ -24,8 +24,9 @@
 ; included from core/ through msx_owner_page.inc's state/callback bindings.
 ; Step 2B (#69) adds application/window identities, links and lifetime through
 ; msx_app_lifetime.inc. Step 2F (#73) shares deferred API/FIFO/delivery through
-; msx_deferred.inc. Native mapper discovery, sysinfo and FS service gates remain
-; here; focus/rendering policy has its own shared units and provider bindings.
+; msx_deferred.inc. Step 2G (#74) shares resident filesystem-owner cleanup and
+; paged context policy. Native mapper discovery, sysinfo and FS service gates
+; remain here; focus/rendering policy has its own shared units and bindings.
 ; Ordered includes preserve the emitted MSX2 kernel bytes.
 
 ; This source is assembled in two passes. The normal app_pool include emits the
@@ -291,23 +292,8 @@ gbfsctx_modname db   "GBFSCTX MOD"
 ; remains open between bounded calls, so invalidating matching records is the
 ; complete close/cancel action. The one-shot launch transfer owns no resource
 ; and is overwritten/consumed by the next prepare/adopt pair.
-fsctx_owner_cleanup
-                ld    ix,MSX_FSCTX_TABLE
-                ld    b,MSX_FSCTX_MAX
-kfoc_loop      ld    a,(ix+0)
-                or    a
-                jr    z,kfoc_next
-                ld    a,(MSX_ALLOC_OWNER)
-                cp    (ix+2)
-                jr    nz,kfoc_next
-                ld    a,(MSX_ALLOC_OWNER+1)
-                cp    (ix+3)
-                jr    nz,kfoc_next
-                ld    (ix+0),0
-kfoc_next      ld    de,MSX_FSCTX_RECORD_SIZE
-                add   ix,de
-                djnz  kfoc_loop
-                ret
+                include "msx_fsctx_cleanup.inc"
+                include "core/fsctx_cleanup.asm"
 
                 endif
                 ifndef GB_DEFER_LATE

@@ -35,6 +35,11 @@ Important split units include:
   timer collector remains app-linked in `lib/gembench/core/timer_collect.inc`
   (SDAS dialect), behind `lib/gembench/msx_timer_collect.inc`;
   see the [step-2F report](../docs/CPC-RESTART-STEP2F.md);
+- `core/fsctx_policy.inc` — shared paged filesystem-context policy, with
+  `kc/msx_fsctx.h` fixed state/Nextor hooks; `core/fsctx_cleanup.asm` retains
+  storage-free resident owner cleanup. App-linked service bookkeeping uses
+  `lib/gembench/core/service_internal.h` and `lib/gembench/msx_service.h`;
+  see the [step-2G report](../docs/CPC-RESTART-STEP2G.md);
 - `assets.asm`, `config_module.asm`, `modules.asm` — resource loading;
 - `app_pool.asm`, `gbr_bank.asm` — application and auxiliary resource pages;
 - `api_table.inc`, `lowram.inc` — frozen calls and fixed shared contracts.

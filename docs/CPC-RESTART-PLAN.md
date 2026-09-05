@@ -23,10 +23,14 @@ correction and accessory pre-click snapshot guard were validated separately.
 move/resize and focus damage, explicit/window clips and bottom-up repaint
 dispatch, with unchanged normal/cooperative MSX2 kernels.
 [Deferred messages/timer collector 2F](CPC-RESTART-STEP2F.md) is extracted under
-#73, retaining byte-identical kernels, timer object and Desktop payload. Next
-extract filesystem-context state/service bookkeeping. Low-level context/IRQ
-adapters and remaining publication/universal-parameter provider work also
-remain. The isolated foundation proofs do not enable a CPC desktop.
+#73, retaining byte-identical kernels, timer object and Desktop payload.
+[Filesystem contexts/service bookkeeping 2G](CPC-RESTART-STEP2G.md) is extracted
+under #74: paged context policy, resident owner cleanup and app-linked service
+state have explicit providers, with unchanged kernels/module/application bytes.
+Next finish the app-side request/publication bindings (filesystem, timers and
+universal parameters) and the low-level context/IRQ adapter boundary. These
+remain before the production CPC memory map and shared desktop integration.
+The isolated foundation proofs do not enable a CPC desktop.
 The remaining step-2 shared-core packages still gate desktop integration;
 moving to hardware probes does not mark step 2 complete.
 

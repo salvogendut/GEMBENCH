@@ -583,6 +583,12 @@ fi
 if [ "$NET_FLAG" = "1" ]; then
     deps+=("$NET_SRC")
 fi
+if [ "$GB_SERVICE_CLIENT_FLAG" = "1" ] ||
+   [ "$GB_SERVICE_PROVIDER_FLAG" = "1" ] ||
+   [ "$GB_SERVICE_COLLECTOR_FLAG" = "1" ]; then
+    deps+=("$GBR_LIB/msx_service.h" "$GBR_LIB/core/service_contract.h"
+           "$GBR_LIB/core/service_internal.h")
+fi
 if [ "$GB_SERVICE_CLIENT_FLAG" = "1" ]; then
     deps+=("$GBR_LIB/gbservice_client.c" "$GBR_LIB/gbservice_internal.h"
            "$GBR_INCLUDE/gbservice.h")

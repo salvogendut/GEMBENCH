@@ -15,7 +15,9 @@ mkdir -p "$work" "$(dirname "$OUT")"
 . tools/build_cache.sh
 
 deps=("$0" tools/build_cache.sh tools/gblib_subset.py "$GB/crt0.s" "$GB/gblib.s" \
-      "$GB/gb.h" "$KC/gbfsctx_mod.c" "$KC/gbfsctx_msx.s" "$KC/gbfsctx.symbols")
+      "$GB/gb.h" "$KC/gbfsctx_mod.c" "$KC/gbfsctx_msx.s" "$KC/gbfsctx.symbols"
+      "$KC/msx_fsctx.h" kernel/core/fsctx_layout.h kernel/core/fsctx_contract.h
+      kernel/core/fsctx_policy.inc)
 stamp="$OUT.stamp"
 cache_key=$(printf '%s\n' "build_fsctxmod.v1" "SDCC=$SDCC" "SDAS=$SDAS" "MAKEBIN=$MAKEBIN")
 if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
