@@ -99,6 +99,7 @@ comparison evidence in this package, not a newly run lifecycle scenario.
 | Multi-client shared-service lifecycle | PASS before and after. Failed startup status 10; duplicate 9, foreign lease 3 and fourth client full 4. References descend `3,2,1,0`; provider appears then unloads; final leases/providers/lock all zero and two baseline owners/windows. Seven responses; network-unavailable statuses `11,11,11`, not successful network traffic. |
 | Actual C policy with independent state | PASS for low (`0x2000`) and high (`0xD800`) bindings. Filesystem allocation/generation/validation, interleaved iterators, batches, I/O bounds/failure, cancel and launch handoff; actual service client/provider/collector functions cover startup failure, queue pressure, owner death, stale leases, generation wrap and bounded STOP collection. |
 | Provider/contract tests | Eight new unittest methods PASS: the executable C fixtures above, shared-source/dependency/layout checks, invalid fixed spans and overlap, and real RASM cleanup assembly with independent addresses and record layouts plus negative field/stride bounds. Existing three service-manager tests also pass. |
+| Full repository `make check` | PASS (exit 0) in a clean detached checkout at `0395b27`: all 126 discovered Python tests, no skips, plus host-library suites, Z80 compilation/universal SDK builds, ABI and distribution audits. |
 
 Host tests execute the real shared C implementation, not a second policy model.
 Their native C integer widths and fake synchronous I/O do not prove Z80 ABI,
@@ -125,6 +126,10 @@ Local evidence: `/tmp/geobench-2g-baseline.IDAyGX` (payloads/kernel comparisons)
 `/tmp/geobench-74-build-compare.log`, `/tmp/geobench-74-policy-tests.log`, and
 `/tmp/geobench-74-{fs,service}-{before,after}.{log,txt}`. These temporary paths
 are convenient evidence locations; this report records the durable results.
+
+Full-suite evidence: `/tmp/geobench-74-check.Ib1gNf` has its own clean build
+directory; output is `/tmp/geobench-74-make-check.log`. The suite's static MSX
+floppy-distribution audit does not boot a floppy or run a CPC emulator.
 
 ## Next gate
 
