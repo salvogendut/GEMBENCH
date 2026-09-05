@@ -9,7 +9,9 @@ Important split units include:
 - `boot_msx.asm` — MSX-DOS/Nextor startup and shutdown;
 - `input_api_msx.asm` — frame-paced input and event publication;
 - `clock_msx.asm`, `clock_msx_rtc.asm` — software clock and RTC seed;
-- `msx_page_pool.asm` — generation-safe mapper/application ownership;
+- `msx_page_pool.asm`, `msx_owner_page.inc` — MSX mapper/application adapter;
+- `core/owner_*.asm`, `core/page_*.asm` — shared owner/page policy with a
+  checked state/callback contract; see the [step-2A report](../docs/CPC-RESTART-STEP2A.md);
 - `scheduler.asm`, `scheduler_image.asm` — app-worker scheduling;
 - `assets.asm`, `config_module.asm`, `modules.asm` — resource loading;
 - `app_pool.asm`, `gbr_bank.asm` — application and auxiliary resource pages;

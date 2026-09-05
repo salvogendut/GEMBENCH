@@ -3,8 +3,10 @@
 Started: 2026-09-05. Tracking issue: [#63](https://github.com/salvogendut/GEMBENCH/issues/63).
 Step-1 branch: `feature/cpc-restart-reference`.
 
-Progress: step 1 deliverables are complete; the fresh host baseline passes.
-Steps 2-5 are planned. Runtime acceptance remains subject to the recorded gates.
+Progress: step 1 is complete. Step 2 has begun with
+[owner/page extraction 2A](CPC-RESTART-STEP2A.md) under issue #64: byte-identical
+MSX2 kernels, passing host checks and before/after openMSX lifecycle validation.
+The remaining shared-core packages and steps 3-5 are planned.
 
 The goal is to bring the CPC back with the software features and application
 behavior of the working MSX2 distribution, using a shared implementation of
