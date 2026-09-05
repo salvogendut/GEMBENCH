@@ -20,7 +20,11 @@ Important split units include:
   `core/window_hit_test.asm` — shared stacking, click-to-focus, hit-testing and
   focus/menu switching, with `msx_window_focus.inc` table/driver bindings;
   see the [step-2C report](../docs/CPC-RESTART-STEP2C.md);
-- `scheduler.asm`, `scheduler_image.asm` — app-worker scheduling;
+- `scheduler.asm`, `scheduler_image.asm` — app-worker context/IRQ machinery;
+- `core/visibility_prepare.asm`, `core/visible_regions.asm`,
+  `core/window_visibility.asm`, `core/worker_select.asm` — shared damage-source
+  iteration, visibility ranking and worker priority, bound through
+  `msx_visibility.inc`; see the [step-2D report](../docs/CPC-RESTART-STEP2D.md);
 - `assets.asm`, `config_module.asm`, `modules.asm` — resource loading;
 - `app_pool.asm`, `gbr_bank.asm` — application and auxiliary resource pages;
 - `api_table.inc`, `lowram.inc` — frozen calls and fixed shared contracts.

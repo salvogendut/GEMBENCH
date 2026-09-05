@@ -16,10 +16,12 @@ is complete on MSX2 under #67, with Screen 6/7 regressions.
 under #69: unchanged kernel bytes, independent provider assembly checks, and
 before/after application lifecycle regressions. [Focus/z-order 2C](CPC-RESTART-STEP2C.md)
 is extracted under #70, with unchanged normal/cooperative kernels and explicit
-before/after stacking assertions. Next extract visible damage and scheduling;
-also tighten the legacy Clock probe's final low-RAM sampling before using it
-as a damage-extraction acceptance gate. The isolated foundation proofs do not
-enable a CPC desktop.
+before/after stacking assertions. [Visible regions/worker priority 2D](CPC-RESTART-STEP2D.md)
+is extracted under #71 with byte-identical scheduler code. The Clock poll-sampling
+correction and accessory pre-click snapshot guard were validated separately.
+Next extract WM damage construction and repaint dispatch; low-level context/IRQ
+adapters and deferred/timer/filesystem/service work remain. The isolated
+foundation proofs do not enable a CPC desktop.
 The remaining step-2 shared-core packages still gate desktop integration;
 moving to hardware probes does not mark step 2 complete.
 
@@ -39,8 +41,13 @@ desktop policy. The first deliverable is the
   sibling `../geobench` is a driver/reference source, not the behavioral
   baseline for the features added in this repository.
 - MSX2 remains the release target during the restart. CPC assumes at least
-  512 KiB RAM and Mode 1, four colors. Use generated M4 card media with `../1984`
-  for CPC integration tests. PCW implementation remains later work under #62.
+  512 KiB RAM and Mode 1, four colors. CPC runtime tests must use M4- or
+  Albireo-backed media, never floppy-backed tests (user decision, 2026-09-05).
+  Keep `../1984` as the proved M4 foundation runner; qualify `../konCePCja`,
+  `../arnold` and `../caprice32` through the
+  [CPC emulator test strategy](CPC-EMULATOR-TEST-STRATEGY.md) before relying on
+  them. Unsupported storage is a recorded gap, not permission to use floppies.
+  PCW implementation remains later work under #62.
 - Keep the current GEOBENCH name, blue/white/black/red identity, and BSD-3-Clause
   licensing. This effort does not change the product identity.
 - Preserve the frozen GEMBENCH-1 contracts. Review necessary changes to the
@@ -134,8 +141,8 @@ Exit: repeated bank switches, interrupts, clipped primitives, pointer
 movement over changing backgrounds, M4 load/save, and failure returns preserve
 their documented state and memory guards in 1984. Drawing parameters never
 alias display pixels. Record measurements before setting responsiveness limits.
-Floppy and Albireo are later storage-backend gates; M4 success alone does not
-claim their support.
+Albireo is a later storage-backend gate; M4 success alone does not claim its
+support. Floppy runtime testing is excluded by the current testing policy.
 
 ## Step 4 — Integrate the shared core on CPC
 
