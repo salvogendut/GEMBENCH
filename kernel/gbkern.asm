@@ -123,6 +123,9 @@ THEMED_GADGETS  equ   0
 THEMED_GADGETS  equ   0
                 endif
                 include "lowram.inc"
+                ifdef PLATFORM_MSX
+                include "msx_app_lifetime.inc"
+                endif
 
                 include "api_table.inc"
 
@@ -3433,67 +3436,9 @@ k_wm_close
                 ld    c,a
                 jp    msx_window_close_slot
 
-; Close one MSX window slot while keeping its application alive whenever it
-; still owns another window. This is also the internal target of GB_APP's
-; generation-checked close operation. C = live slot owned by the caller.
+; Preserve the old symbol as a label (RASM -s omits EQU aliases).
 msx_window_close_slot
-                ld    a,c
-                ld    (MSX_WINDOW_SLOT),a
-                ld    a,(bank_cur)
-                ld    (MSX_CALLER_BANK),a
-                ld    a,c
-                ld    hl,MSX_WIN_OWNER
-                add   a,l
-                ld    l,a
-                ld    e,(hl)
-                ld    hl,MSX_WIN_OWNER_GEN
-                ld    a,c
-                add   a,l
-                ld    l,a
-                ld    d,(hl)
-                ld    (MSX_CLOSE_OWNER),de
-                ld    a,c
-                call  wm_set_clip                 ; B = shared application code page
-                ld    a,b
-                ld    (MSX_ALLOC_NATIVE),a
-                ld    de,WM_FR_FLAGS-4
-                add   hl,de
-                if PREEMPTIVE_CONTEXT
-                bit   3,(hl)
-                jr    z,mkwc_not_task
-                push  hl
-                ld    hl,SCHED_RUNNABLE
-                dec   (hl)
-                pop   hl
-mkwc_not_task
-                endif
-                ld    (hl),0                       ; dead before identity detaches
-                ld    a,(MSX_WINDOW_SLOT)
-                ld    c,a
-                call  wm_z_remove
-                ld    de,(MSX_CLOSE_OWNER)
-                ld    a,(MSX_WINDOW_SLOT)
-                ld    c,a
-                call  app_window_detach
-                ld    (MSX_APP_REMAIN),a
-                call  wm_focus_top
-                cpl
-                ld    (WM_FPREV),a
-                call  wm_map_focus
-                ld    a,(MSX_CALLER_BANK)
-                call  bank_set                     ; closing callback must finish in its code page
-                ld    de,(MSX_CLOSE_OWNER)
-                ld    a,d
-                or    e
-                jr    z,mkwc_raw_free
-                ld    a,(MSX_APP_REMAIN)
-                or    a
-                jr    nz,mkwc_repaint               ; another owned window keeps the app alive
-                call  owner_release                 ; last window: legacy one-window lifecycle
-                jr    mkwc_repaint
-mkwc_raw_free   ld   a,(MSX_ALLOC_NATIVE)
-                call  wm_free_page
-mkwc_repaint    jp   wm_repaint_all
+                include "core/window_close.asm"
 
                 else
                 ld    a,(WM_FOCUS)

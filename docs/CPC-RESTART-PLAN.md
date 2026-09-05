@@ -12,8 +12,11 @@ is implemented under #66; [public ABI/SDK/runtime adoption](CPC-RESTART-STEP3B-A
 is complete on MSX2 under #67, with Screen 6/7 regressions.
 [Runtime M4 I/O 3C](CPC-RESTART-STEP3C.md) is implemented and validated in
 1984 under #68: bounded staging, exact file bytes and failure/restoration checks.
-Next return to step 2's window attachment/validation and application-lifetime
-extraction on MSX2. The isolated foundation proofs do not enable a CPC desktop.
+[Window/application lifetime 2B](CPC-RESTART-STEP2B.md) is extracted on MSX2
+under #69: unchanged kernel bytes, independent provider assembly checks, and
+before/after application lifecycle regressions. Next extract shared focus and
+z-order policy, followed by visible damage/scheduling. The isolated foundation
+proofs do not enable a CPC desktop.
 The remaining step-2 shared-core packages still gate desktop integration;
 moving to hardware probes does not mark step 2 complete.
 
