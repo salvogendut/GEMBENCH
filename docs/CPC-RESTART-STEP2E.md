@@ -107,12 +107,21 @@ no harness corrections or runtime bug fixes were needed in this package.
 | Release universal Clock/Calculator, Screen 6 and 7 | PASS: Desk activation, menus/borders/text, close/relaunch; ten stacking checkpoints per run; busy pages 4→3→4, final three windows, focus 1, no stack-guard faults. |
 | Independent-provider tests | PASS: seven unittest methods, including low/high state (`2000`/`D800`), independent 16-byte window records/flag bits, 80×200 and 128×212 geometry, independent region/pointer options, deterministic assembly and invalid-contract rejection. |
 | Affected source and geometry tests | PASS: compositor (4), visibility core (6), focus core (5). Existing assertions follow the extracted includes/hooks rather than requiring the previous inline body. |
+| Full `make check` in a clean worktree at `a35c630` | PASS, exit 0: all 108 discovered Python tests, plus existing C/assembly runtime, universal SDK determinism, ABI/layout, asset/media and editor checks. |
 
 The independent providers assemble the actual shared code but are not executed
 CPC implementations. No claim of CPC pointer correctness, physical hardware
 validation, new fairness policy or improved performance is made here. The
 existing runtime scenarios cover normal application workflows, not arbitrary
 corrupt window tables or every callback-failure path.
+
+The full suite ran in `/tmp/geobench-72-check.WtInxw` with independent generated
+fixtures and no production build/media symlinks, through `my-distrobox` with
+`SDCC=/var/home/salvogendut/Dev/sdcc/bin/sdcc` and
+`SDAS=/var/home/salvogendut/Dev/sdcc/bin/sdasz80`. Its log is
+`/tmp/geobench-72-make-check.log`. No check was relaxed for untracked CPC QA
+artifacts. Existing static MSX2 floppy-format audits do not boot an emulator
+and are unaffected by the CPC runtime storage policy.
 
 Reproduction (with matching MSX2 media and retained diagnostics built):
 
