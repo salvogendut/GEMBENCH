@@ -308,6 +308,7 @@ proc da_focus_desktop {callback} {
 }
 
 proc da_focus_desktop_click {} {
+    if {![da_lowram_ready]} { after time 0.002 da_focus_desktop_click; return }
     set ::da_desktop_order [da_z_order]
     da_click da_wait_desktop_focus
 }
