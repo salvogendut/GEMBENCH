@@ -142,6 +142,16 @@ Observed in 1984 on the 512-KiB CPC 6128 fixture:
 - Six host unittest methods cover headers, unsafe-map assembly rejection,
   fault builds, snapshot parsing and checker mutations. Synthetic snapshots
   test the host checker only; they are not counted as emulator execution.
+- Full `make check` passes from clean worktree
+  `/tmp/geobench-cpc-foundation-check.Ty8gzl` at `dbdf58f`: 67 discovered Python
+  tests plus existing C, assembly, universal SDK/ABI, asset and media checks.
+  Log: `make-check.log` in that worktree. The command used `my-distrobox` with
+  `SDCC=/var/home/salvogendut/Dev/sdcc/bin/sdcc` and
+  `SDAS=/var/home/salvogendut/Dev/sdcc/bin/sdasz80` to avoid relative tool-path
+  assumptions in `/tmp`. The clean tree avoids the previously documented
+  retired-target check conflict with leftover, untracked `QA/CPC/` artifacts;
+  neither that check nor the parked artifacts were modified. No fresh MSX2
+  emulator run was necessary or performed: production code/media are unchanged.
 
 No real-CPC test, new emulator fix, runtime file-save proof, clipping/pointer
 proof, desktop stability claim or input-latency result is implied. The current

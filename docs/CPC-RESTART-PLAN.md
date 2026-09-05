@@ -6,8 +6,8 @@ Step-1 branch: `feature/cpc-restart-reference`.
 Progress: step 1 is complete. Step 2 has begun with
 [owner/page extraction 2A](CPC-RESTART-STEP2A.md) under issue #64: byte-identical
 MSX2 kernels, passing host checks and before/after openMSX lifecycle validation.
-Step 3 has begun independently with [memory/interrupt probes 3A](CPC-RESTART-STEP3A.md)
-under issue #65. The remaining step-2 shared-core packages still gate desktop
+Step 3 has begun independently: [memory/interrupt package 3A](CPC-RESTART-STEP3A.md)
+is complete under issue #65; 3B and 3C remain open. The remaining step-2 shared-core packages still gate desktop
 integration; moving to hardware probes does not mark step 2 complete.
 
 The goal is to bring the CPC back with the software features and application
