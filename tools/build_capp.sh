@@ -498,7 +498,9 @@ if [ "$GB_DEFER_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbdefer.h" "$GBR_LIB/gbdefer.s")
 fi
 if [ "$GB_FSCTX_FLAG" = "1" ]; then
-    deps+=("$GBR_INCLUDE/gbfsctx.h" "$GBR_LIB/gbfsctx.c" "$GBR_LIB/gbfsctx.s")
+    deps+=("$GBR_INCLUDE/gbfsctx.h" "$GBR_LIB/gbfsctx.c" "$GBR_LIB/gbfsctx.s"
+           "$GBR_INCLUDE/gbfsctx_platform.h" "$GBR_INCLUDE/gbfsctx_contract.h"
+           "$GBR_INCLUDE/msx/gbfsctx_client.h" "$GBR_LIB/core/fsctx_client.inc")
 fi
 if [ "$GBR_READER_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbr.h" "$GBR_LIB/gbr_reader.c")
@@ -602,7 +604,9 @@ if [ "$GB_SERVICE_COLLECTOR_FLAG" = "1" ]; then
            "$GBR_INCLUDE/gbservice.h")
 fi
 if [ "$GB_TIMER_FLAG" = "1" ]; then
-    deps+=("$GBR_INCLUDE/gbtimer.h" "$GBR_LIB/gbtimer_damage.s")
+    deps+=("$GBR_INCLUDE/gbtimer.h" "$GBR_LIB/gbtimer_damage.s"
+           "$GBR_LIB/msx_timer_publish.inc" "$GBR_LIB/core/timer_publish.inc"
+           "$GBR_LIB/core/timer_publish_contract.inc")
 fi
 if [ "$GB_TIMER_COLLECTOR_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbtimer.h" "$GBR_LIB/gbtimer_collect.s"
@@ -754,7 +758,7 @@ if [ "$GB_SERVICE_CLIENT_FLAG" = "1" ]; then
 fi
 TIMER_REL=""
 if [ "$GB_TIMER_FLAG" = "1" ]; then
-    "$SDAS" -o "$work/gbtimer_damage.rel" "$GBR_LIB/gbtimer_damage.s"
+    "$SDAS" -I"$GBR_LIB" -o "$work/gbtimer_damage.rel" "$GBR_LIB/gbtimer_damage.s"
     TIMER_REL="$TIMER_REL $work/gbtimer_damage.rel"
 fi
 if [ "$GB_TIMER_COLLECTOR_FLAG" = "1" ]; then

@@ -40,6 +40,11 @@ Important split units include:
   storage-free resident owner cleanup. App-linked service bookkeeping uses
   `lib/gembench/core/service_internal.h` and `lib/gembench/msx_service.h`;
   see the [step-2G report](../docs/CPC-RESTART-STEP2G.md);
+- `core/parameters.asm` — shared receiving-side `GB_PARAMS` validation/copy and
+  timer policy, with `msx_parameter_provider.inc` state/geometry/rendering and
+  critical-section hooks. Native filesystem-client and timer-publisher policy
+  live in `lib/gembench/core/{fsctx_client,timer_publish}.inc`;
+  see the [step-2H report](../docs/CPC-RESTART-STEP2H.md);
 - `assets.asm`, `config_module.asm`, `modules.asm` — resource loading;
 - `app_pool.asm`, `gbr_bank.asm` — application and auxiliary resource pages;
 - `api_table.inc`, `lowram.inc` — frozen calls and fixed shared contracts.

@@ -15,6 +15,8 @@ typedef unsigned int gb_fsctx_t;
 #define GB_FSCTX_DIRECTORY_BATCH 4u
 #define GB_FSCTX_API_VERSION    1u
 
+#include "gbfsctx_platform.h"
+
 #define GB_FSCTX_OK              0u
 #define GB_FSCTX_ERR_UNSUPPORTED 1u
 #define GB_FSCTX_ERR_STALE       2u
@@ -42,7 +44,7 @@ unsigned char gb_fsctx_dir_next(gb_fsctx_t context, gb_fsctx_entry_t *entry);
 /* Fetch up to four packed entries into the fixed transfer area. The returned
  * pointer remains valid only until the next filesystem-context call. */
 unsigned char gb_fsctx_dir_batch(gb_fsctx_t context, unsigned char first);
-#define gb_fsctx_batch_entries() ((const gb_fsctx_entry_t *)0xC400)
+#define gb_fsctx_batch_entries() ((const gb_fsctx_entry_t *)GB_FSCTX_TRANSFER)
 unsigned char gb_fsctx_rewind(gb_fsctx_t context);
 unsigned int gb_fsctx_read(gb_fsctx_t context, char *buffer, unsigned int length);
 unsigned char gb_fsctx_write(gb_fsctx_t context, const char *buffer,

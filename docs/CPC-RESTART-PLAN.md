@@ -27,9 +27,12 @@ dispatch, with unchanged normal/cooperative MSX2 kernels.
 [Filesystem contexts/service bookkeeping 2G](CPC-RESTART-STEP2G.md) is extracted
 under #74: paged context policy, resident owner cleanup and app-linked service
 state have explicit providers, with unchanged kernels/module/application bytes.
-Next finish the app-side request/publication bindings (filesystem, timers and
-universal parameters) and the low-level context/IRQ adapter boundary. These
-remain before the production CPC memory map and shared desktop integration.
+[Client/timer/parameter boundaries 2H](CPC-RESTART-STEP2H.md) are extracted
+under #75: filesystem client storage (including the public batch accessor),
+native timer publication and receiving-side `GB_PARAMS` policy have explicit
+providers. Universal SDK records/bridge and APP hashes remain unchanged.
+Next finish the low-level context/IRQ adapter boundary, then validate the
+production CPC memory map and integrate the shared desktop in stages.
 The isolated foundation proofs do not enable a CPC desktop.
 The remaining step-2 shared-core packages still gate desktop integration;
 moving to hardware probes does not mark step 2 complete.
