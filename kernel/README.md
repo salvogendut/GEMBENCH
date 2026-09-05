@@ -16,6 +16,10 @@ Important split units include:
   application/window identity, attachment, validation and lifetime;
   `msx_app_lifetime.inc` supplies state and window-manager hooks without
   changing the MSX2 compositor; see the [step-2B report](../docs/CPC-RESTART-STEP2B.md);
+- `core/window_zorder.asm`, `core/window_raise.asm`, `core/window_focus_*.asm`,
+  `core/window_hit_test.asm` — shared stacking, click-to-focus, hit-testing and
+  focus/menu switching, with `msx_window_focus.inc` table/driver bindings;
+  see the [step-2C report](../docs/CPC-RESTART-STEP2C.md);
 - `scheduler.asm`, `scheduler_image.asm` — app-worker scheduling;
 - `assets.asm`, `config_module.asm`, `modules.asm` — resource loading;
 - `app_pool.asm`, `gbr_bank.asm` — application and auxiliary resource pages;

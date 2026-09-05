@@ -91,6 +91,7 @@ GB_PLATFORM_MSX2      equ 1
 
                 include "msx_owner_page.inc"
                 include "core/app_lifetime_contract.inc"
+                include "core/window_focus_contract.inc" ; WM scratch EQU cells are now defined
 
 ; app_pool_init: retain the TPA page-1 segment plus every available mapper
 ; segment, up to MSX_PAGE_MAX.  PAGE_DATA was already allocated separately by

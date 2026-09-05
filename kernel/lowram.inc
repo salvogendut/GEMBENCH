@@ -142,6 +142,10 @@ WM_MAXWIN       equ   8            ;   on_event(2), menu(2), flags(1), arg(11)
                                    ; #84: 8 = desktop + 7 windows (table #1352..#1419)
 WM_Z            equ   #141A        ; z-order: WM_NWIN slot indices, [0]=bottom
 WM_FPREV        equ   #1422        ; previously focused slot (menu-swap edge detect)
+; Existing WM scratch, declared before shared-provider aliases need it (#70).
+wm_slot         equ   #12F9
+wm_open_back    equ   #12FB
+wm_hz           equ   #12FC
 WM_DRAGNAME     equ   #1423        ; drag-and-drop (#62): dragged 11-byte 8.3 name,
                                    ; app-visible (the drop target reads it on GB_MSG_DROP)
 WM_DRAGSRC      equ   #142E        ; source window slot of the active drag

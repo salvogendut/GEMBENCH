@@ -44,6 +44,7 @@ printf 'GBMSX\r\n' > "$stage/card/AUTOEXEC.BAT"
 tools/build_msx_img.sh "$stage/card" "$stage/desk-accessories.img"
 
 export GEMBENCH_ACCESSORY_OUTPUT="$PWD/build/msx/desk-accessories-${MSX_TEST_MODE:-7}-openmsx.txt"
+export GEMBENCH_ACCESSORY_LAYOUT="$PWD/kernel/lowram.inc"
 export GEMBENCH_ACCESSORY_SCREENSHOT="$PWD/build/msx/desk-accessories-${MSX_TEST_MODE:-7}-openmsx.png"
 export MSX_UNAPI=0
 export MSX_MOUSE=0

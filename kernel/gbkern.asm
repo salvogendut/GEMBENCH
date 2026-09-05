@@ -125,6 +125,7 @@ THEMED_GADGETS  equ   0
                 include "lowram.inc"
                 ifdef PLATFORM_MSX
                 include "msx_app_lifetime.inc"
+                include "msx_window_focus.inc"
                 endif
 
                 include "api_table.inc"
@@ -2200,62 +2201,7 @@ kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs +
 
 ; wm_register: HL = descriptor in the caller's page. Allocate a table slot, store
 ; page = caller, copy the descriptor, mark alive, push onto z-order top and focus.
-; --- z-order manager (#148): the ONLY code that mutates WM_Z / WM_NWIN. ---------
-; Three callers (register/close/raise) used to open-code the compaction; one held
-; the slot in C across wm_free_page (which does ld c,a) and dropped the wrong
-; window. Centralising it kills that bug class and dedups the loops.
-;
-; wm_z_append: A = slot -> WM_Z[WM_NWIN++] = slot (new z-top).
-wm_z_append
-                if PREEMPTIVE
-                ld    hl,WM_NWIN
-                ld    e,(hl)                       ; preserve/return A = slot for claimed drops
-                inc   (hl)                          ; NWIN++
-                ld    d,0
-                ld    hl,WM_Z
-                add   hl,de                         ; HL = &WM_Z[NWIN]
-                ld    (hl),a
-                else
-                ld    b,a                          ; B = slot
-                ld    hl,WM_NWIN
-                ld    a,(hl)                       ; A = NWIN
-                inc   (hl)                          ; NWIN++
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a                           ; HL = &WM_Z[NWIN]
-                ld    (hl),b
-                endif
-                ret
-
-; wm_z_remove: C = slot -> compact WM_Z dropping slot C, dec NWIN once. Keeps C.
-; Clobbers A,B,DE,HL (NOT C - callers may still need the slot).
-wm_z_remove
-                ld    hl,WM_Z
-                ld    de,WM_Z
-                ld    a,(WM_NWIN)
-                ld    b,a
-wzr_l           ld    a,(hl)
-                cp    c
-                jr    z,wzr_skip
-                ld    (de),a
-                inc   de
-wzr_skip        inc   hl
-                djnz  wzr_l
-                ld    hl,WM_NWIN
-                dec   (hl)
-                ret
-
-; wm_focus_top: WM_FOCUS = WM_Z[NWIN-1] (the live z-top). NWIN>=1 (desktop is [0]).
-; The z-top is always alive (the manager keeps WM_Z == the live slots).
-wm_focus_top
-                ld    a,(WM_NWIN)
-                dec   a
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                ld    (WM_FOCUS),a
-                ret
+                include "core/window_zorder.asm"
 
 wm_register
                 ld    (wm_desc),hl
@@ -3598,122 +3544,8 @@ dax_span        add   a,c                           ; max + size
                 ld    e,a
                 ret
 
-; wm_map_focus: bank to the focused window's page and point APP_HANDLER at its
-; on_event (so menu_dispatch in k_poll delivers top-bar clicks to the focused app).
-; On a focus change, also swap the top-bar menu to the focused window's (or clear
-; it) so the bar shows the right menu and clicks reach the right handler.
-wm_map_focus
-                ld    a,(WM_FOCUS)
-                call  wm_entry                    ; HL = entry
-                ld    a,(hl)                       ; page (+0)
-                call  bank_set                     ; preserves HL
-                push  hl
-                ld    de,WM_FR_EVENT
-                add   hl,de
-                ld    a,(hl)
-                inc   hl
-                ld    h,(hl)
-                ld    l,a
-                ld    (APP_HANDLER),hl
-                pop   hl                            ; HL = entry
-                ld    a,(WM_FOCUS)               ; focus changed since last frame?
-                ld    de,WM_FPREV
-                ld    a,(de)
-                ld    b,a
-                ld    a,(WM_FOCUS)
-                cp    b
-                ret   z                            ; no change -> leave the bar as is
-                ld    (de),a                       ; WM_FPREV = focus
-                ld    de,WM_FR_MENU               ; focused window's menu def ptr
-                add   hl,de
-                ld    a,(hl)
-                inc   hl
-                ld    h,(hl)
-                ld    l,a
-                ld    a,h
-                or    l
-                jp    z,menu_clear                 ; no menu -> empty the bar
-                jp    menu_install                 ; install the focused window's menu
-
-; wm_focus_click: if a fresh click landed on a window other than the focused one,
-; move focus there. App windows also rise to the z-top. The MSX2 visible-region
-; compositor repaints the exact union of the old and new focus rectangles, so
-; both windows immediately redraw their active/inactive furniture without
-; touching unrelated desktop areas. On MSX, a click that activates another window in the
-; same application is consumed: the new pane receives frames immediately, but
-; editing starts with the next press instead of reusing the activation press.
-; The desktop (slot 0) stays pinned at the bottom.
-wm_focus_click
-                ld    a,(POLL_FLAGS)
-                bit   0,a
-                ret   z                            ; no fresh click
-                call  wm_hit_test                  ; CF set = no window hit (e.g. top bar)
-                ret   c
-                ifdef PLATFORM_MSX
-                ld    (wm_slot),a                  ; clicked slot survives wm_entry below
-                endif
-                ld    b,a
-                ld    a,(WM_FOCUS)
-                cp    b
-                ret   z                            ; already focused -> deliver
-                ifdef PLATFORM_MSX
-                call  wm_entry                     ; consume activation between sibling panes
-                ld    a,(hl)                       ; (same application/code page)
-                ld    (wm_open_back),a
-                ld    a,(wm_slot)
-                call  wm_entry
-                ld    a,(wm_open_back)
-                cp    (hl)
-                jr    nz,wfc_activate
-                ld    a,(POLL_FLAGS)
-                res   0,a
-                ld    (POLL_FLAGS),a
-wfc_activate
-                if MSX_VISIBLE_COMPOSITOR
-                ld    a,(WM_FOCUS)                ; sibling comparison no longer needs its page
-                ld    (wm_open_back),a             ; retain the old focus slot for exact damage
-                endif
-                ld    a,(wm_slot)
-                else
-                ld    a,b
-                endif
-                ld    (WM_FOCUS),a               ; focus the clicked window
-                if MSX_VISIBLE_COMPOSITOR
-                call  wm_focus_damage             ; exact old/new focus-window union
-                ld    a,(wm_slot)
-                or    a
-                jr    z,wfc_repaint_focus         ; desktop remains pinned at the bottom
-                ld    c,a                          ; c = clicked app slot
-                ld    a,(WM_NWIN)                 ; already the z-top? repaint focus state anyway
-                dec   a
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                cp    c
-                jr    z,wfc_repaint_focus
-                ld    a,c
-                call  wm_raise                     ; bring it to the front
-wfc_repaint_focus
-                jp    wm_repaint_all               ; compositor clips every layer to the exact union
-                else
-                or    a
-                ret   z                            ; desktop: keep it at the bottom
-                ld    c,a                          ; c = clicked app slot
-                ld    a,(WM_NWIN)               ; already the z-top? then nothing to raise
-                dec   a
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                cp    c
-                ret   z
-                ld    a,c
-                call  wm_raise
-                ld    a,c                          ; legacy targets repaint the raised window
-                call  wm_set_clip
-                jp    wm_repaint_top               ; opaque top window: avoid repainting layers through it
-                endif                              ; MSX_VISIBLE_COMPOSITOR
+                include "core/window_focus_map.asm"
+                include "core/window_focus_click.asm"
 
                 if MSX_VISIBLE_COMPOSITOR
 ; wm_focus_damage: make the new focus rectangle the primary source and the old
@@ -3750,50 +3582,7 @@ wfd_primary
                 ret
                 endif                              ; MSX_VISIBLE_COMPOSITOR focus damage
 
-; wm_hit_test: -> A = slot of the top-most window whose rect contains the pointer
-; (POLL_MX, POLL_MY), scanning z-order top->bottom; CF set if none.
-wm_hit_test
-                ld    a,(WM_NWIN)
-                ld    (wm_hz),a
-wht_l           ld    a,(wm_hz)
-                or    a
-                jr    z,wht_none
-                dec   a
-                ld    (wm_hz),a
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)                       ; slot = WM_Z[i]
-                call  wm_entry                     ; HL = entry
-                inc   hl                            ; +1 x
-                ld    a,(POLL_MX)
-                sub   (hl)
-                jr    c,wht_l                       ; mx < x
-                ld    c,a                            ; mx - x
-                inc   hl                            ; +2 y
-                inc   hl                            ; +3 w
-                ld    a,c
-                cp    (hl)
-                jr    nc,wht_l                      ; mx-x >= w
-                dec   hl                            ; +2 y
-                ld    a,(POLL_MY)
-                sub   (hl)
-                jr    c,wht_l                       ; my < y
-                ld    c,a                            ; my - y
-                inc   hl                            ; +3 w
-                inc   hl                            ; +4 h
-                ld    a,c
-                cp    (hl)
-                jr    nc,wht_l                      ; my-y >= h
-                ld    a,(wm_hz)                     ; hit -> recover slot
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                or    a                             ; clear CF
-                ret
-wht_none        scf
-                ret
+                include "core/window_hit_test.asm"
 
 ; k_drag_start (GB_DRAGSTART, #62): HL = 11-byte 8.3 name of the dragged item in
 ; the caller (source) page. Record it, then run a drag loop (the WM loop is
@@ -3954,14 +3743,7 @@ ghost_draw
 
 ghost_on        equ   #124A        ; low-RAM WM scratch (see lowram.tsv)
 
-; wm_raise: A = slot -> move it to z-order top and focus it (keeps the others'
-; relative order). Compacts WM_Z removing the slot, then re-appends it at the end.
-wm_raise
-                ld    (WM_FOCUS),a
-                ld    c,a
-                call  wm_z_remove                 ; drop it from the z-order...
-                ld    a,c
-                jp    wm_z_append                  ; ...and re-append on top (tail-call)
+                include "core/window_raise.asm"
 
 ; wm_repaint_all: repaint every window bottom-up (each in its own page, via its
 ; on_repaint), then restore the caller's page. The cursor is left to the handlers:
@@ -4148,10 +3930,7 @@ we_add
                 ret
 
 wm_desc         equ   #12F7        ; low-RAM WM scratch (see lowram.tsv)
-wm_slot         equ   #12F9
 wm_open_page    equ   #12FA
-wm_open_back    equ   #12FB
-wm_hz           equ   #12FC
 wm_rp_back      equ   #12FD
 wm_rp_i         equ   #12FE
 

@@ -142,7 +142,9 @@ class VisibilityCompositorTests(unittest.TestCase):
         self.assertIn("MSX_TASK_VISIBILITY", scheduler)
         self.assertIn("call  damage_axis", kernel)
         self.assertIn("envelope covers the destructive rubber-band path", kernel)
-        self.assertIn("exact old/new focus-window union", kernel)
+        self.assertIn('include "core/window_focus_click.asm"', kernel)
+        focus = (ROOT / "kernel/core/window_focus_click.asm").read_text()
+        self.assertIn("exact old/new focus-window union", focus)
         self.assertNotIn("MSX_FOCUS_DAMAGE_PENDING", kernel + scheduler + glue)
         self.assertNotIn("GB_REGIONS=1", builder)
 
