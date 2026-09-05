@@ -81,11 +81,14 @@ or window work must cross an explicit version boundary.
 - MSX-DOS2 or Nextor
 - RainBIOS as a supported validation environment
 
-GEOBENCH currently has no active CPC or PCW build, media, or release target. The
+GEOBENCH currently has no active CPC or PCW release target or release media. The
 last multi-platform tree is preserved on `archive/cpc-pcw-targets`. The first
 CPC ABI experiment is parked on `feature/54-reintegrate-cpc`; the
 [five-step CPC restart](docs/CPC-RESTART-PLAN.md) begins from working MSX2 with
-a feature reference and shared-core extraction. PCW follows as a separate port.
+a feature reference and shared-core extraction. Its isolated
+[step-3A M4 hardware probe](docs/CPC-RESTART-STEP3A.md) is available through
+`make diagnostic-cpc-foundation-1984`; it does not boot a desktop.
+PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).
 

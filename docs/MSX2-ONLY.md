@@ -24,6 +24,11 @@ with a behavioral reference and shared-core extraction. PCW follows under #62.
 Until their gates pass, CPC/PCW targets must not be exposed as working release
 builds.
 
+Issue #65 adds an isolated [CPC foundation diagnostic](CPC-RESTART-STEP3A.md).
+Its explicitly named `diagnostic-cpc-foundation` targets generate private M4
+media under `QA/Diagnostics/CPC-foundation/`, not `QA/CPC/` release media. They
+neither re-enable `make cpc` nor change the production kernel/app build paths.
+
 The new direction is specified in
 [UNIVERSAL-APPLICATION-ABI.md](UNIVERSAL-APPLICATION-ABI.md) and its
 [migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md). The active MSX2 build

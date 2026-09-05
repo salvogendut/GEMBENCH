@@ -6,7 +6,9 @@ Step-1 branch: `feature/cpc-restart-reference`.
 Progress: step 1 is complete. Step 2 has begun with
 [owner/page extraction 2A](CPC-RESTART-STEP2A.md) under issue #64: byte-identical
 MSX2 kernels, passing host checks and before/after openMSX lifecycle validation.
-The remaining shared-core packages and steps 3-5 are planned.
+Step 3 has begun independently with [memory/interrupt probes 3A](CPC-RESTART-STEP3A.md)
+under issue #65. The remaining step-2 shared-core packages still gate desktop
+integration; moving to hardware probes does not mark step 2 complete.
 
 The goal is to bring the CPC back with the software features and application
 behavior of the working MSX2 distribution, using a shared implementation of
@@ -109,6 +111,11 @@ Deliverables: isolated hardware probes, memory-map assertions, stack canaries
 and high-water measurements, and a reproducible M4 CARD/image built under QA.
 Reuse audited drivers from the parked branch or upstream where they meet the
 interface. Keep temporary probes out of the release application path.
+
+Work packages under #65: 3A is M4 boot, fixed memory/stack layout, bank and
+interrupt restoration; 3B is clipped graphics, pointer handling, and validation
+of a framebuffer-safe portable command boundary; 3C is bounded runtime M4
+read/write and failure handling. Passing 3A alone does not close this step.
 
 Exit: repeated bank switches, interrupts, clipped primitives, pointer
 movement over changing backgrounds, M4 load/save, and failure returns preserve

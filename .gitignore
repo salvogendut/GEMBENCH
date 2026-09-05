@@ -36,6 +36,8 @@ QA/MSX/CARD/UNAPI.TXT
 # Generated MSX dependency and disk-image artifacts.
 QA/MSXDEPS/
 QA/MSX/GBMSX.IMG
+# Isolated restart diagnostics are generated, never release distributions.
+QA/Diagnostics/CPC-foundation/
 !QA/MSX/Floppies/
 !QA/MSX/Floppies/*.DSK
 !assets/msx/

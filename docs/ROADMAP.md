@@ -40,6 +40,10 @@ and close the parity matrix. The [step-1 inventory](CPC-RESTART-MSX2-REFERENCE.m
 and [baseline results](CPC-RESTART-BASELINE.md) distinguish implemented features
 from missing validation. PCW remains a later port under issue #62.
 
+[Step 3A](CPC-RESTART-STEP3A.md), issue #65, independently tests CPC banking and
+interrupt boundaries through M4/1984. Remaining shared-core extraction and
+graphics/storage foundation packages are still required before integration.
+
 See [MSX2-ONLY.md](MSX2-ONLY.md) and the
 [universal ABI migration plan](UNIVERSAL-APPLICATION-ABI-MIGRATION.md) for target
 status and the executable-format contract.
