@@ -198,6 +198,14 @@ result is claimed.
 - Existing 3A and 3B probes pass again: 1,450 bank/IRQ checks and 2,450 graphics
   requests respectively. Their raw binaries retain the hashes recorded in
   their original package documents.
+- Full `make check` passes at implementation commit `7f7da9d` in clean worktree
+  `/tmp/geobench-68-check.qxJOBC`: **82 discovered Python tests**, plus the
+  existing C, assembly, SDK determinism/layout, ABI, asset and media checks.
+  Log: `/tmp/geobench-68-make-check.log`. It used `my-distrobox` with explicit
+  `SDCC=/var/home/salvogendut/Dev/sdcc/bin/sdcc` and
+  `SDAS=/var/home/salvogendut/Dev/sdcc/bin/sdasz80`. The clean tree avoids the
+  known retired-target assertion conflict with the user's untracked `QA/CPC/`;
+  neither that assertion nor the parked directory was changed.
 
 Normal artifacts: `/tmp/geobench-cpc-foundation-xgyg6hbn/`. Raw probe SHA-256:
 `315ecacce00e1437f127c3e6538b5676ce39421517cb96585cfd629e37a36f52`.
