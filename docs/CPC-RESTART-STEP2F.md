@@ -117,6 +117,7 @@ passed before extraction; existing diagnostic scripts were not changed.
 | Shared deferred assembly/contract | PASS: six unittest methods with low/high state, root-check variants, exact queue-pointer opcode/operand checks and negative fixed-span/index/capacity/record tests. |
 | Shared timer assembly/contract | PASS: four methods covering independent low/high state, 116-byte deterministic code, app-build dependency/binding checks and invalid spans/index pages/active-bit capacity. |
 | Existing ABI/mailbox checks | PASS: four universal-parameter and four background-timer tests, including recursive consume, stale generation and hidden acknowledgement. |
+| Full repository `make check` | PASS (exit 0) in a clean detached worktree at `060d5dc`: 118 discovered Python tests with no skips, host-library checks, Z80 compilation/universal SDK builds and ABI/distribution audits. |
 
 The independent providers are assembly fixtures, not executed CPC backends.
 The existing workflows do not cover every malformed-pointer, nested lifecycle
@@ -132,6 +133,7 @@ MSX_HEADLESS=1 MSX_TEST_MODE=6 bash tools/test_desk_accessories_openmsx.sh
 MSX_HEADLESS=1 MSX_TEST_MODE=7 bash tools/test_desk_accessories_openmsx.sh
 python3 tests/test_deferred_core.py -v
 python3 tests/test_timer_collect_core.py -v
+make check
 ```
 
 Local evidence: `/tmp/geobench-dispatch-baseline.tsAppj/` (raw/object comparisons),
@@ -140,6 +142,10 @@ and isolated assembler output), `/tmp/geobench-73-{messages,clock}-{before,after
 `/tmp/geobench-73-clock-{before,after}.txt` and
 `/tmp/geobench-73-desk-{6,7}-{before,after}.log`. Temporary paths are convenient
 evidence locations; this document records the durable results.
+
+The full-suite checkout is `/tmp/geobench-73-check.t4IVFP`, with no shared build
+directory; its log is `/tmp/geobench-73-make-check.log`. The suite's static
+MSX floppy-distribution audit does not boot a floppy or run a CPC emulator.
 
 ## Next package
 
