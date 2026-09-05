@@ -189,6 +189,17 @@ The negative artifact-directory suffixes are `24zmk51c`, `a_ywjkan`, and
 evidence, not build dependencies. Commands above regenerate the evidence;
 FAT timestamps can change image hashes without changing the raw executable.
 
+Full `make check` passes from clean worktree
+`/tmp/geobench-cpc-graphics-check.oGzBax` at `60fd437`: **72 discovered Python
+tests**, plus existing C, assembly, SDK/ABI, asset and media checks. The log is
+`make-check.log` in that worktree. It ran through `my-distrobox` with explicit
+`SDCC=/var/home/salvogendut/Dev/sdcc/bin/sdcc` and
+`SDAS=/var/home/salvogendut/Dev/sdcc/bin/sdasz80`. The clean worktree avoids the
+known retired-target check conflict with the user's untracked `QA/CPC/`
+artifacts; those artifacts and the check were not altered. No new MSX2 emulator
+run was performed: its production code, ABI constants and release media are
+unchanged.
+
 ## Remaining integration gates
 
 The experimental ABI still exposes MSX-specific `C030`, `C039`, `C1EC` and
