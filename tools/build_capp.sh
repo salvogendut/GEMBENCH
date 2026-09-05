@@ -599,7 +599,9 @@ if [ "$GB_TIMER_FLAG" = "1" ]; then
     deps+=("$GBR_INCLUDE/gbtimer.h" "$GBR_LIB/gbtimer_damage.s")
 fi
 if [ "$GB_TIMER_COLLECTOR_FLAG" = "1" ]; then
-    deps+=("$GBR_INCLUDE/gbtimer.h" "$GBR_LIB/gbtimer_collect.s")
+    deps+=("$GBR_INCLUDE/gbtimer.h" "$GBR_LIB/gbtimer_collect.s"
+           "$GBR_LIB/msx_timer_collect.inc" "$GBR_LIB/core/timer_collect.inc"
+           "$GBR_LIB/core/timer_collect_contract.inc")
 fi
 
 stamp="$OUT.stamp"
@@ -750,7 +752,7 @@ if [ "$GB_TIMER_FLAG" = "1" ]; then
     TIMER_REL="$TIMER_REL $work/gbtimer_damage.rel"
 fi
 if [ "$GB_TIMER_COLLECTOR_FLAG" = "1" ]; then
-    "$SDAS" -o "$work/gbtimer_collect.rel" "$GBR_LIB/gbtimer_collect.s"
+    "$SDAS" -I"$GBR_LIB" -o "$work/gbtimer_collect.rel" "$GBR_LIB/gbtimer_collect.s"
     TIMER_REL="$TIMER_REL $work/gbtimer_collect.rel"
 fi
 if [ "$GB_SERVICE_PROVIDER_FLAG" = "1" ]; then

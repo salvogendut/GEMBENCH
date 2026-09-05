@@ -21,10 +21,12 @@ is extracted under #71 with byte-identical scheduler code. The Clock poll-sampli
 correction and accessory pre-click snapshot guard were validated separately.
 [WM damage/repaint 2E](CPC-RESTART-STEP2E.md) is extracted under #72, including
 move/resize and focus damage, explicit/window clips and bottom-up repaint
-dispatch, with unchanged normal/cooperative MSX2 kernels. Next extract deferred
-message/background-timer dispatch; low-level context/IRQ adapters and
-filesystem/service work also remain. The isolated foundation proofs do not
-enable a CPC desktop.
+dispatch, with unchanged normal/cooperative MSX2 kernels.
+[Deferred messages/timer collector 2F](CPC-RESTART-STEP2F.md) is extracted under
+#73, retaining byte-identical kernels, timer object and Desktop payload. Next
+extract filesystem-context state/service bookkeeping. Low-level context/IRQ
+adapters and remaining publication/universal-parameter provider work also
+remain. The isolated foundation proofs do not enable a CPC desktop.
 The remaining step-2 shared-core packages still gate desktop integration;
 moving to hardware probes does not mark step 2 complete.
 

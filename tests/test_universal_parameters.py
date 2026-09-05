@@ -45,7 +45,11 @@ class UniversalParameterTests(unittest.TestCase):
             actual = re.search(rf"^{name}\s+equ\s+#([0-9A-F]+)", source, re.M)
             self.assertEqual(int(actual[1], 16), value)
         collector = (ROOT / "lib/gembench/gbtimer_collect.s").read_text()
-        self.assertIn("ld      (GB_TIMER_DROPPED_GEN), a", collector)
+        self.assertIn('.include "core/timer_collect.inc"', collector)
+        shared = (ROOT / "lib/gembench/core/timer_collect.inc").read_text()
+        provider = (ROOT / "lib/gembench/msx_timer_collect.inc").read_text()
+        self.assertIn("ld      (CORE_TIMER_DROPPED_GEN), a", shared)
+        self.assertRegex(provider, r"CORE_TIMER_DROPPED_GEN\s*=\s*0xC03F")
 
 
 if __name__ == "__main__":
