@@ -77,8 +77,8 @@ windowless publication/quit, explicit two-window quit and unsupported drag.
 Four generations of owner slot 3 are exercised. A managed pane is task-enabled
 through real shared startup; close removes its runnable contribution while the
 original worker survives. All work is serialized on the root task; drawing
-allows IRQs under the shared lock. Neither the original worker counter nor
-its snapshot may change during the lifetime workload.
+allows IRQs under the shared lock. The original worker counter must remain
+unchanged; the common checker also validates root/worker snapshot lengths.
 
 The independent host model checks status/mapping/focus/runnable state, all page
 metadata, owner/window generations and links, sibling counts, code bindings,
@@ -97,6 +97,55 @@ or stack bounds. Framebuffer SHA-256:
 `426de03c64f0a4d957e897a9daadd07b491cd473c39c10b74eca8daa7cfa2e26`.
 Fault variants must be rejected at last-window cleanup for surviving messages
 or file contexts. The adapter host suite contains 18 passing tests.
+
+## Regression results
+
+Full `make check` passed at implementation commit `ecfa66f` in clean detached
+worktree `/tmp/geobench-77d-check.DHHgyo`: **160 Python tests without skips**,
+plus native C, SDK/ABI, distribution and layout checks. Log:
+`/tmp/geobench-77d-make-check.log`. The final unused native-message reservation
+binding is `1302`, matching the existing native layout; it emits no code.
+Tools: RASM 3.2.1 and explicit SDCC/SDAS 4.6.2 #16671 from `../sdcc/bin`.
+
+The prior CPC window checkpoint still passes with its unchanged framebuffer
+hash and 16 exact checkpoints (`/tmp/geobench-77d-windows-regression.log`).
+Final cleanup fault runs reject message purge and FS-context omission at the
+last-window checkpoint; logs `/tmp/geobench-77d-final-bad-purge.log` and
+`/tmp/geobench-77d-final-bad-fsctx.log`.
+
+MSX2 was rebuilt because the status correction is shared. openMSX, with UNAPI
+disabled and private Nextor hard-disk images, passed:
+
+- Architecture owner/window reuse and filesystem cleanup: owner `0103` ->
+  `0203`, final two owners/windows and 22 free pages.
+- PAINT multiwindow movement/exposure and explicit quit: five peak windows,
+  final two, free pages 22 -> 22, clean/exposed canvas hash `B99399C8`.
+- Desk/Clock/Calculator in Screen 6 and Screen 7: borders, menu connections,
+  close/relaunch allocation, no stack fault or stuck deferred/shell state.
+
+Logs: `/tmp/geobench-77d-msx-{architecture,paint,desk6,desk7}.log`.
+These are regression scenarios, not a separate MSX execution of the newly
+added dead-window case; that exact failure is covered by the CPC execution of
+the same routine plus the independent shared-callsite assembly assertion.
+
+Kernel sizes remain 13,956 bytes (Screen 6) and 15,534 (Screen 7), due to the
+existing aligned layout. New SHA-256 values:
+
+- Screen 6: `3c7b464360134e44f60723f93d32b12f85ee02c4e967f733bf2173038b28c7d4`
+- Screen 7: `18032831a356a4cb8be73c8ec92b9123b9063b1d8681e5bc1b9dc2d969ad6bb6`
+
+The 1,448-byte MSX scheduler remains byte-identical. Fresh universal apps also
+retain the reference hashes:
+
+- ABI Probe: `a6a696cc0bef9caf69c38b6c44f8d8e50dbb7dd560c88e99feb9595993e0adfc`
+- Calculator: `5e1989d171052d751386b355b1204382c88bba69f4edc632ea65fafb8b7da8f5`
+- Clock: `8d605d045087199769dea40bfdfc50009a2a50bf958ffbcc26e97cdfcdfef2f2`
+
+Staged MSX COM files and distribution disks are refreshed; GBUI/debug-splash
+build IDs also change during the normal rebuild. The generated local MSX hard
+disk image is `5ea9663ad94f3aa23ed3cef49718fec288309694b4fbdb46ed78fc39aac39fe6`.
+Floppy images were regenerated/audited as distribution artifacts, **not booted
+for testing**. CPC runtime tests remain M4-only; no PCW/Albireo claim is made.
 
 ## Reproduce and remaining work
 

@@ -34,6 +34,7 @@ class ProductionSourceTests(unittest.TestCase):
         self.assertNotIn("MSX_",provider)
         self.assertIn("CORE_FSCTX_RECORD_SIZE equ 144",provider)
         self.assertIn("CORE_FSCTX_MAX equ 4",provider)
+        self.assertIn("CORE_MESSAGE equ #1302",provider)
         tags,states = lifetime_expected()
         self.assertEqual(tags,[0xC5,0xC6])
         self.assertEqual(states[3]["windows"],[3])
