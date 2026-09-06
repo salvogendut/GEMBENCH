@@ -131,8 +131,16 @@ probe and the 44-checkpoint directory test pass with that rebuilt emulator.
 The [3D-K write/free checkpoint](docs/CPC-RESTART-STEP3D-K.md),
 `make diagnostic-cpc-fswrite-1984`, tests shared truncate/append semantics,
 interleaved owner readback and independently verified M4 free space.
-Public filesystem and SDK execution integration remain open. These are bounded
-private diagnostics, not a CPC desktop.
+Those historical fixtures do not yet bind public filesystem/SDK execution;
+they are bounded private diagnostics, not a CPC desktop.
+The subsequent [3D-L/M/N unified runtime](docs/CPC-RESTART-STEP3D-N.md) now loads
+universal APPs, binds portable filesystem contexts and reuses the actual Desktop
+bar/application menus on private M4 media. Build it with
+`make diagnostic-cpc-runtime`; `make diagnostic-cpc-menus-1984` checks focus and
+dropdown restoration. This is still a test launcher, not the full CPC Desktop.
+[3D-O](docs/CPC-RESTART-STEP3D-O.md) adds the unchanged MSX Calculator and shared
+accessory activation: press **F7** in that M4 runtime, or run
+`make diagnostic-cpc-accessories-1984`. Clock's background service is next.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

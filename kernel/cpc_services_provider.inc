@@ -1,6 +1,7 @@
 ; Private CPC native service binding, no public jump table or TPA buffers yet.
-; Root/kernel serialization is the same as MSX. Six-byte input and executable
-; callback must be in the mapped app aperture below its #7F00 snapshot.
+; Root/kernel serialization is the same as MSX. Executable callbacks belong
+; below #7F00; six-byte send records also accept ordinary C locals on the fixed
+; main stack. Neither stack guards nor IRQ/temporary stacks are client buffers.
 GB_DEFER_ERR_STALE equ 2
 GB_DEFER_ERR_NO_HANDLER equ 3
 GB_DEFER_ERR_FULL equ 4
@@ -38,7 +39,21 @@ CPC_FULLSCREEN equ #130A
                 macro DEFER_CHECK_SEND_RECORD
                 ld a,h
                 cp #40
+                jr nc,cpc_kds_aperture
+                push hl
+                ld de,CPC_MAIN_STACK
+                or a
+                sbc hl,de
+                pop hl
                 jp c,kdefer_bad
+                push hl
+                ld de,CPC_MAIN_TOP-5          ; six-byte span ends before stack top
+                or a
+                sbc hl,de
+                pop hl
+                jp nc,kdefer_bad
+                jr kds_pointer_ok
+cpc_kds_aperture
                 cp #7F
                 jp nc,kdefer_bad
                 cp #7E

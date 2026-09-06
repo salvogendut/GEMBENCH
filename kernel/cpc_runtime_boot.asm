@@ -12,6 +12,8 @@ cpc_runtime_key equ #1D6B
 cpc_runtime_surface_calls equ #1D6C
 cpc_runtime_surface_status equ #1D6D
 cpc_runtime_f5 equ #1D6E
+cpc_runtime_f6 equ #1D6F
+cpc_runtime_f7 equ #1D70
 cpc_runtime_start
                 di
                 ld sp,CPC_MAIN_TOP
@@ -61,6 +63,12 @@ cpc_runtime_start
                 call foundation_bank_set
                 call cpc_fs_load_module
                 jp nc,cpc_runtime_failed
+                ld hl,cpc_bar_data
+                ld de,cpc_bar_data+1
+                ld bc,cpc_bar_data_end-cpc_bar_data-1
+                ld (hl),0
+                ldir                           ; explicit native root BSS initialization
+                call cpc_bar_payload          ; initialize root-owned bar state
                 ; Palette is hardware-only: blue, white, black, bright red.
                 ld hl,cpc_runtime_palette
                 ld d,0
@@ -146,9 +154,11 @@ cpc_root_bar
                 ld hl,(cpc_runtime_turns)
                 inc hl
                 ld (cpc_runtime_turns),hl
-                call cpc_time
+                call cpc_bar_payload+3        ; existing Desktop delta-refresh policy
                 call cpc_runtime_storage
                 call cpc_runtime_fsprobe
+                call cpc_runtime_menuprobe
+                call cpc_runtime_calculator
                 ; F3 opens another copy using the real M4 launch transaction.
                 ld a,(CPC_KEYS)
                 and #20
@@ -176,6 +186,36 @@ cpc_runtime_fsprobe
                 ret nz
                 ld hl,cpc_runtime_fsapp
                 jp k_wm_open
+
+; F6 opens the universal menu client; no fake Desk/accessory service.
+cpc_runtime_menuprobe
+                ld a,(CPC_KEYS)
+                and #10
+                ld b,a
+                ld a,(cpc_runtime_f6)
+                cp b
+                ld a,b
+                ld (cpc_runtime_f6),a
+                ret z
+                or a
+                ret nz
+                ld hl,cpc_runtime_menuapp
+                jp k_wm_open
+
+; F7 uses the SAME Desktop identity-first activation/normal-launch policy.
+; The root loop has mapped C0; the shared code's send record is a C stack local.
+cpc_runtime_calculator
+                ld a,(CPC_KEYS+1)
+                and #04                       ; CPC F7: matrix row 1, bit 2
+                ld b,a
+                ld a,(cpc_runtime_f7)
+                cp b
+                ld a,b
+                ld (cpc_runtime_f7),a
+                ret z
+                or a
+                ret nz
+                jp cpc_bar_payload+6
 
 ; F4 exercises the composed private FS service while windows remain live.
 ; This is root-owned, serialized, read-only M4 work, not a public SDK mailbox.
@@ -218,19 +258,17 @@ cpc_root_paint
                 ld bc,0
                 ld de,#50C8
                 call k_fill
-                ld a,1
-                ld bc,0
-                ld de,#5008
-                call k_fill
-                ld bc,#0100
-                ld de,#0201
-                ld hl,cpc_runtime_label
-                jp gb_text_draw
+                ; Content-only exposure must not invalidate the top bar.
+                ld a,(WM_CLIP_Y)
+                or a
+                ret nz
+                call cpc_bar_payload
+                jp cpc_bar_payload+3
 cpc_root_desc
                 db 0,0,CPC_COLUMNS,CPC_LINES
                 dw cpc_root_idle,cpc_root_paint,cpc_root_idle,0
-cpc_runtime_label db "CPC F3: APP F4: M4 F5: FS S: save",0
 cpc_runtime_app db "ABIPROBEAPP"
 cpc_runtime_fsapp db "FSPROBE APP"
+cpc_runtime_menuapp db "MENUPRBEAPP"
 cpc_runtime_palette db #44,#4B,#54,#4C
-                assert cpc_runtime_f5+1<CPC_ADAPTER_STATE_END,"launcher state overflow"
+                assert cpc_runtime_f7+1<CPC_ADAPTER_STATE_END,"launcher state overflow"

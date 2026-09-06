@@ -64,6 +64,15 @@ cpc_font_payload
                 incbin "DEFAULT.FNT"
 cpc_font_end
                 include "../lib/cpc/cursor.inc"
+; Native root binding for the same Desktop bar C policy. Reserve a fixed
+; resident slot for the two-pass C/assembly link; bytes are loaded once in
+; CORE.BIN, never copied to the framebuffer or duplicated in an APP page.
+cpc_bar_data equ #4000         ; kernel root C0 only, not live in APP banks
+cpc_bar_data_end equ #4020
+cpc_bar_payload
+                incbin "ROOTBAR.BIN"
+cpc_bar_end
+                assert cpc_bar_end-cpc_bar_payload==1536,"bar code reservation"
 cpc_kernel_used_end
                 assert $<=CPC_KERNEL_END,"unified runtime exceeds high kernel"
                 save "CORE.RAW",cpc_kernel_begin,$-cpc_kernel_begin

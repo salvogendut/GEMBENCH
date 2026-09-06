@@ -1,7 +1,7 @@
 ; Native leaves and capability view for the unified, experimental APP launcher.
 ; FS contexts use caller-owned GB_PARAMS; the old native SDK C3D0/C400
 ; mailboxes are pixels on CPC. The legacy GB_FSCTX slot remains unavailable.
-CPC_RUNTIME_CAPS_LOW equ #0F83
+CPC_RUNTIME_CAPS_LOW equ #0F8B ; add GB_CAP_SHELL (#0008), keep other services gated
 CPC_RUNTIME_CAPS_HIGH equ #009F
 cpc_unavailable
                 ld de,0
@@ -154,26 +154,15 @@ k_fill
                 call fill_block
                 jp cpc_damage_end
 
-; Menu text layout/Desk service belongs to the subsequent shell integration.
-; Retain native menu ownership now; the fixed launcher bar labels this gate.
-cpc_menu_clear
-                ld hl,0
-cpc_menu_install
-                ld (cpc_runtime_menu),hl
-                ret
-cpc_set_menu
-                push hl
-                ld a,(WM_FOCUS)
-                call wm_entry
-                ld de,11
-                add hl,de
-                pop de
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                ex de,hl
-                jp cpc_menu_install
-cpc_runtime_menu equ #3354
+; Publish the SAME focus-owned menu snapshot as MSX, not merely its pointer.
+; This fixed low-RAM view is read by the root Desktop bar, never by APPs.
+MENU_DEF equ #1310
+WM_FR_MENU equ 11
+cpc_menu_clear equ menu_clear
+cpc_menu_install equ menu_install
+cpc_set_menu equ k_menu
+                include "core/menu_state.asm"
+                assert MENU_DEF+37<=WM_CLIP_X,"menu/clip state overlap"
 
 ; CPC Mode 1 bytes already ARE canonical 2-bpp semantic pixels. The inherited
 ; save-under API requires an in-bounds rectangle and an app-primary buffer.

@@ -426,6 +426,9 @@ if [ "$SYS_FLAG" = "1" ]; then
 fi
 
 deps=("$0" "tools/build_cache.sh" "tools/check_app_layout.py" "$CRT0_SRC" "$GBLIB_SRC" "$GB/gb.h")
+if [ "$APP" = "apps/desktop" ]; then
+    deps+=("$APP/core/bar_render.inc" "$APP/core/bar_refresh.inc" "$APP/core/accessory_open.inc")
+fi
 if [ "$WINDOW_KIND_FLAG" = "1" ]; then
     deps+=("$GB/gbwindow_kind.s")
 fi

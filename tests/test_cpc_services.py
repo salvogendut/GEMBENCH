@@ -23,6 +23,8 @@ class ServiceSourceTests(unittest.TestCase):
         msx=(ROOT/"kernel/gbkern.asm").read_text()+(ROOT/"kernel/msx_page_pool.asm").read_text()
         msx+=(ROOT/"kernel/core/root_loop.asm").read_text().replace('include "root_dispatch_phase.asm"',
                                                                   'include "core/root_dispatch_phase.asm"')
+        msx+=(ROOT/"kernel/core/shell_service.asm").read_text().replace('include "service_lookup.asm"',
+                                                                      'include "core/service_lookup.asm"')
         cpc=(ROOT/"kernel/cpc_services.asm").read_text()
         for name in ("deferred_api.asm","deferred_dispatch.asm","service_lookup.asm","root_dispatch_phase.asm"):
             for source in (msx,cpc):

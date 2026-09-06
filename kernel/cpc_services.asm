@@ -2,7 +2,12 @@
 cpc_services_begin
                 include "core/deferred_api.asm"
                 include "core/deferred_dispatch.asm"
+                ifdef CPC_RUNTIME
+                include "cpc_shell_provider.inc"
+                include "core/shell_service.asm"
+                else
                 include "core/service_lookup.asm"
+                endif
 cpc_root_dispatch_phase
                 include "core/root_dispatch_phase.asm"
                 ret

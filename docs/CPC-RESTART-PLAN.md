@@ -97,6 +97,18 @@ same caller-owned request on CPC and MSX2, retaining the shared context/client
 policy. One byte-identical `FSPROBE.APP` passes 46 checks on CPC/M4 and MSX2
 Screen 6/7. Native MSX calls remain unchanged; CPC applications no longer need
 MSX framebuffer-aliasing buffers to use filesystem contexts.
+[Shared Desktop bar checkpoint 3D-N](CPC-RESTART-STEP3D-N.md) now compiles the
+actual Desktop bar/refresh policy into the CPC root and uses the same native
+menu publication code as MSX. Ten M4 exact-pixel checkpoints cover real APP
+menus, popup selection/cancel and focus/close restoration. MSX kernel/Desktop
+extraction builds are byte-identical. Desk/accessory service and the complete
+Desktop/File Manager remain pending; this is not a replacement CPC shell.
+[Accessory checkpoint 3D-O](CPC-RESTART-STEP3D-O.md) now binds the existing
+shell service and Desktop exact-activation policy. The unchanged MSX Calculator
+passes CPC/M4 arithmetic, menus, dragging, full-window activation and lifecycle
+checks. Normal C-stack deferred records are admitted with explicit bounds;
+MSX kernel/Desktop extraction bytes remain unchanged. Clock's real worker/timer
+integration is next; the complete Desktop and Desk menu still follow.
 The experimental launcher does not enable a CPC desktop.
 Shared policy/context extraction does not establish CPC adapter correctness;
 the complete memory/adapter gate still precedes desktop integration.
@@ -106,7 +118,7 @@ the complete memory/adapter gate still precedes desktop integration.
 | Order | Work package | Exit before advancing |
 |---|---|---|
 | 1 | Context/IRQ boundary — [2I](CPC-RESTART-STEP2I.md), #76 | Shared mechanism on working MSX2, fixed-state/snapshot contracts, unchanged binaries and real IRQ-switch regressions. |
-| 2 | Production CPC memory layout and adapters — [3D](CPC-RESTART-STEP3D.md), #77; 3D-A through 3D-M checkpoints implemented, final public-service integration pending | One budgeted map for the actual shared core, all state, modules, stacks, app aperture and framebuffer; bank/IRQ, input, time, graphics/text/line/pointer and storage adapters validated together on M4. Reuse 3A/3B/3C hardware proofs, not their provisional addresses. |
+| 2 | Production CPC memory layout and adapters — [3D](CPC-RESTART-STEP3D.md), #77; 3D-A through 3D-O checkpoints implemented, final public-service integration pending | One budgeted map for the actual shared core, all state, modules, stacks, app aperture and framebuffer; bank/IRQ, input, time, graphics/text/line/pointer and storage adapters validated together on M4. Reuse 3A/3B/3C hardware proofs, not their provisional addresses. |
 | 3 | First shared-core window — step 4, initial gate; early runtime proof in [3D-L](CPC-RESTART-STEP3D-L.md), broader adapter gate still open | M4 boot invokes the same lifetime/focus/visibility/damage code; one window opens, draws, gains focus, moves and closes with intact state/stack/bank guards. No alternate CPC WM. |
 | 4 | Desktop integration — remaining step 4 and Desktop/File Manager from step 5 | Overlap/focus/exposure, partial damage, worker priority/occlusion, timers, messages/services and teardown pass equivalent MSX2/CPC scenarios. Desk/menu, input and M4 directory operations work in that shared shell. |
 | 5 | Application parity — remaining step 5 | ABI Probe, Clock/Calculator, forms/Settings/Notepad, three-window PAINT, resources/secondary code, BASIC and the remaining migration ledger; universal APP bytes are identical across targets. |

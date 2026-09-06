@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import json
 import shutil
 import subprocess
 import sys
@@ -32,18 +33,32 @@ class RuntimeTests(unittest.TestCase):
         for offset in range(0,0xD8,3): self.assertEqual(raw[offset],0xC3)
         for offset,target in ((0x0C,'gb_text_draw'),(0x33,'k_fill'),(0x36,'cpc_save_rect'),
                               (0x39,'cpc_restore_rect'),(0x45,'cpc_getkey'),(0x60,'k_wm_open'),
-                              (0xB1,'k_wm_managed'),(0xC3,'cpc_sysinfo'),(0xD5,'universal_parameters')):
+                              (0xB1,'k_wm_managed'),(0xC0,'cpc_shell'),(0xC3,'cpc_sysinfo'),(0xD5,'universal_parameters')):
             self.assertEqual(int.from_bytes(raw[offset+1:offset+3],'little'),s[target])
         # No MSX framebuffer mailboxes or unqualified filesystem/timer promises.
-        self.assertEqual(s['cpc_runtime_caps_low'] & (0x1000|0x4000|0x4|0x8),0)
+        self.assertEqual(s['cpc_runtime_caps_low'] & (0x1000|0x4000|0x4|0x40),0)
+        abi=json.loads((ROOT/'abi/geobench-v2.json').read_text())
+        # The shell mask is frozen by the ABI; do not admit Calculator by
+        # advertising an unrelated service or weakening its package manifest.
+        self.assertTrue(s['cpc_runtime_caps_low'] & abi['capabilities']['low_word_inherited']['shell'])
         self.assertEqual(s['cpc_runtime_caps_high'] & 0x60,0)
         self.assertTrue(s['cpc_runtime_caps_high'] & 0x10)
         for name in ('wm_loop','wm_raise','wm_repaint_all','k_app','k_defer','k_fsctx','gbap4_validate_loaded'):
             self.assertIn(name,s)
+        self.assertEqual(s['menu_def'],0x1310)
+        self.assertEqual(s['cpc_set_menu'],s['k_menu'])
+        self.assertEqual(s['cpc_menu_install'],s['menu_install'])
+        self.assertLessEqual(s['menu_def']+37,s['wm_clip_x'])
+        bar=json.loads((self.work/'bar_layout.json').read_text())
+        self.assertLessEqual(bar['used'],bar['budget'])
+        self.assertLessEqual(bar['data_used'],bar['data_budget'])
+        self.assertEqual(bar['data_base'],0x4000) # private root C0, never framebuffer
+        self.assertEqual(raw[s['cpc_bar_payload']-0x8000:s['cpc_bar_end']-0x8000],
+                         (self.work/'ROOTBAR.BIN').read_bytes())
 
     def test_repeatable_build_and_bad_budget_rejection(self):
         again=self.work/'again';assemble(again)
-        for name in ('CORE.RAW','SUPPORT.RAW','SCHED.RAW','HARDWARE.RAW','FSCTX.BIN'):
+        for name in ('CORE.RAW','SUPPORT.RAW','SCHED.RAW','HARDWARE.RAW','FSCTX.BIN','ROOTBAR.BIN'):
             self.assertEqual((self.work/name).read_bytes(),(again/name).read_bytes())
         with self.assertRaises(subprocess.CalledProcessError):
             assemble(self.work/'too-small',('-DCPC_KERNEL_END=#A000',))

@@ -855,36 +855,7 @@ static void select_icon(unsigned char icon)
 #define WM_FS       ((volatile unsigned char *)0x130A)   /* 1 = a window is fullscreen (kernel) */
 #define CLK_COL     (GB_COLS - 12)  /* clock column (matches the old kernel bar) */
 
-static unsigned char bar_init, bar_hour, bar_min, bar_msig, bar_wasfs;
-
-static unsigned char bin(unsigned char v)   /* raw RTC reg -> binary (gb_time) */
-{
-    return gb_binmode ? v : (unsigned char)((v >> 4) * 10 + (v & 15));
-}
-static void put2(char *p, unsigned char v) { p[0] = '0' + v / 10; p[1] = '0' + v % 10; }
-
-/* bar_menu: the focused window's menu titles (MENU_DEF: count, then {col, 8-byte
-   label}*count). Clear the title region first so a previous app's titles are gone. */
-static void bar_menu(void)
-{
-    unsigned char n = MENU_DEF[0], i, j;
-    char lbl[9];
-    gb_curhide();
-    gb_fill(8, 0, 46, 8, 1);                  /* white, cols 8..53 (RAM/footprint/clock kept) */
-    for (i = 0; i < n && i < 4; i++) {
-        for (j = 0; j < 8; j++) lbl[j] = MENU_DEF[2 + i * 9 + j];
-        lbl[8] = 0;
-        gb_textbw(MENU_DEF[1 + i * 9], 0, lbl);
-    }
-    gb_curshow();
-}
-
-static void bar_clock(unsigned char h, unsigned char m)
-{
-    char t[6];
-    put2(t, bin(h)); t[2] = ':'; put2(t + 3, bin(m)); t[5] = 0;
-    gb_curhide(); gb_textbw(CLK_COL, 0, t); gb_curshow();
-}
+#include "core/bar_render.inc"
 
 #ifdef GEMBENCH_BASELINE
 /* One-shot diagnostic measurements. The bar hook still runs while TASKDEMO
@@ -941,28 +912,7 @@ static void bar_draw(void)
 #ifdef GB_APP_TIMER_COLLECTOR
     gb_timer_collect();                         /* consume worker damage on the root task */
 #endif
-    gb_time();                                  /* also refreshes fixed bytes used by timer workers */
-    if (*WM_FS) { bar_wasfs = 1; return; }    /* fullscreen: the borderless window owns lines 0-7 */
-    if (bar_wasfs) {                          /* just exited fullscreen (e.g. the saver closed) -> */
-        bar_wasfs = 0; bar_init = 0;          /* force a full bar redraw, and restart the idle count */
-        ss_idle = 0; ss_lmx = gb_mx(); ss_lmy = gb_my();
-    }
-    if (!bar_init) {                          /* first frame: white strip + RAM size */
-        gb_curhide();
-        gb_fill(0, 0, GB_COLS, 8, 1);
-        gb_textbw(1, 0, KCFG_MEMSTR);
-        gb_curshow();
-        bar_init = 1; bar_hour = 0xFF; bar_min = 0xFF; bar_msig = 0xFF;
-    }
-    msig = 0;                                  /* menu titles: redraw when MENU_DEF changes */
-    for (i = 0; i < (unsigned char)(MENU_DEF[0] * 9 + 1) && i < 40; i++) msig += MENU_DEF[i];
-    if (msig != bar_msig) { bar_msig = msig; bar_menu(); }
-                                              /* clock: redraw when the displayed time changes */
-    if (gb_hour != bar_hour || gb_min != bar_min) {
-        bar_hour = gb_hour;
-        bar_min = gb_min;
-        bar_clock(gb_hour, gb_min);
-    }
+#include "core/bar_refresh.inc"
 #ifdef GB_PREEMPTIVE_DIAGNOSTIC
     /* Periodically sample both non-yielding workers through their normal DRAW
        callbacks so headless diagnostics expose counter progress on screen. */
@@ -1149,33 +1099,7 @@ static void accessory_action(unsigned char sel)
 /* Activate the exact live accessory before considering mapper capacity.  Only
    absence launches a normal banked APP; a live target's explicit error never
    creates a duplicate instance. */
-static void open_accessory(unsigned char index)
-{
-#ifdef GB_DEFER_MESSAGES
-    gb_owner_t endpoint;
-    gb_defer_send_t message;
-#else
-    unsigned char result;
-#endif
-    if (index >= GB_DESK_ACCESSORY_COUNT) return;
-#ifdef GB_DEFER_MESSAGES
-    endpoint = gb_defer_find_accessory(gb_desk_accessory_ids[index]);
-    if (endpoint) {
-        message.receiver = endpoint;
-        message.type = GB_DEFER_SHELL;
-        message.p0 = GB_SHELL_ACTIVATE;
-        message.p1 = message.p2 = 0;
-        (void)gb_defer_send(&message);
-        return;
-    }
-#else
-    result = gb_shell_request_accessory(gb_desk_accessory_ids[index],
-                                        GB_SHELL_ACTIVATE);
-    if (result != GB_SHELL_NOT_FOUND) return;
-#endif
-    if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
-    else gb_wm_open(gb_desk_accessory_apps[index]);
-}
+#include "core/accessory_open.inc"
 #endif
 
 static void desktop_menu_init(void)

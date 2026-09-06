@@ -49,7 +49,7 @@ def integrity(data, sym, work):
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False):
     media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
@@ -110,10 +110,11 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False):
                 send('key-up '+direction);wait(8)
             else: raise AssertionError('pointer steering timeout')
     rects={1:(11,66,58,68)};order=[0,1];accents={1:0}
+    menu=b'\0';titles={};popup=None;calculators={}
     checks=[]
     def checked(name):
         r=state(name)
-        verify_pixels(r,sym,work,rects,order,accents)
+        verify_pixels(r,sym,work,rects,order,accents,menu,titles,popup,calculators)
         if r[sym['wm_nwin']]!=len(order) or r[sym['wm_z']:sym['wm_z']+len(order)]!=bytes(order):
             raise AssertionError(name+': z-order/count')
         for slot,rect in rects.items():
@@ -135,6 +136,78 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False):
         if ram[entry+1:entry+5]!=bytes((11,66,58,68)): raise AssertionError('wrong universal geometry')
         app=(media/'CARD/GBENCH/ABIPROBE.APP').read_bytes();base=physical(ram[entry])
         if ram[base:base+len(app)]!=app: raise AssertionError('loaded APP differs')
+        if accessories:
+            key('F7');rects[2]=(24,24,31,144);order=[0,1,2];calculators[2]='0';titles[2]='Calculator'
+            definition=bytes((1,10))+b'Edit\0\0\0\0';menu=definition
+            ram=checked('calculator-open')
+            calc=(media/'CARD/GBENCH/CALC.APP').read_bytes()
+            if hashlib.sha256(calc).hexdigest()!='5e1989d171052d751386b355b1204382c88bba69f4edc632ea65fafb8b7da8f5':
+                raise AssertionError('Calculator differs from established MSX build')
+            def owner(r,slot):
+                return bytes((r[sym['core_win_owner']+slot],r[sym['core_win_owner_gen']+slot]))
+            initial_owner=owner(ram,2)
+            owner_index=initial_owner[0]-1
+            entry=sym['wm_table']+50;base=physical(ram[entry])
+            if ram[base:base+len(calc)]!=calc: raise AssertionError('loaded Calculator bytes differ')
+            if ram[sym['core_app_service']+owner_index]!=0xA0 or ram[sym['core_app_accessory']+owner_index]!=2:
+                raise AssertionError('Calculator did not register its exact accessory identity')
+            if not ram[sym['core_defer_handler_hi']+owner_index]: raise AssertionError('missing deferred handler')
+            move(28,93);key('SPACE');calculators[2]='7';checked('calculator-button-seven')
+            key('2');calculators[2]='72';checked('calculator-keyboard-two')
+            move(49,133);key('SPACE');checked('calculator-plus')
+            key('3');calculators[2]='3';checked('calculator-keyboard-three')
+            move(49,153);key('SPACE');calculators[2]='75';checked('calculator-sum')
+            key('F7');ram=checked('calculator-repeat-activation')
+            if owner(ram,2)!=initial_owner: raise AssertionError('repeat created a duplicate owner')
+            move(16,105);key('SPACE');order=[0,2,1];menu=b'\0';accents[1]=1
+            checked('calculator-focus-away')
+            key('F7');order=[0,1,2];menu=definition;ram=checked('calculator-exact-activation')
+            current=sym['core_defer_current']
+            if ram[current:current+8]!=bytes((1,1))+initial_owner+bytes((1,2,0,0)):
+                raise AssertionError('wrong deferred sender/receiver/payload')
+            at=sym['core_defer_send']+4;pointer=int.from_bytes(ram[at:at+2],'little')
+            if not sym['cpc_main_stack']<=pointer<=sym['cpc_main_top']-6:
+                raise AssertionError('shared Desktop did not send from a bounded C stack local')
+            if ram[sym['core_defer_count']] or ram[sym['core_defer_busy']]:
+                raise AssertionError('activation did not drain the serialized FIFO')
+            move(12,3);send('key-down SPACE');wait(15);send('key-up SPACE');wait(20)
+            popup=(10,-1,('Clear',));checked('calculator-edit-popup')
+            key('ESCAPE');popup=None;checked('calculator-edit-cancel')
+            move(12,3);send('key-down SPACE');wait(15);send('key-up SPACE');wait(20)
+            move(13,13);key('SPACE');popup=None;calculators[2]='0';checked('calculator-edit-clear')
+            move(35,29)
+            _,r=snapshot(read());grab=(r[sym['poll_byte']],r[sym['poll_line']])
+            send('key-down SPACE');wait(10);move(42,39)
+            _,r=snapshot(read());drop=(r[sym['poll_byte']],r[sym['poll_line']])
+            send('key-up SPACE');wait(60)
+            _,r=snapshot(read());moved=tuple(r[entry+1:entry+5])
+            expected=(max(0,min(49,24+drop[0]-grab[0])),max(8,min(56,24+drop[1]-grab[1])),31,144)
+            if moved!=expected or moved==rects[2]: raise AssertionError('Calculator title drag differs')
+            rects[2]=moved;checked('calculator-title-drag')
+            key('4');calculators[2]='4';checked('calculator-input-after-drag')
+            # The exact live endpoint must be activated BEFORE checking capacity.
+            for slot in range(3,8):
+                key('F3');rects[slot]=(11,66,58,68);order.append(slot);accents[slot]=0;menu=b'\0'
+            ram=checked('accessory-window-slots-full')
+            key('F7');order.remove(2);order.append(2);menu=definition
+            ram=checked('accessory-activate-while-full')
+            if owner(ram,2)!=initial_owner or ram[sym['wm_nwin']]!=8:
+                raise AssertionError('full-window activation allocated another instance')
+            key('ESCAPE');del rects[2];del calculators[2];order.remove(2);menu=b'\0'
+            ram=checked('accessory-close-cleanup')
+            for field in ('core_app_service','core_app_accessory','core_defer_handler_lo','core_defer_handler_hi'):
+                if ram[sym[field]+owner_index]: raise AssertionError('accessory identity/handler survived teardown')
+            key('F7');rects[2]=(24,24,31,144);order.append(2);calculators[2]='0';menu=definition
+            ram=checked('accessory-relaunch-fresh-owner')
+            if owner(ram,2)==initial_owner: raise AssertionError('relaunch reused stale generation')
+            if ram[sym['core_defer_count']] or ram[sym['shell_busy']]: raise AssertionError('unfinished service work')
+            if image.read_bytes()!=Path(manifest['image']).read_bytes(): raise AssertionError('accessory run changed M4 media')
+            result=dict(checkpoints=checks,sections=manifest['sections'],
+                        app_sha256=hashlib.sha256(calc).hexdigest(),
+                        emulator_sha256=hashlib.sha256(emulator.read_bytes()).hexdigest())
+            (artifacts/'result.json').write_text(json.dumps(result,indent=2)+'\n')
+            print('PASS unchanged Calculator/shared accessory policy '+json.dumps(result),flush=True)
+            return artifacts
         if filesystem:
             key('F5')
             ram=state('portable-filesystem')
@@ -158,6 +231,49 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False):
                         emulator_sha256=hashlib.sha256(emulator.read_bytes()).hexdigest())
             (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
             print('PASS portable filesystem '+json.dumps(report),flush=True)
+            return artifacts
+        if menus:
+            key('F6');rects[2]=(17,90,58,68);order=[0,1,2];accents[2]=0;titles[2]='Menu ABI'
+            definition=bytes((2,10))+b'Probe\0\0\0'+bytes((26,))+b'Tools\0\0\0'
+            menu=definition;ram=checked('menu-open')
+            entry=sym['wm_table']+50;base=physical(ram[entry])
+            menuapp=(media/'CARD/GBENCH/MENUPRBE.APP').read_bytes()
+            if ram[base:base+len(menuapp)]!=menuapp: raise AssertionError('menu APP bytes differ')
+            at=next(int(line.split()[2],16) for line in
+                    (ROOT/'build/universal-obj/menuprobe/app.noi').read_text().splitlines()
+                    if line.startswith('DEF _menuprobe_state '))
+            state_at=base+at-0x4000
+            # Real top-bar click -> current owner's event -> existing portable
+            # popup. Its polling loop intentionally suspends the root bar.
+            move(12,3);send('key-down SPACE');wait(15);send('key-up SPACE');wait(20)
+            popup=(10,-1);ram=checked('popup-open')
+            if ram[state_at:state_at+3]!=bytes((1,0,1)):
+                raise AssertionError('menu event was not delivered to focused APP')
+            move(13,13);wait(15);popup=(10,0);checked('popup-hover')
+            key('SPACE');popup=None;accents[2]=1;ram=checked('popup-selected')
+            if ram[state_at:state_at+3]!=bytes((1,1,0)):
+                raise AssertionError('popup action not selected')
+            # Focus the exposed old APP: menu disappears, then returns intact
+            # when its owning window is raised again, without moving either.
+            move(25,70);key('SPACE');menu=b'\0';order=[0,2,1];ram=checked('menu-focus-away')
+            if ram[sym['wm_focus']]!=1: raise AssertionError('focus-away')
+            move(73,110);key('SPACE');menu=definition;order=[0,1,2];accents[2]=0
+            ram=checked('menu-focus-return')
+            if ram[sym['wm_focus']]!=2: raise AssertionError('focus-return')
+            # Second title, Escape cancel: leave all save-under pixels intact.
+            move(28,3);send('key-down SPACE');wait(15);send('key-up SPACE');wait(20)
+            popup=(26,-1);checked('second-popup')
+            key('ESCAPE');popup=None;ram=checked('popup-cancelled')
+            if ram[state_at:state_at+3]!=bytes((2,1,0)):
+                raise AssertionError('cancel changed action count')
+            key('ESCAPE');del rects[2];order=[0,1];menu=b'\0';checked('menu-close-exposure')
+            if image.read_bytes()!=Path(manifest['image']).read_bytes():
+                raise AssertionError('menu test changed M4 files')
+            report=dict(checkpoints=checks,sections=manifest['sections'],
+                        app_sha256=hashlib.sha256(menuapp).hexdigest(),
+                        emulator_sha256=hashlib.sha256(emulator.read_bytes()).hexdigest())
+            (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+            print('PASS shared Desktop bar/menus '+json.dumps(report),flush=True)
             return artifacts
         move(30,100);key('SPACE');accents[1]=1;ram=checked('content-damage')
         move(25,70)
@@ -210,5 +326,8 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--emulator',type=Path,default=ROOT.parent/'1984/1984')
     parser.add_argument('--skip-build',action='store_true')
-    parser.add_argument('--filesystem',action='store_true')
-    args=parser.parse_args();run(args.emulator.resolve(),args.skip_build,args.filesystem)
+    mode=parser.add_mutually_exclusive_group()
+    mode.add_argument('--filesystem',action='store_true')
+    mode.add_argument('--menus',action='store_true')
+    mode.add_argument('--accessories',action='store_true')
+    args=parser.parse_args();run(args.emulator.resolve(),args.skip_build,args.filesystem,args.menus,args.accessories)

@@ -63,7 +63,7 @@
                 jp k_backdrop ; #80B7
                 jp cpc_unavailable ; #80BA
                 jp cpc_unavailable ; #80BD
-                jp cpc_unavailable ; #80C0
+                jp cpc_shell ; #80C0
                 jp cpc_sysinfo ; #80C3
                 jp owner_current ; #80C6
                 jp cpc_unavailable ; #80C9

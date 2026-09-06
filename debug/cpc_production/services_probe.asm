@@ -191,7 +191,40 @@ svc_api_loop
                 ld a,6
                 call k_defer
                 ld (svc_api+12),a
+                ; Reject complete spans crossing the main-stack guard/top,
+                ; IRQ/temporary stacks and wrapping pointers. Never write the
+                ; invalid addresses. Real C-local acceptance is tested by F7
+                ; in the composed Calculator runtime, not seeded stack bytes.
+                ld hl,svc_stack_rejects
+                ld (svc_vector),hl
+                ld a,24
+                ld (svc_index),a
+svc_stack_reject_loop
+                ld hl,(svc_vector)
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld (svc_vector),hl
+                ex de,hl
+                ld a,1
+                call k_defer
+                ld c,a
+                ld a,(svc_index)
+                ld e,a
+                ld d,0
+                ld hl,svc_api
+                add hl,de
+                ld (hl),c
+                ld hl,svc_index
+                inc (hl)
+                ld a,(hl)
+                cp 30
+                jr c,svc_stack_reject_loop
                 ret
+svc_stack_rejects
+                dw CPC_MAIN_STACK-1,CPC_MAIN_TOP-5,CPC_MAIN_TOP
+                dw CPC_IRQ_STACK,CPC_TMP_STACK,#FFFF
 svc_lookup_test
                 ld b,#A0
                 ld a,4

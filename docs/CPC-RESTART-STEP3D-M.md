@@ -8,6 +8,9 @@ Status: **portable client boundary implemented and tested on CPC/M4 and MSX2
 Screen 6/7**. Desktop/File Manager and Desk/menu integration are still pending.
 This does not close the complete production adapter gate or claim PCW support.
 
+Follow-up: [3D-N](CPC-RESTART-STEP3D-N.md) connects the shared Desktop bar and
+application-menu publication. Full Desk/accessory and shell integration remain open.
+
 ## Design and implementation
 
 The shared filesystem context policy already runs on both targets. Its native

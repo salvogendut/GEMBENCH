@@ -65,6 +65,7 @@ def expected(font):
     timer_rect=(0,0,0,0)
     api=bytearray(32)
     api[:13]=bytes((5,5,6,5,5,5,6,5,8,0,0,0,1))
+    api[24:30]=bytes((5,)*6) # main-stack overrun/guards, IRQ/temp, wrap rejected
     callbacks=set()
     def repaint(box,top=False,timer=False,legacy=False):
         nonlocal passes,recursions

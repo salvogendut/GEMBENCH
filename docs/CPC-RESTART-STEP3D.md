@@ -15,7 +15,9 @@ Status: **3D-A, [3D-B drawing/parameters](CPC-RESTART-STEP3D-B.md) and
 [3D-J bounded directory contexts](CPC-RESTART-STEP3D-J.md) and
 [3D-K writes/free space](CPC-RESTART-STEP3D-K.md) and
 [3D-L unified APP runtime](CPC-RESTART-STEP3D-L.md) and
-[3D-M portable filesystem client](CPC-RESTART-STEP3D-M.md) are
+[3D-M portable filesystem client](CPC-RESTART-STEP3D-M.md) and
+[3D-N shared Desktop bar/application menus](CPC-RESTART-STEP3D-N.md) and
+[3D-O shared accessories/Calculator](CPC-RESTART-STEP3D-O.md) are
 implemented and M4/1984 validated; the complete production adapter gate is
 still open.** The 3D-A record below connects actual shared context
 and visibility code to a checked CPC layout and CPC hardware. It is not a
@@ -23,7 +25,11 @@ desktop, public application loader, or proof that the complete kernel fits.
 3D-L now proves an unchanged universal APP window in one composed runtime;
 remaining public services still precede Desktop integration and final gate closure.
 3D-M adds the shared caller-owned filesystem boundary with the same test APP
-on CPC and both MSX2 screen modes; Desk/menu and shell integration remain open.
+on CPC and both MSX2 screen modes. 3D-N connects the existing Desktop bar and
+focus-owned application menus; Desk/accessory and complete shell integration
+remain open. 3D-O binds accessory registration/discovery and runs the unchanged
+Calculator using the existing Desktop activation policy. Real Clock worker/timer
+integration is next, before full Desk/Desktop integration.
 The 3D-B/C/D/E/F/G/H/I/J/K/L documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory/write/free-space/first-APP gaps and measurements below;
 this document retains the original non-drawing fixture and its evidence.
 

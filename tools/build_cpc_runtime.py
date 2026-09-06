@@ -12,6 +12,7 @@ import tempfile
 from build_cpc_foundation import headed
 from build_cpc_production import ROOT, memory_regions, symbols
 from cpc_production_fsctx import compile_module
+from cpc_runtime_bar import compile_bar
 import genfont
 
 
@@ -19,16 +20,19 @@ def assemble(work: Path, overrides=()):
     work.mkdir(parents=True, exist_ok=True)
     genfont.main(["genfont", str(work / "DEFAULT.FNT")])
     (work / "fsctx_size.inc").write_text("CPC_FS_MODULE_BYTES equ 1\n")
+    (work / "ROOTBAR.BIN").write_bytes(bytes(1536))
     command = [os.environ.get("RASM", "rasm"), str(ROOT / "kernel/cpc_runtime.asm"),
                "-s", "-sq", "-o", "runtime", f"-I{work}", *overrides]
     subprocess.run(command, cwd=work, check=True)
     initial = symbols(work / "runtime.sym")
     compile_module(work, initial, ROOT, directory=True, writable=True)
+    bar = compile_bar(work, initial, ROOT)
+    (work / "bar_layout.json").write_text(json.dumps(bar, indent=2) + "\n")
     subprocess.run(command, cwd=work, check=True)
     sym = symbols(work / "runtime.sym")
     def resident(s): return {k: v for k, v in s.items() if k != "cpc_fs_module_bytes"}
     if resident(sym) != resident(initial):
-        raise AssertionError("FS module changed runtime addresses")
+        raise AssertionError("FS/bar modules changed runtime addresses")
     memory_regions(sym)
     (work / "boot_symbols.inc").write_text("\n".join(
         f"{name} equ {sym[name]}" for name in
@@ -50,6 +54,14 @@ def build():
     fsapp = ROOT / "build/universal/FSPROBE.APP"
     subprocess.run(["bash", "tools/build_uapp.sh", "apps/fsprobe", str(fsapp)],
                    env={**os.environ, "UNIVERSAL_FS": "1"}, cwd=ROOT, check=True)
+    menuapp = ROOT / "build/universal/MENUPRBE.APP"
+    subprocess.run(["bash", "tools/build_uapp.sh", "apps/menuprobe", str(menuapp)],
+                   env={**os.environ, "UNIVERSAL_MENU": "1", "APP_ICON": "apps/abiprobe/icon.asm"},
+                   cwd=ROOT, check=True)
+    calculator = ROOT / "build/universal/CALC.APP"
+    subprocess.run(["bash", "tools/build_uapp.sh", "apps/ucalculator", str(calculator)],
+                   env={**os.environ, "UNIVERSAL_WINDOW_KIND": "1", "UNIVERSAL_ACCESSORY": "1",
+                        "UNIVERSAL_MENU": "1", "DATA_LOC": "0x7600"}, cwd=ROOT, check=True)
     media = ROOT / "QA/Diagnostics/CPC-runtime"
     card = media / "CARD"
     card.mkdir(parents=True, exist_ok=True)
@@ -61,6 +73,8 @@ def build():
              "FSCTX.BIN": (work / "FSCTX.BIN").read_bytes(),
              "GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
+             "GBENCH/MENUPRBE.APP": menuapp.read_bytes(),
+             "GBENCH/CALC.APP": calculator.read_bytes(),
              "UFSTEST/SOURCE.BIN": bytes((i*13+7)&255 for i in range(1025)),
              "UFSTEST/SUB/SMALL.TXT": b"OK!"}
     for name, payload in files.items():
@@ -91,6 +105,7 @@ def build():
         ("scheduler", "cpc_scheduler_begin", "cpc_scheduler_end", "cpc_sched_end")):
         sections[name] = dict(base=sym[begin], used=sym[end]-sym[begin], budget=sym[limit]-sym[begin])
     sections["fsctx"] = dict(base=0x4400, used=len(files["FSCTX.BIN"]), budget=0x1C00)
+    sections["bar"] = json.loads((work / "bar_layout.json").read_text())
     manifest = dict(work=str(work), image=str(image), regions=memory_regions(sym), sections=sections,
                     files={name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
                     status="experimental universal launcher; not Desktop/distribution")
