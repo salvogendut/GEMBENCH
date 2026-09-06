@@ -2,7 +2,11 @@
 ; Shared core alone mutates live z-order/focus/damage and enumerates clips.
 CPC_WINDOW_MENU_CLEAR equ cpc_fixture_menu_clear
 CPC_WINDOW_MENU_INSTALL equ cpc_fixture_menu_install
+                ifdef CPC_REGISTRATION
+CPC_WINDOW_CHROME_DRAW equ wm_chrome_draw
+                else
 CPC_WINDOW_CHROME_DRAW equ cpc_fixture_paint
+                endif
 CPC_WM_GUARD equ #3200
 CPC_WM_END equ #3280
 wm_fixture_event equ #3220

@@ -103,6 +103,15 @@ are not a CPC desktop or loaded application build.
 The [3D-D lifetime/cleanup checkpoint](docs/CPC-RESTART-STEP3D-D.md),
 `make diagnostic-cpc-lifetime-1984`, adds owner-safe close/quit, message purge
 and logical file-context cleanup tests.
+The [3D-E registration/chrome checkpoint](docs/CPC-RESTART-STEP3D-E.md),
+`make diagnostic-cpc-registration-1984`, uses the same native registration,
+window-kind and plain furniture code as MSX, with bounded CPC drawing leaves.
+It tests mixed-kind background painting, slot exhaustion/reuse and cleanup;
+it does not yet load applications or provide an interactive desktop.
+The [3D-F message/timer checkpoint](docs/CPC-RESTART-STEP3D-F.md),
+`make diagnostic-cpc-services-1984`, connects the same deferred FIFO,
+post-input dispatch phase and app-linked timer collector. Sixteen M4
+checkpoints check replies, activation, worker publication and hidden damage.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

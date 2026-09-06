@@ -24,6 +24,8 @@ GBLIB = ROOT / "lib" / "gb" / "gblib.s"
 GBWINDOW_KIND = ROOT / "lib" / "gb" / "gbwindow_kind.s"
 GBLIB_BROWSER = ROOT / "lib" / "gb" / "gblib_browser.s"
 KERNEL = ROOT / "kernel" / "gbkern.asm"
+MANAGED_CORE = ROOT / "kernel" / "core" / "managed_window.asm"
+REGISTER_CORE = ROOT / "kernel" / "core" / "window_register.asm"
 
 C_DEFINE_RE = re.compile(
     r"^\s*#define\s+([A-Z][A-Z0-9_]+)\s+(0x[0-9A-Fa-f]+|[0-9]+)u?\b",
@@ -126,24 +128,29 @@ def check_registration(manifest: dict, errors: list[str]) -> None:
             errors.append(f"{GBLIB_BROWSER}: legacy registration must select A=0")
 
     kernel = KERNEL.read_text(encoding="utf-8")
-    kind_load = re.search(r"(?ms)^mw_kind_load\s*$\n(.*?)^mw_kind\s+db\b", kernel)
-    managed = re.search(r"(?ms)^k_wm_managed\s*$\n(.*?)^; mw_publish:", kernel)
+    for name in ("managed_window.asm", "window_register.asm"):
+        if kernel.count(f'include "core/{name}"') != 1:
+            errors.append(f"{KERNEL}: shared {name} must be included exactly once")
+    kind_load = re.search(r"(?ms)^mw_kind_load\s*$\n(.*?)^\s*CHROME_KIND_STORAGE\b",
+                          MANAGED_CORE.read_text(encoding="utf-8"))
+    managed = re.search(r"(?ms)^k_wm_managed\s*$\n(.*?)\Z",
+                        REGISTER_CORE.read_text(encoding="utf-8"))
     if not kind_load:
-        errors.append(f"{KERNEL}: mw_kind_load block not found")
+        errors.append(f"{MANAGED_CORE}: mw_kind_load block not found")
     else:
         block = kind_load.group(1)
         if not re.search(r"\bbit\s+4,\(hl\)", block):
-            errors.append(f"{KERNEL}: kind load must require the per-window v1 flag")
+            errors.append(f"{MANAGED_CORE}: kind load must require the per-window v1 flag")
         if not re.search(r"\bld\s+de,12\b", block):
-            errors.append(f"{KERNEL}: kind byte must remain at descriptor offset 12")
+            errors.append(f"{MANAGED_CORE}: kind byte must remain at descriptor offset 12")
         if re.search(r"\bld\s+de,13\b", block):
-            errors.append(f"{KERNEL}: legacy-unsafe descriptor offset 13 probe returned")
+            errors.append(f"{MANAGED_CORE}: legacy-unsafe descriptor offset 13 probe returned")
     if not managed:
-        errors.append(f"{KERNEL}: k_wm_managed block not found")
+        errors.append(f"{REGISTER_CORE}: k_wm_managed block not found")
     else:
         block = managed.group(1)
         if "cp    GB_WK_ABI_V1" not in block or not re.search(r"\bset\s+4,\(hl\)", block):
-            errors.append(f"{KERNEL}: explicit kind selector is not persisted per window")
+            errors.append(f"{REGISTER_CORE}: explicit kind selector is not persisted per window")
 
 
 def check_target_layout(manifest: dict, errors: list[str]) -> None:

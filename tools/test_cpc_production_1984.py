@@ -18,6 +18,8 @@ from test_cpc_foundation_1984 import snapshot
 from cpc_production_drawing import verify_drawing
 from cpc_production_windows import verify_windows
 from cpc_production_lifetime import verify_lifetime
+from cpc_production_registration import verify_registration
+from cpc_production_services import verify_services
 
 
 def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
@@ -70,7 +72,10 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
         if ram[sym[base]:sym[base]+len(code)] != code:
             raise AssertionError(f"{file} code changed")
     drawing = "cpc_drawing_begin" in sym
-    drawing_result = (verify_lifetime(ram, sym, work) if "cpc_lifetime_probe" in sym else
+    services = "cpc_services_probe" in sym
+    drawing_result = (verify_services(ram, sym, work) if services else
+                      verify_registration(ram, sym, work) if "cpc_registration_probe" in sym else
+                      verify_lifetime(ram, sym, work) if "cpc_lifetime_probe" in sym else
                       verify_windows(ram, sym, work) if "cpc_window_probe" in sym else
                       verify_drawing(ram, sym, work) if drawing else {})
     pixels = ram[0xC000:0x10000]
@@ -82,7 +87,8 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
     worker = (work / "CORE.RAW").read_bytes()[sym["worker_code"]-0x8000:sym["worker_code_end"]-0x8000]
     if ram[0x10000:0x10000+len(worker)] != worker:
         raise AssertionError("mapped worker code differs")
-    if (ram[0x7F00], ram[0x13F00]) != (24, 26):
+    sizes = (ram[0x7F00], ram[0x13F00])
+    if (any(n % 2 or not 24 <= n <= 64 for n in sizes) if services else sizes != (24, 26)):
         raise AssertionError("missing/invalid yield and IRQ snapshots")
     return {**drawing_result, "root_turns": word("cpc_root_turns"), "io_checks": word("cpc_io_checks"),
             "irq_count": word("cpc_irq_count"), "seconds": word("cpc_hw_seconds"),
@@ -156,7 +162,7 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if (ram[sym["cpc_phase"]], ram[sym["cpc_failure"]]) != (0xFF, 8):
                 raise AssertionError("undersized memory not rejected by CPC admission")
             result = {"expected_failure": "128-KiB memory rejected"}
-        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime"):
+        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime", "registration", "services"):
             result = verify(data, sym, work)
             send("wait frames 150 200")
             send(f"snapshot-save {artifacts / 'stable.sna'}")
@@ -164,7 +170,13 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             verify(stable, sym, work)
             if snapshot(stable)[1] != ram: raise AssertionError("RAM changed after completion")
         else:
-            try: verify(data, sym, work)
+            try:
+                if variant=="registration-bad-owner":
+                    # Wrong binding can also make later cleanup abort. Inspect
+                    # the first actual registration trace, not a generic halt.
+                    verify_registration(ram,sym,work,checkpoints=2)
+                else:
+                    verify(data, sym, work)
             except AssertionError as error:
                 expected = {"bad-guard": "main stack guard damaged", "bad-restore": "failure=6",
                             "drawing-bad-clip": "drawing checkpoint clipped-line",
@@ -172,7 +184,11 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
                             "windows-bad-clip": "window checkpoint initial",
                             "windows-bad-pointer": "window checkpoint initial",
                             "lifetime-bad-purge": "lifetime last-window: message purge",
-                            "lifetime-bad-fsctx": "lifetime last-window: FS context"}[variant]
+                            "lifetime-bad-fsctx": "lifetime last-window: FS context",
+                            "registration-bad-kind": "registration titleless: furniture/content pixels",
+                            "registration-bad-owner": "registration legacy: window owner binding",
+                            "services-bad-delivery": "services reply: delivery",
+                            "services-bad-visible": "services component-hidden: "}[variant]
                 if expected not in str(error): raise
                 result = {"expected_failure": str(error)}
             else: raise AssertionError("corrupt adapter unexpectedly passed")

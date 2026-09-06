@@ -1,6 +1,9 @@
 ; #77 production-address adapter link + private execution probe.
 ; Does not expose an incomplete public jump table or claim a desktop.
                 include "../lib/cpc/production_layout.inc"
+                ifdef CPC_REGISTRATION
+                include "cpc_registration_provider.inc"
+                endif
 FAULT_STORAGE_BANK equ 0
 FAULT_STORAGE_ROM equ 0
 FAULT_STORAGE_COPY equ 0
@@ -57,7 +60,17 @@ cpc_font_end
                 endif
                 ifdef CPC_LIFETIME
                 include "cpc_lifetime.asm"
+                ifdef CPC_REGISTRATION
+                include "cpc_registration.asm"
+                ifdef CPC_SERVICES
+                include "cpc_services.asm"
+                include "../debug/cpc_production/services_probe.asm"
+                else
+                include "../debug/cpc_production/registration_probe.asm"
+                endif
+                else
                 include "../debug/cpc_production/lifetime_probe.asm"
+                endif
                 endif
                 ifdef CPC_PAD_KERNEL
                 ds CPC_KERNEL_END-$,#B9       ; boot stress, NOT real kernel code

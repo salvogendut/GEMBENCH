@@ -14,6 +14,20 @@ all: msx
 .PHONY: diagnostic-cpc-production diagnostic-cpc-production-1984
 .PHONY: diagnostic-cpc-drawing diagnostic-cpc-drawing-1984
 .PHONY: diagnostic-cpc-windows diagnostic-cpc-windows-1984
+.PHONY: diagnostic-cpc-services diagnostic-cpc-services-1984
+diagnostic-cpc-services:
+	$(PYTHON) tools/build_cpc_production.py --variant services
+
+diagnostic-cpc-services-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant services
+
+.PHONY: diagnostic-cpc-registration diagnostic-cpc-registration-1984
+diagnostic-cpc-registration:
+	$(PYTHON) tools/build_cpc_production.py --variant registration
+
+diagnostic-cpc-registration-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant registration
+
 .PHONY: diagnostic-cpc-lifetime diagnostic-cpc-lifetime-1984
 diagnostic-cpc-lifetime:
 	$(PYTHON) tools/build_cpc_production.py --variant lifetime

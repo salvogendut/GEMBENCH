@@ -164,3 +164,8 @@ FS service composition and public/input bindings, then full resident/module/
 state/stack/IRQ-off/M4-ACK qualification. The storage-free cleanup link is not
 a complete FS adapter or full-kernel fit proof. Only after these gates should
 a loaded shared-core window, then Desktop integration, be considered usable.
+
+Follow-up: [3D-E](CPC-RESTART-STEP3D-E.md) implements native registration and
+plain managed chrome with M4 evidence. Its shared kind/title corrections and
+rebuilt MSX kernel supersede this checkpoint's kernel hashes, not its lifetime
+evidence. The complete adapter gate remains open.

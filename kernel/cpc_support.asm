@@ -51,7 +51,15 @@ OWNER_PAGE_CURRENT_OWNER equ owner_current
                 macro OWNER_PAGE_PUBLISH_FREE
                 mend                        ; no public sysinfo advertised yet
                 macro LIFETIME_REGISTER_SLOT
+                ifdef CPC_REGISTRATION
+                ifdef CPC_FAULT_REG_OWNER
+                ld a,(WM_FOCUS)              ; deliberately bind the wrong slot
+                else
+                ld a,(wm_slot)               ; registration binds BEFORE assigning focus
+                endif
+                else
                 ld a,(WM_FOCUS)
+                endif
                 mend
                 macro LIFETIME_TEST_WINDOW_ALIVE
                 push bc

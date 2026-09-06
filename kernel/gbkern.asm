@@ -127,6 +127,22 @@ THEMED_GADGETS  equ   0
                 include "msx_app_lifetime.inc"
                 include "msx_window_focus.inc"
                 include "msx_window_damage.inc"
+                include "msx_root_services.inc"
+                ; Preserve the original MSX resident cells/placement while the
+                ; CPC provider allocates these same shared-core cells in low RAM.
+                macro CHROME_GADGET_STORAGE
+kfm_gx          db 0
+                mend
+                macro CHROME_KIND_STORAGE
+mw_kind         db GB_WK_LEGACY
+                mend
+KWB_LIGHT       equ #55           ; packed UI logical pen 1
+KWB_DARK        equ #AA           ; packed UI logical pen 2
+CHROME_STRING_COPY_LOOP equ gtd_cloop
+                macro CHROME_ENTRY_FLAGS
+                ld de,WM_FR_FLAGS
+                add hl,de
+                mend
                 endif
 
                 include "api_table.inc"
@@ -217,59 +233,7 @@ copy11
 
 ; k_frame (GB_FRAME): draw a 1px rectangle outline. B=x C=y D=w E=h (screen
 ; byte/line), A=pen (0..3). Screen only (no banked buffer), so no page swap.
-k_frame
-                ld    (gf_pen),a             ; save params FIRST: pen_to_byte below
-                ld    a,b                     ; clobbers E (height), so capture it now
-                ld    (gf_x),a
-                ld    a,c
-                ld    (gf_y),a
-                ld    a,d
-                ld    (gf_w),a
-                ld    a,e
-                ld    (gf_h),a
-                ld    a,(gf_pen)
-                call  pen_to_byte            ; pen -> Mode 1 fill byte
-                ld    (fb_val),a
-                ld    a,(gf_x)               ; top edge: (x, y, w, 1)
-                ld    b,a
-                ld    a,(gf_y)
-                ld    c,a
-                ld    a,(gf_w)
-                ld    d,a
-                ld    e,1
-                call  fill_xywh
-                ld    a,(gf_x)               ; bottom edge: (x, y+h-1, w, 1)
-                ld    b,a
-                ld    a,(gf_y)
-                ld    c,a
-                ld    a,(gf_h)
-                add   a,c
-                dec   a
-                ld    c,a
-                ld    a,(gf_w)
-                ld    d,a
-                ld    e,1
-                call  fill_xywh
-                ld    a,(gf_x)               ; left edge: (x, y, 1, h)
-                ld    b,a
-                ld    a,(gf_y)
-                ld    c,a
-                ld    d,1
-                ld    a,(gf_h)
-                ld    e,a
-                call  fill_xywh
-                ld    a,(gf_x)               ; right edge: (x+w-1, y, 1, h)
-                ld    b,a
-                ld    a,(gf_w)
-                add   a,b
-                dec   a
-                ld    b,a
-                ld    a,(gf_y)
-                ld    c,a
-                ld    d,1
-                ld    a,(gf_h)
-                ld    e,a
-                jp    fill_xywh
+                include "core/frame_draw.asm"
 gf_x            equ   #14CD        ; #202: relocated to low RAM (was resident db) to reclaim 5
 gf_y            equ   #14CE        ; resident bytes for the backdrop_init tile-scratch fix.
 gf_w            equ   #14CF        ; gb_frame writes all five before reading them (#188 pattern).
@@ -342,404 +306,7 @@ gtd_scratch     equ   #1450        ; #188: relocated to low RAM (was resident de
 ; B = x (byte col), C = y (line), D = w (bytes), E = h (lines), HL = title.
 ; The frame is plain fills (screen only); the title needs the font, so swap to
 ; PAGE_DATA for it. No save-under: closing a window redraws the desktop.
-gb_open_window
-                ifdef PLATFORM_MSX
-                ld    a,GB_WK_LEGACY         ; direct gb_window() keeps the inherited chrome
-                ld    (mw_kind),a            ; contract; managed windows enter below after
-                endif                        ; loading their explicitly registered kind.
-gb_open_window_kind
-                ld    a,b
-                ld    (kw_x),a
-                ld    a,c
-                ld    (kw_y),a
-                ld    a,d
-                ld    (kw_w),a
-                ld    a,e
-                ld    (kw_h),a
-                ld    de,kw_title            ; copy title out of the caller's page
-                call  gtd_copy
-                if TITLEBAR_TILE
-                call  to_data                 ; GBTITLE.MOD shares PAGE_DATA with font/icons
-                call  kwin_frame             ; frame: fills to screen, no font
-                else
-                call  kwin_frame
-                call  to_data                 ; title needs the font page
-                endif
-                ifdef PLATFORM_MSX
-                ld    a,(mw_kind)
-                bit   0,a                     ; GB_WK_TITLE
-                jr    z,gow_done
-                endif
-                ld    b,1                     ; white on the structure-colour title backing
-                ld    c,2
-                call  set_text_pens
-                ld    a,(kw_x)
-                ifdef PLATFORM_MSX
-                ld    hl,mw_kind
-                bit   1,(hl)                  ; reserve the left close gadget only when selected
-                jr    z,gow_title_left
-                add   a,4
-                jr    gow_title_x
-gow_title_left  inc   a
-gow_title_x
-                else
-                add   a,4
-                endif
-                ld    (tc_x),a
-                ld    a,(kw_y)
-                add   a,3
-                ld    (tc_y),a
-                ld    hl,kw_title
-                call  draw_text
-                if !THEMED_GADGETS
-                ifdef WM_GADGETS
-                ifdef PLATFORM_MSX
-                ld    a,(mw_kind)
-                bit   1,a                     ; GB_WK_CLOSE
-                jr    z,gow_done
-                endif
-                ld    b,2                     ; close 'X' glyph: structure colour on white
-                ld    c,1
-                call  set_text_pens
-                ld    a,(kw_x)
-                inc   a
-                ld    (tc_x),a
-                ld    a,(kw_y)
-                add   a,3
-                ld    (tc_y),a
-                ld    hl,gad_x_str
-                call  draw_text
-                endif
-                endif
-gow_done
-                jp    from_data
-                if !THEMED_GADGETS
-                ifdef WM_GADGETS
-gad_x_str       db    "X",0
-                endif
-                endif
-
-; Window-chrome fill bytes in the compact four-pen UI representation (NOT
-; pen_to_byte), so the CPC image stays byte-identical. MSX Screen 6 uses this
-; representation natively and Screen 7 expands it at the display boundary.
-; CPC's split-bitplane #F0/#0F values therefore cannot be used for MSX; PCW's
-; CGA2 permutation likewise needs its own constants.
-                ifdef PLATFORM_PCW
-KWB_PAPER       equ   #55           ; pen 0 (cyan interior)
-KWB_LIGHT       equ   #FF           ; pen 1 (white title base / gadgets)
-KWB_DARK        equ   #00           ; pen 2 (black stripes / squares)
-                else
-                ifdef PLATFORM_MSX
-KWB_LIGHT       equ   #55           ; packed UI pen 1: 01 01 01 01
-KWB_DARK        equ   #AA           ; packed UI pen 2: 10 10 10 10
-                else
-KWB_LIGHT       equ   #F0           ; CPC Mode-1 pen 1
-KWB_DARK        equ   #0F           ; CPC pen 2
-                endif
-                endif
-
-; kwin_frame: paper interior, striped/tiled title bar, borders and gadgets.
-kwin_frame
-                ifdef PLATFORM_PCW
-                ld    a,KWB_PAPER             ; interior (pen 0)
-                else
-                xor   a                       ; interior (logical pen 0): (x, y, w, h)
-                endif
-                ld    (fb_val),a
-                ld    a,(kw_x)
-                ld    b,a
-                ld    a,(kw_y)
-                ld    c,a
-                ld    a,(kw_w)
-                ld    d,a
-                ld    a,(kw_h)
-                ld    e,a
-                call  fill_xywh
-                ifdef PLATFORM_MSX
-                ld    a,(mw_kind)
-                bit   0,a                     ; a titleless kind is a framed work surface
-                jr    z,kf_border
-                endif
-                if TITLEBAR_TILE
-                ; The tile renderer clips like fill_block and phases the
-                ; 16x14 motif from this window's own top-left corner.
-                ld    a,(kw_x)
-                ld    (fb_x),a
-                ld    a,(kw_y)
-                ld    (fb_y),a
-                ld    a,(kw_w)
-                ld    (fb_w),a
-                ld    a,14
-                ld    (fb_h),a
-                ld    a,(TITLE_READY)
-                or    a
-                jr    z,kf_tile_missing
-                ifdef PLATFORM_MSX
-                call  fill_title_pattern
-                else
-                ifdef PLATFORM_PCW
-                call  fill_title_pattern
-                else
-                call  DATA_TITLE_RUN         ; CPC renderer executes from PAGE_DATA
-                endif
-                endif
-                jr    kf_title_done
-kf_tile_missing
-                ld    a,KWB_LIGHT             ; missing sample module: safe plain title bar
-                ld    (fb_val),a
-                call  fill_block
-kf_title_done
-                else
-                ld    a,KWB_LIGHT             ; title bar: light base (x, y, w, 14)
-                ld    (fb_val),a
-                ld    a,(kw_x)
-                ld    b,a
-                ld    a,(kw_y)
-                ld    c,a
-                ld    a,(kw_w)
-                ld    d,a
-                ld    e,14
-                call  fill_xywh
-                ld    a,KWB_DARK              ; ... dark horizontal stripes (1-line
-                ld    (fb_val),a             ; fills, every other line; fb_x/fb_w
-                ld    a,1                     ; stay kw_x/kw_w from the fill above)
-                ld    (fb_h),a
-                ld    a,(kw_y)
-                ld    (kf_sy),a
-                ld    b,7
-kf_stripe       ld    a,(kf_sy)
-                ld    (fb_y),a
-                push  bc
-                call  fill_block
-                pop   bc
-                ld    a,(kf_sy)
-                add   a,2
-                ld    (kf_sy),a
-                djnz  kf_stripe
-                endif
-kf_border
-                ld    hl,(kw_x)              ; configured borders via k_frame (all 4 edges; the
-                ld    b,l                    ; top edge coincides with the first title
-                ld    c,h                    ; stripe, so it is behavior-neutral) - was
-                ld    hl,(kw_w)              ; three separate left/right/bottom fills
-                ld    d,l
-                ld    e,h
-                ld    a,(KCFG_FRAMEPEN)      ; Edge, or a preselected contrasting UI pen
-                call  k_frame
-                ifdef PLATFORM_MSX
-                jp    kf_msx_furniture
-                else
-                if THEMED_GADGETS
-                jp    kf_theme_gadgets
-                else
-                ld    a,KWB_LIGHT             ; close gadget (light): (x+1, y+2, 2, 10)
-                ld    (fb_val),a
-                ld    a,(kw_x)
-                inc   a
-                ld    b,a
-                ld    a,(kw_y)
-                add   a,2
-                ld    c,a
-                ld    d,2
-                ld    e,10
-                call  fill_xywh              ; (the 'X' glyph is drawn in gb_open_window, font)
-                ifdef WM_GADGETS
-; maximize gadget on the right: white box (x+w-4, y+2, 3, 10) + a centered pen-2 square.
-; (3 bytes wide so the square sits in the MIDDLE byte with white either side - a 2-byte
-; box would have both edge bytes filled by k_frame. 1 byte = 4 px.)
-                ld    a,KWB_LIGHT
-                ld    (fb_val),a
-                ld    a,(kw_x)
-                ld    hl,kw_w
-                add   a,(hl)                  ; A = x + w
-                sub   4
-                ld    (kf_gx),a              ; gadget x (also reused by the hit-test)
-                ld    b,a
-                ld    a,(kw_y)
-                add   a,2
-                ld    c,a
-                ld    d,3
-                ld    e,10
-                call  fill_xywh
-                ld    a,KWB_DARK              ; dark (pen 2) filled square in the centre byte
-                ld    (fb_val),a
-                ld    a,(kf_gx)
-                inc   a                        ; centre byte (gx+1)
-                ld    b,a
-                ld    a,(kw_y)
-                add   a,5
-                ld    c,a
-                ld    d,1                       ; 4 px wide
-                ld    e,4                       ; 4 px tall
-                jp    fill_xywh
-kf_gx           db    0            ; maximize-gadget x byte-col (set by kwin_frame)
-                else
-                ret                            ; plain (no-room) build: just the close box
-                endif
-                endif
-                endif                        ; PLATFORM_MSX
-
-                ifdef PLATFORM_MSX
-; Draw exactly the furniture selected by the explicit MSX2 window kind. Legacy
-; descriptors load GB_WK_STANDARD, retaining the established full chrome.
-kf_msx_furniture
-                ld    a,(mw_kind)
-                bit   0,a                     ; close/maximise live in the title band
-                jr    z,kfm_grip
-                if THEMED_GADGETS
-                xor   a
-                ld    (bm_keep),a
-                ld    a,(mw_kind)
-                bit   1,a                     ; GB_WK_CLOSE
-                jr    z,kfm_theme_max
-                ld    hl,DATA_TITLE_CLOSE
-                ld    (bm_src),hl
-                ld    a,(kw_x)
-                inc   a
-                ld    (bm_x),a
-                ld    a,(kw_y)
-                add   a,2
-                ld    (bm_y),a
-                ld    a,2
-                ld    (bm_w),a
-                ld    a,10
-                ld    (bm_h),a
-                call  blit_bitmap
-kfm_theme_max   ld    a,(mw_kind)
-                bit   2,a                     ; GB_WK_MAXIMIZE
-                jr    z,kfm_grip
-                ld    hl,DATA_TITLE_MAX
-                ld    (bm_src),hl
-                ld    a,(kw_x)
-                ld    hl,kw_w
-                add   a,(hl)
-                sub   4
-                ld    (bm_x),a
-                ld    a,(kw_y)
-                add   a,2
-                ld    (bm_y),a
-                ld    a,3
-                ld    (bm_w),a
-                ld    a,10
-                ld    (bm_h),a
-                call  blit_bitmap
-                else
-                ld    a,(mw_kind)
-                bit   1,a                     ; GB_WK_CLOSE
-                jr    z,kfm_plain_max
-                ld    a,KWB_LIGHT
-                ld    (fb_val),a
-                ld    a,(kw_x)
-                inc   a
-                ld    b,a
-                ld    a,(kw_y)
-                add   a,2
-                ld    c,a
-                ld    d,2
-                ld    e,10
-                call  fill_xywh
-kfm_plain_max   ld    a,(mw_kind)
-                bit   2,a                     ; GB_WK_MAXIMIZE
-                jr    z,kfm_grip
-                ld    a,KWB_LIGHT
-                ld    (fb_val),a
-                ld    a,(kw_x)
-                ld    hl,kw_w
-                add   a,(hl)
-                sub   4
-                ld    (kfm_gx),a
-                ld    b,a
-                ld    a,(kw_y)
-                add   a,2
-                ld    c,a
-                ld    d,3
-                ld    e,10
-                call  fill_xywh
-                ld    a,KWB_DARK
-                ld    (fb_val),a
-                ld    a,(kfm_gx)
-                inc   a
-                ld    b,a
-                ld    a,(kw_y)
-                add   a,5
-                ld    c,a
-                ld    d,1
-                ld    e,4
-                call  fill_xywh
-                endif
-kfm_grip        ld    a,(mw_kind)
-                bit   4,a                     ; GB_WK_RESIZE
-                ret   z
-                ld    a,KWB_LIGHT
-                ld    (fb_val),a
-                ld    a,(kw_x)
-                ld    hl,kw_w
-                add   a,(hl)
-                sub   2
-                ld    b,a
-                ld    a,(kw_y)
-                ld    hl,kw_h
-                add   a,(hl)
-                sub   6
-                ld    c,a
-                ld    d,2
-                ld    e,6
-                call  fill_xywh
-                ld    a,(kw_x)
-                ld    hl,kw_w
-                add   a,(hl)
-                sub   2
-                ld    b,a
-                ld    a,(kw_y)
-                ld    hl,kw_h
-                add   a,(hl)
-                sub   6
-                ld    c,a
-                ld    d,2
-                ld    e,6
-                ld    a,2
-                jp    k_frame
-kfm_gx          db    0
-                endif                        ; PLATFORM_MSX
-
-                if THEMED_GADGETS
-                ifndef PLATFORM_MSX
-; Reusable gadget tiles live beside the repeated background in PAGE_DATA. The
-; shared opaque bitmap path performs each target's native write/transcoding.
-kf_theme_gadgets
-                xor   a
-                ld    (bm_keep),a
-                ld    hl,DATA_TITLE_CLOSE
-                ld    (bm_src),hl
-                ld    a,(kw_x)
-                inc   a
-                ld    (bm_x),a
-                ld    a,(kw_y)
-                add   a,2
-                ld    (bm_y),a
-                ld    a,2
-                ld    (bm_w),a
-                ld    a,10
-                ld    (bm_h),a
-                call  blit_bitmap
-
-                ld    hl,DATA_TITLE_MAX
-                ld    (bm_src),hl
-                ld    a,(kw_x)
-                ld    hl,kw_w
-                add   a,(hl)
-                sub   4
-                ld    (bm_x),a
-                ld    a,(kw_y)
-                add   a,2
-                ld    (bm_y),a
-                ld    a,3
-                ld    (bm_w),a
-                ld    a,10
-                ld    (bm_h),a
-                jp    blit_bitmap
-                endif                        ; !PLATFORM_MSX
-                endif
+                include "core/window_chrome.asm"
 kw_x            db    0
 kw_y            db    0
 kw_w            db    0
@@ -2204,206 +1771,11 @@ kgk_dirkeys     db    10, 0,1,2,8, 72,73,74,75, 76,77 ; cursor + joystick dirs +
 ; page = caller, copy the descriptor, mark alive, push onto z-order top and focus.
                 include "core/window_zorder.asm"
 
-wm_register
-                ld    (wm_desc),hl
-                call  wm_free_slot               ; A = first dead slot
-                cp    #FF
-                ret   z                          ; compositor full: publish nothing
-                ld    (wm_slot),a
-                ifdef PLATFORM_MSX
-                call  window_generation_next
-                ld    a,(wm_slot)
-                endif
-                call  wm_entry                    ; HL = WM_TABLE[slot]
-                ld    a,(bank_cur)               ; +0 page = caller
-                ld    (hl),a
-                inc   hl
-                ex    de,hl                       ; DE = entry+1
-                ld    hl,(wm_desc)
-                ld    bc,12                       ; x,y,w,h,on_frame,on_repaint,on_event,menu
-                ldir
-                ld    a,1                          ; entry+13 flags = alive
-                ld    (de),a
-                inc   de                            ; entry+14 = arg: capture the pending
-                ld    hl,launch_arg               ; launch arg as this window's own file
-                call  copy11
-                ifdef PLATFORM_MSX
-                call  owner_bind_pending_window   ; parallel owner identity; WM entry stays frozen
-                endif
-                ld    a,(wm_slot)                 ; focus + append the new window (z-top)
-                ld    (WM_FOCUS),a
-                call  wm_z_append
-                scf
-                ret
-
-; ===== managed windows (#146): the kernel owns the chrome ====================
-; k_wm_managed (GB_WMMANAGED): HL = a gb_mwin_t descriptor in the caller's page;
-; A = 0 for the legacy 12-byte contract or GB_WK_ABI_V1 for the explicit MSX2
-; kind extension. Distinct libgb entry points supply the selector, so the kernel
-; never probes beyond a legacy descriptor.
-; Register a window the WM draws + drives: the descriptor pointer goes in WM_FR_FRAME
-; and FLAGS gets MW_MANAGED, so wm_loop / wm_repaint_all route it to wm_chrome_frame /
-; wm_chrome_draw instead of the app's on_frame/on_repaint. Descriptor layout:
-;   +0 x +1 y +2 w +3 h +4 min_w +5 min_h +6 proc +8 title
-;   +10 task_worker (0 for normal managed windows)
-k_wm_managed
-                ifdef PLATFORM_MSX
-                push  af                     ; preserve the registration selector
-                endif
-                call  wm_register            ; HL = desc; register as a normal window (slot,
-                                             ; page, focus, z-order, arg, flags=alive; copies
-                                             ; desc[0..11] -> entry+1..12). wm_register stashed
-                                             ; the desc ptr in wm_desc. Now patch for managed:
-                ifdef PLATFORM_MSX
-                jr    c,kwm_registered
-                pop   af
-                ret
-kwm_registered
-                else
-                ret   nc
-                endif
-                ld    a,(WM_FOCUS)           ; the just-registered window
-                call  wm_entry               ; HL = entry
-                ifdef PLATFORM_MSX
-                pop   af                     ; restore the registration selector
-                endif
-                push  hl
-                ld    de,WM_FR_FLAGS         ; FLAGS |= managed
-                add   hl,de
-                set   1,(hl)
-                ifdef PLATFORM_MSX
-                cp    GB_WK_ABI_V1
-                jr    nz,kwm_kind_done
-                set   4,(hl)                  ; remember explicit v1 registration per window
-kwm_kind_done
-                endif
-                pop   hl
-                push  hl
-                ld    de,WM_FR_FRAME         ; WM_FR_FRAME (entry+5,6) = the descriptor ptr
-                add   hl,de
-                ld    de,(wm_desc)
-                ld    (hl),e
-                inc   hl
-                ld    (hl),d
-                pop   hl
-                ld    de,WM_FR_EVENT         ; WM_FR_EVENT = desc.on_event (so bar clicks/drops
-                add   hl,de                  ; reach the app's menu handler via the normal path)
-                push  hl                     ; HL = entry+9
-                ld    hl,(wm_desc)
-                ld    de,6                   ; WM_FR_EVENT = desc.proc (#148): menu/drop come
-                add   hl,de                  ; through here too, so every message reaches the
-                ld    e,(hl)                 ; one WndProc (keyed by gb_msg.type)
-                inc   hl
-                ld    d,(hl)                 ; DE = proc ptr
-                pop   hl                     ; HL = entry+9
-                ld    (hl),e
-                inc   hl
-                ld    (hl),d                 ; REPAINT (entry+7,8) is garbage but the managed
-                                             ; flag means wm_repaint_all skips it; MENU (entry+
-                                             ; 11,12) temporarily contains task_worker but gb_doc
-                                             ; replaces it before the app returns to the WM loop
-                ifdef PLATFORM_MSX
-                ld    hl,(wm_desc)
-                ld    de,10
-                add   hl,de
-                ld    a,(hl)
-                inc   hl
-                or    (hl)
-                call  nz,app_mark_worker_current
-                endif
-                ld    a,(WM_FOCUS)           ; publish MW_RECT so the app can read gb_wm_x/y/w/h
-                call  wm_entry               ; in main, but DON'T draw yet: the app loads its
-                call  mw_publish             ; content then calls gb_restore_parent for the first
-                                             ; paint, so a window never shows empty during a slow
-                                             ; load (#146). A managed app MUST paint when ready.
-                                             ; mw_publish preserves A (still = WM_FOCUS), so:
-                jp    wm_set_clip            ; #153: pre-set the clip to the new window's rect so
-                                             ; that first gb_restore_parent repaints only OUR area,
-                                             ; not the whole desktop (the open "flash"); then
-                                             ; wm_repaint_all restores the full-screen clip.
+                include "core/window_register.asm"
 
 ; mw_publish: HL = entry. Copy x,y,w,h -> MW_RECT (the app reads it via gb_wm_x/y/w/h);
 ; (mw_desc) = the descriptor pointer. HL preserved.
-mw_publish
-                push  hl
-                inc   hl                     ; entry+1
-                ld    de,MW_RECT
-                ld    bc,4
-                ldir                         ; MW_RECT = x,y,w,h ; HL = entry+5
-                ld    e,(hl)
-                inc   hl
-                ld    d,(hl)
-                ld    (mw_desc),de           ; desc ptr
-                pop   hl
-                ret
-
-                ifdef PLATFORM_MSX
-; Load the append-only kind byte only for a window explicitly registered through
-; gb_wm_managed_kind. Legacy descriptors never have bytes read beyond offset 11.
-mw_kind_load
-                ld    a,GB_WK_LEGACY
-                ld    (mw_kind),a
-                ld    a,(WM_FOCUS)
-                call  wm_entry
-                ld    de,WM_FR_FLAGS
-                add   hl,de
-                bit   4,(hl)                  ; MW_KIND_V1
-                ret   z
-                ld    hl,(mw_desc)
-                ld    de,12                  ; desc.kind
-                add   hl,de
-                ld    a,(hl)
-                and   GB_WK_STANDARD
-                or    GB_WK_EXTENDED         ; internal opt-in marker
-                ld    (mw_kind),a
-                ret
-mw_kind         db    GB_WK_LEGACY
-                endif
-
-; mw_hook: A = a GB_MSG_* window message. Set gb_msg.type, then dispatch to the
-; window's single proc (desc+6). The proc switches on the type. Clobbers HL,DE,A.
-mw_hook
-                ld    (GB_MSG),a              ; gb_msg.type = the message being delivered
-                ld    hl,(mw_desc)
-                ld    de,6
-                add   hl,de                  ; HL = &desc.proc
-                ld    a,(hl)
-                inc   hl
-                ld    h,(hl)
-                ld    l,a                     ; HL = proc ptr
-                ld    a,h
-                or    l
-                ret   z                       ; no proc -> skip (shouldn't happen)
-                jp    md_call                 ; jp (hl); the proc rets to mw_hook's caller
-
-; wm_chrome_draw: HL = entry. Draw frame+title (gb_open_window) then the content (on_draw).
-wm_chrome_draw
-                call  mw_publish
-                ifdef PLATFORM_MSX
-                call  mw_kind_load
-                endif
-                ld    hl,(mw_desc)           ; title = *(desc+8)
-                ld    de,8
-                add   hl,de
-                ld    e,(hl)
-                inc   hl
-                ld    d,(hl)
-                ex    de,hl                  ; HL = title ptr (caller page)
-                ld    a,(MW_RECT)
-                ld    b,a                     ; x
-                ld    a,(MW_RECT+1)
-                ld    c,a                     ; y
-                ld    a,(MW_RECT+2)
-                ld    d,a                     ; w
-                ld    a,(MW_RECT+3)
-                ld    e,a                     ; h
-                ifdef PLATFORM_MSX
-                call  gb_open_window_kind    ; frame + selected furniture
-                else
-                call  gb_open_window         ; frame + title
-                endif
-                ld    a,GB_MSG_DRAW          ; -> the proc draws the content
-                jr    mw_hook
+                include "core/managed_window.asm"
 
 ; wm_chrome_frame: HL = entry. The per-frame router: idle hook, then QUIT/close,
 ; close-gadget, content click. (Title drag + grip resize land in slice 2.)
@@ -2892,21 +2264,7 @@ mw_desc         dw    0                       ; scratch: the focused managed win
 mwm_notify      db    0                       ; nonzero only for a real managed descriptor
 
 ; wm_free_slot: -> A = lowest table slot whose alive flag is clear, or #FF.
-wm_free_slot
-                ld    hl,WM_TABLE+WM_FR_FLAGS
-                ld    de,WM_ESZ
-                ld    c,0
-wfs_l           ld    a,(hl)
-                and   1
-                jr    z,wfs_found
-                add   hl,de
-                inc   c
-                ld    a,c
-                cp    WM_MAXWIN
-                jr    c,wfs_l
-                ld    c,#FF
-wfs_found       ld    a,c
-                ret
+                include "core/window_slot.asm"
 
 ; k_wm_run (GB_WMRUN): register the caller (the root/desktop window) and enter the
 ; master loop. Never returns.
@@ -2926,10 +2284,11 @@ wm_loop
                 call  k_poll                      ; on_event, so a top-bar click reaches
                 call  wm_focus_click             ; the right app. then route the click.
                 ifdef PLATFORM_MSX
-                call  defer_dispatch_one         ; one bounded, non-nested app message per turn
-                endif
+                include "core/root_dispatch_phase.asm"
+                else
                 call  wm_map_focus               ; focus may have changed
-                call  clip_set_full              ; #281: each window's frame starts from a full clip.
+                call  clip_set_full
+                endif                            ; #281: each window's frame starts from a full clip.
                                                  ; A direct-drawing full-screen app (a .SAV saver) never
                                                  ; goes through wm_repaint_all (which restores the clip),
                                                  ; so without this it inherits the stale damage clip the
@@ -3218,63 +2577,7 @@ ksh_register_accessory
 ; Search z-order from top to bottom so a class with several instances resolves
 ; to the most recently active compatible window.  Handles are slot+1; zero is
 ; therefore an unambiguous not-found result.
-ksh_find
-                ld    c,0                           ; coarse lookup: no exact ID
-                jr    kshf_start
-ksh_find_accessory
-                ld    a,c
-                or    a
-                ret   z
-                ld    b,GB_SHELL_ACCESSORY_CLASS
-kshf_start
-                ld    a,b
-                and   WM_SHELL_MASK
-                ret   z
-                ld    (wm_slot),a                  ; requested encoded class
-                ld    a,c
-                ld    (MSX_APP_SLOT),a             ; optional exact accessory ID
-                ld    a,(WM_NWIN)
-                ld    (wm_hz),a                    ; z-order cursor, top to bottom
-kshf_loop
-                ld    a,(wm_hz)
-                or    a
-                jr    z,kshf_missing
-                dec   a
-                ld    (wm_hz),a
-                ld    hl,WM_Z
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                ld    (wm_rp_i),a                 ; candidate slot (repaint is not active)
-                call  app_service_for_window
-                ld    b,a
-                ld    a,(wm_slot)
-                cp    b
-                jr    nz,kshf_loop
-                ld    a,(MSX_APP_SLOT)              ; an exact accessory lookup also
-                or    a                             ; matches its private stable ID
-                jr    z,kshf_found
-                ld    c,a
-                ld    a,(wm_rp_i)
-                ld    hl,MSX_WIN_OWNER
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                or    a
-                jr    z,kshf_loop
-                dec   a
-                ld    hl,MSX_APP_ACCESSORY
-                add   a,l
-                ld    l,a
-                ld    a,(hl)
-                cp    c
-                jr    nz,kshf_loop
-kshf_found
-                ld    a,(wm_rp_i)
-                inc   a
-                ret
-kshf_missing    xor   a
-                ret
+                include "core/service_lookup.asm"
 
 ; Send one standard request to a previously discovered handle.  Stale handles,
 ; invalid requests/arguments, and nested delivery fail before focus changes.
@@ -3876,6 +3179,7 @@ GB_DEFER_LATE   equ 1
                 endif                          ; (PLATFORM_PCW platform-include swap, #331)
                 endif                          ; (PLATFORM_MSX platform-include swap, #287)
                 include "core/window_damage_contract.inc"
+                include "core/window_registration_contract.inc"
                 assert CORE_CLIP_X==clip_x,"damage X must match the graphics driver"
                 assert CORE_CLIP_Y==clip_y,"damage Y must match the graphics driver"
                 assert CORE_CLIP_W==clip_w,"damage W must match the graphics driver"
