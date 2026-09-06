@@ -27,8 +27,9 @@ cpc_timer_visible
                 jp sched_region_test
                 endif
 cpc_timer_payload
-                ifndef CPC_RUNTIME
+                ifdef CPC_RUNTIME
+cpc_timer_collect equ cpc_timer_payload
+                endif
                 incbin "TIMER.BIN"          ; SAME app-linked SDAS collector as MSX
 cpc_timer_payload_end
                 assert cpc_timer_payload_end-cpc_timer_payload==116,"timer collector size changed"
-                endif

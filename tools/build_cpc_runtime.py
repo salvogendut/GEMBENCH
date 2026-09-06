@@ -13,6 +13,7 @@ from build_cpc_foundation import headed
 from build_cpc_production import ROOT, memory_regions, symbols
 from cpc_production_fsctx import compile_module
 from cpc_runtime_bar import compile_bar
+from cpc_production_services import compile_timer
 import genfont
 
 
@@ -21,11 +22,13 @@ def assemble(work: Path, overrides=()):
     genfont.main(["genfont", str(work / "DEFAULT.FNT")])
     (work / "fsctx_size.inc").write_text("CPC_FS_MODULE_BYTES equ 1\n")
     (work / "ROOTBAR.BIN").write_bytes(bytes(1536))
+    (work / "TIMER.BIN").write_bytes(bytes(116))
     command = [os.environ.get("RASM", "rasm"), str(ROOT / "kernel/cpc_runtime.asm"),
                "-s", "-sq", "-o", "runtime", f"-I{work}", *overrides]
     subprocess.run(command, cwd=work, check=True)
     initial = symbols(work / "runtime.sym")
     compile_module(work, initial, ROOT, directory=True, writable=True)
+    compile_timer(work, initial, ROOT)
     bar = compile_bar(work, initial, ROOT)
     (work / "bar_layout.json").write_text(json.dumps(bar, indent=2) + "\n")
     subprocess.run(command, cwd=work, check=True)
@@ -62,6 +65,11 @@ def build():
     subprocess.run(["bash", "tools/build_uapp.sh", "apps/ucalculator", str(calculator)],
                    env={**os.environ, "UNIVERSAL_WINDOW_KIND": "1", "UNIVERSAL_ACCESSORY": "1",
                         "UNIVERSAL_MENU": "1", "DATA_LOC": "0x7600"}, cwd=ROOT, check=True)
+    clock = ROOT / "build/universal/CLOCK.APP"
+    subprocess.run(["bash", "tools/build_uapp.sh", "apps/uclock", str(clock)],
+                   env={**os.environ, "UNIVERSAL_TASK": "1", "UNIVERSAL_WINDOW_KIND": "1",
+                        "UNIVERSAL_ACCESSORY": "1", "UNIVERSAL_MENU": "1", "DATA_LOC": "0x7300"},
+                   cwd=ROOT, check=True)
     media = ROOT / "QA/Diagnostics/CPC-runtime"
     card = media / "CARD"
     card.mkdir(parents=True, exist_ok=True)
@@ -75,6 +83,7 @@ def build():
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
              "GBENCH/MENUPRBE.APP": menuapp.read_bytes(),
              "GBENCH/CALC.APP": calculator.read_bytes(),
+             "GBENCH/CLOCK.APP": clock.read_bytes(),
              "UFSTEST/SOURCE.BIN": bytes((i*13+7)&255 for i in range(1025)),
              "UFSTEST/SUB/SMALL.TXT": b"OK!"}
     for name, payload in files.items():

@@ -1,7 +1,7 @@
 ; CPC keyboard matrix -> the inherited ASCII/control set, no firmware calls.
 ; One character per press/change; no repeat timer yet. Joystick bits are not
 ; text. Cursor keys drive the pointer and are not also typed (MSX behavior).
-; Private launcher F3..F7 controls consume their keypad aliases too. They must
+; Private launcher F2..F7 controls consume their keypad aliases too. They must
 ; not type digits into a focused APP before the root handles the command.
 cpc_key_previous equ #3356
 cpc_key_modifiers equ #3357
@@ -62,7 +62,7 @@ cpc_key_publish
                 ret
 cpc_key_plain
                 db 0,0,0,'9',0,0,13,'.'
-                db 0,0,0,'8',0,'1','2','0'
+                db 0,0,0,'8',0,'1',0,'0'
                 db 127,'[',13,']',0,0,92,0
                 db '^','-','@','p',';',':','/','.'
                 db '0','9','o','i','l','k','m',','
@@ -73,7 +73,7 @@ cpc_key_plain
                 db 0,0,0,0,0,0,0,8
 cpc_key_shift
                 db 0,0,0,'9',0,0,13,'.'
-                db 0,0,0,'8',0,'1','2','0'
+                db 0,0,0,'8',0,'1',0,'0'
                 db 127,'{',13,'}',0,0,'|',0
                 db '~','=','|','P','+','*','?','>'
                 db '_',')','O','I','L','K','M','<'

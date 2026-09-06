@@ -22,7 +22,9 @@ CORE_LOOKUP_CLASS equ #3350
 CORE_LOOKUP_ID equ CORE_APP_SLOT
 CORE_LOOKUP_CURSOR equ #3351
 CORE_LOOKUP_SLOT equ #3352
+                ifndef CPC_RUNTIME
 CPC_TIMER_COLLECT equ #4C00
+                endif
 CPC_FULLSCREEN equ #130A
                 macro DEFER_REQUIRE_ROOT
                 ld a,(SCHED_CURRENT)
@@ -75,4 +77,6 @@ cpc_kds_aperture
                 jp wm_repaint_top
                 mend
                 assert CORE_LOOKUP_SLOT+1<=CPC_REG_END,"service/chrome state overlap"
+                ifndef CPC_RUNTIME
                 assert CPC_TIMER_COLLECT+116<=CPC_APP_LIMIT,"app-linked collector crosses snapshot"
+                endif

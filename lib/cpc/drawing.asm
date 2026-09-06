@@ -274,6 +274,11 @@ cpc_line_min
 ; the measured interval is the backend's interrupt-enabled drawing loop.
 cpc_draw_sample_begin
                 push hl
+                ifdef CPC_RUNTIME
+                ld hl,(cpc_runtime_draw_calls)
+                inc hl
+                ld (cpc_runtime_draw_calls),hl
+                endif
                 ld hl,(CPC_IRQ_COUNT)
                 ld (draw_tick_start),hl
                 pop hl

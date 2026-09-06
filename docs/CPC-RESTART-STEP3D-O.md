@@ -146,6 +146,10 @@ Media remain under `QA/Diagnostics/CPC-runtime`, not the old CPC distribution.
 
 ## Next
 
+Follow-up: [3D-P](CPC-RESTART-STEP3D-P.md) now implements and tests the Clock
+integration described below; this document retains 3D-O's historical budgets
+and binary identities.
+
 Connect the existing Clock worker and shared timer collector to this same
 composed runtime; prove focused/partial/fully covered behavior, cleanup and
 exact reactivation before advertising `background-timers` or staging Clock.

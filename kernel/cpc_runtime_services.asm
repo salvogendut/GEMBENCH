@@ -2,7 +2,7 @@
 ; FS contexts use caller-owned GB_PARAMS; the old native SDK C3D0/C400
 ; mailboxes are pixels on CPC. The legacy GB_FSCTX slot remains unavailable.
 CPC_RUNTIME_CAPS_LOW equ #0F8B ; add GB_CAP_SHELL (#0008), keep other services gated
-CPC_RUNTIME_CAPS_HIGH equ #009F
+CPC_RUNTIME_CAPS_HIGH equ #00DF ; shared worker + root timer collector are now bound
 cpc_unavailable
                 ld de,0
                 ld a,1
@@ -215,6 +215,34 @@ cpc_rect_size
                 jp block_copy
 cpc_rect_direction equ #3358
 cpc_fill_pen equ #3359
+
+; A software cursor needs saving only when effective timer damage touches it.
+; Walk the existing region iterator, without painting or inventing another
+; overlap policy. The real pass restarts that iterator and retains its one
+; pointer lock. Ordinary multi-source exposure keeps the full-pass save-under.
+cpc_runtime_repaint_hide
+                ld a,(CORE_PARAM_TIMER_OWNER)
+                or a
+                jp p,cpc_window_pointer_hide
+                and #7F
+                dec a
+                call sched_region_begin
+cpc_runtime_pointer_fragment
+                or a
+                jr z,cpc_runtime_pointer_done
+                call cpc_window_clip
+                call c,pointer_exclude
+                ld a,(pointer_visible)
+                or a
+                jr z,cpc_runtime_pointer_done
+                call sched_region_next
+                jr cpc_runtime_pointer_fragment
+cpc_runtime_pointer_done
+                ld hl,CORE_COMPOSITOR_DAMAGE
+                ld de,WM_CLIP_X
+                ld bc,4
+                ldir
+                ret
                 assert MW_RECT==#1448,"frozen universal managed rectangle"
                 assert CORE_LEGACY_BUSY+8<=MW_RECT,"page flags/SDK rectangle overlap"
                 assert MW_RECT+4<=#1450,"SDK rectangle/text scratch overlap"

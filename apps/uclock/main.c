@@ -254,6 +254,9 @@ static void draw(void)
     if (gb_timer_active_for(clock_window_handle)) {
         h = timer_h; m = timer_m; s = timer_s;
         if (timer_part == TIMER_HANDS) {
+            /* A hand's rectangular damage can intersect the rim/ticks even
+             * though the hand itself cannot. Restore those clipped pixels. */
+            draw_face();
             hands(h, m, s, show_sec, GB_UI_SURFACE, GB_UI_ACCENT);
             ph = h; pm = m; ps = s; pshow = show_sec;
             timer_digit_due = 1u;

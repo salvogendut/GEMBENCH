@@ -14,6 +14,10 @@ cpc_runtime_surface_status equ #1D6D
 cpc_runtime_f5 equ #1D6E
 cpc_runtime_f6 equ #1D6F
 cpc_runtime_f7 equ #1D70
+cpc_runtime_f2 equ #1D71
+cpc_runtime_worker_calls equ #1D72 ; private diagnostic observation, no scheduling policy
+cpc_runtime_draw_calls equ #1D74   ; backend transactions, including transient redraws
+                assert cpc_runtime_draw_calls+2<=CPC_ADAPTER_STATE_END,"runtime state overflow"
 cpc_runtime_start
                 di
                 ld sp,CPC_MAIN_TOP
@@ -154,11 +158,13 @@ cpc_root_bar
                 ld hl,(cpc_runtime_turns)
                 inc hl
                 ld (cpc_runtime_turns),hl
+                call cpc_timer_collect        ; same order as the real Desktop bar hook
                 call cpc_bar_payload+3        ; existing Desktop delta-refresh policy
                 call cpc_runtime_storage
                 call cpc_runtime_fsprobe
                 call cpc_runtime_menuprobe
                 call cpc_runtime_calculator
+                call cpc_runtime_clock
                 ; F3 opens another copy using the real M4 launch transaction.
                 ld a,(CPC_KEYS)
                 and #20
@@ -216,6 +222,21 @@ cpc_runtime_calculator
                 or a
                 ret nz
                 jp cpc_bar_payload+6
+
+; F2 activates the universal Clock through the same Desktop accessory policy.
+; 1984 reserves host F8 for its monitor; F2 reaches the CPC keyboard normally.
+cpc_runtime_clock
+                ld a,(CPC_KEYS+1)
+                and #40                       ; CPC F2: matrix row 1, bit 6
+                ld b,a
+                ld a,(cpc_runtime_f2)
+                cp b
+                ld a,b
+                ld (cpc_runtime_f2),a
+                ret z
+                or a
+                ret nz
+                jp cpc_bar_payload+9
 
 ; F4 exercises the composed private FS service while windows remain live.
 ; This is root-owned, serialized, read-only M4 work, not a public SDK mailbox.

@@ -32,6 +32,11 @@
 ; A=0/Z when exhausted. REGION_SLOT stays valid across each drawing callback.
 ; Fully covered windows receive no callback. Overlap subtraction and fragment
 ; enumeration are the shared visibility core, not duplicated in this unit.
+; Optional CORE_PAINT_TIMER_OWNER is the collector's validated fixed byte:
+; bit 7 means an active consume, bits 0..6 are source slot+1. Such a pass paints
+; only that source's effective regions. The collector retains ownership through
+; callbacks and clears it on completion. Zero/queued requests do not filter
+; normal exposure passes. The provider must bind the same byte as its collector.
 ;
 ; Hooks/macros:
 ; WINDOW_TOKEN: A=slot -> HL=fixed opaque record token; clobber B/DE/flags,
@@ -73,6 +78,11 @@
                 assert CORE_PAINT_ALIVE_BIT!=CORE_PAINT_MANAGED_BIT,"paint flag bits must differ"
                 assert (CORE_REPAINT_REGIONS==0)|(CORE_REPAINT_REGIONS==1),"CORE_REPAINT_REGIONS must be boolean"
                 assert (CORE_REPAINT_ERASE_POINTER==0)|(CORE_REPAINT_ERASE_POINTER==1),"CORE_REPAINT_ERASE_POINTER must be boolean"
+                ifdef CORE_PAINT_TIMER_OWNER
+                assert CORE_REPAINT_REGIONS==1,"timer-source paint requires visible regions"
+                assert CORE_WINDOW_MAX<=127,"timer source slot exceeds encoded range"
+                assert ((CORE_PAINT_TIMER_OWNER>=0)&(CORE_PAINT_TIMER_OWNER+1<=#4000))|((CORE_PAINT_TIMER_OWNER>=#8000)&(CORE_PAINT_TIMER_OWNER+1<=#10000)),"CORE_PAINT_TIMER_OWNER must remain fixed"
+                endif
                 assert CORE_CLIP_Y==CORE_CLIP_X+1,"clip bytes must be contiguous"
                 assert CORE_CLIP_W==CORE_CLIP_X+2,"clip bytes must be contiguous"
                 assert CORE_CLIP_H==CORE_CLIP_X+3,"clip bytes must be contiguous"

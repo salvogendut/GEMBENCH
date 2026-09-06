@@ -153,6 +153,19 @@ class DamageAssemblyTests(unittest.TestCase):
         self.assertIsNone(binary)
         self.assertIn("CORE_CLIP_X must remain", result.stdout + result.stderr)
 
+    def test_source_only_timer_binding_and_bounds(self):
+        for address in (0x23CA,0xC3CA):
+            result,binary,syms=self.assemble(0x2000,overrides={'CORE_PAINT_TIMER_OWNER':address})
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertIsNotNone(binary)
+            self.assertIn('WRA_TIMER_SLOT_READY',syms)
+        for overrides in ({'CORE_PAINT_TIMER_OWNER':0x4000},
+                          {'CORE_PAINT_TIMER_OWNER':0x23CA,'CORE_REPAINT_REGIONS':0},
+                          {'CORE_PAINT_TIMER_OWNER':0x23CA,'CORE_WINDOW_MAX':128}):
+            result,binary,_=self.assemble(0x2000,overrides=overrides)
+            self.assertIsNone(binary)
+            self.assertIn('ASSERT',(result.stdout+result.stderr).upper())
+
     def test_invalid_capacities_geometry_options_and_flag_bits_are_rejected(self):
         cases = {"CORE_WINDOW_MAX": (0, 256), "CORE_SCREEN_COLS": (0, 256),
                  "CORE_SCREEN_LINES": (0, 256), "CORE_WINDOW_DAMAGE_PAD": (-1, 256),

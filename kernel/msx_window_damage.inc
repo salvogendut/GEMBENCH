@@ -20,6 +20,9 @@ CORE_REGION_SLOT equ MSX_REGION_SLOT
 CORE_POINTER_SUPPRESSED equ cur_supp
 CORE_POINTER_PAINTLOCK equ cur_paintlock
 CORE_REPAINT_REGIONS equ MSX_VISIBLE_COMPOSITOR
+                if MSX_VISIBLE_COMPOSITOR
+CORE_PAINT_TIMER_OWNER equ #C3CA
+                endif
 ; Separate hardware choice: a future software pointer must erase before paint
 ; even when it uses the shared visible-region policy. MSX sprites need not.
 CORE_REPAINT_ERASE_POINTER equ 1-MSX_VISIBLE_COMPOSITOR

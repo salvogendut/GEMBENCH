@@ -29,8 +29,8 @@ void cpc_bar_tick(void)
 #include "../../apps/desktop/core/bar_refresh.inc"
 }
 
-/* Temporary root binding for the real Desktop activation policy. F7 is a
- * private integration control, not a substitute Desk menu. Capacity/failure
+/* Temporary root binding for the real Desktop activation policy. F2/F7 are
+ * private integration controls, not a substitute Desk menu. Capacity/failure
  * presentation are native leaves until the full Desktop/UI is connected. */
 volatile unsigned char cpc_accessory_requests, cpc_accessory_full;
 static unsigned char cpc_accessory_capacity(void)
@@ -52,4 +52,11 @@ void cpc_desk_calculator(void)
     ++cpc_accessory_requests;
     cpc_accessory_full = 0;
     open_accessory(GB_DESK_ACCESSORY_CALCULATOR_INDEX);
+}
+
+void cpc_desk_clock(void)
+{
+    ++cpc_accessory_requests;
+    cpc_accessory_full = 0;
+    open_accessory(GB_DESK_ACCESSORY_CLOCK_INDEX);
 }

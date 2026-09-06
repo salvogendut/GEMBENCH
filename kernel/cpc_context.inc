@@ -64,6 +64,13 @@ CORE_CONTEXT_CODE_END equ CPC_SCHED_END
                 ld l,a
                 mend
                 macro CTX_CALL_WORKER
+                ifdef CPC_RUNTIME
+                push hl
+                ld hl,(cpc_runtime_worker_calls)
+                inc hl
+                ld (cpc_runtime_worker_calls),hl
+                pop hl
+                endif
                 call sched_md_call
                 mend
                 macro CTX_MAP_BANK

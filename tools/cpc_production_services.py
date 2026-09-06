@@ -39,7 +39,7 @@ def compile_timer(work, sym, root):
     subprocess.run([sdas,f"-I{root}/lib/gembench","-o","timer.rel","timer.s"],cwd=work,check=True)
     subprocess.run([sdcc,"-mz80","--no-std-crt0","--nostdlib","--code-loc",hex(sym["cpc_timer_collect"]),
                     "--data-loc","0x6000","timer.rel","-o","timer.ihx"],cwd=work,check=True)
-    subprocess.run([str(bindir/"makebin"),"-p","timer.ihx","timer.bin"],cwd=work,check=True)
+    subprocess.run([str(bindir/"makebin"),"-s","65536","-p","timer.ihx","timer.bin"],cwd=work,check=True)
     binary=(work/"timer.bin").read_bytes()[sym["cpc_timer_collect"]:]
     if len(binary)!=116: raise AssertionError("shared collector link is not exactly 116 bytes")
     (work/"TIMER.BIN").write_bytes(binary)

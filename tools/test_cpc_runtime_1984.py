@@ -49,7 +49,7 @@ def integrity(data, sym, work):
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False):
     media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
@@ -136,6 +136,10 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         if ram[entry+1:entry+5]!=bytes((11,66,58,68)): raise AssertionError('wrong universal geometry')
         app=(media/'CARD/GBENCH/ABIPROBE.APP').read_bytes();base=physical(ram[entry])
         if ram[base:base+len(app)]!=app: raise AssertionError('loaded APP differs')
+        if clock:
+            from cpc_runtime_clock import run_clock
+            return run_clock(ROOT,media,manifest,work,sym,artifacts,image,emulator,
+                             send,wait,read,key,move)
         if accessories:
             key('F7');rects[2]=(24,24,31,144);order=[0,1,2];calculators[2]='0';titles[2]='Calculator'
             definition=bytes((1,10))+b'Edit\0\0\0\0';menu=definition
@@ -330,4 +334,5 @@ if __name__=='__main__':
     mode.add_argument('--filesystem',action='store_true')
     mode.add_argument('--menus',action='store_true')
     mode.add_argument('--accessories',action='store_true')
-    args=parser.parse_args();run(args.emulator.resolve(),args.skip_build,args.filesystem,args.menus,args.accessories)
+    mode.add_argument('--clock',action='store_true')
+    args=parser.parse_args();run(args.emulator.resolve(),args.skip_build,args.filesystem,args.menus,args.accessories,args.clock)

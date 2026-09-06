@@ -140,7 +140,12 @@ bar/application menus on private M4 media. Build it with
 dropdown restoration. This is still a test launcher, not the full CPC Desktop.
 [3D-O](docs/CPC-RESTART-STEP3D-O.md) adds the unchanged MSX Calculator and shared
 accessory activation: press **F7** in that M4 runtime, or run
-`make diagnostic-cpc-accessories-1984`. Clock's background service is next.
+`make diagnostic-cpc-accessories-1984`.
+[3D-P](docs/CPC-RESTART-STEP3D-P.md) connects Clock's real worker and shared
+timer collector: **F2** opens Clock, **S** toggles seconds, and
+`make diagnostic-cpc-clock-1984` checks background updates, occlusion and
+pointer save-under. The same updated Clock binary is tested on CPC and MSX2;
+the complete Desktop/Desk menu and File Manager remain next.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

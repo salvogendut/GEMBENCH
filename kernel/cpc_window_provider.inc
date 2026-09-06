@@ -47,7 +47,12 @@ PAINT_REGION_NEXT equ sched_region_next
 PAINT_SET_BANK equ foundation_bank_set
 PAINT_CHROME_DRAW equ CPC_WINDOW_CHROME_DRAW
 PAINT_CALL equ cpc_window_call
+                ifdef CPC_RUNTIME
+CORE_PAINT_TIMER_OWNER equ CORE_PARAM_TIMER_OWNER
+PAINT_POINTER_ERASE equ cpc_runtime_repaint_hide
+                else
 PAINT_POINTER_ERASE equ cpc_window_pointer_hide
+                endif
 PAINT_POINTER_SHOW equ cpc_window_pointer_show
                 macro FOCUS_NATIVE_CELL
                 call sched_wm_entry

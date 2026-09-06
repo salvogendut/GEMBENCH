@@ -41,7 +41,10 @@ class RuntimeTests(unittest.TestCase):
         # The shell mask is frozen by the ABI; do not admit Calculator by
         # advertising an unrelated service or weakening its package manifest.
         self.assertTrue(s['cpc_runtime_caps_low'] & abi['capabilities']['low_word_inherited']['shell'])
-        self.assertEqual(s['cpc_runtime_caps_high'] & 0x60,0)
+        self.assertEqual(s['cpc_runtime_caps_high'] & 0x20,0)
+        self.assertTrue(s['cpc_runtime_caps_high'] & 0x40)
+        self.assertEqual(raw[s['cpc_timer_collect']-0x8000:s['cpc_timer_payload_end']-0x8000],
+                         (self.work/'TIMER.BIN').read_bytes())
         self.assertTrue(s['cpc_runtime_caps_high'] & 0x10)
         for name in ('wm_loop','wm_raise','wm_repaint_all','k_app','k_defer','k_fsctx','gbap4_validate_loaded'):
             self.assertIn(name,s)

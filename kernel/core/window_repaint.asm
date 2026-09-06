@@ -37,6 +37,19 @@ wra_l           ld    a,(CORE_REPAINT_INDEX)
                 ld    hl,CORE_Z_ORDER
                 add   a,l
                 ld    l,a
+                ifdef CORE_PAINT_TIMER_OWNER
+                ; A timer changes one surface, not windows covering its damage.
+                ; Keep the existing visible-region iterator for that surface;
+                ; ordinary expose/move/focus passes still traverse every layer.
+                ld    a,(CORE_PAINT_TIMER_OWNER)
+                bit   7,a
+                jr    z,wra_timer_slot_ready
+                and   #7F
+                dec   a
+                cp    (hl)                         ; CORE_Z_ORDER[i]
+                jr    nz,wra_next
+wra_timer_slot_ready
+                endif
                 ld    a,(hl)                        ; slot = CORE_Z_ORDER[i]
                 if CORE_REPAINT_REGIONS
                 call  PAINT_REGION_BEGIN            ; installs first exact visible damage fragment
