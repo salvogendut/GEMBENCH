@@ -121,7 +121,8 @@ The final framebuffer SHA-256 is
 `c5d29635d7c47978621a71f86a2ebe36fe09c3da42d9b3d9a499f289c3cad836`.
 IRQ totals vary with workload/emulator timing; exact pixel/state checks do not.
 
-Earlier normal/full-slot/bad-guard/bad-bank/128-KiB production tests all pass.
+Earlier normal/full-slot/bad-guard/wrong-restored-bank/128-KiB production tests
+all pass.
 The standalone 3B graphics suite also passes, with its original raw payload
 SHA-256 `e722d7b4235241717e6d6124c51b62a1cf19684389d982abe589907b0ed2232e`:
 2,450 requests, 24 pixel checkpoints, 1,753 IRQs; artifacts
@@ -131,6 +132,23 @@ Four new host tests cover shared composition, exact clipping/gap oracles,
 deterministic linked profiles/budgets and corrupted-pixel/code/metadata
 observations. Synthetic observations test the checker only; execution evidence
 comes from the real M4 runs above.
+
+Full `make check` passed in clean detached worktree
+`/tmp/geobench-77b-check.V5wH9D` at implementation commit `c34fda2`: **152
+Python tests, no skips**, native C tests, ABI/layout and distribution audits.
+Log: `/tmp/geobench-77b-make-check.log`. The container used RASM 3.2.1 and
+explicit SDCC/SDAS 4.6.2 #16671 binaries from `../sdcc/bin`. Fresh universal
+ABI Probe, Calculator and Clock retain their reference hashes:
+
+- ABI Probe: `a6a696cc0bef9caf69c38b6c44f8d8e50dbb7dd560c88e99feb9595993e0adfc`
+- Calculator: `5e1989d171052d751386b355b1204382c88bba69f4edc632ea65fafb8b7da8f5`
+- Clock: `8d605d045087199769dea40bfdfc50009a2a50bf958ffbcc26e97cdfcdfef2f2`
+
+MSX2/shared production source and release media are unchanged; no additional
+MSX emulator run was necessary or performed for this CPC-provider-only
+checkpoint. The retained MSX image hash remains
+`a0c6fb4c1cf0dc4e2d0e1f9fb29356c981c022ab4202f12cf7f4077d9cc6ae0b`.
+The static MSX floppy-distribution audit does not boot a floppy.
 
 ## Reproduction
 
