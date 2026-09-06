@@ -164,7 +164,11 @@ cpc_verify_io
                 ld a,#C0
                 call foundation_bank_set
                 ifdef CPC_WM
+                ifdef CPC_LIFETIME
+                call cpc_lifetime_probe
+                else
                 call cpc_window_probe
+                endif
                 endif
                 if CPC_FAULT_GUARD
                 ld hl,CPC_MAIN_STACK-1

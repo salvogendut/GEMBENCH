@@ -55,6 +55,10 @@ cpc_font_end
                 include "../debug/cpc_production/window_probe.asm"
                 include "cpc_window_policy.asm"
                 endif
+                ifdef CPC_LIFETIME
+                include "cpc_lifetime.asm"
+                include "../debug/cpc_production/lifetime_probe.asm"
+                endif
                 ifdef CPC_PAD_KERNEL
                 ds CPC_KERNEL_END-$,#B9       ; boot stress, NOT real kernel code
                 endif

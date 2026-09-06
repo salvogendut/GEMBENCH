@@ -18,11 +18,38 @@ from cpc_production_drawing import DRAWING_VARIANTS, cases, expected_frames, ver
 from cpc_graphics_fixture import address
 from cpc_production_windows import (WINDOW_VARIANTS, cases as window_cases,
     expected_frames as window_frames, verify_windows, NATIVES)
+from cpc_production_lifetime import (LIFETIME_VARIANTS, expected as lifetime_expected,
+    physical as lifetime_physical, verify_lifetime, NATIVES as LIFE_NATIVES)
 
 RASM = shutil.which(os.environ.get("RASM", "rasm"))
 
 
 class ProductionSourceTests(unittest.TestCase):
+    def test_lifetime_cleanup_composition_and_oracle(self):
+        source = (ROOT / "kernel/cpc_lifetime.asm").read_text()
+        self.assertEqual(re.findall(r'include "core/([^\"]+)"', source), [
+            "app_lifetime.asm","window_close.asm","owner_reclaim.asm",
+            "deferred_queue.asm","deferred_purge.asm","fsctx_cleanup.asm"])
+        provider = (ROOT / "kernel/cpc_lifetime_provider.inc").read_text()
+        self.assertNotIn("MSX_",provider)
+        self.assertIn("CORE_FSCTX_RECORD_SIZE equ 144",provider)
+        self.assertIn("CORE_FSCTX_MAX equ 4",provider)
+        tags,states = lifetime_expected()
+        self.assertEqual(tags,[0xC5,0xC6])
+        self.assertEqual(states[3]["windows"],[3])
+        self.assertEqual(states[3]["flags"],1)
+        self.assertEqual(states[4]["flags"],0)
+        self.assertEqual(states[5]["status"],2)
+        self.assertEqual(states[6]["app_gen"],2)
+        self.assertEqual(states[7]["status"],2)
+        self.assertEqual(states[9]["flags"],9)
+        self.assertEqual(states[12]["order"],[0,1])
+        self.assertEqual(len(states[4]["queue"]),32)
+        self.assertEqual([states[4]["contexts"][i*144] for i in range(4)],[0,0,1,1])
+        for before,after in ((0,1),(1,2),(4,5),(6,7),(12,13)):
+            self.assertEqual(states[before]["frame"],states[after]["frame"])
+        self.assertNotEqual(states[2]["frame"],states[3]["frame"])
+
     def test_window_integration_uses_shared_policy_and_software_pointer(self):
         code = (ROOT / "kernel/cpc_window_policy.asm").read_text()
         self.assertEqual(re.findall(r'include "core/([^\"]+)"', code), [
@@ -169,6 +196,95 @@ class ProductionAssemblyTests(unittest.TestCase):
         assemble(again, "windows")
         for file in ("CORE.RAW", "SUPPORT.RAW", "SCHED.RAW", "BOOT.RAW"):
             self.assertEqual((again / file).read_bytes(), (self.root / "windows" / file).read_bytes())
+
+    def test_lifetime_link_budget_and_determinism(self):
+        for variant in LIFETIME_VARIANTS:
+            sym=self.maps[variant]
+            self.assertLess(sym["cpc_lifetime_end"]-sym["cpc_lifetime_begin"],1024)
+            self.assertLessEqual(sym["cpc_wm_end"]+16,sym["cpc_life_guard"])
+            self.assertLessEqual(sym["cpc_life_end"]+16,sym["cpc_future_state_end"])
+            self.assertEqual(sym["core_fsctx_table"]+sym["core_fsctx_record_size"]*sym["core_fsctx_max"],0x2840)
+            self.assertEqual(sym["core_defer_activate"]+1,sym["core_param_timer_owner"])
+        again=self.root/"lifetime-again"
+        assemble(again,"lifetime")
+        for file in ("CORE.RAW","SUPPORT.RAW","SCHED.RAW","BOOT.RAW"):
+            self.assertEqual((again/file).read_bytes(),(self.root/"lifetime"/file).read_bytes())
+
+    def test_lifetime_checker_rejects_cleanup_and_isolation_corruption(self):
+        # Synthetic host observation, not a claimed emulator execution.
+        sym,work=self.maps["lifetime"],self.root/"lifetime"
+        tags,states=lifetime_expected()
+        ram=bytearray(512*1024)
+        ram[sym["life_trace_tags"]:sym["life_trace_tags"]+2]=bytes(tags)
+        ram[sym["life_done"]]=16
+        for i,s in enumerate(states):
+            record=bytearray(b"\xBD"*2048)
+            record[:16]=bytes((i,s["status"],s["bank"],s["focus"],len(s["order"]),s["run"],
+                s["frame_tag"],s["primary"],3,s["app_gen"],3,s["win_gen"][2]))+struct.pack("<HH",s["saves"],s["restores"])
+            record[32:544]=bytes(512)
+            def field(name,values):
+                at=32+sym[name]-0x2200
+                record[at:at+len(values)]=bytes(values)
+            field("core_page_native",LIFE_NATIVES+[0]*4)
+            field("core_page_free",[sum(not p["owner"] for p in s["pages"])])
+            for name,values in (("core_page_state",[int(bool(p["owner"])) for p in s["pages"]]),
+                                ("core_page_gen",[p["gen"] for p in s["pages"]]),
+                                ("core_page_owner",[p["owner"]&255 for p in s["pages"]]),
+                                ("core_page_owner_gen",[p["owner"]>>8 for p in s["pages"]]),
+                                ("core_page_purpose",[p["purpose"] for p in s["pages"]])):
+                field(name,values+[0]*4)
+            field("core_owner_active",[1,1,bool(s["flags"])])
+            field("core_owner_gen",[1,1,s["app_gen"]])
+            field("core_win_gen",s["win_gen"])
+            field("core_win_owner",[1,2]+[3 if j in s["windows"] else 0 for j in range(2,8)])
+            field("core_win_owner_gen",[1,1]+[s["app_gen"] if j in s["windows"] else 0 for j in range(2,8)])
+            field("core_app_window_count",[1,1,len(s["windows"])])
+            for name,value in (("core_app_flags",s["flags"]),("core_app_service",s["service"]),
+                               ("core_app_accessory",s["accessory"]),("core_app_worker_win",s["worker"]),
+                               ("core_app_primary_win",s["windows"][0] if s["windows"] else 255),
+                               ("core_defer_handler_lo",s["endpoint"]&255),("core_defer_handler_hi",s["endpoint"]>>8),
+                               ("core_app_code_native",s["primary"] if s["flags"] else 0),
+                               ("core_app_code_page",s["app_pages"][0]+1 if s["flags"] else 0),
+                               ("core_app_code_gen",s["pages"][s["app_pages"][0]]["gen"] if s["flags"] else 0)):
+                field(name,[0,0,value])
+            field("core_defer_count",[len(s["queue"])//8])
+            field("core_defer_queue",s["queue"])
+            record[544:1120]=s["contexts"]
+            record[1120:1320]=bytes(200)
+            for slot in s["order"]:
+                record[1120+slot*25+13]=9 if slot==0 else 11 if slot==1 or slot==s["worker"] else 3
+            record[1320:1328]=bytes(s["order"]+[0]*(8-len(s["order"])))
+            record[1328:1332]=bytes((0,0,80,200))
+            base=lifetime_physical(tags[i//8])+i%8*2048
+            ram[base:base+2048]=record
+            base=lifetime_physical(s["frame_tag"])
+            ram[base:base+16384]=s["frame"]
+        ram[0x2200:0x2400]=record[32:544]
+        ram[0x2600:0x2840]=record[544:1120]
+        ram[0x2840:0x2900]=b"\xAC"*192
+        ram[0xC000:0x10000]=states[-1]["frame"]
+        for name in ("cpc_wm_guard","cpc_wm_end","cpc_life_guard","cpc_life_end","cpc_draw_state_guard","cpc_draw_state_end"):
+            ram[sym[name]:sym[name]+16]=b"\xD7"*16
+        ram[sym["pointer_visible"]]=1
+        raw=(work/"SUPPORT.RAW").read_bytes()
+        ram[sym["cpc_support_base"]:sym["cpc_support_base"]+len(raw)]=raw
+        font=(work/"DEFAULT.FNT").read_bytes()
+        ram[0x7C000:0x80000]=font+b"\xA9"*(16384-len(font))
+        ram[0x10202]=2
+        self.assertEqual(verify_lifetime(ram,sym,work)["lifetime_checkpoints"],16)
+        closed=lifetime_physical(tags[0])+4*2048
+        for at,message in ((closed+32+sym["core_defer_count"]-0x2200,"message purge"),
+                           (closed+544,"FS context"),(closed+32+sym["core_page_owner"]-0x2200,"page reclamation"),
+                           (closed+32+sym["core_app_window_count"]-0x2200,"sibling count"),
+                           (closed+5,"status/bank"),(closed+1320,"z-order"),(closed+1500,"trace tail"),
+                           (lifetime_physical(states[4]["frame_tag"]),"framebuffer"),
+                           (0x2840,"launch/service"),(sym["cpc_life_end"],"guard"),
+                           (sym["universal_parameters"],"SUPPORT.RAW"),(0x7C100,"font page"),
+                           (0x10200,"worker rejection"),(0x2376,"final tables")):
+            damaged=bytearray(ram)
+            damaged[at]^=1
+            with self.subTest(at=at),self.assertRaisesRegex(AssertionError,message):
+                verify_lifetime(damaged,sym,work)
 
     def test_window_checker_rejects_pixels_overdraw_callback_and_state_faults(self):
         # Synthetic HOST checker test only; M4 runner supplies execution evidence.

@@ -210,6 +210,7 @@ kapp_window_close
                 call  LIFETIME_CURRENT_OWNER
                 pop   hl
                 call  window_validate_owned
+                or    a                    ; status is in A; stale/dead may leave Z set
                 ret   nz
                 call  LIFETIME_CLOSE_WINDOW
                 xor   a

@@ -100,6 +100,9 @@ exact text/line/pointer clipping. The
 through `make diagnostic-cpc-windows-1984`, checking the shared compositor
 with native fixtures and CPC clipping/pointer adapters. These diagnostics
 are not a CPC desktop or loaded application build.
+The [3D-D lifetime/cleanup checkpoint](docs/CPC-RESTART-STEP3D-D.md),
+`make diagnostic-cpc-lifetime-1984`, adds owner-safe close/quit, message purge
+and logical file-context cleanup tests.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

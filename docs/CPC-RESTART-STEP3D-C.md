@@ -143,9 +143,14 @@ or rehabilitate the parked `QA/CPC/` release tree.
 
 ## Next gate
 
-Connect the real application lifetime/close path, including deferred-message
-purge and filesystem-context cleanup, and measure the resident/module split.
-Production registration/managed chrome, root event/mouse translation, public
+Follow-up [3D-D](CPC-RESTART-STEP3D-D.md) now validates application lifetime,
+message purge and storage-free file-context cleanup with native fixtures.
+It fixes a shared stale-close status check; the unchanged-MSX statements above
+describe this earlier checkpoint, not that subsequent correction.
+
+With that cleanup checkpoint in place, measure the complete resident/module
+split and finish service composition. Production registration/managed chrome,
+root event/mouse translation, public
 bindings, timers/FS composition and IRQ-off/M4-ACK responsiveness remain.
 Only after that combined adapter/layout gate should a loaded shared-core
 window, then Desktop/File Manager, be treated as usable. MSX2 remains the

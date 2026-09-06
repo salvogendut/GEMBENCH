@@ -5,13 +5,14 @@ Branch: `feature/77-cpc-production-adapters`, based on context/IRQ #76 at
 `076f01f`. Parent plan: [CPC-RESTART-PLAN.md](CPC-RESTART-PLAN.md).
 
 Status: **3D-A, [3D-B drawing/parameters](CPC-RESTART-STEP3D-B.md) and
-[3D-C focus/stacking/damage](CPC-RESTART-STEP3D-C.md) are
+[3D-C focus/stacking/damage](CPC-RESTART-STEP3D-C.md) and
+[3D-D lifetime/cleanup](CPC-RESTART-STEP3D-D.md) are
 implemented and M4/1984 validated; the complete production adapter gate is
 still open.** The 3D-A record below connects actual shared context
 and visibility code to a checked CPC layout and CPC hardware. It is not a
 desktop, public application loader, or proof that the complete kernel fits.
 The remaining integration work must finish before the first shared-core window.
-The 3D-B/C documents supersede the drawing/parameter/compositor gaps and measurements below;
+The 3D-B/C/D documents supersede the drawing/parameter/compositor/cleanup gaps and measurements below;
 this document retains the original non-drawing fixture and its evidence.
 
 ## Why the addresses change
@@ -246,7 +247,9 @@ pointer/block primitives, at these addresses. It does not complete all of the
 following original exit requirements.
 Follow-up [3D-C](CPC-RESTART-STEP3D-C.md) also executes shared focus/stacking/
 damage with CPC hardware clipping and pointer locking. Production window
-registration/chrome and lifetime/defer/FS teardown remain unconnected.
+registration/chrome and service integration remain unconnected. [3D-D](CPC-RESTART-STEP3D-D.md)
+now links lifetime/owner cleanup, including FIFO purge and storage-free FS
+context invalidation; it does not provide CPC FS context operations/delivery.
 
 1. Bind the real shared owner/lifetime/focus/damage/defer/FS tables, module/data
    reservations and receiving-side `GB_PARAMS` contracts to this CPC map.

@@ -109,6 +109,15 @@ class LifetimeAssemblyTests(unittest.TestCase):
         self.assertNotEqual(low[1], high[1], "relocated state must change operands")
         self.assertEqual(low[1], self.assemble(0x2000)[1])
 
+    def test_close_checks_status_not_validator_flags(self):
+        for base in (0x2000, 0xD800):
+            result, binary, symbols = self.assemble(base)
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            address = int(re.search(r"(?m)^KAPP_WINDOW_CLOSE #([0-9A-F]+)",symbols)[1],16)
+            # PUSH HL; CALL owner; POP HL; CALL validate; OR A; RET NZ.
+            # Dead/stale rejection can return nonzero A with Z still set.
+            self.assertEqual(binary[address-0x8000+8:address-0x8000+10], b"\xB7\xC0")
+
     def test_window_generation_table_must_fit_index_page(self):
         result, binary, _ = self.assemble(0x2000, {"CORE_WIN_GEN": 0x20FC})
         self.assertIsNone(binary, result.stdout+result.stderr)
