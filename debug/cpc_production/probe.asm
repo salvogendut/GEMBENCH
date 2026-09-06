@@ -61,6 +61,9 @@ cpc_workers_clear
                 ld a,200
                 ld (WM_CLIP_H),a
                 call sched_compositor_prepare ; real shared visible classification
+                ifdef CPC_DRAWING
+                call cpc_drawing_init
+                endif
                 ld a,2
                 ld (CPC_PHASE),a
                 ei
@@ -146,6 +149,9 @@ cpc_verify_io
                 ld hl,(CPC_IO_CHECKS)
                 inc hl
                 ld (CPC_IO_CHECKS),hl
+                ifdef CPC_DRAWING
+                call cpc_drawing_case
+                endif
                 ld a,(CPC_ROOT_TURNS)
                 cp 64
                 jp nz,cpc_root_loop
@@ -183,10 +189,24 @@ root_record
                 db 3
                 ds 11,0
 worker_code
+                ifdef CPC_DRAWING
+                ld hl,#4000+worker_draw_request-worker_code
+                ld bc,16
+                call universal_parameters      ; real mapped worker must not render
+                ld (#4202),a
+                endif
+worker_loop
                 ld hl,(#4200)
                 inc hl
                 ld (#4200),hl
-                jr worker_code
+                jr worker_loop
+                ifdef CPC_DRAWING
+worker_draw_request
+                db 1,1
+                dw 0,0,319,199
+                db 3
+                ds 5,0
+                endif
 worker_code_end
 io_request db 1,1
                 dw #4320

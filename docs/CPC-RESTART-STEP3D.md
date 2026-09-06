@@ -4,11 +4,14 @@ Date: 2026-09-06. Issue: [#77](https://github.com/salvogendut/GEMBENCH/issues/77
 Branch: `feature/77-cpc-production-adapters`, based on context/IRQ #76 at
 `076f01f`. Parent plan: [CPC-RESTART-PLAN.md](CPC-RESTART-PLAN.md).
 
-Status: **3D-A is implemented and M4/1984 validated; the complete production
-adapter gate is still open.** This checkpoint connects actual shared context
+Status: **3D-A and [3D-B drawing/parameters](CPC-RESTART-STEP3D-B.md) are
+implemented and M4/1984 validated; the complete production adapter gate is
+still open.** The 3D-A record below connects actual shared context
 and visibility code to a checked CPC layout and CPC hardware. It is not a
 desktop, public application loader, or proof that the complete kernel fits.
-The remaining 3D-B work below must finish before the first shared-core window.
+The remaining integration work must finish before the first shared-core window.
+The 3D-B document supersedes the drawing/parameter gaps and measurements below;
+this document retains the original non-drawing fixture and its evidence.
 
 ## Why the addresses change
 
@@ -234,7 +237,12 @@ a clean worktree, not by deleting those files or weakening the checks. Whole
 FAT image hashes can differ with file timestamps; raw payload bytes and their
 source fingerprints are the reproducible comparison.
 
-## Remaining 3D-B exit work — before a window
+## Production-adapter exit work — before a window
+
+Update: [3D-B](CPC-RESTART-STEP3D-B.md) binds and executes shared owner/page,
+window identity and receiving parameters, plus clipped Mode-1 text/line and
+pointer/block primitives, at these addresses. It does not complete all of the
+following original exit requirements.
 
 1. Bind the real shared owner/lifetime/focus/damage/defer/FS tables, module/data
    reservations and receiving-side `GB_PARAMS` contracts to this CPC map.

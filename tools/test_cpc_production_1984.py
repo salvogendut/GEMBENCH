@@ -15,6 +15,7 @@ import time
 
 from build_cpc_production import ROOT, VARIANTS, build, symbols
 from test_cpc_foundation_1984 import snapshot
+from cpc_production_drawing import verify_drawing
 
 
 def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
@@ -66,8 +67,10 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
         code = (work / file).read_bytes()
         if ram[sym[base]:sym[base]+len(code)] != code:
             raise AssertionError(f"{file} code changed")
+    drawing = "cpc_drawing_begin" in sym
+    drawing_result = verify_drawing(ram, sym, work) if drawing else {}
     pixels = ram[0xC000:0x10000]
-    if pixels != bytes((a >> 8) ^ (a & 255) for a in range(0xC000, 0x10000)):
+    if not drawing and pixels != bytes((a >> 8) ^ (a & 255) for a in range(0xC000, 0x10000)):
         raise AssertionError("non-drawing adapter damaged framebuffer or raster gaps")
     if ram[0x4340:0x4380] != bytes(range(64, 0, -1)):
         raise AssertionError("M4 returned bytes differ")
@@ -77,7 +80,7 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
         raise AssertionError("mapped worker code differs")
     if (ram[0x7F00], ram[0x13F00]) != (24, 26):
         raise AssertionError("missing/invalid yield and IRQ snapshots")
-    return {"root_turns": word("cpc_root_turns"), "io_checks": word("cpc_io_checks"),
+    return {**drawing_result, "root_turns": word("cpc_root_turns"), "io_checks": word("cpc_io_checks"),
             "irq_count": word("cpc_irq_count"), "seconds": word("cpc_hw_seconds"),
             "stack_bytes": used, "scheduler_stack_max": byte("sched_stack_max"),
             "worker_counter": word("cpc_worker_counter"), "commands": word("command_count"),
@@ -149,7 +152,7 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if (ram[sym["cpc_phase"]], ram[sym["cpc_failure"]]) != (0xFF, 8):
                 raise AssertionError("undersized memory not rejected by CPC admission")
             result = {"expected_failure": "128-KiB memory rejected"}
-        elif variant in ("normal", "full-slot"):
+        elif variant in ("normal", "full-slot", "drawing"):
             result = verify(data, sym, work)
             send("wait frames 150 200")
             send(f"snapshot-save {artifacts / 'stable.sna'}")
@@ -159,7 +162,9 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
         else:
             try: verify(data, sym, work)
             except AssertionError as error:
-                expected = "main stack guard damaged" if variant == "bad-guard" else "failure=6"
+                expected = {"bad-guard": "main stack guard damaged", "bad-restore": "failure=6",
+                            "drawing-bad-clip": "drawing checkpoint clipped-line",
+                            "drawing-bad-copy": "drawing checkpoint text-under-pointer"}[variant]
                 if expected not in str(error): raise
                 result = {"expected_failure": str(error)}
             else: raise AssertionError("corrupt adapter unexpectedly passed")

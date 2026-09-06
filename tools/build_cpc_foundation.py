@@ -98,7 +98,7 @@ def build(variant: str) -> Path:
         "source_sha256": {
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in [*sorted((ROOT / "debug/cpc_foundation").iterdir()),
-                         ROOT / "lib/cpc/bank.asm", ROOT / "lib/cpc/graphics.asm", ROOT / "lib/cpc/m4.asm",
+                         ROOT / "lib/cpc/bank.asm", ROOT / "lib/cpc/graphics.asm", ROOT / "lib/cpc/graphics_gate.asm", ROOT / "lib/cpc/m4.asm",
                          ROOT / "tools/cpc_graphics_fixture.py",
                          ROOT / "tools/cpc_storage_fixture.py"] if path.is_file()
         },

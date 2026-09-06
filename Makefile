@@ -12,6 +12,13 @@ all: msx
 .PHONY: diagnostic-cpc-foundation diagnostic-cpc-foundation-1984 diagnostic-cpc-graphics diagnostic-cpc-graphics-1984
 .PHONY: diagnostic-cpc-storage diagnostic-cpc-storage-1984
 .PHONY: diagnostic-cpc-production diagnostic-cpc-production-1984
+.PHONY: diagnostic-cpc-drawing diagnostic-cpc-drawing-1984
+diagnostic-cpc-drawing:
+	$(PYTHON) tools/build_cpc_production.py --variant drawing
+
+diagnostic-cpc-drawing-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant drawing
+
 diagnostic-cpc-production:
 	$(PYTHON) tools/build_cpc_production.py
 

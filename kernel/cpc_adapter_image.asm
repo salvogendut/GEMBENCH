@@ -11,6 +11,10 @@ CPC_FAULT_GUARD equ 0
 CPC_FAULT_RESTORE equ 0
                 endif
                 include "cpc_scheduler.asm"
+                ifdef CPC_DRAWING
+                include "../lib/cpc/drawing_layout.inc"
+                include "cpc_support.asm"
+                endif
 
                 org CPC_HARDWARE_BASE
 cpc_hardware_begin
@@ -31,6 +35,22 @@ cpc_kernel_begin
                 jp cpc_probe_start
                 include "../lib/cpc/memory.asm"
                 include "../debug/cpc_production/probe.asm"
+                ifdef CPC_DRAWING
+cpc_drawing_begin
+FAULT_CLIP equ 0
+FAULT_COPY equ 0
+FAULT_CURSOR equ 0
+                include "../lib/cpc/graphics_gate.asm"
+                include "../lib/cpc/graphics.asm"
+                include "../lib/cpc/text.asm"
+                include "../lib/cpc/drawing.asm"
+cpc_drawing_end
+                include "../debug/cpc_production/drawing_probe.asm"
+                include "drawing_vectors.inc"
+cpc_font_payload
+                incbin "DEFAULT.FNT"
+cpc_font_end
+                endif
                 ifdef CPC_PAD_KERNEL
                 ds CPC_KERNEL_END-$,#B9       ; boot stress, NOT real kernel code
                 endif

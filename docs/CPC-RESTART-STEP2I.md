@@ -150,7 +150,8 @@ untouched. The static MSX floppy-distribution audit does not boot any floppy.
 ## Next package
 
 Follow-up: [3D-A production-address integration](CPC-RESTART-STEP3D.md) is now
-validated under #77; that document tracks the still-open 3D-B completion gate.
+validated under #77; that document tracks drawing checkpoint 3D-B and the
+still-open production-adapter completion gate.
 
 Production CPC memory layout and adapters. Budget the actual shared policy and
 context image, resident kernel, low-memory support, all fixed state, normal/IRQ/

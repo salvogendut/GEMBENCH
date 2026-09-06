@@ -45,6 +45,12 @@ cpc_boot_start
                 ld de,CPC_LOADER_BASE
                 ld bc,loader_payload_end-loader_payload
                 ldir
+                ifdef CPC_DRAWING
+                ld hl,support_payload
+                ld de,CPC_SUPPORT_BASE
+                ld bc,support_payload_end-support_payload
+                ldir
+                endif
                 ld a,#8D
                 call storage_ga_set
                 ld a,#C0
@@ -87,6 +93,11 @@ scheduler_payload_end
 loader_payload
                 incbin "LOADER.RAW"
 loader_payload_end
+                ifdef CPC_DRAWING
+support_payload
+                incbin "SUPPORT.RAW"
+support_payload_end
+                endif
 cpc_boot_end
                 assert cpc_boot_end<=#9A00,"boot image overwrites live firmware workspace"
                 save "BOOT.RAW",cpc_boot_start,cpc_boot_end-cpc_boot_start

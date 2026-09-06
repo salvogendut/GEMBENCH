@@ -92,8 +92,10 @@ The [3B graphics/pointer proof](docs/CPC-RESTART-STEP3B.md) runs through
 `make diagnostic-cpc-graphics-1984`, also using isolated M4 media.
 The [3D production-address integration](docs/CPC-RESTART-STEP3D.md) uses
 `make diagnostic-cpc-production-1984` to exercise shared context switching,
-banking, keyboard/ticks and M4 together. Drawing integration is still pending;
-this diagnostic is not a CPC desktop.
+banking, keyboard/ticks and M4 together. Its
+[3D-B drawing/parameter integration](docs/CPC-RESTART-STEP3D-B.md) runs through
+`make diagnostic-cpc-drawing-1984`, including shared ownership/parameters and
+exact text/line/pointer clipping. Neither diagnostic is a CPC desktop.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

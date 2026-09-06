@@ -12,10 +12,13 @@ import subprocess
 import tempfile
 
 from build_cpc_foundation import headed
+from cpc_production_drawing import DRAWING_VARIANTS, emit_vectors
+import genfont
 
 ROOT = Path(__file__).resolve().parents[1]
 VARIANTS = {"normal": None, "full-slot": "CPC_PAD_KERNEL",
-            "bad-guard": "CPC_FAULT_GUARD", "bad-restore": "CPC_FAULT_RESTORE"}
+            "bad-guard": "CPC_FAULT_GUARD", "bad-restore": "CPC_FAULT_RESTORE",
+            **DRAWING_VARIANTS}
 
 
 def symbols(path: Path) -> dict[str, int]:
@@ -48,8 +51,14 @@ def memory_regions(sym: dict[str, int]) -> list[dict]:
 
 def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
     work.mkdir(parents=True, exist_ok=True)
+    drawing = variant in DRAWING_VARIANTS
+    if drawing:
+        emit_vectors(work / "drawing_vectors.inc")
+        genfont.main(["genfont", str(work / "DEFAULT.FNT")])
     cmd = [os.environ.get("RASM", "rasm"), str(ROOT / "kernel/cpc_adapter_image.asm"),
-           "-s", "-sq", "-o", "adapters", *overrides]
+           "-s", "-sq", "-o", "adapters", f"-I{work}", *overrides]
+    if drawing:
+        cmd += ["-DCPC_DRAWING=1"]
     if VARIANTS[variant]:
         cmd += [f"-D{VARIANTS[variant]}=1"]
     subprocess.run(cmd, cwd=work, check=True)
@@ -61,7 +70,8 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
     core = (work / "CORE.RAW").read_bytes()
     for source, output in (("cpc_m4_loader.asm", "loader"), ("cpc_m4_boot.asm", "boot")):
         subprocess.run([os.environ.get("RASM", "rasm"), str(ROOT / "kernel" / source),
-                        "-s", "-sq", "-o", output, f"-I{work}", f"-DCPC_LOAD_BYTES={len(core)}"],
+                        "-s", "-sq", "-o", output, f"-I{work}", f"-DCPC_LOAD_BYTES={len(core)}",
+                        *(["-DCPC_DRAWING=1"] if drawing else [])],
                        cwd=work, check=True)
     return sym
 
@@ -101,12 +111,18 @@ def build(variant="normal") -> Path:
                     ("scheduler", "cpc_scheduler_begin", "cpc_scheduler_end", "cpc_sched_end"),
                     ("hardware", "cpc_hardware_begin", "cpc_hardware_used_end", "cpc_hardware_end"),
                     ("probe_NOT_complete_kernel", "cpc_kernel_begin", "cpc_kernel_used_end", "cpc_kernel_end"))}
+    if variant in DRAWING_VARIANTS:
+        sections["support"] = dict(base=sym["cpc_support_base"], used=sym["cpc_support_used_end"]-sym["cpc_support_begin"],
+                                   budget=sym["cpc_support_end"]-sym["cpc_support_base"])
+        sections["drawing_code"] = dict(base=sym["cpc_drawing_begin"], used=sym["cpc_drawing_end"]-sym["cpc_drawing_begin"])
     sources = [ROOT / "kernel/cpc_adapter_image.asm", ROOT / "kernel/cpc_scheduler.asm",
                ROOT / "kernel/cpc_context.inc", ROOT / "kernel/cpc_visibility.inc", ROOT / "kernel/cpc_m4_boot.asm", ROOT / "kernel/cpc_m4_loader.asm",
                *sorted((ROOT / "kernel/core").glob("*.asm")), *sorted((ROOT / "kernel/core").glob("*.inc")),
                *sorted((ROOT / "lib/cpc").glob("*")), *sorted((ROOT / "debug/cpc_production").glob("*")),
                ROOT / "tools/build_cpc_production.py", ROOT / "tools/test_cpc_production_1984.py",
-               ROOT / "tools/build_cpc_foundation.py", ROOT / "tools/test_cpc_foundation_1984.py"]
+               ROOT / "tools/build_cpc_foundation.py", ROOT / "tools/test_cpc_foundation_1984.py",
+               ROOT / "tools/cpc_production_drawing.py", ROOT / "tools/genfont.py",
+               ROOT / "kernel/cpc_support.asm", ROOT / "kernel/cpc_parameter_provider.inc"]
     manifest = {"variant": variant, "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "sections": sections, "memory_regions": memory_regions(sym), "image": str(image), "work": str(work),
                 "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from build_cpc_production import VARIANTS, assemble, memory_regions, symbols
 from test_cpc_production_1984 import verify
+from cpc_production_drawing import DRAWING_VARIANTS, cases, expected_frames, verify_drawing
+from cpc_graphics_fixture import address
 
 RASM = shutil.which(os.environ.get("RASM", "rasm"))
 
@@ -20,7 +23,7 @@ RASM = shutil.which(os.environ.get("RASM", "rasm"))
 class ProductionSourceTests(unittest.TestCase):
     def test_common_hardware_leaves_have_one_source(self):
         for wrapper, leaf in (("bank.asm", "bank.asm"), ("graphics_driver.asm", "graphics.asm"),
-                              ("storage_driver.asm", "m4.asm")):
+                              ("storage_driver.asm", "m4.asm"), ("graphics_gate.asm", "graphics_gate.asm")):
             code = (ROOT / "debug/cpc_foundation" / wrapper).read_text()
             statements = [line.strip() for line in code.splitlines()
                           if line.strip() and not line.lstrip().startswith(";")]
@@ -38,6 +41,41 @@ class ProductionSourceTests(unittest.TestCase):
             self.assertNotRegex((ROOT / "kernel" / name).read_text(), r"\bMSX_[A-Z_]+")
         # A production-address fixture is not authority to restore a second WM.
         self.assertNotIn("wm_create", code)
+
+    def test_drawing_uses_shared_identity_and_parameter_policy(self):
+        code = (ROOT / "kernel/cpc_support.asm").read_text()
+        for name in ("page_count", "owner_identity", "page_pool", "app_code",
+                     "window_identity", "owner_context", "parameters"):
+            self.assertEqual(code.count(f'include "core/{name}.asm"'), 1)
+        provider = (ROOT / "kernel/cpc_parameter_provider.inc").read_text()
+        self.assertNotIn("MSX_", provider)
+        self.assertIn("PARAM_CURRENT_OWNER equ owner_current", provider)
+        self.assertIn("jp window_validate_owned", code)
+        renderer = (ROOT / "lib/cpc/text.asm").read_text()
+        self.assertNotIn("equ   #14", renderer)
+        self.assertIn("call cpc_byte_visible", renderer)
+        self.assertIn("ld hl,font_last", renderer)
+
+    def test_drawing_oracle_clips_bytes_and_covers_gap_bytes(self):
+        frames, _ = expected_frames()
+        named = dict(frames)
+        self.assertEqual(len(frames), 26)
+        self.assertLessEqual(len(cases()), 64)
+        gaps = set(range(16384)) - {address(x*4,y) for x in range(80) for y in range(200)}
+        self.assertEqual(len(gaps), 384)
+        for _, frame in frames:
+            for offset in gaps:
+                self.assertEqual(frame[offset], ((offset+0xC000)>>8) ^ (offset&255))
+        before, after = named["point"], named["clipped-line"]
+        changed = {i for i, (a,b) in enumerate(zip(before,after)) if a != b}
+        allowed = {address(x*4,y) for x in range(13,43) for y in range(22,62)}
+        self.assertTrue(changed)
+        self.assertLessEqual(changed, allowed)
+        self.assertEqual(named["clipped-line"], named["empty-clip-line"])
+        before, after = named["text-pointer-hide"], named["partial-glyph-clip"]
+        changed = {i for i, (a,b) in enumerate(zip(before,after)) if a != b}
+        self.assertTrue(changed)
+        self.assertLessEqual(changed, {address(x*4,y) for x in range(10,17) for y in range(58,61)})
 
 
 @unittest.skipUnless(RASM, "RASM required for production-address CPC adapter assembly")
@@ -84,6 +122,76 @@ class ProductionAssemblyTests(unittest.TestCase):
         assemble(again)
         for file in ("CORE.RAW", "SCHED.RAW", "HARDWARE.RAW", "LOADER.RAW", "BOOT.RAW"):
             self.assertEqual((again / file).read_bytes(), (self.root / "normal" / file).read_bytes())
+
+    def test_drawing_sections_and_profile_are_bounded(self):
+        for variant in DRAWING_VARIANTS:
+            sym, work = self.maps[variant], self.root / variant
+            raw = (work / "SUPPORT.RAW").read_bytes()
+            self.assertEqual(len(raw), sym["cpc_support_used_end"]-sym["cpc_support_base"])
+            self.assertLessEqual(sym["cpc_support_used_end"], sym["cpc_support_end"])
+            self.assertLessEqual(sym["cpc_draw_state_end"]+16, sym["cpc_draw_trace"])
+            self.assertLessEqual(sym["cpc_draw_trace_end"], sym["cpc_future_state_end"])
+            self.assertEqual(sym["core_param_app_native"], sym["core_app_code_native"])
+            self.assertEqual(sym["core_param_width"], 320)
+            self.assertEqual(sym["core_param_columns"], 80)
+            self.assertEqual(sym["core_param_height"], 200)
+            self.assertLess(sym["universal_parameters"], 0x4000)
+            self.assertEqual((work / "DEFAULT.FNT").read_bytes()[:10], b"GBFN\1\x20\x83\6\10\1")
+            for name in ("core_page_native", "core_owner_active", "core_app_code_native", "core_win_gen"):
+                self.assertTrue(0x2000 <= sym[name] < 0x2900)
+        again = self.root / "drawing-again"
+        assemble(again, "drawing")
+        for file in ("CORE.RAW", "SUPPORT.RAW", "BOOT.RAW"):
+            self.assertEqual((again / file).read_bytes(), (self.root / "drawing" / file).read_bytes())
+
+    def test_drawing_checker_rejects_corrupt_pixels_state_and_code(self):
+        # Host-only synthetic observation: real execution is the M4 runner.
+        sym, work = self.maps["drawing"], self.root / "drawing"
+        ram = bytearray(512*1024)
+        frames, saved = expected_frames()
+        def byte(name, value): ram[sym[name]] = value
+        def word(name, value): ram[sym[name]:sym[name]+2] = value.to_bytes(2,"little")
+        byte("draw_case_count_done", len(cases()))
+        byte("draw_capture_count", len(frames))
+        for i, (_, frame) in enumerate(frames):
+            ram[0x14000+i*16384:0x14000+(i+1)*16384] = frame
+        ram[0xC000:0x10000] = frames[-1][1]
+        ram[0x4100:0x4100+len(saved)] = saved
+        raw = (work / "SUPPORT.RAW").read_bytes()
+        ram[sym["cpc_support_base"]:sym["cpc_support_base"]+len(raw)] = raw
+        for at in (sym["cpc_draw_state_guard"], sym["cpc_draw_state_end"]):
+            ram[at:at+16] = b"\xD7"*16
+        font = (work / "DEFAULT.FNT").read_bytes()
+        ram[0x7C000:0x80000] = font+b"\xA9"*(16384-len(font))
+        byte("core_page_total",28)
+        byte("core_page_free",26-len(frames))
+        for name, values in (("core_page_state",[1]*28), ("core_page_gen",[1]*28),
+                             ("core_page_owner",[1,2]+[1]*26), ("core_page_owner_gen",[1]*28),
+                             ("core_page_purpose",[1,1]+[6]*26)):
+            ram[sym[name]:sym[name]+32] = bytes(values+[0]*4)
+        word("draw_root_owner",0x0101)
+        word("draw_worker_owner",0x0102)
+        ram[sym["core_win_gen"]:sym["core_win_gen"]+2] = b"\1\1"
+        ram[sym["core_app_code_native"]:sym["core_app_code_native"]+2] = b"\xC0\xC4"
+        ram[0x10202] = 2
+        word("draw_irq_total",1)
+        for name, trace in (("phase-3",(4,3)), ("draw-under-pointer",(5,4)),
+                            ("empty-clip-line",(6,6)), ("text-under-pointer",(8,7))):
+            index = [n for n, _ in frames].index(name)
+            at = sym["cpc_draw_trace"]+index*4
+            ram[at:at+4] = struct.pack("<HH",*trace)
+        self.assertEqual(verify_drawing(ram,sym,work)["drawing_cases"], len(cases()))
+        for at, message in ((0x14000+0x7FF,"drawing checkpoint"), (0xFFFF,"final framebuffer"),
+                            (0x4100,"canonical"), (sym["universal_parameters"],"SUPPORT.RAW"),
+                            (sym["cpc_draw_state_end"],"guard"), (0x7C015,"font/service"),
+                            (sym["core_page_free"],"accounting"), (sym["core_win_gen"],"generations"),
+                            (0x10202,"actual worker"), (sym["core_param_timer_owner"],"timer"),
+                            (sym["core_page_owner"],"metadata"), (sym["draw_irq_total"],"no interrupts"),
+                            (sym["draw_root_owner"],"owner allocation")):
+            damaged = bytearray(ram)
+            damaged[at] ^= 1
+            with self.subTest(at=at), self.assertRaisesRegex(AssertionError,message):
+                verify_drawing(damaged,sym,work)
 
     def test_unsafe_maps_and_overflow_rejected(self):
         for index, (option, message) in enumerate((
