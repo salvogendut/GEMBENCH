@@ -179,7 +179,34 @@ promotion. They remain byte-identical and pass from M4:
 Seven new host tests assemble all variants, check deterministic raw payloads,
 link budgets/boot exports, reject bad maps, and mutate synthetic observations
 to test the checker. Synthetic snapshots are **checker tests**, not CPC runtime
-evidence. The complete regression run is recorded below after clean validation.
+evidence.
+
+Full `make check` passed in clean detached worktree
+`/tmp/geobench-77-check.UktoHN` at implementation commit `894d882`: all **148
+Python tests, no skips**, native C checks, ABI/layout and distribution audits.
+Toolchain: RASM 3.2.1 and SDCC/SDAS 4.6.2 #16671, with `SDCC` and `SDAS`
+explicitly selecting the compiler binaries under `../sdcc/bin`. Log:
+`/tmp/geobench-77-make-check.log`. No local `QA/CPC` artifacts were copied in.
+The static MSX floppy-distribution audit does not boot a floppy.
+
+The fresh universal ABI Probe, Calculator and Clock builds retain their
+reference SHA-256 values:
+
+| APP | Bytes | SHA-256 |
+|---|---|---|
+| ABI Probe | 2,571 | `a6a696cc0bef9caf69c38b6c44f8d8e50dbb7dd560c88e99feb9595993e0adfc` |
+| Calculator | 7,825 | `5e1989d171052d751386b355b1204382c88bba69f4edc632ea65fafb8b7da8f5` |
+| Clock | 7,571 | `8d605d045087199769dea40bfdfc50009a2a50bf958ffbcc26e97cdfcdfef2f2` |
+
+The normal MSX2 scheduler was rebuilt: 1,448 bytes, unchanged SHA-256
+`70c0e6f9402eae994a6e509a91381d70a85d3217597b7859ffc6be09048f62f9`.
+Fresh `tools/test_context_irq_openmsx.sh` runs passed in both Screen 6 and 7,
+with private hard-disk fixtures: eight switches/returns, worker/root progress,
+maximum snapshot 45 bytes and zero stack faults. Logs:
+`/tmp/geobench-77-msx-irq-6.log` and `/tmp/geobench-77-msx-irq-7.log`.
+Normal Desktop and MSX distribution media were not rebuilt or changed; the
+retained `QA/MSX/GBMSX.IMG` hash remains
+`a0c6fb4c1cf0dc4e2d0e1f9fb29356c981c022ab4202f12cf7f4077d9cc6ae0b`.
 
 ### Reproduction
 
