@@ -31,11 +31,28 @@ state have explicit providers, with unchanged kernels/module/application bytes.
 under #75: filesystem client storage (including the public batch accessor),
 native timer publication and receiving-side `GB_PARAMS` policy have explicit
 providers. Universal SDK records/bridge and APP hashes remain unchanged.
-Next finish the low-level context/IRQ adapter boundary, then validate the
-production CPC memory map and integrate the shared desktop in stages.
+[Context/IRQ boundary 2I](CPC-RESTART-STEP2I.md) is extracted under #76:
+shared Z80 snapshots, register frames, task startup and IRQ dispatch use explicit
+MSX2 state/bank/interrupt providers. All eight scheduler variants are unchanged
+byte-for-byte. Production CPC placement and hardware integration are next.
 The isolated foundation proofs do not enable a CPC desktop.
-The remaining step-2 shared-core packages still gate desktop integration;
-moving to hardware probes does not mark step 2 complete.
+Shared policy/context extraction does not establish CPC adapter correctness;
+the complete memory/adapter gate still precedes desktop integration.
+
+## Execution order agreed on 2026-09-06
+
+| Order | Work package | Exit before advancing |
+|---|---|---|
+| 1 | Context/IRQ boundary — [2I](CPC-RESTART-STEP2I.md), #76 | Shared mechanism on working MSX2, fixed-state/snapshot contracts, unchanged binaries and real IRQ-switch regressions. |
+| 2 | Production CPC memory layout and adapters — next step-3 package | One budgeted map for the actual shared core, all state, modules, stacks, app aperture and framebuffer; bank/IRQ, input, time, graphics/text/line/pointer and storage adapters validated together on M4. Reuse 3A/3B/3C hardware proofs, not their provisional addresses. |
+| 3 | First shared-core window — step 4, initial gate | M4 boot invokes the same lifetime/focus/visibility/damage code; one window opens, draws, gains focus, moves and closes with intact state/stack/bank guards. No alternate CPC WM. |
+| 4 | Desktop integration — remaining step 4 and Desktop/File Manager from step 5 | Overlap/focus/exposure, partial damage, worker priority/occlusion, timers, messages/services and teardown pass equivalent MSX2/CPC scenarios. Desk/menu, input and M4 directory operations work in that shared shell. |
+| 5 | Application parity — remaining step 5 | ABI Probe, Clock/Calculator, forms/Settings/Notepad, three-window PAINT, resources/secondary code, BASIC and the remaining migration ledger; universal APP bytes are identical across targets. |
+
+These are dependency gates, not five independent rewrites. Keep packages on
+separate issues/branches, measure each before moving on, and preserve the MSX2
+reference. CPC runtime media remain M4/Albireo only. Albireo requires its own
+backend proof; passing M4 is not an Albireo compatibility claim.
 
 The goal is to bring the CPC back with the software features and application
 behavior of the working MSX2 distribution, using a shared implementation of
@@ -134,10 +151,12 @@ desktop services. Prove resident-stack and bank restoration, interrupt entry
 and return, safe firmware/M4 boundaries, canonical drawing and clipping,
 software-pointer save/restore, and bounded storage transfers.
 
-The universal SDK currently uses MSX page-3 command mailboxes that collide with
-the CPC framebuffer in the parked port. Choose and validate an explicit
-portable calling/state convention. Preserve pixels as pixels; a framebuffer
-save/write-command/restore workaround is not an accepted ABI boundary.
+The parked port's universal SDK used MSX page-3 command mailboxes that collided
+with the CPC framebuffer. [3B-ABI](CPC-RESTART-STEP3B-ABI.md) has since adopted
+caller-owned ABI 2.1 parameter records and validated the MSX2 SDK/runtime.
+The production CPC receiver must now implement that same convention. Preserve
+pixels as pixels; a framebuffer save/write-command/restore workaround is not
+an accepted ABI boundary.
 
 Deliverables: isolated hardware probes, memory-map assertions, stack canaries
 and high-water measurements, and a reproducible M4 CARD/image built under QA.

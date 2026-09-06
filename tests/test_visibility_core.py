@@ -63,15 +63,17 @@ class VisibilityBoundaryTests(unittest.TestCase):
             self.assertNotRegex(code, r"\b(?:MSX_\w+|WM_\w+|SCHED_\w+|PLATFORM_\w+|PREEMPTIVE\w*|sched_wm_entry|sched_bank_set)\b", name)
             self.assertNotRegex(code.lower(), r"\b(?:di|ei|in|out|halt|reti|retn|sp)\b", name)
 
-    def test_ordered_single_includes_leave_context_and_drawing_in_provider(self):
+    def test_ordered_single_includes_compose_context_and_drawing_boundaries(self):
         scheduler = (ROOT / "kernel/scheduler.asm").read_text()
         for name in UNITS:
             self.assertEqual(scheduler.count(f'include "core/{name}"'), 1)
         for symbol in ("sched_region_begin", "sched_region_prepare_band",
                        "sched_visibility_refresh", "sched_m9_select_worker"):
             self.assertNotRegex(scheduler, rf"(?m)^{symbol}\s*$")
-        for symbol in ("sched_switch_context", "sched_restore_slot", "sched_wm_entry"):
-            self.assertRegex(scheduler, rf"(?m)^{symbol}\s*$")
+        for name in ("context_save.asm", "context_restore.asm"):
+            self.assertEqual(scheduler.count(f'include "core/{name}"'), 1)
+        helpers = (ROOT / "kernel/msx_context_helpers.asm").read_text()
+        self.assertRegex(helpers, r"(?m)^sched_wm_entry\s*$")
         kernel = (ROOT / "kernel/gbkern.asm").read_text()
         self.assertIn('include "core/window_repaint.asm"', kernel)
         self.assertIn('include "core/window_focus_damage.asm"', kernel)
