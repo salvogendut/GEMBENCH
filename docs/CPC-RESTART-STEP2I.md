@@ -139,8 +139,13 @@ Evidence: `/tmp/geobench-2i-baseline.oowWRk/{t*,after-t*}` contains the eight
 before/after payloads, symbols and assembler logs. Runtime logs are
 `/tmp/geobench-2i-{clock,desk6,desk7,irq6,irq7}-{before,after}.log`;
 the complete post-change Clock report is `/tmp/geobench-2i-clock-after.txt`.
-Full clean-checkout `make check` validation is pending below the implementation
-commit; the final result will be recorded before handoff.
+Full clean-checkout `make check` passed at implementation commit `5a348a4`:
+141 discovered Python tests with no skips, all host/C/Z80 checks, public ABI,
+layout and distribution audits exit zero. The clean build also regenerated
+ABI Probe, Calculator and Clock with their unchanged universal APP hashes.
+Checkout: `/tmp/geobench-76-check.6BpIuS`; log:
+`/tmp/geobench-76-make-check.log`. Its independent build leaves local `QA/CPC/`
+untouched. The static MSX floppy-distribution audit does not boot any floppy.
 
 ## Next package
 
