@@ -35,6 +35,10 @@ Important split units include:
   timer collector remains app-linked in `lib/gembench/core/timer_collect.inc`
   (SDAS dialect), behind `lib/gembench/msx_timer_collect.inc`;
   see the [step-2F report](../docs/CPC-RESTART-STEP2F.md);
+- `core/root_loop.asm`, `core/window_frame.asm`, `core/window_gestures.asm`,
+  `core/menu_dispatch.asm`, `core/poll_publish.asm` — shared native root-loop,
+  managed input/gesture and menu/click policy, with MSX/CPC state and hardware
+  bindings; see the [CPC 3D-G report](../docs/CPC-RESTART-STEP3D-G.md);
 - `core/fsctx_policy.inc` — shared paged filesystem-context policy, with
   `kc/msx_fsctx.h` fixed state/Nextor hooks; `core/fsctx_cleanup.asm` retains
   storage-free resident owner cleanup. App-linked service bookkeeping uses

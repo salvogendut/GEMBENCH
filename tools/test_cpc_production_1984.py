@@ -20,6 +20,7 @@ from cpc_production_windows import verify_windows
 from cpc_production_lifetime import verify_lifetime
 from cpc_production_registration import verify_registration
 from cpc_production_services import verify_services
+from cpc_production_routing import ROUTING_VARIANTS, drive_routing, verify_routing
 
 
 def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
@@ -73,7 +74,9 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
             raise AssertionError(f"{file} code changed")
     drawing = "cpc_drawing_begin" in sym
     services = "cpc_services_probe" in sym
-    drawing_result = (verify_services(ram, sym, work) if services else
+    routing = "cpc_routing_probe" in sym
+    drawing_result = (verify_routing(ram, sym, work) if routing else
+                      verify_services(ram, sym, work) if services else
                       verify_registration(ram, sym, work) if "cpc_registration_probe" in sym else
                       verify_lifetime(ram, sym, work) if "cpc_lifetime_probe" in sym else
                       verify_windows(ram, sym, work) if "cpc_window_probe" in sym else
@@ -88,7 +91,7 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
     if ram[0x10000:0x10000+len(worker)] != worker:
         raise AssertionError("mapped worker code differs")
     sizes = (ram[0x7F00], ram[0x13F00])
-    if (any(n % 2 or not 24 <= n <= 64 for n in sizes) if services else sizes != (24, 26)):
+    if (any(n % 2 or not 24 <= n <= 64 for n in sizes) if services or routing else sizes != (24, 26)):
         raise AssertionError("missing/invalid yield and IRQ snapshots")
     return {**drawing_result, "root_turns": word("cpc_root_turns"), "io_checks": word("cpc_io_checks"),
             "irq_count": word("cpc_irq_count"), "seconds": word("cpc_hw_seconds"),
@@ -143,6 +146,8 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
     try:
         receive("pilot PTY:", 15)
         key_sent = False
+        routing_result = {}
+        routing_error = None
         for attempt in range(30):
             send("wait frames 100 200")
             send(f"snapshot-save {artifacts / 'result.sna'}")
@@ -155,6 +160,18 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if phase == 2 and not key_sent:
                 send("key-down RIGHT")
                 key_sent = True
+            elif phase==0x40 and variant in ROUTING_VARIANTS:
+                send("key-up RIGHT")
+                key_sent=False
+                try:
+                    routing_result=drive_routing(send,sym,work,artifacts)
+                except AssertionError as error:
+                    if variant=="routing": raise
+                    routing_error=error
+                send(f"snapshot-save {artifacts / 'result.sna'}")
+                data=(artifacts/"result.sna").read_bytes()
+                _,ram=snapshot(data)
+                break
             elif phase in (0xA5, 0xFF): break
         else: raise AssertionError(f"probe did not finish; see {artifacts}")
         if key_sent: send("key-up RIGHT")
@@ -162,8 +179,8 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if (ram[sym["cpc_phase"]], ram[sym["cpc_failure"]]) != (0xFF, 8):
                 raise AssertionError("undersized memory not rejected by CPC admission")
             result = {"expected_failure": "128-KiB memory rejected"}
-        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime", "registration", "services"):
-            result = verify(data, sym, work)
+        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime", "registration", "services", "routing"):
+            result = {**verify(data, sym, work),**routing_result}
             send("wait frames 150 200")
             send(f"snapshot-save {artifacts / 'stable.sna'}")
             stable = (artifacts / "stable.sna").read_bytes()
@@ -171,6 +188,7 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if snapshot(stable)[1] != ram: raise AssertionError("RAM changed after completion")
         else:
             try:
+                if routing_error: raise routing_error
                 if variant=="registration-bad-owner":
                     # Wrong binding can also make later cleanup abort. Inspect
                     # the first actual registration trace, not a generic halt.
@@ -188,7 +206,9 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
                             "registration-bad-kind": "registration titleless: furniture/content pixels",
                             "registration-bad-owner": "registration legacy: window owner binding",
                             "services-bad-delivery": "services reply: delivery",
-                            "services-bad-visible": "services component-hidden: "}[variant]
+                            "services-bad-visible": "services component-hidden: ",
+                            "routing-bad-bank": "failure=61",
+                            "routing-bad-click": "routing menu: focus"}[variant]
                 if expected not in str(error): raise
                 result = {"expected_failure": str(error)}
             else: raise AssertionError("corrupt adapter unexpectedly passed")

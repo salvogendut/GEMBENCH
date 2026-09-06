@@ -15,8 +15,10 @@ cpc_probe_start
                 ld (CPC_HW_DIVIDER),hl
                 call sched_init_impl
                 ifdef CPC_SERVICES
+                ifndef CPC_ROUTING
                 xor a
                 ld (svc_request),a
+                endif
                 endif
                 xor a
                 ld (SCHED_CURRENT),a
@@ -171,7 +173,11 @@ cpc_verify_io
                 ifdef CPC_LIFETIME
                 ifdef CPC_REGISTRATION
                 ifdef CPC_SERVICES
+                ifdef CPC_ROUTING
+                call cpc_routing_probe
+                else
                 call cpc_services_probe
+                endif
                 else
                 call cpc_registration_probe
                 endif
@@ -218,7 +224,9 @@ worker_code
                 endif
 worker_loop
                 ifdef CPC_SERVICES
+                ifndef CPC_ROUTING
                 call cpc_service_worker_hook  ; actual IRQ-preempted worker, no drawing
+                endif
                 endif
                 ld hl,(#4200)
                 inc hl

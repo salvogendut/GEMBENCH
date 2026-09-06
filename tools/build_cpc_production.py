@@ -17,13 +17,14 @@ from cpc_production_windows import WINDOW_VARIANTS, emit_vectors as emit_windows
 from cpc_production_lifetime import LIFETIME_VARIANTS, emit_vectors as emit_lifetime
 from cpc_production_registration import REGISTRATION_VARIANTS, emit_vectors as emit_registration
 from cpc_production_services import SERVICE_VARIANTS, compile_timer
+from cpc_production_routing import ROUTING_VARIANTS
 import genfont
 
 ROOT = Path(__file__).resolve().parents[1]
 VARIANTS = {"normal": None, "full-slot": "CPC_PAD_KERNEL",
             "bad-guard": "CPC_FAULT_GUARD", "bad-restore": "CPC_FAULT_RESTORE",
             **DRAWING_VARIANTS, **WINDOW_VARIANTS, **LIFETIME_VARIANTS, **REGISTRATION_VARIANTS,
-            **SERVICE_VARIANTS}
+            **SERVICE_VARIANTS, **ROUTING_VARIANTS}
 
 
 def symbols(path: Path) -> dict[str, int]:
@@ -56,7 +57,8 @@ def memory_regions(sym: dict[str, int]) -> list[dict]:
 
 def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
     work.mkdir(parents=True, exist_ok=True)
-    services = variant in SERVICE_VARIANTS
+    routing = variant in ROUTING_VARIANTS
+    services = variant in SERVICE_VARIANTS or routing
     registration = variant in REGISTRATION_VARIANTS or services
     lifetime = variant in LIFETIME_VARIANTS or registration
     windows = variant in WINDOW_VARIANTS or lifetime
@@ -84,6 +86,8 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
         cmd += ["-DCPC_REGISTRATION=1"]
     if services:
         cmd += ["-DCPC_SERVICES=1"]
+    if routing:
+        cmd += ["-DCPC_ROUTING=1"]
     if VARIANTS[variant]:
         cmd += [f"-D{VARIANTS[variant]}=1"]
     subprocess.run(cmd, cwd=work, check=True)
@@ -158,6 +162,9 @@ def build(variant="normal") -> Path:
         sections["shared_services"] = dict(base=sym["cpc_services_begin"],
             used=sym["cpc_services_end"]-sym["cpc_services_begin"])
         sections["app_linked_timer"] = dict(base=sym["cpc_timer_collect"], used=116)
+    if "cpc_routing_begin" in sym:
+        sections["shared_input_routing"] = dict(base=sym["cpc_routing_begin"],
+            used=sym["cpc_routing_end"]-sym["cpc_routing_begin"])
     sources = [ROOT / "kernel/cpc_adapter_image.asm", ROOT / "kernel/cpc_scheduler.asm",
                ROOT / "kernel/cpc_context.inc", ROOT / "kernel/cpc_visibility.inc", ROOT / "kernel/cpc_m4_boot.asm", ROOT / "kernel/cpc_m4_loader.asm",
                *sorted((ROOT / "kernel/core").glob("*.asm")), *sorted((ROOT / "kernel/core").glob("*.inc")),
@@ -172,7 +179,9 @@ def build(variant="normal") -> Path:
                ROOT / "kernel/cpc_registration.asm", ROOT / "kernel/cpc_registration_provider.inc",
                ROOT / "tools/cpc_production_registration.py", ROOT / "tools/cpc_production_services.py",
                ROOT / "kernel/cpc_services.asm", ROOT / "kernel/cpc_services_provider.inc",
-               ROOT / "lib/gembench/core/timer_collect.inc", ROOT / "lib/gembench/core/timer_collect_contract.inc"]
+               ROOT / "lib/gembench/core/timer_collect.inc", ROOT / "lib/gembench/core/timer_collect_contract.inc",
+               ROOT / "tools/cpc_production_routing.py", ROOT / "kernel/cpc_routing.asm",
+               ROOT / "kernel/cpc_routing_provider.inc"]
     manifest = {"variant": variant, "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "sections": sections, "memory_regions": memory_regions(sym), "image": str(image), "work": str(work),
                 "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),

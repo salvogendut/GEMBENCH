@@ -165,8 +165,9 @@ and `--variant services-bad-visible`. Toolchain: RASM 3.2.1 and SDCC/SDAS
 4.6.2 #16671. Emulator output and the state/pixel oracle are diagnostic tests,
 not a manual application demonstration.
 
-Next: integrate **shared input/root-loop routing** with the CPC keyboard/pointer
-adapters, preserving the MSX focus/gesture/menu handoffs. Then complete public
+Follow-up [3D-G](CPC-RESTART-STEP3D-G.md) integrates shared input/root-loop
+routing with CPC keyboard/pointer adapters, preserving the MSX focus/gesture/
+menu handoffs. Remaining: public
 APP admission/loading, menu/themed graphics, file-context/backend and remaining
 service bindings, and qualify the complete map, stacks and responsiveness.
 The loaded shared-core window, Desktop and application-parity gates remain

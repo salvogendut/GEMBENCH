@@ -21,6 +21,8 @@ TOOLCHAIN=all(shutil.which(os.environ.get(k,k.lower())) for k in ("RASM","SDCC")
 class ServiceSourceTests(unittest.TestCase):
     def test_dispatch_and_lookup_policy_have_one_implementation(self):
         msx=(ROOT/"kernel/gbkern.asm").read_text()+(ROOT/"kernel/msx_page_pool.asm").read_text()
+        msx+=(ROOT/"kernel/core/root_loop.asm").read_text().replace('include "root_dispatch_phase.asm"',
+                                                                  'include "core/root_dispatch_phase.asm"')
         cpc=(ROOT/"kernel/cpc_services.asm").read_text()
         for name in ("deferred_api.asm","deferred_dispatch.asm","service_lookup.asm","root_dispatch_phase.asm"):
             for source in (msx,cpc):

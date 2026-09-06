@@ -112,6 +112,10 @@ The [3D-F message/timer checkpoint](docs/CPC-RESTART-STEP3D-F.md),
 `make diagnostic-cpc-services-1984`, connects the same deferred FIFO,
 post-input dispatch phase and app-linked timer collector. Sixteen M4
 checkpoints check replies, activation, worker publication and hidden damage.
+The [3D-G input/root-loop checkpoint](docs/CPC-RESTART-STEP3D-G.md),
+`make diagnostic-cpc-routing-1984`, drives the shared MSX loop and native
+focus/menu/move/resize/maximise router through real CPC keyboard input on M4.
+It uses fixture windows and a plain bar, not the loaded Desktop applications.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

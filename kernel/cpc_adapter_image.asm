@@ -64,7 +64,12 @@ cpc_font_end
                 include "cpc_registration.asm"
                 ifdef CPC_SERVICES
                 include "cpc_services.asm"
+                ifdef CPC_ROUTING
+                include "cpc_routing.asm"
+                include "../debug/cpc_production/routing_probe.asm"
+                else
                 include "../debug/cpc_production/services_probe.asm"
+                endif
                 else
                 include "../debug/cpc_production/registration_probe.asm"
                 endif
