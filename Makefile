@@ -16,6 +16,13 @@ all: msx
 .PHONY: diagnostic-cpc-windows diagnostic-cpc-windows-1984
 .PHONY: diagnostic-cpc-services diagnostic-cpc-services-1984
 .PHONY: diagnostic-cpc-routing diagnostic-cpc-routing-1984
+.PHONY: diagnostic-cpc-loading diagnostic-cpc-loading-1984
+diagnostic-cpc-loading:
+	$(PYTHON) tools/build_cpc_production.py --variant loading
+
+diagnostic-cpc-loading-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant loading
+
 diagnostic-cpc-routing:
 	$(PYTHON) tools/build_cpc_production.py --variant routing
 

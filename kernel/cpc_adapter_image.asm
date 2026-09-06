@@ -62,6 +62,10 @@ cpc_font_end
                 include "cpc_lifetime.asm"
                 ifdef CPC_REGISTRATION
                 include "cpc_registration.asm"
+                ifdef CPC_LOADING
+                include "cpc_loading.asm"
+                include "../debug/cpc_production/loading_probe.asm"
+                else
                 ifdef CPC_SERVICES
                 include "cpc_services.asm"
                 ifdef CPC_ROUTING
@@ -72,6 +76,7 @@ cpc_font_end
                 endif
                 else
                 include "../debug/cpc_production/registration_probe.asm"
+                endif
                 endif
                 else
                 include "../debug/cpc_production/lifetime_probe.asm"

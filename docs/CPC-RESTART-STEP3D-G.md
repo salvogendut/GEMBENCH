@@ -165,6 +165,10 @@ Fault variants: `routing-bad-bank` and `routing-bad-click` with
 `routing-checkpoints.json` are written into the runner's private `/tmp` directory.
 The parked `QA/CPC/` tree is untouched; there is no Albireo compatibility claim.
 
+Follow-up: [3D-H](CPC-RESTART-STEP3D-H.md) implements the loader transaction
+and admission half with M4; full filesystem contexts and public SDK execution
+remain open. The original next integration below is not yet complete.
+
 Next bounded integration: **public application admission/loading from M4 and
 its required filesystem-context binding**, so the shared loop can run a loaded
 app instead of native fixtures. Then finish menu/themed graphics and remaining

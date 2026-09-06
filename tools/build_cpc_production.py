@@ -18,13 +18,14 @@ from cpc_production_lifetime import LIFETIME_VARIANTS, emit_vectors as emit_life
 from cpc_production_registration import REGISTRATION_VARIANTS, emit_vectors as emit_registration
 from cpc_production_services import SERVICE_VARIANTS, compile_timer
 from cpc_production_routing import ROUTING_VARIANTS
+from cpc_production_loading import LOADING_VARIANTS, emit_vectors as emit_loading, packages
 import genfont
 
 ROOT = Path(__file__).resolve().parents[1]
 VARIANTS = {"normal": None, "full-slot": "CPC_PAD_KERNEL",
             "bad-guard": "CPC_FAULT_GUARD", "bad-restore": "CPC_FAULT_RESTORE",
             **DRAWING_VARIANTS, **WINDOW_VARIANTS, **LIFETIME_VARIANTS, **REGISTRATION_VARIANTS,
-            **SERVICE_VARIANTS, **ROUTING_VARIANTS}
+            **SERVICE_VARIANTS, **ROUTING_VARIANTS, **LOADING_VARIANTS}
 
 
 def symbols(path: Path) -> dict[str, int]:
@@ -59,7 +60,8 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
     work.mkdir(parents=True, exist_ok=True)
     routing = variant in ROUTING_VARIANTS
     services = variant in SERVICE_VARIANTS or routing
-    registration = variant in REGISTRATION_VARIANTS or services
+    loading = variant in LOADING_VARIANTS
+    registration = variant in REGISTRATION_VARIANTS or services or loading
     lifetime = variant in LIFETIME_VARIANTS or registration
     windows = variant in WINDOW_VARIANTS or lifetime
     drawing = variant in DRAWING_VARIANTS or windows
@@ -72,6 +74,8 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
         emit_lifetime(work / "lifetime_vectors.inc")
     if variant in REGISTRATION_VARIANTS:
         emit_registration(work / "registration_vectors.inc")
+    if loading:
+        emit_loading(work / "loading_vectors.inc")
     if services:
         (work / "TIMER.BIN").write_bytes(bytes(116))  # symbol pass only; never published to media
     cmd = [os.environ.get("RASM", "rasm"), str(ROOT / "kernel/cpc_adapter_image.asm"),
@@ -88,10 +92,15 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
         cmd += ["-DCPC_SERVICES=1"]
     if routing:
         cmd += ["-DCPC_ROUTING=1"]
+    if loading:
+        cmd += ["-DCPC_LOADING=1"]
     if VARIANTS[variant]:
         cmd += [f"-D{VARIANTS[variant]}=1"]
     subprocess.run(cmd, cwd=work, check=True)
     sym = symbols(work / "adapters.sym")
+    if loading:
+        for name,data in packages(sym,ROOT).items():
+            (work/name).write_bytes(data)
     if services:
         compile_timer(work,sym,ROOT)
         subprocess.run(cmd,cwd=work,check=True)
@@ -111,7 +120,7 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
 
 
 def build(variant="normal") -> Path:
-    for tool in (os.environ.get("RASM", "rasm"), "sfdisk", "mkfs.fat", "mcopy"):
+    for tool in (os.environ.get("RASM", "rasm"), "sfdisk", "mkfs.fat", "mcopy", "mmd"):
         if not shutil.which(tool):
             raise SystemExit(f"missing {tool}; use distrobox my-distrobox")
     work = ROOT / "build/cpc-production" / variant
@@ -125,7 +134,10 @@ def build(variant="normal") -> Path:
     files = {"BOOT.BIN": boot, "CORE.BIN": (work / "CORE.RAW").read_bytes(),
              "DATA.BIN": bytes(range(64, 0, -1)),
              "BOOT.BAS": (ROOT / "debug/cpc_production/BOOT.BAS").read_text().replace("\n", "\r\n").encode()}
+    if variant in LOADING_VARIANTS:
+        files.update({"GBENCH/"+name:data for name,data in packages(sym,ROOT).items()})
     for name, data in files.items():
+        (card / name).parent.mkdir(parents=True, exist_ok=True)
         (card / name).write_bytes(data)
     image = media / "ADAPTERS.IMG"
     fd, tmp = tempfile.mkstemp(prefix="adapters-", suffix=".img", dir=media)
@@ -135,8 +147,11 @@ def build(variant="normal") -> Path:
         subprocess.run(["sfdisk", "-q", tmp], input="label: dos\nlabel-id: 0x43504344\nstart=32, type=06\n",
                        text=True, check=True, stdout=subprocess.DEVNULL)
         subprocess.run(["mkfs.fat", "--invariant", "-F16", "--offset", "32", "-n", "CPCADAPT", tmp], check=True)
-        subprocess.run(["mcopy", "-i", tmp+"@@16384", *[str(card / name) for name in files], "::/"],
+        subprocess.run(["mcopy", "-i", tmp+"@@16384", *[str(card / name) for name in files if "/" not in name], "::/"],
                        env={**os.environ, "MTOOLS_SKIP_CHECK": "1"}, check=True)
+        if variant in LOADING_VARIANTS:
+            subprocess.run(["mmd", "-i", tmp+"@@16384", "::/GBENCH"], check=True)
+            subprocess.run(["mcopy", "-i", tmp+"@@16384", *[str(card/name) for name in files if "/" in name], "::/GBENCH/"], check=True)
         Path(tmp).replace(image)
     finally:
         Path(tmp).unlink(missing_ok=True)
@@ -165,6 +180,9 @@ def build(variant="normal") -> Path:
     if "cpc_routing_begin" in sym:
         sections["shared_input_routing"] = dict(base=sym["cpc_routing_begin"],
             used=sym["cpc_routing_end"]-sym["cpc_routing_begin"])
+    if "cpc_loading_begin" in sym:
+        sections["shared_launch_admission_and_m4_leaf"] = dict(base=sym["cpc_loading_begin"],
+            used=sym["cpc_loading_end"]-sym["cpc_loading_begin"])
     sources = [ROOT / "kernel/cpc_adapter_image.asm", ROOT / "kernel/cpc_scheduler.asm",
                ROOT / "kernel/cpc_context.inc", ROOT / "kernel/cpc_visibility.inc", ROOT / "kernel/cpc_m4_boot.asm", ROOT / "kernel/cpc_m4_loader.asm",
                *sorted((ROOT / "kernel/core").glob("*.asm")), *sorted((ROOT / "kernel/core").glob("*.inc")),
@@ -181,7 +199,9 @@ def build(variant="normal") -> Path:
                ROOT / "kernel/cpc_services.asm", ROOT / "kernel/cpc_services_provider.inc",
                ROOT / "lib/gembench/core/timer_collect.inc", ROOT / "lib/gembench/core/timer_collect_contract.inc",
                ROOT / "tools/cpc_production_routing.py", ROOT / "kernel/cpc_routing.asm",
-               ROOT / "kernel/cpc_routing_provider.inc"]
+               ROOT / "kernel/cpc_routing_provider.inc", ROOT / "kernel/cpc_loading.asm",
+               ROOT / "tools/cpc_production_loading.py", ROOT / "tools/embed_app_icon.py",
+               ROOT / "apps/abiprobe/manifest.json", ROOT / "apps/abiprobe/icon.asm"]
     manifest = {"variant": variant, "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "sections": sections, "memory_regions": memory_regions(sym), "image": str(image), "work": str(work),
                 "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),

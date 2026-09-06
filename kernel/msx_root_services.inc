@@ -23,3 +23,4 @@ wm_sav_h        db 0
 mw_desc         dw 0
 mwm_notify      db 0
                 mend
+APP_ADMISSION_GATE equ MSX_GBAP4_GATE

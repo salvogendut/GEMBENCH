@@ -116,6 +116,10 @@ The [3D-G input/root-loop checkpoint](docs/CPC-RESTART-STEP3D-G.md),
 `make diagnostic-cpc-routing-1984`, drives the shared MSX loop and native
 focus/menu/move/resize/maximise router through real CPC keyboard input on M4.
 It uses fixture windows and a plain bar, not the loaded Desktop applications.
+The [3D-H M4 loading checkpoint](docs/CPC-RESTART-STEP3D-H.md),
+`make diagnostic-cpc-loading-1984`, tests the shared MSX launch/admission
+transaction, file-loaded native registration, corrupt-package rejection and
+owner/page rollback. Full filesystem contexts and SDK execution remain open.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

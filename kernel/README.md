@@ -39,6 +39,10 @@ Important split units include:
   `core/menu_dispatch.asm`, `core/poll_publish.asm` — shared native root-loop,
   managed input/gesture and menu/click policy, with MSX/CPC state and hardware
   bindings; see the [CPC 3D-G report](../docs/CPC-RESTART-STEP3D-G.md);
+- `core/app_launch.asm`, `core/app_admission.asm` — shared MSX launch transaction
+  and GBAP v4 validator; `cpc_loading.asm` binds the diagnostic CPC link to
+  `lib/cpc/app_load.asm`, using the unchanged M4 read-at leaf and separate staging;
+  see the [3D-H loader report](../docs/CPC-RESTART-STEP3D-H.md);
 - `core/fsctx_policy.inc` — shared paged filesystem-context policy, with
   `kc/msx_fsctx.h` fixed state/Nextor hooks; `core/fsctx_cleanup.asm` retains
   storage-free resident owner cleanup. App-linked service bookkeeping uses

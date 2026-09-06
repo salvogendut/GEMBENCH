@@ -35,6 +35,11 @@ def main() -> int:
 
     glue = (ROOT / "lib/msx/glue.inc").read_text(encoding="utf-8")
     kernel = (ROOT / "kernel/gbkern.asm").read_text(encoding="utf-8")
+    launch = (ROOT / "kernel/core/app_launch.asm").read_text(encoding="utf-8")
+    bindings = (ROOT / "kernel/msx_root_services.inc").read_text(encoding="utf-8")
+    if kernel.count('include "core/app_launch.asm"') != 1 or not re.search(
+            r"^APP_ADMISSION_GATE\s+equ\s+MSX_GBAP4_GATE$", bindings, re.M):
+        raise AssertionError("MSX does not bind the shared launch transaction to its gate")
     pool = (ROOT / "kernel/msx_page_pool.asm").read_text(encoding="utf-8")
     pool += (ROOT / "kernel/msx_capabilities.inc").read_text(encoding="utf-8")
     abi = json.loads((ROOT / "abi/geobench-v2.json").read_text())
@@ -66,9 +71,9 @@ def main() -> int:
     if not gate_base + 8 <= entry < gate_base + len(gate):
         raise AssertionError("GBAPV4.MOD entry is outside the module")
 
-    validate = kernel.index("call  MSX_GBAP4_GATE")
-    rollback = kernel.index("jr    nc,wmo_fail", validate)
-    enter = kernel.index("call  APP_BASE", rollback)
+    validate = launch.index("call  APP_ADMISSION_GATE")
+    rollback = launch.index("jr    nc,wmo_fail", validate)
+    enter = launch.index("call  APP_BASE", rollback)
     if not validate < rollback < enter:
         raise AssertionError("GBAP v4 gate is not ordered before app entry/rollback")
 

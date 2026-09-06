@@ -21,6 +21,7 @@ from cpc_production_lifetime import verify_lifetime
 from cpc_production_registration import verify_registration
 from cpc_production_services import verify_services
 from cpc_production_routing import ROUTING_VARIANTS, drive_routing, verify_routing
+from cpc_production_loading import verify_loading, loading_commands
 
 
 def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
@@ -47,9 +48,12 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
         raise AssertionError("shared context/fixture window state differs")
     if (byte("cpc_wm_visibility"), ram[sym["cpc_wm_visibility"]+1], ram[sym["cpc_task_visibility"]+1]) != (1, 3, 3):
         raise AssertionError("shared visibility classification differs")
-    if any(byte(name) for name in ("io_busy", "io_offline", "io_fd", "io_status", "sched_reserved")):
+    loading = "cpc_loading_probe" in sym
+    if any(byte(name) for name in ("io_busy", "io_offline", "io_fd", "sched_reserved")) or byte("io_status") != int(loading):
         raise AssertionError("unfinished M4/IRQ transaction")
     expected_commands = 1+4*((len((work / "CORE.RAW").read_bytes())+127)//128)+64*4
+    if loading:
+        expected_commands += loading_commands(work)
     if word("command_count") != expected_commands:
         raise AssertionError("M4 command count differs")
     if (byte("bank_cur"), header[0x41], header[0x40]) != (0xC0, 0, 0x0D):
@@ -75,7 +79,8 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
     drawing = "cpc_drawing_begin" in sym
     services = "cpc_services_probe" in sym
     routing = "cpc_routing_probe" in sym
-    drawing_result = (verify_routing(ram, sym, work) if routing else
+    drawing_result = (verify_loading(ram, sym, work) if loading else
+                      verify_routing(ram, sym, work) if routing else
                       verify_services(ram, sym, work) if services else
                       verify_registration(ram, sym, work) if "cpc_registration_probe" in sym else
                       verify_lifetime(ram, sym, work) if "cpc_lifetime_probe" in sym else
@@ -179,7 +184,7 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if (ram[sym["cpc_phase"]], ram[sym["cpc_failure"]]) != (0xFF, 8):
                 raise AssertionError("undersized memory not rejected by CPC admission")
             result = {"expected_failure": "128-KiB memory rejected"}
-        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime", "registration", "services", "routing"):
+        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime", "registration", "services", "routing", "loading"):
             result = {**verify(data, sym, work),**routing_result}
             send("wait frames 150 200")
             send(f"snapshot-save {artifacts / 'stable.sna'}")
@@ -208,7 +213,8 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
                             "services-bad-delivery": "services reply: delivery",
                             "services-bad-visible": "services component-hidden: ",
                             "routing-bad-bank": "failure=61",
-                            "routing-bad-click": "routing menu: focus"}[variant]
+                            "routing-bad-click": "routing menu: focus",
+                            "loading-bad-admission": "loading 1 admission/entry count"}[variant]
                 if expected not in str(error): raise
                 result = {"expected_failure": str(error)}
             else: raise AssertionError("corrupt adapter unexpectedly passed")

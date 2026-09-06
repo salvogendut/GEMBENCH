@@ -172,6 +172,9 @@ cpc_verify_io
                 ifdef CPC_WM
                 ifdef CPC_LIFETIME
                 ifdef CPC_REGISTRATION
+                ifdef CPC_LOADING
+                call cpc_loading_probe
+                else
                 ifdef CPC_SERVICES
                 ifdef CPC_ROUTING
                 call cpc_routing_probe
@@ -180,6 +183,7 @@ cpc_verify_io
                 endif
                 else
                 call cpc_registration_probe
+                endif
                 endif
                 else
                 call cpc_lifetime_probe
