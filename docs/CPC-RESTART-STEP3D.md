@@ -244,6 +244,9 @@ Update: [3D-B](CPC-RESTART-STEP3D-B.md) binds and executes shared owner/page,
 window identity and receiving parameters, plus clipped Mode-1 text/line and
 pointer/block primitives, at these addresses. It does not complete all of the
 following original exit requirements.
+Follow-up [3D-C](CPC-RESTART-STEP3D-C.md) also executes shared focus/stacking/
+damage with CPC hardware clipping and pointer locking. Production window
+registration/chrome and lifetime/defer/FS teardown remain unconnected.
 
 1. Bind the real shared owner/lifetime/focus/damage/defer/FS tables, module/data
    reservations and receiving-side `GB_PARAMS` contracts to this CPC map.

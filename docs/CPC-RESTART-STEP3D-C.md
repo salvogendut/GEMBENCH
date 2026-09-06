@@ -87,7 +87,9 @@ is diagnostic capture consumption, not a Desktop RAM requirement.
 
 Final M4/1984 run: **16 pixel checkpoints, 36,384 byte writes, 64 I/O rounds,
 581 M4 commands, 1,996 IRQs, including 1,225 inside drawing callbacks**.
-Runtime artifacts: `/tmp/geobench-cpc-production-bnkq7u8g`.
+Runtime artifacts: `/tmp/geobench-cpc-production-bnkq7u8g`; the committed-image
+rerun at `2d4ebe5` also passes in `/tmp/geobench-cpc-production-0u1me3av`
+with identical pixel/write/IRQ results (`/tmp/geobench-77c-final-windows.log`).
 Final framebuffer SHA-256:
 `a081f76273032937e9a28db50a06df7efbf05575809e958234c05d8af0c4436c`.
 IRQ counts are timing-dependent, not an input/ACK latency qualification.
@@ -104,6 +106,27 @@ The runner also checks linked code, guards, stack balance, returned M4 bytes,
 bank/ROM/IFF, owner-page capture metadata, font-page integrity, worker snapshots
 and 150 further frames of stable final RAM. Host synthetic observations test
 the checker only, not Z80 execution. The adapter unit suite has 15 passing tests.
+
+Full `make check` passed at implementation commit `2d4ebe5` in clean detached
+worktree `/tmp/geobench-77c-check.pcgyyX`: **156 Python tests with no skips**,
+plus native C, SDK/ABI and distribution checks. Log:
+`/tmp/geobench-77c-make-check.log`. Tools: RASM 3.2.1 and explicit SDCC/SDAS
+4.6.2 #16671 paths from `../sdcc/bin` through `my-distrobox`.
+The earlier production context/M4 and drawing/parameter runtime tests also
+pass unchanged (logs `/tmp/geobench-77c-normal-regression.log` and
+`/tmp/geobench-77c-drawing-regression.log`; the latter still has 58 cases,
+26 pixel checkpoints and 279 drawing-loop IRQs).
+
+Fresh universal APPs retain the recorded reference SHA-256 values:
+
+- ABI Probe: `a6a696cc0bef9caf69c38b6c44f8d8e50dbb7dd560c88e99feb9595993e0adfc`
+- Calculator: `5e1989d171052d751386b355b1204382c88bba69f4edc632ea65fafb8b7da8f5`
+- Clock: `8d605d045087199769dea40bfdfc50009a2a50bf958ffbcc26e97cdfcdfef2f2`
+
+MSX2/shared production sources and the retained MSX2 release image are
+unchanged; no new MSX emulator run was necessary or performed for this
+CPC-provider-only checkpoint. The static distribution audit does not boot
+floppies. Local `QA/CPC/` was preserved throughout.
 
 ## Reproduce
 

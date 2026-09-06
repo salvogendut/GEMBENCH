@@ -95,7 +95,11 @@ The [3D production-address integration](docs/CPC-RESTART-STEP3D.md) uses
 banking, keyboard/ticks and M4 together. Its
 [3D-B drawing/parameter integration](docs/CPC-RESTART-STEP3D-B.md) runs through
 `make diagnostic-cpc-drawing-1984`, including shared ownership/parameters and
-exact text/line/pointer clipping. Neither diagnostic is a CPC desktop.
+exact text/line/pointer clipping. The
+[3D-C focus/stacking/damage checkpoint](docs/CPC-RESTART-STEP3D-C.md) runs
+through `make diagnostic-cpc-windows-1984`, checking the shared compositor
+with native fixtures and CPC clipping/pointer adapters. These diagnostics
+are not a CPC desktop or loaded application build.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).
