@@ -1,4 +1,8 @@
 /* Shared paged filesystem-context policy (#74). Include after a provider. */
+#ifndef FSCTX_DIRECTORY_STATUS
+/* Preserve the historical MSX null-entry/EOF behavior byte-for-byte. */
+#define FSCTX_DIRECTORY_STATUS() OK
+#endif
 static volatile unsigned char *context_at(unsigned char slot)
 {
     return CTX_BASE + (unsigned int)slot * CTX_SIZE;
@@ -125,7 +129,7 @@ static void directory(volatile unsigned char *ctx, unsigned char first)
     if (!activate(ctx)) return;
     if (!first) copy_bytes(FSCTX_CURSOR, ctx + CTX_CURSOR, FSCTX_CURSOR_SIZE);
     entry = first ? FSCTX_DIRECTORY_FIRST() : FSCTX_DIRECTORY_NEXT();
-    if (!entry) { status(OK); return; }
+    if (!entry) { status(FSCTX_DIRECTORY_STATUS()); return; }
     publish_entry(ctx);
 }
 
@@ -151,7 +155,7 @@ static void directory_batch(volatile unsigned char *ctx)
         count++;
     }
     REQ_ACTUAL = count;
-    status(OK);
+    status(FSCTX_DIRECTORY_STATUS());
 }
 
 static void reset_offset(volatile unsigned char *ctx)

@@ -11,9 +11,17 @@ static unsigned char entry_size[4] = {8, 0, 0, 0};
 static char entry_name[12] = "A       TXT";
 static unsigned char selected_drive, io_calls;
 static unsigned int read_amount = 8;
+#ifdef TEST_FS_DIRECTORY_STATUS
+static unsigned char directory_result, error_after = 255;
+#define FSCTX_DIRECTORY_STATUS() directory_result
+#endif
 static char *next_entry(unsigned char first)
 {
     if (first) FSCTX_CURSOR[0] = 0;
+#ifdef TEST_FS_DIRECTORY_STATUS
+    directory_result = OK;
+    if (FSCTX_CURSOR[0] == error_after) { directory_result = IOERR; return NULL; }
+#endif
     if (FSCTX_CURSOR[0] >= 3) return NULL;
     entry_name[0] = (char)('A' + FSCTX_CURSOR[0]++);
     return entry_name;
@@ -79,6 +87,17 @@ int main(void)
     call(OP_DIR_BATCH, a, 0x0101); assert(REQ_ACTUAL == 0 && REQ_STATUS == OK);
     REQ_LENGTH = 5;
     call(OP_DIR_BATCH, a, 0x0101); assert(REQ_STATUS == BADARG);
+
+#ifdef TEST_FS_DIRECTORY_STATUS
+    error_after = 1; REQ_FLAGS = 1; REQ_LENGTH = 4;
+    call(OP_DIR_BATCH, a, 0x0101);
+    assert(REQ_ACTUAL == 1 && REQ_STATUS == IOERR && XFER[0] == 'A');
+    assert(context_at(0)[CTX_CURSOR] == 1);
+    error_after = 0;
+    call(OP_DIR_FIRST, a, 0x0101); assert(REQ_STATUS == IOERR && !REQ_AUX);
+    error_after = 255;
+    call(OP_DIR_FIRST, a, 0x0101); assert(REQ_STATUS == OK && REQ_AUX);
+#endif
 
     REQ_LENGTH = 0; before = io_calls;
     call(OP_READ, a, 0x0101); assert(REQ_STATUS == BADARG && io_calls == before);

@@ -248,30 +248,23 @@ kpg_no_owner    ld    a,GB_PAGE_ERR_OWNER
 ; fixed-size values and at most 512 bytes into page-3 RAM. The paged module owns
 ; all branchy filesystem policy; the resident path only captures the implicit
 ; generation-tagged caller and rejects worker-task entry.
-k_fsctx
-                ld    (MSX_FSCTX_OP),a
+FSCTX_GATE_OP equ MSX_FSCTX_OP
+FSCTX_GATE_OWNER equ MSX_FSCTX_OWNER
+FSCTX_GATE_STATUS equ MSX_FSCTX_STATUS
+FSCTX_GATE_HANDLE equ MSX_FSCTX_HANDLE
+FSCTX_MODULE_RUN equ run_data_module
+                macro FSCTX_PRIVATE_DISPATCH
                 cp    #FE                     ; private module leaf: path in native-FIB workspace
                 jr    z,kfsctx_chdir
+                mend
+                macro FSCTX_CHECK_WORKER
                 if PREEMPTIVE_CONTEXT
                 ld    a,(SCHED_CURRENT)
                 or    a
                 jr    nz,kfsctx_context
                 endif
-                call  owner_current
-                ld    (MSX_FSCTX_OWNER),de
-                ld    a,d
-                or    e
-                jr    z,kfsctx_context
-                ld    hl,gbfsctx_modname
-                call  run_data_module
-                jr    c,kfsctx_result
-                ld    a,GB_FSCTX_ERR_UNSUPPORTED
-                jr    kfsctx_store
-kfsctx_context ld    a,GB_FSCTX_ERR_CONTEXT
-kfsctx_store   ld    (MSX_FSCTX_STATUS),a
-kfsctx_result  ld    a,(MSX_FSCTX_STATUS)
-                ld    de,(MSX_FSCTX_HANDLE)
-                ret
+                mend
+                include "core/fsctx_gate.asm"
 ; A paged module cannot execute even one instruction after BDOS has restored
 ; the process TPA bank. Keep _CHDIR resident, then re-map PAGE_DATA before RET.
 ; Return the native zero/nonzero DOS result directly to GBFSCTX.MOD.

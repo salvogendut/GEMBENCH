@@ -433,7 +433,11 @@ storage_send
                 or a
                 jr nz,storage_protocol
                 ld a,l
+                ifdef CPC_FSCTX
+                cp 2                        ; CD/GETPATH may have no arguments
+                else
                 cp 3
+                endif
                 jr c,storage_protocol
                 cp 132
                 jr nc,storage_protocol
@@ -464,14 +468,24 @@ storage_send_loop
                 pop de
                 pop hl
                 ld a,(response_buffer)
+                ifdef CPC_FSCTX
+                cp 2                        ; navigation has an empty payload
+                else
                 cp 3
+                endif
                 jr c,storage_protocol
                 cp 136
                 jr nc,storage_protocol
                 sub 2
+                ifdef CPC_FSCTX
+                jr z,storage_empty_payload  ; never execute a zero-count LDIR
+                endif
                 ld c,a
                 ld b,0
                 ldir
+                ifdef CPC_FSCTX
+storage_empty_payload
+                endif
                 call storage_response_fault ; diagnostic hook, no device mutation
                 ld a,(command_buffer+1)
                 ld hl,response_buffer+1
@@ -482,7 +496,11 @@ storage_send_loop
                 cp #43
                 jr nz,storage_protocol
                 ld a,(response_buffer)
+                ifdef CPC_FSCTX
+                cp 2
+                else
                 cp 3
+                endif
                 jr c,storage_protocol
                 cp 136
                 jr nc,storage_protocol

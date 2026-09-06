@@ -173,7 +173,14 @@ cpc_verify_io
                 ifdef CPC_LIFETIME
                 ifdef CPC_REGISTRATION
                 ifdef CPC_LOADING
+                ifdef CPC_FSCTX
+                call cpc_fsctx_probe
+                ifdef CPC_FSDIR_PROTOCOL
+                call cpc_fsdir_probe
+                endif
+                else
                 call cpc_loading_probe
+                endif
                 else
                 ifdef CPC_SERVICES
                 ifdef CPC_ROUTING
@@ -227,6 +234,11 @@ worker_code
                 ld (#4202),a
                 endif
 worker_loop
+                ifdef CPC_FSCTX
+                xor a                        ; real worker cannot allocate a context
+                call cpc_fsctx_call
+                ld (#4204),a
+                endif
                 ifdef CPC_SERVICES
                 ifndef CPC_ROUTING
                 call cpc_service_worker_hook  ; actual IRQ-preempted worker, no drawing

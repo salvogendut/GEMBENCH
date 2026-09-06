@@ -64,7 +64,16 @@ cpc_font_end
                 include "cpc_registration.asm"
                 ifdef CPC_LOADING
                 include "cpc_loading.asm"
+                ifdef CPC_FSCTX
+                include "fsctx_size.inc"
+                include "cpc_fsctx.asm"
+                include "../debug/cpc_production/fsctx_probe.asm"
+                ifdef CPC_FSDIR_PROTOCOL
+                include "../debug/cpc_production/fsdir_protocol.asm"
+                endif
+                else
                 include "../debug/cpc_production/loading_probe.asm"
+                endif
                 else
                 ifdef CPC_SERVICES
                 include "cpc_services.asm"

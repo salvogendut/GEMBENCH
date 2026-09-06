@@ -19,13 +19,16 @@ from cpc_production_registration import REGISTRATION_VARIANTS, emit_vectors as e
 from cpc_production_services import SERVICE_VARIANTS, compile_timer
 from cpc_production_routing import ROUTING_VARIANTS
 from cpc_production_loading import LOADING_VARIANTS, emit_vectors as emit_loading, packages
+from cpc_production_fsctx import FSCTX_VARIANTS, compile_module, emit_vectors as emit_fsctx, files as fsctx_files
+from cpc_fsdir_protocol import emit_vectors as emit_fsdir, files as fsdir_files
+from cpc_fsdir_cases import DIRECTORY_VARIANTS, files as directory_files
 import genfont
 
 ROOT = Path(__file__).resolve().parents[1]
 VARIANTS = {"normal": None, "full-slot": "CPC_PAD_KERNEL",
             "bad-guard": "CPC_FAULT_GUARD", "bad-restore": "CPC_FAULT_RESTORE",
             **DRAWING_VARIANTS, **WINDOW_VARIANTS, **LIFETIME_VARIANTS, **REGISTRATION_VARIANTS,
-            **SERVICE_VARIANTS, **ROUTING_VARIANTS, **LOADING_VARIANTS}
+            **SERVICE_VARIANTS, **ROUTING_VARIANTS, **LOADING_VARIANTS, **FSCTX_VARIANTS}
 
 
 def symbols(path: Path) -> dict[str, int]:
@@ -60,7 +63,10 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
     work.mkdir(parents=True, exist_ok=True)
     routing = variant in ROUTING_VARIANTS
     services = variant in SERVICE_VARIANTS or routing
-    loading = variant in LOADING_VARIANTS
+    fsctx = variant in FSCTX_VARIANTS
+    fsdir = variant == "fsctx-protocol"
+    directory = variant in DIRECTORY_VARIANTS
+    loading = variant in LOADING_VARIANTS or fsctx
     registration = variant in REGISTRATION_VARIANTS or services or loading
     lifetime = variant in LIFETIME_VARIANTS or registration
     windows = variant in WINDOW_VARIANTS or lifetime
@@ -74,7 +80,12 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
         emit_lifetime(work / "lifetime_vectors.inc")
     if variant in REGISTRATION_VARIANTS:
         emit_registration(work / "registration_vectors.inc")
-    if loading:
+    if fsctx:
+        emit_fsctx(work / "fsctx_vectors.inc", directory)
+        (work / "fsctx_size.inc").write_text("CPC_FS_MODULE_BYTES equ 1\n")
+        if fsdir:
+            emit_fsdir(work / "fsdir_vectors.inc")
+    elif loading:
         emit_loading(work / "loading_vectors.inc")
     if services:
         (work / "TIMER.BIN").write_bytes(bytes(116))  # symbol pass only; never published to media
@@ -94,11 +105,24 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
         cmd += ["-DCPC_ROUTING=1"]
     if loading:
         cmd += ["-DCPC_LOADING=1"]
+    if fsctx:
+        cmd += ["-DCPC_FSCTX=1"]
+    if fsdir:
+        cmd += ["-DCPC_FSDIR_PROTOCOL=1"]
+    if directory:
+        cmd += ["-DCPC_FS_DIRECTORY=1"]
     if VARIANTS[variant]:
         cmd += [f"-D{VARIANTS[variant]}=1"]
     subprocess.run(cmd, cwd=work, check=True)
     sym = symbols(work / "adapters.sym")
-    if loading:
+    if fsctx:
+        compile_module(work,sym,ROOT,directory,variant=="fsctx-directory-bad-meta")
+        subprocess.run(cmd,cwd=work,check=True)
+        final=symbols(work / "adapters.sym")
+        if {k:v for k,v in final.items() if k!="cpc_fs_module_bytes"}!={k:v for k,v in sym.items() if k!="cpc_fs_module_bytes"}:
+            raise AssertionError("FS module compile changed resident addresses")
+        sym=final
+    elif loading:
         for name,data in packages(sym,ROOT).items():
             (work/name).write_bytes(data)
     if services:
@@ -120,7 +144,10 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
 
 
 def build(variant="normal") -> Path:
-    for tool in (os.environ.get("RASM", "rasm"), "sfdisk", "mkfs.fat", "mcopy", "mmd"):
+    required = (os.environ.get("RASM", "rasm"), "sfdisk", "mkfs.fat", "mcopy", "mmd")
+    if variant in DIRECTORY_VARIANTS:
+        required += ("mattrib",)
+    for tool in required:
         if not shutil.which(tool):
             raise SystemExit(f"missing {tool}; use distrobox my-distrobox")
     work = ROOT / "build/cpc-production" / variant
@@ -136,6 +163,15 @@ def build(variant="normal") -> Path:
              "BOOT.BAS": (ROOT / "debug/cpc_production/BOOT.BAS").read_text().replace("\n", "\r\n").encode()}
     if variant in LOADING_VARIANTS:
         files.update({"GBENCH/"+name:data for name,data in packages(sym,ROOT).items()})
+    if variant in FSCTX_VARIANTS:
+        files["FSCTX.BIN"]=(work/"FSCTX.BIN").read_bytes()
+        files.update(fsctx_files())
+        if variant == "fsctx-protocol":
+            files.update(fsdir_files())
+            (card / "CATALOG/EIGHTCHR").mkdir(parents=True, exist_ok=True)
+        if variant in DIRECTORY_VARIANTS:
+            files.update(directory_files())
+            (card / "CATALOG/EIGHTCHR").mkdir(parents=True, exist_ok=True)
     for name, data in files.items():
         (card / name).parent.mkdir(parents=True, exist_ok=True)
         (card / name).write_bytes(data)
@@ -152,6 +188,18 @@ def build(variant="normal") -> Path:
         if variant in LOADING_VARIANTS:
             subprocess.run(["mmd", "-i", tmp+"@@16384", "::/GBENCH"], check=True)
             subprocess.run(["mcopy", "-i", tmp+"@@16384", *[str(card/name) for name in files if "/" in name], "::/GBENCH/"], check=True)
+        if variant in FSCTX_VARIANTS:
+            for directory in ("DOCS","DOCS/SUB","ALT"):
+                subprocess.run(["mmd","-i",tmp+"@@16384","::/"+directory],check=True)
+            for name in fsctx_files():
+                subprocess.run(["mcopy","-i",tmp+"@@16384",str(card/name),"::/"+name],check=True)
+            if variant == "fsctx-protocol" or variant in DIRECTORY_VARIANTS:
+                for directory in ("CATALOG", "CATALOG/EIGHTCHR"):
+                    subprocess.run(["mmd", "-i", tmp+"@@16384", "::/"+directory], check=True)
+                for name in (directory_files() if variant in DIRECTORY_VARIANTS else fsdir_files()):
+                    subprocess.run(["mcopy", "-i", tmp+"@@16384", str(card/name), "::/"+name], check=True)
+                if variant in DIRECTORY_VARIANTS:
+                    subprocess.run(["mattrib", "-i", tmp+"@@16384", "+r", "+h", "+s", "::/CATALOG/BIG.BIN"], check=True)
         Path(tmp).replace(image)
     finally:
         Path(tmp).unlink(missing_ok=True)
@@ -183,6 +231,10 @@ def build(variant="normal") -> Path:
     if "cpc_loading_begin" in sym:
         sections["shared_launch_admission_and_m4_leaf"] = dict(base=sym["cpc_loading_begin"],
             used=sym["cpc_loading_end"]-sym["cpc_loading_begin"])
+    if "cpc_fsctx_begin" in sym:
+        sections["fsctx_resident_adapter"] = dict(base=sym["cpc_fsctx_begin"],
+            used=sym["cpc_fsctx_end"]-sym["cpc_fsctx_begin"])
+        sections["fsctx_data_page_module"] = dict(base=0x4400,used=len((work/"FSCTX.BIN").read_bytes()),budget=0x1C00)
     sources = [ROOT / "kernel/cpc_adapter_image.asm", ROOT / "kernel/cpc_scheduler.asm",
                ROOT / "kernel/cpc_context.inc", ROOT / "kernel/cpc_visibility.inc", ROOT / "kernel/cpc_m4_boot.asm", ROOT / "kernel/cpc_m4_loader.asm",
                *sorted((ROOT / "kernel/core").glob("*.asm")), *sorted((ROOT / "kernel/core").glob("*.inc")),
@@ -201,7 +253,13 @@ def build(variant="normal") -> Path:
                ROOT / "tools/cpc_production_routing.py", ROOT / "kernel/cpc_routing.asm",
                ROOT / "kernel/cpc_routing_provider.inc", ROOT / "kernel/cpc_loading.asm",
                ROOT / "tools/cpc_production_loading.py", ROOT / "tools/embed_app_icon.py",
-               ROOT / "apps/abiprobe/manifest.json", ROOT / "apps/abiprobe/icon.asm"]
+               ROOT / "apps/abiprobe/manifest.json", ROOT / "apps/abiprobe/icon.asm",
+               ROOT / "tools/cpc_production_fsctx.py", ROOT / "kernel/cpc_fsctx.asm",
+               ROOT / "kernel/kc/cpc_fsctx.h", ROOT / "kernel/kc/gbfsctx_cpc.c",
+               ROOT / "kernel/core/fsctx_contract.h", ROOT / "kernel/core/fsctx_layout.h",
+               ROOT / "tools/cpc_fsdir_protocol.py", ROOT / "lib/gb/crt0.s",
+               ROOT / "tools/cpc_fsdir_cases.py", ROOT / "kernel/kc/cpc_fsdir.inc",
+               ROOT / "tools/check_app_layout.py"]
     manifest = {"variant": variant, "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "sections": sections, "memory_regions": memory_regions(sym), "image": str(image), "work": str(work),
                 "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),

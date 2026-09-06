@@ -94,3 +94,20 @@ substitute for eventual real-hardware confirmation.
 
 The restart still has no enabled CPC desktop. These notes prepare its later
 testing; they do not claim the application parity matrix has passed.
+
+## 2026-09-06 directory qualification update
+
+[3D-J](CPC-RESTART-STEP3D-J.md) exposed missing extended READDIR and pathname
+FSTAT in 1984. The user authorized sibling work: issue
+[#289](https://github.com/salvogendut/1984/issues/289), branch
+`fix/289-m4-directory-metadata`, based on `origin/main` at `1d92b47` (the prior
+PowerGraph branch is preserved). With that fix and a rebuilt executable, the
+unchanged protocol reproducer, 45 read-context checkpoints and new 44-checkpoint
+directory integration pass using real M4 media. Emulator-side tests also cover
+image and host-directory metadata and unchanged legacy catalog formatting.
+
+This is still one emulator implementation, not independent real-board
+confirmation or qualification of arbitrary long/non-ASCII names. The local
+konCePCja FSTAT handler is incompatible with the documented metadata API
+(source inspection only). Arnold/Caprice32 remain unqualified for the required
+storage path. No floppy fallback was used; emulator source stays in 1984.

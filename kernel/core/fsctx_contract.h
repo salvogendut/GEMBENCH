@@ -8,6 +8,9 @@
  * SELECT_CONTEXT must preserve XFER (including a pending write payload).
  * Directory hooks expose canonical 11-byte names, attr and 32-bit size, and an
  * opaque bounded cursor; NEXT resumes the restored cursor, not a global scan.
+ * Optional DIRECTORY_STATUS reports an error after a null entry or batch;
+ * omitted means the historical OK/EOF behavior. A failed partial batch retains
+ * its actual count and last published cursor so the caller may retry.
  * READ returns at most REQ_LENGTH; WRITE returns success/failure. Activation
  * and error precedence, partial path writes on rejection, zero read ambiguity,
  * append semantics and pending-launch one-shot behavior are unchanged.

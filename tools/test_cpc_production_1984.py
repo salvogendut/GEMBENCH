@@ -22,6 +22,8 @@ from cpc_production_registration import verify_registration
 from cpc_production_services import verify_services
 from cpc_production_routing import ROUTING_VARIANTS, drive_routing, verify_routing
 from cpc_production_loading import verify_loading, loading_commands
+from cpc_production_fsctx import verify_fsctx, expected as fsctx_expected
+from cpc_fsdir_protocol import transactions as fsdir_transactions, observe as observe_fsdir
 
 
 def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
@@ -49,11 +51,18 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
     if (byte("cpc_wm_visibility"), ram[sym["cpc_wm_visibility"]+1], ram[sym["cpc_task_visibility"]+1]) != (1, 3, 3):
         raise AssertionError("shared visibility classification differs")
     loading = "cpc_loading_probe" in sym
-    if any(byte(name) for name in ("io_busy", "io_offline", "io_fd", "sched_reserved")) or byte("io_status") != int(loading):
+    fsctx = "cpc_fsctx_probe" in sym
+    directory = "cpc_fs_directory_enabled" in sym
+    # Directory fixture's last file read is a successful short alias read.
+    if any(byte(name) for name in ("io_busy", "io_offline", "io_fd", "sched_reserved")) or byte("io_status") != int(loading or directory):
         raise AssertionError("unfinished M4/IRQ transaction")
     expected_commands = 1+4*((len((work / "CORE.RAW").read_bytes())+127)//128)+64*4
     if loading:
         expected_commands += loading_commands(work)
+    if fsctx:
+        expected_commands += 4*(len((work/"FSCTX.BIN").read_bytes())//128+1)+fsctx_expected(directory)[1]
+    if "cpc_fsdir_probe" in sym:
+        expected_commands += len(fsdir_transactions())
     if word("command_count") != expected_commands:
         raise AssertionError("M4 command count differs")
     if (byte("bank_cur"), header[0x41], header[0x40]) != (0xC0, 0, 0x0D):
@@ -79,7 +88,8 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
     drawing = "cpc_drawing_begin" in sym
     services = "cpc_services_probe" in sym
     routing = "cpc_routing_probe" in sym
-    drawing_result = (verify_loading(ram, sym, work) if loading else
+    drawing_result = (verify_fsctx(ram, sym, work) if fsctx else
+                      verify_loading(ram, sym, work) if loading else
                       verify_routing(ram, sym, work) if routing else
                       verify_services(ram, sym, work) if services else
                       verify_registration(ram, sym, work) if "cpc_registration_probe" in sym else
@@ -96,7 +106,7 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
     if ram[0x10000:0x10000+len(worker)] != worker:
         raise AssertionError("mapped worker code differs")
     sizes = (ram[0x7F00], ram[0x13F00])
-    if (any(n % 2 or not 24 <= n <= 64 for n in sizes) if services or routing else sizes != (24, 26)):
+    if (any(n % 2 or not 24 <= n <= 64 for n in sizes) if services or routing or fsctx else sizes != (24, 26)):
         raise AssertionError("missing/invalid yield and IRQ snapshots")
     return {**drawing_result, "root_turns": word("cpc_root_turns"), "io_checks": word("cpc_io_checks"),
             "irq_count": word("cpc_irq_count"), "seconds": word("cpc_hw_seconds"),
@@ -184,13 +194,15 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if (ram[sym["cpc_phase"]], ram[sym["cpc_failure"]]) != (0xFF, 8):
                 raise AssertionError("undersized memory not rejected by CPC admission")
             result = {"expected_failure": "128-KiB memory rejected"}
-        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime", "registration", "services", "routing", "loading"):
+        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime", "registration", "services", "routing", "loading", "fsctx", "fsctx-protocol", "fsctx-directory"):
             result = {**verify(data, sym, work),**routing_result}
             send("wait frames 150 200")
             send(f"snapshot-save {artifacts / 'stable.sna'}")
             stable = (artifacts / "stable.sna").read_bytes()
             verify(stable, sym, work)
             if snapshot(stable)[1] != ram: raise AssertionError("RAM changed after completion")
+            if variant == "fsctx-protocol":
+                result.update(observe_fsdir(ram, sym))
         else:
             try:
                 if routing_error: raise routing_error
@@ -198,6 +210,8 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
                     # Wrong binding can also make later cleanup abort. Inspect
                     # the first actual registration trace, not a generic halt.
                     verify_registration(ram,sym,work,checkpoints=2)
+                elif variant in ("fsctx-bad-owner", "fsctx-directory-bad-meta"):
+                    verify_fsctx(ram,sym,work)
                 else:
                     verify(data, sym, work)
             except AssertionError as error:
@@ -214,7 +228,9 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
                             "services-bad-visible": "services component-hidden: ",
                             "routing-bad-bank": "failure=61",
                             "routing-bad-click": "routing menu: focus",
-                            "loading-bad-admission": "loading 1 admission/entry count"}[variant]
+                            "loading-bad-admission": "loading 1 admission/entry count",
+                            "fsctx-bad-owner":"fsctx worker-owner-allocate: byte 4",
+                            "fsctx-directory-bad-meta":"fsctx root-next-large: byte 18"}[variant]
                 if expected not in str(error): raise
                 result = {"expected_failure": str(error)}
             else: raise AssertionError("corrupt adapter unexpectedly passed")
@@ -223,7 +239,10 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
                       emulator_sha256=hashlib.sha256(emulator.read_bytes()).hexdigest(),
                       sections=manifest["sections"], image_sha256=manifest["image_sha256"])
         (artifacts / "result.json").write_text(json.dumps(result, indent=2)+"\n")
-        print("PASS "+json.dumps(result, sort_keys=True), flush=True)
+        qualified = result.get("directory_protocol_qualified", True)
+        print(("PASS " if qualified else "PROTOCOL BLOCKED ")+json.dumps(result, sort_keys=True), flush=True)
+        if not qualified:
+            raise SystemExit(2)
         return artifacts
     finally:
         process.terminate()

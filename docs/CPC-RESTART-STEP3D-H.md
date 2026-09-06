@@ -131,6 +131,11 @@ the parked `QA/CPC` tree or floppies for this checkpoint.
 
 ## Still required
 
+Follow-up: [3D-I](CPC-RESTART-STEP3D-I.md) now loads the unchanged shared
+filesystem-context policy as a paged CPC M4 module and validates owner-safe
+read-only operations. Directory/cursor metadata, writes and free-space remain
+explicitly unsupported; the full integration described below is still open.
+
 Next: bind shared filesystem-context policy and required M4 directory/read
 operations, then finish budgeted public API/sysinfo/module composition. Join
 loaded applications to the shared loop and prove the first unchanged SDK

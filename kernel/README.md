@@ -44,8 +44,12 @@ Important split units include:
   `lib/cpc/app_load.asm`, using the unchanged M4 read-at leaf and separate staging;
   see the [3D-H loader report](../docs/CPC-RESTART-STEP3D-H.md);
 - `core/fsctx_policy.inc` — shared paged filesystem-context policy, with
-  `kc/msx_fsctx.h` fixed state/Nextor hooks; `core/fsctx_cleanup.asm` retains
-  storage-free resident owner cleanup. App-linked service bookkeeping uses
+  `kc/msx_fsctx.h` fixed state/Nextor hooks and private `kc/cpc_fsctx.h` M4
+  read-only bindings. `core/fsctx_gate.asm` shares resident implicit-owner and
+  worker checks; `core/fsctx_cleanup.asm` retains storage-free resident owner
+  cleanup. The CPC module is loaded into F7, not copied into the resident image;
+  see the [3D-I context report](../docs/CPC-RESTART-STEP3D-I.md).
+  App-linked service bookkeeping uses
   `lib/gembench/core/service_internal.h` and `lib/gembench/msx_service.h`;
   see the [step-2G report](../docs/CPC-RESTART-STEP2G.md);
 - `core/parameters.asm` — shared receiving-side `GB_PARAMS` validation/copy and

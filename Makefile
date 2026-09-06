@@ -17,6 +17,27 @@ all: msx
 .PHONY: diagnostic-cpc-services diagnostic-cpc-services-1984
 .PHONY: diagnostic-cpc-routing diagnostic-cpc-routing-1984
 .PHONY: diagnostic-cpc-loading diagnostic-cpc-loading-1984
+.PHONY: diagnostic-cpc-fsctx diagnostic-cpc-fsctx-1984
+.PHONY: diagnostic-cpc-fsdir-protocol diagnostic-cpc-fsdir-protocol-1984
+.PHONY: diagnostic-cpc-fsdir diagnostic-cpc-fsdir-1984
+diagnostic-cpc-fsdir:
+	$(PYTHON) tools/build_cpc_production.py --variant fsctx-directory
+
+diagnostic-cpc-fsdir-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant fsctx-directory
+
+diagnostic-cpc-fsdir-protocol:
+	$(PYTHON) tools/build_cpc_production.py --variant fsctx-protocol
+
+diagnostic-cpc-fsdir-protocol-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant fsctx-protocol
+
+diagnostic-cpc-fsctx:
+	$(PYTHON) tools/build_cpc_production.py --variant fsctx
+
+diagnostic-cpc-fsctx-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant fsctx
+
 diagnostic-cpc-loading:
 	$(PYTHON) tools/build_cpc_production.py --variant loading
 
