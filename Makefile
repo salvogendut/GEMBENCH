@@ -11,6 +11,13 @@ all: msx
 # CPC restart step 3: isolated hardware diagnostics, not a release CPC target.
 .PHONY: diagnostic-cpc-foundation diagnostic-cpc-foundation-1984 diagnostic-cpc-graphics diagnostic-cpc-graphics-1984
 .PHONY: diagnostic-cpc-storage diagnostic-cpc-storage-1984
+.PHONY: diagnostic-cpc-production diagnostic-cpc-production-1984
+diagnostic-cpc-production:
+	$(PYTHON) tools/build_cpc_production.py
+
+diagnostic-cpc-production-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py
+
 diagnostic-cpc-storage:
 	$(PYTHON) tools/build_cpc_foundation.py --variant storage
 

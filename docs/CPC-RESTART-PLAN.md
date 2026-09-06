@@ -34,7 +34,12 @@ providers. Universal SDK records/bridge and APP hashes remain unchanged.
 [Context/IRQ boundary 2I](CPC-RESTART-STEP2I.md) is extracted under #76:
 shared Z80 snapshots, register frames, task startup and IRQ dispatch use explicit
 MSX2 state/bank/interrupt providers. All eight scheduler variants are unchanged
-byte-for-byte. Production CPC placement and hardware integration are next.
+byte-for-byte. [Production-address integration 3D-A](CPC-RESTART-STEP3D.md)
+is implemented under #77: checked fixed allocations, firmware-safe M4 takeover,
+512-KiB admission, the same shared context/visibility scheduler, raw keyboard
+input and software ticks execute together in 1984. The production adapter gate
+is **not complete**: drawing/parameter integration, full shared-core/module
+placement and responsiveness qualification remain in 3D-B before a window.
 The isolated foundation proofs do not enable a CPC desktop.
 Shared policy/context extraction does not establish CPC adapter correctness;
 the complete memory/adapter gate still precedes desktop integration.
@@ -44,7 +49,7 @@ the complete memory/adapter gate still precedes desktop integration.
 | Order | Work package | Exit before advancing |
 |---|---|---|
 | 1 | Context/IRQ boundary — [2I](CPC-RESTART-STEP2I.md), #76 | Shared mechanism on working MSX2, fixed-state/snapshot contracts, unchanged binaries and real IRQ-switch regressions. |
-| 2 | Production CPC memory layout and adapters — next step-3 package | One budgeted map for the actual shared core, all state, modules, stacks, app aperture and framebuffer; bank/IRQ, input, time, graphics/text/line/pointer and storage adapters validated together on M4. Reuse 3A/3B/3C hardware proofs, not their provisional addresses. |
+| 2 | Production CPC memory layout and adapters — [3D](CPC-RESTART-STEP3D.md), #77; 3D-A validated, 3D-B pending | One budgeted map for the actual shared core, all state, modules, stacks, app aperture and framebuffer; bank/IRQ, input, time, graphics/text/line/pointer and storage adapters validated together on M4. Reuse 3A/3B/3C hardware proofs, not their provisional addresses. |
 | 3 | First shared-core window — step 4, initial gate | M4 boot invokes the same lifetime/focus/visibility/damage code; one window opens, draws, gains focus, moves and closes with intact state/stack/bank guards. No alternate CPC WM. |
 | 4 | Desktop integration — remaining step 4 and Desktop/File Manager from step 5 | Overlap/focus/exposure, partial damage, worker priority/occlusion, timers, messages/services and teardown pass equivalent MSX2/CPC scenarios. Desk/menu, input and M4 directory operations work in that shared shell. |
 | 5 | Application parity — remaining step 5 | ABI Probe, Clock/Calculator, forms/Settings/Notepad, three-window PAINT, resources/secondary code, BASIC and the remaining migration ledger; universal APP bytes are identical across targets. |
