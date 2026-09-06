@@ -24,6 +24,7 @@ from cpc_production_routing import ROUTING_VARIANTS, drive_routing, verify_routi
 from cpc_production_loading import verify_loading, loading_commands
 from cpc_production_fsctx import verify_fsctx, expected as fsctx_expected
 from cpc_fsdir_protocol import transactions as fsdir_transactions, observe as observe_fsdir
+from cpc_fswrite_cases import WRITE_VARIANTS, space as write_space, verify_media
 
 
 def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
@@ -53,14 +54,16 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
     loading = "cpc_loading_probe" in sym
     fsctx = "cpc_fsctx_probe" in sym
     directory = "cpc_fs_directory_enabled" in sym
+    writable = "cpc_fs_write_enabled" in sym
     # Directory fixture's last file read is a successful short alias read.
-    if any(byte(name) for name in ("io_busy", "io_offline", "io_fd", "sched_reserved")) or byte("io_status") != int(loading or directory):
+    if any(byte(name) for name in ("io_busy", "io_offline", "io_fd", "sched_reserved")) or byte("io_status") != int(loading or (directory and not writable)):
         raise AssertionError("unfinished M4/IRQ transaction")
     expected_commands = 1+4*((len((work / "CORE.RAW").read_bytes())+127)//128)+64*4
     if loading:
         expected_commands += loading_commands(work)
     if fsctx:
-        expected_commands += 4*(len((work/"FSCTX.BIN").read_bytes())//128+1)+fsctx_expected(directory)[1]
+        geometry=json.loads((work/'fswrite_geometry.json').read_text()) if writable else {}
+        expected_commands += 4*(len((work/"FSCTX.BIN").read_bytes())//128+1)+fsctx_expected(directory,writable,**geometry)[1]
     if "cpc_fsdir_probe" in sym:
         expected_commands += len(fsdir_transactions())
     if word("command_count") != expected_commands:
@@ -194,7 +197,7 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if (ram[sym["cpc_phase"]], ram[sym["cpc_failure"]]) != (0xFF, 8):
                 raise AssertionError("undersized memory not rejected by CPC admission")
             result = {"expected_failure": "128-KiB memory rejected"}
-        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime", "registration", "services", "routing", "loading", "fsctx", "fsctx-protocol", "fsctx-directory"):
+        elif variant in ("normal", "full-slot", "drawing", "windows", "lifetime", "registration", "services", "routing", "loading", "fsctx", "fsctx-protocol", "fsctx-directory", "fsctx-write"):
             result = {**verify(data, sym, work),**routing_result}
             send("wait frames 150 200")
             send(f"snapshot-save {artifacts / 'stable.sna'}")
@@ -203,6 +206,17 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if snapshot(stable)[1] != ram: raise AssertionError("RAM changed after completion")
             if variant == "fsctx-protocol":
                 result.update(observe_fsdir(ram, sym))
+            if variant == "fsctx-write":
+                geometry=json.loads((work/'fswrite_geometry.json').read_text())
+                expected_files={}
+                fsctx_expected(True,True,**geometry,media_out=expected_files)
+                original_files={name:(media/'CARD'/name).read_bytes() for name in manifest['files_sha256']}
+                result['media_files_verified']=verify_media(image,expected_files,original_files)
+                free_kib,cluster_kib=write_space(image)
+                allocated=sum((len(b)+cluster_kib*1024-1)//(cluster_kib*1024) for b in expected_files.values())
+                if free_kib!=geometry['free_kib']-allocated*cluster_kib:
+                    raise AssertionError('written image free space differs')
+                result['free_kib_after']=free_kib
         else:
             try:
                 if routing_error: raise routing_error
@@ -210,7 +224,7 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
                     # Wrong binding can also make later cleanup abort. Inspect
                     # the first actual registration trace, not a generic halt.
                     verify_registration(ram,sym,work,checkpoints=2)
-                elif variant in ("fsctx-bad-owner", "fsctx-directory-bad-meta"):
+                elif variant in ("fsctx-bad-owner", "fsctx-directory-bad-meta", "fsctx-write-bad-append"):
                     verify_fsctx(ram,sym,work)
                 else:
                     verify(data, sym, work)
@@ -230,7 +244,8 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
                             "routing-bad-click": "routing menu: focus",
                             "loading-bad-admission": "loading 1 admission/entry count",
                             "fsctx-bad-owner":"fsctx worker-owner-allocate: byte 4",
-                            "fsctx-directory-bad-meta":"fsctx root-next-large: byte 18"}[variant]
+                            "fsctx-directory-bad-meta":"fsctx root-next-large: byte 18",
+                            "fsctx-write-bad-append":"fsctx root-read-512: byte 10"}[variant]
                 if expected not in str(error): raise
                 result = {"expected_failure": str(error)}
             else: raise AssertionError("corrupt adapter unexpectedly passed")

@@ -12,20 +12,23 @@ Status: **3D-A, [3D-B drawing/parameters](CPC-RESTART-STEP3D-B.md) and
 [3D-G input/root routing](CPC-RESTART-STEP3D-G.md) and
 [3D-H M4 launch/admission](CPC-RESTART-STEP3D-H.md) and
 [3D-I read-only filesystem contexts](CPC-RESTART-STEP3D-I.md) and
-[3D-J bounded directory contexts](CPC-RESTART-STEP3D-J.md) are
+[3D-J bounded directory contexts](CPC-RESTART-STEP3D-J.md) and
+[3D-K writes/free space](CPC-RESTART-STEP3D-K.md) are
 implemented and M4/1984 validated; the complete production adapter gate is
 still open.** The 3D-A record below connects actual shared context
 and visibility code to a checked CPC layout and CPC hardware. It is not a
 desktop, public application loader, or proof that the complete kernel fits.
 The remaining integration work must finish before the first shared-core window.
-The 3D-B/C/D/E/F/G/H/I/J documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory gaps and measurements below;
+The 3D-B/C/D/E/F/G/H/I/J/K documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory/write/free-space gaps and measurements below;
 this document retains the original non-drawing fixture and its evidence.
 
 3D-J requires the separately authorized 1984 fix on
 `fix/289-m4-directory-metadata` ([issue #289](https://github.com/salvogendut/1984/issues/289)).
 Its unchanged protocol reproducer and new independent-directory tests pass
-with the rebuilt emulator. This does not enable a public filesystem service;
-writes/free-space, namespace limits and complete SDK composition remain open.
+with the rebuilt emulator. 3D-K binds writes and free-space reporting to the
+same shared policy, with M4 readback and independent media checks. This does
+not enable a public filesystem service; namespace limits and complete SDK
+composition remain open.
 
 ## Why the addresses change
 

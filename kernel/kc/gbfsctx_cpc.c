@@ -116,3 +116,7 @@ static unsigned int cpc_fs_read(void)
 #ifdef CPC_FS_DIRECTORY
 #include "cpc_fsdir.inc"
 #endif
+
+#ifdef CPC_FS_WRITE
+#include "cpc_fswrite.inc"
+#endif

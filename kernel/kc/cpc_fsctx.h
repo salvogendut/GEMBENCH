@@ -70,6 +70,13 @@ static char *cpc_fs_directory(unsigned char first);
 #define FSCTX_ENTRY_ATTR U8(0x14E7u)
 #define FSCTX_ENTRY_SIZE ((volatile unsigned char *)0x14E8u)
 #endif
+#ifdef CPC_FS_WRITE
+static unsigned char cpc_fs_write(void);
+static unsigned char cpc_fs_free(unsigned int *out);
+#define FSCTX_FREE_KIB(out) cpc_fs_free(out)
+#define FSCTX_WRITE_CHUNK(ctx,ok) do { (void)(ctx); ok=cpc_fs_write(); } while (0)
+#else
 #define FSCTX_FREE_KIB(out) 0u
 #define FSCTX_WRITE_CHUNK(ctx,ok) do { (void)(ctx); ok=0; } while (0)
+#endif
 #endif

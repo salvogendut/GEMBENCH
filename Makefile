@@ -20,6 +20,13 @@ all: msx
 .PHONY: diagnostic-cpc-fsctx diagnostic-cpc-fsctx-1984
 .PHONY: diagnostic-cpc-fsdir-protocol diagnostic-cpc-fsdir-protocol-1984
 .PHONY: diagnostic-cpc-fsdir diagnostic-cpc-fsdir-1984
+.PHONY: diagnostic-cpc-fswrite diagnostic-cpc-fswrite-1984
+diagnostic-cpc-fswrite:
+	$(PYTHON) tools/build_cpc_production.py --variant fsctx-write
+
+diagnostic-cpc-fswrite-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant fsctx-write
+
 diagnostic-cpc-fsdir:
 	$(PYTHON) tools/build_cpc_production.py --variant fsctx-directory
 

@@ -78,8 +78,12 @@ authorized [1984 M4 fix #289](https://github.com/salvogendut/1984/issues/289).
 The private adapter supports bounded independent cursors, first/next/batches,
 actual short aliases, 32-bit sizes and error reporting distinct from EOF.
 The existing 45 read-context checks still pass; MSX module bytes are unchanged.
-Writes, free-space bindings, full owner filesystem-context services and public
-SDK execution are still open. Directory namespace/replay limits are recorded
+[Write/free checkpoint 3D-K](CPC-RESTART-STEP3D-K.md) now passes 45 M4-backed
+checkpoints: shared offset-zero replacement/nonzero append semantics, zero-length
+writes, multi-chunk readback, owner validation and free-space accounting. The
+existing fixed storage gate supplies the hardware transactions. Full owner
+filesystem-context services and public SDK execution are still open.
+Directory namespace/replay limits are recorded
 in 3D-J; passing this fixture is not a claim of complete filesystem parity.
 Complete shared-core/module placement, remaining service composition, public loader,
 input/FS bindings and responsiveness qualification still precede a usable window.
@@ -92,7 +96,7 @@ the complete memory/adapter gate still precedes desktop integration.
 | Order | Work package | Exit before advancing |
 |---|---|---|
 | 1 | Context/IRQ boundary — [2I](CPC-RESTART-STEP2I.md), #76 | Shared mechanism on working MSX2, fixed-state/snapshot contracts, unchanged binaries and real IRQ-switch regressions. |
-| 2 | Production CPC memory layout and adapters — [3D](CPC-RESTART-STEP3D.md), #77; 3D-A/B/C/D/E/F/G/H/I/J checkpoints implemented, final integration pending | One budgeted map for the actual shared core, all state, modules, stacks, app aperture and framebuffer; bank/IRQ, input, time, graphics/text/line/pointer and storage adapters validated together on M4. Reuse 3A/3B/3C hardware proofs, not their provisional addresses. |
+| 2 | Production CPC memory layout and adapters — [3D](CPC-RESTART-STEP3D.md), #77; 3D-A/B/C/D/E/F/G/H/I/J/K checkpoints implemented, final integration pending | One budgeted map for the actual shared core, all state, modules, stacks, app aperture and framebuffer; bank/IRQ, input, time, graphics/text/line/pointer and storage adapters validated together on M4. Reuse 3A/3B/3C hardware proofs, not their provisional addresses. |
 | 3 | First shared-core window — step 4, initial gate | M4 boot invokes the same lifetime/focus/visibility/damage code; one window opens, draws, gains focus, moves and closes with intact state/stack/bank guards. No alternate CPC WM. |
 | 4 | Desktop integration — remaining step 4 and Desktop/File Manager from step 5 | Overlap/focus/exposure, partial damage, worker priority/occlusion, timers, messages/services and teardown pass equivalent MSX2/CPC scenarios. Desk/menu, input and M4 directory operations work in that shared shell. |
 | 5 | Application parity — remaining step 5 | ABI Probe, Clock/Calculator, forms/Settings/Notepad, three-window PAINT, resources/secondary code, BASIC and the remaining migration ledger; universal APP bytes are identical across targets. |

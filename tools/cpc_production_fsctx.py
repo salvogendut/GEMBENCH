@@ -1,6 +1,7 @@
 """Build the same FSCTX C policy for the CPC F7 module and private M4 checks."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import shutil
@@ -10,12 +11,14 @@ import struct
 from check_app_layout import read_areas
 from cpc_production_lifetime import physical
 from cpc_fsdir_cases import DIRECTORY_VARIANTS, inputs as dir_inputs, files as dir_files, entries as dir_entries
+from cpc_fswrite_cases import WRITE_VARIANTS, inputs as write_inputs
 
-FSCTX_VARIANTS={"fsctx":None,"fsctx-bad-owner":"CPC_FAULT_FS_OWNER", "fsctx-protocol":None, **DIRECTORY_VARIANTS}
+FSCTX_VARIANTS={"fsctx":None,"fsctx-bad-owner":"CPC_FAULT_FS_OWNER", "fsctx-protocol":None, **DIRECTORY_VARIANTS, **WRITE_VARIANTS}
 TRACE_PAGES=(0xC5,0xC6,0xC7,0xCC)
 
 
-def inputs(directory=False):
+def inputs(directory=False,writable=False):
+    if writable: return write_inputs()
     if directory: return dir_inputs()
     rows=[]
     def add(name,op,handle=0,native=0xC0,drive=0,length=0,payload=b"",save=255):
@@ -74,7 +77,7 @@ def files():
             "ALT/B.BIN":bytes((255-i*3)&255 for i in range(333))}
 
 
-def compile_module(work,sym,root,directory=False,fault_metadata=False):
+def compile_module(work,sym,root,directory=False,fault_metadata=False,writable=False,fault_append=False):
     sdcc=shutil.which(os.environ.get("SDCC","sdcc"))
     if not sdcc: raise RuntimeError("SDCC is required for shared FSCTX policy")
     bindir=Path(sdcc).parent
@@ -88,6 +91,8 @@ def compile_module(work,sym,root,directory=False,fault_metadata=False):
     subprocess.run([sdcc,"-mz80","--std-c99","--opt-code-size","--max-allocs-per-node","100000",
                     *(["-DCPC_FS_DIRECTORY"] if directory else []),
                     *(["-DCPC_FAULT_FS_META"] if fault_metadata else []),
+                    *(["-DCPC_FS_WRITE"] if writable else []),
+                    *(["-DCPC_FAULT_FS_APPEND"] if fault_append else []),
                     "--fomit-frame-pointer","-c",str(root/"kernel/kc/gbfsctx_cpc.c"),"-o","fs_mod.rel"],cwd=work,check=True)
     subprocess.run([sdcc,"-mz80","--no-std-crt0","--code-loc","0x4400","--data-loc","0x5F00",
                     "fs_crt.rel","fs_mod.rel","fs_bridge.rel","-o","fs_mod.ihx"],cwd=work,check=True)
@@ -101,8 +106,8 @@ def compile_module(work,sym,root,directory=False,fault_metadata=False):
     (work/"fsctx_size.inc").write_text(f"CPC_FS_MODULE_BYTES equ {len(binary)}\n")
 
 
-def emit_vectors(path,directory=False):
-    cases=inputs(directory)
+def emit_vectors(path,directory=False,writable=False):
+    cases=inputs(directory,writable)
     rows=[f"FP_CASES equ {len(cases)}",f"FP_TRACE_PAGES equ {len(TRACE_PAGES)}","FP_VECTOR_SIZE equ 15","fp_vectors"]
     for i,c in enumerate(cases):
         rows += [f'db {c["op"]},{c["native"]},{c["handle"]},{c["drive"]}',
@@ -114,14 +119,17 @@ def emit_vectors(path,directory=False):
     path.write_text("\n".join(rows)+"\n")
 
 
-def expected(directory=False):
+def expected(directory=False,writable=False,free_kib=None,cluster_kib=2,media_out=None):
     """Independent observable model; never used to seed emulator state."""
+    if writable and free_kib is None: raise ValueError('write oracle requires initial media geometry')
     contexts=[None]*4
     generations=[0]*4
     handles={0:0}
     pending=bytearray(64)
     rows=[]
     commands=0
+    datafiles={**files(),**dir_files()}
+    written={}
     def allocate(owner,drive):
         if drive: return 5,0
         slot=next((i for i,c in enumerate(contexts) if c is None or not c[0]),None)
@@ -132,7 +140,7 @@ def expected(directory=False):
         c[16:27]=b" "*11; c[28]=ord('\\')
         contexts[slot]=c
         return 0,(generations[slot]<<8)|(slot+1)
-    for item in inputs(directory):
+    for item in inputs(directory,writable):
         op,h=item["op"],handles[item["handle"]]
         owner=0x102 if item["native"]==0xC4 else 0x101
         req=bytearray(32)
@@ -146,7 +154,7 @@ def expected(directory=False):
         if op==255:
             for c in contexts:
                 if c and int.from_bytes(c[2:4],"little")==0x102: c[0]=0
-        elif op in ((9,10) if directory else (5,6,9,10,14)): status=1
+        elif op in (() if writable else (9,10) if directory else (5,6,9,10,14)): status=1
         elif op==0 or op==13:
             if op==13 and not pending[0]: status=2
             else:
@@ -175,7 +183,7 @@ def expected(directory=False):
             else:
                 path=bytes(ctx[28:76]).split(b"\0",1)[0].decode().replace('\\','/').strip('/')
                 commands+=2+len(path.split('/')) if path else 2
-                if path not in ("CATALOG","ALT","CATALOG/EIGHTCHR"): status=6
+                if path not in (("DOCS/SUB","ALT") if writable else ("CATALOG","ALT","CATALOG/EIGHTCHR")): status=6
                 else:
                     first=(op==5 or (op==14 and item.get("flags",0)))
                     cursor=bytearray(ctx[76:140])
@@ -187,7 +195,14 @@ def expected(directory=False):
                     if not status:
                         ordinal=int.from_bytes(cursor[:2],"little")
                         commands+=1+ordinal  # reset and replay device iterator
-                        listing=dir_entries(path)
+                        if writable:
+                            listing=[]
+                            for key,data in datafiles.items():
+                                parent,leaf=key.rsplit('/',1)
+                                if parent==path:
+                                    base,ext=leaf.split('.')
+                                    listing.append((base.ljust(8).encode()+ext.ljust(3).encode(),0x20,len(data)))
+                        else: listing=dir_entries(path)
                         for _ in range(length):
                             commands+=1
                             if ordinal==len(listing): break
@@ -200,6 +215,27 @@ def expected(directory=False):
                             else:
                                 payload[:11]=name;req[20]=attr;req[21]=1
                                 req[16:20]=size.to_bytes(4,"little")
+        elif writable and op in (9,10):
+            length=item['length']
+            if op==9 and length>512: status=5
+            else:
+                path=bytes(ctx[28:76]).split(b'\0',1)[0].decode().replace('\\','/').strip('/')
+                commands+=2+len(path.split('/')) if path else 2
+                if path not in ('DOCS/SUB','ALT'): status=6
+                elif op==10:
+                    commands+=1;amount=min(65535,free_kib);req[21]=1
+                else:
+                    name=bytes(ctx[16:24]).decode().rstrip()+'.'+bytes(ctx[24:27]).decode().rstrip()
+                    key=path+'/'+name;old=datafiles.get(key,b'')
+                    offset=int.from_bytes(ctx[8:12],'little')
+                    data=(old if offset else b'')+payload[:length]
+                    unit=cluster_kib*1024
+                    free_kib+=(((len(old)+unit-1)//unit)-((len(data)+unit-1)//unit))*cluster_kib
+                    datafiles[key]=data;written[key]=bytes(data)
+                    parts=max(1,(length+127)//128)
+                    commands+=parts*5-(0 if offset else 2)-(0 if length else 1)
+                    amount=length;ctx[8:12]=(offset+amount).to_bytes(4,'little')
+                    req[12:16]=ctx[8:12]
         elif op in (4,8):
             length=item["length"]
             if op==8 and not 1<=length<=512: status=5
@@ -209,7 +245,7 @@ def expected(directory=False):
                 if path not in ("","DOCS","DOCS/SUB","ALT","CATALOG"): status=6
                 elif op==8:
                     name=bytes(ctx[16:24]).decode().rstrip()+'.'+bytes(ctx[24:27]).decode().rstrip()
-                    source={**files(),**dir_files()}
+                    source=dict(datafiles)
                     source["CATALOG/LONGNA~1.TXT"]=source["CATALOG/Long named file.txt"]
                     data=source[path+'/'+name]
                     offset=int.from_bytes(ctx[8:12],"little")
@@ -227,6 +263,7 @@ def expected(directory=False):
         table=b"".join(bytes(c) if c else bytes(144) for c in contexts)
         meta=bytes((status,item["native"],item["iff"],1,0,0,0,26-len(TRACE_PAGES)))
         rows.append(bytes(req)+table+bytes(pending)+bytes(payload)+meta)
+    if media_out is not None: media_out.update(written)
     return rows,commands
 
 
@@ -234,14 +271,16 @@ def verify_fsctx(ram,sym,work):
     def require(ok,why):
         if not ok: raise AssertionError("fsctx "+why)
     directory="cpc_fs_directory_enabled" in sym
-    rows,commands=expected(directory)
+    writable="cpc_fs_write_enabled" in sym
+    geometry=json.loads((work/'fswrite_geometry.json').read_text()) if writable else {}
+    rows,commands=expected(directory,writable,**geometry)
     require(ram[sym["fp_done"]]==len(rows),"checkpoint count")
     for i,want in enumerate(rows):
         at=physical(TRACE_PAGES[i//12])+(i%12)*1280
         actual=ram[at:at+len(want)]
         if actual!=want:
             offset=next(j for j,(a,b) in enumerate(zip(actual,want)) if a!=b)
-            raise AssertionError(f'fsctx {inputs(directory)[i]["name"]}: byte {offset} got {actual[offset]:02x} expected {want[offset]:02x}')
+            raise AssertionError(f'fsctx {inputs(directory,writable)[i]["name"]}: byte {offset} got {actual[offset]:02x} expected {want[offset]:02x}')
         require(ram[at+len(want):at+1280]==b"\xD7"*(1280-len(want)),"trace boundary")
     require(int.from_bytes(ram[sym["fp_commands"]:sym["fp_commands"]+2],"little")==commands,"command accounting")
     require(ram[0x10204]==7,"real worker admission")

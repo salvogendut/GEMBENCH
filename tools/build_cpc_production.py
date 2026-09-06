@@ -22,6 +22,7 @@ from cpc_production_loading import LOADING_VARIANTS, emit_vectors as emit_loadin
 from cpc_production_fsctx import FSCTX_VARIANTS, compile_module, emit_vectors as emit_fsctx, files as fsctx_files
 from cpc_fsdir_protocol import emit_vectors as emit_fsdir, files as fsdir_files
 from cpc_fsdir_cases import DIRECTORY_VARIANTS, files as directory_files
+from cpc_fswrite_cases import WRITE_VARIANTS, space as write_space
 import genfont
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,7 +66,8 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
     services = variant in SERVICE_VARIANTS or routing
     fsctx = variant in FSCTX_VARIANTS
     fsdir = variant == "fsctx-protocol"
-    directory = variant in DIRECTORY_VARIANTS
+    writable = variant in WRITE_VARIANTS
+    directory = variant in DIRECTORY_VARIANTS or writable
     loading = variant in LOADING_VARIANTS or fsctx
     registration = variant in REGISTRATION_VARIANTS or services or loading
     lifetime = variant in LIFETIME_VARIANTS or registration
@@ -81,7 +83,7 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
     if variant in REGISTRATION_VARIANTS:
         emit_registration(work / "registration_vectors.inc")
     if fsctx:
-        emit_fsctx(work / "fsctx_vectors.inc", directory)
+        emit_fsctx(work / "fsctx_vectors.inc", directory, writable)
         (work / "fsctx_size.inc").write_text("CPC_FS_MODULE_BYTES equ 1\n")
         if fsdir:
             emit_fsdir(work / "fsdir_vectors.inc")
@@ -111,12 +113,14 @@ def assemble(work: Path, variant="normal", overrides=()) -> dict[str, int]:
         cmd += ["-DCPC_FSDIR_PROTOCOL=1"]
     if directory:
         cmd += ["-DCPC_FS_DIRECTORY=1"]
+    if writable:
+        cmd += ["-DCPC_FS_WRITE=1"]
     if VARIANTS[variant]:
         cmd += [f"-D{VARIANTS[variant]}=1"]
     subprocess.run(cmd, cwd=work, check=True)
     sym = symbols(work / "adapters.sym")
     if fsctx:
-        compile_module(work,sym,ROOT,directory,variant=="fsctx-directory-bad-meta")
+        compile_module(work,sym,ROOT,directory,variant=="fsctx-directory-bad-meta",writable,variant=="fsctx-write-bad-append")
         subprocess.run(cmd,cwd=work,check=True)
         final=symbols(work / "adapters.sym")
         if {k:v for k,v in final.items() if k!="cpc_fs_module_bytes"}!={k:v for k,v in sym.items() if k!="cpc_fs_module_bytes"}:
@@ -147,6 +151,8 @@ def build(variant="normal") -> Path:
     required = (os.environ.get("RASM", "rasm"), "sfdisk", "mkfs.fat", "mcopy", "mmd")
     if variant in DIRECTORY_VARIANTS:
         required += ("mattrib",)
+    if variant in WRITE_VARIANTS:
+        required += ("mtype",)
     for tool in required:
         if not shutil.which(tool):
             raise SystemExit(f"missing {tool}; use distrobox my-distrobox")
@@ -203,6 +209,9 @@ def build(variant="normal") -> Path:
         Path(tmp).replace(image)
     finally:
         Path(tmp).unlink(missing_ok=True)
+    if variant in WRITE_VARIANTS:
+        free_kib,cluster_kib=write_space(image)
+        (work/'fswrite_geometry.json').write_text(json.dumps(dict(free_kib=free_kib,cluster_kib=cluster_kib))+'\n')
     sections = {name: {"base": sym[base], "used": sym[end]-sym[base], "budget": sym[limit]-sym[base]}
                 for name, base, end, limit in (
                     ("scheduler", "cpc_scheduler_begin", "cpc_scheduler_end", "cpc_sched_end"),
@@ -259,6 +268,7 @@ def build(variant="normal") -> Path:
                ROOT / "kernel/core/fsctx_contract.h", ROOT / "kernel/core/fsctx_layout.h",
                ROOT / "tools/cpc_fsdir_protocol.py", ROOT / "lib/gb/crt0.s",
                ROOT / "tools/cpc_fsdir_cases.py", ROOT / "kernel/kc/cpc_fsdir.inc",
+               ROOT / "tools/cpc_fswrite_cases.py", ROOT / "kernel/kc/cpc_fswrite.inc",
                ROOT / "tools/check_app_layout.py"]
     manifest = {"variant": variant, "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "sections": sections, "memory_regions": memory_regions(sym), "image": str(image), "work": str(work),

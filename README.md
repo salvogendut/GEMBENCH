@@ -126,10 +126,13 @@ from M4 and tests independent paths/reads, owner identity, launch handoff and
 cleanup. The [3D-J directory checkpoint](docs/CPC-RESTART-STEP3D-J.md),
 `make diagnostic-cpc-fsdir-1984`, adds independent enumeration, canonical short
 aliases, full-size metadata and batches behind that shared policy. It requires
-the 1984 M4 fix on `fix/289-m4-directory-metadata`; both the unchanged protocol
+the 1984 M4 fix merged in PR #290; both the unchanged protocol
 probe and the 44-checkpoint directory test pass with that rebuilt emulator.
-Writes, free-space reporting, public filesystem and SDK execution integration
-remain open. These are bounded private diagnostics, not a CPC desktop.
+The [3D-K write/free checkpoint](docs/CPC-RESTART-STEP3D-K.md),
+`make diagnostic-cpc-fswrite-1984`, tests shared truncate/append semantics,
+interleaved owner readback and independently verified M4 free space.
+Public filesystem and SDK execution integration remain open. These are bounded
+private diagnostics, not a CPC desktop.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

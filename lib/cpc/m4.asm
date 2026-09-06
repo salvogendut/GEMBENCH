@@ -9,6 +9,8 @@
 ; control/backslash bytes. Namespace/permission policy belongs above this gate.
 ; Zero read validates path but does no I/O; zero replace creates an empty file.
 ; Zero count does not access/validate buffer. Replace requires offset zero.
+; CPC_FS_WRITE additionally enables op 3: open/create and append at actual EOF,
+; also with a zero request offset. The ordinary read/replace ABI is unchanged.
 ; A=status (0 OK,1 short/EOF,2 argument,3 I/O,4 protocol,5 busy,6 context,
 ; 7 offline). DE=actual on OK/EOF, otherwise zero. Other registers volatile.
 ; Reads copy out only after a successful close; writes are NOT transactional.
@@ -68,7 +70,11 @@ storage_gate
                 ldir
                 ld a,(request_packet)
                 dec a
+                ifdef CPC_FS_WRITE
+                cp 3
+                else
                 cp 2
+                endif
                 jp nc,storage_argument
                 ld a,(request_packet+1)
                 cp 1
@@ -120,8 +126,13 @@ storage_path_chars
                 or a
                 jp nz,storage_argument
                 ld a,(request_packet)
+                ifdef CPC_FS_WRITE
+                cp 1
+                jr z,storage_read_offset
+                else
                 cp 2
                 jr nz,storage_read_offset
+                endif
                 ld hl,(request_packet+10)
                 ld de,(request_packet+12)
                 ld a,h
@@ -147,8 +158,13 @@ storage_buffer
                 call storage_span
                 jp nc,storage_argument
                 ld a,(request_packet)
+                ifdef CPC_FS_WRITE
+                cp 1
+                jr z,storage_staged
+                else
                 cp 2
                 jr nz,storage_staged
+                endif
                 ld de,transfer_buffer
                 ldir                        ; stage write while caller still mapped
 storage_staged
@@ -169,6 +185,12 @@ storage_start
                 ld a,1                      ; C_OPEN
                 call storage_command
                 ld a,(request_packet)
+                ifdef CPC_FS_WRITE
+                cp 3
+                ld a,#92                    ; write + open/create + dynamic
+                jr z,storage_open_mode
+                ld a,(request_packet)
+                endif
                 cp 2
                 ld a,#81                    ; read + dynamic descriptor
                 jr nz,storage_open_mode
@@ -198,6 +220,10 @@ storage_open_mode
                 jp z,storage_open_uncertain
                 ld (io_fd),a
                 ld a,(request_packet)
+                ifdef CPC_FS_WRITE
+                cp 3
+                jp z,storage_append
+                endif
                 cp 2
                 jp z,storage_write
                 ld a,5                      ; C_SEEK (32-bit absolute)
@@ -257,6 +283,32 @@ storage_read_copy
                 ld de,transfer_buffer
                 ldir
                 jr storage_close
+                ifdef CPC_FS_WRITE
+storage_append
+                ld a,#11                    ; FSIZE, not the logical context offset
+                call storage_command_fd
+                call storage_send
+                jp nz,storage_close_result
+                ld a,(response_buffer)
+                cp 6
+                jp nz,storage_read_protocol
+                ld hl,(response_buffer+3)
+                ld de,(request_packet+8)
+                add hl,de
+                ld hl,(response_buffer+5)
+                ld de,0
+                adc hl,de
+                jp c,storage_read_error     ; reject size + count overflow
+                ld a,5
+                call storage_command_fd
+                ex de,hl
+                ld hl,response_buffer+3
+                ld bc,4
+                ldir
+                ex de,hl
+                call storage_send_status
+                jp nz,storage_close_result
+                endif
 storage_write
                 ld a,(request_packet+8)
                 or a

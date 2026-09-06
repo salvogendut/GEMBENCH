@@ -11,6 +11,9 @@ CPC_FS_MODULE_LIMIT equ #6000
                 ifdef CPC_FS_DIRECTORY
 cpc_fs_directory_enabled equ 1
                 endif
+                ifdef CPC_FS_WRITE
+cpc_fs_write_enabled equ 1
+                endif
 cpc_fs_ready equ #24AA
 cpc_fs_module_offset equ #24AC
 cpc_fs_module_dest equ #24AE
@@ -75,10 +78,12 @@ cpc_fs_run_module
                 cp 14
                 jr z,cpc_fs_unsupported
                 endif
+                ifndef CPC_FS_WRITE
                 cp 9
                 jr z,cpc_fs_unsupported
                 cp 10
                 jr z,cpc_fs_unsupported
+                endif
                 ld a,(BANK_CUR)
                 push af
                 ld a,CPC_DATA_PAGE
