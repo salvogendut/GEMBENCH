@@ -51,6 +51,10 @@ cpc_font_payload
                 incbin "DEFAULT.FNT"
 cpc_font_end
                 endif
+                ifdef CPC_WM
+                include "../debug/cpc_production/window_probe.asm"
+                include "cpc_window_policy.asm"
+                endif
                 ifdef CPC_PAD_KERNEL
                 ds CPC_KERNEL_END-$,#B9       ; boot stress, NOT real kernel code
                 endif

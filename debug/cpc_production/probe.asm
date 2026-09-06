@@ -150,7 +150,9 @@ cpc_verify_io
                 inc hl
                 ld (CPC_IO_CHECKS),hl
                 ifdef CPC_DRAWING
+                ifndef CPC_WM
                 call cpc_drawing_case
+                endif
                 endif
                 ld a,(CPC_ROOT_TURNS)
                 cp 64
@@ -161,6 +163,9 @@ cpc_verify_io
                 ld (CPC_WORKER_COUNTER),hl       ; wrapping compute counter
                 ld a,#C0
                 call foundation_bank_set
+                ifdef CPC_WM
+                call cpc_window_probe
+                endif
                 if CPC_FAULT_GUARD
                 ld hl,CPC_MAIN_STACK-1
                 inc (hl)

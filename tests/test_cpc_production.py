@@ -16,11 +16,45 @@ from build_cpc_production import VARIANTS, assemble, memory_regions, symbols
 from test_cpc_production_1984 import verify
 from cpc_production_drawing import DRAWING_VARIANTS, cases, expected_frames, verify_drawing
 from cpc_graphics_fixture import address
+from cpc_production_windows import (WINDOW_VARIANTS, cases as window_cases,
+    expected_frames as window_frames, verify_windows, NATIVES)
 
 RASM = shutil.which(os.environ.get("RASM", "rasm"))
 
 
 class ProductionSourceTests(unittest.TestCase):
+    def test_window_integration_uses_shared_policy_and_software_pointer(self):
+        code = (ROOT / "kernel/cpc_window_policy.asm").read_text()
+        self.assertEqual(re.findall(r'include "core/([^\"]+)"', code), [
+            "window_hit_test.asm", "window_focus_click.asm", "window_focus_map.asm",
+            "window_raise.asm", "window_zorder.asm", "window_damage.asm",
+            "window_focus_damage.asm", "window_geometry.asm", "window_repaint.asm"])
+        provider = (ROOT / "kernel/cpc_window_provider.inc").read_text()
+        self.assertIn("CORE_REPAINT_ERASE_POINTER equ 1", provider)
+        self.assertIn("CORE_REPAINT_REGIONS equ 1", provider)
+        self.assertNotIn("MSX_", provider)
+        adapter = (ROOT / "lib/cpc/window.asm").read_text()
+        self.assertEqual(adapter.count("call clip_axis"), 2)
+        self.assertEqual(adapter.count("ld a,(CORE_POINTER_PAINTLOCK)"), 2)
+
+    def test_window_oracle_tracks_only_effective_damage(self):
+        frames = {f["name"]: f for f in window_frames()}
+        self.assertEqual(len(frames), 16)
+        self.assertEqual(frames["initial"]["writes"][4], 0)  # completely covered
+        self.assertEqual(frames["same-focus"]["writes"], [0]*5)
+        self.assertEqual(frames["no-hit"]["writes"], [0]*5)
+        self.assertEqual(frames["empty-damage"]["writes"], [0]*5)
+        self.assertEqual(frames["tiny-damage"]["writes"], [20,0,0,0,0])
+        self.assertEqual(frames["sibling-focus"]["flags"], 0)
+        self.assertEqual(frames["cross-page-focus"]["flags"], 1)
+        self.assertEqual(frames["return-sibling"]["focus"], 2)
+        self.assertEqual(frames["exposed-focus"]["focus"], 4)
+        self.assertGreater(frames["move-expose"]["writes"][4], 0)
+        gaps = set(range(16384)) - {address(x*4,y) for x in range(80) for y in range(200)}
+        for f in frames.values():
+            for offset in gaps:
+                self.assertEqual(f["frame"][offset], ((offset+0xC000)>>8) ^ (offset&255))
+
     def test_common_hardware_leaves_have_one_source(self):
         for wrapper, leaf in (("bank.asm", "bank.asm"), ("graphics_driver.asm", "graphics.asm"),
                               ("storage_driver.asm", "m4.asm"), ("graphics_gate.asm", "graphics_gate.asm")):
@@ -122,6 +156,66 @@ class ProductionAssemblyTests(unittest.TestCase):
         assemble(again)
         for file in ("CORE.RAW", "SCHED.RAW", "HARDWARE.RAW", "LOADER.RAW", "BOOT.RAW"):
             self.assertEqual((again / file).read_bytes(), (self.root / "normal" / file).read_bytes())
+
+    def test_window_link_budgets_guards_and_determinism(self):
+        for variant in WINDOW_VARIANTS:
+            sym = self.maps[variant]
+            self.assertLess(sym["cpc_window_policy_end"]-sym["cpc_window_policy_begin"], 1024)
+            self.assertLessEqual(sym["cpc_draw_trace_end"], sym["cpc_wm_guard"])
+            self.assertLessEqual(sym["cpc_wm_end"]+16, sym["cpc_future_state_end"])
+            self.assertLessEqual(sym["cpc_wm_trace"]+32*len(window_cases()), sym["cpc_wm_trace_end"])
+            self.assertLessEqual(sym["cpc_wm_trace_end"], sym["cpc_adapter_state_end"])
+        again = self.root / "windows-again"
+        assemble(again, "windows")
+        for file in ("CORE.RAW", "SUPPORT.RAW", "SCHED.RAW", "BOOT.RAW"):
+            self.assertEqual((again / file).read_bytes(), (self.root / "windows" / file).read_bytes())
+
+    def test_window_checker_rejects_pixels_overdraw_callback_and_state_faults(self):
+        # Synthetic HOST checker test only; M4 runner supplies execution evidence.
+        sym, work = self.maps["windows"], self.root / "windows"
+        ram = bytearray(512*1024)
+        frames = window_frames()
+        ram[sym["wm_fixture_done"]] = ram[sym["draw_capture_count"]] = len(frames)
+        for i, f in enumerate(frames):
+            ram[0x14000+i*16384:0x14000+(i+1)*16384] = f["frame"]
+            focus, order = f["focus"], f["order"]
+            trace = struct.pack("<5H", *f["writes"]) + bytes(bool(v) for v in f["writes"])
+            trace += bytes((focus,f["flags"],*order,*([0]*(5-len(order))),NATIVES[focus]))
+            trace += struct.pack("<HHBHH",0x4500+focus*16,0 if not focus else 0x4600+focus*16,
+                                 len(order),f["saves"],f["restores"])
+            ram[sym["cpc_wm_trace"]+32*i:sym["cpc_wm_trace"]+32*(i+1)] = trace
+        ram[0xC000:0x10000] = frames[-1]["frame"]
+        for name in ("cpc_wm_guard","cpc_wm_end","cpc_draw_state_guard","cpc_draw_state_end"):
+            ram[sym[name]:sym[name]+16] = b"\xD7"*16
+        ram[sym["pointer_visible"]] = 1
+        ram[sym["core_clip_x"]:sym["core_clip_x"]+4] = bytes((0,0,80,200))
+        raw = (work / "SUPPORT.RAW").read_bytes()
+        ram[sym["cpc_support_base"]:sym["cpc_support_base"]+len(raw)] = raw
+        font = (work / "DEFAULT.FNT").read_bytes()
+        ram[0x7C000:0x80000] = font+b"\xA9"*(16384-len(font))
+        ram[sym["core_page_total"]], ram[sym["core_page_free"]] = 28,10
+        for name, values in (("core_page_state", [1]*18), ("core_page_gen", [1]*18),
+                             ("core_page_owner", [1,2]+[1]*16), ("core_page_owner_gen", [1]*18),
+                             ("core_page_purpose", [1,1]+[6]*16)):
+            ram[sym[name]:sym[name]+32] = bytes(values+[0]*14)
+        ram[0x10202] = 2
+        ram[sym["draw_irq_total"]] = 1
+        self.assertEqual(verify_windows(ram,sym,work)["window_checkpoints"],16)
+        for at, message in ((0x14000,"pixels"),(sym["cpc_wm_trace"],"damage writes"),
+                            (sym["cpc_wm_trace"]+14,"callback visibility"),
+                            (sym["cpc_wm_trace"]+15,"focus/z-order"),
+                            (sym["cpc_wm_trace"]+22,"mapping/menu"),
+                            (sym["cpc_wm_trace"]+28,"pointer pass lock"),
+                            (sym["cpc_wm_end"],"guard"),(sym["core_pointer_paintlock"],"pointer state"),
+                            (sym["core_clip_x"],"full clip"),(sym["universal_parameters"],"SUPPORT.RAW"),
+                            (sym["core_page_owner"],"metadata"),(sym["core_page_free"],"accounting"),
+                            (0x7C020,"font/service"),(0x10202,"actual worker"),
+                            (0x10200,"worker ran"),
+                            (sym["draw_irq_total"],"IRQ coverage")):
+            damaged = bytearray(ram)
+            damaged[at] ^= 1
+            with self.subTest(at=at), self.assertRaisesRegex(AssertionError,message):
+                verify_windows(damaged,sym,work)
 
     def test_drawing_sections_and_profile_are_bounded(self):
         for variant in DRAWING_VARIANTS:

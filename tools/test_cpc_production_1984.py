@@ -16,6 +16,7 @@ import time
 from build_cpc_production import ROOT, VARIANTS, build, symbols
 from test_cpc_foundation_1984 import snapshot
 from cpc_production_drawing import verify_drawing
+from cpc_production_windows import verify_windows
 
 
 def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
@@ -68,7 +69,8 @@ def verify(data: bytes, sym: dict[str, int], work: Path) -> dict:
         if ram[sym[base]:sym[base]+len(code)] != code:
             raise AssertionError(f"{file} code changed")
     drawing = "cpc_drawing_begin" in sym
-    drawing_result = verify_drawing(ram, sym, work) if drawing else {}
+    drawing_result = (verify_windows(ram, sym, work) if "cpc_window_probe" in sym else
+                      verify_drawing(ram, sym, work) if drawing else {})
     pixels = ram[0xC000:0x10000]
     if not drawing and pixels != bytes((a >> 8) ^ (a & 255) for a in range(0xC000, 0x10000)):
         raise AssertionError("non-drawing adapter damaged framebuffer or raster gaps")
@@ -152,7 +154,7 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             if (ram[sym["cpc_phase"]], ram[sym["cpc_failure"]]) != (0xFF, 8):
                 raise AssertionError("undersized memory not rejected by CPC admission")
             result = {"expected_failure": "128-KiB memory rejected"}
-        elif variant in ("normal", "full-slot", "drawing"):
+        elif variant in ("normal", "full-slot", "drawing", "windows"):
             result = verify(data, sym, work)
             send("wait frames 150 200")
             send(f"snapshot-save {artifacts / 'stable.sna'}")
@@ -164,7 +166,9 @@ def run(variant="normal", emulator=ROOT.parent / "1984/1984", memory=512) -> Pat
             except AssertionError as error:
                 expected = {"bad-guard": "main stack guard damaged", "bad-restore": "failure=6",
                             "drawing-bad-clip": "drawing checkpoint clipped-line",
-                            "drawing-bad-copy": "drawing checkpoint text-under-pointer"}[variant]
+                            "drawing-bad-copy": "drawing checkpoint text-under-pointer",
+                            "windows-bad-clip": "window checkpoint initial",
+                            "windows-bad-pointer": "window checkpoint initial"}[variant]
                 if expected not in str(error): raise
                 result = {"expected_failure": str(error)}
             else: raise AssertionError("corrupt adapter unexpectedly passed")

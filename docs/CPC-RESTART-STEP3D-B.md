@@ -166,8 +166,9 @@ diagnostic, not an interactive Desktop/Clock/Calculator build.
 
 ## Still required before the first shared-core window
 
-Connect and measure the remaining shared lifecycle/close, focus/z-order,
-damage/repaint, deferred/timer-consumer and FS/provider code in the complete
+Follow-up [3D-C](CPC-RESTART-STEP3D-C.md) now validates the shared focus/z-order
+and damage/repaint units with native fixtures on CPC. Connect and measure the
+remaining lifecycle/close, production chrome, deferred/timer-consumer and FS/provider code in the complete
 CPC kernel/module layout. The linked identity subset is not full application
 lifetime or teardown. Root input/event translation, mouse-device handling,
 time-of-day policy, public drawing/storage bindings and responsive I/O also
