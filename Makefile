@@ -26,6 +26,10 @@ all: msx
 .PHONY: diagnostic-cpc-menus-1984
 .PHONY: diagnostic-cpc-accessories-1984
 .PHONY: diagnostic-cpc-clock-1984
+.PHONY: diagnostic-cpc-desk-1984
+diagnostic-cpc-desk-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desk
+
 diagnostic-cpc-clock-1984:
 	$(PYTHON) tools/test_cpc_runtime_1984.py --clock
 

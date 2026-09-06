@@ -56,15 +56,21 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
             for xx in range(x,x+w):
                 at=address(xx*4,yy);result[at]=surface[at]
     if popup is not None:
-        x,hot,*custom=popup
-        labels=custom[0] if custom else ('Toggle','Cancel')
-        y,w,h=8,max((len(s)*6+3)//4+4 for s in labels),len(labels)*10+4
+        native=isinstance(popup,dict)
+        if native:
+            x,y,hot,labels=(popup[k] for k in ('x','y','hot','labels'))
+        else:
+            x,hot,*custom=popup
+            labels=custom[0] if custom else ('Toggle','Cancel')
+            y=8
+        w=max((len(s)*6+(0 if native else 3))//4+4 for s in labels)
+        h=len(labels)*10+4
         fill(result,x,y,w,h,1)
         for rx,ry,rw,rh in ((x,y,w,1),(x,y+h-1,w,1),(x,y,1,h),(x+w-1,y,1,h)):
             fill(result,rx,ry,rw,rh,2)
         for i,label in enumerate(labels):
             paper,pen=(2,1) if i==hot else (1,2)
-            fill(result,x+1,y+2+i*10,w-2,10,paper)
+            if not native: fill(result,x+1,y+2+i*10,w-2,10,paper)
             text(result,x+1,y+2+i*10,label,pen,paper)
     px,py=pointer
     for y,row in enumerate(CURSOR):

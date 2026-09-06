@@ -21,7 +21,6 @@ def assemble(work: Path, overrides=()):
     work.mkdir(parents=True, exist_ok=True)
     genfont.main(["genfont", str(work / "DEFAULT.FNT")])
     (work / "fsctx_size.inc").write_text("CPC_FS_MODULE_BYTES equ 1\n")
-    (work / "ROOTBAR.BIN").write_bytes(bytes(1536))
     (work / "TIMER.BIN").write_bytes(bytes(116))
     command = [os.environ.get("RASM", "rasm"), str(ROOT / "kernel/cpc_runtime.asm"),
                "-s", "-sq", "-o", "runtime", f"-I{work}", *overrides]
@@ -79,6 +78,7 @@ def build():
     files = {"BOOT.BIN": bytes(boot), "CORE.BIN": (work / "CORE.RAW").read_bytes(),
              "BOOT.BAS": b'10 MEMORY &7FFF\r\n20 LOAD"BOOT.BIN",&8000\r\n30 CALL &8000\r\n',
              "FSCTX.BIN": (work / "FSCTX.BIN").read_bytes(),
+             "GBENCH/ROOTUI.BIN": (work / "ROOTBAR.BIN").read_bytes(),
              "GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
              "GBENCH/MENUPRBE.APP": menuapp.read_bytes(),

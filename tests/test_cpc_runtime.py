@@ -55,16 +55,24 @@ class RuntimeTests(unittest.TestCase):
         bar=json.loads((self.work/'bar_layout.json').read_text())
         self.assertLessEqual(bar['used'],bar['budget'])
         self.assertLessEqual(bar['data_used'],bar['data_budget'])
-        self.assertEqual(bar['data_base'],0x4000) # private root C0, never framebuffer
-        self.assertEqual(raw[s['cpc_bar_payload']-0x8000:s['cpc_bar_end']-0x8000],
-                         (self.work/'ROOTBAR.BIN').read_bytes())
+        self.assertEqual(bar['data_base'],0x6000) # root C0, separate from code and F7 I/O
+        self.assertEqual(bar['base'],0x4000)
+        self.assertEqual(len((self.work/'ROOTBAR.BIN').read_bytes()),s['cpc_bar_end']-s['cpc_bar_payload'])
+        self.assertLessEqual(s['cpc_bar_end'],s['cpc_bar_data'])
+        self.assertLessEqual(s['cpc_bar_data_end'],0x6100)
+        self.assertGreaterEqual(s['cpc_root_popup'],0x6300)
+        self.assertLessEqual(s['cpc_root_popup_end'],0x7F00)
 
     def test_repeatable_build_and_bad_budget_rejection(self):
         again=self.work/'again';assemble(again)
         for name in ('CORE.RAW','SUPPORT.RAW','SCHED.RAW','HARDWARE.RAW','FSCTX.BIN','ROOTBAR.BIN'):
             self.assertEqual((self.work/name).read_bytes(),(again/name).read_bytes())
         with self.assertRaises(subprocess.CalledProcessError):
-            assemble(self.work/'too-small',('-DCPC_KERNEL_END=#A000',))
+            assemble(self.work/'too-small',(f'-DCPC_KERNEL_END={0xA000}',))
+        with self.assertRaises(AssertionError):
+            assemble(self.work/'root-too-small',(f'-DCPC_ROOT_CODE_END={0x4400}',))
+        with self.assertRaises(subprocess.CalledProcessError):
+            assemble(self.work/'root-overlap',(f'-DCPC_ROOT_CODE_END={0x6100}',))
 
     def test_pixel_observer_rejects_content_chrome_exposure_and_bar_damage(self):
         # Synthetic host observations challenge the checker; never injected into CPC.

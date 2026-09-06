@@ -1091,10 +1091,7 @@ static void sys_action(unsigned char sel)
 }
 
 #ifdef GB_DESK_ACCESSORIES
-static void accessory_action(unsigned char sel)
-{
-    if (sel < GB_DESK_ACCESSORY_COUNT) want_accessory = (unsigned char)(sel + 1);
-}
+#include "core/accessory_menu.inc"
 
 /* Activate the exact live accessory before considering mapper capacity.  Only
    absence launches a normal banked APP; a live target's explicit error never
@@ -1102,15 +1099,7 @@ static void accessory_action(unsigned char sel)
 #include "core/accessory_open.inc"
 #endif
 
-static void desktop_menu_init(void)
-{
-    gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
-#ifdef GB_DESK_ACCESSORIES
-    gb_menu_add("Desk", gb_desk_accessory_labels, GB_DESK_ACCESSORY_COUNT,
-                accessory_action);
-#endif
-    gb_menu_add("System", sys_items, 7, sys_action);
-}
+#include "core/menu_init.inc"
 
 /* on_event: kernel callback (issue #32). Fires when the user clicks the
    kernel-owned top bar; proves the kernel->app round-trip by showing the
@@ -1224,11 +1213,7 @@ static void on_frame(void)
         }
         repaint_stack();                   /* restore existing windows and widen the popup clip */
 #ifdef GB_DESK_ACCESSORIES
-        if (want_accessory) {
-            unsigned char index = (unsigned char)(want_accessory - 1);
-            want_accessory = 0;
-            open_accessory(index);
-        }
+#include "core/accessory_pending.inc"
 #endif
         if (want_settings) {                  /* System>Settings: now safe to open on top (#129) */
             want_settings = 0;

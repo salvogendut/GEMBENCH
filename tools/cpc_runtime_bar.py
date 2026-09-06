@@ -1,4 +1,4 @@
-"""Link the existing Desktop C bar as a bounded resident kernel component."""
+"""Link the shared Desktop menu/bar component in the bounded native root page."""
 import os
 from pathlib import Path
 import shutil
@@ -24,10 +24,18 @@ def compile_bar(work, sym, root):
                     '-I', str(root / 'lib/gb'), '-c', str(root / 'kernel/kc/cpc_root_bar.c'),
                     '-I', str(root / 'include/gembench'),
                     '-o', 'bar.rel'], cwd=work, check=True)
+    for source, output, defs in (
+            ('gbdoc.c', 'doc.rel', ['-DGBDOC_MENU_ONLY']),
+            ('gbdlg.c', 'popup.rel', [f'-DGB_POPUP_BUFFER={sym["cpc_root_popup"]}',
+                                     f'-DGB_POPUP_CAPACITY={sym["cpc_root_popup_end"]-sym["cpc_root_popup"]}'])):
+        subprocess.run([sdcc, '-mz80', '--std-c99', '--opt-code-size', '--fomit-frame-pointer',
+                        *defs, '-I', str(root/'lib/gb'), '-c', str(root/'lib/gb'/source),
+                        '-o', output], cwd=work, check=True)
     base, end = sym['cpc_bar_payload'], sym['cpc_bar_end']
     data, limit = sym['cpc_bar_data'], sym['cpc_bar_data_end']
     subprocess.run([sdcc, '-mz80', '--no-std-crt0', '--code-loc', hex(base),
                     '--data-loc', hex(data), 'bar_entry.rel', 'bar.rel', 'bar_lib.rel', 'bar_defer.rel',
+                    'doc.rel', 'popup.rel',
                     '-o', 'bar.ihx'], cwd=work, check=True)
     areas = read_areas(work / 'bar.map')
     for name, (address, size) in areas.items():
@@ -38,9 +46,10 @@ def compile_bar(work, sym, root):
             raise AssertionError('Desktop bar must not require CRT initialization')
     subprocess.run([str(bindir / 'makebin'), '-s', '65536', '-p', 'bar.ihx', 'bar.bin'], cwd=work, check=True)
     raw = (work / 'bar.bin').read_bytes()[base:]
-    if not 12 <= len(raw) <= end-base:
+    if not 21 <= len(raw) <= end-base:
         raise AssertionError('Desktop bar binary exceeds resident slot')
     (work / 'ROOTBAR.BIN').write_bytes(raw.ljust(end-base, b'\0'))
     return dict(base=base, used=len(raw), budget=end-base,
                 data_base=data, data_used=sum(n for k, (_, n) in areas.items() if k not in LOADED_AREAS),
-                data_budget=limit-data)
+                data_budget=limit-data, popup_base=sym['cpc_root_popup'],
+                popup_budget=sym['cpc_root_popup_end']-sym['cpc_root_popup'])

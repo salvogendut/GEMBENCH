@@ -67,12 +67,15 @@ cpc_runtime_start
                 call foundation_bank_set
                 call cpc_fs_load_module
                 jp nc,cpc_runtime_failed
+                call cpc_desktop_load
+                jp nc,cpc_runtime_failed
                 ld hl,cpc_bar_data
                 ld de,cpc_bar_data+1
                 ld bc,cpc_bar_data_end-cpc_bar_data-1
                 ld (hl),0
                 ldir                           ; explicit native root BSS initialization
                 call cpc_bar_payload          ; initialize root-owned bar state
+                call cpc_bar_payload+12       ; actual Desktop Desk registration
                 ; Palette is hardware-only: blue, white, black, bright red.
                 ld hl,cpc_runtime_palette
                 ld d,0
@@ -118,6 +121,7 @@ cpc_runtime_failed
                 halt
                 jr cpc_runtime_failed
 cpc_root_idle
+                call cpc_bar_payload+15       ; same gb_doc event/popup/activation path
                 call #8045                   ; GB_GETKEY, root launcher only
                 or a
                 ret z
@@ -287,7 +291,34 @@ cpc_root_paint
                 jp cpc_bar_payload+3
 cpc_root_desc
                 db 0,0,CPC_COLUMNS,CPC_LINES
-                dw cpc_root_idle,cpc_root_paint,cpc_root_idle,0
+                dw cpc_root_idle,cpc_root_paint,cpc_root_event,0
+cpc_root_event
+                jp cpc_bar_payload+18
+; Native trusted root component; reuse the exact M4 application reader. Its
+; load envelope stops before the root snapshot. Reject any length other than
+; the budgeted/padded module BEFORE initialization or execution.
+cpc_desktop_load
+                ld hl,cpc_desktop_name
+                ld de,fs_req_name
+                ld bc,11
+                ldir
+                ld hl,CPC_APP_BASE
+                ld (fs_load_dst),hl
+                ld hl,APP_LOAD_MAX
+                ld (fs_load_max),hl
+                call fs_load_sys
+                ret nc
+                ld hl,(fs_ent_size)
+                ld de,cpc_bar_end-cpc_bar_payload
+                or a
+                sbc hl,de
+                jr nz,cpc_desktop_invalid
+                scf
+                ret
+cpc_desktop_invalid
+                or a
+                ret
+cpc_desktop_name db "ROOTUI  BIN"
 cpc_runtime_app db "ABIPROBEAPP"
 cpc_runtime_fsapp db "FSPROBE APP"
 cpc_runtime_menuapp db "MENUPRBEAPP"

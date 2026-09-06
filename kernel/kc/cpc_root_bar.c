@@ -1,8 +1,9 @@
-/* Native kernel integration of the existing Desktop bar, NOT a CPC Desktop
- * APP or a new portable ABI. Code is resident; private state belongs to the
- * kernel root's C0 page. Only the root loop / root DRAW may enter this module.
- * Replace this binding when the complete shared Desktop becomes the root. */
+/* Native integration of the shared Desktop root menu/bar, not another Desktop
+ * or a portable APP. Code and state now belong to root C0; the fixed kernel
+ * loads the bounded module before callbacks run. Assets/File Manager follow. */
 #include "gb.h"
+#define GB_DESK_ACCESSORIES 1
+#define DESKTOP_SYSTEM_MENU 0 /* its native providers are not qualified yet */
 #define GB_DEFER_MESSAGES 1
 #include "gbdefer.h"
 #include "gbshell.h"
@@ -15,6 +16,8 @@
 #define CLK_COL (GB_COLS - 12)
 static unsigned int ss_idle;
 static unsigned char ss_lmx, ss_lmy;
+static const gb_doc_t deskdoc = { 0 };
+static unsigned char want_accessory;
 
 #include "../../apps/desktop/core/bar_render.inc"
 
@@ -40,12 +43,34 @@ static unsigned char cpc_accessory_capacity(void)
 }
 static void cpc_accessory_full_alert(const char *first, const char *second)
 {
-    (void)first; (void)second;
+    const char *const rows[2] = { first, second };
     cpc_accessory_full = 1;
+    gb_popup(23, 84, rows, 2);
 }
 #define gb_wm_full cpc_accessory_capacity
 #define gb_alert cpc_accessory_full_alert
 #include "../../apps/desktop/core/accessory_open.inc"
+#include "../../apps/desktop/core/accessory_menu.inc"
+#include "../../apps/desktop/core/menu_init.inc"
+
+void cpc_desktop_init(void)
+{
+    desktop_menu_init();
+}
+
+void cpc_desktop_event(void)
+{
+    gb_doc_event();
+}
+
+void cpc_desktop_frame(void)
+{
+    if (gb_doc_frame()) {
+        /* Desk has no content mutation: the shared popup already restored its
+         * save-under. Launch/activation is the only resulting window damage. */
+#include "../../apps/desktop/core/accessory_pending.inc"
+    }
+}
 
 void cpc_desk_calculator(void)
 {

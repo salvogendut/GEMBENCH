@@ -145,7 +145,12 @@ accessory activation: press **F7** in that M4 runtime, or run
 timer collector: **F2** opens Clock, **S** toggles seconds, and
 `make diagnostic-cpc-clock-1984` checks background updates, occlusion and
 pointer save-under. The same updated Clock binary is tested on CPC and MSX2;
-the complete Desktop/Desk menu and File Manager remain next.
+the complete Desktop and File Manager remain pending.
+[3D-Q](docs/CPC-RESTART-STEP3D-Q.md) adds the real shared **Desk** menu on a
+bounded root page: close ABI Probe with **Escape** or click the background,
+then choose **Desk → Clock / Calculator**. Run `make diagnostic-cpc-desk-1984`
+for its M4 regression. System/Settings, assets and File Manager remain gated;
+this is not yet the full CPC Desktop.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

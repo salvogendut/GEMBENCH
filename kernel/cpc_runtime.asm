@@ -64,15 +64,23 @@ cpc_font_payload
                 incbin "DEFAULT.FNT"
 cpc_font_end
                 include "../lib/cpc/cursor.inc"
-; Native root binding for the same Desktop bar C policy. Reserve a fixed
-; resident slot for the two-pass C/assembly link; bytes are loaded once in
-; CORE.BIN, never copied to the framebuffer or duplicated in an APP page.
-cpc_bar_data equ #4000         ; kernel root C0 only, not live in APP banks
-cpc_bar_data_end equ #4020
-cpc_bar_payload
-                incbin "ROOTBAR.BIN"
-cpc_bar_end
-                assert cpc_bar_end-cpc_bar_payload==1536,"bar code reservation"
+; Shared Desktop root component, M4-loaded into its already-owned C0 page.
+; It no longer consumes fixed resident kernel space. All callbacks map root
+; first; code, mutable state, diagnostic scratch and popup pixels are disjoint.
+cpc_bar_payload equ #4000
+                ifndef CPC_ROOT_CODE_END
+CPC_ROOT_CODE_END equ #6000
+                endif
+cpc_bar_end equ CPC_ROOT_CODE_END
+cpc_bar_data equ #6000
+cpc_bar_data_end equ #6100
+cpc_root_popup equ #6400
+cpc_root_popup_end equ CPC_APP_LIMIT
+                assert cpc_bar_payload==CPC_APP_BASE,"root loader start mismatch"
+                assert cpc_bar_end<=cpc_bar_data,"root code/data overlap"
+                assert cpc_bar_data_end<=#6100,"root data/diagnostic scratch overlap"
+                assert #6300<=cpc_root_popup,"root scratch/popup overlap"
+                assert cpc_root_popup_end<=CPC_APP_LIMIT,"root popup/snapshot overlap"
 cpc_kernel_used_end
                 assert $<=CPC_KERNEL_END,"unified runtime exceeds high kernel"
                 save "CORE.RAW",cpc_kernel_begin,$-cpc_kernel_begin

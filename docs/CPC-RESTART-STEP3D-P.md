@@ -163,6 +163,11 @@ built, matching MSX reference card, run
 
 ## Next
 
+Follow-up [3D-Q](CPC-RESTART-STEP3D-Q.md) now provides the real shared Desk menu
+and relocates the native root component into its owned C0 page. Its measured
+allocations supersede the root-helper/fixed-kernel budgets above; System and
+the complete Desktop/File Manager still need their native providers.
+
 Integrate the real Desktop root/UI and Desk menu, then its assets and File
 Manager/M4 navigation, resolving their remaining native service bindings in the
 same budgeted runtime. Do not grow the private F-key launcher into another

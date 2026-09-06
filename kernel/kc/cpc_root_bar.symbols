@@ -6,3 +6,14 @@ gb_time
 gb_mx
 gb_my
 gb_wm_open
+gb_menu
+gb_frame
+gb_textrev
+gb_poll
+gb_saverect
+gb_restorerect
+gb_wm_damage
+gb_wm_x
+gb_wm_y
+gb_wm_w
+gb_wm_h

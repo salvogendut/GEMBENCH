@@ -51,8 +51,12 @@ static void pop_row(unsigned char x, unsigned char y,
  * transfer scratch instead of permanently consuming 2.5 KiB of GBUI.MOD's page.
  * GB_COPYMAX also lets the taller file picker restore cleanly instead of falling
  * back to an erase/repaint path. */
-#define POP_BUFSZ GB_COPYMAX
-#define pop_under ((unsigned char *)gb_copybuf)
+#ifndef GB_POPUP_BUFFER
+#define GB_POPUP_BUFFER gb_copybuf
+#define GB_POPUP_CAPACITY GB_COPYMAX
+#endif
+#define POP_BUFSZ GB_POPUP_CAPACITY
+#define pop_under ((unsigned char *)GB_POPUP_BUFFER)
 
 /* gb_popup: THE GEOBENCH dropdown menu - one implementation every menu uses (the
  * desktop's System menu and every app's title menus), so they all look and behave

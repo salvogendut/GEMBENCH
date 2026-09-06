@@ -35,6 +35,7 @@ def integrity(data, sym, work):
         used[stem] = hi-lo-next((i for i,b in enumerate(ram[lo:hi]) if b!=0xA6),hi-lo)
         if used[stem] >= hi-lo: raise AssertionError(f'{stem} stack exhausted')
     for name,base in (('CORE.RAW',0x8000),('SCHED.RAW',0x2900),('HARDWARE.RAW',0x3800),
+                      ('ROOTBAR.BIN',0x4000),
                       ('SUPPORT.RAW',0x400),('FSCTX.BIN',0x7C400),('DEFAULT.FNT',0x7C000)):
         expected = (work/name).read_bytes()
         actual = bytearray(ram[base:base+len(expected)])
@@ -49,12 +50,21 @@ def integrity(data, sym, work):
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None):
     media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-'))
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(manifest['image']).read_bytes())
+    if root_fault:
+        # Corrupt ONLY the private M4 image, never mounted/user/release media.
+        target=['-i',str(image)+'@@16384']
+        subprocess.run(['mdel',*target,'::/GBENCH/ROOTUI.BIN'],check=True)
+        if root_fault!='missing':
+            module=(work/'ROOTBAR.BIN').read_bytes()
+            invalid=artifacts/'invalid-root.bin'
+            invalid.write_bytes(module[:-1] if root_fault=='short' else module+b'\0')
+            subprocess.run(['mcopy',*target,str(invalid),'::/GBENCH/ROOTUI.BIN'],check=True)
     config=artifacts/'1984.conf'
     config.write_text(f'[machine]\nmodel=6128\nmemory=512\n[hardware]\nmx4=true\nm4=true\n'
                       f'm4_path=\nm4_image={image}\nalbireo=false\nsymbiface_ide=false\n[advanced]\ndebug=true\n')
@@ -127,8 +137,26 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         receive('pilot PTY:',15)
         for _ in range(30):
             wait(100);data=read('boot');_,ram=snapshot(data)
-            if ram[sym['cpc_runtime_status']] == 1: break
-            if ram[sym['cpc_runtime_status']] == 255: raise AssertionError('runtime boot failure')
+            if ram[sym['cpc_runtime_status']] == 1:
+                if root_fault: raise AssertionError('invalid root module executed')
+                break
+            if ram[sym['cpc_runtime_status']] == 255:
+                if not root_fault: raise AssertionError('runtime boot failure')
+                if ram[sym['cpc_runtime_launches']] or ram[sym['sched_fault']]:
+                    raise AssertionError('invalid root module crossed boot boundary')
+                for name,base in (('CORE.RAW',0x8000),('SCHED.RAW',0x2900),('HARDWARE.RAW',0x3800)):
+                    expected=(work/name).read_bytes()
+                    if ram[base:base+len(expected)]!=expected: raise AssertionError('boot failure damaged '+name)
+                for stem in ('main','irq','tmp'):
+                    lo,hi=sym[f'cpc_{stem}_stack'],sym[f'cpc_{stem}_top']
+                    if ram[lo-16:lo]!=b'\xD7'*16 or ram[hi:hi+16]!=b'\xD7'*16:
+                        raise AssertionError('boot failure stack guard')
+                before=bytes(ram);wait(100);_,after=snapshot(read('rejected'))
+                if bytes(after)!=before: raise AssertionError('failed boot resumed execution')
+                report=dict(expected_failure=root_fault,sections=manifest['sections'])
+                (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+                print('PASS root module rejection '+json.dumps(report),flush=True)
+                return artifacts
         else: raise AssertionError('runtime boot timeout')
         wait(50);ram=checked('opened')
         if ram[sym['wm_nwin']]!=2 or ram[sym['wm_focus']]!=1: raise AssertionError('APP failed to open/focus')
@@ -136,6 +164,10 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         if ram[entry+1:entry+5]!=bytes((11,66,58,68)): raise AssertionError('wrong universal geometry')
         app=(media/'CARD/GBENCH/ABIPROBE.APP').read_bytes();base=physical(ram[entry])
         if ram[base:base+len(app)]!=app: raise AssertionError('loaded APP differs')
+        if desk:
+            from cpc_runtime_desk import run_desk
+            return run_desk(ROOT,media,manifest,work,sym,artifacts,image,emulator,
+                            send,wait,read,key,move)
         if clock:
             from cpc_runtime_clock import run_clock
             return run_clock(ROOT,media,manifest,work,sym,artifacts,image,emulator,
@@ -303,7 +335,7 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         accents[1]=0;order=[0,2,1];ram=checked('focus-exposes-first')
         if ram[sym['wm_focus']]!=1: raise AssertionError('exposed window did not gain focus')
         key('ESCAPE');del rects[1];order=[0,2];ram=checked('close-exposes-second')
-        key('ESCAPE');rects={};order=[0];ram=checked('closed')
+        key('ESCAPE');rects={};order=[0];menu=bytes((1,10))+b'Desk\0\0\0\0';ram=checked('closed')
         if ram[sym['wm_nwin']]!=1 or ram[sym['core_page_free']]!=27: raise AssertionError('close/reclaim')
         key('A');ram=checked('ascii-key')
         if ram[sym['cpc_runtime_key']]!=ord('a'): raise AssertionError('ASCII input differs')
@@ -311,7 +343,7 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         if ram[sym['cpc_runtime_surface_calls']]!=1 or ram[sym['cpc_runtime_surface_status']]:
             raise AssertionError('save/line/restore service failed')
         if ram[0x6100:0x6120]!=bytes(32): raise AssertionError('canonical saved bytes differ')
-        key('F3');rects={1:(11,66,58,68)};order=[0,1];accents={1:0};ram=checked('reopened')
+        key('F3');rects={1:(11,66,58,68)};order=[0,1];accents={1:0};menu=b'\0';ram=checked('reopened')
         if ram[sym['wm_nwin']]!=2 or ram[sym['core_page_free']]!=26: raise AssertionError('reopen/reuse')
         if image.read_bytes()!=Path(manifest['image']).read_bytes(): raise AssertionError('read-only run changed media')
         result=dict(checkpoints=checks,sections=manifest['sections'],app_sha256=hashlib.sha256(app).hexdigest(),
@@ -335,4 +367,6 @@ if __name__=='__main__':
     mode.add_argument('--menus',action='store_true')
     mode.add_argument('--accessories',action='store_true')
     mode.add_argument('--clock',action='store_true')
-    args=parser.parse_args();run(args.emulator.resolve(),args.skip_build,args.filesystem,args.menus,args.accessories,args.clock)
+    mode.add_argument('--desk',action='store_true')
+    mode.add_argument('--root-fault',choices=('missing','short','oversized'))
+    args=parser.parse_args();run(args.emulator.resolve(),args.skip_build,args.filesystem,args.menus,args.accessories,args.clock,args.desk,args.root_fault)
