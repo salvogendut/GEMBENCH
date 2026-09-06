@@ -42,6 +42,7 @@ gb4_crc_value       ds 4,0
                 include "msx_universal_parameters.asm"
                 include "msx_sysinfo_init.asm"
 gb4_gate_end
+                print "GBAPV4 module bytes: ", {int}gb4_gate_end-MSX_GBAP4_GATE
 
                 assert gb4_gate_end<=MSX_SYSINFO_LEGACY,"GBAPV4.MOD overlaps legacy sysinfo view"
                 assert gb4_gate_end-MSX_GBAP4_GATE==MSX_GBAP4_GATE_SIZE,"update module byte count"

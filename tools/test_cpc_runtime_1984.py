@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""Boot the unchanged universal APP on M4; observe, never inject, guest RAM."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import queue
+import subprocess
+import tempfile
+import threading
+import time
+
+from build_cpc_runtime import ROOT, build, symbols
+from test_cpc_foundation_1984 import snapshot
+from cpc_production_lifetime import physical
+from cpc_runtime_pixels import verify_pixels
+from cpc_fswrite_cases import space
+
+
+def integrity(data, sym, work):
+    header, ram = snapshot(data)
+    if len(ram) != 512*1024: raise AssertionError("512 KiB required")
+    if ram[sym['cpc_runtime_status']] != 1: raise AssertionError("runtime failed to boot")
+    if ram[sym['sched_fault']]: raise AssertionError("scheduler fault")
+    for name in ('io_busy','io_offline','io_fd','core_pointer_paintlock'):
+        if ram[sym[name]]: raise AssertionError(f"unfinished transaction: {name}")
+    used = {}
+    for stem in ('main','irq','tmp'):
+        lo, hi = sym[f'cpc_{stem}_stack'], sym[f'cpc_{stem}_top']
+        if ram[lo-16:lo] != b'\xD7'*16 or ram[hi:hi+16] != b'\xD7'*16:
+            raise AssertionError(f'{stem} stack guard')
+        used[stem] = hi-lo-next((i for i,b in enumerate(ram[lo:hi]) if b!=0xA6),hi-lo)
+        if used[stem] >= hi-lo: raise AssertionError(f'{stem} stack exhausted')
+    for name,base in (('CORE.RAW',0x8000),('SCHED.RAW',0x2900),('HARDWARE.RAW',0x3800),
+                      ('SUPPORT.RAW',0x400),('FSCTX.BIN',0x7C400),('DEFAULT.FNT',0x7C000)):
+        expected = (work/name).read_bytes()
+        actual = bytearray(ram[base:base+len(expected)])
+        if name == 'SUPPORT.RAW':
+            for field,n in (('up_request',16),('up_text_copy',49)):
+                off=sym[field]-base
+                actual[off:off+n]=expected[off:off+n]
+        if actual != expected: raise AssertionError(f'{name} code/data changed')
+    if header[0x25] != 1 or header[0x40] != 0x0D: raise AssertionError('IM/ROM/mode')
+    if ram[0x1448:0x144C] != ram[sym['mw_rect']:sym['mw_rect']+4]:
+        raise AssertionError('public managed geometry differs')
+    return ram, used
+
+
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False):
+    media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
+    manifest=json.loads((media/'manifest.json').read_text())
+    work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
+    artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-'))
+    image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(manifest['image']).read_bytes())
+    config=artifacts/'1984.conf'
+    config.write_text(f'[machine]\nmodel=6128\nmemory=512\n[hardware]\nmx4=true\nm4=true\n'
+                      f'm4_path=\nm4_image={image}\nalbireo=false\nsymbiface_ide=false\n[advanced]\ndebug=true\n')
+    pilot=artifacts/'pilot'
+    process=subprocess.Popen([str(emulator),f'--config={config}','--6128','--memory=512',
+                              '--autostart=BOOT',f'--pilot={pilot}','--pilot-replies-stderr','--exit-after=30000'],
+                             cwd=ROOT,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,
+                             text=True,bufsize=1,env={**os.environ,'SDL_VIDEODRIVER':'dummy','SDL_AUDIODRIVER':'dummy'})
+    lines=queue.Queue()
+    def pump():
+        with (artifacts/'1984.log').open('w') as log:
+            for line in process.stderr: log.write(line);log.flush();lines.put(line.rstrip())
+        lines.put(None)
+    reader=threading.Thread(target=pump,daemon=True);reader.start()
+    def receive(pattern,timeout=45):
+        deadline=time.monotonic()+timeout
+        while time.monotonic()<deadline:
+            try: line=lines.get(timeout=.2)
+            except queue.Empty: continue
+            if line is None: raise RuntimeError(f'1984 exited; {artifacts}')
+            if pattern in line: return line
+        raise TimeoutError(f'{pattern}; {artifacts}')
+    def send(command):
+        fd=os.open(pilot,os.O_WRONLY|os.O_NOCTTY)
+        try: os.write(fd,(command+'\n').encode())
+        finally: os.close(fd)
+        reply=receive('1984: pilot reply: ').split('1984: pilot reply: ',1)[1]
+        if not reply.startswith('ok '): raise RuntimeError(reply)
+    def wait(n=30): send(f'wait frames {n} 300')
+    def read(name='steering'):
+        path=artifacts/(name+'.sna');send(f'snapshot-save {path}')
+        return path.read_bytes()
+    def key(name,frames=12):
+        send('key-down '+name);wait(frames);send('key-up '+name)
+        _,r=snapshot(read())
+        at=sym['cpc_runtime_turns'];before=int.from_bytes(r[at:at+2],'little')
+        for _ in range(120):
+            wait(20);_,r=snapshot(read())
+            if (int.from_bytes(r[at:at+2],'little')-before)&65535 >= 5: break
+        else: raise AssertionError('root loop failed to resume after '+name)
+    def state(name):
+        data=read(name);r,used=integrity(data,sym,work)
+        send(f'crop {artifacts/(name+".ppm")} 0 0 768 576 1')
+        print(f'{name}: windows={r[sym["wm_nwin"]]} focus={r[sym["wm_focus"]]} stack={used}',flush=True)
+        return r
+    def move(x,y):
+        for axis,target,negative,positive in (('poll_byte',x,'LEFT','RIGHT'),('poll_line',y,'UP','DOWN')):
+            for _ in range(70):
+                _,r=snapshot(read());delta=target-r[sym[axis]]
+                if abs(delta)<=1: break
+                direction=positive if delta>0 else negative
+                send('key-down '+direction);wait(min(15,max(1,abs(delta)-1)))
+                send('key-up '+direction);wait(8)
+            else: raise AssertionError('pointer steering timeout')
+    rects={1:(11,66,58,68)};order=[0,1];accents={1:0}
+    checks=[]
+    def checked(name):
+        r=state(name)
+        verify_pixels(r,sym,work,rects,order,accents)
+        if r[sym['wm_nwin']]!=len(order) or r[sym['wm_z']:sym['wm_z']+len(order)]!=bytes(order):
+            raise AssertionError(name+': z-order/count')
+        for slot,rect in rects.items():
+            at=sym['wm_table']+25*slot+1
+            if r[at:at+4]!=bytes(rect): raise AssertionError(name+': window geometry')
+        checks.append(name)
+        return r
+    print(f'Unified CPC runtime, M4; artifacts: {artifacts}',flush=True)
+    try:
+        receive('pilot PTY:',15)
+        for _ in range(30):
+            wait(100);data=read('boot');_,ram=snapshot(data)
+            if ram[sym['cpc_runtime_status']] == 1: break
+            if ram[sym['cpc_runtime_status']] == 255: raise AssertionError('runtime boot failure')
+        else: raise AssertionError('runtime boot timeout')
+        wait(50);ram=checked('opened')
+        if ram[sym['wm_nwin']]!=2 or ram[sym['wm_focus']]!=1: raise AssertionError('APP failed to open/focus')
+        entry=sym['wm_table']+25
+        if ram[entry+1:entry+5]!=bytes((11,66,58,68)): raise AssertionError('wrong universal geometry')
+        app=(media/'CARD/GBENCH/ABIPROBE.APP').read_bytes();base=physical(ram[entry])
+        if ram[base:base+len(app)]!=app: raise AssertionError('loaded APP differs')
+        if filesystem:
+            key('F5')
+            ram=state('portable-filesystem')
+            entry=sym['wm_table']+50
+            if ram[sym['wm_nwin']]!=3 or ram[sym['wm_focus']]!=2:
+                raise AssertionError('FSPROBE did not open/focus')
+            at=next(int(line.split()[2],16) for line in
+                    (ROOT/'build/universal-obj/fsprobe/app.noi').read_text().splitlines()
+                    if line.startswith('DEF _fsprobe_state '))
+            appbase=physical(ram[entry]);result=ram[appbase+at-0x4000:appbase+at-0x4000+8]
+            if result[0]!=85: raise AssertionError(f'FSPROBE failed: {list(result)}')
+            if any(ram[sym['core_fsctx_table']+144*i] for i in range(4)):
+                raise AssertionError('FSPROBE leaked contexts')
+            data=subprocess.check_output(['mtype','-i',str(image)+'@@16384','::/UFSTEST/RESULT.BIN'])
+            if data!=b'DONE': raise AssertionError('portable write media readback differs')
+            # Closing the diagnostic must expose precisely the unchanged ABI
+            # Probe/background, including pixels overlaid during filesystem I/O.
+            key('ESCAPE');checked('filesystem-close-exposure')
+            report=dict(checks=result[1],sections=manifest['sections'],
+                        app_sha256=manifest['files']['GBENCH/FSPROBE.APP'],
+                        emulator_sha256=hashlib.sha256(emulator.read_bytes()).hexdigest())
+            (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+            print('PASS portable filesystem '+json.dumps(report),flush=True)
+            return artifacts
+        move(30,100);key('SPACE');accents[1]=1;ram=checked('content-damage')
+        move(25,70)
+        _,r=snapshot(read());grab=(r[sym['poll_byte']],r[sym['poll_line']])
+        send('key-down SPACE');wait(10)
+        move(31,78)
+        _,r=snapshot(read());drop=(r[sym['poll_byte']],r[sym['poll_line']])
+        send('key-up SPACE');wait(60)
+        _,r=snapshot(read());rect=tuple(r[entry+1:entry+5])
+        expected=(max(0,min(22,11+drop[0]-grab[0])),max(8,min(132,66+drop[1]-grab[1])),58,68)
+        if rect!=expected or rect==rects[1]: raise AssertionError('title drag geometry differs')
+        rects[1]=rect;ram=checked('moved')
+        key('F4');ram=checked('storage-while-windowed')
+        if ram[sym['cpc_runtime_fs_calls']]!=1 or ram[sym['cpc_runtime_fs_status']]:
+            raise AssertionError('private M4 filesystem service failed')
+        at=sym['cpc_runtime_free']
+        if int.from_bytes(ram[at:at+2],'little')!=space(image)[0]: raise AssertionError('M4 free-space differs')
+        if any(ram[sym['core_fsctx_table']+144*i] for i in range(4)): raise AssertionError('FS context leaked')
+        key('F3');rects[2]=(11,66,58,68);order=[0,1,2];accents[2]=0
+        ram=checked('overlap-open')
+        # The moved first window extends to the right of the second window.
+        move(rects[1][0]+56,rects[1][1]+30);key('SPACE')
+        accents[1]=0;order=[0,2,1];ram=checked('focus-exposes-first')
+        if ram[sym['wm_focus']]!=1: raise AssertionError('exposed window did not gain focus')
+        key('ESCAPE');del rects[1];order=[0,2];ram=checked('close-exposes-second')
+        key('ESCAPE');rects={};order=[0];ram=checked('closed')
+        if ram[sym['wm_nwin']]!=1 or ram[sym['core_page_free']]!=27: raise AssertionError('close/reclaim')
+        key('A');ram=checked('ascii-key')
+        if ram[sym['cpc_runtime_key']]!=ord('a'): raise AssertionError('ASCII input differs')
+        key('S');ram=checked('canonical-save-line-restore')
+        if ram[sym['cpc_runtime_surface_calls']]!=1 or ram[sym['cpc_runtime_surface_status']]:
+            raise AssertionError('save/line/restore service failed')
+        if ram[0x6100:0x6120]!=bytes(32): raise AssertionError('canonical saved bytes differ')
+        key('F3');rects={1:(11,66,58,68)};order=[0,1];accents={1:0};ram=checked('reopened')
+        if ram[sym['wm_nwin']]!=2 or ram[sym['core_page_free']]!=26: raise AssertionError('reopen/reuse')
+        if image.read_bytes()!=Path(manifest['image']).read_bytes(): raise AssertionError('read-only run changed media')
+        result=dict(checkpoints=checks,sections=manifest['sections'],app_sha256=hashlib.sha256(app).hexdigest(),
+                    emulator_sha256=hashlib.sha256(emulator.read_bytes()).hexdigest())
+        (artifacts/'result.json').write_text(json.dumps(result,indent=2)+'\n')
+        print('PASS '+json.dumps(result),flush=True)
+        return artifacts
+    finally:
+        process.terminate()
+        try: process.wait(timeout=5)
+        except subprocess.TimeoutExpired: process.kill();process.wait()
+        reader.join(timeout=5)
+
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--emulator',type=Path,default=ROOT.parent/'1984/1984')
+    parser.add_argument('--skip-build',action='store_true')
+    parser.add_argument('--filesystem',action='store_true')
+    args=parser.parse_args();run(args.emulator.resolve(),args.skip_build,args.filesystem)

@@ -72,7 +72,7 @@ proc pp_begin {} {
     foreach size {0 15 17 256 65535} {pp_add "record-size-$size" $busy 1 0 0x7EE0 $size}
     pp_add record-exact-end $busy 0 0 0x7EF0
     pp_add version [pp_record 6 {} 2] 6
-    pp_add operation [pp_record 8 {}] 6
+    pp_add operation [pp_record 9 {}] 6
     pp_add line-outside [pp_record 1 {0 2 10 0 20 0 10 0 3}] 1
     pp_add line-y-outside [pp_record 1 {10 0 212 0 20 0 10 0 3}] 1
     pp_add line-pen [pp_record 1 {10 0 10 0 20 0 10 0 4}] 1

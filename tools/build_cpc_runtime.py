@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""Compose the shared CPC core and universal launcher on a private M4 card."""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+from build_cpc_foundation import headed
+from build_cpc_production import ROOT, memory_regions, symbols
+from cpc_production_fsctx import compile_module
+import genfont
+
+
+def assemble(work: Path, overrides=()):
+    work.mkdir(parents=True, exist_ok=True)
+    genfont.main(["genfont", str(work / "DEFAULT.FNT")])
+    (work / "fsctx_size.inc").write_text("CPC_FS_MODULE_BYTES equ 1\n")
+    command = [os.environ.get("RASM", "rasm"), str(ROOT / "kernel/cpc_runtime.asm"),
+               "-s", "-sq", "-o", "runtime", f"-I{work}", *overrides]
+    subprocess.run(command, cwd=work, check=True)
+    initial = symbols(work / "runtime.sym")
+    compile_module(work, initial, ROOT, directory=True, writable=True)
+    subprocess.run(command, cwd=work, check=True)
+    sym = symbols(work / "runtime.sym")
+    def resident(s): return {k: v for k, v in s.items() if k != "cpc_fs_module_bytes"}
+    if resident(sym) != resident(initial):
+        raise AssertionError("FS module changed runtime addresses")
+    memory_regions(sym)
+    (work / "boot_symbols.inc").write_text("\n".join(
+        f"{name} equ {sym[name]}" for name in
+        ("foundation_bank_set", "storage_gate", "storage_ga_set", "storage_rom_set",
+         "storage_command", "storage_send")) + "\n")
+    for source, output in (("cpc_m4_loader.asm", "loader"), ("cpc_m4_boot.asm", "boot")):
+        subprocess.run([os.environ.get("RASM", "rasm"), str(ROOT / "kernel" / source),
+                        "-s", "-sq", "-o", output, f"-I{work}", "-DCPC_DRAWING=1",
+                        f"-DCPC_LOAD_BYTES={(work / 'CORE.RAW').stat().st_size}"],
+                       cwd=work, check=True)
+    return sym
+
+
+def build():
+    work = ROOT / "build/cpc-runtime"
+    sym = assemble(work)
+    app = ROOT / "build/universal/ABIPROBE.APP"
+    subprocess.run(["bash", "tools/build_uapp.sh", "apps/abiprobe", str(app)], cwd=ROOT, check=True)
+    fsapp = ROOT / "build/universal/FSPROBE.APP"
+    subprocess.run(["bash", "tools/build_uapp.sh", "apps/fsprobe", str(fsapp)],
+                   env={**os.environ, "UNIVERSAL_FS": "1"}, cwd=ROOT, check=True)
+    media = ROOT / "QA/Diagnostics/CPC-runtime"
+    card = media / "CARD"
+    card.mkdir(parents=True, exist_ok=True)
+    boot = bytearray(headed((work / "BOOT.RAW").read_bytes(), 0x8000))
+    boot[1:12] = b"BOOT    BIN"
+    boot[67:69] = sum(boot[:67]).to_bytes(2, "little")
+    files = {"BOOT.BIN": bytes(boot), "CORE.BIN": (work / "CORE.RAW").read_bytes(),
+             "BOOT.BAS": b'10 MEMORY &7FFF\r\n20 LOAD"BOOT.BIN",&8000\r\n30 CALL &8000\r\n',
+             "FSCTX.BIN": (work / "FSCTX.BIN").read_bytes(),
+             "GBENCH/ABIPROBE.APP": app.read_bytes(),
+             "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
+             "UFSTEST/SOURCE.BIN": bytes((i*13+7)&255 for i in range(1025)),
+             "UFSTEST/SUB/SMALL.TXT": b"OK!"}
+    for name, payload in files.items():
+        path = card / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+    image = media / "RUNTIME.IMG"
+    fd, temporary = tempfile.mkstemp(prefix="runtime-", suffix=".img", dir=media)
+    try:
+        with os.fdopen(fd, "wb") as out: out.truncate(32 * 1024 * 1024)
+        subprocess.run(["sfdisk", "-q", temporary],
+                       input="label: dos\nlabel-id: 0x4350434c\nstart=32, type=06\n",
+                       text=True, check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(["mkfs.fat", "--invariant", "-F16", "--offset", "32",
+                        "-n", "CPCRUNTIME", temporary], check=True)
+        volume = temporary + "@@16384"
+        subprocess.run(["mmd", "-i", volume, "::/GBENCH", "::/UFSTEST", "::/UFSTEST/SUB"], check=True)
+        for name in files:
+            subprocess.run(["mcopy", "-i", volume, str(card / name), "::/" + name], check=True)
+        Path(temporary).replace(image)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    sections = {}
+    for name, begin, end, limit in (
+        ("kernel", "cpc_kernel_begin", "cpc_kernel_used_end", "cpc_kernel_end"),
+        ("support", "cpc_support_begin", "cpc_support_used_end", "cpc_support_end"),
+        ("hardware", "cpc_hardware_begin", "cpc_hardware_used_end", "cpc_hardware_end"),
+        ("scheduler", "cpc_scheduler_begin", "cpc_scheduler_end", "cpc_sched_end")):
+        sections[name] = dict(base=sym[begin], used=sym[end]-sym[begin], budget=sym[limit]-sym[begin])
+    sections["fsctx"] = dict(base=0x4400, used=len(files["FSCTX.BIN"]), budget=0x1C00)
+    manifest = dict(work=str(work), image=str(image), regions=memory_regions(sym), sections=sections,
+                    files={name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
+                    status="experimental universal launcher; not Desktop/distribution")
+    (media / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    # Explicit private config: manual testing never edits the user's normal
+    # machine setup or mounts their existing M4/Albireo card.
+    (media / "1984.conf").write_text(
+        '[machine]\nmodel=6128\nmemory=512\n[hardware]\nmx4=true\nm4=true\n'
+        f'm4_path=\nm4_image={image}\nalbireo=false\nsymbiface_ide=false\n')
+    print(f"Built {image}: {json.dumps(sections)}", flush=True)
+    return media
+
+
+if __name__ == "__main__": build()

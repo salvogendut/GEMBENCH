@@ -25,7 +25,11 @@ up_dispatch
                 jp nz,up_unsupported
                 ld a,(ix+0)
                 dec a
+                ifdef PARAM_FS_CALL
+                cp 8
+                else
                 cp 7
+                endif
                 jp nc,up_unsupported
                 ; Unlike focus fallback, the mapped primary must identify the
                 ; caller. The existing ownership service validates generation.
@@ -41,6 +45,10 @@ up_dispatch
                 cp (hl)
                 jp nz,up_context
                 ld a,(ix+0)
+                ifdef PARAM_FS_CALL
+                cp 8
+                jp z,up_filesystem
+                endif
                 cp 3
                 jp nc,up_timer
                 ld a,(CORE_PARAM_CURRENT)
@@ -233,3 +241,7 @@ up_span_bad     pop hl
 
 up_request      ds 16,0
 up_text_copy    ds 49,0
+
+                ifdef PARAM_FS_CALL
+                include "parameters_fs.asm"
+                endif

@@ -13,13 +13,18 @@ Status: **3D-A, [3D-B drawing/parameters](CPC-RESTART-STEP3D-B.md) and
 [3D-H M4 launch/admission](CPC-RESTART-STEP3D-H.md) and
 [3D-I read-only filesystem contexts](CPC-RESTART-STEP3D-I.md) and
 [3D-J bounded directory contexts](CPC-RESTART-STEP3D-J.md) and
-[3D-K writes/free space](CPC-RESTART-STEP3D-K.md) are
+[3D-K writes/free space](CPC-RESTART-STEP3D-K.md) and
+[3D-L unified APP runtime](CPC-RESTART-STEP3D-L.md) and
+[3D-M portable filesystem client](CPC-RESTART-STEP3D-M.md) are
 implemented and M4/1984 validated; the complete production adapter gate is
 still open.** The 3D-A record below connects actual shared context
 and visibility code to a checked CPC layout and CPC hardware. It is not a
 desktop, public application loader, or proof that the complete kernel fits.
-The remaining integration work must finish before the first shared-core window.
-The 3D-B/C/D/E/F/G/H/I/J/K documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory/write/free-space gaps and measurements below;
+3D-L now proves an unchanged universal APP window in one composed runtime;
+remaining public services still precede Desktop integration and final gate closure.
+3D-M adds the shared caller-owned filesystem boundary with the same test APP
+on CPC and both MSX2 screen modes; Desk/menu and shell integration remain open.
+The 3D-B/C/D/E/F/G/H/I/J/K/L documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory/write/free-space/first-APP gaps and measurements below;
 this document retains the original non-drawing fixture and its evidence.
 
 3D-J requires the separately authorized 1984 fix on
@@ -29,6 +34,10 @@ with the rebuilt emulator. 3D-K binds writes and free-space reporting to the
 same shared policy, with M4 readback and independent media checks. This does
 not enable a public filesystem service; namespace limits and complete SDK
 composition remain open.
+
+The subsequent 1984 FAT/M4 protection follow-up is resolved by
+[PR #292](https://github.com/salvogendut/1984/pull/292), merged as `0851004`.
+3D-L uses that rebuilt emulator for real M4 boot and universal APP execution.
 
 ## Why the addresses change
 

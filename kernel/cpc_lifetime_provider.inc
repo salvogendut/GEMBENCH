@@ -54,7 +54,11 @@ OWNER_PAGE_CLOSE_CONTEXTS equ cpc_lifetime_contexts
 cpc_lifetime_not_worker
                 mend
                 macro LIFETIME_DRAG_CURRENT
+                ifdef CPC_RUNTIME
+                call mw_move_silent
+                else
                 ; No input/managed-drag provider yet. Explicit failure, not a
                 ; success-only placeholder. This private link has no public ABI.
                 jp cpc_lifetime_drag_unsupported
+                endif
                 mend

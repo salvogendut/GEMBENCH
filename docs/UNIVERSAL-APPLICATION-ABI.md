@@ -273,6 +273,49 @@ refreshed in both views. Rebuilt CRTs compare compatible minor versions using
 a minimum test. The regression boots the actual old ABI Probe binary as well
 as the rebuilt one.
 
+## Portable filesystem binding (optional ABI 2.1 service)
+
+`portable-filesystem` now selects `GB_PARAMS` operation 8, record version 1.
+This is an append-only operation behind a previously unadvertised capability,
+not a change to the inherited `GB_FSCTX` slot or the seven existing parameter
+operations. Existing ABI Probe/Clock/Calculator binaries stay unchanged.
+
+The 14-byte data area begins with four little-endian words: pointer to a
+32-byte filesystem header, header size (32), pointer to a 512-byte transfer
+area, transfer size (512). Both complete spans must lie in the current
+application primary page below `7F00`, without wrap or mutual overlap. All
+arguments are validated before touching native filesystem state. The descriptor
+is copied first, so it may alias an input/output buffer; it is no longer valid
+as a descriptor if that output overwrites it. No pointer is retained after return.
+
+The authority's `portable_filesystem` section defines the header and operations
+0 through 14. They reuse the existing generation-tagged context policy: four
+contexts, implicit mapped owner, 47-byte paths, raw 8.3 names, packed 16-byte
+directory entries, batches of at most four and transfers of at most 512 bytes.
+Header owner input is ignored and replaced by the native gate's caller identity.
+Offset-zero writes replace; subsequent writes append; a zero-byte offset-zero
+write truncates. EOF is zero actual bytes with filesystem status OK. Transport
+and namespace limitations still require backend qualification.
+
+`GB_PARAMS` status describes the transport/validation result; after a successful
+transport, header byte 1 holds the filesystem operation status. Malformed spans,
+lengths and operation numbers fail without copying results or invoking storage.
+Workers are rejected before any native header/transfer copy. Both target adapters
+restore the caller's mapping, stack, interrupt state and scheduler lock.
+
+Build clients with `UNIVERSAL_FS=1` and require `portable-filesystem` in their
+manifest. `gbfsctx.h` then selects caller-owned storage while reusing the same
+client implementation and public functions as native applications. Only the
+transport differs. The client uses 544 bytes of per-application header/transfer
+storage, plus the existing parameter bridge. These wrappers are non-reentrant
+and root-callback-only; worker code must not call them. Returned directory batches
+expire on the next context call in that application. Optional callers using the
+low-level operation must check the live capability themselves.
+
+The first cross-target proof is [CPC restart 3D-M](CPC-RESTART-STEP3D-M.md):
+one unchanged `FSPROBE.APP` on CPC/M4 and MSX2 Screen 6/7. This is not a claim
+of complete filesystem, Desktop, physical-hardware or PCW parity.
+
 ## GBAP v4 package
 
 GBAP v4 preserves the initial three-byte `JP`, `GBAP` magic, 16-byte outer

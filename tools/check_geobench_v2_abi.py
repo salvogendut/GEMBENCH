@@ -291,6 +291,10 @@ def main() -> int:
     check_slots(authority, errors)
     parameters = authority["caller_parameters"]
     contiguous(parameters["fields"], parameters["record_size"], "parameters", errors)
+    filesystem = authority["portable_filesystem"]
+    contiguous(filesystem["header_fields"], filesystem["header_size"], "filesystem", errors)
+    if parameters["operations"]["filesystem"] != filesystem["parameter_operation"]:
+        errors.append("filesystem parameter operation differs")
     if parameters["kernel_slot"] != authority["jump_table"]["slots"][-1]["address"]:
         errors.append("caller_parameters does not identify the appended service")
     if any(region["address"] >= 0xC000 for region in mailbox):

@@ -133,6 +133,13 @@ read-only check. This is **source evidence, not a new destructive runtime test**
 Qualify/fix these emulator safeguards separately before advertising public write
 parity; the current tests write only their disposable ordinary-file fixtures.
 
+Follow-up resolved on 2026-09-06: [1984 issue #291](https://github.com/salvogendut/1984/issues/291)
+and [PR #292](https://github.com/salvogendut/1984/pull/292), merged at `0851004`,
+add the FAT/M4 protection checks and rejected-operation media-preservation
+regressions. The 1984 native suite passed all 20 tests. This supersedes the
+emulator blocker above, not the remaining physical-media/firmware qualifications.
+[3D-L](CPC-RESTART-STEP3D-L.md) records the subsequent unified runtime integration.
+
 Next: budget and compose the public filesystem/SDK service bindings with the
 shared root loop and module placement, then load the first real shared-core
 application window. Passing isolated adapter links does not prove the whole

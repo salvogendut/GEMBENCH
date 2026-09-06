@@ -4,7 +4,9 @@ APP_BASE equ CPC_APP_BASE
 APP_LOAD_MAX equ CPC_APP_LIMIT-CPC_APP_BASE
 ADMISSION_SYSINFO_SIZE equ 48
 GB_PAGE_APPLICATION equ 1
+                ifndef bank_set
 bank_set equ foundation_bank_set
+                endif
 WM_OPEN_STRICT equ #123D
 wm_open_page equ #12FA
 wm_open_back equ #12FB
@@ -27,6 +29,10 @@ cpc_loading_begin
                 include "core/app_admission.asm"
 cpc_loaded_admission
                 call gbap4_validate_loaded
+                ifdef CPC_RUNTIME
+                ret nc
+                jp cpc_runtime_admission
+                endif
                 ifdef CPC_FAULT_LOAD_ADMISSION
                 scf                         ; negative test: execute rejected data
                 endif

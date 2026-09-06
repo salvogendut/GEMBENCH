@@ -15,6 +15,9 @@ CORE_PARAM_HEIGHT equ 212
 PARAM_CURRENT_OWNER equ GB_OWNER
 PARAM_WINDOW_CALL equ GB_APP
 PARAM_DRAW_TEXT equ GB_TEXT
+PARAM_FS_CALL equ GB_FSCTX
+PARAM_FS_REQUEST equ MSX_FSCTX_REQ
+PARAM_FS_TRANSFER equ MSX_FSCTX_TRANSFER
 
 ; Entry/exit retain exact IFF2, IX, scheduler-lock and status/boolean behavior.
                 macro PARAM_ENTER

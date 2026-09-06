@@ -3,7 +3,11 @@
 
 #include "gb.h"
 
-/* Architecture Milestone 4 (#37): four generation-tagged filesystem contexts.
+/* Four generation-tagged filesystem contexts. UNIVERSAL_FS=1 links the same
+ * client policy with caller-owned GB_PARAMS storage (portable-filesystem is a
+ * required manifest capability). Root callbacks only, non-reentrant; workers
+ * must not enter these wrappers. Native MSX2 bindings remain unchanged.
+ * Architecture Milestone 4 (#37):
  * The MSX2 implementation serializes native DOS access but retains drive, path,
  * name, offset and directory enumeration state independently for each owner.
  * Every transfer advances at most one 512-byte chunk on the root task. */

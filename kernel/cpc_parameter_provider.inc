@@ -15,6 +15,11 @@ CORE_PARAM_HEIGHT equ CPC_LINES
 PARAM_CURRENT_OWNER equ owner_current
 PARAM_WINDOW_CALL equ cpc_parameter_window
 PARAM_DRAW_TEXT equ cpc_draw_text
+                ifdef CPC_RUNTIME
+PARAM_FS_CALL equ cpc_fsctx_call
+PARAM_FS_REQUEST equ #2400
+PARAM_FS_TRANSFER equ #1500
+                endif
                 macro PARAM_ENTER
                 push ix
                 ld a,i

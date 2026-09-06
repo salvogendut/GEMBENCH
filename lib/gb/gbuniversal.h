@@ -165,6 +165,7 @@ void gb_window_rect(gb_rect_t *rect);
 #define GB_PARAMS_TIMER_DROPPED 5u
 #define GB_PARAMS_TIMER_BUSY 6u
 #define GB_PARAMS_TIMER_CANCEL 7u
+#define GB_PARAMS_FILESYSTEM 8u
 #define GB_PARAMS_OK 0u
 #define GB_PARAMS_BADARG 1u
 #define GB_PARAMS_CONTEXT 2u

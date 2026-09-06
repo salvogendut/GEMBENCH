@@ -20,7 +20,11 @@ CPC_REG_GUARD equ #3290
 wm_desc equ #32A0
 mw_desc equ #32A2
 mw_kind equ #32A4
+                ifdef CPC_RUNTIME
+MW_RECT equ #1448              ; frozen SDK observation, not diagnostic scratch
+                else
 MW_RECT equ #32A5
+                endif
 kw_x equ #32A9
 kw_y equ #32AA
 kw_w equ #32AB

@@ -21,6 +21,21 @@ all: msx
 .PHONY: diagnostic-cpc-fsdir-protocol diagnostic-cpc-fsdir-protocol-1984
 .PHONY: diagnostic-cpc-fsdir diagnostic-cpc-fsdir-1984
 .PHONY: diagnostic-cpc-fswrite diagnostic-cpc-fswrite-1984
+.PHONY: diagnostic-cpc-runtime diagnostic-cpc-runtime-1984
+.PHONY: diagnostic-cpc-portablefs-1984 diagnostic-portablefs-openmsx
+diagnostic-cpc-portablefs-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --filesystem
+
+diagnostic-portablefs-openmsx:
+	$(PYTHON) tools/test_portable_fs_openmsx.py --mode 6
+	$(PYTHON) tools/test_portable_fs_openmsx.py --mode 7
+
+diagnostic-cpc-runtime:
+	$(PYTHON) tools/build_cpc_runtime.py
+
+diagnostic-cpc-runtime-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py
+
 diagnostic-cpc-fswrite:
 	$(PYTHON) tools/build_cpc_production.py --variant fsctx-write
 

@@ -18,6 +18,11 @@
 ; The caller-primary 4000..7EFF span is the universal ABI, not an MSX mailbox.
 ; Local bounds/indexing checks don't prove the complete provider memory map,
 ; hook register promises, instruction timing or overall stack budget.
+; Optional PARAM_FS_CALL binds operation 8 to the existing serialized native
+; context gate: A=operation, native fixed REQUEST[32]/TRANSFER[512] in/out.
+; It must restore caller mapping/SP, retain the scheduler lock and not reenter
+; GB_PARAMS. The shared extension validates/copies primary buffers under ENTER;
+; workers fail before native state is touched. Legacy clients remain unchanged.
                 assert ((universal_parameters>=0)&(up_text_copy+49<=#4000))|((universal_parameters>=#8000)&(up_text_copy+49<=#10000)),"parameter code and scratch must remain fixed"
                 assert (CORE_PARAM_OWNER_MAX>=1)&(CORE_PARAM_OWNER_MAX<=127),"invalid parameter owner capacity"
                 assert (CORE_PARAM_COLUMNS>=1)&(CORE_PARAM_COLUMNS<=254),"invalid parameter columns"

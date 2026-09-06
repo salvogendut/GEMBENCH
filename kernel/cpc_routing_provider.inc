@@ -45,7 +45,9 @@ POLL_MENU_DISPATCH equ cpc_route_bad_menu
                 else
 POLL_MENU_DISPATCH equ menu_dispatch
                 endif
+                ifndef bank_set
 bank_set equ foundation_bank_set
+                endif
 SCHED_YIELD_ENTRY equ sched_yield
 cursor_erase equ cpc_window_pointer_hide
 cursor_show equ cpc_window_pointer_show
@@ -54,7 +56,11 @@ cursor_show equ cpc_window_pointer_show
                 macro GESTURE_STATE_STORAGE
                 mend
                 macro ROOT_LOOP_REPEAT
+                ifdef CPC_RUNTIME
+                jp wm_loop
+                else
                 jp cpc_route_repeat           ; diagnostic boundary/exit, not an alternate loop
+                endif
                 mend
                 assert launch_arg+11<=BAR_HANDLER,"registration/routing state overlap"
                 assert mwm_notify+1<=CORE_LOOKUP_CLASS,"routing/service scratch overlap"
