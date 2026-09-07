@@ -20,31 +20,24 @@ FONT_APPLY equ font_apply_header
                 mend
                 include "core/font_asset.asm"
 
-; icon_init: load <ICONS>.IST into PAGE_DATA at DATA_ICONS.
-icon_init
+; Shared icon policy, byte-identical MSX binding.
+ICON_LOAD_MAX equ DATA_MODTOP-DATA_ICONS-#200
+ICON_LOAD_DST equ DATA_ICONS
+                macro ICON_ENTER
                 di
                 LD_A_PAGE_DATA
-                call  bank_set
-                ld    hl,KCFG_ICONNAME       ; fs_req_name = the config icon name
-                ld    de,fs_req_name
-                call  copy11
-                ld    hl,DATA_MODTOP-DATA_ICONS-#200 ; cap = the free icon region: from
-                ld    (fs_load_max),hl               ; DATA_ICONS up to DATA_MODTOP (the write
-                                                     ; write module also lives in PAGE_DATA),
-                                                     ; less a sector. The compact resident
-                                                     ; set has 21 icons after the auxiliary
-                                                     ; CF/IDE/app artwork slots were restored,
-                                                     ; derived so it never needs hand-tuning.
-                ld    hl,DATA_ICONS
-                ld    (fs_load_dst),hl
-                ld    hl,def_ist             ; fall back to DEFAULT.IST if missing
-                call  load_or_default
-                ifdef PIC_RUNTIME_CONVERT      ; icon packs use canonical CPC Mode-1 bytes;
-                call  c,icon_convert          ; keep the .IST payload unified across targets
+                call bank_set
+                mend
+                macro ICON_APPLY
+                ifdef PIC_RUNTIME_CONVERT
+                call c,icon_convert
                 endif
-                call  bank_normal
+                mend
+                macro ICON_LEAVE
+                call bank_normal
                 ei
-                ret
+                mend
+                include "core/icon_asset.asm"
 
 ; icon_convert: transcode a loaded .IST in-place from canonical CPC Mode-1 icon
 ; bytes to the current platform's runtime encoding. The file format itself is

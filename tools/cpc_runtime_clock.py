@@ -24,6 +24,23 @@ def clock_cache_ready(value, modal=False):
                 (not value('show_sec') or value('ps')==value('ds')))))
 
 
+def clock_may_remain_parked(rects,order,slot,window_visibility,task_visibility):
+    """Conservative independent cover proof, not permission to skip pixels.
+
+    A hidden worker may stop between hand/digit components indefinitely.
+    Require one actual foreground rectangle to cover it completely AND both
+    scheduler visibility views to agree. Partial/exposed windows still settle.
+    """
+    if window_visibility or task_visibility or slot not in rects or slot not in order:
+        return False
+    x,y,w,h=rects[slot]
+    for front in order[order.index(slot)+1:]:
+        if front not in rects: continue
+        fx,fy,fw,fh=rects[front]
+        if fx<=x and fy<=y and fx+fw>=x+w and fy+fh>=y+h: return True
+    return False
+
+
 def draw_clock(surface,rect,time,fill,text):
     x,y,w,h=rect;hour,minute,second,seconds=time[:4]
     top=y+14;digital=y+h-16;avail=digital-2-top
@@ -83,9 +100,10 @@ def run_clock(root,media,manifest,work,sym,artifacts,image,emulator,send,wait,re
             if r[sym['pointer_visible']] and not (
                     r[sym['core_pointer_paintlock']] or r[sym['core_param_timer_owner']] or
                     r[sym['io_busy']]):
-                if 2 not in rects or (value(r,'have_prev') and not value(r,'timer_digit_due') and
-                    (value(r,'ph'),value(r,'pm'))==(value(r,'dh'),value(r,'dm')) and
-                    (not value(r,'show_sec') or value(r,'ps')==value(r,'ds'))):
+                if (2 not in rects or
+                    clock_may_remain_parked(rects,order,2,r[sym['cpc_wm_visibility']+2],
+                                           r[sym['cpc_task_visibility']+2]) or
+                    clock_cache_ready(lambda k:value(r,k))):
                     signature=(bytes(r[0xC000:0x10000]),bytes(r[0x1240:0x1242]),
                                tuple(value(r,k) for k in ('ph','pm','ps','show_sec')) if 2 in rects else ())
                     turn=word(r,'cpc_runtime_turns')

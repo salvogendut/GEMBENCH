@@ -42,7 +42,9 @@ reserved F6, leaving 27 application-pool pages including root. Its map supersede
 the historical single-reserved-bank budget below; asset/theme application,
 file pickers and the complete Desktop still follow. 3D-S now supplies bounded
 configured 6x8 font loading, palette/border application and shared frame contrast.
-Other asset families and full native reload remain gated.
+The [3D-T bitmap checkpoint](CPC-RESTART-STEP3D-T.md) now supplies configured
+icons/cursor/backdrop with checked allocations and clipped rendering.
+Titlebar/gadget assets and full native reload remain gated.
 The [Clock/cursor responsiveness follow-up](CPC-CLOCK-RESPONSIVENESS.md) addresses
 input stalls reported during manual 3D-S testing before those asset families.
 The 3D-B/C/D/E/F/G/H/I/J/K/L documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory/write/free-space/first-APP gaps and measurements below;

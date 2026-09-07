@@ -1,7 +1,7 @@
 ; Root-only CPC keyboard/joystick virtual pointer adapter. No firmware or mouse
 ; detection claim. One byte-column / one scanline per sampled direction; input
 ; acceleration, mouse protocols and text translation remain separate adapters.
-; The cadence is measured from the previous sample, not from entry into POLL.
+; The cadence follows a persistent deadline, not a fresh delay on entering POLL.
 ; Root GB_PARAMS boundaries also service movement, without dispatching events
 ; or reentering a callback. No keyboard/video work is added to the IRQ handler.
 k_poll
@@ -14,6 +14,9 @@ k_poll_wait
                 halt
                 jr k_poll_wait
 k_poll_ready
+                ifdef CPC_RUNTIME
+                ei                         ; do not lose ticks copying a loaded 16-row pointer
+                endif
                 call cpc_pointer_sample
                 ld a,(CPC_KEYS+9)
                 ld e,a
@@ -34,8 +37,8 @@ k_poll_ready
                 ld (in_quit),a
                 include "../../kernel/core/poll_publish.asm"
 
-; NC if at least six 300-Hz ticks have passed. A 16-bit stamp avoids the old
-; 8-bit wrap after a long operation. Missed periods are never replayed as jumps.
+; NC if the next six-tick deadline is due. A 16-bit stamp avoids the old
+; 8-bit wrap after a long operation. Missed whole periods are not replayed.
 cpc_pointer_due
                 ld hl,(CPC_HW_TICKS)
                 ld de,(cpc_poll_stamp)
@@ -98,11 +101,30 @@ cpc_pointer_service_done
 cpc_pointer_sample
                 ld hl,(CPC_HW_TICKS)
                 ifdef CPC_RUNTIME
-                ld de,(cpc_poll_stamp)
-                ld (cpc_poll_stamp),hl
+                push hl
+                ld de,(cpc_pointer_sample_stamp)
+                ld (cpc_pointer_sample_stamp),hl
                 or a
                 sbc hl,de
                 ld (cpc_pointer_interval),hl
+                pop hl
+                ; Retain the six-tick deadline through sub-period jitter.
+                ; After a missed whole period reset it: no accumulated moves,
+                ; no catch-up loop. Keep actual-gap telemetry independent.
+                push hl
+                ld de,(cpc_poll_stamp)
+                or a
+                sbc hl,de
+                ld bc,12
+                or a
+                sbc hl,bc
+                pop hl
+                jr nc,cpc_pointer_deadline
+                ex de,hl
+                ld bc,6
+                add hl,bc
+cpc_pointer_deadline
+                ld (cpc_poll_stamp),hl
                 else
                 ld (cpc_poll_stamp),hl
                 endif
@@ -212,7 +234,7 @@ cpc_pointer_first_move
                 ld a,(CORE_COMPOSITOR_DAMAGE)
                 ld d,a
                 ld a,b
-                add a,3
+                add a,CPC_POINTER_WIDTH
                 cp d
                 jp c,pointer_show
                 jp z,pointer_show
@@ -224,7 +246,7 @@ cpc_pointer_first_move
                 ld a,(CORE_COMPOSITOR_DAMAGE+1)
                 ld d,a
                 ld a,c
-                add a,8
+                add a,CPC_POINTER_HEIGHT
                 cp d
                 jp c,pointer_show
                 jp z,pointer_show

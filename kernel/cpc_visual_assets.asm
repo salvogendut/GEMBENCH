@@ -5,7 +5,7 @@
 KCFG_FONTNAME equ CPC_CFG_OUTPUT+13
 DATA_FONT equ CPC_FONT_BASE
 FONT_LOAD_MAX equ CPC_FONT_LIMIT-CPC_FONT_BASE
-FONT_READ equ cpc_font_read
+FONT_READ equ cpc_asset_read
 FONT_APPLY equ cpc_font_publish
                 macro FONT_ENTER
                 ld a,CPC_SYSTEM_PAGE
@@ -36,7 +36,9 @@ cpc_visual_apply
                 xor a
                 ld (CPC_FONT_ATTEMPT),a
                 ld (CPC_VISUAL_DIRTY),a
+                ld (CPC_ASSET_KIND),a
                 call font_init
+                call cpc_other_assets
                 call cpc_config_palette
                 ld a,(CPC_CFG_OUTPUT+62)
                 ld hl,KCFG_FRAMEPEN
@@ -67,12 +69,6 @@ cpc_visual_frame_same
 ; path handling. Its 0x3F00 cap is an I/O limit, NOT the font admission limit.
 ; Nothing reaches F7 unless the complete candidate is a valid <=1024-byte FNT.
 cpc_font_read
-                ld hl,CPC_FONT_ATTEMPT
-                inc (hl)
-                ld hl,APP_LOAD_MAX
-                ld (fs_load_max),hl
-                call fs_load_sys
-                ret nc
                 ld hl,(fs_ent_size)
                 ld de,CPC_FONT_LIMIT-CPC_FONT_BASE+1
                 or a

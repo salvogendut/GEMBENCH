@@ -15,7 +15,7 @@
                 jp wm_repaint_top ; #8027
                 jp cpc_unavailable ; #802A
                 jp cpc_unavailable ; #802D
-                jp cpc_unavailable ; #8030
+                jp k_icon ; #8030
                 jp k_fill ; #8033
                 jp cpc_save_rect ; #8036
                 jp cpc_restore_rect ; #8039
@@ -52,7 +52,7 @@
                 jp cpc_on_bar ; #8096
                 jp k_wm_setsize ; #8099
                 jp cpc_unavailable ; #809C
-                jp cpc_unavailable ; #809F
+                jp k_icon_half ; #809F
                 jp cpc_pointer_pixel ; #80A2
                 jp cpc_unavailable ; #80A5
                 jp cpc_unavailable ; #80A8

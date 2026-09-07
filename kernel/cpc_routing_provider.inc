@@ -20,7 +20,8 @@ cpc_pointer_interval equ #335C
 cpc_pointer_max_gap equ #335E        ; IRQ ticks, consecutive moving samples
 cpc_pointer_moves equ #3360
 cpc_pointer_moving equ #3362
-                assert cpc_pointer_moving+1<=CPC_REG_END,"pointer cadence state overflow"
+cpc_pointer_sample_stamp equ #3363 ; actual sample time, independent of deadline
+                assert cpc_pointer_sample_stamp+2<=CPC_REG_END,"pointer cadence state overflow"
                 endif
 wm_sav_x equ #3309
 wm_sav_y equ #330A

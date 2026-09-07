@@ -380,50 +380,7 @@ ig_h            db    0
 
 ; icon_geom: A = slot -> from the .IST directory (DATA_ICONS) set up a
 ; half-height blit (middle band) at (be_x, be_y). PAGE_DATA must be mapped.
-icon_geom
-                ld    l,a                     ; dir entry = DATA_ICONS+16 + slot*4
-                ld    h,0
-                add   hl,hl
-                add   hl,hl
-                ld    de,DATA_ICONS+16
-                add   hl,de
-                ld    e,(hl)                  ; offset (word)
-                inc   hl
-                ld    d,(hl)
-                inc   hl
-                ld    a,(hl)                  ; width (bytes)
-                ld    (ig_w),a
-                inc   hl
-                ld    a,(hl)                  ; height (rows)
-                ld    (ig_h),a
-                ld    hl,DATA_ICONS          ; bitmap base = DATA_ICONS + offset
-                add   hl,de
-                ld    a,(ig_h)               ; + (h/4)*w  (skip the top quarter)
-                srl   a
-                srl   a
-                ld    b,a
-                ld    a,(ig_w)
-                ld    e,a
-                ld    d,0
-ig_skip
-                ld    a,b
-                or    a
-                jr    z,ig_done
-                add   hl,de
-                dec   b
-                jr    ig_skip
-ig_done
-                ld    (bm_src),hl
-                ld    a,(ig_w)
-                ld    (bm_w),a
-                ld    a,(ig_h)               ; half height
-                srl   a
-                ld    (bm_h),a
-                ld    a,(be_x)
-                ld    (bm_x),a
-                ld    a,(be_y)
-                ld    (bm_y),a
-                ret
+                include "core/icon_half_geom.asm"
 
 ; (file -> icon-slot mapping moved to the File Manager, #103 - the kernel now
 ; only blits a given slot via k_icon / k_icon_half; the .IST lives in PAGE_DATA.)
@@ -2126,30 +2083,7 @@ k_icon
                 call  icon_full_geom
                 call  blit_bitmap
                 jp    from_data
-icon_full_geom                                 ; A = slot -> bm_src/w/h, bm_x/y
-                ld    l,a
-                ld    h,0
-                add   hl,hl
-                add   hl,hl                     ; slot*4
-                ld    de,DATA_ICONS+16
-                add   hl,de
-                ld    e,(hl)                  ; offset
-                inc   hl
-                ld    d,(hl)
-                inc   hl
-                ld    a,(hl)                  ; width
-                ld    (bm_w),a
-                inc   hl
-                ld    a,(hl)                  ; height (full)
-                ld    (bm_h),a
-                ld    hl,DATA_ICONS
-                add   hl,de
-                ld    (bm_src),hl
-                ld    a,(gi_x)
-                ld    (bm_x),a
-                ld    a,(gi_y)
-                ld    (bm_y),a
-                ret
+                include "core/icon_full_geom.asm"
 gi_slot         db    0
 gi_x            db    0
 gi_y            db    0

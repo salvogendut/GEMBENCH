@@ -185,6 +185,10 @@ the same canonical formats. Budget storage and validate rendering before
 connecting the full shared Desktop/File Manager. Titlebar/gadget tile modules
 also remain unbound, as do file pickers and System/Settings.
 
+Implemented subsequently in [3D-T](CPC-RESTART-STEP3D-T.md). That checkpoint
+also documents the existing platform-specific cursor format distinction and
+supersedes the earlier runtime cursor and resident-code budgets.
+
 `GB_RELOAD` stays explicitly unavailable: supporting one asset family must not
 pretend to implement the complete native service. No new capability bit or
 portable-app admission promise is added. Issue #77 and the production adapter,

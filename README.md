@@ -160,7 +160,11 @@ not repaint for an unchanged configuration. Run `make diagnostic-cpc-assets-1984
 for custom-font/theme and reload checks on a copied M4 image.
 The [Clock/cursor responsiveness follow-up](docs/CPC-CLOCK-RESPONSIVENESS.md)
 adds `make diagnostic-cpc-latency-1984` for video-timed movement and save-under checks.
-Other assets, file pickers and the full
+[3D-T](docs/CPC-RESTART-STEP3D-T.md) connects configured icon packs (REFINED by
+default), the CPC cursor sprite and backdrop tiles. With the background focused,
+**A** toggles the diagnostic icon gallery and **V** checks cursor pixel phases.
+Run `make diagnostic-cpc-bitmaps-1984` for custom artwork and clipped exposure
+checks on a private M4 copy. Titlebar/gadget assets, file pickers and the full
 Desktop/Settings/File Manager remain later integrations.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the

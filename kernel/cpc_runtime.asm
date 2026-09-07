@@ -60,12 +60,18 @@ cpc_runtime_core_end
                 include "cpc_runtime_services.asm"
                 include "cpc_native_modules.asm"
                 include "cpc_visual_assets.asm"
+                include "cpc_bitmap_assets.asm"
                 include "../lib/cpc/runtime_input.asm"
                 include "cpc_runtime_boot.asm"
 cpc_font_payload
                 incbin "DEFAULT.FNT"
 cpc_font_end
-                include "../lib/cpc/cursor.inc"
+; Runtime cursor phases are mutable fixed RAM, never paged during movement.
+cursor_phases   defs 512,0
+cpc_cursor_default
+                incbin "DEFAULT.SPR"
+cpc_cursor_default_end
+                assert cpc_cursor_default_end-cpc_cursor_default==256,"CPC SPR geometry"
 ; Shared Desktop root component, M4-loaded into its already-owned C0 page.
 ; It no longer consumes fixed resident kernel space. All callbacks map root
 ; first; code, mutable state, diagnostic scratch and popup pixels are disjoint.

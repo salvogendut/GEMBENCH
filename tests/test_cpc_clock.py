@@ -57,5 +57,18 @@ class ClockTests(unittest.TestCase):
         damaged[at]=0
         self.assertNotEqual(bytes(damaged),actual)
 
+    def test_hidden_clock_does_not_need_cpu_to_settle_a_pending_component(self):
+        from cpc_runtime_clock import clock_cache_ready,clock_may_remain_parked
+        values=dict(have_prev=1,timer_digit_due=1,ph=0,pm=0,ps=54,
+                    dh=0,dm=0,ds=53,show_sec=1)
+        self.assertFalse(clock_cache_ready(values.get))
+        rects={2:(26,20,28,122),3:(25,9,31,144)}
+        self.assertTrue(clock_may_remain_parked(rects,[0,2,3],2,0,0))
+        for window,task in ((1,0),(0,1),(3,3)):
+            self.assertFalse(clock_may_remain_parked(rects,[0,2,3],2,window,task))
+        self.assertFalse(clock_may_remain_parked(rects,[0,3,2],2,0,0))
+        rects[3]=(39,24,31,144) # exposed left side: stale caches are not accepted
+        self.assertFalse(clock_may_remain_parked(rects,[0,2,3],2,0,0))
+
 
 if __name__=='__main__': unittest.main()

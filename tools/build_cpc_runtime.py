@@ -16,11 +16,25 @@ from cpc_runtime_bar import compile_bar
 from cpc_native_modules import compile_native
 from cpc_production_services import compile_timer
 import genfont
+import packicons
+
+ICON_SOURCES = ('floppy','clock','trash','geobench','basic','binary','picture',
+                'text','folder','app','font','desktop','filemanager','sd','up',
+                'screensaver','cf','ide','fractal','settings','calculator')
+
+
+def bitmap_assets(work):
+    packicons.main(['packicons',str(work/'DEFAULT.IST'),
+                    *(str(ROOT/f'lib/icon_{name}.asm') for name in ICON_SOURCES)])
+    subprocess.run(['python3',str(ROOT/'tools/png2spr.py'),str(ROOT/'assets/pointer.png'),
+                    str(work/'DEFAULT.SPR'),'cursor','12x16'],check=True)
+    (work/'REFINED.IST').write_bytes((ROOT/'assets/iconsets/REFINED.IST').read_bytes())
 
 
 def assemble(work: Path, overrides=()):
     work.mkdir(parents=True, exist_ok=True)
     genfont.main(["genfont", str(work / "DEFAULT.FNT")])
+    bitmap_assets(work)
     (work / "fsctx_size.inc").write_text("CPC_FS_MODULE_BYTES equ 1\n")
     (work / "TIMER.BIN").write_bytes(bytes(116))
     command = [os.environ.get("RASM", "rasm"), str(ROOT / "kernel/cpc_runtime.asm"),
@@ -84,6 +98,9 @@ def build():
              "GBENCH/GBCFG.MOD": (work / "GBCFG.MOD").read_bytes(),
              "GBENCH/GBUI.MOD": (work / "GBUI.MOD").read_bytes(),
              "GBENCH/DEFAULT.FNT": (work / "DEFAULT.FNT").read_bytes(),
+             "GBENCH/DEFAULT.IST": (work / "DEFAULT.IST").read_bytes(),
+             "GBENCH/REFINED.IST": (work / "REFINED.IST").read_bytes(),
+             "GBENCH/DEFAULT.SPR": (work / "DEFAULT.SPR").read_bytes(),
              "GEOBENCH.CFG": b'ICONS=REFINED\r\nFONT=DEFAULT\r\nCURSOR=DEFAULT\r\nBACKDROP=SOLID\r\nINKS=1,26,0,6,1\r\n',
              "GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
@@ -92,6 +109,8 @@ def build():
              "GBENCH/CLOCK.APP": clock.read_bytes(),
              "UFSTEST/SOURCE.BIN": bytes((i*13+7)&255 for i in range(1025)),
              "UFSTEST/SUB/SMALL.TXT": b"OK!"}
+    for tile in (ROOT/'assets/backdrops').glob('*.BDP'):
+        files['GBENCH/'+tile.name.upper()] = tile.read_bytes()
     for name, payload in files.items():
         path = card / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -120,6 +139,10 @@ def build():
         ("scheduler", "cpc_scheduler_begin", "cpc_scheduler_end", "cpc_sched_end")):
         sections[name] = dict(base=sym[begin], used=sym[end]-sym[begin], budget=sym[limit]-sym[begin])
     sections["fsctx"] = dict(base=0x4400, used=len(files["FSCTX.BIN"]), budget=0x1C00)
+    sections["icons"] = dict(base=sym['data_icons'],used=len(files['GBENCH/REFINED.IST']),
+                            budget=sym['cpc_icon_limit']-sym['data_icons'],page=sym['cpc_data_page'])
+    sections["cursor"] = dict(base=sym['cursor_phases'],used=512,budget=512,
+                             save_under=sym['pointer_background'],save_under_bytes=64)
     sections["bar"] = json.loads((work / "bar_layout.json").read_text())
     sections.update(json.loads((work / "native_layout.json").read_text()))
     manifest = dict(work=str(work), image=str(image), regions=memory_regions(sym), sections=sections,

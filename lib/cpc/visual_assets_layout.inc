@@ -12,7 +12,44 @@ CPC_FONT_DEST equ #1856
 CPC_FONT_LEFT equ #1858
 CPC_VISUAL_CALLS equ #185A
 CPC_VISUAL_DIRTY equ #185C       ; font pixels or frame pen changed, not just RGB
-CPC_VISUAL_STATE_END equ #185D
+CPC_ASSET_KIND equ #185D         ; 0 font, 1 icons, 2 cursor, 3 backdrop
+CPC_ICON_STATUS equ #185E
+CPC_ICON_COUNT equ #185F
+CPC_ICON_BYTES equ #1860
+CPC_CURSOR_STATUS equ #1862
+CPC_BACKDROP_STATUS equ #1863     ; 0 tile, 1 solid/missing/invalid
+CPC_ASSET_EXPECT equ #1864
+CPC_ASSET_ENTRIES equ #1866
+CPC_ASSET_DIR equ #1867
+CPC_ASSET_REMAIN equ #1869
+gi_slot equ #186B
+gi_x equ #186C
+gi_y equ #186D
+be_x equ gi_x
+be_y equ gi_y
+ig_w equ #186E
+ig_h equ #186F
+bm_src equ #1870
+bm_w equ #1872
+bm_h equ #1873
+bm_x equ #1874
+bm_y equ #1875
+bm_keep equ #1876
+CPC_ICON_HALF equ #1877
+CPC_ASSET_BANK equ #1878
+CPC_ASSET_PREVIOUS equ #1879
+CPC_ICON_DEMO equ #187A          ; private root test toggle, not Desktop policy
+CPC_BD_TILE equ #1880
+CPC_VISUAL_STATE_END equ pointer_background+64
+                assert CPC_BD_TILE+64<=pointer_background,"backdrop/pointer save-under overlap"
+DATA_ICONS equ #6100
+                ifndef CPC_ICON_LIMIT
+CPC_ICON_LIMIT equ CPC_APP_LIMIT
+                endif
+                assert CPC_APP_IO_END<=DATA_ICONS,"icon/filesystem I/O overlap"
+                assert DATA_ICONS<CPC_ICON_LIMIT,"empty icon allocation"
+                assert CPC_ICON_LIMIT<=CPC_APP_LIMIT,"icon/snapshot overlap"
+                assert CPC_ICON_LIMIT-DATA_ICONS>=5284,"default icon set exceeds allocation"
                 assert CPC_NATIVE_MODULE_STATE_END<=CPC_FONT_STATUS,"visual/native state overlap"
                 assert CPC_VISUAL_STATE_END<=CPC_NATIVE_STATE_END,"visual/hardware state overlap"
                 assert CPC_FONT_BASE==CPC_APP_BASE,"font staging reader base mismatch"

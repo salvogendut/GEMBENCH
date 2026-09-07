@@ -3,7 +3,37 @@ from cpc_graphics_fixture import CURSOR, address, put_pixel
 from cpc_production_registration import chrome
 
 
-def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2):
+def cursor_grid(sprite):
+    """Decode phase zero of the CPC file; no guest phase table as an oracle."""
+    if len(sprite)!=256: raise ValueError('CPC cursor must be 256 bytes')
+    rows=[]
+    for y in range(16):
+        row=''
+        for x in range(16):
+            mask,ink=sprite[y*8+(x//4)*2:y*8+(x//4)*2+2]
+            shift=x%4
+            row += '.' if mask & (0x88>>shift) else str(((ink>>(7-shift))&1)|(((ink>>(3-shift))&1)<<1))
+        rows.append(row)
+    return rows
+
+
+def cursor_phases(sprite):
+    """Independent pixel-level encode of all four phases for integrity checks."""
+    result=bytearray()
+    for phase in range(4):
+        for row in cursor_grid(sprite):
+            pixels='.'*phase+row
+            for col in range(4):
+                mask,ink=255,0
+                for x,ch in enumerate(pixels[col*4:col*4+4]):
+                    if ch!='.':
+                        mask &= ~(0x88>>x)
+                        ink |= (int(ch)&1)<<(7-x) | (int(ch)>>1)<<(3-x)
+                result.extend((mask,ink))
+    return bytes(result)
+
+
+def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None):
     def fill(image,x,y,w,h,pen):
         for yy in range(max(0,y),min(200,y+h)):
             for xx in range(max(0,x)*4,min(80,x+w)*4): put_pixel(image,xx,yy,pen)
@@ -18,7 +48,23 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
                         put_pixel(image,xx,yy,pen if font[at+gy]&(128>>gx) else paper)
     # Keep the boot pattern in non-display raster gaps; draw only visible pixels.
     result=bytearray((a>>8)^(a&255) for a in range(0xC000,0x10000))
-    fill(result,0,0,80,200,0);fill(result,0,0,80,8,1)
+    fill(result,0,0,80,200,0)
+    if backdrop is not None:
+        for y in range(200):
+            for x in range(80): result[address(x*4,y)]=backdrop[(y%16)*4+x%4]
+    if icons is not None:
+        for slot,x,y,half in ((0,2,32,False),(3,34,32,False),(20,72,32,False),(8,18,144,True)):
+            if slot>=icons[5]: continue
+            off=int.from_bytes(icons[16+4*slot:18+4*slot],'little')
+            w,h=icons[18+4*slot:20+4*slot]
+            if half: off+=(h//4)*w;h//=2
+            for yy in range(h):
+                for xx in range(w*4):
+                    if x*4+xx>=320 or y+yy>=200: continue
+                    b=icons[off+yy*w+xx//4];i=xx%4
+                    pen=((b>>(7-i))&1)|(((b>>(3-i))&1)<<1)
+                    if half or pen: put_pixel(result,x*4+xx,y+yy,pen)
+    fill(result,0,0,80,8,1)
     text(result,1,0,'512K',2,1)
     text(result,68,0,f'{clock[0]:02}:{clock[1]:02}',2,1)
     for i in range(min(menu[0],4)):
@@ -97,19 +143,20 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
             if not native: fill(result,x+1,y+2+i*10,w-2,10,paper)
             text(result,x+1,y+2+i*10,label,pen,paper)
     px,py=pointer
-    for y,row in enumerate(CURSOR):
+    for y,row in enumerate(CURSOR if cursor is None else cursor_grid(cursor)):
         for x,ch in enumerate(row):
             if ch!='.' and px+x<320 and py+y<200: put_pixel(result,px+x,py+y,int(ch))
     return bytes(result)
 
 
-def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2):
+def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None):
     px=int.from_bytes(ram[sym['pointer_x']:sym['pointer_x']+2],'little')
     py=ram[sym['pointer_y']]
     if ram[sym['menu_def']:sym['menu_def']+len(menu)]!=menu:
         raise AssertionError('focused menu snapshot differs')
     expected=frame(rects,order,accents,(px,py),font if font is not None else (work/'DEFAULT.FNT').read_bytes(),
-                   tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog,frame_pen)
+                   tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog,frame_pen,
+                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons)
     actual=ram[0xC000:0x10000]
     if actual!=expected:
         at=next(i for i,(a,b) in enumerate(zip(actual,expected)) if a!=b)

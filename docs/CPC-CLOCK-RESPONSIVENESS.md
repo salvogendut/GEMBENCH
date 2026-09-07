@@ -3,6 +3,11 @@
 2026-09-07, issue #77, `feature/77-cpc-production-adapters`.
 Follow-up to [3D-S](CPC-RESTART-STEP3D-S.md), before the next asset checkpoint.
 
+[3D-T](CPC-RESTART-STEP3D-T.md) subsequently loads a 16-row cursor and retains
+the six-tick deadline through sub-period scheduling jitter, resetting it after
+a missed whole period. Actual sample-gap telemetry remains independent; there
+is no accumulated-motion replay. Its new measurements supersede those below.
+
 ## Defect and fix
 
 With seconds enabled, the CPC virtual pointer slowed down and moved in bursts.

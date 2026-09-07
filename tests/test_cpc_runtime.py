@@ -72,6 +72,11 @@ class RuntimeTests(unittest.TestCase):
         self.assertLessEqual(s['cpc_native_module_state_end'],s['cpc_font_status'])
         self.assertLessEqual(s['cpc_visual_state_end'],s['cpc_native_state_end'])
         self.assertEqual(s['cpc_font_base'],0x4000)
+        self.assertGreaterEqual(s['data_icons'],s['cpc_app_io_end'])
+        self.assertLessEqual(s['cpc_icon_limit'],s['cpc_app_limit'])
+        self.assertLessEqual(s['cpc_bd_tile']+64,s['pointer_background'])
+        self.assertLessEqual(s['pointer_background']+64,s['cpc_native_state_end'])
+        self.assertEqual((s['cpc_pointer_width'],s['cpc_pointer_height']),(4,16))
         self.assertLessEqual(s['cpc_font_limit'],s['cpc_fs_module'])
         self.assertLessEqual(s['cpc_font_end']-s['cpc_font_payload'],s['cpc_font_limit']-s['cpc_font_base'])
         self.assertLessEqual(s['cpc_module_code_end'],s['cpc_module_data'])
@@ -96,13 +101,18 @@ class RuntimeTests(unittest.TestCase):
             assemble(self.work/'module-overlap',(f'-DCPC_MODULE_CODE_END={0x5900}',))
         with self.assertRaises(subprocess.CalledProcessError):
             assemble(self.work/'font-overlap',(f'-DCPC_FONT_LIMIT={0x4500}',))
+        with self.assertRaises(subprocess.CalledProcessError):
+            assemble(self.work/'icon-overlap',(f'-DCPC_ICON_LIMIT={0x8000}',))
+        with self.assertRaises(subprocess.CalledProcessError):
+            assemble(self.work/'icons-too-small',(f'-DCPC_ICON_LIMIT={0x7000}',))
 
     def test_pixel_observer_rejects_content_chrome_exposure_and_bar_damage(self):
         # Synthetic host observations challenge the checker; never injected into CPC.
         s=self.sym;rects={1:(11,66,58,68),2:(17,74,58,68)};order=[0,1,2];accents={1:0,2:1}
         ram=bytearray(512*1024)
         ram[s['pointer_x']:s['pointer_x']+2]=(40).to_bytes(2,'little');ram[s['pointer_y']]=30
-        ram[0xC000:0x10000]=frame(rects,order,accents,(40,30),(self.work/'DEFAULT.FNT').read_bytes())
+        ram[0xC000:0x10000]=frame(rects,order,accents,(40,30),(self.work/'DEFAULT.FNT').read_bytes(),
+                                 cursor=(self.work/'DEFAULT.SPR').read_bytes())
         verify_pixels(ram,s,self.work,rects,order,accents)
         for x,y in ((1,0),(15,68),(22,100),(73,105),(80,150),(40,30)):
             bad=bytearray(ram);bad[0xC000+address(x,y)]^=1

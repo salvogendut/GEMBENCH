@@ -104,6 +104,10 @@ cpc_root_idle
                 ld (cpc_runtime_key),a
                 cp 'r'
                 jr z,cpc_runtime_config
+                cp 'a'
+                jr z,cpc_runtime_assets_demo
+                cp 'v'
+                jp z,cpc_runtime_cursor_phase
                 cp 'p'
                 jp z,cpc_bar_payload+21
                 cp 'u'
@@ -157,6 +161,23 @@ cpc_runtime_config_done
                 ld (CPC_CFG_CALLS),hl
                 ei
                 ret
+cpc_runtime_assets_demo
+                ld a,(CPC_ICON_DEMO)
+                xor 1
+                ld (CPC_ICON_DEMO),a
+                jp wm_repaint_all
+cpc_runtime_cursor_phase
+                call pointer_hide
+                ld a,(pointer_x)
+                ld b,a
+                inc a
+                and 3
+                ld c,a
+                ld a,b
+                and #FC
+                or c
+                ld (pointer_x),a
+                jp pointer_show
 cpc_runtime_line db 1,1
                 dw 16,40,47,43
                 db 3,0,0,0,0,0
@@ -285,10 +306,12 @@ cpc_runtime_fs_done
                 inc (hl)
                 ret
 cpc_root_paint
-                xor a
                 ld bc,0
                 ld de,#50C8
-                call k_fill
+                call k_backdrop
+                ld a,(CPC_ICON_DEMO)
+                or a
+                call nz,cpc_icon_gallery
                 ; Content-only exposure must not invalidate the top bar.
                 ld a,(WM_CLIP_Y)
                 or a

@@ -7,7 +7,9 @@ cpc_routing_begin
 cpc_routing_end
                 include "../lib/cpc/poll.asm"
 ; Solid-backdrop configuration only. The tiled desktop asset provider is later.
+                ifndef CPC_RUNTIME
 k_backdrop
                 xor a
                 ld (fb_val),a
                 jp fill_xywh
+                endif

@@ -2,6 +2,10 @@
 ; composition are adapted from lib/screen.asm and lib/cursor.asm at 56478578.
 ; Changes: explicit fixed scratch, validated nonempty bounds, no ROM/IFF side
 ; effects, four pointer phases, pixel/top-down coordinates, idempotent hide.
+                ifndef CPC_POINTER_WIDTH
+CPC_POINTER_WIDTH equ 3             ; isolated 3B proof retains its 8x8 fixture
+CPC_POINTER_HEIGHT equ 8
+                endif
 
 ; D=byte column, E=line (already clipped); HL=screen. Clobbers AF/BC.
 scr_addr
@@ -151,7 +155,7 @@ pointer_show
                 ld a,l
                 and 3
                 ld b,a
-                ld de,48
+                ld de,CPC_POINTER_WIDTH*CPC_POINTER_HEIGHT*2
                 push hl
                 ld hl,cursor_phases
                 or a
@@ -171,9 +175,9 @@ pointer_phase_ok
                 ld b,a
                 ld a,80
                 sub b
-                cp 3
+                cp CPC_POINTER_WIDTH
                 jr c,pointer_width_ok
-                ld a,3
+                ld a,CPC_POINTER_WIDTH
 pointer_width_ok
                 ld (pointer_w),a
                 ld a,(pointer_y)
@@ -181,9 +185,9 @@ pointer_width_ok
                 ld b,a
                 ld a,200
                 sub b
-                cp 8
+                cp CPC_POINTER_HEIGHT
                 jr c,pointer_height_ok
-                ld a,8
+                ld a,CPC_POINTER_HEIGHT
 pointer_height_ok
                 ld (pointer_h),a
                 call pointer_block
@@ -224,7 +228,7 @@ pointer_byte
                 jr nz,pointer_byte
                 ld a,(pointer_w)
                 ld b,a
-                ld a,3
+                ld a,CPC_POINTER_WIDTH
                 sub b
                 add a,a
                 ld c,a

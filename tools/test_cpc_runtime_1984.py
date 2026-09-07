@@ -16,11 +16,11 @@ import time
 from build_cpc_runtime import ROOT, build, symbols
 from test_cpc_foundation_1984 import snapshot
 from cpc_production_lifetime import physical
-from cpc_runtime_pixels import verify_pixels
+from cpc_runtime_pixels import verify_pixels, cursor_phases
 from cpc_fswrite_cases import space
 
 
-def integrity(data, sym, work, font=None):
+def integrity(data, sym, work, font=None, cursor=None):
     header, ram = snapshot(data)
     if len(ram) != 512*1024: raise AssertionError("512 KiB required")
     if ram[sym['cpc_runtime_status']] != 1: raise AssertionError("runtime failed to boot")
@@ -43,6 +43,11 @@ def integrity(data, sym, work, font=None):
             for field,n in (('up_request',16),('up_text_copy',49)):
                 off=sym[field]-base
                 actual[off:off+n]=expected[off:off+n]
+        if name == 'CORE.RAW':
+            off=sym['cursor_phases']-base
+            phases=cursor_phases((work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor)
+            if actual[off:off+512]!=phases: raise AssertionError('cursor phase publication changed')
+            actual[off:off+512]=expected[off:off+512]
         if actual != expected: raise AssertionError(f'{name} code/data changed')
     if header[0x25] != 1 or header[0x40] != 0x0D: raise AssertionError('IM/ROM/mode')
     if ram[0x1448:0x144C] != ram[sym['mw_rect']:sym['mw_rect']+4]:
@@ -50,7 +55,7 @@ def integrity(data, sym, work, font=None):
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None):
     media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
@@ -59,6 +64,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
     if asset_case:
         from cpc_runtime_assets import prepare
         asset_fixture=prepare(asset_case,work,image,artifacts)
+    if bitmap_case:
+        from cpc_runtime_bitmaps import prepare
+        bitmap_fixture=prepare(bitmap_case,work,ROOT,image,artifacts)
     if native_fault or config_case:
         target=['-i',str(image)+'@@16384']
         if native_fault:
@@ -169,7 +177,13 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                     raise AssertionError('parser executable failure was not reported')
                 for name,base in (('CORE.RAW',0x8000),('SCHED.RAW',0x2900),('HARDWARE.RAW',0x3800)):
                     expected=(work/name).read_bytes()
-                    if ram[base:base+len(expected)]!=expected: raise AssertionError('boot failure damaged '+name)
+                    actual=bytearray(ram[base:base+len(expected)])
+                    if name=='CORE.RAW' and not parser_fault:
+                        off=sym['cursor_phases']-base
+                        if actual[off:off+512]!=cursor_phases((work/'DEFAULT.SPR').read_bytes()):
+                            raise AssertionError('failed root load damaged initialized cursor')
+                        actual[off:off+512]=expected[off:off+512]
+                    if actual!=expected: raise AssertionError('boot failure damaged '+name)
                 for stem in ('main','irq','tmp'):
                     lo,hi=sym[f'cpc_{stem}_stack'],sym[f'cpc_{stem}_top']
                     if ram[lo-16:lo]!=b'\xD7'*16 or ram[hi:hi+16]!=b'\xD7'*16:
@@ -182,6 +196,10 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 return artifacts
         else: raise AssertionError('runtime boot timeout')
         wait(50)
+        if bitmap_case:
+            from cpc_runtime_bitmaps import run_bitmaps
+            return run_bitmaps(media,manifest,work,sym,artifacts,image,emulator,
+                               send,wait,read,key,move,bitmap_case,bitmap_fixture)
         if asset_case:
             from cpc_runtime_assets import run_assets
             return run_assets(media,manifest,work,sym,artifacts,image,emulator,
@@ -373,8 +391,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         key('ESCAPE');del rects[1];order=[0,2];ram=checked('close-exposes-second')
         key('ESCAPE');rects={};order=[0];menu=bytes((1,10))+b'Desk\0\0\0\0';ram=checked('closed')
         if ram[sym['wm_nwin']]!=1 or ram[sym['core_page_free']]!=sym['cpc_pool_pages']-1: raise AssertionError('close/reclaim')
-        key('A');ram=checked('ascii-key')
-        if ram[sym['cpc_runtime_key']]!=ord('a'): raise AssertionError('ASCII input differs')
+        # A now toggles the asset gallery; use an unbound key for translation.
+        key('B');ram=checked('ascii-key')
+        if ram[sym['cpc_runtime_key']]!=ord('b'): raise AssertionError('ASCII input differs')
         key('S');ram=checked('canonical-save-line-restore')
         if ram[sym['cpc_runtime_surface_calls']]!=1 or ram[sym['cpc_runtime_surface_status']]:
             raise AssertionError('save/line/restore service failed')
@@ -411,4 +430,6 @@ if __name__=='__main__':
     mode.add_argument('--config-case',choices=('missing','empty','exact','oversized','custom'))
     from cpc_runtime_assets import ASSET_CASES
     mode.add_argument('--asset-case',choices=ASSET_CASES)
+    from cpc_runtime_bitmaps import BITMAP_CASES
+    mode.add_argument('--bitmap-case',choices=BITMAP_CASES)
     args=parser.parse_args();args.emulator=args.emulator.resolve();run(**vars(args))

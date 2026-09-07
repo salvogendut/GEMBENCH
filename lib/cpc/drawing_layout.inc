@@ -31,7 +31,16 @@ pointer_sprite equ #302E
 pointer_excluded equ #3030
 pointer_saves equ #3031
 pointer_restores equ #3033
+                ifdef CPC_RUNTIME
+pointer_background equ #18C0       ; 4 columns x 16 rows, after backdrop tile
+CPC_POINTER_WIDTH equ 4
+CPC_POINTER_HEIGHT equ 16
+                assert pointer_background+64<=CPC_NATIVE_STATE_END,"pointer/native state overflow"
+                else
 pointer_background equ #3035
+CPC_POINTER_WIDTH equ 3
+CPC_POINTER_HEIGHT equ 8
+                endif
 tc_x equ #304D
 tc_y equ #304E
 txt_penb equ #304F
