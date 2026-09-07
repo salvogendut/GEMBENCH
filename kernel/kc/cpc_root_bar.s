@@ -3,6 +3,7 @@
         .module cpc_root_bar_entry
         .globl _cpc_bar_reset
         .globl _cpc_bar_tick
+        .globl _cpc_bar_damage
         .globl _cpc_desk_calculator
         .globl _cpc_desk_clock
         .globl _cpc_desktop_init
@@ -24,3 +25,4 @@
         jp _cpc_test_popup
         jp _cpc_test_about
         jp _cpc_test_size
+        jp _cpc_bar_damage

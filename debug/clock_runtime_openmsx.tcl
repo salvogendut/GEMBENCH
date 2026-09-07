@@ -17,6 +17,16 @@ foreach line [split [read $cr_file] "\n"] {
     if {[regexp {^\s+0\s+(_main|_clock_timer|_draw_face)\s+([0-9A-Fa-f]+)\s} $line -> name value]} {
         set cr_app($name) [expr "0x$value"]
     }
+    if {[regexp {^\s+1\s+_show_sec\s+([0-9A-Fa-f]+)\s} $line -> value]} {
+        set cr_seconds_offset [expr "0x$value"]
+    }
+}
+close $cr_file
+set cr_file [open build/universal-obj/uclock/app.noi r]
+foreach line [split [read $cr_file] "\n"] {
+    if {[regexp {^DEF s__DATA (0x[0-9A-Fa-f]+)} $line -> value]} {
+        set cr_seconds_address [expr {$value + $cr_seconds_offset}]
+    }
 }
 close $cr_file
 set cr_base [expr {$da_clock_main - $cr_app(_main)}]
@@ -56,12 +66,24 @@ proc da_move_to {x y callback} {
 }
 
 rename da_focus_desktop cr_focus_desktop
+proc cr_wait_seconds {callback} {
+    if {[da_sig_loaded $::da_clock_main $::da_clock_sig] &&
+        [peek $::cr_seconds_address]} {
+        keymatrixup 5 0x01
+        after time 1.0 [list cr_focus_desktop $callback]
+    } elseif {[machine_info time] > $::cr_seconds_deadline} {
+        keymatrixup 5 0x01
+        da_finish "FAIL Clock did not acknowledge seconds key"
+    } else {
+        after time 0.05 [list cr_wait_seconds $callback]
+    }
+}
 proc da_focus_desktop {callback} {
     if {!$::cr_seconds_requested} {
         set ::cr_seconds_requested 1
+        set ::cr_seconds_deadline [expr {[machine_info time] + 20.0}]
         keymatrixdown 5 0x01
-        after time 0.15 {keymatrixup 5 0x01}
-        after time 1.0 [list cr_focus_desktop $callback]
+        cr_wait_seconds $callback
     } else { cr_focus_desktop $callback }
 }
 rename da_finish cr_finish_base

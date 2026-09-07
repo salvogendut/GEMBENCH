@@ -47,7 +47,7 @@ def compile_bar(work, sym, root):
             raise AssertionError('Desktop bar must not require CRT initialization')
     subprocess.run([str(bindir / 'makebin'), '-s', '65536', '-p', 'bar.ihx', 'bar.bin'], cwd=work, check=True)
     raw = (work / 'bar.bin').read_bytes()[base:]
-    if not 33 <= len(raw) <= end-base:
+    if not 36 <= len(raw) <= end-base:
         raise AssertionError('Desktop bar binary exceeds resident slot')
     (work / 'ROOTBAR.BIN').write_bytes(raw.ljust(end-base, b'\0'))
     return dict(base=base, used=len(raw), budget=end-base,

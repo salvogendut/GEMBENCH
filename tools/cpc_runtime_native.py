@@ -2,6 +2,7 @@
 import json
 from cpc_production_lifetime import physical
 from cpc_runtime_pixels import verify_pixels
+from cpc_runtime_clock import clock_cache_ready
 from test_cpc_foundation_1984 import snapshot
 
 
@@ -34,9 +35,7 @@ def run_native(root,media,manifest,work,sym,artifacts,image,emulator,send,wait,r
         for _ in range(180):
             data=read(name);_,r=snapshot(data)
             if r[sym['pointer_visible']] and not r[sym['core_pointer_paintlock']] and not r[sym['io_busy']]:
-                if slot is None or (value(r,'have_prev') and (modal or (not value(r,'timer_digit_due') and
-                    (value(r,'ph'),value(r,'pm'))==(value(r,'dh'),value(r,'dm')) and
-                    (not value(r,'show_sec') or value(r,'ps')==value(r,'ds'))))):
+                if slot is None or clock_cache_ready(lambda k:value(r,k),modal):
                     signature=bytes(r[0xC000:0x10000])+bytes(r[0x1240:0x1242])
                     turn=word(r,'cpc_runtime_turns')
                     if previous and signature==previous[0] and (modal or turn!=previous[1]): break
@@ -47,7 +46,8 @@ def run_native(root,media,manifest,work,sym,artifacts,image,emulator,send,wait,r
         for k,n in used.items(): stacks[k]=max(stacks[k],n)
         if bool(r[sym['ui_modal']])!=modal: raise AssertionError(name+': modal gate leaked')
         if slot is not None: clocks[slot]=tuple(value(r,k) for k in ('ph','pm','ps','show_sec','dh','dm','ds'))
-        verify_pixels(r,sym,work,rects,order,accents,menu,titles,popup,calculators,clocks,dialog)
+        verify_pixels(r,sym,work,rects,order,accents,menu,titles,popup,calculators,clocks,dialog,
+                      frame_pen=1 if config_case=='custom' else 2)
         if r[sym['wm_nwin']]!=len(order) or r[sym['wm_z']:sym['wm_z']+len(order)]!=bytes(order):
             raise AssertionError(name+': window lifecycle changed during modal')
         if sym['cpc_system_page'] in r[sym['core_page_native']:sym['core_page_native']+sym['cpc_pool_pages']]:
@@ -99,7 +99,8 @@ def run_native(root,media,manifest,work,sym,artifacts,image,emulator,send,wait,r
         status=r[sym['cpc_cfg_status']]
         if status!=(19 if config_case=='missing' else 2 if config_case=='oversized' else 0):
             raise AssertionError('configuration status differs: '+str(status))
-        module(r,'GBCFG')
+        # The following asset transaction owns/reuses F6 after parsing; the
+        # parser's outputs above, not a stale code image, are its live contract.
     r=observe('native-config-boot');cfg(r)
     root_focus();r=observe('native-root-focus')
     if config_case:

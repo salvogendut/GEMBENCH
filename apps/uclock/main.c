@@ -39,6 +39,14 @@ static int cx, cy;
 static unsigned char rr, tick_in, l_hour, l_min, l_sec, dig_y;
 static unsigned int aspect_x;
 
+/* Geometry is independent of time and of the window's position. Keep relative
+ * endpoints so moving the window is cheap too. In particular, a timer repair
+ * must not repeat 32-bit aspect-ratio arithmetic for every rim/tick segment. */
+typedef struct { int x, y; } clock_point;
+static clock_point rim[30], ticks[24], hand_points[3][60];
+static unsigned char geometry_ready, geometry_radius;
+static void cache_geometry(void);
+
 static const signed char SIN64[60] = {
       0,  7, 13, 20, 26, 32, 38, 43, 48, 52, 55, 58,
      61, 63, 64, 64, 64, 63, 61, 58, 55, 52, 48, 43,
@@ -86,6 +94,11 @@ static void relayout(void)
     l_min = (unsigned char)((unsigned int)rr * 30u / 44u);
     l_sec = (unsigned char)((unsigned int)rr * 36u / 44u);
     dig_y = dy;
+    if (!geometry_ready || geometry_radius != rr) {
+        cache_geometry();
+        geometry_radius = rr;
+        geometry_ready = 1u;
+    }
 }
 
 static int px_at(unsigned char pos, unsigned char rad)
@@ -99,11 +112,33 @@ static int py_at(unsigned char pos, unsigned char rad)
     return cy - (int)COS64[pos] * rad / 64;
 }
 
-static void hand(unsigned char pos, unsigned char length, unsigned char pen)
+static void cache_point(clock_point *point, unsigned char pos, unsigned char rad)
 {
+    point->x = px_at(pos, rad) - cx;
+    point->y = py_at(pos, rad) - cy;
+}
+
+static void cache_geometry(void)
+{
+    unsigned char k;
+    for (k = 0u; k < 30u; ++k) cache_point(&rim[k], k * 2u, rr);
+    for (k = 0u; k < 12u; ++k) {
+        cache_point(&ticks[k * 2u], k * 5u, rr);
+        cache_point(&ticks[k * 2u + 1u], k * 5u, tick_in);
+    }
+    for (k = 0u; k < 60u; ++k) {
+        cache_point(&hand_points[0][k], k, l_hour);
+        cache_point(&hand_points[1][k], k, l_min);
+        cache_point(&hand_points[2][k], k, l_sec);
+    }
+}
+
+static void hand(unsigned char pos, unsigned char kind, unsigned char pen)
+{
+    const clock_point *point = &hand_points[kind][pos];
     gb_line((unsigned int)cx, (unsigned int)cy,
-            (unsigned int)px_at(pos, length),
-            (unsigned int)py_at(pos, length), pen);
+            (unsigned int)(cx + point->x),
+            (unsigned int)(cy + point->y), pen);
 }
 
 static unsigned char hour_pos(unsigned char h, unsigned char m)
@@ -114,25 +149,25 @@ static unsigned char hour_pos(unsigned char h, unsigned char m)
 static void draw_face(void)
 {
     unsigned char k, next;
-    for (k = 0u; k < 60u; k += 2u) {
-        next = (unsigned char)((k + 2u) % 60u);
-        gb_line((unsigned int)px_at(k, rr), (unsigned int)py_at(k, rr),
-                (unsigned int)px_at(next, rr), (unsigned int)py_at(next, rr),
+    for (k = 0u; k < 30u; ++k) {
+        next = k == 29u ? 0u : k + 1u;
+        gb_line((unsigned int)(cx + rim[k].x), (unsigned int)(cy + rim[k].y),
+                (unsigned int)(cx + rim[next].x), (unsigned int)(cy + rim[next].y),
                 GB_UI_SURFACE);
     }
-    for (k = 0u; k < 60u; k += 5u)
-        gb_line((unsigned int)px_at(k, rr), (unsigned int)py_at(k, rr),
-                (unsigned int)px_at(k, tick_in),
-                (unsigned int)py_at(k, tick_in), GB_UI_SURFACE);
+    for (k = 0u; k < 24u; k += 2u)
+        gb_line((unsigned int)(cx + ticks[k].x), (unsigned int)(cy + ticks[k].y),
+                (unsigned int)(cx + ticks[k + 1u].x),
+                (unsigned int)(cy + ticks[k + 1u].y), GB_UI_SURFACE);
 }
 
 static void hands(unsigned char h, unsigned char m, unsigned char s,
                   unsigned char seconds, unsigned char hm_pen,
                   unsigned char second_pen)
 {
-    hand(hour_pos(h, m), l_hour, hm_pen);
-    hand(m, l_min, hm_pen);
-    if (seconds) hand(s, l_sec, second_pen);
+    hand(hour_pos(h, m), 0u, hm_pen);
+    hand(m, 1u, hm_pen);
+    if (seconds) hand(s, 2u, second_pen);
 }
 
 static char digits[9];
@@ -164,9 +199,10 @@ static void draw_seconds(unsigned char s)
 
 static int damage_l, damage_r, damage_t, damage_b;
 
-static void damage_endpoint(unsigned char pos, unsigned char length)
+static void damage_endpoint(unsigned char pos, unsigned char kind)
 {
-    int x = px_at(pos, length), y = py_at(pos, length);
+    const clock_point *point = &hand_points[kind][pos];
+    int x = cx + point->x, y = cy + point->y;
     if (x < damage_l) damage_l = x;
     if (x > damage_r) damage_r = x;
     if (y < damage_t) damage_t = y;
@@ -178,12 +214,12 @@ static void publish_hand_damage(unsigned char h, unsigned char m, unsigned char 
     unsigned char x, right;
     damage_l = damage_r = cx;
     damage_t = damage_b = cy;
-    damage_endpoint(hour_pos(ph, pm), l_hour);
-    damage_endpoint(pm, l_min);
-    if (pshow) damage_endpoint(ps, l_sec);
-    damage_endpoint(hour_pos(h, m), l_hour);
-    damage_endpoint(m, l_min);
-    if (show_sec) damage_endpoint(s, l_sec);
+    damage_endpoint(hour_pos(ph, pm), 0u);
+    damage_endpoint(pm, 1u);
+    if (pshow) damage_endpoint(ps, 2u);
+    damage_endpoint(hour_pos(h, m), 0u);
+    damage_endpoint(m, 1u);
+    if (show_sec) damage_endpoint(s, 2u);
     x = (unsigned char)(damage_l >> 2);
     right = (unsigned char)((damage_r + 4) >> 2);
     timer_part = TIMER_HANDS;
@@ -242,6 +278,8 @@ static void sync_rect(void)
 {
     gb_rect_t rect;
     gb_window_rect(&rect);
+    if (geometry_ready && win_x == rect.x && win_y == rect.y &&
+        win_w == rect.w && win_h == rect.h) return;
     win_x = rect.x; win_y = rect.y; win_w = rect.w; win_h = rect.h;
     relayout();
 }

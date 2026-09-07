@@ -154,7 +154,13 @@ this is not yet the full CPC Desktop.
 [3D-R](docs/CPC-RESTART-STEP3D-R.md) binds shared configuration parsing and basic
 native dialogs in a reserved system bank. With the background focused, **U/P/N/I**
 exercise popup/prompt/size/About; **R** reparses configuration. Run
-`make diagnostic-cpc-native-1984`. Themes/assets, file pickers and the full
+`make diagnostic-cpc-native-1984`. [3D-S](docs/CPC-RESTART-STEP3D-S.md) now applies
+configured 6x8 fonts, palette/border and contrasting window frames. **R** does
+not repaint for an unchanged configuration. Run `make diagnostic-cpc-assets-1984`
+for custom-font/theme and reload checks on a copied M4 image.
+The [Clock/cursor responsiveness follow-up](docs/CPC-CLOCK-RESPONSIVENESS.md)
+adds `make diagnostic-cpc-latency-1984` for video-timed movement and save-under checks.
+Other assets, file pickers and the full
 Desktop/Settings/File Manager remain later integrations.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the

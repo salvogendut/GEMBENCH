@@ -6,38 +6,19 @@
 ; --- font in PAGE_DATA ----------------------------------------------------
 ; font_init: page PAGE_DATA in, load <FONT>.FNT into it, cache the geometry.
 ; The 8.3 filename was built by the GBCFG module (KCFG_FONTNAME); just copy it.
-font_init
+FONT_LOAD_MAX equ #1000
+FONT_READ equ fs_load_sys
+FONT_APPLY equ font_apply_header
+                macro FONT_ENTER
                 di
                 LD_A_PAGE_DATA
-                call  bank_set
-                ld    hl,KCFG_FONTNAME       ; fs_req_name = the config font name
-                ld    de,fs_req_name
-                call  copy11
-                ld    hl,#1000               ; font fits easily
-                ld    (fs_load_max),hl
-                ld    hl,DATA_FONT           ; load into PAGE_DATA
-                ld    (fs_load_dst),hl
-                ld    hl,def_fnt             ; fall back to DEFAULT.FNT if missing
-                call  load_or_default
-                ld    hl,DATA_FONT           ; cache geometry (font_glyphs -> PAGE_DATA)
-                call  font_apply_header
-                call  bank_normal
+                call bank_set
+                mend
+                macro FONT_LEAVE
+                call bank_normal
                 ei
-                ret
-def_fnt         db    "DEFAULT FNT"
-def_ist         db    "DEFAULT IST"
-
-; load_or_default: fs_req_name holds the wanted 8.3 name and fs_load_dst/max are
-; set. Try it; if the file is missing (a bad ICONS=/FONT= value), retry with the
-; 11-byte default name at HL so a typo can't leave the screen drawing garbage.
-load_or_default                                ; HL = default 8.3 name (11 bytes)
-                push  hl
-                call  fs_load_sys             ; #134: fonts/icons/cursor live in /GEOBENCH
-                pop   hl
-                ret   c                         ; wanted file loaded
-                ld    de,fs_req_name           ; missing -> use the default name
-                call  copy11
-                jp    fs_load_sys              ; (dst/max unchanged by the miss)
+                mend
+                include "core/font_asset.asm"
 
 ; icon_init: load <ICONS>.IST into PAGE_DATA at DATA_ICONS.
 icon_init

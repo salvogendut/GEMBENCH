@@ -43,8 +43,8 @@ class RoutingSourceTests(unittest.TestCase):
         self.assertNotRegex(source,r'send\(.*(?:poke|write-memory)')
         poll=(ROOT/"lib/cpc/poll.asm").read_text()
         self.assertIn("call cpc_input_scan",poll)
-        self.assertIn("call cpc_window_pointer_hide",poll)
-        self.assertIn("call cpc_window_pointer_show",poll)
+        self.assertIn("call pointer_hide",poll)
+        self.assertIn("jp z,pointer_show",poll)
         self.assertNotIn("wm_focus",poll)
 
 

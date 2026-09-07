@@ -10,6 +10,17 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 class NativeModuleTests(unittest.TestCase):
+    def test_modal_clock_observer_does_not_wait_for_parked_work(self):
+        sys.path.insert(0,str(ROOT/'tools'))
+        from cpc_runtime_clock import clock_cache_ready
+        state=dict(have_prev=1,timer_digit_due=1,ph=0,pm=1,ps=33,dh=0,dm=1,ds=32,show_sec=1)
+        self.assertFalse(clock_cache_ready(state.__getitem__))
+        self.assertTrue(clock_cache_ready(state.__getitem__,modal=True))
+        state.update(timer_digit_due=0,ds=33)
+        self.assertTrue(clock_cache_ready(state.__getitem__))
+        state['have_prev']=0
+        self.assertFalse(clock_cache_ready(state.__getitem__,modal=True))
+
     def test_modal_clock_oracle_checks_hand_and_digit_caches_separately(self):
         sys.path.insert(0,str(ROOT/'tools'))
         from cpc_runtime_clock import draw_clock

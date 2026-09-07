@@ -32,6 +32,8 @@ void cpc_bar_tick(void)
 #include "../../apps/desktop/core/bar_refresh.inc"
 }
 
+#include "cpc_bar_damage.inc"
+
 /* Temporary root binding for the real Desktop activation policy. F2/F7 are
  * private integration controls, not a substitute Desk menu. Capacity/failure
  * presentation are native leaves until the full Desktop/UI is connected. */

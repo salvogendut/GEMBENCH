@@ -21,6 +21,9 @@ PARAM_FS_REQUEST equ #2400
 PARAM_FS_TRANSFER equ #1500
                 endif
                 macro PARAM_ENTER
+                ifdef CPC_RUNTIME
+                call cpc_pointer_service   ; between primitives, never in an IRQ
+                endif
                 push ix
                 ld a,i
                 push af
@@ -29,6 +32,13 @@ PARAM_FS_TRANSFER equ #1500
                 push af
                 ld a,1
                 ld (CORE_PARAM_LOCK),a
+                ifdef CPC_RUNTIME
+                ; Serialization is the scheduler lock, not a long IRQ blackout.
+                ; The CPC IRQ touches only fixed time/context cells. Keep time
+                ; advancing through validation and fully clipped primitives,
+                ; which never enter a raster loop with its own EI boundary.
+                ei
+                endif
                 mend
                 macro PARAM_LEAVE
                 ld d,a

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from cpc_production_lifetime import physical
 from cpc_runtime_pixels import verify_pixels
+from cpc_runtime_clock import clock_cache_ready
 from test_cpc_foundation_1984 import snapshot
 
 DESK=bytes((1,10))+b'Desk\0\0\0\0'
@@ -31,23 +32,28 @@ def run_desk(root,media,manifest,work,sym,artifacts,image,emulator,send,wait,rea
             data=read(name);_,r=snapshot(data)
             if r[sym['sched_fault']]: raise AssertionError('scheduler fault')
             if r[sym['pointer_visible']] and not any(r[sym[n]] for n in
-                    ('core_pointer_paintlock','core_param_timer_owner','io_busy')):
-                if clock_slot is None or (value(r,'have_prev') and not value(r,'timer_digit_due') and
-                    (value(r,'ph'),value(r,'pm'))==(value(r,'dh'),value(r,'dm')) and
-                    (not value(r,'show_sec') or value(r,'ps')==value(r,'ds'))):
-                    signature=bytes(r[0xC000:0x10000])+bytes(r[0x1240:0x1242])
+                    ('core_pointer_paintlock','io_busy')) and \
+                    (popup is not None or not r[sym['core_param_timer_owner']]):
+                # Desk can park the timer between completed hand and digit
+                # passes, just like GBUI. Do not wait for intentionally parked
+                # work; check both completed caches against the actual pixels.
+                if clock_slot is None or clock_cache_ready(lambda k:value(r,k),popup is not None):
+                    signature=bytes(r[0xC000:0x10000])+bytes(r[0x1240:0x1242])+bytes(r[sym['menu_def']:sym['menu_def']+37])
                     # Modal polling intentionally does not re-enter the root
                     # loop/worker dispatcher; otherwise require root progress.
                     turn=word(r,'cpc_runtime_turns')
-                    if previous and signature==previous[0] and (popup is not None or turn!=previous[1]):
+                    # The counter is incremented at bar ENTRY, before its
+                    # refresh. Require two turns with the same screen/menu to
+                    # avoid accepting a freshly launched app before that bar.
+                    if previous and signature==previous[0] and (popup is not None or (turn-previous[1])&65535>=2):
                         r,used=integrity(data,sym,work)
                         for k,n in used.items(): stack[k]=max(stack[k],n)
                         break
-                    previous=(signature,turn)
+                    if previous is None or signature!=previous[0]: previous=(signature,turn)
             wait(3)
         else: raise AssertionError(name+': incomplete drawing')
         if clock_slot is not None:
-            clocks[clock_slot]=tuple(value(r,k) for k in ('ph','pm','ps','show_sec'))
+            clocks[clock_slot]=tuple(value(r,k) for k in ('ph','pm','ps','show_sec','dh','dm','ds'))
         verify_pixels(r,sym,work,rects,order,accents,menu,titles,popup,calculators,clocks)
         if r[sym['wm_focus']]!=focus or r[sym['wm_nwin']]!=len(order):
             raise AssertionError(name+': focus/window count')

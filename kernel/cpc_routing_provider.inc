@@ -14,7 +14,14 @@ in_quit equ #3304
 poll_lastfire equ #3305
 poll_byte equ #3306
 poll_line equ #3307
-cpc_poll_stamp equ #3308
+cpc_poll_stamp equ #335A             ; 16-bit cadence; #3308 is now reserved
+                ifdef CPC_RUNTIME
+cpc_pointer_interval equ #335C
+cpc_pointer_max_gap equ #335E        ; IRQ ticks, consecutive moving samples
+cpc_pointer_moves equ #3360
+cpc_pointer_moving equ #3362
+                assert cpc_pointer_moving+1<=CPC_REG_END,"pointer cadence state overflow"
+                endif
 wm_sav_x equ #3309
 wm_sav_y equ #330A
 wm_sav_w equ #330B

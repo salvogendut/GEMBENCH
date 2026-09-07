@@ -26,8 +26,13 @@ all: msx
 .PHONY: diagnostic-cpc-menus-1984
 .PHONY: diagnostic-cpc-accessories-1984
 .PHONY: diagnostic-cpc-clock-1984
+.PHONY: diagnostic-cpc-latency-1984
 .PHONY: diagnostic-cpc-desk-1984
 .PHONY: diagnostic-cpc-native-1984
+.PHONY: diagnostic-cpc-assets-1984
+diagnostic-cpc-assets-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --asset-case custom
+
 diagnostic-cpc-native-1984:
 	$(PYTHON) tools/test_cpc_runtime_1984.py --native
 
@@ -36,6 +41,9 @@ diagnostic-cpc-desk-1984:
 
 diagnostic-cpc-clock-1984:
 	$(PYTHON) tools/test_cpc_runtime_1984.py --clock
+
+diagnostic-cpc-latency-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --latency
 
 diagnostic-cpc-accessories-1984:
 	$(PYTHON) tools/test_cpc_runtime_1984.py --accessories

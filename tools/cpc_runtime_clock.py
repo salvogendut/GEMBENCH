@@ -13,6 +13,17 @@ SIN=(0,7,13,20,26,32,38,43,48,52,55,58,61,63,64,64,64,63,61,58,
 COS=tuple(SIN[(i+15)%60] for i in range(60))
 
 
+def clock_cache_ready(value, modal=False):
+    """A modal may park between completed hand/digit passes. Both are drawable.
+
+    Outside modal polling require the pending digit pass to finish; observers
+    still independently require a stable screen and unobstructed draw boundary.
+    """
+    return bool(value('have_prev') and (modal or (not value('timer_digit_due') and
+                (value('ph'),value('pm'))==(value('dh'),value('dm')) and
+                (not value('show_sec') or value('ps')==value('ds')))))
+
+
 def draw_clock(surface,rect,time,fill,text):
     x,y,w,h=rect;hour,minute,second,seconds=time[:4]
     top=y+14;digital=y+h-16;avail=digital-2-top
@@ -110,8 +121,9 @@ def run_clock(root,media,manifest,work,sym,artifacts,image,emulator,send,wait,re
     def owner(r): return bytes((r[sym['core_win_owner']+2],r[sym['core_win_owner_gen']+2]))
     key('F2');r=checked('clock-open')
     app=(media/'CARD/GBENCH/CLOCK.APP').read_bytes()
-    if hashlib.sha256(app).hexdigest()!='73a3786bb08f75162018cfeeaaad2add5eb4f240bd72725441d8a6681b22a90c':
-        raise AssertionError('Clock differs from shared rim-repair build')
+    if (app != (root/'build/universal/CLOCK.APP').read_bytes() or
+            hashlib.sha256(app).hexdigest() != manifest['files']['GBENCH/CLOCK.APP']):
+        raise AssertionError('Clock differs from the canonical compile-once build')
     initial_owner=owner(r);idx=initial_owner[0]-1;base=physical(r[sym['wm_table']+50])
     if r[base:base+len(app)]!=app: raise AssertionError('loaded Clock bytes differ')
     if r[sym['core_app_accessory']+idx]!=1 or r[sym['core_app_service']+idx]!=0xA0:
@@ -161,7 +173,14 @@ def run_clock(root,media,manifest,work,sym,artifacts,image,emulator,send,wait,re
     drag(3,39,24);r=checked('clock-partial-exposure')
     # Pointer on the covering window, inside the old bounding damage, must
     # remain untouched; only Clock's exact uncovered fragments are painted.
-    move(42,75);before=quiet_start('partial-before');elapsed(before);r=checked('clock-partial-tick')
+    move(42,75);before=quiet_start('partial-before')
+    # Require a genuinely exposed moving hand. During seconds 0..30 the hand
+    # and seconds digits can both be entirely behind Calculator. Clipped line
+    # rejection now correctly does zero raster work in that interval.
+    second=word(before,'cpc_hw_seconds')%60
+    if not 35<=second<=44:
+        elapsed(before,(35-second)%60);before=quiet_start('partial-before')
+    elapsed(before);r=checked('clock-partial-tick')
     if word(r,'cpc_runtime_draw_calls')==word(before,'cpc_runtime_draw_calls'):
         raise AssertionError('partially visible Clock did not paint')
     unchanged_counters(before,r,('pointer_saves','pointer_restores'))

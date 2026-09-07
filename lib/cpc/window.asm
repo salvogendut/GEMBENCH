@@ -26,6 +26,13 @@ cpc_window_clip
                 ld (rect_h),a
                 ret
 cpc_window_call
+                ifdef CPC_RUNTIME
+                ; Native chrome leaves may return DI. Root application code
+                ; must run with time IRQs enabled BETWEEN primitives as well.
+                ; Root cannot be preempted; IRQ never touches video/PPI scratch.
+                ; Do not move this to PAINT_IRQ_ENTER: chrome runs after it.
+                ei
+                endif
                 jp (hl)
 cpc_window_pointer_hide
                 ld a,(CORE_POINTER_PAINTLOCK)

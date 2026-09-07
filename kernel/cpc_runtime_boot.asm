@@ -55,20 +55,11 @@ cpc_runtime_start
                 ld de,CPC_SYSINFO_BASE
                 ld bc,48
                 ldir
-                ld a,CPC_DATA_PAGE
-                call foundation_bank_set
-                ld hl,cpc_font_payload
-                ld de,#4000
-                ld bc,cpc_font_end-cpc_font_payload
-                ldir
-                ld hl,#4000
-                call font_apply_header
-                ld a,#C0
-                call foundation_bank_set
                 call cpc_fs_load_module
                 jp nc,cpc_runtime_failed
                 call cpc_config
                 jp nc,cpc_runtime_failed
+                call cpc_visual_apply
                 call cpc_desktop_load
                 jp nc,cpc_runtime_failed
                 ld hl,cpc_bar_data
@@ -78,23 +69,6 @@ cpc_runtime_start
                 ldir                           ; explicit native root BSS initialization
                 call cpc_bar_payload          ; initialize root-owned bar state
                 call cpc_bar_payload+12       ; actual Desktop Desk registration
-                ; Palette is hardware-only: blue, white, black, bright red.
-                ld hl,cpc_runtime_palette
-                ld d,0
-cpc_runtime_ink
-                ld bc,#7F00
-                out (c),d
-                ld a,(hl)
-                out (c),a
-                inc hl
-                inc d
-                ld a,d
-                cp 4
-                jr c,cpc_runtime_ink
-                ld a,16
-                out (c),a
-                ld a,#44
-                out (c),a
                 ld hl,cpc_root_bar
                 ld (BAR_HANDLER),hl
                 ld a,10
@@ -170,6 +144,14 @@ cpc_root_idle
 cpc_runtime_config
                 di
                 call cpc_config
+                jr nc,cpc_runtime_config_done
+                call cpc_visual_apply
+                ; Explicit global font/theme change invalidates all surfaces;
+                ; ordinary focus, damage and timer repaints remain clipped.
+                ld a,(CPC_VISUAL_DIRTY)
+                or a
+                call nz,wm_repaint_all
+cpc_runtime_config_done
                 ld hl,(CPC_CFG_CALLS)
                 inc hl
                 ld (CPC_CFG_CALLS),hl
@@ -183,6 +165,10 @@ cpc_root_bar
                 inc hl
                 ld (cpc_runtime_turns),hl
                 call cpc_timer_collect        ; same order as the real Desktop bar hook
+                ; A fully covered timer component is dropped without repaint,
+                ; so its narrow clip is still installed. The root bar must not
+                ; cache a menu/time update that was clipped away.
+                call clip_set_full
                 call cpc_bar_payload+3        ; existing Desktop delta-refresh policy
                 call cpc_runtime_storage
                 call cpc_runtime_fsprobe
@@ -307,8 +293,7 @@ cpc_root_paint
                 ld a,(WM_CLIP_Y)
                 or a
                 ret nz
-                call cpc_bar_payload
-                jp cpc_bar_payload+3
+                jp cpc_bar_payload+33        ; clipped repair must not publish full-bar cache
 cpc_root_desc
                 db 0,0,CPC_COLUMNS,CPC_LINES
                 dw cpc_root_idle,cpc_root_paint,cpc_root_event,0
@@ -342,5 +327,4 @@ cpc_desktop_name db "ROOTUI  BIN"
 cpc_runtime_app db "ABIPROBEAPP"
 cpc_runtime_fsapp db "FSPROBE APP"
 cpc_runtime_menuapp db "MENUPRBEAPP"
-cpc_runtime_palette db #44,#4B,#54,#4C
                 assert cpc_runtime_f7+1<CPC_ADAPTER_STATE_END,"launcher state overflow"

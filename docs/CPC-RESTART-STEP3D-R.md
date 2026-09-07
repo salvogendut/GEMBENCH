@@ -217,6 +217,10 @@ literal pipe-separated list). `make diagnostic-cpc-runtime` only rebuilds.
 
 ## Next
 
+The first bounded asset step is now [3D-S](CPC-RESTART-STEP3D-S.md): configured
+6x8 fonts, palette/border and shared frame contrast, with no-op reload detection.
+The remaining asset families below are still required.
+
 Bind asset/theme loading and application, then connect the full shared Desktop
 and File Manager to the qualified M4 providers. File pickers, Settings,
 screensavers, general UI clients and the remaining applications need their own

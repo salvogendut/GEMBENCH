@@ -83,6 +83,7 @@ def build():
              "GBENCH/ROOTUI.BIN": (work / "ROOTBAR.BIN").read_bytes(),
              "GBENCH/GBCFG.MOD": (work / "GBCFG.MOD").read_bytes(),
              "GBENCH/GBUI.MOD": (work / "GBUI.MOD").read_bytes(),
+             "GBENCH/DEFAULT.FNT": (work / "DEFAULT.FNT").read_bytes(),
              "GEOBENCH.CFG": b'ICONS=REFINED\r\nFONT=DEFAULT\r\nCURSOR=DEFAULT\r\nBACKDROP=SOLID\r\nINKS=1,26,0,6,1\r\n',
              "GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),

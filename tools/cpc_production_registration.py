@@ -40,7 +40,7 @@ def emit_vectors(path: Path):
     path.write_text("\n".join(rows)+"\n")
 
 
-def chrome(rect, kind, title, font):
+def chrome(rect, kind, title, font, frame_pen=1):
     """Declarative plain furniture, in logical pixels before Mode-1 packing."""
     x,y,w,h = rect
     pixels = bytearray(320*200)
@@ -65,7 +65,7 @@ def chrome(rect, kind, title, font):
     if kind & 1:
         fill((x,y,w,14),1)
         for yy in range(y,y+14,2): fill((x,yy,w,1),2)
-    border(rect,1)
+    border(rect,frame_pen)
     if kind & 1:
         if kind & 2: fill((x+1,y+2,2,10),1)
         if kind & 4:

@@ -3,7 +3,7 @@ from cpc_graphics_fixture import CURSOR, address, put_pixel
 from cpc_production_registration import chrome
 
 
-def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None):
+def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2):
     def fill(image,x,y,w,h,pen):
         for yy in range(max(0,y),min(200,y+h)):
             for xx in range(max(0,x)*4,min(80,x+w)*4): put_pixel(image,xx,yy,pen)
@@ -29,7 +29,7 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
         calculator=(calculators or {}).get(slot)
         watch=(clocks or {}).get(slot)
         surface=chrome((x,y,w,h),31 if watch is not None else 11 if calculator is not None else 7,
-                       (titles or {}).get(slot,'Universal ABI'),font)
+                       (titles or {}).get(slot,'Universal ABI'),font,frame_pen)
         fill(surface,x+1,y+14,w-2,h-15,0 if watch is not None else 1)
         if watch is not None:
             # Independent Clock geometry/pixels at the observed completed time,
@@ -103,13 +103,13 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
     return bytes(result)
 
 
-def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None):
+def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2):
     px=int.from_bytes(ram[sym['pointer_x']:sym['pointer_x']+2],'little')
     py=ram[sym['pointer_y']]
     if ram[sym['menu_def']:sym['menu_def']+len(menu)]!=menu:
         raise AssertionError('focused menu snapshot differs')
-    expected=frame(rects,order,accents,(px,py),(work/'DEFAULT.FNT').read_bytes(),
-                   tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog)
+    expected=frame(rects,order,accents,(px,py),font if font is not None else (work/'DEFAULT.FNT').read_bytes(),
+                   tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog,frame_pen)
     actual=ram[0xC000:0x10000]
     if actual!=expected:
         at=next(i for i,(a,b) in enumerate(zip(actual,expected)) if a!=b)

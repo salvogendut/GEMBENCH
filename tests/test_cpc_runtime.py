@@ -69,6 +69,11 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(s['cpc_ui_request'],0x1700)
         self.assertLessEqual(s['cpc_ui_request_end'],s['cpc_cfg_output'])
         self.assertLessEqual(s['cpc_cfg_text_end'],0x1200)
+        self.assertLessEqual(s['cpc_native_module_state_end'],s['cpc_font_status'])
+        self.assertLessEqual(s['cpc_visual_state_end'],s['cpc_native_state_end'])
+        self.assertEqual(s['cpc_font_base'],0x4000)
+        self.assertLessEqual(s['cpc_font_limit'],s['cpc_fs_module'])
+        self.assertLessEqual(s['cpc_font_end']-s['cpc_font_payload'],s['cpc_font_limit']-s['cpc_font_base'])
         self.assertLessEqual(s['cpc_module_code_end'],s['cpc_module_data'])
         self.assertLessEqual(s['cpc_module_data_end'],s['cpc_ui_under'])
         self.assertLessEqual(s['cpc_ui_under_end'],s['cpc_ui_popup'])
@@ -89,6 +94,8 @@ class RuntimeTests(unittest.TestCase):
             assemble(self.work/'root-overlap',(f'-DCPC_ROOT_CODE_END={0x6100}',))
         with self.assertRaises(subprocess.CalledProcessError):
             assemble(self.work/'module-overlap',(f'-DCPC_MODULE_CODE_END={0x5900}',))
+        with self.assertRaises(subprocess.CalledProcessError):
+            assemble(self.work/'font-overlap',(f'-DCPC_FONT_LIMIT={0x4500}',))
 
     def test_pixel_observer_rejects_content_chrome_exposure_and_bar_damage(self):
         # Synthetic host observations challenge the checker; never injected into CPC.

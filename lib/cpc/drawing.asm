@@ -77,7 +77,9 @@ cpc_damage_begin
                 ld (rect_y),a
                 ld a,b
                 ld (rect_h),a
-                jp pointer_exclude
+                call pointer_exclude
+                scf                       ; nonempty, regardless of pointer overlap
+                ret
 cpc_damage_empty
                 xor a
                 ld (pointer_excluded),a
@@ -120,7 +122,9 @@ cpc_text_width
                 ld (rect_h),a
                 call cpc_damage_begin
                 pop hl
+                ret nc                    ; no glyph work outside the active clip
                 ; All text is fixed scratch before font replaces caller aperture.
+                di                        ; bank/sample boundary, not the whole call
                 ld a,(BANK_CUR)
                 ld (draw_bank),a
                 push hl
@@ -208,6 +212,15 @@ cpc_line_dy
                 ld a,l
                 ld (rect_h),a
                 call cpc_damage_begin
+                ret nc                    ; reject invisible lines before Bresenham
+                ld a,(up_request+10)
+                ld e,a
+                ld d,0
+                ld hl,solid_pens
+                add hl,de
+                ld a,(hl)
+                ld (pixel_ink),a
+                di                        ; atomic telemetry start; drawing runs EI
                 call cpc_draw_sample_begin
                 ei
 cpc_line_step
@@ -305,15 +318,6 @@ cpc_pixel_shift
                 djnz cpc_pixel_shift
 cpc_pixel_mask
                 ld (pixel_mask),a
-                ld a,(up_request+10)
-                ld e,a
-                ld d,0
-                push hl
-                ld hl,solid_pens
-                add hl,de
-                ld a,(hl)
-                ld (pixel_ink),a
-                pop hl
                 srl h
                 rr l
                 srl h

@@ -20,7 +20,7 @@ from cpc_runtime_pixels import verify_pixels
 from cpc_fswrite_cases import space
 
 
-def integrity(data, sym, work):
+def integrity(data, sym, work, font=None):
     header, ram = snapshot(data)
     if len(ram) != 512*1024: raise AssertionError("512 KiB required")
     if ram[sym['cpc_runtime_status']] != 1: raise AssertionError("runtime failed to boot")
@@ -37,7 +37,7 @@ def integrity(data, sym, work):
     for name,base in (('CORE.RAW',0x8000),('SCHED.RAW',0x2900),('HARDWARE.RAW',0x3800),
                       ('ROOTBAR.BIN',0x4000),
                       ('SUPPORT.RAW',0x400),('FSCTX.BIN',0x7C400),('DEFAULT.FNT',0x7C000)):
-        expected = (work/name).read_bytes()
+        expected = font if name=='DEFAULT.FNT' and font is not None else (work/name).read_bytes()
         actual = bytearray(ram[base:base+len(expected)])
         if name == 'SUPPORT.RAW':
             for field,n in (('up_request',16),('up_text_copy',49)):
@@ -50,12 +50,15 @@ def integrity(data, sym, work):
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False):
     media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-'))
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(manifest['image']).read_bytes())
+    if asset_case:
+        from cpc_runtime_assets import prepare
+        asset_fixture=prepare(asset_case,work,image,artifacts)
     if native_fault or config_case:
         target=['-i',str(image)+'@@16384']
         if native_fault:
@@ -109,7 +112,8 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         finally: os.close(fd)
         reply=receive('1984: pilot reply: ').split('1984: pilot reply: ',1)[1]
         if not reply.startswith('ok '): raise RuntimeError(reply)
-    def wait(n=30): send(f'wait frames {n} 300')
+        return reply
+    def wait(n=30): return send(f'wait frames {n} 300')
     def read(name='steering'):
         path=artifacts/(name+'.sna');send(f'snapshot-save {path}')
         return path.read_bytes()
@@ -140,7 +144,8 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
     checks=[]
     def checked(name):
         r=state(name)
-        verify_pixels(r,sym,work,rects,order,accents,menu,titles,popup,calculators)
+        verify_pixels(r,sym,work,rects,order,accents,menu,titles,popup,calculators,
+                      frame_pen=1 if config_case=='custom' else 2)
         if r[sym['wm_nwin']]!=len(order) or r[sym['wm_z']:sym['wm_z']+len(order)]!=bytes(order):
             raise AssertionError(name+': z-order/count')
         for slot,rect in rects.items():
@@ -176,7 +181,12 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 print('PASS root module rejection '+json.dumps(report),flush=True)
                 return artifacts
         else: raise AssertionError('runtime boot timeout')
-        wait(50);ram=checked('opened')
+        wait(50)
+        if asset_case:
+            from cpc_runtime_assets import run_assets
+            return run_assets(media,manifest,work,sym,artifacts,image,emulator,
+                              send,wait,read,key,move,asset_case,asset_fixture)
+        ram=checked('opened')
         if ram[sym['wm_nwin']]!=2 or ram[sym['wm_focus']]!=1: raise AssertionError('APP failed to open/focus')
         entry=sym['wm_table']+25
         if ram[entry+1:entry+5]!=bytes((11,66,58,68)): raise AssertionError('wrong universal geometry')
@@ -190,6 +200,10 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
             from cpc_runtime_desk import run_desk
             return run_desk(ROOT,media,manifest,work,sym,artifacts,image,emulator,
                             send,wait,read,key,move)
+        if latency:
+            from cpc_runtime_latency import run_latency
+            return run_latency(ROOT,media,manifest,work,sym,artifacts,image,emulator,
+                               send,wait,read,key,move)
         if clock:
             from cpc_runtime_clock import run_clock
             return run_clock(ROOT,media,manifest,work,sym,artifacts,image,emulator,
@@ -389,9 +403,12 @@ if __name__=='__main__':
     mode.add_argument('--menus',action='store_true')
     mode.add_argument('--accessories',action='store_true')
     mode.add_argument('--clock',action='store_true')
+    mode.add_argument('--latency',action='store_true')
     mode.add_argument('--desk',action='store_true')
     mode.add_argument('--root-fault',choices=('missing','short','oversized','cfg-missing','cfg-short','cfg-oversized'))
     mode.add_argument('--native',action='store_true')
     mode.add_argument('--native-fault',choices=('missing','short','oversized'))
     mode.add_argument('--config-case',choices=('missing','empty','exact','oversized','custom'))
+    from cpc_runtime_assets import ASSET_CASES
+    mode.add_argument('--asset-case',choices=ASSET_CASES)
     args=parser.parse_args();args.emulator=args.emulator.resolve();run(**vars(args))
