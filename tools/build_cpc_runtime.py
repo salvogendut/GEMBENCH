@@ -111,6 +111,7 @@ def build():
              "GBENCH/ROOTUI.BIN": (work / "ROOTBAR.BIN").read_bytes(),
              "GBENCH/GBCFG.MOD": (work / "GBCFG.MOD").read_bytes(),
              "GBENCH/GBUI.MOD": (work / "GBUI.MOD").read_bytes(),
+             "GBENCH/GBPICK.MOD": (work / "GBPICK.MOD").read_bytes(),
              "GBENCH/DEFAULT.FNT": (work / "DEFAULT.FNT").read_bytes(),
              "GBENCH/DEFAULT.IST": (work / "DEFAULT.IST").read_bytes(),
              "GBENCH/REFINED.IST": (work / "REFINED.IST").read_bytes(),
@@ -123,7 +124,10 @@ def build():
              "GBENCH/CALC.APP": calculator.read_bytes(),
              "GBENCH/CLOCK.APP": clock.read_bytes(),
              "UFSTEST/SOURCE.BIN": bytes((i*13+7)&255 for i in range(1025)),
-             "UFSTEST/SUB/SMALL.TXT": b"OK!"}
+             "UFSTEST/SUB/SMALL.TXT": b"OK!",
+             "PICKTEST/NOTES.TXT": b"Picker notes\r\n",
+             "PICKTEST/IGNORE.BIN": b"not a text file",
+             "PICKTEST/INNER/HELLO.TXT": b"Picked from M4!\n"}
     for tile in (ROOT/'assets/backdrops').glob('*.BDP'):
         files['GBENCH/'+tile.name.upper()] = tile.read_bytes()
     for folder,ext in (('titlebars','TBR'),('gadgets','GDT')):
@@ -132,6 +136,9 @@ def build():
             if len(raw) not in ((56,106) if ext=='TBR' else (50,)):
                 raise AssertionError('invalid chrome asset '+str(path))
             files['GBENCH/'+path.name.upper()]=raw
+    directories=("GBENCH", "UFSTEST", "UFSTEST/SUB", "PICKTEST", "PICKTEST/INNER", "PICKTEST/EMPTY")
+    for name in directories:
+        (card/name).mkdir(parents=True,exist_ok=True)
     for name, payload in files.items():
         path = card / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,7 +153,7 @@ def build():
         subprocess.run(["mkfs.fat", "--invariant", "-F16", "--offset", "32",
                         "-n", "CPCRUNTIME", temporary], check=True)
         volume = temporary + "@@16384"
-        subprocess.run(["mmd", "-i", volume, "::/GBENCH", "::/UFSTEST", "::/UFSTEST/SUB"], check=True)
+        subprocess.run(["mmd", "-i", volume, *["::/"+name for name in directories]], check=True)
         for name in files:
             subprocess.run(["mcopy", "-i", volume, str(card / name), "::/" + name], check=True)
         Path(temporary).replace(image)

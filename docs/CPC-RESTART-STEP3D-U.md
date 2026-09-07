@@ -157,7 +157,8 @@ untouched. No floppies were used. These tests do not qualify Albireo or PCW.
 
 ## Next
 
-**3D-V: native file-picker integration**, using the existing shared dialog and
-filesystem policy. Then System/Settings, the complete shared Desktop/File
+**[3D-V: native file-picker integration](CPC-RESTART-STEP3D-V.md)** now binds
+the existing shared dialog and filesystem policy with owned temporary contexts.
+Then System/Settings, the complete shared Desktop/File
 Manager and remaining application parity. The broader production-adapter gate
 and full native reload contract remain open.

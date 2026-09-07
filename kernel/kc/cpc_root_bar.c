@@ -11,6 +11,7 @@
 #include "gbdesk_catalog.h"
 
 #include GB_UI_PROVIDER
+#include "gbfsctx.h"
 #define MENU_DEF ((volatile unsigned char *)0x1310)
 #define WM_FS ((volatile unsigned char *)0x130A)
 #define CLK_COL (GB_COLS - 12)
@@ -116,4 +117,29 @@ void cpc_test_about(void)
 void cpc_test_size(void)
 {
     UI_OP = 25; UI_WIDTH = 320; UI_HEIGHT = 200; gb_ui();
+}
+
+void cpc_test_pickfile(void)
+{
+    gb_fsctx_t context;
+    unsigned char status;
+    UI_OP=3;ui_text("TXT");UI_TEXT[4]=0;
+    CPC_PICK_PROBE_BYTES=0;
+    if (gb_ui()!=1) return;
+    /* Read through a fresh caller-owned context AFTER the module returns:
+     * proves exact path/name handoff, not just a list that looks correct. */
+    context=gb_fsctx_open(0);
+    if (!context) { CPC_PICK_STATUS=gb_fsctx_status(); return; }
+    status=gb_fsctx_set_path(context,CPC_PICK_PATH);
+    if (!status) status=gb_fsctx_set_name(context,UI_NAME);
+    if (!status) {
+        CPC_PICK_PROBE_BYTES=gb_fsctx_read(context,CPC_PICK_PROBE_DATA,16);
+        status=gb_fsctx_status();
+    }
+    gb_fsctx_close(context);
+    CPC_PICK_STATUS=status;
+}
+void cpc_test_pickdir(void)
+{
+    UI_OP=4;ui_text("TXT");UI_TEXT[4]=0;gb_ui();
 }

@@ -1,4 +1,4 @@
-"""Link shared config/basic-dialog modules against checked native CPC allocations."""
+"""Link shared config/dialog/picker code against checked native CPC allocations."""
 import json
 import os
 from pathlib import Path
@@ -38,6 +38,12 @@ def provider(work, sym):
     ptr('GB_UI_TEXT_END', sym['cpc_ui_request_end'], 'const char')
     word('UI_WIDTH', ui+8); word('UI_HEIGHT', ui+10)
     byte('GB_UI_STATUS', sym['cpc_ui_status'])
+    ptr('CPC_PICK_PATH', sym['cpc_pick_path'])
+    word('CPC_PICK_OWNER', sym['cpc_pick_owner'])
+    word('CPC_UI_OWNER', sym['cpc_ui_owner'])
+    byte('CPC_PICK_STATUS', sym['cpc_pick_status'])
+    word('CPC_PICK_PROBE_BYTES', sym['cpc_pick_probe_bytes'])
+    ptr('CPC_PICK_PROBE_DATA', sym['cpc_pick_probe_data'])
     out += [f'#define GB_UI_SAVEUNDER {sym["cpc_ui_under"]}',
             f'#define GB_POPUP_BUFFER {sym["cpc_ui_popup"]}',
             f'#define GB_POPUP_CAPACITY {sym["cpc_ui_popup_end"]-sym["cpc_ui_popup"]}']
@@ -52,10 +58,24 @@ def compile_native(work, sym, root):
     bindir = Path(sdcc).parent
     sdas = os.environ.get('SDAS',str(bindir/'sdasz80'))
     header = provider(work, sym)
+    fsheader=work/'cpc_fs_client.h'
+    fsheader.write_text(
+        f'#define GB_FSCTX_REQUEST_ADDRESS {sym["cpc_fs_request"]}\n'
+        f'#define GB_FSCTX_TRANSFER_ADDRESS {sym["cpc_fs_xfer"]}\n'
+        '#define GB_FSCTX_REQUEST ((volatile unsigned char *)GB_FSCTX_REQUEST_ADDRESS)\n'
+        '#define GB_FSCTX_TRANSFER ((volatile unsigned char *)GB_FSCTX_TRANSFER_ADDRESS)\n'
+        '#define GB_FSCTX_WORD_AT(offset) (*(volatile unsigned int *)(GB_FSCTX_REQUEST_ADDRESS+(offset)))\n')
+    (work/'native_fs.s').write_text('.module native_fs\n.globl _gb_fsctx_call\n'
+                                   f'_gb_fsctx_call = {sym["cpc_native_fs_call"]}\n')
+    (work/'cpc_picker.h').write_text('extern unsigned char cpc_picker_error(void);\n'
+                                   '#define GB_PICK_STATUS cpc_picker_error\n')
     (work/'ui_lib.s').write_text(generate(root/'lib/gb/gblib.s',[root/'kernel/kc/cpc_ui.symbols']))
-    for source, target in ((root/'lib/gb/crt0.s','native_crt.rel'),(work/'ui_lib.s','ui_lib.rel')):
+    for source, target in ((root/'lib/gb/crt0.s','native_crt.rel'),(work/'ui_lib.s','ui_lib.rel'),
+                           (work/'native_fs.s','native_fs.rel')):
         subprocess.run([sdas,'-o',target,str(source)],cwd=work,check=True)
-    shared = ['-mz80','--opt-code-size','--fomit-frame-pointer','-I',str(root/'lib/gb')]
+    shared = ['-mz80','--opt-code-size','--fomit-frame-pointer','-I',str(root/'lib/gb'),
+              '-I',str(root/'include/gembench')]
+    fsdefs=[f'-DGB_FSCTX_PLATFORM_HEADER="{fsheader}"']
     cfgdefs = [f'-DGB_CONFIG_PROVIDER="{header}"','-DGB_CONFIG_CHROME']
     version=(root/'VERSION').read_text().strip()
     commit=os.environ.get('GIT_COMMIT') or subprocess.check_output(
@@ -69,6 +89,9 @@ def compile_native(work, sym, root):
         ('kernel/kc/kcfg_mod.c','native_cfg.rel',cfgdefs),
         ('kernel/kc/kcfg.c','native_parser.rel',[]),
         ('kernel/kc/gbui_mod.c','native_ui.rel',uidefs),
+        ('kernel/kc/cpc_picker_mod.c','native_picker.rel',[*fsdefs,f'-DGB_UI_PROVIDER="{header}"']),
+        ('lib/gb/gbpick.c','native_picklib.rel',[f'-DGB_PICK_PROVIDER="{work/"cpc_picker.h"}"']),
+        ('lib/gembench/gbfsctx.c','native_fs_client.rel',fsdefs),
         ('lib/gb/gbdlg.c','native_popup.rel',
          [f'-DGB_POPUP_BUFFER={sym["cpc_ui_popup"]}',
           f'-DGB_POPUP_CAPACITY={sym["cpc_ui_popup_end"]-sym["cpc_ui_popup"]}']),
@@ -76,7 +99,9 @@ def compile_native(work, sym, root):
         subprocess.run([sdcc,*shared,*defs,'-c',str(root/source),'-o',target],cwd=work,check=True)
     layout = {}
     for name, objects in (('GBCFG', ['native_cfg.rel','native_parser.rel']),
-                           ('GBUI', ['native_ui.rel','native_popup.rel','native_prompt.rel','ui_lib.rel'])):
+                           ('GBUI', ['native_ui.rel','native_popup.rel','native_prompt.rel','ui_lib.rel']),
+                           ('GBPICK', ['native_picker.rel','native_picklib.rel','native_popup.rel',
+                                       'native_fs_client.rel','native_fs.rel','ui_lib.rel'])):
         base,end=sym['cpc_module_base'],sym['cpc_module_code_end']
         data,limit=sym['cpc_module_data'],sym['cpc_module_data_end']
         subprocess.run([sdcc,'-mz80','--no-std-crt0','--code-loc',hex(base),'--data-loc',hex(data),

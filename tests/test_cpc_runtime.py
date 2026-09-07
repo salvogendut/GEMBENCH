@@ -91,13 +91,16 @@ class RuntimeTests(unittest.TestCase):
         self.assertLessEqual(s['cpc_module_data_end'],s['cpc_ui_under'])
         self.assertLessEqual(s['cpc_ui_under_end'],s['cpc_ui_popup'])
         self.assertLessEqual(s['cpc_ui_popup_end'],0x7F00)
-        for name in ('GBCFG','GBUI'):
+        self.assertGreaterEqual(s['cpc_pick_path'],0x1D76)
+        self.assertLessEqual(s['cpc_pick_state_end'],s['cpc_adapter_state_end'])
+        self.assertGreaterEqual(s['cpc_module_data_end']-s['cpc_module_data'],433)
+        for name in ('GBCFG','GBUI','GBPICK'):
             self.assertEqual(len((self.work/(name+'.MOD')).read_bytes()),
                              s['cpc_module_code_end']-s['cpc_module_base'])
 
     def test_repeatable_build_and_bad_budget_rejection(self):
         again=self.work/'again';assemble(again)
-        for name in ('CORE.RAW','SUPPORT.RAW','SCHED.RAW','HARDWARE.RAW','FSCTX.BIN','ROOTBAR.BIN','GBCFG.MOD','GBUI.MOD','GBTITLE.MOD'):
+        for name in ('CORE.RAW','SUPPORT.RAW','SCHED.RAW','HARDWARE.RAW','FSCTX.BIN','ROOTBAR.BIN','GBCFG.MOD','GBUI.MOD','GBPICK.MOD','GBTITLE.MOD'):
             self.assertEqual((self.work/name).read_bytes(),(again/name).read_bytes())
         with self.assertRaises(subprocess.CalledProcessError):
             assemble(self.work/'too-small',(f'-DCPC_KERNEL_END={0xA000}',))

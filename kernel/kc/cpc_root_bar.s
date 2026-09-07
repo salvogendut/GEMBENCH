@@ -13,6 +13,8 @@
         .globl _cpc_test_popup
         .globl _cpc_test_about
         .globl _cpc_test_size
+        .globl _cpc_test_pickfile
+        .globl _cpc_test_pickdir
         .area _CODE
         jp _cpc_bar_reset
         jp _cpc_bar_tick
@@ -26,3 +28,5 @@
         jp _cpc_test_about
         jp _cpc_test_size
         jp _cpc_bar_damage
+        jp _cpc_test_pickfile
+        jp _cpc_test_pickdir

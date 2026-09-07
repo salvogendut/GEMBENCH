@@ -60,7 +60,7 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None):
     media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
@@ -75,12 +75,14 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
     if chrome_case:
         from cpc_runtime_chrome import prepare
         chrome_fixture=prepare(chrome_case,work,ROOT,image,artifacts)
-    if native_fault or config_case:
+    if native_fault or config_case or picker_fault:
         target=['-i',str(image)+'@@16384']
-        if native_fault:
-            name='::/GBENCH/GBUI.MOD'
-            raw=(work/'GBUI.MOD').read_bytes()
-            payload=None if native_fault=='missing' else raw[:-1] if native_fault=='short' else raw+b'\0'
+        if native_fault or picker_fault:
+            module='GBPICK.MOD' if picker_fault else 'GBUI.MOD'
+            fault=picker_fault or native_fault
+            name='::/GBENCH/'+module
+            raw=(work/module).read_bytes()
+            payload=None if fault=='missing' else raw[:-1] if fault=='short' else raw+b'\0'
         else:
             from cpc_runtime_native import CONFIG_CASES
             name='::/GEOBENCH.CFG';payload=CONFIG_CASES[config_case]
@@ -226,6 +228,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
             from cpc_runtime_native import run_native
             return run_native(ROOT,media,manifest,work,sym,artifacts,image,emulator,
                               send,wait,read,key,move,native_fault,config_case)
+        if picker or picker_fault:
+            from cpc_runtime_picker import run_picker
+            return run_picker(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,picker_fault)
         if desk:
             from cpc_runtime_desk import run_desk
             return run_desk(ROOT,media,manifest,work,sym,artifacts,image,emulator,
@@ -439,6 +444,8 @@ if __name__=='__main__':
     mode.add_argument('--root-fault',choices=('missing','short','oversized','cfg-missing','cfg-short','cfg-oversized'))
     mode.add_argument('--native',action='store_true')
     mode.add_argument('--native-fault',choices=('missing','short','oversized'))
+    mode.add_argument('--picker',action='store_true')
+    mode.add_argument('--picker-fault',choices=('missing','short','oversized'))
     mode.add_argument('--config-case',choices=('missing','empty','exact','oversized','custom'))
     from cpc_runtime_assets import ASSET_CASES
     mode.add_argument('--asset-case',choices=ASSET_CASES)

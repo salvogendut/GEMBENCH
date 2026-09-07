@@ -23,7 +23,8 @@ Status: **3D-A, [3D-B drawing/parameters](CPC-RESTART-STEP3D-B.md) and
 [3D-R native configuration/basic UI](CPC-RESTART-STEP3D-R.md) and
 [3D-S configured font/palette](CPC-RESTART-STEP3D-S.md),
 [3D-T bitmap assets](CPC-RESTART-STEP3D-T.md) and
-[3D-U titlebars/gadgets](CPC-RESTART-STEP3D-U.md) are
+[3D-U titlebars/gadgets](CPC-RESTART-STEP3D-U.md) and
+[3D-V native file picker](CPC-RESTART-STEP3D-V.md) are
 implemented and M4/1984 validated; the complete production adapter gate is
 still open.** The 3D-A record below connects actual shared context
 and visibility code to a checked CPC layout and CPC hardware. It is not a
@@ -48,7 +49,10 @@ The [3D-T bitmap checkpoint](CPC-RESTART-STEP3D-T.md) now supplies configured
 icons/cursor/backdrop with checked allocations and clipped rendering.
 The [3D-U chrome checkpoint](CPC-RESTART-STEP3D-U.md) now binds configured
 titlebars/gadgets and a bounded F7 title renderer to shared native furniture.
-Full native reload, file pickers and the complete shell remain gated.
+The [3D-V picker checkpoint](CPC-RESTART-STEP3D-V.md) binds the shared chooser
+to temporary owned filesystem contexts, with private path/name handoff and
+post-dialog readback. Full native implicit filesystem/reload contracts and the
+complete shell remain gated.
 The [Clock/cursor responsiveness follow-up](CPC-CLOCK-RESPONSIVENESS.md) addresses
 input stalls reported during manual 3D-S testing before those asset families.
 The 3D-B/C/D/E/F/G/H/I/J/K/L documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory/write/free-space/first-APP gaps and measurements below;

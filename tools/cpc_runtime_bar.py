@@ -22,6 +22,7 @@ def compile_bar(work, sym, root):
         subprocess.run([sdas, '-o', output, str(source)], cwd=work, check=True)
     subprocess.run([sdcc, '-mz80', '--std-c99', '--opt-code-size', '--fomit-frame-pointer',
                     f'-DGB_UI_PROVIDER="{work / "cpc_native.h"}"',
+                    f'-DGB_FSCTX_PLATFORM_HEADER="{work / "cpc_fs_client.h"}"',
                     '-I', str(root / 'lib/gb'), '-c', str(root / 'kernel/kc/cpc_root_bar.c'),
                     '-I', str(root / 'include/gembench'),
                     '-o', 'bar.rel'], cwd=work, check=True)
@@ -36,7 +37,7 @@ def compile_bar(work, sym, root):
     data, limit = sym['cpc_bar_data'], sym['cpc_bar_data_end']
     subprocess.run([sdcc, '-mz80', '--no-std-crt0', '--code-loc', hex(base),
                     '--data-loc', hex(data), 'bar_entry.rel', 'bar.rel', 'bar_lib.rel', 'bar_defer.rel',
-                    'doc.rel', 'popup.rel',
+                    'doc.rel', 'popup.rel', 'native_fs_client.rel', 'native_fs.rel',
                     '-o', 'bar.ihx'], cwd=work, check=True)
     areas = read_areas(work / 'bar.map')
     for name, (address, size) in areas.items():

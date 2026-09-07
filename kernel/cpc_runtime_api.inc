@@ -57,7 +57,7 @@
                 jp cpc_unavailable ; #80A5
                 jp cpc_unavailable ; #80A8
                 jp cpc_unavailable ; #80AB
-                jp cpc_ui ; #80AE: bounded native basic dialogs, not file/browser UI
+                jp cpc_ui ; #80AE: bounded native basic/picker dialogs, not browser UI
                 jp k_wm_managed ; #80B1
                 jp k_wm_damage ; #80B4
                 jp k_backdrop ; #80B7

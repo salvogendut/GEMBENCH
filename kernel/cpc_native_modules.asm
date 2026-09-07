@@ -9,10 +9,22 @@ MODULE_READ equ cpc_module_read
                 ld a,CPC_SYSTEM_PAGE
                 mend
                 macro UI_SELECT_MODULE
-                ld hl,gbui_modname            ; alternate modules rejected at entry
+                call cpc_ui_module_name
                 mend
                 include "core/data_module.asm"
                 include "core/ui_module.asm"
+
+cpc_ui_module_name
+                ld a,(CPC_UI_REQUEST)
+                cp 3
+                jr z,cpc_ui_picker_name
+                cp 4
+                ld hl,gbui_modname
+                ret nz
+cpc_ui_picker_name
+                ld hl,cpc_pick_modname
+                ret
+cpc_pick_modname db "GBPICK  MOD"
 
 cpc_module_read
                 call fs_load_sys
@@ -69,6 +81,8 @@ cpc_ui_cancel_set
                 ld hl,(WM_CLIP_W)
                 push hl
                 call clip_set_full
+                call owner_current
+                ld (CPC_UI_OWNER),de
                 ld a,1                       ; loader failure until renderer runs
                 ld (CPC_UI_STATUS),a
                 ld hl,(CPC_UI_CALLS)
@@ -87,6 +101,58 @@ cpc_ui_cancel_set
                 pop ix
                 ret po
                 ei
+                ret
+
+; Private native FS bridge. Ordinary calls derive the actual mapped owner;
+; only the serialized F6 UI module may borrow the captured caller identity.
+; Same context policy/M4 backend, no global device cursor or public ABI change.
+cpc_native_fs_call
+                ld c,a
+                push ix
+                ld a,i
+                push af
+                di
+                ld a,(SCHED_LOCK)
+                push af
+                ld a,1
+                ld (SCHED_LOCK),a
+                ld a,(SCHED_CURRENT)
+                or a
+                jr nz,cpc_native_fs_context
+                ld a,c
+                ld (FSCTX_GATE_OP),a
+                ld a,(BANK_CUR)
+                cp CPC_SYSTEM_PAGE
+                jr nz,cpc_native_fs_caller
+                ld a,(UI_MODAL)
+                or a
+                jr z,cpc_native_fs_context
+                ld de,(CPC_UI_OWNER)
+                call owner_validate
+                jr nc,cpc_native_fs_context
+                ld de,(CPC_UI_OWNER)
+                jr cpc_native_fs_owner
+cpc_native_fs_caller
+                call owner_current
+cpc_native_fs_owner
+                ld a,d
+                or e
+                jr z,cpc_native_fs_context
+                ld (FSCTX_GATE_OWNER),de
+                call cpc_fs_run_module
+                jr c,cpc_native_fs_done
+cpc_native_fs_context
+                ld a,7
+                ld (FSCTX_GATE_STATUS),a
+cpc_native_fs_done
+                pop af
+                ld (SCHED_LOCK),a
+                pop af
+                pop ix
+                jp po,cpc_native_fs_result
+                ei
+cpc_native_fs_result
+                ld a,(FSCTX_GATE_STATUS)
                 ret
 
 ; Config boot/reload uses the same parser/default-output wrapper as MSX.

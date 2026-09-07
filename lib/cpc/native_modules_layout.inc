@@ -20,11 +20,19 @@ CPC_MODULE_BASE equ #4000
 CPC_MODULE_CODE_END equ #5800
                 endif
 CPC_MODULE_DATA equ #5800
-CPC_MODULE_DATA_END equ #5900
-CPC_UI_UNDER equ #5900
+CPC_MODULE_DATA_END equ #5B00  ; includes the shared picker's label/name arrays
+CPC_UI_UNDER equ #5B00
 CPC_UI_UNDER_END equ #6C00
 CPC_UI_POPUP equ #6C00
 CPC_UI_POPUP_END equ CPC_APP_LIMIT
+CPC_PICK_PATH equ #1E00        ; private native selection handoff, 48-byte path
+CPC_PICK_OWNER equ #1E30
+CPC_UI_OWNER equ #1E32          ; captured BEFORE system-module banking
+CPC_PICK_STATUS equ #1E34
+CPC_PICK_PROBE_BYTES equ #1E36
+CPC_PICK_PROBE_DATA equ #1E38   ; 16-byte diagnostic readback, not an app buffer
+CPC_PICK_STATE_END equ #1E48
+                assert CPC_PICK_STATE_END<=CPC_ADAPTER_STATE_END,"picker state overflow"
                 assert CPC_CFG_TEXT>=CPC_NATIVE_STATE_BASE,"config/support overlap"
                 assert CPC_CFG_TEXT_END<=#1200,"config/native state overlap"
                 assert CPC_UI_REQUEST>=CPC_FS_XFER+512,"UI/filesystem transfer overlap"

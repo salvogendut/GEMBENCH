@@ -18,6 +18,7 @@ cpc_runtime_f2 equ #1D71
 cpc_runtime_worker_calls equ #1D72 ; private diagnostic observation, no scheduling policy
 cpc_runtime_draw_calls equ #1D74   ; backend transactions, including transient redraws
                 assert cpc_runtime_draw_calls+2<=CPC_ADAPTER_STATE_END,"runtime state overflow"
+                assert cpc_runtime_draw_calls+2<=CPC_PICK_PATH,"runtime/picker state overlap"
 cpc_runtime_start
                 di
                 ld sp,CPC_MAIN_TOP
@@ -105,7 +106,7 @@ cpc_root_idle
                 cp 'r'
                 jr z,cpc_runtime_config
                 cp 'a'
-                jr z,cpc_runtime_assets_demo
+                jp z,cpc_runtime_assets_demo
                 cp 'v'
                 jp z,cpc_runtime_cursor_phase
                 cp 'p'
@@ -116,6 +117,10 @@ cpc_root_idle
                 jp z,cpc_bar_payload+27
                 cp 'n'
                 jp z,cpc_bar_payload+30
+                cp 'o'
+                jp z,cpc_bar_payload+36
+                cp 'd'
+                jp z,cpc_bar_payload+39
                 cp 's'
                 ret nz
                 ; Small public-ABI exercise on the empty launch surface. Keep

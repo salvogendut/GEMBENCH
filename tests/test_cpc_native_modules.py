@@ -10,6 +10,15 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 class NativeModuleTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which(os.environ.get('CC','cc')),'C compiler required')
+    def test_actual_picker_and_owned_context_binding(self):
+        with tempfile.TemporaryDirectory(prefix='native-picker-') as tmp:
+            output=Path(tmp)/'native-picker'
+            subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',
+                            '-I',str(ROOT/'lib/gb'),'-I',str(ROOT/'include/gembench'),
+                            str(ROOT/'tests/cpc_picker_test.c'),'-o',str(output)],check=True)
+            subprocess.run([str(output)],check=True)
+
     def test_modal_clock_observer_does_not_wait_for_parked_work(self):
         sys.path.insert(0,str(ROOT/'tools'))
         from cpc_runtime_clock import clock_cache_ready
@@ -55,7 +64,7 @@ class NativeModuleTests(unittest.TestCase):
         for name in ('kcfg_mod.c','kcfg.c','gbui_mod.c','gbdlg.c','gbprompt.c'):
             self.assertIn(name,source)
         self.assertIn('GBUI_BASIC_ONLY',source)
-        self.assertNotIn('gbpick.c',source)
+        self.assertIn('gbpick.c',source)
         self.assertIn('CPC_POOL_PAGES equ 27',(ROOT/'lib/cpc/production_layout.inc').read_text())
 
 

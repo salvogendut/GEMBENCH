@@ -35,7 +35,8 @@ esac
 BUILD_DEFS=(-DGB_VERSION="\"$BUILD_VERSION\"" -DGB_GIT="\"$BUILD_COMMIT\"")
 
 deps=("$0" "tools/build_cache.sh" "$GB/crt0.s" "$GB/gblib.s" "$GB/gb.h" \
-      "$GB/gbdlg.c" "$GB/gbprompt.c" "$GB/gbpick.c" "$KC/gbui_mod.c" "VERSION")
+      "$GB/gbdlg.c" "$GB/gbprompt.c" "$GB/gbpick.c" "$KC/gbui_mod.c" \
+      "kernel/core/ui_picker.inc" "VERSION")
 stamp="$OUT.stamp"
 cache_key=$(printf '%s\n' \
     "build_uimod.v2" \
