@@ -8,6 +8,9 @@
  */
 #include "gb.h"
 
+#ifdef GB_UI_PROVIDER
+#include GB_UI_PROVIDER
+#else
 #define UI_OP    (*(volatile unsigned char *)0x1700)
 #define UI_COL   (*(volatile unsigned char *)0x1701)
 #define UI_LINE  (*(volatile unsigned char *)0x1702)
@@ -15,6 +18,7 @@
 #define UI_MODAL (*(volatile unsigned char *)0x1705)
 #define UI_NAME  ((char *)0x1708)            /* OUT: pickfile/prompt result */
 #define UI_TEXT  ((char *)0x1718)            /* IN: packed labels / caption / exts */
+#endif
 #ifdef GBUI_APPICON_PICKER
 #define UI_MODNAME ((char *)0x3914)
 static const char appick_modname[11] = {

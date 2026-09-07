@@ -7,4 +7,3 @@
 #define CPC_EDIT_STATUS edit_status
 #define CPC_EDIT_CHANGED edit_changed
 #define CPC_EDIT_ERROR edit_error
-#define CPC_EDIT_IO_STATUS transport_status

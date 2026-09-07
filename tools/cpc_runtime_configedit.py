@@ -9,20 +9,20 @@ from cpc_runtime_clock import clock_cache_ready
 from cpc_production_lifetime import physical
 from test_cpc_foundation_1984 import snapshot
 
-EDIT_CASES=('normal','exact','append','duplicate','unterminated','missing','empty',
+EDIT_CASES=('normal','view','exact','append','duplicate','unterminated','missing','empty',
             'oversized','long-value','unterminated-append','no-space',
             'module-missing','module-short','module-oversized')
 
 
-def replace_value(raw,value):
-    match=re.search(rb'(?:\A|(?<=[\r\n]))TITLEBAR=([^\r\n]*)',raw)
+def replace_value(raw,value,key=b'TITLEBAR='):
+    match=re.search(rb'(?:\A|(?<=[\r\n]))'+re.escape(key)+rb'([^\r\n]*)',raw)
     if match: return raw[:match.start(1)]+value+raw[match.end(1):]
-    return raw+b'TITLEBAR='+value+b'\r\n'
+    return raw+key+value+b'\r\n'
 
 
 def prepare(case,media,work,image,artifacts):
     raw=(media/'CARD/GEOBENCH.CFG').read_bytes();payload=raw;name='/GEOBENCH.CFG'
-    if case in ('normal','reboot'): return
+    if case in ('normal','reboot','view','view-reboot'): return
     if case=='exact': payload=raw+b'#'*(512-len(raw))
     elif case=='append': payload=b''.join(line for line in raw.splitlines(keepends=True) if not line.startswith(b'TITLEBAR='))
     elif case=='duplicate': payload=raw+b'TITLEBAR=SOLID\r\n'
@@ -113,6 +113,8 @@ def run_edit(root,media,manifest,work,sym,artifacts,image,emulator,send,wait,rea
         key('W');r=observe('config-edit-rejected')
         if r[sym['cpc_edit_status']]!=failure or r[sym['cpc_ui_request']+4] or r[sym['cpc_edit_changed']]:
             raise AssertionError('wrong edit rejection '+str(r[sym['cpc_edit_status']]))
+        if case=='missing' and r[sym['cpc_edit_error']]!=6:
+            raise AssertionError('native client did not receive the shared filesystem I/O error')
         if image.read_bytes()!=initial: raise AssertionError('rejected edit wrote the image')
         if live!=r[sym['cpc_cfg_text']:sym['cpc_cfg_text']+word(r,'cpc_cfg_output')]:
             raise AssertionError('rejected edit published configuration')
@@ -120,6 +122,23 @@ def run_edit(root,media,manifest,work,sym,artifacts,image,emulator,send,wait,rea
         if b'TITLEBAR=WEAVE' not in expected: raise AssertionError('saved config lost across reboot')
         key('W');r=observe('config-edit-reboot-noop');accepted(r,0)
         if image.read_bytes()!=initial: raise AssertionError('reboot/no-op rewrote disk')
+    elif case in ('view','view-reboot'):
+        if case=='view-reboot' and b'VIEW=LIST' not in expected:
+            raise AssertionError('saved File Manager view lost across reboot')
+        before=expected;expected=replace_value(expected,b'LIST',b'VIEW=')
+        draws=word(r,'cpc_runtime_draw_calls')
+        key('L');r=observe('config-view-list');accepted(r,int(before!=expected))
+        saved=image.read_bytes();calls=word(r,'cpc_visual_calls')
+        key('L');r=observe('config-view-noop');accepted(r,0)
+        if image.read_bytes()!=saved or word(r,'cpc_visual_calls')!=calls+1 or \
+           r[sym['cpc_visual_dirty']] or word(r,'cpc_runtime_draw_calls')!=draws:
+            raise AssertionError('view preference caused image rewrite on no-op or visual repaint')
+        if case=='view':
+            expected=replace_value(expected,b'DEFAULT',b'VIEW=');key('B')
+            r=observe('config-view-icons');accepted(r,1)
+            expected=replace_value(expected,b'LIST',b'VIEW=');key('L')
+            r=observe('config-view-saved');accepted(r,1)
+            reboot_artifacts=run(emulator=emulator,skip_build=True,config_edit='view-reboot',seed_image=image)
     else:
         expected=replace_value(expected,b'WEAVE');key('W');theme=weave
         r=observe('config-edit-saved-weave');accepted(r,1)

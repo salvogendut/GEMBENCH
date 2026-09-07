@@ -105,6 +105,13 @@ the bounded key in `UI_NAME` and value in `UI_TEXT`; callers use the private
 update entry, not a new portable ABI. The input/status convention is not the
 complete native Settings filesystem or reload contract.
 
+**Sprint 1 follow-up:** [the shared read-status binding](CPC-RESTART-SPRINT1.md)
+now propagates CPC read failures as FSCTX I/O errors. The config editor no
+longer needs the transport-cell workaround described for W1 above. Missing
+files remain rejected without writes or publication, now with common status 6
+instead of a private transport-derived error. Other W1 guarantees and limits
+are unchanged.
+
 ## Allocations
 
 | Allocation | Used / budget |
@@ -168,12 +175,15 @@ Focus the blue background (arrows move the pointer; Space clicks):
 
 - **W** saves `TITLEBAR=WEAVE` and applies it live.
 - **E** saves `TITLEBAR=ORIGINAL` and restores it live.
+- Sprint 1 adds **L** (`VIEW=LIST`) and **B** (`VIEW=DEFAULT`) after rebuilding
+  diagnostics. These exercise the actual File Manager persistence binding;
+  they do not launch a File Manager or change desktop/window appearance.
 - Press the same key twice: the second request does not write or repaint.
 - Stop and restart the emulator without rebuilding: the saved choice remains.
 - F7/F2 open Calculator/Clock. Return focus to the background before W/E and
   check that the application state and background Clock updates survive.
 
-Unlike the earlier read-only picker, these two diagnostic keys **write the
+Unlike the earlier read-only picker, these diagnostic keys **write the
 diagnostic image's configuration**. They do not touch normal release media.
 Rebuilding `make diagnostic-cpc-runtime` restores the staged ORIGINAL defaults.
 `make diagnostic-cpc-config-edit-1984` runs the automated save/reload/reboot
@@ -184,5 +194,10 @@ Next after W2-A: sprint 1 of the four-sprint desktop-first plan combines the
 dependency audit and required native service/memory bindings. Reuse W1
 persistence where required; finish Settings' complete profile separately.
 W3 connects qualified System actions
-incrementally. Desktop and File Manager remain pending; W1 does not close the
-production-adapter gate.
+incrementally. Sprint 1 now has complete linked profiles for both applications
+and private actual-Desktop/File Manager contracts, including owned browsing and
+native load rollback. Sprint 1's combined runtime capacity/recovery and actual
+File Manager View/configuration/Clock qualification now pass; see the
+[sprint 1 closure](CPC-RESTART-SPRINT1.md#final-combined-qualification--2026-09-08).
+Next is sprint 2's regular M4 Desktop delivery, not another service-only
+checkpoint. W1 alone does not close the production-adapter gate.

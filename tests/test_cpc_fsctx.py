@@ -43,8 +43,10 @@ class FsctxSourceTests(unittest.TestCase):
         backend=(ROOT/"kernel/kc/gbfsctx_cpc.c").read_text()
         self.assertIn("exchange(0x13u,0u)",backend)  # verify CD via returned path
         self.assertIn("copy_bytes(CPC_FILE,CPC_PATH,i)",backend)
-        self.assertIn("amount>128u",backend)
-        self.assertIn("offset+(unsigned long)REQ_LENGTH<offset",backend)
+        self.assertIn('#include "cpc_fsread.inc"',backend)
+        reader=(ROOT/"kernel/kc/cpc_fsread.inc").read_text()
+        self.assertIn("amount>128u",reader)
+        self.assertIn("offset>0xFFFFFFFFUL-(unsigned long)REQ_LENGTH",reader)
 
 
 @unittest.skipUnless(TOOLS,"RASM and SDCC required for CPC module composition")

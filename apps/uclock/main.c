@@ -310,13 +310,22 @@ static void draw(void)
         return;
     }
     gb_timer_cancel(clock_window_handle);
-    read_time(1u, &h, &m, &s);
     /* The compositor owns the one-column side/bottom frame.  Painting the
      * complete rectangle here erases that chrome after every callback. */
     gb_fill((unsigned char)(win_x + 1u), (unsigned char)(win_y + TITLE_H),
             (unsigned char)(win_w - 2u),
             (unsigned char)(win_h - TITLE_H - 1u), GB_UI_CANVAS);
     draw_face();
+    if (have_prev) {
+        /* Exposure may cover only a fragment. Reconstruct the last completed
+         * hand/digit passes without advancing either cache: pixels outside the
+         * clip still show those passes. The next focused/timer update can then
+         * erase the real old hands instead of leaving an unpainted time trail. */
+        hands(ph, pm, ps, pshow, GB_UI_SURFACE, GB_UI_ACCENT);
+        draw_digital(dh, dm, ds);
+        return;
+    }
+    read_time(1u, &h, &m, &s);
     hands(h, m, s, show_sec, GB_UI_SURFACE, GB_UI_ACCENT);
     draw_digital(h, m, s);
     ph = dh = h; pm = dm = m; ps = ds = s;
@@ -330,7 +339,8 @@ static void focused_tick(void)
     unsigned char h, m, s;
     read_time(1u, &h, &m, &s);
     if (have_prev && h == ph && m == pm && (!show_sec || s == ps) &&
-        show_sec == pshow) return;
+        show_sec == pshow && h == dh && m == dm && (!show_sec || s == ds) &&
+        show_sec == dshow) return;
     if (have_prev) hands(ph, pm, ps, pshow, GB_UI_CANVAS, GB_UI_CANVAS);
     hands(h, m, s, show_sec, GB_UI_SURFACE, GB_UI_ACCENT);
     if (show_sec && dshow && h == dh && m == dm) draw_seconds(s);

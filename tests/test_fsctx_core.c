@@ -11,6 +11,10 @@ static unsigned char entry_size[4] = {8, 0, 0, 0};
 static char entry_name[12] = "A       TXT";
 static unsigned char selected_drive, io_calls;
 static unsigned int read_amount = 8;
+#ifdef TEST_FS_READ_STATUS
+static unsigned char read_result;
+#define FSCTX_READ_STATUS() read_result
+#endif
 #ifdef TEST_FS_DIRECTORY_STATUS
 static unsigned char directory_result, error_after = 255;
 #define FSCTX_DIRECTORY_STATUS() directory_result
@@ -106,6 +110,23 @@ int main(void)
     REQ_LENGTH = 8;
     call(OP_READ, a, 0x0101);
     assert(REQ_ACTUAL == 8 && REQ_OFFSET[0] == 8 && XFER[0] == 0x5A);
+#ifdef TEST_FS_READ_STATUS
+    /* A transport may have staged a prefix, but neither it nor an error/EOF
+     * from a previous call may advance this owner's offset on failure. */
+    read_amount = 4; read_result = IOERR;
+    call(OP_READ, a, 0x0101);
+    assert(REQ_STATUS == IOERR && REQ_ACTUAL == 0 && context_at(0)[CTX_OFFSET] == 8);
+    read_amount = 0;
+    call(OP_READ, a, 0x0101);
+    assert(REQ_STATUS == IOERR && REQ_ACTUAL == 0 && context_at(0)[CTX_OFFSET] == 8);
+    read_result = OK;
+    call(OP_READ, a, 0x0101);
+    assert(REQ_STATUS == OK && REQ_ACTUAL == 0 && REQ_OFFSET[0] == 8);
+    read_amount = 8;
+    call(OP_READ, b, 0x0102);
+    assert(REQ_STATUS == OK && REQ_ACTUAL == 8 && REQ_OFFSET[0] == 8);
+    assert(context_at(0)[CTX_OFFSET] == 8); /* another owner's progress is independent */
+#endif
     XFER[0] = 0xA5; write_ok = 0;
     call(OP_WRITE, a, 0x0101);
     assert(REQ_STATUS == IOERR && REQ_ACTUAL == 0 && context_at(0)[CTX_OFFSET] == 8);

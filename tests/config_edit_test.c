@@ -4,7 +4,7 @@
 #include <string.h>
 #define GB_FSCTX_PLATFORM_HEADER "../../tests/fixtures/fsctx_client_provider.h"
 #include "gbfsctx.h"
-static unsigned char request[256],ui_status,edit_status,edit_changed,edit_error,transport_status;
+static unsigned char request[256],ui_status,edit_status,edit_changed,edit_error;
 static unsigned char fs_status,active,missing,full,fail_write,fail_verify;
 static unsigned int opens,closes,writes,reads,fail_read,disklen,offset;
 static char disk[1024];
@@ -30,9 +30,9 @@ unsigned int gb_fsctx_read(gb_fsctx_t h,char *p,unsigned int n)
 {
     unsigned int got;
     assert(h==0x201 && active);reads++;fs_status=0;
-    if(missing || reads==fail_read) { transport_status=5;return 0; } /* inherited zero-read ambiguity */
+    if(missing || reads==fail_read) { fs_status=GB_FSCTX_ERR_IO;return 0; }
     got=disklen-offset;if(got>n)got=n;
-    memcpy(p,disk+offset,got);offset+=got;transport_status=got<n?1:0;
+    memcpy(p,disk+offset,got);offset+=got;
     if(fail_verify && writes && got)p[0]^=1;
     return got;
 }
@@ -47,7 +47,7 @@ static void reset(const char *text,const char *key,const char *value)
     assert(!active);memset(request,0,sizeof(request));memset(disk,0,sizeof(disk));
     disklen=(unsigned int)strlen(text);memcpy(disk,text,disklen);
     UI_OP=CPC_EDIT_OP;strcpy(UI_NAME,key);strcpy(UI_TEXT,value);
-    ui_status=edit_status=edit_changed=edit_error=99;transport_status=0;
+    ui_status=edit_status=edit_changed=edit_error=99;
     opens=closes=writes=reads=fail_read=missing=full=fail_write=fail_verify=0;
 }
 static void accepted(const char *expected,unsigned int n,unsigned char changed)
@@ -86,6 +86,18 @@ int main(void)
         char expected[64];snprintf(expected,sizeof(expected),"X=1\r\n%s%s\r\n",keys[i],values[i]);
         reset("X=1\r\n",keys[i],values[i]);accepted(expected,(unsigned int)strlen(expected),1);
     }
+    const char *view_base="# VIEW=LIST\r\nVIEW=DEFAULT\r\nUNKNOWN=42\r\n";
+    const char *view_list="# VIEW=LIST\r\nVIEW=LIST\r\nUNKNOWN=42\r\n";
+    reset(view_base,"VIEW=","LIST");accepted(view_list,(unsigned int)strlen(view_list),1);
+    reset(view_list,"VIEW=","DEFAULT");accepted(view_base,(unsigned int)strlen(view_base),1);
+    reset(view_list,"VIEW=","LIST");accepted(view_list,(unsigned int)strlen(view_list),0);
+    reset("X=1\r\n","VIEW=","LIST");accepted("X=1\r\nVIEW=LIST\r\n",16,1);
+    const char *bad_view[]={"","list","ICONS","DEFAULT.FNT","LIST\r\nX=1","LISTX"};
+    for(unsigned int i=0;i<sizeof(bad_view)/sizeof(bad_view[0]);i++) {
+        reset(view_base,"VIEW=",bad_view[i]);rejected(2);assert(!opens);
+    }
+    reset(view_list,"VIEW=","DEFAULT");fail_write=1;rejected(5);
+    reset(view_list,"VIEW=","DEFAULT");fail_verify=1;rejected(6);
     const char *bad[]={"","../WEAVE","C:WEAVE","ABCDEFGHI","weave","WEAVE.GDT","WEAVE.TBR.X","WEAVE\r\nX"};
     for(unsigned int i=0;i<sizeof(bad)/sizeof(bad[0]);i++) {
         reset(base,"TITLEBAR=",bad[i]);rejected(2);assert(!opens);
@@ -94,14 +106,14 @@ int main(void)
     reset(base,"TITLEBAR=","WEAVE");memset(UI_NAME,'X',16);rejected(2);assert(!opens);
     reset(base,"TITLEBAR=","WEAVE");UI_OP=3;rejected(2);assert(!opens);
     reset("","TITLEBAR=","WEAVE");rejected(3);
-    reset(base,"TITLEBAR=","WEAVE");missing=1;rejected(3);assert(edit_error==21);
+    reset(base,"TITLEBAR=","WEAVE");missing=1;rejected(3);assert(edit_error==GB_FSCTX_ERR_IO);
     reset(base,"TITLEBAR=","WEAVE");full=1;rejected(7);assert(edit_error==GB_FSCTX_ERR_FULL);
     reset(base,"TITLEBAR=","WEAVE");disk[1]=0;rejected(3);
-    reset(base,"TITLEBAR=","WEAVE");fail_read=1;rejected(3);assert(edit_error==21);
+    reset(base,"TITLEBAR=","WEAVE");fail_read=1;rejected(3);assert(edit_error==GB_FSCTX_ERR_IO);
     reset(base,"TITLEBAR=","WEAVE");fail_write=1;rejected(5);
     reset(base,"TITLEBAR=","WEAVE");fail_verify=1;rejected(6);
-    reset(base,"TITLEBAR=","WEAVE");fail_read=2;rejected(6);assert(edit_error==21);
-    reset(base,"TITLEBAR=","WEAVE");fail_read=3;rejected(6);assert(edit_error==21); /* EOF verification */
+    reset(base,"TITLEBAR=","WEAVE");fail_read=2;rejected(6);assert(edit_error==GB_FSCTX_ERR_IO);
+    reset(base,"TITLEBAR=","WEAVE");fail_read=3;rejected(6);assert(edit_error==GB_FSCTX_ERR_IO); /* EOF verification */
     reset("TITLEBAR=ORIGINAL\r\n","TITLEBAR=","WEAVE");
     memset(disk+disklen,'#',512-disklen);disklen=512;
     char expected[512];memcpy(expected,"TITLEBAR=WEAVE\r\n",16);memset(expected+16,'#',493);

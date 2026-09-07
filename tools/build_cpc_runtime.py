@@ -78,9 +78,22 @@ def assemble(work: Path, overrides=()):
     return sym
 
 
-def build():
-    work = ROOT / "build/cpc-runtime"
-    sym = assemble(work)
+def build(desktop=False, filemgr=False):
+    desktop = desktop or filemgr
+    variant = 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
+    work = ROOT / ('build/cpc-'+variant)
+    overrides=('-DCPC_NATIVE_DESKTOP=1',) if desktop else ()
+    if filemgr: overrides+=('-DCPC_NATIVE_FILEMGR=1',)
+    sym = assemble(work,overrides)
+    if filemgr:
+        from build_cpc_filemgr import compile_filemgr, bind_runtime
+        compile_filemgr(work/'filemgr',work,sym)
+        bind_runtime(work,work/'filemgr',sym)
+    if desktop:
+        from build_cpc_desktop import compile_desktop
+        layout=compile_desktop(work,work,sym)
+        (work/'ROOTBAR.BIN').write_bytes((work/'DESKTOP.native.bin').read_bytes())
+        (work/'bar_layout.json').write_text(json.dumps(layout,indent=2)+'\n')
     app = ROOT / "build/universal/ABIPROBE.APP"
     subprocess.run(["bash", "tools/build_uapp.sh", "apps/abiprobe", str(app)], cwd=ROOT, check=True)
     fsapp = ROOT / "build/universal/FSPROBE.APP"
@@ -99,7 +112,7 @@ def build():
                    env={**os.environ, "UNIVERSAL_TASK": "1", "UNIVERSAL_WINDOW_KIND": "1",
                         "UNIVERSAL_ACCESSORY": "1", "UNIVERSAL_MENU": "1", "DATA_LOC": "0x7300"},
                    cwd=ROOT, check=True)
-    media = ROOT / "QA/Diagnostics/CPC-runtime"
+    media = ROOT / ('QA/Diagnostics/CPC-'+variant)
     card = media / "CARD"
     card.mkdir(parents=True, exist_ok=True)
     boot = bytearray(headed((work / "BOOT.RAW").read_bytes(), 0x8000))
@@ -129,6 +142,8 @@ def build():
              "PICKTEST/NOTES.TXT": b"Picker notes\r\n",
              "PICKTEST/IGNORE.BIN": b"not a text file",
              "PICKTEST/INNER/HELLO.TXT": b"Picked from M4!\n"}
+    if filemgr:
+        files['GBENCH/FILEMGR.BIN']=(work/'filemgr/FILEMGR.native.bin').read_bytes()
     for tile in (ROOT/'assets/backdrops').glob('*.BDP'):
         files['GBENCH/'+tile.name.upper()] = tile.read_bytes()
     for folder,ext in (('titlebars','TBR'),('gadgets','GDT')):
@@ -176,11 +191,14 @@ def build():
     sections["cursor"] = dict(base=sym['cursor_phases'],used=512,budget=512,
                              save_under=sym['pointer_background'],save_under_bytes=64)
     sections["bar"] = json.loads((work / "bar_layout.json").read_text())
+    if filemgr: sections['filemgr']=json.loads((work/'filemgr_layout.json').read_text())
     sections.update(json.loads((work / "native_layout.json").read_text()))
     manifest = dict(work=str(work), image=str(image), regions=memory_regions(sym), sections=sections,
                     native_identity=json.loads((work/'native_identity.json').read_text()),
                     files={name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
-                    status="experimental universal launcher; not Desktop/distribution")
+                    status="private native File Manager launch qualification; not a distribution" if filemgr else
+                           "private actual Desktop boot contract; File Manager not admitted" if desktop else
+                           "experimental universal launcher; not Desktop/distribution")
     (media / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     # Explicit private config: manual testing never edits the user's normal
     # machine setup or mounts their existing M4/Albireo card.

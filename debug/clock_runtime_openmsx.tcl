@@ -66,11 +66,27 @@ proc da_move_to {x y callback} {
 }
 
 rename da_focus_desktop cr_focus_desktop
+# Observe a real unfocused update before Calculator can cover the Clock.
+# A fixed one-second delay raced the timer and made missing background evidence
+# depend on input timing. Wait for execution, without changing guest state.
+proc cr_wait_background {callback} {
+    if {$::cr_workers && $::cr_timer_fragments && $::cr_rim_repairs} {
+        uplevel #0 $callback
+    } elseif {[machine_info time] > $::cr_background_deadline} {
+        da_finish "FAIL visible unfocused Clock did not repaint"
+    } else {
+        after time 0.05 [list cr_wait_background $callback]
+    }
+}
+proc cr_begin_background {callback} {
+    set ::cr_background_deadline [expr {[machine_info time] + 20.0}]
+    cr_wait_background $callback
+}
 proc cr_wait_seconds {callback} {
     if {[da_sig_loaded $::da_clock_main $::da_clock_sig] &&
         [peek $::cr_seconds_address]} {
         keymatrixup 5 0x01
-        after time 1.0 [list cr_focus_desktop $callback]
+        after time 1.0 [list cr_focus_desktop [list cr_begin_background $callback]]
     } elseif {[machine_info time] > $::cr_seconds_deadline} {
         keymatrixup 5 0x01
         da_finish "FAIL Clock did not acknowledge seconds key"

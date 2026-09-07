@@ -20,7 +20,7 @@ from cpc_runtime_pixels import verify_pixels, cursor_phases, DEFAULT_THEME
 from cpc_fswrite_cases import space
 
 
-def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, title_ready=True):
+def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, title_ready=True, kernel=None):
     header, ram = snapshot(data)
     if len(ram) != 512*1024: raise AssertionError("512 KiB required")
     if ram[sym['cpc_runtime_status']] != 1: raise AssertionError("runtime failed to boot")
@@ -38,6 +38,7 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
                       ('ROOTBAR.BIN',0x4000),
                       ('SUPPORT.RAW',0x400),('FSCTX.BIN',0x7C400),('DEFAULT.FNT',0x7C000)):
         expected = font if name=='DEFAULT.FNT' and font is not None else (work/name).read_bytes()
+        if name=='CORE.RAW' and kernel is not None: expected=kernel
         actual = bytearray(ram[base:base+len(expected)])
         if name == 'SUPPORT.RAW':
             for field,n in (('up_request',16),('up_text_copy',49)):
@@ -60,12 +61,18 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None):
-    media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None):
+    filemgr=filemgr or filemgr_case is not None or filemgr_scenario is not None
+    variant='filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
+    media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr)
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-'))
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(seed_image or manifest['image']).read_bytes())
+    filemgr_kernel=None
+    if filemgr_case:
+        from cpc_runtime_filemgr import prepare
+        filemgr_kernel=prepare(filemgr_case,work,sym,image,artifacts)
     if config_edit:
         from cpc_runtime_configedit import prepare
         prepare(config_edit,media,work,image,artifacts)
@@ -209,6 +216,12 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 return artifacts
         else: raise AssertionError('runtime boot timeout')
         wait(50)
+        if filemgr:
+            from cpc_runtime_filemgr import run_filemgr
+            return run_filemgr(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,filemgr_case,filemgr_kernel,filemgr_scenario)
+        if desktop:
+            from cpc_runtime_desktop import run_desktop
+            return run_desktop(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move)
         if config_edit:
             from cpc_runtime_configedit import run_edit
             return run_edit(ROOT,media,manifest,work,sym,artifacts,image,emulator,send,wait,read,key,move,config_edit)
@@ -447,6 +460,10 @@ if __name__=='__main__':
     mode.add_argument('--clock',action='store_true')
     mode.add_argument('--latency',action='store_true')
     mode.add_argument('--desk',action='store_true')
+    mode.add_argument('--desktop',action='store_true',help='private actual Desktop boot contract, not File Manager admission')
+    mode.add_argument('--filemgr',action='store_true',help='private build-matched native File Manager lifecycle')
+    mode.add_argument('--filemgr-case',choices=('missing','short','oversized','corrupt','unbound','no-register'))
+    mode.add_argument('--filemgr-scenario',choices=('contexts','services','windows'))
     mode.add_argument('--root-fault',choices=('missing','short','oversized','cfg-missing','cfg-short','cfg-oversized'))
     mode.add_argument('--native',action='store_true')
     mode.add_argument('--native-fault',choices=('missing','short','oversized'))

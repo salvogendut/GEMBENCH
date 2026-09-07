@@ -37,7 +37,7 @@ def cursor_phases(sprite):
     return bytes(result)
 
 
-def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True):
+def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None):
     def fill(image,x,y,w,h,pen):
         for yy in range(max(0,y),min(200,y+h)):
             for xx in range(max(0,x)*4,min(80,x+w)*4): put_pixel(image,xx,yy,pen)
@@ -68,9 +68,23 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
                     b=icons[off+yy*w+xx//4];i=xx%4
                     pen=((b>>(7-i))&1)|(((b>>(3-i))&1)<<1)
                     if half or pen: put_pixel(result,x*4+xx,y+yy,pen)
+    if desktop is not None:
+        footprint=desktop.get('footprint') if isinstance(desktop,dict) else None
+        desktop=desktop['icons'] if isinstance(desktop,dict) else desktop
+        for slot,x,y,label in ((13,0,20,'Disk C'),(1,66,35,'Clock')):
+            off=int.from_bytes(desktop[16+4*slot:18+4*slot],'little')
+            w,h=desktop[18+4*slot:20+4*slot]
+            for yy in range(h):
+                for xx in range(w*4):
+                    b=desktop[off+yy*w+xx//4];i=xx%4
+                    pen=((b>>(7-i))&1)|(((b>>(3-i))&1)<<1)
+                    if pen: put_pixel(result,x*4+xx,y+yy,pen)
+            fill(result,x,y+34,(len(label)*3+1)//2,8,0)
+            text(result,x,y+34,label,1,0)
     fill(result,0,0,80,8,1)
     text(result,1,0,'512K',2,1)
     text(result,68,0,f'{clock[0]:02}:{clock[1]:02}',2,1)
+    if desktop is not None and footprint: text(result,54,0,footprint,2,1)
     for i in range(min(menu[0],4)):
         text(result,menu[1+i*9],0,menu[2+i*9:10+i*9].split(b'\0',1)[0].decode(),2,1)
     for slot in order:
@@ -78,10 +92,17 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
         x,y,w,h=rects[slot]
         calculator=(calculators or {}).get(slot)
         watch=(clocks or {}).get(slot)
-        surface=chrome((x,y,w,h),31 if watch is not None else 11 if calculator is not None else 7,
+        filemgr=(filemanagers or {}).get(slot)
+        surface=chrome((x,y,w,h),31 if watch is not None or filemgr is not None else 11 if calculator is not None else 7,
                        (titles or {}).get(slot,'Universal ABI'),font,frame_pen,theme,title_ready)
-        fill(surface,x+1,y+14,w-2,h-15,0 if watch is not None else 1)
-        if watch is not None:
+        if filemgr is not None:
+            from cpc_filemgr_pixels import draw
+            fill(surface,x+2,y+16,2,3,0)  # remove the chrome fixture's diagnostic mark
+            draw(surface,(x,y,w,h),filemgr,desktop,fill,text)
+        else:
+            fill(surface,x+1,y+14,w-2,h-15,0 if watch is not None else 1)
+        if filemgr is not None: pass
+        elif watch is not None:
             # Independent Clock geometry/pixels at the observed completed time,
             # not copies of guest screen data or the Z80 compositor algorithm.
             from cpc_runtime_clock import draw_clock
@@ -153,14 +174,14 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
     return bytes(result)
 
 
-def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True):
+def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None):
     px=int.from_bytes(ram[sym['pointer_x']:sym['pointer_x']+2],'little')
     py=ram[sym['pointer_y']]
     if ram[sym['menu_def']:sym['menu_def']+len(menu)]!=menu:
         raise AssertionError('focused menu snapshot differs')
     expected=frame(rects,order,accents,(px,py),font if font is not None else (work/'DEFAULT.FNT').read_bytes(),
                    tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog,frame_pen,
-                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons,theme,title_ready)
+                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons,theme,title_ready,desktop,filemanagers)
     actual=ram[0xC000:0x10000]
     if actual!=expected:
         at=next(i for i,(a,b) in enumerate(zip(actual,expected)) if a!=b)

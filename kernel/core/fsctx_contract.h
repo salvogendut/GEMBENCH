@@ -11,9 +11,12 @@
  * Optional DIRECTORY_STATUS reports an error after a null entry or batch;
  * omitted means the historical OK/EOF behavior. A failed partial batch retains
  * its actual count and last published cursor so the caller may retry.
- * READ returns at most REQ_LENGTH; WRITE returns success/failure. Activation
- * and error precedence, partial path writes on rejection, zero read ambiguity,
- * append semantics and pending-launch one-shot behavior are unchanged.
+ * READ returns at most REQ_LENGTH; optional READ_STATUS distinguishes EOF (OK)
+ * from failure. A failed read publishes zero actual bytes, leaves its offset
+ * unchanged and makes XFER unspecified (a partial transport prefix may exist).
+ * Omitting READ_STATUS preserves the historical MSX zero-read ambiguity.
+ * WRITE returns success/failure. Activation/error precedence, partial path
+ * writes on rejection, append and pending-launch behavior are unchanged.
  * CANCEL rewinds only; teardown invalidates owned records but does not purge
  * pending launch state. No persistent native handles survive calls. Providers
  * with persistent handles require an explicitly reviewed cleanup adaptation.

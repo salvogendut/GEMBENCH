@@ -63,6 +63,14 @@ cpc_runtime_start
                 call cpc_visual_apply
                 call cpc_desktop_load
                 jp nc,cpc_runtime_failed
+                ifdef CPC_NATIVE_DESKTOP
+                xor a
+                ld (CPC_DESKTOP_STATUS),a
+                call cpc_bar_payload         ; actual Desktop CRT, initialization and binding
+                ld a,(CPC_DESKTOP_STATUS)
+                cp 1
+                jp nz,cpc_runtime_failed
+                else
                 ld hl,cpc_bar_data
                 ld de,cpc_bar_data+1
                 ld bc,cpc_bar_data_end-cpc_bar_data-1
@@ -72,6 +80,7 @@ cpc_runtime_start
                 call cpc_bar_payload+12       ; actual Desktop Desk registration
                 ld hl,cpc_root_bar
                 ld (BAR_HANDLER),hl
+                endif
                 ld a,10
                 ld (poll_byte),a
                 ld hl,40
@@ -81,7 +90,9 @@ cpc_runtime_start
                 ld (pointer_y),a
                 call clip_set_full
                 call wm_repaint_all
+                ifndef CPC_NATIVE_DESKTOP
                 call cpc_runtime_launch
+                endif
                 ld a,1
                 ld (cpc_runtime_status),a
                 jp wm_loop
@@ -104,7 +115,7 @@ cpc_root_idle
                 ret z
                 ld (cpc_runtime_key),a
                 cp 'r'
-                jr z,cpc_runtime_config
+                jp z,cpc_runtime_config
                 cp 'a'
                 jp z,cpc_runtime_assets_demo
                 cp 'v'
@@ -125,6 +136,10 @@ cpc_root_idle
                 jp z,cpc_bar_payload+42
                 cp 'e'
                 jp z,cpc_bar_payload+45
+                cp 'l'
+                jp z,cpc_bar_payload+48       ; actual File Manager VIEW=LIST binding
+                cp 'b'
+                jp z,cpc_bar_payload+51       ; VIEW=DEFAULT (icons)
                 cp 's'
                 ret nz
                 ; Small public-ABI exercise on the empty launch surface. Keep
@@ -371,4 +386,7 @@ cpc_desktop_name db "ROOTUI  BIN"
 cpc_runtime_app db "ABIPROBEAPP"
 cpc_runtime_fsapp db "FSPROBE APP"
 cpc_runtime_menuapp db "MENUPRBEAPP"
+                ifdef CPC_NATIVE_DESKTOP
+                include "cpc_desktop_boot.inc"
+                endif
                 assert cpc_runtime_f7+1<CPC_ADAPTER_STATE_END,"launcher state overflow"

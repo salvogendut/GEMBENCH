@@ -48,6 +48,7 @@ static unsigned int cpc_fs_read(void);
 #define FSCTX_SELECT_CONTEXT(ctx) do { CPC_SELECTED=(ctx); } while (0)
 #define FSCTX_CHANGE_DIRECTORY() cpc_fs_activate()
 #define FSCTX_READ_CHUNK(ctx,got) do { (void)(ctx); got=cpc_fs_read(); } while (0)
+#define FSCTX_READ_STATUS() (CPC_IO_STATUS>=2u ? IOERR : OK)
 #ifdef CPC_FS_DIRECTORY
 #define CPC_DIR_STATUS U8(0x24B0u)
 #define CPC_DIR_LIVE U8(0x24B1u)

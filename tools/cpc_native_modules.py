@@ -31,8 +31,16 @@ def provider(work, sym):
         # Config results are staged, then applied by the visual-asset provider.
         out.append(f'#define {name} (*(unsigned char *){cfg+offset})')
     ptr('FS_REQ_NAME', sym['fs_req_name'])
-    for name, offset in (('UI_OP',0),('UI_COL',1),('UI_LINE',2),('UI_N',3),('UI_RES',4)):
+    for name, offset in (('UI_OP',0),('UI_COL',1),('UI_LINE',2),('UI_N',3),('UI_RES',4),('UI_MODAL',5)):
         byte(name, ui+offset)
+    byte('FILEMGR_WINDOW_COUNT', sym['wm_nwin'])
+    byte('FILEMGR_FOCUS', sym['wm_focus'])
+    byte('FILEMGR_FREE_PAGES', sym['core_page_free'])
+    out.append(f'#define FILEMGR_WINDOW_LIMIT {sym["cpc_window_max"]}')
+    ptr('DESKTOP_MENU', sym['menu_def'], 'volatile unsigned char')
+    ptr('DESKTOP_FULLSCREEN', 0x130A, 'volatile unsigned char')
+    out.append(f'#define DESKTOP_KERNEL_BYTES {sym["cpc_kernel_used_end"]-sym["cpc_kernel_begin"]}u')
+    out.append(f'#define DESKTOP_FILEMGR_READY {int(sym.get("cpc_filemgr_profile")==1)}')
     ptr('UI_NAME', ui+8)
     ptr('UI_TEXT', sym['cpc_ui_text'])
     ptr('GB_UI_TEXT_END', sym['cpc_ui_request_end'], 'const char')
@@ -47,7 +55,6 @@ def provider(work, sym):
     out.append(f'#define CPC_EDIT_OP {sym["cpc_edit_op"]}')
     for name in ('STATUS','CHANGED','ERROR'):
         byte('CPC_EDIT_'+name,sym['cpc_edit_'+name.lower()])
-    byte('CPC_EDIT_IO_STATUS',sym['cpc_fs_io_status'])
     out += [f'#define GB_UI_SAVEUNDER {sym["cpc_ui_under"]}',
             f'#define GB_POPUP_BUFFER {sym["cpc_ui_popup"]}',
             f'#define GB_POPUP_CAPACITY {sym["cpc_ui_popup_end"]-sym["cpc_ui_popup"]}']

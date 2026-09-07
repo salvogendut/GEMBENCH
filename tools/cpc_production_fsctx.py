@@ -67,6 +67,9 @@ def inputs(directory=False,writable=False):
     add("fresh-context",0,save=6)
     add("fresh-path",2,6,payload=b"DOCS/SUB\0")
     add("fresh-name",3,6,payload=b"A       BIN")
+    add("missing-name",3,6,payload=b"MISSING BIN")
+    add("missing-read-is-error",8,6,length=512)
+    add("retry-name",3,6,payload=b"A       BIN")
     add("fresh-read",8,6,length=128)
     add("final-close",1,6)
     return rows
@@ -248,14 +251,18 @@ def expected(directory=False,writable=False,free_kib=None,cluster_kib=2,media_ou
                     name=bytes(ctx[16:24]).decode().rstrip()+'.'+bytes(ctx[24:27]).decode().rstrip()
                     source=dict(datafiles)
                     source["CATALOG/LONGNA~1.TXT"]=source["CATALOG/Long named file.txt"]
-                    data=source[path+'/'+name]
-                    offset=int.from_bytes(ctx[8:12],"little")
-                    chunk=data[offset:offset+length]; amount=len(chunk)
-                    # Each full requested 128-byte leaf needs no additional EOF read.
-                    commands+=4*((amount+127)//128 if amount==length else amount//128+1)
-                    payload[:amount]=chunk
-                    ctx[8:12]=(offset+amount).to_bytes(4,"little")
-                    req[12:16]=ctx[8:12]
+                    if path+'/'+name not in source:
+                        commands+=1  # failed OPEN: no descriptor to seek/read/close
+                        status=6
+                    else:
+                        data=source[path+'/'+name]
+                        offset=int.from_bytes(ctx[8:12],"little")
+                        chunk=data[offset:offset+length]; amount=len(chunk)
+                        # Each full requested 128-byte leaf needs no additional EOF read.
+                        commands+=4*((amount+127)//128 if amount==length else amount//128+1)
+                        payload[:amount]=chunk
+                        ctx[8:12]=(offset+amount).to_bytes(4,"little")
+                        req[12:16]=ctx[8:12]
         else: status=5
         if item["save"]!=255: handles[item["save"]]=h
         req[1]=status

@@ -28,6 +28,22 @@ cpc_loading_begin
                 include "core/app_launch.asm"
                 include "core/app_admission.asm"
 cpc_loaded_admission
+                ifdef CPC_NATIVE_FILEMGR
+                ; Private system profile only. Other files still pass through
+                ; the unchanged universal validator/receiver below.
+                ld hl,fs_req_name
+                ld de,cpc_filemgr_name
+                ld b,11
+cpc_filemgr_name_check
+                ld a,(de)
+                cp (hl)
+                jr nz,cpc_loaded_universal
+                inc hl
+                inc de
+                djnz cpc_filemgr_name_check
+                jp cpc_filemgr_admission
+cpc_loaded_universal
+                endif
                 call gbap4_validate_loaded
                 ifdef CPC_RUNTIME
                 ret nc
@@ -37,6 +53,9 @@ cpc_loaded_admission
                 scf                         ; negative test: execute rejected data
                 endif
                 ret
+                ifdef CPC_NATIVE_FILEMGR
+                include "cpc_filemgr_admission.inc"
+                endif
                 include "../lib/cpc/app_load.asm"
 cpc_loading_end
                 assert gb4_crc_value+4<=CPC_ARCH_STATE_END,"admission state overflow"

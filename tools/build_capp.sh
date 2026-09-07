@@ -426,6 +426,12 @@ if [ "$SYS_FLAG" = "1" ]; then
 fi
 
 deps=("$0" "tools/build_cache.sh" "tools/check_app_layout.py" "$CRT0_SRC" "$GBLIB_SRC" "$GB/gb.h")
+if [ "$APP" = "apps/filemgr" ]; then
+    deps+=("$APP/platform.h")
+fi
+if [ "$APP" = "apps/desktop" ]; then
+    deps+=("$APP/platform.h")
+fi
 if [ "$APP" = "apps/settings" ]; then
     deps+=("$APP/core/config_keypos.inc" "$APP/core/config_edit.inc"
            "$APP/platform/legacy.h" "$APP/platform/ink_legacy.inc"

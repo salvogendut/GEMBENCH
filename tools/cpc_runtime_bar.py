@@ -26,6 +26,12 @@ def compile_bar(work, sym, root):
                     '-I', str(root / 'lib/gb'), '-c', str(root / 'kernel/kc/cpc_root_bar.c'),
                     '-I', str(root / 'include/gembench'),
                     '-o', 'bar.rel'], cwd=work, check=True)
+    subprocess.run([sdcc, '-mz80', '--std-c99', '--opt-code-size', '--fomit-frame-pointer',
+                    f'-DGB_FILEMGR_BINDINGS="{work / "cpc_native.h"}"',
+                    f'-DGB_FSCTX_PLATFORM_HEADER="{work / "cpc_fs_client.h"}"',
+                    '-I', str(root / 'lib/gb'), '-I', str(root / 'include/gembench'),
+                    '-c', str(root / 'kernel/kc/cpc_filemgr.c'),
+                    '-o', 'bar_filemgr.rel'], cwd=work, check=True)
     for source, output, defs in (
             ('gbdoc.c', 'doc.rel', ['-DGBDOC_MENU_ONLY']),
             ('gbdlg.c', 'popup.rel', [f'-DGB_POPUP_BUFFER={sym["cpc_root_popup"]}',
@@ -37,7 +43,7 @@ def compile_bar(work, sym, root):
     data, limit = sym['cpc_bar_data'], sym['cpc_bar_data_end']
     subprocess.run([sdcc, '-mz80', '--no-std-crt0', '--code-loc', hex(base),
                     '--data-loc', hex(data), 'bar_entry.rel', 'bar.rel', 'bar_lib.rel', 'bar_defer.rel',
-                    'doc.rel', 'popup.rel', 'native_fs_client.rel', 'native_fs.rel',
+                    'doc.rel', 'popup.rel', 'native_fs_client.rel', 'native_fs.rel', 'bar_filemgr.rel',
                     '-o', 'bar.ihx'], cwd=work, check=True)
     areas = read_areas(work / 'bar.map')
     for name, (address, size) in areas.items():
@@ -48,7 +54,7 @@ def compile_bar(work, sym, root):
             raise AssertionError('Desktop bar must not require CRT initialization')
     subprocess.run([str(bindir / 'makebin'), '-s', '65536', '-p', 'bar.ihx', 'bar.bin'], cwd=work, check=True)
     raw = (work / 'bar.bin').read_bytes()[base:]
-    if not 36 <= len(raw) <= end-base:
+    if not 54 <= len(raw) <= end-base:
         raise AssertionError('Desktop bar binary exceeds resident slot')
     (work / 'ROOTBAR.BIN').write_bytes(raw.ljust(end-base, b'\0'))
     return dict(base=base, used=len(raw), budget=end-base,

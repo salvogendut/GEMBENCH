@@ -8,6 +8,9 @@ static void desktop_menu_init(void)
                 accessory_action);
 #endif
 #if !defined(DESKTOP_SYSTEM_MENU) || DESKTOP_SYSTEM_MENU
-    gb_menu_add("System", sys_items, 7, sys_action);
+#ifndef DESKTOP_SYSTEM_ITEM_COUNT
+#define DESKTOP_SYSTEM_ITEM_COUNT 7
+#endif
+    gb_menu_add("System", sys_items, DESKTOP_SYSTEM_ITEM_COUNT, sys_action);
 #endif
 }

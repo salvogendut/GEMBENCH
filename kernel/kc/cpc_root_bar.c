@@ -156,3 +156,9 @@ static void title_choice(const char *value)
 }
 void cpc_test_config_weave(void) { title_choice("WEAVE"); }
 void cpc_test_config_original(void) { title_choice("ORIGINAL"); }
+
+/* Exercise the actual File Manager binding, not a second VIEW request packer.
+ * These private root controls do not admit or launch a native File Manager. */
+extern unsigned char filemgr_save_view(unsigned char view);
+void cpc_test_view_list(void) { (void)filemgr_save_view(0); }
+void cpc_test_view_icons(void) { (void)filemgr_save_view(1); }

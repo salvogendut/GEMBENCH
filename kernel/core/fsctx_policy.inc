@@ -184,6 +184,12 @@ static void read_chunk(volatile unsigned char *ctx)
     if (!REQ_LENGTH || REQ_LENGTH > 512u) { status(BADARG); return; }
     if (!activate(ctx)) return;
     FSCTX_READ_CHUNK(ctx, got);
+#ifdef FSCTX_READ_STATUS
+    /* Providers with explicit transport status must not publish a failed
+     * prefix as a successful short read/EOF. Leave the context offset intact
+     * so a retry starts at the same byte. XFER is scratch until status is OK. */
+    if (FSCTX_READ_STATUS() != OK) { status(FSCTX_READ_STATUS()); return; }
+#endif
     REQ_ACTUAL = got;
     advance_offset(ctx, got);
     status(OK);

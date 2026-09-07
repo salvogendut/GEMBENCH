@@ -169,13 +169,13 @@ Consolidate delivery into **four outcome-based sprints: three implementation
 sprints and one stabilization sprint**. The earlier estimate of 8–12 small
 checkpoints describes internal tasks, not additional delivery milestones.
 This grouping does not promise a calendar duration or remove engineering work.
-Desktop and File Manager still need their detailed dependency audit; record
-discoveries within the relevant sprint and flag material scope changes rather
-than silently adding more sprints or bypassing a safety gate.
+The joint Desktop/File Manager dependency inventory is recorded in sprint 1;
+record further discoveries within the relevant sprint and flag material scope
+changes rather than silently adding more sprints or bypassing a safety gate.
 
 | Sprint | Scope | Deliverable / exit condition |
 | --- | --- | --- |
-| **1 — Native services and memory** | Audit the actual Desktop/File Manager together; bind their minimum owned filesystem, loading, configuration and native service needs to the production CPC map. Reuse W1 and the qualified core/providers. | Checked linked layouts and native-call integration tests on private M4 media; required service paths work, rejected loads clean up ownership, and unqualified actions remain gated. MSX regressions pass. This is infrastructure, not yet the real Desktop UI. |
+| **1 — Native services and memory** | Audit the actual Desktop/File Manager together; bind their minimum owned filesystem, loading, configuration and native service needs to the production CPC map. Reuse W1 and the qualified core/providers. | Checked linked layouts and native-call integration tests on private M4 media; required service paths work, rejected loads clean up ownership, and unqualified actions remain gated. MSX regressions pass. This is infrastructure/private qualification, not the regular Desktop delivery. |
 | **2 — Real Desktop** | Integrate the actual root surface, icons, Desk/System menus and qualified application-launch/return paths. | A bootable M4 image showing the real Desktop, with Clock/Calculator launch, focus, drag, close and menu return tested together. File browsing may remain unavailable until sprint 3. |
 | **3 — File Manager and usable workflow** | Integrate the actual File Manager, Disk C directory/parent navigation, supported file/application opening and visible error handling. | The first end-to-end usable desktop: boot → browse Disk C → launch supported apps → manage their windows. Preserve directory/owner state through repeated opens and closes. |
 | **4 — Stabilization and delivery** | Fix integration defects; exercise overlap/exposure, partial repaint, Clock visibility/background work, pointer responsiveness, repeated lifecycles and boot failures; finalize build/staging and instructions. | A reproducibly built, documented M4 desktop image with the combined acceptance checks and MSX regressions passing, plus an explicit list of deferred features. |
@@ -204,10 +204,18 @@ Unqualified actions must be visibly unavailable or omitted, not implemented as
 successful no-ops. This changes the delivery order, not the runtime admission,
 memory, ownership or regression requirements.
 
-**Next: sprint 1.** Audit the real Desktop/File Manager service requirements
-against the qualified runtime and W2-A inventory, then implement and validate
-the required native bindings as one work package. The earlier W2/W3 scope
-remains tracked, but finishing every Settings/saver action before starting
+**Complete: [sprint 1](CPC-RESTART-SPRINT1.md) (2026-09-08).** The actual
+Desktop/File Manager now have checked complete native profiles and private M4
+boot/launch contracts. Owned browsing, load-failure cleanup, reachable native
+capacity limits/recovery and combined View/configuration/Clock calls pass,
+including 52 final runtime checkpoints. Shared Clock exposure and preemptive
+File Manager selection repairs have regression coverage; full host checks and
+openMSX Screen 6/7 Clock/Desk checks pass. **0% remains within sprint 1's defined
+qualification scope.** Normal APP admission remains unchanged; the private
+profile is not regular CPC Desktop delivery. Next is **sprint 2: stage and
+document the qualified actual Desktop as a reproducible manual M4 target**.
+The earlier
+W2/W3 scope remains tracked, but finishing every Settings/saver action before starting
 Desktop is no longer a delivery requirement.
 
 Use private M4 image copies for automated runtime tests; no slow floppy tests.

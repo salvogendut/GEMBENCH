@@ -103,9 +103,11 @@ typedef struct {
 } gb_sysinfo_v6_t;
 
 /* Fail the target build if compiler packing ever changes the binary record. */
+#if defined(__SDCC) || !defined(GB_UNIVERSAL_HOST_TEST)
 typedef char gb_sysinfo_v6_size_must_be_48[
     sizeof(gb_sysinfo_v6_t) == GB_UNIVERSAL_SYSINFO_SIZE ? 1 : -1
 ];
+#endif /* host behavioral tests never transmit this native-width struct */
 
 typedef struct {
     unsigned char hour;

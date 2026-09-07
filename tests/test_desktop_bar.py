@@ -24,7 +24,10 @@ class DesktopBarTests(unittest.TestCase):
         for name in ('apps/desktop/main.c', 'kernel/kc/cpc_root_bar.c'):
             text = (ROOT/name).read_text()
             for fragment in ('bar_render.inc', 'bar_refresh.inc'):
-                self.assertEqual(text.count(fragment), 1)
+                # The actual Desktop additionally runs the same refresh policy
+                # inside its native clipped-damage callback, preserving caches.
+                expected = 2 if name=='apps/desktop/main.c' and fragment=='bar_refresh.inc' else 1
+                self.assertEqual(text.count(fragment), expected)
             self.assertNotIn('static void bar_menu(', text)
         for name in ('kernel/gbkern.asm', 'kernel/cpc_runtime_services.asm'):
             self.assertIn('include "core/menu_state.asm"', (ROOT/name).read_text())

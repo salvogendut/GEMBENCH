@@ -17,6 +17,8 @@
         .globl _cpc_test_pickdir
         .globl _cpc_test_config_weave
         .globl _cpc_test_config_original
+        .globl _cpc_test_view_list
+        .globl _cpc_test_view_icons
         .area _CODE
         jp _cpc_bar_reset
         jp _cpc_bar_tick
@@ -34,3 +36,5 @@
         jp _cpc_test_pickdir
         jp _cpc_test_config_weave
         jp _cpc_test_config_original
+        jp _cpc_test_view_list
+        jp _cpc_test_view_icons

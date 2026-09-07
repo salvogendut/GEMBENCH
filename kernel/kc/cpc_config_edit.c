@@ -25,6 +25,12 @@ static unsigned char valid_request(void)
     if (UI_OP!=CPC_EDIT_OP) return 0;
     for (i=0;i<16 && UI_NAME[i];i++) ;
     if (i==16) return 0;
+    if (equal(UI_NAME,"VIEW=")) {
+        if (equal(UI_TEXT,"LIST")) value_length=4;
+        else if (equal(UI_TEXT,"DEFAULT")) value_length=7;
+        else return 0;
+        return 1;
+    }
     for (k=0;k<6 && !equal(UI_NAME,keys[k]);k++) ;
     if (k==6) return 0;
     while (stem<8 && ((*p>='A' && *p<='Z') || (*p>='0' && *p<='9') ||
@@ -42,9 +48,6 @@ static unsigned char io_error(void)
 {
     unsigned char status=gb_fsctx_status();
     if (status) { CPC_EDIT_ERROR=status;return 1; }
-    /* FSCTX's inherited zero-read ambiguity is not safe for config writes.
-     * The native provider can additionally inspect its transport result. */
-    if (CPC_EDIT_IO_STATUS>=2) { CPC_EDIT_ERROR=16+CPC_EDIT_IO_STATUS;return 1; }
     return 0;
 }
 static void persist(void)
