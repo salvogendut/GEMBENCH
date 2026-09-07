@@ -60,12 +60,15 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None):
     media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-'))
-    image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(manifest['image']).read_bytes())
+    image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(seed_image or manifest['image']).read_bytes())
+    if config_edit:
+        from cpc_runtime_configedit import prepare
+        prepare(config_edit,media,work,image,artifacts)
     if asset_case:
         from cpc_runtime_assets import prepare
         asset_fixture=prepare(asset_case,work,image,artifacts)
@@ -206,6 +209,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 return artifacts
         else: raise AssertionError('runtime boot timeout')
         wait(50)
+        if config_edit:
+            from cpc_runtime_configedit import run_edit
+            return run_edit(ROOT,media,manifest,work,sym,artifacts,image,emulator,send,wait,read,key,move,config_edit)
         if chrome_case:
             from cpc_runtime_chrome import run_chrome
             return run_chrome(media,manifest,work,sym,artifacts,image,emulator,
@@ -446,6 +452,8 @@ if __name__=='__main__':
     mode.add_argument('--native-fault',choices=('missing','short','oversized'))
     mode.add_argument('--picker',action='store_true')
     mode.add_argument('--picker-fault',choices=('missing','short','oversized'))
+    from cpc_runtime_configedit import EDIT_CASES
+    mode.add_argument('--config-edit',choices=EDIT_CASES)
     mode.add_argument('--config-case',choices=('missing','empty','exact','oversized','custom'))
     from cpc_runtime_assets import ASSET_CASES
     mode.add_argument('--asset-case',choices=ASSET_CASES)

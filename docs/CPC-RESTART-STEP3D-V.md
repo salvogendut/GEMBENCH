@@ -141,6 +141,8 @@ a private missing-module test; `short` and `oversized` are also available.
 
 ## Next
 
-System/Settings service integration, including the native reload and filesystem
-handoff required by those callers; then the complete shared Desktop/File
+[System/Settings service integration](CPC-RESTART-STEP3D-W.md): W1 now supplies
+checked configuration persistence/reload. The actual application's native
+loading, filesystem and form bindings remain W2, followed by the System menu
+in W3; then the complete shared Desktop/File
 Manager and remaining application parity. The broader adapter gate stays open.

@@ -131,8 +131,10 @@ tiles. [Chrome checkpoint 3D-U](CPC-RESTART-STEP3D-U.md) binds the actual Deskto
 title/gadget selection and shared furniture to a checked F7 renderer module.
 [Picker checkpoint 3D-V](CPC-RESTART-STEP3D-V.md) binds the existing chooser
 to temporary owned filesystem contexts and checks post-dialog file readback.
-Full native implicit filesystem/reload contracts, System/Settings and the
-complete shell remain gated.
+[Settings persistence gate 3D-W1](CPC-RESTART-STEP3D-W.md) now reuses the actual
+Settings edit block with verified M4 writes and live configuration reload.
+The Settings application/System menu, full native implicit filesystem/reload
+contracts and complete shell remain gated (W2/W3 and subsequent integration).
 The experimental launcher does not enable a CPC desktop.
 Shared policy/context extraction does not establish CPC adapter correctness;
 the complete memory/adapter gate still precedes desktop integration.

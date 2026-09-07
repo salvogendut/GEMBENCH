@@ -44,6 +44,10 @@ def provider(work, sym):
     byte('CPC_PICK_STATUS', sym['cpc_pick_status'])
     word('CPC_PICK_PROBE_BYTES', sym['cpc_pick_probe_bytes'])
     ptr('CPC_PICK_PROBE_DATA', sym['cpc_pick_probe_data'])
+    out.append(f'#define CPC_EDIT_OP {sym["cpc_edit_op"]}')
+    for name in ('STATUS','CHANGED','ERROR'):
+        byte('CPC_EDIT_'+name,sym['cpc_edit_'+name.lower()])
+    byte('CPC_EDIT_IO_STATUS',sym['cpc_fs_io_status'])
     out += [f'#define GB_UI_SAVEUNDER {sym["cpc_ui_under"]}',
             f'#define GB_POPUP_BUFFER {sym["cpc_ui_popup"]}',
             f'#define GB_POPUP_CAPACITY {sym["cpc_ui_popup_end"]-sym["cpc_ui_popup"]}']
@@ -66,7 +70,9 @@ def compile_native(work, sym, root):
         '#define GB_FSCTX_TRANSFER ((volatile unsigned char *)GB_FSCTX_TRANSFER_ADDRESS)\n'
         '#define GB_FSCTX_WORD_AT(offset) (*(volatile unsigned int *)(GB_FSCTX_REQUEST_ADDRESS+(offset)))\n')
     (work/'native_fs.s').write_text('.module native_fs\n.globl _gb_fsctx_call\n'
-                                   f'_gb_fsctx_call = {sym["cpc_native_fs_call"]}\n')
+                                   f'_gb_fsctx_call = {sym["cpc_native_fs_call"]}\n'
+                                   '.globl _cpc_config_update\n'
+                                   f'_cpc_config_update = {sym["cpc_config_update"]}\n')
     (work/'cpc_picker.h').write_text('extern unsigned char cpc_picker_error(void);\n'
                                    '#define GB_PICK_STATUS cpc_picker_error\n')
     (work/'ui_lib.s').write_text(generate(root/'lib/gb/gblib.s',[root/'kernel/kc/cpc_ui.symbols']))
@@ -90,6 +96,7 @@ def compile_native(work, sym, root):
         ('kernel/kc/kcfg.c','native_parser.rel',[]),
         ('kernel/kc/gbui_mod.c','native_ui.rel',uidefs),
         ('kernel/kc/cpc_picker_mod.c','native_picker.rel',[*fsdefs,f'-DGB_UI_PROVIDER="{header}"']),
+        ('kernel/kc/cpc_config_edit.c','native_edit.rel',[*fsdefs,f'-DGB_UI_PROVIDER="{header}"']),
         ('lib/gb/gbpick.c','native_picklib.rel',[f'-DGB_PICK_PROVIDER="{work/"cpc_picker.h"}"']),
         ('lib/gembench/gbfsctx.c','native_fs_client.rel',fsdefs),
         ('lib/gb/gbdlg.c','native_popup.rel',
@@ -101,7 +108,8 @@ def compile_native(work, sym, root):
     for name, objects in (('GBCFG', ['native_cfg.rel','native_parser.rel']),
                            ('GBUI', ['native_ui.rel','native_popup.rel','native_prompt.rel','ui_lib.rel']),
                            ('GBPICK', ['native_picker.rel','native_picklib.rel','native_popup.rel',
-                                       'native_fs_client.rel','native_fs.rel','ui_lib.rel'])):
+                                       'native_fs_client.rel','native_fs.rel','ui_lib.rel']),
+                           ('GBEDIT', ['native_edit.rel','native_fs_client.rel','native_fs.rel'])):
         base,end=sym['cpc_module_base'],sym['cpc_module_code_end']
         data,limit=sym['cpc_module_data'],sym['cpc_module_data_end']
         subprocess.run([sdcc,'-mz80','--no-std-crt0','--code-loc',hex(base),'--data-loc',hex(data),

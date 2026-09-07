@@ -143,3 +143,16 @@ void cpc_test_pickdir(void)
 {
     UI_OP=4;ui_text("TXT");UI_TEXT[4]=0;gb_ui();
 }
+
+extern void cpc_config_update(void);
+static void title_choice(const char *value)
+{
+    unsigned char i;
+    static const char key[]="TITLEBAR=";
+    UI_OP=CPC_EDIT_OP;
+    for (i=0;i<sizeof(key);i++) UI_NAME[i]=key[i];
+    ui_text(value);
+    cpc_config_update();
+}
+void cpc_test_config_weave(void) { title_choice("WEAVE"); }
+void cpc_test_config_original(void) { title_choice("ORIGINAL"); }

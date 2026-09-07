@@ -222,18 +222,7 @@ static char drive_letter(unsigned char d)
 /* ---- GEOBENCH.CFG read/write (generic, key includes the '=') ----------------- */
 
 /* cfg_keypos: index just past KEY's '=' (KEY must sit at a line start), or 0xFFFF. */
-static unsigned int cfg_keypos(const char *key)
-{
-    unsigned char kl = 0, j;
-    unsigned int i;
-    while (key[kl]) kl++;
-    for (i = 0; i + kl <= cfglen; i++) {
-        if (i && cfgbuf[i-1] != '\r' && cfgbuf[i-1] != '\n') continue;   /* line start only */
-        for (j = 0; j < kl; j++) if (cfgbuf[i+j] != key[j]) break;
-        if (j == kl) return i + kl;
-    }
-    return 0xFFFF;
-}
+#include "core/config_keypos.inc"
 
 /* cfg_get: copy KEY's value (up to 14 chars, to the line end) into dst; "-" if absent. */
 static void cfg_get(const char *key, char *dst)
@@ -281,35 +270,7 @@ static void cfg_path(char *dst, unsigned char drive, const char *stem, const cha
    the line if KEY is absent), then save GEOBENCH.CFG to the boot drive. Best-effort. */
 static void cfg_set(const char *key, const char *val)
 {
-    unsigned char kl = 0, vl = 0;
-    unsigned int p, end, i;
-    while (key[kl]) kl++;
-    while (val[vl]) vl++;
-    if (cfglen == 0) return;                 /* no config loaded -> nothing to update */
-
-    p = cfg_keypos(key);
-    if (p == 0xFFFF) {                        /* no such key: append "KEY=val\r\n" */
-        if (cfglen + kl + vl + 2 > sizeof(cfgbuf)) return;
-        for (i = 0; i < kl; i++) cfgbuf[cfglen + i] = key[i];
-        cfglen += kl;
-        for (i = 0; i < vl; i++) cfgbuf[cfglen + i] = val[i];
-        cfglen += vl;
-        cfgbuf[cfglen++] = '\r'; cfgbuf[cfglen++] = '\n';
-    } else {                                  /* replace the value in place */
-        end = p;
-        while (end < cfglen && cfgbuf[end] != '\r' && cfgbuf[end] != '\n') end++;
-        if (vl > (unsigned char)(end - p)) {            /* grow: shift the tail right */
-            unsigned int d = vl - (end - p);
-            if (cfglen + d > sizeof(cfgbuf)) return;
-            for (i = cfglen; i > end; i--) cfgbuf[i - 1 + d] = cfgbuf[i - 1];
-            cfglen += d;
-        } else if (vl < (unsigned char)(end - p)) {     /* shrink: shift the tail left */
-            unsigned int d = (end - p) - vl;
-            for (i = end; i < cfglen; i++) cfgbuf[i - d] = cfgbuf[i];
-            cfglen -= d;
-        }
-        for (i = 0; i < vl; i++) cfgbuf[p + i] = val[i];
-    }
+#include "core/config_edit.inc"
     sel_boot_root();
     gb_set_name("GEOBENCHCFG");
     gb_fs_save(cfgbuf, cfglen);

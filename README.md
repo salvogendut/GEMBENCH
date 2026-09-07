@@ -171,7 +171,12 @@ focus, dragging and gadget checks. [3D-V](docs/CPC-RESTART-STEP3D-V.md) adds the
 shared native file/destination chooser with temporary owned filesystem contexts.
 With the background focused, **O/D** exercise it; run
 `make diagnostic-cpc-picker-1984` for navigation, readback and restoration checks.
-The full Desktop/Settings/File Manager and native implicit filesystem/reload
+[3D-W1](docs/CPC-RESTART-STEP3D-W.md) reuses Settings' configuration editing with
+verified M4 persistence and live reload. On the focused background, **W/E**
+save/apply WEAVE/ORIGINAL titlebars; the choice survives restarting the emulator.
+Run `make diagnostic-cpc-config-edit-1984` for private-image save/reload/reboot
+checks. These keys write the diagnostic image only. The actual Settings window,
+System menu, full Desktop/File Manager and native implicit filesystem/reload
 contracts remain later integrations.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the

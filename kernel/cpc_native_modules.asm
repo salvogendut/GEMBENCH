@@ -19,12 +19,54 @@ cpc_ui_module_name
                 cp 3
                 jr z,cpc_ui_picker_name
                 cp 4
+                jr z,cpc_ui_picker_name
+                cp CPC_EDIT_OP
+                ld hl,cpc_edit_modname
+                ret z
                 ld hl,gbui_modname
-                ret nz
+                ret
 cpc_ui_picker_name
                 ld hl,cpc_pick_modname
                 ret
 cpc_pick_modname db "GBPICK  MOD"
+cpc_edit_modname db "GBEDIT  MOD"
+
+; Private configuration persistence entry. Inputs use owned fixed UI_NAME
+; (key) and UI_TEXT (value). Never reload F6 while its edit code is executing.
+; The UI transaction below supplies the captured caller and context boundary.
+cpc_config_update
+                ld a,1
+                ld (CPC_EDIT_STATUS),a
+                xor a
+                ld (CPC_EDIT_CHANGED),a
+                ld (CPC_EDIT_ERROR),a
+                ld (UI_RES),a
+                ld a,(CPC_UI_REQUEST)
+                cp CPC_EDIT_OP
+                jr z,cpc_config_update_valid
+                ld a,2
+                ld (CPC_EDIT_STATUS),a
+                ret
+cpc_config_update_valid
+                xor a
+                call cpc_ui
+                ld a,(UI_RES)
+                cp 1
+                ret nz
+                ld hl,(CPC_EDIT_CALLS)
+                inc hl
+                ld (CPC_EDIT_CALLS),hl
+                ; The private root reload path is not the legacy GB_RELOAD
+                ; transfer-area API. Publication follows verified persistence.
+                call cpc_runtime_config
+                ld a,(CPC_CFG_STATUS)
+                or a
+                ret z
+                ld a,8
+                ld (CPC_EDIT_STATUS),a
+                xor a
+                ld (UI_RES),a
+                ret
 
 cpc_module_read
                 call fs_load_sys

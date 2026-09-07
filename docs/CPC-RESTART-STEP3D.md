@@ -53,6 +53,10 @@ The [3D-V picker checkpoint](CPC-RESTART-STEP3D-V.md) binds the shared chooser
 to temporary owned filesystem contexts, with private path/name handoff and
 post-dialog readback. Full native implicit filesystem/reload contracts and the
 complete shell remain gated.
+The [3D-W1 persistence gate](CPC-RESTART-STEP3D-W.md) now binds the actual
+Settings configuration edit to checked M4 writes, readback verification and
+live reload. The Settings window and System menu remain W2/W3 dependencies;
+the private update path does not enable the legacy `GB_RELOAD` contract.
 The [Clock/cursor responsiveness follow-up](CPC-CLOCK-RESPONSIVENESS.md) addresses
 input stalls reported during manual 3D-S testing before those asset families.
 The 3D-B/C/D/E/F/G/H/I/J/K/L documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory/write/free-space/first-APP gaps and measurements below;

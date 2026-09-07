@@ -32,6 +32,15 @@ CPC_PICK_STATUS equ #1E34
 CPC_PICK_PROBE_BYTES equ #1E36
 CPC_PICK_PROBE_DATA equ #1E38   ; 16-byte diagnostic readback, not an app buffer
 CPC_PICK_STATE_END equ #1E48
+CPC_EDIT_OP equ 26              ; private native service, not a universal UI op
+CPC_EDIT_STATUS equ #1E48       ; 0 OK; 1 module; 2 request; 3 read; 4 bounds;
+                               ; 5 write; 6 verify; 7 context; 8 reload
+CPC_EDIT_CHANGED equ #1E49      ; 1 only after a verified disk write
+CPC_EDIT_ERROR equ #1E4A        ; FSCTX status, or 16 + native transport status
+CPC_EDIT_CALLS equ #1E4C
+CPC_EDIT_STATE_END equ #1E4E
+                assert CPC_EDIT_STATUS>=CPC_PICK_STATE_END,"edit/picker overlap"
+                assert CPC_EDIT_STATE_END<=CPC_ADAPTER_STATE_END,"edit state overflow"
                 assert CPC_PICK_STATE_END<=CPC_ADAPTER_STATE_END,"picker state overflow"
                 assert CPC_CFG_TEXT>=CPC_NATIVE_STATE_BASE,"config/support overlap"
                 assert CPC_CFG_TEXT_END<=#1200,"config/native state overlap"

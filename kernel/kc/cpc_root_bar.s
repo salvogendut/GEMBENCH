@@ -15,6 +15,8 @@
         .globl _cpc_test_size
         .globl _cpc_test_pickfile
         .globl _cpc_test_pickdir
+        .globl _cpc_test_config_weave
+        .globl _cpc_test_config_original
         .area _CODE
         jp _cpc_bar_reset
         jp _cpc_bar_tick
@@ -30,3 +32,5 @@
         jp _cpc_bar_damage
         jp _cpc_test_pickfile
         jp _cpc_test_pickdir
+        jp _cpc_test_config_weave
+        jp _cpc_test_config_original

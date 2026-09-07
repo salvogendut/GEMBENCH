@@ -121,6 +121,10 @@ cpc_root_idle
                 jp z,cpc_bar_payload+36
                 cp 'd'
                 jp z,cpc_bar_payload+39
+                cp 'w'
+                jp z,cpc_bar_payload+42
+                cp 'e'
+                jp z,cpc_bar_payload+45
                 cp 's'
                 ret nz
                 ; Small public-ABI exercise on the empty launch surface. Keep
@@ -151,7 +155,14 @@ cpc_root_idle
                 inc (hl)
                 ret
 cpc_runtime_config
+                push ix
+                ld a,i
+                push af
                 di
+                ld a,(SCHED_LOCK)
+                push af
+                ld a,1
+                ld (SCHED_LOCK),a
                 call cpc_config
                 jr nc,cpc_runtime_config_done
                 call cpc_visual_apply
@@ -164,6 +175,11 @@ cpc_runtime_config_done
                 ld hl,(CPC_CFG_CALLS)
                 inc hl
                 ld (CPC_CFG_CALLS),hl
+                pop af
+                ld (SCHED_LOCK),a
+                pop af
+                pop ix
+                ret po
                 ei
                 ret
 cpc_runtime_assets_demo

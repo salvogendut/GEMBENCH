@@ -112,6 +112,7 @@ def build():
              "GBENCH/GBCFG.MOD": (work / "GBCFG.MOD").read_bytes(),
              "GBENCH/GBUI.MOD": (work / "GBUI.MOD").read_bytes(),
              "GBENCH/GBPICK.MOD": (work / "GBPICK.MOD").read_bytes(),
+             "GBENCH/GBEDIT.MOD": (work / "GBEDIT.MOD").read_bytes(),
              "GBENCH/DEFAULT.FNT": (work / "DEFAULT.FNT").read_bytes(),
              "GBENCH/DEFAULT.IST": (work / "DEFAULT.IST").read_bytes(),
              "GBENCH/REFINED.IST": (work / "REFINED.IST").read_bytes(),
