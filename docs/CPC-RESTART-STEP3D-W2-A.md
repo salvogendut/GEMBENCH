@@ -107,11 +107,12 @@ Evidence and isolated build/check trees are under `/tmp/geobench-77w2-*`.
 No new openMSX, 1984, Albireo or PCW runtime qualification is claimed for this
 compile-only gate.
 
-## Next checkpoint
+## Next sprint
 
 The [desktop-first delivery update](CPC-RESTART-PLAN.md#desktop-first-delivery-update--2026-09-07)
-now prioritizes the actual Desktop/File Manager dependency audit and minimum
-native filesystem/loading bindings. Reuse this Settings inventory and W1 where
+now groups delivery into four sprints. Sprint 1 combines the actual
+Desktop/File Manager dependency audit and required native service/memory
+bindings. Reuse this Settings inventory and W1 where
 they unblock that path; completing every Settings or saver feature is not a
 prerequisite for the first usable desktop.
 

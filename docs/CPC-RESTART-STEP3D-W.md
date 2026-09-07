@@ -180,8 +180,9 @@ Rebuilding `make diagnostic-cpc-runtime` restores the staged ORIGINAL defaults.
 scenario on separate copies. Individual cases are available via
 `tools/test_cpc_runtime_1984.py --skip-build --config-edit <case>`.
 
-Next after W2-A: follow the desktop-first plan's dependency audit and minimum
-owned filesystem/loading bindings. Reuse W1 persistence where required; finish
-Settings' complete profile separately. W3 connects qualified System actions
+Next after W2-A: sprint 1 of the four-sprint desktop-first plan combines the
+dependency audit and required native service/memory bindings. Reuse W1
+persistence where required; finish Settings' complete profile separately.
+W3 connects qualified System actions
 incrementally. Desktop and File Manager remain pending; W1 does not close the
 production-adapter gate.

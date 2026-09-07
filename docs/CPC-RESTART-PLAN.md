@@ -165,18 +165,31 @@ parity. The acceptance path is:
 **Boot the actual shared Desktop → browse Disk C in the actual File Manager →
 launch Clock/Calculator → focus, move and close their windows.**
 
-The current estimate is **8–12 further small implementation checkpoints**,
-grouped into four work packages. This is a planning range, not a fixed count
-or a calendar estimate; a checkpoint is not necessarily one conversation turn.
-Desktop and File Manager have not yet received the detailed dependency audit
-performed for Settings, so their missing services may change the estimate.
+Consolidate delivery into **four outcome-based sprints: three implementation
+sprints and one stabilization sprint**. The earlier estimate of 8–12 small
+checkpoints describes internal tasks, not additional delivery milestones.
+This grouping does not promise a calendar duration or remove engineering work.
+Desktop and File Manager still need their detailed dependency audit; record
+discoveries within the relevant sprint and flag material scope changes rather
+than silently adding more sprints or bypassing a safety gate.
 
-| Remaining work package | Estimated checkpoints | Exit condition |
+| Sprint | Scope | Deliverable / exit condition |
 | --- | --- | --- |
-| Desktop-required native services, loading and memory placement | 3–4 | Audit the actual Desktop/File Manager dependencies; bind the minimum owned filesystem and native application/service profiles to checked allocations. Reuse the shared core and qualified CPC providers. |
-| Actual Desktop integration | 2–3 | Boot its real root surface, icons, Desk/System menus and application-launch/return paths; expose only qualified actions. |
-| Actual File Manager integration | 2–3 | Browse Disk C and its directories, return to parents and launch supported applications with correct ownership, focus and error handling. |
-| Combined M4 validation and packaging | 1–2 | Repeated boot/browse/launch/close, overlapping-window repaint, Clock background updates and pointer responsiveness pass together; produce a clearly identified testable desktop image. |
+| **1 — Native services and memory** | Audit the actual Desktop/File Manager together; bind their minimum owned filesystem, loading, configuration and native service needs to the production CPC map. Reuse W1 and the qualified core/providers. | Checked linked layouts and native-call integration tests on private M4 media; required service paths work, rejected loads clean up ownership, and unqualified actions remain gated. MSX regressions pass. This is infrastructure, not yet the real Desktop UI. |
+| **2 — Real Desktop** | Integrate the actual root surface, icons, Desk/System menus and qualified application-launch/return paths. | A bootable M4 image showing the real Desktop, with Clock/Calculator launch, focus, drag, close and menu return tested together. File browsing may remain unavailable until sprint 3. |
+| **3 — File Manager and usable workflow** | Integrate the actual File Manager, Disk C directory/parent navigation, supported file/application opening and visible error handling. | The first end-to-end usable desktop: boot → browse Disk C → launch supported apps → manage their windows. Preserve directory/owner state through repeated opens and closes. |
+| **4 — Stabilization and delivery** | Fix integration defects; exercise overlap/exposure, partial repaint, Clock visibility/background work, pointer responsiveness, repeated lifecycles and boot failures; finalize build/staging and instructions. | A reproducibly built, documented M4 desktop image with the combined acceptance checks and MSX regressions passing, plus an explicit list of deferred features. |
+
+Each sprint includes implementation, focused regression tests and its integrated
+acceptance run; testing is not postponed wholesale to sprint 4. Audits, provider
+extraction and individual adapter fixes are internal tasks, not separate
+user-facing milestones. A sprint is complete only when its exit condition is
+met, not merely when its first internal task compiles. Keep validation evidence
+in the existing checkpoint documents and give a concise sprint-level handoff.
+
+**Visibility:** sprint 2 delivers the real Desktop for manual testing; sprint 3
+delivers the usable browsing/launch workflow; sprint 4 qualifies that combined
+delivery. No full application-parity claim is implied by any of these exits.
 
 The shared window manager, graphics/input, Clock/Calculator, Desk activation,
 appearance providers, native picker and W1 persistence already provide working
@@ -191,12 +204,11 @@ Unqualified actions must be visibly unavailable or omitted, not implemented as
 successful no-ops. This changes the delivery order, not the runtime admission,
 memory, ownership or regression requirements.
 
-**Next:** audit the real Desktop/File Manager service requirements against the
-qualified runtime and W2-A inventory, then implement their next missing owned
-filesystem/loading dependency. Record concrete blockers and results in the
-existing checkpoint documents. The earlier W2/W3 scope remains tracked, but
-finishing every Settings/saver action before starting Desktop is no longer a
-delivery requirement.
+**Next: sprint 1.** Audit the real Desktop/File Manager service requirements
+against the qualified runtime and W2-A inventory, then implement and validate
+the required native bindings as one work package. The earlier W2/W3 scope
+remains tracked, but finishing every Settings/saver action before starting
+Desktop is no longer a delivery requirement.
 
 Use private M4 image copies for automated runtime tests; no slow floppy tests.
 Keep normal MSX media and user cards/recordings untouched. Albireo remains a

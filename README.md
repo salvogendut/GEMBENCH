@@ -182,8 +182,10 @@ contracts remain later integrations.
 bindings and audits its unresolved CPC services/data layout. Run
 `make diagnostic-cpc-settings-audit`; it produces no executable or new media.
 The [desktop-first delivery plan](docs/CPC-RESTART-PLAN.md#desktop-first-delivery-update--2026-09-07)
-estimates 8–12 further checkpoints to boot, browse Disk C and launch/manage
-applications; complete Settings and broader application parity follow separately.
+groups the remaining work into four sprints: native services/memory, real
+Desktop, File Manager, and stabilization. Sprint 2 targets a testable Desktop;
+sprint 3 adds the usable browsing/launch workflow. Complete Settings and broader
+application parity follow separately.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).
