@@ -10,7 +10,7 @@
 #define GB_DESK_CATALOG_DATA
 #include "gbdesk_catalog.h"
 
-#define KCFG_MEMSTR "512K"
+#include GB_UI_PROVIDER
 #define MENU_DEF ((volatile unsigned char *)0x1310)
 #define WM_FS ((volatile unsigned char *)0x130A)
 #define CLK_COL (GB_COLS - 12)
@@ -84,4 +84,34 @@ void cpc_desk_clock(void)
     ++cpc_accessory_requests;
     cpc_accessory_full = 0;
     open_accessory(GB_DESK_ACCESSORY_CLOCK_INDEX);
+}
+
+/* Private keys exercise the real paged native service while the full System
+ * menu remains gated. These marshal requests, not replacement dialog policy. */
+extern unsigned char gb_ui(void);
+static void ui_text(const char *s)
+{
+    char *p = UI_TEXT;
+    while ((*p++ = *s++) != 0) ;
+}
+void cpc_test_prompt(void)
+{
+    UI_OP = 2; UI_N = 12; ui_text("Name:"); gb_ui();
+}
+void cpc_test_popup(void)
+{
+    unsigned char i;
+    static const char labels[] = "Continue\0Cancel";
+    UI_OP = 1; UI_N = 2; UI_COL = 23; UI_LINE = 84;
+    for (i = 0; i < sizeof(labels); i++) UI_TEXT[i] = labels[i];
+    gb_ui();
+}
+void cpc_test_about(void)
+{
+    UI_OP = 24; UI_COL = (GB_COLS - 60) / 2; UI_LINE = (GB_LINES - 62) / 2;
+    gb_ui();
+}
+void cpc_test_size(void)
+{
+    UI_OP = 25; UI_WIDTH = 320; UI_HEIGHT = 200; gb_ui();
 }

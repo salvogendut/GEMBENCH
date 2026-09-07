@@ -1,4 +1,4 @@
-; Seven root-page entry points. No startup/initialized data: reset explicitly
+; Root-page component and private diagnostic entry points. No CRT: reset explicitly
 ; initializes the live flags before the first shared bar refresh.
         .module cpc_root_bar_entry
         .globl _cpc_bar_reset
@@ -8,6 +8,10 @@
         .globl _cpc_desktop_init
         .globl _cpc_desktop_frame
         .globl _cpc_desktop_event
+        .globl _cpc_test_prompt
+        .globl _cpc_test_popup
+        .globl _cpc_test_about
+        .globl _cpc_test_size
         .area _CODE
         jp _cpc_bar_reset
         jp _cpc_bar_tick
@@ -16,3 +20,7 @@
         jp _cpc_desktop_init
         jp _cpc_desktop_frame
         jp _cpc_desktop_event
+        jp _cpc_test_prompt
+        jp _cpc_test_popup
+        jp _cpc_test_about
+        jp _cpc_test_size

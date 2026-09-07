@@ -50,21 +50,37 @@ def integrity(data, sym, work):
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None):
     media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-'))
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(manifest['image']).read_bytes())
+    if native_fault or config_case:
+        target=['-i',str(image)+'@@16384']
+        if native_fault:
+            name='::/GBENCH/GBUI.MOD'
+            raw=(work/'GBUI.MOD').read_bytes()
+            payload=None if native_fault=='missing' else raw[:-1] if native_fault=='short' else raw+b'\0'
+        else:
+            from cpc_runtime_native import CONFIG_CASES
+            name='::/GEOBENCH.CFG';payload=CONFIG_CASES[config_case]
+        subprocess.run(['mdel',*target,name],check=True)
+        if payload is not None:
+            fixture=artifacts/'native-fixture.bin';fixture.write_bytes(payload)
+            subprocess.run(['mcopy',*target,str(fixture),name],check=True)
     if root_fault:
         # Corrupt ONLY the private M4 image, never mounted/user/release media.
         target=['-i',str(image)+'@@16384']
-        subprocess.run(['mdel',*target,'::/GBENCH/ROOTUI.BIN'],check=True)
-        if root_fault!='missing':
-            module=(work/'ROOTBAR.BIN').read_bytes()
+        parser_fault=root_fault.startswith('cfg-')
+        fault=root_fault[4:] if parser_fault else root_fault
+        name='::/GBENCH/GBCFG.MOD' if parser_fault else '::/GBENCH/ROOTUI.BIN'
+        subprocess.run(['mdel',*target,name],check=True)
+        if fault!='missing':
+            module=(work/('GBCFG.MOD' if parser_fault else 'ROOTBAR.BIN')).read_bytes()
             invalid=artifacts/'invalid-root.bin'
-            invalid.write_bytes(module[:-1] if root_fault=='short' else module+b'\0')
-            subprocess.run(['mcopy',*target,str(invalid),'::/GBENCH/ROOTUI.BIN'],check=True)
+            invalid.write_bytes(module[:-1] if fault=='short' else module+b'\0')
+            subprocess.run(['mcopy',*target,str(invalid),name],check=True)
     config=artifacts/'1984.conf'
     config.write_text(f'[machine]\nmodel=6128\nmemory=512\n[hardware]\nmx4=true\nm4=true\n'
                       f'm4_path=\nm4_image={image}\nalbireo=false\nsymbiface_ide=false\n[advanced]\ndebug=true\n')
@@ -144,6 +160,8 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 if not root_fault: raise AssertionError('runtime boot failure')
                 if ram[sym['cpc_runtime_launches']] or ram[sym['sched_fault']]:
                     raise AssertionError('invalid root module crossed boot boundary')
+                if root_fault.startswith('cfg-') and ram[sym['cpc_cfg_status']]!=3:
+                    raise AssertionError('parser executable failure was not reported')
                 for name,base in (('CORE.RAW',0x8000),('SCHED.RAW',0x2900),('HARDWARE.RAW',0x3800)):
                     expected=(work/name).read_bytes()
                     if ram[base:base+len(expected)]!=expected: raise AssertionError('boot failure damaged '+name)
@@ -164,6 +182,10 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         if ram[entry+1:entry+5]!=bytes((11,66,58,68)): raise AssertionError('wrong universal geometry')
         app=(media/'CARD/GBENCH/ABIPROBE.APP').read_bytes();base=physical(ram[entry])
         if ram[base:base+len(app)]!=app: raise AssertionError('loaded APP differs')
+        if native or native_fault or config_case:
+            from cpc_runtime_native import run_native
+            return run_native(ROOT,media,manifest,work,sym,artifacts,image,emulator,
+                              send,wait,read,key,move,native_fault,config_case)
         if desk:
             from cpc_runtime_desk import run_desk
             return run_desk(ROOT,media,manifest,work,sym,artifacts,image,emulator,
@@ -336,7 +358,7 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         if ram[sym['wm_focus']]!=1: raise AssertionError('exposed window did not gain focus')
         key('ESCAPE');del rects[1];order=[0,2];ram=checked('close-exposes-second')
         key('ESCAPE');rects={};order=[0];menu=bytes((1,10))+b'Desk\0\0\0\0';ram=checked('closed')
-        if ram[sym['wm_nwin']]!=1 or ram[sym['core_page_free']]!=27: raise AssertionError('close/reclaim')
+        if ram[sym['wm_nwin']]!=1 or ram[sym['core_page_free']]!=sym['cpc_pool_pages']-1: raise AssertionError('close/reclaim')
         key('A');ram=checked('ascii-key')
         if ram[sym['cpc_runtime_key']]!=ord('a'): raise AssertionError('ASCII input differs')
         key('S');ram=checked('canonical-save-line-restore')
@@ -344,7 +366,7 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
             raise AssertionError('save/line/restore service failed')
         if ram[0x6100:0x6120]!=bytes(32): raise AssertionError('canonical saved bytes differ')
         key('F3');rects={1:(11,66,58,68)};order=[0,1];accents={1:0};menu=b'\0';ram=checked('reopened')
-        if ram[sym['wm_nwin']]!=2 or ram[sym['core_page_free']]!=26: raise AssertionError('reopen/reuse')
+        if ram[sym['wm_nwin']]!=2 or ram[sym['core_page_free']]!=sym['cpc_pool_pages']-2: raise AssertionError('reopen/reuse')
         if image.read_bytes()!=Path(manifest['image']).read_bytes(): raise AssertionError('read-only run changed media')
         result=dict(checkpoints=checks,sections=manifest['sections'],app_sha256=hashlib.sha256(app).hexdigest(),
                     emulator_sha256=hashlib.sha256(emulator.read_bytes()).hexdigest())
@@ -368,5 +390,8 @@ if __name__=='__main__':
     mode.add_argument('--accessories',action='store_true')
     mode.add_argument('--clock',action='store_true')
     mode.add_argument('--desk',action='store_true')
-    mode.add_argument('--root-fault',choices=('missing','short','oversized'))
-    args=parser.parse_args();run(args.emulator.resolve(),args.skip_build,args.filesystem,args.menus,args.accessories,args.clock,args.desk,args.root_fault)
+    mode.add_argument('--root-fault',choices=('missing','short','oversized','cfg-missing','cfg-short','cfg-oversized'))
+    mode.add_argument('--native',action='store_true')
+    mode.add_argument('--native-fault',choices=('missing','short','oversized'))
+    mode.add_argument('--config-case',choices=('missing','empty','exact','oversized','custom'))
+    args=parser.parse_args();args.emulator=args.emulator.resolve();run(**vars(args))

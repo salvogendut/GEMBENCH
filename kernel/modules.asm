@@ -12,57 +12,19 @@
 ; operation, CALL it, restore the page. CF set = loaded (NC = missing). One copy
 ; instead of three (GB_UI + GB_NET + the floppy-write stub) - reclaims the resident
 ; bytes the net hook needs.
-run_data_module
-                ex    de,hl                    ; keep the module-name pointer while HL
-                                               ; saves the caller's fs_load_* request.
-                ld    a,(bank_cur)
-                push  af
-                ld    hl,(fs_load_max)
-                push  hl
-                ld    hl,(fs_load_dst)
-                push  hl
+MODULE_LOAD_MAX equ #2000
+MODULE_READ equ fs_load_sys
+                macro MODULE_MAP_PAGE
                 LD_A_PAGE_DATA
-                call  bank_set
-                ex    de,hl
-                ld    de,fs_req_name          ; HL (name) -> fs_req_name
-                ld    bc,11
-                ldir
-                ld    hl,#2000                ; load cap (8 KB window to #8000)
-                ld    (fs_load_max),hl
-                ld    hl,DATA_MODTOP          ; #6000
-                ld    (fs_load_dst),hl
-                call  fs_load_sys            ; module -> #6000 (boot drive, preserves browse dir)
-                pop   de
-                ld    (fs_load_dst),de
-                pop   de
-                ld    (fs_load_max),de
-                jr    nc,rdm_miss
-                call  DATA_MODTOP            ; run it
-                pop   af
-                call  bank_set
-                scf
-                ret
-rdm_miss
-                pop   af
-                call  bank_set
-                or    a                       ; NC = missing
-                ret
-
-k_ui
-                ld    hl,UI_MODAL             ; modal: the dialog's gb_poll must not dispatch
-                inc   (hl)
-                rlca                          ; A bit 7 selects the Browser helper name that
-                ld    hl,gbui_modname         ; BROWSER.APP placed in low RAM. Normal gb_ui
-                jr    nc,kui_run               ; calls enter with A=0 (gblib enforces that).
-                ld    hl,#3914
-kui_run
-                call  run_data_module
-                ld    hl,UI_MODAL
-                dec   (hl)
-                ld    a,(UI_RES)              ; missing module -> caller pre-set a cancel
-                ld    c,a
-                ret
-gbui_modname    db    "GBUI    MOD"
+                mend
+                macro UI_SELECT_MODULE
+                rlca
+                ld hl,gbui_modname
+                jr nc,kui_run
+                ld hl,#3914
+                mend
+                include "core/data_module.asm"
+                include "core/ui_module.asm"
 
 ; k_net (GB_NET #80BD): the paged networking module. Apps marshal an op + args
 ; into the GBNET_* low-RAM block; the kernel loads the module matching the card

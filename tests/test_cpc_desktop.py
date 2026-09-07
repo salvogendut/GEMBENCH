@@ -31,7 +31,7 @@ class DesktopMenuTests(unittest.TestCase):
         root=(ROOT/'kernel/kc/cpc_root_bar.c').read_text()
         self.assertIn('#define DESKTOP_SYSTEM_MENU 0',root)
         self.assertNotIn('gb_universal_popup',root)
-        self.assertIn('jp cpc_unavailable ; #80AE',(ROOT/'kernel/cpc_runtime_api.inc').read_text())
+        self.assertIn('jp cpc_ui ; #80AE',(ROOT/'kernel/cpc_runtime_api.inc').read_text())
 
     def test_default_popup_keeps_native_msx_buffer(self):
         source=(ROOT/'lib/gb/gbdlg.c').read_text()

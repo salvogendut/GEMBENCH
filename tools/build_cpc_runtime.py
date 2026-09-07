@@ -13,6 +13,7 @@ from build_cpc_foundation import headed
 from build_cpc_production import ROOT, memory_regions, symbols
 from cpc_production_fsctx import compile_module
 from cpc_runtime_bar import compile_bar
+from cpc_native_modules import compile_native
 from cpc_production_services import compile_timer
 import genfont
 
@@ -28,6 +29,7 @@ def assemble(work: Path, overrides=()):
     initial = symbols(work / "runtime.sym")
     compile_module(work, initial, ROOT, directory=True, writable=True)
     compile_timer(work, initial, ROOT)
+    compile_native(work, initial, ROOT)
     bar = compile_bar(work, initial, ROOT)
     (work / "bar_layout.json").write_text(json.dumps(bar, indent=2) + "\n")
     subprocess.run(command, cwd=work, check=True)
@@ -79,6 +81,9 @@ def build():
              "BOOT.BAS": b'10 MEMORY &7FFF\r\n20 LOAD"BOOT.BIN",&8000\r\n30 CALL &8000\r\n',
              "FSCTX.BIN": (work / "FSCTX.BIN").read_bytes(),
              "GBENCH/ROOTUI.BIN": (work / "ROOTBAR.BIN").read_bytes(),
+             "GBENCH/GBCFG.MOD": (work / "GBCFG.MOD").read_bytes(),
+             "GBENCH/GBUI.MOD": (work / "GBUI.MOD").read_bytes(),
+             "GEOBENCH.CFG": b'ICONS=REFINED\r\nFONT=DEFAULT\r\nCURSOR=DEFAULT\r\nBACKDROP=SOLID\r\nINKS=1,26,0,6,1\r\n',
              "GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
              "GBENCH/MENUPRBE.APP": menuapp.read_bytes(),
@@ -115,7 +120,9 @@ def build():
         sections[name] = dict(base=sym[begin], used=sym[end]-sym[begin], budget=sym[limit]-sym[begin])
     sections["fsctx"] = dict(base=0x4400, used=len(files["FSCTX.BIN"]), budget=0x1C00)
     sections["bar"] = json.loads((work / "bar_layout.json").read_text())
+    sections.update(json.loads((work / "native_layout.json").read_text()))
     manifest = dict(work=str(work), image=str(image), regions=memory_regions(sym), sections=sections,
+                    native_identity=json.loads((work/'native_identity.json').read_text()),
                     files={name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
                     status="experimental universal launcher; not Desktop/distribution")
     (media / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

@@ -1,0 +1,38 @@
+; Native service allocations for the unified runtime, not universal ABI state.
+; Text is fixed and survives module banking. Outputs do not borrow filesystem,
+; graphics, context, or M4 transport state. UI_MODAL is the router's own cell.
+CPC_CFG_TEXT equ #1000
+CPC_CFG_TEXT_END equ #1200
+CPC_UI_REQUEST equ #1700
+CPC_UI_TEXT equ CPC_UI_REQUEST+24
+CPC_UI_REQUEST_END equ #1800
+CPC_CFG_OUTPUT equ #1800
+CPC_CFG_OUTPUT_END equ #1840
+CPC_CFG_STATUS equ #1840
+CPC_UI_STATUS equ #1841
+CPC_UI_CALLS equ #1842
+CPC_CFG_CALLS equ #1844
+CPC_CFG_OFFSET equ #1846
+CPC_NATIVE_MODULE_STATE_END equ #1850
+CPC_SYSTEM_PAGE equ #F6
+CPC_MODULE_BASE equ #4000
+                ifndef CPC_MODULE_CODE_END
+CPC_MODULE_CODE_END equ #5800
+                endif
+CPC_MODULE_DATA equ #5800
+CPC_MODULE_DATA_END equ #5900
+CPC_UI_UNDER equ #5900
+CPC_UI_UNDER_END equ #6C00
+CPC_UI_POPUP equ #6C00
+CPC_UI_POPUP_END equ CPC_APP_LIMIT
+                assert CPC_CFG_TEXT>=CPC_NATIVE_STATE_BASE,"config/support overlap"
+                assert CPC_CFG_TEXT_END<=#1200,"config/native state overlap"
+                assert CPC_UI_REQUEST>=CPC_FS_XFER+512,"UI/filesystem transfer overlap"
+                assert CPC_UI_REQUEST_END<=CPC_CFG_OUTPUT,"UI/config overlap"
+                assert CPC_NATIVE_MODULE_STATE_END<=#1A00,"native service/hardware overlap"
+                assert CPC_MODULE_CODE_END<=CPC_MODULE_DATA,"module code/data overlap"
+                assert CPC_MODULE_DATA_END<=CPC_UI_UNDER,"module/save-under overlap"
+                assert CPC_UI_UNDER_END<=CPC_UI_POPUP,"nested dialog save-under overlap"
+                assert CPC_UI_POPUP_END<=CPC_APP_LIMIT,"dialog/snapshot overlap"
+                assert 60*62<=CPC_UI_UNDER_END-CPC_UI_UNDER,"About save-under too small"
+                assert CPC_SYSTEM_PAGE!=CPC_DATA_PAGE,"UI/filesystem page collision"

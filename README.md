@@ -151,6 +151,11 @@ bounded root page: close ABI Probe with **Escape** or click the background,
 then choose **Desk → Clock / Calculator**. Run `make diagnostic-cpc-desk-1984`
 for its M4 regression. System/Settings, assets and File Manager remain gated;
 this is not yet the full CPC Desktop.
+[3D-R](docs/CPC-RESTART-STEP3D-R.md) binds shared configuration parsing and basic
+native dialogs in a reserved system bank. With the background focused, **U/P/N/I**
+exercise popup/prompt/size/About; **R** reparses configuration. Run
+`make diagnostic-cpc-native-1984`. Themes/assets, file pickers and the full
+Desktop/Settings/File Manager remain later integrations.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

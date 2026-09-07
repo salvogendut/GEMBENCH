@@ -83,6 +83,10 @@ extension into snapshot or framebuffer memory.
 
 ## Remaining Desktop service ledger
 
+Follow-up [3D-R](CPC-RESTART-STEP3D-R.md) now binds retained configuration and
+basic native UI in a reserved system bank. It supersedes those two unbound
+service entries below, but does not enable Settings, file pickers or assets.
+
 | Dependency | State / next binding |
 |---|---|
 | Root loop, bar, Desk, menus, accessories, workers and timer damage | Composed and tested here and in 3D-N/O/P. |

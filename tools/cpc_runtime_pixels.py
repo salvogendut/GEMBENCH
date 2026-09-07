@@ -3,7 +3,7 @@ from cpc_graphics_fixture import CURSOR, address, put_pixel
 from cpc_production_registration import chrome
 
 
-def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None):
+def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None):
     def fill(image,x,y,w,h,pen):
         for yy in range(max(0,y),min(200,y+h)):
             for xx in range(max(0,x)*4,min(80,x+w)*4): put_pixel(image,xx,yy,pen)
@@ -55,6 +55,30 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
         for yy in range(y,y+h):
             for xx in range(x,x+w):
                 at=address(xx*4,yy);result[at]=surface[at]
+    if dialog is not None:
+        def box(x,y,w,h,pen=2):
+            fill(result,x,y,w,h,1)
+            for edge in ((x,y,w,1),(x,y+h-1,w,1),(x,y,1,h),(x+w-1,y,1,h)):
+                fill(result,*edge,pen)
+        if dialog['kind']=='prompt':
+            box(12,60,52,34)
+            text(result,14,63,'Name:',2,1)
+            text(result,14,76,dialog.get('value',''),2,1)
+        elif dialog['kind']=='size':
+            box(21,70,38,50)
+            text(result,23,74,'New picture',2,1)
+            values=dialog.get('values',('320','200'));active=dialog.get('active',0)
+            for i,x in enumerate((24,43)):
+                box(x,88,8,15,3 if i==active else 2)
+                text(result,x+1,91,values[i],2,1)
+            text(result,37,91,'by',2,1)
+            box(36,107,8,10);text(result,38,108,'OK',2,1)
+        elif dialog['kind']=='about':
+            box(10,69,60,62)
+            text(result,13,74,'GEOBENCH (C) salvogendut 2026',2,1)
+            text(result,13,86,dialog['build'],2,1)
+            text(result,13,98,'RAM:',2,1);text(result,20,98,'512K',2,1)
+        else: raise AssertionError('unknown expected native dialog')
     if popup is not None:
         native=isinstance(popup,dict)
         if native:
@@ -79,13 +103,13 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
     return bytes(result)
 
 
-def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None):
+def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None):
     px=int.from_bytes(ram[sym['pointer_x']:sym['pointer_x']+2],'little')
     py=ram[sym['pointer_y']]
     if ram[sym['menu_def']:sym['menu_def']+len(menu)]!=menu:
         raise AssertionError('focused menu snapshot differs')
     expected=frame(rects,order,accents,(px,py),(work/'DEFAULT.FNT').read_bytes(),
-                   tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks)
+                   tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog)
     actual=ram[0xC000:0x10000]
     if actual!=expected:
         at=next(i for i,(a,b) in enumerate(zip(actual,expected)) if a!=b)

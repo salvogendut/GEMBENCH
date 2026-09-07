@@ -19,7 +19,8 @@ Status: **3D-A, [3D-B drawing/parameters](CPC-RESTART-STEP3D-B.md) and
 [3D-N shared Desktop bar/application menus](CPC-RESTART-STEP3D-N.md) and
 [3D-O shared accessories/Calculator](CPC-RESTART-STEP3D-O.md) and
 [3D-P Clock/background repaint](CPC-RESTART-STEP3D-P.md) and
-[3D-Q shared Desktop root/Desk](CPC-RESTART-STEP3D-Q.md) are
+[3D-Q shared Desktop root/Desk](CPC-RESTART-STEP3D-Q.md) and
+[3D-R native configuration/basic UI](CPC-RESTART-STEP3D-R.md) are
 implemented and M4/1984 validated; the complete production adapter gate is
 still open.** The 3D-A record below connects actual shared context
 and visibility code to a checked CPC layout and CPC hardware. It is not a
@@ -35,6 +36,10 @@ real worker/timer service, with shared source-only repaint and one common Clock
 rim-repair fix tested on CPC and MSX2. 3D-Q connects the real shared Desk menu
 in a bounded root-page module. Its memory audit and service ledger precede
 System/configuration/UI/assets and full Desktop/File Manager integration.
+3D-R now supplies retained configuration and bounded basic native dialogs in
+reserved F6, leaving 27 application-pool pages including root. Its map supersedes
+the historical single-reserved-bank budget below; asset/theme application,
+file pickers and the complete Desktop still follow.
 The 3D-B/C/D/E/F/G/H/I/J/K/L documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory/write/free-space/first-APP gaps and measurements below;
 this document retains the original non-drawing fixture and its evidence.
 

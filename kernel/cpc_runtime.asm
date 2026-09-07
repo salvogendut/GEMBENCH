@@ -58,6 +58,7 @@ cpc_runtime_core_begin
                 include "cpc_fsctx.asm"
 cpc_runtime_core_end
                 include "cpc_runtime_services.asm"
+                include "cpc_native_modules.asm"
                 include "../lib/cpc/runtime_input.asm"
                 include "cpc_runtime_boot.asm"
 cpc_font_payload

@@ -67,6 +67,8 @@ cpc_runtime_start
                 call foundation_bank_set
                 call cpc_fs_load_module
                 jp nc,cpc_runtime_failed
+                call cpc_config
+                jp nc,cpc_runtime_failed
                 call cpc_desktop_load
                 jp nc,cpc_runtime_failed
                 ld hl,cpc_bar_data
@@ -126,6 +128,16 @@ cpc_root_idle
                 or a
                 ret z
                 ld (cpc_runtime_key),a
+                cp 'r'
+                jr z,cpc_runtime_config
+                cp 'p'
+                jp z,cpc_bar_payload+21
+                cp 'u'
+                jp z,cpc_bar_payload+24
+                cp 'i'
+                jp z,cpc_bar_payload+27
+                cp 'n'
+                jp z,cpc_bar_payload+30
                 cp 's'
                 ret nz
                 ; Small public-ABI exercise on the empty launch surface. Keep
@@ -154,6 +166,14 @@ cpc_root_idle
                 call #801B
                 ld hl,cpc_runtime_surface_calls
                 inc (hl)
+                ret
+cpc_runtime_config
+                di
+                call cpc_config
+                ld hl,(CPC_CFG_CALLS)
+                inc hl
+                ld (CPC_CFG_CALLS),hl
+                ei
                 ret
 cpc_runtime_line db 1,1
                 dw 16,40,47,43

@@ -55,7 +55,11 @@ CPC_PAGE_MAX equ 32
 ; 512 KiB: three fixed base pages, 29 aperture pages. Reserve F7 for data/
 ; modules, leaving C0 plus 27 expansion pages for the shared owner allocator.
 CPC_DATA_PAGE equ #F7
+                ifdef CPC_RUNTIME
+CPC_POOL_PAGES equ 27                 ; F6 is the native config/UI module bank
+                else
 CPC_POOL_PAGES equ 28
+                endif
 
                 assert CPC_ARCH_STATE_END<=CPC_SCHED_BASE,"architecture/scheduler overlap"
                 assert CPC_SCHED_BASE<CPC_SCHED_END,"invalid scheduler allocation"

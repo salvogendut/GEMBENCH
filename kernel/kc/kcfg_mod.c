@@ -19,6 +19,9 @@
  */
 #include "kcfg.h"
 
+#ifdef GB_CONFIG_PROVIDER
+#include GB_CONFIG_PROVIDER
+#else
 #define KCFG_TEXT      ((const char *)0x1000)
 #define KCFG_LEN       (*(unsigned int *)0x1200)
 #define KCFG_ICONNAME  ((char *)0x1202)
@@ -32,6 +35,7 @@
 #define KCFG_FRAMEPEN  (*(unsigned char *)0x133C)  /* out: visible window-frame pen */
 #define KCFG_BD_SOLID  (*(unsigned char *)0x1290)  /* out: 1 = solid desktop (BACKDROP=SOLID/absent) */
 #define FS_REQ_NAME    ((char *)0x14EC)            /* out: boot_splash consumes this filename */
+#endif
 /* WALLPAPER= is NOT parsed here (#212/#216): every free low-RAM transfer cell collides with
    something (dir scratch #12xx, the floppy cursor sector-overread #1500..#16FF, the GBUI dialog
    block #1700) - the last broke the System menu. The desktop parses WALLPAPER= itself, straight

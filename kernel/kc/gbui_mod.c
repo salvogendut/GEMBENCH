@@ -14,6 +14,9 @@
  */
 #include "gb.h"
 
+#ifdef GB_UI_PROVIDER
+#include GB_UI_PROVIDER
+#else
 #define UI_OP    (*(volatile unsigned char *)0x1700)
 #define UI_COL   (*(volatile unsigned char *)0x1701)
 #define UI_LINE  (*(volatile unsigned char *)0x1702)
@@ -21,6 +24,10 @@
 #define UI_RES   (*(volatile unsigned char *)0x1704)
 #define UI_NAME  ((char *)0x1708)            /* OUT: pickfile/prompt result (16 bytes) */
 #define UI_TEXT  ((char *)0x1718)            /* IN: packed labels / caption / exts      */
+#define UI_WIDTH  (*(volatile unsigned int *)0x1708)
+#define UI_HEIGHT (*(volatile unsigned int *)0x170A)
+#define KCFG_MEMSTR ((const char *)0x121A)
+#endif
 
 #define UI_OP_POPUP    1
 #define UI_OP_PROMPT   2
@@ -31,10 +38,6 @@
 #define UI_OP_BSAVE_AS 8
 #define UI_OP_ABOUT    24
 #define UI_OP_SIZE     25
-
-#define UI_WIDTH  (*(volatile unsigned int *)0x1708)
-#define UI_HEIGHT (*(volatile unsigned int *)0x170A)
-#define KCFG_MEMSTR ((const char *)0x121A)
 
 #define ABOUT_W 60
 #define ABOUT_H 62
@@ -61,9 +64,11 @@
 #define BUI_ACT_PROXY  3
 #define BUI_ACT_SAVETO 4
 
+#ifndef GBUI_BASIC_ONLY
 static const char *const browser_file[] = { "Load", "Save" };
 static const char *const browser_settings[] = { "Proxy...", "Direct" };
 static const char *const html_exts[] = { "HTM", 0 };
+#endif
 static const char about_title[] = "GEOBENCH (C) salvogendut 2026";
 static const char about_build[] = "Version : " GB_VERSION " Git: " GB_GIT;
 static const char *const about_buttons[] = { "  OK  " };
@@ -212,6 +217,7 @@ static void about_dialog(void)
     gb_popup((unsigned char)(x + 23), (unsigned char)(y + 42), about_buttons, 1);
 }
 
+#ifndef GBUI_BASIC_ONLY
 static void browser_to_83(const char *src)
 {
     unsigned char i = 0, j;
@@ -252,11 +258,66 @@ static void browser_save_as(void)
     for (i = 0; i < 11; i++) BUI_SAVE_NAME[i] = UI_NAME[i];
     UI_RES = BUI_ACT_SAVETO;
 }
+#endif
+
+#ifdef GB_UI_SAVEUNDER
+/* Bounded native module profile. The caller and the renderer share an owned
+ * request block; reject malformed strings/geometry before any drawing or input.
+ * These checks do not enable the still-unbound file/browser operations. */
+static unsigned char ui_valid(void)
+{
+    const char *p = UI_TEXT;
+    unsigned char i, n, longest = 0;
+    unsigned int width, height;
+    if (UI_OP == UI_OP_SIZE) return 1;
+    if (UI_OP == UI_OP_ABOUT)
+        return UI_COL <= GB_COLS - ABOUT_W && UI_LINE >= 8 &&
+               UI_LINE <= GB_LINES - ABOUT_H;
+    if (UI_OP == UI_OP_PROMPT) {
+        if (!UI_N || UI_N > 12) return 0; /* local 16-byte result, no plain mode */
+        n = 1;
+    } else if (UI_OP == UI_OP_POPUP || UI_OP == UI_OP_GBR_MENU) {
+        n = UI_N;
+        if (!n || n > (UI_OP == UI_OP_GBR_MENU ? 8 : 16) || UI_LINE > 198)
+            return 0;
+    } else return 0;
+    for (i = 0; i < n; i++) {
+        unsigned char length = 0;
+        while (p < GB_UI_TEXT_END && *p) {
+            if (++length > 48) return 0;
+            p++;
+        }
+        if (p >= GB_UI_TEXT_END) return 0;
+        p++;
+        if (length > longest) longest = length;
+    }
+    if (UI_OP == UI_OP_PROMPT) return longest <= 32;
+    width = (unsigned int)longest * 6 / 4 + 4;
+    height = (unsigned int)(n < 10 ? n : 10) * 10 + 4;
+    return UI_COL + width <= GB_COLS && (unsigned int)UI_LINE + height <= 255 &&
+           width * height <= GB_POPUP_CAPACITY;
+}
+#endif
 
 void main(void)
 {
     unsigned char i;
     char *p = UI_TEXT;
+#ifdef GB_UI_SAVEUNDER
+    unsigned char x = 0, y = 0, w = 0, h = 0;
+    UI_RES = (UI_OP == UI_OP_POPUP || UI_OP == UI_OP_GBR_MENU) ? 0xFF : 0;
+    GB_UI_STATUS = 2; /* unsupported or malformed; never enter a modal loop */
+    if (!ui_valid()) return;
+    GB_UI_STATUS = 0;
+    if (UI_OP == UI_OP_PROMPT) { x = 12; y = 60; w = 52; h = 34; }
+    else if (UI_OP == UI_OP_SIZE) { x = SIZE_X; y = SIZE_Y; w = SIZE_W; h = SIZE_H; }
+    else if (UI_OP == UI_OP_ABOUT) { x = UI_COL; y = UI_LINE; w = ABOUT_W; h = ABOUT_H; }
+    if (w) {
+        gb_curhide();
+        gb_saverect(x, y, w, h, (void *)GB_UI_SAVEUNDER);
+        gb_curshow();
+    }
+#endif
 
     if (UI_OP == UI_OP_POPUP) {
         const char *labels[16];                  /* rebuild the pointer array into UI_TEXT */
@@ -277,9 +338,13 @@ void main(void)
 
     } else if (UI_OP == UI_OP_PROMPT) {
         char buf[16];
+#ifdef GBUI_BASIC_ONLY
+        for (i = 0; i < 16; i++) buf[i] = 0;
+#endif
         UI_RES = gb_prompt(UI_TEXT, buf, UI_N);  /* caption in UI_TEXT, result -> buf */
         if (UI_RES) { for (i = 0; i < 16; i++) UI_NAME[i] = buf[i]; }
 
+#ifndef GBUI_BASIC_ONLY
     } else if (UI_OP == UI_OP_PICKFILE || UI_OP == UI_OP_PICKDIR) {
         const char *exts[8];                     /* rebuild the ext list from UI_TEXT */
         unsigned char ne = 0;
@@ -291,9 +356,17 @@ void main(void)
         browser_menu();
     } else if (UI_OP == UI_OP_BSAVE_AS) {
         browser_save_as();
+#endif
     } else if (UI_OP == UI_OP_ABOUT) {
         about_dialog();
     } else if (UI_OP == UI_OP_SIZE) {
         size_dialog();
     }
+#ifdef GB_UI_SAVEUNDER
+    if (w) {
+        gb_curhide();
+        gb_restorerect(x, y, w, h, (void *)GB_UI_SAVEUNDER);
+        gb_curshow();
+    }
+#endif
 }

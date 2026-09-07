@@ -33,7 +33,7 @@ class RuntimeTests(unittest.TestCase):
         for offset in range(0,0xD8,3): self.assertEqual(raw[offset],0xC3)
         for offset,target in ((0x0C,'gb_text_draw'),(0x33,'k_fill'),(0x36,'cpc_save_rect'),
                               (0x39,'cpc_restore_rect'),(0x45,'cpc_getkey'),(0x60,'k_wm_open'),
-                              (0xB1,'k_wm_managed'),(0xC0,'cpc_shell'),(0xC3,'cpc_sysinfo'),(0xD5,'universal_parameters')):
+                              (0xAE,'cpc_ui'),(0xB1,'k_wm_managed'),(0xC0,'cpc_shell'),(0xC3,'cpc_sysinfo'),(0xD5,'universal_parameters')):
             self.assertEqual(int.from_bytes(raw[offset+1:offset+3],'little'),s[target])
         # No MSX framebuffer mailboxes or unqualified filesystem/timer promises.
         self.assertEqual(s['cpc_runtime_caps_low'] & (0x1000|0x4000|0x4|0x40),0)
@@ -62,10 +62,24 @@ class RuntimeTests(unittest.TestCase):
         self.assertLessEqual(s['cpc_bar_data_end'],0x6100)
         self.assertGreaterEqual(s['cpc_root_popup'],0x6300)
         self.assertLessEqual(s['cpc_root_popup_end'],0x7F00)
+        self.assertEqual(s['cpc_pool_pages'],27)
+        pool=raw[s['cpc_memory_pages']-0x8000:s['cpc_memory_pages']-0x8000+s['cpc_pool_pages']]
+        self.assertNotIn(s['cpc_system_page'],pool)
+        self.assertNotIn(s['cpc_data_page'],pool)
+        self.assertEqual(s['cpc_ui_request'],0x1700)
+        self.assertLessEqual(s['cpc_ui_request_end'],s['cpc_cfg_output'])
+        self.assertLessEqual(s['cpc_cfg_text_end'],0x1200)
+        self.assertLessEqual(s['cpc_module_code_end'],s['cpc_module_data'])
+        self.assertLessEqual(s['cpc_module_data_end'],s['cpc_ui_under'])
+        self.assertLessEqual(s['cpc_ui_under_end'],s['cpc_ui_popup'])
+        self.assertLessEqual(s['cpc_ui_popup_end'],0x7F00)
+        for name in ('GBCFG','GBUI'):
+            self.assertEqual(len((self.work/(name+'.MOD')).read_bytes()),
+                             s['cpc_module_code_end']-s['cpc_module_base'])
 
     def test_repeatable_build_and_bad_budget_rejection(self):
         again=self.work/'again';assemble(again)
-        for name in ('CORE.RAW','SUPPORT.RAW','SCHED.RAW','HARDWARE.RAW','FSCTX.BIN','ROOTBAR.BIN'):
+        for name in ('CORE.RAW','SUPPORT.RAW','SCHED.RAW','HARDWARE.RAW','FSCTX.BIN','ROOTBAR.BIN','GBCFG.MOD','GBUI.MOD'):
             self.assertEqual((self.work/name).read_bytes(),(again/name).read_bytes())
         with self.assertRaises(subprocess.CalledProcessError):
             assemble(self.work/'too-small',(f'-DCPC_KERNEL_END={0xA000}',))
@@ -73,6 +87,8 @@ class RuntimeTests(unittest.TestCase):
             assemble(self.work/'root-too-small',(f'-DCPC_ROOT_CODE_END={0x4400}',))
         with self.assertRaises(subprocess.CalledProcessError):
             assemble(self.work/'root-overlap',(f'-DCPC_ROOT_CODE_END={0x6100}',))
+        with self.assertRaises(subprocess.CalledProcessError):
+            assemble(self.work/'module-overlap',(f'-DCPC_MODULE_CODE_END={0x5900}',))
 
     def test_pixel_observer_rejects_content_chrome_exposure_and_bar_damage(self):
         # Synthetic host observations challenge the checker; never injected into CPC.

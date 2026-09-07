@@ -14,7 +14,7 @@ COS=tuple(SIN[(i+15)%60] for i in range(60))
 
 
 def draw_clock(surface,rect,time,fill,text):
-    x,y,w,h=rect;hour,minute,second,seconds=time
+    x,y,w,h=rect;hour,minute,second,seconds=time[:4]
     top=y+14;digital=y+h-16;avail=digital-2-top
     radius=min(w*2-6,avail//2-2);cx=x*4+w*2;cy=top+avail//2
     def scale(n): return (1 if n>=0 else -1)*(abs(n)//64)
@@ -35,7 +35,10 @@ def draw_clock(surface,rect,time,fill,text):
     line((cx,cy),endpoint(minute,radius*30//44),1)
     if seconds: line((cx,cy),endpoint(second,radius*36//44),3)
     width=12 if seconds else 8
-    value=f'{hour:02}:{minute:02}'+(f':{second:02}' if seconds else '')
+    # A native modal may begin between the independent hand and digit damage
+    # passes. Model both completed caches; never copy guest pixels as expected.
+    dh,dm,ds=time[4:7] if len(time)>4 else (hour,minute,second)
+    value=f'{dh:02}:{dm:02}'+(f':{ds:02}' if seconds else '')
     fill(surface,x+(w-width)//2,digital,width,8,0)
     text(surface,x+(w-width)//2,digital,value,1,0)
 
