@@ -16,11 +16,11 @@ import time
 from build_cpc_runtime import ROOT, build, symbols
 from test_cpc_foundation_1984 import snapshot
 from cpc_production_lifetime import physical
-from cpc_runtime_pixels import verify_pixels, cursor_phases
+from cpc_runtime_pixels import verify_pixels, cursor_phases, DEFAULT_THEME
 from cpc_fswrite_cases import space
 
 
-def integrity(data, sym, work, font=None, cursor=None):
+def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, title_ready=True):
     header, ram = snapshot(data)
     if len(ram) != 512*1024: raise AssertionError("512 KiB required")
     if ram[sym['cpc_runtime_status']] != 1: raise AssertionError("runtime failed to boot")
@@ -50,12 +50,17 @@ def integrity(data, sym, work, font=None, cursor=None):
             actual[off:off+512]=expected[off:off+512]
         if actual != expected: raise AssertionError(f'{name} code/data changed')
     if header[0x25] != 1 or header[0x40] != 0x0D: raise AssertionError('IM/ROM/mode')
+    if bool(ram[sym['title_ready']])!=title_ready: raise AssertionError('title renderer readiness')
+    at=0x7C000+sym['data_title']-0x4000  # excluded F7 is not an app/owner page
+    if ram[at:at+106]!=theme: raise AssertionError('title/gadget publication changed')
+    if title_ready and ram[at+106:at+sym['cpc_title_module_size']]!=(work/'GBTITLE.MOD').read_bytes()[106:]:
+        raise AssertionError('title renderer code changed')
     if ram[0x1448:0x144C] != ram[sym['mw_rect']:sym['mw_rect']+4]:
         raise AssertionError('public managed geometry differs')
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None):
     media = ROOT/'QA/Diagnostics/CPC-runtime' if skip_build else build()
     manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
@@ -67,6 +72,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
     if bitmap_case:
         from cpc_runtime_bitmaps import prepare
         bitmap_fixture=prepare(bitmap_case,work,ROOT,image,artifacts)
+    if chrome_case:
+        from cpc_runtime_chrome import prepare
+        chrome_fixture=prepare(chrome_case,work,ROOT,image,artifacts)
     if native_fault or config_case:
         target=['-i',str(image)+'@@16384']
         if native_fault:
@@ -196,6 +204,10 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 return artifacts
         else: raise AssertionError('runtime boot timeout')
         wait(50)
+        if chrome_case:
+            from cpc_runtime_chrome import run_chrome
+            return run_chrome(media,manifest,work,sym,artifacts,image,emulator,
+                              send,wait,read,key,move,chrome_case,chrome_fixture)
         if bitmap_case:
             from cpc_runtime_bitmaps import run_bitmaps
             return run_bitmaps(media,manifest,work,sym,artifacts,image,emulator,
@@ -432,4 +444,6 @@ if __name__=='__main__':
     mode.add_argument('--asset-case',choices=ASSET_CASES)
     from cpc_runtime_bitmaps import BITMAP_CASES
     mode.add_argument('--bitmap-case',choices=BITMAP_CASES)
+    from cpc_runtime_chrome import CHROME_CASES
+    mode.add_argument('--chrome-case',choices=CHROME_CASES)
     args=parser.parse_args();args.emulator=args.emulator.resolve();run(**vars(args))

@@ -18,13 +18,17 @@ def provider(work, sym):
     cfg = sym['cpc_cfg_output']; ui = sym['cpc_ui_request']
     ptr('KCFG_TEXT', sym['cpc_cfg_text'], 'const char')
     word('KCFG_LEN', cfg)
+    out += [f'#define CHROME_CFG_LEN {cfg}',
+            f'#define CHROME_CFG_TEXT {sym["cpc_cfg_text"]}']
+    ptr('CPC_TITLE_NAME', sym['cpc_title_name'])
+    ptr('CPC_GADGET_NAME', sym['cpc_gadget_name'])
     for name, offset in (('KCFG_ICONNAME',2),('KCFG_FONTNAME',13),('KCFG_MEMSTR',26),
                          ('KCFG_CURSORNAME',33),('KCFG_BDPNAME',49)):
         ptr(name, cfg+offset)
     word('KCFG_MEMKB', cfg+24)
     ptr('KCFG_INKS', cfg+44, 'unsigned char')
     for name, offset in (('KCFG_BDDRIVE',60),('KCFG_BD_SOLID',61),('KCFG_FRAMEPEN',62)):
-        # Config results are staged; theme/asset application is the next gate.
+        # Config results are staged, then applied by the visual-asset provider.
         out.append(f'#define {name} (*(unsigned char *){cfg+offset})')
     ptr('FS_REQ_NAME', sym['fs_req_name'])
     for name, offset in (('UI_OP',0),('UI_COL',1),('UI_LINE',2),('UI_N',3),('UI_RES',4)):
@@ -52,7 +56,7 @@ def compile_native(work, sym, root):
     for source, target in ((root/'lib/gb/crt0.s','native_crt.rel'),(work/'ui_lib.s','ui_lib.rel')):
         subprocess.run([sdas,'-o',target,str(source)],cwd=work,check=True)
     shared = ['-mz80','--opt-code-size','--fomit-frame-pointer','-I',str(root/'lib/gb')]
-    cfgdefs = [f'-DGB_CONFIG_PROVIDER="{header}"']
+    cfgdefs = [f'-DGB_CONFIG_PROVIDER="{header}"','-DGB_CONFIG_CHROME']
     version=(root/'VERSION').read_text().strip()
     commit=os.environ.get('GIT_COMMIT') or subprocess.check_output(
         ['git','rev-parse','--short=12','HEAD'],cwd=root,text=True).strip()

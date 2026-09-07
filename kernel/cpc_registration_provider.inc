@@ -11,8 +11,13 @@ GB_WK_LEGACY equ 7
 GB_WK_STANDARD equ 31
 GB_WK_EXTENDED equ 128
 GB_WK_ABI_V1 equ #B6
-TITLEBAR_TILE equ 0             ; existing shared plain-furniture configuration
-THEMED_GADGETS equ 0            ; tile/module provider is a later checkpoint
+                ifdef CPC_RUNTIME
+TITLEBAR_TILE equ 1
+THEMED_GADGETS equ 1
+                else
+TITLEBAR_TILE equ 0             ; preserve the isolated plain-chrome proof
+THEMED_GADGETS equ 0
+                endif
 KWB_LIGHT equ #F0              ; Mode-1 solid logical pen 1
 KWB_DARK equ #0F               ; Mode-1 solid logical pen 2
 CHROME_STRING_COPY_LOOP equ cpc_title_copy

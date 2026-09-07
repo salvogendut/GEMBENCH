@@ -1,6 +1,6 @@
 ; Configured font/palette provider for the private production runtime. No new
-; Desktop, parser or font renderer. Native GB_RELOAD stays gated until the
-; other asset families are implemented. Caller has serialized root context.
+; Desktop, parser or font renderer. Native GB_RELOAD stays gated until its
+; complete contract is implemented. Caller has serialized root context.
                 include "../lib/cpc/visual_assets_layout.inc"
 KCFG_FONTNAME equ CPC_CFG_OUTPUT+13
 DATA_FONT equ CPC_FONT_BASE
@@ -39,6 +39,7 @@ cpc_visual_apply
                 ld (CPC_ASSET_KIND),a
                 call font_init
                 call cpc_other_assets
+                call cpc_title_assets
                 call cpc_config_palette
                 ld a,(CPC_CFG_OUTPUT+62)
                 ld hl,KCFG_FRAMEPEN

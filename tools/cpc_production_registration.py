@@ -40,7 +40,7 @@ def emit_vectors(path: Path):
     path.write_text("\n".join(rows)+"\n")
 
 
-def chrome(rect, kind, title, font, frame_pen=1):
+def chrome(rect, kind, title, font, frame_pen=1, theme=None, title_ready=True):
     """Declarative plain furniture, in logical pixels before Mode-1 packing."""
     x,y,w,h = rect
     pixels = bytearray(320*200)
@@ -62,22 +62,36 @@ def chrome(rect, kind, title, font, frame_pen=1):
                     px,py = tx*4+i*fw+gx,ty+gy
                     if 0<=px<320 and 0<=py<200 and contains(rect,px//4,py):
                         pixels[py*320+px] = ink if font[glyph+gy] & (128>>gx) else paper
+    def bitmap(bx,by,bw,bh,data):
+        for yy in range(bh):
+            for xx in range(bw*4):
+                value=data[yy*bw+xx//4];shift=xx%4
+                px,py=bx*4+xx,by+yy
+                if 0<=px<320 and 0<=py<200 and contains(rect,px//4,py):
+                    pixels[py*320+px]=((value>>(7-shift))&1)|(((value>>(3-shift))&1)<<1)
     if kind & 1:
         fill((x,y,w,14),1)
-        for yy in range(y,y+14,2): fill((x,yy,w,1),2)
+        if theme is None:
+            for yy in range(y,y+14,2): fill((x,yy,w,1),2)
+        elif title_ready:
+            bitmap(x,y,w,14,bytes(theme[yy*4+xx%4] for yy in range(14) for xx in range(w)))
     border(rect,frame_pen)
     if kind & 1:
-        if kind & 2: fill((x+1,y+2,2,10),1)
+        if kind & 2:
+            if theme is None: fill((x+1,y+2,2,10),1)
+            else: bitmap(x+1,y+2,2,10,theme[56:76])
         if kind & 4:
-            fill((x+w-4,y+2,3,10),1)
-            fill((x+w-3,y+5,1,4),2)
+            if theme is None:
+                fill((x+w-4,y+2,3,10),1)
+                fill((x+w-3,y+5,1,4),2)
+            else: bitmap(x+w-4,y+2,3,10,theme[76:106])
     if kind & 16:
         box = (x+w-2,y+h-6,2,6)
         fill(box,1)
         border(box,2)
     if kind & 1:
         text(x+(4 if kind&2 else 1),y+3,title,1,2)
-        if kind & 2: text(x+1,y+3,"X",2,1)
+        if kind & 2 and theme is None: text(x+1,y+3,"X",2,1)
     fill((x+2,y+16,2,3),3)        # fixture content only, not window furniture
     packed = bytearray(16384)
     for yy in range(max(0,y),min(200,y+h)):

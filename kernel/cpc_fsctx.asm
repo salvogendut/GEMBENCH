@@ -7,7 +7,11 @@ CPC_FS_DIAG equ #24A0
 CPC_FS_IO_STATUS equ #24A6
 CPC_FS_COMMAND_END equ #24A8
 CPC_FS_MODULE equ #4400
+                ifdef CPC_RUNTIME
+CPC_FS_MODULE_LIMIT equ #5E00    ; 3D-U reserves 5E00..6000 for title assets/code
+                else
 CPC_FS_MODULE_LIMIT equ #6000
+                endif
                 ifdef CPC_FS_DIRECTORY
 cpc_fs_directory_enabled equ 1
                 endif

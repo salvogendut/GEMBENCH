@@ -31,6 +31,10 @@ all: msx
 .PHONY: diagnostic-cpc-native-1984
 .PHONY: diagnostic-cpc-assets-1984
 .PHONY: diagnostic-cpc-bitmaps-1984
+.PHONY: diagnostic-cpc-chrome-1984
+diagnostic-cpc-chrome-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --chrome-case custom
+
 diagnostic-cpc-bitmaps-1984:
 	$(PYTHON) tools/test_cpc_runtime_1984.py --bitmap-case custom
 

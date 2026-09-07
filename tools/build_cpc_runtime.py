@@ -29,6 +29,19 @@ def bitmap_assets(work):
     subprocess.run(['python3',str(ROOT/'tools/png2spr.py'),str(ROOT/'assets/pointer.png'),
                     str(work/'DEFAULT.SPR'),'cursor','12x16'],check=True)
     (work/'REFINED.IST').write_bytes((ROOT/'assets/iconsets/REFINED.IST').read_bytes())
+    for folder,extension,size in (('titlebars','TBR',56),('gadgets','GDT',50)):
+        raw=(ROOT/f'assets/{folder}/ORIGINAL.{extension}').read_bytes()
+        if len(raw)!=size: raise AssertionError('invalid embedded '+extension)
+        (work/f'ORIGINAL.{extension}').write_bytes(raw)
+
+
+def title_module(work, sym):
+    names=('data_title','cpc_title_module_size','cpc_title_off','rect_x','rect_y','rect_w','rect_h',
+           'fb_x','fb_y','draw_rows','draw_y','scr_addr')
+    (work/'title_symbols.inc').write_text('\n'.join(f'{k} equ {sym[k]}' for k in names)+'\n')
+    subprocess.run([os.environ.get('RASM','rasm'),str(ROOT/'kernel/cpc_title_module.asm'),
+                    '-s','-sq','-o','title',f'-I{work}'],cwd=work,check=True)
+    return symbols(work/'title.sym')['cpc_title_module_used_end']-sym['data_title']
 
 
 def assemble(work: Path, overrides=()):
@@ -41,6 +54,7 @@ def assemble(work: Path, overrides=()):
                "-s", "-sq", "-o", "runtime", f"-I{work}", *overrides]
     subprocess.run(command, cwd=work, check=True)
     initial = symbols(work / "runtime.sym")
+    title_module(work,initial)
     compile_module(work, initial, ROOT, directory=True, writable=True)
     compile_timer(work, initial, ROOT)
     compile_native(work, initial, ROOT)
@@ -101,7 +115,8 @@ def build():
              "GBENCH/DEFAULT.IST": (work / "DEFAULT.IST").read_bytes(),
              "GBENCH/REFINED.IST": (work / "REFINED.IST").read_bytes(),
              "GBENCH/DEFAULT.SPR": (work / "DEFAULT.SPR").read_bytes(),
-             "GEOBENCH.CFG": b'ICONS=REFINED\r\nFONT=DEFAULT\r\nCURSOR=DEFAULT\r\nBACKDROP=SOLID\r\nINKS=1,26,0,6,1\r\n',
+             "GBENCH/GBTITLE.MOD": (work / "GBTITLE.MOD").read_bytes(),
+             "GEOBENCH.CFG": b'ICONS=REFINED\r\nFONT=DEFAULT\r\nCURSOR=DEFAULT\r\nBACKDROP=SOLID\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nINKS=1,26,0,6,1\r\n',
              "GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
              "GBENCH/MENUPRBE.APP": menuapp.read_bytes(),
@@ -111,6 +126,12 @@ def build():
              "UFSTEST/SUB/SMALL.TXT": b"OK!"}
     for tile in (ROOT/'assets/backdrops').glob('*.BDP'):
         files['GBENCH/'+tile.name.upper()] = tile.read_bytes()
+    for folder,ext in (('titlebars','TBR'),('gadgets','GDT')):
+        for path in (ROOT/'assets'/folder).glob('*.'+ext):
+            raw=path.read_bytes()
+            if len(raw) not in ((56,106) if ext=='TBR' else (50,)):
+                raise AssertionError('invalid chrome asset '+str(path))
+            files['GBENCH/'+path.name.upper()]=raw
     for name, payload in files.items():
         path = card / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -138,7 +159,10 @@ def build():
         ("hardware", "cpc_hardware_begin", "cpc_hardware_used_end", "cpc_hardware_end"),
         ("scheduler", "cpc_scheduler_begin", "cpc_scheduler_end", "cpc_sched_end")):
         sections[name] = dict(base=sym[begin], used=sym[end]-sym[begin], budget=sym[limit]-sym[begin])
-    sections["fsctx"] = dict(base=0x4400, used=len(files["FSCTX.BIN"]), budget=0x1C00)
+    sections["fsctx"] = dict(base=0x4400, used=len(files["FSCTX.BIN"]), budget=sym['cpc_fs_module_limit']-0x4400)
+    sections['title'] = dict(base=sym['data_title'],page=sym['cpc_data_page'],
+                            used=symbols(work/'title.sym')['cpc_title_module_used_end']-sym['data_title'],
+                            loaded=sym['cpc_title_module_size'],budget=sym['cpc_title_limit']-sym['data_title'])
     sections["icons"] = dict(base=sym['data_icons'],used=len(files['GBENCH/REFINED.IST']),
                             budget=sym['cpc_icon_limit']-sym['data_icons'],page=sym['cpc_data_page'])
     sections["cursor"] = dict(base=sym['cursor_phases'],used=512,budget=512,

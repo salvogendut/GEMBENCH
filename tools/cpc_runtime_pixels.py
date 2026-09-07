@@ -1,6 +1,10 @@
 """Independent expected surfaces for the real universal ABI Probe, not a WM."""
 from cpc_graphics_fixture import CURSOR, address, put_pixel
 from cpc_production_registration import chrome
+from pathlib import Path
+
+_ROOT=Path(__file__).resolve().parents[1]
+DEFAULT_THEME=(_ROOT/'assets/titlebars/ORIGINAL.TBR').read_bytes()+(_ROOT/'assets/gadgets/ORIGINAL.GDT').read_bytes()
 
 
 def cursor_grid(sprite):
@@ -33,7 +37,7 @@ def cursor_phases(sprite):
     return bytes(result)
 
 
-def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None):
+def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True):
     def fill(image,x,y,w,h,pen):
         for yy in range(max(0,y),min(200,y+h)):
             for xx in range(max(0,x)*4,min(80,x+w)*4): put_pixel(image,xx,yy,pen)
@@ -75,7 +79,7 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
         calculator=(calculators or {}).get(slot)
         watch=(clocks or {}).get(slot)
         surface=chrome((x,y,w,h),31 if watch is not None else 11 if calculator is not None else 7,
-                       (titles or {}).get(slot,'Universal ABI'),font,frame_pen)
+                       (titles or {}).get(slot,'Universal ABI'),font,frame_pen,theme,title_ready)
         fill(surface,x+1,y+14,w-2,h-15,0 if watch is not None else 1)
         if watch is not None:
             # Independent Clock geometry/pixels at the observed completed time,
@@ -149,14 +153,14 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
     return bytes(result)
 
 
-def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None):
+def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True):
     px=int.from_bytes(ram[sym['pointer_x']:sym['pointer_x']+2],'little')
     py=ram[sym['pointer_y']]
     if ram[sym['menu_def']:sym['menu_def']+len(menu)]!=menu:
         raise AssertionError('focused menu snapshot differs')
     expected=frame(rects,order,accents,(px,py),font if font is not None else (work/'DEFAULT.FNT').read_bytes(),
                    tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog,frame_pen,
-                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons)
+                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons,theme,title_ready)
     actual=ram[0xC000:0x10000]
     if actual!=expected:
         at=next(i for i,(a,b) in enumerate(zip(actual,expected)) if a!=b)

@@ -55,6 +55,10 @@ static unsigned char frame_pen(const unsigned char *inks)
     return 2;                           /* no contrasting configured pen exists */
 }
 
+#ifdef GB_CONFIG_CHROME
+#include "cpc_chrome_config.inc"
+#endif
+
 void main(void)
 {
     char icons[9];
@@ -84,4 +88,7 @@ void main(void)
     KCFG_BD_SOLID = (backdrop[0] == 'S' && backdrop[1] == 'O' && backdrop[2] == 'L' &&
                      backdrop[3] == 'I' && backdrop[4] == 'D' && backdrop[5] == 0) ? 1 : 0;
     gb_fmt_mem(KCFG_MEMKB, KCFG_MEMSTR);    /* top-bar RAM string */
+#ifdef GB_CONFIG_CHROME
+    chrome_config();
+#endif
 }

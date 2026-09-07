@@ -164,7 +164,10 @@ adds `make diagnostic-cpc-latency-1984` for video-timed movement and save-under 
 default), the CPC cursor sprite and backdrop tiles. With the background focused,
 **A** toggles the diagnostic icon gallery and **V** checks cursor pixel phases.
 Run `make diagnostic-cpc-bitmaps-1984` for custom artwork and clipped exposure
-checks on a private M4 copy. Titlebar/gadget assets, file pickers and the full
+checks on a private M4 copy. [3D-U](docs/CPC-RESTART-STEP3D-U.md) now connects
+configured titlebar/gadget assets through the shared native furniture and a
+bounded paged renderer. Run `make diagnostic-cpc-chrome-1984` for custom themes,
+focus, dragging and gadget checks. File pickers and the full
 Desktop/Settings/File Manager remain later integrations.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the

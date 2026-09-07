@@ -36,6 +36,8 @@ cpc_asset_read
                 jp z,cpc_icon_validate
                 dec a
                 jr z,cpc_cursor_validate
+                dec a
+                jp nz,cpc_title_validate
                 ld de,64
                 jr cpc_asset_exact
 cpc_cursor_validate
@@ -399,6 +401,12 @@ cpc_icon_map
 cpc_icon_full
                 call icon_full_geom
 cpc_icon_render
+                call blit_bitmap
+                jp cpc_icon_draw_end
+
+; Shared native chrome uses the same clipped opaque blitter as icon assets.
+; Caller owns the bank/lock; no extra policy or geometry is introduced here.
+blit_bitmap
                 ld hl,bm_w
                 ld de,rect_w
                 ld bc,2
@@ -406,7 +414,7 @@ cpc_icon_render
                 ld hl,(bm_x)
                 ld (rect_x),hl
                 call cpc_damage_begin
-                jp nc,cpc_icon_draw_end
+                ret nc
                 ; Advance into the original bitmap, but iterate ONLY the
                 ; clipped rectangle. Tall assets near the bottom must not
                 ; wrap the 8-bit row counter and paint the top of the screen.
@@ -503,7 +511,7 @@ cpc_icon_skip
                 jr nz,cpc_icon_row
                 di
                 call cpc_draw_sample_end
-                call cpc_damage_end
+                jp cpc_damage_end
 cpc_icon_draw_end
                 pop af
                 call foundation_bank_set

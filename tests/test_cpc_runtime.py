@@ -76,6 +76,14 @@ class RuntimeTests(unittest.TestCase):
         self.assertLessEqual(s['cpc_icon_limit'],s['cpc_app_limit'])
         self.assertLessEqual(s['cpc_bd_tile']+64,s['pointer_background'])
         self.assertLessEqual(s['pointer_background']+64,s['cpc_native_state_end'])
+        self.assertLessEqual(s['pointer_background']+64,s['cpc_title_xfer'])
+        self.assertLessEqual(s['cpc_fs_module_limit'],s['data_title'])
+        self.assertLessEqual(s['data_title']+s['cpc_title_module_size'],s['cpc_title_limit'])
+        self.assertLessEqual(s['cpc_title_limit'],s['cpc_app_io_buffer'])
+        self.assertEqual((s['titlebar_tile'],s['themed_gadgets']),(1,1))
+        self.assertEqual(len((self.work/'GBTITLE.MOD').read_bytes()),384)
+        self.assertEqual((self.work/'GBTITLE.MOD').read_bytes()[:106],
+                         (self.work/'ORIGINAL.TBR').read_bytes()+(self.work/'ORIGINAL.GDT').read_bytes())
         self.assertEqual((s['cpc_pointer_width'],s['cpc_pointer_height']),(4,16))
         self.assertLessEqual(s['cpc_font_limit'],s['cpc_fs_module'])
         self.assertLessEqual(s['cpc_font_end']-s['cpc_font_payload'],s['cpc_font_limit']-s['cpc_font_base'])
@@ -89,7 +97,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_repeatable_build_and_bad_budget_rejection(self):
         again=self.work/'again';assemble(again)
-        for name in ('CORE.RAW','SUPPORT.RAW','SCHED.RAW','HARDWARE.RAW','FSCTX.BIN','ROOTBAR.BIN','GBCFG.MOD','GBUI.MOD'):
+        for name in ('CORE.RAW','SUPPORT.RAW','SCHED.RAW','HARDWARE.RAW','FSCTX.BIN','ROOTBAR.BIN','GBCFG.MOD','GBUI.MOD','GBTITLE.MOD'):
             self.assertEqual((self.work/name).read_bytes(),(again/name).read_bytes())
         with self.assertRaises(subprocess.CalledProcessError):
             assemble(self.work/'too-small',(f'-DCPC_KERNEL_END={0xA000}',))
@@ -105,6 +113,10 @@ class RuntimeTests(unittest.TestCase):
             assemble(self.work/'icon-overlap',(f'-DCPC_ICON_LIMIT={0x8000}',))
         with self.assertRaises(subprocess.CalledProcessError):
             assemble(self.work/'icons-too-small',(f'-DCPC_ICON_LIMIT={0x7000}',))
+        with self.assertRaises(subprocess.CalledProcessError):
+            assemble(self.work/'title-overlap',(f'-DCPC_TITLE_LIMIT={0x6100}',))
+        with self.assertRaises(subprocess.CalledProcessError):
+            assemble(self.work/'title-too-small',(f'-DCPC_TITLE_LIMIT={0x5F00}',))
 
     def test_pixel_observer_rejects_content_chrome_exposure_and_bar_damage(self):
         # Synthetic host observations challenge the checker; never injected into CPC.

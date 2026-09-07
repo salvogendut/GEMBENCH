@@ -462,18 +462,7 @@ static unsigned char ss_lmx, ss_lmy;  /* last pointer position (a change = activ
 /* cfg_val: index just past KEY (klen chars, including '=') found at a line start in the
  * boot config text, or KCFG_LEN if absent. Reads straight from #1000 (no transfer cell
  * to collide), like wp_cfg_name. */
-static unsigned int cfg_val(const char *key, unsigned char klen)
-{
-    const char *t = KCFG_TEXT;
-    unsigned int len = KCFG_LEN, i;
-    unsigned char j;
-    for (i = 0; i + klen <= len; i++) {
-        if (i && t[i-1] != '\r' && t[i-1] != '\n') continue;   /* line start only */
-        for (j = 0; j < klen; j++) if (t[i+j] != key[j]) break;
-        if (j == klen) return i + klen;
-    }
-    return len;
-}
+#include "core/config_value.inc"
 
 static char chrome_name[11];
 
@@ -485,70 +474,9 @@ static unsigned int chrome_load(unsigned char gadgets) __naked
 {
     gadgets;
 __asm
-    push af                         ; retain the TBR/GDT selector
-    or a
-    jr z,cl_title_key
-    ld a,#8
-    push af
-    inc sp
-    ld hl,#cl_gadget_key
-    call _cfg_val                  ; DE = value offset
-    jr cl_have_pos
-cl_title_key:
-    ld a,#9
-    push af
-    inc sp
-    ld hl,#cl_title_key_text
-    call _cfg_val
-cl_have_pos:
-    push de
-    ld hl,#cl_default
-    ld de,#_chrome_name
-    ld bc,#11
-    ldir
-    pop de
-    ld hl,(#0x1200)                ; KCFG_LEN
-    ld a,d
-    cp h
-    jr c,cl_copy_stem
-    jr nz,cl_extension
-    ld a,e
-    cp l
-    jr nc,cl_extension
-cl_copy_stem:
-    push de
-    ld hl,#_chrome_name
-    ld (hl),#0x20
-    ld de,#_chrome_name+1
-    ld bc,#7
-    ldir
-    pop hl
-    ld de,#0x1000                  ; KCFG_TEXT
-    add hl,de
-    ld de,#_chrome_name
-    ld b,#8
-cl_stem_loop:
-    ld a,(hl)
-    cp #13
-    jr z,cl_extension
-    cp #10
-    jr z,cl_extension
-    cp #'.'
-    jr z,cl_extension
-    ld (de),a
-    inc hl
-    inc de
-    djnz cl_stem_loop
-cl_extension:
-    pop af
-    or a
-    jr z,cl_load
-    ld hl,#_chrome_name+8
-    ld (hl),#'G'
-    inc hl
-    ld (hl),#'D'
-    inc hl
-    ld (hl),#'T'
+#define CHROME_CFG_LEN 0x1200
+#define CHROME_CFG_TEXT 0x1000
+#include "core/chrome_select.inc"
 cl_load:
     call _gb_get_drive
     push af
@@ -579,14 +507,7 @@ cl_restore_drive:
     call _gb_set_drive
     pop de
     ret
-cl_default:
-    .ascii "ORIGINALTBR"
-cl_gadget_key:
-    .ascii "GADGETS="
-    .db 0
-cl_title_key_text:
-    .ascii "TITLEBAR="
-    .db 0
+#include "core/chrome_keys.inc"
 __endasm;
 }
 

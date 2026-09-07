@@ -94,14 +94,15 @@ def compile_module(work,sym,root,directory=False,fault_metadata=False,writable=F
                     *(["-DCPC_FS_WRITE"] if writable else []),
                     *(["-DCPC_FAULT_FS_APPEND"] if fault_append else []),
                     "--fomit-frame-pointer","-c",str(root/"kernel/kc/gbfsctx_cpc.c"),"-o","fs_mod.rel"],cwd=work,check=True)
-    subprocess.run([sdcc,"-mz80","--no-std-crt0","--code-loc","0x4400","--data-loc","0x5F00",
+    limit=sym['cpc_fs_module_limit']
+    subprocess.run([sdcc,"-mz80","--no-std-crt0","--code-loc","0x4400","--data-loc",hex(limit-256),
                     "fs_crt.rel","fs_mod.rel","fs_bridge.rel","-o","fs_mod.ihx"],cwd=work,check=True)
     areas=read_areas(work/"fs_mod.map")
-    if any(n and not 0x4400<=a<a+n<=0x6000 for a,n in areas.values()):
+    if any(n and not 0x4400<=a<a+n<=limit for a,n in areas.values()):
         raise AssertionError(f"CPC FSCTX module exceeds F7 allocation: {areas}")
     subprocess.run([str(bindir/"makebin"),"-p","fs_mod.ihx","fs_mod.bin"],cwd=work,check=True)
     binary=(work/"fs_mod.bin").read_bytes()[0x4400:]
-    if not 0<len(binary)<=0x1B00: raise AssertionError("CPC FSCTX loaded bytes overflow")
+    if not 0<len(binary)<=limit-0x4400: raise AssertionError("CPC FSCTX loaded bytes overflow")
     (work/"FSCTX.BIN").write_bytes(binary)
     (work/"fsctx_size.inc").write_text(f"CPC_FS_MODULE_BYTES equ {len(binary)}\n")
 

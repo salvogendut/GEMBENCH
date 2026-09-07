@@ -173,7 +173,8 @@ untouched. CPC runtime tests use M4 only; this does not qualify Albireo.
 
 ## Next
 
-**3D-U: titlebar/gadget asset modules**, retaining shared native furniture
+**[3D-U: titlebar/gadget asset modules](CPC-RESTART-STEP3D-U.md)** is now implemented,
+retaining shared native furniture
 policy and testing fallback, clipping and storage budgets. File pickers,
 System/Settings, the complete shared Desktop/File Manager and remaining
 application migrations still follow. `GB_RELOAD` stays unavailable until its
