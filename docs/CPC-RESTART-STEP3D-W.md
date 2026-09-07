@@ -2,6 +2,11 @@
 
 Issue #77, branch `feature/77-cpc-production-adapters`, following `66b5cc9`.
 2026-09-07. **W1 is implemented and M4/1984 validated. W2/W3 remain open.**
+W2 has started with the [W2-A platform boundary and compile audit](CPC-RESTART-STEP3D-W2-A.md);
+this is preparatory, not a runnable Settings application.
+The later [desktop-first delivery update](CPC-RESTART-PLAN.md#desktop-first-delivery-update--2026-09-07)
+prioritizes Desktop-required bindings; complete Settings/saver support remains
+tracked here but does not block the first usable desktop milestone.
 
 ## Gates
 
@@ -175,6 +180,8 @@ Rebuilding `make diagnostic-cpc-runtime` restores the staged ORIGINAL defaults.
 scenario on separate copies. Individual cases are available via
 `tools/test_cpc_runtime_1984.py --skip-build --config-edit <case>`.
 
-Next: W2, the real Settings application's native loading/data/form/service
-bindings. W3 then connects the qualified System actions. The complete Desktop
-and File Manager remain pending; W1 does not close the production-adapter gate.
+Next after W2-A: follow the desktop-first plan's dependency audit and minimum
+owned filesystem/loading bindings. Reuse W1 persistence where required; finish
+Settings' complete profile separately. W3 connects qualified System actions
+incrementally. Desktop and File Manager remain pending; W1 does not close the
+production-adapter gate.

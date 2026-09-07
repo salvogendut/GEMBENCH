@@ -178,6 +178,12 @@ Run `make diagnostic-cpc-config-edit-1984` for private-image save/reload/reboot
 checks. These keys write the diagnostic image only. The actual Settings window,
 System menu, full Desktop/File Manager and native implicit filesystem/reload
 contracts remain later integrations.
+[W2-A](docs/CPC-RESTART-STEP3D-W2-A.md) isolates the actual Settings platform
+bindings and audits its unresolved CPC services/data layout. Run
+`make diagnostic-cpc-settings-audit`; it produces no executable or new media.
+The [desktop-first delivery plan](docs/CPC-RESTART-PLAN.md#desktop-first-delivery-update--2026-09-07)
+estimates 8–12 further checkpoints to boot, browse Disk C and launch/manage
+applications; complete Settings and broader application parity follow separately.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).

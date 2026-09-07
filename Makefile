@@ -31,6 +31,7 @@ all: msx
 .PHONY: diagnostic-cpc-native-1984
 .PHONY: diagnostic-cpc-picker-1984
 .PHONY: diagnostic-cpc-config-edit-1984
+.PHONY: diagnostic-cpc-settings-audit
 .PHONY: diagnostic-cpc-assets-1984
 .PHONY: diagnostic-cpc-bitmaps-1984
 .PHONY: diagnostic-cpc-chrome-1984
@@ -51,6 +52,9 @@ diagnostic-cpc-picker-1984:
 
 diagnostic-cpc-config-edit-1984:
 	$(PYTHON) tools/test_cpc_runtime_1984.py --config-edit normal
+
+diagnostic-cpc-settings-audit:
+	$(PYTHON) tools/audit_cpc_settings.py --output build/cpc-settings-audit
 
 diagnostic-cpc-desk-1984:
 	$(PYTHON) tools/test_cpc_runtime_1984.py --desk

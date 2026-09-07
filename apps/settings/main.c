@@ -32,11 +32,25 @@
  * the safe depth-1 navigation case.
  */
 #include "gb.h"
+#ifndef GB_SETTINGS_PROVIDER
+/* Retain the legacy binary layout. Settings uses its own cfg_get/keypos;
+ * a new provider need not carry gbcfg's unused fixed-address reader. */
 #include "gbcfg.h"
+#endif
 #include "gbsavercfg.h"
 #include "gbtitle.h"
 #ifdef GB_MSX2
 #include "gbvdi.h"
+#endif
+#ifdef GB_SETTINGS_PROVIDER
+#include GB_SETTINGS_PROVIDER
+#elif defined(GB_CPC_RESTART)
+#error "CPC restart Settings requires an explicit platform provider"
+#else
+#include "platform/legacy.h"
+#endif
+#if GB_SETTINGS_PROVIDER_VERSION != 1
+#error "Unsupported Settings platform provider contract"
 #endif
 
 #define TITLE_H   14
@@ -116,28 +130,20 @@ typedef struct {
     const char *key;       /* e.g. "FONT=" */
     const char *ext;       /* e.g. "FNT" (raw 3-char, matched against the 8.3 name) */
     unsigned char min_icons;  /* IST: exact desktop count; 0 = no check */
-    unsigned int  tfr;     /* kernel transfer-area addr for the 8.3 name (gb_reload, #185) */
+    char *tfr;            /* provider-owned 8.3 name (gb_reload, #185) */
 } setting_t;
 
 static const setting_t rows[] = {
-    { "Font",   "FONT=",     "FNT", 0,             0x120D },  /* KCFG_FONTNAME */
-    { "Icons",  "ICONS=",    "IST", MIN_IST_ICONS, 0x1202 },  /* KCFG_ICONNAME */
-    { "Cursor", "CURSOR=",   "SPR", 0,             0x1221 },  /* KCFG_CURSORNAME */
+    { "Font",   "FONT=",     "FNT", 0,             SETTINGS_FONT_NAME },
+    { "Icons",  "ICONS=",    "IST", MIN_IST_ICONS, SETTINGS_ICON_NAME },
+    { "Cursor", "CURSOR=",   "SPR", 0,             SETTINGS_CURSOR_NAME },
     { "Title bar","TITLEBAR=","TBR", 0,             0 },       /* paged app-linked installer */
     { "Gadgets", "GADGETS=", "GDT", 0,             0 },       /* independent close/maximize pair */
-    { "Backdrop","BACKDROP=","BDP", 0,             0x1231 },  /* KCFG_BDPNAME (+ BD_SOLID #1290) */
+    { "Backdrop","BACKDROP=","BDP", 0,             SETTINGS_BACKDROP_NAME },
     { "Wallpaper","WALLPAPER=","PIC", 0,           0 },       /* no live tfr: the desktop reads
                                                                  WALLPAPER= from the config (#216) */
 };
 #define NROWS 7
-#define BD_SOLID_ADDR 0x1290   /* kernel BD_SOLID flag */
-#define BD_DRIVE_ADDR 0x123C   /* kernel KCFG_BDDRIVE: selected backdrop drive */
-#define BD_TILE_ADDR  0x1250   /* kernel BD_TILE: the loaded 16x16 backdrop tile (#216) */
-#define KCFG_INKS_ADDR ((volatile unsigned char *)0x122C)
-#define KCFG_FRAMEPEN_ADDR (*(volatile unsigned char *)0x133C)
-#ifdef GB_MSX2
-#define MSX_SCRMOD (*(volatile unsigned char *)0xFCAF)
-#endif
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
    512-byte sectors, so a smaller buffer would overflow into the globals after it). */
@@ -278,10 +284,10 @@ static void cfg_set(const char *key, const char *val)
        desktop reads straight from it (the screensaver SAVER=/SAVERTIME=, #219) take
        effect without a reboot - the desktop re-parses it when it repaints. */
     {
-        char *km = (char *)0x1000;                 /* KCFG_TEXT */
+        char *km = SETTINGS_CONFIG_TEXT;
         unsigned int i;
         for (i = 0; i < cfglen; i++) km[i] = cfgbuf[i];
-        *(volatile unsigned int *)0x1200 = cfglen; /* KCFG_LEN */
+        SETTINGS_CONFIG_LENGTH = cfglen;
     }
 }
 
@@ -674,14 +680,14 @@ static void s_draw(void)
 #endif
         if (rows[r].ext[0] == 'B') {         /* #216: preview the current backdrop tile beside */
             unsigned char sx = (unsigned char)(win_x + 51), sy = row_y(r);  /* keep clear of the selector */
-            if (*(volatile unsigned char *)BD_SOLID_ADDR)
+            if (SETTINGS_BACKDROP_SOLID)
                 gb_fill(sx, sy, 4, 8, 0);    /* SOLID -> a plain pen-0 (desktop) square */
 #if defined(GB_MSX2) || defined(GB_PCW)
             else
                 gb_backdrop(sx, sy, 4, 8);   /* applies the target's native tile encoding */
 #else
             else
-                gb_restorerect(sx, sy, 4, 8, (const void *)BD_TILE_ADDR);   /* tile's top 8 rows */
+                gb_restorerect(sx, sy, 4, 8, (const void *)SETTINGS_BACKDROP_TILE);   /* tile's top 8 rows */
 #endif
             gb_frame(sx, sy, 4, 8, 2);       /* outline so it shows on the white panel */
         }
@@ -755,46 +761,7 @@ static unsigned char ink_cur[NPEN], ink_orig[NPEN];
    (&BC38). A palette change recolours every pixel of that pen at once, so the whole UI
    updates with no redraw - that is the preview (and, on Save, the immediate effect). */
 static volatile unsigned char si_pen, si_ink;
-#if defined(GB_MSX2) || defined(GB_PCW)
-/* MSX: GB_SETINK (#8006) maps the CPC ink to the V9938 palette (kernel #287).
- * PCW: the CGA2 palette is fixed - the slot is k_noop there, so the preview
- * is safely inert (#331; the CPC arm called firmware the PCW lacks).
- * Called via inline asm - a gb.h/libgb binding would relink and bloat every
- * CPC app past its budget, so only Settings (this app) reaches the slot. */
-static void si_call(void) __naked
-{
-__asm
-    ld   a,(_si_ink)
-    ld   b,a
-    ld   c,a
-    ld   a,(_si_pen)
-    call 0x8006          ; GB_SETINK (A = pen 0-4, B/C = CPC ink)
-    ret
-__endasm;
-}
-#else
-static void si_call(void) __naked
-{
-__asm
-    ld   a,(_si_ink)
-    ld   b,a
-    ld   c,a
-    ld   a,(_si_pen)
-    call 0xBC32          ; SCR SET INK (A = pen, B/C = ink)
-    ret
-__endasm;
-}
-static void sb_call(void) __naked
-{
-__asm
-    ld   a,(_si_ink)
-    ld   b,a
-    ld   c,a
-    call 0xBC38          ; SCR SET BORDER (B/C = ink)
-    ret
-__endasm;
-}
-#endif
+#include GB_SETTINGS_INK_IMPLEMENTATION
 static void apply_colour(unsigned char i, unsigned char ink)
 {
     unsigned char frame_pen = 2;
@@ -1142,15 +1109,7 @@ static void saver_dialog(void)
 static char ss_updates[GB_SSCFG_TEXT_CAP];
 static char ss_saved_modname[11];
 
-static unsigned char ss_run_module(void) __naked
-{
-__asm
-    ld a,#0x80
-    call #0x80AE
-    ld a,c
-    ret
-__endasm;
-}
+#include GB_SETTINGS_SAVER_IMPLEMENTATION
 
 static void ss_config_name(char *name11)
 {
@@ -1192,22 +1151,22 @@ static void ss_config_dialog(void)
     ss_config_name(module);
     old_drive = gb_get_drive();
     for (i = 0; i < 11; i++) {
-        ss_saved_modname[i] = GB_SSCFG_MODNAME[i];
-        GB_SSCFG_MODNAME[i] = module[i];
+        ss_saved_modname[i] = SETTINGS_SAVER_MODNAME[i];
+        SETTINGS_SAVER_MODNAME[i] = module[i];
     }
-    GB_SSCFG_OP = GB_SSCFG_OP_CONFIG;
-    GB_SSCFG_RESULT = GB_SSCFG_MISSING;
-    GB_SSCFG_TEXT[0] = 0;
-    GB_SSCFG_TEXT[1] = 0;
+    SETTINGS_SAVER_OP = GB_SSCFG_OP_CONFIG;
+    SETTINGS_SAVER_RESULT = GB_SSCFG_MISSING;
+    SETTINGS_SAVER_TEXT[0] = 0;
+    SETTINGS_SAVER_TEXT[1] = 0;
     gb_set_drive(drive);
     result = ss_run_module();
 
     /* Preserve the result before restoring state or saving GEOBENCH.CFG. */
     for (i = 0; i < GB_SSCFG_TEXT_CAP; i++)
-        ss_updates[i] = GB_SSCFG_TEXT[i];
+        ss_updates[i] = SETTINGS_SAVER_TEXT[i];
     ss_updates[GB_SSCFG_TEXT_CAP - 2] = 0;
     ss_updates[GB_SSCFG_TEXT_CAP - 1] = 0;
-    for (i = 0; i < 11; i++) GB_SSCFG_MODNAME[i] = ss_saved_modname[i];
+    for (i = 0; i < 11; i++) SETTINGS_SAVER_MODNAME[i] = ss_saved_modname[i];
     gb_set_drive(old_drive);
 
     if (result == GB_SSCFG_SAVE) {
@@ -1232,7 +1191,7 @@ static void load_backdrop_live(const char *name, unsigned char drive)
 
     if (name[0]=='S' && name[1]=='O' && name[2]=='L' &&
         name[3]=='I' && name[4]=='D' && name[5]==0) {
-        *(unsigned char *)BD_SOLID_ADDR = 1;
+        SETTINGS_BACKDROP_SOLID = 1;
         return;
     }
 
@@ -1249,10 +1208,10 @@ static void load_backdrop_live(const char *name, unsigned char drive)
     gb_set_drive(old_drive);
     if (n >= 64) {
         for (i = 0; i < 64; i++)
-            ((char *)BD_TILE_ADDR)[i] = gb_copybuf[i];
-        *(unsigned char *)BD_SOLID_ADDR = 0;
+            SETTINGS_BACKDROP_TILE[i] = gb_copybuf[i];
+        SETTINGS_BACKDROP_SOLID = 0;
     } else {
-        *(unsigned char *)BD_SOLID_ADDR = 1;
+        SETTINGS_BACKDROP_SOLID = 1;
     }
 }
 #endif
@@ -1286,13 +1245,13 @@ static void live_apply(unsigned char r, const char *name, unsigned char drive)
         return;
     }
     if (is_backdrop) {
-        *(unsigned char *)BD_DRIVE_ADDR = drive;
-        *(unsigned char *)BD_SOLID_ADDR =
+        SETTINGS_BACKDROP_DRIVE = drive;
+        SETTINGS_BACKDROP_SOLID =
             (name[0]=='S' && name[1]=='O' && name[2]=='L' &&
              name[3]=='I' && name[4]=='D' && name[5]==0) ? 1 : 0;
     }
     {
-        char *dst = (char *)rows[r].tfr;
+        char *dst = rows[r].tfr;
         unsigned char i = 0;
         while (i < 8 && name[i]) { dst[i] = name[i]; i++; }
         while (i < 8) dst[i++] = ' ';
@@ -1438,8 +1397,8 @@ static void reset_defaults(void)
     cfg_get_inks(ink_cur);
     for (p = 0; p < NPEN; p++) apply_colour(p, ink_cur[p]);
 #endif
-    *(volatile unsigned char *)BD_SOLID_ADDR = 1;
-    *(volatile unsigned char *)BD_DRIVE_ADDR = DRIVE_NONE;
+    SETTINGS_BACKDROP_SOLID = 1;
+    SETTINGS_BACKDROP_DRIVE = DRIVE_NONE;
     s_draw();
     gb_curshow();
 }
@@ -1572,7 +1531,7 @@ static void s_proc(void)
 }
 
 static const gb_mwin_t smw = {
-    DEF_X, DEF_Y, DEF_W, DEF_H, 0, 0, s_proc, "Settings"
+    DEF_X, DEF_Y, DEF_W, DEF_H, 0, 0, s_proc, "Settings", 0
 };
 
 void main(void)

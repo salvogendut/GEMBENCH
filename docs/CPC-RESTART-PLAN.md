@@ -133,6 +133,8 @@ title/gadget selection and shared furniture to a checked F7 renderer module.
 to temporary owned filesystem contexts and checks post-dialog file readback.
 [Settings persistence gate 3D-W1](CPC-RESTART-STEP3D-W.md) now reuses the actual
 Settings edit block with verified M4 writes and live configuration reload.
+[W2-A](CPC-RESTART-STEP3D-W2-A.md) isolates Settings' native bindings and adds
+a compile-only requirement/layout audit; no native app admission is enabled.
 The Settings application/System menu, full native implicit filesystem/reload
 contracts and complete shell remain gated (W2/W3 and subsequent integration).
 The experimental launcher does not enable a CPC desktop.
@@ -153,6 +155,53 @@ These are dependency gates, not five independent rewrites. Keep packages on
 separate issues/branches, measure each before moving on, and preserve the MSX2
 reference. CPC runtime media remain M4/Albireo only. Albireo requires its own
 backend proof; passing M4 is not an Albireo compatibility claim.
+
+## Desktop-first delivery update — 2026-09-07
+
+Following W1 and the completed W2-A source/audit checkpoint, prioritize the
+first **usable M4-backed CPC desktop**, separately from full MSX application
+parity. The acceptance path is:
+
+**Boot the actual shared Desktop → browse Disk C in the actual File Manager →
+launch Clock/Calculator → focus, move and close their windows.**
+
+The current estimate is **8–12 further small implementation checkpoints**,
+grouped into four work packages. This is a planning range, not a fixed count
+or a calendar estimate; a checkpoint is not necessarily one conversation turn.
+Desktop and File Manager have not yet received the detailed dependency audit
+performed for Settings, so their missing services may change the estimate.
+
+| Remaining work package | Estimated checkpoints | Exit condition |
+| --- | --- | --- |
+| Desktop-required native services, loading and memory placement | 3–4 | Audit the actual Desktop/File Manager dependencies; bind the minimum owned filesystem and native application/service profiles to checked allocations. Reuse the shared core and qualified CPC providers. |
+| Actual Desktop integration | 2–3 | Boot its real root surface, icons, Desk/System menus and application-launch/return paths; expose only qualified actions. |
+| Actual File Manager integration | 2–3 | Browse Disk C and its directories, return to parents and launch supported applications with correct ownership, focus and error handling. |
+| Combined M4 validation and packaging | 1–2 | Repeated boot/browse/launch/close, overlapping-window repaint, Clock background updates and pointer responsiveness pass together; produce a clearly identified testable desktop image. |
+
+The shared window manager, graphics/input, Clock/Calculator, Desk activation,
+appearance providers, native picker and W1 persistence already provide working
+foundations. Reuse them; do not restart these components or introduce another
+CPC-specific desktop/window-manager implementation.
+
+Complete Settings, screensavers, PAINT, BASIC and the rest of application parity
+are **not prerequisites for this first desktop milestone**. Settings remains a
+useful consumer for qualifying shared filesystem/persistence work, but defer
+Settings-only completeness when it does not unblock Desktop/File Manager.
+Unqualified actions must be visibly unavailable or omitted, not implemented as
+successful no-ops. This changes the delivery order, not the runtime admission,
+memory, ownership or regression requirements.
+
+**Next:** audit the real Desktop/File Manager service requirements against the
+qualified runtime and W2-A inventory, then implement their next missing owned
+filesystem/loading dependency. Record concrete blockers and results in the
+existing checkpoint documents. The earlier W2/W3 scope remains tracked, but
+finishing every Settings/saver action before starting Desktop is no longer a
+delivery requirement.
+
+Use private M4 image copies for automated runtime tests; no slow floppy tests.
+Keep normal MSX media and user cards/recordings untouched. Albireo remains a
+separate backend qualification, and preserve the working MSX reference through
+proportionate regressions or byte comparisons where applicable.
 
 The goal is to bring the CPC back with the software features and application
 behavior of the working MSX2 distribution, using a shared implementation of

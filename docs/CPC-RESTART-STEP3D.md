@@ -57,6 +57,9 @@ The [3D-W1 persistence gate](CPC-RESTART-STEP3D-W.md) now binds the actual
 Settings configuration edit to checked M4 writes, readback verification and
 live reload. The Settings window and System menu remain W2/W3 dependencies;
 the private update path does not enable the legacy `GB_RELOAD` contract.
+[W2-A](CPC-RESTART-STEP3D-W2-A.md) isolates Settings' platform references and
+audits its unresolved CPC services and data placement. This is compile-only;
+native Settings launch and the complete W2 service profile remain gated.
 The [Clock/cursor responsiveness follow-up](CPC-CLOCK-RESPONSIVENESS.md) addresses
 input stalls reported during manual 3D-S testing before those asset families.
 The 3D-B/C/D/E/F/G/H/I/J/K/L documents supersede the drawing/parameter/compositor/cleanup/registration/deferred-timer/input-routing/private-loader/read-context/directory/write/free-space/first-APP gaps and measurements below;

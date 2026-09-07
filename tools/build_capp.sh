@@ -427,7 +427,9 @@ fi
 
 deps=("$0" "tools/build_cache.sh" "tools/check_app_layout.py" "$CRT0_SRC" "$GBLIB_SRC" "$GB/gb.h")
 if [ "$APP" = "apps/settings" ]; then
-    deps+=("$APP/core/config_keypos.inc" "$APP/core/config_edit.inc")
+    deps+=("$APP/core/config_keypos.inc" "$APP/core/config_edit.inc"
+           "$APP/platform/legacy.h" "$APP/platform/ink_legacy.inc"
+           "$APP/platform/saver_legacy.inc")
 fi
 if [ "$APP" = "apps/desktop" ]; then
     deps+=("$APP/core/bar_render.inc" "$APP/core/bar_refresh.inc" "$APP/core/accessory_open.inc")
