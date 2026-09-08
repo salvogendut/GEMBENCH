@@ -71,7 +71,10 @@ preamble_size=$(python3 tools/embed_app_icon.py size-v4 \
     "$APP_MANIFEST" "${icon_args[@]}")
 CODE_LOC=$(printf '0x%X' $((0x4000 + preamble_size)))
 
-python3 tools/gblib_subset.py lib/gb/gblib.s "$work/gblib.s" \
+# Universal apps can run with interrupts enabled on every target. Never pop a
+# two-byte word and rewind SP to consume one byte: an IRQ can overwrite the
+# caller's next live stack byte (e.g. Clock's saved digit X coordinate).
+python3 tools/gblib_subset.py --interrupt-safe lib/gb/gblib.s "$work/gblib.s" \
     "$GBLIB_UNIVERSAL" "$GBLIB_SYMBOLS"
 "$SDAS" -o "$work/crt0_v4.rel" lib/gb/crt0_v4.s
 "$SDAS" -o "$work/gbsys.rel" lib/gb/gbsys.s

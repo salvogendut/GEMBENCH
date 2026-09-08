@@ -26,7 +26,7 @@ void gb_saverect(unsigned char x,unsigned char y,unsigned char w,unsigned char h
 void gb_restorerect(unsigned char x,unsigned char y,unsigned char w,unsigned char h,const void *buf)
 { assert(buf==saved && x==sx && y==sy && w==sw && h==sh);restores++; }
 unsigned char gb_popup(unsigned char x,unsigned char y,const char *const *labels,unsigned char n)
-{ assert(x<GB_COLS && y<GB_LINES && n && labels[0]);pops++;return choice; }
+{ assert(x<GB_COLS && y<GB_LINES && n && labels[0] && choice<n);pops++;return choice; }
 unsigned char gb_prompt(const char *caption,char *buf,unsigned char maxlen)
 { assert(caption && maxlen<=12);prompts++;strcpy(buf,"ABC");return choice; }
 static void reset(unsigned char op)
@@ -50,7 +50,11 @@ int main(void)
     assert(status==0 && !UI_RES && saves==1 && restores==1 && width==320 && height==200);
     for (unsigned char op=3;op<=8;op++) if (op!=6) { reset(op);rejected(); }
     reset(1);rejected(); /* zero rows */
-    reset(1);UI_N=17;rejected();
+    reset(1);UI_N=GB_UI_POPUP_MAX+1;rejected();
+    reset(1);UI_N=GB_UI_POPUP_MAX;UI_LINE=110;choice=GB_UI_POPUP_MAX-1;
+    memcpy(UI_TEXT,"SOLID",6);
+    for (unsigned char i=1;i<GB_UI_POPUP_MAX;i++) memcpy(UI_TEXT+6+(i-1)*11,"C:12345678",11);
+    native_ui_main();assert(status==0 && UI_RES==choice && pops==1);
     reset(6);UI_N=9;rejected();
     reset(1);UI_N=1;memset(UI_TEXT,'X',232);rejected();
     reset(1);UI_N=1;UI_COL=79;strcpy(UI_TEXT,"Wide");rejected();

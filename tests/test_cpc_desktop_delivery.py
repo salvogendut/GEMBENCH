@@ -124,6 +124,48 @@ class DesktopDeliveryTests(unittest.TestCase):
         self.manifest['files']['CORE.BIN']=hashlib.sha256(changed).hexdigest();self.save()
         with self.assertRaisesRegex(ValueError,'admission contract'): validate(self.media)
 
+    def settings_profile(self):
+        self.filemgr_profile()
+        payload=b'build-matched appearance Settings'
+        contract=len(payload).to_bytes(2,'little')+zlib.crc32(payload).to_bytes(4,'little')
+        core=(self.media/'CARD/CORE.BIN').read_bytes();at=0x8000+len(core)
+        for name,data in {'GBENCH/SETTINGS.BIN':payload,'CORE.BIN':core+contract}.items():
+            (self.media/'CARD'/name).write_bytes(data)
+            self.manifest['files'][name]=hashlib.sha256(data).hexdigest()
+        self.manifest['profile']='cpc-desktop-m4-v3'
+        self.manifest['sections']['settings']=dict(staged=True,private_integration=True,
+            source='apps/settings/main.c',code_bytes=len(payload),code_sha256=hashlib.sha256(payload).hexdigest(),
+            contract=contract.hex(),runtime_contract=at,
+            settings=['FONT','ICONS','CURSOR','TITLEBAR','GADGETS','BACKDROP'])
+        self.save()
+
+    def test_settings_delivery_requires_both_checked_native_contracts(self):
+        self.settings_profile()
+        self.assertEqual(validate(self.media,pristine=True),self.manifest)
+        original=json.dumps(self.manifest)
+        for key,value in (('staged',False),('private_integration',False),('source','other.c'),
+                          ('settings',['PALETTE']),('code_bytes',1),('code_sha256','wrong'),
+                          ('contract','000000000000'),('runtime_contract',0x7FFF)):
+            with self.subTest(key=key):
+                self.manifest=json.loads(original)
+                self.manifest['sections']['settings'][key]=value;self.save()
+                with self.assertRaises(ValueError):validate(self.media)
+        self.manifest=json.loads(original)
+        self.manifest['sections']['filemgr']['contract']='000000000000';self.save()
+        with self.assertRaisesRegex(ValueError,'File Manager.*admission contract'):validate(self.media)
+
+    def test_settings_cannot_be_smuggled_into_an_older_delivery_profile(self):
+        self.settings_profile()
+        self.manifest['profile']='cpc-desktop-m4-v2';self.save()
+        with self.assertRaisesRegex(ValueError,'Settings requires'):validate(self.media)
+
+    def test_settings_rejects_unbound_kernel_even_with_correct_staging_hash(self):
+        self.settings_profile()
+        core=bytearray((self.media/'CARD/CORE.BIN').read_bytes());core[-6:]=bytes(6)
+        (self.media/'CARD/CORE.BIN').write_bytes(core)
+        self.manifest['files']['CORE.BIN']=hashlib.sha256(core).hexdigest();self.save()
+        with self.assertRaisesRegex(ValueError,'Settings.*admission contract'):validate(self.media)
+
     def test_manual_launcher_uses_only_generated_m4_configuration(self):
         (self.root/'tools').mkdir()
         runner = self.root/'tools/run_cpc.sh'

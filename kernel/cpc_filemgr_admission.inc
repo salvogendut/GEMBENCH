@@ -8,6 +8,10 @@ cpc_filemgr_contract
                 dw 0                        ; exact linked payload size
                 dw 0,0                      ; IEEE CRC32 of all loaded bytes
 cpc_filemgr_admission
+                ifdef CPC_NATIVE_SETTINGS
+                ld de,cpc_filemgr_contract
+                jp cpc_native_contract_admission
+                else
                 ld hl,(fs_ent_size+2)
                 ld a,h
                 or l
@@ -37,3 +41,4 @@ cpc_filemgr_crc_check
 cpc_filemgr_reject
                 or a
                 ret
+                endif

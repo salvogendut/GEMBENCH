@@ -54,7 +54,14 @@ unsigned char gb_popup(unsigned char x,unsigned char y,const char *const *items,
 {
     assert(y==8);
     if(x==10) {assert(n==2 && !strcmp(items[0],"Clock") && !strcmp(items[1],"Calculator"));}
-    else {assert(x==17 && n==3 && !strcmp(items[1],"Tidy Icons") && !strcmp(items[2],"About GEOBENCH"));}
+    else {
+        assert(x==17 && n==DESKTOP_SYSTEM_ITEM_COUNT && !strcmp(items[1],"Tidy Icons"));
+#if DESKTOP_SETTINGS_READY
+        assert(!strcmp(items[2],"Settings") && !strcmp(items[3],"About GEOBENCH"));
+#else
+        assert(!strcmp(items[2],"About GEOBENCH"));
+#endif
+    }
     return popup_choice;
 }
 void gb_alert(const char *a,const char *b) {assert(a && b);alerts++;}
@@ -96,7 +103,17 @@ int main(void)
     root_bar();assert(footprints==prior_footprints+1); /* no repeated bar painting */
     root_window->on_repaint();assert(footprints==prior_footprints+2);
     menu_select(17,0);assert(!show_ram);
-    menu_select(17,2);assert(want_about==2 && !ui_calls);on_frame();assert(!want_about && ui_calls==1);
+#if DESKTOP_SETTINGS_READY
+    unsigned int settings_opens=opens;
+    host_focus=0;menu_select(17,2);
+    assert(!want_settings && opens==settings_opens+1 && !memcmp(opened,"SETTINGSBIN",11));
+    host_windows=8;host_pages=0;menu_select(17,2);assert(opens==settings_opens+1);
+    host_windows=1;host_pages=26;
+    menu_select(17,3);
+#else
+    menu_select(17,2);
+#endif
+    assert(want_about==2 && !ui_calls);on_frame();assert(!want_about && ui_calls==1);
     unsigned int before=alerts,prior_opens=opens;
     host_focus=0;click_icon(IDX_C);
 #if DESKTOP_FILEMGR_READY

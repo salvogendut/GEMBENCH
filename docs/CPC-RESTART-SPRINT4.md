@@ -39,7 +39,10 @@ repaint or patch the emulator. The regular manual M4 image has been rebuilt
 and verified against the passing isolated candidate. The accepted Sprint 3
 card was backed up before replacement.
 
-Publication follows this accepted checkpoint on `feature/77-cpc-production-adapters`.
+Published as commit `80800be`, pushed to `feature/77-cpc-production-adapters`,
+then merged into `main` by [PR #78](https://github.com/salvogendut/GEMBENCH/pull/78)
+on 2026-09-08 (merge commit `68b1607`; issue #77 closed). Only after that merge,
+[Settings integration](CPC-SETTINGS-INTEGRATION.md) began on a separate branch.
 
 ### Final automated acceptance and delivery — 2026-09-08
 

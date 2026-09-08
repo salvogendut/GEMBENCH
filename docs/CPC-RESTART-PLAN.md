@@ -5,8 +5,16 @@ Step-1 branch: `feature/cpc-restart-reference`.
 
 **Current status — 2026-09-08:** all four desktop-first sprints are implemented,
 automatically qualified and manually accepted. The usable M4 CPC Desktop/File
-Manager with Clock/Calculator is ready to merge. Next is application parity,
-starting with the existing Settings application and its W2-A audit. Earlier
+Manager with Clock/Calculator was merged in [PR #78](https://github.com/salvogendut/GEMBENCH/pull/78)
+(`68b1607`). Application parity has now started with the existing Settings
+application under [issue #79](https://github.com/salvogendut/GEMBENCH/issues/79),
+branch `feature/79-cpc-settings`; see the [integration plan](CPC-SETTINGS-INTEGRATION.md).
+Settings passed private storage-fault/stress qualification (20 scenarios / 316
+checkpoints) and is now included in the normal M4 image as `cpc-desktop-m4-v3`.
+The previous accepted card is backed up. The 28-scenario delivery gate passed
+323 pixel checkpoints, alongside 285 host tests and openMSX Screen 6/7 accessory
+checks. The user accepted the manual image on 2026-09-08 and requested PR/merge.
+See that plan for evidence and limitations. Earlier
 checkpoint descriptions below are historical, not the current delivery status.
 
 Progress: step 1 is complete. Step 2 has begun with

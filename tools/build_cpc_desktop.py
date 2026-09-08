@@ -28,7 +28,8 @@ def compile_desktop(work, runtime, sym, root=ROOT):
     if not sdcc: raise RuntimeError('SDCC required')
     bindir=Path(sdcc).parent;sdas=os.environ.get('SDAS',str(bindir/'sdasz80'))
     (work/'desktop_lib.s').write_text(generate(root/'lib/gb/gblib.s',
-                                               [root/'apps/desktop/platform/cpc.symbols']))
+        [root/'apps/desktop/platform/cpc.symbols'],
+        interrupt_safe=sym.get('cpc_settings_profile')==1))
     (work/'desktop_boot.s').write_text('.module desktop_boot\n'+''.join(
         f'.globl _desktop_{name}\n_desktop_{name} = {sym["cpc_desktop_"+name]}\n'
         for name in ('start','collect')))
@@ -78,9 +79,11 @@ def compile_desktop(work, runtime, sym, root=ROOT):
                 base=base,used=len(raw),budget=end-base,data_base=data,
                 data_used=sum(n for k,(_,n) in areas.items() if k not in LOADED_AREAS),
                 data_budget=limit-data,snapshot_base=sym['cpc_app_limit'],areas=areas,
-                main_requirements=sorted(refs),system_items=['Ram Usage','Tidy Icons','About GEOBENCH'],
+                main_requirements=sorted(refs),system_items=['Ram Usage','Tidy Icons']+
+                    (['Settings'] if sym.get('cpc_settings_profile')==1 else [])+['About GEOBENCH'],
                 deferred=([] if sym.get('cpc_filemgr_profile')==1 else ['native File Manager admission'])+
-                         ['Settings','savers','wallpaper/PIC paging',
+                         ([] if sym.get('cpc_settings_profile')==1 else ['Settings'])+
+                         ['savers','wallpaper/PIC paging',
                           'trash/delete','media refresh/hotplug','firmware exit'])
     (work/'desktop_layout.json').write_text(json.dumps(report,indent=2)+'\n')
     return report

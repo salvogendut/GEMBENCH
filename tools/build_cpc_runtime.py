@@ -78,19 +78,25 @@ def assemble(work: Path, overrides=()):
     return sym
 
 
-def build(desktop=False, filemgr=False, *, delivery=False):
+def build(desktop=False, filemgr=False, *, delivery=False, settings=False):
+    if settings: filemgr=True
     if delivery and not desktop:
         raise ValueError('Desktop delivery requires an explicit Desktop profile')
     desktop = desktop or filemgr
-    variant = 'desktop' if delivery else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
+    variant = 'desktop' if delivery else 'settings-contract' if settings else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
     work = ROOT / ('build/cpc-'+variant)
     overrides=('-DCPC_NATIVE_DESKTOP=1',) if desktop else ()
     if filemgr: overrides+=('-DCPC_NATIVE_FILEMGR=1',)
+    if settings: overrides+=('-DCPC_NATIVE_SETTINGS=1',)
     sym = assemble(work,overrides)
     if filemgr:
         from build_cpc_filemgr import compile_filemgr, bind_runtime
         compile_filemgr(work/'filemgr',work,sym)
         bind_runtime(work,work/'filemgr',sym)
+    if settings:
+        from build_cpc_settings import compile_settings
+        compile_settings(work/'settings',work,sym)
+        bind_runtime(work,work/'settings',sym,name='settings',title='Settings',filename='SETTINGS.native.bin')
     if desktop:
         from build_cpc_desktop import compile_desktop
         layout=compile_desktop(work,work,sym)
@@ -147,6 +153,8 @@ def build(desktop=False, filemgr=False, *, delivery=False):
              "PICKTEST/INNER/HELLO.TXT": b"Picked from M4!\n"})
     if filemgr:
         files['GBENCH/FILEMGR.BIN']=(work/'filemgr/FILEMGR.native.bin').read_bytes()
+    if settings:
+        files['GBENCH/SETTINGS.BIN']=(work/'settings/SETTINGS.native.bin').read_bytes()
     for tile in (ROOT/'assets/backdrops').glob('*.BDP'):
         files['GBENCH/'+tile.name.upper()] = tile.read_bytes()
     for folder,ext in (('titlebars','TBR'),('gadgets','GDT')):
@@ -205,6 +213,12 @@ def build(desktop=False, filemgr=False, *, delivery=False):
         if delivery:
             sections['filemgr'].update(staged=True,
                 status='build-matched native File Manager; not a portable APP')
+    if settings:
+        sections['settings']=json.loads((work/'settings_layout.json').read_text())
+        sections['settings'].update(staged=True,launch='shared Desktop System > Settings'+('' if delivery else ' (private)'))
+        if delivery:
+            sections['settings']['status']='build-matched native Settings; not a portable APP'
+        sections['settings']['deferred'].remove('System menu launch')
     sections.update(json.loads((work / "native_layout.json").read_text()))
     manifest = dict(work=str(work), image=str(image), regions=memory_regions(sym), sections=sections,
                     native_identity=json.loads((work/'native_identity.json').read_text()),
@@ -215,8 +229,12 @@ def build(desktop=False, filemgr=False, *, delivery=False):
                            "private actual Desktop boot contract; File Manager not admitted" if desktop else
                            "experimental universal launcher; not Desktop/distribution")
     if delivery:
-        manifest.update(profile='cpc-desktop-m4-v2' if filemgr else 'cpc-desktop-m4-v1', storage='m4', directories=list(directories),
+        manifest.update(profile='cpc-desktop-m4-v3' if settings else 'cpc-desktop-m4-v2' if filemgr else 'cpc-desktop-m4-v1', storage='m4', directories=list(directories),
                         image_sha256=hashlib.sha256(image.read_bytes()).hexdigest())
+        if settings:manifest['status']='experimental CPC M4 Desktop with native File Manager and appearance Settings'
+    if settings and not delivery:
+        manifest.update(profile='cpc-settings-m4-private-v1',storage='m4',
+                        status='private Settings launch/persistence qualification; not a distribution')
     (media / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     # Explicit private config: manual testing never edits the user's normal
     # machine setup or mounts their existing M4/Albireo card.

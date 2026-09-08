@@ -7,8 +7,16 @@ cd "$(dirname "$0")/.."
 [ -s build/universal/CLOCK.APP ]
 [ -s build/universal/CALC.APP ]
 cmp -s build/msx/DESKTOP.RAW QA/MSX/CARD/GBENCH/DESKTOP.APP
-cmp -s build/universal/CLOCK.APP QA/MSX/CARD/GBENCH/CLOCK.APP
-cmp -s build/universal/CALC.APP QA/MSX/CARD/GBENCH/CALC.APP
+# SDK regression runs may stage freshly rebuilt compile-once apps on the
+# disposable card without rebuilding or modifying the accepted MSX media.
+case "${GEOBENCH_ACCESSORY_REBUILT_APPS:-0}" in
+    0)
+        cmp -s build/universal/CLOCK.APP QA/MSX/CARD/GBENCH/CLOCK.APP
+        cmp -s build/universal/CALC.APP QA/MSX/CARD/GBENCH/CALC.APP
+        ;;
+    1) ;;
+    *) echo 'GEOBENCH_ACCESSORY_REBUILT_APPS must be 0 or 1' >&2; exit 1 ;;
+esac
 
 app_signature() {
     local image="$1" noi="$2" main offset
@@ -38,6 +46,9 @@ cleanup() { rm -rf -- "$stage"; }
 trap cleanup EXIT
 mkdir "$stage/card"
 cp -a QA/MSX/CARD/. "$stage/card/"
+if [ "${GEOBENCH_ACCESSORY_REBUILT_APPS:-0}" = 1 ]; then
+    cp build/universal/CLOCK.APP build/universal/CALC.APP "$stage/card/GBENCH/"
+fi
 sed -i "s/^MSXMODE=.*/MSXMODE=${MSX_TEST_MODE:-7}/" "$stage/card/GEOBENCH.CFG"
 rm -f -- "$stage/card/UNAPINET.COM" "$stage/card/UNAPI.TXT"
 printf 'GBMSX\r\n' > "$stage/card/AUTOEXEC.BAT"

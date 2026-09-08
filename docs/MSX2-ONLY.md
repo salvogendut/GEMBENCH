@@ -5,6 +5,12 @@
 `make cpc` Desktop build under `QA/CPC-Desktop/`. It reuses the qualified shared
 Desktop/core and portable Clock/Calculator; Disk C opens the actual native File
 Manager through its build-specific admission contract.
+[Settings integration #79](CPC-SETTINGS-INTEGRATION.md) now adds the shared
+six-row appearance Settings via System > Settings in `cpc-desktop-m4-v3`.
+Private storage-fault qualification and all 28 normal-image regression scenarios
+passed; the user accepted the manual image on 2026-09-08. Palette, wallpaper,
+savers and reset are
+not included in the CPC Settings profile.
 The parked `QA/CPC/` tree is not an output or source. PCW and bundled BASIC
 remain MSX-only, and this is not a full CPC application-parity release.
 The original retirement decision and subsequent diagnostic history follow.

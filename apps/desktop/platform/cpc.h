@@ -5,6 +5,10 @@
 #error "Desktop requires checked CPC runtime bindings"
 #endif
 #include GB_DESKTOP_BINDINGS
+#if DESKTOP_SETTINGS_READY
+#undef DESKTOP_SYSTEM_ITEM_COUNT
+#define DESKTOP_SYSTEM_ITEM_COUNT 4
+#endif
 #define GB_DESKTOP_PROVIDER_VERSION 1
 #define MENU_DEF DESKTOP_MENU
 #define WM_FS DESKTOP_FULLSCREEN

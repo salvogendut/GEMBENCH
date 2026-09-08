@@ -14,7 +14,7 @@ from cpc_desktop_media import validate
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def cases():
+def cases(settings=False):
     result = [('desktop', []), ('lifecycle', ['--filemgr'])]
     result += [(name, ['--filemgr-scenario', name]) for name in
                ('workflow', 'services', 'contexts', 'stacking', 'minute-cadence', 'cadence')]
@@ -22,6 +22,9 @@ def cases():
                ('missing', 'short', 'oversized', 'corrupt', 'unbound', 'no-register')]
     result += [('root-'+name, ['--root-fault', name]) for name in
                ('missing', 'short', 'oversized', 'cfg-missing', 'cfg-short', 'cfg-oversized')]
+    if settings:
+        result += [('settings-'+name,['--settings-case',name]) for name in
+                   ('normal','mixed','contexts','missing','short','corrupt','unbound','edit-missing')]
     return result
 
 
@@ -44,12 +47,13 @@ def run(emulator, jobs=1, skip_build=False):
         subprocess.run([sys.executable, str(ROOT/'tools/build_cpc.py')], cwd=ROOT, check=True)
     media = ROOT/'QA/CPC-Desktop'
     manifest = validate(media, pristine=True)
-    if manifest['profile'] != 'cpc-desktop-m4-v2':
+    if manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3'):
         raise ValueError('combined acceptance requires Desktop plus File Manager')
-    artifacts = Path(tempfile.mkdtemp(prefix='geobench-cpc-delivery-'))
+    artifact_root=ROOT/'build/cpc-delivery-runtime';artifact_root.mkdir(parents=True,exist_ok=True)
+    artifacts = Path(tempfile.mkdtemp(prefix='geobench-cpc-delivery-',dir=artifact_root))
     print('Delivery acceptance logs: '+str(artifacts), flush=True)
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        results = list(pool.map(lambda case: run_case(case, emulator, artifacts), cases()))
+        results = list(pool.map(lambda case: run_case(case, emulator, artifacts), cases('settings' in manifest['sections'])))
     # Each child verifies the actual FAT payload before using a private image.
     # Verify the source manifest/staging/image remained pristine after ALL runs.
     if validate(media, pristine=True) != manifest:

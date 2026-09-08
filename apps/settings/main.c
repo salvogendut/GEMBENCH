@@ -52,11 +52,16 @@
 #if GB_SETTINGS_PROVIDER_VERSION != 1
 #error "Unsupported Settings platform provider contract"
 #endif
+#ifndef GB_SETTINGS_APPEARANCE_ONLY
+#define GB_SETTINGS_APPEARANCE_ONLY 0
+#endif
 
 #define TITLE_H   14
 #define DEF_X     18
 #define DEF_W     58           /* byte cols (232 px) */
-#ifdef GB_MSX2
+#if GB_SETTINGS_APPEARANCE_ONLY
+#define DEF_H     112          /* six qualified appearance rows and footer */
+#elif defined(GB_MSX2)
 #define DEF_H     198          /* includes video mode and Return to Defaults rows */
 #elif defined(GB_PCW)
 #define DEF_H     174          /* fixed monochrome palette: no Colours row */
@@ -104,14 +109,18 @@
 #define DRIVE_NONE 0xFF
 
 static unsigned char win_x, win_y, win_w, win_h;
+#if !GB_SETTINGS_APPEARANCE_ONLY
 static unsigned char titlebar_repaint;
+#endif
 static void s_draw(void);      /* forward: the colours editor repaints the window on exit */
-#if defined(GB_PREEMPTIVE) && !defined(GB_PCW)
+#if defined(GB_PREEMPTIVE) && !defined(GB_PCW) && !GB_SETTINGS_APPEARANCE_ONLY
 static void colp_draw(void);   /* a compositor repaint must preserve the active editor */
 #endif
 static void draw_selector(unsigned char row, const char *value);
+#if !GB_SETTINGS_APPEARANCE_ONLY
 static void saver_value(char *dst);       /* forward: s_draw shows the current SAVERTIME= (#219) */
 static void ss_module_value(char *dst);   /* forward: s_draw shows the current SAVER= module (#219) */
+#endif
 
 /* MIN_IST_ICONS: the exact icon count for an .IST to be offered as the desktop icon
    set. App-owned icons moved into GBAP headers, leaving 21 resident
@@ -140,10 +149,16 @@ static const setting_t rows[] = {
     { "Title bar","TITLEBAR=","TBR", 0,             0 },       /* paged app-linked installer */
     { "Gadgets", "GADGETS=", "GDT", 0,             0 },       /* independent close/maximize pair */
     { "Backdrop","BACKDROP=","BDP", 0,             SETTINGS_BACKDROP_NAME },
+#if !GB_SETTINGS_APPEARANCE_ONLY
     { "Wallpaper","WALLPAPER=","PIC", 0,           0 },       /* no live tfr: the desktop reads
                                                                  WALLPAPER= from the config (#216) */
+#endif
 };
+#if GB_SETTINGS_APPEARANCE_ONLY
+#define NROWS 6
+#else
 #define NROWS 7
+#endif
 
 /* GEOBENCH.CFG is loaded once into a full-sector buffer (gb_fs_load copies WHOLE
    512-byte sectors, so a smaller buffer would overflow into the globals after it). */
@@ -152,7 +167,11 @@ static unsigned int cfglen;
 
 /* the popup file list: stems of the matching files in /GBENCH. Flat buffer + a pointer
    array (a 2D char array indexed by a uchar wraps the *width at 8 bits - see the FM). */
+#ifdef GB_SETTINGS_MAX_STEMS
+#define MAXST GB_SETTINGS_MAX_STEMS
+#else
 #define MAXST 24      /* max files a picker lists (savers/icons/fonts); the popup scrolls */
+#endif
 #define STLEN 11
 static char stembuf[MAXST * STLEN];
 static const char *stems[MAXST];
@@ -181,7 +200,9 @@ static unsigned char picker_drive_pos, picker_drive, picker_old_drive;
 static unsigned char picker_back_left, picker_filter_pos, picker_keep;
 
 static void picker_row_finish(unsigned char r);
+#if !GB_SETTINGS_APPEARANCE_ONLY
 static void ss_module_finish(void);
+#endif
 #endif
 
 /* sel_boot: pin the active drive to the boot drive, where GEOBENCH.CFG + /GBENCH
@@ -272,8 +293,16 @@ static void cfg_path(char *dst, unsigned char drive, const char *stem, const cha
     dst[j] = 0;
 }
 
-/* cfg_set: write val into KEY's line (replace in place, preserving other keys; append
-   the line if KEY is absent), then save GEOBENCH.CFG to the boot drive. Best-effort. */
+/* cfg_set: persist a setting. Legacy builds use the best-effort editor below;
+   the native appearance profile uses the provider's verified transaction. */
+#if GB_SETTINGS_APPEARANCE_ONLY
+/* The provider publishes this app's copy only after verified persistence.
+ * Do not fall through to the legacy best-effort save or transfer-area reload. */
+static unsigned char cfg_set(const char *key, const char *val)
+{
+    return settings_commit(key, val, cfgbuf, &cfglen);
+}
+#else
 static void cfg_set(const char *key, const char *val)
 {
 #include "core/config_edit.inc"
@@ -290,6 +319,8 @@ static void cfg_set(const char *key, const char *val)
         SETTINGS_CONFIG_LENGTH = cfglen;
     }
 }
+
+#endif
 
 /* ---- /GBENCH and /PICS enumeration ------------------------------------------ */
 
@@ -317,22 +348,31 @@ static unsigned char enter_assets(unsigned char pictures)
     return 0;
 }
 
-/* ist_count: load the icon set `stem`.IST into the kernel copy buffer (low RAM, big
-   enough for a full set, so no app bank is spent) and return its GBIS header icon
-   count - 0 if it isn't a valid set or is too big to load. */
+/* ist_count: inspect the GBIS header count. Legacy builds load the whole set;
+   the native appearance profile reads only a bounded, app-owned header. */
 static unsigned char ist_count(const char *stem)
 {
     char nm[11];
+#if GB_SETTINGS_APPEARANCE_ONLY
+    char header[16];
+#endif
     unsigned char k;
     unsigned int n;
     for (k = 0; k < 8; k++) nm[k] = ' ';
     for (k = 0; k < 8 && stem[k]; k++) nm[k] = stem[k];
     nm[8] = 'I'; nm[9] = 'S'; nm[10] = 'T';
     gb_set_name(nm);
+#if GB_SETTINGS_APPEARANCE_ONLY
+    n = gb_fs_load(header, sizeof(header)); /* header only; no legacy low-RAM copy buffer */
+    if (n < 16 || header[0] != 'G' || header[1] != 'B' ||
+        header[2] != 'I' || header[3] != 'S') return 0;
+    return (unsigned char)header[5];
+#else
     n = gb_fs_load(gb_copybuf, GB_COPYMAX);
     if (n < 16 || gb_copybuf[0] != 'G' || gb_copybuf[1] != 'B'
         || gb_copybuf[2] != 'I' || gb_copybuf[3] != 'S') return 0;
     return (unsigned char)gb_copybuf[5];
+#endif
 }
 
 /* enumerate_boot: fill stems[] with the names of files in the BOOT drive's /GBENCH
@@ -509,12 +549,24 @@ static void picker_add_entry(const char *ext)
 
 static void picker_start(unsigned char row, unsigned char saver)
 {
+#if GB_SETTINGS_APPEARANCE_ONLY
+    if (saver || row >= NROWS) return;
+#endif
     if (picker_state != PICK_IDLE) return;
     if (gb_drop_claimed()) {
         gb_alert("Storage busy", "Try again shortly.");
+#if GB_SETTINGS_APPEARANCE_ONLY
+        gb_curhide();
+#endif
         s_draw();
+#if GB_SETTINGS_APPEARANCE_ONLY
+        gb_curshow();
+#endif
         return;
     }
+#if GB_SETTINGS_APPEARANCE_ONLY
+    settings_io_reset();
+#endif
     picker_row = row;
     picker_flags = saver ? PICKF_SAVER : 0;
     if (saver || row == ROW_BACKDROP || row == ROW_WALLPAPER)
@@ -550,6 +602,17 @@ static void picker_step(void)
     char *p;
     unsigned char n, k, done_saver, done_row;
     unsigned int src, dst;
+
+#if GB_SETTINGS_APPEARANCE_ONLY
+    if (settings_io_failed()) {
+        picker_cancel();
+        gb_alert("Cannot read assets", "Storage operation failed.");
+        gb_curhide();
+        s_draw();
+        gb_curshow();
+        return;
+    }
+#endif
 
     if (picker_state == PICK_BACK) {
         gb_set_drive(picker_drive);
@@ -619,8 +682,13 @@ static void picker_step(void)
         gb_drop_release();
         picker_flags = 0;
         picker_state = PICK_IDLE;
+#if !GB_SETTINGS_APPEARANCE_ONLY
         if (done_saver) ss_module_finish();
-        else picker_row_finish(done_row);
+        else
+#else
+        (void)done_saver;
+#endif
+        picker_row_finish(done_row);
     }
 }
 #endif
@@ -647,9 +715,11 @@ static unsigned char selector_hit(unsigned char row,
                          SELECT_W, SELECT_H, mx, my);
 }
 
+#if !GB_SETTINGS_APPEARANCE_ONLY
 static const gb_action_t configure_action[1] = {
     { "Configure", 16 }
 };
+#endif
 
 /* paint the content: a white panel, each setting's label + current value, and a note
    that changes apply on the next boot. The WM already drew the frame/title/close. */
@@ -658,14 +728,21 @@ static void s_draw(void)
     unsigned char r;
     char val[16];
     win_x = gb_wm_x(); win_y = gb_wm_y(); win_w = gb_wm_w(); win_h = gb_wm_h();
-#if defined(GB_PREEMPTIVE) && !defined(GB_PCW)
+#if defined(GB_PREEMPTIVE) && !defined(GB_PCW) && !GB_SETTINGS_APPEARANCE_ONLY
     if (picker_state == PICK_COLOURS) {
         colp_draw();
         return;
     }
 #endif
+#if GB_SETTINGS_APPEARANCE_ONLY
+    /* Native kind descriptors give furniture to the shared window manager.
+       Content drawing must leave its one-byte side and bottom frame intact. */
+    gb_fill((unsigned char)(win_x + 1), (unsigned char)(win_y + TITLE_H),
+            (unsigned char)(win_w - 2), (unsigned char)(win_h - TITLE_H - 1), 1);
+#else
     gb_fill(win_x, (unsigned char)(win_y + TITLE_H), win_w,
             (unsigned char)(win_h - TITLE_H), 1);          /* white panel */
+#endif
     for (r = 0; r < NROWS; r++) {
         gb_textbw((unsigned char)(win_x + 1), row_y(r), rows[r].label);
 #ifdef GB_PREEMPTIVE
@@ -682,7 +759,7 @@ static void s_draw(void)
             unsigned char sx = (unsigned char)(win_x + 51), sy = row_y(r);  /* keep clear of the selector */
             if (SETTINGS_BACKDROP_SOLID)
                 gb_fill(sx, sy, 4, 8, 0);    /* SOLID -> a plain pen-0 (desktop) square */
-#if defined(GB_MSX2) || defined(GB_PCW)
+#if defined(GB_MSX2) || defined(GB_PCW) || GB_SETTINGS_APPEARANCE_ONLY
             else
                 gb_backdrop(sx, sy, 4, 8);   /* applies the target's native tile encoding */
 #else
@@ -692,6 +769,7 @@ static void s_draw(void)
             gb_frame(sx, sy, 4, 8, 2);       /* outline so it shows on the white panel */
         }
     }
+#if !GB_SETTINGS_APPEARANCE_ONLY
 #ifndef GB_PCW
     gb_textbw((unsigned char)(win_x + 1), row_y(COLOUR_ROW), "Colours...");
 #endif
@@ -736,8 +814,11 @@ static void s_draw(void)
         draw_selector(SS_TM_ROW, sv);
     }
     gb_textbw((unsigned char)(win_x + 1), row_y(RESET_ROW), "Return to Defaults...");
+#endif
     gb_textbw((unsigned char)(win_x + 1), (unsigned char)(win_y + win_h - 10),
-#ifdef GB_MSX2
+#if GB_SETTINGS_APPEARANCE_ONLY
+              "Appearance only. Saved live.");
+#elif defined(GB_MSX2)
               "Mode/input/font/icons: reboot.");
 #else
               "Font/icons: reboot.");
@@ -746,7 +827,7 @@ static void s_draw(void)
 
 /* ---- desktop colours (INKS=) ------------------------------------------------ */
 
-#ifndef GB_PCW
+#if !defined(GB_PCW) && !GB_SETTINGS_APPEARANCE_ONLY
 /* 5 colours: the 4 Mode-1 pens + the screen border (its own CPC ink). */
 #define NPEN 5
 #ifdef GB_MSX2
@@ -987,6 +1068,7 @@ static void colours_dialog(void)
 #endif
 
 /* ---- screensaver: module (SAVER=) + idle timeout (SAVERTIME=, #219) ---------- */
+#if !GB_SETTINGS_APPEARANCE_ONLY
 
 /* ss_module_value: the current SAVER= module/path (the default SQUARES when absent). */
 static void ss_module_value(char *dst)
@@ -1266,6 +1348,8 @@ static void live_apply(unsigned char r, const char *name, unsigned char drive)
     gb_reload();
 }
 
+#endif /* legacy saver/live-apply paths: the qualified provider owns persistence/reload */
+
 /* Present an already-enumerated row list, then write and apply the selection. */
 static void picker_row_finish(unsigned char r)
 {
@@ -1280,12 +1364,30 @@ static void picker_row_finish(unsigned char r)
     for (i = 0; i < nstem; i++) list[n++] = stems[i];
     if (n == 0) {
         gb_alert("No files found", "in /GBENCH.");
+#if GB_SETTINGS_APPEARANCE_ONLY
+        gb_curhide();
+#endif
         s_draw();
+#if GB_SETTINGS_APPEARANCE_ONLY
+        gb_curshow();
+#endif
         return;
     }
     sel = gb_popup((unsigned char)(win_x + VAL_COL), row_y(r), list, n);
     gb_curhide();
     if (sel != 0xFF) {
+#if GB_SETTINGS_APPEARANCE_ONLY
+        if (r == ROW_BACKDROP && sel == 0) {
+            path[0]='S'; path[1]='O'; path[2]='L'; path[3]='I'; path[4]='D'; path[5]=0;
+        } else {
+            cfg_path(path, boot_drive(), media ? list[sel] + 2 : list[sel], ext);
+        }
+        if (!cfg_set(rows[r].key, path)) {
+            gb_curshow();
+            gb_alert("Could not apply setting", "Check storage and retry.");
+            gb_curhide();
+        }
+#else
         if ((ext[0] == 'B' && list[sel][0] == 'S' && list[sel][1] == 'O' &&
              list[sel][2] == 'L' && list[sel][3] == 'I' && list[sel][4] == 'D' &&
              list[sel][5] == 0) ||
@@ -1310,7 +1412,13 @@ static void picker_row_finish(unsigned char r)
         }
         /* Titlebar changes schedule a clipped repaint for the next frame. Repainting from this
            picker callback would re-enter the WM while its modal UI path is still unwinding. */
+#endif
     }
+#if GB_SETTINGS_APPEARANCE_ONLY
+    /* Verified reload can repaint the stack and re-show the pointer. Re-hide
+       it before drawing the newly published value over its saved background. */
+    gb_curhide();
+#endif
     s_draw();                                /* repaint our content (new font/value) */
     gb_curshow();
 }
@@ -1357,6 +1465,7 @@ static void input_device_dialog(void)
 /* Replace the mutable config with the target-specific pristine copy shipped in
    /GBENCH (card/MSX) or the floppy root. Font, icons, cursor and MSX mode still
    take effect at the next boot; palette and desktop-owned settings are live. */
+#if !GB_SETTINGS_APPEARANCE_ONLY
 static void reset_defaults(void)
 {
     static const char *const choices[] = { "Return to Defaults", "Cancel" };
@@ -1403,12 +1512,14 @@ static void reset_defaults(void)
     gb_curshow();
 }
 
+#endif
+
 /* a content press: which row was clicked? */
 static void s_click(void)
 {
     unsigned char mx, my, r;
 #ifdef GB_PREEMPTIVE
-#ifndef GB_PCW
+#if !defined(GB_PCW) && !GB_SETTINGS_APPEARANCE_ONLY
     if (picker_state == PICK_COLOURS) { colours_click(); return; }
 #endif
     if (picker_state != PICK_IDLE) return;
@@ -1421,7 +1532,7 @@ static void s_click(void)
             return;
         }
     }
-#ifndef GB_PCW
+#if !defined(GB_PCW) && !GB_SETTINGS_APPEARANCE_ONLY
     {
         unsigned char ry = row_y(COLOUR_ROW);
         if (my >= (unsigned char)(ry - 2) && my < (unsigned char)(ry + ROW_H - 2)) {
@@ -1446,6 +1557,7 @@ static void s_click(void)
         }
     }
 #endif
+#if !GB_SETTINGS_APPEARANCE_ONLY
     {
         if (selector_hit(SS_MOD_ROW, mx, my)) {           /* #219: screensaver module */
             ss_module_dialog();
@@ -1475,8 +1587,10 @@ static void s_click(void)
             return;
         }
     }
+#endif
 }
 
+#if !GB_SETTINGS_APPEARANCE_ONLY
 static void s_drag(void)
 {
 #ifdef GB_PREEMPTIVE
@@ -1489,6 +1603,8 @@ static void s_drag(void)
     }
 }
 
+#endif
+
 static void s_frame(void)
 {
 #ifdef GB_PREEMPTIVE
@@ -1497,24 +1613,29 @@ static void s_frame(void)
         return;
     }
 #endif
+#if !GB_SETTINGS_APPEARANCE_ONLY
     if (!titlebar_repaint) return;
     titlebar_repaint = 0;
     /* Lower windows repaint first, and icon blits are not damage-clipped. Repaint
        our complete opaque surface so a desktop icon cannot show through the body. */
     gb_wm_damage(win_x, win_y, win_w, win_h);
     gb_restore_parent();
+#endif
 }
 
 static void s_close(void)
 {
 #ifdef GB_PREEMPTIVE
-#ifndef GB_PCW
+#if !defined(GB_PCW) && !GB_SETTINGS_APPEARANCE_ONLY
     if (picker_state == PICK_COLOURS) {
         colours_finish(0);
         return;
     }
 #endif
     picker_cancel();
+#endif
+#if GB_SETTINGS_APPEARANCE_ONLY
+    settings_end();
 #endif
     gb_wm_close();
 }
@@ -1526,21 +1647,44 @@ static void s_proc(void)
         case GB_MSG_CLICK: s_click();     break;
         case GB_MSG_FRAME: s_frame();     break;
         case GB_MSG_CLOSE: s_close();     break;
+#if !GB_SETTINGS_APPEARANCE_ONLY
         case GB_MSG_DRAG:  s_drag();      break;
+#endif
     }
 }
 
+#if GB_SETTINGS_APPEARANCE_ONLY
+static const gb_mwin_kind_t smw = {
+    { DEF_X, DEF_Y, DEF_W, DEF_H, 0, 0, s_proc, "Settings", 0 },
+    GB_WK_TITLE | GB_WK_CLOSE | GB_WK_MOVE
+};
+#else
 static const gb_mwin_t smw = {
     DEF_X, DEF_Y, DEF_W, DEF_H, 0, 0, s_proc, "Settings", 0
 };
+#endif
 
 void main(void)
 {
     unsigned char n;
+#if GB_SETTINGS_APPEARANCE_ONLY
+    gb_wm_managed_kind(&smw);
+    if (!settings_begin(cfgbuf, &cfglen)) {
+        gb_alert("Settings unavailable", "Check config and storage.");
+        settings_end();
+        gb_app_quit();
+        return;
+    }
+#else
     gb_wm_managed(&smw);                            /* register FIRST (no draw), like the other apps */
     sel_boot_root();
     gb_set_name("GEOBENCHCFG");
     cfglen = gb_fs_load(cfgbuf, sizeof(cfgbuf));   /* load the config once (0 if none) */
+#endif
     for (n = 64; n; n--) if (!gb_getkey()) break;  /* drain the launch keystrokes (#142) */
+#if GB_SETTINGS_APPEARANCE_ONLY
+    gb_repaint_top();
+#else
     gb_restore_parent();                            /* first paint: WM chrome + s_draw */
+#endif
 }

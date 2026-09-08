@@ -50,10 +50,11 @@ class NativeModuleTests(unittest.TestCase):
     def test_actual_ui_dispatch_and_bounded_profile(self):
         with tempfile.TemporaryDirectory(prefix='native-ui-') as tmp:
             output=Path(tmp)/'native-ui'
-            subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',
-                            '-I',str(ROOT/'lib/gb'),str(ROOT/'tests/native_ui_test.c'),
-                            '-o',str(output)],check=True)
-            subprocess.run([str(output)],check=True)
+            for flags in ([],['-DGB_UI_POPUP_MAX=17']):
+                subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',*flags,
+                                '-I',str(ROOT/'lib/gb'),str(ROOT/'tests/native_ui_test.c'),
+                                '-o',str(output)],check=True)
+                subprocess.run([str(output)],check=True)
 
     def test_common_module_transaction_and_explicit_provider(self):
         for name in ('kernel/modules.asm','kernel/cpc_native_modules.asm'):

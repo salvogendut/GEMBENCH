@@ -53,6 +53,9 @@ def main() -> None:
             build(app, rebuilt, extra)
             assert canonical.read_bytes() == rebuilt.read_bytes(), \
                 f"{identity} universal build is not deterministic"
+            sdk = (ROOT/'build/universal-obj'/Path(app).name/'gblib.s').read_text()
+            assert 'interrupt-safe one-byte argument' in sdk, \
+                f"{identity} still uses interrupt-unsafe byte arguments"
             manifest = parse_manifest(canonical.read_bytes())
             assert manifest["application_id"] == identity
             assert manifest["profile"] == 3

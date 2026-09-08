@@ -6,7 +6,7 @@ are referenced. Memory-constrained applications can list the gb_* entry points
 they use in a manifest and link the generated object instead of all of gblib.s.
 
 Usage:
-    gblib_subset.py lib/gb/gblib.s build/GBLIBAPP.s app/gblib.symbols [...]
+    gblib_subset.py [--interrupt-safe] lib/gb/gblib.s build/GBLIBAPP.s app/gblib.symbols [...]
 """
 
 import re
@@ -37,7 +37,7 @@ def read_symbols(paths):
     return symbols
 
 
-def generate(source_path, manifest_paths):
+def generate(source_path, manifest_paths, *, interrupt_safe=False):
     lines = Path(source_path).read_text(encoding="ascii").splitlines(keepends=True)
     wanted = set(read_symbols(manifest_paths))
     starts = []
@@ -73,18 +73,35 @@ def generate(source_path, manifest_paths):
     ]
     for _, name in starts[:-1]:
         if name in wanted:
-            output.extend(blocks[name])
+            block = "".join(blocks[name])
+            if interrupt_safe and name in ('_gb_fill', '_gb_frame', '_gb_icon', '_gb_icon_half'):
+                # POP HL / DEC SP consumes one byte by temporarily popping two.
+                # An IM1 interrupt in that gap overwrites the next live stack
+                # byte with its return PC. Read BEFORE advancing SP instead.
+                # Only L is used; A, BC, DE, IX and IY must survive this read.
+                block, count = re.subn(
+                    r"(?m)^        pop\s+hl[^\n]*\n        dec\s+sp[^\n]*\n",
+                    "        ld      hl, #0          ; interrupt-safe one-byte argument\n"
+                    "        add     hl, sp\n"
+                    "        ld      l, (hl)\n"
+                    "        inc     sp\n", block)
+                if count != 1:
+                    raise ValueError('native stack wrapper changed: '+name)
+            output.append(block)
     return "".join(output)
 
 
 def main(argv):
+    interrupt_safe = len(argv) > 1 and argv[1] == '--interrupt-safe'
+    if interrupt_safe:
+        argv = [argv[0], *argv[2:]]
     if len(argv) < 4:
         raise SystemExit(
-            "usage: gblib_subset.py <gblib.s> <output.s> <symbols-file> [...]"
+            "usage: gblib_subset.py [--interrupt-safe] <gblib.s> <output.s> <symbols-file> [...]"
         )
     source, output, *manifests = argv[1:]
     symbols = set(read_symbols(manifests))
-    generated = generate(source, manifests)
+    generated = generate(source, manifests, interrupt_safe=interrupt_safe)
     target = Path(output)
     if target.exists() and target.read_text(encoding="ascii") == generated:
         print(f"{output}: current")

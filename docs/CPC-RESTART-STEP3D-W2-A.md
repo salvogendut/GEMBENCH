@@ -3,6 +3,14 @@
 Issue #77, branch `feature/77-cpc-production-adapters`, following W1 commit
 `abbe251`. 2026-09-07.
 
+Follow-up: after the desktop-first merge in PR #78, the
+[Settings integration plan](CPC-SETTINGS-INTEGRATION.md) resumes this work under
+#79 with an appearance-only native provider, complete link and private M4
+System-menu launch/persistence profile. Its private M4 storage-fault/stress gate
+passes and the normal v3 image now includes Settings. All 28 delivery scenarios
+pass; the user accepted the manual image on 2026-09-08. The
+full-feature audit below is a historical measurement, not that reduced profile.
+
 **Implemented: source isolation, compile-time dependency/layout audit and host
 tests of the actual Settings application/widgets. Not implemented: native CPC
 Settings launch, its complete service bindings, or System-menu integration.**
