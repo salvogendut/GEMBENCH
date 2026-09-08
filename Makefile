@@ -8,7 +8,8 @@ GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
 all: msx
 
-.PHONY: cpc cpc-desktop cpc-desktop-1984 cpc-filemgr-1984
+.PHONY: cpc cpc-desktop cpc-desktop-1984 cpc-filemgr-1984 cpc-stability-1984 cpc-delivery-1984
+CPC_TEST_JOBS ?= 1
 # Experimental actual Desktop delivery, separate from parked QA/CPC and diagnostics.
 cpc: cpc-desktop
 cpc-desktop:
@@ -16,6 +17,14 @@ cpc-desktop:
 
 cpc-desktop-1984: cpc-desktop
 	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --skip-build
+
+cpc-delivery-1984: cpc-desktop
+	$(PYTHON) tools/test_cpc_delivery_1984.py --skip-build --jobs $(CPC_TEST_JOBS)
+
+cpc-stability-1984: cpc-desktop
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-scenario stacking --skip-build
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-scenario minute-cadence --skip-build
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-scenario cadence --skip-build
 
 cpc-filemgr-1984: cpc-desktop
 	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr --skip-build

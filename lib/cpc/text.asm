@@ -95,6 +95,13 @@ ptb2
 ; draw_text: HL = 0-terminated string at (tc_x, tc_y). Advances a pixel cursor
 ; by font_w per glyph; on return tc_x is the byte column just past the text.
 draw_text
+                ifdef CPC_RUNTIME
+                ; Native chrome bypasses GB_PARAMS. Its text boundary is also
+                ; a safe point while the compositor owns pointer damage.
+                ld a,(CORE_POINTER_PAINTLOCK)
+                or a
+                call nz,cpc_pointer_service
+                endif
                 push  hl                     ; save string pointer (HL is reused)
                 ld    a,(tc_x)               ; pixel cursor = tc_x * 4
                 ld    l,a
@@ -143,6 +150,48 @@ draw_char
 ; draw_glyph: A = char. Draw at (dc_px,tc_y); out-of-font codes use the first
 ; glyph. The byte emitter clips partially visible cells, not just whole glyphs.
 draw_glyph
+                ; Chrome also calls this leaf directly, including when timer
+                ; damage lies wholly below the title. Reject invisible cells
+                ; before doing any glyph work (and preserve cursor advance).
+                ifndef CPC_FAULT_DRAW_CLIP
+                push af
+                ld a,(font_h)
+                ld b,a
+                ld a,(WM_CLIP_Y)
+                ld d,a
+                ld a,(WM_CLIP_H)
+                ld e,a
+                ld a,(tc_y)
+                ld c,CPC_LINES
+                call clip_axis
+                pop bc
+                ret nc
+                push bc
+                ld hl,(dc_px)
+                ld a,l
+                and 3
+                ld b,a
+                ld a,(font_w)
+                add a,b
+                add a,3
+                srl a
+                srl a
+                ld b,a
+                srl h
+                rr l
+                srl h
+                rr l
+                ld a,(WM_CLIP_X)
+                ld d,a
+                ld a,(WM_CLIP_W)
+                ld e,a
+                ld a,l
+                ld c,CPC_COLUMNS
+                call clip_axis
+                pop bc
+                ret nc
+                ld a,b
+                endif
                 ld hl,font_first
                 cp (hl)
                 jr c,dg_fallback
@@ -170,6 +219,39 @@ dg_mul
                 ld    (dc_rows),a
                 ld    a,(tc_y)
                 ld    (dc_y),a
+                ; The default 6x8 font touches exactly two bytes at either
+                ; possible phase (0 or 2). Prove the entire glyph visible
+                ; once, then avoid per-byte clipping/16-bit shifts. Other
+                ; fonts and partially exposed glyphs keep the generic path.
+                ld a,(font_w)
+                cp 6
+                jr nz,dg_row
+                ld a,(font_h)
+                cp 8
+                jr nz,dg_row
+                ld hl,(dc_px)
+                ld a,l
+                and 3
+                ld (br_phase),a
+                and 1
+                jr nz,dg_row
+                srl h
+                rr l
+                srl h
+                rr l
+                ld a,l
+                ld (br_col),a
+                ld d,a
+                ld a,(dc_y)
+                ld e,a
+                call cpc_byte_visible
+                jr nc,dg_row
+                inc d
+                ld a,e
+                add a,7
+                ld e,a
+                call cpc_byte_visible
+                jp c,dg_six_row
 dg_row
                 ld    hl,(dc_gp)             ; A = next glyph row byte
                 ld    a,(hl)
@@ -183,6 +265,83 @@ dg_row
                 dec   a
                 ld    (dc_rows),a
                 jr    nz,dg_row
+                ret
+
+; Fully visible 6x8 glyph. Preserve the same pen/paper coverage, including
+; nonzero unused font bits, and leave the adjacent two pixels untouched.
+; No pointer, bank, scheduler or interrupt state is changed here.
+dg_six_row
+                ld hl,(dc_gp)
+                ld a,(hl)
+                inc hl
+                ld (dc_gp),hl
+                and #FC
+                ld b,a
+                ld a,(br_phase)
+                or a
+                jr z,dg_six_aligned
+                srl b
+                srl b
+dg_six_aligned
+                ld a,b
+                ld (br_glyph),a
+                ld a,(br_col)
+                ld d,a
+                ld a,(dc_y)
+                ld e,a
+                call scr_addr
+                ld a,(br_glyph)
+                rrca
+                rrca
+                rrca
+                rrca
+                call dg_six_ink
+                ld b,a
+                ld a,(br_phase)
+                or a
+                ld a,b
+                jr z,dg_six_first
+                xor (hl)
+                and #33
+                xor (hl)
+dg_six_first
+                ld (hl),a
+                inc hl
+                ld a,(br_glyph)
+                call dg_six_ink
+                ld b,a
+                ld a,(br_phase)
+                or a
+                ld a,b
+                jr nz,dg_six_second
+                xor (hl)
+                and #CC
+                xor (hl)
+dg_six_second
+                ld (hl),a
+                ld hl,dc_y
+                inc (hl)
+                ld hl,dc_rows
+                dec (hl)
+                jr nz,dg_six_row
+                ret
+
+; Low nibble -> four semantic pixels, no coverage mask yet. HL preserved.
+dg_six_ink
+                and #0F
+                ld c,a
+                add a,a
+                add a,a
+                add a,a
+                add a,a
+                or c
+                ld c,a
+                ld a,(txt_paperb)
+                ld b,a
+                ld a,(txt_penb)
+                xor b
+                and c
+                xor b
                 ret
 
 ; blit_row: A = glyph row byte (top font_w bits = pixels), at (dc_px, dc_y).

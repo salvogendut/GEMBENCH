@@ -218,6 +218,7 @@ cpc_runtime_line db 1,1
                 dw 16,40,47,43
                 db 3,0,0,0,0,0
 cpc_root_bar
+                call cpc_pointer_service   ; same pre-collector boundary as Desktop
                 ld hl,(cpc_runtime_turns)
                 inc hl
                 ld (cpc_runtime_turns),hl

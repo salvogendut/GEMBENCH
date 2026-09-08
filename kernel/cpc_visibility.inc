@@ -74,6 +74,9 @@ CORE_REGION_WORKER_SLOT equ CPC_REGION_WORKER_SLOT
 CORE_REGION_OWNER_ID equ CPC_REGION_OWNER_ID
 CORE_REGION_OWNER_MAX equ CPC_REGION_OWNER_MAX
 CORE_REGION_SLOT_SCAN equ CPC_REGION_SLOT_SCAN
+                ifdef CPC_RUNTIME
+CORE_VIS_TIMER_OWNER equ #23CA ; same validated consume byte as GB_PARAMS/collector
+                endif
 
                 assert CPC_ARCH_STATE_BASE<=CPC_WM_VISIBILITY,"visibility outside architecture state"
                 assert CPC_APP_WORKER_WIN+CPC_OWNER_MAX<=CPC_ARCH_STATE_END,"worker state overflow"

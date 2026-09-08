@@ -4,13 +4,56 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'tools'))
-from cpc_runtime_latency import check_latency
+from cpc_runtime_latency import check_latency, measure_pointer
 
 
 class LatencyTests(unittest.TestCase):
+    def test_sampler_uses_video_time_and_releases_held_input(self):
+        sym=dict(pointer_y=0,cpc_irq_count=1,cpc_pointer_max_gap=3,
+                 core_param_timer_owner=5,cpc_runtime_draw_calls=6)
+        commands=[];index=0;frame=100;observations=[]
+        def wait(n):
+            nonlocal frame
+            frame+=n
+            return f'ok wait frame={frame}'
+        def read(name):
+            nonlocal index
+            r=bytearray(8);r[0]=10+index*2
+            # Deliberately lose half the IRQ ticks. The sampler must not use
+            # that slower clock to report an inflated pointer rate.
+            r[1:3]=(index*6).to_bytes(2,'little');r[3]=6;r[6]=index+1
+            index+=1
+            return bytes(r)
+        def checked(name):
+            observations.append(name)
+            return bytes(8)
+        with tempfile.TemporaryDirectory(prefix='cursor-sampler-') as tmp, \
+             patch('cpc_runtime_latency.snapshot',side_effect=lambda r:(bytes(256),r)):
+            row=measure_pointer('fixture',True,sym,Path(tmp),commands.append,wait,read,
+                                lambda x,y:None,checked)
+            self.assertEqual(row['steps_per_second'],50)
+            self.assertEqual(row['irq_frame_ratio'],.5)
+            self.assertEqual(row['still_frames'],0)
+            self.assertEqual(row['draws'],45)
+            self.assertEqual(commands,['key-down DOWN','key-up DOWN'])
+            self.assertEqual(observations,['fixture-before','fixture-after'])
+            self.assertTrue((Path(tmp)/'fixture-samples.json').is_file())
+            check_latency([row])
+
+    def test_sampler_releases_input_if_observation_fails(self):
+        commands=[]
+        def fail(name): raise RuntimeError('snapshot failed')
+        with tempfile.TemporaryDirectory(prefix='cursor-sampler-') as tmp:
+            with self.assertRaisesRegex(RuntimeError,'snapshot failed'):
+                measure_pointer('failure',False,{},Path(tmp),commands.append,
+                                lambda n:'ok wait frame=1',fail,lambda x,y:None,
+                                lambda name:bytes(8))
+        self.assertEqual(commands,['key-down DOWN','key-up DOWN'])
+
     def test_checker_rejects_stalls_slow_movement_and_disabled_seconds(self):
         baseline = dict(case='idle', steps_per_second=49., max_gap_ticks=6,
                         seconds=False, draws=0, still_frames=0, irq_frame_ratio=1.)

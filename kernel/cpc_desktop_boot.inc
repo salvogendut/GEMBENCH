@@ -93,6 +93,7 @@ cpc_desktop_code_end
                 ret                       ; CF=1 iff inside loaded root slot
 
 cpc_desktop_collect
+                call cpc_pointer_service   ; service input before region preparation
                 ld hl,(cpc_runtime_turns)
                 inc hl
                 ld (cpc_runtime_turns),hl

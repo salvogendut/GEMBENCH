@@ -142,6 +142,20 @@ class VisibilityAssemblyTests(unittest.TestCase):
                     self.assertIsNone(binary)
                     self.assertIn("invalid " + field, result.stdout + result.stderr)
 
+    def test_timer_rank_reuse_is_optional_and_binds_fixed_collector_state(self):
+        ordinary = self.assemble(0x2000)[1]
+        for address in (0x23CA, 0xC3CA):
+            result, binary, _ = self.assemble(0x2000, overrides={"CORE_VIS_TIMER_OWNER": address})
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            # LD A,(owner); BIT 7,A; RET NZ. Only active validated consumption
+            # bypasses reclassification; queued requests retain normal policy.
+            self.assertIn(bytes((0x3A, address & 255, address >> 8, 0xCB, 0x7F, 0xC0)), binary)
+            self.assertEqual(len(binary), len(ordinary) + 6)
+        for address in (-1, 0x4000, 0x7FFF, 0x10000):
+            result, binary, _ = self.assemble(0x2000, overrides={"CORE_VIS_TIMER_OWNER": address})
+            self.assertIsNone(binary)
+            self.assertIn("CORE_VIS_TIMER_OWNER must remain fixed", result.stdout + result.stderr)
+
     def test_all_state_spans_are_fixed_and_index_arrays_fit_a_byte_page(self):
         for field, size in FIELDS:
             for address in (0x4000, -1, 0x10000-size+1):

@@ -206,7 +206,15 @@ groups delivery into four sprints: native services/memory, real
 Desktop, File Manager, and stabilization. Sprints 1 and 2 are complete;
 [sprint 3](docs/CPC-RESTART-SPRINT3.md) now delivers the usable browsing/launch
 workflow, with automated acceptance passed and the manual image rebuilt.
-Sprint 4 is stabilization. Complete Settings and broader
+[Sprint 4](docs/CPC-RESTART-SPRINT4.md) is automatically qualified and manually
+accepted, completing the desktop-first delivery. Run the rebuilt M4 image with
+`distrobox enter my-distrobox -- bash tools/run_cpc.sh`.
+Delivered-window, Clock visibility and cursor-cadence regressions start with
+`make cpc-stability-1984`.
+The combined gate is `make cpc-delivery-1984` (`CPC_TEST_JOBS=4` optionally runs
+independent disposable M4 scenarios in parallel). See the sprint document for
+results: all 20 scenarios pass, alongside 269 Python tests and MSX regressions.
+Complete Settings and broader
 application parity follow separately.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the

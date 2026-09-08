@@ -92,8 +92,9 @@ the minimal bank/IRQ/graphics/storage sequence before attributing a failure to
 GEOBENCH or an emulator. Emulator agreement is supporting evidence, not a
 substitute for eventual real-hardware confirmation.
 
-The restart still has no enabled CPC desktop. These notes prepare its later
-testing; they do not claim the application parity matrix has passed.
+The experimental CPC M4 Desktop is now enabled under `QA/CPC-Desktop/`.
+These qualification requirements still apply to additional runners; delivery
+on 1984 does not establish emulator independence or full application parity.
 
 ## 2026-09-06 directory qualification update
 
@@ -111,3 +112,20 @@ confirmation or qualification of arbitrary long/non-ASCII names. The local
 konCePCja FSTAT handler is incompatible with the documented metadata API
 (source inspection only). Arnold/Caprice32 remain unqualified for the required
 storage path. No floppy fallback was used; emulator source stays in 1984.
+
+## 2026-09-08 Sprint 4 recheck
+
+The Arnold, Caprice32 and konCePCja checkouts remain at the revisions listed
+above. Read-only source checks confirm the same blockers: Arnold/Caprice32
+still have no identified M4/Albireo integration; konCePCja's
+`src/m4board.cpp:cmd_fstat()` still expects an open descriptor and returns only
+an attribute byte, not the pathname metadata used by the qualified directory
+provider. Its raw SD read/write handlers are also unimplemented. Host-directory
+M4 remains a candidate once its protocol is qualified, not a passing second
+Desktop runner. No emulator changes or floppy tests were made for Sprint 4.
+
+The current 1984 executable used for Sprint 4 has SHA-256
+`00ac601cab80763dcea63e08cf3be642322c87b23864897069a8d21ca3d1228e`.
+Each combined acceptance run records that executable hash, the delivered image
+hash, all staged payload hashes and separate per-case logs. Independent emulator
+and real-board confirmation remain explicitly unqualified.

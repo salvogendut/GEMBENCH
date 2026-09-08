@@ -29,6 +29,14 @@
 ; This retains owner-ID-only lookup: generation validation belongs to lifetime
 ; publication/cleanup. Stale owner/window links are forbidden preconditions,
 ; not newly accepted public input. Rank refresh is explicit, not every slice.
+; Optional CORE_VIS_TIMER_OWNER binds the collector's validated fixed byte.
+; With bit 7 set, prepare still captures both damage sources but retains the
+; existing ranks: content-only timer callbacks cannot change geometry, focus,
+; z-order or ownership. Providers must refresh ranks after every such change
+; before collecting timers. Zero/queued owners take the normal refresh path.
+                ifdef CORE_VIS_TIMER_OWNER
+                assert ((CORE_VIS_TIMER_OWNER>=0)&(CORE_VIS_TIMER_OWNER<#4000))|((CORE_VIS_TIMER_OWNER>=#8000)&(CORE_VIS_TIMER_OWNER<#10000)),"CORE_VIS_TIMER_OWNER must remain fixed"
+                endif
 ;
 ; Selection returns every worker to runnable root before choosing another.
 ; Root searches focused/full/partial tiers in order, round-robin starting after

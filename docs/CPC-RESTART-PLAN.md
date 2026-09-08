@@ -3,6 +3,12 @@
 Started: 2026-09-05. Tracking issue: [#63](https://github.com/salvogendut/GEMBENCH/issues/63).
 Step-1 branch: `feature/cpc-restart-reference`.
 
+**Current status — 2026-09-08:** all four desktop-first sprints are implemented,
+automatically qualified and manually accepted. The usable M4 CPC Desktop/File
+Manager with Clock/Calculator is ready to merge. Next is application parity,
+starting with the existing Settings application and its W2-A audit. Earlier
+checkpoint descriptions below are historical, not the current delivery status.
+
 Progress: step 1 is complete. Step 2 has begun with
 [owner/page extraction 2A](CPC-RESTART-STEP2A.md) under issue #64: byte-identical
 MSX2 kernels, passing host checks and before/after openMSX lifecycle validation.
@@ -225,7 +231,16 @@ View/configuration (including cold restart), app launch/return and
 failure/capacity recovery pass **140 M4 checkpoints**, alongside **263 Python
 tests** and native/SDK/ABI checks. The manual image is rebuilt and its 33 FAT
 payloads match the isolated tested build. The user confirmed the manual image;
-next is **sprint 4 stabilization**. This does not claim full CPC application parity.
+**[Sprint 4 stabilization](CPC-RESTART-SPRINT4.md) is complete and manually
+accepted (2026-09-08).** Combined delivery
+passes **20/20 disposable M4 scenarios**, including 32 stacking checkpoints,
+minute rollover and repeated Clock/cursor cadence. The native text/minimum-size
+fixes and shared-core timer-rank reuse remove the measured stalls without
+changing timing limits. Full checks pass **269 Python tests, no skips**, plus
+native/SDK/ABI; fresh openMSX Clock/Desk checks pass in Screen 6/7 with existing
+MSX visibility behavior retained. The manual M4 image is rebuilt and all
+33 actual FAT payloads match the tested candidate; the earlier accepted card
+is backed up. This does not claim full CPC application parity.
 The earlier
 W2/W3 scope remains tracked, but finishing every Settings/saver action before starting
 Desktop is no longer a delivery requirement.

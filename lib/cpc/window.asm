@@ -35,6 +35,12 @@ cpc_window_call
                 endif
                 jp (hl)
 cpc_window_pointer_hide
+                ifdef CPC_RUNTIME
+                ; Finish a due move BEFORE an explicit native transaction
+                ; hides the pointer (e.g. the shared Desktop's minute label).
+                ; Never override that hide or reenter an application callback.
+                call cpc_pointer_service
+                endif
                 ld a,(CORE_POINTER_PAINTLOCK)
                 or a
                 ret nz

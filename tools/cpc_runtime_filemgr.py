@@ -14,6 +14,14 @@ from cpc_fswrite_cases import space
 from test_cpc_foundation_1984 import snapshot
 
 
+def popup_ready(ram, sym, popup):
+    """UI_MODAL is set before M4 loads GBUI; status zero proves renderer entry."""
+    labels=b''.join(label.encode()+b'\0' for label in popup['labels'])
+    return (ram[sym['cpc_ui_status']]==0 and
+            ram[sym['cpc_ui_request']+3]==len(popup['labels']) and
+            ram[sym['cpc_ui_text']:sym['cpc_ui_text']+len(labels)]==labels)
+
+
 def prepare(case,work,sym,image,artifacts):
     """Change disk fixtures only. No injected guest RAM or patched emulator."""
     raw=(work/'filemgr/FILEMGR.native.bin').read_bytes()
@@ -50,7 +58,7 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
     icons=(work/'REFINED.IST').read_bytes();raw=(app/'FILEMGR.native.bin').read_bytes()
     items=listing(manifest['files']);rects={};order=[0];fms={};titles={};accents={}
     focus=0;menu=DESKTOP;popup=None;calculators={};clocks={};clock_slot=None
-    checks=[];stack=dict(main=0,irq=0,tmp=0);unpublished=set()
+    checks=[];stack=dict(main=0,irq=0,tmp=0);unpublished=set();metrics={}
     clock_noi={v[1]:int(v[2],16) for line in (root/'build/universal-obj/uclock/app.noi').read_text().splitlines()
                if len(v:=line.split())==3 and v[0]=='DEF'}
     clock_offsets={v[1]:int(v[2],16) for line in (root/'build/universal-obj/uclock/main.sym').read_text().splitlines()
@@ -72,15 +80,17 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
             data=read(name);_,r=snapshot(data)
             ready=all(field(r,s,'list_state')==b'\0' for s in fms)
             if popup is not None:
-                labels=b''.join(label.encode()+b'\0' for label in popup['labels'])
-                ready=ready and r[sym['cpc_ui_request']+3]==len(popup['labels']) and \
-                    r[sym['cpc_ui_text']:sym['cpc_ui_text']+len(labels)]==labels
+                ready=ready and popup_ready(r,sym,popup)
             if clock_slot is not None:
                 ready=ready and not r[sym['core_param_timer_owner']] and (
                     clock_may_remain_parked(rects,order,clock_slot,r[sym['cpc_wm_visibility']+clock_slot],r[sym['cpc_task_visibility']+clock_slot]) or
                     clock_cache_ready(lambda k:clock_value(r,k),popup is not None))
             if ready and r[sym['pointer_visible']] and not any(r[sym[k]] for k in ('io_busy','core_pointer_paintlock')) and bool(r[sym['ui_modal']])==(popup is not None):
                 sig=bytes(r[0xC000:0x10000])+bytes(r[sym['menu_def']:sym['menu_def']+37])
+                # The oracle consumes these caches too. Equal pixels alone
+                # must not mix two different completed Clock update states.
+                if clock_slot is not None:
+                    sig+=bytes(clock_value(r,k) for k in ('ph','pm','ps','show_sec','dh','dm','ds'))
                 turn=word(r,'cpc_runtime_turns')
                 if previous and sig==previous[0] and (popup is not None or (turn-previous[1])&65535>=2): break
                 if previous is None or sig!=previous[0]: previous=sig,turn
@@ -90,6 +100,9 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         for k,n in used.items(): stack[k]=max(stack[k],n)
         if r[sym['wm_nwin']]!=len(order) or r[sym['wm_focus']]!=focus or r[sym['wm_z']:sym['wm_z']+len(order)]!=bytes(order):
             raise AssertionError(name+': window ownership/order')
+        for slot,rect in rects.items():
+            at=sym['wm_table']+25*slot+1
+            if r[at:at+4]!=bytes(rect): raise AssertionError(name+': window geometry')
         if word(r,'core_pending_owner') or any(r[sym['launch_arg']:sym['launch_arg']+11]):
             raise AssertionError('pending launch identity/argument leaked')
         if r[sym['core_page_free']]!=27-len(order): raise AssertionError('application page leak')
@@ -151,7 +164,7 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         if not y+14<=cy<y+h-1: raise AssertionError('item is not visible: '+name)
         move(cx,cy);click();click()
     def finish():
-        report=dict(scenario=scenario or case or 'lifecycle',checkpoints=checks,stack=stack,sections=manifest['sections'])
+        report=dict(scenario=scenario or case or 'lifecycle',checkpoints=checks,stack=stack,sections=manifest['sections'],metrics=metrics)
         (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
         print('PASS native File Manager '+json.dumps(report),flush=True)
         return artifacts
@@ -167,7 +180,125 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         rects[slot]=(max(0,min(80-w,ox+drop[0]-grab[0])),max(8,min(200-h,oy+drop[1]-grab[1])),w,h)
         _,r=snapshot(read());at=sym['wm_table']+25*slot+1
         if r[at:at+4]!=bytes(rects[slot]): raise AssertionError('drag differs from pointer displacement')
+    def resize(slot,w,h):
+        x,y,ow,oh=rects[slot]
+        move(x+ow-2,y+oh-3);send('key-down SPACE');wait(10)
+        move(min(79,x+w-1),min(199,y+h-1));_,r=snapshot(read())
+        drop=(r[sym['poll_byte']],r[sym['poll_line']])
+        send('key-up SPACE');wait(60)
+        rects[slot]=(x,y,min(80-x,max(29,drop[0]-x+1)),min(200-y,max(62,drop[1]-y+1)))
+        _,r=snapshot(read());at=sym['wm_table']+25*slot+1
+        if r[at:at+4]!=bytes(rects[slot]): raise AssertionError('resize differs from pointer endpoint')
     checked('filemgr-root')
+    if scenario=='minute-cadence':
+        from cpc_runtime_latency import check_latency,measure_pointer
+        def align():
+            for _ in range(1800):
+                _,r=snapshot(read('minute-align'))
+                if word(r,'cpc_hw_seconds')%60==59: return
+                wait(3)
+            raise AssertionError('could not align with the top-bar minute refresh')
+        open_disk(1);checked('minute-directory-no-clock')
+        rows=[measure_pointer('minute-baseline',False,sym,artifacts,send,wait,read,move,checked),
+              measure_pointer('minute-rollover',False,sym,artifacts,send,wait,read,move,checked,align)]
+        samples=json.loads((artifacts/'minute-rollover-samples.json').read_text())
+        if samples[0]['software_seconds']//60==samples[-1]['software_seconds']//60:
+            raise AssertionError('measurement did not cross the minute boundary')
+        metrics['cursor']=rows
+        # Save the measured evidence even when the admission criterion fails.
+        (artifacts/'cadence.json').write_text(json.dumps(metrics,indent=2)+'\n')
+        check_latency(rows)
+        close_fm(1);checked('minute-clean-desktop')
+        if (artifacts/'RUNTIME.IMG').read_bytes()!=Path(manifest['image']).read_bytes(): raise AssertionError('minute check changed M4 media')
+        return finish()
+    if scenario=='cadence':
+        from cpc_runtime_latency import check_latency,measure_pointer
+        rows=[]
+        def measure(name,seconds):
+            rows.append(measure_pointer(name,seconds,sym,artifacts,send,wait,read,move,checked))
+        open_disk(1);checked('cadence-directory')
+        measure('directory-no-clock',False)
+        choose_desk(0);clock_slot=2;rects[2]=(26,20,28,122);order.append(2);focus=2;menu=CLOCK;titles[2]='Clock'
+        checked('cadence-clock');drag(2,52,20);checked('cadence-clock-moved')
+        measure('directory-clock-seconds-off',False)
+        key('S');checked('cadence-seconds')
+        measure('directory-clock-focused-seconds',True)
+        move(14,31);click();order.remove(1);order.append(1);focus=1;menu=bytes((1,10))+b'View\0\0\0\0'
+        checked('cadence-directory-focus')
+        measure('directory-clock-background-seconds',True)
+        check_latency(rows)
+        for x,y in ((56,45),(68,75),(75,120),(58,120),(50,60),(70,50)):
+            move(x,y);checked(f'cadence-cursor-crossing-{x}-{y}')
+        move(65,24);click();order.remove(2);order.append(2);focus=2;menu=CLOCK
+        checked('cadence-clock-focus');key('S');checked('cadence-seconds-off')
+        measure('directory-clock-seconds-off-again',False);check_latency(rows)
+        key('ESCAPE');order.remove(2);del rects[2];del titles[2];clocks.clear();clock_slot=None
+        focus=1;menu=bytes((1,10))+b'View\0\0\0\0';checked('cadence-clock-close')
+        close_fm(1);checked('cadence-clean-desktop')
+        if (artifacts/'RUNTIME.IMG').read_bytes()!=Path(manifest['image']).read_bytes(): raise AssertionError('cadence changed M4 media')
+        metrics['cursor']=rows
+        return finish()
+    if scenario=='stacking':
+        def elapsed(r,seconds=3):
+            start=word(r,'cpc_hw_seconds')
+            for _ in range(1000):
+                wait(20);_,after=snapshot(read())
+                if (word(after,'cpc_hw_seconds')-start)&65535>=seconds: return
+            raise AssertionError('software time did not advance')
+        def quiet(name):
+            r=checked(name)
+            if word(r,'cpc_hw_seconds')%60>52:
+                elapsed(r,60-word(r,'cpc_hw_seconds')%60);r=checked(name+'-minute-boundary')
+            return r
+        def unchanged(before,after,names):
+            for name in names:
+                if word(before,name)!=word(after,name): raise AssertionError('unnecessary work: '+name)
+        choose_desk(0);clock_slot=1;rects[1]=(26,20,28,122);order.append(1);focus=1;menu=CLOCK;titles[1]='Clock'
+        checked('stack-clock');key('S');r=checked('stack-seconds')
+        owner=bytes((r[sym['core_win_owner']+1],r[sym['core_win_owner_gen']+1]))
+        base=physical(r[sym['wm_table']+25])
+        open_disk(2);checked('stack-title-only')
+        move(76,190);before=quiet('stack-title-before');elapsed(before);r=checked('stack-title-no-paint')
+        if r[sym['cpc_wm_visibility']+1]!=1 or word(r,'cpc_runtime_worker_calls')==word(before,'cpc_runtime_worker_calls'):
+            raise AssertionError('title-only Clock should keep its worker, not paint covered content')
+        unchanged(before,r,('cpc_runtime_draw_calls','pointer_saves','pointer_restores'))
+        # Real resize grip, not an injected rectangle or fullscreen shortcut.
+        resize(2,34,144);checked('stack-directory-shrink')
+        drag(2,40,26);checked('stack-partial-exposure')
+        move(44,75);before=quiet('stack-partial-before')
+        second=word(before,'cpc_hw_seconds')%60
+        if not 35<=second<=44:
+            elapsed(before,(35-second)%60);before=quiet('stack-partial-visible-hand')
+        elapsed(before);r=checked('stack-partial-tick')
+        if word(r,'cpc_runtime_draw_calls')==word(before,'cpc_runtime_draw_calls'): raise AssertionError('exposed Clock did not paint')
+        unchanged(before,r,('pointer_saves','pointer_restores'))
+        move(36,65);before=quiet('stack-under-pointer');elapsed(before);checked('stack-pointer-update')
+        move(76,190);checked('stack-pointer-restored')
+        drag(2,24,8);checked('stack-fully-covered')
+        before=quiet('stack-hidden-before');elapsed(before);r=checked('stack-hidden-idle')
+        if r[sym['cpc_wm_visibility']+1] or r[sym['cpc_task_visibility']+1]: raise AssertionError('covered worker remains visible')
+        unchanged(before,r,('cpc_runtime_worker_calls','cpc_runtime_draw_calls','pointer_saves','pointer_restores'))
+        if r[base+0x3F00:base+0x4000]!=before[base+0x3F00:base+0x4000]: raise AssertionError('hidden worker snapshot changed')
+        choose_desk(0);order.remove(1);order.append(1);focus=1;menu=CLOCK;r=checked('stack-hidden-reactivate')
+        if bytes((r[sym['core_win_owner']+1],r[sym['core_win_owner_gen']+1]))!=owner or not clock_value(r,'show_sec'):
+            raise AssertionError('hidden activation replaced Clock or lost its state')
+        choose_desk(1);rects[3]=(24,24,31,144);order.append(3);focus=3;menu=EDIT;titles[3]='Calculator';calculators[3]='0'
+        checked('stack-calculator');key('7');key('2');calculators[3]='72';checked('stack-calculator-input')
+        drag(3,45,35);checked('stack-calculator-drag')
+        key('ESCAPE');order.remove(3);del rects[3];del titles[3];calculators.clear();focus=1;menu=CLOCK;checked('stack-calculator-close')
+        key('ESCAPE');order.remove(1);del rects[1];del titles[1];clocks.clear();clock_slot=None;focus=2;menu=bytes((1,10))+b'View\0\0\0\0'
+        checked('stack-clock-close')
+        drag(2,4,26);checked('stack-directory-return')
+        resize(2,1,1);checked('stack-directory-minimum')
+        drag(2,0,8);checked('stack-directory-top-left')
+        resize(2,80,192);checked('stack-directory-maximum')
+        resize(2,29,62);checked('stack-directory-shrink-again')
+        drag(2,51,138);checked('stack-directory-bottom-right')
+        resize(2,80,192);checked('stack-directory-edge-clamp')
+        drag(2,4,26);resize(2,56,158);checked('stack-directory-grow')
+        close_fm(2);checked('stack-clean-desktop')
+        if (artifacts/'RUNTIME.IMG').read_bytes()!=Path(manifest['image']).read_bytes(): raise AssertionError('stacking changed M4 media')
+        return finish()
     if scenario=='reboot':
         before=(artifacts/'RUNTIME.IMG').read_bytes()
         open_disk(1);fms[1]['view']=0;checked('reboot-persisted-list')

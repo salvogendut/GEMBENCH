@@ -36,7 +36,7 @@
 #define DEF_H    158           /* taller default so full icons still show ~3 rows (#88) */
 #define CASCADE_X 4
 #define CASCADE_Y 4
-#define MIN_W    24            /* min size keeps the title + a couple of rows usable */
+#define MIN_W    29            /* 5 chrome/scroll cols + 3 full 8-column icons */
 #define MIN_H    62
 #define TITLE_H  14
 #define DCLICK   75           /* double-click window, frames (gamepad-friendly, #153) */

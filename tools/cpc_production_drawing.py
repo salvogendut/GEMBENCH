@@ -54,6 +54,10 @@ def cases():
         clip=(10, 58, 7, 3), capture=True)
     add("bottom-right-text", text_record(79, 198, 2, 1, 8), text=b"EDGE1234", capture=True)
     add("long-text", text_record(50, 90, count=48), text=b"0123456789ABCDEF"*3, capture=True)
+    # Exercise both default-font phases, every solid pen, nonzero paper and
+    # pen==paper on the real Z80 renderer. The next capture covers all four.
+    for pen, paper in ((0, 3), (1, 2), (2, 2), (3, 0)):
+        add(f"six-pixel-pens-{pen}", text_record(3+pen*16, 124, pen, paper, 8), text=b"A0Z9MW.+")
     add("font-range", text_record(2, 140, count=5), text=bytes((1, 31, 65, 132, 255)), capture=True)
     add("text-nul", text_record(2, 152, count=5), text=b"A\0XYZ", capture=True)
     add("text-zero", text_record(0, 0, count=0, pointer=0xFFFF))

@@ -11,6 +11,15 @@ fill_xywh
                 ld a,e
                 ld (fb_h),a
 fill_block
+                ifdef CPC_RUNTIME
+                ; During a compositor pass the existing pointer service knows
+                ; the WHOLE pending damage and can move safely before a fill.
+                ; Do not sample ordinary primitives here: their damage_begin
+                ; has already excluded the pointer at its previous position.
+                ld a,(CORE_POINTER_PAINTLOCK)
+                or a
+                call nz,cpc_pointer_service
+                endif
                 ld a,(fb_w)
                 ld b,a
                 ld a,(WM_CLIP_X)

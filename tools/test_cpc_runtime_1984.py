@@ -492,7 +492,7 @@ if __name__=='__main__':
     parser.add_argument('--desktop-delivery',action='store_true',help='use the regular M4 Desktop image on a disposable copy, optionally with a File Manager scenario')
     mode.add_argument('--filemgr',action='store_true',help='private build-matched native File Manager lifecycle')
     mode.add_argument('--filemgr-case',choices=('missing','short','oversized','corrupt','unbound','no-register'))
-    mode.add_argument('--filemgr-scenario',choices=('contexts','services','windows','workflow'))
+    mode.add_argument('--filemgr-scenario',choices=('contexts','services','windows','workflow','stacking','cadence','minute-cadence'))
     mode.add_argument('--root-fault',choices=('missing','short','oversized','cfg-missing','cfg-short','cfg-oversized'))
     mode.add_argument('--native',action='store_true')
     mode.add_argument('--native-fault',choices=('missing','short','oversized'))

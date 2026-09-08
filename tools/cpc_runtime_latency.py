@@ -29,6 +29,48 @@ def check_latency(rows):
             raise AssertionError(f"{row['case']}: seconds were not actually drawn")
 
 
+def measure_pointer(name, seconds, sym, artifacts, send, wait, read, move, checked, align=None):
+    """Shared video/IRQ sampler for diagnostic and delivered Desktop workloads."""
+    def word(r, cell): return int.from_bytes(r[sym[cell]:sym[cell]+2], 'little')
+    move(75, 8); wait(30)
+    if align is not None: align()
+    start = checked(name+'-before')
+    samples = []
+    send('key-down DOWN')
+    try:
+        for _ in range(45):
+            reply = wait(2)
+            video_frame = int(re.search(r'\bframe=(\d+)', reply)[1])
+            h, r = snapshot(read(name+'-moving'))
+            y = r[sym['pointer_y']]
+            if not 0 < y < 195: raise AssertionError('latency measurement hit screen edge')
+            samples.append(dict(y=y, frame=video_frame, irq=word(r, 'cpc_irq_count'),
+                gap=word(r, 'cpc_pointer_max_gap'),
+                pc=int.from_bytes(h[0x23:0x25], 'little'),
+                timer=r[sym['core_param_timer_owner']],
+                software_seconds=word(r,'cpc_hw_seconds') if 'cpc_hw_seconds' in sym else None,
+                pointer_visible=r[sym['pointer_visible']] if 'pointer_visible' in sym else None))
+    finally:
+        send('key-up DOWN')
+    ticks = (samples[-1]['irq']-samples[0]['irq']) & 65535
+    frames = samples[-1]['frame']-samples[0]['frame']
+    steps = samples[-1]['y']-samples[0]['y']
+    if frames <= 0: raise AssertionError('video frame counter did not advance')
+    same = samples[0]; still = 0
+    for sample in samples[1:]:
+        if sample['y'] != same['y']: same = sample
+        else: still = max(still, sample['frame']-same['frame'])
+    row = dict(case=name, seconds=seconds, irq_ticks=ticks, video_frames=frames, steps=steps,
+               steps_per_second=50*steps/frames, irq_frame_ratio=ticks/(frames*6),
+               still_frames=still, max_gap_ticks=max(s['gap'] for s in samples),
+               hidden_samples=sum(s['pointer_visible']==0 for s in samples),
+               draws=(word(r, 'cpc_runtime_draw_calls')-word(start, 'cpc_runtime_draw_calls')) & 65535)
+    (artifacts/(name+'-samples.json')).write_text(json.dumps(samples, indent=2)+'\n')
+    print(json.dumps(row), flush=True)
+    checked(name+'-after')
+    return row
+
+
 def run_latency(root, media, manifest, work, sym, artifacts, image, emulator,
                 send, wait, read, key, move):
     from test_cpc_runtime_1984 import integrity
@@ -77,42 +119,7 @@ def run_latency(root, media, manifest, work, sym, artifacts, image, emulator,
         raise AssertionError(name+': did not reach a complete, stable frame')
 
     def measure(name):
-        # Stay clear of the screen edge for the entire held-key measurement.
-        move(75, 8); wait(30)
-        start = checked(name+'-before')
-        samples = []
-        send('key-down DOWN')
-        try:
-            for _ in range(45):
-                reply = wait(2)
-                video_frame = int(re.search(r'\bframe=(\d+)', reply)[1])
-                h, r = snapshot(read(name+'-moving'))
-                y = r[sym['pointer_y']]
-                if not 0 < y < 195: raise AssertionError('latency measurement hit screen edge')
-                samples.append(dict(y=y, frame=video_frame, irq=word(r, 'cpc_irq_count'),
-                    gap=word(r, 'cpc_pointer_max_gap'),
-                    pc=int.from_bytes(h[0x23:0x25], 'little'),
-                    timer=r[sym['core_param_timer_owner']]))
-        finally:
-            send('key-up DOWN')
-        ticks = (samples[-1]['irq']-samples[0]['irq']) & 65535
-        frames = samples[-1]['frame']-samples[0]['frame']
-        steps = samples[-1]['y']-samples[0]['y']
-        same = samples[0]; still = 0
-        for sample in samples[1:]:
-            if sample['y'] != same['y']: same = sample
-            else: still = max(still, sample['frame']-same['frame'])
-        row = dict(case=name, seconds=seconds, irq_ticks=ticks, video_frames=frames, steps=steps,
-                   # Video time determines responsiveness. IRQ loss is reported
-                   # separately: software-clock accuracy is not a cursor SLA.
-                   steps_per_second=50*steps/frames, irq_frame_ratio=ticks/(frames*6),
-                   still_frames=still,
-                   max_gap_ticks=max(s['gap'] for s in samples),
-                   draws=(word(r, 'cpc_runtime_draw_calls')-word(start, 'cpc_runtime_draw_calls')) & 65535)
-        rows.append(row)
-        (artifacts/(name+'-samples.json')).write_text(json.dumps(samples, indent=2)+'\n')
-        print(json.dumps(row), flush=True)
-        checked(name+'-after')
+        rows.append(measure_pointer(name, seconds, sym, artifacts, send, wait, read, move, checked))
 
     measure('no-clock')
     key('F2'); has_clock = True; focus = 2

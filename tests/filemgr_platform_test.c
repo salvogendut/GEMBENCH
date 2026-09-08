@@ -124,6 +124,13 @@ int main(void)
     assert(GB_COLS==80 && GB_LINES==200 && FM_SHARED_CORE && !FM_FILE_COPY && !FM_EMBEDDED_ICONS);
     strcpy(fm_test_config,"VIEW=DEFAULT\r\n");fm_test_config_length=strlen(fm_test_config);
     filemgr_main();assert(registered==&fmmw_kind && registered->kind==GB_WK_STANDARD);
+    assert(registered->window.min_w == MIN_W);
+    /* Every admitted icon-grid width must fit three full-width icons. */
+    for (unsigned char width=MIN_W; width<=GB_COLS; ++width) {
+        win_w=width;
+        assert(CELL_W>=8 && (CELL_W-8)/2<CELL_W);
+    }
+    win_w=DEF_W;
     assert(view_menu.valid && list_state==LIST_WAIT && fs_context==1 && !paints);
     fm_frame();assert(total==4 && list_state==LIST_NEXT && !disp_total() && !paints);
     gb_fsctx_t other=gb_fsctx_open(0);gb_fsctx_set_path(other,"/OTHER");

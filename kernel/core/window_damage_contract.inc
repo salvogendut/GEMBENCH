@@ -27,6 +27,7 @@
 ; Repaint defensively skips dead slots but does not validate arbitrary tables.
 ;
 ; PAINT_PREPARE captures immutable primary/extra sources AND refreshes visibility
+; (or retains ranks for a validated content-only timer; visibility_contract.inc)
 ; (the historical MSX entry name says only "VIS_REFRESH"). REGION_BEGIN accepts
 ; A=slot, REGION_NEXT advances the same surface: A=1/NZ with nonempty clip,
 ; A=0/Z when exhausted. REGION_SLOT stays valid across each drawing callback.
