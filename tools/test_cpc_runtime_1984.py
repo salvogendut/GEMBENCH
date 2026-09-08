@@ -61,11 +61,39 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False):
     filemgr=filemgr or filemgr_case is not None or filemgr_scenario is not None
-    variant='filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
-    media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr)
-    manifest=json.loads((media/'manifest.json').read_text())
+    desktop=desktop or desktop_delivery
+    if desktop_delivery:
+        if (seed_image and filemgr_scenario != 'reboot') or filemgr_scenario == 'windows':
+            raise ValueError('Desktop delivery test must use its own image without diagnostic applications')
+        if filemgr_scenario == 'reboot' and not seed_image:
+            raise ValueError('File Manager reboot check requires the saved View test image')
+        from cpc_desktop_media import validate
+        media=ROOT/'QA/CPC-Desktop' if skip_build else build(desktop=True,filemgr=True,delivery=True)
+        manifest=validate(media,pristine=True)
+        if filemgr and manifest['profile'] != 'cpc-desktop-m4-v2':
+            raise ValueError('File Manager acceptance requires the Sprint 3 delivery profile')
+        # Check the real FAT contents, not just the host staging directory.
+        for name,expected in manifest['files'].items():
+            payload=subprocess.check_output(['mtype','-i',manifest['image']+'@@16384','::/'+name])
+            if hashlib.sha256(payload).hexdigest()!=expected:
+                raise AssertionError('delivered M4 file differs: '+name)
+        if seed_image:
+            # Cold-boot only a payload-identical services-test copy with the
+            # expected saved View. Never mutate the source or silently accept
+            # replacement native/universal binaries through this test path.
+            from cpc_runtime_configedit import replace_value
+            for name,expected in manifest['files'].items():
+                if name == 'GEOBENCH.CFG':
+                    expected=hashlib.sha256(replace_value((media/'CARD'/name).read_bytes(),b'LIST',b'VIEW=')).hexdigest()
+                payload=subprocess.check_output(['mtype','-i',str(seed_image)+'@@16384','::/'+name])
+                if hashlib.sha256(payload).hexdigest()!=expected:
+                    raise AssertionError('File Manager reboot seed differs: '+name)
+    else:
+        variant='filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
+        media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr)
+        manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-'))
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(seed_image or manifest['image']).read_bytes())
@@ -461,9 +489,10 @@ if __name__=='__main__':
     mode.add_argument('--latency',action='store_true')
     mode.add_argument('--desk',action='store_true')
     mode.add_argument('--desktop',action='store_true',help='private actual Desktop boot contract, not File Manager admission')
+    parser.add_argument('--desktop-delivery',action='store_true',help='use the regular M4 Desktop image on a disposable copy, optionally with a File Manager scenario')
     mode.add_argument('--filemgr',action='store_true',help='private build-matched native File Manager lifecycle')
     mode.add_argument('--filemgr-case',choices=('missing','short','oversized','corrupt','unbound','no-register'))
-    mode.add_argument('--filemgr-scenario',choices=('contexts','services','windows'))
+    mode.add_argument('--filemgr-scenario',choices=('contexts','services','windows','workflow'))
     mode.add_argument('--root-fault',choices=('missing','short','oversized','cfg-missing','cfg-short','cfg-oversized'))
     mode.add_argument('--native',action='store_true')
     mode.add_argument('--native-fault',choices=('missing','short','oversized'))
@@ -478,4 +507,8 @@ if __name__=='__main__':
     mode.add_argument('--bitmap-case',choices=BITMAP_CASES)
     from cpc_runtime_chrome import CHROME_CASES
     mode.add_argument('--chrome-case',choices=CHROME_CASES)
-    args=parser.parse_args();args.emulator=args.emulator.resolve();run(**vars(args))
+    args=parser.parse_args();args.emulator=args.emulator.resolve()
+    artifacts=run(**vars(args))
+    if args.desktop_delivery and args.filemgr_scenario=='services':
+        run(args.emulator,skip_build=True,desktop_delivery=True,filemgr_scenario='reboot',
+            seed_image=artifacts/'RUNTIME.IMG')

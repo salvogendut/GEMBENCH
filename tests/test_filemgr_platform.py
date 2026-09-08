@@ -30,7 +30,7 @@ class FilemgrPlatformTests(unittest.TestCase):
 
     def test_native_staging_requires_separate_explicit_profile(self):
         build=(ROOT/'tools/build_cpc_runtime.py').read_text()
-        self.assertIn('def build(desktop=False, filemgr=False)',build)
+        self.assertIn('def build(desktop=False, filemgr=False, *, delivery=False)',build)
         self.assertIn("if filemgr: overrides+=('-DCPC_NATIVE_FILEMGR=1',)",build)
         self.assertIn("'filemgr-contract' if filemgr",build)
         self.assertIn('cp 4',(ROOT/'kernel/cpc_runtime_services.asm').read_text())

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compose the shared CPC core and universal launcher on a private M4 card."""
+"""Compose the shared CPC core and native/universal profiles on M4 media."""
 from __future__ import annotations
 
 import hashlib
@@ -78,9 +78,11 @@ def assemble(work: Path, overrides=()):
     return sym
 
 
-def build(desktop=False, filemgr=False):
+def build(desktop=False, filemgr=False, *, delivery=False):
+    if delivery and not desktop:
+        raise ValueError('Desktop delivery requires an explicit Desktop profile')
     desktop = desktop or filemgr
-    variant = 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
+    variant = 'desktop' if delivery else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
     work = ROOT / ('build/cpc-'+variant)
     overrides=('-DCPC_NATIVE_DESKTOP=1',) if desktop else ()
     if filemgr: overrides+=('-DCPC_NATIVE_FILEMGR=1',)
@@ -94,15 +96,16 @@ def build(desktop=False, filemgr=False):
         layout=compile_desktop(work,work,sym)
         (work/'ROOTBAR.BIN').write_bytes((work/'DESKTOP.native.bin').read_bytes())
         (work/'bar_layout.json').write_text(json.dumps(layout,indent=2)+'\n')
-    app = ROOT / "build/universal/ABIPROBE.APP"
-    subprocess.run(["bash", "tools/build_uapp.sh", "apps/abiprobe", str(app)], cwd=ROOT, check=True)
-    fsapp = ROOT / "build/universal/FSPROBE.APP"
-    subprocess.run(["bash", "tools/build_uapp.sh", "apps/fsprobe", str(fsapp)],
-                   env={**os.environ, "UNIVERSAL_FS": "1"}, cwd=ROOT, check=True)
-    menuapp = ROOT / "build/universal/MENUPRBE.APP"
-    subprocess.run(["bash", "tools/build_uapp.sh", "apps/menuprobe", str(menuapp)],
-                   env={**os.environ, "UNIVERSAL_MENU": "1", "APP_ICON": "apps/abiprobe/icon.asm"},
-                   cwd=ROOT, check=True)
+    if not delivery:
+        app = ROOT / "build/universal/ABIPROBE.APP"
+        subprocess.run(["bash", "tools/build_uapp.sh", "apps/abiprobe", str(app)], cwd=ROOT, check=True)
+        fsapp = ROOT / "build/universal/FSPROBE.APP"
+        subprocess.run(["bash", "tools/build_uapp.sh", "apps/fsprobe", str(fsapp)],
+                       env={**os.environ, "UNIVERSAL_FS": "1"}, cwd=ROOT, check=True)
+        menuapp = ROOT / "build/universal/MENUPRBE.APP"
+        subprocess.run(["bash", "tools/build_uapp.sh", "apps/menuprobe", str(menuapp)],
+                       env={**os.environ, "UNIVERSAL_MENU": "1", "APP_ICON": "apps/abiprobe/icon.asm"},
+                       cwd=ROOT, check=True)
     calculator = ROOT / "build/universal/CALC.APP"
     subprocess.run(["bash", "tools/build_uapp.sh", "apps/ucalculator", str(calculator)],
                    env={**os.environ, "UNIVERSAL_WINDOW_KIND": "1", "UNIVERSAL_ACCESSORY": "1",
@@ -112,9 +115,8 @@ def build(desktop=False, filemgr=False):
                    env={**os.environ, "UNIVERSAL_TASK": "1", "UNIVERSAL_WINDOW_KIND": "1",
                         "UNIVERSAL_ACCESSORY": "1", "UNIVERSAL_MENU": "1", "DATA_LOC": "0x7300"},
                    cwd=ROOT, check=True)
-    media = ROOT / ('QA/Diagnostics/CPC-'+variant)
+    media = ROOT / ('QA/CPC-Desktop' if delivery else 'QA/Diagnostics/CPC-'+variant)
     card = media / "CARD"
-    card.mkdir(parents=True, exist_ok=True)
     boot = bytearray(headed((work / "BOOT.RAW").read_bytes(), 0x8000))
     boot[1:12] = b"BOOT    BIN"
     boot[67:69] = sum(boot[:67]).to_bytes(2, "little")
@@ -132,16 +134,17 @@ def build(desktop=False, filemgr=False):
              "GBENCH/DEFAULT.SPR": (work / "DEFAULT.SPR").read_bytes(),
              "GBENCH/GBTITLE.MOD": (work / "GBTITLE.MOD").read_bytes(),
              "GEOBENCH.CFG": b'ICONS=REFINED\r\nFONT=DEFAULT\r\nCURSOR=DEFAULT\r\nBACKDROP=SOLID\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nINKS=1,26,0,6,1\r\n',
-             "GBENCH/ABIPROBE.APP": app.read_bytes(),
+             "GBENCH/CALC.APP": calculator.read_bytes(),
+             "GBENCH/CLOCK.APP": clock.read_bytes()}
+    if not delivery:
+        files.update({"GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
              "GBENCH/MENUPRBE.APP": menuapp.read_bytes(),
-             "GBENCH/CALC.APP": calculator.read_bytes(),
-             "GBENCH/CLOCK.APP": clock.read_bytes(),
              "UFSTEST/SOURCE.BIN": bytes((i*13+7)&255 for i in range(1025)),
              "UFSTEST/SUB/SMALL.TXT": b"OK!",
              "PICKTEST/NOTES.TXT": b"Picker notes\r\n",
              "PICKTEST/IGNORE.BIN": b"not a text file",
-             "PICKTEST/INNER/HELLO.TXT": b"Picked from M4!\n"}
+             "PICKTEST/INNER/HELLO.TXT": b"Picked from M4!\n"})
     if filemgr:
         files['GBENCH/FILEMGR.BIN']=(work/'filemgr/FILEMGR.native.bin').read_bytes()
     for tile in (ROOT/'assets/backdrops').glob('*.BDP'):
@@ -152,14 +155,18 @@ def build(desktop=False, filemgr=False):
             if len(raw) not in ((56,106) if ext=='TBR' else (50,)):
                 raise AssertionError('invalid chrome asset '+str(path))
             files['GBENCH/'+path.name.upper()]=raw
-    directories=("GBENCH", "UFSTEST", "UFSTEST/SUB", "PICKTEST", "PICKTEST/INNER", "PICKTEST/EMPTY")
+    directories=("GBENCH",) if delivery else ("GBENCH", "UFSTEST", "UFSTEST/SUB", "PICKTEST", "PICKTEST/INNER", "PICKTEST/EMPTY")
+    if delivery:
+        from cpc_desktop_media import check_destination
+        check_destination(media, files, directories)
+    card.mkdir(parents=True, exist_ok=True)
     for name in directories:
         (card/name).mkdir(parents=True,exist_ok=True)
     for name, payload in files.items():
         path = card / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
-    image = media / "RUNTIME.IMG"
+    image = media / ('GEOBENCH.IMG' if delivery else 'RUNTIME.IMG')
     fd, temporary = tempfile.mkstemp(prefix="runtime-", suffix=".img", dir=media)
     try:
         with os.fdopen(fd, "wb") as out: out.truncate(32 * 1024 * 1024)
@@ -191,14 +198,25 @@ def build(desktop=False, filemgr=False):
     sections["cursor"] = dict(base=sym['cursor_phases'],used=512,budget=512,
                              save_under=sym['pointer_background'],save_under_bytes=64)
     sections["bar"] = json.loads((work / "bar_layout.json").read_text())
-    if filemgr: sections['filemgr']=json.loads((work/'filemgr_layout.json').read_text())
+    if delivery:
+        sections['bar'].update(staged=True, status='build-matched boot-only Desktop; not a portable APP')
+    if filemgr:
+        sections['filemgr']=json.loads((work/'filemgr_layout.json').read_text())
+        if delivery:
+            sections['filemgr'].update(staged=True,
+                status='build-matched native File Manager; not a portable APP')
     sections.update(json.loads((work / "native_layout.json").read_text()))
     manifest = dict(work=str(work), image=str(image), regions=memory_regions(sym), sections=sections,
                     native_identity=json.loads((work/'native_identity.json').read_text()),
                     files={name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
-                    status="private native File Manager launch qualification; not a distribution" if filemgr else
+                    status=("experimental CPC M4 Desktop with native File Manager" if filemgr else
+                            "experimental CPC M4 Desktop; file browsing deferred to sprint 3") if delivery else
+                           "private native File Manager launch qualification; not a distribution" if filemgr else
                            "private actual Desktop boot contract; File Manager not admitted" if desktop else
                            "experimental universal launcher; not Desktop/distribution")
+    if delivery:
+        manifest.update(profile='cpc-desktop-m4-v2' if filemgr else 'cpc-desktop-m4-v1', storage='m4', directories=list(directories),
+                        image_sha256=hashlib.sha256(image.read_bytes()).hexdigest())
     (media / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     # Explicit private config: manual testing never edits the user's normal
     # machine setup or mounts their existing M4/Albireo card.

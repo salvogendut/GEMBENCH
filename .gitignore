@@ -40,6 +40,10 @@ QA/MSX/GBMSX.IMG
 QA/Diagnostics/CPC-foundation/
 QA/Diagnostics/CPC-production/
 QA/Diagnostics/CPC-runtime/
+QA/Diagnostics/CPC-desktop-contract/
+QA/Diagnostics/CPC-filemgr-contract/
+# Generated first Desktop delivery; parked QA/CPC remains untouched.
+QA/CPC-Desktop/
 !QA/MSX/Floppies/
 !QA/MSX/Floppies/*.DSK
 !assets/msx/

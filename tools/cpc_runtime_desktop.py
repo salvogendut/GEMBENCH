@@ -1,9 +1,12 @@
 """Observe the actual Desktop boot/bind/menu path on a private M4 image."""
 import json
+from pathlib import Path
 
 from cpc_production_lifetime import physical
 from cpc_runtime_clock import clock_cache_ready
 from cpc_runtime_pixels import verify_pixels
+from cpc_filemgr_pixels import listing
+from cpc_fswrite_cases import space
 from test_cpc_foundation_1984 import snapshot
 
 DESKTOP=bytes((2,10))+b'Desk\0\0\0\0'+bytes((17,))+b'System\0\0'
@@ -17,7 +20,7 @@ def run_desktop(root,manifest,work,sym,artifacts,send,wait,read,key,move):
          if len(v:=line.split())==3 and v[0]=='DEF'}
     offsets={v[1]:int(v[2],16) for line in (root/'build/universal-obj/uclock/main.sym').read_text().splitlines()
              if len(v:=line.split())==4 and v[0]=='1' and v[3]=='R'}
-    rects={};order=[0];accents={};titles={};calculators={};clocks={}
+    rects={};order=[0];accents={};titles={};calculators={};clocks={};filemanagers={}
     focus=0;menu=DESKTOP;clock_slot=None;popup=None;dialog=None;checks=[];stack=dict(main=0,irq=0,tmp=0)
     desktop=dict(icons=(work/'REFINED.IST').read_bytes())
     def word(r,name): return int.from_bytes(r[sym[name]:sym[name]+2],'little')
@@ -43,12 +46,14 @@ def run_desktop(root,manifest,work,sym,artifacts,send,wait,read,key,move):
         if clock_slot is not None:
             clocks[clock_slot]=tuple(clock_value(r,k) for k in ('ph','pm','ps','show_sec','dh','dm','ds'))
         painted_popup=popup if dialog is None else dict(x=33,y=111,hot=-1,labels=('  OK  ',))
-        verify_pixels(r,sym,work,rects,order,accents,menu,titles,popup=painted_popup,calculators=calculators,clocks=clocks,dialog=dialog,desktop=desktop)
+        verify_pixels(r,sym,work,rects,order,accents,menu,titles,popup=painted_popup,calculators=calculators,clocks=clocks,dialog=dialog,desktop=desktop,filemanagers=filemanagers)
         if r[sym['wm_nwin']]!=len(order) or r[sym['wm_focus']]!=focus or r[sym['wm_z']:sym['wm_z']+len(order)]!=bytes(order):
             raise AssertionError(name+': owner/window lifecycle mismatch')
         if r[sym['wm_table']:sym['wm_table']+5]!=bytes((0xC0,0,0,80,200)):
             raise AssertionError('root page or geometry changed')
-        if bool(r[sym['ui_modal']])!=modal or any(r[sym['core_fsctx_table']+i*144] for i in range(4)):
+        if r[sym['core_page_free']]!=27-len(order) or word(r,'core_pending_owner') or any(r[sym['launch_arg']:sym['launch_arg']+11]):
+            raise AssertionError('Desktop owner/page/launch state leaked')
+        if bool(r[sym['ui_modal']])!=modal or sum(bool(r[sym['core_fsctx_table']+i*144]) for i in range(4))!=len(filemanagers):
             raise AssertionError('Desktop modal/context leak')
         if popup is not None:
             labels=b''.join(s.encode()+b'\0' for s in popup['labels'])
@@ -73,6 +78,16 @@ def run_desktop(root,manifest,work,sym,artifacts,send,wait,read,key,move):
         popup=dict(x=col,y=8,hot=-1,labels=('Clock','Calculator') if col==10 else ('Ram Usage','Tidy Icons','About GEOBENCH'))
         checked(f'desktop-popup-{len(checks)}')
         move(col+2,13+index*10);click();wait(12);popup=None
+    def drag(slot,x,y):
+        ox,oy,w,h=rects[slot]
+        move(ox+10,oy+5);_,r=snapshot(read());grab=(r[sym['poll_byte']],r[sym['poll_line']])
+        send('key-down SPACE');wait(10);move(grab[0]+x-ox,grab[1]+y-oy)
+        _,r=snapshot(read());drop=(r[sym['poll_byte']],r[sym['poll_line']])
+        send('key-up SPACE');wait(60)
+        rects[slot]=(max(0,min(80-w,ox+drop[0]-grab[0])),max(8,min(200-h,oy+drop[1]-grab[1])),w,h)
+        _,r=snapshot(read());at=sym['wm_table']+25*slot+1
+        if r[at:at+4]!=bytes(rects[slot]) or rects[slot]==(ox,oy,w,h):
+            raise AssertionError('title drag differs from pointer displacement')
     r=checked('desktop-boot')
     owner=bytes((r[sym['core_win_owner']],r[sym['core_win_owner_gen']]))
     choose(17,0);desktop['footprint']=f"{(manifest['sections']['kernel']['used']+512)//1024}K used"
@@ -80,10 +95,12 @@ def run_desktop(root,manifest,work,sym,artifacts,send,wait,read,key,move):
     choose(10,1);rects[1]=(24,24,31,144);order.append(1);focus=1;menu=EDIT
     titles[1]='Calculator';calculators[1]='0';checked('desktop-calculator')
     key('7');key('2');calculators[1]='72';checked('desktop-calculator-input')
+    drag(1,8,34);checked('desktop-calculator-drag')
     root_focus();checked('desktop-return-root')
     choose(10,0);rects[2]=(26,20,28,122);order.append(2);focus=2;menu=CLOCK
     titles[2]='Clock';clock_slot=2;checked('desktop-clock')
     key('S');checked('desktop-clock-seconds')
+    drag(2,35,28);checked('desktop-clock-drag')
     root_focus();r=checked('desktop-background-clock');before=word(r,'cpc_runtime_worker_calls')
     wait(150);r=checked('desktop-background-progress')
     if word(r,'cpc_runtime_worker_calls')==before: raise AssertionError('background worker stopped')
@@ -106,8 +123,33 @@ def run_desktop(root,manifest,work,sym,artifacts,send,wait,read,key,move):
     identity=manifest['native_identity']
     dialog=dict(kind='about',build=f"Version : {identity['version']} Git: {identity['git']}")
     checked('desktop-about');key('ESCAPE');dialog=None;checked('desktop-about-restores')
+    # Public Desktop gestures, not the old diagnostic F-key launcher.
+    move(3,26);click();click()
+    if 'filemgr' in manifest['sections']:
+        rects[1]=(4,26,56,158);order.append(1);focus=1;menu=bytes((1,10))+b'View\0\0\0\0'
+        filemanagers[1]=dict(items=listing(manifest['files']))
+        titles[1]=f"Disk C {space(Path(manifest['image']))[0]//1024}MiB free"
+        checked('desktop-disk-opens-filemgr');key('ESCAPE')
+        del filemanagers[1];del rects[1];del titles[1];order.remove(1);focus=0;menu=DESKTOP
+        checked('desktop-filemgr-close-restores')
+    else:
+        popup=dict(x=23,y=84,hot=-1,labels=('Disk browsing unavailable','File Manager integration pending'))
+        checked('desktop-disk-unavailable');key('ESCAPE');popup=None
+        checked('desktop-disk-error-restores')
+    move(69,45);click();click()
+    rects[1]=(26,20,28,122);order.append(1);focus=1;menu=CLOCK
+    titles[1]='Clock';clock_slot=1;checked('desktop-clock-icon-launch')
+    root_focus();move(69,45);click();click();focus=1;menu=CLOCK
+    checked('desktop-clock-icon-reactivates')
+    # Use the actual title close gadget this time, not Escape.
+    move(rects[1][0]+1,rects[1][1]+5);click()
+    order.remove(1);del rects[1];del titles[1];clocks.clear();clock_slot=None
+    focus=0;menu=DESKTOP;checked('desktop-title-close-returns')
+    if (artifacts/'RUNTIME.IMG').read_bytes()!=Path(manifest['image']).read_bytes():
+        raise AssertionError('read-only Desktop lifecycle changed its M4 copy')
     report=dict(checkpoints=checks,stack=stack,sections=manifest['sections'],
-                status='actual Desktop boot contract; native File Manager admission still closed')
+                status='actual Desktop with build-matched File Manager' if 'filemgr' in manifest['sections'] else
+                       'actual Desktop boot contract; native File Manager admission still closed')
     (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS actual Desktop contract '+json.dumps(report),flush=True)
     return artifacts

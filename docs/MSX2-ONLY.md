@@ -1,5 +1,14 @@
 # Current MSX2-only implementation state
 
+**2026-09-08 update:** MSX2 remains the default/full release target, but
+[CPC restart Sprint 3](CPC-RESTART-SPRINT3.md) extends the explicit experimental
+`make cpc` Desktop build under `QA/CPC-Desktop/`. It reuses the qualified shared
+Desktop/core and portable Clock/Calculator; Disk C opens the actual native File
+Manager through its build-specific admission contract.
+The parked `QA/CPC/` tree is not an output or source. PCW and bundled BASIC
+remain MSX-only, and this is not a full CPC application-parity release.
+The original retirement decision and subsequent diagnostic history follow.
+
 As of 31 August 2026, the active GEOBENCH tree builds and releases MSX2 only.
 
 The active tree builds and releases for an MSX2 with a V9938/V9958, 128 KiB of

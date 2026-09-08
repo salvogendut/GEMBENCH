@@ -212,8 +212,20 @@ including 52 final runtime checkpoints. Shared Clock exposure and preemptive
 File Manager selection repairs have regression coverage; full host checks and
 openMSX Screen 6/7 Clock/Desk checks pass. **0% remains within sprint 1's defined
 qualification scope.** Normal APP admission remains unchanged; the private
-profile is not regular CPC Desktop delivery. Next is **sprint 2: stage and
-document the qualified actual Desktop as a reproducible manual M4 target**.
+profile is not regular CPC Desktop delivery. **Complete:
+[sprint 2](CPC-RESTART-SPRINT2.md) (2026-09-08)** delivers the actual Desktop via
+`make cpc` under `QA/CPC-Desktop/`, separate from parked `QA/CPC/`. Its 33 M4
+Desktop/app lifecycle checks, six boot-rejection cases and full host suite pass;
+the manual image is built. **Complete and manually accepted:
+[sprint 3](CPC-RESTART-SPRINT3.md) (2026-09-08)** integrates the actual native
+File Manager into the delivered Disk C workflow.
+The `cpc-desktop-m4-v2` profile retains the exact build-specific admission
+contract and unchanged portable APP validator. Delivered-image browsing,
+View/configuration (including cold restart), app launch/return and
+failure/capacity recovery pass **140 M4 checkpoints**, alongside **263 Python
+tests** and native/SDK/ABI checks. The manual image is rebuilt and its 33 FAT
+payloads match the isolated tested build. The user confirmed the manual image;
+next is **sprint 4 stabilization**. This does not claim full CPC application parity.
 The earlier
 W2/W3 scope remains tracked, but finishing every Settings/saver action before starting
 Desktop is no longer a delivery requirement.

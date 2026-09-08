@@ -81,8 +81,28 @@ or window work must cross an explicit version boundary.
 - MSX-DOS2 or Nextor
 - RainBIOS as a supported validation environment
 
-GEOBENCH currently has no active CPC or PCW release target or release media. The
-last multi-platform tree is preserved on `archive/cpc-pcw-targets`. The first
+MSX2 remains the full release target. The experimental **CPC M4 Desktop** is
+now available through [Sprint 3](docs/CPC-RESTART-SPRINT3.md), using the same
+Desktop/File Manager sources, window manager and portable Clock/Calculator apps:
+
+```sh
+make cpc
+bash tools/run_cpc.sh
+```
+
+Use the project SDCC/RASM toolchain; the sprint document includes this workspace's
+distrobox commands. Output is `QA/CPC-Desktop/` (CARD, M4 image and 1984 config),
+separate from parked `QA/CPC/` and diagnostics. Arrow keys move the pointer,
+Space clicks/drags. Double-click **Disk C**, enter **GBENCH**, then open
+**CLOCK.APP** or **CALC.APP**. File Manager's View menu offers Icons/List and
+Fullscreen; double-click `..` to go up. `FILEMGR.BIN` is a build-matched native
+component, not a portable APP. Data-file associations and file copy/delete are
+not yet available. PCW, Albireo and a hardware mouse driver are not yet qualified. Rebuilding
+resets generated media; keep personal data on separate copies.
+
+### Earlier CPC diagnostic checkpoints
+
+The last multi-platform tree is preserved on `archive/cpc-pcw-targets`. The first
 CPC ABI experiment is parked on `feature/54-reintegrate-cpc`; the
 [five-step CPC restart](docs/CPC-RESTART-PLAN.md) begins from working MSX2 with
 a feature reference and shared-core extraction. Its isolated
@@ -182,9 +202,11 @@ contracts remain later integrations.
 bindings and audits its unresolved CPC services/data layout. Run
 `make diagnostic-cpc-settings-audit`; it produces no executable or new media.
 The [desktop-first delivery plan](docs/CPC-RESTART-PLAN.md#desktop-first-delivery-update--2026-09-07)
-groups the remaining work into four sprints: native services/memory, real
-Desktop, File Manager, and stabilization. Sprint 2 targets a testable Desktop;
-sprint 3 adds the usable browsing/launch workflow. Complete Settings and broader
+groups delivery into four sprints: native services/memory, real
+Desktop, File Manager, and stabilization. Sprints 1 and 2 are complete;
+[sprint 3](docs/CPC-RESTART-SPRINT3.md) now delivers the usable browsing/launch
+workflow, with automated acceptance passed and the manual image rebuilt.
+Sprint 4 is stabilization. Complete Settings and broader
 application parity follow separately.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the

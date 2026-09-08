@@ -8,6 +8,24 @@ GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
 all: msx
 
+.PHONY: cpc cpc-desktop cpc-desktop-1984 cpc-filemgr-1984
+# Experimental actual Desktop delivery, separate from parked QA/CPC and diagnostics.
+cpc: cpc-desktop
+cpc-desktop:
+	$(PYTHON) tools/build_cpc.py
+
+cpc-desktop-1984: cpc-desktop
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --skip-build
+
+cpc-filemgr-1984: cpc-desktop
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr --skip-build
+	@set -e; for scenario in workflow services contexts; do \
+		$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-scenario $$scenario --skip-build; \
+	done
+	@set -e; for fault in missing short oversized corrupt unbound no-register; do \
+		$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-case $$fault --skip-build; \
+	done
+
 # CPC restart step 3: isolated hardware diagnostics, not a release CPC target.
 .PHONY: diagnostic-cpc-foundation diagnostic-cpc-foundation-1984 diagnostic-cpc-graphics diagnostic-cpc-graphics-1984
 .PHONY: diagnostic-cpc-storage diagnostic-cpc-storage-1984

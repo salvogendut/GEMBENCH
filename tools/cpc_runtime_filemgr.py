@@ -44,8 +44,9 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
     app=work/'filemgr'
     noi={v[1]:int(v[2],16) for line in (app/'filemgr.noi').read_text().splitlines()
          if len(v:=line.split())==3 and v[0]=='DEF'}
-    offsets={v[1]:int(v[2],16) for line in (app/'main.sym').read_text().splitlines()
-             if len(v:=line.split())==4 and v[0]=='1' and v[3]=='R'}
+    offsets={v[1]:int(v[2],16)+(noi['s__INITIALIZED']-noi['s__DATA'] if v[0]=='2' else 0)
+             for line in (app/'main.sym').read_text().splitlines()
+             if len(v:=line.split())==4 and v[0] in ('1','2') and v[3]=='R'}
     icons=(work/'REFINED.IST').read_bytes();raw=(app/'FILEMGR.native.bin').read_bytes()
     items=listing(manifest['files']);rects={};order=[0];fms={};titles={};accents={}
     focus=0;menu=DESKTOP;popup=None;calculators={};clocks={};clock_slot=None
@@ -108,6 +109,10 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
                 n=names[i*11:i*11+11];got.append(n[:8].decode().rstrip()+('.'+n[8:].decode().rstrip() if n[8:]!=b'   ' else ''))
             if got!=[n for n,_ in expected]: raise AssertionError('directory contents/order: '+repr(got))
             if field(r,slot,'title_buf',24).split(b'\0',1)[0].decode()!=title(path): raise AssertionError('title/free space')
+            # A failed View save shows its modal over the old pixels before
+            # fm_set_view returns and redraws the newly selected session view.
+            if popup is None and (field(r,slot,'top')!=bytes((fms[slot].get('top',0),)) or field(r,slot,'view')!=bytes((fms[slot].get('view',1),))):
+                raise AssertionError('File Manager view/scroll state differs')
         if clock_slot is not None:
             clocks[clock_slot]=tuple(clock_value(r,k) for k in ('ph','pm','ps','show_sec','dh','dm','ds'))
         painted_order=[slot for slot in order if slot not in unpublished]
@@ -135,6 +140,16 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         nonlocal focus,menu
         key('ESCAPE');order.remove(slot);del fms[slot];del rects[slot];del titles[slot]
         focus=order[-1];menu=bytes((1,10))+b'View\0\0\0\0' if focus else DESKTOP
+    def open_item(slot,name):
+        """Use the listing oracle, not diagnostic-image-specific icon positions."""
+        fm=fms[slot];index=[n for n,_ in fm['items']].index(name)
+        x,y,w,h=rects[slot];top=fm.get('top',0)
+        if fm.get('view',1):
+            row,col=divmod(index,3);cx=x+4+col*((w-5)//3)+6;cy=y+20+(row-top)*44
+        else:
+            row=index;cx=x+12;cy=y+20+(row-top)*18
+        if not y+14<=cy<y+h-1: raise AssertionError('item is not visible: '+name)
+        move(cx,cy);click();click()
     def finish():
         report=dict(scenario=scenario or case or 'lifecycle',checkpoints=checks,stack=stack,sections=manifest['sections'])
         (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
@@ -153,6 +168,59 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         _,r=snapshot(read());at=sym['wm_table']+25*slot+1
         if r[at:at+4]!=bytes(rects[slot]): raise AssertionError('drag differs from pointer displacement')
     checked('filemgr-root')
+    if scenario=='reboot':
+        before=(artifacts/'RUNTIME.IMG').read_bytes()
+        open_disk(1);fms[1]['view']=0;checked('reboot-persisted-list')
+        open_item(1,'GBENCH')
+        fms[1]=dict(items=[('..',14)]+listing(manifest['files'],'/GBENCH'),path='/GBENCH',view=0)
+        titles[1]=title('/GBENCH');checked('reboot-list-directory')
+        open_item(1,'..');fms[1]=dict(items=items,view=0);titles[1]=title()
+        checked('reboot-list-parent')
+        close_fm(1);checked('reboot-list-close')
+        if (artifacts/'RUNTIME.IMG').read_bytes()!=before: raise AssertionError('reboot read-only browsing wrote disk')
+        return finish()
+    if scenario=='workflow':
+        view_menu=bytes((1,10))+b'View\0\0\0\0'
+        def directory(slot,path):
+            fms[slot]=dict(items=([('..',14)] if path else [])+listing(manifest['files'],path),path=path)
+            titles[slot]=title(path)
+        open_disk(1);checked('workflow-disk')
+        open_item(1,'GBENCH');directory(1,'/GBENCH');checked('workflow-directory')
+        open_item(1,'CALC.APP')
+        rects[2]=(24,24,31,144);order.append(2);focus=2;menu=EDIT
+        titles[2]='Calculator';calculators[2]='0';checked('workflow-calculator')
+        key('7');key('2');calculators[2]='72';checked('workflow-calculator-input')
+        key('ESCAPE');order.remove(2);del rects[2];del titles[2];calculators.clear();focus=1;menu=view_menu
+        checked('workflow-calculator-return')
+        # Exercise the actual generated resource menu, including checked labels.
+        move(11,3);click();wait(12)
+        popup=dict(x=10,y=8,hot=-1,labels=('[ ] Fullscreen','(x) Icons','( ) List'))
+        checked('workflow-view-menu');key('ESCAPE');popup=None;checked('workflow-view-cancel')
+        move(11,3);click();wait(12);move(12,33);click();fms[1]['view']=0
+        checked('workflow-list-menu')
+        move(6,166);click();fms[1]['top']=7;checked('workflow-list-page-down')
+        move(6,42);click();fms[1]['top']=6;checked('workflow-list-arrow-up')
+        move(6,176);click();fms[1]['top']=7;checked('workflow-list-arrow-down')
+        key('I');fms[1]['view']=1;fms[1]['top']=0;checked('workflow-icons-shortcut')
+        key('F');rects[1]=(0,8,80,192);checked('workflow-fullscreen')
+        key('F');rects[1]=(4,26,56,158);checked('workflow-fullscreen-restores')
+        open_item(1,'..');directory(1,'');checked('workflow-parent')
+        open_item(1,'GEOBENCH.CFG')
+        popup=dict(x=23,y=84,hot=-1,labels=('Not available yet','Unsupported file or location'))
+        checked('workflow-unsupported-file');key('ESCAPE');popup=None;checked('workflow-error-restores')
+        open_item(1,'GBENCH');directory(1,'/GBENCH');checked('workflow-directory-again')
+        open_item(1,'CLOCK.APP');clock_slot=2;rects[2]=(26,20,28,122);order.append(2);focus=2;menu=CLOCK;titles[2]='Clock'
+        checked('workflow-clock');key('S');checked('workflow-clock-seconds')
+        drag(2,52,20);checked('workflow-clock-moved')
+        move(14,31);click();order.remove(1);order.append(1);focus=1;menu=view_menu
+        checked('workflow-refocus-directory')
+        drag(1,0,38);checked('workflow-directory-moved')
+        open_disk(3);checked('workflow-independent-root')
+        close_fm(3);checked('workflow-independent-close')
+        close_fm(1);focus=2;menu=CLOCK;checked('workflow-directory-close')
+        key('ESCAPE');order.remove(2);del rects[2];del titles[2];clocks.clear();clock_slot=None;focus=0;menu=DESKTOP
+        checked('workflow-clean-desktop')
+        return finish()
     if scenario=='contexts':
         for slot in range(1,5):
             open_disk(slot);checked(f'contexts-open-{slot}')
@@ -163,6 +231,7 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         send('key-down L');wait(12);send('key-up L')
         popup=dict(x=23,y=84,hot=-1,labels=('View not saved','Configuration error'))
         r=checked('contexts-config-save-rejected')
+        if field(r,4,'view')!=b'\0': raise AssertionError('failed View save lost the new session preference')
         if r[sym['cpc_edit_status']]!=7 or not r[sym['cpc_edit_error']] or image.read_bytes()!=before:
             raise AssertionError('full-context edit did not reject without writing')
         key('ESCAPE');popup=None;fms[4]['view']=0;checked('contexts-session-view-only')
@@ -279,7 +348,7 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         if slot==2:
             # Launch the unchanged portable Calculator from the first owner's
             # /GBENCH listing, then return to that same native directory state.
-            move(46,46);click();click()
+            open_item(1,'CALC.APP')
             rects[2]=(24,24,31,144);order.append(2);focus=2;menu=EDIT
             titles[2]='Calculator';calculators[2]='0';checked('filemgr-launch-calculator')
             key('7');key('2');calculators[2]='72';checked('filemgr-calculator-input')
