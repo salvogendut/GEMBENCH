@@ -28,6 +28,23 @@ cpc_loading_begin
                 include "core/app_launch.asm"
                 include "core/app_admission.asm"
 cpc_loaded_admission
+                ifdef CPC_NATIVE_SETTINGS
+                ifndef CPC_NATIVE_FILEMGR
+                fail "Settings integration requires the File Manager profile"
+                endif
+                ld hl,fs_req_name
+                ld de,cpc_settings_name
+                ld b,11
+cpc_settings_name_check
+                ld a,(de)
+                cp (hl)
+                jr nz,cpc_settings_other_name
+                inc hl
+                inc de
+                djnz cpc_settings_name_check
+                jp cpc_settings_admission
+cpc_settings_other_name
+                endif
                 ifdef CPC_NATIVE_FILEMGR
                 ; Private system profile only. Other files still pass through
                 ; the unchanged universal validator/receiver below.
@@ -55,6 +72,9 @@ cpc_loaded_universal
                 ret
                 ifdef CPC_NATIVE_FILEMGR
                 include "cpc_filemgr_admission.inc"
+                endif
+                ifdef CPC_NATIVE_SETTINGS
+                include "cpc_settings_admission.inc"
                 endif
                 include "../lib/cpc/app_load.asm"
 cpc_loading_end

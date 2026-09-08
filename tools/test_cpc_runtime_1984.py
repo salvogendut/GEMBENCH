@@ -61,25 +61,31 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None):
+    settings=settings_case is not None
+    if settings and desktop_delivery and settings_case not in (
+            'normal','mixed','reboot','missing','short','corrupt','unbound','edit-missing','contexts','stress'):
+        raise ValueError('injected storage-fault clients remain private Settings diagnostics')
     filemgr=filemgr or filemgr_case is not None or filemgr_scenario is not None
     desktop=desktop or desktop_delivery
     if desktop_delivery:
-        if (seed_image and filemgr_scenario != 'reboot') or filemgr_scenario == 'windows':
+        if (seed_image and filemgr_scenario != 'reboot' and settings_case != 'reboot') or filemgr_scenario == 'windows':
             raise ValueError('Desktop delivery test must use its own image without diagnostic applications')
-        if filemgr_scenario == 'reboot' and not seed_image:
-            raise ValueError('File Manager reboot check requires the saved View test image')
+        if (filemgr_scenario == 'reboot' or settings_case=='reboot') and not seed_image:
+            raise ValueError('reboot check requires its saved test image')
         from cpc_desktop_media import validate
-        media=ROOT/'QA/CPC-Desktop' if skip_build else build(desktop=True,filemgr=True,delivery=True)
+        media=ROOT/'QA/CPC-Desktop' if skip_build else build(desktop=True,filemgr=True,settings=True,delivery=True)
         manifest=validate(media,pristine=True)
-        if filemgr and manifest['profile'] != 'cpc-desktop-m4-v2':
+        if filemgr and manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3'):
             raise ValueError('File Manager acceptance requires the Sprint 3 delivery profile')
+        if settings and manifest['profile']!='cpc-desktop-m4-v3':
+            raise ValueError('Settings acceptance requires the v3 delivery profile')
         # Check the real FAT contents, not just the host staging directory.
         for name,expected in manifest['files'].items():
             payload=subprocess.check_output(['mtype','-i',manifest['image']+'@@16384','::/'+name])
             if hashlib.sha256(payload).hexdigest()!=expected:
                 raise AssertionError('delivered M4 file differs: '+name)
-        if seed_image:
+        if seed_image and not settings:
             # Cold-boot only a payload-identical services-test copy with the
             # expected saved View. Never mutate the source or silently accept
             # replacement native/universal binaries through this test path.
@@ -91,13 +97,18 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 if hashlib.sha256(payload).hexdigest()!=expected:
                     raise AssertionError('File Manager reboot seed differs: '+name)
     else:
-        variant='filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
-        media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr)
+        variant='settings-contract' if settings else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
+        media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr,settings=settings)
         manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
-    artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-'))
+    artifact_root=ROOT/'build/settings-runtime' if settings else ROOT/'build/cpc-delivery-runtime' if desktop_delivery else None
+    if artifact_root is not None:artifact_root.mkdir(parents=True,exist_ok=True)
+    artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-',dir=artifact_root))
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(seed_image or manifest['image']).read_bytes())
     filemgr_kernel=None
+    if settings:
+        from cpc_runtime_settings import prepare
+        settings_fixture=prepare(settings_case,ROOT,media,work,sym,image,artifacts)
     if filemgr_case:
         from cpc_runtime_filemgr import prepare
         filemgr_kernel=prepare(filemgr_case,work,sym,image,artifacts)
@@ -244,6 +255,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 return artifacts
         else: raise AssertionError('runtime boot timeout')
         wait(50)
+        if settings:
+            from cpc_runtime_settings import run_settings
+            return run_settings(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,settings_case,settings_fixture)
         if filemgr:
             from cpc_runtime_filemgr import run_filemgr
             return run_filemgr(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,filemgr_case,filemgr_kernel,filemgr_scenario)
@@ -493,6 +507,8 @@ if __name__=='__main__':
     mode.add_argument('--filemgr',action='store_true',help='private build-matched native File Manager lifecycle')
     mode.add_argument('--filemgr-case',choices=('missing','short','oversized','corrupt','unbound','no-register'))
     mode.add_argument('--filemgr-scenario',choices=('contexts','services','windows','workflow','stacking','cadence','minute-cadence'))
+    from cpc_settings_faults import CASES as SETTINGS_FAULT_CASES
+    mode.add_argument('--settings-case',choices=('normal','mixed','reboot','missing','short','corrupt','unbound','edit-missing')+SETTINGS_FAULT_CASES)
     mode.add_argument('--root-fault',choices=('missing','short','oversized','cfg-missing','cfg-short','cfg-oversized'))
     mode.add_argument('--native',action='store_true')
     mode.add_argument('--native-fault',choices=('missing','short','oversized'))
@@ -509,6 +525,9 @@ if __name__=='__main__':
     mode.add_argument('--chrome-case',choices=CHROME_CASES)
     args=parser.parse_args();args.emulator=args.emulator.resolve()
     artifacts=run(**vars(args))
+    if args.settings_case=='normal':
+        run(args.emulator,skip_build=True,desktop_delivery=args.desktop_delivery,
+            settings_case='reboot',seed_image=artifacts/'RUNTIME.IMG')
     if args.desktop_delivery and args.filemgr_scenario=='services':
         run(args.emulator,skip_build=True,desktop_delivery=True,filemgr_scenario='reboot',
             seed_image=artifacts/'RUNTIME.IMG')

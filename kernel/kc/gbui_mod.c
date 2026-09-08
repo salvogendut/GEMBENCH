@@ -260,6 +260,10 @@ static void browser_save_as(void)
 }
 #endif
 
+#ifndef GB_UI_POPUP_MAX
+#define GB_UI_POPUP_MAX 16
+#endif
+
 #ifdef GB_UI_SAVEUNDER
 /* Bounded native module profile. The caller and the renderer share an owned
  * request block; reject malformed strings/geometry before any drawing or input.
@@ -278,7 +282,7 @@ static unsigned char ui_valid(void)
         n = 1;
     } else if (UI_OP == UI_OP_POPUP || UI_OP == UI_OP_GBR_MENU) {
         n = UI_N;
-        if (!n || n > (UI_OP == UI_OP_GBR_MENU ? 8 : 16) || UI_LINE > 198)
+        if (!n || n > (UI_OP == UI_OP_GBR_MENU ? 8 : GB_UI_POPUP_MAX) || UI_LINE > 198)
             return 0;
     } else return 0;
     for (i = 0; i < n; i++) {
@@ -320,9 +324,9 @@ void main(void)
 #endif
 
     if (UI_OP == UI_OP_POPUP) {
-        const char *labels[16];                  /* rebuild the pointer array into UI_TEXT */
+        const char *labels[GB_UI_POPUP_MAX];      /* rebuild the pointer array into UI_TEXT */
         unsigned char n = UI_N;
-        if (n > 16) n = 16;
+        if (n > GB_UI_POPUP_MAX) n = GB_UI_POPUP_MAX;
         for (i = 0; i < n; i++) { labels[i] = p; while (*p) p++; p++; }
         UI_RES = gb_popup(UI_COL, UI_LINE, labels, n);
 

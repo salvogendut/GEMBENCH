@@ -58,7 +58,7 @@ cpc-filemgr-1984: cpc-desktop
 .PHONY: diagnostic-cpc-native-1984
 .PHONY: diagnostic-cpc-picker-1984
 .PHONY: diagnostic-cpc-config-edit-1984
-.PHONY: diagnostic-cpc-settings-audit
+.PHONY: diagnostic-cpc-settings-audit diagnostic-cpc-settings-link diagnostic-cpc-settings-image diagnostic-cpc-settings-1984
 .PHONY: diagnostic-cpc-assets-1984
 .PHONY: diagnostic-cpc-bitmaps-1984
 .PHONY: diagnostic-cpc-chrome-1984
@@ -82,6 +82,15 @@ diagnostic-cpc-config-edit-1984:
 
 diagnostic-cpc-settings-audit:
 	$(PYTHON) tools/audit_cpc_settings.py --output build/cpc-settings-audit
+
+diagnostic-cpc-settings-link:
+	$(PYTHON) tools/build_cpc_settings.py --output build/cpc-settings-link
+
+diagnostic-cpc-settings-image:
+	$(PYTHON) tools/build_cpc_settings.py --integration-image
+
+diagnostic-cpc-settings-1984: diagnostic-cpc-settings-image
+	$(PYTHON) tools/test_cpc_runtime_1984.py --settings-case normal --skip-build
 
 diagnostic-cpc-desk-1984:
 	$(PYTHON) tools/test_cpc_runtime_1984.py --desk

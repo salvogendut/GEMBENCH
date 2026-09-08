@@ -14,6 +14,10 @@ EDIT=bytes((1,10))+b'Edit\0\0\0\0'
 CLOCK=bytes((2,10))+b'View\0\0\0\0'+bytes((17,))+b'Options\0'
 
 
+def system_items(manifest):
+    return ('Ram Usage','Tidy Icons')+(('Settings',) if 'settings' in manifest['sections'] else ())+('About GEOBENCH',)
+
+
 def run_desktop(root,manifest,work,sym,artifacts,send,wait,read,key,move):
     from test_cpc_runtime_1984 import integrity
     noi={v[1]:int(v[2],16) for line in (root/'build/universal-obj/uclock/app.noi').read_text().splitlines()
@@ -75,7 +79,7 @@ def run_desktop(root,manifest,work,sym,artifacts,send,wait,read,key,move):
     def choose(col,index):
         nonlocal popup
         move(col+1,3);click();wait(12)
-        popup=dict(x=col,y=8,hot=-1,labels=('Clock','Calculator') if col==10 else ('Ram Usage','Tidy Icons','About GEOBENCH'))
+        popup=dict(x=col,y=8,hot=-1,labels=('Clock','Calculator') if col==10 else system_items(manifest))
         checked(f'desktop-popup-{len(checks)}')
         move(col+2,13+index*10);click();wait(12);popup=None
     def drag(slot,x,y):
@@ -119,7 +123,7 @@ def run_desktop(root,manifest,work,sym,artifacts,send,wait,read,key,move):
         raise AssertionError('Desktop owner was replaced')
     if r[sym['core_page_free']]!=26: raise AssertionError('application page leak')
     choose(17,0);desktop.pop('footprint');checked('desktop-footprint-off')
-    choose(17,2)
+    choose(17,len(system_items(manifest))-1)
     identity=manifest['native_identity']
     dialog=dict(kind='about',build=f"Version : {identity['version']} Git: {identity['git']}")
     checked('desktop-about');key('ESCAPE');dialog=None;checked('desktop-about-restores')

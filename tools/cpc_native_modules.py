@@ -41,6 +41,7 @@ def provider(work, sym):
     ptr('DESKTOP_FULLSCREEN', 0x130A, 'volatile unsigned char')
     out.append(f'#define DESKTOP_KERNEL_BYTES {sym["cpc_kernel_used_end"]-sym["cpc_kernel_begin"]}u')
     out.append(f'#define DESKTOP_FILEMGR_READY {int(sym.get("cpc_filemgr_profile")==1)}')
+    out.append(f'#define DESKTOP_SETTINGS_READY {int(sym.get("cpc_settings_profile")==1)}')
     ptr('UI_NAME', ui+8)
     ptr('UI_TEXT', sym['cpc_ui_text'])
     ptr('GB_UI_TEXT_END', sym['cpc_ui_request_end'], 'const char')
@@ -82,7 +83,8 @@ def compile_native(work, sym, root):
                                    f'_cpc_config_update = {sym["cpc_config_update"]}\n')
     (work/'cpc_picker.h').write_text('extern unsigned char cpc_picker_error(void);\n'
                                    '#define GB_PICK_STATUS cpc_picker_error\n')
-    (work/'ui_lib.s').write_text(generate(root/'lib/gb/gblib.s',[root/'kernel/kc/cpc_ui.symbols']))
+    (work/'ui_lib.s').write_text(generate(root/'lib/gb/gblib.s',[root/'kernel/kc/cpc_ui.symbols'],
+                                       interrupt_safe=sym.get('cpc_settings_profile')==1))
     for source, target in ((root/'lib/gb/crt0.s','native_crt.rel'),(work/'ui_lib.s','ui_lib.rel'),
                            (work/'native_fs.s','native_fs.rel')):
         subprocess.run([sdas,'-o',target,str(source)],cwd=work,check=True)
@@ -98,9 +100,12 @@ def compile_native(work, sym, root):
     (work/'native_identity.json').write_text(json.dumps(dict(version=version,git=commit))+'\n')
     uidefs = [f'-DGB_UI_PROVIDER="{header}"','-DGBUI_BASIC_ONLY',
               f'-DGB_VERSION="{version}"',f'-DGB_GIT="{commit}"']
+    if sym.get('cpc_settings_profile')==1:
+        uidefs.append('-DGB_UI_POPUP_MAX=17')  # 16 backdrop stems plus SOLID
     for source, target, defs in (
         ('kernel/kc/kcfg_mod.c','native_cfg.rel',cfgdefs),
-        ('kernel/kc/kcfg.c','native_parser.rel',[]),
+        ('kernel/kc/kcfg.c','native_parser.rel',
+         ['-DGB_CFG_ASSET_EXTENSIONS'] if sym.get('cpc_settings_profile')==1 else []),
         ('kernel/kc/gbui_mod.c','native_ui.rel',uidefs),
         ('kernel/kc/cpc_picker_mod.c','native_picker.rel',[*fsdefs,f'-DGB_UI_PROVIDER="{header}"']),
         ('kernel/kc/cpc_config_edit.c','native_edit.rel',[*fsdefs,f'-DGB_UI_PROVIDER="{header}"']),

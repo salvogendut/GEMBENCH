@@ -46,6 +46,11 @@ static void copy_val(const char *p, const char *e, char *dst, unsigned char max)
         char c = *p;
         if (c == 0 || is_eol(c))
             break;
+#ifdef GB_CFG_ASSET_EXTENSIONS
+        /* The qualified native editor accepts STEM.EXT for font/icon/cursor
+           keys. Match the stem contract used by gb_make_83 after parsing. */
+        if (c == '.') break;
+#endif
         dst[n++] = c;
         ++p;
     }

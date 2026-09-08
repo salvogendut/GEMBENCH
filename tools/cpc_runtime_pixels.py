@@ -37,7 +37,7 @@ def cursor_phases(sprite):
     return bytes(result)
 
 
-def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None):
+def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None):
     def fill(image,x,y,w,h,pen):
         for yy in range(max(0,y),min(200,y+h)):
             for xx in range(max(0,x)*4,min(80,x+w)*4): put_pixel(image,xx,yy,pen)
@@ -93,7 +93,8 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
         calculator=(calculators or {}).get(slot)
         watch=(clocks or {}).get(slot)
         filemgr=(filemanagers or {}).get(slot)
-        surface=chrome((x,y,w,h),31 if watch is not None or filemgr is not None else 11 if calculator is not None else 7,
+        setting=(settings or {}).get(slot)
+        surface=chrome((x,y,w,h),31 if watch is not None or filemgr is not None else 11 if calculator is not None or setting is not None else 7,
                        (titles or {}).get(slot,'Universal ABI'),font,frame_pen,theme,title_ready)
         if filemgr is not None:
             from cpc_filemgr_pixels import draw
@@ -101,7 +102,26 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
             draw(surface,(x,y,w,h),filemgr,desktop,fill,text)
         else:
             fill(surface,x+1,y+14,w-2,h-15,0 if watch is not None else 1)
-        if filemgr is not None: pass
+        if setting is not None:
+            def box(bx,by,bw,bh,pen):
+                for edge in ((bx,by,bw,1),(bx,by+bh-1,bw,1),(bx,by,1,bh),(bx+bw-1,by,1,bh)):
+                    fill(surface,*edge,pen)
+            labels=('Font','Icons','Cursor','Title bar','Gadgets','Backdrop')
+            for i,label in enumerate(labels):
+                ry=y+18+i*12
+                text(surface,x+1,ry,label,2,1)
+                fill(surface,x+16,ry-1,34,10,1);box(x+16,ry-1,34,10,2)
+                text(surface,x+17,ry,'Reading...' if setting.get('reading')==i else setting['values'][i],2,1)
+                text(surface,x+47,ry,'>',2,1)
+                if i==5:
+                    fill(surface,x+51,ry,4,8,0)
+                    if backdrop is not None:
+                        for yy in range(8):
+                            for xx in range(4):
+                                surface[address((x+51+xx)*4,ry+yy)]=backdrop[((ry+yy)%16)*4+(x+51+xx)%4]
+                    box(x+51,ry,4,8,2)
+            text(surface,x+1,y+h-10,'Appearance only. Saved live.',2,1)
+        elif filemgr is not None: pass
         elif watch is not None:
             # Independent Clock geometry/pixels at the observed completed time,
             # not copies of guest screen data or the Z80 compositor algorithm.
@@ -159,14 +179,18 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
             labels=custom[0] if custom else ('Toggle','Cancel')
             y=8
         w=max((len(s)*6+(0 if native else 3))//4+4 for s in labels)
-        h=len(labels)*10+4
+        top=popup.get('top',0) if native else 0
+        vis=min(len(labels),10) if native else len(labels)
+        h=vis*10+4
         fill(result,x,y,w,h,1)
         for rx,ry,rw,rh in ((x,y,w,1),(x,y+h-1,w,1),(x,y,1,h),(x+w-1,y,1,h)):
             fill(result,rx,ry,rw,rh,2)
-        for i,label in enumerate(labels):
+        for i,label in enumerate(labels[top:top+vis]):
             paper,pen=(2,1) if i==hot else (1,2)
             if not native: fill(result,x+1,y+2+i*10,w-2,10,paper)
             text(result,x+1,y+2+i*10,label,pen,paper)
+        if native and top: text(result,x+w-2,y+2,'^',2,1)
+        if native and top+vis<len(labels): text(result,x+w-2,y+2+(vis-1)*10,'v',2,1)
     px,py=pointer
     for y,row in enumerate(CURSOR if cursor is None else cursor_grid(cursor)):
         for x,ch in enumerate(row):
@@ -174,14 +198,14 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
     return bytes(result)
 
 
-def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None):
+def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None):
     px=int.from_bytes(ram[sym['pointer_x']:sym['pointer_x']+2],'little')
     py=ram[sym['pointer_y']]
     if ram[sym['menu_def']:sym['menu_def']+len(menu)]!=menu:
         raise AssertionError('focused menu snapshot differs')
     expected=frame(rects,order,accents,(px,py),font if font is not None else (work/'DEFAULT.FNT').read_bytes(),
                    tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog,frame_pen,
-                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons,theme,title_ready,desktop,filemanagers)
+                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons,theme,title_ready,desktop,filemanagers,settings)
     actual=ram[0xC000:0x10000]
     if actual!=expected:
         at=next(i for i,(a,b) in enumerate(zip(actual,expected)) if a!=b)

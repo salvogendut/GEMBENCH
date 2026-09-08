@@ -34,7 +34,8 @@ def compile_filemgr(work, runtime, sym, root=ROOT):
                     ('poll_flags',0x1308),('mw_rect',0x1448)):
         if sym.get(name)!=at: raise AssertionError('native SDK binding changed: '+name)
     (work/'gblib.s').write_text(generate(root/'lib/gb/gblib.s',
-                                       [root/'apps/filemgr/platform/cpc.symbols']))
+                                      [root/'apps/filemgr/platform/cpc.symbols'],
+                                      interrupt_safe=sym.get('cpc_settings_profile')==1))
     (work/'sys.symbols').write_text('gb_app_quit\n')
     (work/'sys.s').write_text(generate(root/'lib/gb/gbsys.s',[work/'sys.symbols']))
     for source,target in ((root/'lib/gb/crt0.s','crt.rel'),(work/'gblib.s','gblib.rel'),
@@ -92,31 +93,31 @@ def compile_filemgr(work, runtime, sym, root=ROOT):
     return report
 
 
-def bind_runtime(runtime, app, sym):
+def bind_runtime(runtime, app, sym, *, name='filemgr', title='File Manager', filename='FILEMGR.native.bin'):
     """Bind one checked native system image, without changing code addresses.
 
     This private receiver is build-specific, not a portable package or a
     security sandbox. The ordinary runtime has no contract to patch.
     """
     runtime=Path(runtime);app=Path(app)
-    if sym.get('cpc_filemgr_profile')!=1:
-        raise AssertionError('native File Manager requires its private runtime profile')
-    raw=(app/'FILEMGR.native.bin').read_bytes()
+    if sym.get('cpc_'+name+'_profile')!=1:
+        raise AssertionError('native '+title+' requires its private runtime profile')
+    raw=(app/filename).read_bytes()
     report=json.loads((app/'report.json').read_text())
     if not 0<len(raw)<=0x3800 or len(raw)!=report['code_bytes'] or \
             hashlib.sha256(raw).hexdigest()!=report['code_sha256']:
-        raise AssertionError('native File Manager differs from checked link')
+        raise AssertionError('native '+title+' differs from checked link')
     contract=len(raw).to_bytes(2,'little')+zlib.crc32(raw).to_bytes(4,'little')
     kernel=bytearray((runtime/'CORE.RAW').read_bytes())
-    off=sym['cpc_filemgr_contract']-sym['cpc_kernel_begin']
+    off=sym['cpc_'+name+'_contract']-sym['cpc_kernel_begin']
     if not 0<=off<=len(kernel)-6 or kernel[off:off+6] not in (bytes(6),contract):
         raise AssertionError('invalid native contract patch site')
     kernel[off:off+6]=contract
     (runtime/'CORE.RAW').write_bytes(kernel)
-    report.update(status='private build-matched native File Manager; runtime qualification required',
+    report.update(status='private build-matched native '+title+'; runtime qualification required',
                   private_integration=True,
-                  contract=contract.hex(),runtime_contract=sym['cpc_filemgr_contract'])
-    (runtime/'filemgr_layout.json').write_text(json.dumps(report,indent=2)+'\n')
+                  contract=contract.hex(),runtime_contract=sym['cpc_'+name+'_contract'])
+    (runtime/(name+'_layout.json')).write_text(json.dumps(report,indent=2)+'\n')
     return report
 
 

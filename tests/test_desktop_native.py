@@ -17,10 +17,10 @@ class DesktopNativeTests(unittest.TestCase):
     def test_actual_desktop_and_native_leaves(self):
         with tempfile.TemporaryDirectory(prefix='desktop-native-') as temp:
             exe=Path(temp)/'desktop'
-            for ready in (0,1):
-                with self.subTest(filemgr_ready=ready):
+            for ready,settings in ((0,0),(1,0),(1,1)):
+                with self.subTest(filemgr_ready=ready,settings_ready=settings):
                     subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',
-                                    '-Wno-unused-function',f'-DDESKTOP_FILEMGR_READY={ready}',
+                                    '-Wno-unused-function',f'-DDESKTOP_FILEMGR_READY={ready}',f'-DDESKTOP_SETTINGS_READY={settings}',
                                     '-I',str(ROOT/'lib/gb'),'-I',str(ROOT/'include/gembench'),
                                     f'-DGB_DESKTOP_BINDINGS="{ROOT/"tests/desktop_binding_provider.h"}"',
                                     str(ROOT/'tests/desktop_native_test.c'),'-o',str(exe)],check=True)

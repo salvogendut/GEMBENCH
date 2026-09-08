@@ -114,8 +114,10 @@ static unsigned char dc_timer, dc_idx, held_prev;
 static unsigned char show_ram;               /* System menu footprint toggle (#74) */
 static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
 static unsigned char menu_refresh;           /* refocus after a child window closes -> rebuild System */
-#if !DESKTOP_NATIVE
+#if !DESKTOP_NATIVE || DESKTOP_SETTINGS_READY
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
+#endif
+#if !DESKTOP_NATIVE
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
 #endif
 static unsigned char want_about;             /* System>About: 1=menu selected, 2=open next frame (#409) */
@@ -1056,7 +1058,11 @@ static void tidy_icons(void)
 
 /* sys_action: the System menu handler, dispatched by the gb_doc framework (#142). */
 #if DESKTOP_NATIVE
+#if DESKTOP_SETTINGS_READY
+static const char *const sys_items[4] = { "Ram Usage", "Tidy Icons", "Settings", "About GEOBENCH" };
+#else
 static const char *const sys_items[3] = { "Ram Usage", "Tidy Icons", "About GEOBENCH" };
+#endif
 #else
 static const char *const sys_items[7] = {
     "Ram Usage", "Refresh Media", "Tidy Icons", "Settings", "Activate screensaver",
@@ -1067,8 +1073,13 @@ static void sys_action(unsigned char sel)
 {
 #if DESKTOP_NATIVE
     /* Map visible rows to the original actions; unsupported actions are absent. */
+#if DESKTOP_SETTINGS_READY
+    if (sel >= 4) return;
+    if (sel) sel = sel == 1 ? 2 : sel == 2 ? 3 : 5;
+#else
     if (sel >= 3) return;
     if (sel) sel = sel == 1 ? 2 : 5;
+#endif
 #endif
     if (sel == 0) {                            /* Ram Usage: toggle the footprint (it then
                                                   persists - nothing else touches the bar) */
@@ -1088,11 +1099,13 @@ static void sys_action(unsigned char sel)
 #endif
     } else if (sel == 2) {                     /* Tidy Icons */
         tidy_icons();
-#if !DESKTOP_NATIVE
+#if !DESKTOP_NATIVE || DESKTOP_SETTINGS_READY
     } else if (sel == 3) {                     /* Settings (#129): the control panel. Defer the
                                                   open until AFTER gb_doc_frame's desktop repaint
                                                   below, else paint() covers the new window. */
         want_settings = 1;
+#endif
+#if !DESKTOP_NATIVE
     } else if (sel == 4) {                     /* Activate screensaver (#219): run it on demand,
                                                   whatever the SAVER= idle timeout - defer the open
                                                   past gb_doc_frame's repaint, like Settings. */
@@ -1251,12 +1264,20 @@ static void on_frame(void)
 #ifdef GB_DESK_ACCESSORIES
 #include "core/accessory_pending.inc"
 #endif
-#if !DESKTOP_NATIVE
+#if !DESKTOP_NATIVE || DESKTOP_SETTINGS_READY
         if (want_settings) {                  /* System>Settings: now safe to open on top (#129) */
             want_settings = 0;
             if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
-            else gb_wm_open("SETTINGSAPP");
+            else gb_wm_open(
+#if DESKTOP_NATIVE
+                "SETTINGSBIN"
+#else
+                "SETTINGSAPP"
+#endif
+            );
         }
+#endif
+#if !DESKTOP_NATIVE
         if (want_saver) {                     /* System>Screensaver: launch the saver now (#219) */
             want_saver = 0;
             ss_idle = 0;                       /* a manual run resets the idle count */

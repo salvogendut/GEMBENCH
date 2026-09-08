@@ -42,6 +42,7 @@ QA/Diagnostics/CPC-production/
 QA/Diagnostics/CPC-runtime/
 QA/Diagnostics/CPC-desktop-contract/
 QA/Diagnostics/CPC-filemgr-contract/
+QA/Diagnostics/CPC-settings-contract/
 # Generated first Desktop delivery; parked QA/CPC remains untouched.
 QA/CPC-Desktop/
 !QA/MSX/Floppies/

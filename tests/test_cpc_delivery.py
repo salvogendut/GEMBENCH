@@ -14,6 +14,8 @@ spec = importlib.util.spec_from_file_location('delivery_runner', ROOT/'tools/tes
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
 from cpc_runtime_filemgr import popup_ready
+from cpc_runtime_desktop import system_items
+from cpc_runtime_settings import DELIVERY_CHOICES
 
 
 class DeliveryTests(unittest.TestCase):
@@ -54,6 +56,20 @@ class DeliveryTests(unittest.TestCase):
             self.assertIn('--desktop-delivery', command)
             self.assertIn('--skip-build', command)
             self.assertNotIn('--seed-image', command)
+
+    def test_settings_extends_delivery_not_private_fault_clients(self):
+        cases=dict(runner.cases(settings=True))
+        self.assertEqual(len(cases),28)
+        self.assertEqual(len(cases),len(runner.cases(settings=True)))
+        self.assertEqual(cases['settings-mixed'],['--settings-case','mixed'])
+        self.assertEqual(cases['settings-normal'],['--settings-case','normal'])
+        self.assertNotIn('settings-read-error',cases)
+        self.assertNotIn('settings-readback-error',cases)
+        self.assertNotIn('ALTERN.FNT',DELIVERY_CHOICES)
+        self.assertNotIn('ALTCURS.SPR',DELIVERY_CHOICES)
+        self.assertEqual(system_items({'sections':{}}),('Ram Usage','Tidy Icons','About GEOBENCH'))
+        self.assertEqual(system_items({'sections':{'settings':{}}}),
+                         ('Ram Usage','Tidy Icons','Settings','About GEOBENCH'))
 
 
 if __name__ == '__main__':

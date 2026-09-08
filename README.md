@@ -214,8 +214,18 @@ Delivered-window, Clock visibility and cursor-cadence regressions start with
 The combined gate is `make cpc-delivery-1984` (`CPC_TEST_JOBS=4` optionally runs
 independent disposable M4 scenarios in parallel). See the sprint document for
 results: all 20 scenarios pass, alongside 269 Python tests and MSX regressions.
-Complete Settings and broader
-application parity follow separately.
+The desktop-first checkpoint is merged in PR #78. [Settings integration](docs/CPC-SETTINGS-INTEGRATION.md)
+is tracked under #79: `make cpc` now includes **System > Settings** in the normal
+M4 image (font, icons, cursor, title bar, gadgets and backdrop). Private
+storage-fault/stress qualification passed 20 scenarios / 316 pixel checkpoints;
+the expanded delivery gate passed all 28 scenarios / 323 pixel checkpoints,
+plus 285 host tests and openMSX Screen 6/7 accessory checks. The user accepted
+the manual image on 2026-09-08.
+Launch the already-rebuilt image with the command above. Escape cancels a selector
+or closes Settings; changes persist in the image's `GEOBENCH.CFG`. Rebuilding
+resets generated configuration, so copy the image first to preserve preferences.
+Palette, wallpaper, savers and reset are not yet part of CPC Settings.
+Broader application parity follows separately.
 PCW follows as a separate port.
 See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).
