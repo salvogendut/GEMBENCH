@@ -80,22 +80,22 @@ class ServiceManagerTests(unittest.TestCase):
         self.assertEqual(manager.validate(0x0201, handle_a), "stale")
 
     def test_fixed_tables_fit_reserved_fsctx_tail(self) -> None:
-        text = (ROOT / "lib/gembench/gbservice_internal.h").read_text()
+        text = (ROOT / "lib/gembench/msx_service.h").read_text()
 
         def number(name: str) -> int:
             match = re.search(rf"#define\s+{name}\s+.*?0x([0-9A-Fa-f]+)u?", text)
             self.assertIsNotNone(match, name)
             return int(match.group(1), 16)
 
-        provider = number("GB_SERVICE_PROVIDER_BASE")
-        leases = number("GB_SERVICE_LEASE_BASE")
-        lock = number("GB_SERVICE_LOCK")
-        diag = number("GB_SERVICE_DIAG")
+        provider = number("GB_SERVICE_PROVIDER_ADDRESS")
+        leases = number("GB_SERVICE_LEASE_ADDRESS")
+        lock = number("GB_SERVICE_LOCK_ADDRESS")
+        diag = number("GB_SERVICE_DIAG_ADDRESS")
         self.assertEqual((provider, leases, lock, diag),
                          (0xC884, 0xC892, 0xC89E, 0xC89F))
         self.assertEqual(provider + 2 * 7, leases)
         self.assertEqual(leases + 3 * 4, lock)
-        self.assertLess(diag, 0xC8A0)  # active M4 FIB begins here
+        self.assertLess(diag, 0xC8A0)  # active native directory cursor begins here
 
     def test_network_provider_manifest_requires_service_capability(self) -> None:
         manifest = (ROOT / "apps/netsvc/manifest.json").read_text()

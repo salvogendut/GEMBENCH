@@ -18,11 +18,20 @@
 
 #define DOC_MAXTITLES 4              /* File + up to 3 app titles */
 
+#ifndef GBDOC_MENU_ONLY
 static const gb_doc_t *g_doc;
 static unsigned char   g_dirty;
+#endif
 static unsigned char   g_want;       /* 0 = none, else (title index + 1) to drop */
+#ifndef GBDOC_MENU_ONLY
 static char            g_name[11];   /* current file's 8.3 name (Load/Save As update it) */
 static void set_name(const char *n11);
+#endif
+/* Document-less roots may link only the SAME title/event/popup machinery.
+ * This component profile omits file actions, not menu policy or rendering. */
+#if defined(GBDOC_MENU_ONLY) && (defined(GBDOC_RO) || defined(GBDOC_BOUNDED_IO) || defined(GB_SHELL_SERVICES))
+#error GBDOC_MENU_ONLY cannot provide document/file actions
+#endif
 
 #define DOC_AFTER_NONE    0
 #define DOC_AFTER_NEW     1
@@ -63,15 +72,17 @@ static unsigned char   g_def[1 + DOC_MAXTITLES * 9];   /* MENU_DEF: count, {col,
  * read-only app (on_open only) shows just "Load", and a document-less app (the
  * File Manager) shows no File title at all (#142). file_act maps each visible
  * item back to its action. */
+#ifndef GBDOC_MENU_ONLY
 static const char     *file_items[6];
 static unsigned char   file_act[6];   /* per visible item: 0 New,1 Load,2 Save,3 Save As,4 Export */
 static unsigned char   file_nf;       /* number of visible File items */
 static void            file_action(unsigned char sel);
 static const char *const confirm_items[] = { "Save", "Don't Save", "Cancel" };
+#endif
 
 static unsigned char slen(const char *s) { unsigned char n = 0; while (s[n]) n++; return n; }
 
-#ifndef GBDOC_RO       /* to_83 / name83 are only used by Save As (omitted in read-only) */
+#if !defined(GBDOC_RO) && !defined(GBDOC_MENU_ONLY)
 /* to_83: "NAME.EXT" (or "NAME") -> an 11-byte space-padded 8.3 name (no dot) for
  * gb_set_name. */
 static char name83[11];
@@ -108,6 +119,7 @@ static void rebuild(void)
  * Copy/Paste go through the shared clipboard - gb_clip_* are resident kernel calls
  * (a fixed low-RAM buffer at #3E00), so the clipboard survives app switches and the
  * code isn't duplicated into every app's bank. */
+#ifndef GBDOC_MENU_ONLY
 static const char *const edit_items[] = { "Select All", "Copy", "Paste" };
 static void edit_action(unsigned char sel)
 {
@@ -133,9 +145,15 @@ static void view_action(unsigned char sel)
     }
     if (g_doc->on_view) g_doc->on_view((unsigned char)(sel - base));
 }
+#endif
 
 void gb_doc(const gb_doc_t *d)
 {
+#ifdef GBDOC_MENU_ONLY
+    (void)d;                         /* caller registers a document-less root */
+    g_want = g_ntitles = 0;
+    rebuild();
+#else
     g_doc = d;
     g_dirty = 0;
     g_want = 0;
@@ -184,6 +202,7 @@ void gb_doc(const gb_doc_t *d)
     DOC_IO_LAUNCH = (unsigned char)(g_name[0] != 0 && g_name[0] != ' ');
 #endif
     if (g_name[0] == 0 || g_name[0] == ' ') set_name("UNTITLED   ");
+#endif
 }
 
 void gb_menu_add(const char *title, const char *const *items, unsigned char n,
@@ -199,6 +218,7 @@ void gb_menu_add(const char *title, const char *const *items, unsigned char n,
     rebuild();
 }
 
+#ifndef GBDOC_MENU_ONLY
 void gb_doc_dirty(void) { g_dirty = 1; }
 unsigned char gb_doc_modified(void) { return g_dirty; }
 
@@ -211,6 +231,7 @@ static void set_name(const char *n11)
     for (i = 0; i < 11; i++) g_name[i] = n11[i];
     gb_set_name(g_name);
 }
+#endif
 
 /* on_event: a top-bar title was clicked -> arm its menu. Returns 1 if it was one
  * of ours (so the app's on_event stops). */
@@ -266,6 +287,7 @@ unsigned char gb_doc_event(void)
 
 /* --- the standard File actions ------------------------------------------- */
 
+#ifndef GBDOC_MENU_ONLY
 #ifndef GBDOC_RO
 #ifdef GBDOC_BOUNDED_IO
 static unsigned char do_save(unsigned char after);
@@ -635,6 +657,8 @@ static void file_action(unsigned char sel)
     else if (a == 4) { if (g_doc->on_export) g_doc->on_export(); }   /* the optional export */
 }
 
+#endif /* !GBDOC_MENU_ONLY: file actions */
+
 /* on_frame: drop a pending menu and dispatch it. Returns 1 if a menu ran (the
  * app should repaint its window, since the popup erased a hole in it). */
 unsigned char gb_doc_frame(void)
@@ -667,6 +691,7 @@ unsigned char gb_doc_frame(void)
     gb_wm_damage(gb_wm_x(), gb_wm_y(), gb_wm_w(), gb_wm_h());
 #endif
     if (g_handler[t]) g_handler[t](sel);         /* File / Edit / View / app menu */
+#ifndef GBDOC_MENU_ONLY
     if (g_handler[t] == edit_action) {           /* Edit only touched the window CONTENT (frame intact): */
         if (sel == 1) {                          /* Copy: nothing drawn -> undo the clamp */
 #ifndef GBDOC_RO
@@ -676,11 +701,13 @@ unsigned char gb_doc_frame(void)
         }
         return 2;                                /*   Select All / Paste = window body */
     }
+#endif
     return 3;                                    /* File / View / app action: window repaint */
 }
 
 /* gb_doc_close: the window close gadget was hit - offer to save first. 1 = go
  * ahead and close, 0 = stay open (user cancelled). */
+#ifndef GBDOC_MENU_ONLY
 unsigned char gb_doc_close(void)
 {
 #ifdef GBDOC_BOUNDED_IO
@@ -690,3 +717,4 @@ unsigned char gb_doc_close(void)
     return confirm_save();
 #endif
 }
+#endif

@@ -13,14 +13,21 @@
  * All of this is app-level: the kernel/WM owns the window (focus, z-order, the
  * rect-clipped repaint); the contents - views, grid, scrollbar - are drawn here
  * with gb_dir*, gb_blite, gb_fill/gb_frame/gb_text. No kernel changes. */
+#include "platform.h"
 #include "gb.h"
 #ifdef GB_SHELL_SERVICES
 #include "gbshell.h"
 #endif
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
 #include "gbr_menu.h"
 #include "gbfsctx.h"
 #include "view_menu_gbr.h"
+#endif
+#if FM_NATIVE_IO
+#include GB_FILEMGR_PROVIDER
+#if GB_FILEMGR_PROVIDER_VERSION != 1
+#error "Unsupported File Manager provider contract"
+#endif
 #endif
 
 #define DEF_X    4            /* window position */
@@ -29,7 +36,7 @@
 #define DEF_H    158           /* taller default so full icons still show ~3 rows (#88) */
 #define CASCADE_X 4
 #define CASCADE_Y 4
-#define MIN_W    24            /* min size keeps the title + a couple of rows usable */
+#define MIN_W    29            /* 5 chrome/scroll cols + 3 full 8-column icons */
 #define MIN_H    62
 #define TITLE_H  14
 #define DCLICK   75           /* double-click window, frames (gamepad-friendly, #153) */
@@ -59,6 +66,7 @@
 
 #define V_LIST   0
 #define V_ICONS  1
+#if FM_FILE_COPY || FM_EMBEDDED_ICONS
 #define FSV_DIAG (*(volatile unsigned char *)0x170E)  /* FLOPPYSV.MOD diagnostic byte */
 /* Chunked-copy transfer cells (the #144C..#144F free low-RAM gap; the fs backend reads them).
    FS_LOAD_OFS = 24-bit read offset; FS_XFLAGS bit0 = chunk-read, bit1 = append-write,
@@ -66,6 +74,7 @@
 #define FS_LOAD_OFS ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS   (*(volatile unsigned char *)0x144F)
 #define FS_SAVE_LEN_K (*(volatile unsigned int *)0x14FD)
+#endif
 #ifdef GB_PREEMPTIVE
 #define COPY_IDLE      0
 #define COPY_DRAW      1
@@ -105,9 +114,17 @@ static unsigned char nsel;        /* 0 = none, else selected index + 1    */
 static unsigned char dc_idx;      /* index of the last click              */
 static unsigned char dc_timer;
 static unsigned char view = V_ICONS;   /* default = icon view (GEOBENCH.CFG VIEW=) */
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
 static gbr_menu_t view_menu;
 static gb_fsctx_t fs_context;
+#endif
+#if FM_NATIVE_IO
+static gb_fsctx_entry_t selected_entry;
+#define FM_ENTRY_NAME() selected_entry.name
+#define FM_ENTRY_ISDIR() (selected_entry.attributes & GB_FSCTX_ATTR_DIRECTORY)
+#else
+#define FM_ENTRY_NAME() gb_entname()
+#define FM_ENTRY_ISDIR() gb_isdir()
 #endif
 static unsigned char my_drive;         /* the drive this window browses (#65) */
 static const char *const drive_title[3] = { "Disk C", "Disk A", "Disk B" };
@@ -116,26 +133,33 @@ static char msx_drive_title[7] = "Disk A";
 #endif
 static unsigned char free_known;
 static unsigned int free_kib;
-#ifndef GB_PREEMPTIVE
+#if FM_EMBEDDED_ICONS && !defined(GB_PREEMPTIVE)
 static unsigned int appicon_off;
 static unsigned char appicon_codec;
 #endif
 #ifdef GB_PREEMPTIVE
+#if FM_FILE_COPY
 static unsigned char copy_state;
 static unsigned char copy_created;
 static unsigned char copy_ofs_hi;
 static unsigned int copy_ofs_lo;
+#endif
 static unsigned char list_state;
 #endif
 
-/* Reuse the kernel's fixed 512-byte configuration text area. It already has this
-   lifetime, stays visible under app paging, and leaves File Manager enough bank
-   room for the dual-icon parser. */
-#define cfgbuf ((char *)0x1000)
+/* Native profiles read the provider's published configuration. The legacy
+   profile keeps its original shared 512-byte text area and dual-icon budget. */
 #define CFG_BUF_SIZE 512
+#if FM_NATIVE_IO
+#define cfgbuf FILEMGR_CONFIG_TEXT
+#define cfglen FILEMGR_CONFIG_LENGTH
+#else
+#define cfgbuf ((char *)0x1000)
 static unsigned int cfglen;
+#endif
 
-/* MSX2 generates the top bar from view_menu.json; CPC/PCW retain gb_doc. Going
+/* Shared-core profiles generate the top bar from view_menu.json; legacy
+   profiles retain gb_doc. Going
    up a directory is the ".." listing entry; File Manager has no File menu. */
 static unsigned char fs_px, fs_py, fs_pw, fs_ph;   /* geometry saved across Fullscreen */
 
@@ -153,7 +177,7 @@ static unsigned char icons[MAX_ENT];       /* precomputed type icon per entry   
 static unsigned char order[MAX_ENT];       /* sorted permutation -> raw index         */
 #define NAME_AT(k) (&names[(unsigned int)(k) * 11])
 
-#ifdef GB_PREEMPTIVE
+#if defined(GB_PREEMPTIVE) && FM_EMBEDDED_ICONS
 static const char appicon_modname[11] = {
     'G','B','A','P','I','C','K',' ','M','O','D'
 };
@@ -206,6 +230,16 @@ __endasm;
 static char *dir_seek(unsigned char idx)
 {
     unsigned char i;
+#if FM_NATIVE_IO
+    if (!gb_fsctx_dir_first(fs_context, &selected_entry)) return 0;
+    for (i = 0; i < idx; i++)
+        if (!gb_fsctx_dir_next(fs_context, &selected_entry)) return 0;
+    /* A removable/changed directory must not open a different file using an
+     * old cache index. The next relist will publish a new consistent cache. */
+    for (i = 0; i < 11; i++)
+        if (selected_entry.name[i] != NAME_AT(idx)[i]) return 0;
+    return selected_entry.name;
+#else
     char *p;
 #ifdef GB_MSX2
     if (fs_context) (void)gb_fsctx_activate(fs_context);
@@ -213,6 +247,7 @@ static char *dir_seek(unsigned char idx)
     p = gb_dir1();
     for (i = 0; i < idx && p; i++) p = gb_dirn();
     return p;
+#endif
 }
 
 /* cfg_view_pos: index just past "VIEW=" in cfgbuf, or 0xFFFF if there's no such key. */
@@ -231,8 +266,10 @@ static unsigned int cfg_view_pos(void)
 static void cfg_load_view(void)
 {
     unsigned int p;
+#if !FM_NATIVE_IO
     gb_set_name("GEOBENCHCFG");
     cfglen = gb_fs_load(cfgbuf, CFG_BUF_SIZE);
+#endif
     view = V_ICONS;
     p = cfg_view_pos();
     if (p != 0xFFFF && p + 4 <= cfglen && cfgbuf[p] == 'L' && cfgbuf[p+1] == 'I'
@@ -245,6 +282,10 @@ static void cfg_load_view(void)
    can't be written - e.g. it doesn't exist). */
 static void cfg_save_view(void)
 {
+#if FM_NATIVE_IO
+    if (!filemgr_save_view(view))
+        gb_alert("View not saved", "Configuration error");
+#else
     const char *val = (view == V_LIST) ? "LIST" : "DEFAULT";
     unsigned char vlen = (view == V_LIST) ? 4 : 7;
     unsigned int p, end, i;
@@ -274,6 +315,7 @@ static void cfg_save_view(void)
     }
     gb_set_name("GEOBENCHCFG");
     gb_fs_save(cfgbuf, cfglen);
+#endif
 }
 
 /* The listing shows a synthetic ".." entry first whenever we're not at the drive
@@ -343,7 +385,7 @@ static char *name83(const char *e)
 
 /* fullname: the current entry's 8.3 name as "NAME.EXT" (list view shows the
    extension; gb_dir* return name only). */
-static char *fullname(void) { return name83(gb_entname()); }
+static char *fullname(void) { return name83(FM_ENTRY_NAME()); }
 
 
 /* Breadcrumb path shown in the title bar (#104), tracked app-level so it works on
@@ -376,25 +418,43 @@ static void path_pop(void)                       /* drop the last "/component" *
    drive root (fm_path empty -> no parent). */
 static unsigned char up_avail(void) { return (unsigned char)(fm_path[0] != 0); }
 
-#ifdef GB_MSX2
-/* The native DOS backend remains serialized, but each File Manager now keeps
- * its own drive/path/FIB record. Activate only when a legacy file operation
+#if FM_SHARED_CORE
+/* The storage backend remains serialized, but each File Manager keeps
+ * its own drive/path/directory record. Activate only when a legacy file operation
  * immediately consumes the current directory; enumeration itself is private. */
 static void fm_activate(void)
 {
     if (fs_context) (void)gb_fsctx_activate(fs_context);
+#if !FM_NATIVE_IO
     else gb_set_drive(my_drive);
+#endif
 }
 
+#if FM_NATIVE_IO
+static unsigned char fm_context_path(void)
+{
+    if (gb_fsctx_set_path(fs_context, fm_path) == GB_FSCTX_OK) return 1;
+    /* A lost/invalid context must not leave a displayed path pointing at a
+     * different directory. Terminate this owner through the normal cleanup. */
+    gb_alert("File Manager unavailable", "Filesystem context error");
+    (void)gb_app_quit();
+    return 0;
+}
+#else
 static void fm_context_path(void)
 {
     if (fs_context) (void)gb_fsctx_set_path(fs_context, fm_path);
 }
+#endif
 
 static unsigned char fm_free_kib(void)
 {
+#if FM_NATIVE_IO
+    return gb_fsctx_free_kib(fs_context, &free_kib);
+#else
     return fs_context ? gb_fsctx_free_kib(fs_context, &free_kib)
                       : gb_fs_free_kib(&free_kib);
+#endif
 }
 #else
 static void fm_activate(void) { gb_set_drive(my_drive); }
@@ -560,12 +620,16 @@ static unsigned char entry_icon(const char *name, unsigned char directory)
     if (ext_eq(ext, "SAV")) return ICON_SCREENSAVER;   /* #221: screensaver modules */
     if (ext_eq(ext, "MOD")) return ICON_GEOBENCH;      /* #234: kernel modules = the lollipop icon */
     if (ext_eq(ext, "IST")) return ICON_BINARY;   /* #221: apps/data share the binary icon */
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     if (ext_eq(ext, "GBR")) return ICON_APP;      /* app-linked GEOBENCH resource document */
 #endif
     if (ext_eq(ext, "APP")) {
         icon = app_icon(name);
+#if FM_EMBEDDED_ICONS
         return (icon == ICON_APP) ? (unsigned char)(APPICON_UNKNOWN | ICON_APP) : icon;
+#else
+        return icon; /* use the qualified themed set until native icon probing is bound */
+#endif
     }
     return ICON_BINARY;
 }
@@ -589,7 +653,7 @@ static unsigned char rank_of(unsigned char ic)
     }
 }
 
-#if defined(GB_PCW) && !defined(GB_PREEMPTIVE)
+#if FM_EMBEDDED_ICONS && defined(GB_PCW) && !defined(GB_PREEMPTIVE)
 /* Canonical Mode-1 byte -> the raw PCW hardware byte expected by
    gb_restorerect. This is the same fallback conversion used by VIEWER.APP. */
 static unsigned char appicon_native(unsigned char value)
@@ -605,7 +669,7 @@ static unsigned char appicon_native(unsigned char value)
 }
 #endif
 
-#ifndef GB_PREEMPTIVE
+#if FM_EMBEDDED_ICONS && !defined(GB_PREEMPTIVE)
 /* appicon_load: read and validate the GBAP resources into gb_copybuf. The File
    Manager's launch name is parked beyond the probe while gb_fs_load temporarily
    targets the APP. Mode 7 selects codec 7 when present; every other target/mode
@@ -692,6 +756,10 @@ static void draw_entry_type(unsigned char raw, unsigned char x, unsigned char y,
 {
     unsigned char state = icons[raw];
     unsigned char slot = (unsigned char)(state & APPICON_SLOTMASK);
+#if !FM_EMBEDDED_ICONS
+    if (half) gb_icon_half(slot, x, y);
+    else      gb_icon(slot, x, y);
+#else
 #ifdef GB_PREEMPTIVE
     /* Repaints are storage-free. The frame job reloads and draws visible embedded
        icons after this generic placeholder has been painted. */
@@ -730,6 +798,7 @@ static void draw_entry_type(unsigned char raw, unsigned char x, unsigned char y,
     }
     if (half) gb_icon_half(slot, x, y);
     else      gb_icon(slot, x, y);
+#endif
 #endif
 }
 
@@ -776,13 +845,17 @@ static void list_step(void)
     char *e, *d;
 
     if (list_state == LIST_WAIT) {
+#if FM_FILE_COPY
         if (gb_drop_claimed()) return;
         gb_drop_claim();
+#endif
         list_state = LIST_FIRST;
     }
     if (list_state == LIST_FREE) {
         free_known = fm_free_kib();
+#if FM_FILE_COPY
         gb_drop_release();
+#endif
         list_state = LIST_IDLE;
         win_title();
         /* Publish the completed title and listing together in one repaint. */
@@ -793,6 +866,18 @@ static void list_step(void)
 
     n = gb_fsctx_dir_batch(fs_context,
                            (unsigned char)(list_state == LIST_FIRST));
+#if FM_NATIVE_IO
+    if (gb_fsctx_status() != GB_FSCTX_OK) {
+        /* Never publish a failed partial directory as an empty/successful one. */
+        total = 0; list_state = LIST_IDLE;
+        title_buf[0] = 'E'; title_buf[1] = 'r'; title_buf[2] = 'r';
+        title_buf[3] = 'o'; title_buf[4] = 'r'; title_buf[5] = 0;
+        gb_wm_damage(win_x, win_y, win_w, win_h);
+        gb_repaint_top();
+        gb_alert("Cannot read directory", "Close and reopen Disk C");
+        return;
+    }
+#endif
     batch = gb_fsctx_batch_entries();
     for (i = 0; i < n && total < MAX_ENT; i++) {
         raw = total;
@@ -816,7 +901,7 @@ static void list_step(void)
 static void build_list(void)
 {
     unsigned char n = 0, i, j, v;
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     unsigned char count, first = 1, k;
     const gb_fsctx_entry_t *batch = gb_fsctx_batch_entries();
     do {
@@ -856,7 +941,7 @@ static void draw_list_view(void)
 {
     unsigned char i, y, p, raw, up = up_avail();
     unsigned char dt = disp_total();
-#ifdef GB_PREEMPTIVE
+#if FM_EMBEDDED_ICONS && defined(GB_PREEMPTIVE)
     icon_scan_pos = 0;
     icon_scan_col = 0;
     icon_req_x = CT_X;
@@ -880,13 +965,30 @@ static void draw_list_view(void)
     }
 }
 
+static void draw_icon_cell(unsigned int idx, unsigned char cx, unsigned char cy)
+{
+    unsigned char cell_w = CELL_W, up = up_avail(), raw;
+    gb_fill(cx, cy, cell_w, CELL_H - 1, 0);
+    if (idx >= disp_total()) return;
+    if (up && idx == 0) {
+        gb_icon(ICON_UP, (unsigned char)(cx + (cell_w - 4) / 2),
+                (unsigned char)(cy + 9));
+        gb_text((unsigned char)(cx + (cell_w - 3) / 2), cy + 34, "..");
+    } else {
+        raw = order[(unsigned char)(idx - up)];
+        draw_entry_type(raw, cx + (cell_w - 8) / 2, cy + 1, 0);
+        draw_name(cx, cy + 34, name83(NAME_AT(raw)));
+    }
+    if (nsel == (unsigned char)(idx + 1))
+        gb_frame(cx, cy, cell_w, CELL_H - 1, 3);
+}
+
 static void draw_icons_view(void)
 {
-    unsigned char r, c, cx, cy, raw, cell_w = CELL_W, up = up_avail();
+    unsigned char r, c, cx, cy, cell_w = CELL_W;
     unsigned int idx = (unsigned int)top * ICOLS;    /* first visible item */
-    unsigned int dt = disp_total();
     cy = CT_Y;
-#ifdef GB_PREEMPTIVE
+#if FM_EMBEDDED_ICONS && defined(GB_PREEMPTIVE)
     icon_scan_pos = 0;
     icon_scan_col = 0;
     icon_req_x = (unsigned char)(CT_X + (cell_w - 8) / 2);
@@ -895,20 +997,7 @@ static void draw_icons_view(void)
     for (r = 0; r < IVIS; r++) {
         cx = CT_X;
         for (c = 0; c < ICOLS; c++) {
-            gb_fill(cx, cy, cell_w, CELL_H - 1, 0);             /* clear whole cell before repaint */
-            if (idx < dt) {
-                if (up && idx == 0) {                            /* the ".." entry (#142) */
-                    gb_icon(ICON_UP, (unsigned char)(cx + (cell_w - 4) / 2),  /* 16px, centered */
-                            (unsigned char)(cy + 9));                    /* in the 32px band */
-                    gb_text((unsigned char)(cx + (cell_w - 3) / 2), cy + 34, "..");  /* centered */
-                } else {
-                    raw = order[(unsigned char)(idx - up)];
-                    draw_entry_type(raw, cx + (cell_w - 8) / 2, cy + 1, 0); /* full icon (#103/#426) */
-                    draw_name(cx, cy + 34, name83(NAME_AT(raw)));         /* name below the icon */
-                }
-                if (nsel == (unsigned char)(idx + 1))
-                    gb_frame(cx, cy, cell_w, CELL_H - 1, 3);
-            }
+            draw_icon_cell(idx, cx, cy);
             idx++;
             cx = (unsigned char)(cx + cell_w);
         }
@@ -918,23 +1007,41 @@ static void draw_icons_view(void)
 
 static void sel_frame(unsigned char pos, unsigned char pen)
 {
-    unsigned char line = 0, x, y;
+    unsigned char line = 0, x, y, idx;
     if (!pos || view != V_ICONS) return;
     pos--;
+    idx = pos;
     while (pos >= ICOLS) { pos -= ICOLS; line++; }
     if (line < top || line >= top + IVIS) return;
     x = (unsigned char)(CT_X + pos * CELL_W);
     y = (unsigned char)(CT_Y + (line - top) * CELL_H);
+#ifdef GB_PREEMPTIVE
+    if (pen) gb_frame(x, y, CELL_W, CELL_H - 1, pen);
+    else {
+        /* The frame overlaps the filename. Painting it black loses glyph
+         * pixels; reconstruct only this cached cell, not the whole window. */
+        draw_icon_cell(idx, x, y);
+#if FM_EMBEDDED_ICONS && defined(GB_PREEMPTIVE)
+        /* The cached-cell paint marks an embedded icon pending. Let the normal
+         * idle probe revisit it; no file I/O belongs in selection painting. */
+        icon_scan_pos = 0; icon_scan_col = 0;
+        icon_req_x = (unsigned char)(CT_X + (CELL_W - 8) / 2);
+        icon_req_y = CT_Y + 1;
+#endif
+    }
+#else
     gb_frame(x, y, CELL_W, CELL_H - 1, pen);
+#endif
 }
 
 static void select_entry(unsigned char pos)
 {
+    unsigned char old = nsel;
     if (nsel == pos) return;
     if (view != V_ICONS) { nsel = pos; draw(); return; }
     gb_curhide();
-    sel_frame(nsel, 0);
     nsel = pos;
+    sel_frame(old, 0);
     sel_frame(nsel, 3);
     gb_curshow();
 }
@@ -945,7 +1052,7 @@ static void draw_body(void)
     draw_scrollbar();
     if (view == V_ICONS) draw_icons_view();
     else                 draw_list_view();
-#ifndef GB_MSX2
+#if !FM_SHARED_CORE
     gb_draw_grip(win_x, win_y, win_w, win_h);   /* resize grip, bottom-right (#81) */
 #endif
 }
@@ -959,7 +1066,7 @@ static void draw(void)
     gb_curshow();
 }
 
-#ifdef GB_PREEMPTIVE
+#if FM_EMBEDDED_ICONS && defined(GB_PREEMPTIVE)
 /* Probe at most one visible APP per frame. A normal repaint leaves its generic
    placeholder and marks a known custom icon pending, so no filesystem operation
    ever runs from fm_draw. */
@@ -1031,9 +1138,13 @@ static void relist(void)
 /* go_up: ascend to the parent directory (the ".." entry / old View>Up). */
 static void go_up(void)
 {
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     path_pop();
+#if FM_NATIVE_IO
+    if (!fm_context_path()) return;
+#else
     fm_context_path();
+#endif
 #else
     gb_back();
     path_pop();
@@ -1062,19 +1173,51 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
 static void open_entry(unsigned char idx)
 {
     char *e;
+#if FM_NATIVE_IO
+    unsigned char result;
+    if (!dir_seek(order[idx])) {
+        gb_alert("Directory changed", "Please select the file again");
+        relist();
+        return;
+    }
+#else
     dir_seek(order[idx]);          /* sorted display index -> raw entry (sets attr/cluster) */
-    if (gb_isdir()) {
+#endif
+    if (FM_ENTRY_ISDIR()) {
+#if FM_NATIVE_IO
+        unsigned char before = 0;
+        while (fm_path[before]) before++;
         path_push(fullname());
-#ifdef GB_MSX2
+        if (!fm_path[before]) {
+            gb_alert("Path too long", "Cannot open this directory");
+            return;
+        }
+#else
+        path_push(fullname());
+#endif
+#if FM_SHARED_CORE
+#if FM_NATIVE_IO
+        if (!fm_context_path()) return;
+#else
         fm_context_path();
+#endif
 #else
         gb_chdir();
 #endif
         relist();
         return;
     }
-    nsel = 0;
-    e = gb_entname();              /* the positioned entry's 11-byte 8.3 name */
+#ifdef GB_PREEMPTIVE
+    select_entry(0);              /* erase the selected frame before the child takes focus */
+#else
+    nsel = 0;                    /* preserve the tightly packed cooperative profile */
+#endif
+    e = FM_ENTRY_NAME();           /* the positioned entry's 11-byte 8.3 name */
+#if FM_NATIVE_IO
+    result = filemgr_open_file(fs_context, fm_path, e);
+    if (result == 1) gb_alert("Not available yet", "Unsupported file or location");
+    else if (result) gb_alert("Application not opened", "Missing, invalid or no RAM");
+#else
 #ifdef GB_SHELL_SERVICES
     if ((ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G')) &&
         gb_shell_request(GB_SHELL_CLASS_TEXT_EDITOR, GB_SHELL_OPEN, e)
@@ -1106,6 +1249,7 @@ static void open_entry(unsigned char idx)
         gb_alert("Binary programs cannot", "be run from GEOBENCH.");
     else
         gb_alert("No application for", "this file type.");
+#endif
 }
 
 /* sb_drag: while the fire is held, map the pointer's Y to the scroll position
@@ -1124,7 +1268,7 @@ static void sb_drag(void)
     }
 }
 
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
 static void fm_set_view(unsigned char next)
 {
     if (view == next) return;
@@ -1169,7 +1313,7 @@ static void fm_fullscreen(unsigned char on)
                                              vacated - leaving a ghost scrollbar/listing behind (#156) */
 }
 
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
 static void fm_menu_action(unsigned char object_id)
 {
     if (object_id == FILEMGR_VIEW_FULLSCREEN)
@@ -1187,6 +1331,7 @@ static const gb_doc_t fmdoc = {
 };
 #endif
 
+#if FM_FILE_COPY
 #ifdef GB_PREEMPTIVE
 /* A copy stays on the root task because every filesystem operation is kernel-owned.
    The kernel already captured its source context at drag start; one complete
@@ -1331,6 +1476,7 @@ static unsigned char copy_file(void)
     return 1;
 }
 #endif
+#endif
 
 /* on_event: a file dropped here from another window is copied onto our drive (#65);
    a top-bar click arms the target's View menu. */
@@ -1338,6 +1484,7 @@ static void on_event(void)
 {
     sync_rect();
     if (gb_msg.type == GB_MSG_DROP) {     /* a file dropped here from another window (#65) */
+#if FM_FILE_COPY
 #ifdef GB_PREEMPTIVE
         if (copy_state == COPY_IDLE && list_state == LIST_IDLE
             && !gb_drop_claimed()) copy_start();
@@ -1355,12 +1502,15 @@ static void on_event(void)
         }
         relist();
 #endif
+#else
+        gb_alert("Not available yet", "File copying is not enabled");
+#endif
         return;
     }
-#ifdef GB_PREEMPTIVE
+#if FM_FILE_COPY && defined(GB_PREEMPTIVE)
     if (copy_state != COPY_IDLE || gb_drop_claimed()) return;
 #endif
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     if (gb_msg.type == GB_MSG_MENU) gbr_menu_arm(&view_menu, gb_msg.p0);
 #else
     gb_doc_event();
@@ -1373,23 +1523,29 @@ static void on_event(void)
    every idle frame. */
 static void fm_frame(void)
 {
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     unsigned char key, object_id;
 #endif
     sync_rect();
 #ifdef GB_PREEMPTIVE
+#if FM_FILE_COPY
     if (copy_state != COPY_IDLE) { copy_step(); return; }
+#endif
     if (list_state != LIST_IDLE) { list_step(); return; }
+#if FM_FILE_COPY
     if (gb_drop_claimed()) return;        /* another File Manager owns the storage job */
+#endif
     /* wm_chrome_frame delivers the already-sampled click after this idle hook.
        Do not start a synchronous APP-icon probe first: on a slow FAT device it
        can span the release/second-press interval and collapse a double-click
        into one edge. Input always takes priority over background decoration. */
     if (gb_flags() & GB_CLICK) return;
+#if FM_EMBEDDED_ICONS
     if (appicon_step()) return;
 #endif
+#endif
     if (dc_timer) dc_timer--;
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     while ((key = gb_getkey()) != 0)
         if (gbr_menu_shortcut(&view_menu, key, &object_id)) {
             fm_menu_action(object_id);
@@ -1409,6 +1565,7 @@ static void fm_frame(void)
 static void fm_close(void)
 {
 #ifdef GB_PREEMPTIVE
+#if FM_FILE_COPY
     if (copy_state != COPY_IDLE) {
         FS_XFLAGS = 0;
         gb_drop_release();
@@ -1418,12 +1575,15 @@ static void fm_close(void)
         gb_wm_close();
         return;
     }
+#endif
     if (list_state != LIST_IDLE) {
+#if FM_FILE_COPY
         if (list_state != LIST_WAIT) gb_drop_release();
+#endif
         list_state = LIST_IDLE;
     }
 #endif
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     gb_wm_close();
 #else
     if (gb_doc_close()) gb_wm_close();
@@ -1431,13 +1591,17 @@ static void fm_close(void)
 #endif
 }
 
-#ifndef GB_MSX2
+#if !FM_SHARED_CORE
 /* Legacy CPC/PCW path: a title-bar press asks the app to move the window. */
 static void fm_drag(void)
 {
     sync_rect();
 #ifdef GB_PREEMPTIVE
+#if FM_FILE_COPY
     if (copy_state != COPY_IDLE || list_state != LIST_IDLE || gb_drop_claimed()) return;
+#else
+    if (list_state != LIST_IDLE) return;
+#endif
 #endif
     if (gb_drag_window(&win_x, &win_y, win_w, win_h)) {
         gb_wm_setpos(win_x, win_y);
@@ -1457,12 +1621,16 @@ static void fm_click(void)
     my = gb_my();
 
 #ifdef GB_PREEMPTIVE
+#if FM_FILE_COPY
     if (copy_state != COPY_IDLE || list_state != LIST_IDLE || gb_drop_claimed()) return;
+#else
+    if (list_state != LIST_IDLE) return;
+#endif
 #endif
 
-    /* CPC/PCW retain the inherited app-owned grip. The explicit MSX2 kind makes
+    /* Legacy profiles retain the app-owned grip. The shared-core kind makes
        the kernel draw, hit-test and drag this furniture. */
-#ifndef GB_MSX2
+#if !FM_SHARED_CORE
     if (gb_in_grip(win_x, win_y, win_w, win_h, mx, my)) {
         if (gb_drag_resize(win_x, win_y, &win_w, &win_h, MIN_W, MIN_H)) {
             gb_wm_setsize(win_w, win_h);
@@ -1516,6 +1684,7 @@ static void fm_click(void)
         idx = (unsigned char)(idx - up_avail());   /* display position -> sorted real index */
         /* press on an entry: a drag (press + move) drags it to another window /
            the Trash (#62); a plain click (no move) falls through to select/open */
+#if FM_FILE_COPY
         dir_seek(order[idx]);                /* sorted index -> raw entry for gb_entname */
         if (gb_drag_start(gb_entname())) {   /* dropped on a target -> it handled it */
 #ifdef GB_PREEMPTIVE
@@ -1525,6 +1694,7 @@ static void fm_click(void)
 #endif
             return;
         }
+#endif
         if (dc_timer && dc_idx == (unsigned char)(idx + up_avail())) {   /* double-click -> open */
             open_entry(idx);
             dc_timer = 0;
@@ -1548,7 +1718,7 @@ static void fm_proc(void)
         case GB_MSG_CLICK: fm_click(); break;
         case GB_MSG_FRAME: fm_frame(); break;
         case GB_MSG_CLOSE: fm_close(); break;
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
         case GB_MSG_MOVED:
             sync_rect();
             break;
@@ -1565,7 +1735,7 @@ static void fm_proc(void)
     }
 }
 
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
 static gb_mwin_kind_t fmmw_kind = {
     { DEF_X, DEF_Y, DEF_W, DEF_H, MIN_W, MIN_H, fm_proc, 0, 0 },
     GB_WK_STANDARD
@@ -1580,12 +1750,16 @@ static gb_mwin_t fmmw = {
 void main(void)
 {
     nsel = 0; dc_timer = 0;
+#if FM_NATIVE_IO
+    my_drive = 0; /* qualified CPC profile has exactly one M4 volume, Disk C */
+#else
     my_drive = gb_get_drive();   /* the drive the desktop opened us on (#65) */
+#endif
     win_x = DEF_X + my_drive * CASCADE_X;   /* cascade drive windows, but keep Disk B on-screen */
     win_y = DEF_Y + my_drive * CASCADE_Y;
     fmmw.x = win_x;              /* register the window at the cascaded position */
     fmmw.y = win_y;
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     gb_wm_managed_kind(&fmmw_kind); /* explicit v1 kind registration; no legacy overread */
     fs_context = gb_fsctx_open(my_drive);
     if (!fs_context) {
@@ -1593,18 +1767,24 @@ void main(void)
         (void)gb_app_quit();
         return;
     }
+#if FM_NATIVE_IO
+    fm_path[0] = 0;
+    if (!fm_context_path()) return;
+#else
     (void)gb_fsctx_set_path(fs_context, "");
+#endif
 #else
     gb_wm_managed(&fmmw);
 #endif
     /* Register first (no draw, focus) so gb_set_name/fs_load target our window
        for the config read below. */
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     gbr_menu_init(&view_menu, filemgr_view_menu_gbrm,
                   FILEMGR_VIEW_MENU_SIZE, 10);
 #else
     gb_doc(&fmdoc);
 #endif
+#if !FM_NATIVE_IO
     fm_activate();
     /* Open at the drive ROOT. The kernel's directory position is a single global
        (fs_dir_clus / dir stack); a previously-open window may have left it in a
@@ -1612,8 +1792,9 @@ void main(void)
        empty, with no ".." to climb out. Pop back to the top (gb_back is a no-op at
        root on both backends; DIRSTACK is 4 deep) so the listing matches fm_path. */
     { unsigned char k; for (k = 0; k < 4; k++) gb_back(); }
+#endif
     cfg_load_view();             /* VIEW= from GEOBENCH.CFG -> view (default icons) */
-#ifdef GB_MSX2
+#if FM_SHARED_CORE
     gbr_menu_set_checked(&view_menu,
                          view == V_ICONS ? FILEMGR_VIEW_ICONS : FILEMGR_VIEW_LIST,
                          1);

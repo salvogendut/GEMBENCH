@@ -13,7 +13,14 @@
  * drops the icon at its new spot (no movement => it was just a click). The
  * backdrop is a solid colour, so the drag outline erases by redrawing in the
  * backdrop pen - no save-under needed. */
+#include "platform.h"
 #include "gb.h"
+#if DESKTOP_NATIVE
+#include GB_DESKTOP_PROVIDER
+#if GB_DESKTOP_PROVIDER_VERSION != 1
+#error "Unsupported Desktop provider contract"
+#endif
+#endif
 #ifdef GB_VISIBLE_REGIONS
 #include "gbregion.h"
 #endif
@@ -42,7 +49,9 @@
 #define DCLICK  75            /* double-click window, frames (gamepad-friendly, #153) */
 #define NONE    0xFF
 #define DRAGTH  2             /* press must move this far before it lifts (#153) */
+#if !DESKTOP_NATIVE
 #define WM_OPEN_STRICT (*(volatile unsigned char *)0x123D)
+#endif
 
 #ifdef GEMBENCH_BASELINE
 #define BASELINE_PHASE       (*(volatile unsigned char *)0xC02A)
@@ -105,8 +114,10 @@ static unsigned char dc_timer, dc_idx, held_prev;
 static unsigned char show_ram;               /* System menu footprint toggle (#74) */
 static unsigned char menu_inited;            /* gb_doc/System registered on the 1st frame (#142) */
 static unsigned char menu_refresh;           /* refocus after a child window closes -> rebuild System */
+#if !DESKTOP_NATIVE
 static unsigned char want_settings;          /* System>Settings: open AFTER the menu repaint (#129) */
 static unsigned char want_saver;             /* System>Activate screensaver: open after repaint (#219) */
+#endif
 static unsigned char want_about;             /* System>About: 1=menu selected, 2=open next frame (#409) */
 #ifdef GB_DESK_ACCESSORIES
 static unsigned char want_accessory;         /* Desk selection + 1, deferred past popup repaint */
@@ -118,7 +129,7 @@ static unsigned char preemptive_diagnostic_refresh;
 #ifdef GEMBENCH_BASELINE
 static unsigned char baseline_delay;
 #endif
-#if !defined(GB_MSX2) && !defined(GB_PCW)
+#if !DESKTOP_NATIVE && !defined(GB_MSX2) && !defined(GB_PCW)
 static unsigned char first_paint;             /* defer the definitive paint until WM registration */
 #endif
 #ifdef GB_PCW
@@ -134,7 +145,13 @@ static unsigned char timesync_tries;         /* one visible boot sync attempt */
    the left column in detection order (C, A, B) - no gaps for absent drives (#65). */
 static void drive_poll(void)
 {
+#if DESKTOP_NATIVE
+    /* Exactly one boot-admitted M4 volume. Hotplug/media refresh is not yet
+       part of this profile, so do not pretend to probe absent firmware drives. */
+    unsigned char d = GB_DRV_C, i, n = 0;
+#else
     unsigned char d = gb_drives(), i, n = 0;
+#endif
 #ifdef GB_MSX2
     (void)d;
     for (i = 0; i < 3; i++) {
@@ -174,6 +191,7 @@ static void draw_icon(unsigned char i)
     gb_text(ic_x[i], (unsigned char)(ic_y[i] + 34), l);
 }
 
+#if !DESKTOP_NATIVE
 /* ---- centred .PIC wallpaper (#212, experiment) -------------------------------
  * If a wallpaper picture loads into a borrowed app bank, every backdrop-erase goes
  * through wp_backdrop: solid-fill the rect, then blit the overlapping part of the
@@ -462,18 +480,7 @@ static unsigned char ss_lmx, ss_lmy;  /* last pointer position (a change = activ
 /* cfg_val: index just past KEY (klen chars, including '=') found at a line start in the
  * boot config text, or KCFG_LEN if absent. Reads straight from #1000 (no transfer cell
  * to collide), like wp_cfg_name. */
-static unsigned int cfg_val(const char *key, unsigned char klen)
-{
-    const char *t = KCFG_TEXT;
-    unsigned int len = KCFG_LEN, i;
-    unsigned char j;
-    for (i = 0; i + klen <= len; i++) {
-        if (i && t[i-1] != '\r' && t[i-1] != '\n') continue;   /* line start only */
-        for (j = 0; j < klen; j++) if (t[i+j] != key[j]) break;
-        if (j == klen) return i + klen;
-    }
-    return len;
-}
+#include "core/config_value.inc"
 
 static char chrome_name[11];
 
@@ -485,70 +492,9 @@ static unsigned int chrome_load(unsigned char gadgets) __naked
 {
     gadgets;
 __asm
-    push af                         ; retain the TBR/GDT selector
-    or a
-    jr z,cl_title_key
-    ld a,#8
-    push af
-    inc sp
-    ld hl,#cl_gadget_key
-    call _cfg_val                  ; DE = value offset
-    jr cl_have_pos
-cl_title_key:
-    ld a,#9
-    push af
-    inc sp
-    ld hl,#cl_title_key_text
-    call _cfg_val
-cl_have_pos:
-    push de
-    ld hl,#cl_default
-    ld de,#_chrome_name
-    ld bc,#11
-    ldir
-    pop de
-    ld hl,(#0x1200)                ; KCFG_LEN
-    ld a,d
-    cp h
-    jr c,cl_copy_stem
-    jr nz,cl_extension
-    ld a,e
-    cp l
-    jr nc,cl_extension
-cl_copy_stem:
-    push de
-    ld hl,#_chrome_name
-    ld (hl),#0x20
-    ld de,#_chrome_name+1
-    ld bc,#7
-    ldir
-    pop hl
-    ld de,#0x1000                  ; KCFG_TEXT
-    add hl,de
-    ld de,#_chrome_name
-    ld b,#8
-cl_stem_loop:
-    ld a,(hl)
-    cp #13
-    jr z,cl_extension
-    cp #10
-    jr z,cl_extension
-    cp #'.'
-    jr z,cl_extension
-    ld (de),a
-    inc hl
-    inc de
-    djnz cl_stem_loop
-cl_extension:
-    pop af
-    or a
-    jr z,cl_load
-    ld hl,#_chrome_name+8
-    ld (hl),#'G'
-    inc hl
-    ld (hl),#'D'
-    inc hl
-    ld (hl),#'T'
+#define CHROME_CFG_LEN 0x1200
+#define CHROME_CFG_TEXT 0x1000
+#include "core/chrome_select.inc"
 cl_load:
     call _gb_get_drive
     push af
@@ -579,14 +525,7 @@ cl_restore_drive:
     call _gb_set_drive
     pop de
     ret
-cl_default:
-    .ascii "ORIGINALTBR"
-cl_gadget_key:
-    .ascii "GADGETS="
-    .db 0
-cl_title_key_text:
-    .ascii "TITLEBAR="
-    .db 0
+#include "core/chrome_keys.inc"
 __endasm;
 }
 
@@ -789,6 +728,15 @@ static void wp_backdrop(unsigned char x, unsigned char y, unsigned char w, unsig
     }
 }
 
+#else
+/* Boot has already installed the checked solid/tiled backdrop and visual
+ * assets. No borrowed picture banks, raw VRAM writer or legacy installers. */
+#define wp_backdrop gb_backdrop
+static unsigned int ss_idle;
+static unsigned char ss_lmx, ss_lmy;
+static void desktop_bar_damage(void);
+#endif
+
 static void paint_region(void)
 {
     unsigned char i;
@@ -806,9 +754,14 @@ static void paint_region(void)
 
 static void paint(void)
 {
+#if !DESKTOP_NATIVE
     ss_cfg_init();                             /* #219: re-read SAVER=/SAVERTIME= - a Settings change
                                                   applies live (this fires when Settings closes) */
+#endif
     paint_region();
+#if DESKTOP_NATIVE
+    desktop_bar_damage(); /* repair an exposed bar without advancing its full-clip cache */
+#endif
 }
 
 /* Milestone 12: only the MSX2 Desktop opts into bounded visible-region
@@ -833,6 +786,22 @@ static void paint_visible(void)
 static void select_icon(unsigned char icon)
 {
     if (sel_idx == icon) return;
+#if DESKTOP_NATIVE
+    /* The bar hook can clear selection while a child covers this icon. Route
+       through compositor damage, never paint the root over the focused app. */
+    {
+        unsigned char previous = sel_idx;
+        sel_idx = icon;
+        if (previous != NONE && ic_present[previous]) {
+            gb_wm_damage(ic_x[previous], ic_y[previous], IC_W, BOX_H);
+            gb_restore_parent();
+        }
+        if (icon != NONE && ic_present[icon]) {
+            gb_wm_damage(ic_x[icon], ic_y[icon], IC_W, IC_H);
+            gb_restore_parent();
+        }
+    }
+#else
     gb_curhide();
     if (sel_idx != NONE && ic_present[sel_idx]) {
         wp_backdrop(ic_x[sel_idx], ic_y[sel_idx], IC_W, IC_H);   /* erase old frame to backdrop (#128) */
@@ -842,6 +811,7 @@ static void select_icon(unsigned char icon)
         gb_frame(ic_x[icon], ic_y[icon], IC_W, IC_H, 3);
     gb_curshow();
     sel_idx = icon;
+#endif
 }
 
 /* The top bar is now drawn here, not in the kernel (experiment #77). The WM runs
@@ -850,41 +820,34 @@ static void select_icon(unsigned char icon)
    (windows start at line 8), so each element is drawn once and only repainted when it
    changes (clock minute, menu def). Kernel state we read: KCFG_MEMSTR (RAM size, set
    by the GBCFG module) and MENU_DEF (the focused window's menu, kept by the WM). */
+#if !DESKTOP_NATIVE
 #define KCFG_MEMSTR ((const char *)0x121A)
 #define MENU_DEF    ((volatile unsigned char *)0x1310)
 #define WM_FS       ((volatile unsigned char *)0x130A)   /* 1 = a window is fullscreen (kernel) */
+#endif
 #define CLK_COL     (GB_COLS - 12)  /* clock column (matches the old kernel bar) */
 
-static unsigned char bar_init, bar_hour, bar_min, bar_msig, bar_wasfs;
+#include "core/bar_render.inc"
 
-static unsigned char bin(unsigned char v)   /* raw RTC reg -> binary (gb_time) */
+#if DESKTOP_NATIVE
+static void draw_footprint(void);
+static void desktop_bar_tick(void)
 {
-    return gb_binmode ? v : (unsigned char)((v >> 4) * 10 + (v & 15));
+    unsigned char msig, i;
+#include "core/bar_refresh.inc"
 }
-static void put2(char *p, unsigned char v) { p[0] = '0' + v / 10; p[1] = '0' + v % 10; }
-
-/* bar_menu: the focused window's menu titles (MENU_DEF: count, then {col, 8-byte
-   label}*count). Clear the title region first so a previous app's titles are gone. */
-static void bar_menu(void)
+static void desktop_bar_damage(void)
 {
-    unsigned char n = MENU_DEF[0], i, j;
-    char lbl[9];
-    gb_curhide();
-    gb_fill(8, 0, 46, 8, 1);                  /* white, cols 8..53 (RAM/footprint/clock kept) */
-    for (i = 0; i < n && i < 4; i++) {
-        for (j = 0; j < 8; j++) lbl[j] = MENU_DEF[2 + i * 9 + j];
-        lbl[8] = 0;
-        gb_textbw(MENU_DEF[1 + i * 9], 0, lbl);
-    }
-    gb_curshow();
+    unsigned char init=bar_init, hour=bar_hour, minute=bar_min;
+    unsigned char signature=bar_msig, fullscreen=bar_wasfs;
+    /* This callback owns only the compositor's effective clip. */
+    bar_init=bar_wasfs=0;
+    desktop_bar_tick();
+    if (show_ram && !*WM_FS) draw_footprint();
+    bar_init=init;bar_hour=hour;bar_min=minute;
+    bar_msig=signature;bar_wasfs=fullscreen;
 }
-
-static void bar_clock(unsigned char h, unsigned char m)
-{
-    char t[6];
-    put2(t, bin(h)); t[2] = ':'; put2(t + 3, bin(m)); t[5] = 0;
-    gb_curhide(); gb_textbw(CLK_COL, 0, t); gb_curshow();
-}
+#endif
 
 #ifdef GEMBENCH_BASELINE
 /* One-shot diagnostic measurements. The bar hook still runs while TASKDEMO
@@ -932,6 +895,10 @@ static void baseline_probe(void)
 static void bar_draw(void)
 {
     unsigned char msig, i;
+#if DESKTOP_NATIVE
+    unsigned char repair_footprint = !bar_init || bar_wasfs;
+    desktop_collect(); /* the qualified native timer collector + full bar clip */
+#endif
 #ifdef GB_SERVICE_MANAGER
     /* Root-owned M7 collection remains live even while another application or
        a fullscreen surface has focus. It scans three leases and queues at most
@@ -941,28 +908,12 @@ static void bar_draw(void)
 #ifdef GB_APP_TIMER_COLLECTOR
     gb_timer_collect();                         /* consume worker damage on the root task */
 #endif
-    gb_time();                                  /* also refreshes fixed bytes used by timer workers */
-    if (*WM_FS) { bar_wasfs = 1; return; }    /* fullscreen: the borderless window owns lines 0-7 */
-    if (bar_wasfs) {                          /* just exited fullscreen (e.g. the saver closed) -> */
-        bar_wasfs = 0; bar_init = 0;          /* force a full bar redraw, and restart the idle count */
-        ss_idle = 0; ss_lmx = gb_mx(); ss_lmy = gb_my();
+#include "core/bar_refresh.inc"
+#if DESKTOP_NATIVE
+    if (show_ram && repair_footprint) {
+        gb_curhide(); draw_footprint(); gb_curshow();
     }
-    if (!bar_init) {                          /* first frame: white strip + RAM size */
-        gb_curhide();
-        gb_fill(0, 0, GB_COLS, 8, 1);
-        gb_textbw(1, 0, KCFG_MEMSTR);
-        gb_curshow();
-        bar_init = 1; bar_hour = 0xFF; bar_min = 0xFF; bar_msig = 0xFF;
-    }
-    msig = 0;                                  /* menu titles: redraw when MENU_DEF changes */
-    for (i = 0; i < (unsigned char)(MENU_DEF[0] * 9 + 1) && i < 40; i++) msig += MENU_DEF[i];
-    if (msig != bar_msig) { bar_msig = msig; bar_menu(); }
-                                              /* clock: redraw when the displayed time changes */
-    if (gb_hour != bar_hour || gb_min != bar_min) {
-        bar_hour = gb_hour;
-        bar_min = gb_min;
-        bar_clock(gb_hour, gb_min);
-    }
+#endif
 #ifdef GB_PREEMPTIVE_DIAGNOSTIC
     /* Periodically sample both non-yielding workers through their normal DRAW
        callbacks so headless diagnostics expose counter progress on screen. */
@@ -990,6 +941,7 @@ static void bar_draw(void)
        free, launch the saver app. It sets WM_FS, so next frame we bail at the top above
        (no re-launch) until it closes. (A typed key isn't counted here - reading it would
        steal it from the focused app - but it DOES wake the saver, which owns the input.) */
+#if !DESKTOP_NATIVE
     if (ss_timeout) {
         unsigned char mx = gb_mx(), my = gb_my();
         if (mx != ss_lmx || my != ss_lmy || (gb_flags() & (GB_CLICK | GB_FIRE | GB_QUIT))) {
@@ -999,6 +951,7 @@ static void bar_draw(void)
             open_saver();
         }
     }
+#endif
 }
 
 /* Desktop-owned dialogs and menus may run while child windows remain open.
@@ -1102,12 +1055,21 @@ static void tidy_icons(void)
 }
 
 /* sys_action: the System menu handler, dispatched by the gb_doc framework (#142). */
+#if DESKTOP_NATIVE
+static const char *const sys_items[3] = { "Ram Usage", "Tidy Icons", "About GEOBENCH" };
+#else
 static const char *const sys_items[7] = {
     "Ram Usage", "Refresh Media", "Tidy Icons", "Settings", "Activate screensaver",
     "About GEOBENCH", "Exit to DOS"
 };
+#endif
 static void sys_action(unsigned char sel)
 {
+#if DESKTOP_NATIVE
+    /* Map visible rows to the original actions; unsupported actions are absent. */
+    if (sel >= 3) return;
+    if (sel) sel = sel == 1 ? 2 : 5;
+#endif
     if (sel == 0) {                            /* Ram Usage: toggle the footprint (it then
                                                   persists - nothing else touches the bar) */
         show_ram ^= 1;
@@ -1118,12 +1080,15 @@ static void sys_action(unsigned char sel)
         if (show_ram) draw_footprint();
         else gb_fill(FP_COL, 0, 13, 8, 1);
         gb_curshow();
+#if !DESKTOP_NATIVE
     } else if (sel == 1) {                     /* Refresh Media (the old "Media") */
         gb_curhide();
         drive_poll();
         gb_restore_parent();
+#endif
     } else if (sel == 2) {                     /* Tidy Icons */
         tidy_icons();
+#if !DESKTOP_NATIVE
     } else if (sel == 3) {                     /* Settings (#129): the control panel. Defer the
                                                   open until AFTER gb_doc_frame's desktop repaint
                                                   below, else paint() covers the new window. */
@@ -1132,66 +1097,33 @@ static void sys_action(unsigned char sel)
                                                   whatever the SAVER= idle timeout - defer the open
                                                   past gb_doc_frame's repaint, like Settings. */
         want_saver = 1;
+#endif
     } else if (sel == 5) {                     /* About GEOBENCH (#409): defer until the System
                                                   popup has released the click and repainted. */
         want_about = 1;
+#if !DESKTOP_NATIVE
     } else if (sel == 6) {                     /* Exit to DOS */
         gb_exit();                              /* does not return */
+#endif
     }
 }
 
 #ifdef GB_DESK_ACCESSORIES
-static void accessory_action(unsigned char sel)
-{
-    if (sel < GB_DESK_ACCESSORY_COUNT) want_accessory = (unsigned char)(sel + 1);
-}
+#include "core/accessory_menu.inc"
 
 /* Activate the exact live accessory before considering mapper capacity.  Only
    absence launches a normal banked APP; a live target's explicit error never
    creates a duplicate instance. */
-static void open_accessory(unsigned char index)
-{
-#ifdef GB_DEFER_MESSAGES
-    gb_owner_t endpoint;
-    gb_defer_send_t message;
-#else
-    unsigned char result;
-#endif
-    if (index >= GB_DESK_ACCESSORY_COUNT) return;
-#ifdef GB_DEFER_MESSAGES
-    endpoint = gb_defer_find_accessory(gb_desk_accessory_ids[index]);
-    if (endpoint) {
-        message.receiver = endpoint;
-        message.type = GB_DEFER_SHELL;
-        message.p0 = GB_SHELL_ACTIVATE;
-        message.p1 = message.p2 = 0;
-        (void)gb_defer_send(&message);
-        return;
-    }
-#else
-    result = gb_shell_request_accessory(gb_desk_accessory_ids[index],
-                                        GB_SHELL_ACTIVATE);
-    if (result != GB_SHELL_NOT_FOUND) return;
-#endif
-    if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
-    else gb_wm_open(gb_desk_accessory_apps[index]);
-}
+#include "core/accessory_open.inc"
 #endif
 
-static void desktop_menu_init(void)
-{
-    gb_doc(&deskdoc);                        /* empty doc: no File/Edit/View */
-#ifdef GB_DESK_ACCESSORIES
-    gb_menu_add("Desk", gb_desk_accessory_labels, GB_DESK_ACCESSORY_COUNT,
-                accessory_action);
-#endif
-    gb_menu_add("System", sys_items, 7, sys_action);
-}
+#include "core/menu_init.inc"
 
 /* on_event: kernel callback (issue #32). Fires when the user clicks the
    kernel-owned top bar; proves the kernel->app round-trip by showing the
    message payload (the clicked column) in the hint line. */
 /* trash_label: "Trash: NAME.EXT" from the dragged 11-byte 8.3 name (#62 phase 1). */
+#if !DESKTOP_NATIVE
 static char *trash_label(void)
 {
     static char m[20] = "Trash: ";
@@ -1202,10 +1134,14 @@ static char *trash_label(void)
     m[j] = 0;
     return m;
 }
+#endif
 
 static void on_event(void)
 {
     if (gb_msg.type == GB_MSG_DROP) {                  /* a file dropped on the desktop (#62) */
+#if DESKTOP_NATIVE
+        gb_alert("Not available yet", "File deletion is not enabled");
+#else
         if (hit_icon(gb_mx(), gb_my()) == IDX_TRASH) { /* on Trash -> delete the file */
             unsigned char ok;
             gb_copy_begin();                           /* delete from the drag source drive/dir */
@@ -1216,8 +1152,19 @@ static void on_event(void)
             else    gb_alert("Delete failed", "file was not removed");
             gb_curshow();
         }
+#endif
         return;
     }
+#if DESKTOP_NATIVE
+    /* The shared root loop dispatches input before on_frame. On refocus,
+       refresh the definition BEFORE arming gbdoc's pending title; rebuilding
+       it afterwards would silently consume the first menu click. */
+    if (!menu_inited || menu_refresh) {
+        menu_inited = 1;
+        menu_refresh = 0;
+        desktop_menu_init();
+    }
+#endif
     gb_doc_event();                                    /* a top-bar title click -> the framework */
 }
 
@@ -1236,7 +1183,7 @@ static void on_frame(void)
         menu_inited = 1;
         desktop_menu_init();
     }
-#if !defined(GB_MSX2) && !defined(GB_PCW)
+#if !DESKTOP_NATIVE && !defined(GB_MSX2) && !defined(GB_PCW)
     if (first_paint) {
         /* The pre-WM paint left the CPC splash beneath the desktop until a
            later restack. Use the normal registered compositor from frame one. */
@@ -1254,6 +1201,7 @@ static void on_frame(void)
         return;
     }
 #endif
+#if !DESKTOP_NATIVE
     if (menu_refresh && background_changed()) { /* backdrop/wallpaper changed while a child was up:
                                                     reload outside wm_repaint_all, then repaint once. */
         background_init();
@@ -1263,6 +1211,7 @@ static void on_frame(void)
         menu_refresh = 0;
         return;
     }
+#endif
     menu_refresh = 0;
     if (dc_timer) dc_timer--;
     /* the desktop is the permanent root - ESC doesn't exit GEOBENCH (use System >
@@ -1300,12 +1249,9 @@ static void on_frame(void)
         }
         repaint_stack();                   /* restore existing windows and widen the popup clip */
 #ifdef GB_DESK_ACCESSORIES
-        if (want_accessory) {
-            unsigned char index = (unsigned char)(want_accessory - 1);
-            want_accessory = 0;
-            open_accessory(index);
-        }
+#include "core/accessory_pending.inc"
 #endif
+#if !DESKTOP_NATIVE
         if (want_settings) {                  /* System>Settings: now safe to open on top (#129) */
             want_settings = 0;
             if (gb_wm_full()) gb_alert("Sorry, not enough RAM", "to run more apps.");
@@ -1316,6 +1262,7 @@ static void on_frame(void)
             ss_idle = 0;                       /* a manual run resets the idle count */
             if (!gb_wm_full()) open_saver();
         }
+#endif
         return;
     }
 
@@ -1353,8 +1300,12 @@ static void on_frame(void)
             gb_alert("Sorry, not enough RAM", "to run more apps.");
         else if (ic_drive[icon]) {                           /* browse that drive (#65): */
             select_icon(NONE);                               /* opening clears the selection (#153) */
+#if DESKTOP_NATIVE
+            desktop_open_disk(icon);
+#else
             gb_set_drive(icon);                              /* icon idx 0/1/2 = drive slot */
             gb_wm_open("FILEMGR APP");
+#endif
         }
         else if (icon == IDX_CLOCK) {
             select_icon(NONE);
@@ -1380,7 +1331,12 @@ static void on_frame(void)
    full paint() (restacked behind any window), on_event = file-drop + the System menu.
    menu = 0: the gb_doc framework installs the "System" title dynamically (#142). Its
    rect spans the screen so it is the bottom catch-all for click-to-focus. */
+#if DESKTOP_NATIVE
+/* The root also repairs bar damage (fullscreen/overlap exposure). */
+static const gb_win_t deskwin = { 0, 0, GB_COLS, GB_LINES, on_frame, DESKTOP_REPAINT, on_event, 0 };
+#else
 static const gb_win_t deskwin = { 0, 8, GB_COLS, GB_LINES - 8, on_frame, DESKTOP_REPAINT, on_event, 0 };
+#endif
 
 void main(void)
 {
@@ -1389,15 +1345,21 @@ void main(void)
 #endif
     *WM_FS = 0;                                 /* clear the fullscreen flag at boot (low RAM is
                                                    uninitialised; bar_draw reads it every frame) */
+#if !DESKTOP_NATIVE
     WM_OPEN_STRICT = 0;
     chrome_init();                              /* install configured .TBR/.GDT before windows */
+#endif
     drive_poll();                               /* drives present at boot -> icons (#65) */
+#if DESKTOP_NATIVE
+    ic_present[IDX_TRASH] = 0; /* no successful-looking delete target until qualified */
+#endif
 #ifdef GB_PCW
     p = cfg_val("TIMESYNC=", 9);
     want_timesync = (unsigned char)(p < KCFG_LEN && KCFG_TEXT[p] == 't');
     timesync_delay = 250;                      /* start visibly, then let TIMESYNC wait for PerryNet */
     timesync_tries = want_timesync ? 1 : 0;
 #endif
+#if !DESKTOP_NATIVE
     ss_cfg_init();                               /* #219: read the screensaver idle timeout */
 #if !defined(GB_MSX2) && !defined(GB_PCW)
     bd_init();                                   /* canonical BDP is native CPC Mode-1 */
@@ -1410,10 +1372,11 @@ void main(void)
     paint();
     gb_curshow();
 #endif
+#endif
     drag_active = 0;
     dc_timer = 0;
     held_prev = 0;
-#ifdef GB_PREEMPTIVE
+#if defined(GB_PREEMPTIVE) && !DESKTOP_NATIVE
     gb_task_root_init();                         /* install app-carried fixed-RAM scheduler */
 #endif
 #ifdef GEMBENCH_BASELINE
@@ -1436,6 +1399,12 @@ void main(void)
     BASELINE_RUNNABLE = 0;
     baseline_delay = 0;
 #endif
+#if DESKTOP_NATIVE
+    /* Bootstrap already owns root C0, scheduler, config and visual assets.
+       Bind callbacks once, then return to that bootstrap's existing WM loop. */
+    desktop_start(&deskwin, bar_draw);
+#else
     gb_on_bar(bar_draw);                        /* top-bar handler runs every frame (#77) */
     gb_wm_run(&deskwin);                        /* register + run the kernel WM (#45) */
+#endif
 }

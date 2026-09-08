@@ -81,10 +81,143 @@ or window work must cross an explicit version boundary.
 - MSX-DOS2 or Nextor
 - RainBIOS as a supported validation environment
 
-GEOBENCH currently has no active CPC or PCW build, media, or release target. The
-last multi-platform tree is preserved on `archive/cpc-pcw-targets`. CPC is to be
-reintroduced after the compile-once GEOBENCH-2 ABI is implemented; PCW follows
-as a separate port. See the [current target state](docs/MSX2-ONLY.md) and the
+MSX2 remains the full release target. The experimental **CPC M4 Desktop** is
+now available through [Sprint 3](docs/CPC-RESTART-SPRINT3.md), using the same
+Desktop/File Manager sources, window manager and portable Clock/Calculator apps:
+
+```sh
+make cpc
+bash tools/run_cpc.sh
+```
+
+Use the project SDCC/RASM toolchain; the sprint document includes this workspace's
+distrobox commands. Output is `QA/CPC-Desktop/` (CARD, M4 image and 1984 config),
+separate from parked `QA/CPC/` and diagnostics. Arrow keys move the pointer,
+Space clicks/drags. Double-click **Disk C**, enter **GBENCH**, then open
+**CLOCK.APP** or **CALC.APP**. File Manager's View menu offers Icons/List and
+Fullscreen; double-click `..` to go up. `FILEMGR.BIN` is a build-matched native
+component, not a portable APP. Data-file associations and file copy/delete are
+not yet available. PCW, Albireo and a hardware mouse driver are not yet qualified. Rebuilding
+resets generated media; keep personal data on separate copies.
+
+### Earlier CPC diagnostic checkpoints
+
+The last multi-platform tree is preserved on `archive/cpc-pcw-targets`. The first
+CPC ABI experiment is parked on `feature/54-reintegrate-cpc`; the
+[five-step CPC restart](docs/CPC-RESTART-PLAN.md) begins from working MSX2 with
+a feature reference and shared-core extraction. Its isolated
+[step-3A M4 hardware probe](docs/CPC-RESTART-STEP3A.md) is available through
+`make diagnostic-cpc-foundation-1984`; it does not boot a desktop.
+The [3B graphics/pointer proof](docs/CPC-RESTART-STEP3B.md) runs through
+`make diagnostic-cpc-graphics-1984`, also using isolated M4 media.
+The [3D production-address integration](docs/CPC-RESTART-STEP3D.md) uses
+`make diagnostic-cpc-production-1984` to exercise shared context switching,
+banking, keyboard/ticks and M4 together. Its
+[3D-B drawing/parameter integration](docs/CPC-RESTART-STEP3D-B.md) runs through
+`make diagnostic-cpc-drawing-1984`, including shared ownership/parameters and
+exact text/line/pointer clipping. The
+[3D-C focus/stacking/damage checkpoint](docs/CPC-RESTART-STEP3D-C.md) runs
+through `make diagnostic-cpc-windows-1984`, checking the shared compositor
+with native fixtures and CPC clipping/pointer adapters. These diagnostics
+are not a CPC desktop or loaded application build.
+The [3D-D lifetime/cleanup checkpoint](docs/CPC-RESTART-STEP3D-D.md),
+`make diagnostic-cpc-lifetime-1984`, adds owner-safe close/quit, message purge
+and logical file-context cleanup tests.
+The [3D-E registration/chrome checkpoint](docs/CPC-RESTART-STEP3D-E.md),
+`make diagnostic-cpc-registration-1984`, uses the same native registration,
+window-kind and plain furniture code as MSX, with bounded CPC drawing leaves.
+It tests mixed-kind background painting, slot exhaustion/reuse and cleanup;
+it does not yet load applications or provide an interactive desktop.
+The [3D-F message/timer checkpoint](docs/CPC-RESTART-STEP3D-F.md),
+`make diagnostic-cpc-services-1984`, connects the same deferred FIFO,
+post-input dispatch phase and app-linked timer collector. Sixteen M4
+checkpoints check replies, activation, worker publication and hidden damage.
+The [3D-G input/root-loop checkpoint](docs/CPC-RESTART-STEP3D-G.md),
+`make diagnostic-cpc-routing-1984`, drives the shared MSX loop and native
+focus/menu/move/resize/maximise router through real CPC keyboard input on M4.
+It uses fixture windows and a plain bar, not the loaded Desktop applications.
+The [3D-H M4 loading checkpoint](docs/CPC-RESTART-STEP3D-H.md),
+`make diagnostic-cpc-loading-1984`, tests the shared MSX launch/admission
+transaction, file-loaded native registration, corrupt-package rejection and
+owner/page rollback.
+The [3D-I read-only filesystem-context checkpoint](docs/CPC-RESTART-STEP3D-I.md),
+`make diagnostic-cpc-fsctx-1984`, loads the unchanged shared context policy
+from M4 and tests independent paths/reads, owner identity, launch handoff and
+cleanup. The [3D-J directory checkpoint](docs/CPC-RESTART-STEP3D-J.md),
+`make diagnostic-cpc-fsdir-1984`, adds independent enumeration, canonical short
+aliases, full-size metadata and batches behind that shared policy. It requires
+the 1984 M4 fix merged in PR #290; both the unchanged protocol
+probe and the 44-checkpoint directory test pass with that rebuilt emulator.
+The [3D-K write/free checkpoint](docs/CPC-RESTART-STEP3D-K.md),
+`make diagnostic-cpc-fswrite-1984`, tests shared truncate/append semantics,
+interleaved owner readback and independently verified M4 free space.
+Those historical fixtures do not yet bind public filesystem/SDK execution;
+they are bounded private diagnostics, not a CPC desktop.
+The subsequent [3D-L/M/N unified runtime](docs/CPC-RESTART-STEP3D-N.md) now loads
+universal APPs, binds portable filesystem contexts and reuses the actual Desktop
+bar/application menus on private M4 media. Build it with
+`make diagnostic-cpc-runtime`; `make diagnostic-cpc-menus-1984` checks focus and
+dropdown restoration. This is still a test launcher, not the full CPC Desktop.
+[3D-O](docs/CPC-RESTART-STEP3D-O.md) adds the unchanged MSX Calculator and shared
+accessory activation: press **F7** in that M4 runtime, or run
+`make diagnostic-cpc-accessories-1984`.
+[3D-P](docs/CPC-RESTART-STEP3D-P.md) connects Clock's real worker and shared
+timer collector: **F2** opens Clock, **S** toggles seconds, and
+`make diagnostic-cpc-clock-1984` checks background updates, occlusion and
+pointer save-under. The same updated Clock binary is tested on CPC and MSX2;
+the complete Desktop and File Manager remain pending.
+[3D-Q](docs/CPC-RESTART-STEP3D-Q.md) adds the real shared **Desk** menu on a
+bounded root page: close ABI Probe with **Escape** or click the background,
+then choose **Desk → Clock / Calculator**. Run `make diagnostic-cpc-desk-1984`
+for its M4 regression. System/Settings, assets and File Manager remain gated;
+this is not yet the full CPC Desktop.
+[3D-R](docs/CPC-RESTART-STEP3D-R.md) binds shared configuration parsing and basic
+native dialogs in a reserved system bank. With the background focused, **U/P/N/I**
+exercise popup/prompt/size/About; **R** reparses configuration. Run
+`make diagnostic-cpc-native-1984`. [3D-S](docs/CPC-RESTART-STEP3D-S.md) now applies
+configured 6x8 fonts, palette/border and contrasting window frames. **R** does
+not repaint for an unchanged configuration. Run `make diagnostic-cpc-assets-1984`
+for custom-font/theme and reload checks on a copied M4 image.
+The [Clock/cursor responsiveness follow-up](docs/CPC-CLOCK-RESPONSIVENESS.md)
+adds `make diagnostic-cpc-latency-1984` for video-timed movement and save-under checks.
+[3D-T](docs/CPC-RESTART-STEP3D-T.md) connects configured icon packs (REFINED by
+default), the CPC cursor sprite and backdrop tiles. With the background focused,
+**A** toggles the diagnostic icon gallery and **V** checks cursor pixel phases.
+Run `make diagnostic-cpc-bitmaps-1984` for custom artwork and clipped exposure
+checks on a private M4 copy. [3D-U](docs/CPC-RESTART-STEP3D-U.md) now connects
+configured titlebar/gadget assets through the shared native furniture and a
+bounded paged renderer. Run `make diagnostic-cpc-chrome-1984` for custom themes,
+focus, dragging and gadget checks. [3D-V](docs/CPC-RESTART-STEP3D-V.md) adds the
+shared native file/destination chooser with temporary owned filesystem contexts.
+With the background focused, **O/D** exercise it; run
+`make diagnostic-cpc-picker-1984` for navigation, readback and restoration checks.
+[3D-W1](docs/CPC-RESTART-STEP3D-W.md) reuses Settings' configuration editing with
+verified M4 persistence and live reload. On the focused background, **W/E**
+save/apply WEAVE/ORIGINAL titlebars; the choice survives restarting the emulator.
+Run `make diagnostic-cpc-config-edit-1984` for private-image save/reload/reboot
+checks. These keys write the diagnostic image only. The actual Settings window,
+System menu, full Desktop/File Manager and native implicit filesystem/reload
+contracts remain later integrations.
+[W2-A](docs/CPC-RESTART-STEP3D-W2-A.md) isolates the actual Settings platform
+bindings and audits its unresolved CPC services/data layout. Run
+`make diagnostic-cpc-settings-audit`; it produces no executable or new media.
+The [desktop-first delivery plan](docs/CPC-RESTART-PLAN.md#desktop-first-delivery-update--2026-09-07)
+groups delivery into four sprints: native services/memory, real
+Desktop, File Manager, and stabilization. Sprints 1 and 2 are complete;
+[sprint 3](docs/CPC-RESTART-SPRINT3.md) now delivers the usable browsing/launch
+workflow, with automated acceptance passed and the manual image rebuilt.
+[Sprint 4](docs/CPC-RESTART-SPRINT4.md) is automatically qualified and manually
+accepted, completing the desktop-first delivery. Run the rebuilt M4 image with
+`distrobox enter my-distrobox -- bash tools/run_cpc.sh`.
+Delivered-window, Clock visibility and cursor-cadence regressions start with
+`make cpc-stability-1984`.
+The combined gate is `make cpc-delivery-1984` (`CPC_TEST_JOBS=4` optionally runs
+independent disposable M4 scenarios in parallel). See the sprint document for
+results: all 20 scenarios pass, alongside 269 Python tests and MSX regressions.
+Complete Settings and broader
+application parity follow separately.
+PCW follows as a separate port.
+See the [current target state](docs/MSX2-ONLY.md) and the
 [universal ABI experiment](docs/UNIVERSAL-APPLICATION-ABI.md).
 
 ## Build and check

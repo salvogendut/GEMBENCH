@@ -14,6 +14,9 @@
  * chosen directory, so a following gb_fs_load / gb_fs_save targets it.
  */
 #include "gb.h"
+#ifdef GB_PICK_PROVIDER
+#include GB_PICK_PROVIDER
+#endif
 
 #define PICK_MAX  12             /* entries shown per directory (folder nav offsets
                                     the low cap; a scrolling list is a later step) */
@@ -75,6 +78,9 @@ static unsigned char pick(unsigned char savemode, char *out11)
     char *p;
     if (!savemode)
         for (i = 0; i < 8; i++) gb_back();
+#ifdef GB_PICK_STATUS
+    if (GB_PICK_STATUS()) return 0;
+#endif
     for (;;) {
         nreal = 0;
         p = gb_dir1();
@@ -87,6 +93,9 @@ static unsigned char pick(unsigned char savemode, char *out11)
             }
             p = gb_dirn();
         }
+#ifdef GB_PICK_STATUS
+        if (GB_PICK_STATUS()) return 0;
+#endif
         nlab = 0;
         labels[nlab++] = "..";                          /* 0 = up a level */
         if (savemode) labels[nlab++] = "[Save here]";   /* target = current directory */
@@ -97,7 +106,17 @@ static unsigned char pick(unsigned char savemode, char *out11)
         if (sel == 0) { gb_back(); continue; }          /* .. */
         if (savemode && sel == 1) return 1;             /* [Save here] */
         i = (unsigned char)(sel - base);                /* shown-entry index */
-        if (isdir_f[i]) { seek_to(i); gb_chdir(); continue; }   /* descend */
+        if (isdir_f[i]) {
+            seek_to(i);
+#ifdef GB_PICK_STATUS
+            if (GB_PICK_STATUS()) return 0;
+#endif
+            gb_chdir();
+#ifdef GB_PICK_STATUS
+            if (GB_PICK_STATUS()) return 0;
+#endif
+            continue;
+        }   /* descend */
         if (savemode) continue;                         /* a file in Save mode -> ignore */
         if (out11) copy11(out11, rawname[i]);           /* Open: return the clicked row's exact file */
         return 1;

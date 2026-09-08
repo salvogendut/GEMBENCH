@@ -102,10 +102,9 @@ km_finish                                      ; reached by k_exit's longjmp
                 ld    c,_TERM0               ; clean exit to COMMAND2
                 jp    BDOS
 
-; Load the strict GBAP v4 validator into fixed page-3 RAM. Keeping this internal
-; module outside the page-2 resident image preserves Screen-7 kernel headroom;
-; the boot-time signature check prevents an absent/truncated gate from ever
-; being advertised through sysinfo v6.
+; Load the mandatory admission/parameter/sysinfo module into reclaimed child-
+; COM RAM below KCFG_TEXT. Execution is already wholly in page 2 with the DOS
+; stack in page 3. Reject old/truncated modules before publishing ABI 2.1.
 gbap4_gate_load
                 ld    hl,name_gbap4_gate
                 ld    de,fs_req_name
@@ -120,13 +119,23 @@ gbap4_gate_load
                 ld    de,MSX_GBAP4_GATE_SIZE
                 or    a
                 sbc   hl,de
-                ret   nz
+                jr    nz,gbap4_load_bad
                 ld    hl,(MSX_GBAP4_GATE+3)
                 ld    de,#4247                 ; "GB"
                 or    a
                 sbc   hl,de
-                ret   nz
+                jr    nz,gbap4_load_bad
+                ld    hl,(MSX_GBAP4_GATE+5)
+                ld    de,#3456                 ; "V4"
+                or    a
+                sbc   hl,de
+                jr    nz,gbap4_load_bad
+                ld    a,(MSX_GBAP4_GATE+7)
+                cp    2
+                jr    nz,gbap4_load_bad
                 scf
+                ret
+gbap4_load_bad  xor a
                 ret
 name_gbap4_gate db    "GBAPV4  MOD"
 

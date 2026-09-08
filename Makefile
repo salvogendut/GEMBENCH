@@ -8,6 +8,201 @@ GBR_EXAMPLE_OUTPUT := build/examples/hello-dialog.gbr
 
 all: msx
 
+.PHONY: cpc cpc-desktop cpc-desktop-1984 cpc-filemgr-1984 cpc-stability-1984 cpc-delivery-1984
+CPC_TEST_JOBS ?= 1
+# Experimental actual Desktop delivery, separate from parked QA/CPC and diagnostics.
+cpc: cpc-desktop
+cpc-desktop:
+	$(PYTHON) tools/build_cpc.py
+
+cpc-desktop-1984: cpc-desktop
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --skip-build
+
+cpc-delivery-1984: cpc-desktop
+	$(PYTHON) tools/test_cpc_delivery_1984.py --skip-build --jobs $(CPC_TEST_JOBS)
+
+cpc-stability-1984: cpc-desktop
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-scenario stacking --skip-build
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-scenario minute-cadence --skip-build
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-scenario cadence --skip-build
+
+cpc-filemgr-1984: cpc-desktop
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr --skip-build
+	@set -e; for scenario in workflow services contexts; do \
+		$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-scenario $$scenario --skip-build; \
+	done
+	@set -e; for fault in missing short oversized corrupt unbound no-register; do \
+		$(PYTHON) tools/test_cpc_runtime_1984.py --desktop-delivery --filemgr-case $$fault --skip-build; \
+	done
+
+# CPC restart step 3: isolated hardware diagnostics, not a release CPC target.
+.PHONY: diagnostic-cpc-foundation diagnostic-cpc-foundation-1984 diagnostic-cpc-graphics diagnostic-cpc-graphics-1984
+.PHONY: diagnostic-cpc-storage diagnostic-cpc-storage-1984
+.PHONY: diagnostic-cpc-production diagnostic-cpc-production-1984
+.PHONY: diagnostic-cpc-drawing diagnostic-cpc-drawing-1984
+.PHONY: diagnostic-cpc-windows diagnostic-cpc-windows-1984
+.PHONY: diagnostic-cpc-services diagnostic-cpc-services-1984
+.PHONY: diagnostic-cpc-routing diagnostic-cpc-routing-1984
+.PHONY: diagnostic-cpc-loading diagnostic-cpc-loading-1984
+.PHONY: diagnostic-cpc-fsctx diagnostic-cpc-fsctx-1984
+.PHONY: diagnostic-cpc-fsdir-protocol diagnostic-cpc-fsdir-protocol-1984
+.PHONY: diagnostic-cpc-fsdir diagnostic-cpc-fsdir-1984
+.PHONY: diagnostic-cpc-fswrite diagnostic-cpc-fswrite-1984
+.PHONY: diagnostic-cpc-runtime diagnostic-cpc-runtime-1984
+.PHONY: diagnostic-cpc-portablefs-1984 diagnostic-portablefs-openmsx
+.PHONY: diagnostic-cpc-menus-1984
+.PHONY: diagnostic-cpc-accessories-1984
+.PHONY: diagnostic-cpc-clock-1984
+.PHONY: diagnostic-cpc-latency-1984
+.PHONY: diagnostic-cpc-desk-1984
+.PHONY: diagnostic-cpc-native-1984
+.PHONY: diagnostic-cpc-picker-1984
+.PHONY: diagnostic-cpc-config-edit-1984
+.PHONY: diagnostic-cpc-settings-audit
+.PHONY: diagnostic-cpc-assets-1984
+.PHONY: diagnostic-cpc-bitmaps-1984
+.PHONY: diagnostic-cpc-chrome-1984
+diagnostic-cpc-chrome-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --chrome-case custom
+
+diagnostic-cpc-bitmaps-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --bitmap-case custom
+
+diagnostic-cpc-assets-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --asset-case custom
+
+diagnostic-cpc-native-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --native
+
+diagnostic-cpc-picker-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --picker
+
+diagnostic-cpc-config-edit-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --config-edit normal
+
+diagnostic-cpc-settings-audit:
+	$(PYTHON) tools/audit_cpc_settings.py --output build/cpc-settings-audit
+
+diagnostic-cpc-desk-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --desk
+
+diagnostic-cpc-clock-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --clock
+
+diagnostic-cpc-latency-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --latency
+
+diagnostic-cpc-accessories-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --accessories
+
+diagnostic-cpc-menus-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --menus
+
+diagnostic-cpc-portablefs-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py --filesystem
+
+diagnostic-portablefs-openmsx:
+	$(PYTHON) tools/test_portable_fs_openmsx.py --mode 6
+	$(PYTHON) tools/test_portable_fs_openmsx.py --mode 7
+
+diagnostic-cpc-runtime:
+	$(PYTHON) tools/build_cpc_runtime.py
+
+diagnostic-cpc-runtime-1984:
+	$(PYTHON) tools/test_cpc_runtime_1984.py
+
+diagnostic-cpc-fswrite:
+	$(PYTHON) tools/build_cpc_production.py --variant fsctx-write
+
+diagnostic-cpc-fswrite-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant fsctx-write
+
+diagnostic-cpc-fsdir:
+	$(PYTHON) tools/build_cpc_production.py --variant fsctx-directory
+
+diagnostic-cpc-fsdir-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant fsctx-directory
+
+diagnostic-cpc-fsdir-protocol:
+	$(PYTHON) tools/build_cpc_production.py --variant fsctx-protocol
+
+diagnostic-cpc-fsdir-protocol-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant fsctx-protocol
+
+diagnostic-cpc-fsctx:
+	$(PYTHON) tools/build_cpc_production.py --variant fsctx
+
+diagnostic-cpc-fsctx-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant fsctx
+
+diagnostic-cpc-loading:
+	$(PYTHON) tools/build_cpc_production.py --variant loading
+
+diagnostic-cpc-loading-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant loading
+
+diagnostic-cpc-routing:
+	$(PYTHON) tools/build_cpc_production.py --variant routing
+
+diagnostic-cpc-routing-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant routing
+
+diagnostic-cpc-services:
+	$(PYTHON) tools/build_cpc_production.py --variant services
+
+diagnostic-cpc-services-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant services
+
+.PHONY: diagnostic-cpc-registration diagnostic-cpc-registration-1984
+diagnostic-cpc-registration:
+	$(PYTHON) tools/build_cpc_production.py --variant registration
+
+diagnostic-cpc-registration-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant registration
+
+.PHONY: diagnostic-cpc-lifetime diagnostic-cpc-lifetime-1984
+diagnostic-cpc-lifetime:
+	$(PYTHON) tools/build_cpc_production.py --variant lifetime
+
+diagnostic-cpc-lifetime-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant lifetime
+
+diagnostic-cpc-windows:
+	$(PYTHON) tools/build_cpc_production.py --variant windows
+
+diagnostic-cpc-windows-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant windows
+
+diagnostic-cpc-drawing:
+	$(PYTHON) tools/build_cpc_production.py --variant drawing
+
+diagnostic-cpc-drawing-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py --variant drawing
+
+diagnostic-cpc-production:
+	$(PYTHON) tools/build_cpc_production.py
+
+diagnostic-cpc-production-1984:
+	$(PYTHON) tools/test_cpc_production_1984.py
+
+diagnostic-cpc-storage:
+	$(PYTHON) tools/build_cpc_foundation.py --variant storage
+
+diagnostic-cpc-storage-1984:
+	$(PYTHON) tools/test_cpc_foundation_1984.py --variant storage
+
+diagnostic-cpc-foundation:
+	$(PYTHON) tools/build_cpc_foundation.py
+
+diagnostic-cpc-foundation-1984:
+	$(PYTHON) tools/test_cpc_foundation_1984.py
+
+diagnostic-cpc-graphics:
+	$(PYTHON) tools/build_cpc_foundation.py --variant graphics
+
+diagnostic-cpc-graphics-1984:
+	$(PYTHON) tools/test_cpc_foundation_1984.py --variant graphics
+
 # Build the bundled GB-BASIC editor, runtime and low-RAM engine independently
 # of the MSX2 distribution media.
 gb-basic: gb-basic-msx

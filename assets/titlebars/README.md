@@ -4,7 +4,8 @@
 file is a headerless 16x14 repeated background (56 CPC Mode-1 bytes). Close and
 maximize artwork lives independently in `assets/gadgets/*.GDT`, so either part
 can be selected without duplicating the other. The same sources are decoded at
-runtime by CPC, MSX, and PCW builds. Legacy 106-byte combined `.TBR` themes
+runtime by the MSX distribution and experimental CPC runtime. The format is
+also suitable for the future PCW port. Legacy 106-byte combined `.TBR` themes
 remain supported.
 
 The renderer repeats the background horizontally, then stamps the reusable
@@ -21,10 +22,9 @@ provides pencil and line drawing, outlined and filled rectangles/circles,
 bucket fill, spray paint, and undo. The four arrow controls shift the active
 canvas by one pixel and clear the newly exposed edge with paper colour.
 
-All `.TBR` files in this directory are validated and staged for card and MSX
-distributions. Space-constrained CPC and PCW boot floppies carry
-`ORIGINAL.TBR`; their `EXTRAS.DSK` carries the remaining themes. Select an
-available motif live in Settings with **Title bar**, or set:
+All `.TBR` files in this directory are validated and staged for the MSX
+distribution and private CPC M4 runtime. Select an available motif live in
+MSX Settings with **Title bar**, or set:
 
 ```ini
 TITLEBAR=WEAVE
@@ -32,10 +32,14 @@ TITLEBAR=WEAVE
 
 `ORIGINAL.TBR` is the default. The renderer carries the composed ORIGINAL title
 and gadgets as a fallback, so missing configured files cannot leave window
-titles unpainted. Rebuild all distributions with:
+titles unpainted. Build the MSX distribution or private CPC runtime with:
 
 ```sh
-make cpc
 make msx
-make pcw
+make diagnostic-cpc-runtime
 ```
+
+CPC Settings/full Desktop and PCW are not enabled. See the
+[CPC chrome checkpoint](../../docs/CPC-RESTART-STEP3D-U.md) for M4-only manual
+checks, strict asset admission and the plain-title recovery when its module
+is unavailable.

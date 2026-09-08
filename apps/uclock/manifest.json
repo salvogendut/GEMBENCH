@@ -2,9 +2,10 @@
   "application_id": "CLOCK",
   "profile": "universal-z80",
   "platforms": ["cpc", "msx2", "pcw"],
-  "minimum_abi": [2, 0],
+  "minimum_abi": [2, 1],
   "minimum_sysinfo": [6, 48],
   "required_capabilities": [
+    "caller-parameters",
     "windows",
     "events",
     "shell",

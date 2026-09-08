@@ -24,6 +24,7 @@ export GEMBENCH_M1_INITIAL="$(hexsum "$data_abs" "0x$(symbol_offset _initial_fre
 export GEMBENCH_M1_FINAL="$(hexsum "$data_abs" "0x$(symbol_offset _final_free)")"
 export GEMBENCH_M1_OWNER="$(hexsum "$data_abs" "0x$(symbol_offset _owner)")"
 export GEMBENCH_M1_RETAINED="$(hexsum "$data_abs" "0x$(symbol_offset _retained_page)")"
+export GEMBENCH_M1_SYSINFO="$(hexsum "$data_abs" "0x$(symbol_offset _sysinfo_address)")"
 export GEMBENCH_M3_TESTS="$(hexsum "$data_abs" "0x$(symbol_offset _defer_tests)")"
 export GEMBENCH_M4_TESTS="$(hexsum "$data_abs" "0x$(symbol_offset _fsctx_tests)")"
 fm_sym=build/msx-obj/filemgr/main.sym
@@ -40,6 +41,12 @@ export GEMBENCH_FM_LIST_STATE="$(hexsum "$fm_data_abs" "0x$(fm_symbol_offset _li
 export GEMBENCH_FM_ICON_POS="$(hexsum "$fm_data_abs" "0x$(fm_symbol_offset _icon_scan_pos)")"
 export GEMBENCH_FM_VIEW="$(hexsum "$fm_data_abs" "0x$(fm_symbol_offset _view)")"
 export GEMBENCH_K_POLL="0x$(awk '$1 == "K_POLL" { value=$2; sub(/^#/, "", value); print value; exit }' build/msx/gbkernm7.sym)"
+# Standard RASM -s omits EQU constants. Seed boot readiness from the matching
+# layout source; the launched diagnostic then supplies the actual API pointer.
+sysinfo_record=$(awk '$1 == "MSX_SYSINFO" && $2 == "equ" {
+    value=$3; sub(/^#/, "", value); print value; found=1; exit
+} END { if (!found) exit 1 }' lib/msx/glue.inc)
+export GEMBENCH_M1_SYSINFO_RECORD="0x$sysinfo_record"
 export GEMBENCH_M1_OUTPUT="$PWD/build/msx/m1-architecture-openmsx.txt"
 export GEMBENCH_M1_SCREENSHOT="$PWD/build/msx/m1-architecture.png"
 export MSX_UNAPI=0

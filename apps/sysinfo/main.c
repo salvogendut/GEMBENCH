@@ -52,6 +52,15 @@ static unsigned char initial_free;
 static unsigned char final_free;
 static gb_owner_t owner;
 static gb_page_t retained_page;
+/* Published for the emulator probe: observe the real public record, not the
+ * historical fixed-address v5 diagnostic shadow. */
+volatile unsigned int sysinfo_address;
+
+static unsigned char sysinfo_prefix_valid(const gb_sysinfo_t *info)
+{
+    return (unsigned char)(info && info->size >= sizeof(gb_sysinfo_t) &&
+                           info->version >= 5);
+}
 #ifdef GB_FILESYSTEM_CONTEXTS
 volatile unsigned char fsctx_tests;
 #define FSCTX_TEST_SYSINFO 0x01
@@ -122,7 +131,7 @@ static void test_deferred_messages(void)
     if (!gb_defer_current() &&
         gb_defer_slots_free() == GB_DEFER_QUEUE_CAPACITY)
         defer_tests |= DEFER_TEST_CONTEXT;
-    if (info->size == sizeof(gb_sysinfo_t) && info->version == 5 &&
+    if (sysinfo_prefix_valid(info) &&
         info->message_queue_capacity == GB_DEFER_QUEUE_CAPACITY &&
         info->message_inline_bytes == GB_DEFER_INLINE_BYTES &&
         info->message_api_version == GB_DEFER_API_VERSION &&
@@ -173,7 +182,7 @@ static void test_filesystem_contexts(void)
     unsigned char i, allocated = 0;
 
     fsctx_tests = 0;
-    if (info->size == sizeof(gb_sysinfo_t) && info->version == 5 &&
+    if (sysinfo_prefix_valid(info) &&
         info->filesystem_contexts == GB_FSCTX_CAPACITY &&
         info->filesystem_transfer_bytes == GB_FSCTX_TRANSFER_MAX &&
         info->filesystem_api_version == GB_FSCTX_API_VERSION &&
@@ -348,7 +357,7 @@ static void test_application(void)
     gb_window_t primary = gb_window_current();
     gb_window_t probe;
 
-    if (info->size == sizeof(gb_sysinfo_t) && info->version == 5 &&
+    if (sysinfo_prefix_valid(info) &&
         info->max_applications == 8 &&
         info->application_record_version == 1 &&
         info->max_windows_per_application == 8 &&
@@ -391,7 +400,9 @@ static void draw(void)
 
     gb_fill(gb_wm_x(), (unsigned char)(gb_wm_y() + 14), WIN_W,
             (unsigned char)(WIN_H - 14), 1);
-    gb_textbw(x, y, "GB_SYSINFO v5   MSX Screen");
+    gb_textbw(x, y, "GB_SYSINFO      MSX Screen");
+    hex8(value, info->version);
+    gb_textbw((unsigned char)(x + 17), y, value);
     hex8(value, info->video_mode);
     gb_textbw((unsigned char)(x + 51), y, value);
     hex16(value, owner);
@@ -430,6 +441,7 @@ void main(void)
 {
     tests = 0;
     retained_page = 0;
+    sysinfo_address = (unsigned int)gb_sysinfo();
     gb_wm_managed(&window);
     test_pages();
     test_application();

@@ -1,5 +1,14 @@
 # Current MSX2-only implementation state
 
+**2026-09-08 update:** MSX2 remains the default/full release target, but
+[CPC restart Sprint 3](CPC-RESTART-SPRINT3.md) extends the explicit experimental
+`make cpc` Desktop build under `QA/CPC-Desktop/`. It reuses the qualified shared
+Desktop/core and portable Clock/Calculator; Disk C opens the actual native File
+Manager through its build-specific admission contract.
+The parked `QA/CPC/` tree is not an output or source. PCW and bundled BASIC
+remain MSX-only, and this is not a full CPC application-parity release.
+The original retirement decision and subsequent diagnostic history follow.
+
 As of 31 August 2026, the active GEOBENCH tree builds and releases MSX2 only.
 
 The active tree builds and releases for an MSX2 with a V9938/V9958, 128 KiB of
@@ -16,11 +25,18 @@ on the remote branch:
 archive/cpc-pcw-targets
 ```
 
-That branch is the restoration point for the new ports. This is no longer a
-permanent target policy: issue #54 will reintroduce CPC after issue #55 defines
-and implements a compile-once MSX2/CPC/PCW application ABI. PCW follows in a
-later port. Until those gates pass, CPC/PCW targets must not be exposed as
-working release builds.
+That branch remains an archival source for the new ports. This is no longer a
+permanent target policy. The first CPC ABI experiment under issue #54 is parked
+on `feature/54-reintegrate-cpc` at `5647857`. Issue #63 starts the
+[five-step CPC restart](CPC-RESTART-PLAN.md) from working MSX2 `5ed8a15`, beginning
+with a behavioral reference and shared-core extraction. PCW follows under #62.
+Until their gates pass, CPC/PCW targets must not be exposed as working release
+builds.
+
+Issue #65 adds an isolated [CPC foundation diagnostic](CPC-RESTART-STEP3A.md).
+Its explicitly named `diagnostic-cpc-foundation` targets generate private M4
+media under `QA/Diagnostics/CPC-foundation/`, not `QA/CPC/` release media. They
+neither re-enable `make cpc` nor change the production kernel/app build paths.
 
 The new direction is specified in
 [UNIVERSAL-APPLICATION-ABI.md](UNIVERSAL-APPLICATION-ABI.md) and its

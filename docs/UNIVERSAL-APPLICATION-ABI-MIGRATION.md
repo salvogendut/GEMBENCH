@@ -1,9 +1,12 @@
 # Universal application ABI migration plan
 
 This plan implements the experimental GEOBENCH-2 ABI in
-[`UNIVERSAL-APPLICATION-ABI.md`](UNIVERSAL-APPLICATION-ABI.md). Issue #54 (CPC
-reintegration) remains parked until the common SDK, loader contract, and proof
-application exist, so the CPC port does not recreate target-specific app builds.
+[`UNIVERSAL-APPLICATION-ABI.md`](UNIVERSAL-APPLICATION-ABI.md). The first CPC
+experiment under #54 is preserved on `feature/54-reintegrate-cpc`. As of
+2026-09-05, issue #63 starts a [five-step restart](CPC-RESTART-PLAN.md) from the
+working MSX2 implementation, with a full behavior reference before shared-core
+extraction. That plan governs CPC integration order; this document retains the
+SDK/package gates and compile-once contract.
 
 ## Gate 0: accept and freeze the proposal
 
@@ -68,8 +71,9 @@ no mapper pages, windows, owners, or filesystem contexts.
 
 ## Gate 3: CPC reintegration against the ABI
 
-- Resume issue #54 from its parked branch, rebasing only after the v2 SDK is
-  stable.
+- Follow the restart under issue #63 from the pinned MSX2 baseline. Reuse
+  audited drivers/probes from #54 selectively; extract and verify shared policy
+  on MSX2 before CPC integration.
 - Restore the CPC kernel, M4/Albireo CARD staging, and 512 KiB bank allocator,
   but do not restore per-target application compilation.
 - Provide all 71 inherited slots, sysinfo v6, opaque owner/page/application
@@ -82,8 +86,11 @@ no mapper pages, windows, owners, or filesystem contexts.
 Exit: the MSX2 and CPC media contain byte-identical proof files (verified by
 SHA-256), and the same interaction script passes in openMSX/1983 and 1984.
 
-This is the point at which GEOBENCH-2 major version 2 can be frozen. Until then,
-the manifest is experimental and no compatibility claim is made outside the
+This proof-file gate is a necessary ABI check, not full desktop feature parity.
+The restart additionally requires a validated cross-platform memory/mailbox
+contract and the [behavior acceptance matrix](CPC-RESTART-MSX2-REFERENCE.md).
+Keep major version 2 experimental until those relevant contracts and reference
+implementations are reviewed; no compatibility claim is made outside the
 development branches.
 
 ## Gate 4: migrate ordinary applications by dependency tier

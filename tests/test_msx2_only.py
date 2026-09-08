@@ -8,10 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class Msx2OnlyTests(unittest.TestCase):
+class TargetBoundaryTests(unittest.TestCase):
     def test_retired_target_artifacts_are_absent(self) -> None:
         retired = [
-            "QA/CPC",
             "QA/PCW",
             "lib/pcw",
             "tools/build_kernel.sh",
@@ -23,11 +22,16 @@ class Msx2OnlyTests(unittest.TestCase):
         ]
         for relative in retired:
             self.assertFalse((ROOT / relative).exists(), relative)
+        # A parked, untracked QA/CPC may exist locally. Sprint 2 deliberately
+        # stages elsewhere, without treating that preserved tree as a release.
+        self.assertIn("'QA/CPC-Desktop'", (ROOT/'tools/build_cpc_runtime.py').read_text())
 
-    def test_top_level_make_exposes_only_msx(self) -> None:
+    def test_default_is_msx_with_explicit_cpc_desktop_and_no_pcw(self) -> None:
         source = (ROOT / "Makefile").read_text()
         self.assertRegex(source, r"(?m)^all:\s+msx\s*$")
-        self.assertIsNone(re.search(r"(?m)^(?:cpc|pcw)(?:[-\w]*):", source))
+        self.assertIsNone(re.search(r"(?m)^pcw(?:[-\w]*):", source))
+        self.assertRegex(source, r"(?m)^cpc:\s+cpc-desktop\s*$")
+        self.assertIn('tools/build_cpc.py', source)
         self.assertNotIn("-DGB_PCW", source)
 
     def test_bundled_basic_exposes_only_msx(self) -> None:

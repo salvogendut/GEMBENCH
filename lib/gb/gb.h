@@ -688,7 +688,7 @@ typedef struct {
     const char *title;
     void (*task_worker)(void);       /* pure compute callback for gb_task_enable; else 0 */
 } gb_mwin_t;
-#ifdef GB_MSX2
+#if defined(GB_MSX2) || defined(GB_NATIVE_WINDOW_KIND)
 typedef struct {
     gb_mwin_t window;               /* unchanged legacy descriptor prefix */
     unsigned char kind;             /* GB_WK_* furniture/capability bits */

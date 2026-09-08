@@ -35,7 +35,13 @@ def main() -> int:
 
     glue = (ROOT / "lib/msx/glue.inc").read_text(encoding="utf-8")
     kernel = (ROOT / "kernel/gbkern.asm").read_text(encoding="utf-8")
+    launch = (ROOT / "kernel/core/app_launch.asm").read_text(encoding="utf-8")
+    bindings = (ROOT / "kernel/msx_root_services.inc").read_text(encoding="utf-8")
+    if kernel.count('include "core/app_launch.asm"') != 1 or not re.search(
+            r"^APP_ADMISSION_GATE\s+equ\s+MSX_GBAP4_GATE$", bindings, re.M):
+        raise AssertionError("MSX does not bind the shared launch transaction to its gate")
     pool = (ROOT / "kernel/msx_page_pool.asm").read_text(encoding="utf-8")
+    pool += (ROOT / "kernel/msx_capabilities.inc").read_text(encoding="utf-8")
     abi = json.loads((ROOT / "abi/geobench-v2.json").read_text())
 
     gate_base = equ(glue, "MSX_GBAP4_GATE")
@@ -48,7 +54,7 @@ def main() -> int:
     sysinfo = equ(glue, "MSX_SYSINFO")
     app_bottom = equ(glue, "MSX_APP_FIXED_BOTTOM")
     if (sysinfo, gate_base, gate_limit, app_bottom) != (
-            0xCF00, 0xCF30, 0xD400, 0xD400):
+            0xCF00, 0x0400, 0x1000, 0xD400):
         raise AssertionError("unexpected v6/gate fixed-memory layout")
     if abi["sysinfo"]["record_version"] != 6 \
             or abi["sysinfo"]["record_size"] != 48:
@@ -58,16 +64,16 @@ def main() -> int:
 
     gate = args.gate.read_bytes()
     if len(gate) != gate_size or len(gate) > gate_limit - gate_base:
-        raise AssertionError("GBAPV4.MOD does not fit its fixed page-3 region")
-    if gate[0] != 0xC3 or gate[3:8] != b"GBV4\x01":
+        raise AssertionError("GBAPV4.MOD does not fit its reserved low-TPA region")
+    if gate[0] != 0xC3 or gate[3:8] != b"GBV4\x02":
         raise AssertionError("GBAPV4.MOD boot signature is invalid")
     entry = struct.unpack_from("<H", gate, 1)[0]
     if not gate_base + 8 <= entry < gate_base + len(gate):
         raise AssertionError("GBAPV4.MOD entry is outside the module")
 
-    validate = kernel.index("call  MSX_GBAP4_GATE")
-    rollback = kernel.index("jr    nc,wmo_fail", validate)
-    enter = kernel.index("call  APP_BASE", rollback)
+    validate = launch.index("call  APP_ADMISSION_GATE")
+    rollback = launch.index("jr    nc,wmo_fail", validate)
+    enter = launch.index("call  APP_BASE", rollback)
     if not validate < rollback < enter:
         raise AssertionError("GBAP v4 gate is not ordered before app entry/rollback")
 
@@ -80,6 +86,8 @@ def main() -> int:
         raise AssertionError("ABIPROBE does not require the four proved high capabilities")
     if manifest["minimum_sysinfo"] != (6, 48):
         raise AssertionError("ABIPROBE does not require the complete v6 suffix")
+    if manifest["minimum_abi"] != (2, 1) or not required & 0x00800000:
+        raise AssertionError("ABIPROBE must require the caller-parameter service")
     if len(manifest["segments"]) != 1 or manifest["image_size"] != len(package):
         raise AssertionError("Gate-2 ABIPROBE must be one primary-only transaction")
 

@@ -84,6 +84,7 @@ DATA_MODTOP     equ   #6000        ; ceiling of the icon region in PAGE_DATA: th
                                    ; would reuse the same slot.
 
 GB_KERNEL       equ   #8000        ; resident kernel base (fixed, RUN entry)
+GB_PARAMS       equ   GB_KERNEL+213 ; #80D5 ABI 2.1: HL=16-byte record, BC=16 -> A=status E=value
 GB_INIT         equ   GB_KERNEL+0  ; #8000  kernel boot (kernel only)
 GB_CLS          equ   GB_KERNEL+3  ; #8003  clear screen / home cursor
 GB_SETINK       equ   GB_KERNEL+6  ; #8006  set a palette colour live: A=pen (0-3, or

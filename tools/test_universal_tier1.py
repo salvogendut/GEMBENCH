@@ -57,6 +57,8 @@ def main() -> None:
             assert manifest["application_id"] == identity
             assert manifest["profile"] == 3
             assert manifest["platforms"] == 0x07
+            assert manifest["minimum_abi"] == (2, 1)
+            assert manifest["required_capabilities"] & 0x00800000
             assert len(manifest["segments"]) == 1
             assert manifest["image_size"] == canonical.stat().st_size
             if identity == "CLOCK":

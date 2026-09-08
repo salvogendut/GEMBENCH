@@ -1,0 +1,59 @@
+; Same serialized parameter policy and entry/exit convention as MSX2.
+CORE_PARAM_APP_NATIVE equ CORE_APP_CODE_NATIVE
+CORE_PARAM_OWNER_MAX equ CPC_OWNER_MAX
+CORE_PARAM_MAPPED_NATIVE equ BANK_CUR
+CORE_PARAM_CURRENT equ SCHED_CURRENT
+CORE_PARAM_LOCK equ SCHED_LOCK
+CORE_PARAM_TIMER_OWNER equ #23CA
+                ifdef CORE_VIS_TIMER_OWNER
+                assert CORE_VIS_TIMER_OWNER==CORE_PARAM_TIMER_OWNER,"visibility/collector timer owner mismatch"
+                endif
+CORE_PARAM_TIMER_RECT equ #23CB
+CORE_PARAM_TIMER_GEN equ #23CF
+CORE_PARAM_DROPPED equ #21EC
+CORE_PARAM_DROPPED_GEN equ #203F
+CORE_PARAM_COLUMNS equ CPC_COLUMNS
+CORE_PARAM_WIDTH equ CPC_WIDTH
+CORE_PARAM_HEIGHT equ CPC_LINES
+PARAM_CURRENT_OWNER equ owner_current
+PARAM_WINDOW_CALL equ cpc_parameter_window
+PARAM_DRAW_TEXT equ cpc_draw_text
+                ifdef CPC_RUNTIME
+PARAM_FS_CALL equ cpc_fsctx_call
+PARAM_FS_REQUEST equ #2400
+PARAM_FS_TRANSFER equ #1500
+                endif
+                macro PARAM_ENTER
+                ifdef CPC_RUNTIME
+                call cpc_pointer_service   ; between primitives, never in an IRQ
+                endif
+                push ix
+                ld a,i
+                push af
+                di
+                ld a,(CORE_PARAM_LOCK)
+                push af
+                ld a,1
+                ld (CORE_PARAM_LOCK),a
+                ifdef CPC_RUNTIME
+                ; Serialization is the scheduler lock, not a long IRQ blackout.
+                ; The CPC IRQ touches only fixed time/context cells. Keep time
+                ; advancing through validation and fully clipped primitives,
+                ; which never enter a raster loop with its own EI boundary.
+                ei
+                endif
+                mend
+                macro PARAM_LEAVE
+                ld d,a
+                di
+                pop af
+                ld (CORE_PARAM_LOCK),a
+                pop af
+                ld a,d
+                pop ix
+                jp po,up_return
+                ei
+                mend
+                macro PARAM_DRAW_LINE
+                call cpc_draw_line
+                mend

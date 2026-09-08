@@ -1,5 +1,5 @@
-/* GEOBENCH-2 universal runtime accessors. Fixed mailbox addresses are private
- * to this SDK unit and are identical on every conforming kernel. */
+/* GEOBENCH-2.1 universal runtime accessors. Legacy low-RAM observations remain
+ * private to this unit; drawing and timers use caller-owned GB_PARAMS records. */
 #include "gbuniversal.h"
 
 #define U_TIME       ((volatile unsigned char *)0x1240u)
@@ -7,13 +7,9 @@
 #define U_BOOT_DRIVE (*(volatile unsigned char *)0x1336u)
 #define U_DRAG_NAME  ((volatile unsigned char *)0x1423u)
 #define U_DROP_CLAIM (*(volatile unsigned char *)0x142Fu)
-#define U_LINE       ((volatile unsigned char *)0xC030u)
-#define U_TEXT       ((volatile unsigned char *)0xC039u)
-#define U_TIMER_DROP (*(volatile unsigned char *)0xC1ECu)
-#define U_TIMER      ((volatile unsigned char *)0xC3CAu)
-
-void gb_line_exec(void);
-void gb_text_semantic_exec(void);
+/* Internal assembly bridge serializes a stack record into this app's primary
+ * page. Root and worker calls cannot overwrite each other's in-flight data. */
+unsigned int gb_uparam_call(const gb_params_t *request);
 
 static const gb_sysinfo_v6_t *info_v6(void)
 {
@@ -32,9 +28,11 @@ unsigned char gb_universal_ready(void)
 {
     const gb_sysinfo_v6_t *info = info_v6();
     unsigned int required_high = (unsigned int)(
-        (GB_CAP_UNIVERSAL_LOADER | GB_CAP_RUNTIME_GEOMETRY) >> 16);
+        (GB_CAP_UNIVERSAL_LOADER | GB_CAP_RUNTIME_GEOMETRY |
+         GB_CAP_CALLER_PARAMETERS) >> 16);
     return (unsigned char)(info &&
         info->universal_abi_major == GB_UNIVERSAL_ABI_MAJOR &&
+        info->universal_abi_minor >= GB_UNIVERSAL_ABI_MINOR &&
         info->universal_profile == GB_UNIVERSAL_PROFILE_NATIVE_Z80 &&
         info->screen_columns != 0u && info->screen_lines != 0u &&
         info->pixels_per_column == 4u &&
@@ -179,65 +177,75 @@ static void put_word(volatile unsigned char *out, unsigned int value)
 void gb_line(unsigned int x0, unsigned int y0,
              unsigned int x1, unsigned int y1, unsigned char pen)
 {
-    put_word(U_LINE + 0, x0);
-    put_word(U_LINE + 2, y0);
-    put_word(U_LINE + 4, x1);
-    put_word(U_LINE + 6, y1);
-    U_LINE[8] = (unsigned char)(pen & 3u);
-    gb_line_exec();
+    gb_params_t request;
+    request.operation = GB_PARAMS_LINE;
+    request.version = GB_PARAMS_VERSION;
+    put_word(request.data + 0, x0);
+    put_word(request.data + 2, y0);
+    put_word(request.data + 4, x1);
+    put_word(request.data + 6, y1);
+    request.data[8] = (unsigned char)(pen & 3u);
+    (void)gb_uparam_call(&request);
 }
 
 void gb_text_semantic(unsigned char x, unsigned char y, const char *text,
                       unsigned char pen, unsigned char paper)
 {
-    unsigned int pointer = (unsigned int)text;
-    U_TEXT[0] = x;
-    U_TEXT[1] = y;
-    U_TEXT[2] = (unsigned char)(pen & 3u);
-    U_TEXT[3] = (unsigned char)(paper & 3u);
-    put_word(U_TEXT + 4, pointer);
-    gb_text_semantic_exec();
+    gb_params_t request;
+    unsigned char length = 0u;
+    if (!text) return;
+    while (length < 48u && text[length]) ++length;
+    request.operation = GB_PARAMS_TEXT;
+    request.version = GB_PARAMS_VERSION;
+    request.data[0] = x;
+    request.data[1] = y;
+    request.data[2] = (unsigned char)(pen & 3u);
+    request.data[3] = (unsigned char)(paper & 3u);
+    put_word(request.data + 4, (unsigned int)text);
+    request.data[6] = length;
+    (void)gb_uparam_call(&request);
 }
 
 unsigned char gb_timer_damage_for(gb_window_t window, unsigned char x,
                                   unsigned char y, unsigned char w,
                                   unsigned char h)
 {
-    unsigned char slot = (unsigned char)window;
-    unsigned char generation = (unsigned char)(window >> 8);
-    if (slot == 0u || slot > 8u || generation == 0u || w == 0u || h == 0u ||
-        U_TIMER[0] != 0u) return 0u;
-    U_TIMER[1] = x;
-    U_TIMER[2] = y;
-    U_TIMER[3] = w;
-    U_TIMER[4] = h;
-    U_TIMER[5] = generation;
-    U_TIMER[0] = slot;             /* publish the complete request last */
-    return 1u;
+    gb_params_t request;
+    request.operation = GB_PARAMS_TIMER_DAMAGE;
+    request.version = GB_PARAMS_VERSION;
+    put_word(request.data, window);
+    request.data[2] = x;
+    request.data[3] = y;
+    request.data[4] = w;
+    request.data[5] = h;
+    return (unsigned char)(gb_uparam_call(&request) == 1u);
+}
+
+static unsigned char timer_request(unsigned char operation, gb_window_t window)
+{
+    gb_params_t request;
+    request.operation = operation;
+    request.version = GB_PARAMS_VERSION;
+    put_word(request.data, window);
+    return (unsigned char)(gb_uparam_call(&request) == 1u);
 }
 
 unsigned char gb_timer_active_for(gb_window_t window)
 {
-    return (unsigned char)(U_TIMER[0] ==
-        (unsigned char)(0x80u | (unsigned char)window));
+    return timer_request(GB_PARAMS_TIMER_ACTIVE, window);
 }
 
 unsigned char gb_timer_take_dropped(gb_window_t window)
 {
-    unsigned char slot = (unsigned char)window;
-    if (U_TIMER_DROP != slot) return 0u;
-    U_TIMER_DROP = 0u;
-    return 1u;
+    return timer_request(GB_PARAMS_TIMER_DROPPED, window);
 }
 
 unsigned char gb_timer_busy(void)
 {
-    return (unsigned char)(U_TIMER[0] != 0u);
+    return timer_request(GB_PARAMS_TIMER_BUSY, 0u);
 }
 
 void gb_timer_cancel(gb_window_t window)
 {
-    unsigned char slot = (unsigned char)window;
-    if (U_TIMER[0] == slot) U_TIMER[0] = 0u;
-    if (U_TIMER_DROP == slot) U_TIMER_DROP = 0u;
+    (void)timer_request(GB_PARAMS_TIMER_CANCEL, window);
 }

@@ -17,6 +17,7 @@ UNIVERSAL_TASK="${UNIVERSAL_TASK:-0}"
 UNIVERSAL_WINDOW_KIND="${UNIVERSAL_WINDOW_KIND:-0}"
 UNIVERSAL_ACCESSORY="${UNIVERSAL_ACCESSORY:-0}"
 UNIVERSAL_MENU="${UNIVERSAL_MENU:-0}"
+UNIVERSAL_FS="${UNIVERSAL_FS:-0}"
 DATA_LOC="${DATA_LOC:-0x7000}"
 LOAD_LIMIT="0x7F00"
 
@@ -39,7 +40,7 @@ if (( DATA_LOC < 0x4000 || DATA_LOC > 0x7F00 )); then
     exit 2
 fi
 for feature in "$UNIVERSAL_TASK" "$UNIVERSAL_WINDOW_KIND" "$UNIVERSAL_ACCESSORY" \
-    "$UNIVERSAL_MENU"; do
+    "$UNIVERSAL_MENU" "$UNIVERSAL_FS"; do
     [ "$feature" = 0 ] || [ "$feature" = 1 ] || {
         echo "ERROR: universal feature flags must be 0 or 1" >&2
         exit 2
@@ -54,6 +55,14 @@ work="build/universal-obj/$(basename "$APP")"
 mkdir -p "$work" "$(dirname "$OUT")"
 
 icon_args=("$APP_ICON")
+# This SDK emits GB_PARAMS calls. Do not allow a manifest to claim ABI 2.0
+# compatibility: an older loader must reject it before reaching application code.
+python3 - "$APP_MANIFEST" <<'PY'
+import json, sys
+spec = json.load(open(sys.argv[1]))
+if spec.get("minimum_abi") != [2, 1] or "caller-parameters" not in spec.get("required_capabilities", []):
+    raise SystemExit("ERROR: this SDK requires minimum_abi [2, 1] and caller-parameters")
+PY
 if [ -n "$APP_ICON16" ]; then
     [ -f "$APP_ICON16" ] || { echo "ERROR: missing APP_ICON16 $APP_ICON16" >&2; exit 1; }
     icon_args+=("$APP_ICON16")
@@ -69,6 +78,19 @@ python3 tools/gblib_subset.py lib/gb/gblib.s "$work/gblib.s" \
 "$SDAS" -o "$work/gblib.rel" "$work/gblib.s"
 "$SDAS" -o "$work/gbuniversal_draw.rel" lib/gb/gbuniversal_draw.s
 extra_rels=()
+if [ "$UNIVERSAL_FS" = 1 ]; then
+    python3 - "$APP_MANIFEST" <<'PY'
+import json, sys
+if "portable-filesystem" not in json.load(open(sys.argv[1]))["required_capabilities"]:
+    raise SystemExit("ERROR: UNIVERSAL_FS requires portable-filesystem in the manifest")
+PY
+    for unit in gbfsctx gbfsctx_universal; do
+        "$SDCC" -mz80 --std-c99 --opt-code-size --fomit-frame-pointer \
+            -DGB_UNIVERSAL -I lib/gb -I include/gembench \
+            -c "lib/gembench/$unit.c" -o "$work/$unit.rel"
+        extra_rels+=("$work/$unit.rel")
+    done
+fi
 if [ "$UNIVERSAL_TASK" = 1 ]; then
     "$SDAS" -o "$work/gbtask.rel" lib/gb/gbtask.s
     extra_rels+=("$work/gbtask.rel")

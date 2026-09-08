@@ -3,6 +3,7 @@
 set throttle off
 set pause_on_lost_focus false
 set pause off
+after time 600 {da_finish "TIMEOUT harness watchdog"}
 
 proc da_env {name} { expr {$::env($name) + 0} }
 
@@ -44,6 +45,53 @@ set da_clock_border_ok 0
 set da_calc_border_ok 0
 set da_clock_menu_ok 0
 set da_calc_menu_ok 0
+set da_stack_checks 0
+set da_desktop_order {}
+
+# Read the target's layout, not another set of hard-coded stacking addresses.
+# EQU cells are not present in the normal RASM symbol output.
+set da_layout_file [open $::env(GEMBENCH_ACCESSORY_LAYOUT) r]
+foreach line [split [read $da_layout_file] "\n"] {
+    if {[regexp {^(WM_[A-Z_]+)\s+equ\s+(#[0-9A-Fa-f]+|[0-9]+)(\s|$)} $line -> name value]} {
+        set da_layout($name) [expr {[string map {# 0x} $value] + 0}]
+    }
+}
+close $da_layout_file
+foreach name {WM_NWIN WM_MAXWIN WM_Z WM_FOCUS WM_TABLE WM_ESZ WM_FR_FLAGS} {
+    if {![info exists da_layout($name)]} { error "missing focus layout constant $name" }
+}
+
+proc da_z_order {} {
+    set count [peek $::da_layout(WM_NWIN)]
+    if {$count < 1 || $count > $::da_layout(WM_MAXWIN)} {
+        da_finish "FAIL invalid live-window count $count"
+    }
+    set order {}
+    for {set i 0} {$i < $count} {incr i} {
+        lappend order [peek [expr {$::da_layout(WM_Z) + $i}]]
+    }
+    return $order
+}
+
+proc da_expect_stack {expected focus} {
+    set actual [da_z_order]
+    if {$actual ne $expected || [lindex $actual 0] != 0 ||
+        [peek $::da_layout(WM_FOCUS)] != $focus} {
+        da_finish "FAIL stack/focus expected $expected / $focus, got $actual"
+    }
+    if {[llength [lsort -unique $actual]] != [llength $actual]} {
+        da_finish "FAIL duplicate z-order slot"
+    }
+    for {set slot 0} {$slot < $::da_layout(WM_MAXWIN)} {incr slot} {
+        set entry [expr {$::da_layout(WM_TABLE) + $slot * $::da_layout(WM_ESZ)}]
+        set alive [expr {[peek [expr {$entry + $::da_layout(WM_FR_FLAGS)}]] & 1}]
+        if {$alive != ($slot in $actual)} { da_finish "FAIL z-order/live-slot mismatch" }
+    }
+    # Deferred dispatch may temporarily redirect APP_HANDLER or leave the
+    # menu edge pending while the target app is mapped. Do not assert those
+    # steady-state values here; existing menu interactions test that path.
+    incr ::da_stack_checks
+}
 
 proc da_entry {slot} { expr {0x1352 + 25 * $slot} }
 
@@ -95,19 +143,26 @@ proc da_border_ok {slot} {
                          [list [expr {$x + $w - 1}] [expr {$y + 20}]] \
                          [list [expr {$x + 5}] [expr {$y + $h - 1}]]] {
         lassign $point px py
-        set address [expr {$py * 256 + $px * 2}]
-        if {[debug read VRAM $address] != 0x22 ||
-            [debug read VRAM [expr {$address + 1}]] != 0x22} { return 0 }
+        if {[peek 0xCF05] == 7} {
+            set address [expr {$py * 256 + $px * 2}]
+            if {[debug read VRAM $address] != 0x22 ||
+                [debug read VRAM [expr {$address + 1}]] != 0x22} { return 0 }
+        } else {
+            if {[debug read VRAM [expr {$py * 128 + $px}]] != 0xAA} { return 0 }
+        }
     }
     return 1
 }
 
 proc da_lowram_ready {} {
+    # ABI 2.1 also executes ordinary services in reclaimed low TPA. The slot
+    # check still excludes BIOS ROM; PC below 0x4000 no longer implies ROM.
     set n [peek 0x1350]
     if {$n > $::da_max_nwin && $n <= 8} { set ::da_max_nwin $n }
     expr {$::da_page0_slot >= 0 &&
           ([debug read ioports 0xA8] & 3) == $::da_page0_slot &&
-          [reg PC] >= 0x4000 && $n >= 1 && $n <= 8 && [peek 0x1351] < 8}
+          ([reg PC] >= 0x4000 || ([reg PC] >= 0x0400 && [reg PC] < 0x1000)) &&
+          $n >= 1 && $n <= 8 && [peek 0x1351] < 8}
 }
 
 proc da_release_all {} {
@@ -116,6 +171,7 @@ proc da_release_all {} {
 }
 
 proc da_finish {status} {
+    if {$status eq "PASS" && [peek 0x1347] != 0} {set status "FAIL scheduler stack fault"}
     da_release_all
     if {$status ne "PASS"} { catch {screenshot -raw $::da_failure_png} }
     set out [open $::da_output w]
@@ -139,6 +195,9 @@ proc da_finish {status} {
     puts $out "CLOCK_MENU_OK=$::da_clock_menu_ok"
     puts $out "CALCULATOR_MENU_OK=$::da_calc_menu_ok"
     puts $out "MAX_NWIN=$::da_max_nwin"
+    puts $out "STACK_CHECKS=$::da_stack_checks"
+    puts $out "STACK_MAX=[peek 0x1346]"
+    puts $out "STACK_FAULT=[peek 0x1347]"
     puts $out "FINAL_NWIN=[peek 0x1350]"
     puts $out "FINAL_FOCUS=[peek 0x1351]"
     puts $out "SHELL_BUSY=[peek 0x133E]"
@@ -249,12 +308,15 @@ proc da_focus_desktop {callback} {
 }
 
 proc da_focus_desktop_click {} {
+    if {![da_lowram_ready]} { after time 0.002 da_focus_desktop_click; return }
+    set ::da_desktop_order [da_z_order]
     da_click da_wait_desktop_focus
 }
 
 proc da_wait_desktop_focus {} {
     if {![da_lowram_ready]} { after time 0.002 da_wait_desktop_focus; return }
     if {[peek 0x1351] == 0} {
+        da_expect_stack $::da_desktop_order 0
         after time 1.0 $::da_focus_callback
     } elseif {[machine_info time] >= $::da_deadline} {
         da_finish "FAIL Desktop did not focus"
@@ -284,6 +346,7 @@ proc da_wait_first_clock {} {
             return
         }
         set ::da_first_clock_slot $slot
+        da_expect_stack [list 0 $slot] $slot
         da_focus_desktop {da_choose_accessory 1 da_wait_calculator}
     } elseif {[machine_info time] >= $::da_deadline} {
         da_finish "FAIL Clock did not launch from Desk"
@@ -313,6 +376,7 @@ proc da_wait_calculator {} {
             return
         }
         set ::da_calc_slot $slot
+        da_expect_stack [list 0 $::da_first_clock_slot $slot] $slot
         after time 0.5 da_capture_calculator
     } elseif {[machine_info time] >= $::da_deadline} {
         da_finish "FAIL Calculator did not launch from Desk"
@@ -330,6 +394,7 @@ proc da_wait_calculator_reused {} {
     if {![da_lowram_ready]} { after time 0.002 da_wait_calculator_reused; return }
     if {[peek 0x1350] == 3 && [peek 0x1351] == $::da_calc_slot &&
         [da_sig_loaded $::da_calc_main $::da_calc_sig]} {
+        da_expect_stack [list 0 $::da_first_clock_slot $::da_calc_slot] $::da_calc_slot
         da_focus_desktop {da_choose_accessory 0 da_wait_clock_reused}
     } elseif {[peek 0x1350] > 3} {
         da_finish "FAIL duplicate Calculator launched"
@@ -344,6 +409,7 @@ proc da_wait_clock_reused {} {
     if {![da_lowram_ready]} { after time 0.002 da_wait_clock_reused; return }
     if {[peek 0x1350] == 3 && [peek 0x1351] == $::da_first_clock_slot &&
         [da_sig_loaded $::da_clock_main $::da_clock_sig]} {
+        da_expect_stack [list 0 $::da_calc_slot $::da_first_clock_slot] $::da_first_clock_slot
         set ::da_before_close_busy [da_busy_count]
         set entry [da_entry $::da_first_clock_slot]
         set x [expr {[peek [expr {$entry + 1}]] + 2}]
@@ -365,6 +431,7 @@ proc da_wait_clock_closed {} {
     if {[peek 0x1350] == 2 &&
         ([peek [expr {[da_entry $::da_first_clock_slot] + 13}]] & 1) == 0} {
         set ::da_closed_busy [da_busy_count]
+        da_expect_stack [list 0 $::da_calc_slot] $::da_calc_slot
         da_focus_desktop {da_choose_accessory 0 da_wait_clock_relaunched}
     } elseif {[machine_info time] >= $::da_deadline} {
         da_finish "FAIL closing Clock did not release its window"
@@ -380,6 +447,7 @@ proc da_wait_clock_relaunched {} {
         [da_sig_loaded $::da_clock_main $::da_clock_sig]} {
         set ::da_final_accessory_ok [da_accessory_ok $slot 1]
         if {$::da_final_accessory_ok} {
+            da_expect_stack [list 0 $::da_calc_slot $slot] $slot
             set ::da_final_busy [da_busy_count]
             if {$::da_register_hits == 3 && $::da_defer_register_hits == 3 &&
                 $::da_find_hits == 5 &&

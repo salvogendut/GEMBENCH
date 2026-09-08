@@ -3,7 +3,11 @@
 
 #include "gb.h"
 
-/* Architecture Milestone 4 (#37): four generation-tagged filesystem contexts.
+/* Four generation-tagged filesystem contexts. UNIVERSAL_FS=1 links the same
+ * client policy with caller-owned GB_PARAMS storage (portable-filesystem is a
+ * required manifest capability). Root callbacks only, non-reentrant; workers
+ * must not enter these wrappers. Native MSX2 bindings remain unchanged.
+ * Architecture Milestone 4 (#37):
  * The MSX2 implementation serializes native DOS access but retains drive, path,
  * name, offset and directory enumeration state independently for each owner.
  * Every transfer advances at most one 512-byte chunk on the root task. */
@@ -14,6 +18,8 @@ typedef unsigned int gb_fsctx_t;
 #define GB_FSCTX_PATH_MAX      47u
 #define GB_FSCTX_DIRECTORY_BATCH 4u
 #define GB_FSCTX_API_VERSION    1u
+
+#include "gbfsctx_platform.h"
 
 #define GB_FSCTX_OK              0u
 #define GB_FSCTX_ERR_UNSUPPORTED 1u
@@ -42,7 +48,7 @@ unsigned char gb_fsctx_dir_next(gb_fsctx_t context, gb_fsctx_entry_t *entry);
 /* Fetch up to four packed entries into the fixed transfer area. The returned
  * pointer remains valid only until the next filesystem-context call. */
 unsigned char gb_fsctx_dir_batch(gb_fsctx_t context, unsigned char first);
-#define gb_fsctx_batch_entries() ((const gb_fsctx_entry_t *)0xC400)
+#define gb_fsctx_batch_entries() ((const gb_fsctx_entry_t *)GB_FSCTX_TRANSFER)
 unsigned char gb_fsctx_rewind(gb_fsctx_t context);
 unsigned int gb_fsctx_read(gb_fsctx_t context, char *buffer, unsigned int length);
 unsigned char gb_fsctx_write(gb_fsctx_t context, const char *buffer,

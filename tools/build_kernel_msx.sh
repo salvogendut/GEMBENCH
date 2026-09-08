@@ -258,10 +258,10 @@ python3 tools/png2cpc.py --platform msx2 build/msx/SPLASHD_BUILD.png build/msx/S
 echo "Building GB-BASIC MSX payload from $GB_BASIC_DIR"
 make -C "$GB_BASIC_DIR" raws-msx GEOBENCH="$GEOBENCH_ROOT"
 
-# Build the fixed page-3 GBAP v4 validator independently of the resident
-# page-2 kernels. Both video backends load this exact internal module at boot.
+# Build the low-TPA admission/parameter/sysinfo module independently of the
+# resident page-2 kernels. Both video backends load this exact module at boot.
 rm -f build/msx/GBAPV4.RAW
-( cd build/msx && "$RASM" ../../kernel/msx_gbap4.asm )
+( cd build/msx && "$RASM" ../../kernel/msx_gbap4.asm -s -o gbapv4 )
 [ -s build/msx/GBAPV4.RAW ] || { echo "ERROR: GBAPV4.RAW not produced" >&2; exit 1; }
 
 # Build the compile-once conformance and first production applications.

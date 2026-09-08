@@ -162,6 +162,7 @@ uses. The existing low-word capability assignments remain unchanged; v2 adds:
 | `0x00100000` | portable filesystem semantics |
 | `0x00200000` | typed package resources |
 | `0x00400000` | generation-safe background visual timers |
+| `0x00800000` | ABI 2.1 caller-owned drawing/timer parameters |
 
 A kernel must not advertise one of these bits until its implementation passes
 the corresponding cross-platform tests. The old 16-bit `capabilities` field is
@@ -212,19 +213,108 @@ marshalling block as part of the compile-once ABI.
 
 ## Resident mailbox
 
+ABI 2.1 (#67) replaces the experimental line, semantic-text and timer mailboxes
+with `GB_PARAMS` at `0x80D5`. The frozen slots through `0x80D2` are unchanged.
+MSX2 still accepts old ABI 2.0 packages, including their old private mailboxes;
+that compatibility path is not a viable CPC framebuffer contract. Future CPC
+and PCW admission must require the new convention, not accept those old apps
+as portable. This change does not itself supply either runtime.
+
 Some current libgb operations are implemented with fixed resident cells rather
 than a kernel call. Their small common layout is therefore acknowledged by v2:
 time, the four-byte callback message, the last poll result, boot drive, drag
-name/claim, the live managed-window rectangle, the semantic-line command, and
-the generation-safe background-damage publisher. Exact ranges are in the
-authority file. Low records sit below the application page; records shared
-with video/scheduler leaves live in the common resident region at `#C000+`.
+name/claim, and the live managed-window rectangle. Exact ranges are in the
+authority file. All remaining universal mailbox records are below `0x4000`.
 
 Only universal libgb may encode those addresses. Application source uses
 accessors, and callback-scoped values may not be cached after the callback. All
 other low-RAM and page-3 addresses are private kernel implementation details.
 Existing diagnostic apps that inspect mapper tables or kernel scratch are
 target-specific by definition.
+
+### Caller-owned parameters (ABI 2.1)
+
+`GB_PARAMS` takes `HL` pointing to a 16-byte application-primary record and
+`BC=16`. It returns status in `A` and a boolean in `E`. The record begins with
+operation and record-version bytes (version 1), followed by 14 operation-data
+bytes. The authority specifies layouts and status values; unused bytes are
+ignored. The SDK's low-level `gb_parameters()` packs status into the high byte
+and the boolean into the low byte of its result.
+
+The entire descriptor must lie in `[0x4000,0x7F00)` without wraparound. Text
+includes a pointer and explicit length, at most 48 bytes: the entire nonempty
+text span has the same bounds and is copied before the font bank is mapped.
+It needs no source terminator. A zero-length text request does not dereference
+its pointer. Neither descriptors nor text pointers are retained after return.
+
+Typed SDK wrappers stage automatic/stack records and text in application-owned
+primary storage under a critical section. This matters because the application's
+C stack is kernel-owned fixed RAM, not primary-page data. The bridge and service
+restore interrupt enable state; the service also restores the caller's scheduler
+lock and mapping. A worker cannot overwrite a root request while it is copied.
+
+Root application callbacks may draw. Worker contexts may only publish, query
+or cancel timer values. Timer operations other than the global busy query
+require a live generation-tagged window belonging to the mapped application,
+not whichever application has focus. The existing root collector still owns
+visible damage and repaint ordering. Publication copies values, never a pointer;
+active compositor work is not cancelled midway through a callback. Dropped
+damage acknowledgements now carry a private generation as well as the slot.
+
+The current SDK requires manifest ABI `[2,1]` and `caller-parameters`, so an
+old MSX loader rejects a new executable before entering it. The v6/48 sysinfo
+layout is retained, with universal minor 1 and the new capability bit.
+
+The original 2.0 CRT requires an exact minor zero, despite its minimum-version
+manifest. On MSX2, `GB_SYSINFO` therefore returns a separate immutable 2.0 view
+for those packages (minor 0, without the new capability). It does not mutate
+the canonical record seen by native and 2.1 callers. Free-page counts are
+refreshed in both views. Rebuilt CRTs compare compatible minor versions using
+a minimum test. The regression boots the actual old ABI Probe binary as well
+as the rebuilt one.
+
+## Portable filesystem binding (optional ABI 2.1 service)
+
+`portable-filesystem` now selects `GB_PARAMS` operation 8, record version 1.
+This is an append-only operation behind a previously unadvertised capability,
+not a change to the inherited `GB_FSCTX` slot or the seven existing parameter
+operations. Existing ABI Probe/Clock/Calculator binaries stay unchanged.
+
+The 14-byte data area begins with four little-endian words: pointer to a
+32-byte filesystem header, header size (32), pointer to a 512-byte transfer
+area, transfer size (512). Both complete spans must lie in the current
+application primary page below `7F00`, without wrap or mutual overlap. All
+arguments are validated before touching native filesystem state. The descriptor
+is copied first, so it may alias an input/output buffer; it is no longer valid
+as a descriptor if that output overwrites it. No pointer is retained after return.
+
+The authority's `portable_filesystem` section defines the header and operations
+0 through 14. They reuse the existing generation-tagged context policy: four
+contexts, implicit mapped owner, 47-byte paths, raw 8.3 names, packed 16-byte
+directory entries, batches of at most four and transfers of at most 512 bytes.
+Header owner input is ignored and replaced by the native gate's caller identity.
+Offset-zero writes replace; subsequent writes append; a zero-byte offset-zero
+write truncates. EOF is zero actual bytes with filesystem status OK. Transport
+and namespace limitations still require backend qualification.
+
+`GB_PARAMS` status describes the transport/validation result; after a successful
+transport, header byte 1 holds the filesystem operation status. Malformed spans,
+lengths and operation numbers fail without copying results or invoking storage.
+Workers are rejected before any native header/transfer copy. Both target adapters
+restore the caller's mapping, stack, interrupt state and scheduler lock.
+
+Build clients with `UNIVERSAL_FS=1` and require `portable-filesystem` in their
+manifest. `gbfsctx.h` then selects caller-owned storage while reusing the same
+client implementation and public functions as native applications. Only the
+transport differs. The client uses 544 bytes of per-application header/transfer
+storage, plus the existing parameter bridge. These wrappers are non-reentrant
+and root-callback-only; worker code must not call them. Returned directory batches
+expire on the next context call in that application. Optional callers using the
+low-level operation must check the live capability themselves.
+
+The first cross-target proof is [CPC restart 3D-M](CPC-RESTART-STEP3D-M.md):
+one unchanged `FSPROBE.APP` on CPC/M4 and MSX2 Screen 6/7. This is not a claim
+of complete filesystem, Desktop, physical-hardware or PCW parity.
 
 ## GBAP v4 package
 
