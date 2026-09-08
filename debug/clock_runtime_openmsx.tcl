@@ -5,6 +5,7 @@ set cr_workers 0
 set cr_timer_fragments 0
 set cr_rim_repairs 0
 set cr_seconds_requested 0
+set cr_key_ready 0
 set cr_file [open $::env(GEMBENCH_CLOCK_KERNEL_SYMBOLS) r]
 foreach line [split [read $cr_file] "\n"] {
     if {[regexp {^([A-Z0-9_]+) #([0-9A-Fa-f]+) } $line -> name value]} {
@@ -26,6 +27,9 @@ set cr_file [open build/universal-obj/uclock/app.noi r]
 foreach line [split [read $cr_file] "\n"] {
     if {[regexp {^DEF s__DATA (0x[0-9A-Fa-f]+)} $line -> value]} {
         set cr_seconds_address [expr {$value + $cr_seconds_offset}]
+    }
+    if {[regexp {^DEF _gb_getkey (0x[0-9A-Fa-f]+)} $line -> value]} {
+        set cr_getkey_address $value
     }
 }
 close $cr_file
@@ -56,6 +60,10 @@ proc cr_rim {} {
 debug set_bp [expr {$cr_base + $cr_app(_clock_timer)}] {} {cr_worker}
 debug set_bp [expr {$cr_base + $cr_app(_draw_face)}] {} {cr_rim}
 debug set_bp $cr_kernel(WRA_FRAGMENT) {} {cr_fragment}
+debug set_bp $cr_getkey_address {} {
+    if {[da_sig_loaded $::da_clock_main $::da_clock_sig]} {set ::cr_key_ready 1}
+    set ::pause off
+}
 
 # Background line drawing on a 3.58 MHz MSX may outlast the base harness's
 # short key pulses. Keep its real-key steering, but allow the longer route.
@@ -84,8 +92,7 @@ proc cr_begin_background {callback} {
 }
 proc cr_wait_seconds {callback} {
     if {[da_sig_loaded $::da_clock_main $::da_clock_sig] &&
-        [peek $::cr_seconds_address]} {
-        keymatrixup 5 0x01
+        [peek $::cr_seconds_address] == 1} {
         after time 1.0 [list cr_focus_desktop [list cr_begin_background $callback]]
     } elseif {[machine_info time] > $::cr_seconds_deadline} {
         keymatrixup 5 0x01
@@ -98,9 +105,22 @@ proc da_focus_desktop {callback} {
     if {!$::cr_seconds_requested} {
         set ::cr_seconds_requested 1
         set ::cr_seconds_deadline [expr {[machine_info time] + 20.0}]
-        keymatrixdown 5 0x01
-        cr_wait_seconds $callback
+        cr_send_seconds $callback
     } else { cr_focus_desktop $callback }
+}
+proc cr_send_seconds {callback} {
+    if {$::cr_key_ready} {
+        keymatrixdown 5 0x01
+        # Acknowledgement may arrive after a slow initial redraw. Holding S
+        # until then lets the BIOS queue autorepeats, toggling seconds off
+        # again. Send one finite real key pulse, then observe its consumption.
+        after time 0.30 {keymatrixup 5 0x01}
+        after time 0.32 [list cr_wait_seconds $callback]
+    } elseif {[machine_info time] > $::cr_seconds_deadline} {
+        da_finish "FAIL Clock did not reach keyboard input"
+    } else {
+        after time 0.01 [list cr_send_seconds $callback]
+    }
 }
 rename da_finish cr_finish_base
 proc da_finish {status} {

@@ -34,20 +34,51 @@ files rather than assuming this snapshot remains current.
   preserving the ABI's future monochrome portability. Product v1.0 does not
   renumber ABI 2.1, GBAP v4 or the frozen GEMBENCH-1 contracts.
 
-## Git and publication snapshot before milestone 1
+## Current checkpoint — MSX stability and inventory
 
-- Current branch: `main`, at `1408e512dd976e882a9e1ae24ad712a70bed0aca`.
-  Local main matched origin/main after the last merge.
+User authorized milestone 1's first checkpoint with both openMSX and 1983.
+The [MSX baseline](V1-MSX-STABILITY-BASELINE.md) and
+[application ledger](V1-APPLICATION-LEDGER.md) hold the current evidence and
+limitations. **Issue #82 remains open; Notepad conversion has not started.**
+
+- Built fresh production code at `9ff0825` in detached worktree
+  `build/msx-stability-82`; evidence is below its `evidence/` directory.
+  Only harness sources were subsequently updated there. Preserve that worktree.
+- 1983 core Philips Screen 6/7 and Omega/RainBIOS Screen 7 lifecycle checks
+  passed, with three launch/reuse/close cycles and keyboard-pointer cadence.
+  openMSX File Manager window kinds, Screen 7 PAINT and normal Settings
+  save/cold-reload in both modes passed. See the baseline for exact limits.
+- Fixed observer/input races, not production kernel/app behavior: ROM-mapped
+  geometry reads, popup selection before its input loop, and S autorepeat
+  caused by holding the test key through Clock's initial redraw.
+- The corrected Clock test passed twice per mode, but the next Screen 6
+  repeat lost the 80 ms Desk title click. Keep this failure visible; investigate
+  actual input/press acknowledgement and background repaint timing next.
+  Do not substitute longer clicks and claim the interaction issue fixed.
+- RainBIOS main CHGMOD at its bundled source pin lacks mode 6 dispatch.
+  Philips firmware passes the same image in both emulators. No RainBIOS/1983
+  source was changed; a separate sibling issue/branch needs authorization.
+- The 1983 source-linked test core is `5fce06f`; installed CLI is older
+  `c01c807` and was used only for an additional Screen 7 boot smoke.
+- No normal media was rebuilt. Before/after SHA-256 values:
+  MSX `047a19d38e05f009df8c07a22be90e226a98bc68992fc7474c34015f251ce308`;
+  CPC Desktop `c1b09dbc08299b217443d2a06d66f8688ba0e7cf50be0a2a41e2a7475cf94b14`;
+  CPC runtime diagnostic `cf9c77e1b277eecab608e6e7b8a19e332848fe1b3f34678cd89e2fb9135f48bd`.
+
+## Git and publication snapshot
+
+- Current branch: `feature/82-msx-stability`, published to origin; use Git for
+  the latest checkpoint commit. [Issue #82](https://github.com/salvogendut/GEMBENCH/issues/82).
+- Roadmap/handoff commit `9ff0825` is published on `docs/v1-roadmap`,
+  [PR #81](https://github.com/salvogendut/GEMBENCH/pull/81), not merged at this
+  snapshot. Direct main push was rejected by branch protection; a PR was opened
+  instead of bypassing the rule. The feature branch builds on that docs commit.
+  Local main is `9ff0825`; origin/main remains `1408e51` until PR merge.
 - Settings integration commit: `9c5a7514bdcc53b6d94e86a6af17997b7fde7510`.
 - [PR #80](https://github.com/salvogendut/GEMBENCH/pull/80) is merged;
   [issue #79](https://github.com/salvogendut/GEMBENCH/issues/79) is closed.
   Feature branch `feature/79-cpc-settings` was pushed and retained.
 - Earlier accepted desktop sprints were merged in PR #78 at `68b1607`.
-- Planning documents at this snapshot: new `docs/ROADMAP-V1.0.md`, links added
-  to `README.md` and `docs/ROADMAP.md`, and this handoff. The user subsequently
-  authorized committing/pushing them, opening a dedicated issue/branch, and
-  starting milestone 1's MSX stability checkpoint using both openMSX and 1983.
-  Recheck Git and the checkpoint record for publication/progress after this save.
 - Preserve unrelated untracked user files: `1984-20260906-200304.gif`,
   `1984-20260906-231044.gif`, and parked `QA/CPC/`. Do not blanket-stage them.
 
@@ -155,16 +186,16 @@ and the earlier roadmap. Eight planned milestones:
 8. Close the migration/parity ledger and SDK/release-artifact/manual acceptance
    gates for both distributions.
 
-**Next proposed implementation: unified Notepad.** Audit actual dependencies
+**Next: resolve the baseline's open input/firmware findings, then unified
+Notepad.** Audit actual dependencies
 and linked memory first, then migrate the real application and needed services.
 Start the application acceptance ledger, establish MSX behavior/stability checks,
 migrate through the universal MSX path, then test identical APP bytes on CPC
 with real document and failure workflows. Missing services on either target
 are in scope.
-The next authorized work is milestone 1's stability baseline and migration
-inventory, using a mix of openMSX and 1983 on disposable MSX media. Publish the
-planning documents first, then follow the user's issue/feature-branch workflow,
-not direct feature work on main. Notepad conversion follows this checkpoint;
+The authorized first checkpoint established the baseline and inventory using
+openMSX and 1983 on disposable MSX media; its stability gate is not yet closed.
+Continue on issue #82's feature branch. Notepad conversion follows that gate;
 CPC splash restoration remains milestone 4.
 
 ## Tools and testing workflow

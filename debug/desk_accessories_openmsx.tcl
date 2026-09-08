@@ -47,6 +47,7 @@ set da_clock_menu_ok 0
 set da_calc_menu_ok 0
 set da_stack_checks 0
 set da_desktop_order {}
+set da_popup_polled 0
 
 # Read the target's layout, not another set of hard-coded stacking addresses.
 # EQU cells are not present in the normal RASM symbol output.
@@ -298,8 +299,21 @@ proc da_choose_accessory {row callback} {
     da_move_to 11 4 da_choose_title
 }
 
-proc da_choose_title {} { da_click da_choose_popup }
-proc da_choose_popup {} { da_move_to 12 $::da_choice_y da_choose_row }
+proc da_choose_title {} {
+    set ::da_popup_polled 0
+    da_click da_choose_popup
+}
+proc da_choose_popup {} {
+    # UI_MODAL is published before the menu is drawn. Wait until the menu
+    # actually polls input; early movement/click pulses can be lost in drawing.
+    if {$::da_popup_polled} {
+        da_move_to 12 $::da_choice_y da_choose_row
+    } elseif {[machine_info time] >= $::da_deadline} {
+        da_finish "FAIL Desk popup did not reach input loop"
+    } else {
+        after time 0.002 da_choose_popup
+    }
+}
 proc da_choose_row {} { da_click $::da_choice_callback }
 
 proc da_focus_desktop {callback} {
@@ -489,4 +503,11 @@ proc da_start {} {
 debug set_bp 0x80C0 {} {da_api_hit}
 debug set_bp 0x80CF {} {da_defer_api_hit}
 debug set_bp 0x800C {} {da_text_hit}
+debug set_bp 0x801E {} {
+    if {[peek 0x1705] && [peek 0x1703] == 2 &&
+        [debug read_block memory 0x1718 5] eq "Clock"} {
+        set ::da_popup_polled 1
+    }
+    set ::pause off
+}
 after time 62.0 da_start

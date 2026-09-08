@@ -138,7 +138,9 @@ unported application or hardware configuration is already stable.
 ## Ordered milestones
 
 These are outcome-based work packages, not time estimates or new historical
-milestone numbers. All milestones below are **planned**, not started. Use one
+milestone numbers. Milestone 1's initial stability/inventory checkpoint is
+**in progress** in [issue #82](https://github.com/salvogendut/GEMBENCH/issues/82);
+Notepad conversion and milestones 2–8 remain planned. Use one
 bounded issue/branch per implementation package and split internally where
 dependencies require it; do not expand the scope without recording the change.
 
@@ -159,7 +161,14 @@ Milestone 7 can progress alongside application migration once separately
 authorized; start independent confirmation early enough to inform the work.
 Milestone 8 depends on the completed application and hardware/backend gates.
 
-### 1. Unified Notepad and document services — next
+### 1. Unified Notepad and document services — stability checkpoint in progress
+
+The [MSX baseline](V1-MSX-STABILITY-BASELINE.md) and
+[application migration ledger](V1-APPLICATION-LEDGER.md) are now recorded.
+Fresh openMSX and 1983 checks cover the reference apps on private media, but
+intermittent short Desk-click acceptance and the Omega/RainBIOS Screen 6
+firmware gap remain open. Do not mark this gate or the migration complete.
+Resolve/classify these findings before replacing the native Notepad.
 
 Use the existing Notepad implementation and preserve its supported behavior.
 Audit dependencies and linked code/data/stack headroom first; bind its required
