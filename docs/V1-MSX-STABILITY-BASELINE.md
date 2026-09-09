@@ -6,6 +6,12 @@ Production source pin: `9ff0825d77004f9a0380e74b3dc45f3d6d9e772c`.
 The baseline and [application ledger](V1-APPLICATION-LEDGER.md) are recorded;
 **the stability gate remains open**. Notepad migration has not started.
 
+2026-09-09 follow-up: the MSX short-click fix is implemented and passes bounded
+both-mode openMSX/1983 checks. Candidate RainBIOS #169 also runs GEOBENCH in
+both modes. See [the implementation record](MSX-DESK-CLICK-INVESTIGATION.md#implementation-and-verification--2026-09-09)
+for new artifacts, remaining limits and the separate firmware-probe discrepancy.
+The baseline results below remain historical, not results for the fixed build.
+
 ## Scope and isolation
 
 A fresh complete MSX distribution was built in detached worktree
@@ -55,6 +61,12 @@ movement. Earlier diagnostic runs observed a six-frame gap; retain them too.
 
 ### Open findings — do not start migrating over them silently
 
+Follow-up investigation: the Desk loss is now traced to a 135–136 ms interval
+between input samples during Clock repaint, enclosing the complete 80 ms click.
+See [the investigation record](MSX-DESK-CLICK-INVESTIGATION.md) for both-mode
+openMSX traces, 1983 confirmation and the subsequent fix. The findings below
+preserve their original discovery evidence; see the dated follow-up above.
+
 1. **Short Desk clicks are not consistently accepted with Clock running.**
    After two successful final-script runs per mode, the next Screen 6 repeat
    failed with `Desk popup did not reach input loop`:
@@ -77,8 +89,10 @@ movement. Earlier diagnostic runs observed a six-frame gap; retain them too.
    implements mode 6 but this main entry does not route there. Evidence:
    `1983-mode6-regs/result.json` and sibling `1983/ROMS/README-RainBIOS`.
    This identifies a firmware compatibility gap, not an established 1983-core
-   regression. A RainBIOS issue/branch and subsequent 1983 ROM update need
-   separate authorization; neither repository was changed here.
+   regression. The user authorized and received
+   [RainBIOS issue #169](https://github.com/salvogendut/rainbios/issues/169).
+   Firmware implementation/branch and the subsequent 1983 ROM update remain
+   separate work; neither repository's source was changed here.
 
 Issue #82 stays open. Establishing this record is not permission to treat the
 MSX stability prerequisite or the full Notepad milestone as complete.

@@ -9,7 +9,7 @@ ROOT_DISPATCH_ONE equ defer_dispatch_one
 ROOT_MAP_FOCUS equ wm_map_focus
 ROOT_FULL_CLIP equ clip_set_full
 ROOT_HOME_NATIVE equ MSX_TPASEG
-POLL_MENU_DISPATCH equ menu_dispatch
+POLL_MENU_DISPATCH equ msx_input_dispatch
                 macro ROOT_LOOP_REPEAT
                 jr wm_loop
                 mend

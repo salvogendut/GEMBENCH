@@ -1,4 +1,4 @@
-# Session handoff — 2026-09-08
+# Session handoff — 2026-09-09
 
 Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
@@ -55,9 +55,28 @@ limitations. **Issue #82 remains open; Notepad conversion has not started.**
   repeat lost the 80 ms Desk title click. Keep this failure visible; investigate
   actual input/press acknowledgement and background repaint timing next.
   Do not substitute longer clicks and claim the interaction issue fixed.
+- Follow-up investigation reproduced the cause: the complete
+  80 ms click falls inside a 135–136 ms input-sampling gap during Clock repaint
+  in openMSX Screen 6 and 7. 1983 independently misses a short click in Screen 6;
+  its Screen 7 stress sample passes. See `MSX-DESK-CLICK-INVESTIGATION.md`.
+  The now-authorized MSX-only bounded capture fix is implemented. Private build
+  `build/msx-buttons-82`, final media `evidence/mode{6,7}/GEOBENCH.IMG`.
+  Both modes pass 50 short Desk cycles in openMSX and 1983, normal accessory
+  checks, Screen 7 Paint, Screen 6 Settings save/reload, and 294 host tests.
+  See the investigation's dated implementation section. Do not use that
+  worktree's initial aggregate QA image: use the final evidence/mode images.
 - RainBIOS main CHGMOD at its bundled source pin lacks mode 6 dispatch.
-  Philips firmware passes the same image in both emulators. No RainBIOS/1983
-  source was changed; a separate sibling issue/branch needs authorization.
+  Philips firmware passes the same image in both emulators. The separate
+  [RainBIOS #169](https://github.com/salvogendut/rainbios/issues/169) is now open;
+  candidate fix is on `fix/169-main-chgmod-bitmap` in the RainBIOS worktree
+  `build/rainbios-169`; sibling main remains clean. Main bitmap dispatch,
+  display/VBlank setup and full-width clear are corrected. GEOBENCH passes
+  both-mode lifecycle/50-short-click checks with its new Omega ROM.
+  openMSX firmware probes pass; 1983's strengthened main probe still reports
+  a stale first font-byte read (subsequent reads are correct). Keep that
+  discrepancy visible; see RainBIOS `docs/MAIN-CHGMOD-BITMAP.md`.
+  Follow-up: [RainBIOS #170](https://github.com/salvogendut/rainbios/issues/170).
+  No 1983 source or installed/bundled ROM was modified.
 - The 1983 source-linked test core is `5fce06f`; installed CLI is older
   `c01c807` and was used only for an additional Screen 7 boot smoke.
 - No normal media was rebuilt. Before/after SHA-256 values:
@@ -67,13 +86,17 @@ limitations. **Issue #82 remains open; Notepad conversion has not started.**
 
 ## Git and publication snapshot
 
-- Current branch: `feature/82-msx-stability`, published to origin; use Git for
+- Implementation branch: `feature/82-msx-stability`; use Git for
   the latest checkpoint commit. [Issue #82](https://github.com/salvogendut/GEMBENCH/issues/82).
+- The user requested PR/merge for both repositories on 2026-09-09. Publication
+  includes these fixes/tests/docs, but not normal MSX/CPC media or user files.
+  RainBIOS publishes `fix/169-main-chgmod-bitmap` separately; its remaining
+  first-read discrepancy is tracked in #170 and is not a passing test.
 - Roadmap/handoff commit `9ff0825` is published on `docs/v1-roadmap`,
-  [PR #81](https://github.com/salvogendut/GEMBENCH/pull/81), not merged at this
-  snapshot. Direct main push was rejected by branch protection; a PR was opened
-  instead of bypassing the rule. The feature branch builds on that docs commit.
-  Local main is `9ff0825`; origin/main remains `1408e51` until PR merge.
+  [PR #81](https://github.com/salvogendut/GEMBENCH/pull/81). Its commit is also
+  included in this feature branch, so the fix PR carries the pending roadmap
+  documentation. Recheck GitHub for publication state; use the ordinary PR
+  merge path rather than pushing directly to protected main.
 - Settings integration commit: `9c5a7514bdcc53b6d94e86a6af17997b7fde7510`.
 - [PR #80](https://github.com/salvogendut/GEMBENCH/pull/80) is merged;
   [issue #79](https://github.com/salvogendut/GEMBENCH/issues/79) is closed.

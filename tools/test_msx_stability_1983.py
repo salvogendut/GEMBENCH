@@ -41,6 +41,7 @@ class Driver:
         self.frame = 0
         self.checks = 0
         self.metrics = []
+        self.short_desk_stress = args.short_desk_stress
         try:
             if self.response() != {"ready": True}:
                 raise RuntimeError("bridge initialization")
@@ -113,7 +114,7 @@ class Driver:
     def click(self, x, y):
         self.move(x, y)
         self.key(8, 1)
-        self.frames(6)
+        self.frames(4 if self.short_desk_stress else 6)
         self.key()
         self.frames(60)
 
@@ -206,7 +207,32 @@ class Driver:
             self.close(calc, 1)
             self.expect(self.busy() == baseline_busy, "accessory pages reclaimed")
             self.expect(self.value("SCHED_FAULT") == 0, "scheduler stack guards")
+        if self.short_desk_stress:
+            clock = self.accessory(0, 2)
+            self.key(5, 1)
+            self.frames(20)
+            self.key()
+            self.frames(100)
+            self.expect(self.call(f"ram {self.entry(clock)[0]*0x4000 + self.seconds_address-0x4000} 1") == [1],
+                        "Clock seconds enabled for short-click stress")
+            self.focus_desktop()
+            for cycle in range(50):
+                self.click(11, 4)  # four PAL frames: 80 ms, including during repaint
+                self.wait(lambda: self.value("UI_MODAL") == 1,
+                          f"Desk short click {cycle+1}", 200)
+                # Native GBUI C binding: UI_NAME=0x1708, UI_TEXT=0x1718.
+                self.expect(self.read(0x1718, 5) == list(b"Clock"), "actual Desk menu")
+                self.key(7, 4)
+                self.frames(4)
+                self.key()
+                self.wait(lambda: self.value("UI_MODAL") == 0, "Desk cancelled", 200)
+                self.frames(7)
+            self.click(self.entry(clock)[1]+8, self.entry(clock)[2]+4)
+            self.close(clock, 1)
+            self.expect(self.busy() == baseline_busy, "stress Clock page reclaimed")
+            self.expect(self.value("SCHED_FAULT") == 0, "stress scheduler guards")
         return dict(status="PASS", frames=self.frame, checks=self.checks,
+                    short_desk_cycles=50 if self.short_desk_stress else 0,
                     pointer_metrics=self.metrics, final_windows=self.value("WM_NWIN"),
                     stack_max=self.value("SCHED_STACK_MAX"), busy_pages=self.busy())
 
@@ -218,6 +244,8 @@ def main():
     parser.add_argument("--mode", type=int, choices=(6,7), required=True)
     parser.add_argument("--bios", type=Path)
     parser.add_argument("--subrom", type=Path)
+    parser.add_argument("--short-desk-stress", action="store_true",
+                        help="use 80-ms clicks and add 50 Desk cycles while Clock repaints")
     args = parser.parse_args()
     if bool(args.bios) != bool(args.subrom):
         parser.error("--bios and --subrom must be supplied together")

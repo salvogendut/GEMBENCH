@@ -50,7 +50,14 @@ msx_esc_held
 input_init
                 xor   a
                 ld    (in_accel),a
-                ret
+                jp    MSX_BUTTON_INIT
+
+; Keep this boundary after the screen driver's aligned tables: placing it in
+; input_api_msx.asm grows the Screen-7 child COM by a whole alignment page.
+; Dispatch remains in the normal root loop, never in an interrupt or painter.
+msx_input_dispatch
+                call MSX_BUTTON_FILTER
+                jp menu_dispatch
 
 input_poll
                 ld    hl,0

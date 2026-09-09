@@ -178,14 +178,30 @@ MSX_SYS_RESERVED4   equ MSX_SYSINFO+47
 ; project-owned GBAPV4.MOD into fixed low TPA while the application page stays mapped.
 ; Reuse child-COM storage only after boot has left it. This is never an IRQ
 ; entry routine: BIOS interrupts restore DOS page 0 before returning here.
-; #CF30..#D3FF stays reserved; legacy fixed-RAM and stack bounds are unchanged.
+; #CF30..#D0FF is private button capture; #D100..#D3FF stays reserved.
+; No public application, legacy fixed-RAM or stack bounds change.
 MSX_GBAP4_GATE      equ #0400
 MSX_GBAP4_GATE_LIMIT equ #1000
-MSX_GBAP4_GATE_SIZE equ 2238
+MSX_GBAP4_GATE_SIZE equ 2549
 MSX_PARAMETER_ENTRY equ MSX_GBAP4_GATE+8
 MSX_MODULE_SYSINFO equ MSX_GBAP4_GATE+11
 MSX_MODULE_SYSINFO_QUERY equ MSX_GBAP4_GATE+14
+MSX_BUTTON_INIT equ MSX_GBAP4_GATE+17
+MSX_BUTTON_FILTER equ MSX_GBAP4_GATE+20
 MSX_SYSINFO_LEGACY equ #0F00        ; ABI 2.0 CRT requires an exact minor=0 view
+
+; Private MSX button FIFO: four (displayed x,y,focus,generation,modal) records.
+; IRQ capture never maps banks, invokes BIOS or dispatches application code.
+MSX_BUTTON_LEVEL equ #CF30
+MSX_BUTTON_HEAD equ #CF31
+MSX_BUTTON_TAIL equ #CF32
+MSX_BUTTON_COUNT equ #CF33
+MSX_BUTTON_DROPPED equ #CF34       ; saturating overflow/stale counter
+MSX_BUTTON_VALID equ #CF35
+MSX_BUTTON_VIEW equ #CF36         ; last published root pointer/context, 5 bytes
+MSX_BUTTON_QUEUE equ #CF40        ; 4 * 5 bytes, oldest first
+MSX_BUTTON_IRQ equ #CF60          ; position-independent capture code, copied at boot
+MSX_BUTTON_LIMIT equ #D100
 
 ; Architecture milestone 2 (#32): the M1 owner identity is now the public
 ; handle of a real fixed-capacity application record. Window records retain
