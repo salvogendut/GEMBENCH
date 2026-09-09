@@ -15,6 +15,14 @@ and artwork.
 
 ## Status
 
+See the [roadmap to v1.0](docs/ROADMAP-V1.0.md) for finishing **both MSX2 and
+CPC distributions**: unified application migration on both targets, remaining
+CPC feature parity, and separate release qualification. MSX2 is the behavior
+reference, not a finished universal distribution; currently only Clock and
+Calculator are production apps using the unified ABI.
+The plan preserves the accepted CPC desktop's stability while aiming for the
+same quality on MSX2, and includes restoring the CPC boot splash.
+
 The repository contains the complete GEOBENCH foundation plus the GEM-inspired
 resource, multitasking, ownership, messaging, and compositor work developed
 during the archived GEMBENCH phase. The public identity is once again the
@@ -81,7 +89,8 @@ or window work must cross an explicit version boundary.
 - MSX-DOS2 or Nextor
 - RainBIOS as a supported validation environment
 
-MSX2 remains the full release target. The experimental **CPC M4 Desktop** is
+MSX2 remains the main behavior reference; v1.0 completion targets both MSX2 and
+CPC. The experimental **CPC M4 Desktop** is
 now available through [Sprint 3](docs/CPC-RESTART-SPRINT3.md), using the same
 Desktop/File Manager sources, window manager and portable Clock/Calculator apps:
 

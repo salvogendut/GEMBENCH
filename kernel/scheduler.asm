@@ -26,6 +26,7 @@
 
                 include "msx_context_irq.asm"
 sched_irq_vector
+                call MSX_BUTTON_IRQ          ; latch short presses even while root paints
                 include "core/context_irq.asm"
                 include "msx_context_helpers.asm"
 

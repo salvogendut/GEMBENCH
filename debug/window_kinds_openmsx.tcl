@@ -196,11 +196,28 @@ proc wk_wait_rect {expected callback label} {
     if {![wk_rect_valid $current]} {
         after time 0.002 [list wk_wait_rect $expected $callback $label]
     } elseif {$current eq $expected} {
-        after time 1.0 $callback
+        after time 1.0 [list wk_confirm_rect $expected $callback $label]
     } elseif {[machine_info time] >= $::wk_deadline} {
         wk_finish "FAIL $label geometry: [wk_rect]"
     } else {
         after time 0.1 [list wk_wait_rect $expected $callback $label]
+    }
+}
+
+# A BIOS call can map ROM into page 0 during the settling delay. Do not turn
+# ROM bytes into a geometry failure after having observed the correct rectangle.
+# Recheck mapping and geometry together; a genuinely wrong RAM rectangle fails.
+proc wk_confirm_rect {expected callback label} {
+    if {[expr {[debug read ioports 0xA8] & 3}] != $::wk_page0_slot} {
+        if {[machine_info time] >= $::wk_deadline} {
+            wk_finish "FAIL $label RAM mapping did not return"
+        } else {
+            after time 0.002 [list wk_confirm_rect $expected $callback $label]
+        }
+    } elseif {[wk_rect] ne $expected} {
+        wk_finish "FAIL $label settled geometry: [wk_rect]"
+    } else {
+        uplevel #0 $callback
     }
 }
 

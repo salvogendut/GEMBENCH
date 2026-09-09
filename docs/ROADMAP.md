@@ -1,5 +1,13 @@
 # GEOBENCH roadmap
 
+**2026-09-08:** the current forward plan is the
+[roadmap to v1.0](ROADMAP-V1.0.md): finish **both MSX2 and CPC distributions**,
+including unified-ABI migration on both, remaining CPC feature parity and
+separate release acceptance. MSX2 is the behavior reference, not an already
+completed universal distribution.
+The notes below preserve the earlier planning context, not current completion
+status. PCW remains a later port.
+
 The active GEOBENCH release remains MSX2 while a common native application ABI
 is designed for staged CPC and PCW reintroduction. Architectural depth and
 application quality continue on the 512 KiB MSX2 baseline without creating new

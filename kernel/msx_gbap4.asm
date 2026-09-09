@@ -27,6 +27,8 @@ fs_ent_size             equ #14E8
                 jp    universal_parameters
                 jp    module_sysinfo_init
                 jp    module_sysinfo_query
+                jp    button_init_impl
+                jp    button_filter_impl
 
 ADMISSION_SYSINFO_SIZE equ MSX_SYSINFO_SIZE
 CORE_PAGE_FREE equ MSX_PAGE_FREE
@@ -41,6 +43,7 @@ gb4_crc_value       ds 4,0
                 include "core/app_admission.asm"
                 include "msx_universal_parameters.asm"
                 include "msx_sysinfo_init.asm"
+                include "msx_button_capture.asm"
 gb4_gate_end
                 print "GBAPV4 module bytes: ", {int}gb4_gate_end-MSX_GBAP4_GATE
 
