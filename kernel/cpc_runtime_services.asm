@@ -2,7 +2,11 @@
 ; FS contexts use caller-owned GB_PARAMS; the old native SDK C3D0/C400
 ; mailboxes are pixels on CPC. The legacy GB_FSCTX slot remains unavailable.
 CPC_RUNTIME_CAPS_LOW equ #0F8B ; add GB_CAP_SHELL (#0008), keep other services gated
-CPC_RUNTIME_CAPS_HIGH equ #00DF ; shared worker + root timer collector are now bound
+                ifdef PORTABLE_DATA_PAGES
+CPC_RUNTIME_CAPS_HIGH equ #03DF ; private data-page qualification
+                else
+CPC_RUNTIME_CAPS_HIGH equ #01DF ; shared timers, FS and typed clipboard
+                endif
 cpc_unavailable
                 ld de,0
                 ld a,1
@@ -58,12 +62,13 @@ cpc_runtime_admission
                 cpl
                 and (ix+13)
                 jr nz,cpc_runtime_reject
-                ld a,CPC_RUNTIME_CAPS_HIGH
+                ld a,CPC_RUNTIME_CAPS_HIGH & 255
                 cpl
                 and (ix+14)
                 jr nz,cpc_runtime_reject
-                ld a,(ix+15)
-                or a
+                ld a,CPC_RUNTIME_CAPS_HIGH >> 8
+                cpl
+                and (ix+15)
                 jr nz,cpc_runtime_reject
                 scf
                 ret

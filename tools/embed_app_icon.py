@@ -131,6 +131,8 @@ CAPABILITIES_V4 = {
     "package-resources": 0x00200000,
     "background-timers": 0x00400000,
     "caller-parameters": 0x00800000,
+    "typed-clipboard": 0x01000000,
+    "portable-data-pages": 0x02000000,
 }
 LIFECYCLE = {
     "windowed": 0x0001,

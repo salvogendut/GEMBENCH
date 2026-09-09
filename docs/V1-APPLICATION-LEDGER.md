@@ -23,7 +23,7 @@ portable-service contract. Milestone numbers refer to the v1.0 roadmap.
 | Clock / `apps/uclock` | Universal v4 | Screen 6/7 lifecycle, border, background and input checks; see baseline limits | Same payload; accepted desktop workload | Keep regression coverage throughout |
 | Calculator / `apps/ucalculator` | Universal v4 | Screen 6/7 Desk identity, activation, border, text and cleanup | Same payload; accepted desktop workload | Keep regression coverage throughout |
 | ABIProbe / `apps/abiprobe` | Universal v4 diagnostic | Built and inventoried; not independently rerun here | Existing diagnostic qualification, not a production migration | ABI conformance |
-| Notepad / `apps/notepad` | Native v1 | Built; document workflows not yet requalified | Not delivered | Document, chooser, filesystem, typed clipboard, editor reuse; **1** |
+| Notepad / `apps/notepad`, candidate `apps/unotepad` | Native v1 delivery | Portable editor/controller source has host tests; full candidate link rejected for memory overflow, no editor runtime acceptance | Not delivered; chooser diagnostic qualified for ordinary directory names | Bring owned data/code pages forward from **2**; finish shell/configuration, CPC path-name gap and actual editor qualification; **1**, [audit](UNIFIED-NOTEPAD.md) |
 | GBRDEMO / `apps/gbrdemo` | Native legacy | Built only | Not delivered | Portable resources, forms and semantic drawing; **2** |
 | FormRef / `apps/formref` | Native v3 | Built only | Not delivered | Resources/forms plus owned page/secondary-code lifecycle; **2** |
 | File Manager / `apps/filemgr` | Native legacy | Normal window/menu workflow: maximize, restore, move and resize | Accepted native M4 browsing, view persistence and qualified-app launching | Portable FS contexts, menus, launch/association services; **3**, full file operations **4** |
@@ -79,7 +79,32 @@ not rebuild or replace that accepted image.
 
 Next migration's native reference, NOTEPAD.APP: 12070 bytes,
 `402bff07cb4fa73e8b395a6e2707c46860708c7eac0b44e9bcd7dfed3bee7458`.
-Preserve its behavior before replacing it; the universal version does not exist yet.
+Preserve its behavior before replacing it; no runnable universal version exists yet.
+The 2026-09-09 isolated rebuild at `1367593` has the same hash. Its native
+data/BSS ends at `0x7FF9`: seven bytes below the native limit, already 249 bytes
+past the universal `0x7F00` limit. The [audit](UNIFIED-NOTEPAD.md) records the
+additional caller-owned FS storage and reclaimed-icon scratch that must be
+budgeted explicitly. Host-tested document I/O is not a migrated application.
+
+The new diagnostic-only `SCRAPPRB.APP` (4808 bytes) is identical on private
+MSX Screen 6/7 and CPC M4 media; three-owner clipboard checks pass under
+openMSX, 1983 and 1984. See the audit for hash/evidence. This does not add a
+production migrated application or qualify Notepad editor-to-editor exchange.
+
+The diagnostic-only `PICKPRB.APP` (9834 bytes) additionally qualifies the owned
+chooser and selected-file readback with identical bytes on those targets. Save As
+selects a name without writing. Real editing, dirty-save recovery and the complete
+editor link remain; the audit also records the CPC provider's dotted-directory
+and filename-character limitations. Normal distribution media are unchanged.
+
+The actual editor candidate in `apps/unotepad` now has mocked-service host policy
+tests, but its full link needs 28857 bytes against a 16128-byte primary budget.
+The builder rejects it before packaging; it has no APP hash or emulator evidence.
+The private data-page prerequisite now passes with identical 5004-byte
+PAGEPRB.APP on both receivers; see [portable pages](PORTABLE-PAGES.md).
+The shared streamed loader now has instruction-fixture fault/rollback evidence;
+receiver integration and sealed secondary calls still must precede editor delivery. This does not
+upgrade the Notepad row from native or reuse diagnostic acceptance as editor proof.
 
 ## Before marking a row complete
 

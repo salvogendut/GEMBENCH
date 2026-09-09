@@ -184,7 +184,9 @@ The leaf restores PPI C and PSG R15 but, like BIOS interrupt handling, changes
 the PSG register selector. Physical/SDL mouse smoothness is not qualified.
 Observed keyboard-pointer gaps still reach 4–6 frames; this fix retains edges,
 it does not remove synchronous repaint latency. No claim of whole-distribution
-stability or Notepad migration readiness follows from these bounded checks.
+stability follows from these bounded checks alone. The subsequent
+[baseline close-out](V1-MSX-STABILITY-BASELINE.md#close-out--2026-09-09) records
+resolution of the remaining blockers and the start of the Notepad audit.
 
 Test the fixed private image, **not the normal image or the initial candidate
 build's stale aggregate image**:
@@ -193,9 +195,10 @@ build's stale aggregate image**:
 MSX_UNAPI=0 tools/run_msx.sh build/msx-buttons-82/evidence/mode7/GEOBENCH.IMG
 ```
 
-Use `mode6` for Screen 6. Candidate RainBIOS lives on its own branch/worktree:
-`fix/169-main-chgmod-bitmap`, `build/rainbios-169`. Its
-`docs/MAIN-CHGMOD-BITMAP.md` records firmware results and an outstanding 1983
-first-VRAM-read discrepancy. No ROM was imported into `../1983`.
-The remaining discrepancy is tracked as
-[RainBIOS #170](https://github.com/salvogendut/rainbios/issues/170).
+Use `mode6` for Screen 6. The RainBIOS candidate/evidence worktree
+`build/rainbios-169` is retained; its fix is now merged in RainBIOS PR #171.
+The first-VRAM-read discrepancy in
+[RainBIOS #170](https://github.com/salvogendut/rainbios/issues/170) was subsequently
+resolved by 1983 PR #172 (immediate IN timing), without another production
+firmware change. Both issues are closed. No ROM was imported into `../1983`.
+See the baseline close-out for merged revisions and final verification evidence.

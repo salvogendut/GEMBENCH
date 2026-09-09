@@ -24,6 +24,10 @@ cpc_runtime_start
                 ld sp,CPC_MAIN_TOP
                 ld hl,CPC_MAIN_TOP
                 ld (BOOT_SP),hl
+                ld hl,0
+                ld (CPC_CLIPBOARD_BASE),hl
+                ld a,l
+                ld (CPC_SCRAP_TYPE),a
                 call cpc_memory_admit
                 jp nc,cpc_runtime_failed
                 ld hl,300

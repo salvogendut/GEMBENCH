@@ -53,7 +53,10 @@ static unsigned filter(bool enabled) {
 int main(int argc,char **argv) {
     assert(argc==2);
     FILE *f=fopen(argv[1],"rb");assert(f);
-    size_t size=fread(mem+0x400,1,0xb00,f);assert(size>2238 && !ferror(f));fclose(f);
+    /* Load the full reserved module region; the private legacy sysinfo view
+     * may move within it as the module grows. Never silently truncate code. */
+    size_t size=fread(mem+0x400,1,0xc00,f);
+    assert(size>2238 && fgetc(f)==EOF && !ferror(f));fclose(f);
     z80_init(&cpu);psg[14]=255;psg[15]=255;
     call(0x411); /* newly appended private init entry */
     mem[0x1351]=0;mem[0xc358]=1;mem[0x1705]=0;

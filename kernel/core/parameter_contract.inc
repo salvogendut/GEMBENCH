@@ -23,6 +23,11 @@
 ; It must restore caller mapping/SP, retain the scheduler lock and not reenter
 ; GB_PARAMS. The shared extension validates/copies primary buffers under ENTER;
 ; workers fail before native state is touched. Legacy clients remain unchanged.
+; Optional PARAM_SCRAP_LENGTH/DATA/TYPE bind operation 9 to fixed shared
+; clipboard storage (length word + 510 bytes, separate type byte). The shared
+; implementation validates/copies the eight-byte caller header, rejects workers
+; and overlapping/out-of-primary payloads, then copies metadata back. It reuses
+; up_text_copy under the same lock; no callback, mapping or pointer retention.
                 assert ((universal_parameters>=0)&(up_text_copy+49<=#4000))|((universal_parameters>=#8000)&(up_text_copy+49<=#10000)),"parameter code and scratch must remain fixed"
                 assert (CORE_PARAM_OWNER_MAX>=1)&(CORE_PARAM_OWNER_MAX<=127),"invalid parameter owner capacity"
                 assert (CORE_PARAM_COLUMNS>=1)&(CORE_PARAM_COLUMNS<=254),"invalid parameter columns"

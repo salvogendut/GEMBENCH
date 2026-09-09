@@ -89,6 +89,9 @@ cpc_parameter_window
                 jp window_validate_owned      ; GB_PARAMS only calls native A=5
                 include "core/parameters.asm"
                 include "core/parameter_contract.inc"
+                ifdef PORTABLE_DATA_PAGES
+                include "cpc_data_pages.asm"
+                endif
 cpc_support_used_end
                 assert cpc_support_used_end<=CPC_SUPPORT_END,"CPC support allocation overflow"
                 save "SUPPORT.RAW",cpc_support_begin,cpc_support_used_end-cpc_support_begin

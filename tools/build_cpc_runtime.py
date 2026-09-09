@@ -78,7 +78,9 @@ def assemble(work: Path, overrides=()):
     return sym
 
 
-def build(desktop=False, filemgr=False, *, delivery=False, settings=False):
+def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False):
+    if data_pages and (desktop or filemgr or delivery or settings):
+        raise ValueError('data pages currently require the private runtime qualification profile')
     if settings: filemgr=True
     if delivery and not desktop:
         raise ValueError('Desktop delivery requires an explicit Desktop profile')
@@ -88,6 +90,7 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False):
     overrides=('-DCPC_NATIVE_DESKTOP=1',) if desktop else ()
     if filemgr: overrides+=('-DCPC_NATIVE_FILEMGR=1',)
     if settings: overrides+=('-DCPC_NATIVE_SETTINGS=1',)
+    if data_pages: overrides+=('-DPORTABLE_DATA_PAGES=1',)
     sym = assemble(work,overrides)
     if filemgr:
         from build_cpc_filemgr import compile_filemgr, bind_runtime
@@ -108,6 +111,10 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False):
         fsapp = ROOT / "build/universal/FSPROBE.APP"
         subprocess.run(["bash", "tools/build_uapp.sh", "apps/fsprobe", str(fsapp)],
                        env={**os.environ, "UNIVERSAL_FS": "1"}, cwd=ROOT, check=True)
+        scrapapp = ROOT / "build/universal/SCRAPPRB.APP"
+        subprocess.run(["bash", "tools/build_uapp.sh", "apps/scrapprobe", str(scrapapp)],
+                       env={**os.environ, "UNIVERSAL_SCRAP": "1", "APP_ICON": "apps/abiprobe/icon.asm"},
+                       cwd=ROOT, check=True)
         menuapp = ROOT / "build/universal/MENUPRBE.APP"
         subprocess.run(["bash", "tools/build_uapp.sh", "apps/menuprobe", str(menuapp)],
                        env={**os.environ, "UNIVERSAL_MENU": "1", "APP_ICON": "apps/abiprobe/icon.asm"},
@@ -145,6 +152,7 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False):
     if not delivery:
         files.update({"GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
+             "GBENCH/SCRAPPRB.APP": scrapapp.read_bytes(),
              "GBENCH/MENUPRBE.APP": menuapp.read_bytes(),
              "UFSTEST/SOURCE.BIN": bytes((i*13+7)&255 for i in range(1025)),
              "UFSTEST/SUB/SMALL.TXT": b"OK!",

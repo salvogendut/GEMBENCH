@@ -143,7 +143,9 @@
       "portable-filesystem": 1048576,
       "package-resources": 2097152,
       "background-timers": 4194304,
-      "caller-parameters": 8388608
+      "caller-parameters": 8388608,
+      "typed-clipboard": 16777216,
+      "portable-data-pages": 33554432
     }
   },
   "mailbox": {
@@ -168,12 +170,13 @@
       {"name": "version", "offset": 1, "size": 1},
       {"name": "data", "offset": 2, "size": 14}
     ],
-    "operations": {"line": 1, "text": 2, "timer-damage": 3, "timer-active": 4, "timer-dropped": 5, "timer-busy": 6, "timer-cancel": 7, "filesystem": 8},
+    "operations": {"line": 1, "text": 2, "timer-damage": 3, "timer-active": 4, "timer-dropped": 5, "timer-busy": 6, "timer-cancel": 7, "filesystem": 8, "clipboard": 9, "data-pages": 10},
     "statuses": {"ok": 0, "bad-argument": 1, "context": 2, "stale": 3, "owner": 4, "busy": 5, "unsupported": 6},
     "line_data": "u16 x0,y0,x1,y1; u8 pen. Endpoints must be inside runtime geometry; pen 0..3.",
     "text_data": "u8 column,line,pen,paper; u16 text_pointer; u8 length (0..48). Exactly length bytes copied, NUL-terminated privately before rendering; zero length does not dereference the pointer.",
     "timer_data": "u16 window; damage additionally u8 x,y,w,h. Nonempty rectangle inside runtime geometry. Busy ignores data. Other operations require a live generation-tagged window owned by the mapped caller.",
     "filesystem_data": "Requires portable-filesystem capability. Four u16 fields: header_pointer, header_size=32, transfer_pointer, transfer_size=512. Both complete spans must lie in [0x4000,0x7F00) and must not overlap each other. Header operation 0..14 only. Root callbacks only; copy in before mapping the module, copy out after restoring caller. Transport status in A; filesystem status in header[1]. No retained pointers. Legacy GB_FSCTX and native buffers are unchanged.",
+    "clipboard_data": "Requires typed-clipboard capability. Two u16 fields: header_pointer, header_size=8. Root callbacks only. Header must be in primary RAM; effective nonempty payload span must be in primary RAM and disjoint from the header. A is GB_PARAMS transport status and E=0; successful transport publishes the separate scrap status/type/count in the header. No retained pointers or additional transfer buffer.",
     "pointer_policy": "Entire record and nonempty text span must be within [0x4000,0x7F00), no wrap. Copy before banking; no retained pointers. Unused data bytes are ignored. SDK stages automatic stack records/text in app-primary storage under a critical section.",
     "context_policy": "Root application callbacks may draw. Workers may only publish/query/cancel timer values; no rendering. Timers use the existing visible-damage collector and owner teardown, never a deferred pointer.",
     "compatibility": "MSX2 continues accepting ABI 2.0 applications with their old private mailboxes. New SDK applications require ABI 2.1 and caller-parameters. Future CPC/PCW kernels must reject 2.0 packages that use the old framebuffer-aliasing convention; this revision alone does not claim those runtimes exist."
@@ -201,6 +204,44 @@
     "operations": {"open": 0, "close": 1, "set-path": 2, "set-name": 3, "activate": 4, "directory-first": 5, "directory-next": 6, "rewind": 7, "read": 8, "write": 9, "free-kib": 10, "cancel": 11, "prepare-launch": 12, "adopt-launch": 13, "directory-batch": 14},
     "statuses": {"ok": 0, "unsupported": 1, "stale": 2, "owner": 3, "full": 4, "bad-argument": 5, "io": 6, "context": 7},
     "semantics": "Same generation/implicit-owner context policy as native clients. Four contexts, path max 47 bytes, raw space-padded 8.3 names, packed 16-byte entries, directory batches <=4, synchronous root-only transfers <=512 bytes. Read advances by actual bytes; offset-zero write replaces and later writes append; zero-length offset-zero write truncates. EOF is zero actual and status OK. Native transport errors remain reported by the backend. Drive zero is the boot volume; further drives are optional. Client is non-reentrant and root-only. Namespace/transport limits remain platform-qualified, not a FAT implementation guarantee."
+  },
+  "typed_clipboard": {
+    "capability": "typed-clipboard",
+    "parameter_operation": 9,
+    "header_size": 8,
+    "capacity": 510,
+    "header_fields": [
+      {"name": "action", "offset": 0, "size": 1},
+      {"name": "status", "offset": 1, "size": 1},
+      {"name": "type", "offset": 2, "size": 1},
+      {"name": "reserved", "offset": 3, "size": 1},
+      {"name": "buffer", "offset": 4, "size": 2},
+      {"name": "length", "offset": 6, "size": 2}
+    ],
+    "actions": {"query": 0, "set": 1, "get": 2, "clear": 3},
+    "types": {"untyped": 0, "text": 1, "bitmap": 2, "icon": 3, "file-list": 4, "any": 255},
+    "statuses": {"ok": 0, "truncated": 1, "argument": 2, "type": 3, "mismatch": 4, "state": 5},
+    "semantics": "Shared clipboard survives owner switches and teardown, resets on cold boot. SET accepts types 1..4, truncates to 510 with explicit status, and zero length clears; invalid requests preserve prior storage. GET accepts 0..4 or ANY, copies min(length,capacity), returns exact count and truncation; mismatch copies nothing. QUERY returns normalized type/length. Unknown tags and empty content are untyped; corrupt stored length is STATE error. Only the effective copied payload span is validated; empty transfers ignore the pointer. Nonempty payload/header overlap is rejected before payload or storage changes. On successful transport header type is normalized and length is stored/copied count, zero/untyped on scrap errors. Malformed header/action or non-root transport fails without changing the header. MSX legacy raw writes continue to invalidate the same type tag. Root serialization prevents observing a partial typed publication; not reentrant and no worker access."
+  },
+  "portable_data_pages": {
+    "capability": "portable-data-pages",
+    "parameter_operation": 10,
+    "outer_data": "u16 primary_header_pointer; u16 header_size=16; remaining outer data reserved (caller zero, receiver ignores)",
+    "header_size": 16,
+    "page_size": 16384,
+    "transfer_max": 512,
+    "header_fields": [
+      {"name": "action", "offset": 0, "size": 1},
+      {"name": "status", "offset": 1, "size": 1},
+      {"name": "page", "offset": 2, "size": 2},
+      {"name": "offset", "offset": 4, "size": 2},
+      {"name": "buffer", "offset": 6, "size": 2},
+      {"name": "length", "offset": 8, "size": 2},
+      {"name": "reserved", "offset": 10, "size": 6}
+    ],
+    "actions": {"allocate": 0, "release": 1, "read": 2, "write": 3},
+    "statuses": {"ok": 0, "unsupported": 1, "stale": 2, "owner": 3, "free": 4, "no-memory": 5, "bad-argument": 6, "context": 7},
+    "semantics": "Optional root-only service. Header is caller-owned primary RAM. Live non-terminating owner must match mapped primary. Reuse shared generation-tagged allocator; only DOCUMENT-purpose pages can be read/written/freed. Allocate requires zero page; allocate/release require zero offset/buffer/length; all six reserved bytes zero. Effective transfers <=512, offset+length<=16384 without wrap; nonempty buffer entirely within [0x4000,0x7F00) and disjoint from header. Empty transfer ignores buffer but validates page and offset (16384 allowed). Copy through private fixed scratch, restore mapping before results, retain no pointers. Invalid requests do not mutate data/destination. Fresh allocation contents unspecified. Owner teardown reclaims pages. No executable pages or secondary-code entry provided. Capability remains opt-in for private qualification until receiver acceptance."
   },
   "jump_table": {
     "port_rule": "Every GEOBENCH-2 kernel exposes every inherited slot at the same address. Unsupported optional services use a typed failure stub and remain unadvertised.",

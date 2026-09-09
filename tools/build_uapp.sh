@@ -18,6 +18,10 @@ UNIVERSAL_WINDOW_KIND="${UNIVERSAL_WINDOW_KIND:-0}"
 UNIVERSAL_ACCESSORY="${UNIVERSAL_ACCESSORY:-0}"
 UNIVERSAL_MENU="${UNIVERSAL_MENU:-0}"
 UNIVERSAL_FS="${UNIVERSAL_FS:-0}"
+UNIVERSAL_SCRAP="${UNIVERSAL_SCRAP:-0}"
+UNIVERSAL_DOCIO="${UNIVERSAL_DOCIO:-0}"
+UNIVERSAL_FILEPICK="${UNIVERSAL_FILEPICK:-0}"
+UNIVERSAL_DATA_PAGES="${UNIVERSAL_DATA_PAGES:-0}"
 DATA_LOC="${DATA_LOC:-0x7000}"
 LOAD_LIMIT="0x7F00"
 
@@ -40,12 +44,17 @@ if (( DATA_LOC < 0x4000 || DATA_LOC > 0x7F00 )); then
     exit 2
 fi
 for feature in "$UNIVERSAL_TASK" "$UNIVERSAL_WINDOW_KIND" "$UNIVERSAL_ACCESSORY" \
-    "$UNIVERSAL_MENU" "$UNIVERSAL_FS"; do
+    "$UNIVERSAL_MENU" "$UNIVERSAL_FS" "$UNIVERSAL_SCRAP" \
+    "$UNIVERSAL_DOCIO" "$UNIVERSAL_FILEPICK" "$UNIVERSAL_DATA_PAGES"; do
     [ "$feature" = 0 ] || [ "$feature" = 1 ] || {
         echo "ERROR: universal feature flags must be 0 or 1" >&2
         exit 2
     }
 done
+if { [ "$UNIVERSAL_DOCIO" = 1 ] || [ "$UNIVERSAL_FILEPICK" = 1 ]; } && [ "$UNIVERSAL_FS" != 1 ]; then
+    echo "ERROR: universal document I/O and file picker require UNIVERSAL_FS=1" >&2
+    exit 2
+fi
 
 SDCC="${SDCC:-sdcc}"
 BIN="$(dirname "$(command -v "$SDCC")")"
@@ -81,6 +90,30 @@ python3 tools/gblib_subset.py --interrupt-safe lib/gb/gblib.s "$work/gblib.s" \
 "$SDAS" -o "$work/gblib.rel" "$work/gblib.s"
 "$SDAS" -o "$work/gbuniversal_draw.rel" lib/gb/gbuniversal_draw.s
 extra_rels=()
+if [ "$UNIVERSAL_DATA_PAGES" = 1 ]; then
+    python3 - "$APP_MANIFEST" <<'PY'
+import json, sys
+if "portable-data-pages" not in json.load(open(sys.argv[1]))["required_capabilities"]:
+    raise SystemExit("ERROR: UNIVERSAL_DATA_PAGES requires portable-data-pages in the manifest")
+PY
+    "$SDCC" -mz80 --std-c99 --opt-code-size --fomit-frame-pointer \
+        -DGB_UNIVERSAL -I lib/gb -I include/gembench \
+        -c lib/gembench/gbdatapage.c -o "$work/gbdatapage.rel"
+    python3 tools/check_universal_app.py --source lib/gembench/gbdatapage.c \
+        --asm "$work/gbdatapage.asm"
+    extra_rels+=("$work/gbdatapage.rel")
+fi
+if [ "$UNIVERSAL_SCRAP" = 1 ]; then
+    python3 - "$APP_MANIFEST" <<'PY'
+import json, sys
+if "typed-clipboard" not in json.load(open(sys.argv[1]))["required_capabilities"]:
+    raise SystemExit("ERROR: UNIVERSAL_SCRAP requires typed-clipboard in the manifest")
+PY
+    "$SDCC" -mz80 --std-c99 --opt-code-size --fomit-frame-pointer \
+        -DGB_UNIVERSAL -I lib/gb -I include/gembench \
+        -c lib/gembench/gbscrap_universal.c -o "$work/gbscrap_universal.rel"
+    extra_rels+=("$work/gbscrap_universal.rel")
+fi
 if [ "$UNIVERSAL_FS" = 1 ]; then
     python3 - "$APP_MANIFEST" <<'PY'
 import json, sys
@@ -94,6 +127,22 @@ PY
         extra_rels+=("$work/$unit.rel")
     done
 fi
+document_units=()
+[ "$UNIVERSAL_DOCIO" = 0 ] || document_units+=(gbdocio)
+[ "$UNIVERSAL_FILEPICK" = 0 ] || document_units+=(gbfilepick gbfilepick_ui)
+for unit in "${document_units[@]}"; do
+    # Model/I/O call only the IX-preserving GB_PARAMS filesystem bridge.
+    # Keep IX frames there for substantially smaller struct access. Rendering
+    # still requires the IY profile: legacy drawing leaves IX as scratch.
+    frame_flags=()
+    [ "$unit" != gbfilepick_ui ] || frame_flags+=(--fomit-frame-pointer)
+    "$SDCC" -mz80 --std-c99 --opt-code-size --max-allocs-per-node 100000 \
+        "${frame_flags[@]}" -DGB_UNIVERSAL -I lib/gb -I include/gembench \
+        -c "lib/gembench/$unit.c" -o "$work/$unit.rel"
+    python3 tools/check_universal_app.py --source "lib/gembench/$unit.c" \
+        --asm "$work/$unit.asm"
+    extra_rels+=("$work/$unit.rel")
+done
 if [ "$UNIVERSAL_TASK" = 1 ]; then
     "$SDAS" -o "$work/gbtask.rel" lib/gb/gbtask.s
     extra_rels+=("$work/gbtask.rel")

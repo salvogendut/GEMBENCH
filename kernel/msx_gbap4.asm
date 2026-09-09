@@ -31,6 +31,7 @@ fs_ent_size             equ #14E8
                 jp    button_filter_impl
 
 ADMISSION_SYSINFO_SIZE equ MSX_SYSINFO_SIZE
+ADMISSION_TYPED_CLIPBOARD equ 1
 CORE_PAGE_FREE equ MSX_PAGE_FREE
                 macro ADMISSION_STORAGE
 gb4_file_size       dw 0
@@ -48,5 +49,6 @@ gb4_gate_end
                 print "GBAPV4 module bytes: ", {int}gb4_gate_end-MSX_GBAP4_GATE
 
                 assert gb4_gate_end<=MSX_SYSINFO_LEGACY,"GBAPV4.MOD overlaps legacy sysinfo view"
+                assert MSX_SYSINFO_LEGACY+MSX_SYSINFO_SIZE<=MSX_GBAP4_GATE_LIMIT,"legacy sysinfo exceeds gate region"
                 assert gb4_gate_end-MSX_GBAP4_GATE==MSX_GBAP4_GATE_SIZE,"update module byte count"
                 save  "GBAPV4.RAW",MSX_GBAP4_GATE,MSX_GBAP4_GATE_SIZE

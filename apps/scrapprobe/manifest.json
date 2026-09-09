@@ -1,0 +1,15 @@
+{
+  "application_id": "SCRAPPRB",
+  "profile": "universal-z80",
+  "platforms": ["cpc", "msx2", "pcw"],
+  "minimum_abi": [2, 1],
+  "minimum_sysinfo": [6, 48],
+  "required_capabilities": ["caller-parameters", "typed-clipboard", "windows",
+    "events", "owner-identity", "applications", "multi-window", "universal-loader",
+    "runtime-geometry", "portable-drawing", "portable-input"],
+  "optional_capabilities": [],
+  "service_id": 0,
+  "lifecycle": ["windowed"],
+  "minimum_pages": 1,
+  "preferred_pages": 1
+}

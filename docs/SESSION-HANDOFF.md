@@ -4,6 +4,52 @@ Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
 
+## Quick resume — saved at the user's request, 2026-09-09
+
+- The user requested **commit/push, roadmap and memory/handoff updates**, then
+  a pause. Do not interpret this checkpoint as permission to PR/merge, replace
+  normal images or implement another slice without a subsequent request.
+- This file is the durable repository working memory. Source, contracts,
+  diagnostic drivers and test definitions belong in the branch commit; large
+  generated evidence and private images remain local in `build/notepad-84/`.
+  A push does not back up those ignored artifacts. Preserve this worktree.
+- Read the [four remaining work packages](ROADMAP-V1.0.md#saved-checkpoint-and-remaining-delivery-path--2026-09-09)
+  and [secondary-code integration contract](PORTABLE-SECONDARY-CODE.md).
+  Native MSX Notepad still works; **there is no runnable unified Notepad** and
+  no new editor on CPC. The full portable editor link still exceeds memory.
+- Resume with measured MSX loader placement, one-open streaming and safe
+  interrupt/progress boundaries. Then implement the sealed secondary call gate,
+  partition the editor, and qualify/deliver the identical APP on both targets.
+  Do not restart the completed clipboard, chooser, owned-page or stream-fixture
+  work. The streamed loader is not wired into either receiver; its emulator
+  evidence must not be confused with the existing single-segment PAGEPRB runs.
+- Budget discussion: the user reported about 20% of the weekly allowance left.
+  Four packages are an estimate, not four sessions or a completion promise.
+  Prioritize a first testable MSX build; defer full CPC editor acceptance until
+  that exists, while retaining shared code and relevant CPC regressions. Neither
+  the eventual compile-once requirement nor the safety/feature gates is waived.
+
+### Save-point verification
+
+Before the save commit, **40 focused tests passed, no skips**, using the project
+SDCC/RASM toolchain in `my-distrobox`. The repeat includes streamed admission,
+data pages, owner/page policy, parameter boundaries, typed clipboard, MSX button
+capture, document I/O, chooser and the editor's host model/controller. Log:
+`build/notepad-84/evidence/checkpoint-save-tests.log`. Reproduce from the repo:
+
+```sh
+PYTHONPATH=tests python3 -m unittest test_package_stream test_data_pages \
+  test_owner_page_core test_client_parameter_core test_universal_parameters \
+  test_portable_clipboard test_msx_button_capture test_docio test_filepick \
+  test_unotepad -v
+python3 tools/check_geobench_v2_abi.py
+python3 tools/test_gbap4.py
+```
+
+ABI conformance and GBAP packaging/corruption checks also pass. This save-only
+turn does not repeat emulator or full-distribution qualification; prior evidence
+is recorded below. The three normal media hashes still match the saved values.
+
 ## Repository and decisions
 
 - Workspace: `/var/home/salvogendut/Dev/GEMBENCH`.
@@ -34,51 +80,157 @@ files rather than assuming this snapshot remains current.
   preserving the ABI's future monochrome portability. Product v1.0 does not
   renumber ABI 2.1, GBAP v4 or the frozen GEMBENCH-1 contracts.
 
-## Current checkpoint — MSX stability and inventory
+## Current checkpoint — shared secondary stream core qualified; receivers next
 
-User authorized milestone 1's first checkpoint with both openMSX and 1983.
-The [MSX baseline](V1-MSX-STABILITY-BASELINE.md) and
-[application ledger](V1-APPLICATION-LEDGER.md) hold the current evidence and
-limitations. **Issue #82 remains open; Notepad conversion has not started.**
+The user authorized starting unified Notepad after the MSX findings were
+resolved. **Issue #82 is closed** as a bounded baseline/inventory checkpoint,
+not whole-distribution release acceptance. The
+[MSX baseline close-out](V1-MSX-STABILITY-BASELINE.md#close-out--2026-09-09) and
+[application ledger](V1-APPLICATION-LEDGER.md) record evidence and limits.
 
-- Built fresh production code at `9ff0825` in detached worktree
-  `build/msx-stability-82`; evidence is below its `evidence/` directory.
-  Only harness sources were subsequently updated there. Preserve that worktree.
-- 1983 core Philips Screen 6/7 and Omega/RainBIOS Screen 7 lifecycle checks
-  passed, with three launch/reuse/close cycles and keyboard-pointer cadence.
-  openMSX File Manager window kinds, Screen 7 PAINT and normal Settings
-  save/cold-reload in both modes passed. See the baseline for exact limits.
-- Fixed observer/input races, not production kernel/app behavior: ROM-mapped
-  geometry reads, popup selection before its input loop, and S autorepeat
-  caused by holding the test key through Clock's initial redraw.
-- The corrected Clock test passed twice per mode, but the next Screen 6
-  repeat lost the 80 ms Desk title click. Keep this failure visible; investigate
-  actual input/press acknowledgement and background repaint timing next.
-  Do not substitute longer clicks and claim the interaction issue fixed.
-- Follow-up investigation reproduced the cause: the complete
-  80 ms click falls inside a 135–136 ms input-sampling gap during Clock repaint
-  in openMSX Screen 6 and 7. 1983 independently misses a short click in Screen 6;
-  its Screen 7 stress sample passes. See `MSX-DESK-CLICK-INVESTIGATION.md`.
-  The now-authorized MSX-only bounded capture fix is implemented. Private build
+- GEMBENCH PR #83 merged short-button capture at main `1367593`; RainBIOS
+  PR #171 merged bitmap dispatch/display/clear at `e28ff2f` (#169 closed).
+- The remaining first-VRAM-read discrepancy was 1983 immediate IN timing.
+  1983 PR #172 is merged at `c0a0b4a`; 1983 #171 and RainBIOS #170 are closed.
+  The normal sibling 1983 executable was rebuilt at that merge. Original
+  RainBIOS main/direct-SUBROM/MSX1 probes now pass with unchanged corrected
+  ROMs; independent openMSX controls also pass. No bundled ROM was replaced.
+- Final evidence: `build/1983-171/.local/evidence/`, including merged-main
+  firmware repeats and Screen 6/7 GEOBENCH lifecycle/50-short-Desk-cycle runs.
+  Preserve earlier failed evidence in `build/msx-stability-82` too.
+- Fixed private MSX images and matching symbols remain in
   `build/msx-buttons-82`, final media `evidence/mode{6,7}/GEOBENCH.IMG`.
-  Both modes pass 50 short Desk cycles in openMSX and 1983, normal accessory
-  checks, Screen 7 Paint, Screen 6 Settings save/reload, and 294 host tests.
-  See the investigation's dated implementation section. Do not use that
-  worktree's initial aggregate QA image: use the final evidence/mode images.
-- RainBIOS main CHGMOD at its bundled source pin lacks mode 6 dispatch.
-  Philips firmware passes the same image in both emulators. The separate
-  [RainBIOS #169](https://github.com/salvogendut/rainbios/issues/169) is now open;
-  candidate fix is on `fix/169-main-chgmod-bitmap` in the RainBIOS worktree
-  `build/rainbios-169`; sibling main remains clean. Main bitmap dispatch,
-  display/VBlank setup and full-width clear are corrected. GEOBENCH passes
-  both-mode lifecycle/50-short-click checks with its new Omega ROM.
-  openMSX firmware probes pass; 1983's strengthened main probe still reports
-  a stale first font-byte read (subsequent reads are correct). Keep that
-  discrepancy visible; see RainBIOS `docs/MAIN-CHGMOD-BITMAP.md`.
-  Follow-up: [RainBIOS #170](https://github.com/salvogendut/rainbios/issues/170).
-  No 1983 source or installed/bundled ROM was modified.
-- The 1983 source-linked test core is `5fce06f`; installed CLI is older
-  `c01c807` and was used only for an additional Screen 7 boot smoke.
+  Do not use its stale initial aggregate QA image. Corrected RainBIOS ROMs
+  are in `build/rainbios-170/build/`; see baseline hashes.
+- Physical/SDL mouse smoothness, 4–6-frame keyboard-pointer gaps, long stress,
+  MSX storage faults/exhaustion, hardware and remaining app coverage are still
+  release work. Closing the observed blockers does not close those gates.
+- [Issue #84](https://github.com/salvogendut/GEMBENCH/issues/84) and branch
+  `feature/84-unified-notepad` now track the real editor migration. First work:
+  [source/memory audit and document I/O](UNIFIED-NOTEPAD.md). Notepad is still
+  native; there is no new testable editor APP or migration-complete claim.
+- Isolated native rebuild `build/notepad-84` exactly matches the old payload.
+  Data ends at `0x7FF9` (seven native bytes spare), beyond the universal
+  `0x7F00` limit. Account for caller-owned scratch, 544-byte FS storage and
+  v4 metadata; retain 4096-byte document capacity and measure the full link.
+- SDK helper `gbdocio` reuses the real shared FS client: one
+  operation/at most 512 bytes per step, explicit EOF/oversize/error/cancel,
+  borrowed contexts and no atomicity promise. Three new plus 13 existing
+  focused tests pass with no skips; Z80 job is 11 bytes, helper code 888 bytes.
+  That first slice did not change receivers; it remains unlinked from Notepad.
+- Checkpoint 2a: typed clipboard now has one shared kernel policy, capability
+  `typed-clipboard` (`0x01000000`), `GB_PARAMS` operation 9 and
+  `UNIVERSAL_SCRAP=1`/`gbscrap.h` SDK bindings. SDK cost: 359 code + 8 data
+  bytes. MSX native raw/tag behavior remains; CPC's portable service is now
+  implemented, while its legacy raw API slots remain unavailable.
+- Identical 4808-byte SCRAPPRB.APP passes 149 checks across three owner
+  lifetimes on CPC M4/1984 and MSX Screen 6/7 in both openMSX and 1983.
+  openMSX additionally checks 146 call returns/VRAM preservation per mode and
+  106 injected parameter boundaries after the real Clock/Calculator workflow.
+  Five new clipboard contract tests, native scrap regressions and the complete
+  SDK integration pass. See `UNIFIED-NOTEPAD.md` for logs/hashes and limits.
+- Full host suite: 301 pass and one initially skipped (isolated worktree lacked
+  a sibling 1983 path). Both input tests then pass with the explicit source
+  path and a corrected test loader that no longer truncates the enlarged
+  module. Private full CPC Desktop stacking/cadence also pass: 58 checkpoints,
+  stack high-water main 144/IRQ 4/temporary 6, cursor 49.24/48.86 steps/s with
+  focused/background seconds. This is targeted regression coverage, not a
+  repeat of all delivery/storage-fault acceptance.
+- MSX module is now 2889 bytes. Its private ABI 2.0 sysinfo view moves to
+  `0x0FD0`; both still fit the unchanged reserved module region. The complete
+  private CPC Desktop also fits. The app/stack boundaries remain unchanged.
+- Checkpoint 2b adds the owned portable chooser/content panel, linked through
+  `UNIVERSAL_FILEPICK=1`; bounded I/O is now opt-in with `UNIVERSAL_DOCIO=1`.
+  Both require `UNIVERSAL_FS=1`. No new kernel/provider changes in this slice.
+  Paging, filtering, nested/empty folders, Save As naming, cancel/restart and
+  context handoff run without a modal polling loop or disk writes.
+- The identical 9834-byte `PICKPRB.APP` reads selected files into an actual
+  guarded 4096-byte buffer. Save As only selects a destination; no write/editor
+  acceptance is claimed. Data/BSS ends at `0x7E64`; this diagnostic fit is not
+  proof that the complete editor fits. Caller-owned chooser: 161 bytes;
+  model/renderer code: 2852/1581 bytes, no persistent library data.
+- Final chooser evidence in `build/notepad-84/evidence/`: openMSX
+  `chooser-msx{6,7}-painted.log` (13 input checkpoints/47 preserved returns per
+  mode), 1983 `chooser-1983-{6,7}-painted/result.json` (122/161 checks), CPC M4
+  `chooser-cpc-painted/result.json` (13 checkpoints plus exact close exposure;
+  stack main 205/IRQ 4/temporary 0). Independent status-glyph checks on 1983
+  and CPC catch model-only false passes; final screenshots were inspected.
+  APP SHA-256 `b7831fed4c063447559cd2dc4abc8cf8a70ae895a5acb46e0644da0fb536f133`.
+  All 25 focused host tests, deterministic SDK packaging and the original
+  Screen 7 FS probe (46 preserved returns) pass. This is not a full-suite or
+  storage-stress repeat of the earlier checkpoint.
+- Known CPC provider gap: dotted directory names such as `/DOCUI/DIR.EXT`
+  fail activation; filename punctuation support is also narrower than the
+  chooser's DOS 8.3 syntax. The host model handles dotted folders. Actual M4
+  failure/cleanup evidence is retained in `chooser-cpc-dotted-failure/`;
+  passing runtime fixtures use `DIR`, not `DIR.EXT`. Fix the provider before
+  full document portability acceptance; do not add editor target workarounds.
+  This was the end of checkpoint 2b; the editor integration below is newer.
+- Checkpoint 2c: `apps/unotepad` now contains the actual editor model and unified
+  window/menu/clipboard/document controller. Native `apps/notepad` is untouched.
+  Host tests cover dirty New/Close/Ctrl-Q, real chooser context handoff, Save As
+  overwrite confirmation, failed/cancelled/oversize load preservation, partial
+  save errors and cleanup retry. Two-key frame bounds, >255 display rows and
+  streaming BASIC CRLF (full 4 KiB documents without rewriting the buffer) pass.
+- Complete candidate link **does not fit**: code 18604, preamble 364, startup 34
+  = 19002 loaded bytes (end `0x8A3A`); data/BSS 9855; combined 28857 vs allowed
+  16128. `DATA_LOC=0x6000` is a rejected diagnostic layout, not runnable media.
+  Builder fails before APP packaging. No editor emulator acceptance or normal
+  image update. Do not run the overlapping IHX or relax the memory/stack gate.
+- Evidence under `build/notepad-84/evidence/`: `editor-final-relink.log`,
+  `editor-object-audit.log`, `editor-host-final.log` (two tests),
+  `editor-docio-regression.log` (three), `editor-filepick-regression.log` (four).
+  Host tests mock public storage/clipboard/drawing, not real emulators. Sanitizer
+  linking was unavailable due to missing host/container runtime libraries.
+  Retain earlier failed link logs too. The audit records final source hashes.
+- **Next dependency:** specify/review and qualify minimum owned data/copy and
+  validated secondary-code services from roadmap milestone 2, then repartition
+  the actual editor. Even removing the entire transactional load buffer cannot
+  fix the code-only overflow. No new page ABI was implemented this checkpoint.
+  Shell launch/adoption/reuse, configuration reload, CPC name parity and actual
+  editing/write/failure/repaint/input/cleanup acceptance remain after that gate.
+- **Newer checkpoint 2d:** user approved the owned-page prerequisite. First
+  data-page slice is implemented and privately qualified; next is validated
+  secondary-package loading/calling, not editor delivery. See `PORTABLE-PAGES.md`
+  for the authoritative contract, sizes, exact evidence paths and limitations.
+  Capability `portable-data-pages` (`0x02000000`), GB_PARAMS 10; SDK
+  `UNIVERSAL_DATA_PAGES=1`, 283 code + 16 data bytes. Shared policy, DOCUMENT-only
+  ownership, <=512-byte synchronous copies, primary buffers, root/nonterminating
+  owner checks and unchanged app/stack limits. Receiver `PORTABLE_DATA_PAGES=1`
+  stays opt-in; normal delivery remains unadvertised/unmodified.
+- Identical PAGEPRB.APP 5004 bytes passes Screen 6/7 in openMSX and 1983 and
+  CPC M4/1984: full pages, exhaustion, invalid bounds, three owner lifetimes and
+  exact reclamation. openMSX records 407 preserved returns per mode. Additional
+  purpose/foreign/worker/terminating/mapping rejection is instruction-fixture
+  evidence. All 29 focused tests pass; not a full-suite/storage-stress repeat.
+- MSX adds private `GBDPAGE.MOD`, 492 bytes at D100, and its loader after the
+  aligned VDP tables; including it directly in the kernel exceeded the child
+  loader bound. Screen 7 COM now 15957/16128, opt-in admission module 2931 bytes.
+  CPC private support is 2644/3072 and kernel 15505/16384. These are private
+  runtime-profile fits, not completed normal Desktop integration.
+- **Newer checkpoint 2e:** shared two-segment streaming admission/CRC/load and
+  rollback is implemented in `kernel/core/package_stream.asm` and its contract,
+  using the existing `app_admission.asm` under internal `ADMISSION_STREAMED`.
+  Neither receiver selects it. Transaction 742 bytes; streamed admission/CRC
+  1296 bytes (includes 15 mutable fixture bytes), state 22 plus 512 scratch.
+  459 actual Z80 checks at each of two fixed layouts; 31 focused tests pass.
+- Existing dual-icon admission arithmetic was wrong; corrected in the shared
+  validator without changing instruction/module sizes. The same 5524-byte
+  dual-icon PAGEPRB passes MSX Screen 6/7 openMSX/1983 and CPC M4/1984. Evidence
+  is `secondary-stream-complete.log`, `secondary-dual-icon-msx{6,7}.log`,
+  `secondary-dual-icon-1983-{6,7}/`, and `secondary-dual-icon-cpc-artifacts/`
+  in `build/notepad-84/evidence/`. Emulator runs cover the existing single-
+  segment route, NOT the new stream loader. Full contract/next steps are in
+  `PORTABLE-SECONDARY-CODE.md`; no new public call capability or editor APP.
+- Next requires measured fixed placement and persistent stream adapters:
+  MSX boot/browse and strict paths must survive; CPC's existing read-at loader
+  reopens per read and cannot satisfy single-open identity. The low boot region
+  is only a candidate for reclamation pending lifetime audit; CPC's named
+  FUTURE_STATE region is already occupied. Do not relax bounds or overwrite it.
+- Stream-only register CRC reduces maximum fixture cost from 64453420 to
+  25602091 T-states, excluding storage/IRQ. Still too long with IRQs excluded:
+  qualify safe interrupt/progress boundaries before enabling the receiver
+  path. Functional fixture acceptance is not desktop input-latency acceptance.
 - No normal media was rebuilt. Before/after SHA-256 values:
   MSX `047a19d38e05f009df8c07a22be90e226a98bc68992fc7474c34015f251ce308`;
   CPC Desktop `c1b09dbc08299b217443d2a06d66f8688ba0e7cf50be0a2a41e2a7475cf94b14`;
@@ -86,17 +238,15 @@ limitations. **Issue #82 remains open; Notepad conversion has not started.**
 
 ## Git and publication snapshot
 
-- Implementation branch: `feature/82-msx-stability`; use Git for
-  the latest checkpoint commit. [Issue #82](https://github.com/salvogendut/GEMBENCH/issues/82).
-- The user requested PR/merge for both repositories on 2026-09-09. Publication
-  includes these fixes/tests/docs, but not normal MSX/CPC media or user files.
-  RainBIOS publishes `fix/169-main-chgmod-bitmap` separately; its remaining
-  first-read discrepancy is tracked in #170 and is not a passing test.
-- Roadmap/handoff commit `9ff0825` is published on `docs/v1-roadmap`,
-  [PR #81](https://github.com/salvogendut/GEMBENCH/pull/81). Its commit is also
-  included in this feature branch, so the fix PR carries the pending roadmap
-  documentation. Recheck GitHub for publication state; use the ordinary PR
-  merge path rather than pushing directly to protected main.
+- Current branch: `feature/84-unified-notepad`, based on `1367593`.
+  The user requested publication of this checkpoint on 2026-09-09. The save
+  commit is titled `Save unified Notepad foundations and migration handoff`;
+  verify its hash and remote tracking with Git before resuming. Issue #84 stays
+  open; no PR/merge or normal-distribution replacement is requested.
+- GEMBENCH [PR #83](https://github.com/salvogendut/GEMBENCH/pull/83) and
+  roadmap [PR #81](https://github.com/salvogendut/GEMBENCH/pull/81) are merged.
+  Sibling RainBIOS PR #171 and 1983 PR #172 are merged separately. Preserve
+  their worktrees/evidence; do not stage sibling diagnostic/untracked files.
 - Settings integration commit: `9c5a7514bdcc53b6d94e86a6af17997b7fde7510`.
 - [PR #80](https://github.com/salvogendut/GEMBENCH/pull/80) is merged;
   [issue #79](https://github.com/salvogendut/GEMBENCH/issues/79) is closed.
@@ -209,17 +359,18 @@ and the earlier roadmap. Eight planned milestones:
 8. Close the migration/parity ledger and SDK/release-artifact/manual acceptance
    gates for both distributions.
 
-**Next: resolve the baseline's open input/firmware findings, then unified
-Notepad.** Audit actual dependencies
-and linked memory first, then migrate the real application and needed services.
-Start the application acceptance ledger, establish MSX behavior/stability checks,
-migrate through the universal MSX path, then test identical APP bytes on CPC
-with real document and failure workflows. Missing services on either target
-are in scope.
-The authorized first checkpoint established the baseline and inventory using
-openMSX and 1983 on disposable MSX media; its stability gate is not yet closed.
-Continue on issue #82's feature branch. Notepad conversion follows that gate;
-CPC splash restoration remains milestone 4.
+**Next: bind the shared streamed loader to measured MSX/CPC layouts and single-
+open file adapters, then implement the sealed root call/return gate for #84.**
+Data-page service is privately qualified; the streaming core has instruction-
+fixture acceptance only. The full editor still fails its code-size gate.
+Follow `PORTABLE-SECONDARY-CODE.md`, `PORTABLE-PAGES.md` and `UNIFIED-NOTEPAD.md`:
+qualify both receivers, then repartition
+the editor and finish portable document handoff/configuration. Preserve 4 KiB
+capacity and the reserved stack. Close the CPC provider path-name gap before full
+document acceptance. Reuse shared policy; review missing service contracts instead
+of inventing target-local workarounds. Qualify MSX Screen 6/7 using openMSX and
+1983, then identical APP bytes on CPC/M4, including document/failure/cleanup
+workflows before replacing native delivery. CPC splash remains milestone 4.
 
 ## Tools and testing workflow
 
@@ -243,5 +394,6 @@ CPC splash restoration remains milestone 4.
 - Large artifacts now go under `build/`; /tmp previously hit a per-user quota.
   For host tests, `TMPDIR="$PWD/build/settings-check-tmp"` was used.
 - Do not delete old worktrees, test evidence, user media or recordings as part
-  of resuming. No cleanup, new issue, commit, push or release is authorized by
-  saving this note alone.
+  of resuming. The current checkpoint's commit/push is explicitly authorized;
+  this note grants no standing authority for later publication, cleanup, new
+  issues, PRs, merges or releases.

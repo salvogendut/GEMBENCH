@@ -86,6 +86,7 @@ msi_packing     ld    (MSX_SYS_PACKING),a
                 ldir
                 xor   a
                 ld    (MSX_SYSINFO_LEGACY+45),a
+                ld    (MSX_SYSINFO_LEGACY+33),a ; no caller-parameter clipboard in 2.0 view
                 ld    a,GB_CAPS_HIGH_MSX_V6 & #7F
                 ld    (MSX_SYSINFO_LEGACY+32),a
 

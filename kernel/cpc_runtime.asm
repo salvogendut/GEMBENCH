@@ -1,6 +1,7 @@
 ; #77 unified M4 runtime composition. Same core, no diagnostic WM/callbacks.
 ; Experimental launcher only, NOT the Desktop distribution or all SDK services.
 CPC_RUNTIME equ 1
+ADMISSION_TYPED_CLIPBOARD equ 1
 CPC_DRAWING equ 1
 CPC_WM equ 1
 CPC_LIFETIME equ 1

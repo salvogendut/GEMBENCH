@@ -6,13 +6,21 @@ GBAP4_ICON_ENTRY_SIZE   equ 8
 GBAP4_ICON_MODE1_SIZE   equ 256
 GBAP4_ICON_MODE7_SIZE   equ 512
 
-; gbap4_validate_loaded: CF = admitted, NC = reject.
+; Primary-only: CF = admitted, NC = reject. The streamed entry has a distinct
+; name: its CF validates structure only; package_load must finish CRC/close.
+                ifdef ADMISSION_STREAMED
+gbap4_validate_streamed_primary
+                ; The stream transaction has bounded and loaded only primary.
+                ; Its separate total is used for package ranges/CRC below.
+                ld    hl,(PKG_PRIMARY_SIZE)
+                else
 gbap4_validate_loaded
                 ld    hl,(fs_ent_size+2)
                 ld    a,h
                 or    l
                 jp    nz,gb4_reject            ; MSX primary image is 16-bit bounded
                 ld    hl,(fs_ent_size)
+                endif
                 ld    (gb4_file_size),hl
 
                 ; Preserve the legacy path unless the complete executable magic
@@ -134,13 +142,21 @@ gb4_icon_count_ok
                 cp    #03
                 jp    nz,gb4_reject
                 ld    a,(ix+15)
+                ifdef PORTABLE_DATA_PAGES
+                and   #FC
+                else
+                ifdef ADMISSION_TYPED_CLIPBOARD
+                and   #FE
+                else
                 or    a
+                endif
+                endif
                 jp    nz,gb4_reject
                 ld    a,(ix+17)
                 and   #80
                 jp    nz,gb4_reject
                 ld    a,(ix+19)
-                or    a
+                and   #FC                      ; assigned clipboard/data-page bits
                 jp    nz,gb4_reject
                 ld    a,(ix+12)
                 and   (ix+16)
@@ -168,8 +184,13 @@ gb4_icon_count_ok
 
                 ; The already allocated primary counts toward minimum_pages.
                 ld    a,(ix+32)
+                ifdef ADMISSION_STREAMED
+                cp    2
+                jp    c,gb4_reject
+                else
                 or    a
                 jp    z,gb4_reject
+                endif
                 ld    b,a
                 ld    a,(ix+33)
                 cp    b
@@ -179,7 +200,11 @@ gb4_icon_count_ok
                 cp    b
                 jp    c,gb4_reject
                 ld    a,(ix+34)
+                ifdef ADMISSION_STREAMED
+                cp    2                        ; bounded common two-page profile
+                else
                 cp    1                        ; Gate 2: primary-only transaction
+                endif
                 jp    nz,gb4_reject
                 ld    a,(ix+35)
                 cp    GBAP4_SEGMENT_SIZE
@@ -196,7 +221,11 @@ gb4_icon_count_ok
                 sbc   hl,de
                 jp    nz,gb4_reject
                 ld    hl,(gb4_manifest_offset)
+                ifdef ADMISSION_STREAMED
+                ld    de,GBAP4_MANIFEST_SIZE+2*GBAP4_SEGMENT_SIZE
+                else
                 ld    de,GBAP4_MANIFEST_SIZE+GBAP4_SEGMENT_SIZE
+                endif
                 add   hl,de
                 ld    (gb4_resource_offset),hl
 
@@ -233,7 +262,11 @@ gb4_icon_count_ok
                 jp    nc,gb4_reject
                 ld    l,(ix+52)                ; package size is a 32-bit field
                 ld    h,(ix+53)
+                ifdef ADMISSION_STREAMED
+                ld    de,(PKG_TOTAL_SIZE)
+                else
                 ld    de,(gb4_file_size)
+                endif
                 or    a
                 sbc   hl,de
                 jp    nz,gb4_reject
@@ -250,8 +283,17 @@ gb4_icon_count_ok
                 jp    nc,gb4_reject
                 call  gb4_validate_icons
                 jp    nc,gb4_reject
+                ifdef ADMISSION_STREAMED
+                call  gb4_validate_stream_capabilities
+                jp    nc,gb4_reject
+                call  gb4_validate_secondary_segment
+                jp    nc,gb4_reject
+                ; The transaction must still stream secondary, check the full
+                ; CRC and close storage. Structural success is not admission.
+                else
                 call  gb4_validate_crc
                 jp    nc,gb4_reject
+                endif
 gb4_accept
                 scf
                 ret
@@ -438,8 +480,8 @@ gb4_validate_icons
                 or    a
                 sbc   hl,de
                 jp    nz,gb4_helper_bad
-                ex    de,hl                     ; DE = second resource offset
-                ld    hl,GBAP4_ICON_MODE7_SIZE
+                add   hl,de                     ; HL was zero: recover verified offset
+                ld    de,GBAP4_ICON_MODE7_SIZE
                 add   hl,de
 gb4_icons_total
                 ld    de,(APP_BASE+10)
@@ -453,6 +495,9 @@ gb4_helper_bad
                 or    a
                 ret
 
+                ifdef ADMISSION_STREAMED
+                include "package_secondary_descriptor.asm"
+                else
 ; CRC-32/ISO-HDLC over the complete loaded package. The four stored CRC bytes
 ; are temporarily zeroed, then restored before the result is compared.
 gb4_validate_crc
@@ -497,6 +542,7 @@ gb4_crc_compare
                 djnz  gb4_crc_compare
                 scf
                 ret
+                endif
 
 gb4_crc32_loaded
                 ld    hl,gb4_crc_value
@@ -506,6 +552,9 @@ gb4_crc32_loaded
                 ldir
                 ld    hl,APP_BASE
                 ld    bc,(gb4_file_size)
+                ifdef ADMISSION_STREAMED
+                include "package_crc.asm"
+                else
 gb4_crc_byte
                 ld    a,b
                 or    c
@@ -544,6 +593,7 @@ gb4_crc_next_bit
                 pop   hl
                 dec   bc
                 jr    gb4_crc_byte
+                endif
 gb4_crc_finish
                 ld    hl,gb4_crc_value
                 ld    b,4
@@ -556,6 +606,7 @@ gb4_crc_complement
                 ret
 
 ; Logical right shift of the little-endian 32-bit CRC cell. Returns HL at byte 0.
+                ifndef ADMISSION_STREAMED
 gb4_crc_shift
                 ld    hl,gb4_crc_value+3
                 srl   (hl)
@@ -566,5 +617,6 @@ gb4_crc_shift
                 dec   hl
                 rr    (hl)
                 ret
+                endif
 
                 ADMISSION_STORAGE

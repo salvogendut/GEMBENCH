@@ -133,8 +133,12 @@ gbap4_gate_load
                 ld    a,(MSX_GBAP4_GATE+7)
                 cp    2
                 jr    nz,gbap4_load_bad
+                ifdef PORTABLE_DATA_PAGES
+                jp    data_pages_load
+                else
                 scf
                 ret
+                endif
 gbap4_load_bad  xor a
                 ret
 name_gbap4_gate db    "GBAPV4  MOD"

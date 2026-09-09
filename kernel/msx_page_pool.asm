@@ -238,6 +238,9 @@ kpg_no_owner    ld    a,GB_PAGE_ERR_OWNER
 
                 endif
                 ifdef GB_DEFER_LATE
+                ifdef PORTABLE_DATA_PAGES
+                include "msx_data_pages_boot.asm"
+                endif
                 include "msx_deferred.inc"
                 include "core/deferred_api.asm"
                 include "core/deferred_queue.asm"

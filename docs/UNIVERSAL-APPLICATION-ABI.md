@@ -316,6 +316,84 @@ The first cross-target proof is [CPC restart 3D-M](CPC-RESTART-STEP3D-M.md):
 one unchanged `FSPROBE.APP` on CPC/M4 and MSX2 Screen 6/7. This is not a claim
 of complete filesystem, Desktop, physical-hardware or PCW parity.
 
+## Typed clipboard binding (optional ABI 2.1 service)
+
+Issue #84 adds `typed-clipboard` (`0x01000000`) and `GB_PARAMS` operation 9,
+version 1. ABI 2.1, the 16-byte parameter record, v6/48 sysinfo, inherited
+slots and the primary/stack limits are unchanged. Packages requiring this
+service must name the capability; old kernels reject them before entry.
+The authority is `typed_clipboard` in `abi/geobench-v2.json`.
+
+The parameter data begins with two little-endian words: header pointer and
+header size (8). The caller-owned header is:
+
+| Offset | Size | Input / output |
+| --- | --- | --- |
+| 0 | 1 | Action: query 0, set 1, get 2, clear 3 |
+| 1 | 1 | Output `GB_SCRAP_*` status |
+| 2 | 1 | Set/expected type in; normalized stored type out |
+| 3 | 1 | Reserved, ignored |
+| 4 | 2 | Payload pointer, ignored for query/clear or zero effective length |
+| 6 | 2 | Set length/get capacity in; stored/copied count out |
+
+Both header and nonempty effective payload span must lie in the caller's
+primary `[0x4000,0x7F00)` allocation; payload and header must not overlap.
+The outer descriptor is already copied, so it may alias either span, as with
+portable FS. No pointer survives the call. Root-only serialization covers
+validation, payload copy and metadata publication. Workers fail before touching
+clipboard storage or the caller header. The service never renders or maps pages.
+
+Transport status remains `GB_PARAMS_*` in A, with E=0. A malformed header,
+size/action, or invalid caller context leaves the caller header untouched.
+After a successful transport the header holds the separate scrap result:
+OK 0, truncated 1, argument 2, type 3, mismatch 4, state 5. Scrap errors leave
+the old payload untouched and return untyped/zero count; invalid GET copies
+nothing. SET accepts types 1–4, explicitly truncates at 510 bytes, and clears
+on zero length. GET accepts types 0–4 or ANY (255), copies at most capacity,
+and reports truncation. Empty/unknown-tag content is untyped; corrupt stored
+length is a state error. Clipboard content survives owner switches/teardown
+and resets on cold boot. This is session clipboard state, not disk persistence.
+
+`UNIVERSAL_SCRAP=1` links the existing `gbscrap.h` interface to this service,
+requiring `typed-clipboard` in the manifest. The binding costs **359 code +
+8 data bytes** with the project SDCC flags, plus the existing parameter bridge;
+there is no extra 510-byte app buffer. Payloads must be primary-page objects;
+metadata/count output variables may be on the stack because the SDK copies
+them after return. Wrappers are non-reentrant and root-only. Transport failures
+map to argument/state or the appended SDK unsupported/context statuses 6/7;
+`gb_scrap_type()` returns untyped on failure. Clear retains its void signature.
+
+Both receivers include `kernel/core/parameters_clipboard.asm`. MSX shares the
+existing raw clipboard and private tag, so old raw writes still invalidate
+typed metadata. CPC supplies its reserved clipboard storage and cold-boot tag
+initialization; its unqualified legacy raw API slots remain unavailable.
+The MSX module is 2889 bytes; its private legacy sysinfo view moves to `0x0FD0`,
+still within the existing `0x0400..0x0FFF` reservation. Callers use the returned
+sysinfo pointer, not a published fixed address. That legacy view omits the
+new capability as well as caller-parameters.
+
+The same 4808-byte `SCRAPPRB.APP` passes three owner lifetimes on CPC/M4 and
+MSX Screen 6/7 in openMSX and 1983; the
+[Notepad work record](UNIFIED-NOTEPAD.md) holds hashes, evidence and limits.
+This qualifies the service diagnostic, not Notepad migration or PCW support.
+
+## Owned data-page binding (opt-in ABI 2.1 service)
+
+Issue #84 adds optional `portable-data-pages` (`0x02000000`) and GB_PARAMS
+operation 10. `gbdatapage.h` with `UNIVERSAL_DATA_PAGES=1` exposes opaque
+generation-tagged allocation/release and <=512-byte read/write calls. Only
+owned DOCUMENT-purpose pages are accepted, from a live primary root caller;
+code pages are not writable through this service. The shared owner allocator
+and teardown remain authoritative. No app-visible bank number or mapping
+window is introduced.
+
+See [portable pages](PORTABLE-PAGES.md) and `portable_data_pages` in the ABI
+JSON for the 16-byte header, statuses, span/overlap validation and ownership
+contract. The same diagnostic APP passes private MSX Screen 6/7 in openMSX/1983
+and CPC M4/1984. Receiver builds remain opt-in with `PORTABLE_DATA_PAGES=1`;
+default delivery keeps this capability clear and rejects packages requiring it.
+Validated executable-secondary loading/calling is **not** part of this slice.
+
 ## GBAP v4 package
 
 GBAP v4 preserves the initial three-byte `JP`, `GBAP` magic, 16-byte outer

@@ -61,7 +61,9 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None, clipboard=False, chooser=False, data_pages=False):
+    if (clipboard or chooser or data_pages) and (desktop or desktop_delivery or filemgr or filemgr_case or filemgr_scenario or settings_case):
+        raise ValueError('portable service probes use the private diagnostic launcher only')
     settings=settings_case is not None
     if settings and desktop_delivery and settings_case not in (
             'normal','mixed','reboot','missing','short','corrupt','unbound','edit-missing','contexts','stress'):
@@ -98,13 +100,23 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                     raise AssertionError('File Manager reboot seed differs: '+name)
     else:
         variant='settings-contract' if settings else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
-        media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr,settings=settings)
+        media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr,settings=settings,data_pages=data_pages)
         manifest=json.loads((media/'manifest.json').read_text())
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifact_root=ROOT/'build/settings-runtime' if settings else ROOT/'build/cpc-delivery-runtime' if desktop_delivery else None
     if artifact_root is not None:artifact_root.mkdir(parents=True,exist_ok=True)
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-',dir=artifact_root))
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(seed_image or manifest['image']).read_bytes())
+    if clipboard:
+        # Alias on the disposable image only; F5 follows the normal app loader.
+        subprocess.run(['mcopy','-o','-i',str(image)+'@@16384',
+                        str(media/'CARD/GBENCH/SCRAPPRB.APP'),'::/GBENCH/FSPROBE.APP'],check=True)
+    if chooser:
+        from cpc_runtime_filepick import prepare
+        prepare(ROOT,image,artifacts)
+    if data_pages:
+        from cpc_runtime_pages import prepare
+        prepare(ROOT,image)
     filemgr_kernel=None
     if settings:
         from cpc_runtime_settings import prepare
@@ -376,6 +388,48 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
             (artifacts/'result.json').write_text(json.dumps(result,indent=2)+'\n')
             print('PASS unchanged Calculator/shared accessory policy '+json.dumps(result),flush=True)
             return artifacts
+        if clipboard:
+            app=(media/'CARD/GBENCH/SCRAPPRB.APP').read_bytes()
+            if subprocess.check_output(['mtype','-i',str(image)+'@@16384','::/GBENCH/FSPROBE.APP'])!=app:
+                raise AssertionError('clipboard diagnostic alias differs')
+            at=next(int(line.split()[2],16) for line in
+                    (ROOT/'build/universal-obj/scrapprobe/app.noi').read_text().splitlines()
+                    if line.startswith('DEF _scrapprobe_state '))
+            identities=[];results=[]
+            for cycle in range(3):
+                key('F5');ram=state('clipboard-'+str(cycle))
+                entry=sym['wm_table']+50
+                if ram[sym['wm_nwin']]!=3 or ram[sym['wm_focus']]!=2:
+                    raise AssertionError('clipboard APP did not open/focus')
+                appbase=physical(ram[entry])
+                result=list(ram[appbase+at-0x4000:appbase+at-0x4000+8])
+                if result[0]!=85 or result[1]!=49+bool(cycle) or result[2]!=bool(cycle):
+                    raise AssertionError(f'clipboard APP cycle {cycle} failed: {result}')
+                identity=(ram[sym['core_win_owner']+2],ram[sym['core_win_owner_gen']+2])
+                if identity in identities: raise AssertionError('clipboard relaunch reused owner generation')
+                identities.append(identity);results.append(result)
+                key('ESCAPE');ram=checked('clipboard-close-'+str(cycle))
+                if ram[sym['cpc_clipboard_base']:sym['cpc_clipboard_base']+8]!=b'\x06\x00SHARED' or ram[sym['cpc_scrap_type']]!=1:
+                    raise AssertionError('clipboard did not survive owner teardown')
+            report=dict(results=results,identities=identities,checkpoints=checks,
+                        sections=manifest['sections'],app_sha256=hashlib.sha256(app).hexdigest(),
+                        emulator_sha256=hashlib.sha256(emulator.read_bytes()).hexdigest())
+            (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+            print('PASS portable clipboard '+json.dumps(report),flush=True)
+            return artifacts
+        if data_pages:
+            from cpc_runtime_pages import exercise
+            report=exercise(ROOT,work,sym,image,key,state,checked)
+            (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+            print('PASS portable data pages '+json.dumps(report),flush=True)
+            return artifacts
+        if chooser:
+            from cpc_runtime_filepick import exercise
+            report=exercise(ROOT,work,sym,artifacts,image,send,wait,read,key,move)
+            checked('chooser-close-exposure')
+            (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+            print('PASS portable chooser '+json.dumps(report),flush=True)
+            return artifacts
         if filesystem:
             key('F5')
             ram=state('portable-filesystem')
@@ -497,6 +551,9 @@ if __name__=='__main__':
     parser.add_argument('--skip-build',action='store_true')
     mode=parser.add_mutually_exclusive_group()
     mode.add_argument('--filesystem',action='store_true')
+    mode.add_argument('--clipboard',action='store_true')
+    mode.add_argument('--chooser',action='store_true')
+    mode.add_argument('--data-pages',action='store_true')
     mode.add_argument('--menus',action='store_true')
     mode.add_argument('--accessories',action='store_true')
     mode.add_argument('--clock',action='store_true')

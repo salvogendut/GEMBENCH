@@ -22,6 +22,15 @@ PARAM_DRAW_TEXT equ cpc_draw_text
 PARAM_FS_CALL equ cpc_fsctx_call
 PARAM_FS_REQUEST equ #2400
 PARAM_FS_TRANSFER equ #1500
+PARAM_SCRAP_LENGTH equ CPC_CLIPBOARD_BASE
+PARAM_SCRAP_DATA equ CPC_CLIPBOARD_BASE+2
+PARAM_SCRAP_TYPE equ CPC_SCRAP_TYPE
+                ifdef PORTABLE_DATA_PAGES
+PARAM_DATA_PAGES equ 1
+                macro PARAM_DATA_CALL
+                call cpc_data_pages
+                mend
+                endif
                 endif
                 macro PARAM_ENTER
                 ifdef CPC_RUNTIME
