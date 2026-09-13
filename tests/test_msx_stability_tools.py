@@ -18,6 +18,34 @@ def load(name):
 
 
 class StabilityToolsTests(unittest.TestCase):
+    def test_pointer_target_is_rechecked_after_releasing_movement(self):
+        driver_type = load('test_msx_stability_1983').Driver
+
+        class PointerFixture(driver_type):
+            def __init__(self):
+                self.frame = 0
+                self.layout = {'POLL_MX': 0x1306}
+                self.position = [12, 14]
+                self.keys = []
+
+            def read(self, address, count=1):
+                return self.position[:]
+
+            def key(self, row=8, mask=0):
+                self.keys.append(mask)
+
+            def frames(self, count):
+                self.frame += count
+                # Last sampled movement is consumed during a popup repaint,
+                # after key release; the original target would click row two.
+                self.position[1] = 22 if self.frame == 8 else 14
+
+        driver = PointerFixture()
+        driver.move(12, 14)
+        self.assertEqual(driver.position, [12, 14])
+        self.assertEqual(driver.keys, [0, 32, 0])
+        self.assertEqual(driver.frame, 17)
+
     def test_layout_uses_source_constants(self):
         layout = load("test_msx_stability_1983").constants(ROOT/"kernel/lowram.inc")
         self.assertEqual(layout["POLL_MX"], 0x1306)

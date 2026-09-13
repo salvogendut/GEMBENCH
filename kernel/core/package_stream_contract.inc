@@ -6,7 +6,16 @@
 ; PKG_READ(HL=fixed buffer, BC<=512) -> A=0 success, BC=actual; no overrun.
 ; PKG_CLOSE -> A=0 success. Always releases the private stream, even on error.
 ; Providers preserve IX/IY and return the original bank, IFF and lock.
+; PKG_ALLOW_IRQ=1 is an explicit provider opt-in: under the transaction lock,
+; permit fixed-state time/input IRQs during reads, validation, CRC and copies.
+; The provider must prove no application/worker/callback can run or touch this
+; transaction. Only mapping transitions exclude IRQs. Caller IFF is restored.
+; Default remains the serialized fixture profile; never enable it implicitly.
 ; Uses existing core owner/page routines plus streamed app_admission.asm.
+                ifndef PKG_ALLOW_IRQ
+PKG_ALLOW_IRQ equ 0
+                endif
+                assert (PKG_ALLOW_IRQ==0)|(PKG_ALLOW_IRQ==1),"package IRQ profile must be boolean"
 PKG_BUSY equ PKG_STATE
 PKG_STATUS equ PKG_STATE+1
 PKG_OWNER equ PKG_STATE+2

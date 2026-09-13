@@ -193,3 +193,6 @@ button_irq_done
                 ret
 button_irq_end
                 assert MSX_BUTTON_IRQ+button_irq_end-button_irq_template<=MSX_BUTTON_LIMIT,"button capture exceeds private page-3 slot"
+                ifdef PORTABLE_PACKAGE_STREAM
+                assert MSX_BUTTON_IRQ+button_irq_end-button_irq_template<=MSX_PACKAGE_IO_BASE,"button IRQ overlaps package helpers"
+                endif

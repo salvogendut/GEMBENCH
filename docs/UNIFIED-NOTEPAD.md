@@ -14,6 +14,19 @@ Checkpoint 2d qualifies the portable owned-data-page slice on private MSX/CPC
 builds. Checkpoint 2e now qualifies the shared streaming loader in instruction
 fixtures; receiver integration and validated secondary calling are still required.
 See [portable pages](PORTABLE-PAGES.md) for its contract and evidence.
+**2026-09-13 checkpoint 2f** qualifies the optional stream IRQ profile and MSX
+single-open leaves with instruction faults and a standalone real-Nextor run in
+openMSX/1983. Normal Desktop launch integration and secondary calls are still
+pending. **Checkpoint 2g** now fits and boots the dual-admission/fixed-module
+composition in private Screen 6/7 receivers, with ordinary single-segment app
+lifecycles passing in openMSX/1983 and 45 focused tests passing.
+**Checkpoint 2h** now connects normal streamed Desktop launch on private MSX
+Screen 6/7 receivers: successful two-bank launches pass in openMSX/1983, and
+real corrupted/truncated/trailing files reject cleanly in openMSX. Pointer-only
+loading progress and ordinary Clock/Calculator compatibility are checked.
+The Screen 7 child now has **16 bytes spare**. Sealed secondary calls and
+the editor partition/runtime are next within the same sprint.
+See [the current integration checkpoint](PORTABLE-SECONDARY-CODE.md#checkpoint-2h--normal-msx-streamed-launch-2026-09-13).
 Notepad remains the native application in the normal MSX distribution and is
 not yet delivered on CPC. No unified Notepad APP or emulator acceptance is
 claimed by this checkpoint. Normal MSX/CPC images are unchanged.
@@ -24,6 +37,73 @@ foundations and updating working memory before resuming. The
 prioritize a first testable MSX editor, followed by full identical-binary CPC
 qualification; this is not a reduced feature scope or a migration-complete
 claim. [SESSION-HANDOFF.md](SESSION-HANDOFF.md) records the exact restart point.
+
+## Consolidated sprint — runnable MSX Notepad
+
+Agreed 2026-09-13: combine the remaining launch integration, secondary-call
+service and editor integration into **one outcome-based sprint** on issue #84
+and `feature/84-unified-notepad`. This replaces their treatment as separate
+delivery steps; it does not remove their dependency order or safety checks.
+Checkpoint 2g was the starting point, not a runnable-editor acceptance record.
+Execution has started: checkpoint 2h completes the first internal MSX loader
+task in bounded qualification. The secondary-call and editor tasks remain;
+this is not an estimate that one third of the total effort has been spent.
+
+**Sprint finish line:** a reproducibly built unified Notepad APP in a private
+MSX image, launched through the real Desktop, that the user can manually test
+for opening, editing and saving documents. Preserve the existing editor's
+supported behavior and 4096-byte editable capacity. Provide the image path,
+exact build/run instructions, test evidence and any known limitations.
+
+### Internal execution order
+
+1. **Connect the loader — implemented/qualified on private MSX (2h).** Complete single-open path resolution and normal
+   pending-owner launch routing, retaining native/primary-only compatibility.
+   Exercise successful two-segment loading and rejection/rollback through the
+   receiver, not only the existing standalone fixtures. Measure Screen 6/7
+   memory and root input responsiveness before adding the call service.
+2. **Enable validated secondary calls.** Bind immutable owner/page generations
+   and the validated entry; implement bounded copied arguments/results, safe
+   bank/stack/interrupt restoration and teardown. Add the restricted SDK and
+   package/audit support. Validate both return paths and stale/invalid requests
+   before the editor relies on this service. Retain the computation-only
+   secondary contract; filesystem and UI work stay in primary code.
+3. **Bring up the actual editor and test it.** Partition the existing model,
+   controller and state; pass the full linked-memory gate; complete document/
+   Desktop handoff and configuration behavior. Build one portable APP and
+   exercise it in private MSX Screen 6/7 images with openMSX and 1983.
+
+These are internal tasks within the sprint, not three further sprint proposals
+or routine approval stops. Reuse the qualified clipboard, chooser, page and
+stream foundations. Necessary fixes and regression tests belong to this sprint;
+unrelated architectural expansion does not. Report progress toward the editor
+finish line, without counting a diagnostic module as a delivered editor.
+
+### Minimum exit checks
+
+- Normal Desktop launch produces a focused, correctly framed/menu-connected
+  editor; document-open handoff works without debugger-injected calls.
+- Open, edit, save and reopen real files with exact byte readback, including
+  the full 4096-byte boundary; oversized input is rejected safely.
+- Selection/cut/copy/paste and typed clipboard exchange work between editor
+  instances. Dirty Save/Discard/Cancel and failed-load/save recovery preserve
+  the document when the operation cannot complete.
+- Focus changes, overlap, movement, repaint, close and reopen remain usable;
+  bounded MSX checks cover pointer responsiveness, owner/page cleanup and
+  bank/stack/interrupt restoration. Existing Clock/Calculator launches retain
+  their relevant regressions.
+- Record results in both openMSX and 1983 for Screen 6/7. Instruction tests
+  complement these runs; passing loader fixtures alone cannot finish the sprint.
+
+**Constraints and follow-up:** keep shared portable policy and relevant CPC
+regressions, but full CPC streaming/editor qualification and replacement of the
+normal distributions remain the next delivery stage. Native Notepad and normal
+QA images stay intact. Screen 7 currently has only 16 bytes of child-image
+headroom: refactor or relocate within the measured layout, never relax the
+application/stack limits or reduce document capacity to declare completion.
+One sprint is a consolidated deliverable, not a promise of one conversation
+turn, a fixed duration or a fixed token cost. No commit, push or merge is implied
+by this planning update.
 
 ## Ordered delivery
 

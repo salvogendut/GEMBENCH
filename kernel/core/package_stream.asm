@@ -64,6 +64,9 @@ pkg_dispatch
                 ld (PKG_PAGE),hl
                 ld (PKG_ENTRY),hl
                 ld (PKG_SECONDARY_SIZE),hl
+                if PKG_ALLOW_IRQ
+                ei                            ; fixed-state IRQs, never root re-entry
+                endif
                 ld bc,256
                 call pkg_read_exact
                 jp nz,pkg_io
@@ -153,14 +156,18 @@ pkg_total_bound
                 jp nc,pkg_nomem
                 ld (PKG_PAGE),de
                 ld (PKG_NATIVE),a
-                call PKG_MAP
+                call pkg_map_locked
+                ifdef PKG_CLEAR_SECONDARY
+                call PKG_CLEAR_SECONDARY        ; fixed provider, full-page zero, bounded progress
+                else
                 ld hl,APP_BASE
                 ld de,APP_BASE+1
                 ld bc,#3FFF
                 ld (hl),0
                 ldir
+                endif
                 ld a,(PKG_BACK)
-                call PKG_MAP
+                call pkg_map_locked
                 ld hl,(PKG_SECONDARY_SIZE)
                 ld (PKG_REMAIN),hl
                 ld hl,APP_BASE
@@ -188,11 +195,11 @@ pkg_crc_check
                 inc de
                 djnz pkg_crc_check
                 ld a,(PKG_NATIVE)
-                call PKG_MAP
+                call pkg_map_locked
                 call pkg_secondary_entry
                 push af
                 ld a,(PKG_BACK)
-                call PKG_MAP
+                call pkg_map_locked
                 pop af
                 jp nc,pkg_format
                 call PKG_CLOSE
@@ -216,7 +223,7 @@ pkg_abort
 pkg_abort_closed
                 ld (PKG_STATUS),a
                 ld a,(PKG_BACK)
-                call PKG_MAP
+                call pkg_map_locked
                 ld hl,(PKG_PAGE)
                 ld a,h
                 or l
@@ -275,10 +282,10 @@ pkg_secondary_stream
                 ld bc,(PKG_COUNT)
                 call gb4_crc_byte               ; same CRC update as primary
                 ld a,(PKG_NATIVE)
-                call PKG_MAP
+                call pkg_map_locked
                 call pkg_copy
                 ld a,(PKG_BACK)
-                call PKG_MAP
+                call pkg_map_locked
                 jr pkg_secondary_stream
 pkg_copy
                 ld hl,(PKG_REMAIN)
@@ -349,5 +356,13 @@ pkg_secondary_entry
                 ret
 pkg_entry_bad   or a
                 ret
+                if PKG_ALLOW_IRQ
+pkg_map_locked  di
+                call PKG_MAP                  ; hardware + shadow are one transition
+                ei
+                ret
+                else
+pkg_map_locked equ PKG_MAP                     ; preserve the original fixture image
+                endif
 package_load_end
                 assert ((package_load>=0)&(package_load_end<=#4000))|((package_load>=#8000)&(package_load_end<=#10000)),"package transaction must execute in fixed memory"

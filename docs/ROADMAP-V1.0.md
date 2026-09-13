@@ -192,10 +192,45 @@ passes private MSX Screen 6/7 and CPC/M4 qualification with identical APP bytes.
 The shared [secondary streaming core](PORTABLE-SECONDARY-CODE.md) now passes
 instruction-level fault/rollback tests, but receiver stream adapters, full
 launch qualification and the sealed call gate remain before editor runtime testing.
+On 2026-09-13, the opt-in IRQ profile and MSX single-open provider pass a
+standalone real-Nextor diagnostic in openMSX and 1983 (checkpoint 2f). This is
+progress within remaining package 1, not its completion. Checkpoint 2g now
+fits and boots dual admission plus fixed modules in private MSX Screen 6/7
+receivers, retaining ordinary app lifecycles in openMSX/1983. The 45 focused
+tests pass; no application/stack boundary changed (that checkpoint had 45 bytes
+spare in Screen 7). **Checkpoint 2h now connects normal single-open streamed
+Desktop launch** on private MSX Screen 6/7: successful two-bank lifetimes and
+pointer progress pass in openMSX/1983; bad CRC, truncated and trailing files
+reject with exact rollback in openMSX. Ordinary primary-only and Clock/Calculator
+regressions also pass. Screen 7 now has 16 bytes spare. **Next is the sealed
+secondary-call service/restricted SDK, then the actual editor partition/runtime**
+within the same sprint. CPC streaming remains deferred. See the secondary-code
+record for evidence and the distinction between loading and executing a bank.
 The delivered editor is still native; no normal
 image has been replaced and no unified Notepad runtime acceptance is claimed.
 
+#### Consolidated sprint — runnable MSX Notepad, 2026-09-13
+
+The user consolidated the three remaining implementation packages into **one
+sprint**, with a manually testable unified Notepad on MSX as its finish line:
+normal streamed Desktop loading → validated secondary calls → actual editor
+integration and bounded Screen 6/7 testing in openMSX and 1983. These remain
+ordered internal tasks, not separate delivery steps or routine approval gates.
+
+The [sprint plan and exit checks](UNIFIED-NOTEPAD.md#consolidated-sprint--runnable-msx-notepad)
+preserve the full 4 KiB editor, recovery behavior, shared ABI and memory limits.
+Deliver a private image and reproducible manual-test instructions; normal media
+stay unchanged. Full MSX/CPC distribution qualification and identical-APP CPC
+delivery follow this sprint, with relevant shared-code regressions retained
+throughout. This is scope consolidation, not an estimate of one session or a
+claim of completed editor delivery. Execution has started; checkpoint 2h closes
+the first internal MSX loader task in bounded tests, not the whole sprint.
+
 #### Saved checkpoint and remaining delivery path — 2026-09-09
+
+Historical package breakdown; the September 13 sprint above now groups packages
+1–3 and their minimum MSX runtime checks into one deliverable. Package 4's full
+cross-platform qualification/delivery remains the follow-up.
 
 The user requested saving, committing and pushing the current #84 checkpoint
 before further implementation because the remaining weekly token allowance is

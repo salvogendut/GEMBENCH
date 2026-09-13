@@ -238,8 +238,23 @@ kpg_no_owner    ld    a,GB_PAGE_ERR_OWNER
 
                 endif
                 ifdef GB_DEFER_LATE
+                ifdef PORTABLE_PACKAGE_STREAM
+                include "msx_package_boot.asm"
+msx_package_route_resume equ $
+                org MSX_PACKAGE_ROUTE_BASE
+                jp msx_app_load
+                db "GBWM",#30|MSX_SCREEN_MODE  ; resident service addresses are mode-specific
+                jp msx_app_progress
+                jp msx_app_clear_secondary
+                include "msx_app_launch.asm"
+MSX_PACKAGE_ROUTE_SIZE equ $-MSX_PACKAGE_ROUTE_BASE
+                assert $<=MSX_PACKAGE_ROUTE_LIMIT,"package routing exceeds MSX directory tail"
+                save "GBPKWM.RAW",MSX_PACKAGE_ROUTE_BASE,MSX_PACKAGE_ROUTE_SIZE
+                org msx_package_route_resume
+                else
                 ifdef PORTABLE_DATA_PAGES
                 include "msx_data_pages_boot.asm"
+                endif
                 endif
                 include "msx_deferred.inc"
                 include "core/deferred_api.asm"

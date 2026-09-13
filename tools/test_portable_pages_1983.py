@@ -12,11 +12,12 @@ import re
 import subprocess
 
 from test_msx_stability_1983 import Driver, constants
+from embed_app_icon import parse_manifest
 
 
 class PageDriver(Driver):
     def exercise(self, args):
-        linked = (args.worktree / "build/universal-obj/pageprobe/app.noi").read_text()
+        linked = args.symbols.read_text()
         at = int(re.search(r"^DEF _pageprobe_state (0x[0-9A-Fa-f]+)", linked, re.M)[1], 16)
         glue = constants(args.worktree / "lib/msx/glue.inc")
         self.wait(lambda: self.read(0xCF00, 2) == [48, 6] and
@@ -30,10 +31,43 @@ class PageDriver(Driver):
         pages = self.read(glue["MSX_PAGE_STATE"], 32)
         free = self.read(glue["MSX_PAGE_FREE"])[0]
         results, identities = [], []
-        app = (args.worktree / "build/universal/PAGEPRB.APP").read_bytes()
+        app = args.app.read_bytes()
+        manifest = parse_manifest(app)
+        primary = app[:manifest['primary_image_size']]
+        secondary = next((app[s['offset']:s['offset']+s['stored_length']]
+                          for s in manifest['segments'] if s['type'] == 2), None)
+        progress = []
         for cycle in range(3):
+            self.cycle = cycle
             self.click(11, 4)
-            self.click(12, 14)
+            if secondary is not None:
+                package = constants(args.worktree/'kernel/msx_package_layout.inc')
+                self.move(12, 14)
+                self.key(8, 1)
+                self.frames(6)
+                self.key()
+                self.wait(lambda: self.read(package['MSX_PACKAGE_STATE'])[0] == 1,
+                          'stream started through Desk', 100)
+                self.expect(self.read(package['MSX_PACKAGE_STATE'])[0] == 1,
+                            'observed in-flight stream, not a completed launch')
+                previous = self.frame
+                last = self.value('POLL_MX')
+                gaps = []
+                self.key(8, 128)
+                for _ in range(100):
+                    self.frames(1)
+                    self.expect(self.value('SCHED_LOCK') and not self.value('SCHED_CURRENT'),
+                                'root serialized during pointer-only loading progress')
+                    now = self.value('POLL_MX')
+                    if now != last:
+                        gaps.append(self.frame-previous)
+                        previous, last = self.frame, now
+                self.key()
+                self.expect(len(gaps) > 20 and max(gaps) <= 6,
+                            f'pointer progress during stream: {gaps}')
+                progress.append(dict(changes=len(gaps), max_gap_frames=max(gaps)))
+            else:
+                self.click(12, 14)
             self.wait(lambda: self.value("WM_NWIN") == 2 and self.value("WM_FOCUS") > 0,
                       "data-page app opened/focused")
             self.frames(100)
@@ -42,11 +76,23 @@ class PageDriver(Driver):
             result = self.call(f"ram {native*0x4000 + at-0x4000} 8")
             self.expect(result[0] == 85 and result[1]+256*result[2] >= 130 and
                         result[4] == bool(cycle), f"data-page checks cycle {cycle}: {result}")
-            code = b"".join(bytes(self.call(f"ram {native*0x4000+i} {min(4096,len(app)-i)}"))
-                            for i in range(0, len(app), 4096))
-            self.expect(code == app, "application code unchanged")
+            code = b"".join(bytes(self.call(f"ram {native*0x4000+i} {min(4096,len(primary)-i)}"))
+                            for i in range(0, len(primary), 4096))
+            self.expect(code == primary, "primary application code unchanged")
             owner = (self.read(glue["MSX_WIN_OWNER"]+slot)[0],
                      self.read(glue["MSX_WIN_OWNER_GEN"]+slot)[0])
+            if secondary is not None:
+                candidates = [i for i in range(self.read(glue['MSX_PAGE_TOTAL'])[0])
+                              if self.read(glue['MSX_PAGE_STATE']+i)[0] and
+                              self.read(glue['MSX_PAGE_PURPOSE']+i)[0] == 7 and
+                              self.read(glue['MSX_PAGE_OWNER']+i)[0] == owner[0] and
+                              self.read(glue['MSX_PAGE_OWNER_GEN']+i)[0] == owner[1]]
+                self.expect(len(candidates) == 1, 'one secondary belonging to this owner generation')
+                bank = self.read(glue['MSX_PAGE_NATIVE']+candidates[0])[0]
+                stored = b''.join(bytes(self.call(f'ram {bank*0x4000+i} 4096'))
+                                  for i in range(0, 0x4000, 4096))
+                self.expect(stored == secondary+bytes(0x4000-len(secondary)),
+                            'complete secondary bytes and zeroed allocation tail')
             self.expect(owner not in identities, "fresh owner generation")
             identities.append(owner); results.append(result)
             self.border(slot)
@@ -57,6 +103,7 @@ class PageDriver(Driver):
                         "exact full-pool baseline restored")
             self.expect(self.value("SCHED_FAULT") == 0, "scheduler guard")
         return dict(status="PASS", results=results, owners=identities,
+                    stream_progress=progress,
                     checks=self.checks, frames=self.frame, final_windows=self.value("WM_NWIN"),
                     busy_pages=self.busy(), stack_max=self.value("SCHED_STACK_MAX"))
 
@@ -68,11 +115,16 @@ def main():
     parser.add_argument("--mode", type=int, choices=(6, 7), required=True)
     parser.add_argument("--bios", type=Path)
     parser.add_argument("--subrom", type=Path)
+    parser.add_argument('--app', type=Path, help='matching staged APP, including a two-segment package')
+    parser.add_argument('--symbols', type=Path, help='matching link symbols (defaults to staged probe.noi)')
     args = parser.parse_args()
+    args.app = args.app or args.worktree/'build/universal/PAGEPRB.APP'
+    args.symbols = args.symbols or (args.app.with_suffix('.noi') if args.app.with_suffix('.noi').exists()
+                                  else args.worktree/'build/universal-obj/pageprobe/app.noi')
     args.short_desk_stress = False
     if bool(args.bios) != bool(args.subrom): parser.error("supply both BIOS and subROM")
     if args.output.exists(): parser.error("output exists; preserve evidence with a new path")
-    app = (args.worktree / "build/universal/PAGEPRB.APP").read_bytes()
+    app = args.app.read_bytes()
     if subprocess.check_output(["mtype", "-i", str(args.image)+"@@16384", "::/GBENCH/CLOCK.APP"]) != app:
         parser.error("private image does not contain the matching data-page APP")
     original = hashlib.sha256(args.image.read_bytes()).hexdigest()
@@ -84,6 +136,13 @@ def main():
             report = driver.exercise(args)
     except Exception as error:
         report = dict(status="FAIL", error=str(error), frame=driver.frame if driver else 0)
+        if driver:
+            try:
+                report.update(cycle=getattr(driver, 'cycle', None), machine=driver.frames(0),
+                              package=driver.read(0xD0E3, 29), windows=driver.value('WM_NWIN'),
+                              lock=driver.value('SCHED_LOCK'))
+            except Exception as observation_error:
+                report['observation_error'] = str(observation_error)
     finally:
         if driver:
             try:

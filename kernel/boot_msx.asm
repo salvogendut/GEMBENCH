@@ -13,6 +13,9 @@ kernel_main
                 ld    hl,0                    ; empty the shared clipboard (#142)
                 ld    (CLIP_LEN),hl
                 xor   a                       ; UI_MODAL boots as TPA garbage under DOS
+                ifdef PORTABLE_PACKAGE_STREAM
+                ld (MSX_PACKAGE_LAUNCH),a      ; module reads must not probe unloaded helpers
+                endif
                 ld    (SCRAP_TYPE),a          ; raw/empty until a typed scrap writer publishes
                 ld    (SHELL_BUSY),a          ; no shell callback is active at boot
                 ld    (UI_MODAL),a           ; (menu_dispatch would swallow EVERY top-bar
@@ -106,6 +109,9 @@ km_finish                                      ; reached by k_exit's longjmp
 ; COM RAM below KCFG_TEXT. Execution is already wholly in page 2 with the DOS
 ; stack in page 3. Reject old/truncated modules before publishing ABI 2.1.
 gbap4_gate_load
+                ifdef PORTABLE_PACKAGE_STREAM
+                jp    package_modules_load    ; opt-in composition, emitted after VDP tables
+                else
                 ld    hl,name_gbap4_gate
                 ld    de,fs_req_name
                 call  copy11
@@ -142,6 +148,7 @@ gbap4_gate_load
 gbap4_load_bad  xor a
                 ret
 name_gbap4_gate db    "GBAPV4  MOD"
+                endif
 
                 ifdef GB_FSTEST
 ; msx_fstest (#287): exercise the BDOS write path exactly as gb_fs_save/the

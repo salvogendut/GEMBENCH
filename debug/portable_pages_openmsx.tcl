@@ -1,10 +1,19 @@
 # Same real Desk driver and read-only return observer; no injected guest calls.
 source debug/portable_fs_openmsx.tcl
 set page_cycles 0
-after time 58 {
-    if {[peek 0x1350]!=1} {fs_finish "FAIL data pages desktop baseline"}
+rename fs_start fs_start_pages_input
+proc fs_start {} {
+    # Timers may fire while DOS/BIOS ROM covers low RAM. Wait for the actual
+    # admission module and Desktop before sampling the pool or sending input.
+    # The inherited workload deadline still fails absent/broken boots.
+    if {[peek 0x403]!=71 || [peek 0x404]!=66 || [peek 0x405]!=86 ||
+        [peek 0x406]!=52 || [peek 0xCF00]!=48 || [peek 0x1350]!=1} {
+        after time 0.02 fs_start
+        return
+    }
     set ::page_baseline [debug read_block memory 0xC220 32]
     set ::page_free_baseline [peek 0xC2E5]
+    fs_start_pages_input
 }
 rename fs_window fs_window_filesystem
 proc fs_window {} {

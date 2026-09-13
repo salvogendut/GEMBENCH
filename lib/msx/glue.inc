@@ -178,15 +178,20 @@ MSX_SYS_RESERVED4   equ MSX_SYSINFO+47
 ; project-owned GBAPV4.MOD into fixed low TPA while the application page stays mapped.
 ; Reuse child-COM storage only after boot has left it. This is never an IRQ
 ; entry routine: BIOS interrupts restore DOS page 0 before returning here.
-; #CF30..#D0FF is private button capture; #D100..#D3FF is reserved for the
+; #CF30..#D0FF is private button capture (the opt-in stream profile reuses
+; its measured unused tail from #CFDB); #D100..#D3FF is reserved for the
 ; opt-in portable data-page module (unused in normal delivery).
 ; No public application, legacy fixed-RAM or stack bounds change.
 MSX_GBAP4_GATE      equ #0400
 MSX_GBAP4_GATE_LIMIT equ #1000
+                ifdef PORTABLE_PACKAGE_STREAM
+MSX_GBAP4_GATE_SIZE equ 2996        ; measured opt-in module; checked by assembler
+                else
                 ifndef PORTABLE_DATA_PAGES
 MSX_GBAP4_GATE_SIZE equ 2889
                 else
 MSX_GBAP4_GATE_SIZE equ 2931
+                endif
                 endif
 MSX_PARAMETER_ENTRY equ MSX_GBAP4_GATE+8
 MSX_MODULE_SYSINFO equ MSX_GBAP4_GATE+11
@@ -199,6 +204,14 @@ MSX_SYSINFO_LEGACY equ #0FD0        ; returned pointer, private 48-byte ABI 2.0 
 MSX_DATA_PAGE_ENTRY equ #D100
 MSX_DATA_PAGE_LIMIT equ #D400
 MSX_DATA_PAGE_SIZE equ 492
+                ifdef PORTABLE_PACKAGE_STREAM
+                ifndef PORTABLE_DATA_PAGES
+                assert 0,"package stream requires owned data-page profile"
+                endif
+                assert PORTABLE_PACKAGE_STREAM==1,"package stream profile must be 1"
+                assert PORTABLE_DATA_PAGES==1,"package stream requires enabled data-page profile"
+                include "../../kernel/msx_package_layout.inc"
+                endif
 
 ; Private MSX button FIFO: four (displayed x,y,focus,generation,modal) records.
 ; IRQ capture never maps banks, invokes BIOS or dispatches application code.

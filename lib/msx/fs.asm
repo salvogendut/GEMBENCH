@@ -527,12 +527,23 @@ fsload_loop
                 ld    hl,(fsmx_rem)
                 ld    a,h
                 or    l
+                ifdef PORTABLE_PACKAGE_STREAM
+                jp    z,fsload_maxed
+                else
                 jr    z,fsload_maxed
+                endif
                 ld    a,h
                 cp    2
                 jr    c,fsload_short
                 ld    hl,FSMX_BUFSZ
 fsload_short
+                ifdef PORTABLE_PACKAGE_STREAM
+                ld a,(MSX_PACKAGE_LAUNCH)
+                or a
+                jr z,fsload_request_ready
+                call msx_app_read_size          ; bounded first prefix, then ordinary chunks
+fsload_request_ready
+                endif
                 ld    (fsmx_chunk),hl
                 ld    a,(fsmx_handle)
                 ld    b,a
@@ -540,12 +551,37 @@ fsload_short
                 ld    de,FSMX_IOBUF
                 ld    hl,(fsmx_chunk)
                 call  BDOS
+                ifdef PORTABLE_PACKAGE_STREAM
+                cp #C7                         ; a 256-byte APP can end exactly at the prefix
+                jr nz,fsload_read_status
+                ld a,h
+                or l
+                jp z,fsload_success
+                jp fsload_readfail
+fsload_read_status
+                endif
                 or    a
+                ifdef PORTABLE_PACKAGE_STREAM
+                jp    nz,fsload_readfail
+                else
                 jr    nz,fsload_readfail
+                endif
                 ld    (fsmx_actual),hl
                 ld    a,h
                 or    l
                 jr    z,fsload_success       ; EOF
+                ifdef PORTABLE_PACKAGE_STREAM
+                ld a,(MSX_PACKAGE_LAUNCH)
+                or a
+                jr z,fsload_no_probe            ; route module itself may still be loading
+                ld a,(fsmx_handle)
+                ld c,a
+                ld hl,(fsmx_actual)
+                call msx_app_probe             ; adopts/finishes only eligible two-bank APPs
+                jr c,fsload_closed
+fsload_no_probe
+                ld hl,(fsmx_actual)
+                endif
                 push  hl
                 call  fsmx_restore_page      ; copy from resident buffer into the mapped caller page
                 pop   bc
@@ -570,7 +606,11 @@ fsload_short
                 or    a
                 sbc   hl,de
                 jr    nz,fsload_success      ; short read -> EOF
+                ifdef PORTABLE_PACKAGE_STREAM
+                jp    fsload_loop
+                else
                 jr    fsload_loop
+                endif
 fsload_maxed
                 ld    a,(FS_XFLAGS)
                 and   1
@@ -581,6 +621,17 @@ fsload_maxed
                 ld    de,fsmx_probe
                 ld    hl,1
                 call  BDOS
+                ifdef PORTABLE_PACKAGE_STREAM
+                ; Fixed modules fill their exact destination capacity. Nextor
+                ; reports C7/zero on this EOF probe, not necessarily A=0.
+                cp    #C7
+                jr    nz,fsload_probe_status
+                ld    a,h
+                or    l
+                jr    z,fsload_success
+                jr    fsload_readfail          ; C7 with bytes is inconsistent
+fsload_probe_status
+                endif
                 or    a
                 jr    nz,fsload_readfail
                 ld    a,h
@@ -595,6 +646,7 @@ fsload_success
                 ld    b,a
                 ld    c,_DCLOSE
                 call  BDOS
+fsload_closed
                 pop   ix
                 call  fsmx_restore_page
                 scf

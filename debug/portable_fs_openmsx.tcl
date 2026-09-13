@@ -4,16 +4,20 @@ set speed 9999
 set fs_count 0
 set fs_entered 0
 set fs_restorations 0
+set fs_finished 0
 set fs_state $::env(GEOBENCH_FS_STATE)
 set fs_output $::env(GEOBENCH_FS_OUTPUT)
 set fs_operation [expr {[info exists ::env(GEOBENCH_FS_OPERATION)] ? $::env(GEOBENCH_FS_OPERATION) : 8}]
 proc fs_finish {status} {
+    if {$::fs_finished} {return}
+    set ::fs_finished 1
     set f [open $::fs_output w]
     puts $f "STATUS=$status"
     puts $f "PARAMETER_CALLS=$::fs_count"
     puts $f "RESTORATION_CHECKS=$::fs_restorations"
     close $f
     exit
+    if {$status ne "PASS"} {error $status}
 }
 proc fs_parameters {} {
     # This CPU address also exists in ROM during Nextor boot/slot calls. Only
@@ -124,7 +128,8 @@ proc fs_click {callback} {
     after time 0.08 {keymatrixup 8 0x01}
     after time 0.9 $callback
 }
-after time 60 {fs_move 11 4 {fs_click {fs_move 12 14 {fs_click {}}}}}
+proc fs_start {} {fs_move 11 4 {fs_click {fs_move 12 14 {fs_click {}}}}}
+after time 60 fs_start
 after time [expr {[info exists ::env(GEOBENCH_FS_DEADLINE)] ? $::env(GEOBENCH_FS_DEADLINE) : 180}] {
     fs_finish "FAIL timeout entered=$::fs_entered calls=$::fs_count"
 }

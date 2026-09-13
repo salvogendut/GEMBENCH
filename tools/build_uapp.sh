@@ -10,6 +10,7 @@ OUT="${2:-build/universal/ABIPROBE.APP}"
 APP_MANIFEST="${APP_MANIFEST:-$APP/manifest.json}"
 APP_ICON="${APP_ICON:-$APP/icon.asm}"
 APP_ICON16="${APP_ICON16:-}"
+APP_SECONDARY="${APP_SECONDARY:-}" # packaged code only; no secondary-call service implied
 GBLIB_SYMBOLS="${GBLIB_SYMBOLS:-$APP/gblib.symbols}"
 GBLIB_UNIVERSAL="lib/gb/gblib_universal.symbols"
 APP_CFLAGS="${APP_CFLAGS:-}"
@@ -64,6 +65,11 @@ work="build/universal-obj/$(basename "$APP")"
 mkdir -p "$work" "$(dirname "$OUT")"
 
 icon_args=("$APP_ICON")
+secondary_args=()
+if [ -n "$APP_SECONDARY" ]; then
+    [ -f "$APP_SECONDARY" ] || { echo "ERROR: missing secondary payload $APP_SECONDARY" >&2; exit 1; }
+    secondary_args=(--secondary "$APP_SECONDARY")
+fi
 # This SDK emits GB_PARAMS calls. Do not allow a manifest to claim ABI 2.0
 # compatibility: an older loader must reject it before reaching application code.
 python3 - "$APP_MANIFEST" <<'PY'
@@ -180,10 +186,10 @@ python3 tools/check_app_layout.py "$work/app.map" --app "$APP" \
 tail -c +16385 "$work/app.bin" > "$work/app.raw"
 if [ -n "$APP_ICON16" ]; then
     python3 tools/embed_app_icon.py inject-v4 "$APP_MANIFEST" "$APP_ICON" \
-        "$APP_ICON16" "$work/app.raw" "$OUT"
+        "$APP_ICON16" "$work/app.raw" "$OUT" "${secondary_args[@]}"
 else
     python3 tools/embed_app_icon.py inject-v4 "$APP_MANIFEST" "$APP_ICON" \
-        "$work/app.raw" "$OUT"
+        "$work/app.raw" "$OUT" "${secondary_args[@]}"
 fi
 
 python3 tools/check_universal_app.py --source "$APP" --asm "$work/main.asm" \

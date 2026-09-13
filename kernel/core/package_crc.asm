@@ -41,6 +41,11 @@ pkg_crc_bits
 pkg_crc_no_xor
                 djnz pkg_crc_bits
                 dec iy
+                ifdef PKG_CRC_PROGRESS
+                ld a,ixl
+                and 31
+                call z,PKG_CRC_PROGRESS         ; optional fixed-only progress, preserves BC/DE/HL/IX/IY
+                endif
                 jr pkg_crc_bytes
 pkg_crc_done
                 ld (gb4_crc_value),hl

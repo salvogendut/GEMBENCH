@@ -45,7 +45,8 @@ base          0x1700  0x17FF  ui_transfer             modal_1700    GBUI request
 base          0x1700  0x1712  module_control_header   modal_1700    GBFAT/FLOPPYSV/M4SAVE control header; never live during GBUI
 base          0x1710  0x174F  module_path_buffer      modal_1700    M4SAVE/FLOPPYSV card path prefix; never live during GBUI
 base          0x1800  0x19FF  fs_sector_buffer        -             shared 512-byte sector buffer
-base          0x1A00  0x21FF  fs_directory_buffer     fs_1c00       floppy directory buffer; IDE ROM state may overlay #1C00
+base          0x1A00  0x1BFF  fs_directory_prefix    fs_1c00       first directory sector; MSX backdrop scratch is capped at 512 bytes
+base          0x1C00  0x21FF  fs_directory_tail      fs_1c00       FDC-only directory tail; MSX has no FDC directory provider and may reuse this span
 base          0x2200  0x3BFF  module_data_buffer      module_data   preemptive GBFAT/FLOPPYSV/GBNET 6.5-KiB bulk transfer data; cooperative builds extend through 0x3DFF
 base          0x2200  0x2872  browser_pcw_transient   module_data   PCW Browser transport, protocol, render, and fallback buffers
 base          0x2900  0x32FF  browser_source_buffers  module_data   Browser offline-read buffer and 2-KiB source-cache staging block
@@ -54,11 +55,17 @@ base          0x3900  0x3AE6  browser_shared_state    module_data   Browser/GBUI
 base          0x3C00  0x3DFF  scheduler_runtime       -             app-carried scheduler in preemptive CPC/PCW builds; cooperative builds reuse this range as transfer data
 base          0x3E00  0x3FFF  clipboard               -             shared clipboard length and data
 
+msx           0x0100  0x03FF  msx_package_stream      -             opt-in transaction module; dead child-COM storage after boot
 msx           0x0400  0x0FFF  msx_universal_module    -             GBAPV4 loader/parameter/init module; installed after leaving the child-COM image
+msx           0x1C00  0x21FF  msx_package_route       fs_1c00       opt-in fixed launch module; mutually exclusive with non-MSX FDC/IDE directory-tail use
 msx           0x1291  0x1295  msx_picture_state       msx_pic_cursor third/fourth picture banks, packing mode, and source stride
 msx           0x133D  0x133D  typed_scrap_tag         -             private type for the shared raw clipboard; GB_CLIPSET invalidates it
 msx           0x133E  0x133E  shell_dispatch_guard    -             nonzero only during synchronous Milestone-14 application delivery
-msx           0xCF30  0xD0FF  msx_button_capture      -             private four-edge FIFO and fixed-page IRQ leaf; former reserved page-3 prefix
+msx           0xCF30  0xCFDA  msx_button_capture      -             private four-edge FIFO and current fixed-page IRQ leaf; opt-in package build asserts this end
+msx           0xCFDB  0xD0FF  msx_package_io          -             opt-in fixed stream helpers, launch state and descriptor; formerly unused IRQ reservation tail
+msx           0xD100  0xD2EB  msx_data_pages          -             optional fixed data-page service module
+msx           0xD2EC  0xD3EF  msx_package_crc         -             opt-in relocated CRC and cached-prefix helpers; bounded below admission state
+msx           0xD3F0  0xD3FF  msx_package_admission   -             opt-in relocated admission state; native fixed-app storage starts at D400
 
 # Non-ROM IDE recovery profile. Archived, but kept visible because it shares
 # the same low-RAM pool and has historically been revived for tests.

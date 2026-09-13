@@ -8,6 +8,25 @@ GBAP4_ICON_MODE7_SIZE   equ 512
 
 ; Primary-only: CF = admitted, NC = reject. The streamed entry has a distinct
 ; name: its CF validates structure only; package_load must finish CRC/close.
+                ifdef ADMISSION_DUAL
+                ifdef ADMISSION_STREAMED
+                assert 0,"choose dual or streamed-only admission, not both"
+                endif
+gbap4_validate_streamed_primary
+                ld    a,1
+                ld    (gb4_streamed),a
+                ld    hl,(PKG_PRIMARY_SIZE)
+                jr    gb4_begin
+gbap4_validate_loaded
+                xor   a
+                ld    (gb4_streamed),a
+                ld    hl,(fs_ent_size+2)
+                ld    a,h
+                or    l
+                jp    nz,gb4_reject
+                ld    hl,(fs_ent_size)
+gb4_begin
+                else
                 ifdef ADMISSION_STREAMED
 gbap4_validate_streamed_primary
                 ; The stream transaction has bounded and loaded only primary.
@@ -20,6 +39,7 @@ gbap4_validate_loaded
                 or    l
                 jp    nz,gb4_reject            ; MSX primary image is 16-bit bounded
                 ld    hl,(fs_ent_size)
+                endif
                 endif
                 ld    (gb4_file_size),hl
 
@@ -183,6 +203,14 @@ gb4_icon_count_ok
                 jp    nz,gb4_reject
 
                 ; The already allocated primary counts toward minimum_pages.
+                ifdef ADMISSION_DUAL
+                ld    a,(gb4_streamed)
+                inc   a
+                ld    b,a
+                ld    a,(ix+32)
+                cp    b
+                jp    c,gb4_reject
+                else
                 ld    a,(ix+32)
                 ifdef ADMISSION_STREAMED
                 cp    2
@@ -190,6 +218,7 @@ gb4_icon_count_ok
                 else
                 or    a
                 jp    z,gb4_reject
+                endif
                 endif
                 ld    b,a
                 ld    a,(ix+33)
@@ -199,11 +228,17 @@ gb4_icon_count_ok
                 inc   a
                 cp    b
                 jp    c,gb4_reject
+                ifdef ADMISSION_DUAL
+                ld    a,(gb4_streamed)
+                inc   a
+                cp    (ix+34)
+                else
                 ld    a,(ix+34)
                 ifdef ADMISSION_STREAMED
                 cp    2                        ; bounded common two-page profile
                 else
                 cp    1                        ; Gate 2: primary-only transaction
+                endif
                 endif
                 jp    nz,gb4_reject
                 ld    a,(ix+35)
@@ -221,10 +256,19 @@ gb4_icon_count_ok
                 sbc   hl,de
                 jp    nz,gb4_reject
                 ld    hl,(gb4_manifest_offset)
+                ifdef ADMISSION_DUAL
+                ld    de,GBAP4_MANIFEST_SIZE+GBAP4_SEGMENT_SIZE
+                ld    a,(gb4_streamed)
+                or    a
+                jr    z,gb4_resource_base
+                ld    de,GBAP4_MANIFEST_SIZE+2*GBAP4_SEGMENT_SIZE
+gb4_resource_base
+                else
                 ifdef ADMISSION_STREAMED
                 ld    de,GBAP4_MANIFEST_SIZE+2*GBAP4_SEGMENT_SIZE
                 else
                 ld    de,GBAP4_MANIFEST_SIZE+GBAP4_SEGMENT_SIZE
+                endif
                 endif
                 add   hl,de
                 ld    (gb4_resource_offset),hl
@@ -262,10 +306,19 @@ gb4_icon_count_ok
                 jp    nc,gb4_reject
                 ld    l,(ix+52)                ; package size is a 32-bit field
                 ld    h,(ix+53)
+                ifdef ADMISSION_DUAL
+                ld    de,(gb4_file_size)
+                ld    a,(gb4_streamed)
+                or    a
+                jr    z,gb4_package_size
+                ld    de,(PKG_TOTAL_SIZE)
+gb4_package_size
+                else
                 ifdef ADMISSION_STREAMED
                 ld    de,(PKG_TOTAL_SIZE)
                 else
                 ld    de,(gb4_file_size)
+                endif
                 endif
                 or    a
                 sbc   hl,de
@@ -283,6 +336,19 @@ gb4_icon_count_ok
                 jp    nc,gb4_reject
                 call  gb4_validate_icons
                 jp    nc,gb4_reject
+                ifdef ADMISSION_DUAL
+                ld    a,(gb4_streamed)
+                or    a
+                jr    z,gb4_primary_crc
+                call  gb4_validate_stream_capabilities
+                jp    nc,gb4_reject
+                call  gb4_validate_secondary_segment
+                jp    nc,gb4_reject
+                jr    gb4_accept
+gb4_primary_crc
+                call  gb4_validate_crc
+                jp    nc,gb4_reject
+                else
                 ifdef ADMISSION_STREAMED
                 call  gb4_validate_stream_capabilities
                 jp    nc,gb4_reject
@@ -293,6 +359,7 @@ gb4_icon_count_ok
                 else
                 call  gb4_validate_crc
                 jp    nc,gb4_reject
+                endif
                 endif
 gb4_accept
                 scf
@@ -495,9 +562,19 @@ gb4_helper_bad
                 or    a
                 ret
 
-                ifdef ADMISSION_STREAMED
+                ifdef ADMISSION_DUAL
                 include "package_secondary_descriptor.asm"
                 else
+                ifdef ADMISSION_STREAMED
+                include "package_secondary_descriptor.asm"
+                endif
+                endif
+
+                ifdef ADMISSION_CRC_BASE
+gb4_crc_resume equ $
+                org ADMISSION_CRC_BASE
+                endif
+                ifndef ADMISSION_STREAMED
 ; CRC-32/ISO-HDLC over the complete loaded package. The four stored CRC bytes
 ; are temporarily zeroed, then restored before the result is compared.
 gb4_validate_crc
@@ -519,6 +596,9 @@ gb4_crc_zero
                 inc   hl
                 djnz  gb4_crc_zero
                 call  gb4_crc32_loaded
+                ifdef ADMISSION_DUAL
+                call  gb4_crc_finish           ; streamed update retains raw accumulator
+                endif
 
                 ld    hl,gb4_expected_crc
                 push  ix
@@ -552,6 +632,9 @@ gb4_crc32_loaded
                 ldir
                 ld    hl,APP_BASE
                 ld    bc,(gb4_file_size)
+                ifdef ADMISSION_DUAL
+                include "package_crc.asm"
+                else
                 ifdef ADMISSION_STREAMED
                 include "package_crc.asm"
                 else
@@ -594,6 +677,7 @@ gb4_crc_next_bit
                 dec   bc
                 jr    gb4_crc_byte
                 endif
+                endif
 gb4_crc_finish
                 ld    hl,gb4_crc_value
                 ld    b,4
@@ -607,6 +691,7 @@ gb4_crc_complement
 
 ; Logical right shift of the little-endian 32-bit CRC cell. Returns HL at byte 0.
                 ifndef ADMISSION_STREAMED
+                ifndef ADMISSION_DUAL
 gb4_crc_shift
                 ld    hl,gb4_crc_value+3
                 srl   (hl)
@@ -617,6 +702,13 @@ gb4_crc_shift
                 dec   hl
                 rr    (hl)
                 ret
+                endif
+                endif
+gb4_crc_end
+                ifdef ADMISSION_CRC_BASE
+                assert gb4_crc_end<=ADMISSION_CRC_LIMIT,"admission CRC exceeds fixed slot"
+                save "GBPKCRC.RAW",ADMISSION_CRC_BASE,gb4_crc_end-ADMISSION_CRC_BASE
+                org gb4_crc_resume
                 endif
 
                 ADMISSION_STORAGE

@@ -1,8 +1,163 @@
-# Session handoff — 2026-09-09
+# Session handoff — 2026-09-13
 
 Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
+
+## Current resume point — checkpoint 2h, 2026-09-13
+
+The user said to start the consolidated runnable-MSX Notepad sprint. Continue
+on #84, `feature/84-unified-notepad`; do not ask for a new milestone/approval
+between its internal tasks. **Normal two-bank Desktop loading is now implemented
+and qualified in private MSX Screen 6/7 images. No callable secondary service
+or runnable unified Notepad exists yet.** No normal images changed. The user
+has now requested committing/pushing this loader checkpoint before continuing
+with the secondary-call task; the checkpoint commit records the work since
+the earlier pushed save `5437384`.
+
+- Current source and evidence are detailed in
+  [checkpoint 2h](PORTABLE-SECONDARY-CODE.md#checkpoint-2h--normal-msx-streamed-launch-2026-09-13).
+  `kernel/msx_app_launch.asm` adopts the existing resolver's descriptor after
+  its first 256-byte read, supplies the cached prefix once and preserves the
+  chosen file through full-stream CRC/close. Shared WM publication/rollback is
+  used; early guards protect worker/pending/active/poisoned contexts.
+- Opt-in flags remain `PORTABLE_DATA_PAGES=1 PORTABLE_PACKAGE_STREAM=1`.
+  Current modules: GBAPV4 v4 2996 bytes; GBPKFIX v3 1061; GBPKLOAD v2 747;
+  new mode-specific GBPKWM 380, emitted by matching kernel assembly. Its
+  fixed `1C00..2200` reservation reuses only MSX's unused FDC-directory tail;
+  backdrop scratch is capped at `1C00`, bulk scratch starts at `2200`.
+  Do not use `3C00..3E00`: some native paged helpers still reach that area.
+- Child COMs are 14534/16112 bytes, **16 bytes spare in Screen 7**. The route
+  module uses 380 of its 1536 reserved bytes; CRC/extra/state slots remain
+  strictly below `D400`. There is no permission to loosen APP/stack bounds.
+- Full two-bank load takes 468 PAL ticks (9.36 s), so pointer-only progress
+  is essential. CRC/read/clear callbacks call existing input/movement/cursor
+  leaves, never `k_poll`, menus, clock repaint or application callbacks.
+  openMSX maximum pointer-progress gap is 5/4 ticks (Screen 6/7). Loading is
+  still synchronous, not a new background scheduler feature.
+- openMSX: three successful launches per mode with exact banks/tail/pool and
+  401 preserved parameter returns; badCRC/truncation/extra-byte files reject
+  three times each with one open/close, no entry and exact rollback. Ordinary
+  primary-only PAGEPRB retains 407 service-return checks per mode.
+- 1983: identical APP, three generations on Screen 6/7, 352/361 observations,
+  exact banks/tail/pool and unchanged disks. In-flight pointer tests record
+  78 changes in 100 frames, max gap four frames. Ordinary Clock/Calculator
+  also pass three lifetimes per mode (82/109 checks), including ticking-Clock
+  pointer cadence. These are core/keyboard-input runs, not SDL mouse tests.
+- Final host/Z80 suite: **55 tests pass, no skips** in
+  `build/notepad-84/evidence/sprint-launch-final-tests.log`. ABI/package checks
+  pass; low-RAM inventory now includes all opt-in code/state reservations
+  (55 ranges, nine documented overlays), with assembler guards for the actual
+  module ends and unchanged public boundaries.
+- Successful private packages: `build/notepad-84/build/msx/portable-data-pages-7-ijn4r1wi/`
+  and `portable-data-pages-6-5ndm_qjx/` alongside it. They alias PAGEPRB as
+  CLOCK, **not Notepad**. `probe.APP` SHA256 is
+  `2000485837e7e8fe8190936e4209d3b748932cb1b2d4517b7503e09aedaf7305`.
+  New fixtures retain matching `probe.noi`; use `--app`/`--symbols` with the
+  1983 driver rather than a subsequently rebuilt worktree's link symbols.
+- Preserve failed logs. The 1983 discrepancy was a test-driver overshoot:
+  its third intended Clock-row click actually selected `CALC.APP` (confirmed
+  by read-only trace). `Driver.move` now rechecks coordinates after key release;
+  host regression covers it. No emulator/firmware changes were necessary.
+- **Next internal task:** implement owner/page-generation/entry seals and
+  copied, non-nested computation-only secondary calls with bank/stack/IFF
+  restoration and teardown; add the restricted SDK/audit profile. Then split
+  the real Notepad model/state into the secondary, retain the 4-KiB document
+  and primary UI/filesystem, and qualify the actual editor in openMSX/1983.
+  `APP_SECONDARY` is packaging support only. No public secondary call opcode
+  or new capability has been published. Full CPC delivery remains afterward.
+- Explicitly sync source into `build/notepad-84/` before building there. Do
+  not overwrite its evidence or normal QA images; preserve user GIFs/QA/CPC.
+
+## Previous resume point — checkpoint 2g, 2026-09-13
+
+Continue #84 on `feature/84-unified-notepad`. The dual-admission/fixed MSX
+module composition now boots in private Screen 6/7 builds, with unchanged
+application/stack bounds. **No normal WM launch calls the stream loader yet;
+no runnable unified Notepad exists.** Normal images are untouched. Changes
+since pushed save `5437384` are local, not newly committed/pushed.
+
+**Planning update, 2026-09-13:** the user requested consolidating the remaining
+three implementation steps into one sprint. Use the
+[runnable MSX Notepad sprint](UNIFIED-NOTEPAD.md#consolidated-sprint--runnable-msx-notepad)
+as the current delivery unit: connect normal streamed launch, enable validated
+secondary calls, integrate/test the actual editor and provide a private image
+with manual instructions. The internal tasks remain ordered; do not repeatedly
+re-propose them as separate sprints. Full CPC qualification and normal release
+replacement follow. This planning update changes documents only, not the
+checkpoint's implementation status, and does not authorize publication.
+
+- `PORTABLE_DATA_PAGES=1 PORTABLE_PACKAGE_STREAM=1` selects the new profile.
+  `tools/build_msx_package_modules.py --out PRIVATE_DIRECTORY` builds
+  GBAPV4 v3 (2996 bytes), GBPKFIX (1061), GBPKLOAD (757). The low transaction
+  occupies `0100..03F5`; helpers/state reuse `CFDB..D100`, CRC `D2EC..D39F`,
+  admission state `D3F0..D400`. IRQ still ends exactly at `CFDB`; existing
+  data-page code remains `D100..D2EC`. Defaults still use the old module set.
+- Ordinary admission resets the stream mode and validates full primary CRCs;
+  the separate stream entry checks structure only, followed by package CRC
+  and close in the existing transaction. Shared dual fixtures pass at both
+  layouts, including stale-mode/invalid-primary cases. Do not use the
+  structure-only entry as permission to run primary code.
+- **45 focused tests, no skips**, ABI and package checks pass. Log
+  `build/notepad-84/evidence/package-modules-regression-20260913-final.log`.
+  Includes 39 boot fault/header/size cases, six exact-capacity EOF checks and
+  mapped-Desktop/fail-closed observer coverage. File-load faults here are
+  instruction stubs, not injected faults on real Nextor media.
+- openMSX Screen 6/7: three ordinary PAGEPRB lifetimes, 148/150/150 app checks,
+  407 parameter returns each. 1983: same APP, 37/46 lifecycle observations,
+  exact teardown/guards and unchanged disks. Evidence and failed-run notes:
+  [checkpoint 2g](PORTABLE-SECONDARY-CODE.md#checkpoint-2g--dual-admission-and-fixed-msx-boot-2026-09-13).
+  These prove module boot/coexistence and relocated primary CRC, **not calls
+  to the fixed stream entry**. Preserve 2f's standalone transaction evidence.
+- Screen 6/7 child sizes: **14505/16083 bytes**; only **45 bytes** remain in
+  Screen 7's `3F00` envelope. New routing needs measured refactoring, not
+  relaxed limits. The opt-in legacy bounded EOF probe now accepts C7/zero,
+  but still rejects C7/nonzero or other errors. Normal builds are unchanged.
+- **Next:** integrate normal current/strict and boot/browse path resolution,
+  one-open handling and pending-owner WM routing through the fixed stream
+  module. `kernel/core/app_launch.asm` is not modified yet. Retain primary/
+  native compatibility, test actual two-segment success/failure/teardown and
+  pointer latency, then implement the sealed call gate and partition Notepad.
+  These implementation tasks now form the single runnable-MSX sprint above;
+  CPC stream integration and full delivery acceptance follow it.
+- Private worktree `build/notepad-84/` is retained. Explicitly synchronize
+  changed source into it before using its full-kernel diagnostic builders;
+  it does not automatically track root edits. Never replace normal QA images
+  while using these diagnostic aliases. Preserve user GIFs and `QA/CPC/`.
+
+## Previous resume point — checkpoint 2f, 2026-09-13
+
+The user resumed #84 on the same branch after save commit `5437384` was pushed.
+This turn implements the optional `PKG_ALLOW_IRQ=1` profile and
+`kernel/msx_package_stream.asm` (single-open Nextor leaves). They are **not
+installed in either normal receiver**; no new unified Notepad is runnable.
+
+- 42 focused tests pass, including IRQ/fault matrices at two fixed-state
+  layouts and the fail-closed observer regression. ABI/package checks pass.
+- Standalone Nextor diagnostic passes in openMSX (345 observations, six cases,
+  exact bank bytes/tail and open/read/close counts) and the existing read-only
+  1983 bridge with corrected RainBIOS (same disk, six guest cases). It has no
+  Desktop or installed scheduler: BIOS ticks advancing does not qualify root
+  pointer responsiveness. No secondary code executes.
+- Evidence: `build/notepad-84/evidence/stream-checkpoint-20260913-tests.log`,
+  `stream-nextor-openmsx-20260913-eof.log`, and
+  `stream-nextor-ph9009o_/1983-result.json`. Preserve earlier failures; the
+  initial observer's PASS was invalid (zero completed cases), corrected and
+  regression-tested before acceptance. Actual Nextor EOF is `C7` with zero
+  bytes; only that combination is normalized by the new adapter.
+- Transaction 749 bytes; MSX provider 173; fixed state 22+3; scratch 512.
+  Measured candidate placements and the remaining 22-byte admission overrun
+  are documented in [PORTABLE-SECONDARY-CODE.md](PORTABLE-SECONDARY-CODE.md).
+  Candidate spans are not a complete linked receiver or installed allocation.
+- **Next:** integrate normal MSX path resolution/single open, fit and install
+  the components while retaining both primary-only/native and streamed
+  admission, then test real Desktop launch/rollback and input latency. Keep
+  the shared policy; CPC streaming and the sealed call gate still follow.
+  Do not restart the qualified fixtures or mistake the DOS diagnostic for
+  a finished loader milestone. Normal media hashes still match below.
+- Changes in this resumed checkpoint are local; no new commit/push/PR/merge
+  was requested. The prior September 9 pause and allowance estimate below
+  are historical, not a fresh limit or instruction to stop the resumed work.
 
 ## Quick resume — saved at the user's request, 2026-09-09
 
@@ -80,7 +235,7 @@ is recorded below. The three normal media hashes still match the saved values.
   preserving the ABI's future monochrome portability. Product v1.0 does not
   renumber ABI 2.1, GBAP v4 or the frozen GEMBENCH-1 contracts.
 
-## Current checkpoint — shared secondary stream core qualified; receivers next
+## Earlier checkpoint — shared secondary stream core qualified; receivers next
 
 The user authorized starting unified Notepad after the MSX findings were
 resolved. **Issue #82 is closed** as a bounded baseline/inventory checkpoint,
@@ -359,7 +514,7 @@ and the earlier roadmap. Eight planned milestones:
 8. Close the migration/parity ledger and SDK/release-artifact/manual acceptance
    gates for both distributions.
 
-**Next: bind the shared streamed loader to measured MSX/CPC layouts and single-
+**Historical checkpoint 2e next action (see current 2g above): bind the shared streamed loader to measured MSX/CPC layouts and single-
 open file adapters, then implement the sealed root call/return gate for #84.**
 Data-page service is privately qualified; the streaming core has instruction-
 fixture acceptance only. The full editor still fails its code-size gate.
@@ -394,6 +549,6 @@ workflows before replacing native delivery. CPC splash remains milestone 4.
 - Large artifacts now go under `build/`; /tmp previously hit a per-user quota.
   For host tests, `TMPDIR="$PWD/build/settings-check-tmp"` was used.
 - Do not delete old worktrees, test evidence, user media or recordings as part
-  of resuming. The current checkpoint's commit/push is explicitly authorized;
+  of resuming. The September 9 save's commit/push was explicitly authorized;
   this note grants no standing authority for later publication, cleanup, new
   issues, PRs, merges or releases.
