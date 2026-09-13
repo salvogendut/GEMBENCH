@@ -162,6 +162,9 @@ gb4_icon_count_ok
                 cp    #03
                 jp    nz,gb4_reject
                 ld    a,(ix+15)
+                ifdef PORTABLE_PACKAGE_STREAM
+                and   #F8                      ; opt-in sealed computation calls
+                else
                 ifdef PORTABLE_DATA_PAGES
                 and   #FC
                 else
@@ -171,12 +174,13 @@ gb4_icon_count_ok
                 or    a
                 endif
                 endif
+                endif
                 jp    nz,gb4_reject
                 ld    a,(ix+17)
                 and   #80
                 jp    nz,gb4_reject
                 ld    a,(ix+19)
-                and   #FC                      ; assigned clipboard/data-page bits
+                and   #F8                      ; assigned clipboard/data-page/compute bits
                 jp    nz,gb4_reject
                 ld    a,(ix+12)
                 and   (ix+16)

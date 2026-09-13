@@ -47,6 +47,14 @@ proc fs_parameters {} {
             set ::fs_trace_watch [debug set_watchpoint write_mem {0x7F00 0x7FFF} {} fs_trace_guard]
         }
         set ::fs_vram [debug read_block VRAM 0 131072]
+        set ::fs_vdp_busy [expr {[info exists ::env(GEOBENCH_FS_PENDING_VDP)] &&
+            ([debug read {VDP status regs} 2]&1)}]
+        if {$::fs_vdp_busy} {
+            # A previously submitted HMMV may finish autonomously while the
+            # CPU computes. Do not count that as drawing by the call itself.
+            set ::fs_vdp_watch [debug set_watchpoint write_io 0x98 {} {fs_finish "FAIL computation wrote VRAM"}]
+            set ::fs_command_watch [debug set_watchpoint write_io 0x9B {} {fs_finish "FAIL computation issued VDP command"}]
+        }
         set return_pc [expr {[peek $::fs_sp] + 256*[peek [expr {$::fs_sp+1}]]}]
         # The continuation is in banked page 1. Nextor ROM may execute the
         # SAME numeric PC while the service is still running: wait for the
@@ -78,7 +86,12 @@ proc fs_returned {} {
         puts stderr "SLOTS before=$::fs_slot after=[debug read ioports 0xA8] mapper=$::fs_mapper PAGE_DATA=[peek 0xC020]"
         fs_finish "FAIL snapshot guard"
     }
-    if {[debug read_block VRAM 0 131072] ne $::fs_vram} {fs_finish "FAIL parameter service changed pixels"}
+    if {[info exists ::fs_vdp_watch]} {
+        debug remove_watchpoint $::fs_vdp_watch
+        debug remove_watchpoint $::fs_command_watch
+        unset ::fs_vdp_watch ::fs_command_watch
+    }
+    if {!$::fs_vdp_busy && [debug read_block VRAM 0 131072] ne $::fs_vram} {fs_finish "FAIL parameter service changed pixels"}
     incr ::fs_restorations
     set ::pause off
 }

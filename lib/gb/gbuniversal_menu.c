@@ -9,7 +9,13 @@
 #define POPUP_MAX_ITEMS 4u
 #define POPUP_BUFFER_BYTES 768u
 
+#ifdef GB_UNIVERSAL_POPUP_BORROWED
+/* Caller supplies 768 live primary bytes and excludes other users until
+ * popup returns, including during poll's reentrant application callbacks. */
+extern unsigned char *gb_universal_popup_buffer(void);
+#else
 static unsigned char popup_under[POPUP_BUFFER_BYTES];
+#endif
 static unsigned char popup_live;
 static unsigned char popup_close;
 
@@ -50,6 +56,10 @@ unsigned char gb_universal_popup(unsigned char x,
     unsigned char flags, hot = 0xFFu, over, selected = 0xFFu;
     unsigned char y = 8u;
     unsigned int bytes;
+#ifdef GB_UNIVERSAL_POPUP_BORROWED
+    unsigned char *popup_under=gb_universal_popup_buffer();
+    if(!popup_under)return 0xFFu;
+#endif
 
     if (!labels || count == 0u || count > POPUP_MAX_ITEMS) return 0xFFu;
     for (i = 0u; i != count; ++i) {

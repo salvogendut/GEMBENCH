@@ -145,7 +145,8 @@
       "background-timers": 4194304,
       "caller-parameters": 8388608,
       "typed-clipboard": 16777216,
-      "portable-data-pages": 33554432
+      "portable-data-pages": 33554432,
+      "portable-secondary-calls": 67108864
     }
   },
   "mailbox": {
@@ -170,14 +171,15 @@
       {"name": "version", "offset": 1, "size": 1},
       {"name": "data", "offset": 2, "size": 14}
     ],
-    "operations": {"line": 1, "text": 2, "timer-damage": 3, "timer-active": 4, "timer-dropped": 5, "timer-busy": 6, "timer-cancel": 7, "filesystem": 8, "clipboard": 9, "data-pages": 10},
+    "operations": {"line": 1, "text": 2, "timer-damage": 3, "timer-active": 4, "timer-dropped": 5, "timer-busy": 6, "timer-cancel": 7, "filesystem": 8, "clipboard": 9, "data-pages": 10, "secondary-call": 11},
     "statuses": {"ok": 0, "bad-argument": 1, "context": 2, "stale": 3, "owner": 4, "busy": 5, "unsupported": 6},
     "line_data": "u16 x0,y0,x1,y1; u8 pen. Endpoints must be inside runtime geometry; pen 0..3.",
     "text_data": "u8 column,line,pen,paper; u16 text_pointer; u8 length (0..48). Exactly length bytes copied, NUL-terminated privately before rendering; zero length does not dereference the pointer.",
     "timer_data": "u16 window; damage additionally u8 x,y,w,h. Nonempty rectangle inside runtime geometry. Busy ignores data. Other operations require a live generation-tagged window owned by the mapped caller.",
     "filesystem_data": "Requires portable-filesystem capability. Four u16 fields: header_pointer, header_size=32, transfer_pointer, transfer_size=512. Both complete spans must lie in [0x4000,0x7F00) and must not overlap each other. Header operation 0..14 only. Root callbacks only; copy in before mapping the module, copy out after restoring caller. Transport status in A; filesystem status in header[1]. No retained pointers. Legacy GB_FSCTX and native buffers are unchanged.",
     "clipboard_data": "Requires typed-clipboard capability. Two u16 fields: header_pointer, header_size=8. Root callbacks only. Header must be in primary RAM; effective nonempty payload span must be in primary RAM and disjoint from the header. A is GB_PARAMS transport status and E=0; successful transport publishes the separate scrap status/type/count in the header. No retained pointers or additional transfer buffer.",
-    "pointer_policy": "Entire record and nonempty text span must be within [0x4000,0x7F00), no wrap. Copy before banking; no retained pointers. Unused data bytes are ignored. SDK stages automatic stack records/text in app-primary storage under a critical section.",
+    "secondary_call_data": "Requires portable-secondary-calls, not merely inherited secondary-code. Two u16 fields: primary in/out buffer pointer, byte count 1..512; ten remaining bytes must be zero. Root primary callbacks only, non-nested. Execute only the immutable loaded owner/page-generation/entry seal, never a caller-selected entry or raw code-purpose page. Copy in to a zero-filled fixed buffer, enter with HL=buffer/BC=count, restore primary before copying count bytes out. A is GB_PARAMS status, E=1 on success. The computation-only secondary cannot call kernel services or retain primary pointers. Page release and owner teardown invalidate the seal, including before generation reuse. Kernel-owned fixed stack, mapping, IFF and lock are restored; this is not a malicious-code sandbox or a recovery promise for a nonreturning leaf.",
+    "pointer_policy": "Entire record and nonempty text span must be within [0x4000,0x7F00), no wrap. Copy before banking; no retained pointers. Unused data bytes are ignored unless the operation explicitly requires zero. SDK stages automatic stack records/text in app-primary storage under a critical section.",
     "context_policy": "Root application callbacks may draw. Workers may only publish/query/cancel timer values; no rendering. Timers use the existing visible-damage collector and owner teardown, never a deferred pointer.",
     "compatibility": "MSX2 continues accepting ABI 2.0 applications with their old private mailboxes. New SDK applications require ABI 2.1 and caller-parameters. Future CPC/PCW kernels must reject 2.0 packages that use the old framebuffer-aliasing convention; this revision alone does not claim those runtimes exist."
   },

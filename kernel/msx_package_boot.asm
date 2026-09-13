@@ -63,7 +63,7 @@ package_modules_bad
 package_modules
                 db "GBAPV4  MOD"
                 dw MSX_GBAP4_GATE,MSX_GBAP4_GATE_SIZE
-                db "GBV4",4
+                db "GBV4",5
                 db "GBPKFIX MOD"
                 dw MSX_PACKAGE_IO_BASE,MSX_PACKAGE_IMAGE_SIZE
                 db "GBIO",3
@@ -72,6 +72,6 @@ package_modules
                 db "GBPK",2
                 db "GBPKWM  MOD"
                 dw MSX_PACKAGE_ROUTE_BASE,MSX_PACKAGE_ROUTE_SIZE
-                db "GBWM",#30|MSX_SCREEN_MODE
+                db "GBWM",#40|MSX_SCREEN_MODE
                 db 0
 package_data_signature db "GBDP",1

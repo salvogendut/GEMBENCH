@@ -4,7 +4,116 @@ Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
 
-## Current resume point — checkpoint 2h, 2026-09-13
+## Current resume point — checkpoint 2j, 2026-09-13
+
+Latest user request: **save progress (commit/push) and go to next step**.
+Remain on #84 / `feature/84-unified-notepad`. This checkpoint records the
+sealed-call service and actual editor split after `86d93fb`; save/push it before
+starting Desktop document handoff. No PR/merge or normal-image replacement.
+
+**Actual Notepad is now privately runnable, but the sprint is not complete.**
+Read [UNIFIED-NOTEPAD-RUNTIME.md](UNIFIED-NOTEPAD-RUNTIME.md) first for source,
+build profiles, exact memory fit, evidence, limitations and manual commands.
+
+- New `protocol.h`, `client.h`, secondary model and `build_unotepad.sh`; full
+  4096-byte document plus independent transactional staging in the computation
+  bank. Primary owns UI/FS/chooser/clipboard, with exclusive borrowed scratch.
+- Complete APP 18684 bytes, SHA `d944f4565d4869d93f361b774fa38dbd657651878f8210133555b48de495b3c3`.
+  Primary image ends `784F`, DATA `7870..7EF4` (12 bytes before `7F00`);
+  secondary image ends `50AD`, DATA `5E00..7E21`. Kernel layout stays unchanged.
+  Extra features need real savings, not relaxed boundaries.
+- SDK opt-ins: compact IX frames with preserved generated kernel wrappers,
+  minimal helper linkage, borrowed 768-byte popup storage. Defaults remain
+  unchanged. New chunked document helper retains the original job/FS contract.
+  FS transfer scratch aliases the copied model packet; never read it after an
+  FS call without first saving any needed result (BASIC completion is handled).
+- 61 final focused tests pass, no skips; ABI/package/MSX layout checks pass.
+  `editor-final-suite.log` and `editor-final-{abi,package,layout}.log` in evidence.
+  New host cases include malformed stage/export requests, 4-KiB no-mutation
+  failure, long-line text splitting and a zero-returning filtered-arrow queue.
+- OpenMSX Screen 6/7 real small-file round trips pass in
+  `editor-openmsx{6,7}-polled.log` (189/177 exact computation returns).
+  1983 Screen 6 keyboard-pointer boundary run passes 50 checks;
+  Screen 7 joystick-trigger boundary run passes 59 checks. Both round-trip
+  4096 exact bytes and reject 4097 while retaining the old document.
+- **Do not lose the failing input case:** 1983 Screen 7 Space-as-click can add
+  a stray character before close. Bounded queue draining fixes queued startup
+  keys/filtered arrows but does not prove the poll/BIOS timing race solved.
+  Passing joystick tests are distinct evidence. No sibling emulator edits.
+- Local bridge adds a real joystick command and explicitly opt-in writable
+  images. `test_notepad_1983.py` always copies the supplied image first. The
+  original bridge's default stays read-only. New bridge hash and input coverage
+  are recorded in the runtime document; don't reuse the old read-only binary
+  for save tests. `stack_max=0` is not a measured root-stack high-water result.
+- Current private image paths: Screen 7
+  `build/notepad-84/build/msx/portable-notepad-7-4zhwnl2g/filesystem.img`, Screen 6
+  `build/notepad-84/build/msx/notepad-runtime-6/filesystem.img`. Test-only
+  CLOCK alias launches Notepad through Desk; NOTEPAD.APP contains the same app.
+  Preserve these evidence images and copy before manual writes.
+- **Next:** Desktop exact-name/path handoff and configuration contract;
+  remaining input discrepancy; full-document latency/stacking/clipboard and
+  openMSX boundary/failure/BASIC checks. `gb_fsctx_adopt_launch` allocates the
+  context but does not return all title/chooser metadata. Do not add native
+  mailbox reads to the portable app. All-newline 4-KiB BASIC can save as 8 KiB,
+  exceeding the current raw load cap: qualify/resolve, not silently ignore.
+- Explicitly sync sources into `build/notepad-84/`. Preserve normal QA image
+  hashes, user GIFs and untracked `QA/CPC/`. Existing failed logs are retained.
+
+## Previous resume point — checkpoint 2i, 2026-09-13
+
+Latest request: **commit and push and continue**. Committed/pushed the loader
+checkpoint as `86d93fb` on `feature/84-unified-notepad`. Subsequent sealed-call
+work is local, not yet committed/pushed. No PR/merge or normal image changes.
+Continue the consolidated sprint on #84, without re-proposing internal tasks.
+
+The computation-only call gate/restricted SDK now works on private MSX,
+confirmed in openMSX and 1983 Screen 6/7. **Actual Notepad is not runnable yet.**
+See [checkpoint 2i](PORTABLE-SECONDARY-CODE.md#checkpoint-2i--sealed-computation-calls-2026-09-13)
+for code, memory, ABI, evidence, build commands and retained failed runs.
+
+- New shared sealing/call core plus optional page/owner-release hooks; MSX
+  binding publishes only after full CRC/close. Eight-byte per-owner seals
+  include owner/page generations and validated entry/length. GB_PARAMS op 11
+  copies 1..512 bytes and restores primary before copy-out; nested/worker/
+  stale calls reject. The fixed root stack and caller IFF/lock are preserved.
+- Restricted C startup/SDK uses `build_usecondary.sh`, `gb_compute()`,
+  `UNIVERSAL_COMPUTE=1` and a matching payload audit. The new capability
+  `0x04000000` is opt-in only; normal MSX/CPC profiles do not advertise it.
+  No UI, FS, timers, callbacks, kernel calls or banking in the secondary.
+- Modules: GBAPV4 v5 3014; GBPKWM 1496 (mode signatures `46`/`47`), fixed
+  seals `2180`, state `21C0`, trusted bind record `21D0`, ends `21D8` before
+  `2200`. GBPKFIX/GBPKLOAD stay 1061/747; child sizes stay 14534/16112.
+  Calls reuse fixed FS transfer scratch `C400`; no filesystem inside leaf.
+- Executable COMPUTE probe: 54 app checks per generation; three generations
+  on each emulator/mode; same APP hash recorded in the checkpoint. Includes
+  initialized data, 4-KiB BSS, first-call reset and retained state. openMSX
+  checks 66 parameter returns/mode and live seal persistence/reclamation;
+  1983 checks exact live identities/code/pools and unchanged private media.
+- Shared fixture: 1058 operations, 1024 maps, 4659 delivered secondary IRQs
+  at each low/high layout. An important new regression uses half-page tables:
+  RASM rounded `SEC_TABLE/256` into the next page; use `SEC_TABLE >> 8`.
+  The 1983 live-table observation caught this after app-only checks passed.
+  Keep all failed logs; no sibling emulator or firmware edits were made.
+- Final focused suite: 59 tests pass with no skips in
+  `build/notepad-84/evidence/secondary-call-suite-accepted.log`; ABI/package and
+  low-RAM checks pass. Normal MSX/CPC/Desktop/runtime image hashes remain
+  exactly those recorded at the previous checkpoint.
+- **Next internal task is actual editor partition/integration.** Existing
+  `apps/unotepad/editor.h` is pure model code. Move its 4-KiB document and
+  transactional staging behind bounded copied commands; primary keeps UI,
+  FS/chooser/clipboard/config/Desktop handoff. Avoid simply retaining another
+  full 4-KiB primary scratch if it prevents fitting. Preserve all-or-nothing
+  failed load/paste/save semantics. Existing host editor tests still apply.
+  Measure both complete linked images/data/stack, then exercise actual
+  open/edit/save/reopen, recovery, focus/drag and responsiveness in both
+  MSX modes/emulators. Full CPC receiver/editor delivery follows.
+- Sync sources explicitly into `build/notepad-84/` before building. Private
+  final Screen 6/7 probe images: `build/msx/portable-compute-6-v7du_410/` and
+  `portable-compute-7-musp_pfn/` inside that worktree. They replace CLOCK with
+  COMPUTE for real Desk input, **not Notepad**. Preserve normal QA images,
+  user GIFs and untracked `QA/CPC/`.
+
+## Previous resume point — checkpoint 2h, 2026-09-13
 
 The user said to start the consolidated runnable-MSX Notepad sprint. Continue
 on #84, `feature/84-unified-notepad`; do not ask for a new milestone/approval

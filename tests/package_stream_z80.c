@@ -214,6 +214,12 @@ int main(int argc,char **argv)
             init();unsigned at=(bit<16?PKG_CAPS_LOW:PKG_CAPS_HIGH)+(bit%16)/8;
             fixed[at]&=~(1u<<(bit%8));failed(1);
         }
+        /* Assigned compute bit requires both a qualified receiver profile and
+         * its live capability. Never admit it just because it is assigned. */
+        init();image[m+15]|=4;crc();failed(1);
+        init();image[m+15]|=4;fixed[PKG_CAPS_HIGH+1]|=4;crc();
+        if(ADMISSION_DUAL){assert(invoke(PACKAGE_LOAD,0x0102,0)==0);}
+        else failed(1);
         const unsigned positions[]={0,3,7,8,9,12,14,m,m+4,m+5,m+6,m+7,m+8,m+10,m+11,m+13,m+15,
             m+20,m+30,m+31,m+32,m+33,m+34,m+35,m+36,m+38,m+40,m+42,m+44,m+52,m+54,m+60,
             16,17,18,19,20,22,s,s+1,s+2,s+3,s+4,s+6,s+7,s+8,s+10,s+12,s+14,s+16,s+18};

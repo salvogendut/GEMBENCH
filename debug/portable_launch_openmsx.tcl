@@ -44,8 +44,9 @@ proc launch_dos {} {
 }
 proc launch_bank {} {
     if {$::launch_active && [peek 0xD0E7]==1} {
-        launch_check [expr {[debug read_block memory 0x4000 16128] eq $::launch_secondary}] secondary_bytes
-        launch_check [expr {[debug read_block memory 0x7F00 256] eq [string repeat \x00 256]}] secondary_tail
+        set size [string length $::launch_secondary]
+        launch_check [expr {[debug read_block memory 0x4000 $size] eq $::launch_secondary}] secondary_bytes
+        launch_check [expr {[debug read_block memory [expr {0x4000+$size}] [expr {16384-$size}]] eq [string repeat \x00 [expr {16384-$size}]]}] secondary_tail
         incr ::launch_banks
     }
     set ::pause off
@@ -57,7 +58,7 @@ proc launch_return {} {
     set wanted [expr {$ok ? 0 : $::launch_case eq "short" ? 2 : 1}]
     launch_check [expr {[peek 0xD0E4]==2 && [peek 0xD0E5]==$wanted && ([reg F]&1)==$ok}] status
     launch_check [expr {$::launch_opens==1 && $::launch_closes==1}] single_open_close
-    set reads [expr {1+([string length $::launch_primary]-256+511)/512+32+($::launch_case ne "short")}]
+    set reads [expr {1+([string length $::launch_primary]-256+511)/512+([string length $::launch_secondary]+511)/512+($::launch_case ne "short")}]
     launch_check [expr {$::launch_reads==$reads && $::launch_banks==$ok}] stream_reads
     launch_check [expr {[peek 0xD0E7]==0 && [peek 0xD0FD]==0 && [peek 0xD0FF]==0}] stream_cleanup
     if {$ok} {

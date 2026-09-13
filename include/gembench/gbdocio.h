@@ -58,6 +58,16 @@ unsigned char gb_docio_save(gb_docio_t *job, gb_fsctx_t context,
 unsigned char gb_docio_busy(const gb_docio_t *job);
 /* Returns the resulting state; terminal/idle steps do nothing. */
 unsigned char gb_docio_step(gb_docio_t *job);
+/* Banked-model clients can stage/fetch each chunk outside filesystem calls.
+ * Begin without a full primary document buffer; use chunk(), NOT step().
+ * A LOAD result's transferred delta is the valid prefix in buffer; commit
+ * only DONE. Before each SAVE state step fill buffer with the next
+ * min(capacity,limit-transferred) bytes. REWIND/EOF states need no payload.
+ * buffer must be primary RAM and capacity 1..512. No pointer is retained.
+ * The job, context lifetime, exact-limit EOF and failure rules are unchanged. */
+unsigned char gb_docio_load_chunks(gb_docio_t *job,gb_fsctx_t context,unsigned int capacity);
+unsigned char gb_docio_save_chunks(gb_docio_t *job,gb_fsctx_t context,unsigned int length);
+unsigned char gb_docio_chunk(gb_docio_t *job,char *buffer,unsigned int capacity);
 /* Stops future steps, retaining progress/error. Does no I/O: these calls are
  * synchronous, so nothing remains in flight between steps. Returns 1 only
  * when an active job was cancelled. The caller still owns its context. */

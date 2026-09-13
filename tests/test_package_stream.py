@@ -62,6 +62,8 @@ class PackageStreamTests(unittest.TestCase):
                     PKG_ALLOW_IRQ=allow_irq,fs_ent_size=base+0x434,
                     MSX_STREAM_TEST=msx_provider,MSX_PKG_STATE=base+0x440)
                 cells['ADMISSION_DUAL' if profile==3 else 'ADMISSION_STREAMED']=1
+                if profile==3:
+                    cells['PORTABLE_PACKAGE_STREAM']=1
                 code=[*[f'{n} equ {v}' for n,v in cells.items()],
                     'PKG_MAP equ map_page',
                     'PKG_READ equ msx_pkg_read' if msx_provider else 'PKG_READ equ read_stream',
@@ -133,8 +135,9 @@ class PackageStreamTests(unittest.TestCase):
             source=(ROOT/unit).read_text()
             self.assertNotIn('ADMISSION_STREAMED equ',source)
             self.assertNotIn('include "core/package_stream.asm"',source)
-        contract=(ROOT/'docs/PORTABLE-SECONDARY-CODE.md').read_text()
-        self.assertIn('not yet implemented',contract)
+        # CPC has not acquired a secondary-call binding merely because the
+        # shared ABI assigns it. Check code, not a historical prose sentence.
+        self.assertNotIn('PARAM_SECONDARY_CALL equ', (ROOT/'kernel/cpc_parameter_provider.inc').read_text())
 
 
 if __name__=='__main__':unittest.main()

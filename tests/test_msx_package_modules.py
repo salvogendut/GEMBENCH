@@ -77,7 +77,7 @@ real_exit 0
 
     def test_composition_rejects_mixed_modules_and_state_overlap(self):
         parts = {name: (b'\xC3\0\0'+magic).ljust(size, b'\0')
-                 for name, size, magic in [('GBAPV4.RAW', 2996, b'GBV4\4'),
+                 for name, size, magic in [('GBAPV4.RAW', 3014, b'GBV4\5'),
                      ('GBPKIO.RAW', 293, b'GBIO\3'), ('GBDPAGE.RAW', 492, b'GBDP\1'),
                      ('GBPKLOAD.RAW', 747, b'GBPK\2')]}
         parts['GBPKCRC.RAW'] = bytes([0xC9])*186
@@ -102,7 +102,7 @@ real_exit 0
             build(stage)
             # Boot validation depends on size/header, not executable router
             # contents; actual router control flow has its own integration tests.
-            (stage/'GBPKWM.MOD').write_bytes((b'\xC3\x0E\x1CGBWM\x36').ljust(256,b'\0'))
+            (stage/'GBPKWM.MOD').write_bytes((b'\xC3\x17\x1CGBWM\x46').ljust(256,b'\0'))
             fs = (ROOT/'lib/msx/fs.asm').read_text()
             probe = fs[fs.index('\nfsload_maxed\n')+1:fs.index('\nfsload_success\n')]
             (stage/'boot.asm').write_text(f'''

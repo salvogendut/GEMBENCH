@@ -62,6 +62,15 @@ ret
 input_poll ret
 poll_move ret
 cursor_move_to ret
+msx_secondary_commit
+ld a,(#3006)
+inc a
+ld (#3006),a
+ld a,(#3007)
+or a
+ret nz
+scf
+ret
 save "stubs.bin",#9000,$-#9000
 ''')
             subprocess.run(['rasm',str(stage/'test.asm'),'-s','-sq','-o','route'],cwd=stage,

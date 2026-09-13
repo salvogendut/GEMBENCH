@@ -9,6 +9,11 @@ universal_parameters
 up_return       ret
 
 up_dispatch
+                ifdef PARAM_EXCLUSIVE_BUSY
+                ld a,(PARAM_EXCLUSIVE_BUSY)
+                or a
+                jp nz,up_busy                  ; never overwrite a live call's parameter copy
+                endif
                 ld a,b
                 or a
                 jp nz,up_bad
@@ -25,6 +30,9 @@ up_dispatch
                 jp nz,up_unsupported
                 ld a,(ix+0)
                 dec a
+                ifdef PARAM_SECONDARY_CALL
+                cp 11
+                else
                 ifdef PARAM_DATA_PAGES
                 cp 10
                 else
@@ -35,6 +43,7 @@ up_dispatch
                 cp 8
                 else
                 cp 7
+                endif
                 endif
                 endif
                 endif
@@ -53,6 +62,10 @@ up_dispatch
                 cp (hl)
                 jp nz,up_context
                 ld a,(ix+0)
+                ifdef PARAM_SECONDARY_CALL
+                cp 11
+                jp z,up_secondary
+                endif
                 ifdef PARAM_DATA_PAGES
                 cp 10
                 jp z,up_data_pages
@@ -270,4 +283,9 @@ up_text_copy    ds 49,0
                 endif
                 ifdef PARAM_DATA_PAGES
                 include "parameters_pages.asm"
+                endif
+                ifdef PARAM_SECONDARY_CALL
+up_secondary
+                ld hl,up_request
+                jp PARAM_SECONDARY_CALL
                 endif

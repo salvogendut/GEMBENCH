@@ -4,7 +4,16 @@ Started 2026-09-09 in [issue #84](https://github.com/salvogendut/GEMBENCH/issues
 branch `feature/84-unified-notepad`, based on main `1367593`.
 Follows the [bounded MSX baseline close-out](V1-MSX-STABILITY-BASELINE.md).
 
-**Checkpoint 2 in progress: the actual editor integration source and document
+**Current checkpoint 2j, 2026-09-13:** the actual two-bank editor now fits and
+runs in private MSX images. OpenMSX Screen 6/7 passes real open/edit/save/reopen;
+1983 adds full 4096-byte save/readback and oversized-load recovery. Screen 7's
+Space-as-click timing discrepancy remains recorded separately from passing
+joystick input. Desktop document handoff, configuration and broader runtime
+qualification still remain; this is not sprint completion. See
+[runtime evidence, limitations and manual instructions](UNIFIED-NOTEPAD-RUNTIME.md).
+Normal images are unchanged and native Notepad remains the delivered app.
+
+**Historical checkpoints through 2i:** the actual editor integration source and document
 controller now exist, but the complete primary-only link fails the memory gate.
 Owned data/secondary-code support is a demonstrated prerequisite.** Portable
 clipboard and chooser foundations retain their earlier cross-target evidence;
@@ -24,12 +33,14 @@ lifecycles passing in openMSX/1983 and 45 focused tests passing.
 Screen 6/7 receivers: successful two-bank launches pass in openMSX/1983, and
 real corrupted/truncated/trailing files reject cleanly in openMSX. Pointer-only
 loading progress and ordinary Clock/Calculator compatibility are checked.
-The Screen 7 child now has **16 bytes spare**. Sealed secondary calls and
-the editor partition/runtime are next within the same sprint.
-See [the current integration checkpoint](PORTABLE-SECONDARY-CODE.md#checkpoint-2h--normal-msx-streamed-launch-2026-09-13).
+The Screen 7 child now has **16 bytes spare**. **Checkpoint 2i** implements
+sealed computation calls and a restricted SDK, with the same compiled probe
+passing three generations in openMSX and 1983, Screen 6/7. No image boundary
+was enlarged. The actual editor partition/runtime was next at that checkpoint.
+See [the sealed-call integration checkpoint](PORTABLE-SECONDARY-CODE.md#checkpoint-2i--sealed-computation-calls-2026-09-13).
 Notepad remains the native application in the normal MSX distribution and is
 not yet delivered on CPC. No unified Notepad APP or emulator acceptance is
-claimed by this checkpoint. Normal MSX/CPC images are unchanged.
+claimed by checkpoint 2i; the newer 2j evidence is linked above.
 
 **Save point, 2026-09-09:** the user requested committing/pushing these
 foundations and updating working memory before resuming. The
@@ -45,9 +56,10 @@ service and editor integration into **one outcome-based sprint** on issue #84
 and `feature/84-unified-notepad`. This replaces their treatment as separate
 delivery steps; it does not remove their dependency order or safety checks.
 Checkpoint 2g was the starting point, not a runnable-editor acceptance record.
-Execution has started: checkpoint 2h completes the first internal MSX loader
-task in bounded qualification. The secondary-call and editor tasks remain;
-this is not an estimate that one third of the total effort has been spent.
+Checkpoint 2h completes the internal MSX loader task; 2i completes validated
+calls/restricted SDK in bounded private MSX qualification. Checkpoint 2j brings
+up the actual editor and first file/boundary tests, but its integration and
+qualification task is unfinished. This is not a percentage-of-effort estimate.
 
 **Sprint finish line:** a reproducibly built unified Notepad APP in a private
 MSX image, launched through the real Desktop, that the user can manually test
@@ -62,7 +74,7 @@ exact build/run instructions, test evidence and any known limitations.
    Exercise successful two-segment loading and rejection/rollback through the
    receiver, not only the existing standalone fixtures. Measure Screen 6/7
    memory and root input responsiveness before adding the call service.
-2. **Enable validated secondary calls.** Bind immutable owner/page generations
+2. **Enable validated secondary calls — qualified on private MSX (2i).** Bind immutable owner/page generations
    and the validated entry; implement bounded copied arguments/results, safe
    bank/stack/interrupt restoration and teardown. Add the restricted SDK and
    package/audit support. Validate both return paths and stale/invalid requests

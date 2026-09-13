@@ -17,6 +17,7 @@ static void begin(gb_docio_t *job, gb_fsctx_t context, unsigned int limit,
     job->state = state;
 }
 
+#ifndef GB_DOCIO_CHUNKS_ONLY
 unsigned char gb_docio_load(gb_docio_t *job, gb_fsctx_t context,
                             char *buffer, unsigned int capacity)
 {
@@ -34,12 +35,27 @@ unsigned char gb_docio_save(gb_docio_t *job, gb_fsctx_t context,
     job->buffer.save = buffer;
     return 1;
 }
+#endif
 
-unsigned char gb_docio_step(gb_docio_t *job)
+unsigned char gb_docio_load_chunks(gb_docio_t *job,gb_fsctx_t context,unsigned int capacity)
+{
+    if (!job || !context || gb_docio_busy(job)) return 0;
+    begin(job,context,capacity,GB_DOCIO_LOAD_REWIND);job->buffer.load=0;return 1;
+}
+unsigned char gb_docio_save_chunks(gb_docio_t *job,gb_fsctx_t context,unsigned int length)
+{
+    if (!job || !context || gb_docio_busy(job)) return 0;
+    begin(job,context,length,GB_DOCIO_SAVE_REWIND);job->buffer.save=0;return 1;
+}
+unsigned char gb_docio_chunk(gb_docio_t *job,char *buffer,unsigned int capacity)
 {
     unsigned int count, amount;
     unsigned char error = GB_FSCTX_OK;
     if (!job) return GB_DOCIO_IDLE;
+    if (!buffer || !capacity || capacity>GB_FSCTX_TRANSFER_MAX) {
+        if(gb_docio_busy(job)) {job->error=GB_FSCTX_ERR_BADARG;job->state=GB_DOCIO_ERROR;}
+        return job->state;
+    }
     switch (job->state) {
     case GB_DOCIO_LOAD_REWIND:
     case GB_DOCIO_SAVE_REWIND:
@@ -50,9 +66,8 @@ unsigned char gb_docio_step(gb_docio_t *job)
         break;
     case GB_DOCIO_LOAD:
         amount = job->limit - job->transferred;
-        if (amount > GB_FSCTX_TRANSFER_MAX) amount = GB_FSCTX_TRANSFER_MAX;
-        count = gb_fsctx_read(job->context, job->buffer.load + job->transferred,
-                             amount);
+        if (amount > capacity) amount = capacity;
+        count = gb_fsctx_read(job->context,buffer,amount);
         error = gb_fsctx_status();
         if (error) break;          /* zero bytes with an error is not EOF */
         job->transferred += count;
@@ -70,12 +85,10 @@ unsigned char gb_docio_step(gb_docio_t *job)
         break;
     case GB_DOCIO_SAVE:
         amount = job->limit - job->transferred;
-        if (amount > GB_FSCTX_TRANSFER_MAX) amount = GB_FSCTX_TRANSFER_MAX;
+        if (amount > capacity) amount = capacity;
         /* Avoid even NULL + 0 for an empty file. A zero-length first write
          * is intentional: rewind alone does not truncate an existing file. */
-        error = gb_fsctx_write(job->context,
-            amount ? job->buffer.save + job->transferred : job->buffer.save,
-            amount);
+        error = gb_fsctx_write(job->context,buffer,amount);
         if (error) break;
         job->transferred += amount;
         if (job->transferred == job->limit) job->state = GB_DOCIO_DONE;
@@ -89,6 +102,17 @@ unsigned char gb_docio_step(gb_docio_t *job)
     }
     return job->state;
 }
+
+#ifndef GB_DOCIO_CHUNKS_ONLY
+unsigned char gb_docio_step(gb_docio_t *job)
+{
+    char *buffer;
+    if(!job) return GB_DOCIO_IDLE;
+    /* Empty transfers still need a valid owned byte for the chunk API. */
+    buffer=job->buffer.load ? job->buffer.load+job->transferred : &job->probe;
+    return gb_docio_chunk(job,buffer,GB_FSCTX_TRANSFER_MAX);
+}
+#endif
 
 unsigned char gb_docio_cancel(gb_docio_t *job)
 {

@@ -1,16 +1,15 @@
 # Portable secondary code — implementation contract
 
 Issue #84, `feature/84-unified-notepad`. Continues the privately qualified
-[owned data-page prerequisite](PORTABLE-PAGES.md). Native delivery and public
-capability publication remain unchanged until both receiver paths are proved.
+[owned data-page prerequisite](PORTABLE-PAGES.md). Native delivery and normal
+distribution capability publication remain unchanged until both receiver paths are proved.
 
-**2026-09-13 checkpoint 2h:** ordinary Desktop launches now call the stream
-loader in the private MSX profile. Two-bank success, bad CRC/truncation/trailing
-data rejection, rollback and pointer-only progress are qualified in openMSX;
-the same APP also passes three lifetimes in 1983, in Screen 6/7. Earlier
-standalone and boot-only evidence remains below. **Executable secondary calls
-and editor partition/runtime are still missing**; this is not a runnable
-unified Notepad. CPC streaming and normal distribution replacement still follow.
+**2026-09-13 checkpoint 2i:** sealed computation calls and the restricted SDK
+now run through the real Desktop in private MSX Screen 6/7 images, confirmed
+with openMSX and 1983. The preceding loader checkpoint was committed/pushed as
+`86d93fb`. **The actual editor partition/runtime is still missing**; this is
+not a runnable unified Notepad. CPC streaming/calls and normal distribution
+replacement still follow. Earlier checkpoints below are historical evidence.
 
 ## Ordered gates
 
@@ -504,7 +503,115 @@ and qualify copied secondary calls and the restricted SDK, then partition the
 actual editor. The validated secondary in this probe is deliberately never
 executed. CPC stream binding and full release qualification remain deferred.
 
-## Sealed call contract (next, not yet implemented)
+## Checkpoint 2i — sealed computation calls, 2026-09-13
+
+The second internal sprint task is implemented and qualified on private MSX.
+Shared `kernel/core/secondary_call.asm` owns sealing, validation, bounded
+copying and lifetime policy; `msx_secondary_call.asm` supplies the existing
+mapper/current-owner bindings and the copied-parameter adapter. The loader
+publishes a seal only after complete package validation and successful close.
+Raw code-purpose allocation cannot create one. Both page release and owner
+teardown clear seals, including before an eight-bit generation wraps.
+
+ABI 2.1 assigns `portable-secondary-calls = 0x04000000` and `GB_PARAMS`
+operation 11. Only the opt-in MSX receiver advertises/dispatches it. Normal
+MSX/CPC images remain unchanged; CPC streaming/call binding is **not yet
+implemented**. No public jump-table address or primary/stack boundary changed.
+The inherited native secondary-code bit is not this service.
+
+`gb_compute()` uses the existing primary-staging SDK bridge. The restricted
+`build_usecondary.sh` compiles pure C with a GBS4 startup which initializes
+data/BSS once per fresh allocation and retains state across calls. The source,
+generated-assembly and linked-module audit rejects kernel/I/O/interrupt and
+unaudited runtime dependencies. `UNIVERSAL_COMPUTE=1` requires the capability,
+a secondary payload and a matching audited-payload hash. This is a build
+discipline/check against stale artifacts, not cryptographic authorization or
+a sandbox. Primary UI/filesystem work must remain outside the secondary.
+
+Updated private fixed modules:
+
+| Component | Bytes / placement |
+|---|---|
+| GBAPV4 v5 | 3014, `0400..0FC6`, before legacy sysinfo `0FD0` |
+| GBPKWM mode signatures `46`/`47` | 1496, `1C00..21D8`, within the existing `2200` limit |
+| Seal table / call state / trusted bind record | `2180..21C0` / `21C0..21CC` / `21D0..21D8` |
+| Copied call block | Reuses the fixed 512-byte FS transfer scratch at `C400`; no FS calls inside leaf |
+| GBPKFIX / GBPKLOAD | Unchanged 1061 / 747 |
+| Screen 6 / 7 child | Unchanged 14534 / 16112; Screen 7 still has 16 spare bytes |
+
+The gate uses the existing fixed root stack, not an app-installed trampoline
+or new secondary stack. Its entry guard rejects a banked/near-boundary SP;
+the instruction fixture checks IX/IY; real receiver tests check exact SP,
+IFF, lock, primary mapping, snapshot and pixel preservation. Timer IRQs may run inside the leaf while
+the scheduler lock prevents worker or callback dispatch. Actual editor work
+still needs chunking and latency measurements; passing a computation probe
+does not establish editor responsiveness or arbitrary C stack safety.
+
+### Runtime evidence
+
+`apps/computeprobe` invokes actual compiled secondary code, with initialized
+data plus a persistent 4-KiB BSS object. Each fresh owner executes 54 checks:
+copied lengths 1 through 512 at boundary samples, guard preservation, bad
+lengths/spans/reserved bytes, state persistence and first-call reinitialization.
+The same **11206-byte APP** is used in both video modes, SHA256
+`ab6e6eef5bea73ff474d3357e69da4b549e2235429eb917478963f82cf1cc0f4`.
+It deliberately pads the secondary to 7936 bytes to exercise streaming below
+its live data at `6000`; this is not the final editor's layout.
+
+- openMSX: three launch/call/close generations per mode; 66 parameter returns
+  checked exactly, live seal publication, survival after window drawing and
+  complete seal/page reclamation. Each load opens once, reads 24 times and
+  closes once, taking 253–254 PAL ticks. Pointer-progress gaps are at most
+  five/four ticks in Screen 6/7. Logs: `secondary-compute-msx6-final.log` and
+  `secondary-compute-msx7-final.log` under `build/notepad-84/evidence/`.
+- 1983: three generations per mode, 359/368 read-only observations, identical
+  APP bytes, exact seal identities/code/pool cleanup, unchanged private disk.
+  In-flight loading has 78 pointer changes per 100 frames, maximum gap four.
+  Evidence: `secondary-compute-1983-6-final/` and
+  `secondary-compute-1983-7-fixed/` under that evidence directory.
+- Final openMSX Screen 7 regression: corrupt COMPUTE rejects three times,
+  makes no application/secondary call, publishes no seal and restores the
+  exact pool (`secondary-compute-badcrc-msx7.log`). Primary-only PAGEPRB also
+  passes three lifetimes with 407 exact service returns
+  (`secondary-primary-regression-msx7.log`).
+- Shared Z80 call fixture: **1058 operations at each of two fixed layouts**,
+  all lengths 1..512, nested BUSY, stale/foreign identity, purpose/entry/size
+  rejection, banked/near-boundary stack rejection, page-generation wrap and actual owner/page teardown; 1024 maps
+  and **4659 delivered IRQs inside the secondary per layout**. Tables use a
+  half-page offset, not just aligned addresses. The router fixture adds
+  seal-publication failure and active-call preflight rejection (42 checks).
+- **59 focused host/Z80 tests pass, no skips**, including existing document,
+  clipboard, chooser, primary-parameter and shared owner/page regressions.
+  Log: `build/notepad-84/evidence/secondary-call-suite-accepted.log`. ABI authority,
+  deterministic package and 55-range low-RAM inventory checks pass as well.
+
+Final openMSX image directories under `build/notepad-84/build/msx/`:
+`portable-compute-6-v7du_410/` and `portable-compute-7-musp_pfn/`.
+The successful 1983 Screen 7 run used the same corrected receiver in
+`portable-compute-7-3ts_htp9/`. These images alias COMPUTE as CLOCK for real
+Desk input; **they are diagnostics, not a runnable Notepad**.
+
+Reproduce in a source-synchronized private worktree:
+
+```sh
+python3 tools/test_portable_fs_openmsx.py --mode 6 --compute
+python3 tools/test_portable_fs_openmsx.py --mode 7 --compute
+```
+
+For 1983 use `test_portable_pages_1983.py --compute`, the matching private
+image and `--app STAGE/probe.APP`, plus the existing bridge/firmware/worktree
+arguments. Keep unsuccessful logs: the first launch found an outdated
+admission capability mask. A subsequent 1983 identity observation found that
+RASM rounded `SEC_TABLE/256` for `2180` into the next page; using `>> 8` fixes
+the actual address. Both the unaligned instruction fixture and real-runtime
+live-table observers now cover this. No emulator or firmware was changed.
+
+**Next internal task:** partition the actual Notepad model/state and staging
+behind copied commands, preserve its 4096-byte editable capacity and failure
+recovery, fit both linked banks, then perform real open/edit/save/reopen tests.
+Do not treat this diagnostic as completed editor delivery.
+
+## Sealed call contract (implemented on private MSX)
 
 Bind one immutable `(owner generation, page generation, validated entry, length)`
 record only after the full load succeeds. A raw allocated code-purpose page is
@@ -531,4 +638,5 @@ The runtime gate retains primary owner identity, mapping/shadow, return stack,
 interrupt state and lock across entry/return, then copies results into primary
 objects. No promise of sandboxing malicious Z80 code or recovering from a leaf
 which never returns. Chunk long work and measure input latency in receiver tests.
-No public opcode or capability for calls is advertised at this checkpoint.
+The new opcode/capability is advertised only by the opt-in private MSX receiver;
+normal distribution publication and CPC binding remain deferred.

@@ -185,7 +185,7 @@ MSX_SYS_RESERVED4   equ MSX_SYSINFO+47
 MSX_GBAP4_GATE      equ #0400
 MSX_GBAP4_GATE_LIMIT equ #1000
                 ifdef PORTABLE_PACKAGE_STREAM
-MSX_GBAP4_GATE_SIZE equ 2996        ; measured opt-in module; checked by assembler
+MSX_GBAP4_GATE_SIZE equ 3014        ; measured opt-in module; checked by assembler
                 else
                 ifndef PORTABLE_DATA_PAGES
 MSX_GBAP4_GATE_SIZE equ 2889

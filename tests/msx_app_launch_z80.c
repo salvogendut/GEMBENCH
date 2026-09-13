@@ -35,6 +35,7 @@ static int call(unsigned entry){
 static void reset(void){
     memset(mem+0xD0E3,0,29);mem[0x1340]=3;mem[0x1342]=0;word(MSX_PENDING_OWNER,0);
     memset(mem+0x3000,0,32);mem[0x3002]=1;word(0x3003,256);
+    mem[0x21C0]=0;
     memset(mem+0x1800,0,512);mem[0x1800]=0xC3;
     memcpy(mem+0x1803,"GBAP\4",5);mem[0x1808]=2;mem[0x1842]=2;
     packages=admissions=closes=0;admit=1;package_status=0;
@@ -58,13 +59,14 @@ int main(int argc,char **argv){
         reset();mem[0x3002]=0;mem[0x123D]=strict;
         assert(!call(MSX_APP_LOAD) && !packages && !admissions && !mem[0x123D]);++checks;
     }
-    for(unsigned fault=0;fault<6;fault++){
+    for(unsigned fault=0;fault<7;fault++){
         reset();cpu.hl=0x6123;
         if(fault==1)word(MSX_PENDING_OWNER,0x101);
         if(fault==2)mem[0x1342]=1;
         if(fault==3)mem[0xD0E7]=1;
         if(fault==4)mem[0xD0FD]=1;
         if(fault==5)mem[0xD0FF]=0xD0;
+        if(fault==6)mem[0x21C0]=1;
         unsigned char before[29];memcpy(before,mem+0xD0E3,29);
         assert(call(MSX_APP_CAN_LAUNCH)==!fault && cpu.hl==0x6123);
         assert(!memcmp(before,mem+0xD0E3,29));++checks;
@@ -74,6 +76,9 @@ int main(int argc,char **argv){
             assert(!memcmp(before,mem+0xD0E3,29));++checks;
         }
     }
+    reset();mem[0x3007]=1;
+    assert(!call(MSX_APP_LOAD)&&packages==1&&closes==1&&mem[0x3006]==1);
+    assert(mem[0xD0E5]==1&&!mem[0xD0E4]&&!mem[0xD0FD]&&mem[0x1340]==3);++checks;
     /* Later ordinary bytes that happen to resemble a package aren't a prefix. */
     reset();mem[0xD0E4]=1;word(0x3010,512);cpu.hl=256;cpu.c=9;
     assert(!call(MSX_APP_PROBE) && !packages);++checks;

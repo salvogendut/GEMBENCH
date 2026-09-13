@@ -28,7 +28,7 @@ fs_ent_size             equ #14E8
                 org   MSX_GBAP4_GATE
                 jp    gbap4_validate_loaded
                 ifdef PORTABLE_PACKAGE_STREAM
-                db    "GBV4",4
+                db    "GBV4",5
                 else
                 db    "GBV4",2
                 endif

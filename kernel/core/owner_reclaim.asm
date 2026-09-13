@@ -7,6 +7,11 @@ owner_release
                 ld    (CORE_ALLOC_OWNER),de
                 call  owner_validate
                 jp    nc,mor_stale
+                ifdef OWNER_SEAL_RELEASE
+                ld c,e
+                dec c
+                call OWNER_SEAL_RELEASE
+                endif
                 ld    de,(CORE_ALLOC_OWNER)      ; queued sender/receiver endpoints die atomically
                 call  OWNER_PAGE_PURGE_MESSAGES
                 ld    de,(CORE_ALLOC_OWNER)

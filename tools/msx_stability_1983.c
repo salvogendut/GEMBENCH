@@ -1,11 +1,16 @@
 /* Read-only observation/input bridge for the unmodified 1983 core.
  * Compile in GEMBENCH, never alter the sibling emulator or accepted media.
+ * Guest disk writes are opt-in for disposable-image storage tests only.
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include "msx.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef MSX_TEST_WRITABLE_IMAGE
+#define MSX_TEST_WRITABLE_IMAGE 0
+#endif
 
 int main(int argc, char **argv) {
     MsxMachine *m = calloc(1, sizeof(*m));
@@ -25,7 +30,8 @@ int main(int argc, char **argv) {
         msx_load_omega_unified_rom(m, argv[1], 0);
     if (firmware_error || msx_configure_floppy(m, &floppy) ||
         msx_load_sunrise_ide(m, 0, argv[2]) ||
-        msx_mount_sunrise_disk_mode(m, argv[3], ATA_IMAGE_READ_ONLY)) {
+        msx_mount_sunrise_disk_mode(m, argv[3], MSX_TEST_WRITABLE_IMAGE ?
+                                   ATA_IMAGE_READ_WRITE : ATA_IMAGE_READ_ONLY)) {
         fprintf(stderr, "cannot initialize 1983 reference machine\n");
         return 2;
     }
@@ -61,6 +67,9 @@ int main(int argc, char **argv) {
             msx_keyboard_clear(m);
             for (i = 0; i < 8; ++i)
                 if (b & (1u << i)) msx_keyboard_press(m, a, i);
+            puts("{}");
+        } else if (fields == 3 && !strcmp(command, "joystick") && a < MSX_JOYSTICK_PORTS && b <= MSX_JOY_MASK) {
+            msx_joystick_set_pressed(m, a, (u8)b);
             puts("{}");
         } else if (fields == 3 && b <= 4096 &&
                    ((!strcmp(command, "read") && a <= 65536 && b <= 65536-a) ||

@@ -105,6 +105,14 @@ msx_app_match
                 jr c,msx_app_stream_closed
                 call MSX_PACKAGE_IO_CLOSE
 msx_app_stream_closed
+                ld a,(MSX_PACKAGE_RESULT)
+                or a
+                jr nz,msx_app_seal_done
+                call msx_secondary_commit      ; only a closed, fully validated package
+                jr c,msx_app_seal_done
+                ld a,1
+                ld (MSX_PACKAGE_RESULT),a      ; shared owner rollback also frees the secondary
+msx_app_seal_done
                 ld hl,0
                 ld (fs_ent_size+2),hl
                 ld a,(MSX_PACKAGE_RESULT)
@@ -212,6 +220,9 @@ msx_app_can_launch
                 or b
                 ret nz
 msx_app_context_ready
+                ld a,(MSX_SECONDARY_STATE)
+                or a
+                ret nz
                 ld a,(SCHED_CURRENT)
                 or a
                 ret nz

@@ -202,12 +202,20 @@ spare in Screen 7). **Checkpoint 2h now connects normal single-open streamed
 Desktop launch** on private MSX Screen 6/7: successful two-bank lifetimes and
 pointer progress pass in openMSX/1983; bad CRC, truncated and trailing files
 reject with exact rollback in openMSX. Ordinary primary-only and Clock/Calculator
-regressions also pass. Screen 7 now has 16 bytes spare. **Next is the sealed
-secondary-call service/restricted SDK, then the actual editor partition/runtime**
-within the same sprint. CPC streaming remains deferred. See the secondary-code
+regressions also pass. Screen 7 now has 16 bytes spare. **Checkpoint 2i now
+qualifies the sealed secondary-call service and restricted SDK** with actual
+compiled computation code through Desktop on openMSX and 1983, Screen 6/7.
+It retains the same memory bounds. **Checkpoint 2j now brings up the actual
+two-bank editor** within the same sprint: its full 4-KiB model and separate
+staging fit; real file round trips pass on private MSX Screen 6/7, and 1983
+adds full-capacity/oversized-load checks. Space-as-click timing still needs
+resolution; Desktop document/configuration integration and broader runtime
+qualification remain. See [the runtime checkpoint](UNIFIED-NOTEPAD-RUNTIME.md)
+for precise emulator/input coverage, limitations and testable image paths.
+CPC streaming/calls remain deferred. See the secondary-code
 record for evidence and the distinction between loading and executing a bank.
 The delivered editor is still native; no normal
-image has been replaced and no unified Notepad runtime acceptance is claimed.
+image has been replaced. Bounded private runtime evidence is not release acceptance.
 
 #### Consolidated sprint — runnable MSX Notepad, 2026-09-13
 
@@ -223,8 +231,9 @@ Deliver a private image and reproducible manual-test instructions; normal media
 stay unchanged. Full MSX/CPC distribution qualification and identical-APP CPC
 delivery follow this sprint, with relevant shared-code regressions retained
 throughout. This is scope consolidation, not an estimate of one session or a
-claim of completed editor delivery. Execution has started; checkpoint 2h closes
-the first internal MSX loader task in bounded tests, not the whole sprint.
+claim of completed editor delivery. Checkpoints 2h/2i close the internal MSX
+loader and validated-call tasks in bounded tests; 2j begins actual editor runtime
+qualification. The sprint remains open.
 
 #### Saved checkpoint and remaining delivery path — 2026-09-09
 
@@ -475,6 +484,6 @@ changes, promise a date, or authorize a release.
 
 Next implementation package: **milestone 1 — unified Notepad and the document
 services it needs** ([issue #84](https://github.com/salvogendut/GEMBENCH/issues/84)),
-next binding/qualifying the fixture-tested secondary stream loader on both
-receivers and implementing its sealed call gate, then finishing the editor's portable bindings
-and qualifying identical MSX2/CPC application artifacts.
+next completing Desktop document/configuration integration and runtime
+qualification of the privately runnable editor (checkpoint 2j), then binding that shared policy
+on CPC and qualifying identical MSX2/CPC application artifacts.

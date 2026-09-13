@@ -18,7 +18,8 @@ from embed_app_icon import parse_manifest
 class PageDriver(Driver):
     def exercise(self, args):
         linked = args.symbols.read_text()
-        at = int(re.search(r"^DEF _pageprobe_state (0x[0-9A-Fa-f]+)", linked, re.M)[1], 16)
+        stem = 'computeprobe' if args.compute else 'pageprobe'
+        at = int(re.search(rf"^DEF _{stem}_state (0x[0-9A-Fa-f]+)", linked, re.M)[1], 16)
         glue = constants(args.worktree / "lib/msx/glue.inc")
         self.wait(lambda: self.read(0xCF00, 2) == [48, 6] and
                   self.value("WM_NWIN") == 1, "desktop boot", 6000)
@@ -27,6 +28,8 @@ class PageDriver(Driver):
         self.expect(self.read(0xCF05)[0] == args.mode, "requested screen mode")
         self.expect(state["vdp_regs"][0] & 14 == (10 if args.mode == 7 else 8), "bitmap mode")
         self.expect(self.read(0xCF21)[0] & 2, "portable data-page capability")
+        if args.compute:
+            self.expect(self.read(0xCF21)[0] & 4, "sealed computation capability")
         baseline = self.busy()
         pages = self.read(glue["MSX_PAGE_STATE"], 32)
         free = self.read(glue["MSX_PAGE_FREE"])[0]
@@ -74,8 +77,10 @@ class PageDriver(Driver):
             slot = self.value("WM_FOCUS")
             native = self.entry(slot)[0]
             result = self.call(f"ram {native*0x4000 + at-0x4000} 8")
-            self.expect(result[0] == 85 and result[1]+256*result[2] >= 130 and
-                        result[4] == bool(cycle), f"data-page checks cycle {cycle}: {result}")
+            count = result[1]+256*result[2]
+            self.expect(result[0] == 85 and (count == 54 if args.compute else count >= 130) and
+                        result[4] == (0 if args.compute else bool(cycle)),
+                        f"{stem} checks cycle {cycle}: {result}")
             code = b"".join(bytes(self.call(f"ram {native*0x4000+i} {min(4096,len(primary)-i)}"))
                             for i in range(0, len(primary), 4096))
             self.expect(code == primary, "primary application code unchanged")
@@ -91,8 +96,19 @@ class PageDriver(Driver):
                 bank = self.read(glue['MSX_PAGE_NATIVE']+candidates[0])[0]
                 stored = b''.join(bytes(self.call(f'ram {bank*0x4000+i} 4096'))
                                   for i in range(0, 0x4000, 4096))
-                self.expect(stored == secondary+bytes(0x4000-len(secondary)),
-                            'complete secondary bytes and zeroed allocation tail')
+                if args.compute:
+                    self.expect(stored[:len(secondary)] == secondary,
+                                'secondary executable bytes unchanged after real calls')
+                    # The C probe checks initialization, persistent 4-KiB state,
+                    # and reset for each fresh owner. Its data tail is mutable.
+                    seal = self.read(0x2180+8*(owner[0]-1), 3)
+                    expected = [owner[1], candidates[0]+1,
+                                self.read(glue['MSX_PAGE_GEN']+candidates[0])[0]]
+                    self.expect(seal == expected,
+                                f'seal matches live owner/page: actual={seal} expected={expected}')
+                else:
+                    self.expect(stored == secondary+bytes(0x4000-len(secondary)),
+                                'complete secondary bytes and zeroed allocation tail')
             self.expect(owner not in identities, "fresh owner generation")
             identities.append(owner); results.append(result)
             self.border(slot)
@@ -102,6 +118,9 @@ class PageDriver(Driver):
                         self.read(glue["MSX_PAGE_FREE"])[0] == free,
                         "exact full-pool baseline restored")
             self.expect(self.value("SCHED_FAULT") == 0, "scheduler guard")
+            if args.compute:
+                self.expect(self.read(0x2180, 64) == [0]*64 and self.read(0x21C0) == [0],
+                            'all seals reclaimed and call gate idle')
         return dict(status="PASS", results=results, owners=identities,
                     stream_progress=progress,
                     checks=self.checks, frames=self.frame, final_windows=self.value("WM_NWIN"),
@@ -117,10 +136,12 @@ def main():
     parser.add_argument("--subrom", type=Path)
     parser.add_argument('--app', type=Path, help='matching staged APP, including a two-segment package')
     parser.add_argument('--symbols', type=Path, help='matching link symbols (defaults to staged probe.noi)')
+    parser.add_argument('--compute', action='store_true', help='execute the compiled computation probe')
     args = parser.parse_args()
-    args.app = args.app or args.worktree/'build/universal/PAGEPRB.APP'
+    stem = 'computeprobe' if args.compute else 'pageprobe'
+    args.app = args.app or args.worktree/('build/universal/COMPUTE.APP' if args.compute else 'build/universal/PAGEPRB.APP')
     args.symbols = args.symbols or (args.app.with_suffix('.noi') if args.app.with_suffix('.noi').exists()
-                                  else args.worktree/'build/universal-obj/pageprobe/app.noi')
+                                  else args.worktree/f'build/universal-obj/{stem}/app.noi')
     args.short_desk_stress = False
     if bool(args.bios) != bool(args.subrom): parser.error("supply both BIOS and subROM")
     if args.output.exists(): parser.error("output exists; preserve evidence with a new path")

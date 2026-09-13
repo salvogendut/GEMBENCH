@@ -133,6 +133,7 @@ CAPABILITIES_V4 = {
     "caller-parameters": 0x00800000,
     "typed-clipboard": 0x01000000,
     "portable-data-pages": 0x02000000,
+    "portable-secondary-calls": 0x04000000,
 }
 LIFECYCLE = {
     "windowed": 0x0001,

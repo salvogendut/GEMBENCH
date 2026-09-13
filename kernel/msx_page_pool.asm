@@ -92,6 +92,10 @@ GB_PLATFORM_MSX2      equ 1
                 include "msx_capabilities.inc"
 
                 include "msx_owner_page.inc"
+                ifdef PORTABLE_PACKAGE_STREAM
+OWNER_SEAL_RELEASE equ MSX_SECONDARY_OWNER_RELEASE
+PAGE_SEAL_RELEASE equ MSX_SECONDARY_PAGE_RELEASE
+                endif
                 include "core/app_lifetime_contract.inc"
                 include "core/window_focus_contract.inc" ; WM scratch EQU cells are now defined
 
@@ -243,10 +247,20 @@ kpg_no_owner    ld    a,GB_PAGE_ERR_OWNER
 msx_package_route_resume equ $
                 org MSX_PACKAGE_ROUTE_BASE
                 jp msx_app_load
-                db "GBWM",#30|MSX_SCREEN_MODE  ; resident service addresses are mode-specific
+                db "GBWM",#40|MSX_SCREEN_MODE  ; resident service addresses are mode-specific
                 jp msx_app_progress
                 jp msx_app_clear_secondary
+                jp msx_secondary_parameters
+                jp secondary_seal_clear
+                jp secondary_seal_page_release
                 include "msx_app_launch.asm"
+                include "msx_secondary_call.asm"
+                assert $<=MSX_SECONDARY_TABLE,"secondary policy overlaps sealed identities"
+                ds MSX_SECONDARY_TABLE-$,0
+                ds 64,0                        ; boot clears all owner seals
+                ds 12,0                        ; call state
+                ds MSX_SECONDARY_BIND-$,0
+                ds 8,0                         ; trusted completed-load binding record
 MSX_PACKAGE_ROUTE_SIZE equ $-MSX_PACKAGE_ROUTE_BASE
                 assert $<=MSX_PACKAGE_ROUTE_LIMIT,"package routing exceeds MSX directory tail"
                 save "GBPKWM.RAW",MSX_PACKAGE_ROUTE_BASE,MSX_PACKAGE_ROUTE_SIZE
