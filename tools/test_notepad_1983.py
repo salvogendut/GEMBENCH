@@ -16,6 +16,22 @@ from test_msx_stability_1983 import Driver, constants
 
 
 class NotepadDriver(Driver):
+    def move(self, x, y, held=0):
+        # Ctrl+arrows remains available even when a mouse is configured, whereas
+        # joystick direction bits would be interpreted as mouse nibble replies.
+        end = self.frame + 6000
+        while self.frame < end:
+            px, py = self.read(self.layout['POLL_MX'], 2)
+            if abs(px-x) <= 1 and abs(py-y) <= 3:
+                self.call(f'keys 6 2 8 {held}'); self.frames(8)
+                px, py = self.read(self.layout['POLL_MX'], 2)
+                if abs(px-x) <= 1 and abs(py-y) <= 3:
+                    return
+                continue
+            mask = 128 if px < x-1 else 16 if px > x+1 else 64 if py < y-3 else 32
+            self.call(f'keys 6 2 8 {mask | held}'); self.frames(1)
+        raise AssertionError(f'keyboard pointer timeout: {px},{py} -> {x},{y}')
+
     def click(self, x, y):
         self.move(x, y)
         # A real joystick trigger does not also enqueue a typed Space in BIOS.
@@ -28,7 +44,7 @@ class NotepadDriver(Driver):
         else:
             self.call('joystick 0 0')
             raise AssertionError('joystick click not polled within three seconds')
-        self.call('joystick 0 0'); self.frames(60)
+        self.call('joystick 0 0'); self.key(); self.frames(60)
 
     def application(self, symbol, size=1):
         bank = self.entry(1)[0]
@@ -88,6 +104,28 @@ class NotepadDriver(Driver):
         self.launch()
         self.type_keys([(2, 64), (2, 128), (3, 1), (7, 128)])
         self.expect(self.editor()[:2] == [4, 0] and self.editor()[13] == 1, 'typed abc newline')
+        pointer = self.read(self.layout['POLL_MX'], 2)
+        for key, index in [((8, 32), 0), ((8, 128), 1), ((8, 64), 4),
+                           ((8, 16), 3), ((8, 128), 4)]:
+            self.type_keys([key])
+            view = self.editor()
+            self.expect(view[2]+256*view[3] == index, 'arrow caret index')
+            self.expect(view[:2] == [4, 0] and view[13] == 1, 'arrow leaves document unchanged')
+        self.type_keys([(8, 1)])
+        self.expect(self.editor()[:2] == [5, 0], 'Space types instead of clicking')
+        self.type_keys([(7, 32)])
+        self.expect(self.editor()[:4] == [4, 0, 4, 0], 'backspace removes typed Space')
+        self.expect(self.read(self.layout['POLL_MX'], 2) == pointer, 'typing and arrows do not move pointer')
+        self.call(f"ppm {args.output.resolve()/'editing.ppm'}")
+        saved_view=self.editor()
+        self.focus_desktop()
+        pointer=self.read(self.layout['POLL_MX'],2)
+        self.key(8,128);self.frames(6);self.key();self.frames(20)
+        self.expect(self.read(self.layout['POLL_MX'],2)[0]>pointer[0],
+                    'unfocused editor restores ordinary keyboard pointer')
+        self.expect(self.editor()==saved_view,'background editor ignores pointer arrows')
+        self.click(30,20)
+        self.wait(lambda:self.value('WM_FOCUS')==1,'return focus to editor')
         self.menu(3)
         self.wait(self.picker_ready, 'save chooser')
         self.type_keys([(5, 1), (2, 64), (5, 8), (3, 4), (3, 2),

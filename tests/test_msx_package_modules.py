@@ -94,7 +94,7 @@ real_exit 0
         with self.assertRaises(ValueError):
             compose({**parts, 'GBAPV4.RAW': parts['GBAPV4.RAW'][:7]+b'\2'+parts['GBAPV4.RAW'][8:]})
         with self.assertRaises(ValueError):compose(parts,handoff=True)
-        handoff={**parts,'GBAPV4.RAW':parts['GBAPV4.RAW'][:7]+b'\6'+parts['GBAPV4.RAW'][8:]}
+        handoff={**parts,'GBAPV4.RAW':parts['GBAPV4.RAW'][:7]+b'\7'+parts['GBAPV4.RAW'][8:]}
         with self.assertRaises(ValueError):compose(handoff)
         self.assertEqual(len(compose(handoff,handoff=True)['GBAPV4.MOD']),3014)
 

@@ -64,7 +64,7 @@ package_modules
                 db "GBAPV4  MOD"
                 dw MSX_GBAP4_GATE,MSX_GBAP4_GATE_SIZE
                 ifdef PORTABLE_FS_HANDOFF
-                db "GBV4",6
+                db "GBV4",7
                 else
                 db "GBV4",5
                 endif
@@ -77,7 +77,7 @@ package_modules
                 db "GBPKWM  MOD"
                 dw MSX_PACKAGE_ROUTE_BASE,MSX_PACKAGE_ROUTE_SIZE
                 ifdef PORTABLE_FS_HANDOFF
-                db "GBWM",#50|MSX_SCREEN_MODE
+                db "GBWM",#60|MSX_SCREEN_MODE
                 else
                 db "GBWM",#40|MSX_SCREEN_MODE
                 endif

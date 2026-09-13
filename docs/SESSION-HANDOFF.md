@@ -4,7 +4,40 @@ Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
 
-## Current resume point — real Desktop document launch (2l), 2026-09-13
+## Current resume point — focused Notepad editing (2m), 2026-09-13
+
+Latest user request: **commit/push the accepted MSX fixes, then implement the
+CPC receiver support for the identical Notepad APP**. The arrow/repaint fixes
+are grouped in the 2m save after `d950560` on #84 / `feature/84-unified-notepad`;
+check branch history for publication. Read the new current section of
+[UNIFIED-NOTEPAD-HANDOFF.md](UNIFIED-NOTEPAD-HANDOFF.md) for precise evidence,
+fit, limitations and the fresh image `build/notepad-84/manual-edit-cEUP1X/NOTEPAD.IMG`.
+
+- Appended `GB_WK_TEXT_INPUT` selects plain arrows/Space for the focused
+  editor, with Ctrl+arrows/Space retaining keyboard-pointer access. MSX-only
+  receiver implementation, default/native behavior unchanged. New source
+  `kernel/msx_text_input.asm` must be included when syncing/committing.
+- Actual old/new rendered row comparisons in the secondary model bound edit
+  damage to changed column spans. Dirty-title strip is separate. Full 4-KiB
+  document/staging preserved; viewport scroll retains client repaint fallback.
+- Private modules `GBV4,7` and `GBWM,0x66/0x67`, same extents and **CF60 IRQ
+  entry preserved**. Never relocate that entry independently of app-carried
+  scheduler payloads. CF3B is a new private cached routing byte.
+- Final APP `1d554abb…cdc340e8`, 20209 bytes; primary ends `786B`, DATA `7870`,
+  top `7EF5`. Only 5/11 bytes code/data headroom. Secondary end `5686`, top
+  `7E27`. openMSX Screen6/7 navigation/edit/save/reopen passes with 262 exact
+  secondary returns per mode. 1983 Screen6/7 navigation/focus (46/76 checks,
+  Screen7 also boundary/dirty-close) and exact-path handoff/save (53 checks)
+  pass. 52 host/Z80 regressions pass.
+- New observer bridge supports `keys row mask row mask` for real Ctrl chords;
+  build with `MSX_TEST_WRITABLE_IMAGE=1 bash tools/build_msx_stability_1983.sh`.
+  Use disposable image copies. Do not drive joystick axes with MSXMOUSE=TRUE:
+  the receiver interprets those bits as mouse replies. Trigger clicks work.
+- Old manual image and normal release images are untouched. No sibling
+  emulator/firmware edits. Next architectural tasks remain exact-path reuse
+  of an existing editor, configuration reload and eventual CPC qualification.
+
+## Previous resume point — real Desktop document launch (2l), 2026-09-13
 
 Latest request: **commit and push, and explain manual testing**. On #84 /
 `feature/84-unified-notepad`; checkpoints 2k/2l are grouped in the

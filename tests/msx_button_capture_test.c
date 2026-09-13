@@ -28,6 +28,7 @@ static void write_io(void *ctx, unsigned short a, unsigned char v) {
     }
 }
 static Z80 cpu;
+static unsigned short irq_address=0xcf60;
 static Z80Bus bus={.mem_read=read_mem,.mem_write=write_mem,.io_read=read_io,.io_write=write_io};
 static void call(unsigned short address) {
     cpu.pc=address;cpu.sp=0xe000;mem[0xe000]=0;mem[0xe001]=2;
@@ -38,7 +39,7 @@ static void call(unsigned short address) {
 static void irq(void) {
     cpu.af=0x1234;cpu.bc=0x5678;cpu.de=0x9abc;cpu.hl=0xdef0;
     cpu.ix=0x4567;cpu.iy=0x89ab;cpu.iff1=cpu.iff2=false;
-    call(0xcf60);
+    call(irq_address);
     assert(cpu.af==0x1234 && cpu.bc==0x5678 && cpu.de==0x9abc && cpu.hl==0xdef0);
     assert(cpu.ix==0x4567 && cpu.iy==0x89ab && !cpu.iff1 && !cpu.iff2);
     assert(ppi==0xad && psg[15]==0xff);
@@ -51,7 +52,7 @@ static unsigned filter(bool enabled) {
     return cpu.d;
 }
 int main(int argc,char **argv) {
-    assert(argc==2);
+    assert(argc==2 || argc==3);
     FILE *f=fopen(argv[1],"rb");assert(f);
     /* Load the full reserved module region; the private legacy sysinfo view
      * may move within it as the module grows. Never silently truncate code. */
@@ -71,6 +72,13 @@ int main(int argc,char **argv) {
     press();assert(mem[0xcf33]==0); /* aggregate buttons, no duplicate edge */
     psg[14]=255;irq();assert(mem[0xcf30]==16);
     release();assert(filter(true)==2);
+    if(argc==3) {
+        mem[0xcf3b]=1;press();release();
+        assert(filter(true)==2 && mem[0xcf33]==0); /* Space only types */
+        psg[14]=239;irq();assert(filter(true)==7); /* mouse/joystick unaffected */
+        psg[14]=255;irq();assert(filter(true)==2);
+        mem[0xcf3b]=0;press();release();assert(filter(true)==3);
+    }
     for(unsigned i=0;i<5;i++) {mem[0xcf36]=10+i;press();release();}
     assert(mem[0xcf33]==4 && mem[0xcf34]==1);
     for(unsigned i=0;i<4;i++) {assert(filter(true)==3);assert(mem[0x14a2]==10+i);}

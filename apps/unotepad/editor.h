@@ -115,6 +115,29 @@ static unsigned char np_key(np_editor_t *e, unsigned char key)
     return np_replace(e, &ch, 1);
 }
 
+/* Portable cursor codes, matching the MSX BIOS. Navigation never dirties text.
+ * Up/down retain the desired column across shorter display rows. */
+static unsigned char np_arrow(np_editor_t *e, unsigned char key,
+                               unsigned char wrap, unsigned char *goal)
+{
+    unsigned int at=e->cur,row;
+    unsigned char col,selected=e->selected;
+    if (key==28 || key==29) {
+        *goal=255;
+        if (selected) at=key==28 ? e->sel_b : e->sel_a;
+        else if (key==28) { if(at<e->len)++at; }
+        else if(at)--at;
+    } else {
+        np_position(e,at,wrap,&row,&col);
+        if(*goal==255)*goal=col;
+        if(key==30) { if(row)at=np_index(e,row-1,*goal,wrap); }
+        else at=np_index(e,row+1,*goal,wrap);
+    }
+    e->selected=0;
+    if(at==e->cur)return selected;
+    e->cur=at;return 1;
+}
+
 /* Commit only a complete load; caller retains the old editor until then.
  * BASIC normalization matches native Notepad: strip every CR on input. */
 static unsigned char np_loaded(np_editor_t *e, const char *data,

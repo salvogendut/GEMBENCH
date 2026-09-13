@@ -678,6 +678,11 @@ void gb_task_enable(void);
 #define GB_WK_MAXIMIZE 0x04u
 #define GB_WK_MOVE     0x08u
 #define GB_WK_RESIZE   0x10u
+/* Focused text routing in the experimental MSX handoff receiver. Plain arrows
+ * are GB_GETKEY codes right=28, left=29, up=30, down=31; Space types. Ctrl keeps
+ * the keyboard pointer available. Older receivers ignore this appended bit;
+ * CPC/PCW adapters still need to implement the same routing contract. */
+#define GB_WK_TEXT_INPUT 0x20u
 #define GB_WK_STANDARD (GB_WK_TITLE | GB_WK_CLOSE | GB_WK_MAXIMIZE | \
                         GB_WK_MOVE | GB_WK_RESIZE)
 #define GB_WK_ABI_V1   0xB6u

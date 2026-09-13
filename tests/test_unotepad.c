@@ -30,6 +30,8 @@ static unsigned char live[5], fs_error, clip_kind, clip_error, closed;
 static unsigned char input[64], input_pos, mouse_x, mouse_y, buttons;
 static gb_rect_t live_rect = {2,14,66,158};
 static gb_rect_t damage;
+static gb_rect_t damages[32];
+static unsigned damage_count;
 static unsigned int text_calls,text_glyphs;
 static unsigned char text_last_x;
 
@@ -147,7 +149,10 @@ void gb_text_semantic(unsigned char x,unsigned char y,const char *p,unsigned cha
     ++text_calls;text_glyphs+=n;text_last_x=x;
 }
 void gb_wm_damage(unsigned char x,unsigned char y,unsigned char w,unsigned char h)
-{ damage.x=x; damage.y=y; damage.w=w; damage.h=h; assert(x+w<=128 && y+h<=212); }
+{
+    damage.x=x; damage.y=y; damage.w=w; damage.h=h; assert(x+w<=128 && y+h<=212);
+    if(damage_count<32)damages[damage_count++]=damage;
+}
 void gb_restore_parent(void) { draw(); }
 
 static void reset_test(void)
@@ -373,6 +378,43 @@ static void chooser_integration(void)
     memcpy(input,"ABCD",4); input_pos=0; tick();
     assert(input_pos==2 && !strcmp(picker.edit,"AB"));
 }
+
+static void editing_input_and_damage(void)
+{
+    unsigned char goal=255;
+    np_editor_t e={0};
+    assert(np_loaded(&e,"abcdef\nx\nabcdef",15,0));e.cur=5;
+    assert(np_arrow(&e,31,39,&goal) && e.cur==8 && goal==5);
+    assert(np_arrow(&e,31,39,&goal) && e.cur==14 && !e.dirty);
+    assert(np_arrow(&e,30,39,&goal) && e.cur==8);
+    assert(np_arrow(&e,30,39,&goal) && e.cur==5);
+    assert(np_arrow(&e,29,39,&goal) && e.cur==4 && goal==255);
+    np_all(&e);assert(np_arrow(&e,29,39,&goal) && e.cur==0 && !e.selected);
+    assert(!np_arrow(&e,29,39,&goal) && !e.dirty);
+    e.cur=e.len;assert(!np_arrow(&e,28,39,&goal));
+    assert(np_loaded(&e,"abcdefghij",10,0));e.cur=3;
+    assert(np_arrow(&e,31,4,&goal) && e.cur==7);
+    assert(np_arrow(&e,30,4,&goal) && e.cur==3);
+
+    reset_test();damage_count=0;input[0]='a';input_pos=0;tick();
+    assert(editor.len==1 && editor.dirty && damage_count==2);
+    assert(damages[0].h==14); /* dirty title only, never full window */
+    assert(damages[1].h==10 && damages[1].w<8);
+    damage_count=0;memset(input,0,sizeof(input));input[0]='b';input_pos=0;tick();
+    assert(damage_count==1 && damage.h==10 && damage.w<8);
+    damage_count=0;input[0]=29;input_pos=0;tick();
+    assert(editor.cur==1 && editor.len==2 && damage_count==1 && damage.h==10);
+    assert(np_loaded(&editor,"abcdef\nunchanged",16,0));editor.cur=3;sync_editor();
+    update_title();damage_count=0;input[0]='X';input_pos=0;tick();
+    assert(damage_count==2 && damages[1].h==10); /* next line untouched */
+    damage_count=0;input[0]=13;input_pos=0;tick();
+    assert(damage_count==3); /* split line, move suffix, move following line */
+    for(unsigned i=0;i<damage_count;++i)assert(damages[i].h==10);
+    /* A title update must not destroy an in-flight staged document. */
+    assert(model_call(NP_STAGE_BEGIN) && model_stage("pending",7,0));
+    update_title();assert(!model_call(NP_EDIT_BEGIN));
+    packet[6]=0;assert(model_call(NP_STAGE_LOAD));assert(!memcmp(editor.text,"pending",7));
+}
 static void copied_protocol(void)
 {
     unsigned char guarded[NP_PACKET+2];
@@ -405,6 +447,7 @@ static void copied_protocol(void)
 
 int main(void)
 {
+    editing_input_and_damage();
     /* getkey may return zero for a filtered pointer arrow even though later
      * entries contain the keyboard-pointer fire Space. */
     reset_test();input[40]=' ';input[41]=' ';notepad_entry();

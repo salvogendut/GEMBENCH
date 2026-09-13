@@ -68,6 +68,19 @@ int main(int argc, char **argv) {
             for (i = 0; i < 8; ++i)
                 if (b & (1u << i)) msx_keyboard_press(m, a, i);
             puts("{}");
+        } else if (!strcmp(command, "keys")) {
+            unsigned row2, mask2;
+            if (sscanf(line,"%*s %u %u %u %u",&a,&b,&row2,&mask2)!=4 ||
+                a>=11 || row2>=11 || b>255 || mask2>255) {
+                puts("{\"error\":\"invalid keyboard chord\"}");
+            } else {
+                msx_keyboard_clear(m);
+                for(i=0;i<8;++i) {
+                    if(b&(1u<<i))msx_keyboard_press(m,a,i);
+                    if(mask2&(1u<<i))msx_keyboard_press(m,row2,i);
+                }
+                puts("{}");
+            }
         } else if (fields == 3 && !strcmp(command, "joystick") && a < MSX_JOYSTICK_PORTS && b <= MSX_JOY_MASK) {
             msx_joystick_set_pressed(m, a, (u8)b);
             puts("{}");

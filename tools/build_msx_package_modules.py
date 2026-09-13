@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def compose(parts, handoff=False):
     """Validate the versioned fixed-layout parts before creating a boot image."""
-    checks = [('GBAPV4.RAW', 3014, b'GBV4\x06' if handoff else b'GBV4\x05'),
+    checks = [('GBAPV4.RAW', 3014, b'GBV4\x07' if handoff else b'GBV4\x05'),
               ('GBPKIO.RAW', 293, b'GBIO\x03'),
               ('GBDPAGE.RAW', 492, b'GBDP\x01'),
               ('GBPKLOAD.RAW', 747, b'GBPK\x02')]

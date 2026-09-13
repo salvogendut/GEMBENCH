@@ -5,6 +5,8 @@
 #include "gbscrap.h"
 #include <string.h>
 #include "client.h"
+/* At most 84 glyphs: 3*n fits a byte. Keep pixel-column conversion 8-bit. */
+#define TEXT_COL(n) ((unsigned char)((n)*3) >> 1)
 
 enum { EDIT, PICK, CONFIRM, LOAD, SAVE, BAS_REWIND, BAS_WRITE, ERROR, EXIT, OVERWRITE, MENU };
 enum { NONE, NEW, OPEN, CLOSE };
@@ -25,6 +27,7 @@ static unsigned char drive, action, menu_request, cooldown;
 static unsigned char full, dragging, blink, caret, refresh, title_changed;
 static gb_rect_t rect;
 static unsigned char drag_x,drag_y;
+static unsigned char paint_row=255;
 static const char *problem;
 static const unsigned char menus[] = {
     3,10,'F','i','l','e',0,0,0,0,
@@ -38,7 +41,7 @@ static const char *const view_items[] = {"Fullscreen"};
 static void geometry(void)
 {
     gb_window_rect(&rect);
-    wrap = (rect.w - 7) * 2 / 3;
+    wrap = (unsigned char)((rect.w - 7) * 2) / 3;
     if (wrap >= NP_LINE_MAX) wrap = NP_LINE_MAX - 1;
     rows = (rect.h - 29) / 10;
 }
@@ -50,14 +53,8 @@ static unsigned char is_basic(const char *n)
 
 static void update_title(void)
 {
-    unsigned char i, n = 0;
-    for (i = 0; i < 8 && name[i] != ' '; ++i) title[n++] = name[i];
-    if (name[8] != ' ') {
-        title[n++] = '.';
-        for (i = 8; i < 11 && name[i] != ' '; ++i) title[n++] = name[i];
-    }
-    if (editor.dirty) { title[n++] = ' '; title[n++] = '*'; }
-    title[n] = 0;
+    memcpy(packet+NP_DATA,name,11);
+    if(model_call(NP_TITLE))memcpy(title,packet+NP_DATA,sizeof(title));
 }
 
 static void repaint(void)
@@ -83,7 +80,7 @@ static void text_run(unsigned char x,unsigned char y,const char *s,
 static void say(unsigned char y, const char *text)
 {
     /* Clip to the live client width before crossing the semantic text API. */
-    unsigned char n = 0, max = (rect.w-4)*2/3;
+    unsigned char n = 0, max = (unsigned char)((rect.w-4)*2)/3;
     if (max >= NP_LINE_MAX) max = NP_LINE_MAX-1;
     while (n < max && text[n]) { line[n] = text[n]; ++n; }
     line[n] = 0;
@@ -98,7 +95,8 @@ static void draw(void)
     if (mode == PICK && rect.w >= 64 && rect.h >= 148) {
         gb_filepick_draw(&picker, &rect); return;
     }
-    gb_fill(rect.x+1, rect.y+14, rect.w-2, rect.h-15, GB_UI_SURFACE);
+    if(paint_row==255)gb_fill(rect.x+1, rect.y+14, rect.w-2, rect.h-15, GB_UI_SURFACE);
+    else gb_fill(rect.x+5,rect.y+16+paint_row*10,rect.w-6,10,GB_UI_SURFACE);
     if (mode != EDIT && mode != MENU) {
         if (mode == CONFIRM) {
             say(20,"Save changes?"); say(40,"Save  Discard  Cancel");
@@ -113,6 +111,8 @@ static void draw(void)
         else say(20,"Saving; please wait");
         return;
     }
+    screen=paint_row==255 ? 0 : paint_row;
+    packet[6]=paint_row;
     if(!model_call(NP_VIEW_BEGIN))return;
     while(screen<rows) {
         if(!model_call(NP_VIEW_ROWS))return;
@@ -123,10 +123,12 @@ static void draw(void)
             text_run(rect.x+5,rect.y+16+screen*10,line,GB_UI_TEXT,GB_UI_SURFACE);
             if(a!=255 && b>a) {
                 line[b]=0;
-                text_run(rect.x+5+a*3/2,rect.y+16+screen*10,line+a,GB_UI_SURFACE,GB_UI_TEXT);
+                text_run(rect.x+5+TEXT_COL(a),rect.y+16+screen*10,line+a,GB_UI_SURFACE,GB_UI_TEXT);
             }
         }
+        if(paint_row!=255)break;
     }
+    if(paint_row==255) {
     gb_fill(rect.x+1,rect.y+16,3,rows*10,GB_UI_SURFACE);
     gb_text_semantic(rect.x+2,rect.y+16,GLYPH_TRI_UP,GB_UI_TEXT,GB_UI_SURFACE);
     gb_text_semantic(rect.x+2,rect.y+16+rows*10-8,GLYPH_TRI_DOWN,GB_UI_TEXT,GB_UI_SURFACE);
@@ -134,10 +136,11 @@ static void draw(void)
     if (editor.first) ty = editor.first+rows > editor.total ?
         rect.y+16+rows*10-16 : rect.y+16+rows*5-4;
     gb_fill(rect.x+1,ty,3,8,GB_UI_ACCENT);
-    say(rect.h-11,"Click text; Ctrl-Q=quit");
+    say(rect.h-11,"Arrows; ^Q quits");
+    }
     if (caret && editor.c_row >= editor.first && editor.c_row-editor.first < rows) {
         screen = (unsigned char)(editor.c_row-editor.first);
-        gb_fill(rect.x+5+editor.c_col*3/2,rect.y+24+screen*10,2,2,GB_UI_ACCENT);
+        gb_fill(rect.x+5+TEXT_COL(editor.c_col),rect.y+24+screen*10,2,2,GB_UI_ACCENT);
     }
 }
 
@@ -424,8 +427,8 @@ static void close_request(void)
 
 static void frame(void)
 {
-    unsigned char n, key, changed = 0, was_dirty = editor.dirty, had_selection = editor.selected;
-    unsigned int row, old_row, old_first = editor.first;
+    unsigned char n, key, changed = 0, was_dirty = editor.dirty,a,b;
+    unsigned int row;
     geometry();
     if(mode==MENU)return;
     if(model_fault && mode!=ERROR) {fail("Editor service failed");return;}
@@ -448,7 +451,6 @@ static void frame(void)
      * otherwise the click's Space can arrive later as an unintended edit. */
     if (cooldown) { --cooldown;for(n=0;n<64;++n)gb_getkey(); }
     else {
-        old_row=editor.c_row;
         for (n = 0; n < 2; ++n) {
             key = gb_getkey(); if (!key) break;
             if (mode == PICK) gb_filepick_key(&picker,key);
@@ -457,24 +459,30 @@ static void frame(void)
                 if (key == 13 || key == 27) { mode = EDIT; refresh = 1; } break;
             } else if (mode == EDIT) {
                 if (key == 17) { close_request(); break; }
+                if(!n && !model_call(NP_EDIT_BEGIN))break;
                 packet[6]=key;
                 if(model_call(NP_KEY))changed|=(unsigned char)np_word(packet+2);
             }
         }
         if (changed) {
             caret = 1; blink = 0;
-            if (was_dirty != editor.dirty) title_changed = 1;
-            row=editor.c_row;
-            if (row > old_row) row = old_row;
-            if (!had_selection && !title_changed && !refresh && old_first == editor.first &&
-                row >= editor.first && row-editor.first < rows) {
-                /* Insertion can reflow every following row. Damage that suffix,
-                 * not just the caret line, and leave chrome/status untouched. */
-                gb_wm_damage(rect.x+4,rect.y+16+(row-editor.first)*10,rect.w-5,
-                              (rows-(row-editor.first))*10);
-                gb_restore_parent(); return;
+            if(!model_call(NP_EDIT_DAMAGE))return;
+            if(packet[6])refresh=1;
+            memcpy(scratch.bytes,packet+NP_DATA,42);
+            if (was_dirty != editor.dirty) {
+                update_title();
+                gb_wm_damage(rect.x,rect.y,rect.w,14);gb_restore_parent();
             }
-            refresh = 1;
+            if(!refresh) {
+                for(paint_row=0;paint_row<rows;++paint_row) {
+                    a=(unsigned char)scratch.bytes[paint_row*2];
+                    b=(unsigned char)scratch.bytes[paint_row*2+1];
+                    if(a==255)continue;
+                    gb_wm_damage(rect.x+5+TEXT_COL(a),rect.y+16+paint_row*10,TEXT_COL(b-a)+2,10);
+                    gb_restore_parent();
+                }
+                paint_row=255;return;
+            }
         }
     }
     if (refresh || title_changed) { repaint(); return; }
@@ -482,7 +490,7 @@ static void frame(void)
         blink = 0; caret = !caret;
         row=editor.c_row;
         if (row >= editor.first && row-editor.first < rows) {
-            gb_wm_damage(rect.x+5+editor.c_col*3/2,rect.y+24+(row-editor.first)*10,2,2);
+            gb_wm_damage(rect.x+5+TEXT_COL(editor.c_col),rect.y+24+(row-editor.first)*10,2,2);
             gb_restore_parent();
         }
     }
@@ -508,7 +516,7 @@ static void proc(void)
 }
 
 static const gb_mwin_kind_t window = {
-    {2,14,66,158,30,72,proc,title,0},GB_WK_STANDARD
+    {2,14,66,158,30,72,proc,title,0},GB_WK_STANDARD | GB_WK_TEXT_INPUT
 };
 void main(void)
 {

@@ -5,7 +5,87 @@ The runnable-editor checkpoint was committed and pushed as **`e4c8e62`**.
 This document records subsequent work, not another sprint or completed
 normal-distribution delivery.
 
-## Current checkpoint 2l: real document launch
+## Current checkpoint 2m: focused editing and bounded repaint
+
+After the user's successful MSX manual tests, the requested arrow navigation
+and typing repaint improvements are implemented locally on #84's branch.
+Checkpoint 2l was pushed as `d950560`; this follow-up is grouped in the 2m
+editing-fixes save after the user's MSX acceptance. Consult branch history
+for its commit/publication state. Next work is the CPC receiver binding.
+
+- A focused unified Notepad receives plain arrow keys and Space as text input.
+  Left/right cross line boundaries; up/down follow wrapped display rows and
+  retain the desired column across short rows. Navigation does not dirty text.
+- `GB_WK_TEXT_INPUT` is an appended window-kind bit. The private MSX handoff
+  receiver reads it only for a live, explicit-kind managed window; old/native
+  windows retain keyboard-pointer behavior. Ctrl+arrows / Ctrl+Space provide a
+  keyboard-only pointer fallback. Mouse/joystick clicks remain available.
+  CPC/PCW receivers do not implement this new routing yet.
+- An edit batch snapshots the visible rendered rows into **idle** secondary
+  staging scratch, then compares glyphs, selection styles and caret positions.
+  Each changed row gets a bounded column span. The primary renders just that
+  row under the compositor's clip; it no longer invalidates the whole visible
+  suffix after every key. Reflow damages the rows actually changed. Viewport
+  scrolling retains a client-area repaint fallback.
+- Becoming dirty updates only the title strip, separately from text damage.
+  The status area, scrollbar and window frame are untouched by ordinary
+  same-row typing. The 4096-byte document/staging capacities are unchanged.
+- The private module pair is now `GBV4,7` + `GBWM,0x66/0x67`. Their extents
+  remain 3014/1496 bytes. **The CF60 IRQ entry is unchanged**, including for
+  existing app-carried schedulers; small within-page instruction savings fit
+  the Space filter in the same IRQ slot. `CF3B`, formerly padding in private
+  button state, caches root-published text routing. No shell flag is reused.
+
+Final APP: **20209 bytes** (primary 14443, secondary 5766), SHA256
+`1d554abbd83f65ad2c332b48f7712694d55ed68a1ae5d0358f266c8ecdc340e8`.
+Primary image end `786B`, DATA `7870`, top `7EF5`: only **5 code / 11 data
+bytes spare**. Secondary image end `5686`, DATA `5E00`, top `7E27`.
+Child Screen 6/7 sizes are 14526/16104 bytes. Title formatting moved behind
+the copied model protocol and bounded glyph-coordinate arithmetic is 8-bit
+to keep the primary within its existing allocation.
+
+Evidence under `build/notepad-84/evidence/`:
+
+- `edit-regressions.log`: 52 host/Z80 tests pass, including changed-row bounds,
+  dirty-title isolation, selection/wrapping, transactional staging, and the
+  real assembled default/text-mode IRQ capture with register/IFF preservation.
+- `edit-final-openmsx{6,7}.log`: both modes pass real keyboard arrows, Space,
+  backspace, pointer invariance, edit/save/reopen and independent disk readback;
+  each has 262 exact secondary-call returns. A GB_WMDAMAGE observer rejects
+  full-client damage during the initial typing sequence. This observes damage
+  requests, not a cycle-by-cycle VDP write trace.
+- `edit-focus-1983-{6,7}/result.json`: 46/76 checks, including navigation,
+  focus-away restoring ordinary pointer arrows without changing the background
+  editor, and focus return. Screen 7 additionally covers the 4096-byte round
+  trip / 4097-byte rejection / dirty-close regression.
+- `edit-handoff-1983-7/result.json`: 53 checks, including exact-path document
+  opens, save-in-place and owner/context/page reclamation.
+- The 1983 bridge now supports two-row keyboard chords, with no guest RAM
+  writes. Pointer automation uses Ctrl+arrows plus joystick trigger, since
+  these images configure port 1 as a mouse. Bridge SHA256:
+  `8cfef3276da17ab8b8deaecdd10dac858b5ba55e532b7204fc8deb2a09ac5649`.
+
+Fresh manual Screen 7 copy (the old `manual-DfNCgT` image is untouched):
+
+```sh
+MSX_UNAPI=0 tools/run_msx.sh build/notepad-84/manual-edit-cEUP1X/NOTEPAD.IMG
+```
+
+Open Disk A → ADOC → EXACT.TXT, click the document, navigate with all four
+arrows, insert text and Space, then backspace. Try multiple lines and a wrapped
+line. Ordinary typing should affect only the changed text/caret; the first
+edit also updates the dirty marker in the title. Save, close and reopen.
+The same fresh IMG can be mounted read-write as the IDE disk in 1983; use only
+one emulator at a time. For keyboard-only pointer control, hold Ctrl while
+using arrows/Space. Desk → Clock remains the private blank-Notepad alias.
+
+Reference images: `build/notepad-84/build/msx/portable-notepad-7-ze7nl4tm/filesystem.img`
+and `build/notepad-84/build/msx/portable-notepad-6-fus3h2ha/filesystem.img`.
+Normal MSX/CPC release images retain their previous hashes. Existing-instance
+document delivery, configuration reload and CPC qualification remain future
+work; this change does not promote Notepad into normal distribution media.
+
+## Previous checkpoint 2l: real document launch
 
 File Manager document double-clicks now reach the actual two-bank Notepad in
 the private MSX images. Normal images are unchanged; this is not completed

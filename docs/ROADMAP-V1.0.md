@@ -224,6 +224,15 @@ failure rollback, full-capacity/oversize and cleanup pass. Normal profiles remai
 unchanged. Next: existing-instance delivery/reuse with dirty confirmation,
 configuration reload, remaining input and broader UI qualification.
 See [the handoff work record](UNIFIED-NOTEPAD-HANDOFF.md).
+**Follow-up 2m:** after successful manual MSX tests, plain arrows now navigate
+the focused editor and Space types without a pointer click. Ctrl retains
+keyboard-pointer access. Ordinary typing damages changed text/caret spans,
+not the whole window; the dirty title is updated separately. Both MSX screen
+modes pass openMSX navigation/edit/save/reopen; 1983 also covers capacity,
+dirty-close and real exact-path handoff. This is the accepted 2m follow-up to
+`d950560`, not CPC input support or normal-distribution promotion. Next is the
+CPC binding for the same APP, using private M4 media and preserving the accepted
+desktop distribution.
 The delivered editor is still native; no normal
 image has been replaced. Bounded private runtime evidence is not release acceptance.
 

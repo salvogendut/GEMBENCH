@@ -223,7 +223,10 @@ MSX_BUTTON_DROPPED equ #CF34       ; saturating overflow/stale counter
 MSX_BUTTON_VALID equ #CF35
 MSX_BUTTON_VIEW equ #CF36         ; last published root pointer/context, 5 bytes
 MSX_BUTTON_QUEUE equ #CF40        ; 4 * 5 bytes, oldest first
-MSX_BUTTON_IRQ equ #CF60          ; position-independent capture code, copied at boot
+                ifdef PORTABLE_FS_HANDOFF
+MSX_TEXT_INPUT equ #CF3B          ; root-published Space routing, 0 pointer / 1 text
+                endif
+MSX_BUTTON_IRQ equ #CF60          ; fixed entry used by the app-carried scheduler
 MSX_BUTTON_LIMIT equ #D100
 
 ; Architecture milestone 2 (#32): the M1 owner identity is now the public

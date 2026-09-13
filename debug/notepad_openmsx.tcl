@@ -10,6 +10,7 @@ proc np_low_ready {} {expr {[peek 0x403]==71 && [peek 0x404]==66}}
 rename fs_move_tick np_move_tick
 proc fs_move_tick {} {
     if {![np_low_ready]} {after time 0.002 fs_move_tick;return}
+    keymatrixdown 6 2
     np_move_tick
 }
 proc fs_click {callback} {
@@ -20,9 +21,11 @@ proc fs_click {callback} {
 proc np_click_polled {callback} {
     if {[np_low_ready] && ([peek 0x1308]&4)} {
         keymatrixup 8 1
+        keymatrixup 6 2
         after time 0.9 $callback
     } elseif {[machine_info time]>$::np_click_deadline} {
         keymatrixup 8 1
+        keymatrixup 6 2
         fs_finish "FAIL Notepad click was not polled"
     } else {after time 0.02 [list np_click_polled $callback]}
 }
@@ -48,6 +51,13 @@ proc np_opened {} {
     if {![np_mapped]} {after time 0.002 np_opened;return}
     np_check [expr {[peek 0x1350]==2 && [peek 0x1351]==1 && [peek $::fs_state]==0}] opened
     np_check [expr {[np_word $::np_view]==0}] empty
+    set ::np_damage_watch [debug set_bp 0x80B4 {
+        [np_mapped] && [reg DE]>255
+    } {
+        set height [expr {[reg DE]>>8}]
+        if {$height>14} {fs_finish "FAIL typing requested full-client damage"}
+        set ::pause off
+    }]
     np_type {{2 64} {2 128} {3 1} {7 128}} np_edited
 }
 proc np_type {keys callback} {
@@ -61,6 +71,16 @@ proc np_edited {} {
     if {![np_mapped]} {after time 0.002 np_edited;return}
     np_check [expr {[np_word $::np_view]==4 && [peek [expr {$::np_view+13}]]==1}] edited
     puts stderr "NOTEPAD edited through real keyboard"
+    debug remove_bp $::np_damage_watch
+    set ::np_pointer [list [peek 0x1306] [peek 0x1307]]
+    np_type {{8 32} {8 128} {8 64} {8 16} {8 128} {8 1} {7 32}} np_navigated
+}
+proc np_navigated {} {
+    if {![np_mapped]} {after time 0.002 np_navigated;return}
+    np_check [expr {[np_word $::np_view]==4 && [np_word [expr {$::np_view+2}]]==4}] arrows_and_space
+    np_check [expr {$::np_pointer eq [list [peek 0x1306] [peek 0x1307]]}] keyboard_did_not_move_pointer
+    puts stderr "NOTEPAD arrows/Space/backspace passed without moving pointer"
+    catch {screenshot -raw [file rootname $::fs_output]-editing.png}
     # File -> Save As, then the real chooser's name editor.
     fs_move 11 4 {fs_click {fs_move 12 44 {fs_click np_save_picker}}}
 }

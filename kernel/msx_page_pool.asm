@@ -248,7 +248,7 @@ msx_package_route_resume equ $
                 org MSX_PACKAGE_ROUTE_BASE
                 jp msx_app_load
                 ifdef PORTABLE_FS_HANDOFF
-                db "GBWM",#50|MSX_SCREEN_MODE
+                db "GBWM",#60|MSX_SCREEN_MODE
                 else
                 db "GBWM",#40|MSX_SCREEN_MODE  ; resident service addresses are mode-specific
                 endif
@@ -268,6 +268,7 @@ DOC_COPY_NAME equ copy11
 DOC_RELEASING_OWNER equ CORE_ALLOC_OWNER
 DOC_WORKER equ SCHED_CURRENT
                 include "core/document_launch.asm"
+                include "msx_text_input.asm"
                 endif
                 assert $<=MSX_SECONDARY_TABLE,"secondary policy overlaps sealed identities"
                 ds MSX_SECONDARY_TABLE-$,0
