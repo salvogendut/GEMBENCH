@@ -232,7 +232,11 @@ modes pass openMSX navigation/edit/save/reopen; 1983 also covers capacity,
 dirty-close and real exact-path handoff. This is the accepted 2m follow-up to
 `d950560`, not CPC input support or normal-distribution promotion. Next is the
 CPC binding for the same APP, using private M4 media and preserving the accepted
-desktop distribution.
+desktop distribution. MSX 2m was committed/pushed as `6e6fe05`.
+The [CPC follow-up](UNIFIED-NOTEPAD-CPC.md) now qualifies the private single-open
+M4 transport (6,058 Z80 calls and actual 1984 exact-byte two-bank loading plus
+negative media). It is **not yet a CPC editor launcher**: shared loader/sealed
+call placement, FS identity/handoff and focused text input remain.
 The delivered editor is still native; no normal
 image has been replaced. Bounded private runtime evidence is not release acceptance.
 

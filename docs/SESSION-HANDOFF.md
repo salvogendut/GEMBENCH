@@ -4,7 +4,35 @@ Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
 
-## Current resume point — focused Notepad editing (2m), 2026-09-13
+## Current resume point — CPC Notepad transport, 2026-09-13
+
+User requested commit/push of the accepted MSX fixes followed by CPC receiver
+work. **`6e6fe05` is pushed** on #84 / `feature/84-unified-notepad`. The CPC
+follow-up adds a private single-open M4 reader and host/Z80 + real 1984/M4
+qualification, not a runnable editor. Read
+[UNIFIED-NOTEPAD-CPC.md](UNIFIED-NOTEPAD-CPC.md) first for implementation,
+evidence and placement constraints. The next gate is **production-budget
+private receiver composition with the existing shared loader and sealed call
+gate**, then FS identity/handoff and focused text input. Do not advertise a
+capability or supply a CPC editor image based only on the transport probe.
+
+- Same APP SHA `1d554abb…cdc340e8`, 20209 bytes, preserved unmodified. Actual
+  1984/M4 copied both segments byte-for-byte: one OPEN / 160 READ2 / one CLOSE.
+  6,058 Z80 adapter calls pass; malformed/short/extra/missing cases and cleanup
+  are covered. Emulator/source untouched. New sources include
+  `lib/cpc/m4_stream.asm`, `debug/cpc_foundation/stream_probe.asm`,
+  `tools/test_cpc_stream_1984.py`, and their two test files.
+- The 510-byte adapter has **no production binding yet**. Stable runtime
+  hardware has only 406 bytes free, support 1236, high kernel 563. Probe
+  placement is not proof of complete receiver fit. Preserve the loader until
+  it has jumped out of `0100..0400`; check the `9A00` bootstrap limit too.
+- New tests build only under `build/notepad-84/evidence/`. No mirror sync or
+  normal-image rebuild was needed for this isolated gate. Before subsequent
+  private runtime builds, sync new and changed sources explicitly.
+- Preserve the old manual saved-document images, normal MSX/CPC media,
+  user's two GIFs and untracked `QA/CPC/`. No PR/merge requested.
+
+## Previous resume point — focused Notepad editing (2m), 2026-09-13
 
 Latest user request: **commit/push the accepted MSX fixes, then implement the
 CPC receiver support for the identical Notepad APP**. The arrow/repaint fixes

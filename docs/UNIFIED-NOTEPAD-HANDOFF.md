@@ -5,13 +5,23 @@ The runnable-editor checkpoint was committed and pushed as **`e4c8e62`**.
 This document records subsequent work, not another sprint or completed
 normal-distribution delivery.
 
-## Current checkpoint 2m: focused editing and bounded repaint
+## Current CPC follow-up: transport foundation
+
+The accepted MSX 2m fixes are committed/pushed as **`6e6fe05`**. CPC work now
+has a qualified private single-open M4 adapter: 6,058 executed Z80 calls and
+real 1984/M4 exact-byte loading of the unchanged two-bank APP, including
+short/extra/missing-file cleanup cases. This does **not** yet launch Notepad
+on CPC. Shared loader/call-gate placement, FS identity/handoff and text input
+remain to be bound into a private desktop runtime. See
+[UNIFIED-NOTEPAD-CPC.md](UNIFIED-NOTEPAD-CPC.md) for evidence, memory constraints
+and the precise remaining work. Normal MSX/CPC images remain untouched.
+
+## Accepted checkpoint 2m: focused editing and bounded repaint
 
 After the user's successful MSX manual tests, the requested arrow navigation
-and typing repaint improvements are implemented locally on #84's branch.
-Checkpoint 2l was pushed as `d950560`; this follow-up is grouped in the 2m
-editing-fixes save after the user's MSX acceptance. Consult branch history
-for its commit/publication state. Next work is the CPC receiver binding.
+and typing repaint improvements are implemented on #84's branch.
+Checkpoint 2l was pushed as `d950560`; this follow-up was committed/pushed as
+`6e6fe05` after the user's MSX acceptance. Next work is the CPC receiver binding.
 
 - A focused unified Notepad receives plain arrow keys and Space as text input.
   Left/right cross line boundaries; up/down follow wrapped display rows and
