@@ -209,11 +209,21 @@ It retains the same memory bounds. **Checkpoint 2j now brings up the actual
 two-bank editor** within the same sprint: its full 4-KiB model and separate
 staging fit; real file round trips pass on private MSX Screen 6/7, and 1983
 adds full-capacity/oversized-load checks. Space-as-click timing still needs
-resolution; Desktop document/configuration integration and broader runtime
+resolution; existing-instance document/configuration integration and broader runtime
 qualification remain. See [the runtime checkpoint](UNIFIED-NOTEPAD-RUNTIME.md)
 for precise emulator/input coverage, limitations and testable image paths.
 CPC streaming/calls remain deferred. See the secondary-code
 record for evidence and the distinction between loading and executing a bank.
+**Handoff 2k/2l:** checkpoint 2j was pushed as `e4c8e62`; 2k/2l form the next
+document-handoff save on #84's branch. Private File Manager → actual Notepad exact-path document opening now
+works, including same names in different directories, save-in-place and failed
+launch cleanup. Filesystem API v3 binds adoption to the new owner generation;
+the copied identity and staged load publish the title/path only on success.
+50 regressions pass; openMSX Screen6/7 edit/save/reopen and 1983 document launches,
+failure rollback, full-capacity/oversize and cleanup pass. Normal profiles remain
+unchanged. Next: existing-instance delivery/reuse with dirty confirmation,
+configuration reload, remaining input and broader UI qualification.
+See [the handoff work record](UNIFIED-NOTEPAD-HANDOFF.md).
 The delivered editor is still native; no normal
 image has been replaced. Bounded private runtime evidence is not release acceptance.
 
@@ -484,6 +494,6 @@ changes, promise a date, or authorize a release.
 
 Next implementation package: **milestone 1 — unified Notepad and the document
 services it needs** ([issue #84](https://github.com/salvogendut/GEMBENCH/issues/84)),
-next completing Desktop document/configuration integration and runtime
-qualification of the privately runnable editor (checkpoint 2j), then binding that shared policy
+next completing existing-instance document delivery, configuration integration and runtime
+qualification of the privately runnable editor (checkpoint 2l), then binding that shared policy
 on CPC and qualifying identical MSX2/CPC application artifacts.

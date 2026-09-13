@@ -106,7 +106,8 @@ proc fs_window {} {
     if {$::fs_entered} {
         set value [peek $::fs_state]
         set count [peek [expr {$::fs_state+1}]]
-        if {$value!=85 || $count!=46 || $::fs_count!=$::fs_restorations} {
+        set expected [expr {[info exists ::env(GEOBENCH_FS_EXPECTED)] ? $::env(GEOBENCH_FS_EXPECTED) : 46}]
+        if {$value!=85 || $count!=$expected || $::fs_count!=$::fs_restorations} {
             fs_finish "FAIL state=$value checks=$count restorations=$::fs_restorations"
         }
         for {set i 0} {$i<4} {incr i} {

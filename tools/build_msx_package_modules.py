@@ -8,9 +8,9 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def compose(parts):
+def compose(parts, handoff=False):
     """Validate the versioned fixed-layout parts before creating a boot image."""
-    checks = [('GBAPV4.RAW', 3014, b'GBV4\x05'),
+    checks = [('GBAPV4.RAW', 3014, b'GBV4\x06' if handoff else b'GBV4\x05'),
               ('GBPKIO.RAW', 293, b'GBIO\x03'),
               ('GBDPAGE.RAW', 492, b'GBDP\x01'),
               ('GBPKLOAD.RAW', 747, b'GBPK\x02')]
@@ -28,16 +28,17 @@ def compose(parts):
             'GBPKLOAD.MOD': parts['GBPKLOAD.RAW']}
 
 
-def build(output):
+def build(output, handoff=False):
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     for source in ('msx_gbap4', 'msx_data_pages', 'msx_package'):
         subprocess.run([os.environ.get('RASM', 'rasm'), str(ROOT/f'kernel/{source}.asm'),
                         '-DPORTABLE_DATA_PAGES=1', '-DPORTABLE_PACKAGE_STREAM=1',
+                        *(['-DPORTABLE_FS_IDENTITY=1','-DPORTABLE_FS_HANDOFF=1'] if handoff else []),
                         '-s', '-sq', '-o', source], cwd=output, check=True)
     parts = {name: (output/name).read_bytes() for name in
              ('GBAPV4.RAW', 'GBPKIO.RAW', 'GBDPAGE.RAW', 'GBPKLOAD.RAW', 'GBPKCRC.RAW', 'GBPKEX.RAW')}
-    for name, data in compose(parts).items():
+    for name, data in compose(parts,handoff=handoff).items():
         (output/name).write_bytes(data)
         print(f'{name}: {len(data)} bytes')
 
@@ -45,4 +46,6 @@ def build(output):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
-    build(parser.parse_args().out)
+    parser.add_argument('--handoff', action='store_true')
+    args=parser.parse_args()
+    build(args.out,args.handoff)

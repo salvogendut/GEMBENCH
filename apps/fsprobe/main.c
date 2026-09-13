@@ -2,6 +2,9 @@
  * One artifact on both machines; runners observe exported results, never seed RAM. */
 #include "gbuniversal.h"
 #include "gbfsctx.h"
+#ifdef PROBE_FS_IDENTITY
+#include <string.h>
+#endif
 
 volatile unsigned char fsprobe_state[8];
 static char buffer[512];
@@ -9,6 +12,9 @@ static gb_params_t request;
 static unsigned char header[32];
 static unsigned char transfer[512];
 static gb_fsctx_t first, second, third, fourth;
+#ifdef PROBE_FS_IDENTITY
+static gb_fsctx_identity_t identity;
+#endif
 
 #define CHECK(x) do { ++fsprobe_state[1]; if (!(x)) { fsprobe_state[0]=255; return; } } while (0)
 
@@ -46,6 +52,9 @@ static void exercise(void)
     CHECK(boundary((unsigned int)transfer,32,(unsigned int)transfer,512)==GB_PARAMS_BADARG);
     CHECK(boundary((unsigned int)transfer+500,32,(unsigned int)transfer,512)==GB_PARAMS_BADARG);
     header[0]=15;
+#ifdef PROBE_FS_IDENTITY
+    header[0]=16;
+#endif
     CHECK(boundary((unsigned int)header,32,(unsigned int)transfer,512)==GB_PARAMS_BADARG);
     first=gb_fsctx_open(0); CHECK(first);
     second=gb_fsctx_open(0); CHECK(second && second!=first);
@@ -53,7 +62,19 @@ static void exercise(void)
     CHECK(gb_fsctx_set_path(second,"/UFSTEST/SUB")==0);
     CHECK(gb_fsctx_set_name(first,"SOURCE  BIN")==0);
     CHECK(gb_fsctx_set_name(second,"SMALL   TXT")==0);
+#ifdef PROBE_FS_IDENTITY
+    CHECK(gb_universal_sysinfo()->filesystem_api_version==2);
+    CHECK(gb_fsctx_identity(first,&identity)==0);
+    CHECK(identity.drive==0 && !memcmp(identity.name,"SOURCE  BIN",11) && !strcmp(identity.path,"/UFSTEST"));
+    CHECK(gb_fsctx_identity(second,&identity)==0);
+    CHECK(identity.drive==0 && !memcmp(identity.name,"SMALL   TXT",11) && !strcmp(identity.path,"/UFSTEST/SUB"));
+    CHECK(gb_fsctx_identity(first+0x100,&identity)==GB_FSCTX_ERR_STALE);
+    CHECK(!strcmp(identity.path,"/UFSTEST/SUB"));
+#endif
     got=gb_fsctx_read(first,buffer,128); CHECK(got==128 && pattern(0,128));
+#ifdef PROBE_FS_IDENTITY
+    CHECK(gb_fsctx_identity(first,&identity)==0); /* must not rewind the live stream */
+#endif
     got=gb_fsctx_read(second,buffer,512); CHECK(got==3 && buffer[0]=='O' && buffer[1]=='K' && buffer[2]=='!');
     got=gb_fsctx_read(first,buffer,512); CHECK(got==512 && pattern(128,512));
     got=gb_fsctx_read(first,buffer,512); CHECK(got==385 && pattern(640,385));

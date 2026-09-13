@@ -8,10 +8,14 @@ Follows the [bounded MSX baseline close-out](V1-MSX-STABILITY-BASELINE.md).
 runs in private MSX images. OpenMSX Screen 6/7 passes real open/edit/save/reopen;
 1983 adds full 4096-byte save/readback and oversized-load recovery. Screen 7's
 Space-as-click timing discrepancy remains recorded separately from passing
-joystick input. Desktop document handoff, configuration and broader runtime
+joystick input. Existing-instance document delivery, configuration and broader runtime
 qualification still remain; this is not sprint completion. See
 [runtime evidence, limitations and manual instructions](UNIFIED-NOTEPAD-RUNTIME.md).
 Normal images are unchanged and native Notepad remains the delivered app.
+The subsequent [Desktop handoff work (2k/2l)](UNIFIED-NOTEPAD-HANDOFF.md)
+adds a tested copied file-identity interface and real File Manager → Notepad
+startup with recipient binding and failed-launch cleanup. New-window exact-path
+opens/saves pass in private images; reuse and configuration remain unfinished.
 
 **Historical checkpoints through 2i:** the actual editor integration source and document
 controller now exist, but the complete primary-only link fails the memory gate.
@@ -110,7 +114,7 @@ finish line, without counting a diagnostic module as a delivered editor.
 **Constraints and follow-up:** keep shared portable policy and relevant CPC
 regressions, but full CPC streaming/editor qualification and replacement of the
 normal distributions remain the next delivery stage. Native Notepad and normal
-QA images stay intact. Screen 7 currently has only 16 bytes of child-image
+QA images stay intact. Screen 7 currently has only 14 bytes of child-image
 headroom: refactor or relocate within the measured layout, never relax the
 application/stack limits or reduce document capacity to declare completion.
 One sprint is a consolidated deliverable, not a promise of one conversation

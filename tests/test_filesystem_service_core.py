@@ -91,6 +91,14 @@ class StorageServiceExecutionTests(unittest.TestCase):
         for base in ("0x2000", "0xD800"):
             self.compile("test_fsctx_core.c", base)
 
+    def test_optional_identity_is_owned_copied_and_io_free(self):
+        for base in ("0x2000", "0xD800"):
+            self.compile("test_fsctx_core.c", base, ("-DFSCTX_IDENTITY=1",))
+
+    def test_bound_launch_rejects_producer_foreign_and_stale_generation(self):
+        for base in ("0x2000", "0xD800"):
+            self.compile("test_fsctx_core.c",base,("-DFSCTX_IDENTITY=1","-DFSCTX_HANDOFF=1"))
+
     def test_actual_service_policy_with_independent_low_high_state(self):
         for base in ("0x2000", "0xD800"):
             self.compile("test_service_core.c", base)

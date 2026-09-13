@@ -59,7 +59,7 @@ proc np_type {keys callback} {
 }
 proc np_edited {} {
     if {![np_mapped]} {after time 0.002 np_edited;return}
-    np_check [expr {[np_word $::np_view]==4 && [peek [expr {$::np_view+17}]]==1}] edited
+    np_check [expr {[np_word $::np_view]==4 && [peek [expr {$::np_view+13}]]==1}] edited
     puts stderr "NOTEPAD edited through real keyboard"
     # File -> Save As, then the real chooser's name editor.
     fs_move 11 4 {fs_click {fs_move 12 44 {fs_click np_save_picker}}}
@@ -79,7 +79,7 @@ proc np_overwrite {} {
 proc np_saved {} {
     if {![np_mapped]} {after time 0.002 np_saved;return}
     if {[peek $::fs_state] in {4 5 6}} {after time 0.2 np_saved;return}
-    np_check [expr {[peek $::fs_state]==0 && [peek [expr {$::np_view+17}]]==0}] saved_clean
+    np_check [expr {[peek $::fs_state]==0 && [peek [expr {$::np_view+13}]]==0}] saved_clean
     puts stderr "NOTEPAD saved through chooser"
     fs_move 4 18 {fs_click np_relaunch}
 }
@@ -115,13 +115,13 @@ proc np_load_picker {} {
 proc np_loaded {} {
     if {![np_mapped]} {after time 0.002 np_loaded;return}
     if {[peek $::fs_state] in {1 3}} {after time 0.2 np_loaded;return}
-    np_check [expr {[peek $::fs_state]==0 && [np_word $::np_view]==4 && [peek [expr {$::np_view+17}]]==0}] reloaded_clean
+    np_check [expr {[peek $::fs_state]==0 && [np_word $::np_view]==4 && [peek [expr {$::np_view+13}]]==0}] reloaded_clean
     puts stderr "NOTEPAD reopened saved document in fresh owner"
     after time 2 {np_type {{3 2}} np_dirty_again}
 }
 proc np_dirty_again {} {
     if {![np_mapped]} {after time 0.002 np_dirty_again;return}
-    np_check [expr {[peek [expr {$::np_view+17}]]==1}] modified_again
+    np_check [expr {[peek [expr {$::np_view+13}]]==1}] modified_again
     fs_move 4 18 {fs_click np_confirm}
 }
 proc np_confirm {} {

@@ -16,8 +16,8 @@
 #define CTX_PATH     28u
 #define CTX_CURSOR      76u
 #define CTX_PATH_CAP 48u
-#define P_ACTIVE     0u
-#define P_OWNER      1u
+#define P_ACTIVE     0u /* v3: 0 empty, 1 prepared, 2 selected, 3 recipient-bound */
+#define P_OWNER      1u /* v3: producer in states 1/2, recipient in state 3 */
 #define P_DRIVE      3u
 #define P_NAME       4u
 #define P_PATH       16u
@@ -43,4 +43,5 @@
 #define OP_PREP_LAUNCH   12u
 #define OP_ADOPT_LAUNCH  13u
 #define OP_DIR_BATCH     14u
+#define OP_IDENTITY      15u /* optional filesystem API v2 */
 #endif

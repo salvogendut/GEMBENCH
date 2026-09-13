@@ -19,6 +19,7 @@ UNIVERSAL_WINDOW_KIND="${UNIVERSAL_WINDOW_KIND:-0}"
 UNIVERSAL_ACCESSORY="${UNIVERSAL_ACCESSORY:-0}"
 UNIVERSAL_MENU="${UNIVERSAL_MENU:-0}"
 UNIVERSAL_FS="${UNIVERSAL_FS:-0}"
+UNIVERSAL_FS_IDENTITY="${UNIVERSAL_FS_IDENTITY:-0}"
 UNIVERSAL_SCRAP="${UNIVERSAL_SCRAP:-0}"
 UNIVERSAL_DOCIO="${UNIVERSAL_DOCIO:-0}"
 UNIVERSAL_FILEPICK="${UNIVERSAL_FILEPICK:-0}"
@@ -49,7 +50,7 @@ if (( DATA_LOC < 0x4000 || DATA_LOC > 0x7F00 )); then
     exit 2
 fi
 for feature in "$UNIVERSAL_TASK" "$UNIVERSAL_WINDOW_KIND" "$UNIVERSAL_ACCESSORY" \
-    "$UNIVERSAL_MENU" "$UNIVERSAL_FS" "$UNIVERSAL_SCRAP" \
+    "$UNIVERSAL_MENU" "$UNIVERSAL_FS" "$UNIVERSAL_FS_IDENTITY" "$UNIVERSAL_SCRAP" \
     "$UNIVERSAL_DOCIO" "$UNIVERSAL_FILEPICK" "$UNIVERSAL_DATA_PAGES" "$UNIVERSAL_COMPUTE" "$UNIVERSAL_IX" \
     "$UNIVERSAL_MINIMAL" "$UNIVERSAL_MENU_BORROWED"; do
     [ "$feature" = 0 ] || [ "$feature" = 1 ] || {
@@ -57,7 +58,7 @@ for feature in "$UNIVERSAL_TASK" "$UNIVERSAL_WINDOW_KIND" "$UNIVERSAL_ACCESSORY"
         exit 2
     }
 done
-if { [ "$UNIVERSAL_DOCIO" = 1 ] || [ "$UNIVERSAL_FILEPICK" = 1 ]; } && [ "$UNIVERSAL_FS" != 1 ]; then
+if { [ "$UNIVERSAL_DOCIO" = 1 ] || [ "$UNIVERSAL_FILEPICK" = 1 ] || [ "$UNIVERSAL_FS_IDENTITY" = 1 ]; } && [ "$UNIVERSAL_FS" != 1 ]; then
     echo "ERROR: universal document I/O and file picker require UNIVERSAL_FS=1" >&2
     exit 2
 fi
@@ -166,7 +167,7 @@ if "portable-filesystem" not in json.load(open(sys.argv[1]))["required_capabilit
 PY
     for unit in gbfsctx gbfsctx_universal; do
         fs_flags=()
-        [ "$UNIVERSAL_MINIMAL" = 0 ] || fs_flags=(-DGB_FSCTX_BATCH_ONLY)
+        [ "$UNIVERSAL_MINIMAL" = 0 ] || fs_flags=(-DGB_FSCTX_BATCH_ONLY -DGB_FSCTX_DOCUMENT_ONLY)
         "$SDCC" -mz80 --std-c99 --opt-code-size "${app_frames[@]}" \
             -DGB_UNIVERSAL "${fs_flags[@]}" -I lib/gb -I include/gembench \
             -c "lib/gembench/$unit.c" -o "$work/$unit.rel"
@@ -174,6 +175,7 @@ PY
     done
 fi
 document_units=()
+[ "$UNIVERSAL_FS_IDENTITY" = 0 ] || document_units+=(gbfsctx_identity)
 [ "$UNIVERSAL_DOCIO" = 0 ] || document_units+=(gbdocio)
 [ "$UNIVERSAL_FILEPICK" = 0 ] || document_units+=(gbfilepick gbfilepick_ui)
 for unit in "${document_units[@]}"; do

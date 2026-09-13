@@ -1218,6 +1218,17 @@ static void open_entry(unsigned char idx)
     if (result == 1) gb_alert("Not available yet", "Unsupported file or location");
     else if (result) gb_alert("Application not opened", "Missing, invalid or no RAM");
 #else
+#ifdef GB_FSCTX_LAUNCH
+    if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G')) {
+        /* Copy before the paged FS module replaces the native directory entry.
+         * WMOPEN uses the transaction copy, not that mutable native entry. */
+        if (gb_sysinfo()->filesystem_api_version < GB_FSCTX_HANDOFF_API_VERSION ||
+            gb_fsctx_prepare_launch(fs_context,e))
+            gb_alert("Document not opened", "File context unavailable");
+        else gb_wm_open("NOTEPAD APP");
+        return;
+    }
+#endif
 #ifdef GB_SHELL_SERVICES
     if ((ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G')) &&
         gb_shell_request(GB_SHELL_CLASS_TEXT_EDITOR, GB_SHELL_OPEN, e)
@@ -1232,8 +1243,10 @@ static void open_entry(unsigned char idx)
         gb_wm_open(e);                          /* #234: run the app/screensaver image itself */
     else if (ext_is(e, 'I', 'S', 'T') || ext_is(e, 'S', 'P', 'R'))
         gb_wm_launch_as("ICONED  APP");
+#ifndef GB_FSCTX_LAUNCH
     else if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G'))
         gb_wm_launch_as("NOTEPAD APP");
+#endif
     else if (ext_is(e, 'P', 'I', 'C'))
         gb_wm_launch_as("VIEWER  APP");
     else if (ext_is(e, 'H', 'T', 'M'))

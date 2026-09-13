@@ -39,12 +39,19 @@ k_wm_launch_as
                 ld    de,fs_req_name
                 call  copy11
 wm_open_go
+                ifdef APP_LAUNCH_TRANSACTION
+                jp    APP_LAUNCH_TRANSACTION
+wm_open_transaction
+                endif
                 ld    a,(WM_NWIN)                 ; memory pages and window slots are independent
                 cp    WM_MAXWIN
                 ret   nc
                 call  owner_alloc
                 ret   nc
                 ld    (CORE_PENDING_OWNER),de
+                ifdef APP_LAUNCH_BIND
+                call  APP_LAUNCH_BIND
+                endif
                 ld    b,GB_PAGE_APPLICATION
                 call  page_alloc_owned
                 jr    nc,wmo_owner_fail

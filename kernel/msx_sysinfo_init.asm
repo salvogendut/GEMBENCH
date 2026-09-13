@@ -55,7 +55,15 @@ msi_packing     ld    (MSX_SYS_PACKING),a
                 ld    (MSX_SYS_RESERVED3),a
                 ld    hl,MSX_FSCTX_MAX         ; max contexts, transfer low byte (0)
                 ld    (MSX_SYS_FS_CONTEXTS),hl
+                ifdef PORTABLE_FS_HANDOFF
+                ld    hl,#0302                 ; bound launch transaction, API v3
+                else
+                ifdef PORTABLE_FS_IDENTITY
+                ld    hl,#0202                 ; same transfer, optional identity API v2
+                else
                 ld    hl,#0102                 ; transfer high byte (512), API v1
+                endif
+                endif
                 ld    (MSX_SYS_FS_TRANSFER+1),hl
                 ld    hl,GB_CAPS_HIGH_MSX_V6
                 ld    (MSX_SYS_CAPS_HIGH),hl

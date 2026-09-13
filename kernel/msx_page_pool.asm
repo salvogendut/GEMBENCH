@@ -247,7 +247,11 @@ kpg_no_owner    ld    a,GB_PAGE_ERR_OWNER
 msx_package_route_resume equ $
                 org MSX_PACKAGE_ROUTE_BASE
                 jp msx_app_load
+                ifdef PORTABLE_FS_HANDOFF
+                db "GBWM",#50|MSX_SCREEN_MODE
+                else
                 db "GBWM",#40|MSX_SCREEN_MODE  ; resident service addresses are mode-specific
+                endif
                 jp msx_app_progress
                 jp msx_app_clear_secondary
                 jp msx_secondary_parameters
@@ -255,6 +259,16 @@ msx_package_route_resume equ $
                 jp secondary_seal_page_release
                 include "msx_app_launch.asm"
                 include "msx_secondary_call.asm"
+                ifdef PORTABLE_FS_HANDOFF
+DOC_PENDING equ MSX_FSCTX_PENDING
+DOC_CURRENT_OWNER equ owner_current
+DOC_LAUNCH_BODY equ wm_open_transaction
+DOC_LAUNCH_ARG equ launch_arg
+DOC_COPY_NAME equ copy11
+DOC_RELEASING_OWNER equ CORE_ALLOC_OWNER
+DOC_WORKER equ SCHED_CURRENT
+                include "core/document_launch.asm"
+                endif
                 assert $<=MSX_SECONDARY_TABLE,"secondary policy overlaps sealed identities"
                 ds MSX_SECONDARY_TABLE-$,0
                 ds 64,0                        ; boot clears all owner seals
@@ -315,9 +329,12 @@ gbfsctx_modname db   "GBFSCTX MOD"
 ; Owner teardown cannot depend on storage or on the paged module still being
 ; loadable. Four fixed records are cheap to scan resident; no native DOS handle
 ; remains open between bounded calls, so invalidating matching records is the
-; complete close/cancel action. The one-shot launch transfer owns no resource
-; and is overwritten/consumed by the next prepare/adopt pair.
+; complete close/cancel action. The optional v3 tail also invalidates matching
+; launch preparation/binding; legacy one-shot transfers retain their behavior.
                 include "msx_fsctx_cleanup.inc"
+                ifdef PORTABLE_FS_HANDOFF
+CORE_FSCTX_CLEANUP_TAIL equ document_owner_cleanup
+                endif
                 include "core/fsctx_cleanup.asm"
 
                 endif

@@ -5,6 +5,12 @@ Continues the [consolidated sprint](UNIFIED-NOTEPAD.md#consolidated-sprint--runn
 The actual editor now builds and runs. This is **not** completion of the sprint
 or replacement of native Notepad in either normal distribution.
 
+Saved/pushed as `e4c8e62`. Subsequent [Desktop handoff work](UNIFIED-NOTEPAD-HANDOFF.md)
+now includes checkpoint **2l**: actual File Manager exact-path document opens,
+bound recipient/rollback, editor startup adoption and private images. Read that
+document for the latest APP hash, sizes and evidence. The numbers below are
+the historical 2j checkpoint, not the current handoff-enabled build.
+
 ## Implementation and measured fit
 
 `apps/unotepad/secondary/main.c` owns the unchanged editor model, its 4096-byte

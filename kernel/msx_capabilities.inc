@@ -1,4 +1,12 @@
 ; MSX2 published capability constants shared by resident kernel and boot module.
+                ifdef PORTABLE_FS_HANDOFF
+                ifndef PORTABLE_FS_IDENTITY
+                assert 0,"PORTABLE_FS_HANDOFF requires PORTABLE_FS_IDENTITY"
+                endif
+                ifndef PORTABLE_PACKAGE_STREAM
+                assert 0,"PORTABLE_FS_HANDOFF requires PORTABLE_PACKAGE_STREAM"
+                endif
+                endif
 GB_SYSINFO_V5         equ 5
 GB_SYSINFO_V6         equ 6
 GB_PACKING_2BPP       equ 2

@@ -93,6 +93,10 @@ real_exit 0
                     compose({**parts, name: data})
         with self.assertRaises(ValueError):
             compose({**parts, 'GBAPV4.RAW': parts['GBAPV4.RAW'][:7]+b'\2'+parts['GBAPV4.RAW'][8:]})
+        with self.assertRaises(ValueError):compose(parts,handoff=True)
+        handoff={**parts,'GBAPV4.RAW':parts['GBAPV4.RAW'][:7]+b'\6'+parts['GBAPV4.RAW'][8:]}
+        with self.assertRaises(ValueError):compose(handoff)
+        self.assertEqual(len(compose(handoff,handoff=True)['GBAPV4.MOD']),3014)
 
     @unittest.skipUnless(shutil.which('rasm') and shutil.which('cc') and (CORE/'z80.c').exists(),
                          'RASM, cc and read-only 1983 CPU source required')

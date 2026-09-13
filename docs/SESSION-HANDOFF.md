@@ -4,7 +4,81 @@ Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
 
-## Current resume point — checkpoint 2j, 2026-09-13
+## Current resume point — real Desktop document launch (2l), 2026-09-13
+
+Latest request: **commit and push, and explain manual testing**. On #84 /
+`feature/84-unified-notepad`; checkpoints 2k/2l are grouped in the
+document-handoff save after `e4c8e62`. Recheck branch history and upstream
+status for publication; no PR/merge or normal-media change was requested.
+The local writable Screen 7 manual copy is
+`build/notepad-84/manual-DfNCgT/NOTEPAD.IMG`; commands and checklist are in the
+handoff document. The reference fixtures and the user's unrelated files stay intact.
+
+Read [UNIFIED-NOTEPAD-HANDOFF.md](UNIFIED-NOTEPAD-HANDOFF.md) first: it contains
+the current private images, build commands, exact limits and test evidence.
+
+- Actual private File Manager document double-click → unified Notepad works.
+  Shared resident transaction binds a copied path/name to the allocated owner
+  generation, rejects other adopters, and expires on launch failure/return or
+  owner cleanup. Filesystem API v3 uses existing operations 12/13, identity 15;
+  outer ABI stays 2.1. Normal MSX/CPC profiles remain API v1.
+- `PORTABLE_FS_HANDOFF` requires IDENTITY and PACKAGE_STREAM. Pair the v3
+  GBFSCTX module with `GBV4,6` and `GBWM,0x56/0x57` private modules. The private
+  File Manager enables `GB_FSCTX_LAUNCH`, checks FS API >=3, and omits the native
+  shell client. Default distribution builds keep the native route.
+- Notepad adopts before registering, uses the copied identity and existing
+  staged load, then publishes title/path only on success. No 4-KiB capacity
+  reduction or widened limit. APP 18697 bytes, SHA `922b0e5c…9d01e05f`;
+  primary end `785C`, DATA `7870`, BSS end `7EF4`. Child Screen 7 has 14 bytes
+  spare. Root snapshot mirror now follows wire order; dirty byte is offset13,
+  not17. Updated runtime observers require matching new APP/symbol files.
+- 50 regressions pass. openMSX Screen6/7 edit/save/reopen with 189/185 exact
+  secondary returns. 1983 real same-name/different-directory opens and saves,
+  failed CRC launch then blank launch, full-capacity/oversize and cleanup pass.
+  Input uses joystick trigger for 1983; known keyboard Space timing remains.
+- Next: existing-instance exact-path delivery/reuse with dirty confirmation,
+  configuration reload and remaining input/UI qualification. Each private
+  File Manager open currently starts a new editor. Do not call reuse complete
+  or promote these images to normal MSX/CPC distributions yet.
+- Explicitly sync changed **and untracked new** sources into
+  `build/notepad-84/`; it is not an automatic mirror. Preserve prior evidence,
+  normal images, the user's two GIFs and untracked `QA/CPC/`.
+
+## Previous resume point — Desktop handoff foundation (2k), 2026-09-13
+
+User requested **save progress (commit/push) and go to next step**. Checkpoint
+2j (including sealed calls) is now committed/pushed as `e4c8e62` on #84's
+`feature/84-unified-notepad`. The subsequent work below is local/uncommitted;
+no PR/merge or normal-image changes.
+
+Read [UNIFIED-NOTEPAD-HANDOFF.md](UNIFIED-NOTEPAD-HANDOFF.md) for the new
+optional filesystem API-v2 identity query, evidence, private probe images,
+and exact launch-transaction work still needed. **This is not yet a document
+double-click implementation.** Existing Notepad remains the accepted 2j binary.
+
+- Shared optional `FSCTX_IDENTITY` policy adds operation 15: owned/stale-checked
+  60-byte copied drive/name/path, no target-file I/O or context/cursor mutation.
+  SDK `gb_fsctx_identity` checks advertised FS API >=2 and preserves output on
+  failure. `UNIVERSAL_FS_IDENTITY=1` links it; existing clients stay unchanged.
+- `PORTABLE_FS_IDENTITY=1` enables both private MSX gate/sysinfo and module.
+  Default FS module remains byte-identical (2024 bytes); v2 uses 2255 bytes.
+  Default MSX/CPC API v1 profiles remain unmodified in behavior.
+- 48 regressions pass; openMSX Screen 6/7 has 54 APP checks/50 preserved
+  parameter returns per run; 1983 passes three real Desk launches per mode,
+  cleanup and independent disk readback. New probe hash/paths are in the doc.
+- Existing Notepad rebuilt byte-for-byte to `d944f456…e495b3c3` (18684 bytes).
+  Do not stage the new filesystem probe as Notepad. No app functionality was
+  reduced, no limits loosened, no sibling emulator sources changed.
+- Next: exact-path producer/recipient launch transaction, pending rollback,
+  then Notepad adoption/load/title integration with measured primary savings.
+  Existing `prepare_launch/adopt_launch` lacks recipient binding and failed
+  launch cleanup; native File Manager does not call preparation. A paged FS
+  call can also change the native directory entry that `GB_WMLAUNCHAS` uses.
+  Avoid a superficial prepare-before-launch patch that ignores these facts.
+- Sync changed sources explicitly into `build/notepad-84/` before builds.
+  Preserve normal images, evidence, user GIFs and untracked `QA/CPC/`.
+
+## Previous resume point — checkpoint 2j, 2026-09-13
 
 Latest user request: **save progress (commit/push) and go to next step**.
 Remain on #84 / `feature/84-unified-notepad`. This checkpoint records the

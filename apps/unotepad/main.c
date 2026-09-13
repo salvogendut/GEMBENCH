@@ -14,10 +14,14 @@ union { gb_filepick_t picker; char bytes[768]; } scratch;
 unsigned char *gb_universal_popup_buffer(void) {return (unsigned char *)scratch.bytes;}
 static gb_docio_t job;
 static gb_fsctx_t document, candidate, retired;
-static char name[11], path[48], next_name[11], next_path[48];
+static char name[11], path[48];
+static gb_fsctx_identity_t next;
+#define next_name next.name
+#define next_path next.path
+#define next_drive next.drive
 static char title[18], line[NP_LINE_MAX];
 unsigned char mode; /* named for read-only runtime observations */
-static unsigned char drive, next_drive, action, menu_request, cooldown;
+static unsigned char drive, action, menu_request, cooldown;
 static unsigned char full, dragging, blink, caret, refresh, title_changed;
 static gb_rect_t rect;
 static unsigned char drag_x,drag_y;
@@ -508,11 +512,21 @@ static const gb_mwin_kind_t window = {
 };
 void main(void)
 {
-    if (!gb_universal_ready()) return;
+    if (!gb_universal_ready() || gb_universal_sysinfo()->filesystem_api_version < GB_FSCTX_HANDOFF_API_VERSION) return;
     wrap=39;rows=12;
     if(!model_call(NP_RESET))return;
     memcpy(name,"UNTITLEDTXT",11); strcpy(path,"/");
     drive = gb_boot_drive_current(); caret = 1;cooldown=4;
+    /* Adopt while startup belongs to the bound launch owner. Copy identity
+     * before model/storage reuse transfer scratch; publish only after load. */
+    candidate=gb_fsctx_adopt_launch();
+    if(candidate) {
+        if(gb_fsctx_identity(candidate,&next)) {
+            retired=candidate;candidate=0;fail("Cannot open document");
+        } else {
+            start_load();
+        }
+    } else if(gb_fsctx_status()!=GB_FSCTX_ERR_STALE) fail("Cannot open document");
     update_title(); gb_wm_managed_kind(&window); gb_menu(menus);
     refresh = title_changed = 1; repaint();
 }

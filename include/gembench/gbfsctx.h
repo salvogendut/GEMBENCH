@@ -18,6 +18,9 @@ typedef unsigned int gb_fsctx_t;
 #define GB_FSCTX_PATH_MAX      47u
 #define GB_FSCTX_DIRECTORY_BATCH 4u
 #define GB_FSCTX_API_VERSION    1u
+#define GB_FSCTX_IDENTITY_API_VERSION 2u
+#define GB_FSCTX_HANDOFF_API_VERSION 3u
+#define GB_FSCTX_IDENTITY_BYTES 60u
 
 #include "gbfsctx_platform.h"
 
@@ -56,10 +59,26 @@ unsigned char gb_fsctx_write(gb_fsctx_t context, const char *buffer,
 unsigned char gb_fsctx_free_kib(gb_fsctx_t context, unsigned int *kib);
 unsigned char gb_fsctx_cancel(gb_fsctx_t context);
 
-/* A launcher may prepare an exact drive/path/name before GB_WMLAUNCHAS. The
- * newly loaded application can adopt it under its own owner generation. */
+/* Filesystem API >=3: prepare, then immediately GB_WMOPEN the chosen app in the
+ * same root callback. The receiver copies this name into the legacy argument,
+ * binds adoption to the new owner generation, and expires the request when the
+ * synchronous launch returns (including failure). No intervening root yield.
+ * An occupied transaction returns FULL; only the bound recipient can adopt.
+ * API v1/v2 preparation is legacy/unbound: do not use it for this contract. */
 unsigned char gb_fsctx_prepare_launch(gb_fsctx_t context, const char *name11);
 gb_fsctx_t gb_fsctx_adopt_launch(void);
+
+/* Optional UNIVERSAL_FS_IDENTITY=1 helper, filesystem API >=2. Read an owned
+ * context's exact identity without I/O or consuming a pending launch. The
+ * result is caller-owned; errors (including old receivers) leave it unchanged.
+ * Native private paths are normalized to '/' and NUL/zero padded. This query
+ * does not promise the file exists or grant another owner's context access. */
+typedef struct {
+    unsigned char drive;
+    char name[11];
+    char path[48];
+} gb_fsctx_identity_t;
+unsigned char gb_fsctx_identity(gb_fsctx_t context,gb_fsctx_identity_t *out);
 
 /* Status of the most recent operation issued by this application. */
 unsigned char gb_fsctx_status(void);

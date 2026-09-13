@@ -13,7 +13,8 @@ import tempfile
 ROOT=Path(__file__).resolve().parents[1]
 
 
-def run(mode, clipboard=False, chooser=False, data_pages=False, package_modules=False, two_segment=False, launch_case='good', compute=False, notepad=False):
+def run(mode, clipboard=False, chooser=False, data_pages=False, package_modules=False, two_segment=False, launch_case='good', compute=False, notepad=False, identity=False, reuse_app=False):
+    if reuse_app and not notepad: raise ValueError('--reuse-app requires --notepad')
     if compute or notepad:
         data_pages=package_modules=two_segment=True
     if package_modules and not data_pages:
@@ -22,7 +23,7 @@ def run(mode, clipboard=False, chooser=False, data_pages=False, package_modules=
         raise ValueError('two-segment qualification requires --package-modules')
     if launch_case!='good' and not two_segment:
         raise ValueError('launch faults require --two-segment')
-    service = 'notepad' if notepad else 'compute' if compute else 'data-pages' if data_pages else 'chooser' if chooser else 'clipboard' if clipboard else 'filesystem'
+    service = 'file-identity' if identity else 'notepad' if notepad else 'compute' if compute else 'data-pages' if data_pages else 'chooser' if chooser else 'clipboard' if clipboard else 'filesystem'
     work=ROOT/'build/msx'
     work.mkdir(parents=True,exist_ok=True)
     stage=Path(tempfile.mkdtemp(prefix=f'portable-{service}-{mode}-',dir=work))
@@ -30,6 +31,13 @@ def run(mode, clipboard=False, chooser=False, data_pages=False, package_modules=
     app=ROOT/('build/universal/SCRAPPRB.APP' if clipboard else 'build/universal/FSPROBE.APP')
     source='apps/scrapprobe' if clipboard else 'apps/fsprobe'
     features={'UNIVERSAL_SCRAP':'1','APP_ICON':'apps/abiprobe/icon.asm'} if clipboard else {'UNIVERSAL_FS':'1'}
+    if identity:
+        if package_modules or two_segment:
+            raise ValueError('identity fixture uses the ordinary primary-only receiver')
+        features.update(UNIVERSAL_FS_IDENTITY='1',APP_CFLAGS='-DPROBE_FS_IDENTITY=1')
+        subprocess.run(['bash','tools/build_fsctxmod.sh',str(stage/'GBFSCTX.MOD')],cwd=ROOT,
+                       env={**os.environ,'PORTABLE_FS_IDENTITY':'1'},check=True)
+        shutil.copyfile(stage/'GBFSCTX.MOD',card/'GBENCH/GBFSCTX.MOD')
     if chooser:
         from filepick_scenario import FEATURES
         source='apps/filepickprobe';app=ROOT/'build/universal/PICKPRB.APP';features=FEATURES
@@ -40,8 +48,29 @@ def run(mode, clipboard=False, chooser=False, data_pages=False, package_modules=
         features['APP_ICON16']=os.environ['PORTABLE_PROBE_ICON16']
     if notepad:
         source='apps/unotepad';app=ROOT/'build/universal/NOTEPAD.APP'
-        subprocess.run(['bash','tools/build_unotepad.sh'],cwd=ROOT,check=True)
+        subprocess.run(['bash','tools/build_fsctxmod.sh',str(stage/'GBFSCTX.MOD')],cwd=ROOT,
+                       env={**os.environ,'PORTABLE_FS_HANDOFF':'1'},check=True)
+        shutil.copyfile(stage/'GBFSCTX.MOD',card/'GBENCH/GBFSCTX.MOD')
+        if not reuse_app: subprocess.run(['bash','tools/build_unotepad.sh'],cwd=ROOT,check=True)
         shutil.copyfile(ROOT/'build/universal/NOTEPAD.BIN',stage/'secondary.bin')
+        # The private File Manager uses the copied transaction instead of the
+        # native shell mailbox. Normal distribution builds retain their path.
+        subprocess.run(['bash','tools/build_capp.sh','apps/filemgr','build/msx/FILEMGR-HANDOFF.RAW'],cwd=ROOT,
+            env={**os.environ,'GBLIB_SRC':'build/msx/GBLIBFILEMGR.s',
+                 'APPDEFS':'-DGB_MSX2 -DGB_FSCTX_DIRECTORY_ONLY -DGB_FSCTX_BATCH_ONLY -DGB_FSCTX_LAUNCH',
+                 'GLOBAL_APPDEFS':'-DGB_PREEMPTIVE','APP_CFLAGS':'--max-allocs-per-node 5000',
+                 'DATA_LOC':'0x79F8','DIALOGS':'1','GBR_MENUS':'1','SCROLL':'1','REPAINTTOP':'1',
+                 'GBWIN':'0','WINDOW_KIND':'1','GB_SHELL_CLIENT':'0','GB_FSCTX':'1','SYS':'1'},check=True)
+        shutil.copyfile(ROOT/'build/msx/FILEMGR-HANDOFF.RAW',card/'GBENCH/FILEMGR.APP')
+        shutil.copyfile(ROOT/'build/msx-obj/filemgr/app.noi',stage/'filemgr.noi')
+        linked=dict(re.findall(r'^DEF (\w+) (0x[0-9A-Fa-f]+)',(stage/'filemgr.noi').read_text(),re.M))
+        locals={name:int(linked['s__DATA' if area=='1' else 's__INITIALIZED'],16)+int(offset,16)
+                for area,name,offset in re.findall(r'^\s+([12])\s+(_\w+)\s+([0-9A-Fa-f]+)\s+R',
+                    (ROOT/'build/msx-obj/filemgr/main.sym').read_text(),re.M)}
+        (stage/'filemgr-symbols.json').write_text(json.dumps(locals,indent=2)+'\n')
+        for directory, data in (('ADOC',b'Chosen root document.\n'),('ADOC/SUB',b'Chosen nested document.\n')):
+            folder=card/directory;folder.mkdir(parents=True,exist_ok=True)
+            (folder/'EXACT.TXT').write_bytes(data)
     elif compute:
         source='apps/computeprobe';app=ROOT/'build/universal/COMPUTE.APP'
         secondary=stage/'secondary.bin'
@@ -92,10 +121,12 @@ def run(mode, clipboard=False, chooser=False, data_pages=False, package_modules=
         chooser_fixture(stage/'DOCUI')
     rasm=os.environ.get('RASM','rasm')
     experimental=['-DPORTABLE_DATA_PAGES=1'] if data_pages else []
+    if identity: experimental+=['-DPORTABLE_FS_IDENTITY=1']
+    if notepad: experimental+=['-DPORTABLE_FS_IDENTITY=1','-DPORTABLE_FS_HANDOFF=1']
     if package_modules:
         from build_msx_package_modules import build
         experimental+=['-DPORTABLE_PACKAGE_STREAM=1']
-        build(stage/'modules')
+        build(stage/'modules',handoff=notepad)
         for name in ('GBAPV4.MOD','GBPKFIX.MOD','GBPKLOAD.MOD'):
             shutil.copyfile(stage/'modules'/name,card/'GBENCH'/name)
     else:
@@ -129,6 +160,7 @@ def run(mode, clipboard=False, chooser=False, data_pages=False, package_modules=
          'MSX_SCRIPT':'debug/portable_clipboard_openmsx.tcl' if clipboard else 'debug/portable_fs_openmsx.tcl',
          'GEOBENCH_FS_OPERATION':'9' if clipboard else '8','GEOBENCH_FS_STATE':state,
          'GEOBENCH_FS_OUTPUT':str(result),'SDL_AUDIODRIVER':'dummy'}
+    if identity: env['GEOBENCH_FS_EXPECTED']='54'
     if chooser:
         env['MSX_SCRIPT']='debug/portable_filepick_openmsx.tcl'
         env['GEOBENCH_FS_DEADLINE']='320' # 13 pointer journeys, not the single-launch FS probe
@@ -180,10 +212,12 @@ if __name__=='__main__':
     option.add_argument('--data-pages',action='store_true')
     option.add_argument('--compute',action='store_true',help='real compiled secondary calls through a private Desktop alias')
     option.add_argument('--notepad',action='store_true',help='build and exercise the actual private two-bank editor')
+    option.add_argument('--identity',action='store_true',help='qualify the optional API-v2 owned file-identity query')
     parser.add_argument('--package-modules',action='store_true',
                         help='private fixed stream composition (requires --data-pages)')
     parser.add_argument('--two-segment',action='store_true',
                         help='package the probe with a full secondary bank (requires --package-modules)')
     parser.add_argument('--launch-case',choices=('good','badcrc','short','extra'),default='good')
+    parser.add_argument('--reuse-app',action='store_true',help='reuse the already audited Notepad build, without recompiling it')
     args=parser.parse_args()
-    run(args.mode,args.clipboard,args.chooser,args.data_pages,args.package_modules,args.two_segment,args.launch_case,args.compute,args.notepad)
+    run(args.mode,args.clipboard,args.chooser,args.data_pages,args.package_modules,args.two_segment,args.launch_case,args.compute,args.notepad,args.identity,args.reuse_app)

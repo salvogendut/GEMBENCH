@@ -214,6 +214,12 @@ msx_app_clear_chunk
 ; Invoked before public launch writes the filename or allocates an owner.
 ; Preserve HL (the caller's app-name pointer); reject worker/nested entry.
 msx_app_can_launch
+                ifdef PORTABLE_FS_HANDOFF
+                call msx_app_launch_ready
+                ret c
+                jp document_reject
+msx_app_launch_ready
+                endif
                 ld a,(CORE_PENDING_OWNER)
                 ld b,a
                 ld a,(CORE_PENDING_OWNER+1)

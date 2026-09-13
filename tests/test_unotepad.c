@@ -54,6 +54,21 @@ unsigned char gb_fsctx_close(gb_fsctx_t h)
     return fs_error;
 }
 unsigned char gb_fsctx_status(void) { return fs_error; }
+static gb_fsctx_t pending_document;
+static unsigned char identity_error;
+gb_fsctx_t gb_fsctx_adopt_launch(void)
+{
+    gb_fsctx_t result=pending_document;pending_document=0;
+    fs_error=result ? GB_FSCTX_OK : GB_FSCTX_ERR_STALE;
+    return result;
+}
+unsigned char gb_fsctx_identity(gb_fsctx_t h,gb_fsctx_identity_t *out)
+{
+    assert(h && live[h]);
+    if(identity_error)return identity_error;
+    out->drive=1;memcpy(out->name,"EXACT   TXT",11);strcpy(out->path,"/DOCS/SUB");
+    return 0;
+}
 unsigned char gb_fsctx_set_path(gb_fsctx_t h,const char *p) { (void)p; return call(h); }
 unsigned char gb_fsctx_set_name(gb_fsctx_t h,const char *p) { (void)p; return call(h); }
 unsigned char gb_fsctx_activate(gb_fsctx_t h) { return call(h); }
@@ -99,6 +114,12 @@ unsigned char gb_scrap_get(unsigned char type,char *p,unsigned int n,unsigned in
     memcpy(p,clip,n); *copied=n; return 0;
 }
 unsigned char gb_universal_ready(void) { return 1; }
+const gb_sysinfo_v6_t *gb_universal_sysinfo(void)
+{
+    static gb_sysinfo_v6_t info;
+    info.filesystem_api_version=GB_FSCTX_HANDOFF_API_VERSION;
+    return &info;
+}
 unsigned char gb_boot_drive_current(void) { return 0; }
 unsigned char gb_screen_columns(void) { return 128; }
 unsigned char gb_screen_lines(void) { return 212; }
@@ -136,6 +157,7 @@ static void reset_test(void)
     memset(input,0,sizeof(input)); input_pos=0;
     document=candidate=retired=0; fs_calls=fail_call=writes=0;
     fs_error=clip_error=closed=buttons=0; disk_len=clip_len=0;
+    pending_document=0;identity_error=0;
     mode=EDIT; action=menu_request=cooldown=refresh=title_changed=dragging=blink=full=0;
     live_rect.x=2; live_rect.y=14; live_rect.w=66; live_rect.h=158;
     notepad_entry(); refresh=title_changed=cooldown=0;
@@ -164,6 +186,27 @@ static void begin_load(void)
 {
     candidate=gb_fsctx_open(0); memcpy(next_name,"NEW     TXT",11); strcpy(next_path,"/NEW");
     start_load();
+}
+static void launch_document(void)
+{
+    reset_test();
+    pending_document=gb_fsctx_open(1);memcpy(disk,"selected\n",9);disk_len=9;
+    notepad_entry();
+    assert(mode==LOAD && !pending_document && candidate && !document);
+    assert(!memcmp(name,"UNTITLEDTXT",11)); /* publish only after successful I/O */
+    run_io();
+    assert(mode==EDIT && document && !candidate && !editor.dirty && editor.len==9);
+    assert(!memcmp(editor.text,"selected\n",9));
+    assert(drive==1 && !memcmp(name,"EXACT   TXT",11) && !strcmp(path,"/DOCS/SUB"));
+    assert(!strcmp(title,"EXACT.TXT"));
+
+    reset_test();pending_document=gb_fsctx_open(1);identity_error=GB_FSCTX_ERR_IO;
+    notepad_entry();assert(mode==ERROR && retired && !candidate && !document);
+    close_request();tick();assert(!retired && !live[1] && !editor.len);
+
+    reset_test();pending_document=gb_fsctx_open(1);disk_len=4097;
+    notepad_entry();run_io();assert(mode==ERROR && !document && retired && !editor.len);
+    assert(!memcmp(name,"UNTITLEDTXT",11));close_request();tick();assert(!retired);
 }
 static void model(void)
 {
@@ -367,7 +410,7 @@ int main(void)
     reset_test();input[40]=' ';input[41]=' ';notepad_entry();
     for(unsigned char i=0;i<6;++i)tick();
     assert(editor.len==0 && !editor.dirty);
-    model(); copied_protocol(); lifecycle(); clipboard_and_damage(); chooser_integration();
+    model(); copied_protocol(); lifecycle(); clipboard_and_damage(); chooser_integration();launch_document();
     puts("unified Notepad model/controller tests PASS (mocked services; no runtime claim)");
     return 0;
 }

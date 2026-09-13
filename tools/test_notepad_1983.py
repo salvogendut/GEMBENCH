@@ -87,7 +87,7 @@ class NotepadDriver(Driver):
         free = self.read(glue['MSX_PAGE_FREE'])
         self.launch()
         self.type_keys([(2, 64), (2, 128), (3, 1), (7, 128)])
-        self.expect(self.editor()[:2] == [4, 0] and self.editor()[17] == 1, 'typed abc newline')
+        self.expect(self.editor()[:2] == [4, 0] and self.editor()[13] == 1, 'typed abc newline')
         self.menu(3)
         self.wait(self.picker_ready, 'save chooser')
         self.type_keys([(5, 1), (2, 64), (5, 8), (3, 4), (3, 2),
@@ -95,24 +95,24 @@ class NotepadDriver(Driver):
         self.wait(lambda: self.mode() == 9, 'explicit overwrite confirmation')
         self.type_keys([(5, 1)])
         self.wait(lambda: self.mode() == 0, 'save completed')
-        self.expect(self.editor()[17] == 0, 'saved document clean')
+        self.expect(self.editor()[13] == 0, 'saved document clean')
         self.close(1, 1)
         self.launch(); self.load_file()
-        self.expect(self.editor()[:2] == [4, 0] and self.editor()[17] == 0,
+        self.expect(self.editor()[:2] == [4, 0] and self.editor()[13] == 0,
                     'saved document reopened in fresh owner')
         # A real edit, then dirty close / Cancel / close / Discard.
         self.type_keys([(3, 2)])
         self.click(4, 18)
         self.expect(self.mode() == 2 and self.value('WM_NWIN') == 2, 'dirty close confirmation')
         self.type_keys([(7, 4)])  # Escape
-        self.expect(self.mode() == 0 and self.editor()[17] == 1, 'cancel retains dirty document')
+        self.expect(self.mode() == 0 and self.editor()[13] == 1, 'cancel retains dirty document')
         self.click(4, 18); self.type_keys([(3, 2)])
         self.wait(lambda: self.value('WM_NWIN') == 1, 'discard closes')
         if args.boundary:
             self.launch(); self.load_file(b'MAXIMUM TXT')
-            self.expect(self.editor()[:2] == [0, 16] and self.editor()[17] == 0, 'full 4096-byte load')
+            self.expect(self.editor()[:2] == [0, 16] and self.editor()[13] == 0, 'full 4096-byte load')
             self.type_keys([(5, 32)])  # X cannot exceed capacity.
-            self.expect(self.editor()[:2] == [0, 16] and self.editor()[17] == 0, 'capacity retains full document')
+            self.expect(self.editor()[:2] == [0, 16] and self.editor()[13] == 0, 'capacity retains full document')
             self.menu(3); self.wait(self.picker_ready, 'boundary save chooser')
             # FULL.TXT; file chooser starts with an empty edit field.
             self.type_keys([(3, 8), (5, 4), (4, 2), (4, 2), (2, 8),
@@ -121,7 +121,7 @@ class NotepadDriver(Driver):
             self.type_keys([(5, 1)])
             self.wait(lambda: self.mode() == 0, 'full save completed')
             self.load_file(b'TOOLARGETXT', result=7)
-            self.expect(self.editor()[:2] == [0, 16] and self.editor()[17] == 0,
+            self.expect(self.editor()[:2] == [0, 16] and self.editor()[13] == 0,
                         '4097-byte input rejected with old document retained')
             self.type_keys([(7, 128)])
             self.expect(self.mode() == 0, 'load error acknowledged')

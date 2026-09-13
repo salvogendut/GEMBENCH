@@ -63,7 +63,11 @@ package_modules_bad
 package_modules
                 db "GBAPV4  MOD"
                 dw MSX_GBAP4_GATE,MSX_GBAP4_GATE_SIZE
+                ifdef PORTABLE_FS_HANDOFF
+                db "GBV4",6
+                else
                 db "GBV4",5
+                endif
                 db "GBPKFIX MOD"
                 dw MSX_PACKAGE_IO_BASE,MSX_PACKAGE_IMAGE_SIZE
                 db "GBIO",3
@@ -72,6 +76,10 @@ package_modules
                 db "GBPK",2
                 db "GBPKWM  MOD"
                 dw MSX_PACKAGE_ROUTE_BASE,MSX_PACKAGE_ROUTE_SIZE
+                ifdef PORTABLE_FS_HANDOFF
+                db "GBWM",#50|MSX_SCREEN_MODE
+                else
                 db "GBWM",#40|MSX_SCREEN_MODE
+                endif
                 db 0
 package_data_signature db "GBDP",1
