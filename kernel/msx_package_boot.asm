@@ -74,7 +74,11 @@ package_modules
                 db "GBPKLOADMOD"
                 dw MSX_PACKAGE_ENTRY,MSX_PACKAGE_CODE_SIZE
                 db "GBPK",2
-                db "GBPKWM  MOD"
+                if MSX_SCREEN_MODE==7
+                db "GBPKWM7 MOD"
+                else
+                db "GBPKWM6 MOD"
+                endif
                 dw MSX_PACKAGE_ROUTE_BASE,MSX_PACKAGE_ROUTE_SIZE
                 ifdef PORTABLE_FS_HANDOFF
                 db "GBWM",#60|MSX_SCREEN_MODE

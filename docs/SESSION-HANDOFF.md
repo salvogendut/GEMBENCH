@@ -4,7 +4,50 @@ Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
 
-## Current resume point — CPC document/input receiver, 2026-09-14
+## Current resume point — normal unified Notepad delivery, 2026-09-14
+
+The user approved steps **1, 2 and 3**: CPC Escape, acceptance, and promotion
+of the identical editor into both normal distributions. **All three are now
+complete**, on `feature/84-unified-notepad` / issue #84, after pushed
+baseline `33ba155`. The user subsequently requested **commit/push, PR/merge and
+a roadmap update**. The commit containing this section records that delivery
+checkpoint; recheck Git/GitHub for publication and merge state. Issue #84 stays
+open for its outstanding safe live-editor reuse/integration acceptance. Read
+[UNIFIED-NOTEPAD-DELIVERY.md](UNIFIED-NOTEPAD-DELIVERY.md) for exact evidence,
+hashes, remaining limits and manual commands.
+
+- Text-window Escape is owned by POLL's one-shot close/cancel path. GETKEY no
+  longer duplicates it or swallows a press before chrome sees it. Native
+  non-text ASCII Escape remains. 2017 executed Z80 input calls and held-key
+  runtime tests pass.
+- Real CPC/M4 capacity, chooser, cross-owner clipboard, read-only/full-disk
+  failures, dirty decisions and 12 occlusion/cleanup cycles pass. No guest RAM
+  patches, floppy tests or sibling-repository changes.
+- `make cpc`: normal `QA/CPC-Desktop/GEOBENCH.IMG`, v4 delivery manifest,
+  existing native File Manager/Settings plus the universal editor. Normal MSX
+  builds stage the same APP and the filesystem-v3/secondary receiver. TXT/CFG
+  handoffs and direct NOTEPAD.APP launches work. Both images are rebuilt.
+- APP SHA `d45f0c5e…6ad157`, 20213 bytes, unchanged from the accepted Quit
+  build. The primary still has one byte before DATA. Screen 7's child COM has
+  only 24 bytes spare. **Do not relax either bound.**
+- Normal MSX needs **both GBPKWM6.MOD and GBPKWM7.MOD**; addresses/signatures
+  are screen-specific. The static gate now distinguishes historical primary
+  and document receivers; the legacy Makefile check uses an isolated output.
+- Normal delivery: 35 CPC scenarios covered (one obsolete CFG-rejection test
+  corrected/rechecked; original failure retained), 1983 editor/handoff/Desk
+  stress in Screen 6/7, and openMSX editor checks in both modes. Combined
+  evidence: `build/notepad-84/evidence/delivery-result.json`.
+- Normal images and CARD were verified; tests use disposable copies. Backups
+  of previous normal/private images: `build/notepad-84/pre-delivery-R2ZDyU/`.
+  Keep all earlier manual images, user GIFs and untracked `QA/CPC/` intact.
+- Build outputs include tracked MSX CARD payloads/disks and four new checked
+  package MOD files. They are intended normal-delivery changes, not user files.
+  CPC media remains generated/ignored; do not stage parked `QA/CPC/`.
+- Follow-ups, not part of the three completed tasks: existing-instance exact
+  document reuse and live configuration integration; then further app migration
+  per the v1.0 roadmap. This is not a claim of completed v1.0 or PCW support.
+
+## Previous resume point — CPC document/input receiver, 2026-09-14
 
 Latest user follow-up: the exploratory CPC editor and universal File > Quit
 were both manually accepted; the user requested commit/push of this checkpoint.

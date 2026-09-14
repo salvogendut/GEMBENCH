@@ -9,7 +9,7 @@
 static unsigned char mem[65536], parts[4][4096];
 static const unsigned addresses[]={0x400,0xCFDB,0x100,0x1C00};
 static const unsigned lengths[]={3014,1061,747,256};
-static const char *names[]={"GBAPV4  MOD","GBPKFIX MOD","GBPKLOADMOD","GBPKWM  MOD"};
+static const char *names[]={"GBAPV4  MOD","GBPKFIX MOD","GBPKLOADMOD","GBPKWM6 MOD"};
 static Z80 cpu;
 static unsigned calls, fault, target;
 static unsigned dos_status,dos_count;

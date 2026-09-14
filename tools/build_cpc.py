@@ -5,8 +5,9 @@ from cpc_desktop_media import validate
 
 
 if __name__ == '__main__':
-    media = build(desktop=True, filemgr=True, settings=True, delivery=True)
+    media = build(desktop=True, filemgr=True, settings=True, delivery=True, unified_notepad=True)
     validate(media, pristine=True)
     print('CPC Desktop built: '+str(media))
     print('Run: bash tools/run_cpc.sh (Disk C opens the native File Manager)')
     print('System > Settings: font, icons, cursor, title bar, gadgets and backdrop')
+    print('Universal Notepad: GBENCH/NOTEPAD.APP, or double-click a TXT/CFG document')

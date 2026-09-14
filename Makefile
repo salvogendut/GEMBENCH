@@ -331,9 +331,9 @@ geobench-v2-sdk-check: geobench-v2-abi-check geobench-v2-abiprobe geobench-v2-ti
 	$(PYTHON) tools/test_universal_tier1.py
 
 geobench-v2-msx-gate-check: geobench-v2-abiprobe
-	mkdir -p build/msx
-	cd build/msx && rasm ../../kernel/msx_gbap4.asm
-	python3 tools/test_geobench_v2_msx_gate.py
+	mkdir -p build/msx/gate2-check
+	cd build/msx/gate2-check && rasm ../../../kernel/msx_gbap4.asm
+	python3 tools/test_geobench_v2_msx_gate.py --receiver primary --gate build/msx/gate2-check/GBAPV4.RAW
 
 geobench-v2-msx-openmsx: geobench-msx
 	bash tools/test_geobench_v2_msx_openmsx.sh

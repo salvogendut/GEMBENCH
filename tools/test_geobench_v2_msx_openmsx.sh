@@ -15,6 +15,7 @@ for path in build/universal/ABIPROBE.APP build/msx/GBAPV4.RAW \
     }
 done
 python3 tools/test_geobench_v2_msx_gate.py \
+    --gate QA/MSX/CARD/GBENCH/GBAPV4.MOD \
     --staged QA/MSX/CARD/GBENCH/ABIPROBE.APP
 
 kernel_symbols=build/msx/gbkernm7.sym

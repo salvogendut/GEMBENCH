@@ -8,6 +8,20 @@ cpc_key_previous equ #3356
 cpc_key_modifiers equ #3357
 cpc_getkey
                 call cpc_input_scan
+                ifdef PORTABLE_FS_HANDOFF
+                ; Text windows use the window manager's close/cancel event.
+                ; Never claim Escape here: a scan can see the press between
+                ; POLL and GB_MSG_FRAME, when EDIT would discard ASCII 27.
+                ld a,(CPC_KEYS+8)
+                bit 2,a
+                jr nz,cpc_key_escape_ready
+                call cpc_text_focus
+                or a
+                jr z,cpc_key_escape_ready
+                ld hl,CPC_KEYS+8
+                set 2,(hl)
+cpc_key_escape_ready
+                endif
                 ld a,(CPC_KEYS+2)
                 ld (cpc_key_modifiers),a
                 ld hl,CPC_KEYS

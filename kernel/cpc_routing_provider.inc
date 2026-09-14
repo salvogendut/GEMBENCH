@@ -14,7 +14,8 @@ in_quit equ #3304
 poll_lastfire equ #3305
 poll_byte equ #3306
 poll_line equ #3307
-cpc_poll_stamp equ #335A             ; 16-bit cadence; #3308 is now reserved
+cpc_escape_held equ #3308            ; POLL Escape edge, survives focus changes
+cpc_poll_stamp equ #335A             ; independent 16-bit pointer cadence
                 ifdef CPC_RUNTIME
 cpc_pointer_interval equ #335C
 cpc_pointer_max_gap equ #335E        ; IRQ ticks, consecutive moving samples

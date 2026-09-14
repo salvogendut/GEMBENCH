@@ -336,7 +336,10 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         key('F');rects[1]=(0,8,80,192);checked('workflow-fullscreen')
         key('F');rects[1]=(4,26,56,158);checked('workflow-fullscreen-restores')
         open_item(1,'..');directory(1,'');checked('workflow-parent')
-        open_item(1,'GEOBENCH.CFG')
+        # TXT/CFG now launch the unified editor. A system binary remains an
+        # unsupported document on both old and Notepad delivery profiles.
+        open_item(1,'CORE.BIN')
+        move(76,190) # this icon can lie under the alert; verify unhighlighted rows
         popup=dict(x=23,y=84,hot=-1,labels=('Not available yet','Unsupported file or location'))
         checked('workflow-unsupported-file');key('ESCAPE');popup=None;checked('workflow-error-restores')
         open_item(1,'GBENCH');directory(1,'/GBENCH');checked('workflow-directory-again')

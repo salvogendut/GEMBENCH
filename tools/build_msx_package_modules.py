@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the private opt-in MSX stream module set; never stage release media."""
+"""Build the checked MSX stream module set; staging belongs to the caller."""
 import argparse
 import os
 from pathlib import Path

@@ -3,6 +3,7 @@ import hashlib
 import json
 import zlib
 from pathlib import Path
+from embed_app_icon import parse_manifest
 
 
 def check_destination(media, files, directories):
@@ -27,10 +28,13 @@ def validate(media, *, pristine=False):
     """Verify the explicit delivered profile before running its acceptance test."""
     media = Path(media).resolve()
     manifest = json.loads((media/'manifest.json').read_text())
-    if manifest.get('profile') not in ('cpc-desktop-m4-v1', 'cpc-desktop-m4-v2', 'cpc-desktop-m4-v3') or manifest.get('storage') != 'm4':
+    if manifest.get('profile') not in ('cpc-desktop-m4-v1', 'cpc-desktop-m4-v2', 'cpc-desktop-m4-v3', 'cpc-desktop-m4-v4') or manifest.get('storage') != 'm4':
         raise ValueError('not a CPC Desktop M4 delivery manifest')
     files = manifest['files']
-    if {name for name in files if name.endswith('.APP')} != {'GBENCH/CLOCK.APP', 'GBENCH/CALC.APP'}:
+    has_notepad=manifest['profile']=='cpc-desktop-m4-v4'
+    apps={'GBENCH/CLOCK.APP','GBENCH/CALC.APP'}
+    if has_notepad:apps.add('GBENCH/NOTEPAD.APP')
+    if {name for name in files if name.endswith('.APP')} != apps:
         raise ValueError('unexpected Desktop application set')
     if manifest['profile'] == 'cpc-desktop-m4-v1':
         if 'filemgr' in manifest['sections'] or 'GBENCH/FILEMGR.BIN' in files:
@@ -40,7 +44,7 @@ def validate(media, *, pristine=False):
         if (not fm.get('staged') or not fm.get('private_integration') or
                 fm.get('source') != 'apps/filemgr/main.c' or 'GBENCH/FILEMGR.BIN' not in files):
             raise ValueError('build-matched native File Manager is not staged')
-    has_settings=manifest['profile']=='cpc-desktop-m4-v3'
+    has_settings=manifest['profile'] in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4')
     if has_settings:
         setting=manifest['sections'].get('settings',{})
         if (not setting.get('staged') or not setting.get('private_integration') or
@@ -50,6 +54,17 @@ def validate(media, *, pristine=False):
             raise ValueError('build-matched appearance Settings is not staged')
     elif 'settings' in manifest['sections'] or 'GBENCH/SETTINGS.BIN' in files:
         raise ValueError('Settings requires the v3 delivery profile')
+    if has_notepad:
+        editor=manifest['sections'].get('notepad',{})
+        if (not editor.get('staged') or not editor.get('universal') or
+                editor.get('source')!='apps/unotepad' or editor.get('filesystem_api')!=3 or
+                editor.get('secondary_pages')!=1 or editor.get('document_capacity')!=4096 or
+                editor.get('associations')!=['TXT','CFG'] or
+                editor.get('sha256')!=files['GBENCH/NOTEPAD.APP'] or
+                'GBENCH/GBPKLOAD.MOD' not in files or 'package' not in manifest['sections']):
+            raise ValueError('unified Notepad requires its complete receiver and document binding')
+    elif 'notepad' in manifest['sections'] or 'GBENCH/GBPKLOAD.MOD' in files:
+        raise ValueError('Notepad receiver requires the v4 delivery profile')
     if manifest.get('directories') != ['GBENCH']:
         raise ValueError('diagnostic directories in Desktop delivery')
     if not manifest['sections']['bar'].get('staged') or manifest['sections']['bar']['source'] != 'apps/desktop/main.c':
@@ -63,6 +78,12 @@ def validate(media, *, pristine=False):
             raise ValueError('invalid staged path')
         if hashlib.sha256((media/'CARD'/name).read_bytes()).hexdigest() != expected:
             raise ValueError('staged Desktop file differs: '+name)
+    if has_notepad:
+        editor_package=parse_manifest((media/'CARD/GBENCH/NOTEPAD.APP').read_bytes())
+        if (editor_package['version']!=4 or editor_package['profile']!=3 or
+                editor_package['application_id']!='NOTEPAD' or
+                editor_package['minimum_pages']!=2 or len(editor_package['segments'])!=2):
+            raise ValueError('staged Notepad is not the universal two-bank editor')
     contracts=[]
     if manifest['profile']!='cpc-desktop-m4-v1':contracts.append(('File Manager','FILEMGR.BIN',fm))
     if has_settings:contracts.append(('Settings','SETTINGS.BIN',setting))

@@ -11,8 +11,16 @@ APP_SHA='1d554abbd83f65ad2c332b48f7712694d55ed68a1ae5d0358f266c8ecdc340e8'
 QUIT_APP_SHA='d45f0c5ec151f1a5ca4f9a9a52ff94162360f1aa2883eda4afa80340396ad157'
 DOCUMENTS={'/ADOC/EXACT.TXT':b'abc\nxyz\n','/ADOC/SUB/EXACT.TXT':b'Nested document.\n'}
 
+def documents(case):
+    result=dict(DOCUMENTS)
+    if case=='boundary':
+        result['/ADOC/EXACT.TXT']=(b'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n'*111)[:4096]
+        result['/ADOC/TOOLARGE.TXT']=result['/ADOC/EXACT.TXT']+b'!'
+    return result
+
 def prepare(manifest,app,image,artifacts,case):
-    if manifest['profile']!='cpc-notepad-handoff-private-v1':
+    delivery=manifest['profile']=='cpc-desktop-m4-v4'
+    if not delivery and manifest['profile']!='cpc-notepad-handoff-private-v1':
         raise ValueError('Notepad requires the explicit API-v3/text-input receiver')
     app=Path(app);data=app.read_bytes()
     digest=hashlib.sha256(data).hexdigest()
@@ -21,17 +29,30 @@ def prepare(manifest,app,image,artifacts,case):
     (artifacts/'NOTEPAD.APP').write_bytes(data)
     (artifacts/'probe.noi').write_bytes(app.with_suffix('.noi').read_bytes())
     target=['-i',str(image)+'@@16384']
+    if delivery and subprocess.check_output(['mtype',*target,'::/GBENCH/NOTEPAD.APP'])!=data:
+        raise ValueError('delivered Notepad differs from the accepted APP')
     for name in ('::/ADOC','::/ADOC/SUB'):subprocess.run(['mmd',*target,name],check=True)
-    for path,payload in DOCUMENTS.items():
-        file=artifacts/('nested.txt' if '/SUB/' in path else 'root.txt');file.write_bytes(payload)
+    for index,(path,payload) in enumerate(documents(case).items()):
+        file=artifacts/f'document-{index}.txt';file.write_bytes(payload)
         subprocess.run(['mcopy',*target,str(file),'::'+path],check=True)
+    if case=='write-denied':
+        subprocess.run(['mattrib',*target,'+r','::/ADOC/EXACT.TXT'],check=True)
     # A separate pristine alias proves a failed document launch does not leave
     # pending identity for the next blank launch. No source/manual image edits.
-    subprocess.run(['mcopy','-o',*target,str(artifacts/'NOTEPAD.APP'),'::/GBENCH/CALC.APP'],check=True)
+    if case=='bad-app':
+        subprocess.run(['mcopy','-o',*target,str(artifacts/'NOTEPAD.APP'),'::/GBENCH/CALC.APP'],check=True)
     if case=='bad-app':
         bad=bytearray(data);bad[-1]^=1;(artifacts/'bad.APP').write_bytes(bad)
-    subprocess.run(['mcopy','-o',*target,str(artifacts/('bad.APP' if case=='bad-app' else 'NOTEPAD.APP')),
-                    '::/GBENCH/NOTEPAD.APP'],check=True)
+    if not delivery or case=='bad-app':
+        subprocess.run(['mcopy','-o',*target,str(artifacts/('bad.APP' if case=='bad-app' else 'NOTEPAD.APP')),
+                        '::/GBENCH/NOTEPAD.APP'],check=True)
+    if case=='disk-full':
+        from cpc_fswrite_cases import space
+        free,_=space(image)
+        filler=artifacts/'filler.bin'
+        with filler.open('wb') as f:f.truncate(free*1024)
+        subprocess.run(['mcopy',*target,str(filler),'::/FILLER.BIN'],check=True)
+        if space(image)[0]:raise AssertionError('disk-full fixture still has free clusters')
 
 def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
     from test_cpc_runtime_1984 import integrity
@@ -79,7 +100,8 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
             for action,held in (('key-down SPACE',True),('key-up SPACE',False)):
                 send(action);until('pointer click',lambda r:bool(r[sym['poll_lastfire']])==held)
         finally:send('key-up Left_Ctrl')
-    def named(name):
+    def named(name,attempts=0):
+        if attempts>=40:raise AssertionError('File Manager scroll bound exceeded')
         r=until('directory',lambda r:field(r,'list_state')==b'\0')
         names=field(r,'names',1144);order=field(r,'order',field(r,'total')[0])
         for index,entry in enumerate(order):
@@ -87,6 +109,8 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
                 index+=bool(field(r,'fm_path')[0]);row,col=divmod(index,3)
                 x,y,w,h=r[sym['wm_table']+26:sym['wm_table']+30]
                 cy=y+20+(row-field(r,'top')[0])*44
+                if cy>=y+h-1:
+                    pointer(x+2,y+h-5);click();wait(15);return named(name,attempts+1)
                 if field(r,'view')!=b'\1' or not y+14<=cy<y+h-1:raise AssertionError('entry not visible')
                 pointer(x+4+col*((w-5)//3)+6,cy);click();click();return
         raise AssertionError('missing entry '+repr(name))
@@ -95,6 +119,15 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
         try:until('key '+name,predicate)
         finally:send('key-up '+name)
         wait(25)
+    def held_escape(label,predicate):
+        send('key-down ESCAPE')
+        try:
+            until(label,predicate);wait(150)
+            r=checked(label)
+            if not predicate(r):raise AssertionError(label+': held Escape reached another consumer')
+        finally:send('key-up ESCAPE')
+        wait(25)
+        return r
     def leaf(r,n):
         owner=r[sym['core_win_owner']+slot]
         seal=r[sym['sec_table']+(owner-1)*8:sym['sec_table']+owner*8]
@@ -105,25 +138,35 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
     before=checked('boot');pages=before[sym['core_page_state']:sym['core_page_state']+32]
     pointer(76,190);click();pointer(3,26);click();click()
     until('File Manager',lambda r:r[sym['wm_nwin']]==2)
-    named(b'ADOC       ');until('ADOC',lambda r:field(r,'fm_path',6)==b'/ADOC\0')
-    expected_files=dict(DOCUMENTS)
-    for nested in (False,True):
+    folder=b'/GBENCH\0' if case=='blank' else b'/ADOC\0'
+    named(b'GBENCH     ' if case=='blank' else b'ADOC       ')
+    until('document folder',lambda r:field(r,'fm_path',len(folder))==folder)
+    expected_files=documents(case)
+    for cycle,nested in enumerate((False,)*12 if case=='stress' else (False,) if case=='blank' else (False,True)):
         if nested:
             named(b'SUB        ');until('SUB',lambda r:field(r,'fm_path',10)==b'/ADOC/SUB\0')
-        named(b'EXACT   TXT')
+        named(b'NOTEPAD APP' if case=='blank' else b'EXACT   TXT')
         if case=='bad-app':
             wait(150);wait(150);r=checked('rejected-document')
             if r[sym['wm_nwin']]!=2:raise AssertionError('bad APP was published')
             # Dismiss the real File Manager failure alert before closing it.
             key('ESCAPE');break
         until('Notepad focus',lambda r:r[sym['wm_nwin']]==3 and r[sym['wm_focus']]==slot)
-        until('document load',lambda r:mode(r)==0 and view(r)[0]>0)
-        r=checked('nested-document' if nested else 'root-document')
-        path='/ADOC/SUB/EXACT.TXT' if nested else '/ADOC/EXACT.TXT';expected=DOCUMENTS[path]
+        until('document load',lambda r:mode(r)==0 and (case=='blank' or any(view(r)[:2])))
+        r=checked(('nested-document' if nested else 'root-document')+f'-{cycle}')
+        path='/ADOC/SUB/EXACT.TXT' if nested else '/ADOC/EXACT.TXT'
+        expected=b'' if case=='blank' else expected_files[path]
         if view(r)[:2]!=len(expected).to_bytes(2,'little') or view(r)[13] or leaf(r,len(expected))!=expected:
             raise AssertionError('wrong document identity/content')
         if r[base(r,slot):base(r,slot)+primary]!=app[:primary]:raise AssertionError('primary APP changed')
-        if not nested and case!='quit':
+        if case in ('blank','boundary','clipboard','write-denied','disk-full','stress'):
+            from types import SimpleNamespace
+            from cpc_notepad_acceptance import exercise_case
+            exercise_case(case,nested,expected,path,expected_files,SimpleNamespace(
+                ram=ram,until=until,checked=checked,view=view,mode=mode,leaf=leaf,
+                base=base,slot=slot,ns=ns,sym=sym,wait=wait,key=key,send=send,
+                pointer=pointer,click=click,text_key=text_key,held_escape=held_escape))
+        if not nested and case=='handoff':
             wait(80);old_pointer=r[sym['poll_byte']:sym['poll_byte']+2]
             for k,c in (('RIGHT',1),('DOWN',5),('LEFT',4),('UP',0),('RIGHT',1)):
                 text_key(k,lambda r,c=c:view(r)[2:4]==c.to_bytes(2,'little'))
@@ -144,28 +187,31 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
             pointer(11,3);click();wait(20);pointer(12,34);click()
             until('save',lambda r:mode(r)==0 and not view(r)[13]);checked('save-in-place')
             expected_files[path]=expected
-        if case=='quit':
+        if case in ('quit','escape'):
             def quit_menu(label):
                 pointer(11,3);click();wait(20);checked(label)
                 pointer(12,54);click()
             if nested:
                 wait(80) # match the initial editor's launch-click drain/paint settle
                 text_key('Z',lambda r:view(r)[0]==len(expected)+1)
-                quit_menu('dirty-quit-menu')
-                until('dirty Quit confirmation',lambda r:mode(r)==2)
-                # Escape is a level-triggered GB_QUIT on CPC as well as a text
-                # key; a held pulse can cancel then re-request close. Exercise
-                # the real confirmation buttons here, not a timed workaround.
-                checked('quit-confirmation');pointer(28,58);click()
-                r=until('Quit cancelled',lambda r:mode(r)==0)
+                if case=='escape':
+                    held_escape('escape-dirty-close',lambda r:mode(r)==2)
+                    r=held_escape('escape-cancel-held',lambda r:mode(r)==0)
+                else:
+                    quit_menu('dirty-quit-menu')
+                    until('dirty Quit confirmation',lambda r:mode(r)==2)
+                    checked('quit-confirmation');pointer(28,58);click()
+                    r=until('Quit cancelled',lambda r:mode(r)==0)
                 if not view(r)[13] or view(r)[0]!=len(expected)+1:
                     raise AssertionError('Quit Cancel lost dirty document')
                 checked('quit-cancelled');quit_menu('discard-quit-menu')
                 until('discard confirmation',lambda r:mode(r)==2);pointer(16,58);click()
+            elif case=='escape':held_escape('escape-clean-close-held',lambda r:r[sym['wm_nwin']]==2)
             else:quit_menu('clean-quit-menu')
         else:key('ESCAPE')
         until('editor close',lambda r:r[sym['wm_nwin']]==2)
-        checked('closed-nested' if nested else 'closed-root')
+        r=checked(('closed-nested' if nested else 'closed-root')+f'-{cycle}')
+        if any(r[sym['sec_table']:sym['sec_table']+64]):raise AssertionError('per-cycle secondary seal leak')
     key('ESCAPE');until('File Manager close',lambda r:r[sym['wm_nwin']]==1)
     if case=='bad-app':
         slot=1;pointer(11,3);click();wait(15);pointer(12,23);click()

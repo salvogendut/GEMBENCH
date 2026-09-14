@@ -69,7 +69,7 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
 
 
 def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None, clipboard=False, chooser=False, data_pages=False, private_media=None, package_case=None, notepad_case=None, notepad_app=None):
-    if notepad_case and (not private_media or not notepad_app):
+    if notepad_case and (not (private_media or desktop_delivery) or not notepad_app):
         raise ValueError('Notepad qualification requires private media and the accepted APP path')
     if private_media and (not skip_build or desktop_delivery):
         raise ValueError('private media requires --skip-build, never delivery promotion')
@@ -89,11 +89,11 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         if (filemgr_scenario == 'reboot' or settings_case=='reboot') and not seed_image:
             raise ValueError('reboot check requires its saved test image')
         from cpc_desktop_media import validate
-        media=ROOT/'QA/CPC-Desktop' if skip_build else build(desktop=True,filemgr=True,settings=True,delivery=True)
+        media=ROOT/'QA/CPC-Desktop' if skip_build else build(desktop=True,filemgr=True,settings=True,delivery=True,unified_notepad=True)
         manifest=validate(media,pristine=True)
-        if filemgr and manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3'):
+        if filemgr and manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4'):
             raise ValueError('File Manager acceptance requires the Sprint 3 delivery profile')
-        if settings and manifest['profile']!='cpc-desktop-m4-v3':
+        if settings and manifest['profile'] not in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4'):
             raise ValueError('Settings acceptance requires the v3 delivery profile')
         # Check the real FAT contents, not just the host staging directory.
         for name,expected in manifest['files'].items():
@@ -591,7 +591,8 @@ if __name__=='__main__':
     from cpc_runtime_secondary import CASES as PACKAGE_CASES
     mode.add_argument('--package-case',choices=PACKAGE_CASES)
     parser.add_argument('--notepad-app',type=Path,help='unchanged accepted Notepad APP with adjacent probe.noi')
-    mode.add_argument('--notepad-case',choices=('handoff','bad-app','quit'))
+    mode.add_argument('--notepad-case',choices=('handoff','blank','bad-app','quit','escape',
+                                               'boundary','clipboard','write-denied','disk-full','stress'))
     mode.add_argument('--filesystem',action='store_true')
     mode.add_argument('--clipboard',action='store_true')
     mode.add_argument('--chooser',action='store_true')

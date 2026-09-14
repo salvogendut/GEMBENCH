@@ -37,7 +37,7 @@ static void setup(unsigned flags,unsigned kind,unsigned ctrl,unsigned keyrow,uns
     if(ctrl)rows[2]&=~0x80;
     ram[WM_FOCUS]=0;ram[WM_TABLE]=0xC4;ram[WM_TABLE+WM_FR_FLAGS]=flags;
     word(WM_TABLE+WM_FR_FRAME,0x5000);banks[0xC4][0x100C]=kind;
-    ram[CPC_KEY_PREVIOUS]=0;ram[SCHED_LOCK]=7;ram[SCHED_CURRENT]=0;
+    ram[CPC_KEY_PREVIOUS]=ram[CPC_ESCAPE_HELD]=0;ram[SCHED_LOCK]=7;ram[SCHED_CURRENT]=0;
     ram[BANK_CUR]=mapped=0xC5;aperture_reads=0;
     memset(ram+0x3500,0xD7,0x110);
 }
@@ -76,6 +76,30 @@ int main(int argc,char **argv) {
     }
     setup(0x13,0x20,0,0,0);ram[WM_FOCUS]=255;
     assert(!invoke(CPC_GETKEY,1) && !aperture_reads);
+    /* Text GETKEY must neither deliver 27 nor steal the physical press:
+     * chrome owns close/cancel, including when a frame sees Escape first. */
+    for(unsigned iff=0;iff<2;++iff)for(unsigned first=0;first<2;++first) {
+        setup(0x13,0x20,0,8,2);
+        if(first)assert(invoke(CPC_GETKEY,iff)==0);
+        invoke(CPC_INPUT_SCAN,iff);assert(invoke(CPC_ESCAPE_SAMPLE,iff)==4);
+        for(unsigned i=0;i<80;++i) {
+            ram[WM_FOCUS]=0;
+            assert(invoke(CPC_GETKEY,iff)==0);
+            ram[WM_FOCUS]=i&1; /* held GB_QUIT cannot reach another window */
+            invoke(CPC_INPUT_SCAN,iff);assert(invoke(CPC_ESCAPE_SAMPLE,iff)==0);
+        }
+        ram[WM_FOCUS]=0;
+        rows[8]|=4;invoke(CPC_INPUT_SCAN,iff);
+        invoke(CPC_INPUT_SCAN,iff);assert(invoke(CPC_ESCAPE_SAMPLE,iff)==0);
+        rows[8]&=~4;assert(invoke(CPC_GETKEY,iff)==0);
+        invoke(CPC_INPUT_SCAN,iff);assert(invoke(CPC_ESCAPE_SAMPLE,iff)==4);
+        rows[8]|=4;invoke(CPC_INPUT_SCAN,iff);assert(invoke(CPC_ESCAPE_SAMPLE,iff)==0);
+        rows[8]&=~4;invoke(CPC_INPUT_SCAN,iff);assert(invoke(CPC_ESCAPE_SAMPLE,iff)==4);
+        assert(invoke(CPC_GETKEY,iff)==0);
+    }
+    setup(0x13,0,0,8,2); /* Non-text native GETKEY keeps ASCII Escape. */
+    assert(invoke(CPC_GETKEY,1)==27);
+    assert(invoke(CPC_GETKEY,1)==0);
     for(unsigned i=0xC000;i<0x10000;++i)assert(ram[i]==0xA5);
     printf("CPC text input: %u Z80 calls PASS; focus/kind, arrows/Space/Ctrl, held keys, joystick, bank/IFF/registers/guards\n",checks);
     return 0;

@@ -166,6 +166,51 @@ class DesktopDeliveryTests(unittest.TestCase):
         self.manifest['files']['CORE.BIN']=hashlib.sha256(core).hexdigest();self.save()
         with self.assertRaisesRegex(ValueError,'Settings.*admission contract'):validate(self.media)
 
+    def test_notepad_delivery_requires_full_receiver_and_same_payload_identity(self):
+        from embed_app_icon import (_read_v4_manifest_spec,parse_icon,make_v4_preamble,
+                                    v4_preamble_size,refresh_v4_crc)
+        self.settings_profile()
+        secondary=b'\xC3\x08\x40GBS4\x01\xC9';size=v4_preamble_size(False,2)+1
+        package=bytearray(make_v4_preamble(parse_icon(ROOT/'apps/notepad/icon.asm'),
+            _read_v4_manifest_spec(ROOT/'apps/unotepad/manifest.json'),size,size+len(secondary),
+            secondary=secondary)+b'\xC9'+secondary)
+        refresh_v4_crc(package)
+        for name,data in {'GBENCH/NOTEPAD.APP':package,
+                          'GBENCH/GBPKLOAD.MOD':b'checked package module'}.items():
+            (self.media/'CARD'/name).write_bytes(data)
+            self.manifest['files'][name]=hashlib.sha256(data).hexdigest()
+        self.manifest['profile']='cpc-desktop-m4-v4'
+        self.manifest['sections']['package']={}
+        self.manifest['sections']['notepad']=dict(source='apps/unotepad',staged=True,
+            universal=True,filesystem_api=3,secondary_pages=1,document_capacity=4096,
+            sha256=self.manifest['files']['GBENCH/NOTEPAD.APP'],associations=['TXT','CFG'])
+        self.save();self.assertEqual(validate(self.media,pristine=True),self.manifest)
+        original=json.dumps(self.manifest)
+        for key,value in [('staged',False),('universal',False),('filesystem_api',1),
+                          ('secondary_pages',0),('document_capacity',2048),
+                          ('sha256','native build'),('associations',[])]:
+            with self.subTest(key=key):
+                self.manifest=json.loads(original)
+                self.manifest['sections']['notepad'][key]=value;self.save()
+                with self.assertRaisesRegex(ValueError,'complete receiver'):validate(self.media)
+        self.manifest=json.loads(original);del self.manifest['sections']['package'];self.save()
+        with self.assertRaisesRegex(ValueError,'complete receiver'):validate(self.media)
+        self.manifest=json.loads(original)
+        # A self-consistent hash/metadata must not smuggle a native APP through.
+        (self.media/'CARD/GBENCH/NOTEPAD.APP').write_bytes(b'native image')
+        digest=hashlib.sha256(b'native image').hexdigest()
+        self.manifest['files']['GBENCH/NOTEPAD.APP']=digest
+        self.manifest['sections']['notepad']['sha256']=digest;self.save()
+        with self.assertRaises(ValueError):validate(self.media)
+
+    def test_notepad_promotion_requires_explicit_complete_delivery_profile(self):
+        with patch('build_cpc_runtime.assemble') as assemble:
+            for opts in ({},{'delivery':True},{'desktop':True,'delivery':True},
+                         {'desktop':True,'settings':True}):
+                with self.assertRaisesRegex(ValueError,'Notepad delivery requires'):
+                    build(unified_notepad=True,**opts)
+            assemble.assert_not_called()
+
     def test_manual_launcher_uses_only_generated_m4_configuration(self):
         (self.root/'tools').mkdir()
         runner = self.root/'tools/run_cpc.sh'

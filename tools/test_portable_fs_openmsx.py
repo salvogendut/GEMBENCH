@@ -140,7 +140,7 @@ def run(mode, clipboard=False, chooser=False, data_pages=False, package_modules=
     if mode==7: args+=['-DMSX_SCREEN7=1']
     subprocess.run([rasm,str(ROOT/'kernel/gbkern.asm'),'-s','-o',f'gbkernm{mode}',*args],cwd=work,check=True)
     if package_modules:
-        (card/'GBENCH/GBPKWM.MOD').write_bytes((work/'GBPKWM.RAW').read_bytes())
+        (card/f'GBENCH/GBPKWM{mode}.MOD').write_bytes((work/'GBPKWM.RAW').read_bytes())
     subprocess.run([rasm,str(ROOT/'kernel/msx_stub.asm'),*experimental,*(['-DMSX_SCREEN7=1'] if mode==7 else [])],cwd=work,check=True)
     child=(work/'GBMSX.COM').read_bytes()
     if len(child)>0x3F00: raise AssertionError('MSX child exceeds loader window')

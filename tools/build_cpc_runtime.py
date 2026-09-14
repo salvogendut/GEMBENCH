@@ -94,10 +94,14 @@ def assemble(work: Path, overrides=()):
     return sym
 
 
-def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False, package_stream=False, handoff=False):
+def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False, package_stream=False, handoff=False, unified_notepad=False):
+    if unified_notepad:
+        if not (desktop and settings and delivery):
+            raise ValueError('Notepad delivery requires the full Desktop/File Manager/Settings profile')
+        package_stream=handoff=True
     if handoff and not package_stream:
         raise ValueError('CPC document handoff requires the private package receiver')
-    if package_stream and (delivery or data_pages or not settings):
+    if package_stream and ((delivery and not unified_notepad) or data_pages or not settings):
         raise ValueError('secondary receiver requires the full private Settings/Desktop profile; no delivery/data-page promotion')
     if data_pages and (desktop or filemgr or delivery or settings):
         raise ValueError('data pages currently require the private runtime qualification profile')
@@ -106,8 +110,8 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
         raise ValueError('Desktop delivery requires an explicit Desktop profile')
     desktop = desktop or filemgr
     variant = 'desktop' if delivery else 'settings-contract' if settings else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
-    if package_stream: variant='notepad-receiver'
-    if handoff: variant='notepad-handoff'
+    if package_stream and not delivery: variant='notepad-receiver'
+    if handoff and not delivery: variant='notepad-handoff'
     work = ROOT / ('build/cpc-'+variant)
     overrides=('-DCPC_NATIVE_DESKTOP=1',) if desktop else ()
     if filemgr: overrides+=('-DCPC_NATIVE_FILEMGR=1',)
@@ -152,9 +156,11 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
                    env={**os.environ, "UNIVERSAL_TASK": "1", "UNIVERSAL_WINDOW_KIND": "1",
                         "UNIVERSAL_ACCESSORY": "1", "UNIVERSAL_MENU": "1", "DATA_LOC": "0x7300"},
                    cwd=ROOT, check=True)
+    if unified_notepad:
+        subprocess.run(['bash','tools/build_unotepad.sh'],cwd=ROOT,check=True)
     media = ROOT / ('QA/CPC-Desktop' if delivery else 'QA/Diagnostics/CPC-'+variant)
-    if package_stream: media=ROOT/'build/notepad-84/cpc-receiver'
-    if handoff: media=ROOT/'build/notepad-84/cpc-handoff'
+    if package_stream and not delivery: media=ROOT/'build/notepad-84/cpc-receiver'
+    if handoff and not delivery: media=ROOT/'build/notepad-84/cpc-handoff'
     card = media / "CARD"
     boot = bytearray(headed((work / "BOOT.RAW").read_bytes(), 0x8000))
     boot[1:12] = b"BOOT    BIN"
@@ -177,6 +183,8 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
              "GBENCH/CLOCK.APP": clock.read_bytes()}
     if package_stream:
         files['GBENCH/GBPKLOAD.MOD']=(work/'GBPKLOAD.MOD').read_bytes()
+    if unified_notepad:
+        files['GBENCH/NOTEPAD.APP']=(ROOT/'build/universal/NOTEPAD.APP').read_bytes()
     if not delivery:
         files.update({"GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
@@ -238,7 +246,7 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
         sections['package']=dict(base=sym['cpc_package_module_base'],budget=sym['cpc_package_module_size'],
             used=sym['cpc_package_module_used_end']-sym['cpc_package_module_base'],
             loaded=len(files['GBENCH/GBPKLOAD.MOD']),crc32=zlib.crc32(files['GBENCH/GBPKLOAD.MOD']),
-            status='private boot-checked fixed module; not a normal-delivery capability')
+            status='boot-checked fixed package module'+('' if delivery else '; private qualification'))
     sections['title'] = dict(base=sym['data_title'],page=sym['cpc_data_page'],
                             used=symbols(work/'title.sym')['cpc_title_module_used_end']-sym['data_title'],
                             loaded=sym['cpc_title_module_size'],budget=sym['cpc_title_limit']-sym['data_title'])
@@ -277,11 +285,20 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
         manifest.update(profile='cpc-settings-m4-private-v1',storage='m4',
                         status='private Settings launch/persistence qualification; not a distribution')
     if package_stream:
-        manifest.update(profile='cpc-notepad-receiver-private-v1',storage='m4',
-                        status='private secondary receiver qualification; document handoff/text input not yet bound')
-    if handoff:
+        if not delivery:
+            manifest.update(profile='cpc-notepad-receiver-private-v1',storage='m4',
+                            status='private secondary receiver qualification; document handoff/text input not yet bound')
+    if handoff and not delivery:
         manifest.update(profile='cpc-notepad-handoff-private-v1',
                         status='private document/input receiver; Notepad acceptance and delivery remain separate')
+    if unified_notepad:
+        manifest.update(profile='cpc-desktop-m4-v4',
+            status='CPC M4 Desktop, native File Manager/Settings and universal Clock/Calculator/Notepad')
+        sections['notepad']=dict(source='apps/unotepad',staged=True,universal=True,
+            filesystem_api=3,secondary_pages=1,document_capacity=4096,
+            sha256=hashlib.sha256(files['GBENCH/NOTEPAD.APP']).hexdigest(),associations=['TXT','CFG'])
+        sections['filemgr']['deferred'].remove('data-file associations')
+        sections['filemgr']['deferred'].append('associations other than TXT/CFG')
     (media / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     # Explicit private config: manual testing never edits the user's normal
     # machine setup or mounts their existing M4/Albireo card.
