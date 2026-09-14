@@ -557,10 +557,12 @@ changes, promise a date, or authorize a release.
   [migration gates](UNIVERSAL-APPLICATION-ABI-MIGRATION.md)
 - [M4/Albireo emulator qualification strategy](CPC-EMULATOR-TEST-STRATEGY.md)
 
-Next implementation package: **start milestone 2's portable resources, forms
-and owned page/code consumers**, using GBRDEMO and FormRef as the first real
-compile-once applications. Define their common resource-validation and form
-interaction acceptance before replacing either native delivery.
+Current implementation package: **milestone 2's portable resources, forms and
+owned page/code consumers**, tracked in
+[issue #88](https://github.com/salvogendut/GEMBENCH/issues/88) and the
+[milestone plan](V1-M2-PORTABLE-RESOURCES.md). GBRDEMO and FormRef are the first
+real compile-once applications; their common resource-validation and form
+interaction gates precede replacement of either native delivery.
 
 Issue #84 and milestone 1 are complete. The identical editor is delivered and
 its normal MSX2/CPC workflows are qualified; do not repeat the completed
