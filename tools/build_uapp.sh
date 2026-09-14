@@ -30,6 +30,7 @@ UNIVERSAL_MINIMAL="${UNIVERSAL_MINIMAL:-0}"
 UNIVERSAL_MENU_BORROWED="${UNIVERSAL_MENU_BORROWED:-0}"
 UNIVERSAL_SHELL_TARGET="${UNIVERSAL_SHELL_TARGET:-0}"
 UNIVERSAL_CONFIG="${UNIVERSAL_CONFIG:-0}"
+UNIVERSAL_GBR_OBJECTS="${UNIVERSAL_GBR_OBJECTS:-0}"
 DATA_LOC="${DATA_LOC:-0x7000}"
 LOAD_LIMIT="0x7F00"
 
@@ -55,7 +56,7 @@ for feature in "$UNIVERSAL_TASK" "$UNIVERSAL_WINDOW_KIND" "$UNIVERSAL_ACCESSORY"
     "$UNIVERSAL_MENU" "$UNIVERSAL_FS" "$UNIVERSAL_FS_IDENTITY" "$UNIVERSAL_SCRAP" \
     "$UNIVERSAL_DOCIO" "$UNIVERSAL_FILEPICK" "$UNIVERSAL_DATA_PAGES" "$UNIVERSAL_COMPUTE" "$UNIVERSAL_IX" \
     "$UNIVERSAL_MINIMAL" "$UNIVERSAL_MENU_BORROWED" "$UNIVERSAL_SHELL_TARGET" \
-    "$UNIVERSAL_CONFIG"; do
+    "$UNIVERSAL_CONFIG" "$UNIVERSAL_GBR_OBJECTS"; do
     [ "$feature" = 0 ] || [ "$feature" = 1 ] || {
         echo "ERROR: universal feature flags must be 0 or 1" >&2
         exit 2
@@ -165,6 +166,31 @@ PY
     python3 tools/check_universal_app.py --source lib/gembench/gbdatapage.c \
         --asm "$work/gbdatapage.asm"
     extra_rels+=("$work/gbdatapage.rel")
+fi
+if [ "$UNIVERSAL_GBR_OBJECTS" = 1 ]; then
+    python3 - "$APP_MANIFEST" <<'PY'
+import json, sys
+required=set(json.load(open(sys.argv[1]))["required_capabilities"])
+if not {"runtime-geometry", "portable-drawing"} <= required:
+    raise SystemExit("ERROR: UNIVERSAL_GBR_OBJECTS requires runtime geometry and portable drawing")
+PY
+    "$SDCC" -mz80 --std-c99 --opt-code-size "${app_frames[@]}" \
+        -DGB_UNIVERSAL -DGB_BUTTON_ONLY -I lib/gb -I include/gembench \
+        -c lib/gb/gbwidgets.c -o "$work/gbwidgets.rel"
+    "$SDCC" -mz80 --std-c99 --opt-code-size "${app_frames[@]}" \
+        -DGB_UNIVERSAL -I lib/gb -I include/gembench \
+        -c lib/gembench/gbr_reader.c -o "$work/gbr_reader.rel"
+    "$SDCC" -mz80 --std-c99 --opt-code-size "${app_frames[@]}" \
+        -DGB_UNIVERSAL -I lib/gb -I include/gembench \
+        -c lib/gembench/gbr_object.c -o "$work/gbr_object.rel"
+    for unit in lib/gb/gbwidgets.c lib/gembench/gbr_reader.c \
+                lib/gembench/gbr_object.c; do
+        name="$(basename "$unit" .c)"
+        python3 tools/check_universal_app.py --source "$unit" \
+            --asm "$work/$name.asm"
+    done
+    extra_rels+=("$work/gbwidgets.rel" "$work/gbr_reader.rel" \
+                 "$work/gbr_object.rel")
 fi
 if [ "$UNIVERSAL_SCRAP" = 1 ]; then
     python3 - "$APP_MANIFEST" <<'PY'

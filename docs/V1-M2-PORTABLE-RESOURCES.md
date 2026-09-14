@@ -122,3 +122,36 @@ The first code gate is now precise: add a universal resource runtime build
 profile and make GBRDEMO compile without target defines, while preserving its
 native implementation and normal media until its private two-target acceptance
 passes.
+
+## Sprint 2 checkpoint A — compile-once GBRDEMO
+
+The first code gate now passes on this branch:
+
+- `UNIVERSAL_GBR_OBJECTS=1` makes the universal builder link the bounded GBR1
+  reader, object runtime and button-only widgets, and requires runtime geometry
+  plus portable drawing. It deliberately does not claim the target-native
+  `gbr` capability because all GBR policy is linked inside the common APP;
+- the object runtime obtains pixel width and line count through v6 runtime
+  geometry in a universal build, while its native source profile remains
+  byte-identical;
+- `apps/ugbrdemo` adopts File Manager's exact launch context, reads at most 512
+  bytes through the portable filesystem, rejects an oversized or failed read,
+  closes the context, validates `HELLO.GBR`, and only then publishes its managed
+  window;
+- move is kernel-owned, click/state changes publish bounded content damage, and
+  failed/direct launch displays an inert error surface rather than retaining a
+  filesystem context;
+- the private APP is **13069 bytes**, SHA-256
+  `4ec6f034ed396c51fcf5d573c548acfd7df53f077e9f14a718a7cd8cc762b4ff`.
+  Code ends at `0x730D`; application state ends at `0x7D9C`, below the guarded
+  `0x7F00` limit.
+
+`make geobench-v1-m2-gbrdemo-check` builds the APP twice, proves byte identity,
+checks its v4 identity/capabilities and reruns the universal source/assembly/map
+audit. The existing universal SDK test, GBR compiler/reader/object suites and
+the exact native MSX GBRDEMO rebuild all pass; the native rebuild retains SHA
+`482c32bceb4a336f7058b4a4a22086179123418fb80fb0047be2215f37f28df2`.
+
+This is build-level acceptance only. Neither normal image contains the new APP.
+The next checkpoint is private receiver staging and the real MSX Screen 6/7 and
+CPC/M4 external-resource workflow, including malformed resources and cleanup.

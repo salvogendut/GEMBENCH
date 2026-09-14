@@ -319,6 +319,10 @@ geobench-v2-abi-check:
 geobench-v2-abiprobe:
 	bash tools/build_uapp.sh apps/abiprobe build/universal/ABIPROBE.APP
 
+.PHONY: geobench-v1-m2-gbrdemo-check
+geobench-v1-m2-gbrdemo-check:
+	$(PYTHON) tools/test_universal_gbrdemo.py
+
 geobench-v2-tier1:
 	UNIVERSAL_WINDOW_KIND=1 UNIVERSAL_ACCESSORY=1 UNIVERSAL_MENU=1 DATA_LOC=0x7600 \
 		bash tools/build_uapp.sh apps/ucalculator build/universal/CALC.APP
