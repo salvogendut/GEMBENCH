@@ -35,7 +35,7 @@ static void set_handle(gb_fsctx_t context)
     F_HANDLE = context;
 }
 
-#ifndef GB_FSCTX_DIRECTORY_ONLY
+#if !defined(GB_FSCTX_DIRECTORY_ONLY) || defined(GB_FSCTX_LAUNCH)
 static unsigned char copy_name_in(const char *name)
 {
     unsigned char i;
@@ -162,6 +162,7 @@ unsigned char gb_fsctx_write(gb_fsctx_t context, const char *buffer,
 }
 #endif
 
+#ifndef GB_FSCTX_DOCUMENT_ONLY
 unsigned char gb_fsctx_free_kib(gb_fsctx_t context, unsigned int *kib)
 {
     set_handle(context);
@@ -175,13 +176,18 @@ unsigned char gb_fsctx_cancel(gb_fsctx_t context)
 {
     return call_handle(OP_CANCEL, context);
 }
+#endif
 
+#if !defined(GB_FSCTX_DIRECTORY_ONLY) || defined(GB_FSCTX_LAUNCH)
 unsigned char gb_fsctx_prepare_launch(gb_fsctx_t context, const char *name)
 {
     if (!copy_name_in(name)) return GB_FSCTX_ERR_BADARG;
     return call_handle(OP_PREP_LAUNCH, context);
 }
+#endif
+#endif /* !GB_FSCTX_DOCUMENT_ONLY: no free-space/cancel/producer wrappers */
 
+#ifndef GB_FSCTX_DIRECTORY_ONLY
 gb_fsctx_t gb_fsctx_adopt_launch(void)
 {
     if (gb_fsctx_call(OP_ADOPT_LAUNCH) != GB_FSCTX_OK) return 0;

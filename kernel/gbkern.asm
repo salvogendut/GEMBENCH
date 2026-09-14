@@ -2247,6 +2247,9 @@ STACK_RESERVE   equ   256          ; min bytes kept free below HIMEM for the sta
 ; kernel/assets.asm, and the drag ghost saves under fs_secbuf)
 fs_secbuf       equ   #1800            ; IDE sector buffer / aliased AMSDOS write sector
 fsam_buf        equ   #1A00            ; floppy whole-directory buffer
+                ifdef PORTABLE_PACKAGE_STREAM
+                assert fsam_buf+512<=MSX_PACKAGE_ROUTE_BASE,"backdrop read overlaps package routing"
+                endif
                 ifndef PLATFORM_MSX
                 ifndef PLATFORM_PCW             ; (#331: PCW files are staged by mkpcwdsk)
                                                 ; The packaging incbins below are

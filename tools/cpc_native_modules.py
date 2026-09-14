@@ -37,6 +37,7 @@ def provider(work, sym):
     byte('FILEMGR_FOCUS', sym['wm_focus'])
     byte('FILEMGR_FREE_PAGES', sym['core_page_free'])
     out.append(f'#define FILEMGR_WINDOW_LIMIT {sym["cpc_window_max"]}')
+    out.append(f'#define FILEMGR_DOCUMENT_HANDOFF {int(sym.get("cpc_fs_handoff",0))}')
     ptr('DESKTOP_MENU', sym['menu_def'], 'volatile unsigned char')
     ptr('DESKTOP_FULLSCREEN', 0x130A, 'volatile unsigned char')
     out.append(f'#define DESKTOP_KERNEL_BYTES {sym["cpc_kernel_used_end"]-sym["cpc_kernel_begin"]}u')

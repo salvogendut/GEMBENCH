@@ -1,0 +1,515 @@
+/* Actual integration source + real chooser/docio helpers, mocked public FS,
+ * clipboard and drawing services. Host policy tests, NOT runtime acceptance. */
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include "../apps/unotepad/secondary/main.c"
+#define main notepad_entry
+#include "../apps/unotepad/main.c"
+#undef main
+static void sync_editor(void)
+{
+    layout_dirty=caret_dirty=1;
+    assert(model_call(NP_QUERY));
+}
+/* Test observations/edit fixtures refer to the real secondary model, not its
+ * primary snapshot. The transport below copies through a separate buffer. */
+#define editor leaf_editor
+unsigned char gb_compute(void *block,unsigned int length)
+{
+    unsigned char copied[NP_PACKET];
+    assert(length==NP_PACKET);
+    memcpy(copied,block,length);secondary_main(copied,length);memcpy(block,copied,length);
+    return GB_PARAMS_OK;
+}
+
+unsigned char gb_ufs_request[32], gb_ufs_transfer[512];
+static char disk[8194], clip[510];
+static unsigned int disk_len, offset[5], fs_calls, fail_call, writes, clip_len;
+static unsigned char live[5], fs_error, clip_kind, clip_error, closed;
+static unsigned char input[64], input_pos, mouse_x, mouse_y, buttons;
+static unsigned char popup_item=255;
+static gb_rect_t live_rect = {2,14,66,158};
+static gb_rect_t damage;
+static gb_rect_t damages[32];
+static unsigned damage_count;
+static unsigned int text_calls,text_glyphs;
+static unsigned char text_last_x;
+
+static unsigned char call(gb_fsctx_t h)
+{
+    ++fs_calls;
+    fs_error = fs_calls == fail_call ? GB_FSCTX_ERR_IO :
+               h > 4 || !live[h] ? GB_FSCTX_ERR_STALE : 0;
+    return fs_error;
+}
+gb_fsctx_t gb_fsctx_open(unsigned char d)
+{
+    unsigned int i;
+    (void)d; ++fs_calls;
+    if (fs_calls == fail_call) { fs_error = GB_FSCTX_ERR_IO; return 0; }
+    for (i=1; i<=4; ++i) if (!live[i]) { live[i]=1; offset[i]=0; fs_error=0; return i; }
+    fs_error=GB_FSCTX_ERR_FULL; return 0;
+}
+unsigned char gb_fsctx_close(gb_fsctx_t h)
+{
+    if (!call(h)) live[h]=0;
+    return fs_error;
+}
+unsigned char gb_fsctx_status(void) { return fs_error; }
+static gb_fsctx_t pending_document;
+static unsigned char identity_error;
+gb_fsctx_t gb_fsctx_adopt_launch(void)
+{
+    gb_fsctx_t result=pending_document;pending_document=0;
+    fs_error=result ? GB_FSCTX_OK : GB_FSCTX_ERR_STALE;
+    return result;
+}
+unsigned char gb_fsctx_identity(gb_fsctx_t h,gb_fsctx_identity_t *out)
+{
+    assert(h && live[h]);
+    if(identity_error)return identity_error;
+    out->drive=1;memcpy(out->name,"EXACT   TXT",11);strcpy(out->path,"/DOCS/SUB");
+    return 0;
+}
+unsigned char gb_fsctx_set_path(gb_fsctx_t h,const char *p) { (void)p; return call(h); }
+unsigned char gb_fsctx_set_name(gb_fsctx_t h,const char *p) { (void)p; return call(h); }
+unsigned char gb_fsctx_activate(gb_fsctx_t h) { return call(h); }
+unsigned char gb_fsctx_dir_batch(gb_fsctx_t h,unsigned char first)
+{ (void)first; call(h); return 0; }
+unsigned char gb_fsctx_rewind(gb_fsctx_t h)
+{
+    if (!call(h)) offset[h]=0;
+    return fs_error;
+}
+unsigned int gb_fsctx_read(gb_fsctx_t h,char *p,unsigned int n)
+{
+    assert(n<=512);
+    if (call(h)) return 0;
+    if (n>disk_len-offset[h]) n=disk_len-offset[h];
+    memcpy(p,disk+offset[h],n); offset[h]+=n;
+    return n;
+}
+unsigned char gb_fsctx_write(gb_fsctx_t h,const char *p,unsigned int n)
+{
+    assert(n<=512);
+    if (call(h)) return fs_error;
+    ++writes; assert(offset[h]+n<=sizeof(disk));
+    if (!offset[h]) disk_len=0;
+    if (n) memcpy(disk+offset[h],p,n);
+    offset[h]+=n; disk_len=offset[h]; return 0;
+}
+unsigned char gb_scrap_set(unsigned char type,const char *p,unsigned int n)
+{
+    unsigned char result=n>510 ? GB_SCRAP_TRUNCATED : 0;
+    if (clip_error) return clip_error;
+    if (n>510) n=510;
+    memcpy(clip,p,n); clip_len=n; clip_kind=type; return result;
+}
+unsigned char gb_scrap_query(gb_scrap_info_t *i)
+{ i->length=clip_len; i->type=clip_kind; return clip_error; }
+unsigned char gb_scrap_get(unsigned char type,char *p,unsigned int n,unsigned int *copied)
+{
+    *copied=0;
+    if (clip_error) return clip_error;
+    if (type!=clip_kind) return GB_SCRAP_ERR_MISMATCH;
+    if (n>clip_len) n=clip_len;
+    memcpy(p,clip,n); *copied=n; return 0;
+}
+unsigned char gb_universal_ready(void) { return 1; }
+const gb_sysinfo_v6_t *gb_universal_sysinfo(void)
+{
+    static gb_sysinfo_v6_t info;
+    info.filesystem_api_version=GB_FSCTX_HANDOFF_API_VERSION;
+    return &info;
+}
+unsigned char gb_boot_drive_current(void) { return 0; }
+unsigned char gb_screen_columns(void) { return 128; }
+unsigned char gb_screen_lines(void) { return 212; }
+void gb_window_rect(gb_rect_t *r) { *r=live_rect; }
+void gb_wm_setpos(unsigned char x,unsigned char y) { live_rect.x=x; live_rect.y=y; }
+void gb_wm_setsize(unsigned char w,unsigned char h) { live_rect.w=w; live_rect.h=h; }
+void gb_wm_managed_kind(const gb_mwin_kind_t *w) { (void)w; }
+void gb_wm_close(void) { closed=1; }
+void gb_menu(const void *p) { (void)p; }
+void gb_message_read(gb_msg_t *m) { memset(m,0,sizeof(*m)); }
+unsigned char gb_universal_popup_active(void) { return 0; }
+void gb_universal_popup_close(void) { }
+unsigned char gb_universal_popup(unsigned char x,const char *const *p,unsigned char n)
+{
+    static const char *const expected[]={"New","Load","Save","Save As","Quit"};
+    assert(mode==MENU);
+    if(p==file_items) {
+        assert(x==10 && n==5);
+        for(unsigned char i=0;i<n;++i)assert(!strcmp(p[i],expected[i]));
+    } else if(p==edit_items)assert(x==18 && n==3);
+    else { assert(p==view_items && x==26 && n==1); }
+    return popup_item;
+}
+unsigned char gb_getkey(void) { return input_pos<sizeof(input) ? input[input_pos++] : 0; }
+unsigned char gb_mx(void) { return mouse_x; }
+unsigned char gb_my(void) { return mouse_y; }
+unsigned char gb_flags(void) { return buttons; }
+void gb_fill(unsigned char x,unsigned char y,unsigned char w,unsigned char h,unsigned char p)
+{ assert(x+w<=128 && y+h<=212 && p<4); }
+void gb_text_semantic(unsigned char x,unsigned char y,const char *p,unsigned char pen,unsigned char paper)
+{
+    unsigned int n=strlen(p);if(n>48)n=48;
+    assert(x<=128 && y+8<=212 && strlen(p)<NP_LINE_MAX && pen<4 && paper<4);
+    ++text_calls;text_glyphs+=n;text_last_x=x;
+}
+void gb_wm_damage(unsigned char x,unsigned char y,unsigned char w,unsigned char h)
+{
+    damage.x=x; damage.y=y; damage.w=w; damage.h=h; assert(x+w<=128 && y+h<=212);
+    if(damage_count<32)damages[damage_count++]=damage;
+}
+void gb_restore_parent(void) { draw(); }
+
+static void reset_test(void)
+{
+    memset(&editor,0,sizeof(editor)); memset(&scratch,0,sizeof(scratch));
+    memset(&job,0,sizeof(job)); memset(live,0,sizeof(live)); memset(offset,0,sizeof(offset));
+    memset(input,0,sizeof(input)); input_pos=0;
+    document=candidate=retired=0; fs_calls=fail_call=writes=0;
+    fs_error=clip_error=closed=buttons=0; disk_len=clip_len=0;
+    pending_document=0;identity_error=0;
+    popup_item=255;
+    mode=EDIT; action=menu_request=cooldown=refresh=title_changed=dragging=blink=full=0;
+    live_rect.x=2; live_rect.y=14; live_rect.w=66; live_rect.h=158;
+    notepad_entry(); refresh=title_changed=cooldown=0;
+}
+static void tick(void)
+{
+    unsigned int before=fs_calls;
+    sync_editor();
+    frame(); assert(fs_calls<=before+1);
+}
+static void run_io(void)
+{
+    unsigned int limit=100;
+    while (mode==LOAD || mode==SAVE || mode==BAS_REWIND || mode==BAS_WRITE) {
+        assert(limit--); tick();
+    }
+}
+static void old_document(void)
+{
+    document=gb_fsctx_open(0);
+    assert(np_loaded(&editor,"old unsaved",11,0)); editor.dirty=1;
+    memcpy(name,"OLD     TXT",11); strcpy(path,"/OLD");
+    sync_editor();
+}
+static void begin_load(void)
+{
+    candidate=gb_fsctx_open(0); memcpy(next_name,"NEW     TXT",11); strcpy(next_path,"/NEW");
+    start_load();
+}
+static void launch_document(void)
+{
+    reset_test();
+    pending_document=gb_fsctx_open(1);memcpy(disk,"selected\n",9);disk_len=9;
+    notepad_entry();
+    assert(mode==LOAD && !pending_document && candidate && !document);
+    assert(!memcmp(name,"UNTITLEDTXT",11)); /* publish only after successful I/O */
+    run_io();
+    assert(mode==EDIT && document && !candidate && !editor.dirty && editor.len==9);
+    assert(!memcmp(editor.text,"selected\n",9));
+    assert(drive==1 && !memcmp(name,"EXACT   TXT",11) && !strcmp(path,"/DOCS/SUB"));
+    assert(!strcmp(title,"EXACT.TXT"));
+
+    reset_test();pending_document=gb_fsctx_open(1);identity_error=GB_FSCTX_ERR_IO;
+    notepad_entry();assert(mode==ERROR && retired && !candidate && !document);
+    close_request();tick();assert(!retired && !live[1] && !editor.len);
+
+    reset_test();pending_document=gb_fsctx_open(1);disk_len=4097;
+    notepad_entry();run_io();assert(mode==ERROR && !document && retired && !editor.len);
+    assert(!memcmp(name,"UNTITLEDTXT",11));close_request();tick();assert(!retired);
+}
+static void model(void)
+{
+    unsigned int i,row,n; unsigned char col;
+    np_editor_t e={0}; char data[NP_MAX+1], encoded[8194];
+    np_bas_t state;
+    memset(data,'x',sizeof(data));
+    assert(np_key(&e,'a') && np_key(&e,'b') && np_key(&e,13));
+    assert(e.len==3 && !memcmp(e.text,"ab\n",3));
+    np_all(&e); assert(np_key(&e,'z') && e.len==1 && e.text[0]=='z');
+    assert(np_key(&e,8) && !e.len && !np_key(&e,8));
+    assert(np_loaded(&e,data,NP_MAX,0) && !e.dirty);
+    e.cur=e.len; assert(!np_key(&e,'q') && e.len==NP_MAX);
+    assert(!np_loaded(&e,data,NP_MAX+1,0) && e.len==NP_MAX);
+    e.anchor=100; np_select(&e,200); assert(np_replace(&e,"XYZ",3));
+    assert(e.len==3999 && e.cur==103 && !memcmp(e.text+100,"XYZ",3));
+    assert(!np_replace(&e,data,NP_MAX) && e.len==3999);
+    memset(data,'\n',NP_MAX);
+    assert(np_loaded(&e,data,NP_MAX,0));
+    np_position(&e,4096,39,&row,&col); assert(row==4096 && !col);
+    assert(np_index(&e,300,0,39)==300);
+    e.cur=4096; np_follow(&e,39,12); assert(e.first==4085);
+    e.cur=0; np_follow(&e,39,12); assert(!e.first);
+    assert(np_loaded(&e,"abc\r\ndef\r\n",10,1) && e.len==8);
+    for (i=1;i<=84;++i) {
+        unsigned int pos;
+        assert(np_loaded(&e,"123456789\nxyz",13,0));
+        for (pos=0;pos<=e.len;++pos) {
+            np_position(&e,pos,(unsigned char)i,&row,&col);
+            assert(np_index(&e,row,col,(unsigned char)i)==pos);
+        }
+    }
+    /* Empty, no trailing LF, exact/full capacity, and chunks split after CR. */
+    for (i=0;i<=NP_MAX;i=i ? i==1 ? 511 : i==511 ? 512 : i==512 ? NP_MAX : NP_MAX+1 : 1) {
+        unsigned int cap;
+        memset(data,'\n',i); assert(np_loaded(&e,data,i,0));
+        for (cap=1;cap<=512;cap=cap==1 ? 511 : cap+1) {
+            state.offset=0; state.phase=0; n=0;
+            while (state.phase!=4) n+=np_bas_chunk(&e,&state,encoded+n,cap);
+            assert(n==(i ? i*2 : 2));
+            for (row=0;row<n;row+=2) assert(encoded[row]=='\r' && encoded[row+1]=='\n');
+            assert(e.len==i && !memcmp(e.text,data,i));
+        }
+    }
+    assert(np_loaded(&e,"a\nb",3,0)); state.offset=state.phase=0;
+    n=np_bas_chunk(&e,&state,encoded,sizeof(encoded));
+    assert(n==6 && !memcmp(encoded,"a\r\nb\r\n",6));
+}
+static void lifecycle(void)
+{
+    unsigned int failure;
+    reset_test(); old_document();
+    close_request(); assert(mode==CONFIRM && !closed); confirm(27);
+    assert(mode==EDIT && editor.dirty && editor.len==11);
+    tick(); input[0]=17; input_pos=0; tick(); assert(mode==CONFIRM && !closed);
+    confirm('d'); for (failure=0;failure<4 && !closed;++failure) tick(); assert(closed);
+    reset_test(); old_document(); request(NEW); confirm('s');
+    run_io(); assert(mode==EDIT && !editor.dirty && disk_len==11);
+    tick(); assert(!editor.len && !memcmp(name,"UNTITLEDTXT",11));
+    tick(); assert(!live[1]);
+    /* Failure at rewind or every load chunk/EOF probe retains the OLD editor. */
+    for (failure=1;failure<=(NP_MAX+NP_CHUNK-1)/NP_CHUNK+2;++failure) {
+        reset_test(); old_document(); memset(disk,'N',4096); disk_len=4096;
+        begin_load(); fail_call=fs_calls+failure; run_io();
+        assert(mode==ERROR && editor.dirty && editor.len==11);
+        assert(!memcmp(editor.text,"old unsaved",11) && !memcmp(name,"OLD     TXT",11));
+        assert(document && !candidate && retired);
+        fail_call=0; close_request(); tick(); assert(!retired && mode==EDIT);
+    }
+    reset_test(); old_document(); memset(disk,'N',4097); disk_len=4097;
+    begin_load(); run_io(); assert(mode==ERROR && editor.len==11 && editor.dirty);
+    reset_test(); old_document(); memcpy(disk,"new\r\n",5); disk_len=5;
+    begin_load(); memcpy(next_name,"NEW     BAS",11); run_io();
+    assert(mode==EDIT && !editor.dirty && editor.len==4 && !memcmp(editor.text,"new\n",4));
+    assert(!strcmp(path,"/NEW") && retired); tick(); assert(!retired);
+    reset_test(); old_document(); begin_load(); close_request(); tick();
+    assert(mode==EDIT && editor.len==11 && editor.dirty && !retired);
+    /* Save As never publishes the destination until a complete write. */
+    reset_test(); old_document(); candidate=gb_fsctx_open(0);
+    memcpy(next_name,"NEW     TXT",11); strcpy(next_path,"/NEW"); mode=OVERWRITE;
+    tick(); assert(!writes); confirm(27); tick();
+    assert(!candidate && !retired && editor.dirty && !memcmp(name,"OLD     TXT",11));
+    for (failure=1;failure<=(NP_MAX+NP_CHUNK-1)/NP_CHUNK+1;++failure) {
+        reset_test(); old_document(); memset(editor.text,'T',4096); editor.len=4096;
+        sync_editor();
+        candidate=gb_fsctx_open(0); memcpy(next_name,"NEW     TXT",11); strcpy(next_path,"/NEW");
+        start_save(); fail_call=fs_calls+failure; run_io();
+        assert(mode==ERROR && editor.dirty && editor.len==4096 && !memcmp(name,"OLD     TXT",11));
+    }
+    reset_test(); old_document(); editor.dirty=0;sync_editor();start_save();
+    fail_call=fs_calls+2; run_io(); assert(mode==ERROR && editor.dirty);
+    /* BASIC expansion at maximum capacity; a failure never rewrites the text. */
+    for (failure=0;failure<=(2*NP_MAX+NP_CHUNK-1)/NP_CHUNK+1;++failure) {
+        reset_test(); old_document(); memset(editor.text,'\n',4096); editor.len=4096;
+        sync_editor();
+        memcpy(name,"OLD     BAS",11); start_save();
+        fail_call=failure ? fs_calls+failure : 0; run_io();
+        assert(editor.len==4096);
+        for (unsigned int i=0;i<4096;++i) assert(editor.text[i]=='\n');
+        if (failure) assert(mode==ERROR && editor.dirty);
+        else assert(mode==EDIT && !editor.dirty && disk_len==8192);
+    }
+    reset_test(); old_document(); request(NEW); confirm('d');
+    fail_call=fs_calls+1; tick(); assert(mode==ERROR && retired);
+    failure=fs_calls; tick(); assert(fs_calls==failure); /* no silent retry spin */
+    fail_call=0; close_request(); tick(); assert(!retired && mode==EDIT);
+}
+static void file_menu(void)
+{
+    unsigned int guard;
+    /* Menu cancellation leaves even a dirty document untouched. */
+    reset_test();old_document();menu_request=1;menu();
+    assert(mode==EDIT && !action && editor.dirty && !closed);
+    menu_request=2;menu();menu_request=3;menu();
+    assert(mode==EDIT && !action && editor.dirty && !closed);
+    /* The existing entries keep their order and dispatch. */
+    reset_test();old_document();popup_item=0;menu_request=1;menu();
+    assert(mode==CONFIRM && action==NEW);confirm(27);
+    popup_item=1;menu_request=1;menu();
+    assert(mode==CONFIRM && action==OPEN);confirm(27);
+    popup_item=2;menu_request=1;menu();run_io();
+    assert(mode==EDIT && !editor.dirty && disk_len==11);
+    popup_item=3;menu_request=1;menu();
+    assert(mode==PICK && picker.mode==GB_FILEPICK_SAVE);
+    /* Quit uses the same deferred cleanup path as the close gadget / ^Q. */
+    reset_test();old_document();editor.dirty=0;sync_editor();
+    popup_item=4;menu_request=1;menu();
+    assert(mode==EXIT && !closed && document && !writes);
+    for(guard=0;guard<10 && !closed;++guard)tick();
+    assert(closed && !document && !live[1] && !writes);
+    /* Dirty Quit must allow Cancel, then Discard without writing. */
+    reset_test();old_document();popup_item=4;menu_request=1;menu();
+    assert(mode==CONFIRM && action==CLOSE && !closed);confirm(27);
+    assert(mode==EDIT && !action && editor.dirty && editor.len==11 && live[document]);
+    menu_request=1;menu();confirm('d');
+    for(guard=0;guard<10 && !closed;++guard)tick();
+    assert(closed && !document && !live[1] && !writes);
+    /* Save-before-Quit writes fully before releasing the owner. */
+    reset_test();old_document();popup_item=4;menu_request=1;menu();confirm('s');
+    run_io();assert(mode==EDIT && !closed && action==CLOSE && !editor.dirty);
+    assert(disk_len==11 && !memcmp(disk,"old unsaved",11));
+    for(guard=0;guard<10 && !closed;++guard)tick();
+    assert(closed && !document && !live[1]);
+    /* Neither a failed save nor a failed context release silently quits. */
+    reset_test();old_document();popup_item=4;menu_request=1;menu();confirm('s');
+    fail_call=fs_calls+2;run_io();
+    assert(mode==ERROR && !closed && editor.dirty && !action && live[document]);
+    reset_test();old_document();editor.dirty=0;sync_editor();
+    popup_item=4;menu_request=1;menu();fail_call=fs_calls+1;tick();
+    assert(mode==ERROR && !closed && document && live[document]);
+}
+
+static void clipboard_and_damage(void)
+{
+    reset_test(); old_document(); np_all(&editor);sync_editor();copy();
+    assert(clip_len==11 && clip_kind==GB_SCRAP_TEXT);
+    clip_error=GB_SCRAP_ERR_CONTEXT; paste();
+    assert(editor.selected && editor.len==11);
+    clip_error=0; memcpy(clip,"pasted",6); clip_len=6; paste();
+    assert(editor.len==6 && !memcmp(editor.text,"pasted",6));
+    np_all(&editor);sync_editor();clip_kind=GB_SCRAP_BITMAP;paste();assert(editor.len==6);
+    /* At most two edits per frame; Ctrl-Q cannot bypass dirty confirmation. */
+    editor.selected=0; editor.cur=editor.len;
+    memcpy(input,"abcd",4); input_pos=0; tick(); assert(editor.len==8 && input_pos==2);
+    assert(damage.y>=live_rect.y+16 && damage.y+damage.h<=live_rect.y+16+rows*10);
+    tick(); assert(editor.len==10);
+    /* Long-line/fullscreen render and caret damage remain inside the client. */
+    memset(line,'A',84);line[84]=0;text_calls=text_glyphs=0;
+    text_run(5,30,line,GB_UI_TEXT,GB_UI_SURFACE);
+    assert(text_calls==2 && text_glyphs==84 && text_last_x==77);
+    text_calls=text_glyphs=0;
+    text_run(5,30,line,GB_UI_SURFACE,GB_UI_TEXT);
+    assert(text_calls==2 && text_glyphs==84 && text_last_x==77);
+    for (unsigned int width=30;width<=128;++width) {
+        live_rect.w=(unsigned char)width; live_rect.x=0;
+        memset(editor.text,'A',4096); editor.len=4096; editor.cur=4096;
+        geometry(); np_follow(&editor,wrap,rows);sync_editor();draw();
+        blink=15; memset(input,0,sizeof(input)); input_pos=0; tick();
+        assert(damage.w==2 && damage.h==2);
+    }
+}
+static void chooser_integration(void)
+{
+    unsigned int guard, before;
+    const char *p;
+    reset_test(); old_document(); request(OPEN); confirm('d');
+    assert(mode==PICK && editor.dirty && editor.len==11);
+    for (guard=0;guard<30 && picker.state!=GB_FILEPICK_READY;++guard) tick();
+    assert(picker.state==GB_FILEPICK_READY && picker.context);
+    close_request();
+    for (guard=0;guard<30 && mode==PICK;++guard) tick();
+    assert(mode==EDIT && editor.dirty && !candidate && live[document]);
+    /* Real chooser -> named context -> explicit overwrite confirmation -> job. */
+    choose(GB_FILEPICK_SAVE);
+    for (guard=0;guard<30 && picker.state!=GB_FILEPICK_READY;++guard) tick();
+    assert(picker.state==GB_FILEPICK_READY);
+    for (p="SAVED.TXT";*p;++p) gb_filepick_key(&picker,(unsigned char)*p);
+    gb_filepick_submit(&picker);
+    for (guard=0;guard<30 && mode==PICK;++guard) tick();
+    assert(mode==OVERWRITE && candidate && !writes && editor.dirty);
+    assert(!memcmp(next_name,"SAVED   TXT",11));
+    before=fs_calls; confirm('s'); assert(fs_calls==before); run_io();
+    assert(mode==EDIT && !editor.dirty && disk_len==11 && !memcmp(name,"SAVED   TXT",11));
+    tick(); assert(!retired);
+    /* Keyboard frame bound remains in force inside the chooser too. */
+    choose(GB_FILEPICK_SAVE);
+    for (guard=0;guard<30 && picker.state!=GB_FILEPICK_READY;++guard) tick();
+    while (refresh) tick();
+    memcpy(input,"ABCD",4); input_pos=0; tick();
+    assert(input_pos==2 && !strcmp(picker.edit,"AB"));
+}
+
+static void editing_input_and_damage(void)
+{
+    unsigned char goal=255;
+    np_editor_t e={0};
+    assert(np_loaded(&e,"abcdef\nx\nabcdef",15,0));e.cur=5;
+    assert(np_arrow(&e,31,39,&goal) && e.cur==8 && goal==5);
+    assert(np_arrow(&e,31,39,&goal) && e.cur==14 && !e.dirty);
+    assert(np_arrow(&e,30,39,&goal) && e.cur==8);
+    assert(np_arrow(&e,30,39,&goal) && e.cur==5);
+    assert(np_arrow(&e,29,39,&goal) && e.cur==4 && goal==255);
+    np_all(&e);assert(np_arrow(&e,29,39,&goal) && e.cur==0 && !e.selected);
+    assert(!np_arrow(&e,29,39,&goal) && !e.dirty);
+    e.cur=e.len;assert(!np_arrow(&e,28,39,&goal));
+    assert(np_loaded(&e,"abcdefghij",10,0));e.cur=3;
+    assert(np_arrow(&e,31,4,&goal) && e.cur==7);
+    assert(np_arrow(&e,30,4,&goal) && e.cur==3);
+
+    reset_test();damage_count=0;input[0]='a';input_pos=0;tick();
+    assert(editor.len==1 && editor.dirty && damage_count==2);
+    assert(damages[0].h==14); /* dirty title only, never full window */
+    assert(damages[1].h==10 && damages[1].w<8);
+    damage_count=0;memset(input,0,sizeof(input));input[0]='b';input_pos=0;tick();
+    assert(damage_count==1 && damage.h==10 && damage.w<8);
+    damage_count=0;input[0]=29;input_pos=0;tick();
+    assert(editor.cur==1 && editor.len==2 && damage_count==1 && damage.h==10);
+    assert(np_loaded(&editor,"abcdef\nunchanged",16,0));editor.cur=3;sync_editor();
+    update_title();damage_count=0;input[0]='X';input_pos=0;tick();
+    assert(damage_count==2 && damages[1].h==10); /* next line untouched */
+    damage_count=0;input[0]=13;input_pos=0;tick();
+    assert(damage_count==3); /* split line, move suffix, move following line */
+    for(unsigned i=0;i<damage_count;++i)assert(damages[i].h==10);
+    /* A title update must not destroy an in-flight staged document. */
+    assert(model_call(NP_STAGE_BEGIN) && model_stage("pending",7,0));
+    update_title();assert(!model_call(NP_EDIT_BEGIN));
+    packet[6]=0;assert(model_call(NP_STAGE_LOAD));assert(!memcmp(editor.text,"pending",7));
+}
+static void copied_protocol(void)
+{
+    unsigned char guarded[NP_PACKET+2];
+    reset_test();
+    np_put(packet+2,0);np_put(packet+4,1);packet[NP_DATA]='x';
+    assert(!model_call(NP_STAGE_APPEND) && editor.len==0);
+    assert(model_call(NP_STAGE_BEGIN));
+    np_put(packet+2,1);np_put(packet+4,1);
+    assert(!model_call(NP_STAGE_APPEND) && staged==0);
+    np_put(packet+2,0);np_put(packet+4,NP_CHUNK+1);
+    assert(!model_call(NP_STAGE_APPEND) && staged==0);
+    memset(disk,'A',NP_MAX);
+    assert(model_stage(disk,NP_MAX,0) && editor.len==0);
+    packet[6]=0;assert(model_call(NP_STAGE_LOAD) && editor.len==NP_MAX);
+    assert(!model_call(NP_STAGE_LOAD) && editor.len==NP_MAX);
+    assert(model_call(NP_STAGE_BEGIN) && model_stage("x",1,0));
+    assert(!model_call(NP_STAGE_PASTE) && editor.len==NP_MAX && !editor.dirty);
+    assert(!memcmp(editor.text,disk,NP_MAX));
+    np_put(packet+2,NP_MAX+1);np_put(packet+4,1);assert(!model_call(NP_EXPORT));
+    np_put(packet+2,NP_MAX-2);np_put(packet+4,NP_CHUNK);
+    assert(model_call(NP_EXPORT) && np_word(packet+2)==2 && packet[NP_DATA]=='A');
+    memset(guarded,0xA5,sizeof(guarded));
+    guarded[1]=NP_RESET;guarded[8]=0;guarded[29]=12;
+    secondary_main(guarded+1,NP_PACKET);
+    assert(guarded[2]==1 && editor.len==NP_MAX);
+    assert(guarded[0]==0xA5 && guarded[NP_PACKET+1]==0xA5);
+    guarded[2]=0x55;secondary_main(guarded+1,NP_PACKET-1);
+    assert(guarded[2]==0x55 && editor.len==NP_MAX);
+}
+
+int main(void)
+{
+    editing_input_and_damage();
+    /* getkey may return zero for a filtered pointer arrow even though later
+     * entries contain the keyboard-pointer fire Space. */
+    reset_test();input[40]=' ';input[41]=' ';notepad_entry();
+    for(unsigned char i=0;i<6;++i)tick();
+    assert(editor.len==0 && !editor.dirty);
+    model(); copied_protocol(); lifecycle(); file_menu(); clipboard_and_damage(); chooser_integration();launch_document();
+    puts("unified Notepad model/controller tests PASS (mocked services; no runtime claim)");
+    return 0;
+}

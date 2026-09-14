@@ -2,7 +2,15 @@
 ; FS contexts use caller-owned GB_PARAMS; the old native SDK C3D0/C400
 ; mailboxes are pixels on CPC. The legacy GB_FSCTX slot remains unavailable.
 CPC_RUNTIME_CAPS_LOW equ #0F8B ; add GB_CAP_SHELL (#0008), keep other services gated
-CPC_RUNTIME_CAPS_HIGH equ #00DF ; shared worker + root timer collector are now bound
+                ifdef PORTABLE_PACKAGE_STREAM
+CPC_RUNTIME_CAPS_HIGH equ #05DF ; private sealed-secondary receiver, no data-page promise
+                else
+                ifdef PORTABLE_DATA_PAGES
+CPC_RUNTIME_CAPS_HIGH equ #03DF ; private data-page qualification
+                else
+CPC_RUNTIME_CAPS_HIGH equ #01DF ; shared timers, FS and typed clipboard
+                endif
+                endif
 cpc_unavailable
                 ld de,0
                 ld a,1
@@ -21,7 +29,11 @@ cpc_sysinfo_template
                 db 2,4,32,CPC_POOL_PAGES,0,CPC_WINDOW_MAX
                 dw CPC_RUNTIME_CAPS_LOW,0
                 db CPC_OWNER_MAX,1,CPC_WINDOW_MAX,0,8,4,1,0
+                ifdef PORTABLE_FS_HANDOFF
+                db 4,0,2,3                   ; identical API v3 identity/owner-bound handoff
+                else
                 db 4,0,2,1                   ; four contexts, 512 bytes, API v1
+                endif
                 dw CPC_RUNTIME_CAPS_HIGH
                 db CPC_COLUMNS,CPC_LINES,4,4
                 dw CPC_APP_BASE,CPC_APP_LIMIT,CPC_KERNEL_BASE
@@ -58,12 +70,13 @@ cpc_runtime_admission
                 cpl
                 and (ix+13)
                 jr nz,cpc_runtime_reject
-                ld a,CPC_RUNTIME_CAPS_HIGH
+                ld a,CPC_RUNTIME_CAPS_HIGH & 255
                 cpl
                 and (ix+14)
                 jr nz,cpc_runtime_reject
-                ld a,(ix+15)
-                or a
+                ld a,CPC_RUNTIME_CAPS_HIGH >> 8
+                cpl
+                and (ix+15)
                 jr nz,cpc_runtime_reject
                 scf
                 ret

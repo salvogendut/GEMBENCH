@@ -22,6 +22,11 @@ class ButtonCaptureTests(unittest.TestCase):
                             '-I', str(CORE), str(ROOT/'tests/msx_button_capture_test.c'),
                             str(CORE/'z80.c'), '-o', str(exe)], check=True)
             subprocess.run([str(exe), str(Path(tmp)/'GBAPV4.RAW')], check=True)
+            subprocess.run(['rasm', str(ROOT/'kernel/msx_gbap4.asm'),
+                            '-DPORTABLE_PACKAGE_STREAM=1','-DPORTABLE_DATA_PAGES=1',
+                            '-DPORTABLE_FS_HANDOFF=1','-DPORTABLE_FS_IDENTITY=1',
+                            '-s','-o','gate'],cwd=tmp,check=True,capture_output=True)
+            subprocess.run([str(exe),str(Path(tmp)/'GBAPV4.RAW'),'text'],check=True)
 
     def test_capture_is_msx_private(self):
         self.assertIn('call MSX_BUTTON_IRQ', (ROOT/'kernel/scheduler.asm').read_text())

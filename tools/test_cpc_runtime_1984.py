@@ -27,6 +27,13 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     if ram[sym['sched_fault']]: raise AssertionError("scheduler fault")
     for name in ('io_busy','io_offline','io_fd','core_pointer_paintlock'):
         if ram[sym[name]]: raise AssertionError(f"unfinished transaction: {name}")
+    if 'cpc_package_ready' in sym:
+        if ram[sym['cpc_package_ready']] != 1:
+            raise AssertionError('private package module was not qualified')
+        if ram[0x100:0x400] != (work/'GBPKLOAD.MOD').read_bytes():
+            raise AssertionError('fixed package module changed')
+        for name in ('pkg_busy','sec_busy','cs_owned','cpc_package_prefix'):
+            if ram[sym[name]]: raise AssertionError('unfinished '+name)
     used = {}
     for stem in ('main','irq','tmp'):
         lo, hi = sym[f'cpc_{stem}_stack'], sym[f'cpc_{stem}_top']
@@ -61,7 +68,15 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None, clipboard=False, chooser=False, data_pages=False, private_media=None, package_case=None, notepad_case=None, notepad_app=None):
+    if notepad_case and (not (private_media or desktop_delivery) or not notepad_app):
+        raise ValueError('Notepad qualification requires private media and the accepted APP path')
+    if private_media and (not skip_build or desktop_delivery):
+        raise ValueError('private media requires --skip-build, never delivery promotion')
+    if package_case and not private_media:
+        raise ValueError('secondary tests require explicit private receiver media')
+    if (clipboard or chooser or data_pages) and (desktop or desktop_delivery or filemgr or filemgr_case or filemgr_scenario or settings_case):
+        raise ValueError('portable service probes use the private diagnostic launcher only')
     settings=settings_case is not None
     if settings and desktop_delivery and settings_case not in (
             'normal','mixed','reboot','missing','short','corrupt','unbound','edit-missing','contexts','stress'):
@@ -74,11 +89,11 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         if (filemgr_scenario == 'reboot' or settings_case=='reboot') and not seed_image:
             raise ValueError('reboot check requires its saved test image')
         from cpc_desktop_media import validate
-        media=ROOT/'QA/CPC-Desktop' if skip_build else build(desktop=True,filemgr=True,settings=True,delivery=True)
+        media=ROOT/'QA/CPC-Desktop' if skip_build else build(desktop=True,filemgr=True,settings=True,delivery=True,unified_notepad=True)
         manifest=validate(media,pristine=True)
-        if filemgr and manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3'):
+        if filemgr and manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4'):
             raise ValueError('File Manager acceptance requires the Sprint 3 delivery profile')
-        if settings and manifest['profile']!='cpc-desktop-m4-v3':
+        if settings and manifest['profile'] not in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4'):
             raise ValueError('Settings acceptance requires the v3 delivery profile')
         # Check the real FAT contents, not just the host staging directory.
         for name,expected in manifest['files'].items():
@@ -98,13 +113,36 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                     raise AssertionError('File Manager reboot seed differs: '+name)
     else:
         variant='settings-contract' if settings else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
-        media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr,settings=settings)
+        media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr,settings=settings,data_pages=data_pages)
+        if private_media: media=Path(private_media).resolve()
         manifest=json.loads((media/'manifest.json').read_text())
+        if private_media and manifest.get('profile') not in ('cpc-notepad-receiver-private-v1','cpc-notepad-handoff-private-v1'):
+            raise ValueError('expected explicitly private CPC secondary receiver profile')
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifact_root=ROOT/'build/settings-runtime' if settings else ROOT/'build/cpc-delivery-runtime' if desktop_delivery else None
+    if private_media: artifact_root=ROOT/'build/notepad-84/evidence'
     if artifact_root is not None:artifact_root.mkdir(parents=True,exist_ok=True)
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-',dir=artifact_root))
+    if private_media:
+        (artifacts/'receiver-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+        (artifacts/'runtime.sym').write_bytes((work/'runtime.sym').read_bytes())
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(seed_image or manifest['image']).read_bytes())
+    if notepad_case:
+        from cpc_runtime_notepad import prepare
+        prepare(manifest,notepad_app,image,artifacts,notepad_case)
+    if package_case:
+        from cpc_runtime_secondary import prepare
+        prepare(ROOT,work,image,artifacts,package_case)
+    if clipboard:
+        # Alias on the disposable image only; F5 follows the normal app loader.
+        subprocess.run(['mcopy','-o','-i',str(image)+'@@16384',
+                        str(media/'CARD/GBENCH/SCRAPPRB.APP'),'::/GBENCH/FSPROBE.APP'],check=True)
+    if chooser:
+        from cpc_runtime_filepick import prepare
+        prepare(ROOT,image,artifacts)
+    if data_pages:
+        from cpc_runtime_pages import prepare
+        prepare(ROOT,image)
     filemgr_kernel=None
     if settings:
         from cpc_runtime_settings import prepare
@@ -229,6 +267,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 if root_fault: raise AssertionError('invalid root module executed')
                 break
             if ram[sym['cpc_runtime_status']] == 255:
+                if package_case and package_case.startswith('module-'):
+                    from cpc_runtime_secondary import boot_rejected
+                    return boot_rejected(package_case,data,artifacts,sym,wait,read)
                 if not root_fault: raise AssertionError('runtime boot failure')
                 if ram[sym['cpc_runtime_launches']] or ram[sym['sched_fault']]:
                     raise AssertionError('invalid root module crossed boot boundary')
@@ -255,6 +296,14 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 return artifacts
         else: raise AssertionError('runtime boot timeout')
         wait(50)
+        if package_case:
+            if package_case.startswith('module-'):
+                raise AssertionError('bad loader module unexpectedly booted')
+            from cpc_runtime_secondary import exercise
+            return exercise(ROOT,manifest,work,sym,image,artifacts,package_case,send,wait,read,key,move)
+        if notepad_case:
+            from cpc_runtime_notepad import exercise
+            return exercise(manifest,work,sym,image,artifacts,notepad_case,send,wait,read,key,move)
         if settings:
             from cpc_runtime_settings import run_settings
             return run_settings(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,settings_case,settings_fixture)
@@ -376,6 +425,48 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
             (artifacts/'result.json').write_text(json.dumps(result,indent=2)+'\n')
             print('PASS unchanged Calculator/shared accessory policy '+json.dumps(result),flush=True)
             return artifacts
+        if clipboard:
+            app=(media/'CARD/GBENCH/SCRAPPRB.APP').read_bytes()
+            if subprocess.check_output(['mtype','-i',str(image)+'@@16384','::/GBENCH/FSPROBE.APP'])!=app:
+                raise AssertionError('clipboard diagnostic alias differs')
+            at=next(int(line.split()[2],16) for line in
+                    (ROOT/'build/universal-obj/scrapprobe/app.noi').read_text().splitlines()
+                    if line.startswith('DEF _scrapprobe_state '))
+            identities=[];results=[]
+            for cycle in range(3):
+                key('F5');ram=state('clipboard-'+str(cycle))
+                entry=sym['wm_table']+50
+                if ram[sym['wm_nwin']]!=3 or ram[sym['wm_focus']]!=2:
+                    raise AssertionError('clipboard APP did not open/focus')
+                appbase=physical(ram[entry])
+                result=list(ram[appbase+at-0x4000:appbase+at-0x4000+8])
+                if result[0]!=85 or result[1]!=49+bool(cycle) or result[2]!=bool(cycle):
+                    raise AssertionError(f'clipboard APP cycle {cycle} failed: {result}')
+                identity=(ram[sym['core_win_owner']+2],ram[sym['core_win_owner_gen']+2])
+                if identity in identities: raise AssertionError('clipboard relaunch reused owner generation')
+                identities.append(identity);results.append(result)
+                key('ESCAPE');ram=checked('clipboard-close-'+str(cycle))
+                if ram[sym['cpc_clipboard_base']:sym['cpc_clipboard_base']+8]!=b'\x06\x00SHARED' or ram[sym['cpc_scrap_type']]!=1:
+                    raise AssertionError('clipboard did not survive owner teardown')
+            report=dict(results=results,identities=identities,checkpoints=checks,
+                        sections=manifest['sections'],app_sha256=hashlib.sha256(app).hexdigest(),
+                        emulator_sha256=hashlib.sha256(emulator.read_bytes()).hexdigest())
+            (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+            print('PASS portable clipboard '+json.dumps(report),flush=True)
+            return artifacts
+        if data_pages:
+            from cpc_runtime_pages import exercise
+            report=exercise(ROOT,work,sym,image,key,state,checked)
+            (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+            print('PASS portable data pages '+json.dumps(report),flush=True)
+            return artifacts
+        if chooser:
+            from cpc_runtime_filepick import exercise
+            report=exercise(ROOT,work,sym,artifacts,image,send,wait,read,key,move)
+            checked('chooser-close-exposure')
+            (artifacts/'result.json').write_text(json.dumps(report,indent=2)+'\n')
+            print('PASS portable chooser '+json.dumps(report),flush=True)
+            return artifacts
         if filesystem:
             key('F5')
             ram=state('portable-filesystem')
@@ -495,8 +586,17 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--emulator',type=Path,default=ROOT.parent/'1984/1984')
     parser.add_argument('--skip-build',action='store_true')
+    parser.add_argument('--private-media',type=Path,help='explicit private secondary-receiver media; never a delivery image')
     mode=parser.add_mutually_exclusive_group()
+    from cpc_runtime_secondary import CASES as PACKAGE_CASES
+    mode.add_argument('--package-case',choices=PACKAGE_CASES)
+    parser.add_argument('--notepad-app',type=Path,help='unchanged accepted Notepad APP with adjacent probe.noi')
+    mode.add_argument('--notepad-case',choices=('handoff','blank','bad-app','quit','escape',
+                                               'boundary','clipboard','write-denied','disk-full','stress'))
     mode.add_argument('--filesystem',action='store_true')
+    mode.add_argument('--clipboard',action='store_true')
+    mode.add_argument('--chooser',action='store_true')
+    mode.add_argument('--data-pages',action='store_true')
     mode.add_argument('--menus',action='store_true')
     mode.add_argument('--accessories',action='store_true')
     mode.add_argument('--clock',action='store_true')
@@ -527,7 +627,7 @@ if __name__=='__main__':
     artifacts=run(**vars(args))
     if args.settings_case=='normal':
         run(args.emulator,skip_build=True,desktop_delivery=args.desktop_delivery,
-            settings_case='reboot',seed_image=artifacts/'RUNTIME.IMG')
+            private_media=args.private_media,settings_case='reboot',seed_image=artifacts/'RUNTIME.IMG')
     if args.desktop_delivery and args.filemgr_scenario=='services':
         run(args.emulator,skip_build=True,desktop_delivery=True,filemgr_scenario='reboot',
             seed_image=artifacts/'RUNTIME.IMG')

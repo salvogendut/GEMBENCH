@@ -23,6 +23,9 @@ gb4_resource_offset equ #28A4
 gb4_icon_count equ #28A6
 gb4_expected_crc equ #28A7
 gb4_crc_value equ #28AB
+                ifdef PORTABLE_PACKAGE_STREAM
+gb4_streamed equ #28AF
+                endif
                 mend
 cpc_loading_begin
                 include "core/app_launch.asm"
@@ -77,5 +80,11 @@ cpc_loaded_universal
                 include "cpc_settings_admission.inc"
                 endif
                 include "../lib/cpc/app_load.asm"
+                ifdef PORTABLE_PACKAGE_STREAM
+                include "cpc_package_launch.asm"
+                endif
+                ifdef PORTABLE_FS_HANDOFF
+                include "core/document_launch.asm"
+                endif
 cpc_loading_end
                 assert gb4_crc_value+4<=CPC_ARCH_STATE_END,"admission state overflow"

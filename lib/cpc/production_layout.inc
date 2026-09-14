@@ -37,6 +37,7 @@ CPC_HARDWARE_BASE equ #3800
 CPC_HARDWARE_END equ #3E00
 CPC_CLIPBOARD_BASE equ #3E00
 CPC_CLIPBOARD_END equ #4000
+CPC_SCRAP_TYPE equ #133D          ; private; same shared policy, not an app mailbox
 CPC_APP_BASE equ #4000
 CPC_APP_LIMIT equ #7F00
 CPC_APP_END equ #8000

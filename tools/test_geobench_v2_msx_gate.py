@@ -31,6 +31,8 @@ def main() -> int:
     parser.add_argument("--app", type=Path,
                         default=ROOT / "build/universal/ABIPROBE.APP")
     parser.add_argument("--staged", type=Path)
+    parser.add_argument('--receiver',choices=('document','primary'),default='document',
+                        help='document is normal delivery; primary is the historical Gate-2 profile')
     args = parser.parse_args()
 
     glue = (ROOT / "lib/msx/glue.inc").read_text(encoding="utf-8")
@@ -46,11 +48,10 @@ def main() -> int:
 
     gate_base = equ(glue, "MSX_GBAP4_GATE")
     gate_limit = equ(glue, "MSX_GBAP4_GATE_LIMIT")
-    gate_size_match = re.search(r"^MSX_GBAP4_GATE_SIZE\s+equ\s+([0-9]+)",
-                                glue, re.MULTILINE)
-    if not gate_size_match:
+    gate_sizes = re.findall(r"^MSX_GBAP4_GATE_SIZE\s+equ\s+([0-9]+)",glue,re.M)
+    gate_size = 3014 if args.receiver=='document' else 2889
+    if str(gate_size) not in gate_sizes:
         raise AssertionError("missing decimal constant MSX_GBAP4_GATE_SIZE")
-    gate_size = int(gate_size_match.group(1))
     sysinfo = equ(glue, "MSX_SYSINFO")
     app_bottom = equ(glue, "MSX_APP_FIXED_BOTTOM")
     if (sysinfo, gate_base, gate_limit, app_bottom) != (
@@ -65,7 +66,8 @@ def main() -> int:
     gate = args.gate.read_bytes()
     if len(gate) != gate_size or len(gate) > gate_limit - gate_base:
         raise AssertionError("GBAPV4.MOD does not fit its reserved low-TPA region")
-    if gate[0] != 0xC3 or gate[3:8] != b"GBV4\x02":
+    signature=b'GBV4\x07' if args.receiver=='document' else b'GBV4\x02'
+    if gate[0] != 0xC3 or gate[3:8] != signature:
         raise AssertionError("GBAPV4.MOD boot signature is invalid")
     entry = struct.unpack_from("<H", gate, 1)[0]
     if not gate_base + 8 <= entry < gate_base + len(gate):
@@ -93,9 +95,21 @@ def main() -> int:
 
     if args.staged is not None and args.staged.read_bytes() != package:
         raise AssertionError("staged ABIPROBE.APP differs from the SDK output")
+    if args.staged is not None and args.receiver=='document':
+        directory=args.staged.parent
+        for name,size,magic in (('GBPKFIX.MOD',1061,b'GBIO\x03'),
+                                ('GBPKLOAD.MOD',747,b'GBPK\x02'),
+                                ('GBPKWM6.MOD',1496,b'GBWM\x66'),
+                                ('GBPKWM7.MOD',1496,b'GBWM\x67')):
+            module=(directory/name).read_bytes()
+            if len(module)!=size or module[0]!=0xC3 or module[3:8]!=magic:
+                raise AssertionError('mixed/incomplete document receiver: '+name)
+        editor=parse_manifest((directory/'NOTEPAD.APP').read_bytes())
+        if editor['application_id']!='NOTEPAD' or editor['version']!=4 or len(editor['segments'])!=2:
+            raise AssertionError('normal Notepad is not the universal two-bank editor')
 
     print(
-        f"MSX2 Gate 2: sysinfo v6/48, {len(gate)}-byte validator, "
+        f"MSX2 {args.receiver} receiver: sysinfo v6/48, {len(gate)}-byte validator, "
         f"{len(package)}-byte ABIPROBE.APP: ok"
     )
     return 0

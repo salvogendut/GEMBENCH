@@ -69,6 +69,22 @@ case "$GEMBENCH_M7_BANKED" in
     *) echo "GEMBENCH_M7_BANKED must be 0 or 1" >&2; exit 2 ;;
 esac
 
+# Ordinary preemptive delivery uses the qualified two-bank portable receiver.
+# Historical cooperative/baseline comparison builds retain their native editor.
+UNIFIED_NOTEPAD=0
+UNIFIED_RASM=""
+UNIFIED_GATE=primary
+FILEMGR_HANDOFF=""
+FILEMGR_SHELL_CLIENT=1
+if [ "$PREEMPTIVE" = "1" ] && [ "$GEMBENCH_BASELINE" = "0" ]; then
+    UNIFIED_NOTEPAD=1
+    UNIFIED_GATE=document
+    UNIFIED_RASM="-DPORTABLE_DATA_PAGES=1 -DPORTABLE_PACKAGE_STREAM=1 -DPORTABLE_FS_IDENTITY=1 -DPORTABLE_FS_HANDOFF=1"
+    EXTRA_RASM="${EXTRA_RASM:-} $UNIFIED_RASM"
+    FILEMGR_HANDOFF="-DGB_FSCTX_LAUNCH"
+    FILEMGR_SHELL_CLIENT=0
+fi
+
 TITLEBAR_RASM="-DTITLEBAR_TILE=1"
 RASM="$RASM" bash tools/build_titlebarmod.sh
 
@@ -142,8 +158,10 @@ else
         tools/build_capp.sh apps/desktop build/msx/DESKTOP.RAW
 fi
 python3 tools/gbrc.py apps/filemgr/view_menu.json --output build/msx/FILEMGR_MENU.GBR --menu-header apps/filemgr/view_menu_gbr.h --symbol-prefix FILEMGR_VIEW
-GBLIB_SRC="$FILEMGR_GBLIB" APPDEFS="-DGB_MSX2 -DGB_FSCTX_DIRECTORY_ONLY -DGB_FSCTX_BATCH_ONLY" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x79F8 DIALOGS=1 GBR_MENUS=1 SCROLL=1 REPAINTTOP=1 GBWIN=0 WINDOW_KIND=1 GB_SHELL_CLIENT=1 GB_FSCTX=1 SYS=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+GBLIB_SRC="$FILEMGR_GBLIB" APPDEFS="-DGB_MSX2 -DGB_FSCTX_DIRECTORY_ONLY -DGB_FSCTX_BATCH_ONLY $FILEMGR_HANDOFF" APP_CFLAGS="--max-allocs-per-node 5000" DATA_LOC=0x79F8 DIALOGS=1 GBR_MENUS=1 SCROLL=1 REPAINTTOP=1 GBWIN=0 WINDOW_KIND=1 GB_SHELL_CLIENT="$FILEMGR_SHELL_CLIENT" GB_FSCTX=1 SYS=1 tools/build_capp.sh apps/filemgr build/msx/FILEMGR.RAW
+if [ "$UNIFIED_NOTEPAD" = "0" ]; then
 APP_ICON=apps/notepad/icon.asm GBLIB_SRC="$NOTEPAD_GBLIB" APPDEFS="-DGB_MSX2 $NOTEPAD_APPDEFS" APP_CFLAGS="$NOTEPAD_CFLAGS" HELPER_CFLAGS="$NOTEPAD_CFLAGS" DATA_LOC="$NOTEPAD_DATA_LOC" DOC=1 REPAINTTOP="$NOTEPAD_SCROLL" GB_SCRAP=1 GB_SCRAP_TEXT_ONLY=1 GB_SHELL_TARGET=1 tools/build_capp.sh apps/notepad build/msx/NOTEPAD.RAW
+fi
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7C40 DIALOGS=1 STEPPER=1 SELECTOR=1 ACTIONS=1 TITLEBAR=1 GB_VDI_BASE=1 tools/build_capp.sh apps/settings build/msx/SETTINGS.RAW
 APPDEFS="-DGB_MSX2" DIALOGS=1 BUTTON=1 tools/build_capp.sh apps/diskutil build/msx/DISKUTIL.RAW  # FAT12 quick-format (WRABS)
 if [ "$PREEMPTIVE" = "1" ] && [ "$CLOCK_TIMER" = "1" ]; then
@@ -215,7 +233,7 @@ tools/build_uimod.sh                             # -> build/GBUI.RAW (dialogs/me
 APPDEFS="-DGB_MSX2" tools/build_appickmod.sh build/msx/GBAPICK.RAW
 tools/build_webmod.sh build/msx/GBWEB.RAW        # Browser cache/config helper
 APPDEFS="-DGB_MSX2" tools/build_imgmod.sh build/msx/GBIMG.RAW # Browser inline-image helper
-tools/build_fsctxmod.sh build/msx/GBFSCTX.RAW     # M4 explicit filesystem contexts
+PORTABLE_FS_HANDOFF="$UNIFIED_NOTEPAD" tools/build_fsctxmod.sh build/msx/GBFSCTX.RAW
 
 # --- assets ------------------------------------------------------------------
 python3 tools/genfont.py build/msx/DEFAULT.FNT           # 1bpp glyphs: shared format
@@ -260,9 +278,15 @@ make -C "$GB_BASIC_DIR" raws-msx GEOBENCH="$GEOBENCH_ROOT"
 
 # Build the low-TPA admission/parameter/sysinfo module independently of the
 # resident page-2 kernels. Both video backends load this exact module at boot.
-rm -f build/msx/GBAPV4.RAW
-( cd build/msx && "$RASM" ../../kernel/msx_gbap4.asm -s -o gbapv4 )
-[ -s build/msx/GBAPV4.RAW ] || { echo "ERROR: GBAPV4.RAW not produced" >&2; exit 1; }
+if [ "$UNIFIED_NOTEPAD" = "1" ]; then
+    python3 tools/build_msx_package_modules.py --out build/msx/package --handoff
+    cp build/msx/package/GBAPV4.MOD build/msx/GBAPV4.RAW
+    bash tools/build_unotepad.sh
+else
+    rm -f build/msx/GBAPV4.RAW
+    ( cd build/msx && "$RASM" ../../kernel/msx_gbap4.asm -s -o gbapv4 )
+    [ -s build/msx/GBAPV4.RAW ] || { echo "ERROR: GBAPV4.RAW not produced" >&2; exit 1; }
+fi
 
 # Build the compile-once conformance and first production applications.
 bash tools/build_uapp.sh apps/abiprobe build/universal/ABIPROBE.APP
@@ -275,7 +299,7 @@ UNIVERSAL_TASK=1 UNIVERSAL_WINDOW_KIND=1 UNIVERSAL_ACCESSORY=1 UNIVERSAL_MENU=1 
 # RASM exits 0 even on assembly errors, so stale outputs would silently ship:
 # remove them first and require fresh files after each pass.
 rm -f build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW build/msx/GBKERN7.RAW \
-      build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM
+      build/msx/GBMSX.COM build/msx/GBMSX6.COM build/msx/GBMSX7.COM build/msx/GBPKWM.RAW
 
 # The DOS child loader places a mode-specific COM at #0100..#3FFF. Crossing
 # that boundary overwrites its tail before control reaches the kernel (Screen 7
@@ -296,17 +320,23 @@ check_child_com_size() {
 ( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DGEMBENCH_BASELINE="$GEMBENCH_BASELINE" -s -o gbkernm ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: GBKERNM.RAW not produced (rasm errors above)" >&2; exit 1; }
 cp build/msx/GBKERNM.RAW build/msx/GBKERN6.RAW
-( cd build/msx && "$RASM" ../../kernel/msx_stub.asm )
+if [ "$UNIFIED_NOTEPAD" = "1" ]; then
+    cp build/msx/GBPKWM.RAW build/msx/GBPKWM6.MOD
+fi
+( cd build/msx && "$RASM" ../../kernel/msx_stub.asm $UNIFIED_RASM )
 [ -s build/msx/GBMSX.COM ] || { echo "ERROR: Screen-6 loader stub not produced" >&2; exit 1; }
 check_child_com_size build/msx/GBMSX.COM
 mv build/msx/GBMSX.COM build/msx/GBMSX6.COM
 
 # Extended backend: Screen 7, with sixteen-colour Viewer support.
-rm -f build/msx/GBKERNM.RAW
+rm -f build/msx/GBKERNM.RAW build/msx/GBPKWM.RAW
 ( cd build/msx && "$RASM" ../../kernel/gbkern.asm -DPLATFORM_MSX=1 -DMSX_SCREEN7=1 -DGEMBENCH_BASELINE="$GEMBENCH_BASELINE" -s -o gbkernm7 ${EXTRA_RASM:-} $TITLEBAR_RASM )
 [ -s build/msx/GBKERNM.RAW ] || { echo "ERROR: Screen-7 GBKERNM.RAW not produced" >&2; exit 1; }
 cp build/msx/GBKERNM.RAW build/msx/GBKERN7.RAW
-( cd build/msx && "$RASM" ../../kernel/msx_stub.asm -DMSX_SCREEN7=1 )
+if [ "$UNIFIED_NOTEPAD" = "1" ]; then
+    cp build/msx/GBPKWM.RAW build/msx/GBPKWM7.MOD
+fi
+( cd build/msx && "$RASM" ../../kernel/msx_stub.asm -DMSX_SCREEN7=1 $UNIFIED_RASM )
 [ -s build/msx/GBMSX.COM ] || { echo "ERROR: Screen-7 loader stub not produced" >&2; exit 1; }
 check_child_com_size build/msx/GBMSX.COM
 mv build/msx/GBMSX.COM build/msx/GBMSX7.COM
@@ -339,7 +369,14 @@ printf 'FONT=DEFAULT\r\nICONS=REFINED\r\nCURSOR=DEFAULT\r\nTITLEBAR=ORIGINAL\r\n
 cp QA/MSX/CARD/GEOBENCH.CFG QA/MSX/CARD/GBENCH/DEFAULT.CFG
 cp build/msx/DESKTOP.RAW  QA/MSX/CARD/GBENCH/DESKTOP.APP
 cp build/msx/FILEMGR.RAW  QA/MSX/CARD/GBENCH/FILEMGR.APP
-cp build/msx/NOTEPAD.RAW  QA/MSX/CARD/GBENCH/NOTEPAD.APP
+if [ "$UNIFIED_NOTEPAD" = "1" ]; then
+    cp build/universal/NOTEPAD.APP QA/MSX/CARD/GBENCH/NOTEPAD.APP
+    cp build/msx/package/GBPKFIX.MOD build/msx/package/GBPKLOAD.MOD \
+        build/msx/GBPKWM6.MOD build/msx/GBPKWM7.MOD QA/MSX/CARD/GBENCH/
+    cmp -s build/universal/NOTEPAD.APP QA/MSX/CARD/GBENCH/NOTEPAD.APP
+else
+    cp build/msx/NOTEPAD.RAW QA/MSX/CARD/GBENCH/NOTEPAD.APP
+fi
 cp build/msx/SETTINGS.RAW QA/MSX/CARD/GBENCH/SETTINGS.APP
 cp build/msx/DISKUTIL.RAW QA/MSX/CARD/GBENCH/DISKUTIL.APP
 cp build/msx/XAOS.RAW     QA/MSX/CARD/GBENCH/XAOS.APP
@@ -411,7 +448,7 @@ cp build/universal/ABIPROBE.APP QA/MSX/CARD/GBENCH/ABIPROBE.APP
 cmp -s build/universal/CALC.APP QA/MSX/CARD/GBENCH/CALC.APP
 cmp -s build/universal/CLOCK.APP QA/MSX/CARD/GBENCH/CLOCK.APP
 python3 tools/test_geobench_v2_msx_gate.py \
-    --staged QA/MSX/CARD/GBENCH/ABIPROBE.APP
+    --receiver "$UNIFIED_GATE" --staged QA/MSX/CARD/GBENCH/ABIPROBE.APP
 cp build/msx/SPLASH.BIN  QA/MSX/CARD/GBENCH/SPLASH.MOD
 cp build/msx/SPLASHD.BIN QA/MSX/CARD/GBENCH/SPLASHD.MOD
 cp build/msx/GBTITLE.RAW QA/MSX/CARD/GBENCH/GBTITLE.MOD

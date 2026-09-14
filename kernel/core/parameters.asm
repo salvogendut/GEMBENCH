@@ -9,6 +9,11 @@ universal_parameters
 up_return       ret
 
 up_dispatch
+                ifdef PARAM_EXCLUSIVE_BUSY
+                ld a,(PARAM_EXCLUSIVE_BUSY)
+                or a
+                jp nz,up_busy                  ; never overwrite a live call's parameter copy
+                endif
                 ld a,b
                 or a
                 jp nz,up_bad
@@ -25,10 +30,22 @@ up_dispatch
                 jp nz,up_unsupported
                 ld a,(ix+0)
                 dec a
+                ifdef PARAM_SECONDARY_CALL
+                cp 11
+                else
+                ifdef PARAM_DATA_PAGES
+                cp 10
+                else
+                ifdef PARAM_SCRAP_LENGTH
+                cp 9
+                else
                 ifdef PARAM_FS_CALL
                 cp 8
                 else
                 cp 7
+                endif
+                endif
+                endif
                 endif
                 jp nc,up_unsupported
                 ; Unlike focus fallback, the mapped primary must identify the
@@ -45,6 +62,22 @@ up_dispatch
                 cp (hl)
                 jp nz,up_context
                 ld a,(ix+0)
+                ifdef PARAM_SECONDARY_CALL
+                cp 11
+                jp z,up_secondary
+                endif
+                ifdef PARAM_DATA_PAGES
+                cp 10
+                jp z,up_data_pages
+                endif
+                ifdef PARAM_SCRAP_LENGTH
+                cp 9
+                jp z,up_clipboard
+                ifndef PARAM_FS_CALL
+                cp 8
+                jp z,up_unsupported
+                endif
+                endif
                 ifdef PARAM_FS_CALL
                 cp 8
                 jp z,up_filesystem
@@ -244,4 +277,15 @@ up_text_copy    ds 49,0
 
                 ifdef PARAM_FS_CALL
                 include "parameters_fs.asm"
+                endif
+                ifdef PARAM_SCRAP_LENGTH
+                include "parameters_clipboard.asm"
+                endif
+                ifdef PARAM_DATA_PAGES
+                include "parameters_pages.asm"
+                endif
+                ifdef PARAM_SECONDARY_CALL
+up_secondary
+                ld hl,up_request
+                jp PARAM_SECONDARY_CALL
                 endif

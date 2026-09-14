@@ -27,6 +27,9 @@ cpc_native_contract_admission
                 inc de
                 push de
                 call gb4_crc32_loaded        ; existing universal/native CRC
+                ifdef ADMISSION_DUAL
+                call gb4_crc_finish
+                endif
                 pop de
                 ld hl,gb4_crc_value
                 ld b,4

@@ -26,6 +26,9 @@ cpc_filemgr_admission
                 jr nz,cpc_filemgr_reject
                 ld (gb4_file_size),de
                 call gb4_crc32_loaded        ; same CRC implementation as v4
+                ifdef ADMISSION_DUAL
+                call gb4_crc_finish
+                endif
                 ld hl,gb4_crc_value
                 ld de,cpc_filemgr_contract+2
                 ld b,4

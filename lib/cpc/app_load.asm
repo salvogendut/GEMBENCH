@@ -24,6 +24,7 @@ CPC_APP_IO_END equ #6100
 ; Strict and normal have identical semantics on this single mounted M4 volume.
 ; CF=loaded, NC=absent/invalid/oversized/I/O failure. fs_ent_size is exact, not
 ; sector-rounded. Read one byte past the load limit to reject truncation.
+                ifndef PORTABLE_PACKAGE_STREAM
 fs_load_cur_sys
 fs_load_sys
                 ld a,(BANK_CUR)
@@ -118,6 +119,7 @@ cpc_app_failure
                 call foundation_bank_set
                 or a
                 ret
+                endif
 
 ; Convert bounded uppercase, padded 8.3 names. Reject separators, embedded
 ; padding and empty components before any I/O; no app may escape /GBENCH.
@@ -186,7 +188,9 @@ cpc_app_name_bad
                 or a
                 ret
 cpc_app_prefix db "/GBENCH/"
+                ifndef PORTABLE_PACKAGE_STREAM
 cpc_app_request db 1,1
                 dw CPC_APP_IO_PATH
                 db 0,0
                 dw CPC_APP_IO_BUFFER,128,0,0,0
+                endif

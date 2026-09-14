@@ -18,6 +18,22 @@ PARAM_DRAW_TEXT equ GB_TEXT
 PARAM_FS_CALL equ GB_FSCTX
 PARAM_FS_REQUEST equ MSX_FSCTX_REQ
 PARAM_FS_TRANSFER equ MSX_FSCTX_TRANSFER
+                ifdef PORTABLE_FS_IDENTITY
+PARAM_FS_IDENTITY equ 1
+                endif
+PARAM_SCRAP_LENGTH equ CLIP_LEN
+PARAM_SCRAP_DATA equ CLIP_DATA
+PARAM_SCRAP_TYPE equ SCRAP_TYPE
+                ifdef PORTABLE_PACKAGE_STREAM
+PARAM_SECONDARY_CALL equ MSX_SECONDARY_PARAM
+PARAM_EXCLUSIVE_BUSY equ MSX_SECONDARY_STATE
+                endif
+                ifdef PORTABLE_DATA_PAGES
+PARAM_DATA_PAGES equ 1
+                macro PARAM_DATA_CALL
+                call MSX_DATA_PAGE_ENTRY
+                mend
+                endif
 
 ; Entry/exit retain exact IFF2, IX, scheduler-lock and status/boolean behavior.
                 macro PARAM_ENTER

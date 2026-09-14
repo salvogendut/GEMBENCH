@@ -26,7 +26,7 @@ def prepare(case,root,media,work,sym,image,artifacts):
         raise ValueError('Settings tests require a disposable artifact image')
     target=['-i',str(image)+'@@16384']
     manifest=json.loads((media/'manifest.json').read_text())
-    delivery=manifest.get('profile')=='cpc-desktop-m4-v3'
+    delivery=manifest.get('profile') in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4')
     choices=DELIVERY_CHOICES if delivery else CHOICES
     extras={} if delivery else {'GBENCH/ALTERN.FNT':variant((work/'DEFAULT.FNT').read_bytes()),
             'GBENCH/ALTCURS.SPR':bitmap_fixture('custom',work,root)['cursor']}

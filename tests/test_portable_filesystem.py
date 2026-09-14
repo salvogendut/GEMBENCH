@@ -17,7 +17,12 @@ class PortableFilesystemTests(unittest.TestCase):
         self.assertEqual(authority['version'],[2,1])
         self.assertEqual(authority['caller_parameters']['operations']['filesystem'],8)
         self.assertEqual((fs['header_size'],fs['transfer_size']),(32,512))
-        self.assertEqual(sorted(fs['operations'].values()),list(range(15)))
+        self.assertEqual(sorted(v for k,v in fs['operations'].items() if k!='identity'),list(range(15)))
+        self.assertEqual(fs['operations']['identity'],15)
+        self.assertEqual(fs['identity']['minimum_filesystem_api_version'],2)
+        self.assertEqual(fs['identity']['result_size'],60)
+        self.assertEqual(fs['document_launch']['minimum_filesystem_api_version'],3)
+        self.assertEqual(fs['document_launch']['operations'],[12,13])
         positions=[i for f in fs['header_fields'] for i in range(f['offset'],f['offset']+f['size'])]
         self.assertEqual(positions,list(range(32)))
         for machine,call in (('msx','GB_FSCTX'),('cpc','cpc_fsctx_call')):

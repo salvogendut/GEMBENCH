@@ -145,6 +145,15 @@ int main(void)
 
     memcpy((void *)XFER, "DOC     TXT", 11);
     call(OP_PREP_LAUNCH, a, 0x0101); assert(PENDING[P_ACTIVE]);
+#ifdef FSCTX_HANDOFF
+    call(OP_ADOPT_LAUNCH,0,0x0102);assert(REQ_STATUS==OWNER && PENDING[P_ACTIVE]==1);
+    call(OP_PREP_LAUNCH,b,0x0102);assert(REQ_STATUS==FULL && PENDING[P_OWNER]==1);
+    /* The real resident launcher binds after owner allocation; no client
+     * operation can manufacture this state. Assembly tests cover that half. */
+    PENDING[P_ACTIVE]=3;PENDING[P_OWNER]=2;PENDING[P_OWNER+1]=1;
+    call(OP_ADOPT_LAUNCH,0,0x0202);assert(REQ_STATUS==OWNER && PENDING[P_ACTIVE]==3);
+    call(OP_ADOPT_LAUNCH,0,0x0101);assert(REQ_STATUS==OWNER && PENDING[P_ACTIVE]==3);
+#endif
     call(OP_ADOPT_LAUNCH, 0, 0x0102);
     assert(REQ_STATUS == FULL && PENDING[P_ACTIVE]);
     call(OP_CLOSE, c, 0x0101);
@@ -152,6 +161,42 @@ int main(void)
     assert(REQ_STATUS == OK && !PENDING[P_ACTIVE] && REQ_HANDLE == 0x0203);
     assert(!memcmp((const void *)(context_at(2) + CTX_NAME), "DOC     TXT", 11));
     assert(!strcmp((const char *)context_at(2) + CTX_PATH, "\\DIR\\SUB"));
+#ifdef FSCTX_IDENTITY
+    {
+        unsigned char record[CTX_SIZE], pending[64];
+        unsigned int adopted=REQ_HANDLE;
+        before=io_calls;
+        memcpy(record,(const void *)context_at(2),sizeof(record));
+        memcpy(pending,(const void *)PENDING,sizeof(pending));
+        memset((void *)XFER,0xA5,512);
+        call(OP_IDENTITY,adopted,0x0102);
+        assert(REQ_STATUS==OK && REQ_ACTUAL==60 && io_calls==before);
+        assert(XFER[0]==0 && !memcmp((const void *)(XFER+1),"DOC     TXT",11));
+        assert(!strcmp((const char *)XFER+12,"/DIR/SUB"));
+        for(unsigned int i=20;i<60;++i)assert(XFER[i]==0);
+        for(unsigned int i=60;i<512;++i)assert(XFER[i]==0xA5);
+        assert(!memcmp(record,(const void *)context_at(2),sizeof(record)));
+        assert(!memcmp(pending,(const void *)PENDING,sizeof(pending)));
+        memset((void *)XFER,0xA5,512);
+        call(OP_IDENTITY,adopted,0x0101);assert(REQ_STATUS==OWNER && !REQ_ACTUAL);
+        call(OP_IDENTITY,adopted+0x100,0x0102);assert(REQ_STATUS==STALE && !REQ_ACTUAL);
+        for(unsigned int i=0;i<512;++i)assert(XFER[i]==0xA5);
+        memset((void *)(context_at(2)+CTX_PATH),'X',48);
+        context_at(2)[CTX_PATH]='\\';context_at(2)[CTX_PATH+47]=0;
+        call(OP_IDENTITY,adopted,0x0102);
+        assert(REQ_STATUS==OK && XFER[12]=='/' && XFER[58]=='X' && XFER[59]==0);
+        context_at(2)[CTX_PATH+47]='X';memset((void *)XFER,0xA5,512);
+        call(OP_IDENTITY,adopted,0x0102);assert(REQ_STATUS==BADARG && !REQ_ACTUAL);
+        for(unsigned int i=0;i<512;++i)assert(XFER[i]==0xA5);
+        context_at(2)[CTX_PATH]=0;
+        call(OP_IDENTITY,adopted,0x0102);assert(REQ_STATUS==BADARG);
+        context_at(2)[CTX_PATH]='X';context_at(2)[CTX_PATH+1]=0;
+        call(OP_IDENTITY,adopted,0x0102);assert(REQ_STATUS==BADARG);
+        assert(io_calls==before);
+    }
+#else
+    call(OP_IDENTITY,0x0203,0x0102);assert(REQ_STATUS==BADARG && !REQ_ACTUAL);
+#endif
     call(OP_REWIND, c, 0x0101); assert(REQ_STATUS == STALE);
     call(OP_ADOPT_LAUNCH, 0, 0x0102); assert(REQ_STATUS == STALE);
     call(OP_CLOSE, d, 0x0101);

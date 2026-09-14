@@ -31,11 +31,34 @@ k_poll_ready
                 cpl
                 and #20
                 ld (in_fire),a
-                ld a,(CPC_KEYS+8)           ; Escape row 8 bit 2
+                ifdef PORTABLE_FS_HANDOFF
+                call cpc_escape_sample
+                else
+                ld a,(CPC_KEYS+8)
                 cpl
                 and 4
+                endif
                 ld (in_quit),a
                 include "../../kernel/core/poll_publish.asm"
+
+; One Escape press produces one GB_QUIT, even across modal/focus changes.
+; Text windows reserve Escape for this close/cancel path (GETKEY masks 27).
+; Only POLL claims the press, after its own fresh scan; GETKEY cannot consume
+; it before chrome sees it. A POLL-sampled release rearms the physical key.
+; Clobbers AF/E/HL. The boot-cleared routing byte owns the held state.
+                ifdef PORTABLE_FS_HANDOFF
+cpc_escape_sample
+                ld a,(CPC_KEYS+8)           ; active-low row 8 bit 2
+                cpl
+                and 4
+                ld e,a
+                ld hl,cpc_escape_held
+                ld a,(hl)
+                ld (hl),e
+                cpl
+                and e
+                ret
+                endif
 
 ; NC if the next six-tick deadline is due. A 16-bit stamp avoids the old
 ; 8-bit wrap after a long operation. Missed whole periods are not replayed.
@@ -129,6 +152,9 @@ cpc_pointer_deadline
                 ld (cpc_poll_stamp),hl
                 endif
                 call cpc_input_scan
+                ifdef PORTABLE_FS_HANDOFF
+                call cpc_text_pointer
+                endif
                 ld a,(poll_byte)
                 ld b,a
                 ld a,(poll_line)

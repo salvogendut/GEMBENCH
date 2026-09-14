@@ -4,6 +4,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 OUT="${1:-build/msx/GBFSCTX.RAW}"
+identity="${PORTABLE_FS_IDENTITY:-0}"
+handoff="${PORTABLE_FS_HANDOFF:-0}"
+[[ "$handoff" = 0 || "$handoff" = 1 ]] || { echo 'PORTABLE_FS_HANDOFF must be 0 or 1' >&2; exit 2; }
+[ "$handoff" = 0 ] || identity=1
+[[ "$identity" = 0 || "$identity" = 1 ]] || { echo 'PORTABLE_FS_IDENTITY must be 0 or 1' >&2; exit 2; }
+identity_flags=()
+[ "$identity" = 0 ] || identity_flags=(-DFSCTX_IDENTITY=1)
+[ "$handoff" = 0 ] || identity_flags+=(-DFSCTX_HANDOFF=1)
 GB="lib/gb"
 KC="kernel/kc"
 SDCC="${SDCC:-sdcc}"
@@ -19,7 +27,7 @@ deps=("$0" tools/build_cache.sh tools/gblib_subset.py "$GB/crt0.s" "$GB/gblib.s"
       "$KC/msx_fsctx.h" kernel/core/fsctx_layout.h kernel/core/fsctx_contract.h
       kernel/core/fsctx_policy.inc)
 stamp="$OUT.stamp"
-cache_key=$(printf '%s\n' "build_fsctxmod.v1" "SDCC=$SDCC" "SDAS=$SDAS" "MAKEBIN=$MAKEBIN")
+cache_key=$(printf '%s\n' "build_fsctxmod.v1" "SDCC=$SDCC" "SDAS=$SDAS" "MAKEBIN=$MAKEBIN" "IDENTITY=$identity" "HANDOFF=$handoff")
 if ! gb_needs_rebuild "$OUT" "$stamp" "$cache_key" "${deps[@]}"; then
     echo "Up to date $OUT ($(stat -c%s "$OUT") bytes)"
     exit 0
@@ -30,7 +38,7 @@ python3 tools/gblib_subset.py "$GB/gblib.s" "$work/gblib.s" "$KC/gbfsctx.symbols
 "$SDAS" -o "$work/gblib.rel" "$work/gblib.s"
 "$SDAS" -o "$work/msx.rel" "$KC/gbfsctx_msx.s"
 "$SDCC" -mz80 --opt-code-size --max-allocs-per-node 100000 --fomit-frame-pointer \
-    -DGB_MSX2 -I "$GB" -c "$KC/gbfsctx_mod.c" -o "$work/mod.rel"
+    -DGB_MSX2 "${identity_flags[@]}" -I "$GB" -c "$KC/gbfsctx_mod.c" -o "$work/mod.rel"
 "$SDCC" -mz80 --no-std-crt0 --code-loc 0x6000 --data-loc 0x7F00 \
     "$work/crt0.rel" "$work/mod.rel" "$work/msx.rel" "$work/gblib.rel" \
     -o "$work/mod.ihx"

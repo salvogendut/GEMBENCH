@@ -8,8 +8,9 @@
 ; The MSX standard mouse joins in M4 (GTPAD path).
 ;
 ; k_getkey also lives here (BIOS CHSNS/CHGET instead of the CPC KM buffer):
-; cursor-key codes 28..31 are dropped - those keys ARE the pointer, and would
-; otherwise flood a typing app exactly like the CPC's joystick-key gotcha.
+; Legacy cursor-key codes 28..31 are dropped because they drive the pointer.
+; The opt-in handoff receiver instead routes plain arrows/Space to explicit
+; text windows; Ctrl temporarily restores keyboard-pointer operation.
 ; ---------------------------------------------------------------------------
 
 ; --- direction bits (shared semantics with the CPC layer) -------------------
@@ -67,16 +68,29 @@ input_poll
                 ld    (in_fire),a
                 ld    (in_quit),a
                 ld    (in_joy_dirs),a
+                ifdef PORTABLE_FS_HANDOFF
+                call  msx_text_mode
+                ld    (MSX_TEXT_INPUT),a
+                or    a
+                jr    nz,ip_cursor_done
+                endif
                 xor   a                       ; stick 0 = cursor keys
                 call  read_stick
+ip_cursor_done
                 ld    a,(MSX_MOUSE)           ; port 1 is either mouse or joystick
                 or    a
                 jr    nz,ip_no_joystick
                 ld    a,1                     ; stick 1 = joystick port 1
                 call  read_stick
 ip_no_joystick
+                ifdef PORTABLE_FS_HANDOFF
+                ld    a,(MSX_TEXT_INPUT)
+                or    a
+                jr    nz,ip_space_done
+                endif
                 xor   a                       ; trigger 0 = space bar
                 call  read_trig
+ip_space_done
                 ld    a,1                     ; trigger 1 = joystick 1 button
                 call  read_trig
                 call  joy_to_delta
@@ -252,6 +266,9 @@ add_de_to
 
 ; --- k_getkey (GB_GETKEY): A = a typed character, or 0 if none ---------------
 k_getkey
+                ifdef PORTABLE_FS_HANDOFF
+                jp    msx_text_getkey
+                else
                 ld    ix,CHSNS
                 call  msx_bios
                 jr    z,kgk_none              ; ZF set = nothing waiting
@@ -267,6 +284,7 @@ kgk_have
 kgk_none
                 xor   a
                 ret
+                endif
 
 ; --- State -------------------------------------------------------------------
 in_dx           dw    0

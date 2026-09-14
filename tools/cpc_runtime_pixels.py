@@ -179,6 +179,7 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
             labels=custom[0] if custom else ('Toggle','Cancel')
             y=8
         w=max((len(s)*6+(0 if native else 3))//4+4 for s in labels)
+        if not native and len(labels)==5:w-=1
         top=popup.get('top',0) if native else 0
         vis=min(len(labels),10) if native else len(labels)
         h=vis*10+4

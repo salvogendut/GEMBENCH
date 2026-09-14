@@ -20,8 +20,8 @@ proc pp_record {op data {version 1}} {
     while {[llength $result] < 16} {lappend result 0}
     return $result
 }
-proc pp_add {name record status {value 0} {pointer 0x7EE0} {size 16} {writes {}} {worker 0}} {
-    lappend ::pp_cases [list $name $record $status $value $pointer $size $writes $worker]
+proc pp_add {name record status {value 0} {pointer 0x7EE0} {size 16} {writes {}} {worker 0} {expected {}}} {
+    lappend ::pp_cases [list $name $record $status $value $pointer $size $writes $worker $expected]
 }
 proc pp_hook {} {
     set op [peek [reg HL]]
@@ -49,6 +49,8 @@ proc pp_begin {} {
     set ::pp_mapper [debug read ioports 0xFD]
     set ::pp_current [peek 0x1342]
     set ::pp_lock [peek 0x1340]
+    set ::pp_clipboard [debug read_block memory 0x3E00 512]
+    set ::pp_cliptag [peek 0x133D]
     set ::pp_timer [debug read_block memory 0xC3CA 6]
     set ::pp_drop [peek 0xC1EC]
     set ::pp_drop_gen [peek 0xC03F]
@@ -72,7 +74,20 @@ proc pp_begin {} {
     foreach size {0 15 17 256 65535} {pp_add "record-size-$size" $busy 1 0 0x7EE0 $size}
     pp_add record-exact-end $busy 0 0 0x7EF0
     pp_add version [pp_record 6 {} 2] 6
-    pp_add operation [pp_record 9 {}] 6
+    pp_add operation [pp_record 10 {}] 6
+    pp_add clipboard-worker [pp_record 9 {176 126 8 0}] 2 0 0x7EE0 16 {} 1
+    pp_add clipboard-low-header [pp_record 9 {255 63 8 0}] 1
+    pp_add clipboard-header-end [pp_record 9 {249 126 8 0}] 1
+    pp_add clipboard-short-header [pp_record 9 {176 126 7 0}] 1
+    pp_add clipboard-action [pp_record 9 {176 126 8 0}] 1 0 0x7EE0 16 {0x7EB0 4}
+    pp_add clipboard-corrupt-length [pp_record 9 {176 126 8 0}] 0 0 0x7EE0 16 \
+        {0x7EB0 0 0x3E00 255 0x3E01 1 0x133D 1} 0 \
+        {0x7EB1 5 0x7EB2 0 0x7EB6 0 0x7EB7 0 0x3E00 255 0x3E01 1 0x133D 1}
+    pp_add clipboard-unknown-tag [pp_record 9 {176 126 8 0}] 0 0 0x7EE0 16 \
+        {0x7EB0 0 0x3E00 2 0x3E01 0 0x133D 127} 0 \
+        {0x7EB1 0 0x7EB2 0 0x7EB6 2 0x7EB7 0 0x133D 127}
+    pp_add clipboard-exact-header [pp_record 9 {248 126 8 0}] 0 0 0x7EE0 16 \
+        {0x7EF8 0} 0 {0x7EF9 0 0x7EFA 0 0x7EFE 2 0x7EFF 0}
     pp_add line-outside [pp_record 1 {0 2 10 0 20 0 10 0 3}] 1
     pp_add line-y-outside [pp_record 1 {10 0 212 0 20 0 10 0 3}] 1
     pp_add line-pen [pp_record 1 {10 0 10 0 20 0 10 0 4}] 1
@@ -144,6 +159,8 @@ proc pp_next {} {
     poke 0x1340 [expr {$::pp_iff == 0 ? 0 : 1}]
     set ::pp_case_lock [peek 0x1340]
     set ::pp_before_vram [debug read_block VRAM 0 131072]
+    set ::pp_before_clipboard [debug read_block memory 0x3E00 512]
+    set ::pp_before_cliptag [peek 0x133D]
     set ::pp_canary [expr {$::pp_sp - 128}]
     for {set i 0} {$i < 8} {incr i} {poke [expr {$::pp_canary+$i}] 0xA5}
     reg SP [expr {$::pp_sp - 2}]
@@ -158,7 +175,7 @@ proc pp_next {} {
     reg PC 0x7ED0
 }
 proc pp_return {} {
-    lassign $::pp_case name record status value pointer size writes worker
+    lassign $::pp_case name record status value pointer size writes worker expected
     if {[reg A] != $status || [reg E] != $value} {
         error "$name IFF=$::pp_iff returned [reg A]/[reg E], expected $status/$value"
     }
@@ -173,6 +190,13 @@ proc pp_return {} {
     if {[debug read_block memory 0x7F00 256] ne $::pp_guard} {error "$name app snapshot guard"}
     if {$status != 0 && [debug read_block VRAM 0 131072] ne $::pp_before_vram} {
         error "$name rejection changed VRAM"
+    }
+    if {$status != 0 && ([debug read_block memory 0x3E00 512] ne $::pp_before_clipboard ||
+                        [peek 0x133D]!=$::pp_before_cliptag)} {
+        error "$name rejection changed clipboard"
+    }
+    foreach {address byte} $expected {
+        if {[peek $address]!=$byte} {error "$name memory $address differs: [peek $address]/$byte"}
     }
     incr ::pp_count
     pp_next
@@ -189,6 +213,8 @@ proc pp_finish {} {
     poke 0xC03F $::pp_drop_gen
     poke 0x1342 $::pp_current
     poke 0x1340 $::pp_lock
+    debug write_block memory 0x3E00 $::pp_clipboard
+    poke 0x133D $::pp_cliptag
     debug write_block "CPU regs" 0 $::pp_regs
     if {$::pp_workers == 0 || $::pp_root_draws == 0} {error "missing real worker/root calls"}
     puts stderr "PARAMETERS_PASS cases=$::pp_count real_worker_calls=$::pp_workers root_draws=$::pp_root_draws"

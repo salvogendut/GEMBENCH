@@ -7,7 +7,11 @@
  * The raw gb_clip_* API remains the storage contract and retains its complete
  * 510-byte payload.  A private low-RAM tag describes payloads written through
  * this source API; a raw gb_clip_set() invalidates that tag and is reported as
- * GB_SCRAP_UNTYPED.
+ * GB_SCRAP_UNTYPED. Universal apps link UNIVERSAL_SCRAP=1 and require the
+ * typed-clipboard capability: the same API uses caller-owned GB_PARAMS records
+ * instead of private addresses. Root-only, non-reentrant; nonempty payloads
+ * must remain in primary app RAM, not the kernel stack. Metadata/count outputs
+ * are copied by the SDK and may be automatic variables.
  */
 
 #define GB_SCRAP_CAPACITY 510u
@@ -25,6 +29,8 @@
 #define GB_SCRAP_ERR_TYPE       3u
 #define GB_SCRAP_ERR_MISMATCH   4u
 #define GB_SCRAP_ERR_STATE      5u
+#define GB_SCRAP_ERR_UNSUPPORTED 6u  /* universal transport only */
+#define GB_SCRAP_ERR_CONTEXT     7u  /* universal transport only */
 
 typedef struct {
     unsigned int length;

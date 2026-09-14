@@ -95,6 +95,7 @@ def compile_module(work,sym,root,directory=False,fault_metadata=False,writable=F
                     *(["-DCPC_FS_DIRECTORY"] if directory else []),
                     *(["-DCPC_FAULT_FS_META"] if fault_metadata else []),
                     *(["-DCPC_FS_WRITE"] if writable else []),
+                    *(["-DFSCTX_IDENTITY", "-DFSCTX_HANDOFF"] if sym.get('cpc_fs_handoff') else []),
                     *(["-DCPC_FAULT_FS_APPEND"] if fault_append else []),
                     "--fomit-frame-pointer","-c",str(root/"kernel/kc/gbfsctx_cpc.c"),"-o","fs_mod.rel"],cwd=work,check=True)
     limit=sym['cpc_fs_module_limit']

@@ -43,6 +43,7 @@ unsigned char gb_universal_ready(void)
         (info->capabilities_high & required_high) == required_high);
 }
 
+#ifndef GB_UNIVERSAL_MINIMAL
 unsigned char gb_has_capability(unsigned long capability)
 {
     const gb_sysinfo_v6_t *info = info_v6();
@@ -52,6 +53,7 @@ unsigned char gb_has_capability(unsigned long capability)
     return (unsigned char)((info->capabilities_low & low) == low &&
                            (info->capabilities_high & high) == high);
 }
+#endif
 
 unsigned char gb_screen_columns(void)
 {
@@ -65,6 +67,7 @@ unsigned char gb_screen_lines(void)
     return info ? info->screen_lines : 0;
 }
 
+#ifndef GB_UNIVERSAL_MINIMAL
 unsigned int gb_screen_width_pixels(void)
 {
     const gb_sysinfo_v6_t *info = info_v6();
@@ -96,6 +99,7 @@ unsigned int gb_pixel_aspect_x_256(void)
      * CPC/PCW bitmap pixels are treated as square by the portable UI. */
     return (info && info->platform == GB_PLATFORM_MSX2) ? 461u : 256u;
 }
+#endif
 
 void gb_message_read(gb_msg_t *message)
 {
@@ -105,6 +109,7 @@ void gb_message_read(gb_msg_t *message)
     for (i = 0; i != sizeof(gb_msg_t); ++i) out[i] = U_MESSAGE[i];
 }
 
+#ifndef GB_UNIVERSAL_MINIMAL
 void gb_message_set_p1(unsigned char value)
 {
     U_MESSAGE[2] = value;
@@ -131,12 +136,14 @@ void gb_time_observe(gb_time_snapshot_t *snapshot)
     if (!snapshot) return;
     for (i = 0; i != sizeof(gb_time_snapshot_t); ++i) out[i] = U_TIME[i];
 }
+#endif
 
 unsigned char gb_boot_drive_current(void)
 {
     return U_BOOT_DRIVE;
 }
 
+#ifndef GB_UNIVERSAL_MINIMAL
 void gb_drag_name_read(char *name11)
 {
     unsigned char i;
@@ -158,6 +165,7 @@ unsigned char gb_drop_is_claimed(void)
 {
     return (unsigned char)((U_DROP_CLAIM & 0x80u) != 0u);
 }
+#endif
 
 void gb_window_rect(gb_rect_t *rect)
 {
@@ -174,6 +182,7 @@ static void put_word(volatile unsigned char *out, unsigned int value)
     out[1] = (unsigned char)(value >> 8);
 }
 
+#ifndef GB_UNIVERSAL_MINIMAL
 void gb_line(unsigned int x0, unsigned int y0,
              unsigned int x1, unsigned int y1, unsigned char pen)
 {
@@ -187,6 +196,7 @@ void gb_line(unsigned int x0, unsigned int y0,
     request.data[8] = (unsigned char)(pen & 3u);
     (void)gb_uparam_call(&request);
 }
+#endif
 
 void gb_text_semantic(unsigned char x, unsigned char y, const char *text,
                       unsigned char pen, unsigned char paper)
@@ -206,6 +216,7 @@ void gb_text_semantic(unsigned char x, unsigned char y, const char *text,
     (void)gb_uparam_call(&request);
 }
 
+#ifndef GB_UNIVERSAL_MINIMAL
 unsigned char gb_timer_damage_for(gb_window_t window, unsigned char x,
                                   unsigned char y, unsigned char w,
                                   unsigned char h)
@@ -249,3 +260,4 @@ void gb_timer_cancel(gb_window_t window)
 {
     (void)timer_request(GB_PARAMS_TIMER_CANCEL, window);
 }
+#endif

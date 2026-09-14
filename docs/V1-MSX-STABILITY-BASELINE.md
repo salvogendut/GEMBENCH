@@ -3,16 +3,52 @@
 Recorded 2026-09-08 on `feature/82-msx-stability`,
 [issue #82](https://github.com/salvogendut/GEMBENCH/issues/82).
 Production source pin: `9ff0825d77004f9a0380e74b3dc45f3d6d9e772c`.
-The baseline and [application ledger](V1-APPLICATION-LEDGER.md) are recorded;
-**the stability gate remains open**. Notepad migration has not started.
+The baseline and [application ledger](V1-APPLICATION-LEDGER.md) are recorded.
+**2026-09-09: issue #82 is closed as a bounded baseline/inventory checkpoint.**
+The observed input, firmware and emulator blockers are resolved; this is not
+whole-distribution release acceptance. Unified Notepad has started in
+[issue #84](https://github.com/salvogendut/GEMBENCH/issues/84), with its
+[source/memory audit and document-I/O foundation](UNIFIED-NOTEPAD.md).
 
-2026-09-09 follow-up: the MSX short-click fix is implemented and passes bounded
-both-mode openMSX/1983 checks. Candidate RainBIOS #169 also runs GEOBENCH in
-both modes. See [the implementation record](MSX-DESK-CLICK-INVESTIGATION.md#implementation-and-verification--2026-09-09)
-for new artifacts, remaining limits and the separate firmware-probe discrepancy.
-The baseline results below remain historical, not results for the fixed build.
+## Close-out — 2026-09-09
 
-## Scope and isolation
+- [GEMBENCH PR #83](https://github.com/salvogendut/GEMBENCH/pull/83) merged the
+  bounded short-button capture fix; main merge `1367593`. Both-mode openMSX and
+  1983 regressions retain the original 80 ms Desk pulses. See
+  [the implementation record](MSX-DESK-CLICK-INVESTIGATION.md#implementation-and-verification--2026-09-09).
+- [RainBIOS PR #171](https://github.com/salvogendut/rainbios/pull/171) merged
+  main CHGMOD bitmap forwarding, display/VBlank setup and full-width clear;
+  main `e28ff2f`, issue #169 closed.
+- The remaining first-VRAM-read discrepancy was an immediate `IN A,(n)`
+  timing defect in 1983, not another firmware change.
+  [1983 PR #172](https://github.com/salvogendut/1983/pull/172) is merged at
+  `c0a0b4a`; 1983 #171 and RainBIOS #170 are closed. The normal 1983 executable
+  was rebuilt at that merge. The unchanged corrected RainBIOS ROMs pass the
+  original main/direct-SUBROM/MSX1 probes; independent openMSX controls pass.
+- Retained evidence: `build/1983-171/.local/evidence/`. The emulator correction
+  passes 96 CPU I/O cases, 457 PAL/NTSC first-read positions and all 30 emulator
+  test programs. `geobench-mode{6,7}/result.json` passes three accessory
+  lifecycle cycles plus 50 short Desk cycles per mode (243/273 checks), final
+  one window and maximum stack use 53 bytes. `rainbios-probes-merged-main.log`
+  repeats the original firmware probes with the rebuilt merged executable;
+  `openmsx-controls.log` records the independent controls.
+
+Use the fixed private MSX images and matching symbols under
+`build/msx-buttons-82/evidence/mode{6,7}/`, not its stale initial aggregate image.
+The corrected RainBIOS ROMs are under `build/rainbios-170/build/`; their hashes:
+main `2c5dd90e6994f409f852312bd1f4fe47439b1e19a9400fa4a8733eaa31727337`,
+subROM `7b06e3e10990d2d815cf8b9a640e689167ab47b0f90df821cb48d0e7158049a0`,
+Omega `5e6b6ffd0a59fe8154d9743f7bf6ee2306549fd0ae75e6233207a231333114f8`.
+No new ROM was imported into 1983's bundled firmware, and no normal MSX/CPC
+image was rebuilt. Closing this issue does not qualify those old default ROMs.
+
+Physical/SDL mouse smoothness, 4–6-frame keyboard-pointer gaps, long-duration
+stress, hardware, MSX storage faults/exhaustion and the remaining application
+coverage below still need release qualification. Carry the existing stability
+workload into each migration, adding real document/failure/cleanup checks.
+The results below preserve the original pre-fix evidence, not new passes.
+
+## Original baseline: scope and isolation
 
 A fresh complete MSX distribution was built in detached worktree
 `build/msx-stability-82`, using the project's SDCC toolchain. No production
@@ -28,7 +64,7 @@ Tests steer real keyboard-matrix input and use read-only observations. The 1983
 bridge links the unmodified emulator core; it does not inject guest RAM, copy
 host-side window policy into the guest, or modify the emulator to make tests pass.
 
-## Results
+## Original baseline results
 
 Paths below are relative to `build/msx-stability-82/evidence/`. Large local
 evidence/media are not committed. This document preserves the conclusions,
@@ -59,7 +95,7 @@ changes. Maximum observed gap was four PAL frames (80 ms). This is a baseline
 measurement, not a newly accepted latency budget or proof of smooth host mouse
 movement. Earlier diagnostic runs observed a six-frame gap; retain them too.
 
-### Open findings — do not start migrating over them silently
+### Original findings — resolved as recorded in the close-out above
 
 Follow-up investigation: the Desk loss is now traced to a 135–136 ms interval
 between input samples during Clock repaint, enclosing the complete 80 ms click.
@@ -94,8 +130,8 @@ preserve their original discovery evidence; see the dated follow-up above.
    Firmware implementation/branch and the subsequent 1983 ROM update remain
    separate work; neither repository's source was changed here.
 
-Issue #82 stays open. Establishing this record is not permission to treat the
-MSX stability prerequisite or the full Notepad milestone as complete.
+At the original checkpoint these findings kept #82 open. Their subsequent
+resolution closes that prerequisite, not the full Notepad milestone.
 
 ### Test defects corrected during investigation
 

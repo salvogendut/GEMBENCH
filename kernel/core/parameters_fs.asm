@@ -49,7 +49,11 @@ up_fs_transfer_end
 up_fs_copy
                 ld hl,(up_request+2)
                 ld a,(hl)
+                ifdef PARAM_FS_IDENTITY
+                cp 16
+                else
                 cp 15
+                endif
                 jp nc,up_bad
                 ld de,PARAM_FS_REQUEST
                 ld bc,32

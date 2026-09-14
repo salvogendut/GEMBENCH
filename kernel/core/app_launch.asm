@@ -4,6 +4,10 @@
 ; returns), then restore the caller's page. Non-blocking: the app becomes a live
 ; window the master loop services, rather than running its own loop.
 k_wm_open
+                ifdef APP_LAUNCH_GUARD
+                call APP_LAUNCH_GUARD
+                ret nc
+                endif
                 ld    de,fs_req_name
                 call  copy11
                 ld    hl,launch_arg               ; opened with no file -> blank the arg
@@ -23,6 +27,10 @@ kwo_blank       ld    (hl),a
 ; a data file auto-opens in the app the caller chose (the File Manager picks it by
 ; extension - see apps/filemgr/main.c).
 k_wm_launch_as
+                ifdef APP_LAUNCH_GUARD
+                call APP_LAUNCH_GUARD
+                ret nc
+                endif
                 push  hl                           ; app name
                 ld    hl,fs_ent_name              ; current entry -> the launch file arg
                 ld    de,launch_arg
@@ -31,12 +39,19 @@ k_wm_launch_as
                 ld    de,fs_req_name
                 call  copy11
 wm_open_go
+                ifdef APP_LAUNCH_TRANSACTION
+                jp    APP_LAUNCH_TRANSACTION
+wm_open_transaction
+                endif
                 ld    a,(WM_NWIN)                 ; memory pages and window slots are independent
                 cp    WM_MAXWIN
                 ret   nc
                 call  owner_alloc
                 ret   nc
                 ld    (CORE_PENDING_OWNER),de
+                ifdef APP_LAUNCH_BIND
+                call  APP_LAUNCH_BIND
+                endif
                 ld    b,GB_PAGE_APPLICATION
                 call  page_alloc_owned
                 jr    nc,wmo_owner_fail
@@ -47,6 +62,9 @@ wm_open_go
                 di
                 ld    a,(wm_open_page)
                 call  bank_set
+                ifdef APP_LOAD_AND_ADMIT
+                call  APP_LOAD_AND_ADMIT          ; provider retains path/format policy
+                else
                 ld    hl,APP_LOAD_MAX
                 ld    (fs_load_max),hl
                 ld    hl,APP_BASE
@@ -61,6 +79,7 @@ wm_open_go
 wmo_load_sys    call  fs_load_sys                 ; normal app open: boot-first, browse-fallback
 wmo_loaded      jr    nc,wmo_fail
                 call  APP_ADMISSION_GATE            ; v4 validates before outer JP/publication
+                endif
                 jr    nc,wmo_fail               ; owner/page rollback is shared and complete
                 ei
                 call  APP_BASE                    ; main -> GB_WMADD + paint, then ret

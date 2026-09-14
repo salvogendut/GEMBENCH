@@ -126,6 +126,11 @@ button_irq_template
                 out (#AA),a
                 in a,(#A9)                  ; raw matrix row 8, bit 0 = Space
                 ld c,a
+                ifdef PORTABLE_FS_HANDOFF
+                ld a,(MSX_TEXT_INPUT)       ; force Space-up for a focused text window
+                or c
+                ld c,a
+                endif
                 ld a,b
                 out (#AA),a
                 ld a,15
@@ -169,19 +174,35 @@ button_space_up
                 add a,a
                 add a,a
                 add a,e
+                ifdef PORTABLE_FS_HANDOFF
+                ; Queue stays in CFxx. Save three bytes without moving the
+                ; fixed CF60 IRQ entry used by already-built scheduler payloads.
+                add a,MSX_BUTTON_QUEUE&255
+                ld e,a
+                ld d,MSX_BUTTON_QUEUE/256
+                else
                 ld e,a
                 ld d,0
                 ld hl,MSX_BUTTON_QUEUE
                 add hl,de
                 ex de,hl
+                endif
                 ld hl,MSX_BUTTON_VIEW
                 ld bc,5
                 ldir
+                ifdef PORTABLE_FS_HANDOFF
+                ld l,MSX_BUTTON_COUNT&255    ; HL = CF3B after the five-byte copy
+                else
                 ld hl,MSX_BUTTON_COUNT
+                endif
                 inc (hl)
                 jr button_irq_done
 button_irq_full
+                ifdef PORTABLE_FS_HANDOFF
+                ld l,MSX_BUTTON_DROPPED&255  ; HL still points to CF30 held level
+                else
                 ld hl,MSX_BUTTON_DROPPED     ; drop newest, never overwrite oldest
+                endif
                 inc (hl)
                 jr nz,button_irq_done
                 dec (hl)
@@ -192,4 +213,12 @@ button_irq_done
                 pop af
                 ret
 button_irq_end
+                ifdef PORTABLE_FS_HANDOFF
+                assert (MSX_BUTTON_QUEUE&#FF00)==((MSX_BUTTON_QUEUE+19)&#FF00),"queue offset arithmetic crosses page"
+                assert ((MSX_BUTTON_VIEW+5)&#FF00)==(MSX_BUTTON_COUNT&#FF00),"post-copy counter leaves page"
+                assert (MSX_BUTTON_LEVEL&#FF00)==(MSX_BUTTON_DROPPED&#FF00),"overflow counter leaves page"
+                endif
                 assert MSX_BUTTON_IRQ+button_irq_end-button_irq_template<=MSX_BUTTON_LIMIT,"button capture exceeds private page-3 slot"
+                ifdef PORTABLE_PACKAGE_STREAM
+                assert MSX_BUTTON_IRQ+button_irq_end-button_irq_template<=MSX_PACKAGE_IO_BASE,"button IRQ overlaps package helpers"
+                endif

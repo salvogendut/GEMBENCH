@@ -105,7 +105,13 @@ class Driver:
             if abs(px-x) <= 1 and abs(py-y) <= 3:
                 self.key(8, held)
                 self.frames(8)
-                return
+                # A slow popup repaint may still consume its last sampled
+                # movement after key release. Recheck the settled position so
+                # a row-centre target cannot turn into a click on the next item.
+                px, py = self.read(self.layout['POLL_MX'], 2)
+                if abs(px-x) <= 1 and abs(py-y) <= 3:
+                    return
+                continue
             mask = 128 if px < x-1 else 16 if px > x+1 else 64 if py < y-3 else 32
             self.key(8, held | mask)
             self.frames(1)

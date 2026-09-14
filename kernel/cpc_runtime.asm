@@ -1,6 +1,7 @@
 ; #77 unified M4 runtime composition. Same core, no diagnostic WM/callbacks.
 ; Experimental launcher only, NOT the Desktop distribution or all SDK services.
 CPC_RUNTIME equ 1
+ADMISSION_TYPED_CLIPBOARD equ 1
 CPC_DRAWING equ 1
 CPC_WM equ 1
 CPC_LIFETIME equ 1
@@ -12,6 +13,14 @@ CPC_FSCTX equ 1
 CPC_FS_DIRECTORY equ 1
 CPC_FS_WRITE equ 1
                 include "../lib/cpc/production_layout.inc"
+                ifdef PORTABLE_FS_HANDOFF
+                ifndef PORTABLE_PACKAGE_STREAM
+                fail "CPC handoff requires the private package receiver"
+                endif
+                endif
+                ifdef PORTABLE_PACKAGE_STREAM
+                include "cpc_package_provider.inc"
+                endif
                 include "cpc_registration_provider.inc"
 FAULT_STORAGE_BANK equ 0
 FAULT_STORAGE_ROM equ 0
@@ -35,6 +44,10 @@ storage_response_fault
                 ret
                 include "../lib/cpc/irq.asm"
                 include "../lib/cpc/input.asm"
+                ifdef PORTABLE_PACKAGE_STREAM
+                include "../lib/cpc/m4_stream_read.asm"
+                include "cpc_package_hardware.asm"
+                endif
 cpc_hardware_used_end
                 assert $<=CPC_HARDWARE_END,"runtime hardware overflow"
                 save "HARDWARE.RAW",cpc_hardware_begin,$-cpc_hardware_begin
@@ -63,6 +76,9 @@ cpc_runtime_core_end
                 include "cpc_bitmap_assets.asm"
                 include "cpc_title_assets.asm"
                 include "../lib/cpc/runtime_input.asm"
+                ifdef PORTABLE_FS_HANDOFF
+                include "cpc_text_input.asm"
+                endif
                 include "cpc_runtime_boot.asm"
 cpc_font_payload
                 incbin "DEFAULT.FNT"
@@ -93,3 +109,14 @@ cpc_root_popup_end equ CPC_APP_LIMIT
 cpc_kernel_used_end
                 assert $<=CPC_KERNEL_END,"unified runtime exceeds high kernel"
                 save "CORE.RAW",cpc_kernel_begin,$-cpc_kernel_begin
+                ifdef PORTABLE_PACKAGE_STREAM
+                assert CPC_EDIT_STATE_END<=CPC_STREAM_STATE,"package/editor state overlap"
+                org CPC_PACKAGE_MODULE_BASE
+                jp package_load
+                db "CPK4",1
+                include "core/package_stream.asm"
+cpc_package_module_used_end
+                assert $<=CPC_PACKAGE_MODULE_BASE+CPC_PACKAGE_MODULE_SIZE,"CPC package module overflow"
+                defs CPC_PACKAGE_MODULE_BASE+CPC_PACKAGE_MODULE_SIZE-$,0
+                save "GBPKLOAD.MOD",CPC_PACKAGE_MODULE_BASE,CPC_PACKAGE_MODULE_SIZE
+                endif

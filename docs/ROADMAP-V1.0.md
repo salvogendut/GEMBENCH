@@ -8,6 +8,10 @@ and qualify both release images. Scope clarified with the user on 2026-09-08.
 It is not a release announcement or a claim that the remaining features are
 implemented.
 
+Updated 2026-09-14 for the user-approved Notepad delivery commit/PR/merge:
+the editor is delivered on both targets; wider milestone 1 integration and
+milestones 2–8 remain open. Publication state is recorded in Git/GitHub.
+
 ## What v1.0 means
 
 The planning target is a usable, qualified **MSX2 and CPC release with common
@@ -52,14 +56,15 @@ must remain visible in the acceptance ledger.
 ### MSX2: functional reference, partial ABI migration
 
 The [MSX distribution builder](../tools/build_kernel_msx.sh) currently stages
-a mixed application suite. Only **Clock and Calculator are production apps
-using the unified ABI**; ABIProbe is an additional universal diagnostic.
+a mixed application suite. **Clock, Calculator and Notepad use the unified
+ABI**; ABIProbe is an additional universal diagnostic. Notepad's normal delivery
+checkpoint is recorded in [UNIFIED-NOTEPAD-DELIVERY.md](UNIFIED-NOTEPAD-DELIVERY.md).
 
 | Application group | Current MSX2 distribution status |
 | --- | --- |
-| Clock, Calculator | Universal APPs, also used unchanged on CPC. |
+| Clock, Calculator, Notepad | Universal APPs, also used unchanged on CPC. |
 | ABIProbe | Universal conformance diagnostic, not a production-app migration. |
-| Notepad, File Manager, Settings, Shell, Disk Utilities | MSX-specific application builds; migration remains. |
+| File Manager, Settings, Shell, Disk Utilities | MSX-specific application builds; migration remains. |
 | PAINT, Viewer, Icon Editor, BASIC/BASRUN | MSX-specific application builds; portable document/page services and migration remain. |
 | FormRef, GBRDEMO, XAOS, Mahjong, networking apps, sound test, savers | MSX-specific builds; service binding, migration and per-app acceptance remain. |
 
@@ -78,16 +83,16 @@ merged and manually accepted. CPC currently delivers:
   visible-region damage, background Clock updates and visibility-ranked workers;
 - M4/Disk C browsing with independent File Manager contexts, list/icon views,
   persistent View preference and qualified application launch/return;
-- unified Clock and Calculator, with identical CPC/MSX executable payloads;
+- unified Clock, Calculator and Notepad, with identical CPC/MSX executable payloads;
 - native, build-matched File Manager and six-row Settings: font, icons, cursor,
   title bar, gadgets and backdrop, including verified configuration persistence.
 
 ABI Probe and other portable probes provide diagnostic coverage; they are not
 a substitute for ordinary application workflows. The current normal CPC image
-contains Clock and Calculator as universal apps; File Manager and Settings are
+contains Clock, Calculator and Notepad as universal apps; File Manager and Settings are
 still native binaries. Desktop is a target-linked root/system component.
 
-Latest integration evidence: **28 delivery scenarios / 323 pixel checkpoints**,
+Pre-Notepad integration evidence: **28 delivery scenarios / 323 pixel checkpoints**,
 an independent 32-checkpoint stacking repeat, **285 host tests**, remaining
 SDK/native/distribution checks and openMSX Screen 6/7 accessory checks passed.
 The preceding private Settings gate passed 20 scenarios / 316 checkpoints,
@@ -138,15 +143,18 @@ unported application or hardware configuration is already stable.
 ## Ordered milestones
 
 These are outcome-based work packages, not time estimates or new historical
-milestone numbers. Milestone 1's initial stability/inventory checkpoint is
-**in progress** in [issue #82](https://github.com/salvogendut/GEMBENCH/issues/82);
-Notepad conversion and milestones 2–8 remain planned. Use one
+milestone numbers. Milestone 1's initial stability/inventory checkpoint
+[issue #82](https://github.com/salvogendut/GEMBENCH/issues/82) is closed;
+Notepad's editor and normal MSX2/CPC delivery are **complete** under
+[issue #84](https://github.com/salvogendut/GEMBENCH/issues/84); that issue remains
+open for safe live-editor reuse and the remaining document integration.
+Milestones 2–8 are not delivered. Use one
 bounded issue/branch per implementation package and split internally where
 dependencies require it; do not expand the scope without recording the change.
 
 | Order | Deliverable | Completion criterion |
 | --- | --- | --- |
-| 1 | Unified Notepad and document services | One Notepad APP performs real open/edit/save/copy/paste/close workflows on MSX2 and CPC, preserving dirty-document and error handling. |
+| 1 | Unified Notepad and document services — editor delivered; integration follow-ups open | One Notepad APP performs real open/edit/save/copy/paste/close workflows on MSX2 and CPC; finish safe live-editor reuse and configuration refresh without losing dirty content. |
 | 2 | Portable resources, forms and owned page/code services | Identical GBRDEMO/FormRef APPs run on MSX2 and CPC, with resource validation, form interaction and owned secondary-code lifecycle qualified on both. |
 | 3 | Unified Settings and File Manager | Replace their separate target application builds with identical APPs; preserve MSX behavior and the accepted CPC profile through explicit runtime capabilities. |
 | 4 | Complete boot, desktop and file workflows | Restore the CPC boot splash; both distributions support file operations, document associations, Trash, qualified-app launching, palette/wallpaper/defaults, media refresh and firmware return; Shell/Disk Utilities use the unified ABI. |
@@ -161,14 +169,170 @@ Milestone 7 can progress alongside application migration once separately
 authorized; start independent confirmation early enough to inform the work.
 Milestone 8 depends on the completed application and hardware/backend gates.
 
-### 1. Unified Notepad and document services — stability checkpoint in progress
+**Resolved prerequisite, 2026-09-14:** the initial full link required 28857
+bytes, beyond the 16128-byte primary allocation; see [checkpoint 2c](UNIFIED-NOTEPAD.md#checkpoint-2c--real-editor-integration-and-failed-full-link-gate-2026-09-09).
+Minimum owned data/secondary-code services were brought forward from milestone
+2 and are now exercised by the delivered two-segment editor. The original
+memory limits and 4096-byte editable capacity remain intact. This does not
+complete milestone 2's resource/forms application migrations.
+
+### 1. Unified Notepad and document services — delivered editor, integration follow-ups
+
+**Current checkpoint, 2026-09-14:** the user-approved Escape → acceptance →
+normal-delivery sequence is complete on #84 and approved for commit/PR/merge.
+One identical 20213-byte
+Notepad APP is now in the normal MSX2 and CPC images, with exact-path TXT/CFG
+handoff, direct APP launch, editing/arrows, bounded repaint, chooser/save,
+cross-owner clipboard and guarded Quit. CPC read-only/full-volume failure and
+occlusion/cleanup checks pass; normal-image workflows pass in 1984/M4 and both
+MSX screen modes in openMSX/1983. See the
+[delivery record](UNIFIED-NOTEPAD-DELIVERY.md) for the 35 CPC scenarios, explicit
+corrected-test provenance, MSX checks, hashes and memory limits.
+
+**Still open within the wider milestone:** existing-instance exact-path
+delivery/reuse and live configuration integration, followed by their stability
+checks. File Manager and Settings themselves remain native. The dated private
+checkpoints below are historical; their "not staged" status does not describe
+the current normal images. Do not mark v1.0 or the remaining milestones complete.
+
+#### Historical implementation checkpoints (superseded by normal delivery)
 
 The [MSX baseline](V1-MSX-STABILITY-BASELINE.md) and
 [application migration ledger](V1-APPLICATION-LEDGER.md) are now recorded.
-Fresh openMSX and 1983 checks cover the reference apps on private media, but
-intermittent short Desk-click acceptance and the Omega/RainBIOS Screen 6
-firmware gap remain open. Do not mark this gate or the migration complete.
-Resolve/classify these findings before replacing the native Notepad.
+The observed short Desk-click, Omega/RainBIOS bitmap-mode and 1983 first-read
+blockers are resolved in GEMBENCH PR #83, RainBIOS PR #171 and 1983 PR #172.
+The baseline's dated close-out distinguishes these passing bounded checks from
+remaining whole-distribution release coverage. The
+[Notepad audit](UNIFIED-NOTEPAD.md) records the real native memory limit and the
+first tested portable I/O helper. Typed clipboard now has a shared kernel/SDK
+binding, qualified by the same diagnostic APP on CPC/M4 and MSX Screen 6/7
+using openMSX and 1983. The owned portable chooser/content panel also passes
+navigation, naming, cancellation and selected-file readback with identical APP
+bytes on those targets. Its Save As diagnostic does not write; real editor and
+dirty-document recovery remain, as does a CPC provider gap for dotted directory
+names and wider filename punctuation. The actual editor/controller is now
+integrated in candidate source with host tests, but its complete link is rejected
+for memory overflow. The first [owned data-page slice](PORTABLE-PAGES.md) now
+passes private MSX Screen 6/7 and CPC/M4 qualification with identical APP bytes.
+The shared [secondary streaming core](PORTABLE-SECONDARY-CODE.md) now passes
+instruction-level fault/rollback tests, but receiver stream adapters, full
+launch qualification and the sealed call gate remain before editor runtime testing.
+On 2026-09-13, the opt-in IRQ profile and MSX single-open provider pass a
+standalone real-Nextor diagnostic in openMSX and 1983 (checkpoint 2f). This is
+progress within remaining package 1, not its completion. Checkpoint 2g now
+fits and boots dual admission plus fixed modules in private MSX Screen 6/7
+receivers, retaining ordinary app lifecycles in openMSX/1983. The 45 focused
+tests pass; no application/stack boundary changed (that checkpoint had 45 bytes
+spare in Screen 7). **Checkpoint 2h now connects normal single-open streamed
+Desktop launch** on private MSX Screen 6/7: successful two-bank lifetimes and
+pointer progress pass in openMSX/1983; bad CRC, truncated and trailing files
+reject with exact rollback in openMSX. Ordinary primary-only and Clock/Calculator
+regressions also pass. Screen 7 now has 16 bytes spare. **Checkpoint 2i now
+qualifies the sealed secondary-call service and restricted SDK** with actual
+compiled computation code through Desktop on openMSX and 1983, Screen 6/7.
+It retains the same memory bounds. **Checkpoint 2j now brings up the actual
+two-bank editor** within the same sprint: its full 4-KiB model and separate
+staging fit; real file round trips pass on private MSX Screen 6/7, and 1983
+adds full-capacity/oversized-load checks. Space-as-click timing still needs
+resolution; existing-instance document/configuration integration and broader runtime
+qualification remain. See [the runtime checkpoint](UNIFIED-NOTEPAD-RUNTIME.md)
+for precise emulator/input coverage, limitations and testable image paths.
+CPC streaming/calls remain deferred. See the secondary-code
+record for evidence and the distinction between loading and executing a bank.
+**Handoff 2k/2l:** checkpoint 2j was pushed as `e4c8e62`; 2k/2l form the next
+document-handoff save on #84's branch. Private File Manager → actual Notepad exact-path document opening now
+works, including same names in different directories, save-in-place and failed
+launch cleanup. Filesystem API v3 binds adoption to the new owner generation;
+the copied identity and staged load publish the title/path only on success.
+50 regressions pass; openMSX Screen6/7 edit/save/reopen and 1983 document launches,
+failure rollback, full-capacity/oversize and cleanup pass. Normal profiles remain
+unchanged. Next: existing-instance delivery/reuse with dirty confirmation,
+configuration reload, remaining input and broader UI qualification.
+See [the handoff work record](UNIFIED-NOTEPAD-HANDOFF.md).
+**Follow-up 2m:** after successful manual MSX tests, plain arrows now navigate
+the focused editor and Space types without a pointer click. Ctrl retains
+keyboard-pointer access. Ordinary typing damages changed text/caret spans,
+not the whole window; the dirty title is updated separately. Both MSX screen
+modes pass openMSX navigation/edit/save/reopen; 1983 also covers capacity,
+dirty-close and real exact-path handoff. This is the accepted 2m follow-up to
+`d950560`, not CPC input support or normal-distribution promotion. Next is the
+CPC binding for the same APP, using private M4 media and preserving the accepted
+desktop distribution. MSX 2m was committed/pushed as `6e6fe05`.
+The [CPC follow-up](UNIFIED-NOTEPAD-CPC.md) qualifies the private single-open
+M4 transport (6,058 Z80 calls) and now binds the shared package loader and sealed
+calls in the full private Desktop/File Manager/Settings runtime. The existing
+two-bank computation APP passes 54 checks / 17 copied calls per launch across
+three owner generations in real 1984/M4; invalid loader modules fail boot before
+capability publication. All existing memory budgets are retained (18 bytes of
+high-kernel headroom at that checkpoint). Receiver checkpoint `3041971` is
+committed/pushed. **2026-09-14:** the subsequent private full CPC profile binds
+FS identity/owner-bound handoff and focused text input. The unchanged Notepad
+APP now passes real File Manager document launch, arrows/Space/backspace,
+focus-away/back, in-place save, nested same-name selection and cleanup in
+1984/M4. Its high kernel has 229 bytes spare after omitting unused diagnostic
+launcher code; no memory limits or editor capacities changed. Next is full
+private CPC editor acceptance (capacity, dirty-close, chooser/clipboard,
+repaint/occlusion, storage errors). An exploratory manual image is available
+under `build/notepad-84/manual-cpc-jB6Idz/` at the user's request. Default receiver
+binaries and normal distribution images remain unchanged.
+The delivered editor is still native; no normal
+image has been replaced. Bounded private runtime evidence is not release acceptance.
+
+#### Consolidated sprint — runnable MSX Notepad, 2026-09-13
+
+The user consolidated the three remaining implementation packages into **one
+sprint**, with a manually testable unified Notepad on MSX as its finish line:
+normal streamed Desktop loading → validated secondary calls → actual editor
+integration and bounded Screen 6/7 testing in openMSX and 1983. These remain
+ordered internal tasks, not separate delivery steps or routine approval gates.
+
+The [sprint plan and exit checks](UNIFIED-NOTEPAD.md#consolidated-sprint--runnable-msx-notepad)
+preserve the full 4 KiB editor, recovery behavior, shared ABI and memory limits.
+Deliver a private image and reproducible manual-test instructions; normal media
+stay unchanged. Full MSX/CPC distribution qualification and identical-APP CPC
+delivery follow this sprint, with relevant shared-code regressions retained
+throughout. This is scope consolidation, not an estimate of one session or a
+claim of completed editor delivery. Checkpoints 2h/2i close the internal MSX
+loader and validated-call tasks in bounded tests; 2j begins actual editor runtime
+qualification. The sprint remains open.
+
+#### Saved checkpoint and remaining delivery path — 2026-09-09
+
+Historical package breakdown; the September 13 sprint above now groups packages
+1–3 and their minimum MSX runtime checks into one deliverable. Package 4's full
+cross-platform qualification/delivery remains the follow-up.
+
+The user requested saving, committing and pushing the current #84 checkpoint
+before further implementation because the remaining weekly token allowance is
+limited. Resume on `feature/84-unified-notepad`; this is not a merge or release.
+See [the session handoff](SESSION-HANDOFF.md) for durable working memory and
+evidence. Approximately **four substantial work packages** remain, not four
+guaranteed sessions:
+
+1. **Production package loading:** measured fixed code/state placement,
+   single-open storage adapters, normal-launch rollback and interrupt-safe
+   progress. The shared streaming fixture is complete; receiver integration is
+   not. Bring up MSX first without forking the shared policy or weakening bounds.
+2. **Validated secondary calls:** sealed owner/page/entry identity, copied
+   arguments/results, safe bank/stack/interrupt restoration, teardown and the
+   restricted SDK/packaging support. No executable call gate exists yet.
+3. **Actual editor integration:** partition the existing editor/model and state,
+   pass the full linked-memory gate, and finish document/desktop handoff and
+   configuration behavior. Preserve 4 KiB documents, dirty recovery and the
+   existing editing features. This is the first expected manually testable MSX
+   Notepad checkpoint, not yet distribution acceptance.
+4. **Qualification and delivery:** open/edit/save/reopen, clipboard, failures,
+   responsiveness, repaint and lifecycle on MSX Screen 6/7 with openMSX/1983;
+   qualify identical APP bytes on CPC/M4 and close its known name/path gap.
+   Replace normal delivery only after both acceptance records pass.
+
+A first MSX build is the near-term priority; full CPC editor acceptance follows,
+not a removal of CPC from scope. Shared receiver changes still require relevant
+cross-target regressions. The first two packages carry the greatest uncertainty:
+a runnable MSX editor within the remaining allowance is a stretch goal, not a
+promise. Defer unrelated resource/forms work and preserve a resumable checkpoint
+if another architectural obstacle appears. Normal media and native Notepad stay
+intact until their replacements are qualified.
 
 Use the existing Notepad implementation and preserve its supported behavior.
 Audit dependencies and linked code/data/stack headroom first; bind its required
@@ -195,8 +359,10 @@ Do not substitute a reduced CPC editor or call a compile-only audit completion.
 ### 2. Resources, forms and portable memory/code services
 
 Bring the required shared GBR/form/menu/semantic drawing interfaces through
-the unified boundary. Start with GBRDEMO and form interaction, then qualify
-FormRef's complete resource and secondary-code behavior.
+the unified boundary. The owned data/secondary-code prerequisite now needs to
+precede Notepad delivery (the checkpoint 2c link provides the evidence). Keep
+that prerequisite bounded; subsequent resources/forms work starts with GBRDEMO
+and form interaction, then qualifies FormRef's complete resource/code behavior.
 
 The underlying allocator or native secondary mechanism is not proof that its
 public portable service exists. Provide checked ownership/entry/bank-restoration
@@ -377,6 +543,17 @@ changes, promise a date, or authorize a release.
   [migration gates](UNIVERSAL-APPLICATION-ABI-MIGRATION.md)
 - [M4/Albireo emulator qualification strategy](CPC-EMULATOR-TEST-STRATEGY.md)
 
-Next implementation package: **milestone 1 — unified Notepad and the document
-services it needs**, starting with the MSX stability baseline and application
-ledger, then delivering identical MSX2/CPC application artifacts.
+Next implementation package: **finish milestone 1's document integration**
+([issue #84](https://github.com/salvogendut/GEMBENCH/issues/84)), in this order:
+
+1. Safe existing-instance delivery/reuse: exact drive/path identity, activation,
+   and Save/Discard/Cancel before replacing dirty content, on both receivers.
+2. Live configuration refresh in the running editor, preserving document,
+   selection, dirty state and correct bounded repaint; requalify both targets.
+3. Close the remaining milestone 1 acceptance rows, then start milestone 2's
+   portable resources/forms consumers using the already-qualified page services.
+
+The identical editor is now delivered and its normal MSX2/CPC workflows are
+qualified; do not repeat the completed transport/input/first-delivery work.
+Native File Manager/Settings conversion and CPC boot splash retain their ordered
+milestones; this checkpoint does not silently start or complete them.

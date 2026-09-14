@@ -24,3 +24,11 @@ mw_desc         dw 0
 mwm_notify      db 0
                 mend
 APP_ADMISSION_GATE equ MSX_GBAP4_GATE
+                ifdef PORTABLE_PACKAGE_STREAM
+APP_LOAD_AND_ADMIT equ msx_app_load
+APP_LAUNCH_GUARD equ msx_app_can_launch
+                ifdef PORTABLE_FS_HANDOFF
+APP_LAUNCH_TRANSACTION equ document_launch
+APP_LAUNCH_BIND equ document_bind
+                endif
+                endif

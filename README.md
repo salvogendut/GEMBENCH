@@ -18,8 +18,9 @@ and artwork.
 See the [roadmap to v1.0](docs/ROADMAP-V1.0.md) for finishing **both MSX2 and
 CPC distributions**: unified application migration on both targets, remaining
 CPC feature parity, and separate release qualification. MSX2 is the behavior
-reference, not a finished universal distribution; currently only Clock and
-Calculator are production apps using the unified ABI.
+reference, not a finished universal distribution. Clock, Calculator and
+[Notepad](docs/UNIFIED-NOTEPAD-DELIVERY.md) now use the same unified-ABI APPs
+in both normal distributions.
 The plan preserves the accepted CPC desktop's stability while aiming for the
 same quality on MSX2, and includes restoring the CPC boot splash.
 
@@ -51,8 +52,8 @@ The completed foundation currently covers:
 - a bounded MSX2 typed-scrap layer for text, bitmap, icon, and file-list data
   that preserves the complete 510-byte raw clipboard and accepts legacy text;
 - bounded MSX2 shell discovery and synchronous open/activate/close/quit
-  messaging, with File Manager reusing a clean live Notepad instead of opening
-  a duplicate;
+  messaging, retained for native applications; the universal Notepad uses
+  owned exact-path document launches (existing-instance reuse remains planned);
 - a generated, fixed-capacity MSX2 Desk menu whose Clock and Calculator launch
   on demand, reactivate by exact stable ID, and release their mapper page on
   close;
@@ -92,7 +93,7 @@ or window work must cross an explicit version boundary.
 MSX2 remains the main behavior reference; v1.0 completion targets both MSX2 and
 CPC. The experimental **CPC M4 Desktop** is
 now available through [Sprint 3](docs/CPC-RESTART-SPRINT3.md), using the same
-Desktop/File Manager sources, window manager and portable Clock/Calculator apps:
+Desktop/File Manager sources, window manager and portable Clock/Calculator/Notepad apps:
 
 ```sh
 make cpc
@@ -103,10 +104,14 @@ Use the project SDCC/RASM toolchain; the sprint document includes this workspace
 distrobox commands. Output is `QA/CPC-Desktop/` (CARD, M4 image and 1984 config),
 separate from parked `QA/CPC/` and diagnostics. Arrow keys move the pointer,
 Space clicks/drags. Double-click **Disk C**, enter **GBENCH**, then open
-**CLOCK.APP** or **CALC.APP**. File Manager's View menu offers Icons/List and
+**CLOCK.APP**, **CALC.APP** or **NOTEPAD.APP**. TXT/CFG documents also open in
+Notepad. In a focused Notepad window, arrows move the text caret and Space
+types; hold Ctrl with arrows/Space to move/click the CPC pointer instead.
+Notepad supports 4096-byte documents, Load/Save/Save As, Copy/Paste and guarded
+File > Quit. File Manager's View menu offers Icons/List and
 Fullscreen; double-click `..` to go up. `FILEMGR.BIN` is a build-matched native
-component, not a portable APP. Data-file associations and file copy/delete are
-not yet available. PCW, Albireo and a hardware mouse driver are not yet qualified. Rebuilding
+component, not a portable APP. Other data-file associations and file copy/delete
+are not yet available. PCW, Albireo and a hardware mouse driver are not yet qualified. Rebuilding
 resets generated media; keep personal data on separate copies.
 
 ### Earlier CPC diagnostic checkpoints

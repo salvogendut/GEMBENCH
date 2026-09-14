@@ -220,6 +220,10 @@ static void free_space(volatile unsigned char *ctx)
 
 static void prepare_launch(volatile unsigned char *ctx)
 {
+#ifdef FSCTX_HANDOFF
+    /* Do not overwrite another live producer/recipient transaction. */
+    if (PENDING[P_ACTIVE]) { status(FULL); return; }
+#endif
     PENDING[P_ACTIVE] = 0;
     PENDING[P_OWNER] = (unsigned char)REQ_OWNER;
     PENDING[P_OWNER + 1] = (unsigned char)(REQ_OWNER >> 8);
@@ -234,6 +238,13 @@ static void adopt_launch(void)
 {
     volatile unsigned char *ctx;
     if (!PENDING[P_ACTIVE]) { status(STALE); return; }
+#ifdef FSCTX_HANDOFF
+    if (PENDING[P_ACTIVE] != 3u ||
+        PENDING[P_OWNER] != (unsigned char)REQ_OWNER ||
+        PENDING[P_OWNER+1] != (unsigned char)(REQ_OWNER >> 8)) {
+        status(OWNER); return;
+    }
+#endif
     ctx = allocate(PENDING[P_DRIVE]);
     if (!ctx) return;
     copy_bytes(ctx + CTX_NAME, PENDING + P_NAME, 11u);
@@ -241,6 +252,27 @@ static void adopt_launch(void)
     PENDING[P_ACTIVE] = 0;
     status(OK);
 }
+
+#ifdef FSCTX_IDENTITY
+/* Public copied identity, never a pointer to the private owner/cursor record.
+ * Validate before touching XFER; a failed query preserves the caller's bytes.
+ * No activation, directory scan, offset change, or other filesystem I/O. */
+static void identity(volatile unsigned char *ctx)
+{
+    unsigned char i, length, ch;
+    for (length=0;length<CTX_PATH_CAP && ctx[CTX_PATH+length];++length) { }
+    if (!length || length==CTX_PATH_CAP ||
+        (ctx[CTX_PATH]!='\\' && ctx[CTX_PATH]!='/')) { status(BADARG);return; }
+    zero_bytes(XFER,60u);
+    XFER[0]=ctx[CTX_DRIVE];
+    copy_bytes(XFER+1,ctx+CTX_NAME,11u);
+    for(i=0;i<length;++i) {
+        ch=ctx[CTX_PATH+i];XFER[12u+i]=ch=='\\' ? '/' : ch;
+    }
+    REQ_ACTUAL=60u;
+    status(OK);
+}
+#endif
 
 void main(void)
 {
@@ -271,6 +303,9 @@ void main(void)
         case OP_CANCEL:       reset_offset(ctx); break;
         case OP_PREP_LAUNCH:  prepare_launch(ctx); break;
         case OP_DIR_BATCH:    directory_batch(ctx); break;
+#ifdef FSCTX_IDENTITY
+        case OP_IDENTITY:     identity(ctx); break;
+#endif
         default:              status(BADARG); break;
     }
 }

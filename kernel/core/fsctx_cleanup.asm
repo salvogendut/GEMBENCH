@@ -15,4 +15,8 @@ kfoc_loop      ld    a,(ix+CORE_FSCTX_ACTIVE)
 kfoc_next      ld    de,CORE_FSCTX_RECORD_SIZE
                 add   ix,de
                 djnz  kfoc_loop
+                ifdef CORE_FSCTX_CLEANUP_TAIL
+                jp CORE_FSCTX_CLEANUP_TAIL
+                else
                 ret
+                endif

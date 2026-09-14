@@ -183,6 +183,9 @@ mpc_free        ld    a,GB_PAGE_ERR_FREE
 
 ; page_release_index: C = pool index. Privileged internal primitive.
 page_release_index
+                ifdef PAGE_SEAL_RELEASE
+                call PAGE_SEAL_RELEASE
+                endif
                 ld    hl,CORE_PAGE_STATE
                 ld    a,c
                 add   a,l

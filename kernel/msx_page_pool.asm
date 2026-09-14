@@ -92,6 +92,10 @@ GB_PLATFORM_MSX2      equ 1
                 include "msx_capabilities.inc"
 
                 include "msx_owner_page.inc"
+                ifdef PORTABLE_PACKAGE_STREAM
+OWNER_SEAL_RELEASE equ MSX_SECONDARY_OWNER_RELEASE
+PAGE_SEAL_RELEASE equ MSX_SECONDARY_PAGE_RELEASE
+                endif
                 include "core/app_lifetime_contract.inc"
                 include "core/window_focus_contract.inc" ; WM scratch EQU cells are now defined
 
@@ -238,6 +242,49 @@ kpg_no_owner    ld    a,GB_PAGE_ERR_OWNER
 
                 endif
                 ifdef GB_DEFER_LATE
+                ifdef PORTABLE_PACKAGE_STREAM
+                include "msx_package_boot.asm"
+msx_package_route_resume equ $
+                org MSX_PACKAGE_ROUTE_BASE
+                jp msx_app_load
+                ifdef PORTABLE_FS_HANDOFF
+                db "GBWM",#60|MSX_SCREEN_MODE
+                else
+                db "GBWM",#40|MSX_SCREEN_MODE  ; resident service addresses are mode-specific
+                endif
+                jp msx_app_progress
+                jp msx_app_clear_secondary
+                jp msx_secondary_parameters
+                jp secondary_seal_clear
+                jp secondary_seal_page_release
+                include "msx_app_launch.asm"
+                include "msx_secondary_call.asm"
+                ifdef PORTABLE_FS_HANDOFF
+DOC_PENDING equ MSX_FSCTX_PENDING
+DOC_CURRENT_OWNER equ owner_current
+DOC_LAUNCH_BODY equ wm_open_transaction
+DOC_LAUNCH_ARG equ launch_arg
+DOC_COPY_NAME equ copy11
+DOC_RELEASING_OWNER equ CORE_ALLOC_OWNER
+DOC_WORKER equ SCHED_CURRENT
+                include "core/document_launch.asm"
+                include "msx_text_input.asm"
+                endif
+                assert $<=MSX_SECONDARY_TABLE,"secondary policy overlaps sealed identities"
+                ds MSX_SECONDARY_TABLE-$,0
+                ds 64,0                        ; boot clears all owner seals
+                ds 12,0                        ; call state
+                ds MSX_SECONDARY_BIND-$,0
+                ds 8,0                         ; trusted completed-load binding record
+MSX_PACKAGE_ROUTE_SIZE equ $-MSX_PACKAGE_ROUTE_BASE
+                assert $<=MSX_PACKAGE_ROUTE_LIMIT,"package routing exceeds MSX directory tail"
+                save "GBPKWM.RAW",MSX_PACKAGE_ROUTE_BASE,MSX_PACKAGE_ROUTE_SIZE
+                org msx_package_route_resume
+                else
+                ifdef PORTABLE_DATA_PAGES
+                include "msx_data_pages_boot.asm"
+                endif
+                endif
                 include "msx_deferred.inc"
                 include "core/deferred_api.asm"
                 include "core/deferred_queue.asm"
@@ -283,9 +330,12 @@ gbfsctx_modname db   "GBFSCTX MOD"
 ; Owner teardown cannot depend on storage or on the paged module still being
 ; loadable. Four fixed records are cheap to scan resident; no native DOS handle
 ; remains open between bounded calls, so invalidating matching records is the
-; complete close/cancel action. The one-shot launch transfer owns no resource
-; and is overwritten/consumed by the next prepare/adopt pair.
+; complete close/cancel action. The optional v3 tail also invalidates matching
+; launch preparation/binding; legacy one-shot transfers retain their behavior.
                 include "msx_fsctx_cleanup.inc"
+                ifdef PORTABLE_FS_HANDOFF
+CORE_FSCTX_CLEANUP_TAIL equ document_owner_cleanup
+                endif
                 include "core/fsctx_cleanup.asm"
 
                 endif
