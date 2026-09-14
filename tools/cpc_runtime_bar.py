@@ -27,6 +27,7 @@ def compile_bar(work, sym, root):
                     '-I', str(root / 'include/gembench'),
                     '-o', 'bar.rel'], cwd=work, check=True)
     subprocess.run([sdcc, '-mz80', '--std-c99', '--opt-code-size', '--fomit-frame-pointer',
+                    '-DCPC_FILEMGR_CONFIG_ONLY',
                     f'-DGB_FILEMGR_BINDINGS="{work / "cpc_native.h"}"',
                     f'-DGB_FSCTX_PLATFORM_HEADER="{work / "cpc_fs_client.h"}"',
                     '-I', str(root / 'lib/gb'), '-I', str(root / 'include/gembench'),

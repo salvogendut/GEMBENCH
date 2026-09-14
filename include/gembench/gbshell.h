@@ -40,6 +40,9 @@
 /* Register the focused/calling window as a provider of one service class. */
 unsigned char gb_shell_register(unsigned char service_class);
 
+/* Set the response while handling the current synchronous GB_MSG_SHELL. */
+void gb_shell_respond(unsigned char response);
+
 /*
  * Register the focused window as one exact Desk accessory.  IDs are non-zero,
  * build-time catalog values; this does not create a process record or retain a

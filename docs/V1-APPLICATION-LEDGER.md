@@ -23,7 +23,7 @@ portable-service contract. Milestone numbers refer to the v1.0 roadmap.
 | Clock / `apps/uclock` | Universal v4 | Screen 6/7 lifecycle, border, background and input checks; see baseline limits | Same payload; accepted desktop workload | Keep regression coverage throughout |
 | Calculator / `apps/ucalculator` | Universal v4 | Screen 6/7 Desk identity, activation, border, text and cleanup | Same payload; accepted desktop workload | Keep regression coverage throughout |
 | ABIProbe / `apps/abiprobe` | Universal v4 diagnostic | Built and inventoried; not independently rerun here | Existing diagnostic qualification, not a production migration | ABI conformance |
-| Notepad / `apps/unotepad`; native reference retained in `apps/notepad` | Universal v4, two segments | Normal-image Screen 6/7 editor, exact-path handoff and Desk stress in 1983; editor independently checked in openMSX | Same APP in normal M4 image; editing/chooser/clipboard, 4096/4097 bounds, dirty decisions, read-only/full-disk failures and cleanup qualified | **1:** editor delivered; safe live-editor reuse and configuration refresh remain. Albireo/release coverage remains **7/8**; [evidence](UNIFIED-NOTEPAD-DELIVERY.md) |
+| Notepad / `apps/unotepad`; native reference retained in `apps/notepad` | Universal v4, two segments | Normal-image Screen 6/7 editor, exact-path handoff and live reuse in 1983; editor independently checked in openMSX | Same APP in normal M4 image; editing/chooser/clipboard, 4096/4097 bounds, dirty decisions, live clean/dirty reuse, read-only/full-disk failures and cleanup qualified | **1:** editor and safe live-document reuse delivered; configuration refresh remains. Albireo/release coverage remains **7/8**; [delivery](UNIFIED-NOTEPAD-DELIVERY.md), [reuse](UNIFIED-NOTEPAD-REUSE.md) |
 | GBRDEMO / `apps/gbrdemo` | Native legacy | Built only | Not delivered | Portable resources, forms and semantic drawing; **2** |
 | FormRef / `apps/formref` | Native v3 | Built only | Not delivered | Resources/forms plus owned page/secondary-code lifecycle; **2** |
 | File Manager / `apps/filemgr` | Native legacy | Normal window/menu workflow: maximize, restore, move and resize | Accepted native M4 browsing, view persistence and qualified-app launching | Portable FS contexts, menus, launch/association services; **3**, full file operations **4** |
@@ -67,7 +67,7 @@ production universal applications match byte-for-byte:
 | --- | ---: | --- |
 | CLOCK.APP | 8198 | `55b45e59f53126a399ba6ab0ac93439235ae09fe8d90bcf8bc90e8155a9cdad0` |
 | CALC.APP | 7868 | `4e7fbe8df31f328b1814cbc46bbe04f984a38f6f62466640786574f7385265e0` |
-| NOTEPAD.APP | 20213 | `d45f0c5ec151f1a5ca4f9a9a52ff94162360f1aa2883eda4afa80340396ad157` |
+| NOTEPAD.APP | 20368 | `38b1e574dbbfe3a374981334a38860bbf66fe100d8e5b32c19b12b544e904b0e` |
 
 Normal CPC acceptance covers 35 scenarios (34 passed initially; the corrected
 legacy unsupported-file scenario passed separately). All seven delivered editor
@@ -76,9 +76,9 @@ stress pass in both screen modes under 1983, with independent openMSX editor
 checks. See [the delivery record](UNIFIED-NOTEPAD-DELIVERY.md) for complete
 provenance, image hashes, source-media preservation and exact memory limits.
 Prior user manual acceptance covered editing and File > Quit on both targets;
-this normal-delivery checkpoint adds automated qualification, not real-hardware
-or Albireo acceptance. Safe live-editor reuse and configuration refresh remain
-open under #84; no full milestone 1/v1.0 completion is implied.
+the delivery and subsequent live-reuse checkpoint add automated qualification,
+not real-hardware or Albireo acceptance. Configuration refresh remains open
+under #84; no full milestone 1/v1.0 completion is implied.
 
 ## Historical artifact identity and bring-up findings — 2026-09-08/09
 

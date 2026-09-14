@@ -29,6 +29,7 @@ static unsigned int disk_len, offset[5], fs_calls, fail_call, writes, clip_len;
 static unsigned char live[5], fs_error, clip_kind, clip_error, closed;
 static unsigned char input[64], input_pos, mouse_x, mouse_y, buttons;
 static unsigned char popup_item=255;
+static unsigned char shell_response, shell_registered;
 static gb_rect_t live_rect = {2,14,66,158};
 static gb_rect_t damage;
 static gb_rect_t damages[32];
@@ -133,6 +134,9 @@ void gb_wm_managed_kind(const gb_mwin_kind_t *w) { (void)w; }
 void gb_wm_close(void) { closed=1; }
 void gb_menu(const void *p) { (void)p; }
 void gb_message_read(gb_msg_t *m) { memset(m,0,sizeof(*m)); }
+unsigned char gb_shell_register(unsigned char service_class)
+{ shell_registered=service_class; return GB_SHELL_OK; }
+void gb_shell_respond(unsigned char response) { shell_response=response; }
 unsigned char gb_universal_popup_active(void) { return 0; }
 void gb_universal_popup_close(void) { }
 unsigned char gb_universal_popup(unsigned char x,const char *const *p,unsigned char n)
@@ -170,13 +174,14 @@ static void reset_test(void)
     memset(&editor,0,sizeof(editor)); memset(&scratch,0,sizeof(scratch));
     memset(&job,0,sizeof(job)); memset(live,0,sizeof(live)); memset(offset,0,sizeof(offset));
     memset(input,0,sizeof(input)); input_pos=0;
-    document=candidate=retired=0; fs_calls=fail_call=writes=0;
+    document=candidate=retired=incoming=0; fs_calls=fail_call=writes=0;
     fs_error=clip_error=closed=buttons=0; disk_len=clip_len=0;
-    pending_document=0;identity_error=0;
+    pending_document=0;identity_error=0;shell_response=255;shell_registered=0;
     popup_item=255;
     mode=EDIT; action=menu_request=cooldown=refresh=title_changed=dragging=blink=full=0;
     live_rect.x=2; live_rect.y=14; live_rect.w=66; live_rect.h=158;
     notepad_entry(); refresh=title_changed=cooldown=0;
+    assert(shell_registered==GB_SHELL_CLASS_TEXT_EDITOR);
 }
 static void tick(void)
 {
@@ -223,6 +228,61 @@ static void launch_document(void)
     reset_test();pending_document=gb_fsctx_open(1);disk_len=4097;
     notepad_entry();run_io();assert(mode==ERROR && !document && retired && !editor.len);
     assert(!memcmp(name,"UNTITLEDTXT",11));close_request();tick();assert(!retired);
+}
+static void live_reuse(void)
+{
+    gb_fsctx_t old, offered;
+    /* A clean live editor adopts synchronously, but loads and retires its old
+     * exact context through the ordinary bounded frame path. */
+    reset_test();old_document();editor.dirty=0;sync_editor();old=document;
+    offered=gb_fsctx_open(1);pending_document=offered;
+    memcpy(disk,"replacement\n",12);disk_len=12;
+    shell_open();
+    assert(shell_response==GB_SHELL_OK && !pending_document && mode==LOAD);
+    assert(candidate==offered && document==old && !incoming);
+    run_io();
+    assert(document==offered && retired==old && editor.len==12);
+    assert(!memcmp(editor.text,"replacement\n",12));tick();assert(!live[old]);
+
+    /* Cancel closes only the offered copy and retains the dirty editor. */
+    reset_test();old_document();old=document;
+    offered=gb_fsctx_open(1);pending_document=offered;shell_open();
+    assert(shell_response==GB_SHELL_OK && mode==CONFIRM && incoming==offered);
+    confirm(27);assert(mode==EDIT && document==old && retired==offered);
+    assert(editor.dirty && !memcmp(editor.text,"old unsaved",11));
+    tick();assert(!live[offered] && live[old]);
+
+    /* Discard promotes the offered identity only after its load succeeds. */
+    reset_test();old_document();old=document;
+    offered=gb_fsctx_open(1);pending_document=offered;
+    memcpy(disk,"new\n",4);disk_len=4;shell_open();confirm('d');
+    assert(mode==LOAD && candidate==offered && document==old);
+    run_io();assert(document==offered && retired==old && editor.len==4);
+    assert(!memcmp(editor.text,"new\n",4));
+
+    /* Save writes the old document completely before beginning the offered
+     * load; the two exact owner contexts are never confused. */
+    reset_test();old_document();old=document;
+    offered=gb_fsctx_open(1);pending_document=offered;shell_open();confirm('s');
+    assert(mode==SAVE && job.context==old && incoming==offered && !candidate);
+    run_io();assert(mode==EDIT && action==OPEN && !editor.dirty);
+    tick();assert(mode==LOAD && candidate==offered && document==old && !incoming);
+    run_io();assert(document==offered && retired==old);
+
+    /* Busy means no adoption: File Manager can launch a fresh Notepad from
+     * the still-prepared transaction. */
+    reset_test();old_document();offered=gb_fsctx_open(1);pending_document=offered;
+    mode=PICK;shell_open();
+    assert(shell_response==GB_SHELL_BUSY && pending_document==offered);
+    assert(!incoming && document && live[offered]);
+
+    /* Once accepted, an identity failure is reported in the existing editor
+     * and the offered context is retired without disturbing the old text. */
+    reset_test();old_document();old=document;editor.dirty=0;sync_editor();
+    offered=gb_fsctx_open(1);pending_document=offered;identity_error=GB_FSCTX_ERR_IO;
+    shell_open();assert(shell_response==GB_SHELL_OK && mode==ERROR);
+    assert(document==old && retired==offered && !candidate && !incoming);
+    assert(editor.len==11 && !memcmp(editor.text,"old unsaved",11));
 }
 static void model(void)
 {
@@ -475,6 +535,10 @@ static void copied_protocol(void)
 {
     unsigned char guarded[NP_PACKET+2];
     reset_test();
+    assert(np_loaded(&editor,"abcd\nef",7,0));sync_editor();
+    packet[2]=3;packet[3]=10;packet[6]=1;
+    assert(model_call(NP_POINT) && editor.cur==7 && editor.anchor==7);
+    reset_test();
     np_put(packet+2,0);np_put(packet+4,1);packet[NP_DATA]='x';
     assert(!model_call(NP_STAGE_APPEND) && editor.len==0);
     assert(model_call(NP_STAGE_BEGIN));
@@ -509,7 +573,7 @@ int main(void)
     reset_test();input[40]=' ';input[41]=' ';notepad_entry();
     for(unsigned char i=0;i<6;++i)tick();
     assert(editor.len==0 && !editor.dirty);
-    model(); copied_protocol(); lifecycle(); file_menu(); clipboard_and_damage(); chooser_integration();launch_document();
+    model(); copied_protocol(); lifecycle(); file_menu(); clipboard_and_damage(); chooser_integration();launch_document();live_reuse();
     puts("unified Notepad model/controller tests PASS (mocked services; no runtime claim)");
     return 0;
 }

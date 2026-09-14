@@ -7,6 +7,10 @@
 #include "fixtures/fsctx_core_provider.h"
 #include "../kernel/core/fsctx_contract.h"
 static unsigned char chdir_error, write_ok = 1, free_ok = 1;
+#ifdef FSCTX_HANDOFF
+static unsigned char reuse_active;
+#define FSCTX_REUSE_ACTIVE() reuse_active
+#endif
 static unsigned char entry_size[4] = {8, 0, 0, 0};
 static char entry_name[12] = "A       TXT";
 static unsigned char selected_drive, io_calls;
@@ -153,12 +157,24 @@ int main(void)
     PENDING[P_ACTIVE]=3;PENDING[P_OWNER]=2;PENDING[P_OWNER+1]=1;
     call(OP_ADOPT_LAUNCH,0,0x0202);assert(REQ_STATUS==OWNER && PENDING[P_ACTIVE]==3);
     call(OP_ADOPT_LAUNCH,0,0x0101);assert(REQ_STATUS==OWNER && PENDING[P_ACTIVE]==3);
-#endif
+    /* Only the provider-authenticated synchronous OPEN callback may convert a
+     * prepared producer copy into an owner-bound live-recipient transaction. */
+    PENDING[P_ACTIVE]=1;PENDING[P_OWNER]=1;PENDING[P_OWNER+1]=1;
+    reuse_active=1;
+    call(OP_ADOPT_LAUNCH,0,0x0102);
+    assert(REQ_STATUS==FULL && PENDING[P_ACTIVE]==1 &&
+           PENDING[P_OWNER]==1 && PENDING[P_OWNER+1]==1);
+    call(OP_CLOSE,c,0x0101);
+    call(OP_ADOPT_LAUNCH,0,0x0102);
+    assert(REQ_STATUS==OK && !PENDING[P_ACTIVE] && REQ_HANDLE==0x0203);
+    reuse_active=0;
+#else
     call(OP_ADOPT_LAUNCH, 0, 0x0102);
     assert(REQ_STATUS == FULL && PENDING[P_ACTIVE]);
     call(OP_CLOSE, c, 0x0101);
     call(OP_ADOPT_LAUNCH, 0, 0x0102);
     assert(REQ_STATUS == OK && !PENDING[P_ACTIVE] && REQ_HANDLE == 0x0203);
+#endif
     assert(!memcmp((const void *)(context_at(2) + CTX_NAME), "DOC     TXT", 11));
     assert(!strcmp((const char *)context_at(2) + CTX_PATH, "\\DIR\\SUB"));
 #ifdef FSCTX_IDENTITY

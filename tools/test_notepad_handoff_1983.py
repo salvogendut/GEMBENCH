@@ -58,6 +58,7 @@ class HandoffDriver(NotepadDriver):
         self.frames(100);self.entry_named(b'ADOC       ')
         self.wait(lambda:bytes(self.fm('_fm_path',6))==b'/ADOC\0','ADOC navigation')
         for nested in (False,True):
+            expected=b'Chosen nested document.\n' if nested else b'Chosen root document.\n'
             if nested:
                 self.entry_named(b'SUB        ')
                 self.wait(lambda:bytes(self.fm('_fm_path',10))==b'/ADOC/SUB\0','nested navigation')
@@ -68,9 +69,9 @@ class HandoffDriver(NotepadDriver):
                             'failed admission cleared pending document')
                 break
             self.wait(lambda:self.value('WM_NWIN')==3 and self.value('WM_FOCUS')==2,'document launch and focus')
-            self.wait(lambda:self.mode()==0,'document staged load')
+            self.wait(lambda:self.mode()==0 and self.editor()[:2]==[len(expected),0],
+                      'document staged load')
             self.frames(100)
-            expected=b'Chosen nested document.\n' if nested else b'Chosen root document.\n'
             self.expect(self.editor()[:2]==[len(expected),0] and self.editor()[13]==0,'exact document length and clean state')
             self.expect(self.read(glue['MSX_FSCTX_PENDING'])==[0],'handoff consumed exactly once')
             # Inspect the real sealed model bank, not a debugger-injected model.
@@ -88,7 +89,14 @@ class HandoffDriver(NotepadDriver):
             self.border(2)
             # Save the adopted document in place; host verifies both directories.
             self.menu(2);self.wait(lambda:self.mode()==0,'in-place save completed');self.frames(100)
-            self.close(2,2)
+            if args.reuse and not nested:
+                # The larger File Manager remains exposed below Notepad. Raise
+                # it without closing the editor; the next TXT launch must reuse
+                # slot 2 and keep the total at three windows.
+                _,x,y,w,h,*_=self.entry(1)
+                self.click(x+w-2,y+h-2)
+                self.wait(lambda:self.value('WM_FOCUS')==1,'File Manager refocus for reuse')
+            else:self.close(2,2)
         self.close(1,1)
         if args.bad_app:
             self.notepad_slot=1
@@ -99,14 +107,17 @@ class HandoffDriver(NotepadDriver):
                     'all application pages reclaimed')
         self.expect(all(not self.read(glue['MSX_FSCTX_TABLE']+144*i)[0] for i in range(4)), 'all contexts reclaimed')
         self.expect(self.read(0x2180,64)==[0]*64 and not self.value('SCHED_FAULT'),'seals and scheduler clean')
-        return dict(status='PASS',checks=self.checks,frames=self.frame,case='bad-app' if args.bad_app else 'exact-path')
+        return dict(status='PASS',checks=self.checks,frames=self.frame,
+                    case='bad-app' if args.bad_app else 'reuse' if args.reuse else 'exact-path')
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ('bridge','omega','sunrise','image','worktree','output'):parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--mode',type=int,choices=(6,7),required=True)
-    parser.add_argument('--bad-app',action='store_true')
+    mode=parser.add_mutually_exclusive_group()
+    mode.add_argument('--bad-app',action='store_true')
+    mode.add_argument('--reuse',action='store_true')
     args=parser.parse_args();args.bios=args.subrom=None;args.short_desk_stress=False
     if args.output.exists():parser.error('output exists; preserve earlier evidence')
     args.source=args.image;source_hash=hashlib.sha256(args.source.read_bytes()).hexdigest()

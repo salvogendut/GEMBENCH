@@ -77,6 +77,14 @@ void secondary_main(unsigned char *p,unsigned int length)
         a=np_index(&leaf_editor,a,(unsigned char)b,width);
         if (flag) leaf_editor.anchor=a;
         np_select(&leaf_editor,a);caret_dirty=follow=1;break;
+    case NP_POINT:
+        goal_col=255;
+        aux=(unsigned char)(p[2]*2u)/3u;
+        if(aux>=width)aux=width-1;
+        a=leaf_editor.first+p[3]/10u;
+        a=np_index(&leaf_editor,a,aux,width);
+        if(flag)leaf_editor.anchor=a;
+        np_select(&leaf_editor,a);caret_dirty=follow=1;break;
     case NP_SCROLL:
         layout(width,rows,0);limit=total_rows>=rows ? total_rows-rows+1 : 0;
         if (flag) leaf_editor.first=leaf_editor.first>3 ? leaf_editor.first-3 : 0;

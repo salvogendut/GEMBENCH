@@ -5,7 +5,7 @@
   "minimum_abi": [2, 1],
   "minimum_sysinfo": [6, 48],
   "required_capabilities": ["caller-parameters", "portable-filesystem",
-    "typed-clipboard", "windows", "events", "owner-identity", "applications",
+    "typed-clipboard", "windows", "events", "shell", "owner-identity", "applications",
     "multi-window", "universal-loader", "runtime-geometry", "portable-drawing",
     "portable-input", "portable-secondary-calls"],
   "optional_capabilities": [],

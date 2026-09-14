@@ -13,7 +13,7 @@ void gb_filepick_draw(const gb_filepick_t *p, const gb_rect_t *r)
     if (!p || !fits(r)) return;
     x = r->x + 2; y = r->y + 16;
     gb_fill(r->x + 1, r->y + 14, r->w - 2, r->h - 15, GB_UI_SURFACE);
-    max = (r->w - 4) * 2 / 3;
+    max = (unsigned char)((unsigned char)(r->w - 4u) * 2u) / 3u;
     if (max > 40) max = 40;
     for (i = 0; i < max && p->path[i]; ++i) label[i] = p->path[i];
     label[i] = 0;
@@ -53,7 +53,7 @@ void gb_filepick_click(gb_filepick_t *p, const gb_rect_t *r,
         else if (x < 45) gb_filepick_up(p);
         else gb_filepick_cancel(p);
     } else if (y >= 30 && y < 90) {
-        gb_filepick_choose(p, (y - 30) / 10);
+        gb_filepick_choose(p, (unsigned char)(y - 30u) / 10u);
     } else if (y >= 124 && y < 134) {
         gb_filepick_submit(p);
     }

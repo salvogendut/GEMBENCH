@@ -28,6 +28,7 @@ UNIVERSAL_COMPUTE="${UNIVERSAL_COMPUTE:-0}"
 UNIVERSAL_IX="${UNIVERSAL_IX:-0}" # opt-in preserved kernel IX + compact C frames
 UNIVERSAL_MINIMAL="${UNIVERSAL_MINIMAL:-0}"
 UNIVERSAL_MENU_BORROWED="${UNIVERSAL_MENU_BORROWED:-0}"
+UNIVERSAL_SHELL_TARGET="${UNIVERSAL_SHELL_TARGET:-0}"
 DATA_LOC="${DATA_LOC:-0x7000}"
 LOAD_LIMIT="0x7F00"
 
@@ -52,7 +53,7 @@ fi
 for feature in "$UNIVERSAL_TASK" "$UNIVERSAL_WINDOW_KIND" "$UNIVERSAL_ACCESSORY" \
     "$UNIVERSAL_MENU" "$UNIVERSAL_FS" "$UNIVERSAL_FS_IDENTITY" "$UNIVERSAL_SCRAP" \
     "$UNIVERSAL_DOCIO" "$UNIVERSAL_FILEPICK" "$UNIVERSAL_DATA_PAGES" "$UNIVERSAL_COMPUTE" "$UNIVERSAL_IX" \
-    "$UNIVERSAL_MINIMAL" "$UNIVERSAL_MENU_BORROWED"; do
+    "$UNIVERSAL_MINIMAL" "$UNIVERSAL_MENU_BORROWED" "$UNIVERSAL_SHELL_TARGET"; do
     [ "$feature" = 0 ] || [ "$feature" = 1 ] || {
         echo "ERROR: universal feature flags must be 0 or 1" >&2
         exit 2
@@ -118,6 +119,17 @@ fi
 "$SDAS" -o "$work/gblib.rel" "$work/gblib.s"
 "$SDAS" -o "$work/gbuniversal_draw.rel" lib/gb/gbuniversal_draw.s
 extra_rels=()
+shell_flags=()
+if [ "$UNIVERSAL_SHELL_TARGET" = 1 ]; then
+    python3 - "$APP_MANIFEST" <<'PY'
+import json, sys
+if "shell" not in json.load(open(sys.argv[1]))["required_capabilities"]:
+    raise SystemExit("ERROR: UNIVERSAL_SHELL_TARGET requires shell in the manifest")
+PY
+    shell_flags=(-DGB_SHELL_SERVICES)
+    "$SDAS" -o "$work/gbshell_register.rel" lib/gembench/gbshell_register.s
+    extra_rels+=("$work/gbshell_register.rel")
+fi
 if [ "$UNIVERSAL_COMPUTE" = 1 ]; then
     python3 - "$APP_MANIFEST" "$APP_SECONDARY" <<'PY'
 import hashlib, json, pathlib, sys
@@ -214,7 +226,7 @@ if [ "$UNIVERSAL_MENU" = 1 ]; then
     extra_rels+=("$work/gbuniversal_menu.rel")
 fi
 "$SDCC" -mz80 --std-c99 --opt-code-size "${app_optimization[@]}" "${app_frames[@]}" \
-    -DGB_UNIVERSAL $APP_CFLAGS -I lib/gb -I include/gembench \
+    -DGB_UNIVERSAL "${shell_flags[@]}" $APP_CFLAGS -I lib/gb -I include/gembench \
     -c "$APP/main.c" -o "$work/main.rel"
 "$SDCC" -mz80 --std-c99 --opt-code-size "${app_frames[@]}" \
     -DGB_UNIVERSAL "${minimal_flags[@]}" -I lib/gb -c lib/gb/gbuniversal.c -o "$work/gbuniversal.rel"

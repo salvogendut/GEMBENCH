@@ -1221,15 +1221,23 @@ static void open_entry(unsigned char idx)
 #ifdef GB_FSCTX_LAUNCH
     if (ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G')) {
         /* Copy before the paged FS module replaces the native directory entry.
-         * WMOPEN uses the transaction copy, not that mutable native entry. */
-        if (gb_sysinfo()->filesystem_api_version < GB_FSCTX_HANDOFF_API_VERSION ||
-            gb_fsctx_prepare_launch(fs_context,e))
+         * A live editor adopts the same owner-bound copy; otherwise WMOPEN
+         * binds it to a new owner. Never pass native path/context pointers. */
+        /* GB_FSCTX_LAUNCH is emitted only for a build-matched API-v3 image. */
+        if (gb_fsctx_prepare_launch(fs_context,e))
             gb_alert("Document not opened", "File context unavailable");
-        else gb_wm_open("NOTEPAD APP");
+        else {
+#ifdef GB_SHELL_SERVICES
+            if(gb_shell_request(GB_SHELL_CLASS_TEXT_EDITOR,GB_SHELL_OPEN,e)
+                !=GB_SHELL_OK)gb_wm_open("NOTEPAD APP");
+#else
+            gb_wm_open("NOTEPAD APP");
+#endif
+        }
         return;
     }
 #endif
-#ifdef GB_SHELL_SERVICES
+#if defined(GB_SHELL_SERVICES) && !defined(GB_FSCTX_LAUNCH)
     if ((ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G')) &&
         gb_shell_request(GB_SHELL_CLASS_TEXT_EDITOR, GB_SHELL_OPEN, e)
             != GB_SHELL_NOT_FOUND)
