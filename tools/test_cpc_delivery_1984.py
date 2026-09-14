@@ -28,7 +28,7 @@ def cases(settings=False,notepad=False):
     if notepad:
         result += [('notepad-'+name,['--notepad-case',name,'--notepad-app',
                    str(ROOT/'build/universal/NOTEPAD.APP')]) for name in
-                   ('handoff','blank','escape','boundary','clipboard','write-denied','disk-full','config')]
+                   ('handoff','blank','escape','boundary','clipboard','write-denied','disk-full','config','basic')]
     return result
 
 

@@ -10,11 +10,17 @@ from test_cpc_foundation_1984 import snapshot
 APP_SHA='fae9ad2f6da69b906af13836f7230095d2ca8421211a8f80a79e310813f933b7'
 QUIT_APP_SHA=APP_SHA
 DOCUMENTS={'/ADOC/EXACT.TXT':b'abc\nxyz\n','/ADOC/SUB/EXACT.TXT':b'Nested document.\n'}
+BASIC_PATH='/ADOC/DIR.EXT/ROUND.BAS'
+BASIC_DISK=b'10 PRINT "ONE"\r\n20 END\r\n'
+BASIC_SEED='/ADOC/DIR.EXT/SEED.TXT'
 
 def documents(case):
     result=dict(DOCUMENTS)
     if case=='config':
         result['/ADOC/GEOBENCH.CFG']=b'FONT=DEFAULT\nVIEW=ICONS\n'
+    if case=='basic':
+        result[BASIC_PATH]=BASIC_DISK
+        result[BASIC_SEED]=b'Open BASIC through Notepad.\n'
     if case=='boundary':
         result['/ADOC/EXACT.TXT']=(b'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n'*111)[:4096]
         result['/ADOC/TOOLARGE.TXT']=result['/ADOC/EXACT.TXT']+b'!'
@@ -34,6 +40,7 @@ def prepare(manifest,app,image,artifacts,case):
     if delivery and subprocess.check_output(['mtype',*target,'::/GBENCH/NOTEPAD.APP'])!=data:
         raise ValueError('delivered Notepad differs from the accepted APP')
     for name in ('::/ADOC','::/ADOC/SUB'):subprocess.run(['mmd',*target,name],check=True)
+    if case=='basic':subprocess.run(['mmd',*target,'::/ADOC/DIR.EXT'],check=True)
     for index,(path,payload) in enumerate(documents(case).items()):
         file=artifacts/f'document-{index}.txt';file.write_bytes(payload)
         subprocess.run(['mcopy',*target,str(file),'::'+path],check=True)
@@ -148,14 +155,20 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
     named(b'GBENCH     ' if case=='blank' else b'ADOC       ')
     until('document folder',lambda r:field(r,'fm_path',len(folder))==folder)
     expected_files=documents(case)
+    if case=='basic':
+        named(b'DIR     EXT')
+        until('dotted document folder',lambda r:field(r,'fm_path',14)==b'/ADOC/DIR.EXT\0')
     for cycle,nested in enumerate((False,)*12 if case=='stress' else
-                                  (False,) if case in ('blank','config') else (False,True)):
-        path='/ADOC/GEOBENCH.CFG' if case=='config' else \
+                                  (False,) if case in ('blank','config','basic') else (False,True)):
+        path=BASIC_SEED if case=='basic' else \
+             '/ADOC/GEOBENCH.CFG' if case=='config' else \
              '/ADOC/SUB/EXACT.TXT' if nested else '/ADOC/EXACT.TXT'
         expected=b'' if case=='blank' else expected_files[path]
+        if case=='basic':expected=expected.replace(b'\r',b'')
         if nested:
             named(b'SUB        ');until('SUB',lambda r:field(r,'fm_path',10)==b'/ADOC/SUB\0')
         named(b'NOTEPAD APP' if case=='blank' else
+              b'SEED    TXT' if case=='basic' else
               b'GEOBENCHCFG' if case=='config' else b'EXACT   TXT')
         if case=='bad-app':
             wait(150);wait(150);r=checked('rejected-document')
@@ -193,6 +206,41 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
             if r[sym['cpc_cfg_text']:sym['cpc_cfg_text']+len(changed)]!=changed:
                 raise AssertionError('resident configuration bytes differ from saved document')
             expected_files[path]=changed;checked('configuration-published')
+        if case=='basic' and not cycle:
+            def app_state(state,name,size):
+                at=base(state,slot)+ns[name]-0x4000
+                return state[at:at+size]
+            def picker_ready(state):return mode(state)==1 and app_state(state,'_scratch',9)[8]==5
+            def load_basic():
+                pointer(11,3);click();wait(20);pointer(12,24);click()
+                for _ in range(32):
+                    state=until('BASIC chooser',picker_ready);picker=app_state(state,'_scratch',161)
+                    for row in range(picker[10]):
+                        if picker[89+12*row:100+12*row]==b'ROUND   BAS':
+                            pointer(10,48+row*10);click();return
+                    if not picker[11]:raise AssertionError('BASIC missing from chooser')
+                    pointer(22,112);click()
+                raise AssertionError('BASIC chooser page bound exceeded')
+            normalized=BASIC_DISK.replace(b'\r',b'')
+            load_basic()
+            r=until('BASIC normalized load',lambda state:mode(state)==0 and
+                    view(state)[:2]==len(normalized).to_bytes(2,'little') and not view(state)[13])
+            if leaf(r,len(normalized))!=normalized:raise AssertionError('BASIC CRLF was not normalized')
+            checked('basic-crlf-loaded');wait(80)
+            text_key('Z',lambda state:view(state)[0:2]==(len(normalized)+1).to_bytes(2,'little'))
+            changed=b'z'+normalized
+            if leaf(ram(),len(changed))!=changed:raise AssertionError('BASIC edit differs')
+            pointer(11,3);click();wait(20);pointer(12,34);click()
+            r=until('BASIC save',lambda state:mode(state)==0 and not view(state)[13])
+            if view(r)[:2]!=len(changed).to_bytes(2,'little') or leaf(r,len(changed))!=changed:
+                raise AssertionError('BASIC save changed the normalized editor text')
+            expected_files[BASIC_PATH]=changed.replace(b'\n',b'\r\n')
+            checked('basic-crlf-saved')
+            load_basic()
+            r=until('BASIC exact reopen',lambda state:mode(state)==0 and
+                    view(state)[:2]==len(changed).to_bytes(2,'little') and not view(state)[13])
+            if leaf(r,len(changed))!=changed:raise AssertionError('BASIC reopen differs')
+            checked('basic-crlf-reopened')
         if case in ('blank','boundary','clipboard','write-denied','disk-full','stress'):
             from types import SimpleNamespace
             from cpc_notepad_acceptance import exercise_case

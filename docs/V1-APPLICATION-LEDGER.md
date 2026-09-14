@@ -23,7 +23,7 @@ portable-service contract. Milestone numbers refer to the v1.0 roadmap.
 | Clock / `apps/uclock` | Universal v4 | Screen 6/7 lifecycle, border, background and input checks; see baseline limits | Same payload; accepted desktop workload | Keep regression coverage throughout |
 | Calculator / `apps/ucalculator` | Universal v4 | Screen 6/7 Desk identity, activation, border, text and cleanup | Same payload; accepted desktop workload | Keep regression coverage throughout |
 | ABIProbe / `apps/abiprobe` | Universal v4 diagnostic | Built and inventoried; not independently rerun here | Existing diagnostic qualification, not a production migration | ABI conformance |
-| Notepad / `apps/unotepad`; native reference retained in `apps/notepad` | Universal v4, two segments | Normal-image Screen 6/7 editor, exact-path handoff, live reuse and exact configuration publication in 1983; editor independently checked in openMSX | Same APP in normal M4 image; editing/chooser/clipboard, 4096/4097 bounds, dirty decisions, live reuse/configuration publication, read-only/full-disk failures and cleanup qualified | **1:** editor, safe live-document reuse and bounded configuration publication qualified; remaining acceptance rows stay open. Albireo/release coverage remains **7/8**; [delivery](UNIFIED-NOTEPAD-DELIVERY.md), [reuse](UNIFIED-NOTEPAD-REUSE.md), [configuration](UNIFIED-NOTEPAD-CONFIG.md) |
+| Notepad / `apps/unotepad`; native reference retained in `apps/notepad` | Universal v4, two segments | Normal-image Screen 6/7 editor, exact-path handoff, live reuse, exact configuration publication and real BASIC CRLF round trip in 1983; independently checked in openMSX | Same APP in normal M4 image; editing/chooser/clipboard, 4096/4097 bounds, dirty decisions, live reuse/configuration publication, dotted paths, BASIC CRLF, read-only/full-disk failures and cleanup qualified | **1 complete.** Albireo and whole-release coverage remain milestone **7/8**, not Notepad gaps; [delivery](UNIFIED-NOTEPAD-DELIVERY.md), [reuse](UNIFIED-NOTEPAD-REUSE.md), [configuration](UNIFIED-NOTEPAD-CONFIG.md), [closure](UNIFIED-NOTEPAD-CLOSURE.md) |
 | GBRDEMO / `apps/gbrdemo` | Native legacy | Built only | Not delivered | Portable resources, forms and semantic drawing; **2** |
 | FormRef / `apps/formref` | Native v3 | Built only | Not delivered | Resources/forms plus owned page/secondary-code lifecycle; **2** |
 | File Manager / `apps/filemgr` | Native legacy | Normal window/menu workflow: maximize, restore, move and resize | Accepted native M4 browsing, view persistence and qualified-app launching | Portable FS contexts, menus, launch/association services; **3**, full file operations **4** |
@@ -69,7 +69,7 @@ production universal applications match byte-for-byte:
 | CALC.APP | 7868 | `4e7fbe8df31f328b1814cbc46bbe04f984a38f6f62466640786574f7385265e0` |
 | NOTEPAD.APP | 20521 | `fae9ad2f6da69b906af13836f7230095d2ca8421211a8f80a79e310813f933b7` |
 
-Normal CPC acceptance covers 35 scenarios (34 passed initially; the corrected
+Normal CPC acceptance covers the original 35 scenarios (34 passed initially; the corrected
 legacy unsupported-file scenario passed separately). All seven delivered editor
 cases passed initially. MSX editor, exact-path handoff and Desk/Clock/Calculator
 stress pass in both screen modes under 1983, with independent openMSX editor
@@ -77,8 +77,11 @@ checks. See [the delivery record](UNIFIED-NOTEPAD-DELIVERY.md) for complete
 provenance, image hashes, source-media preservation and exact memory limits.
 Prior user manual acceptance covered editing and File > Quit on both targets;
 the delivery and subsequent live-reuse/configuration checkpoints add automated
-qualification, not real-hardware or Albireo acceptance. Remaining milestone 1
-acceptance stays open under #84; no full milestone 1/v1.0 completion is implied.
+qualification. The [closure record](UNIFIED-NOTEPAD-CLOSURE.md) adds CPC dotted
+path acceptance and real BASIC CRLF round trips in CPC/1984 and MSX/1983 Screen
+6/7, plus an independent openMSX regression. Milestone 1 is complete. Real
+hardware, Albireo and whole-release acceptance remain milestones 7–8; no v1.0
+completion is implied.
 
 ## Historical artifact identity and bring-up findings — 2026-09-08/09
 

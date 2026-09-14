@@ -592,7 +592,7 @@ if __name__=='__main__':
     mode.add_argument('--package-case',choices=PACKAGE_CASES)
     parser.add_argument('--notepad-app',type=Path,help='unchanged accepted Notepad APP with adjacent probe.noi')
     mode.add_argument('--notepad-case',choices=('handoff','reuse','reuse-dirty','blank','bad-app','quit','escape',
-                                               'boundary','clipboard','write-denied','disk-full','stress','config'))
+                                               'boundary','clipboard','write-denied','disk-full','stress','config','basic'))
     mode.add_argument('--filesystem',action='store_true')
     mode.add_argument('--clipboard',action='store_true')
     mode.add_argument('--chooser',action='store_true')

@@ -8,11 +8,11 @@ and qualify both release images. Scope clarified with the user on 2026-09-08.
 It is not a release announcement or a claim that the remaining features are
 implemented.
 
-Updated 2026-09-14 for the user-approved Notepad delivery commit/PR/merge and
-issue #84 sprints 1–2: the editor is delivered on both targets, safe live
-TXT/CFG reuse is implemented, and bounded live configuration publication is
-qualified locally. Remaining milestone 1 acceptance and milestones 2–8 remain
-open.
+Updated 2026-09-14 after issue #84's final closure sprint: the editor is
+delivered on both targets, safe live TXT/CFG reuse and bounded live
+configuration publication are qualified, real BASIC CRLF round trips pass on
+both targets, and CPC filesystem paths now match the portable chooser's bounded
+8.3 grammar. Milestone 1 is complete; milestones 2–8 remain open.
 
 ## What v1.0 means
 
@@ -148,16 +148,17 @@ These are outcome-based work packages, not time estimates or new historical
 milestone numbers. Milestone 1's initial stability/inventory checkpoint
 [issue #82](https://github.com/salvogendut/GEMBENCH/issues/82) is closed;
 Notepad's editor and normal MSX2/CPC delivery are **complete** under
-[issue #84](https://github.com/salvogendut/GEMBENCH/issues/84); its two local
-follow-up sprints add safe reuse and live configuration publication. That issue
-remains open for the remaining milestone acceptance rows.
+[issue #84](https://github.com/salvogendut/GEMBENCH/issues/84). Its follow-up
+sprints add safe reuse, live configuration publication, real BASIC newline
+round trips and a portable CPC path grammar; the
+[closure record](UNIFIED-NOTEPAD-CLOSURE.md) accounts for every acceptance row.
 Milestones 2–8 are not delivered. Use one
 bounded issue/branch per implementation package and split internally where
 dependencies require it; do not expand the scope without recording the change.
 
 | Order | Deliverable | Completion criterion |
 | --- | --- | --- |
-| 1 | Unified Notepad and document services — editor delivered; reuse and configuration publication qualified locally | One Notepad APP performs real open/edit/save/copy/paste/close/reuse/configuration workflows on MSX2 and CPC; close the remaining acceptance rows. |
+| 1 | **Complete — unified Notepad and document services** | One identical Notepad APP performs real open/edit/save/copy/paste/close/reuse/configuration and BASIC/config newline workflows on MSX2 and CPC; all #84 acceptance rows pass. |
 | 2 | Portable resources, forms and owned page/code services | Identical GBRDEMO/FormRef APPs run on MSX2 and CPC, with resource validation, form interaction and owned secondary-code lifecycle qualified on both. |
 | 3 | Unified Settings and File Manager | Replace their separate target application builds with identical APPs; preserve MSX behavior and the accepted CPC profile through explicit runtime capabilities. |
 | 4 | Complete boot, desktop and file workflows | Restore the CPC boot splash; both distributions support file operations, document associations, Trash, qualified-app launching, palette/wallpaper/defaults, media refresh and firmware return; Shell/Disk Utilities use the unified ABI. |
@@ -179,9 +180,9 @@ Minimum owned data/secondary-code services were brought forward from milestone
 memory limits and 4096-byte editable capacity remain intact. This does not
 complete milestone 2's resource/forms application migrations.
 
-### 1. Unified Notepad and document services — delivered editor, integration follow-ups
+### 1. Unified Notepad and document services — complete
 
-**Current checkpoint, 2026-09-14:** the user-approved Escape → acceptance →
+**Completed 2026-09-14:** the user-approved Escape → acceptance →
 normal-delivery sequence is complete on #84 and merged. Issue #84 sprint 1
 adds safe existing-instance document reuse on both targets: exact copied
 identity, dirty Save/Discard/Cancel, busy fallback and context-full rollback
@@ -197,13 +198,16 @@ MSX screen modes in openMSX/1983. See the
 the [reuse sprint record](UNIFIED-NOTEPAD-REUSE.md), and the
 [configuration sprint record](UNIFIED-NOTEPAD-CONFIG.md) for the new service,
 bounds and runtime evidence. The original record also contains explicit
-corrected-test provenance, MSX checks, hashes and memory limits.
+corrected-test provenance, MSX checks, hashes and memory limits. The final
+[closure sprint](UNIFIED-NOTEPAD-CLOSURE.md) proves a real BASIC CRLF
+open/edit/save/reopen sequence on CPC/M4 and MSX Screen 6/7, independently
+reruns openMSX, and makes CPC path validation match the portable chooser,
+including dotted directories. All issue #84 acceptance rows are satisfied.
 
-**Still open within the wider milestone:** the remaining acceptance rows and
-user acceptance of the two follow-up sprints. File Manager and Settings
-themselves remain native. The dated private
-checkpoints below are historical; their "not staged" status does not describe
-the current normal images. Do not mark v1.0 or the remaining milestones complete.
+File Manager and Settings themselves remain native under milestone 3. The
+dated private checkpoints below are historical; their "not staged" status does
+not describe the current normal images. Do not mark v1.0 or the remaining
+milestones complete.
 
 #### Historical implementation checkpoints (superseded by normal delivery)
 
@@ -553,17 +557,13 @@ changes, promise a date, or authorize a release.
   [migration gates](UNIVERSAL-APPLICATION-ABI-MIGRATION.md)
 - [M4/Albireo emulator qualification strategy](CPC-EMULATOR-TEST-STRATEGY.md)
 
-Next implementation package: **finish milestone 1's document integration**
-([issue #84](https://github.com/salvogendut/GEMBENCH/issues/84)), in this order:
+Next implementation package: **start milestone 2's portable resources, forms
+and owned page/code consumers**, using GBRDEMO and FormRef as the first real
+compile-once applications. Define their common resource-validation and form
+interaction acceptance before replacing either native delivery.
 
-1. **Complete locally in issue #84 sprint 1:** safe existing-instance delivery,
-   exact identity and dirty Save/Discard/Cancel on both receivers.
-2. **Complete locally in issue #84 sprint 2:** exact bounded live configuration
-   publication with no parse/repaint side effect; both targets requalified.
-3. Next: close the remaining milestone 1 acceptance rows, then start milestone 2's
-   portable resources/forms consumers using the already-qualified page services.
-
-The identical editor is now delivered and its normal MSX2/CPC workflows are
-qualified; do not repeat the completed transport/input/first-delivery work.
+Issue #84 and milestone 1 are complete. The identical editor is delivered and
+its normal MSX2/CPC workflows are qualified; do not repeat the completed
+transport, input, document or first-delivery work.
 Native File Manager/Settings conversion and CPC boot splash retain their ordered
 milestones; this checkpoint does not silently start or complete them.

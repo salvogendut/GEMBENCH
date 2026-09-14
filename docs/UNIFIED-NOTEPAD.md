@@ -4,6 +4,11 @@ Started 2026-09-09 in [issue #84](https://github.com/salvogendut/GEMBENCH/issues
 branch `feature/84-unified-notepad`, based on main `1367593`.
 Follows the [bounded MSX baseline close-out](V1-MSX-STABILITY-BASELINE.md).
 
+**Superseded status, 2026-09-14:** the unified editor is now normally delivered
+and milestone 1 is complete. See the [closure record](UNIFIED-NOTEPAD-CLOSURE.md)
+for final cross-target evidence. The dated checkpoints below intentionally
+retain the constraints and failures observed during bring-up.
+
 **Current checkpoint 2j, 2026-09-13:** the actual two-bank editor now fits and
 runs in private MSX images. OpenMSX Screen 6/7 passes real open/edit/save/reopen;
 1983 adds full 4096-byte save/readback and oversized-load recovery. Screen 7's

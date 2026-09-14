@@ -23,14 +23,21 @@ and remaining issues here before declaring the delivery complete.
 
 Publication follow-up, 2026-09-14: the user requested committing/pushing this
 checkpoint, opening/merging its PR, and updating the v1.0 roadmap and acceptance
-ledger. This publishes the completed editor delivery; issue #84 remains open
-for its outstanding safe live-editor reuse/document-integration acceptance.
+ledger. This published the completed editor delivery; at this historical
+checkpoint issue #84 remained open for safe live-editor reuse and document
+integration acceptance.
 
 Subsequent issue #84 sprint 1 implements that safe live-document reuse. Its
 new APP identity, normal-image hashes, owner transaction, dirty-decision and
 emulator evidence are recorded separately in
 [UNIFIED-NOTEPAD-REUSE.md](UNIFIED-NOTEPAD-REUSE.md). Exact sizes and hashes
 below remain the historical delivery checkpoint, not the later reuse artifact.
+
+Final status, 2026-09-14: issue #84's later reuse, configuration and closure
+sprints are complete. The [closure record](UNIFIED-NOTEPAD-CLOSURE.md) adds the
+real BASIC CRLF and portable CPC dotted-path evidence that completes milestone
+1. Statements below about outstanding work describe this earlier delivery
+checkpoint and are retained as historical provenance.
 
 ## Preserved baseline
 

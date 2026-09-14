@@ -49,6 +49,16 @@ class HandoffDriver(NotepadDriver):
                       (args.source.parent/'probe.noi').read_text(),re.M)}
         self.fm_symbols=json.loads((args.source.parent/'filemgr-symbols.json').read_text())
         glue=constants(args.worktree/'lib/msx/glue.inc')
+        def model_text(count):
+            owner=self.read(glue['MSX_WIN_OWNER']+2)[0]
+            seal=self.read(0x2180+(owner-1)*8,8)
+            native=self.read(glue['MSX_PAGE_NATIVE']+seal[1]-1)[0]
+            model_symbols=(args.worktree/'build/universal-secondary/secondary/main.sym').read_text()
+            assert re.search(r'^\s+1\s+_leaf_editor\s+00000000\s+R',model_symbols,re.M)
+            secondary_link=(args.worktree/'build/universal-secondary/secondary/secondary.noi').read_text()
+            data_base=int(re.search(r'^DEF s__DATA (0x[0-9A-Fa-f]+)',secondary_link,re.M)[1],16)
+            actual=bytes(self.call(f'ram {native*0x4000+data_base+1-0x4000} {count}'))
+            return actual,owner,seal,native
         self.wait(lambda:self.read(0xCF00,2)==[48,6] and self.value('WM_NWIN')==1,'desktop boot',6000)
         self.bank=self.frames(100)['p0']
         self.expect(self.read(0xCF05)==[args.mode] and self.read(0xCF1F)==[3],'Screen mode and filesystem API v3')
@@ -76,7 +86,32 @@ class HandoffDriver(NotepadDriver):
             self.expect(length==[len(changed),0] and bytes(self.read(0x1000,len(changed)))==changed,
                         'resident configuration cache matches saved bytes')
             self.close(2,2)
-        for nested in () if args.config else (False,True):
+        if args.basic:
+            disk=b'10 PRINT "ONE"\r\n20 END\r\n';expected=disk.replace(b'\r',b'')
+            self.entry_named(b'SEED    TXT')
+            self.wait(lambda:self.value('WM_NWIN')==3 and self.value('WM_FOCUS')==2,
+                      'seed document launch and focus')
+            self.load_file(b'ROUND   BAS')
+            self.wait(lambda:self.mode()==0 and self.editor()[:2]==[len(expected),0],
+                      'BASIC normalized load')
+            actual,owner,seal,native=model_text(len(expected))
+            self.expect(actual==expected,
+                        f'BASIC CRLF normalized in model: owner={owner}, seal={seal}, native={native}')
+            self.frames(100);self.type_keys([(2,64)])
+            changed=b'a'+expected
+            self.wait(lambda:self.editor()[:2]==[len(changed),0] and self.editor()[13],
+                      'BASIC edit')
+            self.expect(model_text(len(changed))[0]==changed,'BASIC edited model bytes')
+            self.menu(2);self.wait(lambda:self.mode()==0 and not self.editor()[13],
+                                   'BASIC CRLF save')
+            self.expect(model_text(len(changed))[0]==changed,
+                        'BASIC save preserves normalized editor bytes')
+            self.load_file(b'ROUND   BAS')
+            self.wait(lambda:self.mode()==0 and self.editor()[:2]==[len(changed),0],
+                      'BASIC reopen')
+            self.expect(model_text(len(changed))[0]==changed,'BASIC exact reopen bytes')
+            self.close(2,2)
+        for nested in () if args.config or args.basic else (False,True):
             expected=b'Chosen nested document.\n' if nested else b'Chosen root document.\n'
             if nested:
                 self.entry_named(b'SUB        ')
@@ -94,16 +129,8 @@ class HandoffDriver(NotepadDriver):
             self.expect(self.editor()[:2]==[len(expected),0] and self.editor()[13]==0,'exact document length and clean state')
             self.expect(self.read(glue['MSX_FSCTX_PENDING'])==[0],'handoff consumed exactly once')
             # Inspect the real sealed model bank, not a debugger-injected model.
-            owner=self.read(glue['MSX_WIN_OWNER']+2)[0]
-            seal=self.read(0x2180+(owner-1)*8,8)
-            native=self.read(glue['MSX_PAGE_NATIVE']+seal[1]-1)[0]
             # crt0_secondary contributes one DATA byte before main's model.
-            # Verify these bindings against the matched private build.
-            model_symbols=(args.worktree/'build/universal-secondary/secondary/main.sym').read_text()
-            assert re.search(r'^\s+1\s+_leaf_editor\s+00000000\s+R',model_symbols,re.M)
-            secondary_link=(args.worktree/'build/universal-secondary/secondary/secondary.noi').read_text()
-            data_base=int(re.search(r'^DEF s__DATA (0x[0-9A-Fa-f]+)',secondary_link,re.M)[1],16)
-            actual=bytes(self.call(f'ram {native*0x4000+data_base+1-0x4000} {len(expected)}'))
+            actual,owner,seal,native=model_text(len(expected))
             self.expect(actual==expected,f'exact loaded bytes from selected path: owner={owner}, seal={seal}, native={native}, got={actual!r}')
             self.border(2)
             # Save the adopted document in place; host verifies both directories.
@@ -127,12 +154,15 @@ class HandoffDriver(NotepadDriver):
         # and be released by the first launch.  The invariant is the idle
         # desktop allocation plus no loss of free pages, not byte equality
         # with that transient baseline.
-        self.expect(after==[1]+[0]*31 and after_free[0]>=free[0],
+        reclaimed=(after==before and after_free==free) or \
+                  (after==[1]+[0]*31 and after_free[0]>=free[0])
+        self.expect(reclaimed,
                     f'all application pages reclaimed: {before}/{free} -> {after}/{after_free}')
         self.expect(all(not self.read(glue['MSX_FSCTX_TABLE']+144*i)[0] for i in range(4)), 'all contexts reclaimed')
         self.expect(self.read(0x2180,64)==[0]*64 and not self.value('SCHED_FAULT'),'seals and scheduler clean')
         return dict(status='PASS',checks=self.checks,frames=self.frame,
-                    case='config' if args.config else 'bad-app' if args.bad_app else
+                    case='config' if args.config else 'basic' if args.basic else
+                         'bad-app' if args.bad_app else
                          'reuse' if args.reuse else 'exact-path')
 
 
@@ -144,6 +174,7 @@ def main():
     mode.add_argument('--bad-app',action='store_true')
     mode.add_argument('--reuse',action='store_true')
     mode.add_argument('--config',action='store_true')
+    mode.add_argument('--basic',action='store_true')
     args=parser.parse_args();args.bios=args.subrom=None;args.short_desk_stress=False
     if args.output.exists():parser.error('output exists; preserve earlier evidence')
     args.source=args.image;source_hash=hashlib.sha256(args.source.read_bytes()).hexdigest()
@@ -158,6 +189,11 @@ def main():
     if args.config:
         file=args.output/'GEOBENCH.CFG';file.write_bytes(b'FONT=DEFAULT\nVIEW=ICONS\n')
         subprocess.run(['mcopy','-o','-i',str(args.image)+'@@16384',str(file),'::/ADOC/GEOBENCH.CFG'],check=True)
+    if args.basic:
+        file=args.output/'ROUND.BAS';file.write_bytes(b'10 PRINT "ONE"\r\n20 END\r\n')
+        subprocess.run(['mcopy','-o','-i',str(args.image)+'@@16384',str(file),'::/ADOC/ROUND.BAS'],check=True)
+        file=args.output/'SEED.TXT';file.write_bytes(b'Open BASIC through Notepad.\n')
+        subprocess.run(['mcopy','-o','-i',str(args.image)+'@@16384',str(file),'::/ADOC/SEED.TXT'],check=True)
     driver=None
     try:
         with (args.output/'bridge.log').open('w') as log:
@@ -183,6 +219,11 @@ def main():
                 report.update(status='FAIL',error='saved configuration differs')
             else:
                 report['saved_configuration_mismatch']=actual.decode('ascii','backslashreplace')
+    if args.basic:
+        actual=subprocess.check_output(['mtype','-i',str(args.image)+'@@16384','::/ADOC/ROUND.BAS'])
+        if actual!=b'a10 PRINT "ONE"\r\n20 END\r\n':
+            if report.get('status')=='PASS':report.update(status='FAIL',error='saved BASIC differs')
+            else:report['saved_basic_mismatch']=actual.decode('ascii','backslashreplace')
     unchanged=hashlib.sha256(args.source.read_bytes()).hexdigest()==source_hash
     if not unchanged:report.update(status='FAIL',error='source image changed')
     report.update(source_image_sha256=source_hash,source_image_unchanged=unchanged,mode=args.mode,
