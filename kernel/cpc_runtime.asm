@@ -13,6 +13,9 @@ CPC_FSCTX equ 1
 CPC_FS_DIRECTORY equ 1
 CPC_FS_WRITE equ 1
                 include "../lib/cpc/production_layout.inc"
+                ifdef PORTABLE_PACKAGE_STREAM
+                include "cpc_package_provider.inc"
+                endif
                 include "cpc_registration_provider.inc"
 FAULT_STORAGE_BANK equ 0
 FAULT_STORAGE_ROM equ 0
@@ -36,6 +39,10 @@ storage_response_fault
                 ret
                 include "../lib/cpc/irq.asm"
                 include "../lib/cpc/input.asm"
+                ifdef PORTABLE_PACKAGE_STREAM
+                include "../lib/cpc/m4_stream_read.asm"
+                include "cpc_package_hardware.asm"
+                endif
 cpc_hardware_used_end
                 assert $<=CPC_HARDWARE_END,"runtime hardware overflow"
                 save "HARDWARE.RAW",cpc_hardware_begin,$-cpc_hardware_begin
@@ -94,3 +101,14 @@ cpc_root_popup_end equ CPC_APP_LIMIT
 cpc_kernel_used_end
                 assert $<=CPC_KERNEL_END,"unified runtime exceeds high kernel"
                 save "CORE.RAW",cpc_kernel_begin,$-cpc_kernel_begin
+                ifdef PORTABLE_PACKAGE_STREAM
+                assert CPC_EDIT_STATE_END<=CPC_STREAM_STATE,"package/editor state overlap"
+                org CPC_PACKAGE_MODULE_BASE
+                jp package_load
+                db "CPK4",1
+                include "core/package_stream.asm"
+cpc_package_module_used_end
+                assert $<=CPC_PACKAGE_MODULE_BASE+CPC_PACKAGE_MODULE_SIZE,"CPC package module overflow"
+                defs CPC_PACKAGE_MODULE_BASE+CPC_PACKAGE_MODULE_SIZE-$,0
+                save "GBPKLOAD.MOD",CPC_PACKAGE_MODULE_BASE,CPC_PACKAGE_MODULE_SIZE
+                endif

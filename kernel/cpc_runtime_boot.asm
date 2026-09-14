@@ -35,6 +35,10 @@ cpc_runtime_start
                 call sched_init_impl
                 xor a
                 ld (SCHED_CURRENT),a
+                ifdef PORTABLE_PACKAGE_STREAM
+                call cpc_package_boot
+                jp nc,cpc_runtime_failed
+                endif
                 ld a,1
                 ld (SCHED_RUNNABLE),a
                 ld (KCFG_FRAMEPEN),a

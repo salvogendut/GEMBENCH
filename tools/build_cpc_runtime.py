@@ -2,12 +2,14 @@
 """Compose the shared CPC core and native/universal profiles on M4 media."""
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
+import zlib
 
 from build_cpc_foundation import headed
 from build_cpc_production import ROOT, memory_regions, symbols
@@ -52,7 +54,19 @@ def assemble(work: Path, overrides=()):
     (work / "TIMER.BIN").write_bytes(bytes(116))
     command = [os.environ.get("RASM", "rasm"), str(ROOT / "kernel/cpc_runtime.asm"),
                "-s", "-sq", "-o", "runtime", f"-I{work}", *overrides]
+    package = '-DPORTABLE_PACKAGE_STREAM=1' in overrides
+    if package:
+        (work/'package_crc.inc').write_text('db 0,0,0,0\n')
     subprocess.run(command, cwd=work, check=True)
+    if package:
+        module = (work/'GBPKLOAD.MOD').read_bytes()
+        if len(module)!=768 or module[0]!=0xC3 or module[3:8]!=b'CPK4\1':
+            raise AssertionError('invalid fixed CPC package module')
+        crc = zlib.crc32(module).to_bytes(4,'little')
+        (work/'package_crc.inc').write_text('db '+','.join(str(b) for b in crc)+'\n')
+        subprocess.run(command, cwd=work, check=True)
+        if (work/'GBPKLOAD.MOD').read_bytes()!=module:
+            raise AssertionError('module CRC binding changed its executable bytes')
     initial = symbols(work / "runtime.sym")
     title_module(work,initial)
     compile_module(work, initial, ROOT, directory=True, writable=True)
@@ -62,6 +76,8 @@ def assemble(work: Path, overrides=()):
     (work / "bar_layout.json").write_text(json.dumps(bar, indent=2) + "\n")
     subprocess.run(command, cwd=work, check=True)
     sym = symbols(work / "runtime.sym")
+    if package and (work/'GBPKLOAD.MOD').read_bytes()!=module:
+        raise AssertionError('final CPC modules changed package receiver binding')
     def resident(s): return {k: v for k, v in s.items() if k != "cpc_fs_module_bytes"}
     if resident(sym) != resident(initial):
         raise AssertionError("FS/bar modules changed runtime addresses")
@@ -78,7 +94,9 @@ def assemble(work: Path, overrides=()):
     return sym
 
 
-def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False):
+def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False, package_stream=False):
+    if package_stream and (delivery or data_pages or not settings):
+        raise ValueError('secondary receiver requires the full private Settings/Desktop profile; no delivery/data-page promotion')
     if data_pages and (desktop or filemgr or delivery or settings):
         raise ValueError('data pages currently require the private runtime qualification profile')
     if settings: filemgr=True
@@ -86,11 +104,13 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
         raise ValueError('Desktop delivery requires an explicit Desktop profile')
     desktop = desktop or filemgr
     variant = 'desktop' if delivery else 'settings-contract' if settings else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
+    if package_stream: variant='notepad-receiver'
     work = ROOT / ('build/cpc-'+variant)
     overrides=('-DCPC_NATIVE_DESKTOP=1',) if desktop else ()
     if filemgr: overrides+=('-DCPC_NATIVE_FILEMGR=1',)
     if settings: overrides+=('-DCPC_NATIVE_SETTINGS=1',)
     if data_pages: overrides+=('-DPORTABLE_DATA_PAGES=1',)
+    if package_stream: overrides+=('-DPORTABLE_PACKAGE_STREAM=1',)
     sym = assemble(work,overrides)
     if filemgr:
         from build_cpc_filemgr import compile_filemgr, bind_runtime
@@ -129,6 +149,7 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
                         "UNIVERSAL_ACCESSORY": "1", "UNIVERSAL_MENU": "1", "DATA_LOC": "0x7300"},
                    cwd=ROOT, check=True)
     media = ROOT / ('QA/CPC-Desktop' if delivery else 'QA/Diagnostics/CPC-'+variant)
+    if package_stream: media=ROOT/'build/notepad-84/cpc-receiver'
     card = media / "CARD"
     boot = bytearray(headed((work / "BOOT.RAW").read_bytes(), 0x8000))
     boot[1:12] = b"BOOT    BIN"
@@ -149,6 +170,8 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
              "GEOBENCH.CFG": b'ICONS=REFINED\r\nFONT=DEFAULT\r\nCURSOR=DEFAULT\r\nBACKDROP=SOLID\r\nTITLEBAR=ORIGINAL\r\nGADGETS=ORIGINAL\r\nINKS=1,26,0,6,1\r\n',
              "GBENCH/CALC.APP": calculator.read_bytes(),
              "GBENCH/CLOCK.APP": clock.read_bytes()}
+    if package_stream:
+        files['GBENCH/GBPKLOAD.MOD']=(work/'GBPKLOAD.MOD').read_bytes()
     if not delivery:
         files.update({"GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
@@ -206,6 +229,11 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
         ("scheduler", "cpc_scheduler_begin", "cpc_scheduler_end", "cpc_sched_end")):
         sections[name] = dict(base=sym[begin], used=sym[end]-sym[begin], budget=sym[limit]-sym[begin])
     sections["fsctx"] = dict(base=0x4400, used=len(files["FSCTX.BIN"]), budget=sym['cpc_fs_module_limit']-0x4400)
+    if package_stream:
+        sections['package']=dict(base=sym['cpc_package_module_base'],budget=sym['cpc_package_module_size'],
+            used=sym['cpc_package_module_used_end']-sym['cpc_package_module_base'],
+            loaded=len(files['GBENCH/GBPKLOAD.MOD']),crc32=zlib.crc32(files['GBENCH/GBPKLOAD.MOD']),
+            status='private boot-checked fixed module; not a normal-delivery capability')
     sections['title'] = dict(base=sym['data_title'],page=sym['cpc_data_page'],
                             used=symbols(work/'title.sym')['cpc_title_module_used_end']-sym['data_title'],
                             loaded=sym['cpc_title_module_size'],budget=sym['cpc_title_limit']-sym['data_title'])
@@ -243,6 +271,9 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     if settings and not delivery:
         manifest.update(profile='cpc-settings-m4-private-v1',storage='m4',
                         status='private Settings launch/persistence qualification; not a distribution')
+    if package_stream:
+        manifest.update(profile='cpc-notepad-receiver-private-v1',storage='m4',
+                        status='private secondary receiver qualification; document handoff/text input not yet bound')
     (media / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     # Explicit private config: manual testing never edits the user's normal
     # machine setup or mounts their existing M4/Albireo card.
@@ -253,4 +284,9 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     return media
 
 
-if __name__ == "__main__": build()
+if __name__ == "__main__":
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--notepad-receiver',action='store_true',
+        help='private full CPC secondary receiver; not a runnable Notepad or delivery image')
+    args=parser.parse_args()
+    build(settings=args.notepad_receiver,package_stream=args.notepad_receiver)

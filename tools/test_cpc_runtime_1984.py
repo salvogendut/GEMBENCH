@@ -27,6 +27,13 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     if ram[sym['sched_fault']]: raise AssertionError("scheduler fault")
     for name in ('io_busy','io_offline','io_fd','core_pointer_paintlock'):
         if ram[sym[name]]: raise AssertionError(f"unfinished transaction: {name}")
+    if 'cpc_package_ready' in sym:
+        if ram[sym['cpc_package_ready']] != 1:
+            raise AssertionError('private package module was not qualified')
+        if ram[0x100:0x400] != (work/'GBPKLOAD.MOD').read_bytes():
+            raise AssertionError('fixed package module changed')
+        for name in ('pkg_busy','sec_busy','cs_owned','cpc_package_prefix'):
+            if ram[sym[name]]: raise AssertionError('unfinished '+name)
     used = {}
     for stem in ('main','irq','tmp'):
         lo, hi = sym[f'cpc_{stem}_stack'], sym[f'cpc_{stem}_top']
@@ -61,7 +68,11 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None, clipboard=False, chooser=False, data_pages=False):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None, clipboard=False, chooser=False, data_pages=False, private_media=None, package_case=None):
+    if private_media and (not skip_build or desktop_delivery):
+        raise ValueError('private media requires --skip-build, never delivery promotion')
+    if package_case and not private_media:
+        raise ValueError('secondary tests require explicit private receiver media')
     if (clipboard or chooser or data_pages) and (desktop or desktop_delivery or filemgr or filemgr_case or filemgr_scenario or settings_case):
         raise ValueError('portable service probes use the private diagnostic launcher only')
     settings=settings_case is not None
@@ -101,12 +112,19 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
     else:
         variant='settings-contract' if settings else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
         media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr,settings=settings,data_pages=data_pages)
+        if private_media: media=Path(private_media).resolve()
         manifest=json.loads((media/'manifest.json').read_text())
+        if private_media and manifest.get('profile')!='cpc-notepad-receiver-private-v1':
+            raise ValueError('expected explicitly private CPC secondary receiver profile')
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifact_root=ROOT/'build/settings-runtime' if settings else ROOT/'build/cpc-delivery-runtime' if desktop_delivery else None
+    if private_media: artifact_root=ROOT/'build/notepad-84/evidence'
     if artifact_root is not None:artifact_root.mkdir(parents=True,exist_ok=True)
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-',dir=artifact_root))
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(seed_image or manifest['image']).read_bytes())
+    if package_case:
+        from cpc_runtime_secondary import prepare
+        prepare(ROOT,work,image,artifacts,package_case)
     if clipboard:
         # Alias on the disposable image only; F5 follows the normal app loader.
         subprocess.run(['mcopy','-o','-i',str(image)+'@@16384',
@@ -241,6 +259,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 if root_fault: raise AssertionError('invalid root module executed')
                 break
             if ram[sym['cpc_runtime_status']] == 255:
+                if package_case and package_case.startswith('module-'):
+                    from cpc_runtime_secondary import boot_rejected
+                    return boot_rejected(package_case,data,artifacts,sym,wait,read)
                 if not root_fault: raise AssertionError('runtime boot failure')
                 if ram[sym['cpc_runtime_launches']] or ram[sym['sched_fault']]:
                     raise AssertionError('invalid root module crossed boot boundary')
@@ -267,6 +288,11 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 return artifacts
         else: raise AssertionError('runtime boot timeout')
         wait(50)
+        if package_case:
+            if package_case.startswith('module-'):
+                raise AssertionError('bad loader module unexpectedly booted')
+            from cpc_runtime_secondary import exercise
+            return exercise(ROOT,manifest,work,sym,image,artifacts,package_case,send,wait,read,key,move)
         if settings:
             from cpc_runtime_settings import run_settings
             return run_settings(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,settings_case,settings_fixture)
@@ -549,7 +575,10 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--emulator',type=Path,default=ROOT.parent/'1984/1984')
     parser.add_argument('--skip-build',action='store_true')
+    parser.add_argument('--private-media',type=Path,help='explicit private secondary-receiver media; never a delivery image')
     mode=parser.add_mutually_exclusive_group()
+    from cpc_runtime_secondary import CASES as PACKAGE_CASES
+    mode.add_argument('--package-case',choices=PACKAGE_CASES)
     mode.add_argument('--filesystem',action='store_true')
     mode.add_argument('--clipboard',action='store_true')
     mode.add_argument('--chooser',action='store_true')
@@ -584,7 +613,7 @@ if __name__=='__main__':
     artifacts=run(**vars(args))
     if args.settings_case=='normal':
         run(args.emulator,skip_build=True,desktop_delivery=args.desktop_delivery,
-            settings_case='reboot',seed_image=artifacts/'RUNTIME.IMG')
+            private_media=args.private_media,settings_case='reboot',seed_image=artifacts/'RUNTIME.IMG')
     if args.desktop_delivery and args.filemgr_scenario=='services':
         run(args.emulator,skip_build=True,desktop_delivery=True,filemgr_scenario='reboot',
             seed_image=artifacts/'RUNTIME.IMG')

@@ -92,6 +92,10 @@ cpc_parameter_window
                 ifdef PORTABLE_DATA_PAGES
                 include "cpc_data_pages.asm"
                 endif
+                ifdef PORTABLE_PACKAGE_STREAM
+                include "cpc_secondary_call.asm"
+                include "../lib/cpc/m4_stream.asm"
+                endif
 cpc_support_used_end
                 assert cpc_support_used_end<=CPC_SUPPORT_END,"CPC support allocation overflow"
                 save "SUPPORT.RAW",cpc_support_begin,cpc_support_used_end-cpc_support_begin

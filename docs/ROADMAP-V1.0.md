@@ -233,10 +233,16 @@ dirty-close and real exact-path handoff. This is the accepted 2m follow-up to
 `d950560`, not CPC input support or normal-distribution promotion. Next is the
 CPC binding for the same APP, using private M4 media and preserving the accepted
 desktop distribution. MSX 2m was committed/pushed as `6e6fe05`.
-The [CPC follow-up](UNIFIED-NOTEPAD-CPC.md) now qualifies the private single-open
-M4 transport (6,058 Z80 calls and actual 1984 exact-byte two-bank loading plus
-negative media). It is **not yet a CPC editor launcher**: shared loader/sealed
-call placement, FS identity/handoff and focused text input remain.
+The [CPC follow-up](UNIFIED-NOTEPAD-CPC.md) qualifies the private single-open
+M4 transport (6,058 Z80 calls) and now binds the shared package loader and sealed
+calls in the full private Desktop/File Manager/Settings runtime. The existing
+two-bank computation APP passes 54 checks / 17 copied calls per launch across
+three owner generations in real 1984/M4; invalid loader modules fail boot before
+capability publication. All existing memory budgets are retained (18 bytes of
+high-kernel headroom). It is **not yet a CPC editor launcher**: FS identity /
+owner-bound document handoff and focused text input are next, followed by
+private acceptance of the identical Notepad APP. Default receiver binaries and
+normal distribution images remain unchanged.
 The delivered editor is still native; no normal
 image has been replaced. Bounded private runtime evidence is not release acceptance.
 

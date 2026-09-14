@@ -71,6 +71,7 @@ def prepare(app, variant):
                   image_sha256=sha(image.read_bytes()), raw_sha256=sha(raw),
                   source_sha256={name: sha((ROOT/name).read_bytes()) for name in (
                       'debug/cpc_foundation/stream_probe.asm', 'lib/cpc/m4_stream.asm',
+                      'lib/cpc/m4_stream_read.asm',
                       'lib/cpc/m4.asm', 'lib/cpc/bank.asm', 'lib/cpc/irq.asm')})
     (stage/'build.json').write_text(json.dumps(report, indent=2)+'\n')
     print('Prepared '+str(stage), flush=True)

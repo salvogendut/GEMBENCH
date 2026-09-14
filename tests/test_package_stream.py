@@ -135,9 +135,10 @@ class PackageStreamTests(unittest.TestCase):
             source=(ROOT/unit).read_text()
             self.assertNotIn('ADMISSION_STREAMED equ',source)
             self.assertNotIn('include "core/package_stream.asm"',source)
-        # CPC has not acquired a secondary-call binding merely because the
-        # shared ABI assigns it. Check code, not a historical prose sentence.
-        self.assertNotIn('PARAM_SECONDARY_CALL equ', (ROOT/'kernel/cpc_parameter_provider.inc').read_text())
+        # CPC's private receiver now has an explicit opt-in binding. The full
+        # default-versus-private assembly assertions live in its receiver test.
+        self.assertIn('ifdef PORTABLE_PACKAGE_STREAM\nPARAM_SECONDARY_CALL equ',
+                      (ROOT/'kernel/cpc_parameter_provider.inc').read_text())
 
 
 if __name__=='__main__':unittest.main()

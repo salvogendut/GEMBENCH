@@ -4,7 +4,43 @@ Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
 
-## Current resume point — CPC Notepad transport, 2026-09-13
+## Current resume point — CPC desktop secondary receiver, 2026-09-13
+
+Continuing #84 / `feature/84-unified-notepad` after pushed `fd04dd1`.
+The private full Desktop/File Manager/Settings runtime now uses shared
+two-bank package admission and sealed calls with CPC owner/page/bank leaves.
+Read [UNIFIED-NOTEPAD-CPC.md](UNIFIED-NOTEPAD-CPC.md) for current evidence and
+commands. This follow-up has not been promoted into either distribution.
+
+- Build: `python3 tools/build_cpc_runtime.py --notepad-receiver` with compiler
+  tools from `my-distrobox`. Work is `build/cpc-notepad-receiver`; media is
+  `build/notepad-84/cpc-receiver`, explicitly private. Real M4/1984 tests use
+  `--skip-build --private-media build/notepad-84/cpc-receiver`; never floppies.
+- `GBPKLOAD.MOD` is 768 loaded bytes at `0100..0400`, installed only after the
+  low bootstrap exits. Exact size/EOF/close/build CRC precede readiness. Shared
+  `core/package_stream.asm`, `secondary_call.asm`, launch/admission and owner
+  cleanup supply policy; new CPC glue only binds transport, mapping and calls.
+- Full measured CORE 16366/16384, SUPPORT 3035/3072, HARDWARE 1483/1536,
+  scheduler 1452/1536, BOOT 6312/6656. Fixed state `1F00..1F80`, transfer
+  `1500..1700`. No memory limits changed. No data-page combination qualified.
+- Three real Desktop launches of the existing computation APP pass 54 checks /
+  17 copied calls each, exact bank bytes, unique owner generations, seals,
+  cleanup and code/stack guards. Bad loader modules stop boot safely. See the
+  CPC work record for full regression/evidence details.
+- **Next: FS identity/owner-bound handoff and focused text routing**, then the
+  identical Notepad APP's CPC editing acceptance. Filesystem remains API v1;
+  don't claim the editor works yet. The 18-byte high-kernel remainder requires
+  a measured placement/code-size solution for those bindings, not app shrinkage.
+- Do not rebuild `build/cpc-notepad-receiver` underneath active emulator tests:
+  integrity checks use that directory's exact binaries/symbols. The stream
+  implementation now includes `lib/cpc/m4_stream_read.asm`; include this new
+  file when syncing sources. Default full resident/bootstrap outputs were
+  checked byte-for-byte against `fd04dd1` and are unchanged.
+- Preserve accepted MSX APP SHA `1d554abb…cdc340e8` (20209 bytes), both manual
+  MSX saved-document images, normal MSX/CPC media, user GIFs and `QA/CPC/`.
+  No sibling emulator/firmware changes, PR or merge in this follow-up.
+
+## Previous resume point — CPC Notepad transport, 2026-09-13
 
 User requested commit/push of the accepted MSX fixes followed by CPC receiver
 work. **`6e6fe05` is pushed** on #84 / `feature/84-unified-notepad`. The CPC

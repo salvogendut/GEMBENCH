@@ -5,7 +5,25 @@ The runnable-editor checkpoint was committed and pushed as **`e4c8e62`**.
 This document records subsequent work, not another sprint or completed
 normal-distribution delivery.
 
-## Current CPC follow-up: transport foundation
+## Current CPC follow-up: private desktop secondary receiver
+
+The production-budget **full Desktop/File Manager/Settings** private build now
+binds the same shared package loader, dual admission and sealed secondary-call
+policy to CPC/M4. The real computation APP passes 54 checks / 17 copied calls
+per launch over three owner generations. A checked 768-byte module replaces
+the low bootstrap only after it has jumped out; missing/damaged modules stop
+boot before capability publication. The high kernel fits with **18 bytes**
+remaining. Default resident/bootstrap binaries remain byte-identical.
+
+This follows pushed transport checkpoint `fd04dd1`; check Git for the current
+follow-up publication state. **CPC Notepad is still not runnable**: bind the
+shared FS identity/owner-bound handoff and focused text input next, then qualify
+the unchanged 20209-byte APP on a private M4 editor image. Do not reduce the
+4096-byte document/staging capacities or increase fixed memory limits.
+See [UNIFIED-NOTEPAD-CPC.md](UNIFIED-NOTEPAD-CPC.md) for the complete map,
+commands and test evidence. Normal/manual MSX and CPC images remain untouched.
+
+## Previous CPC follow-up: transport foundation
 
 The accepted MSX 2m fixes are committed/pushed as **`6e6fe05`**. CPC work now
 has a qualified private single-open M4 adapter: 6,058 executed Z80 calls and
