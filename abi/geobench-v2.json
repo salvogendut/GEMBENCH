@@ -183,6 +183,20 @@
     "context_policy": "Root application callbacks may draw. Workers may only publish/query/cancel timer values; no rendering. Timers use the existing visible-damage collector and owner teardown, never a deferred pointer.",
     "compatibility": "MSX2 continues accepting ABI 2.0 applications with their old private mailboxes. New SDK applications require ABI 2.1 and caller-parameters. Future CPC/PCW kernels must reject 2.0 packages that use the old framebuffer-aliasing convention; this revision alone does not claim those runtimes exist."
   },
+  "shell_service": {
+    "kernel_slot": 32960,
+    "capability": "shell",
+    "operations": {"register": 0, "find": 1, "send": 2, "register-accessory": 3, "find-accessory": 4, "configuration-publish": 5},
+    "statuses": {"ok": 0, "not-found": 1, "stale": 2, "busy": 3, "bad-request": 4, "no-handler": 5, "rejected": 6},
+    "configuration_publish": {
+      "minimum_abi": [2, 1],
+      "registers": "A=5, HL=source in current primary, BC=byte count; A=status; other registers volatile",
+      "maximum_bytes": 512,
+      "source_span": "[0x4000,0x7F00)",
+      "context": "Synchronous root callback only; rejected as busy during shell delivery or a worker turn.",
+      "semantics": "After a successful application-level save, copy exactly 0..512 bytes into the resident raw GEOBENCH.CFG cache and atomically publish its length. The kernel retains no caller pointer. Publication does not parse the text, reload assets, repaint, change focus or alter application state. The application is responsible for selecting the exact GEOBENCH.CFG identity; ordinary CFG files must not publish. Invalid length/span leaves both resident bytes and length unchanged. Receivers predating operation 5 return bad-request."
+    }
+  },
   "portable_filesystem": {
     "capability": "portable-filesystem",
     "parameter_operation": 8,

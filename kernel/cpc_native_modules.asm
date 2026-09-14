@@ -207,6 +207,7 @@ cpc_config
                 call foundation_bank_set
                 ld hl,0
                 ld (CPC_CFG_OUTPUT),hl
+                ld (CPC_CFG_LENGTH),hl
                 ld (CPC_CFG_OFFSET),hl
                 ld hl,cpc_cfg_request
                 ld de,CPC_APP_IO_REQUEST
@@ -258,6 +259,8 @@ cpc_cfg_read
                 or a
                 jr z,cpc_cfg_next
 cpc_cfg_done
+                ld hl,(CPC_CFG_OUTPUT)
+                ld (CPC_CFG_LENGTH),hl
                 xor a
                 jr cpc_cfg_parsing
 cpc_cfg_oversize
@@ -268,6 +271,7 @@ cpc_cfg_error
 cpc_cfg_empty
                 ld hl,0
                 ld (CPC_CFG_OUTPUT),hl
+                ld (CPC_CFG_LENGTH),hl
 cpc_cfg_parsing
                 ld (CPC_CFG_STATUS),a
                 ld hl,512

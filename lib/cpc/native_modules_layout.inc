@@ -13,6 +13,7 @@ CPC_UI_STATUS equ #1841
 CPC_UI_CALLS equ #1842
 CPC_CFG_CALLS equ #1844
 CPC_CFG_OFFSET equ #1846
+CPC_CFG_LENGTH equ #1848        ; persistent raw-text length after parser output replaces input
 CPC_NATIVE_MODULE_STATE_END equ #1850
 CPC_SYSTEM_PAGE equ #F6
 CPC_MODULE_BASE equ #4000

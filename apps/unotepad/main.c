@@ -4,6 +4,7 @@
 #include "gbdocio.h"
 #include "gbscrap.h"
 #include "gbshell.h"
+#include "gbconfig.h"
 #include <string.h>
 #include "client.h"
 /* At most 84 glyphs: 3*n fits a byte. Keep pixel-column conversion 8-bit. */
@@ -275,12 +276,18 @@ static void promote(void)
         retired = document; document = candidate; candidate = 0;
         memcpy(name,next_name,11); strcpy(path,next_path); drive = next_drive;
     }
+    memcpy(packet+NP_DATA,name,11);
     model_call(NP_SAVED);mode = EDIT; refresh = title_changed = 1;
 }
 
 static void saved(void)
 {
     promote();
+    if(packet[6]) {
+        packet[0]=NP_CONFIG_EXPORT;
+        if(gb_compute(packet,NP_PACKET)==GB_PARAMS_OK)
+            (void)gb_config_publish((char *)packet,editor.len);
+    }
     /* Cleanup the old context before a deferred New/Load/Close can run. */
 }
 static void start_load(void)
@@ -411,9 +418,10 @@ static void menu(void)
 
 static void pointer_select(unsigned char begin)
 {
-    unsigned char x = gb_mx(), y = gb_my();
-    packet[2]=x>rect.x+5 ? x-rect.x-5 : 0;
-    packet[3]=y>rect.y+16 ? y-rect.y-16 : 0;
+    unsigned char x = gb_mx(), y = gb_my(), origin = rect.x + 5;
+    packet[2]=x>origin ? x-origin : 0;
+    origin=rect.y+16;
+    packet[3]=y>origin ? y-origin : 0;
     packet[6]=begin;
     model_call(NP_POINT);drag_x=x;drag_y=y;
 }

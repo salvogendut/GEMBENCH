@@ -61,7 +61,12 @@ void secondary_main(unsigned char *p,unsigned int length)
     char title_name[11];
     unsigned char op,flag,width,rows,follow=0,bad=0,aux=0;
     if (length!=NP_PACKET) return;
-    op=p[0];a=np_word(p+2);b=np_word(p+4);flag=p[6];width=p[7];rows=p[28];
+    op=p[0];
+    if(op==NP_CONFIG_EXPORT) {
+        if(leaf_editor.len<=512)memcpy(p,leaf_editor.text,leaf_editor.len);
+        return;
+    }
+    a=np_word(p+2);b=np_word(p+4);flag=p[6];width=p[7];rows=p[28];
     if (!width || width>=NP_LINE_MAX || !rows || rows>21) { p[1]=1;return; }
     switch (op) {
     case NP_QUERY: break;
@@ -105,7 +110,9 @@ void secondary_main(unsigned char *p,unsigned int length)
         if (!stage_active || !np_replace(&leaf_editor,staging,staged)) bad=1;
         else { goal_col=255;layout_dirty=caret_dirty=follow=1; }
         stage_active=0;break;
-    case NP_SAVED: leaf_editor.dirty=0;break;
+    case NP_SAVED:
+        leaf_editor.dirty=0;
+        aux=leaf_editor.len<=512 && !memcmp(p+NP_DATA,"GEOBENCHCFG",11);break;
     case NP_DIRTY: leaf_editor.dirty=1;break;
     case NP_EXPORT:
         if (a>leaf_editor.len || b>NP_CHUNK) bad=1;

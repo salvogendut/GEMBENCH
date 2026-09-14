@@ -5,6 +5,11 @@ WM_FR_ARG equ 14
 WM_DRAGNAME equ #1423
 SHELL_BUSY equ #133E
 GB_MSG_SHELL equ 11
+                ifdef PORTABLE_FS_HANDOFF
+SHELL_CONFIG_PUBLISH equ config_publish
+CONFIG_PUBLISH_TEXT equ CPC_CFG_TEXT
+CONFIG_PUBLISH_LENGTH equ CPC_CFG_LENGTH
+                endif
                 assert SHELL_BUSY+1<=SCHED_LOCK,"shell/scheduler state overlap"
                 assert WM_Z+CPC_WINDOW_MAX<=WM_DRAGNAME,"shell argument/z-order overlap"
                 assert WM_DRAGNAME+11<=CORE_LEGACY_BUSY,"shell argument/legacy banks overlap"

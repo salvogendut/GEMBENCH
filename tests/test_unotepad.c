@@ -30,6 +30,9 @@ static unsigned char live[5], fs_error, clip_kind, clip_error, closed;
 static unsigned char input[64], input_pos, mouse_x, mouse_y, buttons;
 static unsigned char popup_item=255;
 static unsigned char shell_response, shell_registered;
+static unsigned char config_status;
+static unsigned int config_calls, config_len;
+static char config_text[512];
 static gb_rect_t live_rect = {2,14,66,158};
 static gb_rect_t damage;
 static gb_rect_t damages[32];
@@ -137,6 +140,12 @@ void gb_message_read(gb_msg_t *m) { memset(m,0,sizeof(*m)); }
 unsigned char gb_shell_register(unsigned char service_class)
 { shell_registered=service_class; return GB_SHELL_OK; }
 void gb_shell_respond(unsigned char response) { shell_response=response; }
+unsigned char gb_config_publish(const char *text,unsigned int length)
+{
+    assert(length<=512);config_calls++;config_len=length;
+    if(length)memcpy(config_text,text,length);
+    return config_status;
+}
 unsigned char gb_universal_popup_active(void) { return 0; }
 void gb_universal_popup_close(void) { }
 unsigned char gb_universal_popup(unsigned char x,const char *const *p,unsigned char n)
@@ -177,6 +186,7 @@ static void reset_test(void)
     document=candidate=retired=incoming=0; fs_calls=fail_call=writes=0;
     fs_error=clip_error=closed=buttons=0; disk_len=clip_len=0;
     pending_document=0;identity_error=0;shell_response=255;shell_registered=0;
+    config_status=0;config_calls=config_len=0;memset(config_text,0,sizeof(config_text));
     popup_item=255;
     mode=EDIT; action=menu_request=cooldown=refresh=title_changed=dragging=blink=full=0;
     live_rect.x=2; live_rect.y=14; live_rect.w=66; live_rect.h=158;
@@ -283,6 +293,30 @@ static void live_reuse(void)
     shell_open();assert(shell_response==GB_SHELL_OK && mode==ERROR);
     assert(document==old && retired==offered && !candidate && !incoming);
     assert(editor.len==11 && !memcmp(editor.text,"old unsaved",11));
+}
+static void config_publish(void)
+{
+    const char contents[]="FONT=DEFAULT\nVIEW=ICONS\n";
+    unsigned int old_cur,old_anchor;
+    reset_test();old_document();memcpy(name,"GEOBENCHCFG",11);
+    assert(np_loaded(&editor,contents,sizeof(contents)-1,0));
+    editor.cur=5;editor.anchor=2;np_select(&editor,5);editor.dirty=1;sync_editor();
+    old_cur=editor.cur;old_anchor=editor.anchor;
+    start_save();run_io();
+    assert(config_calls==1 && config_len==sizeof(contents)-1);
+    assert(!memcmp(config_text,contents,config_len));
+    assert(mode==EDIT && !editor.dirty && editor.cur==old_cur && editor.anchor==old_anchor);
+
+    reset_test();old_document();memcpy(name,"OTHER   CFG",11);start_save();run_io();
+    assert(!config_calls); /* ordinary small CFG files never replace the system cache */
+
+    reset_test();old_document();memcpy(name,"GEOBENCHCFG",11);
+    memset(editor.text,'C',513);editor.len=513;editor.dirty=1;sync_editor();
+    start_save();run_io();assert(!config_calls && mode==EDIT && !editor.dirty);
+
+    reset_test();old_document();memcpy(name,"GEOBENCHCFG",11);
+    config_status=GB_SHELL_BAD_REQUEST;start_save();run_io();
+    assert(config_calls==1 && mode==EDIT && !editor.dirty && disk_len==11);
 }
 static void model(void)
 {
@@ -573,7 +607,7 @@ int main(void)
     reset_test();input[40]=' ';input[41]=' ';notepad_entry();
     for(unsigned char i=0;i<6;++i)tick();
     assert(editor.len==0 && !editor.dirty);
-    model(); copied_protocol(); lifecycle(); file_menu(); clipboard_and_damage(); chooser_integration();launch_document();live_reuse();
+    model(); copied_protocol(); lifecycle(); file_menu(); clipboard_and_damage(); chooser_integration();launch_document();live_reuse();config_publish();
     puts("unified Notepad model/controller tests PASS (mocked services; no runtime claim)");
     return 0;
 }

@@ -29,6 +29,7 @@ UNIVERSAL_IX="${UNIVERSAL_IX:-0}" # opt-in preserved kernel IX + compact C frame
 UNIVERSAL_MINIMAL="${UNIVERSAL_MINIMAL:-0}"
 UNIVERSAL_MENU_BORROWED="${UNIVERSAL_MENU_BORROWED:-0}"
 UNIVERSAL_SHELL_TARGET="${UNIVERSAL_SHELL_TARGET:-0}"
+UNIVERSAL_CONFIG="${UNIVERSAL_CONFIG:-0}"
 DATA_LOC="${DATA_LOC:-0x7000}"
 LOAD_LIMIT="0x7F00"
 
@@ -53,7 +54,8 @@ fi
 for feature in "$UNIVERSAL_TASK" "$UNIVERSAL_WINDOW_KIND" "$UNIVERSAL_ACCESSORY" \
     "$UNIVERSAL_MENU" "$UNIVERSAL_FS" "$UNIVERSAL_FS_IDENTITY" "$UNIVERSAL_SCRAP" \
     "$UNIVERSAL_DOCIO" "$UNIVERSAL_FILEPICK" "$UNIVERSAL_DATA_PAGES" "$UNIVERSAL_COMPUTE" "$UNIVERSAL_IX" \
-    "$UNIVERSAL_MINIMAL" "$UNIVERSAL_MENU_BORROWED" "$UNIVERSAL_SHELL_TARGET"; do
+    "$UNIVERSAL_MINIMAL" "$UNIVERSAL_MENU_BORROWED" "$UNIVERSAL_SHELL_TARGET" \
+    "$UNIVERSAL_CONFIG"; do
     [ "$feature" = 0 ] || [ "$feature" = 1 ] || {
         echo "ERROR: universal feature flags must be 0 or 1" >&2
         exit 2
@@ -129,6 +131,10 @@ PY
     shell_flags=(-DGB_SHELL_SERVICES)
     "$SDAS" -o "$work/gbshell_register.rel" lib/gembench/gbshell_register.s
     extra_rels+=("$work/gbshell_register.rel")
+fi
+if [ "$UNIVERSAL_CONFIG" = 1 ]; then
+    "$SDAS" -o "$work/gbconfig.rel" lib/gembench/gbconfig.s
+    extra_rels+=("$work/gbconfig.rel")
 fi
 if [ "$UNIVERSAL_COMPUTE" = 1 ]; then
     python3 - "$APP_MANIFEST" "$APP_SECONDARY" <<'PY'

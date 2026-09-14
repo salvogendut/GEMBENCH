@@ -7,6 +7,7 @@ extern unsigned char st_solid, st_ui_op, st_ui_result;
 extern volatile gb_msg_t st_message;
 #define KCFG_TEXT st_config
 #define KCFG_LEN st_config_length
+#define KCFG_CACHE_LEN st_config_length
 #define KCFG_FONTNAME st_font
 #define KCFG_ICONNAME st_icons
 #define KCFG_CURSORNAME st_cursor

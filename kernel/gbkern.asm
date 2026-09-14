@@ -1770,7 +1770,15 @@ k_on_bar
                 include "core/app_launch.asm"
 
                 ifdef PLATFORM_MSX
+                ifdef PORTABLE_FS_HANDOFF
+SHELL_CONFIG_PUBLISH equ config_publish
+CONFIG_PUBLISH_TEXT equ KCFG_TEXT
+CONFIG_PUBLISH_LENGTH equ KCFG_LEN
+                endif
                 include "core/shell_service.asm"
+                ifdef PORTABLE_FS_HANDOFF
+                include "core/config_publish.asm"
+                endif
                 endif
 
 ; k_wm_close (GB_WMCLOSE): close the focused (calling) window - free its page, drop

@@ -22,6 +22,7 @@
 #define GB_SHELL_ACTIVATE 2u
 #define GB_SHELL_CLOSE    3u
 #define GB_SHELL_QUIT     4u
+#define GB_SHELL_CONFIG_PUBLISH 5u /* root GB_SHELL operation, not a window request */
 
 #define GB_SHELL_OK          0u
 #define GB_SHELL_NOT_FOUND   1u
