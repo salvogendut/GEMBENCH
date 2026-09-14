@@ -34,7 +34,7 @@ static const unsigned char menus[] = {
     18,'E','d','i','t',0,0,0,0,
     26,'V','i','e','w',0,0,0,0
 };
-static const char *const file_items[] = {"New", "Load", "Save", "Save As"};
+static const char *const file_items[] = {"New", "Load", "Save", "Save As", "Quit"};
 static const char *const edit_items[] = {"Select All", "Copy", "Paste"};
 static const char *const view_items[] = {"Fullscreen"};
 
@@ -107,7 +107,7 @@ static void draw(void)
         } else if (mode == ERROR) {
             say(20,problem); say(40,"Enter / click to return");
         } else if (mode == PICK) say(20,"Enlarge window for file chooser");
-        else if (mode == LOAD) say(20,"Loading; old document retained");
+        else if (mode == LOAD) say(20,"Loading; old text retained");
         else say(20,"Saving; please wait");
         return;
     }
@@ -349,15 +349,16 @@ static void menu(void)
     unsigned char requested = menu_request, item;
     menu_request = 0;
     mode=MENU; /* borrowed scratch is exclusive: no chooser/file/clipboard work */
-    item = gb_universal_popup(requested == 1 ? 10 : requested == 2 ? 18 : 26,
+    /* File/Edit/View titles start at columns 10/18/26. */
+    item = gb_universal_popup(requested * 8 + 2,
         requested == 1 ? file_items : requested == 2 ? edit_items : view_items,
-        requested == 3 ? 1 : requested == 2 ? 3 : 4);
+        requested == 3 ? 1 : requested == 2 ? 3 : sizeof(file_items)/sizeof(file_items[0]));
     mode=EDIT;
     cooldown = 4;
     if (item == 255) return;
     if (requested == 1) {
-        if (item == 0) request(NEW);
-        else if (item == 1) request(OPEN);
+        if (item < 2) request(item + NEW);
+        else if (item == 4) request(CLOSE);
         else { action = NONE; save(item == 3); }
     } else if (requested == 2) {
         if (!item) model_call(NP_ALL);

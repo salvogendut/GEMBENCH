@@ -3,6 +3,9 @@ cpc_package_guard
                 push hl                    ; shared entry still needs its app name
                 call cpc_package_guard_check
                 pop hl
+                ifdef PORTABLE_FS_HANDOFF
+                jp nc,document_reject      ; expire only this root producer's preparation
+                endif
                 ret
 cpc_package_guard_check
                 ld a,(CPC_PACKAGE_READY)

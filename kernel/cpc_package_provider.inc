@@ -36,6 +36,23 @@ PKG_ALLOW_IRQ equ 1
 ADMISSION_DUAL equ 1
 APP_LOAD_AND_ADMIT equ cpc_package_launch
 APP_LAUNCH_GUARD equ cpc_package_guard
+                ifdef PORTABLE_FS_HANDOFF
+                ifndef CPC_NATIVE_SETTINGS
+                fail "CPC document receiver requires the full Desktop/Settings profile"
+                endif
+CPC_FS_HANDOFF equ 1
+PARAM_FS_IDENTITY equ 1
+APP_LAUNCH_TRANSACTION equ document_launch
+APP_LAUNCH_BIND equ document_bind
+CORE_FSCTX_CLEANUP_TAIL equ document_owner_cleanup
+DOC_PENDING equ #2460
+DOC_CURRENT_OWNER equ owner_current
+DOC_LAUNCH_BODY equ wm_open_transaction
+DOC_LAUNCH_ARG equ launch_arg
+DOC_COPY_NAME equ copy11
+DOC_RELEASING_OWNER equ CORE_ALLOC_OWNER
+DOC_WORKER equ SCHED_CURRENT
+                endif
 CPC_PACKAGE_MODULE_BASE equ CPC_LOADER_BASE
 CPC_PACKAGE_MODULE_SIZE equ CPC_LOADER_END-CPC_LOADER_BASE
                 include "core/secondary_contract.inc"

@@ -29,7 +29,11 @@ cpc_sysinfo_template
                 db 2,4,32,CPC_POOL_PAGES,0,CPC_WINDOW_MAX
                 dw CPC_RUNTIME_CAPS_LOW,0
                 db CPC_OWNER_MAX,1,CPC_WINDOW_MAX,0,8,4,1,0
+                ifdef PORTABLE_FS_HANDOFF
+                db 4,0,2,3                   ; identical API v3 identity/owner-bound handoff
+                else
                 db 4,0,2,1                   ; four contexts, 512 bytes, API v1
+                endif
                 dw CPC_RUNTIME_CAPS_HIGH
                 db CPC_COLUMNS,CPC_LINES,4,4
                 dw CPC_APP_BASE,CPC_APP_LIMIT,CPC_KERNEL_BASE

@@ -6,7 +6,7 @@
  */
 #include "gbuniversal.h"
 
-#define POPUP_MAX_ITEMS 4u
+#define POPUP_MAX_ITEMS 5u
 #define POPUP_BUFFER_BYTES 768u
 
 #ifdef GB_UNIVERSAL_POPUP_BORROWED
@@ -66,6 +66,9 @@ unsigned char gb_universal_popup(unsigned char x,
         columns = (unsigned char)(text_columns(labels[i]) + 4u);
         if (columns > width) width = columns;
     }
+    /* Preserve existing menus; five rows need one less padding column so
+     * Notepad's "Save As" still fits the unchanged 768-byte save-under. */
+    if (count == 5u) --width;
     height = (unsigned char)(count * 10u + 4u);
     if ((unsigned char)(y + height) > gb_screen_lines())
         y = (unsigned char)(gb_screen_lines() - height);

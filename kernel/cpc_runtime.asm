@@ -13,6 +13,11 @@ CPC_FSCTX equ 1
 CPC_FS_DIRECTORY equ 1
 CPC_FS_WRITE equ 1
                 include "../lib/cpc/production_layout.inc"
+                ifdef PORTABLE_FS_HANDOFF
+                ifndef PORTABLE_PACKAGE_STREAM
+                fail "CPC handoff requires the private package receiver"
+                endif
+                endif
                 ifdef PORTABLE_PACKAGE_STREAM
                 include "cpc_package_provider.inc"
                 endif
@@ -71,6 +76,9 @@ cpc_runtime_core_end
                 include "cpc_bitmap_assets.asm"
                 include "cpc_title_assets.asm"
                 include "../lib/cpc/runtime_input.asm"
+                ifdef PORTABLE_FS_HANDOFF
+                include "cpc_text_input.asm"
+                endif
                 include "cpc_runtime_boot.asm"
 cpc_font_payload
                 incbin "DEFAULT.FNT"

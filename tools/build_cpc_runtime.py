@@ -94,7 +94,9 @@ def assemble(work: Path, overrides=()):
     return sym
 
 
-def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False, package_stream=False):
+def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False, package_stream=False, handoff=False):
+    if handoff and not package_stream:
+        raise ValueError('CPC document handoff requires the private package receiver')
     if package_stream and (delivery or data_pages or not settings):
         raise ValueError('secondary receiver requires the full private Settings/Desktop profile; no delivery/data-page promotion')
     if data_pages and (desktop or filemgr or delivery or settings):
@@ -105,12 +107,14 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     desktop = desktop or filemgr
     variant = 'desktop' if delivery else 'settings-contract' if settings else 'filemgr-contract' if filemgr else 'desktop-contract' if desktop else 'runtime'
     if package_stream: variant='notepad-receiver'
+    if handoff: variant='notepad-handoff'
     work = ROOT / ('build/cpc-'+variant)
     overrides=('-DCPC_NATIVE_DESKTOP=1',) if desktop else ()
     if filemgr: overrides+=('-DCPC_NATIVE_FILEMGR=1',)
     if settings: overrides+=('-DCPC_NATIVE_SETTINGS=1',)
     if data_pages: overrides+=('-DPORTABLE_DATA_PAGES=1',)
     if package_stream: overrides+=('-DPORTABLE_PACKAGE_STREAM=1',)
+    if handoff: overrides+=('-DPORTABLE_FS_HANDOFF=1',)
     sym = assemble(work,overrides)
     if filemgr:
         from build_cpc_filemgr import compile_filemgr, bind_runtime
@@ -150,6 +154,7 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
                    cwd=ROOT, check=True)
     media = ROOT / ('QA/CPC-Desktop' if delivery else 'QA/Diagnostics/CPC-'+variant)
     if package_stream: media=ROOT/'build/notepad-84/cpc-receiver'
+    if handoff: media=ROOT/'build/notepad-84/cpc-handoff'
     card = media / "CARD"
     boot = bytearray(headed((work / "BOOT.RAW").read_bytes(), 0x8000))
     boot[1:12] = b"BOOT    BIN"
@@ -274,6 +279,9 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     if package_stream:
         manifest.update(profile='cpc-notepad-receiver-private-v1',storage='m4',
                         status='private secondary receiver qualification; document handoff/text input not yet bound')
+    if handoff:
+        manifest.update(profile='cpc-notepad-handoff-private-v1',
+                        status='private document/input receiver; Notepad acceptance and delivery remain separate')
     (media / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     # Explicit private config: manual testing never edits the user's normal
     # machine setup or mounts their existing M4/Albireo card.
@@ -288,5 +296,8 @@ if __name__ == "__main__":
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--notepad-receiver',action='store_true',
         help='private full CPC secondary receiver; not a runnable Notepad or delivery image')
+    parser.add_argument('--notepad-handoff',action='store_true',
+        help='private document/input binding; preserve the earlier receiver media')
     args=parser.parse_args()
-    build(settings=args.notepad_receiver,package_stream=args.notepad_receiver)
+    private=args.notepad_receiver or args.notepad_handoff
+    build(settings=private,package_stream=private,handoff=args.notepad_handoff)

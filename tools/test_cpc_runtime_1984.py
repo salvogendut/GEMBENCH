@@ -68,7 +68,9 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None, clipboard=False, chooser=False, data_pages=False, private_media=None, package_case=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None, clipboard=False, chooser=False, data_pages=False, private_media=None, package_case=None, notepad_case=None, notepad_app=None):
+    if notepad_case and (not private_media or not notepad_app):
+        raise ValueError('Notepad qualification requires private media and the accepted APP path')
     if private_media and (not skip_build or desktop_delivery):
         raise ValueError('private media requires --skip-build, never delivery promotion')
     if package_case and not private_media:
@@ -114,14 +116,20 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr,settings=settings,data_pages=data_pages)
         if private_media: media=Path(private_media).resolve()
         manifest=json.loads((media/'manifest.json').read_text())
-        if private_media and manifest.get('profile')!='cpc-notepad-receiver-private-v1':
+        if private_media and manifest.get('profile') not in ('cpc-notepad-receiver-private-v1','cpc-notepad-handoff-private-v1'):
             raise ValueError('expected explicitly private CPC secondary receiver profile')
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifact_root=ROOT/'build/settings-runtime' if settings else ROOT/'build/cpc-delivery-runtime' if desktop_delivery else None
     if private_media: artifact_root=ROOT/'build/notepad-84/evidence'
     if artifact_root is not None:artifact_root.mkdir(parents=True,exist_ok=True)
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-',dir=artifact_root))
+    if private_media:
+        (artifacts/'receiver-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+        (artifacts/'runtime.sym').write_bytes((work/'runtime.sym').read_bytes())
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(seed_image or manifest['image']).read_bytes())
+    if notepad_case:
+        from cpc_runtime_notepad import prepare
+        prepare(manifest,notepad_app,image,artifacts,notepad_case)
     if package_case:
         from cpc_runtime_secondary import prepare
         prepare(ROOT,work,image,artifacts,package_case)
@@ -293,6 +301,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
                 raise AssertionError('bad loader module unexpectedly booted')
             from cpc_runtime_secondary import exercise
             return exercise(ROOT,manifest,work,sym,image,artifacts,package_case,send,wait,read,key,move)
+        if notepad_case:
+            from cpc_runtime_notepad import exercise
+            return exercise(manifest,work,sym,image,artifacts,notepad_case,send,wait,read,key,move)
         if settings:
             from cpc_runtime_settings import run_settings
             return run_settings(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,settings_case,settings_fixture)
@@ -579,6 +590,8 @@ if __name__=='__main__':
     mode=parser.add_mutually_exclusive_group()
     from cpc_runtime_secondary import CASES as PACKAGE_CASES
     mode.add_argument('--package-case',choices=PACKAGE_CASES)
+    parser.add_argument('--notepad-app',type=Path,help='unchanged accepted Notepad APP with adjacent probe.noi')
+    mode.add_argument('--notepad-case',choices=('handoff','bad-app','quit'))
     mode.add_argument('--filesystem',action='store_true')
     mode.add_argument('--clipboard',action='store_true')
     mode.add_argument('--chooser',action='store_true')

@@ -104,12 +104,14 @@ cpc_runtime_start
                 ld a,1
                 ld (cpc_runtime_status),a
                 jp wm_loop
+                ifndef PORTABLE_FS_HANDOFF
 cpc_runtime_launch
                 ld hl,cpc_runtime_app
                 call k_wm_open
                 ld hl,cpc_runtime_launches
                 inc (hl)
                 ret
+                endif
 cpc_runtime_failed
                 ld a,#FF
                 ld (cpc_runtime_status),a
@@ -117,6 +119,11 @@ cpc_runtime_failed
                 halt
                 jr cpc_runtime_failed
 cpc_root_idle
+                ifdef PORTABLE_FS_HANDOFF
+                ; The full Desktop replaces this descriptor before the event
+                ; loop. Keep diagnostic key launchers out of this private link.
+                ret
+                else
                 call cpc_bar_payload+15       ; same gb_doc event/popup/activation path
                 call #8045                   ; GB_GETKEY, root launcher only
                 or a
@@ -177,6 +184,7 @@ cpc_root_idle
                 ld hl,cpc_runtime_surface_calls
                 inc (hl)
                 ret
+                endif
 cpc_runtime_config
                 push ix
                 ld a,i
@@ -205,6 +213,7 @@ cpc_runtime_config_done
                 ret po
                 ei
                 ret
+                ifndef PORTABLE_FS_HANDOFF
 cpc_runtime_assets_demo
                 ld a,(CPC_ICON_DEMO)
                 xor 1
@@ -350,7 +359,11 @@ cpc_runtime_fs_done
                 ld hl,cpc_runtime_fs_calls
                 inc (hl)
                 ret
+                endif
 cpc_root_paint
+                ifdef PORTABLE_FS_HANDOFF
+                ret                        ; replaced by validated Desktop callbacks
+                else
                 ld bc,0
                 ld de,#50C8
                 call k_backdrop
@@ -362,11 +375,16 @@ cpc_root_paint
                 or a
                 ret nz
                 jp cpc_bar_payload+33        ; clipped repair must not publish full-bar cache
+                endif
 cpc_root_desc
                 db 0,0,CPC_COLUMNS,CPC_LINES
                 dw cpc_root_idle,cpc_root_paint,cpc_root_event,0
 cpc_root_event
+                ifdef PORTABLE_FS_HANDOFF
+                ret
+                else
                 jp cpc_bar_payload+18
+                endif
 ; Native trusted root component; reuse the exact M4 application reader. Its
 ; load envelope stops before the root snapshot. Reject any length other than
 ; the budgeted/padded module BEFORE initialization or execution.
@@ -392,9 +410,11 @@ cpc_desktop_invalid
                 or a
                 ret
 cpc_desktop_name db "ROOTUI  BIN"
+                ifndef PORTABLE_FS_HANDOFF
 cpc_runtime_app db "ABIPROBEAPP"
 cpc_runtime_fsapp db "FSPROBE APP"
 cpc_runtime_menuapp db "MENUPRBEAPP"
+                endif
                 ifdef CPC_NATIVE_DESKTOP
                 include "cpc_desktop_boot.inc"
                 endif

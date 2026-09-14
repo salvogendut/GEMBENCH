@@ -101,7 +101,8 @@ proc np_saved {} {
     if {[peek $::fs_state] in {4 5 6}} {after time 0.2 np_saved;return}
     np_check [expr {[peek $::fs_state]==0 && [peek [expr {$::np_view+13}]]==0}] saved_clean
     puts stderr "NOTEPAD saved through chooser"
-    fs_move 4 18 {fs_click np_relaunch}
+    # Clean File > Quit must release the document and secondary owner.
+    fs_move 11 4 {fs_click {fs_move 12 54 {fs_click np_relaunch}}}
 }
 proc np_relaunch {} {
     if {![np_low_ready]} {after time 0.002 np_relaunch;return}
@@ -142,13 +143,26 @@ proc np_loaded {} {
 proc np_dirty_again {} {
     if {![np_mapped]} {after time 0.002 np_dirty_again;return}
     np_check [expr {[peek [expr {$::np_view+13}]]==1}] modified_again
-    fs_move 4 18 {fs_click np_confirm}
+    fs_move 11 4 {fs_click {fs_move 12 54 {fs_click np_confirm}}}
 }
 proc np_confirm {} {
     if {![np_mapped]} {after time 0.002 np_confirm;return}
     np_check [expr {[peek $::fs_state]==2 && [peek 0x1350]==2}] dirty_confirmation
+    # Cancel first: File > Quit must not discard dirty text implicitly.
+    # Let popup release/debounce and the confirmation paint finish before
+    # sending a short matrix pulse; observing mode alone precedes that work.
+    after time 2 {np_type {{7 4}} np_quit_cancelled}
+}
+proc np_quit_cancelled {} {
+    if {![np_mapped]} {after time 0.002 np_quit_cancelled;return}
+    np_check [expr {[peek $::fs_state]==0 && [peek [expr {$::np_view+13}]]==1}] quit_cancel_retains_document
+    fs_move 11 4 {fs_click {fs_move 12 54 {fs_click np_quit_discard}}}
+}
+proc np_quit_discard {} {
+    if {![np_mapped]} {after time 0.002 np_quit_discard;return}
+    np_check [expr {[peek $::fs_state]==2 && [peek 0x1350]==2}] quit_discard_confirmation
     # D: discard. Then normal owner teardown must remove the secondary seal.
-    np_type {{3 2}} np_closed
+    after time 2 {np_type {{3 2}} np_closed}
 }
 proc np_closed {} {
     if {[peek 0x403]!=71 || [peek 0x404]!=66} {after time 0.002 np_closed;return}

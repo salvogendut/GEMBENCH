@@ -15,6 +15,18 @@ CC = os.environ.get('CC', 'cc')
 
 class UnifiedNotepadTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which(CC), 'host C compiler required')
+    def test_real_five_item_popup(self):
+        for borrowed in (False, True):
+            with self.subTest(borrowed=borrowed), tempfile.TemporaryDirectory(prefix='geobench-popup-') as tmp:
+                binary = Path(tmp) / 'test'
+                flags = ['-DGB_UNIVERSAL_POPUP_BORROWED'] if borrowed else []
+                subprocess.run([CC, '-std=c99', '-Wall', '-Wextra', '-Werror',
+                                '-DGB_UNIVERSAL', '-DGB_UNIVERSAL_HOST_TEST', *flags,
+                                '-I', str(ROOT / 'lib/gb'), str(ROOT / 'tests/test_universal_popup.c'),
+                                '-o', str(binary)], check=True)
+                subprocess.run([str(binary)], check=True)
+
+    @unittest.skipUnless(shutil.which(CC), 'host C compiler required')
     def test_editor_and_document_controller(self):
         with tempfile.TemporaryDirectory(prefix='geobench-unotepad-') as tmp:
             binary = Path(tmp) / 'test'

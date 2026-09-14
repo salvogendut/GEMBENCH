@@ -1,11 +1,36 @@
 # Unified Notepad — Desktop handoff work
 
-2026-09-13, issue #84, `feature/84-unified-notepad`.
+2026-09-14, issue #84, `feature/84-unified-notepad`.
 The runnable-editor checkpoint was committed and pushed as **`e4c8e62`**.
 This document records subsequent work, not another sprint or completed
 normal-distribution delivery.
 
-## Current CPC follow-up: private desktop secondary receiver
+## Current CPC follow-up: document/input binding
+
+Latest follow-up: user accepted the exploratory CPC editor and requested
+File > Quit. The universal app now has that fifth menu item with the existing
+unsaved-change protection. Updated package: 20213 bytes, SHA `d45f0c5e…6ad157`;
+fresh CPC manual image under `build/notepad-84/manual-filequit-tjbVdT/`.
+The previous manual image remains intact. Exact evidence is in the CPC document.
+
+**`3041971` is committed and pushed.** The next private CPC receiver now binds
+filesystem API v3 and focused text input. The same 20209-byte Notepad APP opens
+documents through actual File Manager, navigates with arrows, edits Space/text,
+backspaces and saves in place on M4 in 1984. Nested same-name files select the
+correct contents; focus-away restores pointer arrows without editing text;
+close reclaims contexts/pages/seals. The private full Desktop still passes
+stacking/Clock/Calculator and Settings save/cold-boot tests.
+
+See [UNIFIED-NOTEPAD-CPC.md](UNIFIED-NOTEPAD-CPC.md) for exact evidence, commands
+and limits. CORE has 229 bytes spare after leaving unused diagnostic-launcher
+code out of this full Desktop profile. No memory budgets or document capacities
+changed; no APP fork. **Normal images remain unchanged.** Next is the larger
+CPC editor acceptance gate (capacity, dirty close, chooser/clipboard, clipped
+repaint, storage errors), not release promotion. An exploratory manual M4
+image was prepared at the user's request under
+`build/notepad-84/manual-cpc-jB6Idz/`; see the CPC document for launch and controls.
+
+## Previous CPC follow-up: private desktop secondary receiver
 
 The production-budget **full Desktop/File Manager/Settings** private build now
 binds the same shared package loader, dual admission and sealed secondary-call

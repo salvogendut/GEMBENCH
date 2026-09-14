@@ -13,7 +13,7 @@ from build_cpc_runtime import bitmap_assets, build
 from build_cpc_production import symbols, memory_regions
 import genfont
 
-def assemble(stage,package):
+def assemble(stage,package,handoff=False):
     stage.mkdir(parents=True)
     genfont.main(['genfont',str(stage/'DEFAULT.FNT')]);bitmap_assets(stage)
     (stage/'fsctx_size.inc').write_text('CPC_FS_MODULE_BYTES equ 1\n')
@@ -22,6 +22,7 @@ def assemble(stage,package):
     cmd=['rasm',str(ROOT/'kernel/cpc_runtime.asm'),'-s','-sq','-o','runtime',f'-I{stage}',
          '-DCPC_NATIVE_DESKTOP=1','-DCPC_NATIVE_FILEMGR=1','-DCPC_NATIVE_SETTINGS=1']
     if package:cmd+=['-DPORTABLE_PACKAGE_STREAM=1']
+    if handoff:cmd+=['-DPORTABLE_FS_HANDOFF=1']
     subprocess.run(cmd,cwd=stage,check=True,capture_output=True)
     if package:
         module=(stage/'GBPKLOAD.MOD').read_bytes()
@@ -46,9 +47,10 @@ class CPCPackageReceiverTests(unittest.TestCase):
         cls.work=Path(cls.temp.name)
         cls.baseline,_=assemble(cls.work/'default',False)
         cls.sym,cls.command=assemble(cls.work/'package',True)
+        cls.handoff,_=assemble(cls.work/'handoff',True,True)
 
     def test_full_budget_default_is_not_promoted(self):
-        for s in (self.baseline,self.sym):
+        for s in (self.baseline,self.sym,self.handoff):
             for begin,end,limit in (
                 ('cpc_support_begin','cpc_support_used_end','cpc_support_end'),
                 ('cpc_hardware_begin','cpc_hardware_used_end','cpc_hardware_end'),
@@ -60,8 +62,34 @@ class CPCPackageReceiverTests(unittest.TestCase):
         self.assertNotIn('param_secondary_call',self.baseline)
         self.assertEqual(self.baseline['cpc_runtime_caps_high'],0x1DF)
         self.assertEqual(self.sym['cpc_runtime_caps_high'],0x5DF)
-        for name in ('default','package'):
+        for name in ('default','package','handoff'):
             self.assertLessEqual((self.work/name/'BOOT.RAW').stat().st_size,0x9A00-0x8000)
+
+    def test_private_handoff_binds_shared_policy_and_removes_only_unused_launcher(self):
+        s=self.handoff
+        self.assertEqual(s['app_launch_transaction'],s['document_launch'])
+        self.assertEqual(s['app_launch_bind'],s['document_bind'])
+        self.assertEqual(s['core_fsctx_cleanup_tail'],s['document_owner_cleanup'])
+        self.assertEqual(s['doc_pending'],s['cpc_fs_pending'])
+        self.assertEqual(s['param_fs_identity'],1)
+        raw=(self.work/'handoff/CORE.RAW').read_bytes()
+        self.assertEqual(raw[s['cpc_sysinfo_template']-0x8000+31],3)
+        self.assertIn('cpc_runtime_config',s)  # real Settings reload retained
+        self.assertIn('cpc_desktop_collect',s)
+        self.assertNotIn('cpc_runtime_fsprobe',s)
+        self.assertIn('cpc_runtime_fsprobe',self.sym)
+        self.assertNotIn('document_launch',self.sym)
+        self.assertNotIn('cpc_text_mode',self.sym)
+
+    @unittest.skipUnless(shutil.which('cc') and (ROOT.parent/'1983/src/z80.c').exists(),'C compiler and read-only CPU source required')
+    def test_executed_cpc_text_and_pointer_routing(self):
+        work=self.work/'handoff';s=self.handoff;cpu=ROOT.parent/'1983/src'
+        (work/'text_fixture.h').write_text('\n'.join(f'#define {k.upper()} {v}' for k,v in s.items())+'\n')
+        exe=work/'input-test'
+        subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-O2',
+            '-I',str(cpu),'-I',str(work),str(ROOT/'tests/cpc_text_input_z80.c'),
+            str(cpu/'z80.c'),'-o',str(exe)],check=True)
+        subprocess.run([str(exe),str(work)],check=True)
 
     def test_checked_fixed_module_and_real_shared_hooks(self):
         s=self.sym;work=self.work/'package'
@@ -89,6 +117,7 @@ class CPCPackageReceiverTests(unittest.TestCase):
 
     def test_unqualified_combinations_fail_before_media_writes(self):
         for options in ({'package_stream':True},
+                        {'handoff':True},
                         {'package_stream':True,'settings':True,'delivery':True},
                         {'package_stream':True,'settings':True,'data_pages':True}):
             with self.assertRaises(ValueError):build(**options)

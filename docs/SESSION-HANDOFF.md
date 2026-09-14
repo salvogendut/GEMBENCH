@@ -1,10 +1,62 @@
-# Session handoff — 2026-09-13
+# Session handoff — 2026-09-14
 
 Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
 
-## Current resume point — CPC desktop secondary receiver, 2026-09-13
+## Current resume point — CPC document/input receiver, 2026-09-14
+
+Latest user follow-up: the exploratory CPC editor and universal File > Quit
+were both manually accepted; the user requested commit/push of this checkpoint.
+Quit is implemented via the existing guarded close path. The new
+APP is 20213 bytes, SHA `d45f0c5e…6ad157`, with unchanged secondary model and
+memory budgets. The shared popup now supports five rows in its existing
+768-byte buffer. Current fresh CPC image/config live under
+`build/notepad-84/manual-filequit-tjbVdT/`; the earlier manual image is untouched.
+See the File > Quit section of the CPC document for evidence and commands.
+During qualification, held CPC Escape could cancel then re-request a dirty
+close because GB_QUIT is level-triggered; on-screen Cancel is the workaround.
+Keep this in the remaining keyboard acceptance work; MSX Escape cancellation
+passes. Do not claim the CPC keyboard issue is fixed by the Quit menu addition.
+
+The preceding receiver was committed/pushed as **`3041971`** on #84 /
+`feature/84-unified-notepad`. This checkpoint includes the subsequent
+document/input bindings, File > Quit, regression tests and manual-test handoff.
+Recheck Git for its commit and upstream status rather than relying on this note.
+Read [UNIFIED-NOTEPAD-CPC.md](UNIFIED-NOTEPAD-CPC.md) for the current checkpoint.
+
+- Full private `--notepad-handoff` profile: work `build/cpc-notepad-handoff`,
+  media `build/notepad-84/cpc-handoff`, filesystem API v3. It preserves the
+  preceding private receiver and all normal/manual images. The unchanged APP
+  SHA `1d554abb…cdc340e8` remains 20209 bytes (14443 + 5766).
+- Same shared `document_launch.asm` and FSCTX identity/handoff policy; CPC
+  native File Manager's binding now enables TXT/CFG handoff and qualified
+  NOTEPAD.APP launch. `kernel/cpc_text_input.asm` supplies the keyboard leaf:
+  plain arrows/Space edit only the focused explicit text kind; Ctrl restores
+  pointer access. Hardware joystick, defaults and native routing are retained.
+- CORE 16155/16384, SUPPORT 3035/3072, HARDWARE 1486/1536, SCHED 1452/1536,
+  FSCTX 4853/6656, checked loader 768/768, BOOT 6315/6656. The saving removes
+  only unused diagnostic launcher callbacks in the full private Desktop
+  profile; real Desktop initialization/callbacks and Settings reload remain.
+- 47 host/Z80 tests pass, including 1001 executed CPC input calls. Real 1984
+  tests pass document launch/edit/save, arrows/Space/backspace, focus-away/back,
+  nested same-name selection, disk readback and owner/page/context cleanup;
+  desktop stacking (32), computation (3 generations), Settings (21 + 9 reboot)
+  regressions pass. Exact artifacts and the failure-path record are in the CPC
+  work document. Observations are read-only; do not inject guest RAM.
+- Next: full CPC Notepad acceptance (4096/4097 bounds, dirty close, chooser,
+  clipboard, clipped repaint/occlusion, storage errors and repeated cleanup).
+  Do not promote normal delivery yet. At the user's request, an exploratory
+  manual M4 image is ready at `build/notepad-84/manual-cpc-jB6Idz/NOTEPAD.IMG`;
+  launch its adjacent `1984.conf` with `--6128 --memory=512 --autostart=BOOT`.
+  Open Disk C > ADOC > EXACT.TXT; preserve this image if the user saves edits.
+- New source/test files: `kernel/cpc_text_input.asm`,
+  `tests/cpc_text_input_z80.c`, `tools/cpc_runtime_notepad.py`. Preserve these
+  when syncing. Do not rebuild a private work directory beneath active tests.
+- Normal MSX/CPC images and older manual saved-document images remain intact.
+  User GIFs and untracked `QA/CPC/` are unrelated; no sibling emulator changes.
+
+## Previous resume point — CPC desktop secondary receiver, 2026-09-13
 
 Continuing #84 / `feature/84-unified-notepad` after pushed `fd04dd1`.
 The private full Desktop/File Manager/Settings runtime now uses shared

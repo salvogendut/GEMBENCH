@@ -83,5 +83,8 @@ cpc_loaded_universal
                 ifdef PORTABLE_PACKAGE_STREAM
                 include "cpc_package_launch.asm"
                 endif
+                ifdef PORTABLE_FS_HANDOFF
+                include "core/document_launch.asm"
+                endif
 cpc_loading_end
                 assert gb4_crc_value+4<=CPC_ARCH_STATE_END,"admission state overflow"

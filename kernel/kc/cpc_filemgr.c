@@ -22,20 +22,37 @@ unsigned char filemgr_save_view(unsigned char view)
 unsigned char filemgr_open_file(gb_fsctx_t context, const char *path,
                                const char *name11)
 {
-    static const char names[3][12]={"CLOCK   APP","CALC    APP","ABIPROBEAPP"};
+    static const char names[][12]={"CLOCK   APP","CALC    APP","ABIPROBEAPP"
+#if FILEMGR_DOCUMENT_HANDOFF
+        ,"NOTEPAD APP"
+#endif
+    };
     static const char directory[]="/GBENCH";
     unsigned char i,k,focus;
     /* This receiver currently loads only from the system directory. Never
      * silently launch a same-named file there when the user selected another
      * directory. Data-file handoff and other applications stay explicit gates. */
     if (!path || !name11) return 1;
+#if FILEMGR_DOCUMENT_HANDOFF
+    if ((name11[8]=='T' && name11[9]=='X' && name11[10]=='T') ||
+        (name11[8]=='C' && name11[9]=='F' && name11[10]=='G')) {
+        if (FILEMGR_WINDOW_COUNT>=FILEMGR_WINDOW_LIMIT || !FILEMGR_FREE_PAGES) return 2;
+        focus=FILEMGR_FOCUS;
+        /* The same FS v3 policy as MSX copies identity before module calls
+         * replace the native directory entry. The shared launcher binds it
+         * to the new owner generation and expires all unsuccessful delivery. */
+        if (gb_fsctx_prepare_launch(context,name11)!=GB_FSCTX_OK) return 2;
+        gb_wm_open("NOTEPAD APP");
+        return FILEMGR_FOCUS==focus ? 2 : 0;
+    }
+#endif
     for (i=0;directory[i];i++) if (path[i]!=directory[i]) return 1;
     if (path[i]) return 1;
-    for (k=0;k<3;k++) {
+    for (k=0;k<sizeof(names)/sizeof(names[0]);k++) {
         for (i=0;i<11 && name11[i]==names[k][i];i++) ;
         if (i==11) break;
     }
-    if (k==3) return 1;
+    if (k==sizeof(names)/sizeof(names[0])) return 1;
     if (gb_fsctx_activate(context)!=GB_FSCTX_OK) return 2;
     if (FILEMGR_WINDOW_COUNT>=FILEMGR_WINDOW_LIMIT || !FILEMGR_FREE_PAGES) return 2;
     focus=FILEMGR_FOCUS;

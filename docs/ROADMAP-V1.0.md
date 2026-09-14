@@ -239,10 +239,17 @@ calls in the full private Desktop/File Manager/Settings runtime. The existing
 two-bank computation APP passes 54 checks / 17 copied calls per launch across
 three owner generations in real 1984/M4; invalid loader modules fail boot before
 capability publication. All existing memory budgets are retained (18 bytes of
-high-kernel headroom). It is **not yet a CPC editor launcher**: FS identity /
-owner-bound document handoff and focused text input are next, followed by
-private acceptance of the identical Notepad APP. Default receiver binaries and
-normal distribution images remain unchanged.
+high-kernel headroom at that checkpoint). Receiver checkpoint `3041971` is
+committed/pushed. **2026-09-14:** the subsequent private full CPC profile binds
+FS identity/owner-bound handoff and focused text input. The unchanged Notepad
+APP now passes real File Manager document launch, arrows/Space/backspace,
+focus-away/back, in-place save, nested same-name selection and cleanup in
+1984/M4. Its high kernel has 229 bytes spare after omitting unused diagnostic
+launcher code; no memory limits or editor capacities changed. Next is full
+private CPC editor acceptance (capacity, dirty-close, chooser/clipboard,
+repaint/occlusion, storage errors). An exploratory manual image is available
+under `build/notepad-84/manual-cpc-jB6Idz/` at the user's request. Default receiver
+binaries and normal distribution images remain unchanged.
 The delivered editor is still native; no normal
 image has been replaced. Bounded private runtime evidence is not release acceptance.
 

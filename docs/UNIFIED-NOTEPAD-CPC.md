@@ -1,13 +1,210 @@
 # Unified Notepad — CPC receiver binding
 
-2026-09-13, issue #84, `feature/84-unified-notepad`.
+2026-09-14, issue #84, `feature/84-unified-notepad`.
 
 The MSX arrow-navigation / incremental-repaint fixes were accepted by the
 user and committed/pushed as **`6e6fe05`**. This work brings the **same APP**
 to CPC; it is not a separate CPC editor or a replacement desktop port.
 The accepted normal CPC distribution remains unchanged.
 
-## Current checkpoint: private desktop two-bank receiver
+## File > Quit follow-up — 2026-09-14
+
+The user accepted the exploratory CPC editor and requested **Quit** at the
+bottom of the universal app's File menu. The order is now New, Load, Save,
+Save As, Quit. Quit uses the existing deferred close/unsaved-document path;
+Save, Discard and Cancel remain available, and errors cannot silently close it.
+The user subsequently accepted the updated manual image ("OK looks good") and
+requested commit/push of this work together with the private CPC receiver.
+
+The shared popup now permits five items. Tighter padding for five rows keeps
+this menu at **756/768 save-under bytes**, without adding RAM; existing menus
+of one through four items retain their original dimensions. Host tests exercise
+the actual popup (owned and borrowed buffers), all five selections, cancellation
+and oversize rejection, plus the editor's menu dispatch and close/error paths.
+The final package is **20213 bytes** (14447 primary + unchanged 5766 secondary),
+primary end `786F`, DATA `7870`, top `7EF5`; capacities and budgets are unchanged.
+New APP SHA256: `d45f0c5ec151f1a5ca4f9a9a52ff94162360f1aa2883eda4afa80340396ad157`.
+The earlier `1d554abb…` baseline remains pinned for reproducing prior evidence.
+
+Fresh manual CPC/M4 image (previous image and saved documents untouched):
+
+```sh
+../1984/1984 \
+  --config="$PWD/build/notepad-84/manual-filequit-tjbVdT/1984.conf" \
+  --6128 --memory=512 --autostart=BOOT
+```
+
+Open Disk C > ADOC > EXACT.TXT or GBENCH > NOTEPAD.APP. File > Quit is the
+last row; dirty text triggers the existing confirmation. Controls remain
+Ctrl+arrows/Space for the pointer while the text window is focused.
+
+Build/host evidence: `quit-build-compatible-final.log` and
+`quit-host-final.log` under `build/notepad-84/evidence/` (three tests, including
+the real popup with both buffer implementations). Earlier emulator evidence:
+`build/notepad-84/manual-quit-BS2tm7/openmsx-settled/result.txt` (PASS, 282
+parameter calls/restorations, independent saved-file readback and clean owner
+teardown). The automated MSX confirmation pulse waits for popup debounce/paint;
+the earlier short-pulse failure is preserved in the sibling `openmsx` folder.
+Final-build emulator results:
+
+- `build/notepad-84/manual-filequit-tjbVdT/openmsx/result.txt`: PASS, 282
+  parameter calls/restorations; clean Quit, dirty Quit/Cancel/Discard, saved
+  bytes independently read back, source image and owner cleanup checked.
+- `build/notepad-84/evidence/geobench-cpc-runtime-dl9drj3d/result.json`:
+  PASS, real File menu clean Quit, nested document edit, dirty confirmation,
+  Cancel button retains text, Discard button closes without changing the file,
+  clean Desktop and exact page/seal/context reclamation. Log:
+  `filequit-cpc-final.log`. Snapshots wait for an idle paint boundary before
+  checking integrity; they do not inject RAM or waive a stuck repaint.
+
+All 44 original CPC receiver files, including real Clock/Calculator, are
+unchanged in the manual image. No normal-distribution promotion is implied.
+
+Follow-up for CPC keyboard acceptance: Escape is exposed both as a text key and
+a level-triggered `GB_QUIT`. A held Escape can cancel the dirty prompt then
+request close again, leaving the prompt visible. This is separate from the
+new Quit dispatch (MSX Escape cancellation passes). Use the on-screen Cancel
+button on CPC for now. Evidence: `quit-cpc-settled.log` / runtime `8th5klaz`;
+do not hide this behind a shorter automated pulse or treat keyboard acceptance
+as complete. The focused Quit scenario tests the actual Cancel/Discard buttons.
+
+## Current checkpoint: document handoff and focused editing
+
+The preceding two-bank receiver checkpoint is committed/pushed as **`3041971`**.
+This follow-up binds the existing MSX filesystem-v3 handoff and text-window
+behavior into a separate full CPC private runtime. The **unchanged 20209-byte
+Notepad APP now opens, edits and saves real documents on CPC/M4 in 1984**.
+This is bounded receiver qualification, not normal-distribution promotion or
+complete CPC Notepad acceptance.
+
+- `PORTABLE_FS_HANDOFF=1` requires the full private package/Settings/Desktop
+  composition. CPC's F7 filesystem module compiles the same `FSCTX_IDENTITY`
+  and `FSCTX_HANDOFF` policy; parameter op 8 accepts identity operation 15.
+  The private sysinfo publishes filesystem API **v3**, default remains v1.
+- The same `core/document_launch.asm` selects the producer's copied path/name,
+  binds the new owner generation, expires failed/unconsumed delivery, and
+  clears matching pending identity during owner cleanup. No new public opcodes
+  or alternative CPC handoff policy. File Manager's native adapter enables
+  `.TXT`/`.CFG` handoff and `/GBENCH/NOTEPAD.APP` only in this build-matched
+  profile; existing unsupported file types and non-system APP paths stay gated.
+- Fresh CPC keyboard scans give plain arrows and Space to live explicit-kind
+  `GB_WK_TEXT_INPUT` windows. Ctrl+arrows/Space retain pointer access; joystick
+  input is unchanged. Invalid, native, non-text or unfocused windows retain
+  pointer routing. Matrix translation preserves bank/IFF/index registers and
+  does not add keyboard or graphics work to the IRQ.
+- The full Desktop replaces its initial bootstrap callbacks before entering
+  the event loop. This profile omits the **unused diagnostic launcher** code
+  and retains the actual Desktop callbacks and Settings config reload. No
+  desktop feature, public service, memory budget or editor capacity was cut.
+  Ordinary/default and previous receiver profiles retain their original bytes.
+
+Full measured fit: **CORE 16155/16384 (229 bytes spare)**, SUPPORT 3035/3072,
+HARDWARE 1486/1536, scheduler 1452/1536, checked package 768/768 and bootstrap
+6315/6656. F7 filesystem code is **4853/6656** (1803 spare). Notepad keeps its
+14443-byte primary + 5766-byte secondary, full 4096-byte document and independent
+4096-byte staging; APP SHA256 remains
+`1d554abbd83f65ad2c332b48f7712694d55ed68a1ae5d0358f266c8ecdc340e8`.
+
+Passing evidence under `build/notepad-84/evidence/`:
+
+- `cpc-handoff-regressions-final.log`: **47 host/Z80 tests**, no skips. Includes
+  **1001 executed CPC input calls** (focus/kind/CTRL/arrows/Space/held keys,
+  joystick preservation, bank/IFF/index registers, stack and framebuffer),
+  shared owner-bound handoff, identity, storage, package/calls and editor tests.
+  Native Ctrl+Space retains its earlier key behavior; suppression as text is
+  limited to a focused text window. The final adjustment is also recorded in
+  `cpc-handoff-input-final.log` and `cpc-handoff-build-final.log`.
+- `geobench-cpc-runtime-c8fmo3ak`: actual File Manager opens `ADOC/EXACT.TXT`,
+  Notepad navigates with all four arrows, inserts text/Space, backspaces and
+  saves in place. Focus away restores ordinary pointer arrows without editing
+  the background document; focus return works. Opening the same basename in
+  `ADOC/SUB` loads different exact bytes. Independent M4 file readback verifies
+  the changed root document and unchanged nested document. Close returns to
+  clean Desktop with pages, seals and contexts reclaimed. **10 checkpoints**;
+  main stack reaches 165 bytes, guards intact. Screenshots are retained.
+- `geobench-cpc-runtime-qrgytxx0`: earlier open/edit/save/nested-path run,
+  eight checkpoints. Early observer failures were corrected: initialized
+  File Manager symbols use their initialized-data base, not the BSS base.
+- `geobench-cpc-runtime-z9wo28_1`: corrupt Notepad admission clears the producer's
+  pending record. After dismissing the failure alert, a subsequent pristine
+  blank launch inherits no document; all contexts/pages/seals are reclaimed.
+  The observer uses Escape for native alerts and frame waits shorter than the
+  emulator's command timeout; neither correction required guest code changes.
+- `geobench-cpc-runtime-y5sa576d`: **32** desktop stacking/Clock/Calculator
+  checkpoints. `geobench-cpc-runtime-el99fr7h`: three computation launches,
+  **54 checks / 17 copied calls** each, distinct owner generations and cleanup.
+- `geobench-cpc-runtime-o00ygoa5` / `-w6vp9v58`: Settings **21 normal + 9
+  automatic cold-reboot checkpoints**, all six appearance settings retained.
+- `cpc-handoff-default-before` / `-after`: complete default resident and
+  bootstrap binaries are byte-identical to `3041971`.
+
+The above full-runtime runs initially used CORE 16144. The native Ctrl+Space
+compatibility adjustment adds 11 bytes; final-image reruns are recorded below.
+
+- `geobench-cpc-runtime-6c4z9p7i`: final-image document/edit/save/focus/nested-path
+  workflow, all 10 checkpoints pass.
+- `geobench-cpc-runtime-t5r1i33g`: final-image bad-APP rejection, subsequent
+  blank launch and complete cleanup, four checkpoints pass.
+- `geobench-cpc-runtime-y8ixtv0u`: final-image Desktop, Clock, Calculator and
+  File Manager stacking, occlusion, dragging, resizing and cleanup, all 32
+  checkpoints pass.
+
+Reproduce using the compiler in `my-distrobox`, then 1984 on the host:
+
+```sh
+python3 tools/build_cpc_runtime.py --notepad-handoff
+python3 tools/test_cpc_runtime_1984.py --skip-build \
+  --private-media build/notepad-84/cpc-handoff --notepad-case handoff \
+  --notepad-app build/notepad-84/build/msx/portable-notepad-7-ze7nl4tm/probe.APP
+```
+
+The builder preserves the earlier `cpc-receiver` image and all normal/manual
+images. The test makes a new M4 copy and stages the accepted APP, adjacent
+`probe.noi`, and test documents; it never writes the source image. Repeat with
+`--notepad-case bad-app` for failed document launch / later blank-launch cleanup.
+The plain private builder does not itself stage Notepad into a distribution.
+
+### Exploratory manual image — 2026-09-14
+
+At the user's request, a fresh M4 image is available with the accepted Notepad
+APP and two sample documents. It preserves all 44 original receiver payloads,
+including the real Clock and Calculator (no test aliases).
+The fresh image boots in 1984 with filesystem v3, intact resident/module code
+and stack guards, and one clean Desktop window (`boot.sna` / `boot.png` beside
+the image). Initial image SHA256:
+`7ed1119d2c8494a7f4d8e9b513b8017e8c763172324a5d0aafe58120ae4ca230`.
+
+From the repository root, run:
+
+```sh
+../1984/1984 \
+  --config="$PWD/build/notepad-84/manual-cpc-jB6Idz/1984.conf" \
+  --6128 --memory=512 --autostart=BOOT
+```
+
+Prefix with `distrobox enter my-distrobox --` if needed for emulator libraries.
+Double-click **Disk C > ADOC > EXACT.TXT**. Try arrows, text, Space and
+Backspace; use **Ctrl+arrows** to move the pointer and **Ctrl+Space** to click
+while the editor is focused. Choose **File > Save**, close, and reopen to
+verify persistence. `ADOC/SUB/EXACT.TXT` is a different sample with the same
+basename. `GBENCH/NOTEPAD.APP` opens a blank document.
+
+Saves stay in `build/notepad-84/manual-cpc-jB6Idz/NOTEPAD.IMG`; normal images,
+older manual images and automated evidence are untouched. Back up this file
+to preserve manual edits. This is exploratory testing, not completion of the
+remaining acceptance gate or normal-distribution promotion.
+
+**Next gate:** complete CPC editor acceptance: 4096-byte round trip, 4097-byte
+rejection, dirty-close/cancel/discard, chooser/clipboard, repaint bounds and
+occlusion under the real CPC renderer, repeated cleanup and storage faults.
+The exploratory image above is available before that gate at the user's
+request. Normal delivery promotion and a second CPC emulator/backend
+confirmation remain separate work.
+The CPC translator still emits one character per press/change, as before;
+key-repeat timing is not added by this receiver binding and remains an input
+acceptance item.
+
+## Previous checkpoint: private desktop two-bank receiver
 
 The shared package loader and sealed secondary-call policy now run in the
 **full private CPC Desktop/File Manager/Settings composition**. The transport
@@ -173,7 +370,7 @@ The hardware probe deliberately **does not execute the APP**, perform GBAP
 admission, seal a secondary page, or present a desktop. A transport PASS is
 not a runnable-Notepad or full CPC receiver acceptance claim.
 
-## Remaining receiver work
+## Original receiver work order (progress superseded above)
 
 1. **Document and input bindings.** Enable the existing shared filesystem
    identity / owner-bound launch-handoff policy in CPC's paged FS module and

@@ -28,6 +28,7 @@ static char disk[8194], clip[510];
 static unsigned int disk_len, offset[5], fs_calls, fail_call, writes, clip_len;
 static unsigned char live[5], fs_error, clip_kind, clip_error, closed;
 static unsigned char input[64], input_pos, mouse_x, mouse_y, buttons;
+static unsigned char popup_item=255;
 static gb_rect_t live_rect = {2,14,66,158};
 static gb_rect_t damage;
 static gb_rect_t damages[32];
@@ -135,7 +136,16 @@ void gb_message_read(gb_msg_t *m) { memset(m,0,sizeof(*m)); }
 unsigned char gb_universal_popup_active(void) { return 0; }
 void gb_universal_popup_close(void) { }
 unsigned char gb_universal_popup(unsigned char x,const char *const *p,unsigned char n)
-{ (void)x; (void)p; (void)n; return 255; }
+{
+    static const char *const expected[]={"New","Load","Save","Save As","Quit"};
+    assert(mode==MENU);
+    if(p==file_items) {
+        assert(x==10 && n==5);
+        for(unsigned char i=0;i<n;++i)assert(!strcmp(p[i],expected[i]));
+    } else if(p==edit_items)assert(x==18 && n==3);
+    else { assert(p==view_items && x==26 && n==1); }
+    return popup_item;
+}
 unsigned char gb_getkey(void) { return input_pos<sizeof(input) ? input[input_pos++] : 0; }
 unsigned char gb_mx(void) { return mouse_x; }
 unsigned char gb_my(void) { return mouse_y; }
@@ -163,6 +173,7 @@ static void reset_test(void)
     document=candidate=retired=0; fs_calls=fail_call=writes=0;
     fs_error=clip_error=closed=buttons=0; disk_len=clip_len=0;
     pending_document=0;identity_error=0;
+    popup_item=255;
     mode=EDIT; action=menu_request=cooldown=refresh=title_changed=dragging=blink=full=0;
     live_rect.x=2; live_rect.y=14; live_rect.w=66; live_rect.h=158;
     notepad_entry(); refresh=title_changed=cooldown=0;
@@ -319,6 +330,51 @@ static void lifecycle(void)
     failure=fs_calls; tick(); assert(fs_calls==failure); /* no silent retry spin */
     fail_call=0; close_request(); tick(); assert(!retired && mode==EDIT);
 }
+static void file_menu(void)
+{
+    unsigned int guard;
+    /* Menu cancellation leaves even a dirty document untouched. */
+    reset_test();old_document();menu_request=1;menu();
+    assert(mode==EDIT && !action && editor.dirty && !closed);
+    menu_request=2;menu();menu_request=3;menu();
+    assert(mode==EDIT && !action && editor.dirty && !closed);
+    /* The existing entries keep their order and dispatch. */
+    reset_test();old_document();popup_item=0;menu_request=1;menu();
+    assert(mode==CONFIRM && action==NEW);confirm(27);
+    popup_item=1;menu_request=1;menu();
+    assert(mode==CONFIRM && action==OPEN);confirm(27);
+    popup_item=2;menu_request=1;menu();run_io();
+    assert(mode==EDIT && !editor.dirty && disk_len==11);
+    popup_item=3;menu_request=1;menu();
+    assert(mode==PICK && picker.mode==GB_FILEPICK_SAVE);
+    /* Quit uses the same deferred cleanup path as the close gadget / ^Q. */
+    reset_test();old_document();editor.dirty=0;sync_editor();
+    popup_item=4;menu_request=1;menu();
+    assert(mode==EXIT && !closed && document && !writes);
+    for(guard=0;guard<10 && !closed;++guard)tick();
+    assert(closed && !document && !live[1] && !writes);
+    /* Dirty Quit must allow Cancel, then Discard without writing. */
+    reset_test();old_document();popup_item=4;menu_request=1;menu();
+    assert(mode==CONFIRM && action==CLOSE && !closed);confirm(27);
+    assert(mode==EDIT && !action && editor.dirty && editor.len==11 && live[document]);
+    menu_request=1;menu();confirm('d');
+    for(guard=0;guard<10 && !closed;++guard)tick();
+    assert(closed && !document && !live[1] && !writes);
+    /* Save-before-Quit writes fully before releasing the owner. */
+    reset_test();old_document();popup_item=4;menu_request=1;menu();confirm('s');
+    run_io();assert(mode==EDIT && !closed && action==CLOSE && !editor.dirty);
+    assert(disk_len==11 && !memcmp(disk,"old unsaved",11));
+    for(guard=0;guard<10 && !closed;++guard)tick();
+    assert(closed && !document && !live[1]);
+    /* Neither a failed save nor a failed context release silently quits. */
+    reset_test();old_document();popup_item=4;menu_request=1;menu();confirm('s');
+    fail_call=fs_calls+2;run_io();
+    assert(mode==ERROR && !closed && editor.dirty && !action && live[document]);
+    reset_test();old_document();editor.dirty=0;sync_editor();
+    popup_item=4;menu_request=1;menu();fail_call=fs_calls+1;tick();
+    assert(mode==ERROR && !closed && document && live[document]);
+}
+
 static void clipboard_and_damage(void)
 {
     reset_test(); old_document(); np_all(&editor);sync_editor();copy();
@@ -453,7 +509,7 @@ int main(void)
     reset_test();input[40]=' ';input[41]=' ';notepad_entry();
     for(unsigned char i=0;i<6;++i)tick();
     assert(editor.len==0 && !editor.dirty);
-    model(); copied_protocol(); lifecycle(); clipboard_and_damage(); chooser_integration();launch_document();
+    model(); copied_protocol(); lifecycle(); file_menu(); clipboard_and_damage(); chooser_integration();launch_document();
     puts("unified Notepad model/controller tests PASS (mocked services; no runtime claim)");
     return 0;
 }

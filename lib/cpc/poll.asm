@@ -129,6 +129,9 @@ cpc_pointer_deadline
                 ld (cpc_poll_stamp),hl
                 endif
                 call cpc_input_scan
+                ifdef PORTABLE_FS_HANDOFF
+                call cpc_text_pointer
+                endif
                 ld a,(poll_byte)
                 ld b,a
                 ld a,(poll_line)
