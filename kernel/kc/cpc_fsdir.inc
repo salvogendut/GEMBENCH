@@ -77,7 +77,7 @@ static char *cpc_fs_directory(unsigned char first)
             if (part || !pos) return directory_error(UNSUPPORTED);
             part=1;pos=0;continue;
         }
-        if (!path_char(ch) || pos>=(part?3u:8u)) return directory_error(UNSUPPORTED);
+        if (!cpc_path83_char(ch) || pos>=(part?3u:8u)) return directory_error(UNSUPPORTED);
         CPC_DIR_ENTRY[(part?8u:0u)+pos++]=ch;
     }
     if (i==13u || !pos) return directory_error(UNSUPPORTED);

@@ -1,5 +1,6 @@
 #include "../core/fsctx_layout.h"
 #include "cpc_fsctx.h"
+#include "cpc_path83.h"
 #include "../core/fsctx_contract.h"
 #include "../core/fsctx_policy.inc"
 
@@ -7,11 +8,6 @@
  * by the original M4 backend, then GETPATH to confirm activation: CD has no
  * status payload on the qualified protocol. Never treat an empty reply as a
  * successful directory change. No application transfer buffer is touched. */
-static unsigned char path_char(unsigned char ch)
-{
-    return (ch>='A' && ch<='Z') || (ch>='0' && ch<='9') || ch=='_' || ch=='-' || ch=='~';
-}
-
 static unsigned char exchange(unsigned char cmd, unsigned char length)
 {
     CPC_COMMAND[1]=cmd;
@@ -22,7 +18,7 @@ static unsigned char exchange(unsigned char cmd, unsigned char length)
 
 static unsigned char cpc_fs_activate(void)
 {
-    unsigned char i, start, count=0, ch, len;
+    unsigned char i, start, count, ch, len;
 #ifdef CPC_FS_DIRECTORY
     CPC_DIR_LIVE=0; /* CD invalidates the device cursor; replay on first use. */
 #endif
@@ -31,15 +27,8 @@ static unsigned char cpc_fs_activate(void)
         if (ch=='\\') ch='/';
         CPC_PATH[i]=ch;
         if (!ch) break;
-        if (ch=='/') {
-            if (i && !count) return 1;
-            count=0;
-        } else {
-            if (!path_char(ch) || ++count>8u) return 1;
-        }
     }
-    if (i==CTX_PATH_CAP || !i || CPC_PATH[0]!='/' || (i>1u && !count)) return 1;
-    len=i;
+    if (i==CTX_PATH_CAP || !(len=cpc_path83_length(CPC_PATH,CTX_PATH_CAP))) return 1;
     CPC_COMMAND[3]='/'; CPC_COMMAND[4]=0;
     if (exchange(8u,2u) || CPC_RESPONSE[0]!=2u) return 1;
     start=1;
@@ -72,7 +61,7 @@ static unsigned char cpc_fs_filename(void)
         for (j=0;j<(part?3u:8u);j++) {
             ch=CPC_SELECTED[CTX_NAME+(part?8u:0u)+j];
             if (ch==' ') { padded=1; continue; }
-            if (padded || !path_char(ch)) return 0;
+            if (padded || !cpc_path83_char(ch)) return 0;
             CPC_FILE[i++]=ch; seen=1;
         }
         if (!part && !seen) return 0;
