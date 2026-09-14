@@ -7,12 +7,14 @@ import subprocess
 from cpc_production_lifetime import physical
 from test_cpc_foundation_1984 import snapshot
 
-APP_SHA='1d554abbd83f65ad2c332b48f7712694d55ed68a1ae5d0358f266c8ecdc340e8'
-QUIT_APP_SHA='d45f0c5ec151f1a5ca4f9a9a52ff94162360f1aa2883eda4afa80340396ad157'
+APP_SHA='fae9ad2f6da69b906af13836f7230095d2ca8421211a8f80a79e310813f933b7'
+QUIT_APP_SHA=APP_SHA
 DOCUMENTS={'/ADOC/EXACT.TXT':b'abc\nxyz\n','/ADOC/SUB/EXACT.TXT':b'Nested document.\n'}
 
 def documents(case):
     result=dict(DOCUMENTS)
+    if case=='config':
+        result['/ADOC/GEOBENCH.CFG']=b'FONT=DEFAULT\nVIEW=ICONS\n'
     if case=='boundary':
         result['/ADOC/EXACT.TXT']=(b'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n'*111)[:4096]
         result['/ADOC/TOOLARGE.TXT']=result['/ADOC/EXACT.TXT']+b'!'
@@ -100,6 +102,10 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
             for action,held in (('key-down SPACE',True),('key-up SPACE',False)):
                 send(action);until('pointer click',lambda r:bool(r[sym['poll_lastfire']])==held)
         finally:send('key-up Left_Ctrl')
+    def focus_filemgr():
+        r=ram();x,y,w,h=r[sym['wm_table']+26:sym['wm_table']+30]
+        pointer(x+w-2,y+h-2);click()
+        return until('File Manager refocus for reuse',lambda state:state[sym['wm_focus']]==1)
     def named(name,attempts=0):
         if attempts>=40:raise AssertionError('File Manager scroll bound exceeded')
         r=until('directory',lambda r:field(r,'list_state')==b'\0')
@@ -142,23 +148,51 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
     named(b'GBENCH     ' if case=='blank' else b'ADOC       ')
     until('document folder',lambda r:field(r,'fm_path',len(folder))==folder)
     expected_files=documents(case)
-    for cycle,nested in enumerate((False,)*12 if case=='stress' else (False,) if case=='blank' else (False,True)):
+    for cycle,nested in enumerate((False,)*12 if case=='stress' else
+                                  (False,) if case in ('blank','config') else (False,True)):
+        path='/ADOC/GEOBENCH.CFG' if case=='config' else \
+             '/ADOC/SUB/EXACT.TXT' if nested else '/ADOC/EXACT.TXT'
+        expected=b'' if case=='blank' else expected_files[path]
         if nested:
             named(b'SUB        ');until('SUB',lambda r:field(r,'fm_path',10)==b'/ADOC/SUB\0')
-        named(b'NOTEPAD APP' if case=='blank' else b'EXACT   TXT')
+        named(b'NOTEPAD APP' if case=='blank' else
+              b'GEOBENCHCFG' if case=='config' else b'EXACT   TXT')
         if case=='bad-app':
             wait(150);wait(150);r=checked('rejected-document')
             if r[sym['wm_nwin']]!=2:raise AssertionError('bad APP was published')
             # Dismiss the real File Manager failure alert before closing it.
             key('ESCAPE');break
+        if case=='reuse-dirty' and nested:
+            until('dirty reuse confirmation',lambda r:r[sym['wm_nwin']]==3 and
+                  r[sym['wm_focus']]==slot and mode(r)==2)
+            checked('dirty-reuse-confirmation')
+            key('ESCAPE');r=until('dirty reuse cancelled',lambda r:mode(r)==0)
+            root=expected_files['/ADOC/EXACT.TXT']
+            if view(r)[:2]!=(len(root)+1).to_bytes(2,'little') or not view(r)[13]:
+                raise AssertionError('reuse Cancel lost the dirty root document')
+            focus_filemgr();named(b'EXACT   TXT')
+            until('dirty reuse confirmation retry',lambda r:r[sym['wm_focus']]==slot and mode(r)==2)
+            pointer(16,58);click() # Discard
         until('Notepad focus',lambda r:r[sym['wm_nwin']]==3 and r[sym['wm_focus']]==slot)
-        until('document load',lambda r:mode(r)==0 and (case=='blank' or any(view(r)[:2])))
+        until('document load',lambda r:mode(r)==0 and
+              view(r)[:2]==len(expected).to_bytes(2,'little') and not view(r)[13])
         r=checked(('nested-document' if nested else 'root-document')+f'-{cycle}')
-        path='/ADOC/SUB/EXACT.TXT' if nested else '/ADOC/EXACT.TXT'
-        expected=b'' if case=='blank' else expected_files[path]
+        if case in ('reuse','reuse-dirty') and cycle and r[sym['wm_nwin']]!=3:
+            raise AssertionError('live document open allocated another window')
         if view(r)[:2]!=len(expected).to_bytes(2,'little') or view(r)[13] or leaf(r,len(expected))!=expected:
             raise AssertionError('wrong document identity/content')
         if r[base(r,slot):base(r,slot)+primary]!=app[:primary]:raise AssertionError('primary APP changed')
+        if case=='config':
+            wait(80)
+            text_key('Z',lambda state:view(state)[0:2]==(len(expected)+1).to_bytes(2,'little'))
+            changed=b'z'+expected
+            pointer(11,3);click();wait(20);pointer(12,34);click()
+            r=until('configuration save',lambda state:mode(state)==0 and not view(state)[13])
+            if int.from_bytes(r[sym['cpc_cfg_length']:sym['cpc_cfg_length']+2],'little')!=len(changed):
+                raise AssertionError('resident configuration length was not published')
+            if r[sym['cpc_cfg_text']:sym['cpc_cfg_text']+len(changed)]!=changed:
+                raise AssertionError('resident configuration bytes differ from saved document')
+            expected_files[path]=changed;checked('configuration-published')
         if case in ('blank','boundary','clipboard','write-denied','disk-full','stress'):
             from types import SimpleNamespace
             from cpc_notepad_acceptance import exercise_case
@@ -187,6 +221,16 @@ def exercise(manifest,work,sym,image,artifacts,case,send,wait,read,key,move):
             pointer(11,3);click();wait(20);pointer(12,34);click()
             until('save',lambda r:mode(r)==0 and not view(r)[13]);checked('save-in-place')
             expected_files[path]=expected
+        if case in ('reuse','reuse-dirty') and not nested:
+            if case=='reuse-dirty':
+                wait(80) # match the launch-click drain before text input
+                text_key('Z',lambda state:view(state)[0:2]==(len(expected)+1).to_bytes(2,'little'))
+                r=checked('dirty-reuse-source')
+            # Raise File Manager through its exposed lower frame, then launch a
+            # second exact-path document. The registered editor must be reused.
+            focus_filemgr()
+            checked('reuse-source-refocused')
+            continue
         if case in ('quit','escape'):
             def quit_menu(label):
                 pointer(11,3);click();wait(20);checked(label)

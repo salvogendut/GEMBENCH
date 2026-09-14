@@ -39,6 +39,10 @@
 #define CPC_PACKET ((volatile unsigned char *)0x6000u)
 #define CPC_IO_PATH ((volatile unsigned char *)0x6020u)
 #define CPC_BUFFER ((volatile unsigned char *)0x6080u)
+#ifdef FSCTX_HANDOFF
+#define FSCTX_REUSE_ACTIVE() \
+    (U8(0x133Eu) == 1u && U8(0x1302u) == 11u && U8(0x1303u) == 1u)
+#endif
 #define CPC_COMMAND ((volatile unsigned char *)0x1BA0u)
 #define CPC_RESPONSE ((volatile unsigned char *)0x1B00u)
 extern unsigned char cpc_fs_exchange(void) __sdcccall(0);

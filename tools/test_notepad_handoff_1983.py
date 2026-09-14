@@ -57,7 +57,27 @@ class HandoffDriver(NotepadDriver):
         self.wait(lambda:self.value('WM_NWIN')==2,'File Manager launch')
         self.frames(100);self.entry_named(b'ADOC       ')
         self.wait(lambda:bytes(self.fm('_fm_path',6))==b'/ADOC\0','ADOC navigation')
-        for nested in (False,True):
+        if args.config:
+            expected=b'FONT=DEFAULT\nVIEW=ICONS\n'
+            self.entry_named(b'GEOBENCHCFG')
+            self.wait(lambda:self.value('WM_NWIN')==3 and self.value('WM_FOCUS')==2,
+                      'configuration launch and focus')
+            self.wait(lambda:self.mode()==0 and self.editor()[:2]==[len(expected),0],
+                      'configuration staged load')
+            # Reuse the deterministic A key used by the core Notepad editor
+            # qualification; it inserts a lowercase byte with this fixture.
+            self.frames(100);self.type_keys([(2,64)])
+            self.wait(lambda:self.editor()[:2]==[len(expected)+1,0] and self.editor()[13],
+                      'configuration edit')
+            self.menu(2);self.wait(lambda:self.mode()==0 and not self.editor()[13],
+                                   'configuration save and publication')
+            changed=b'a'+expected
+            length=self.read(0x1200,2)
+            self.expect(length==[len(changed),0] and bytes(self.read(0x1000,len(changed)))==changed,
+                        'resident configuration cache matches saved bytes')
+            self.close(2,2)
+        for nested in () if args.config else (False,True):
+            expected=b'Chosen nested document.\n' if nested else b'Chosen root document.\n'
             if nested:
                 self.entry_named(b'SUB        ')
                 self.wait(lambda:bytes(self.fm('_fm_path',10))==b'/ADOC/SUB\0','nested navigation')
@@ -68,9 +88,9 @@ class HandoffDriver(NotepadDriver):
                             'failed admission cleared pending document')
                 break
             self.wait(lambda:self.value('WM_NWIN')==3 and self.value('WM_FOCUS')==2,'document launch and focus')
-            self.wait(lambda:self.mode()==0,'document staged load')
+            self.wait(lambda:self.mode()==0 and self.editor()[:2]==[len(expected),0],
+                      'document staged load')
             self.frames(100)
-            expected=b'Chosen nested document.\n' if nested else b'Chosen root document.\n'
             self.expect(self.editor()[:2]==[len(expected),0] and self.editor()[13]==0,'exact document length and clean state')
             self.expect(self.read(glue['MSX_FSCTX_PENDING'])==[0],'handoff consumed exactly once')
             # Inspect the real sealed model bank, not a debugger-injected model.
@@ -88,25 +108,42 @@ class HandoffDriver(NotepadDriver):
             self.border(2)
             # Save the adopted document in place; host verifies both directories.
             self.menu(2);self.wait(lambda:self.mode()==0,'in-place save completed');self.frames(100)
-            self.close(2,2)
+            if args.reuse and not nested:
+                # The larger File Manager remains exposed below Notepad. Raise
+                # it without closing the editor; the next TXT launch must reuse
+                # slot 2 and keep the total at three windows.
+                _,x,y,w,h,*_=self.entry(1)
+                self.click(x+w-2,y+h-2)
+                self.wait(lambda:self.value('WM_FOCUS')==1,'File Manager refocus for reuse')
+            else:self.close(2,2)
         self.close(1,1)
         if args.bad_app:
             self.notepad_slot=1
             self.launch() # undamaged Desk alias must open blank, not the failed document
             self.expect(self.read(glue['MSX_FSCTX_PENDING'])==[0],'later blank launch has no stale handoff')
             self.close(1,1)
-        self.expect(self.read(glue['MSX_PAGE_STATE'],32)==before and self.read(glue['MSX_PAGE_FREE'])==free,
-                    'all application pages reclaimed')
+        after=self.read(glue['MSX_PAGE_STATE'],32);after_free=self.read(glue['MSX_PAGE_FREE'])
+        # A deferred boot resource can still occupy one page at the baseline
+        # and be released by the first launch.  The invariant is the idle
+        # desktop allocation plus no loss of free pages, not byte equality
+        # with that transient baseline.
+        self.expect(after==[1]+[0]*31 and after_free[0]>=free[0],
+                    f'all application pages reclaimed: {before}/{free} -> {after}/{after_free}')
         self.expect(all(not self.read(glue['MSX_FSCTX_TABLE']+144*i)[0] for i in range(4)), 'all contexts reclaimed')
         self.expect(self.read(0x2180,64)==[0]*64 and not self.value('SCHED_FAULT'),'seals and scheduler clean')
-        return dict(status='PASS',checks=self.checks,frames=self.frame,case='bad-app' if args.bad_app else 'exact-path')
+        return dict(status='PASS',checks=self.checks,frames=self.frame,
+                    case='config' if args.config else 'bad-app' if args.bad_app else
+                         'reuse' if args.reuse else 'exact-path')
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ('bridge','omega','sunrise','image','worktree','output'):parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--mode',type=int,choices=(6,7),required=True)
-    parser.add_argument('--bad-app',action='store_true')
+    mode=parser.add_mutually_exclusive_group()
+    mode.add_argument('--bad-app',action='store_true')
+    mode.add_argument('--reuse',action='store_true')
+    mode.add_argument('--config',action='store_true')
     args=parser.parse_args();args.bios=args.subrom=None;args.short_desk_stress=False
     if args.output.exists():parser.error('output exists; preserve earlier evidence')
     args.source=args.image;source_hash=hashlib.sha256(args.source.read_bytes()).hexdigest()
@@ -118,6 +155,9 @@ def main():
         damaged=bytearray((args.source.parent/'probe.APP').read_bytes());damaged[-1]^=1
         file=args.output/'BAD.APP';file.write_bytes(damaged)
         subprocess.run(['mcopy','-o','-i',str(args.image)+'@@16384',str(file),'::/GBENCH/NOTEPAD.APP'],check=True)
+    if args.config:
+        file=args.output/'GEOBENCH.CFG';file.write_bytes(b'FONT=DEFAULT\nVIEW=ICONS\n')
+        subprocess.run(['mcopy','-o','-i',str(args.image)+'@@16384',str(file),'::/ADOC/GEOBENCH.CFG'],check=True)
     driver=None
     try:
         with (args.output/'bridge.log').open('w') as log:
@@ -136,6 +176,13 @@ def main():
     for directory,data in (('ADOC',b'Chosen root document.\n'),('ADOC/SUB',b'Chosen nested document.\n')):
         actual=subprocess.check_output(['mtype','-i',str(args.image)+'@@16384',f'::/{directory}/EXACT.TXT'])
         if actual!=data:report.update(status='FAIL',error='saved file differs: '+directory)
+    if args.config:
+        actual=subprocess.check_output(['mtype','-i',str(args.image)+'@@16384','::/ADOC/GEOBENCH.CFG'])
+        if actual!=b'aFONT=DEFAULT\nVIEW=ICONS\n':
+            if report.get('status')=='PASS':
+                report.update(status='FAIL',error='saved configuration differs')
+            else:
+                report['saved_configuration_mismatch']=actual.decode('ascii','backslashreplace')
     unchanged=hashlib.sha256(args.source.read_bytes()).hexdigest()==source_hash
     if not unchanged:report.update(status='FAIL',error='source image changed')
     report.update(source_image_sha256=source_hash,source_image_unchanged=unchanged,mode=args.mode,

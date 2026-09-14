@@ -15,6 +15,7 @@ GB_SHELL_FIND     equ 1
 GB_SHELL_SEND     equ 2
 GB_SHELL_REGISTER_ACCESSORY equ 3
 GB_SHELL_FIND_ACCESSORY equ 4
+GB_SHELL_CONFIG_PUBLISH equ 5
 GB_SHELL_ACCESSORY_CLASS equ #A0
 GB_SHELL_OPEN     equ 1
 GB_SHELL_QUIT     equ 4
@@ -28,15 +29,30 @@ k_shell
                 or    a
                 jr    z,ksh_register
                 dec   a
-                jr    z,ksh_find
+                jp    z,ksh_find
                 dec   a
                 jp    z,ksh_send
                 dec   a
                 jr    z,ksh_register_accessory
                 dec   a
-                jr    z,ksh_find_accessory
+                jp    z,ksh_find_accessory
+                ifdef SHELL_CONFIG_PUBLISH
+                dec   a
+                jr    z,ksh_config_publish
+                endif
 ksh_bad         ld    a,GB_SHELL_BAD
                 ret
+
+                ifdef SHELL_CONFIG_PUBLISH
+ksh_config_publish
+                ld    a,(SHELL_BUSY)
+                or    a
+                jp    nz,ksh_busy
+                ld    a,(SCHED_CURRENT)
+                or    a
+                jp    nz,ksh_busy
+                jp    SHELL_CONFIG_PUBLISH
+                endif
 
 ; Register one of seven encoded service classes in the current window's unused
 ; flag bits.  The existing alive/managed/task/kind bits remain unchanged.

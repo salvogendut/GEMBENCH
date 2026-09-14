@@ -3,6 +3,8 @@
 #include "gbfilepick_ui.h"
 #include "gbdocio.h"
 #include "gbscrap.h"
+#include "gbshell.h"
+#include "gbconfig.h"
 #include <string.h>
 #include "client.h"
 /* At most 84 glyphs: 3*n fits a byte. Keep pixel-column conversion 8-bit. */
@@ -15,7 +17,7 @@ union { gb_filepick_t picker; char bytes[768]; } scratch;
 #define picker scratch.picker
 unsigned char *gb_universal_popup_buffer(void) {return (unsigned char *)scratch.bytes;}
 static gb_docio_t job;
-static gb_fsctx_t document, candidate, retired;
+static gb_fsctx_t document, candidate, retired, incoming;
 static char name[11], path[48];
 static gb_fsctx_identity_t next;
 #define next_name next.name
@@ -37,18 +39,21 @@ static const unsigned char menus[] = {
 static const char *const file_items[] = {"New", "Load", "Save", "Save As", "Quit"};
 static const char *const edit_items[] = {"Select All", "Copy", "Paste"};
 static const char *const view_items[] = {"Fullscreen"};
+static const char untitled[] = "UNTITLEDTXT";
+static const char open_error[] = "Cannot open document";
 
 static void geometry(void)
 {
     gb_window_rect(&rect);
     wrap = (unsigned char)((rect.w - 7) * 2) / 3;
     if (wrap >= NP_LINE_MAX) wrap = NP_LINE_MAX - 1;
-    rows = (rect.h - 29) / 10;
+    rows = (unsigned char)(rect.h - 29u) / 10u;
 }
 
 static unsigned char is_basic(const char *n)
 {
-    return n[8] == 'B' && n[9] == 'A' && n[10] == 'S';
+    n+=8;
+    return *n++=='B' && *n++=='A' && *n=='S';
 }
 
 static void update_title(void)
@@ -149,6 +154,7 @@ static void fail(const char *message)
     if (mode == SAVE || mode == BAS_REWIND || mode == BAS_WRITE) {
         model_call(NP_DIRTY);title_changed = 1;
     }
+    if (incoming) { retired=incoming;incoming=0; }
     problem = message; mode = ERROR; action = NONE; refresh = 1;
 }
 
@@ -180,15 +186,19 @@ static void choose(unsigned char saving)
     }
 }
 
+static void start_load(void);
 static void perform(void)
 {
     unsigned char requested = action;
     action = NONE;
-    if (requested == OPEN) choose(GB_FILEPICK_OPEN);
+    if (requested == OPEN) {
+        if (incoming) { candidate=incoming;incoming=0;start_load(); }
+        else choose(GB_FILEPICK_OPEN);
+    }
     else if (requested == CLOSE) mode = EXIT;
     else if (requested == NEW) {
         retired = document; document = 0;
-        model_call(NP_RESET); memcpy(name,"UNTITLEDTXT",11);
+        model_call(NP_RESET); memcpy(name,untitled,11);
         mode = EDIT; refresh = title_changed = 1;
     }
 }
@@ -231,7 +241,33 @@ static void confirm(unsigned char choice)
     }
     if (choice == 's' || choice == 'S') save(0);
     else if (choice == 'd' || choice == 'D') perform();
-    else if (choice == 27) { action = NONE; mode = EDIT; refresh = 1; }
+    else if (choice == 27) {
+        if (incoming) { retired=incoming;incoming=0; }
+        action = NONE; mode = EDIT; refresh = 1;
+    }
+}
+
+static gb_fsctx_t adopt_document(void)
+{
+    gb_fsctx_t adopted=gb_fsctx_adopt_launch();
+    if(adopted && gb_fsctx_identity(adopted,&next)) {
+        retired=adopted;fail(open_error);return 0;
+    }
+    return adopted;
+}
+
+/* The shell has already raised this window. Adopt its copied transaction
+ * synchronously, then defer dirty decisions and I/O to ordinary frames. */
+static void shell_open(void)
+{
+    if (mode || retired || action) {
+        gb_shell_respond(GB_SHELL_BUSY);return;
+    }
+    incoming=adopt_document();
+    if (!incoming) {
+        gb_shell_respond(mode==ERROR ? GB_SHELL_OK : GB_SHELL_REJECTED);return;
+    }
+    gb_shell_respond(GB_SHELL_OK);request(OPEN);
 }
 
 static void promote(void)
@@ -240,12 +276,18 @@ static void promote(void)
         retired = document; document = candidate; candidate = 0;
         memcpy(name,next_name,11); strcpy(path,next_path); drive = next_drive;
     }
+    memcpy(packet+NP_DATA,name,11);
     model_call(NP_SAVED);mode = EDIT; refresh = title_changed = 1;
 }
 
 static void saved(void)
 {
     promote();
+    if(packet[6]) {
+        packet[0]=NP_CONFIG_EXPORT;
+        if(gb_compute(packet,NP_PACKET)==GB_PARAMS_OK)
+            (void)gb_config_publish((char *)packet,editor.len);
+    }
     /* Cleanup the old context before a deferred New/Load/Close can run. */
 }
 static void start_load(void)
@@ -376,18 +418,18 @@ static void menu(void)
 
 static void pointer_select(unsigned char begin)
 {
-    unsigned char x = gb_mx(), y = gb_my(), col = 0;
-    unsigned int row = editor.first;
-    if (x > rect.x+5) col = (x-rect.x-5)*2/3;
-    if (col >= wrap) col = wrap-1;
-    if (y > rect.y+16) row += (y-rect.y-16)/10;
-    np_put(packet+2,row);np_put(packet+4,col);packet[6]=begin;
-    model_call(NP_HIT);drag_x=x;drag_y=y;
+    unsigned char x = gb_mx(), y = gb_my(), origin = rect.x + 5;
+    packet[2]=x>origin ? x-origin : 0;
+    origin=rect.y+16;
+    packet[3]=y>origin ? y-origin : 0;
+    packet[6]=begin;
+    model_call(NP_POINT);drag_x=x;drag_y=y;
 }
 
 static void click(void)
 {
     unsigned char x = gb_mx(), y = gb_my();
+    geometry();
     cooldown = 4;
     if (mode == PICK) { gb_filepick_click(&picker,&rect,x,y); return; }
     if (mode == ERROR) { mode = EDIT; refresh = 1; return; }
@@ -500,12 +542,16 @@ static void frame(void)
 static void proc(void)
 {
     gb_msg_t message;
-    gb_message_read(&message); geometry();
+    gb_message_read(&message);
     switch (message.type) {
     case GB_MSG_DRAW: draw(); break;
     case GB_MSG_FRAME: frame(); break;
     case GB_MSG_CLICK: click(); break;
     case GB_MSG_CLOSE: close_request(); break;
+    case GB_MSG_SHELL:
+        if(message.p0==GB_SHELL_OPEN)shell_open();
+        else gb_shell_respond(GB_SHELL_BAD_REQUEST);
+        break;
     case GB_MSG_SIZED:
     case GB_MSG_MAXIMIZED: model_call(NP_FOLLOW);refresh = 1; break;
     case GB_MSG_MENU:
@@ -524,18 +570,14 @@ void main(void)
     if (!gb_universal_ready() || gb_universal_sysinfo()->filesystem_api_version < GB_FSCTX_HANDOFF_API_VERSION) return;
     wrap=39;rows=12;
     if(!model_call(NP_RESET))return;
-    memcpy(name,"UNTITLEDTXT",11); strcpy(path,"/");
+    memcpy(name,untitled,11);path[0]='/';path[1]=0;
     drive = gb_boot_drive_current(); caret = 1;cooldown=4;
     /* Adopt while startup belongs to the bound launch owner. Copy identity
      * before model/storage reuse transfer scratch; publish only after load. */
-    candidate=gb_fsctx_adopt_launch();
-    if(candidate) {
-        if(gb_fsctx_identity(candidate,&next)) {
-            retired=candidate;candidate=0;fail("Cannot open document");
-        } else {
-            start_load();
-        }
-    } else if(gb_fsctx_status()!=GB_FSCTX_ERR_STALE) fail("Cannot open document");
-    update_title(); gb_wm_managed_kind(&window); gb_menu(menus);
+    candidate=adopt_document();
+    if(candidate)start_load();
+    else if(gb_fsctx_status()!=GB_FSCTX_ERR_STALE)fail(open_error);
+    update_title(); gb_wm_managed_kind(&window);
+    (void)gb_shell_register(GB_SHELL_CLASS_TEXT_EDITOR);gb_menu(menus);
     refresh = title_changed = 1; repaint();
 }

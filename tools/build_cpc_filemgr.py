@@ -40,12 +40,13 @@ def compile_filemgr(work, runtime, sym, root=ROOT):
     (work/'sys.s').write_text(generate(root/'lib/gb/gbsys.s',[work/'sys.symbols']))
     for source,target in ((root/'lib/gb/crt0.s','crt.rel'),(work/'gblib.s','gblib.rel'),
                           (work/'sys.s','sys.rel'),(root/'lib/gb/gbwindow_kind.s','kind.rel'),
+                          (root/'lib/gembench/gbshell_client.s','shell_client.rel'),
                           (root/'lib/gb/gbrepaint.s','repaint.rel'),
                           (runtime/'native_fs.s','native_fs.rel')):
         subprocess.run([sdas,'-o',target,str(source)],cwd=work,check=True)
     common=['-mz80','--std-c99','--opt-code-size','--fomit-frame-pointer',
             '--max-allocs-per-node','5000','-DGB_PREEMPTIVE','-DGB_CPC_RESTART',
-            '-DGB_NATIVE_WINDOW_KIND','-I',str(root/'lib/gb'),
+            '-DGB_NATIVE_WINDOW_KIND','-DGB_SHELL_SERVICES','-I',str(root/'lib/gb'),
             '-I',str(root/'include/gembench'),
             f'-DGB_FSCTX_PLATFORM_HEADER="{runtime/"cpc_fs_client.h"}"',
             f'-DGB_FILEMGR_BINDINGS="{runtime/"cpc_native.h"}"']
@@ -55,12 +56,13 @@ def compile_filemgr(work, runtime, sym, root=ROOT):
         ('kernel/kc/cpc_filemgr.c','provider.rel',[]),
         ('lib/gembench/gbr_menu.c','menu.rel',[]),
         ('lib/gembench/gbfsctx.c','fs.rel',[]),
+        ('lib/gembench/gbshell.c','shell.rel',[]),
         ('lib/gb/gbscroll.c','scroll.rel',[]),
         ('lib/gb/gbui_stub.c','ui.rel',
          ['-DGBR_MENU_RUNTIME',f'-DGB_UI_PROVIDER="{runtime/"cpc_native.h"}"'])):
         subprocess.run([sdcc,*common,*defs,'-c',str(root/source),'-o',target],cwd=work,check=True)
-    objects=['crt.rel','main.rel','provider.rel','menu.rel','fs.rel','scroll.rel','ui.rel',
-             'gblib.rel','sys.rel','kind.rel','repaint.rel','native_fs.rel']
+    objects=['crt.rel','main.rel','provider.rel','menu.rel','fs.rel','shell.rel','scroll.rel','ui.rel',
+             'gblib.rel','sys.rel','kind.rel','shell_client.rel','repaint.rel','native_fs.rel']
     base=0x4000;data=0x7800;limit=sym['cpc_app_limit']
     subprocess.run([sdcc,'-mz80','--no-std-crt0','--code-loc',hex(base),'--data-loc',hex(data),
                     *objects,'-o','filemgr.ihx'],cwd=work,check=True)

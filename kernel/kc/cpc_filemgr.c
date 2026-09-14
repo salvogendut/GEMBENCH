@@ -2,6 +2,7 @@
  * Use the existing serialized config module and shared launch transaction. */
 #include "gb.h"
 #include "gbfsctx.h"
+#include "gbshell.h"
 #include GB_FILEMGR_BINDINGS
 
 extern void cpc_config_update(void);
@@ -19,6 +20,7 @@ unsigned char filemgr_save_view(unsigned char view)
     return UI_RES==1;
 }
 
+#ifndef CPC_FILEMGR_CONFIG_ONLY
 unsigned char filemgr_open_file(gb_fsctx_t context, const char *path,
                                const char *name11)
 {
@@ -36,12 +38,14 @@ unsigned char filemgr_open_file(gb_fsctx_t context, const char *path,
 #if FILEMGR_DOCUMENT_HANDOFF
     if ((name11[8]=='T' && name11[9]=='X' && name11[10]=='T') ||
         (name11[8]=='C' && name11[9]=='F' && name11[10]=='G')) {
-        if (FILEMGR_WINDOW_COUNT>=FILEMGR_WINDOW_LIMIT || !FILEMGR_FREE_PAGES) return 2;
         focus=FILEMGR_FOCUS;
         /* The same FS v3 policy as MSX copies identity before module calls
-         * replace the native directory entry. The shared launcher binds it
-         * to the new owner generation and expires all unsuccessful delivery. */
+         * replace the native directory entry. Offer it to a live editor first;
+         * a rejection leaves the producer copy available to the shared new-app
+         * launcher, which expires every unsuccessful delivery. */
         if (gb_fsctx_prepare_launch(context,name11)!=GB_FSCTX_OK) return 2;
+        if (gb_shell_request(GB_SHELL_CLASS_TEXT_EDITOR,GB_SHELL_OPEN,name11)
+            ==GB_SHELL_OK) return 0;
         gb_wm_open("NOTEPAD APP");
         return FILEMGR_FOCUS==focus ? 2 : 0;
     }
@@ -62,3 +66,4 @@ unsigned char filemgr_open_file(gb_fsctx_t context, const char *path,
      * Do not infer success from the native void trampoline's leftover A. */
     return FILEMGR_FOCUS==focus ? 2 : 0;
 }
+#endif

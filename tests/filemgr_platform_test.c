@@ -5,6 +5,7 @@
 #include <string.h>
 #define GB_PREEMPTIVE
 #define GB_CPC_RESTART
+#define FILEMGR_DOCUMENT_HANDOFF 1
 #define GB_FILEMGR_PROVIDER "../../tests/filemgr_provider.h"
 #define GB_FSCTX_PLATFORM_HEADER "../../tests/fixtures/fsctx_client_provider.h"
 #define main filemgr_main
@@ -19,8 +20,10 @@ volatile gb_msg_t fm_test_message;
 gb_fsctx_entry_t fm_test_batch[4];
 static struct { unsigned char active,cursor;char path[48]; } contexts[4];
 static unsigned char status_code,fail_directory,fail_activate,fail_save,fail_open,fail_path;
+static unsigned char shell_result=GB_SHELL_OK,fail_prepare;
 static unsigned char pointer_x,pointer_y,key,selected_menu=255,changed_entry;
 static unsigned int fs_calls,alerts,opens,saves,paints,closes,damage,cleared_cells;
+static unsigned int shell_calls,prepare_calls;
 static unsigned char draw_x=DEF_X,draw_y=DEF_Y,draw_w=DEF_W,draw_h=DEF_H;
 static char opened[12];
 static const gb_mwin_kind_t *registered;
@@ -55,6 +58,17 @@ unsigned char gb_fsctx_set_path(gb_fsctx_t h,const char *path)
 unsigned char gb_fsctx_activate(gb_fsctx_t h)
 { assert(h && h<=4 && contexts[h-1].active);fs_calls++;return status_code=fail_activate?GB_FSCTX_ERR_IO:0; }
 unsigned char gb_fsctx_status(void){return status_code;}
+unsigned char gb_fsctx_prepare_launch(gb_fsctx_t h,const char *name11)
+{
+    assert(h && h<=4 && contexts[h-1].active && name11);
+    prepare_calls++;return fail_prepare ? GB_FSCTX_ERR_IO : GB_FSCTX_OK;
+}
+unsigned char gb_shell_request(unsigned char service_class,unsigned char request,
+                               const char *name11)
+{
+    assert(service_class==GB_SHELL_CLASS_TEXT_EDITOR && request==GB_SHELL_OPEN && name11);
+    shell_calls++;return shell_result;
+}
 unsigned char gb_fsctx_dir_batch(gb_fsctx_t h,unsigned char first)
 {
     unsigned char n=0;assert(h && h<=4 && contexts[h-1].active);fs_calls++;
@@ -146,8 +160,13 @@ int main(void)
     open_entry(1);assert(opens==1 && !memcmp(opened,"CALC    APP",11) && !alerts);
     assert(!nsel && cleared_cells==before+1); /* repair one cell before child focus */
     fm_test_focus=1;fail_open=1;open_entry(1);assert(opens==2 && alerts==1);fail_open=0;
-    before=opens;open_entry(3);assert(opens==before && alerts==2); /* TXT deferred */
-    changed_entry=1;open_entry(0);assert(opens==before && alerts==3);changed_entry=0;finish_list();
+    before=opens;open_entry(3);
+    assert(opens==before && shell_calls==1 && prepare_calls==1 && alerts==1);
+    shell_result=GB_SHELL_BUSY;fm_test_focus=1;open_entry(3);
+    assert(opens==before+1 && !memcmp(opened,"NOTEPAD APP",11));
+    fail_prepare=1;fm_test_focus=1;open_entry(3);assert(alerts==2);fail_prepare=0;
+    changed_entry=1;open_entry(0);assert(opens==before+1 && alerts==3);changed_entry=0;finish_list();
+    before=opens;
     assert(filemgr_open_file(fs_context,"/OTHER","CALC    APP")==1 && opens==before);
     fail_activate=1;assert(filemgr_open_file(fs_context,"/GBENCH","CALC    APP")==2);fail_activate=0;
     fm_test_pages=0;assert(filemgr_open_file(fs_context,"/GBENCH","CALC    APP")==2);fm_test_pages=26;

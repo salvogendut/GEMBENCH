@@ -21,7 +21,7 @@ unsigned char settings_io_failed(void) { return io_status; }
 
 static unsigned char copy_config(char *text, unsigned int *length)
 {
-    unsigned int i,n=KCFG_LEN;
+    unsigned int i,n=KCFG_CACHE_LEN;
     if (!text || !length || !n || n>512) return 0;
     for (i=0;i<n;i++) if (!KCFG_TEXT[i]) return 0;
     for (i=0;i<n;i++) text[i]=KCFG_TEXT[i];

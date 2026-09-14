@@ -22,6 +22,7 @@
 #define GB_SHELL_ACTIVATE 2u
 #define GB_SHELL_CLOSE    3u
 #define GB_SHELL_QUIT     4u
+#define GB_SHELL_CONFIG_PUBLISH 5u /* root GB_SHELL operation, not a window request */
 
 #define GB_SHELL_OK          0u
 #define GB_SHELL_NOT_FOUND   1u
@@ -39,6 +40,9 @@
 
 /* Register the focused/calling window as a provider of one service class. */
 unsigned char gb_shell_register(unsigned char service_class);
+
+/* Set the response while handling the current synchronous GB_MSG_SHELL. */
+void gb_shell_respond(unsigned char response);
 
 /*
  * Register the focused window as one exact Desk accessory.  IDs are non-zero,

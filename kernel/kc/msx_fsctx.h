@@ -35,6 +35,12 @@
 #define FSCTX_ENTRY_SIZE  ((volatile unsigned char *)0x14E8)
 #define FS_LOAD_OFS  ((volatile unsigned char *)0x144C)
 #define FS_XFLAGS    U8(0x144F)
+#ifdef FSCTX_HANDOFF
+/* Fixed shell mailbox: only a synchronous OPEN callback may convert a
+ * producer-prepared document into this mapped owner's bound transaction. */
+#define FSCTX_REUSE_ACTIVE() \
+    (U8(0x133Eu) == 1u && U8(0x1302u) == 11u && U8(0x1303u) == 1u)
+#endif
 
 extern unsigned char gbfs_msx_chdir(void);
 #define FSCTX_CHANGE_DIRECTORY() gbfs_msx_chdir()

@@ -28,6 +28,11 @@ class PortableFilesystemTests(unittest.TestCase):
         for machine,call in (('msx','GB_FSCTX'),('cpc','cpc_fsctx_call')):
             provider=(ROOT/f'kernel/{machine}_parameter_provider.inc').read_text()
             self.assertIn('PARAM_FS_CALL equ '+call,provider)
+            fs_provider=(ROOT/f'kernel/kc/{machine}_fsctx.h').read_text()
+            self.assertIn('FSCTX_REUSE_ACTIVE()',fs_provider)
+            self.assertIn('0x133Eu',fs_provider)
+            self.assertIn('0x1302u) == 11u',fs_provider)
+            self.assertIn('0x1303u) == 1u',fs_provider)
         core=(ROOT/'kernel/core/parameters_fs.asm').read_text()
         self.assertLess(core.index('call up_span'),core.index('up_fs_copy\n'))
         self.assertLess(core.index('CORE_PARAM_CURRENT'),core.index('ldir'))

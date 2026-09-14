@@ -1,5 +1,6 @@
 """Actual Notepad integration policy; a passing host test does not qualify an APP."""
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -47,6 +48,8 @@ class UnifiedNotepadTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertIn('#define NP_MAX 4096u', (ROOT / 'apps/unotepad/editor.h').read_text())
         self.assertNotIn('0x4010', (ROOT / 'apps/unotepad/main.c').read_text())
+        manifest = json.loads((ROOT / 'apps/unotepad/manifest.json').read_text())
+        self.assertIn('shell', manifest['required_capabilities'])
 
 
 if __name__ == '__main__':

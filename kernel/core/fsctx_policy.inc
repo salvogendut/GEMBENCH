@@ -239,10 +239,20 @@ static void adopt_launch(void)
     volatile unsigned char *ctx;
     if (!PENDING[P_ACTIVE]) { status(STALE); return; }
 #ifdef FSCTX_HANDOFF
+    /* A live editor may adopt a producer's prepared copy only from inside the
+     * synchronous GB_SHELL_OPEN callback selected by that producer. Root work
+     * cannot interleave between PREP_LAUNCH and the callback. Allocate for the
+     * mapped recipient directly; leaving state 1 unchanged until success also
+     * preserves the producer transaction when the context table is full. */
     if (PENDING[P_ACTIVE] != 3u ||
         PENDING[P_OWNER] != (unsigned char)REQ_OWNER ||
         PENDING[P_OWNER+1] != (unsigned char)(REQ_OWNER >> 8)) {
-        status(OWNER); return;
+#ifdef FSCTX_REUSE_ACTIVE
+        if (PENDING[P_ACTIVE] != 1u || !FSCTX_REUSE_ACTIVE())
+#endif
+        {
+            status(OWNER); return;
+        }
     }
 #endif
     ctx = allocate(PENDING[P_DRIVE]);

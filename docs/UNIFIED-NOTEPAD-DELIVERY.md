@@ -26,6 +26,12 @@ checkpoint, opening/merging its PR, and updating the v1.0 roadmap and acceptance
 ledger. This publishes the completed editor delivery; issue #84 remains open
 for its outstanding safe live-editor reuse/document-integration acceptance.
 
+Subsequent issue #84 sprint 1 implements that safe live-document reuse. Its
+new APP identity, normal-image hashes, owner transaction, dirty-decision and
+emulator evidence are recorded separately in
+[UNIFIED-NOTEPAD-REUSE.md](UNIFIED-NOTEPAD-REUSE.md). Exact sizes and hashes
+below remain the historical delivery checkpoint, not the later reuse artifact.
+
 ## Preserved baseline
 
 Before building, copied normal `QA/MSX`, `QA/CPC-Desktop`, and the preceding

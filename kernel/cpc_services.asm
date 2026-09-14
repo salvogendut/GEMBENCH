@@ -5,6 +5,9 @@ cpc_services_begin
                 ifdef CPC_RUNTIME
                 include "cpc_shell_provider.inc"
                 include "core/shell_service.asm"
+                ifdef PORTABLE_FS_HANDOFF
+                include "core/config_publish.asm"
+                endif
                 else
                 include "core/service_lookup.asm"
                 endif

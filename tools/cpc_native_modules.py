@@ -18,6 +18,7 @@ def provider(work, sym):
     cfg = sym['cpc_cfg_output']; ui = sym['cpc_ui_request']
     ptr('KCFG_TEXT', sym['cpc_cfg_text'], 'const char')
     word('KCFG_LEN', cfg)
+    word('KCFG_CACHE_LEN', sym['cpc_cfg_length'])
     out += [f'#define CHROME_CFG_LEN {cfg}',
             f'#define CHROME_CFG_TEXT {sym["cpc_cfg_text"]}']
     ptr('CPC_TITLE_NAME', sym['cpc_title_name'])
