@@ -24,7 +24,8 @@ unsigned char filemgr_save_view(unsigned char view)
 unsigned char filemgr_open_file(gb_fsctx_t context, const char *path,
                                const char *name11)
 {
-    static const char names[][12]={"CLOCK   APP","CALC    APP","ABIPROBEAPP"
+    static const char names[][12]={"CLOCK   APP","CALC    APP","ABIPROBEAPP",
+                                    "GBRDEMO APP"
 #if FILEMGR_DOCUMENT_HANDOFF
         ,"NOTEPAD APP"
 #endif
@@ -36,6 +37,14 @@ unsigned char filemgr_open_file(gb_fsctx_t context, const char *path,
      * directory. Data-file handoff and other applications stay explicit gates. */
     if (!path || !name11) return 1;
 #if FILEMGR_DOCUMENT_HANDOFF
+    if (name11[8]=='G' && name11[9]=='B' && name11[10]=='R') {
+        if (FILEMGR_WINDOW_COUNT>=FILEMGR_WINDOW_LIMIT || !FILEMGR_FREE_PAGES)
+            return 2;
+        if (gb_fsctx_prepare_launch(context,name11)!=GB_FSCTX_OK) return 2;
+        focus=FILEMGR_FOCUS;
+        gb_wm_open("GBRDEMO APP");
+        return FILEMGR_FOCUS==focus ? 2 : 0;
+    }
     if ((name11[8]=='T' && name11[9]=='X' && name11[10]=='T') ||
         (name11[8]=='C' && name11[9]=='F' && name11[10]=='G')) {
         focus=FILEMGR_FOCUS;

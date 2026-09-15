@@ -155,3 +155,104 @@ the exact native MSX GBRDEMO rebuild all pass; the native rebuild retains SHA
 This is build-level acceptance only. Neither normal image contains the new APP.
 The next checkpoint is private receiver staging and the real MSX Screen 6/7 and
 CPC/M4 external-resource workflow, including malformed resources and cleanup.
+
+## Sprint 2 checkpoint B — private cross-target receiver qualification
+
+The identical 13069-byte `GBRDEMO.APP` now passes its private receiver gate on
+both targets. It is still not installed as the normal GBRDEMO delivery.
+
+- File Manager prepares the selected `.GBR` context and opens `GBRDEMO.APP`
+  through the shared launch transaction on MSX2 and CPC. The receiver adopts
+  that owner-bound context, reads and closes it, and never relies on a native
+  directory pointer or implicit current-file state.
+- The shared launch path now clears all 11 bytes of its transient launch-name
+  scratch after the synchronous registration/admission attempt. Success,
+  rejection and rollback retain neither the argument nor a selected/bound
+  pending record.
+- The private CPC M4 profile passes four real 1984 runs: canonical, checksum
+  corruption, truncation and 513-byte oversize. Exact independent framebuffer
+  checks cover open, selected button, drag, focus away/return, close and clean
+  Desktop. Invalid resources publish the bounded error surface and remain
+  inert. Main-stack high water is 242/256 bytes in the canonical case and at
+  most 205 bytes in the invalid cases; IRQ high water is four bytes.
+- Disposable MSX images cover the same four fixtures in both Screen 6 and
+  Screen 7. All eight openMSX runs pass real File Manager input, package
+  admission, resource acceptance/rejection, button state and exact close/
+  transaction cleanup. The larger package's real CRC pass requires the test to
+  wait after the deliberate second click; repeatedly injecting clicks while
+  admission is synchronous is explicitly avoided.
+- The same eight cases independently pass on 1983 with real keyboard/joystick
+  pointer input. Each run performs 23 assertions: exact APP bytes in the mapped
+  page, canonical outlined/selected state or invalid-resource inertness,
+  owner/context cleanup, drag/overlap state preservation, page reclamation and
+  scheduler guards. Each source image remains byte-identical and a final PPM is
+  retained by the private driver.
+
+The canonical resource remains exactly 111 bytes with SHA-256
+`49b42e9268ad4f4208d70f591f9d3f6b6ad7bee2dcf6f008a773ece968febf12`;
+the APP remains SHA-256
+`4ec6f034ed396c51fcf5d573c548acfd7df53f077e9f14a718a7cd8cc762b4ff`.
+The native MSX fallback remains exactly 11214 bytes with SHA-256
+`482c32bceb4a336f7058b4a4a22086179123418fb80fb0047be2215f37f28df2`.
+Normal CPC media and the normal MSX GBRDEMO application remain unchanged by
+the private staging tools; CPC qualification uses M4 only, never a floppy.
+
+Reproduce the build and private target gates with:
+
+```sh
+make geobench-v1-m2-gbrdemo-check
+python3 tools/build_cpc_runtime.py --gbrdemo
+python3 tools/test_cpc_runtime_1984.py --skip-build \
+  --private-media build/v1-m2/gbrdemo-cpc --gbrdemo-case good
+python3 tools/prepare_gbrdemo_msx.py --output NEW_EMPTY_DIRECTORY
+GEMBENCH_GBR_MSX_STAGE=NEW_EMPTY_DIRECTORY \
+  bash tools/test_universal_gbrdemo_openmsx.sh
+bash tools/build_msx_stability_1983.sh NEW_EMPTY_DIRECTORY/1983-bridge
+python3 tools/test_universal_gbrdemo_1983.py --mode 6 --case good \
+  --bridge NEW_EMPTY_DIRECTORY/1983-bridge \
+  --omega ../1983/ROMS/rainbios_omega.rom \
+  --sunrise ../1983/ROMS/Nextor-2.1.1.SunriseIDE.ROM \
+  --image NEW_EMPTY_DIRECTORY/mode6-good/filesystem.img \
+  --worktree . --output NEW_EMPTY_DIRECTORY/evidence-1983-mode6-good
+```
+
+Repeat the CPC case for `checksum`, `truncated` and `oversized`; repeat the 1983
+command for all four fixture names and both modes. The private preparation and
+1983 drivers refuse existing evidence paths by design.
+
+## Sprint 2 checkpoint C — normal MSX/CPC delivery
+
+The qualified universal application and its canonical external resource are
+now part of both normal distributions. This completes the GBRDEMO vertical
+slice without removing the native MSX build used as a regression oracle.
+
+- `make geobench-msx` stages `build/universal/GBRDEMO.APP` as
+  `QA/MSX/CARD/GBENCH/GBRDEMO.APP`, stages `HELLO.GBR` at the card root and
+  packs both into `QA/MSX/GBMSX.IMG` and the normal `GEOBENCH.DSK` floppy.
+- `make cpc` stages the same two byte-identical files in the normal M4 card and
+  `QA/CPC-Desktop/GEOBENCH.IMG`. Its delivery manifest advances to
+  `cpc-desktop-m4-v5` and rejects a missing, substituted or mismatched APP or
+  resource.
+- `tools/test_gbrdemo_delivery.py` checks the host staging trees, MSX hard-disk
+  and floppy images, CPC M4 image, universal package identity and CPC delivery
+  manifest. The APP is
+  13069 bytes with SHA-256
+  `4ec6f034ed396c51fcf5d573c548acfd7df53f077e9f14a718a7cd8cc762b4ff`;
+  the resource is 111 bytes with SHA-256
+  `49b42e9268ad4f4208d70f591f9d3f6b6ad7bee2dcf6f008a773ece968febf12`.
+- The canonical CPC image passes the real 1984/M4 open, button-state, drag,
+  focus-away/return, close and cleanup workflow with 242/256 bytes maximum
+  main-stack use and four IRQ-stack bytes. The canonical MSX Screen 7 image
+  passes the same File Manager association and lifecycle in openMSX and 1983;
+  the 1983 run performs 23 checks and leaves the source image unchanged.
+
+Reproduce the normal-media gates with:
+
+```sh
+make geobench-v1-m2-gbrdemo-delivery-check
+make geobench-v1-m2-gbrdemo-delivery-cpc-1984
+make geobench-v1-m2-gbrdemo-delivery-openmsx
+```
+
+Sprint 2 is complete. Sprint 3's compile-once FormRef implementation is the
+next ordered milestone work.

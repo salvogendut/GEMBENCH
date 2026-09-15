@@ -211,6 +211,52 @@ class DesktopDeliveryTests(unittest.TestCase):
                     build(unified_notepad=True,**opts)
             assemble.assert_not_called()
 
+    def test_v5_delivery_requires_universal_gbrdemo_and_matched_resource(self):
+        from embed_app_icon import (_read_v4_manifest_spec,parse_icon,make_v4_preamble,
+                                    v4_preamble_size,refresh_v4_crc)
+        self.settings_profile()
+        secondary=b'\xC3\x08\x40GBS4\x01\xC9';size=v4_preamble_size(False,2)+1
+        notepad=bytearray(make_v4_preamble(parse_icon(ROOT/'apps/notepad/icon.asm'),
+            _read_v4_manifest_spec(ROOT/'apps/unotepad/manifest.json'),size,size+len(secondary),
+            secondary=secondary)+b'\xC9'+secondary)
+        refresh_v4_crc(notepad)
+        demo_size=v4_preamble_size(False,1)+1
+        demo=bytearray(make_v4_preamble(parse_icon(ROOT/'lib/icon_app.asm'),
+            _read_v4_manifest_spec(ROOT/'apps/ugbrdemo/manifest.json'),demo_size,demo_size)+b'\xC9')
+        refresh_v4_crc(demo)
+        resource=bytes(111)
+        additions={'GBENCH/NOTEPAD.APP':notepad,
+                   'GBENCH/GBPKLOAD.MOD':b'checked package module',
+                   'GBENCH/GBRDEMO.APP':demo,'HELLO.GBR':resource}
+        for name,data in additions.items():
+            (self.media/'CARD'/name).write_bytes(data)
+            self.manifest['files'][name]=hashlib.sha256(data).hexdigest()
+        self.manifest['profile']='cpc-desktop-m4-v5'
+        self.manifest['sections']['package']={}
+        self.manifest['sections']['notepad']=dict(source='apps/unotepad',staged=True,
+            universal=True,filesystem_api=3,secondary_pages=1,document_capacity=4096,
+            sha256=self.manifest['files']['GBENCH/NOTEPAD.APP'],associations=['TXT','CFG'])
+        self.manifest['sections']['gbrdemo']=dict(source='apps/ugbrdemo',staged=True,
+            universal=True,filesystem_api=3,resource='HELLO.GBR',resource_bytes=111,
+            app_sha256=self.manifest['files']['GBENCH/GBRDEMO.APP'],
+            resource_sha256=self.manifest['files']['HELLO.GBR'])
+        self.save();self.assertEqual(validate(self.media,pristine=True),self.manifest)
+        original=json.dumps(self.manifest)
+        for change in ('missing-app','missing-resource','wrong-resource-hash','native-app'):
+            with self.subTest(change=change):
+                self.manifest=json.loads(original)
+                if change=='missing-app': del self.manifest['files']['GBENCH/GBRDEMO.APP']
+                elif change=='missing-resource': del self.manifest['files']['HELLO.GBR']
+                elif change=='wrong-resource-hash': self.manifest['sections']['gbrdemo']['resource_sha256']='wrong'
+                else:
+                    native=b'native image';(self.media/'CARD/GBENCH/GBRDEMO.APP').write_bytes(native)
+                    digest=hashlib.sha256(native).hexdigest()
+                    self.manifest['files']['GBENCH/GBRDEMO.APP']=digest
+                    self.manifest['sections']['gbrdemo']['app_sha256']=digest
+                self.save()
+                with self.assertRaises(ValueError):validate(self.media)
+                (self.media/'CARD/GBENCH/GBRDEMO.APP').write_bytes(demo)
+
     def test_manual_launcher_uses_only_generated_m4_configuration(self):
         (self.root/'tools').mkdir()
         runner = self.root/'tools/run_cpc.sh'

@@ -37,7 +37,7 @@ def cursor_phases(sprite):
     return bytes(result)
 
 
-def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None):
+def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None, gbrs=None):
     def fill(image,x,y,w,h,pen):
         for yy in range(max(0,y),min(200,y+h)):
             for xx in range(max(0,x)*4,min(80,x+w)*4): put_pixel(image,xx,yy,pen)
@@ -94,13 +94,14 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
         watch=(clocks or {}).get(slot)
         filemgr=(filemanagers or {}).get(slot)
         setting=(settings or {}).get(slot)
+        gbr=(gbrs or {}).get(slot)
         surface=chrome((x,y,w,h),31 if watch is not None or filemgr is not None else 11 if calculator is not None or setting is not None else 7,
                        (titles or {}).get(slot,'Universal ABI'),font,frame_pen,theme,title_ready)
         if filemgr is not None:
             from cpc_filemgr_pixels import draw
             fill(surface,x+2,y+16,2,3,0)  # remove the chrome fixture's diagnostic mark
             draw(surface,(x,y,w,h),filemgr,desktop,fill,text)
-        else:
+        elif gbr is None:
             fill(surface,x+1,y+14,w-2,h-15,0 if watch is not None else 1)
         if setting is not None:
             def box(bx,by,bw,bh,pen):
@@ -139,6 +140,24 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
                 bx,by=x+2+(i%4)*7,y+42+(i//4)*20
                 fill(surface,bx,by,6,18,1);box(bx,by,6,18,2)
                 text(surface,bx+(6-(len(label)*6+3)//4)//2,by+5,label,2,1)
+        elif gbr is not None:
+            if not gbr.get('ready'):
+                fill(surface,x+1,y+14,w-2,h-15,1)
+                text(surface,x+3,y+22,'Cannot open HELLO.GBR',2,1)
+            else:
+                def box(bx,by,bw,bh,pen):
+                    for edge in ((bx,by,bw,1),(bx,by+bh-1,bw,1),
+                                 (bx,by,1,bh),(bx+bw-1,by,1,bh)):
+                        fill(surface,*edge,pen)
+                # Independent rendering of examples/hello-dialog.json.  The
+                # resource root is positioned by the application at the first
+                # content column; children remain pixel-relative to that root.
+                bx,by=x+1,y+14
+                fill(surface,bx,by,68,104,1);box(bx,by,68,104,2)
+                text(surface,bx+4,by+20,'Welcome to GEOBENCH',2,1)
+                fill(surface,bx+24,by+64,20,24,1)
+                box(bx+24,by+64,20,24,3)
+                text(surface,bx+32,by+72+(1 if gbr.get('selected') else 0),'OK',2,1)
         else:
             text(surface,x+4,y+22,'GEOBENCH-2 ABI',2,1)
             text(surface,x+4,y+38,'ONE APP / 3 Z80S',2,1)
@@ -199,14 +218,14 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
     return bytes(result)
 
 
-def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None):
+def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None, gbrs=None):
     px=int.from_bytes(ram[sym['pointer_x']:sym['pointer_x']+2],'little')
     py=ram[sym['pointer_y']]
     if ram[sym['menu_def']:sym['menu_def']+len(menu)]!=menu:
         raise AssertionError('focused menu snapshot differs')
     expected=frame(rects,order,accents,(px,py),font if font is not None else (work/'DEFAULT.FNT').read_bytes(),
                    tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog,frame_pen,
-                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons,theme,title_ready,desktop,filemanagers,settings)
+                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons,theme,title_ready,desktop,filemanagers,settings,gbrs)
     actual=ram[0xC000:0x10000]
     if actual!=expected:
         at=next(i for i,(a,b) in enumerate(zip(actual,expected)) if a!=b)

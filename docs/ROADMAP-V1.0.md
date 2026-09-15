@@ -58,17 +58,17 @@ must remain visible in the acceptance ledger.
 ### MSX2: functional reference, partial ABI migration
 
 The [MSX distribution builder](../tools/build_kernel_msx.sh) currently stages
-a mixed application suite. **Clock, Calculator and Notepad use the unified
+a mixed application suite. **Clock, Calculator, Notepad and GBRDEMO use the unified
 ABI**; ABIProbe is an additional universal diagnostic. Notepad's normal delivery
 checkpoint is recorded in [UNIFIED-NOTEPAD-DELIVERY.md](UNIFIED-NOTEPAD-DELIVERY.md).
 
 | Application group | Current MSX2 distribution status |
 | --- | --- |
-| Clock, Calculator, Notepad | Universal APPs, also used unchanged on CPC. |
+| Clock, Calculator, Notepad, GBRDEMO | Universal APPs, also used unchanged on CPC. GBRDEMO reads the same external `HELLO.GBR` on both. |
 | ABIProbe | Universal conformance diagnostic, not a production-app migration. |
 | File Manager, Settings, Shell, Disk Utilities | MSX-specific application builds; migration remains. |
 | PAINT, Viewer, Icon Editor, BASIC/BASRUN | MSX-specific application builds; portable document/page services and migration remain. |
-| FormRef, GBRDEMO, XAOS, Mahjong, networking apps, sound test, savers | MSX-specific builds; service binding, migration and per-app acceptance remain. |
+| FormRef, XAOS, Mahjong, networking apps, sound test, savers | MSX-specific builds; service binding, migration and per-app acceptance remain. |
 
 An `.APP` suffix, shared source, or use of the newer GEM/SymbOS-inspired kernel
 services does not establish unified-ABI compliance. Desktop, kernels and
@@ -85,13 +85,13 @@ merged and manually accepted. CPC currently delivers:
   visible-region damage, background Clock updates and visibility-ranked workers;
 - M4/Disk C browsing with independent File Manager contexts, list/icon views,
   persistent View preference and qualified application launch/return;
-- unified Clock, Calculator and Notepad, with identical CPC/MSX executable payloads;
+- unified Clock, Calculator, Notepad and GBRDEMO, with identical CPC/MSX executable payloads;
 - native, build-matched File Manager and six-row Settings: font, icons, cursor,
   title bar, gadgets and backdrop, including verified configuration persistence.
 
 ABI Probe and other portable probes provide diagnostic coverage; they are not
 a substitute for ordinary application workflows. The current normal CPC image
-contains Clock, Calculator and Notepad as universal apps; File Manager and Settings are
+contains Clock, Calculator, Notepad and GBRDEMO as universal apps; File Manager and Settings are
 still native binaries. Desktop is a target-linked root/system component.
 
 Pre-Notepad integration evidence: **28 delivery scenarios / 323 pixel checkpoints**,
@@ -152,14 +152,15 @@ Notepad's editor and normal MSX2/CPC delivery are **complete** under
 sprints add safe reuse, live configuration publication, real BASIC newline
 round trips and a portable CPC path grammar; the
 [closure record](UNIFIED-NOTEPAD-CLOSURE.md) accounts for every acceptance row.
-Milestones 2–8 are not delivered. Use one
+Milestone 2 is underway: GBRDEMO is delivered and FormRef remains. Milestones
+3–8 are not delivered. Use one
 bounded issue/branch per implementation package and split internally where
 dependencies require it; do not expand the scope without recording the change.
 
 | Order | Deliverable | Completion criterion |
 | --- | --- | --- |
 | 1 | **Complete — unified Notepad and document services** | One identical Notepad APP performs real open/edit/save/copy/paste/close/reuse/configuration and BASIC/config newline workflows on MSX2 and CPC; all #84 acceptance rows pass. |
-| 2 | Portable resources, forms and owned page/code services | Identical GBRDEMO/FormRef APPs run on MSX2 and CPC, with resource validation, form interaction and owned secondary-code lifecycle qualified on both. |
+| 2 | **In progress — portable resources, forms and owned page/code services** | GBRDEMO is delivered as one identical APP/resource pair; completion requires identical GBRDEMO/FormRef APPs on MSX2 and CPC, with resource validation, form interaction and owned secondary-code lifecycle qualified on both. |
 | 3 | Unified Settings and File Manager | Replace their separate target application builds with identical APPs; preserve MSX behavior and the accepted CPC profile through explicit runtime capabilities. |
 | 4 | Complete boot, desktop and file workflows | Restore the CPC boot splash; both distributions support file operations, document associations, Trash, qualified-app launching, palette/wallpaper/defaults, media refresh and firmware return; Shell/Disk Utilities use the unified ABI. |
 | 5 | Paged and multi-window applications | PAINT, Viewer, Icon Editor and bundled BASIC application components use portable services and identical APPs, with full lifecycle and file workflows qualified on both targets. |
@@ -389,6 +390,20 @@ behavior, keyboard focus, clipped raster rendering, page exhaustion/recovery,
 and stale/foreign/nested/worker secondary-call rejection. Preserve the frozen
 GBR1 and managed-window contracts and test the actual target readers/renderers.
 
+**Checkpoint 2026-09-15:** Sprint 2's compile-once external-resource receiver
+is delivered on both normal targets. One 13069-byte `GBRDEMO.APP` passes canonical,
+checksum, truncated and oversized resources on CPC/1984/M4 and on MSX Screen
+6/7 in both openMSX and 1983, including input/state, drag/overlap, lifecycle,
+context/page reclamation and launch-scratch cleanup. Exact CPC framebuffer
+comparisons and independent 1983 PPM captures complement the guest-state
+checks. The byte-identical APP and canonical 111-byte `HELLO.GBR` are now in
+the normal MSX hard-disk/floppy media and CPC M4 image; CPC delivery profile
+`cpc-desktop-m4-v5` enforces their identities. Canonical delivery workflows
+also pass on CPC/1984 and MSX/openMSX/1983. See the
+[milestone record](V1-M2-PORTABLE-RESOURCES.md#sprint-2-checkpoint-c--normal-msxcpc-delivery).
+Sprint 3's compile-once FormRef is next; forms and secondary-code closure
+remain open.
+
 ### 3. Unified Settings and File Manager
 
 Remove target defines, private memory addresses and target-specific application
@@ -560,9 +575,9 @@ changes, promise a date, or authorize a release.
 Current implementation package: **milestone 2's portable resources, forms and
 owned page/code consumers**, tracked in
 [issue #88](https://github.com/salvogendut/GEMBENCH/issues/88) and the
-[milestone plan](V1-M2-PORTABLE-RESOURCES.md). GBRDEMO and FormRef are the first
-real compile-once applications; their common resource-validation and form
-interaction gates precede replacement of either native delivery.
+[milestone plan](V1-M2-PORTABLE-RESOURCES.md). GBRDEMO is now the first
+compile-once external-resource application in both normal distributions;
+FormRef and its owned form/secondary-code lifecycle are next.
 
 Issue #84 and milestone 1 are complete. The identical editor is delivered and
 its normal MSX2/CPC workflows are qualified; do not repeat the completed

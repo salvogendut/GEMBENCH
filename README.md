@@ -18,8 +18,9 @@ and artwork.
 See the [roadmap to v1.0](docs/ROADMAP-V1.0.md) for finishing **both MSX2 and
 CPC distributions**: unified application migration on both targets, remaining
 CPC feature parity, and separate release qualification. MSX2 is the behavior
-reference, not a finished universal distribution. Clock, Calculator and
-[Notepad](docs/UNIFIED-NOTEPAD-DELIVERY.md) now use the same unified-ABI APPs
+reference, not a finished universal distribution. Clock, Calculator,
+[Notepad](docs/UNIFIED-NOTEPAD-DELIVERY.md) and
+[GBRDEMO](docs/V1-M2-PORTABLE-RESOURCES.md) now use the same unified-ABI APPs
 in both normal distributions.
 The plan preserves the accepted CPC desktop's stability while aiming for the
 same quality on MSX2, and includes restoring the CPC boot splash.
@@ -93,7 +94,8 @@ or window work must cross an explicit version boundary.
 MSX2 remains the main behavior reference; v1.0 completion targets both MSX2 and
 CPC. The experimental **CPC M4 Desktop** is
 now available through [Sprint 3](docs/CPC-RESTART-SPRINT3.md), using the same
-Desktop/File Manager sources, window manager and portable Clock/Calculator/Notepad apps:
+Desktop/File Manager sources, window manager and portable
+Clock/Calculator/Notepad/GBRDEMO apps:
 
 ```sh
 make cpc
@@ -113,6 +115,10 @@ Fullscreen; double-click `..` to go up. `FILEMGR.BIN` is a build-matched native
 component, not a portable APP. Other data-file associations and file copy/delete
 are not yet available. PCW, Albireo and a hardware mouse driver are not yet qualified. Rebuilding
 resets generated media; keep personal data on separate copies.
+
+To exercise the portable external-resource path, double-click `HELLO.GBR` in
+Disk C's root. The normal CPC and MSX images contain the same `GBRDEMO.APP` and
+the same resource bytes.
 
 ### Earlier CPC diagnostic checkpoints
 

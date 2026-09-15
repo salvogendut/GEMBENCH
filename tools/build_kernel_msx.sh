@@ -204,6 +204,7 @@ else
 fi
 python3 tools/gbrc.py examples/hello-dialog.json --output build/msx/HELLO.GBR
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7000 BUTTON=1 GBR_OBJECTS=1 tools/build_capp.sh apps/gbrdemo build/msx/GBRDEMO.RAW
+bash tools/build_ugbrdemo.sh build/universal/GBRDEMO.APP
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/msx/SNDTEST.RAW
 APP_ICON=apps/browser/icon.asm APPDEFS="-DGB_MSX2" GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/msx/BROWSER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/msx/BRSAVE.RAW
@@ -397,7 +398,7 @@ if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
 else
     rm -f QA/MSX/CARD/GBENCH/FORMREF.GBR
 fi
-cp build/msx/GBRDEMO.RAW  QA/MSX/CARD/GBENCH/GBRDEMO.APP
+cp build/universal/GBRDEMO.APP QA/MSX/CARD/GBENCH/GBRDEMO.APP
 rm -f QA/MSX/CARD/GBENCH/HELLO.GBR
 cp build/msx/HELLO.GBR    QA/MSX/CARD/HELLO.GBR
 cp build/msx/SNDTEST.RAW  QA/MSX/CARD/GBENCH/SNDTEST.APP

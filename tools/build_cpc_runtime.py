@@ -94,7 +94,14 @@ def assemble(work: Path, overrides=()):
     return sym
 
 
-def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False, package_stream=False, handoff=False, unified_notepad=False):
+def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False, package_stream=False, handoff=False, unified_notepad=False, gbrdemo=False):
+    private_gbrdemo = gbrdemo and not delivery
+    delivery_gbrdemo = delivery and unified_notepad
+    include_gbrdemo = private_gbrdemo or delivery_gbrdemo
+    if private_gbrdemo:
+        # Resource qualification is isolated from delivery, but deliberately
+        # uses the complete API-v3 receiver rather than a diagnostic shortcut.
+        settings=package_stream=handoff=True
     if unified_notepad:
         if not (desktop and settings and delivery):
             raise ValueError('Notepad delivery requires the full Desktop/File Manager/Settings profile')
@@ -158,9 +165,15 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
                    cwd=ROOT, check=True)
     if unified_notepad:
         subprocess.run(['bash','tools/build_unotepad.sh'],cwd=ROOT,check=True)
+    if include_gbrdemo:
+        subprocess.run(['bash','tools/build_ugbrdemo.sh'],cwd=ROOT,check=True)
+        hello=work/'HELLO.GBR'
+        subprocess.run(['python3','tools/gbrc.py','examples/hello-dialog.json',
+                        '--output',str(hello)],cwd=ROOT,check=True)
     media = ROOT / ('QA/CPC-Desktop' if delivery else 'QA/Diagnostics/CPC-'+variant)
     if package_stream and not delivery: media=ROOT/'build/notepad-84/cpc-receiver'
     if handoff and not delivery: media=ROOT/'build/notepad-84/cpc-handoff'
+    if private_gbrdemo: media=ROOT/'build/v1-m2/gbrdemo-cpc'
     card = media / "CARD"
     boot = bytearray(headed((work / "BOOT.RAW").read_bytes(), 0x8000))
     boot[1:12] = b"BOOT    BIN"
@@ -185,6 +198,9 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
         files['GBENCH/GBPKLOAD.MOD']=(work/'GBPKLOAD.MOD').read_bytes()
     if unified_notepad:
         files['GBENCH/NOTEPAD.APP']=(ROOT/'build/universal/NOTEPAD.APP').read_bytes()
+    if include_gbrdemo:
+        files['GBENCH/GBRDEMO.APP']=(ROOT/'build/universal/GBRDEMO.APP').read_bytes()
+        files['HELLO.GBR']=(work/'HELLO.GBR').read_bytes()
     if not delivery:
         files.update({"GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
@@ -291,9 +307,17 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     if handoff and not delivery:
         manifest.update(profile='cpc-notepad-handoff-private-v1',
                         status='private document/input receiver; Notepad acceptance and delivery remain separate')
+    if include_gbrdemo:
+        sections['gbrdemo']=dict(source='apps/ugbrdemo',staged=True,universal=True,
+            filesystem_api=3,resource='HELLO.GBR',resource_bytes=len(files['HELLO.GBR']),
+            app_sha256=hashlib.sha256(files['GBENCH/GBRDEMO.APP']).hexdigest(),
+            resource_sha256=hashlib.sha256(files['HELLO.GBR']).hexdigest())
+    if private_gbrdemo:
+        manifest.update(profile='cpc-gbrdemo-private-v1',storage='m4',
+            status='private portable external-resource qualification; not a distribution')
     if unified_notepad:
-        manifest.update(profile='cpc-desktop-m4-v4',
-            status='CPC M4 Desktop, native File Manager/Settings and universal Clock/Calculator/Notepad')
+        manifest.update(profile='cpc-desktop-m4-v5',
+            status='CPC M4 Desktop, native File Manager/Settings and universal Clock/Calculator/Notepad/GBRDEMO')
         sections['notepad']=dict(source='apps/unotepad',staged=True,universal=True,
             filesystem_api=3,secondary_pages=1,document_capacity=4096,
             sha256=hashlib.sha256(files['GBENCH/NOTEPAD.APP']).hexdigest(),associations=['TXT','CFG'])
@@ -315,6 +339,9 @@ if __name__ == "__main__":
         help='private full CPC secondary receiver; not a runnable Notepad or delivery image')
     parser.add_argument('--notepad-handoff',action='store_true',
         help='private document/input binding; preserve the earlier receiver media')
+    parser.add_argument('--gbrdemo',action='store_true',
+        help='private portable GBRDEMO and external-resource M4 profile')
     args=parser.parse_args()
-    private=args.notepad_receiver or args.notepad_handoff
-    build(settings=private,package_stream=private,handoff=args.notepad_handoff)
+    private=args.notepad_receiver or args.notepad_handoff or args.gbrdemo
+    build(settings=private,package_stream=private,
+          handoff=args.notepad_handoff or args.gbrdemo,gbrdemo=args.gbrdemo)

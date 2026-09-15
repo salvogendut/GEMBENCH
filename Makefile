@@ -319,9 +319,33 @@ geobench-v2-abi-check:
 geobench-v2-abiprobe:
 	bash tools/build_uapp.sh apps/abiprobe build/universal/ABIPROBE.APP
 
-.PHONY: geobench-v1-m2-gbrdemo-check
+.PHONY: geobench-v1-m2-gbrdemo-check geobench-v1-m2-gbrdemo-cpc
+.PHONY: geobench-v1-m2-gbrdemo-msx-media geobench-v1-m2-gbrdemo-openmsx
+.PHONY: geobench-v1-m2-gbrdemo-delivery-check geobench-v1-m2-gbrdemo-delivery-cpc-1984 geobench-v1-m2-gbrdemo-delivery-openmsx
 geobench-v1-m2-gbrdemo-check:
 	$(PYTHON) tools/test_universal_gbrdemo.py
+
+geobench-v1-m2-gbrdemo-cpc: geobench-v1-m2-gbrdemo-check
+	$(PYTHON) tools/build_cpc_runtime.py --gbrdemo
+	@set -e; for case in good checksum truncated oversized; do \
+		$(PYTHON) tools/test_cpc_runtime_1984.py --skip-build \
+			--private-media build/v1-m2/gbrdemo-cpc --gbrdemo-case $$case; \
+	done
+
+geobench-v1-m2-gbrdemo-msx-media: geobench-msx gbr-example geobench-v1-m2-gbrdemo-check
+	$(PYTHON) tools/prepare_gbrdemo_msx.py --output build/v1-m2/gbrdemo-msx
+
+geobench-v1-m2-gbrdemo-openmsx: geobench-v1-m2-gbrdemo-msx-media
+	bash tools/test_universal_gbrdemo_openmsx.sh
+
+geobench-v1-m2-gbrdemo-delivery-check: geobench-msx cpc
+	$(PYTHON) tools/test_gbrdemo_delivery.py
+
+geobench-v1-m2-gbrdemo-delivery-cpc-1984: geobench-v1-m2-gbrdemo-delivery-check
+	$(PYTHON) tools/test_cpc_runtime_1984.py --skip-build --desktop-delivery --gbrdemo-case good
+
+geobench-v1-m2-gbrdemo-delivery-openmsx: geobench-v1-m2-gbrdemo-delivery-check
+	bash tools/test_universal_gbrdemo_delivery_openmsx.sh
 
 geobench-v2-tier1:
 	UNIVERSAL_WINDOW_KIND=1 UNIVERSAL_ACCESSORY=1 UNIVERSAL_MENU=1 DATA_LOC=0x7600 \

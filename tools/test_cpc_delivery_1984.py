@@ -51,7 +51,7 @@ def run(emulator, jobs=1, skip_build=False):
         subprocess.run([sys.executable, str(ROOT/'tools/build_cpc.py')], cwd=ROOT, check=True)
     media = ROOT/'QA/CPC-Desktop'
     manifest = validate(media, pristine=True)
-    if manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4'):
+    if manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5'):
         raise ValueError('combined acceptance requires Desktop plus File Manager')
     artifact_root=ROOT/'build/cpc-delivery-runtime';artifact_root.mkdir(parents=True,exist_ok=True)
     artifacts = Path(tempfile.mkdtemp(prefix='geobench-cpc-delivery-',dir=artifact_root))

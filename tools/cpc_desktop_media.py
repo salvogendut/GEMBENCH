@@ -28,12 +28,14 @@ def validate(media, *, pristine=False):
     """Verify the explicit delivered profile before running its acceptance test."""
     media = Path(media).resolve()
     manifest = json.loads((media/'manifest.json').read_text())
-    if manifest.get('profile') not in ('cpc-desktop-m4-v1', 'cpc-desktop-m4-v2', 'cpc-desktop-m4-v3', 'cpc-desktop-m4-v4') or manifest.get('storage') != 'm4':
+    if manifest.get('profile') not in ('cpc-desktop-m4-v1', 'cpc-desktop-m4-v2', 'cpc-desktop-m4-v3', 'cpc-desktop-m4-v4', 'cpc-desktop-m4-v5') or manifest.get('storage') != 'm4':
         raise ValueError('not a CPC Desktop M4 delivery manifest')
     files = manifest['files']
-    has_notepad=manifest['profile']=='cpc-desktop-m4-v4'
+    has_notepad=manifest['profile'] in ('cpc-desktop-m4-v4','cpc-desktop-m4-v5')
+    has_gbrdemo=manifest['profile']=='cpc-desktop-m4-v5'
     apps={'GBENCH/CLOCK.APP','GBENCH/CALC.APP'}
     if has_notepad:apps.add('GBENCH/NOTEPAD.APP')
+    if has_gbrdemo:apps.add('GBENCH/GBRDEMO.APP')
     if {name for name in files if name.endswith('.APP')} != apps:
         raise ValueError('unexpected Desktop application set')
     if manifest['profile'] == 'cpc-desktop-m4-v1':
@@ -44,7 +46,7 @@ def validate(media, *, pristine=False):
         if (not fm.get('staged') or not fm.get('private_integration') or
                 fm.get('source') != 'apps/filemgr/main.c' or 'GBENCH/FILEMGR.BIN' not in files):
             raise ValueError('build-matched native File Manager is not staged')
-    has_settings=manifest['profile'] in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4')
+    has_settings=manifest['profile'] in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5')
     if has_settings:
         setting=manifest['sections'].get('settings',{})
         if (not setting.get('staged') or not setting.get('private_integration') or
@@ -65,6 +67,16 @@ def validate(media, *, pristine=False):
             raise ValueError('unified Notepad requires its complete receiver and document binding')
     elif 'notepad' in manifest['sections'] or 'GBENCH/GBPKLOAD.MOD' in files:
         raise ValueError('Notepad receiver requires the v4 delivery profile')
+    if has_gbrdemo:
+        demo=manifest['sections'].get('gbrdemo',{})
+        if (not demo.get('staged') or not demo.get('universal') or
+                demo.get('source')!='apps/ugbrdemo' or demo.get('filesystem_api')!=3 or
+                demo.get('resource')!='HELLO.GBR' or demo.get('resource_bytes')!=111 or
+                demo.get('app_sha256')!=files.get('GBENCH/GBRDEMO.APP') or
+                demo.get('resource_sha256')!=files.get('HELLO.GBR')):
+            raise ValueError('universal GBRDEMO requires its matched external resource')
+    elif 'gbrdemo' in manifest['sections'] or 'GBENCH/GBRDEMO.APP' in files or 'HELLO.GBR' in files:
+        raise ValueError('GBRDEMO requires the v5 delivery profile')
     if manifest.get('directories') != ['GBENCH']:
         raise ValueError('diagnostic directories in Desktop delivery')
     if not manifest['sections']['bar'].get('staged') or manifest['sections']['bar']['source'] != 'apps/desktop/main.c':
@@ -84,6 +96,12 @@ def validate(media, *, pristine=False):
                 editor_package['application_id']!='NOTEPAD' or
                 editor_package['minimum_pages']!=2 or len(editor_package['segments'])!=2):
             raise ValueError('staged Notepad is not the universal two-bank editor')
+    if has_gbrdemo:
+        demo_package=parse_manifest((media/'CARD/GBENCH/GBRDEMO.APP').read_bytes())
+        if (demo_package['version']!=4 or demo_package['profile']!=3 or
+                demo_package['application_id']!='GBRDEMO' or
+                demo_package['minimum_pages']!=1 or len(demo_package['segments'])!=1):
+            raise ValueError('staged GBRDEMO is not the universal primary-only application')
     contracts=[]
     if manifest['profile']!='cpc-desktop-m4-v1':contracts.append(('File Manager','FILEMGR.BIN',fm))
     if has_settings:contracts.append(('Settings','SETTINGS.BIN',setting))

@@ -47,7 +47,7 @@ def prepare(case,work,sym,image,artifacts):
     return bytes(kernel)
 
 
-def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=None,kernel=None,scenario=None):
+def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=None,kernel=None,scenario=None,gbrdemo_case=None):
     from test_cpc_runtime_1984 import integrity
     app=work/'filemgr'
     noi={v[1]:int(v[2],16) for line in (app/'filemgr.noi').read_text().splitlines()
@@ -57,7 +57,7 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
              if len(v:=line.split())==4 and v[0] in ('1','2') and v[3]=='R'}
     icons=(work/'REFINED.IST').read_bytes();raw=(app/'FILEMGR.native.bin').read_bytes()
     items=listing(manifest['files']);rects={};order=[0];fms={};titles={};accents={}
-    focus=0;menu=DESKTOP;popup=None;calculators={};clocks={};clock_slot=None
+    focus=0;menu=DESKTOP;popup=None;calculators={};clocks={};gbrs={};clock_slot=None
     checks=[];stack=dict(main=0,irq=0,tmp=0);unpublished=set();metrics={}
     clock_noi={v[1]:int(v[2],16) for line in (root/'build/universal-obj/uclock/app.noi').read_text().splitlines()
                if len(v:=line.split())==3 and v[0]=='DEF'}
@@ -129,7 +129,9 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         if clock_slot is not None:
             clocks[clock_slot]=tuple(clock_value(r,k) for k in ('ph','pm','ps','show_sec','dh','dm','ds'))
         painted_order=[slot for slot in order if slot not in unpublished]
-        verify_pixels(r,sym,work,rects,painted_order,accents,menu,titles,popup=popup,desktop=icons,filemanagers=fms,calculators=calculators,clocks=clocks)
+        verify_pixels(r,sym,work,rects,painted_order,accents,menu,titles,popup=popup,
+                      desktop=icons,filemanagers=fms,calculators=calculators,
+                      clocks=clocks,gbrs=gbrs)
         checks.append(name);send(f'crop {artifacts/(name+".ppm")} 0 0 768 576 1')
         print(f'{name}: windows={len(order)} contexts={len(live)} stack={stack}',flush=True)
         return r
@@ -190,6 +192,58 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         _,r=snapshot(read());at=sym['wm_table']+25*slot+1
         if r[at:at+4]!=bytes(rects[slot]): raise AssertionError('resize differs from pointer endpoint')
     checked('filemgr-root')
+    if gbrdemo_case:
+        if manifest.get('profile') not in ('cpc-gbrdemo-private-v1','cpc-desktop-m4-v5'):
+            raise AssertionError('GBRDEMO requires its qualified private or v5 delivery profile')
+        image_before=(artifacts/'RUNTIME.IMG').read_bytes()
+        gnoi={v[1]:int(v[2],16) for line in
+              (root/'build/universal-obj/ugbrdemo/app.noi').read_text().splitlines()
+              if len(v:=line.split())==3 and v[0]=='DEF'}
+        goff={v[1]:int(v[2],16) for line in
+              (root/'build/universal-obj/ugbrdemo/main.sym').read_text().splitlines()
+              if len(v:=line.split())==4 and v[0]=='1' and v[3]=='R'}
+        expected_ready=gbrdemo_case=='good'
+        open_disk(1);checked('gbr-directory')
+        open_item(1,'HELLO.GBR')
+        rects[2]=(5,34,70,132);order.append(2);focus=2;menu=b'\0'
+        titles[2]='GBR Resource';gbrs[2]=dict(ready=expected_ready,selected=False)
+        ram=checked('gbr-open-'+gbrdemo_case)
+        entry=sym['wm_table']+50;base=physical(ram[entry])
+        payload=(root/'build/universal/GBRDEMO.APP').read_bytes()
+        if ram[base:base+len(payload)]!=payload:
+            raise AssertionError('loaded GBRDEMO differs from compile-once APP')
+        ready_at=base+gnoi['s__DATA']-0x4000+goff['_ready']
+        states_at=base+gnoi['s__DATA']-0x4000+goff['_object_states']
+        if bool(ram[ready_at])!=expected_ready:
+            raise AssertionError('external resource acceptance state differs')
+        expected_states=b'\0\0\0\0\x08\0' if expected_ready else b'\0'*6
+        if ram[states_at:states_at+6]!=expected_states:
+            raise AssertionError('initial resource state overlay differs')
+        move(35,120);click()
+        if expected_ready:
+            gbrs[2]['selected']=True;ram=checked('gbr-selected')
+            if ram[states_at:states_at+6]!=b'\0\0\0\0\x0A\0':
+                raise AssertionError('resource-defined button state did not change')
+        else:
+            ram=checked('gbr-invalid-inert')
+            if ram[states_at:states_at+6]!=expected_states:
+                raise AssertionError('invalid resource accepted input')
+        drag(2,9,42);checked('gbr-moved')
+        # Focus the exposed File Manager title, then restore the resource from
+        # its exposed right edge. This exercises damage and context ownership.
+        move(10,30);click();order.remove(1);order.append(1);focus=1
+        menu=bytes((1,10))+b'View\0\0\0\0';checked('gbr-focus-parent')
+        move(74,60);click();order.remove(2);order.append(2);focus=2;menu=b'\0'
+        checked('gbr-focus-return')
+        key('ESCAPE');order.remove(2);del rects[2];del titles[2];gbrs.clear()
+        focus=1;menu=bytes((1,10))+b'View\0\0\0\0';checked('gbr-close-cleanup')
+        close_fm(1);checked('gbr-clean-desktop')
+        if (artifacts/'RUNTIME.IMG').read_bytes()!=image_before:
+            raise AssertionError('GBR workflow wrote its private M4 image')
+        metrics['gbrdemo']=dict(case=gbrdemo_case,ready=expected_ready,
+                                app_sha256=manifest['sections']['gbrdemo']['app_sha256'],
+                                resource_sha256=manifest['sections']['gbrdemo']['resource_sha256'])
+        return finish()
     if scenario=='minute-cadence':
         from cpc_runtime_latency import check_latency,measure_pointer
         def align():

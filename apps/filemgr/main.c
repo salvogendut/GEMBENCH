@@ -1167,7 +1167,7 @@ static unsigned char ext_is(const char *e, char a, char b, char c)
      .PIC             the image-only VIEWER
      .HTM             an offline page -> BROWSER.APP
      .BAS             a GB-BASIC program -> opens in BASIC.APP
-     .GBR             a GEOBENCH resource -> GBRDEMO.APP (MSX2 only)
+     .GBR             a GEOBENCH resource -> portable GBRDEMO.APP
      .BIN             a native binary -> an info note (exec unimplemented, #236)
      anything else    no associated GEOBENCH application */
 static void open_entry(unsigned char idx)
@@ -1236,6 +1236,16 @@ static void open_entry(unsigned char idx)
         }
         return;
     }
+    if (ext_is(e, 'G', 'B', 'R')) {
+        /* The resource consumer adopts the exact selected file context.  Do
+         * not fall back to the legacy implicit current-file transport: that
+         * would make an otherwise identical APP target-dependent. */
+        if (gb_fsctx_prepare_launch(fs_context, e))
+            gb_alert("Resource not opened", "File context unavailable");
+        else
+            gb_wm_open("GBRDEMO APP");
+        return;
+    }
 #endif
 #if defined(GB_SHELL_SERVICES) && !defined(GB_FSCTX_LAUNCH)
     if ((ext_is(e, 'T', 'X', 'T') || ext_is(e, 'C', 'F', 'G')) &&
@@ -1261,7 +1271,7 @@ static void open_entry(unsigned char idx)
         gb_wm_launch_as("BROWSER APP");
     else if (ext_is(e, 'B', 'A', 'S'))          /* GB-BASIC programs open in BASIC.APP */
         gb_wm_launch_as("BASIC   APP");
-#ifdef GB_MSX2
+#if defined(GB_MSX2) && !defined(GB_FSCTX_LAUNCH)
     else if (ext_is(e, 'G', 'B', 'R'))          /* GEOBENCH resource proof-of-concept */
         gb_wm_launch_as("GBRDEMO APP");
 #endif

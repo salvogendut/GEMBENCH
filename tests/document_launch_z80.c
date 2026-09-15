@@ -54,6 +54,7 @@ int main(int argc,char **argv){
         if(fault==1)mem[WM_NWIN]=WM_MAXWIN;
         invoke(K_WM_OPEN);
         assert(!mem[DOC_PENDING] && !word(CORE_PENDING_OWNER) && mem[BANK_CUR]==7);
+        assert(!memcmp(mem+LAUNCH_ARG,"\0\0\0\0\0\0\0\0\0\0\0",11));
         assert(opened==(fault==0 || fault>=5));
         assert(released==(fault>=3 && fault<=5));
         ++fault;

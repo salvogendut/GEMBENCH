@@ -7,7 +7,7 @@ not a declaration that all shipped apps are qualified for v1.0.
 
 ## Current migration state
 
-As of 2026-09-14, **Clock, Calculator and Notepad** are production compile-once applications in both
+As of 2026-09-15, **Clock, Calculator, Notepad and GBRDEMO** are production compile-once applications in both
 distributions. ABIProbe is an additional universal diagnostic. Native GBAP v1,
 v2 or v3 packages, headerless legacy applications, and the `.APP` suffix do not
 establish unified-ABI compliance. Desktop and system providers are separate
@@ -24,7 +24,7 @@ portable-service contract. Milestone numbers refer to the v1.0 roadmap.
 | Calculator / `apps/ucalculator` | Universal v4 | Screen 6/7 Desk identity, activation, border, text and cleanup | Same payload; accepted desktop workload | Keep regression coverage throughout |
 | ABIProbe / `apps/abiprobe` | Universal v4 diagnostic | Built and inventoried; not independently rerun here | Existing diagnostic qualification, not a production migration | ABI conformance |
 | Notepad / `apps/unotepad`; native reference retained in `apps/notepad` | Universal v4, two segments | Normal-image Screen 6/7 editor, exact-path handoff, live reuse, exact configuration publication and real BASIC CRLF round trip in 1983; independently checked in openMSX | Same APP in normal M4 image; editing/chooser/clipboard, 4096/4097 bounds, dirty decisions, live reuse/configuration publication, dotted paths, BASIC CRLF, read-only/full-disk failures and cleanup qualified | **1 complete.** Albireo and whole-release coverage remain milestone **7/8**, not Notepad gaps; [delivery](UNIFIED-NOTEPAD-DELIVERY.md), [reuse](UNIFIED-NOTEPAD-REUSE.md), [configuration](UNIFIED-NOTEPAD-CONFIG.md), [closure](UNIFIED-NOTEPAD-CLOSURE.md) |
-| GBRDEMO / `apps/gbrdemo` | Native legacy | Built only | Not delivered | Portable resources, forms and semantic drawing; **2** |
+| GBRDEMO / `apps/ugbrdemo`; native reference retained in `apps/gbrdemo` | Universal v4 | Normal-image Screen 7 external-resource association, state, move/focus/close and cleanup in openMSX and 1983; private Screen 6/7 malformed-resource matrix | Same APP and `HELLO.GBR` in normal M4 image; canonical workflow accepted in 1984, private malformed-resource matrix retained | **2 GBRDEMO slice complete.** FormRef and owned secondary-code closure remain; [milestone record](V1-M2-PORTABLE-RESOURCES.md) |
 | FormRef / `apps/formref` | Native v3 | Built only | Not delivered | Resources/forms plus owned page/secondary-code lifecycle; **2** |
 | File Manager / `apps/filemgr` | Native legacy | Normal window/menu workflow: maximize, restore, move and resize | Accepted native M4 browsing, view persistence and qualified-app launching | Portable FS contexts, menus, launch/association services; **3**, full file operations **4** |
 | Settings / `apps/settings` | Native legacy | System launch, titlebar selection/save, close and cold reload in both modes | Accepted native six-row appearance profile | Portable config/appearance/chooser services, explicit capabilities; **3**, remaining controls **4/6** |
@@ -58,9 +58,9 @@ portable-service contract. Milestone numbers refer to the v1.0 roadmap.
 - Source-only probes/utilities and retired native Clock/Calculator sources are
   not additional delivered migrations. Reconcile any new delivery with this list.
 
-## Current delivery identity — 2026-09-14
+## Current delivery identity — 2026-09-15
 
-Direct comparison of the normal MSX and CPC CARD files confirms that all three
+Direct comparison of the normal MSX and CPC CARD files confirms that all four
 production universal applications match byte-for-byte:
 
 | Payload | Bytes | SHA-256 |
@@ -68,6 +68,8 @@ production universal applications match byte-for-byte:
 | CLOCK.APP | 8198 | `55b45e59f53126a399ba6ab0ac93439235ae09fe8d90bcf8bc90e8155a9cdad0` |
 | CALC.APP | 7868 | `4e7fbe8df31f328b1814cbc46bbe04f984a38f6f62466640786574f7385265e0` |
 | NOTEPAD.APP | 20521 | `fae9ad2f6da69b906af13836f7230095d2ca8421211a8f80a79e310813f933b7` |
+| GBRDEMO.APP | 13069 | `4ec6f034ed396c51fcf5d573c548acfd7df53f077e9f14a718a7cd8cc762b4ff` |
+| HELLO.GBR | 111 | `49b42e9268ad4f4208d70f591f9d3f6b6ad7bee2dcf6f008a773ece968febf12` |
 
 Normal CPC acceptance covers the original 35 scenarios (34 passed initially; the corrected
 legacy unsupported-file scenario passed separately). All seven delivered editor
@@ -82,6 +84,13 @@ path acceptance and real BASIC CRLF round trips in CPC/1984 and MSX/1983 Screen
 6/7, plus an independent openMSX regression. Milestone 1 is complete. Real
 hardware, Albireo and whole-release acceptance remain milestones 7–8; no v1.0
 completion is implied.
+
+GBRDEMO's normal CPC M4 workflow additionally passes exact framebuffer,
+selection, drag, focus and cleanup checks in 1984. The normal MSX Screen 7
+workflow passes in openMSX and in 1983 with 23 state/lifecycle checks and no
+source-image write. Its private qualification matrix retains Screen 6/7 and
+canonical/checksum/truncated/oversized coverage on both targets. This completes
+only GBRDEMO's milestone-2 slice; FormRef remains.
 
 ## Historical artifact identity and bring-up findings — 2026-09-08/09
 
