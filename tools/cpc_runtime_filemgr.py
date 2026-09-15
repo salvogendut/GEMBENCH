@@ -11,6 +11,7 @@ from cpc_runtime_configedit import replace_value
 from cpc_runtime_pixels import verify_pixels
 from cpc_production_lifetime import physical
 from cpc_fswrite_cases import space
+from embed_app_icon import parse_manifest
 from test_cpc_foundation_1984 import snapshot
 
 
@@ -47,7 +48,7 @@ def prepare(case,work,sym,image,artifacts):
     return bytes(kernel)
 
 
-def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=None,kernel=None,scenario=None):
+def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=None,kernel=None,scenario=None,gbrdemo_case=None,formref=False):
     from test_cpc_runtime_1984 import integrity
     app=work/'filemgr'
     noi={v[1]:int(v[2],16) for line in (app/'filemgr.noi').read_text().splitlines()
@@ -57,7 +58,7 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
              if len(v:=line.split())==4 and v[0] in ('1','2') and v[3]=='R'}
     icons=(work/'REFINED.IST').read_bytes();raw=(app/'FILEMGR.native.bin').read_bytes()
     items=listing(manifest['files']);rects={};order=[0];fms={};titles={};accents={}
-    focus=0;menu=DESKTOP;popup=None;calculators={};clocks={};clock_slot=None
+    focus=0;menu=DESKTOP;popup=None;calculators={};clocks={};gbrs={};formrefs={};form_dialog=None;clock_slot=None
     checks=[];stack=dict(main=0,irq=0,tmp=0);unpublished=set();metrics={}
     clock_noi={v[1]:int(v[2],16) for line in (root/'build/universal-obj/uclock/app.noi').read_text().splitlines()
                if len(v:=line.split())==3 and v[0]=='DEF'}
@@ -92,7 +93,7 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
                 if clock_slot is not None:
                     sig+=bytes(clock_value(r,k) for k in ('ph','pm','ps','show_sec','dh','dm','ds'))
                 turn=word(r,'cpc_runtime_turns')
-                if previous and sig==previous[0] and (popup is not None or (turn-previous[1])&65535>=2): break
+                if previous and sig==previous[0] and (popup is not None or form_dialog is not None or (turn-previous[1])&65535>=2): break
                 if previous is None or sig!=previous[0]: previous=sig,turn
             wait(5)
         else: raise AssertionError(name+': File Manager/root did not settle')
@@ -105,7 +106,9 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
             if r[at:at+4]!=bytes(rect): raise AssertionError(name+': window geometry')
         if word(r,'core_pending_owner') or any(r[sym['launch_arg']:sym['launch_arg']+11]):
             raise AssertionError('pending launch identity/argument leaked')
-        if r[sym['core_page_free']]!=27-len(order): raise AssertionError('application page leak')
+        expected_pages=len(order)+(1 if formref and 2 in order else 0)
+        if r[sym['core_page_free']]!=27-expected_pages:
+            raise AssertionError('application/secondary page leak')
         contexts=[r[sym['core_fsctx_table']+i*144:sym['core_fsctx_table']+(i+1)*144] for i in range(4)]
         live=[c for c in contexts if c[0]]
         if len(live)!=len(fms): raise AssertionError('filesystem context leak')
@@ -129,7 +132,9 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         if clock_slot is not None:
             clocks[clock_slot]=tuple(clock_value(r,k) for k in ('ph','pm','ps','show_sec','dh','dm','ds'))
         painted_order=[slot for slot in order if slot not in unpublished]
-        verify_pixels(r,sym,work,rects,painted_order,accents,menu,titles,popup=popup,desktop=icons,filemanagers=fms,calculators=calculators,clocks=clocks)
+        verify_pixels(r,sym,work,rects,painted_order,accents,menu,titles,popup=popup,
+                      desktop=icons,filemanagers=fms,calculators=calculators,
+                      clocks=clocks,gbrs=gbrs,formrefs=formrefs,dialog=form_dialog)
         checks.append(name);send(f'crop {artifacts/(name+".ppm")} 0 0 768 576 1')
         print(f'{name}: windows={len(order)} contexts={len(live)} stack={stack}',flush=True)
         return r
@@ -190,6 +195,177 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         _,r=snapshot(read());at=sym['wm_table']+25*slot+1
         if r[at:at+4]!=bytes(rects[slot]): raise AssertionError('resize differs from pointer endpoint')
     checked('filemgr-root')
+    if gbrdemo_case:
+        if manifest.get('profile') not in ('cpc-gbrdemo-private-v1','cpc-desktop-m4-v5','cpc-desktop-m4-v6'):
+            raise AssertionError('GBRDEMO requires its qualified private or delivery profile')
+        image_before=(artifacts/'RUNTIME.IMG').read_bytes()
+        gnoi={v[1]:int(v[2],16) for line in
+              (root/'build/universal-obj/ugbrdemo/app.noi').read_text().splitlines()
+              if len(v:=line.split())==3 and v[0]=='DEF'}
+        goff={v[1]:int(v[2],16) for line in
+              (root/'build/universal-obj/ugbrdemo/main.sym').read_text().splitlines()
+              if len(v:=line.split())==4 and v[0]=='1' and v[3]=='R'}
+        expected_ready=gbrdemo_case=='good'
+        open_disk(1);checked('gbr-directory')
+        open_item(1,'HELLO.GBR')
+        rects[2]=(5,34,70,132);order.append(2);focus=2;menu=b'\0'
+        titles[2]='GBR Resource';gbrs[2]=dict(ready=expected_ready,selected=False)
+        ram=checked('gbr-open-'+gbrdemo_case)
+        entry=sym['wm_table']+50;base=physical(ram[entry])
+        payload=(root/'build/universal/GBRDEMO.APP').read_bytes()
+        if ram[base:base+len(payload)]!=payload:
+            raise AssertionError('loaded GBRDEMO differs from compile-once APP')
+        ready_at=base+gnoi['s__DATA']-0x4000+goff['_ready']
+        states_at=base+gnoi['s__DATA']-0x4000+goff['_object_states']
+        if bool(ram[ready_at])!=expected_ready:
+            raise AssertionError('external resource acceptance state differs')
+        expected_states=b'\0\0\0\0\x08\0' if expected_ready else b'\0'*6
+        if ram[states_at:states_at+6]!=expected_states:
+            raise AssertionError('initial resource state overlay differs')
+        move(35,120);click()
+        if expected_ready:
+            gbrs[2]['selected']=True;ram=checked('gbr-selected')
+            if ram[states_at:states_at+6]!=b'\0\0\0\0\x0A\0':
+                raise AssertionError('resource-defined button state did not change')
+        else:
+            ram=checked('gbr-invalid-inert')
+            if ram[states_at:states_at+6]!=expected_states:
+                raise AssertionError('invalid resource accepted input')
+        drag(2,9,42);checked('gbr-moved')
+        # Focus the exposed File Manager title, then restore the resource from
+        # its exposed right edge. This exercises damage and context ownership.
+        move(10,30);click();order.remove(1);order.append(1);focus=1
+        menu=bytes((1,10))+b'View\0\0\0\0';checked('gbr-focus-parent')
+        move(74,60);click();order.remove(2);order.append(2);focus=2;menu=b'\0'
+        checked('gbr-focus-return')
+        key('ESCAPE');order.remove(2);del rects[2];del titles[2];gbrs.clear()
+        focus=1;menu=bytes((1,10))+b'View\0\0\0\0';checked('gbr-close-cleanup')
+        close_fm(1);checked('gbr-clean-desktop')
+        if (artifacts/'RUNTIME.IMG').read_bytes()!=image_before:
+            raise AssertionError('GBR workflow wrote its private M4 image')
+        metrics['gbrdemo']=dict(case=gbrdemo_case,ready=expected_ready,
+                                app_sha256=manifest['sections']['gbrdemo']['app_sha256'],
+                                resource_sha256=manifest['sections']['gbrdemo']['resource_sha256'])
+        return finish()
+    if formref:
+        delivery=manifest.get('profile')=='cpc-desktop-m4-v6'
+        if not delivery and manifest.get('profile')!='cpc-formref-private-v2':
+            raise AssertionError('FormRef requires its private or v6 delivery profile')
+        image_before=(artifacts/'RUNTIME.IMG').read_bytes()
+        fnoi={v[1]:int(v[2],16) for line in
+              (root/'build/universal-obj/uformref/app.noi').read_text().splitlines()
+              if len(v:=line.split())==3 and v[0]=='DEF'}
+        fabs={}
+        for line in (root/'build/universal-obj/uformref/main.sym').read_text().splitlines():
+            v=line.split()
+            if len(v)==4 and v[0] in ('1','2') and v[3]=='R':
+                fabs[v[1]]=fnoi['s__DATA' if v[0]=='1' else 's__INITIALIZED']+int(v[2],16)
+        def appfield(r,name,n=1):
+            base=physical(r[sym['wm_table']+50])
+            at=base+fabs['_'+name]-0x4000
+            return r[at:at+n]
+        def modal_key(name,frames=120):
+            send('key-down '+name);wait(12);send('key-up '+name);wait(frames)
+        def shift_tab():
+            send('key-down Left_Shift');send('key-down TAB');wait(12)
+            send('key-up TAB');send('key-up Left_Shift');wait(120)
+        open_disk(1);checked('formref-root')
+        open_item(1,'GBENCH')
+        fms[1]=dict(items=[('..',14)]+listing(manifest['files'],'/GBENCH'),path='/GBENCH')
+        titles[1]=title('/GBENCH');checked('formref-directory')
+        open_item(1,'FORMREF.APP' if delivery else 'A.APP')
+        rects[2]=(20,42,42,70);order.append(2);focus=2;menu=b'\0'
+        titles[2]='Form Reference';formrefs[2]=dict(name='GEOBENCH',autosave=True,layout=False)
+        ram=checked('formref-open')
+        entry=sym['wm_table']+50;base=physical(ram[entry])
+        payload=(root/'build/universal/FORMREF.APP').read_bytes()
+        package=parse_manifest(payload);primary,secondary=package['segments']
+        primary_bytes=payload[:primary['stored_length']]
+        secondary_bytes=payload[secondary['offset']:
+                                secondary['offset']+secondary['stored_length']]
+        if ram[base:base+len(primary_bytes)]!=primary_bytes:
+            raise AssertionError('loaded FormRef primary differs from compile-once APP')
+        owner=ram[sym['core_win_owner']+2]
+        owner_generation=ram[sym['core_win_owner_gen']+2]
+        seal_at=sym['sec_table']+(owner-1)*8
+        seal=ram[seal_at:seal_at+8]
+        if not owner or seal[0]!=owner_generation or not seal[1]:
+            raise AssertionError('FormRef secondary owner seal differs')
+        page_index=seal[1]-1
+        secondary_base=physical(ram[sym['core_page_native']+page_index])
+        if (ram[sym['core_page_purpose']+page_index]!=7 or
+                ram[secondary_base:secondary_base+len(secondary_bytes)]!=secondary_bytes):
+            raise AssertionError('FormRef sealed computation page differs')
+        if appfield(ram,'resource_ready')!=b'\1':
+            raise AssertionError('embedded FormRef resource not published')
+        initial_calls=appfield(ram,'secondary_calls')[0]
+        work_record=appfield(ram,'secondary_work',40)
+        if (appfield(ram,'secondary_status')!=b'\0' or not initial_calls or
+                work_record[15]!=0xA5 or
+                work_record[17:29].rstrip(b'\0')!=b'Autosave on' or
+                work_record[30:39].rstrip(b'\0')!=b'Classic'):
+            raise AssertionError('FormRef initial copied computation differs')
+
+        move(30,103);click()
+        form_dialog=dict(kind='formref',focus=2,draft='GEOBENCH',autosave=True,layout=False)
+        ram=checked('formref-modal')
+        if appfield(ram,'focus')!=b'\2' or appfield(ram,'form_states',16)!=bytes(
+                (0,0,0,0,8,0,4,0,4,0,0,0,0,0,0,0)):
+            raise AssertionError('FormRef initial focus/state overlay differs')
+        for _ in range(8):modal_key('BACKSPACE')
+        for char in ('A','B','C'):modal_key(char)
+        form_dialog['draft']='abc';ram=checked('formref-field-edited')
+        if appfield(ram,'draft_name',4)!=b'abc\0':
+            raise AssertionError('FormRef CPC field edit differs')
+        shift_tab();form_dialog['focus']=7;ram=checked('formref-reverse-tab')
+        if appfield(ram,'focus')!=b'\7':raise AssertionError('CPC Shift-Tab did not wrap reverse')
+        modal_key('TAB');form_dialog['focus']=2;checked('formref-forward-wrap')
+        modal_key('TAB');form_dialog['focus']=3;checked('formref-checkbox-focus')
+        modal_key('RETURN');form_dialog['autosave']=False;ram=checked('formref-checkbox-toggle')
+        if appfield(ram,'form_states',8)[6:8]!=bytes((8,0)):
+            raise AssertionError('FormRef keyboard checkbox state differs')
+        modal_key('TAB');form_dialog['focus']=4;checked('formref-classic-focus')
+        modal_key('TAB');form_dialog['focus']=5;checked('formref-refined-focus')
+        modal_key('RETURN');form_dialog['layout']=True;ram=checked('formref-radio-select')
+        if appfield(ram,'form_states',12)[8:12]!=bytes((0,0,12,0)):
+            raise AssertionError('FormRef radio exclusivity differs')
+        modal_key('TAB');form_dialog['focus']=6;checked('formref-save-focus')
+        modal_key('RETURN');form_dialog=None
+        formrefs[2]=dict(name='abc',autosave=False,layout=True)
+        ram=checked('formref-saved')
+        if (appfield(ram,'saved_name',4)!=b'abc\0' or
+            appfield(ram,'saved_autosave')!=b'\0' or appfield(ram,'saved_layout')!=b'\1'):
+            raise AssertionError('FormRef committed state differs')
+        work_record=appfield(ram,'secondary_work',40)
+        if (appfield(ram,'secondary_status')!=b'\0' or
+                appfield(ram,'secondary_calls')[0]==initial_calls or
+                work_record[17:29].rstrip(b'\0')!=b'Autosave off' or
+                work_record[30:39].rstrip(b'\0')!=b'Refined'):
+            raise AssertionError('FormRef recomputed display record differs')
+
+        move(30,103);click()
+        form_dialog=dict(kind='formref',focus=2,draft='abc',autosave=False,layout=True)
+        checked('formref-reopened')
+        move(30,90);click();form_dialog.update(focus=3,autosave=True)
+        ram=checked('formref-pointer-toggle')
+        if appfield(ram,'focus')!=b'\3' or appfield(ram,'form_states',8)[6:8]!=bytes((12,0)):
+            raise AssertionError('FormRef pointer hit/state differs')
+        move(36,123);click();form_dialog=None;ram=checked('formref-cancelled')
+        if (appfield(ram,'saved_name',4)!=b'abc\0' or
+            appfield(ram,'saved_autosave')!=b'\0' or appfield(ram,'saved_layout')!=b'\1'):
+            raise AssertionError('FormRef Cancel changed saved state')
+        drag(2,28,34);checked('formref-moved')
+        key('ESCAPE');order.remove(2);del rects[2];del titles[2];formrefs.clear()
+        focus=1;menu=bytes((1,10))+b'View\0\0\0\0';ram=checked('formref-close-cleanup')
+        if any(ram[seal_at:seal_at+8]):
+            raise AssertionError('FormRef secondary seal was not reclaimed')
+        close_fm(1);checked('formref-clean-desktop')
+        if (artifacts/'RUNTIME.IMG').read_bytes()!=image_before:
+            raise AssertionError('FormRef workflow wrote its private M4 image')
+        metrics['formref']=dict(app_sha256=manifest['sections']['formref']['app_sha256'],
+            resource_sha256=manifest['sections']['formref']['resource_sha256'],
+            secondary_sha256=manifest['sections']['formref']['secondary_sha256'])
+        return finish()
     if scenario=='minute-cadence':
         from cpc_runtime_latency import check_latency,measure_pointer
         def align():

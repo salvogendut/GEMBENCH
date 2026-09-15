@@ -72,6 +72,20 @@ msx_text_getkey
                 jr z,text_no_key
                 ld ix,CHGET
                 call msx_bios
+                cp 9
+                jr nz,text_key_ready
+                ; Preserve ordinary Tab as ASCII 9 and expose Shift-Tab as the
+                ; target-neutral GBR back-tab code 11. This is still the same
+                ; GB_GETKEY byte stream; no ABI entry or modifier pointer is
+                ; added. MSX Shift is matrix row 6, bit 0 (active low).
+                ld a,6
+                ld ix,SNSMAT
+                call msx_bios
+                bit 0,a
+                ld a,9
+                jr nz,text_key_ready
+                ld a,11
+text_key_ready
                 cp 28
                 ret c
                 cp 32

@@ -1,5 +1,5 @@
 /* App-linked drawing, state, focus, and hit testing for GBR object trees. */
-#include "gb.h"
+#include "gbr_geometry.h"
 #include "gbr_object.h"
 
 #define TEXT_CHUNK 16u
@@ -128,14 +128,14 @@ static unsigned char screen_rect(const gbr_rect_t *rect,
     unsigned int bottom;
     unsigned int left_col;
     unsigned int right_col;
-    if (rect->w == 0 || rect->h == 0 || rect->x >= GB_XPIX ||
-        rect->y >= GB_LINES)
+    if (rect->w == 0 || rect->h == 0 || rect->x >= gbr_screen_width() ||
+        rect->y >= gbr_screen_height())
         return 0;
     right = (unsigned int)(rect->x + rect->w);
     bottom = (unsigned int)(rect->y + rect->h);
     if (right < rect->x || bottom < rect->y) return 0;
-    if (right > GB_XPIX) right = GB_XPIX;
-    if (bottom > GB_LINES) bottom = GB_LINES;
+    if (right > gbr_screen_width()) right = gbr_screen_width();
+    if (bottom > gbr_screen_height()) bottom = gbr_screen_height();
     left_col = rect->x >> 2;
     right_col = (unsigned int)((right + 3u) >> 2);
     if (right_col <= left_col || bottom <= rect->y) return 0;
@@ -201,7 +201,7 @@ static unsigned char draw_override(const char *text, const gbr_rect_t *rect,
     unsigned char count;
     unsigned char index;
     if (!bounded_override(text)) return GBR_RT_ERR_OBJECT;
-    while (text[source] && x < GB_XPIX) {
+    while (text[source] && x < gbr_screen_width()) {
         count = 0;
         while (count < TEXT_CHUNK && text[source + count]) count++;
         for (index = 0; index < count; index++)
@@ -243,7 +243,7 @@ static unsigned char draw_text(const gbr_runtime_t *runtime,
     source = string.offset;
     left = string.length;
     x = rect->x;
-    while (left != 0 && x < GB_XPIX) {
+    while (left != 0 && x < gbr_screen_width()) {
         count = left > TEXT_CHUNK ? TEXT_CHUNK : (unsigned char)left;
         if (!gbr_read(runtime->resource, source,
                       (unsigned char *)chunk, count))
@@ -310,7 +310,7 @@ static unsigned char draw_object(const gbr_runtime_t *runtime,
             return GBR_RT_OK;
         case GBR_TYPE_TEXT:
         case GBR_TYPE_STRING:
-            if (rect.y >= GB_LINES) return GBR_RT_OK;
+            if (rect.y >= gbr_screen_height()) return GBR_RT_OK;
             return draw_text(runtime, object_index, &object, &rect, state);
         case GBR_TYPE_BUTTON:
             if (!screen_rect(&rect, &x, &y, &w, &h)) return GBR_RT_OK;
@@ -332,7 +332,8 @@ static unsigned char draw_object(const gbr_runtime_t *runtime,
             const gbr_graphic_binding_t *binding =
                 graphic_binding(runtime, object.spec);
             if (binding == 0 || (rect.x & 3u) != 0 ||
-                rect.x >= GB_XPIX || rect.y >= GB_LINES ||
+                rect.x >= gbr_screen_width() ||
+                rect.y >= gbr_screen_height() ||
                 !gb_vdi_raster(runtime->graphics_context,
                                (unsigned char)(rect.x >> 2),
                                (unsigned char)rect.y, binding->raster))
@@ -547,9 +548,10 @@ unsigned char gbr_draw_tree(const gbr_runtime_t *runtime,
             if (!graphic_ready(runtime, &object) ||
                 !gbr_object_rect(runtime, (unsigned char)index,
                                  root_x, root_y, &rect) ||
-                (rect.x & 3u) != 0 || rect.x >= GB_XPIX ||
-                rect.y >= GB_LINES || rect.w > GB_XPIX - rect.x ||
-                rect.h > GB_LINES - rect.y)
+                (rect.x & 3u) != 0 || rect.x >= gbr_screen_width() ||
+                rect.y >= gbr_screen_height() ||
+                rect.w > gbr_screen_width() - rect.x ||
+                rect.h > gbr_screen_height() - rect.y)
                 return GBR_RT_ERR_GRAPHIC;
         }
 #endif

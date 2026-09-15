@@ -21,6 +21,10 @@ set gbr_button_x 0
 set gbr_button_y 0
 set gbr_entry_seen 0
 set gbr_resource_clicks 0
+set gbr_entry_address 0x4000
+if {[info exists ::env(GEMBENCH_GBR_ENTRY)]} {
+    set gbr_entry_address [expr {$::env(GEMBENCH_GBR_ENTRY)}]
+}
 
 proc gbr_release_directions {} {
     catch {keymatrixup 8 0x10}
@@ -32,6 +36,9 @@ proc gbr_release_directions {} {
 proc gbr_finish {status} {
     gbr_release_directions
     catch {keymatrixup 8 0x01}
+    if {[string match "FAIL*" $status] || [string match "TIMEOUT*" $status]} {
+        catch {screenshot -raw $::gbr_screenshot}
+    }
     set handle [open $::gbr_output w]
     puts $handle "STATUS=$status"
     puts $handle "DRIVE_TARGET=$::gbr_drive_x,$::gbr_drive_y"
@@ -159,7 +166,7 @@ proc gbr_open_resource_first_click {} {
     # the desktop icon path, still safely within its 75-frame double-click span.
     set ::gbr_entry_seen 0
     set ::gbr_resource_clicks 0
-    debug set_bp 0x4000 {} {set ::gbr_entry_seen 1; set ::pause off}
+    debug set_bp $::gbr_entry_address {} {set ::gbr_entry_seen 1; set ::pause off}
     gbr_resource_click
 }
 

@@ -68,9 +68,13 @@ def integrity(data, sym, work, font=None, cursor=None, theme=DEFAULT_THEME, titl
     return ram, used
 
 
-def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None, clipboard=False, chooser=False, data_pages=False, private_media=None, package_case=None, notepad_case=None, notepad_app=None):
+def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, menus=False, accessories=False, clock=False, desk=False, root_fault=None, native=False, native_fault=None, config_case=None, asset_case=None, latency=False, bitmap_case=None, chrome_case=None, picker=False, picker_fault=None, config_edit=None, seed_image=None, desktop=False, filemgr=False, filemgr_case=None, filemgr_scenario=None, desktop_delivery=False, settings_case=None, clipboard=False, chooser=False, data_pages=False, private_media=None, package_case=None, notepad_case=None, notepad_app=None, gbrdemo_case=None, formref=False):
     if notepad_case and (not (private_media or desktop_delivery) or not notepad_app):
         raise ValueError('Notepad qualification requires private media and the accepted APP path')
+    if gbrdemo_case and not (private_media or (desktop_delivery and gbrdemo_case=='good')):
+        raise ValueError('malformed GBRDEMO qualification requires explicit private M4 media')
+    if formref and not (private_media or desktop_delivery):
+        raise ValueError('FormRef qualification requires private or delivery M4 media')
     if private_media and (not skip_build or desktop_delivery):
         raise ValueError('private media requires --skip-build, never delivery promotion')
     if package_case and not private_media:
@@ -81,7 +85,7 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
     if settings and desktop_delivery and settings_case not in (
             'normal','mixed','reboot','missing','short','corrupt','unbound','edit-missing','contexts','stress'):
         raise ValueError('injected storage-fault clients remain private Settings diagnostics')
-    filemgr=filemgr or filemgr_case is not None or filemgr_scenario is not None
+    filemgr=filemgr or filemgr_case is not None or filemgr_scenario is not None or gbrdemo_case is not None or formref
     desktop=desktop or desktop_delivery
     if desktop_delivery:
         if (seed_image and filemgr_scenario != 'reboot' and settings_case != 'reboot') or filemgr_scenario == 'windows':
@@ -91,9 +95,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         from cpc_desktop_media import validate
         media=ROOT/'QA/CPC-Desktop' if skip_build else build(desktop=True,filemgr=True,settings=True,delivery=True,unified_notepad=True)
         manifest=validate(media,pristine=True)
-        if filemgr and manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4'):
+        if filemgr and manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5','cpc-desktop-m4-v6'):
             raise ValueError('File Manager acceptance requires the Sprint 3 delivery profile')
-        if settings and manifest['profile'] not in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4'):
+        if settings and manifest['profile'] not in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5','cpc-desktop-m4-v6'):
             raise ValueError('Settings acceptance requires the v3 delivery profile')
         # Check the real FAT contents, not just the host staging directory.
         for name,expected in manifest['files'].items():
@@ -116,17 +120,28 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr,settings=settings,data_pages=data_pages)
         if private_media: media=Path(private_media).resolve()
         manifest=json.loads((media/'manifest.json').read_text())
-        if private_media and manifest.get('profile') not in ('cpc-notepad-receiver-private-v1','cpc-notepad-handoff-private-v1'):
+        if private_media and manifest.get('profile') not in ('cpc-notepad-receiver-private-v1','cpc-notepad-handoff-private-v1','cpc-gbrdemo-private-v1','cpc-formref-private-v2'):
             raise ValueError('expected explicitly private CPC secondary receiver profile')
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifact_root=ROOT/'build/settings-runtime' if settings else ROOT/'build/cpc-delivery-runtime' if desktop_delivery else None
-    if private_media: artifact_root=ROOT/'build/notepad-84/evidence'
+    if private_media:
+        artifact_root=(ROOT/'build/v1-m2/evidence/cpc' if gbrdemo_case or formref else
+                       ROOT/'build/notepad-84/evidence')
     if artifact_root is not None:artifact_root.mkdir(parents=True,exist_ok=True)
     artifacts=Path(tempfile.mkdtemp(prefix='geobench-cpc-runtime-',dir=artifact_root))
     if private_media:
         (artifacts/'receiver-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
         (artifacts/'runtime.sym').write_bytes((work/'runtime.sym').read_bytes())
     image=artifacts/'RUNTIME.IMG';image.write_bytes(Path(seed_image or manifest['image']).read_bytes())
+    if gbrdemo_case and gbrdemo_case!='good':
+        source=(Path(private_media)/'CARD/HELLO.GBR').read_bytes()
+        if gbrdemo_case=='checksum': source=source[:-1]+bytes((source[-1]^1,))
+        elif gbrdemo_case=='truncated': source=source[:-1]
+        elif gbrdemo_case=='oversized': source=source.ljust(513,b'\0')
+        fixture=artifacts/'HELLO.GBR';fixture.write_bytes(source)
+        target=['-i',str(image)+'@@16384']
+        subprocess.run(['mdel',*target,'::/HELLO.GBR'],check=True)
+        subprocess.run(['mcopy',*target,str(fixture),'::/HELLO.GBR'],check=True)
     if notepad_case:
         from cpc_runtime_notepad import prepare
         prepare(manifest,notepad_app,image,artifacts,notepad_case)
@@ -309,7 +324,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
             return run_settings(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,settings_case,settings_fixture)
         if filemgr:
             from cpc_runtime_filemgr import run_filemgr
-            return run_filemgr(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,filemgr_case,filemgr_kernel,filemgr_scenario)
+            return run_filemgr(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move,
+                               filemgr_case,filemgr_kernel,filemgr_scenario,gbrdemo_case,
+                               formref)
         if desktop:
             from cpc_runtime_desktop import run_desktop
             return run_desktop(ROOT,manifest,work,sym,artifacts,send,wait,read,key,move)
@@ -607,6 +624,8 @@ if __name__=='__main__':
     mode.add_argument('--filemgr',action='store_true',help='private build-matched native File Manager lifecycle')
     mode.add_argument('--filemgr-case',choices=('missing','short','oversized','corrupt','unbound','no-register'))
     mode.add_argument('--filemgr-scenario',choices=('contexts','services','windows','workflow','stacking','cadence','minute-cadence'))
+    mode.add_argument('--gbrdemo-case',choices=('good','checksum','truncated','oversized'))
+    mode.add_argument('--formref',action='store_true')
     from cpc_settings_faults import CASES as SETTINGS_FAULT_CASES
     mode.add_argument('--settings-case',choices=('normal','mixed','reboot','missing','short','corrupt','unbound','edit-missing')+SETTINGS_FAULT_CASES)
     mode.add_argument('--root-fault',choices=('missing','short','oversized','cfg-missing','cfg-short','cfg-oversized'))

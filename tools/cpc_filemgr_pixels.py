@@ -12,7 +12,8 @@ def listing(files, path=''):
         if not name: continue
         directory='/' in full[len(prefix):]
         ext=name.rsplit('.',1)[-1] if '.' in name else ''
-        slot=8 if directory else {'TXT':7,'CFG':7,'BAS':4,'BIN':5,'MOD':3,'FNT':10}.get(ext,5)
+        slot=8 if directory else {'TXT':7,'CFG':7,'BAS':4,'BIN':5,'MOD':3,
+                                  'FNT':10,'GBR':9}.get(ext,5)
         if ext=='APP': slot={'CLOCK.APP':1,'CALC.APP':20,'DESKTOP.APP':11,'FILEMGR.APP':12}.get(name,9)
         items[name]=slot
     rank={8:0,1:1,9:1,11:1,12:1,20:1,6:2,7:3,4:4,10:6,3:7}

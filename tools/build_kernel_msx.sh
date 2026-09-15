@@ -204,6 +204,7 @@ else
 fi
 python3 tools/gbrc.py examples/hello-dialog.json --output build/msx/HELLO.GBR
 APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7000 BUTTON=1 GBR_OBJECTS=1 tools/build_capp.sh apps/gbrdemo build/msx/GBRDEMO.RAW
+bash tools/build_ugbrdemo.sh build/universal/GBRDEMO.APP
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 BUTTON=1 SOUND=1 tools/build_capp.sh apps/sndtest build/msx/SNDTEST.RAW
 APP_ICON=apps/browser/icon.asm APPDEFS="-DGB_MSX2" GBWIN=0 GBLIB_SRC=lib/gb/gblib_browser.s APP_CFLAGS="--max-allocs-per-node 100000" DATA_LOC=0x7E00 NET=1 tools/build_capp.sh apps/browser build/msx/BROWSER.RAW
 APPDEFS="-DGB_MSX2" DATA_LOC=0x6200 tools/build_capp.sh apps/brsave build/msx/BRSAVE.RAW
@@ -282,6 +283,7 @@ if [ "$UNIFIED_NOTEPAD" = "1" ]; then
     python3 tools/build_msx_package_modules.py --out build/msx/package --handoff
     cp build/msx/package/GBAPV4.MOD build/msx/GBAPV4.RAW
     bash tools/build_unotepad.sh
+    bash tools/build_uformref.sh
 else
     rm -f build/msx/GBAPV4.RAW
     ( cd build/msx && "$RASM" ../../kernel/msx_gbap4.asm -s -o gbapv4 )
@@ -391,13 +393,18 @@ cp build/msx/NETSVC.RAW   QA/MSX/CARD/GBENCH/NETSVC.APP
 cp build/msx/TELNET.RAW   QA/MSX/CARD/GBENCH/TELNET.APP
 cp build/msx/BROWSER.RAW  QA/MSX/CARD/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/CARD/GBENCH/BRSAVE.APP
-cp build/msx/FORMREF.RAW  QA/MSX/CARD/GBENCH/FORMREF.APP
-if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
+if [ "$UNIFIED_NOTEPAD" = "1" ]; then
+    cp build/universal/FORMREF.APP QA/MSX/CARD/GBENCH/FORMREF.APP
+    cmp -s build/universal/FORMREF.APP QA/MSX/CARD/GBENCH/FORMREF.APP
+else
+    cp build/msx/FORMREF.RAW QA/MSX/CARD/GBENCH/FORMREF.APP
+fi
+if [ "$GEMBENCH_M7_BANKED" = "1" ] && [ "$UNIFIED_NOTEPAD" = "0" ]; then
     cp build/msx/FORMREF.GBR QA/MSX/CARD/GBENCH/FORMREF.GBR
 else
     rm -f QA/MSX/CARD/GBENCH/FORMREF.GBR
 fi
-cp build/msx/GBRDEMO.RAW  QA/MSX/CARD/GBENCH/GBRDEMO.APP
+cp build/universal/GBRDEMO.APP QA/MSX/CARD/GBENCH/GBRDEMO.APP
 rm -f QA/MSX/CARD/GBENCH/HELLO.GBR
 cp build/msx/HELLO.GBR    QA/MSX/CARD/HELLO.GBR
 cp build/msx/SNDTEST.RAW  QA/MSX/CARD/GBENCH/SNDTEST.APP

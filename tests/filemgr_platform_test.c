@@ -167,6 +167,12 @@ int main(void)
     fail_prepare=1;fm_test_focus=1;open_entry(3);assert(alerts==2);fail_prepare=0;
     changed_entry=1;open_entry(0);assert(opens==before+1 && alerts==3);changed_entry=0;finish_list();
     before=opens;
+    fm_test_focus=1;
+    assert(filemgr_open_file(fs_context,"/","HELLO   GBR")==0 &&
+           opens==before+1 && prepare_calls==4 && !memcmp(opened,"GBRDEMO APP",11));
+    before=opens;fm_test_focus=1;fail_prepare=1;
+    assert(filemgr_open_file(fs_context,"/","HELLO   GBR")==2 && opens==before);
+    fail_prepare=0;
     assert(filemgr_open_file(fs_context,"/OTHER","CALC    APP")==1 && opens==before);
     fail_activate=1;assert(filemgr_open_file(fs_context,"/GBENCH","CALC    APP")==2);fail_activate=0;
     fm_test_pages=0;assert(filemgr_open_file(fs_context,"/GBENCH","CALC    APP")==2);fm_test_pages=26;

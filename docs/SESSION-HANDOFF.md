@@ -1,8 +1,39 @@
-# Session handoff — 2026-09-14
+# Session handoff — 2026-09-15
 
 Local working memory saved at the user's request. Read this together with
 [the v1.0 roadmap](ROADMAP-V1.0.md) before resuming. Recheck Git and current
 files rather than assuming this snapshot remains current.
+
+## Current resume point — v1 milestone 2 complete on issue #88
+
+Branch `feature/88-portable-resources-forms` now completes all four sprints in
+[the milestone record](V1-M2-PORTABLE-RESOURCES.md). At the time of this note
+the Sprint 4 changes are local and uncommitted; recheck Git before publishing.
+
+- Normal MSX and CPC media contain the same 16160-byte two-bank
+  `FORMREF.APP`, SHA
+  `9960e96cf4efdb60003d73cbb70b04cd155ae2bf998ad7de4783716222c679ce`.
+  Its 231-byte embedded GBR1 and 329-byte restricted GBS4 computation bank are
+  frozen and independently hashed.
+- FormRef's secondary boundary is a 40-byte copied value record. The primary
+  owns all drawing and publishes bounded post-modal damage through the shared
+  compositor, avoiding the CPC cursor save-under corruption of a direct
+  application repaint. The openMSX runner waits for the resulting sealed
+  computation and confirms that teardown input was sampled.
+- Final normal MSX delivery passes 46 checks in Screen 6 and 7 under 1983;
+  evidence is `build/v1-m2/evidence/formref-1983-delivery-final2-mode{6,7}`.
+  Final private openMSX checks pass both modes. Normal CPC M4 delivery passes
+  21 checks in 1984 at
+  `build/cpc-delivery-runtime/geobench-cpc-runtime-h3th8t7r`.
+- CPC delivery profile `cpc-desktop-m4-v6` validates the frozen resource
+  identity and the actual secondary-segment hash. The exact-delivery gate
+  checks MSX card/HD/floppy and CPC card/M4 payloads.
+- Shared instruction tests pass 1058 sealed calls at each fixed layout and the
+  complete streamed-package fault matrix, including stale/foreign/nested/
+  worker/teardown/entry/length rejection and exact restoration.
+- Preserve untracked user GIFs and `QA/CPC/`. Next publication action, only
+  when requested, is commit/push then PR/merge/issue closure. Roadmap milestone
+  3 (unified Settings and File Manager) is the next implementation milestone.
 
 ## Current resume point — normal unified Notepad delivery, 2026-09-14
 

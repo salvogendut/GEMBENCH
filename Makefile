@@ -319,6 +319,59 @@ geobench-v2-abi-check:
 geobench-v2-abiprobe:
 	bash tools/build_uapp.sh apps/abiprobe build/universal/ABIPROBE.APP
 
+.PHONY: geobench-v1-m2-gbrdemo-check geobench-v1-m2-gbrdemo-cpc
+.PHONY: geobench-v1-m2-gbrdemo-msx-media geobench-v1-m2-gbrdemo-openmsx
+.PHONY: geobench-v1-m2-gbrdemo-delivery-check geobench-v1-m2-gbrdemo-delivery-cpc-1984 geobench-v1-m2-gbrdemo-delivery-openmsx
+.PHONY: geobench-v1-m2-formref-check geobench-v1-m2-formref-msx-media geobench-v1-m2-formref-openmsx geobench-v1-m2-formref-cpc geobench-v1-m2-formref-delivery-check geobench-v1-m2-formref-delivery-msx-media geobench-v1-m2-formref-delivery-cpc-1984
+geobench-v1-m2-gbrdemo-check:
+	$(PYTHON) tools/test_universal_gbrdemo.py
+
+geobench-v1-m2-gbrdemo-cpc: geobench-v1-m2-gbrdemo-check
+	$(PYTHON) tools/build_cpc_runtime.py --gbrdemo
+	@set -e; for case in good checksum truncated oversized; do \
+		$(PYTHON) tools/test_cpc_runtime_1984.py --skip-build \
+			--private-media build/v1-m2/gbrdemo-cpc --gbrdemo-case $$case; \
+	done
+
+geobench-v1-m2-gbrdemo-msx-media: geobench-msx gbr-example geobench-v1-m2-gbrdemo-check
+	$(PYTHON) tools/prepare_gbrdemo_msx.py --output build/v1-m2/gbrdemo-msx
+
+geobench-v1-m2-gbrdemo-openmsx: geobench-v1-m2-gbrdemo-msx-media
+	bash tools/test_universal_gbrdemo_openmsx.sh
+
+geobench-v1-m2-gbrdemo-delivery-check: geobench-msx cpc
+	$(PYTHON) tools/test_gbrdemo_delivery.py
+
+geobench-v1-m2-gbrdemo-delivery-cpc-1984: geobench-v1-m2-gbrdemo-delivery-check
+	$(PYTHON) tools/test_cpc_runtime_1984.py --skip-build --desktop-delivery --gbrdemo-case good
+
+geobench-v1-m2-gbrdemo-delivery-openmsx: geobench-v1-m2-gbrdemo-delivery-check
+	bash tools/test_universal_gbrdemo_delivery_openmsx.sh
+
+geobench-v1-m2-formref-check:
+	$(PYTHON) tools/test_universal_formref.py
+
+geobench-v1-m2-formref-msx-media: geobench-msx geobench-v1-m2-formref-check
+	$(PYTHON) tools/prepare_formref_msx.py --output build/v1-m2/formref-msx
+
+geobench-v1-m2-formref-openmsx: geobench-v1-m2-formref-msx-media
+	bash tools/test_universal_formref_openmsx.sh
+
+geobench-v1-m2-formref-cpc: geobench-v1-m2-formref-check
+	$(PYTHON) tools/build_cpc_runtime.py --formref
+	$(PYTHON) tools/test_cpc_runtime_1984.py --skip-build \
+		--private-media build/v1-m2/formref-cpc --formref
+
+geobench-v1-m2-formref-delivery-check: geobench-msx cpc
+	$(PYTHON) tools/test_formref_delivery.py
+
+geobench-v1-m2-formref-delivery-msx-media: geobench-v1-m2-formref-delivery-check
+	$(PYTHON) tools/prepare_formref_msx.py --delivery \
+		--output build/v1-m2/formref-msx-delivery
+
+geobench-v1-m2-formref-delivery-cpc-1984: geobench-v1-m2-formref-delivery-check
+	$(PYTHON) tools/test_cpc_runtime_1984.py --skip-build --desktop-delivery --formref
+
 geobench-v2-tier1:
 	UNIVERSAL_WINDOW_KIND=1 UNIVERSAL_ACCESSORY=1 UNIVERSAL_MENU=1 DATA_LOC=0x7600 \
 		bash tools/build_uapp.sh apps/ucalculator build/universal/CALC.APP
@@ -388,9 +441,7 @@ app:
 	@if [ -z "$(APP)" ]; then echo "usage: make app APP=mahjong"; exit 2; fi
 	bash tools/rebuild_app.sh "$(APP)"
 
-formref:
-	python3 tools/gbrc.py apps/formref/formref.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_gbr.h --symbol-prefix FORMREF
-	APP_ICON=apps/formref/icon.asm APP_ICON16=apps/formref/icon16.asm APP_MANIFEST=apps/formref/manifest.json APPDEFS="-DGB_MSX2" APP_CFLAGS="--opt-code-size --max-allocs-per-node 100000" DATA_LOC=0x7F00 WIDGETS=1 FORM=1 FORM_MODAL_ONLY=1 GBR_FORM_ENGINE=1 GBR_FIXED_TREE=1 GBR_EMBEDDED=1 tools/build_capp.sh apps/formref build/msx/FORMREF.RAW
+formref: gembench-m6-manifest
 
 formref-banked:
 	python3 tools/gbrc.py apps/formref/formref-m7.json --output build/msx/FORMREF.GBR --c-header apps/formref/formref_m7_gbr.h --symbol-prefix FORMREF

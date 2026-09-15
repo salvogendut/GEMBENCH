@@ -14,6 +14,16 @@ document_launch
                 ld de,DOC_LAUNCH_ARG
                 call DOC_COPY_NAME
                 call DOC_LAUNCH_BODY
+                ; Registration has copied the file identity into the window.
+                ; Do not retain it in shared scratch after the synchronous
+                ; launch, whether admission succeeded or rolled back.
+                ld hl,DOC_LAUNCH_ARG
+                ld b,11
+                xor a
+document_clear_arg
+                ld (hl),a
+                inc hl
+                djnz document_clear_arg
                 ; A successful adopter may already have prepared another
                 ; request. Only the selected/bound transaction expires here.
                 ld a,(DOC_PENDING)

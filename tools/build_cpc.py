@@ -11,3 +11,5 @@ if __name__ == '__main__':
     print('Run: bash tools/run_cpc.sh (Disk C opens the native File Manager)')
     print('System > Settings: font, icons, cursor, title bar, gadgets and backdrop')
     print('Universal Notepad: GBENCH/NOTEPAD.APP, or double-click a TXT/CFG document')
+    print('Universal GBRDEMO: double-click root HELLO.GBR')
+    print('Universal FormRef: GBENCH/FORMREF.APP')
