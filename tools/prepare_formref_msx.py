@@ -21,22 +21,29 @@ def put(image: Path, source: Path, target: str) -> None:
                     str(source), "::/" + target], check=True)
 
 
-def prepare(output: Path) -> None:
+def prepare(output: Path, delivery: bool = False) -> None:
     source = ROOT / "QA/MSX/GBMSX.IMG"
     card = ROOT / "QA/MSX/CARD"
     app = ROOT / "build/universal/FORMREF.APP"
     resource = ROOT / "build/universal/FORMREF.GBR"
     for path in (source, card / "GEOBENCH.CFG",
-                 card / "GBENCH/FILEMGR.APP", app, resource):
+                 card / "GBENCH/FILEMGR.APP", card / "GBENCH/FORMREF.APP",
+                 app, resource):
         if not path.exists():
             raise ValueError("missing prerequisite: " + str(path))
     package = parse_manifest(app.read_bytes())
     if (package["version"], package["application_id"],
-            len(package["segments"])) != (4, "FORMREF", 1):
-        raise ValueError("expected the compile-once primary-only FormRef")
+            len(package["segments"])) != (4, "FORMREF", 2):
+        raise ValueError("expected compile-once FormRef with sealed secondary")
     if hashlib.sha256(resource.read_bytes()).hexdigest() != \
             "a5f473f4665e5f119bf809819e8e191d509f41bda3cd0111320e54f3750bdfc8":
         raise ValueError("FORMREF.GBR differs from the frozen fixture")
+    if delivery:
+        if (card / "GBENCH/FORMREF.APP").read_bytes() != app.read_bytes():
+            raise ValueError("normal MSX CARD does not contain universal FormRef")
+        if subprocess.check_output(["mtype", "-i", str(source) + "@@16384",
+                                    "::/GBENCH/FORMREF.APP"]) != app.read_bytes():
+            raise ValueError("normal MSX image does not contain universal FormRef")
     if output.exists():
         raise ValueError("preserve existing evidence; choose a fresh output directory")
 
@@ -54,13 +61,13 @@ def prepare(output: Path) -> None:
         (stage / "AUTOEXEC.BAT").write_bytes(b"GBMSX\r\n")
         put(image, stage / "GEOBENCH.CFG", "GEOBENCH.CFG")
         put(image, stage / "AUTOEXEC.BAT", "AUTOEXEC.BAT")
-        # The short root alias makes the icon position deterministic. Its bytes
-        # are the exact candidate package; no test-only executable is involved.
-        put(image, app, "A.APP")
-        actual = subprocess.check_output(
-            ["mtype", "-i", str(image) + "@@16384", "::/A.APP"])
-        if actual != app.read_bytes():
-            raise AssertionError("staged FormRef APP differs")
+        if not delivery:
+            # The short root alias makes private icon position deterministic.
+            put(image, app, "A.APP")
+            actual = subprocess.check_output(
+                ["mtype", "-i", str(image) + "@@16384", "::/A.APP"])
+            if actual != app.read_bytes():
+                raise AssertionError("staged FormRef APP differs")
         files[f"mode{mode}"] = {
             "image": str(image),
             "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
@@ -68,7 +75,8 @@ def prepare(output: Path) -> None:
     if hashlib.sha256(source.read_bytes()).hexdigest() != source_hash:
         raise AssertionError("normal MSX image changed")
     (output / "manifest.json").write_text(json.dumps({
-        "profile": "msx-formref-private-v1",
+        "profile": "msx-formref-delivery-v1" if delivery else
+                   "msx-formref-private-v2",
         "source_image": str(source),
         "source_image_sha256": source_hash,
         "source_unchanged": True,
@@ -76,11 +84,13 @@ def prepare(output: Path) -> None:
         "resource_sha256": hashlib.sha256(resource.read_bytes()).hexdigest(),
         "files": files,
     }, indent=2) + "\n")
-    print("PASS private Screen 6/7 FormRef fixtures: " + str(output))
+    print("PASS " + ("delivery" if delivery else "private") +
+          " Screen 6/7 FormRef fixtures: " + str(output))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--delivery", action="store_true")
     args = parser.parse_args()
-    prepare(args.output.resolve())
+    prepare(args.output.resolve(), args.delivery)

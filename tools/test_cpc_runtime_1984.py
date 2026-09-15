@@ -73,8 +73,8 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         raise ValueError('Notepad qualification requires private media and the accepted APP path')
     if gbrdemo_case and not (private_media or (desktop_delivery and gbrdemo_case=='good')):
         raise ValueError('malformed GBRDEMO qualification requires explicit private M4 media')
-    if formref and not private_media:
-        raise ValueError('FormRef qualification requires explicit private M4 media')
+    if formref and not (private_media or desktop_delivery):
+        raise ValueError('FormRef qualification requires private or delivery M4 media')
     if private_media and (not skip_build or desktop_delivery):
         raise ValueError('private media requires --skip-build, never delivery promotion')
     if package_case and not private_media:
@@ -95,9 +95,9 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         from cpc_desktop_media import validate
         media=ROOT/'QA/CPC-Desktop' if skip_build else build(desktop=True,filemgr=True,settings=True,delivery=True,unified_notepad=True)
         manifest=validate(media,pristine=True)
-        if filemgr and manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5'):
+        if filemgr and manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5','cpc-desktop-m4-v6'):
             raise ValueError('File Manager acceptance requires the Sprint 3 delivery profile')
-        if settings and manifest['profile'] not in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5'):
+        if settings and manifest['profile'] not in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5','cpc-desktop-m4-v6'):
             raise ValueError('Settings acceptance requires the v3 delivery profile')
         # Check the real FAT contents, not just the host staging directory.
         for name,expected in manifest['files'].items():
@@ -120,7 +120,7 @@ def run(emulator=ROOT.parent/'1984/1984', skip_build=False, filesystem=False, me
         media = ROOT/('QA/Diagnostics/CPC-'+variant) if skip_build else build(desktop=desktop,filemgr=filemgr,settings=settings,data_pages=data_pages)
         if private_media: media=Path(private_media).resolve()
         manifest=json.loads((media/'manifest.json').read_text())
-        if private_media and manifest.get('profile') not in ('cpc-notepad-receiver-private-v1','cpc-notepad-handoff-private-v1','cpc-gbrdemo-private-v1','cpc-formref-private-v1'):
+        if private_media and manifest.get('profile') not in ('cpc-notepad-receiver-private-v1','cpc-notepad-handoff-private-v1','cpc-gbrdemo-private-v1','cpc-formref-private-v2'):
             raise ValueError('expected explicitly private CPC secondary receiver profile')
     work=Path(manifest['work']);sym=symbols(work/'runtime.sym')
     artifact_root=ROOT/'build/settings-runtime' if settings else ROOT/'build/cpc-delivery-runtime' if desktop_delivery else None

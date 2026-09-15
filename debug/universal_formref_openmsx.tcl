@@ -1,4 +1,4 @@
-# Independent openMSX confirmation for the compile-once primary FormRef.
+# Independent openMSX confirmation for the compile-once two-bank FormRef.
 # Reuse the established keyboard-pointer Desktop/File Manager navigation; the
 # short root A.APP alias occupies the same deterministic first cell on row two.
 source debug/gbr_object_openmsx.tcl
@@ -6,6 +6,8 @@ source debug/gbr_object_openmsx.tcl
 set fr_focus [expr {$::env(GEMBENCH_FORM_FOCUS)}]
 set fr_ready [expr {$::env(GEMBENCH_FORM_READY)}]
 set fr_states [expr {$::env(GEMBENCH_FORM_STATES)}]
+set fr_calls [expr {$::env(GEMBENCH_FORM_CALLS)}]
+set fr_status [expr {$::env(GEMBENCH_FORM_STATUS)}]
 set fr_modal [expr {$::env(GEMBENCH_FORM_MODAL)}]
 set fr_modal_seen 0
 set fr_deadline 0
@@ -112,14 +114,40 @@ proc fr_modal_cancelled {} {
         gbr_finish "FAIL FormRef modal cancel/window state"
         return
     }
-    set at [expr {0x1352 + 2 * 25}]
-    gbr_move_to [expr {[peek [expr {$at+1}]]+2}] \
-        [expr {[peek [expr {$at+2}]]+4}] fr_close_app
+    # Wait for the compositor to execute the bounded post-modal redraw and its
+    # second sealed call before injecting teardown input. On a 3.58 MHz target
+    # that repaint can legitimately outlive a fixed wall-clock delay.
+    set ::fr_deadline [expr {[machine_info time] + 30.0}]
+    after time 0.05 fr_refresh_done
 }
 
-proc fr_close_app {} {
+proc fr_refresh_done {} {
+    if {![fr_app_mapped]} {after time 0.002 fr_refresh_done;return}
+    if {[peek $::fr_calls] >= 2 && [peek $::fr_status] == 0} {
+        after time 0.25 fr_close_key
+    } elseif {[machine_info time] >= $::fr_deadline} {
+        gbr_finish "FAIL FormRef post-modal secondary refresh calls=[peek $::fr_calls] status=[peek $::fr_status]"
+    } else {
+        after time 0.05 fr_refresh_done
+    }
+}
+
+proc fr_close_key {} {
     set ::fr_deadline [expr {[machine_info time] + 10.0}]
-    fr_click fr_app_closed
+    keymatrixdown 7 0x04
+    after time 0.02 fr_close_polled
+}
+
+proc fr_close_polled {} {
+    if {[fr_low_ready] && ([peek 0x1308] & 2)} {
+        keymatrixup 7 0x04
+        after time 1.0 fr_app_closed
+    } elseif {[machine_info time] >= $::fr_deadline} {
+        keymatrixup 7 0x04
+        gbr_finish "FAIL FormRef close key was not polled"
+    } else {
+        after time 0.02 fr_close_polled
+    }
 }
 
 proc fr_app_closed {} {

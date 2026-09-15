@@ -352,3 +352,71 @@ Repeat the 1983 command with `--mode 7` and the mode-7 image. This closes the
 primary FormRef vertical slice. Sprint 4 remains responsible for converting
 the frozen native secondary behavior to the sealed, computation-only GBS4
 contract and for normal delivery; this checkpoint does not claim either.
+
+## Sprint 4 checkpoint — sealed secondary closure and normal delivery
+
+Milestone 2 is complete. FormRef now ships as one deterministic two-segment
+GBAP v4 package on both targets:
+
+- the **15831-byte primary** owns all form state, universal drawing and bounded
+  damage publication. Its embedded resource is still the exact 231-byte GBR1
+  fixture with SHA-256
+  `a5f473f4665e5f119bf809819e8e191d509f41bda3cd0111320e54f3750bdfc8`;
+- the **329-byte GBS4 secondary** accepts only a copied 40-byte value record and
+  returns the display strings, state and an eight-bit wrapping call serial.
+  It contains no pointers, target branches, drawing, filesystem, banking,
+  interrupt or kernel calls. Its SHA-256 is
+  `4814e49ce5b1521148d9f28bf36b6174d75d0125f28b351afd93dd0daa6d63c0`;
+- the complete **16160-byte `FORMREF.APP`** has SHA-256
+  `9960e96cf4efdb60003d73cbb70b04cd155ae2bf998ad7de4783716222c679ce`.
+  The stored primary ends at `0x7DD7`, DATA begins at `0x7DE0`, and application state ends at
+  `0x7EA2`, leaving 94 bytes below the guarded `0x7F00` task limit;
+- the post-modal update publishes only the window content through the shared
+  compositor. This avoids the CPC cursor save-under corruption seen with a
+  direct application repaint. Final openMSX qualification also waits for that
+  repaint's second sealed result and confirms the teardown key was sampled,
+  rather than relying on a short input pulse during active drawing.
+
+The common sealed-call contract remains the provider authority. Its real Z80
+suite passes 1058 bind/call/reclaim operations at each of two fixed layouts,
+covering every copied length from 1 through 512 plus invalid length/range,
+entry, stale/foreign owner and page generations, worker/current-owner,
+terminating owner, nested call, bind fault, teardown and generation-wrap
+cases. Every path checks exact mapper shadow, SP, IX/IY, IFF and lock
+restoration. The shared package-stream fault matrix also passes at both layouts;
+FormRef does not duplicate or weaken those receiver checks.
+
+Final target and delivery evidence:
+
+- private openMSX Screen 6 and 7 runs pass real launch, modal input, the second
+  sealed computation and cleanup;
+- normal MSX hard-disk delivery passes **46 checks** in each mode under 1983
+  (5554/5672 frames), including exact primary/secondary mapping and seal,
+  Save-result recomputation, movement, close/reclaim and unchanged images;
+- normal CPC M4 delivery passes **21 checkpoints** in 1984 with exact resource,
+  secondary and framebuffer state, full interaction and cleanup. Maximum stack
+  use is 237 main, four IRQ and zero temporary bytes;
+- `cpc-desktop-m4-v6` requires the universal FormRef, frozen embedded-resource
+  identity and the hash of the actual secondary segment. The delivery gate
+  proves exact APP identity in the MSX staging card, hard disk and floppy and
+  in the CPC staging card and M4 image.
+
+Reproduce the final gates with:
+
+```sh
+make geobench-v1-m2-formref-delivery-check
+make geobench-v1-m2-formref-delivery-cpc-1984
+python3 tools/prepare_formref_msx.py --delivery --output NEW_EMPTY_DIRECTORY
+bash tools/build_msx_stability_1983.sh NEW_EMPTY_DIRECTORY/1983-bridge
+python3 tools/test_universal_formref_1983.py --delivery --mode 6 \
+  --bridge NEW_EMPTY_DIRECTORY/1983-bridge \
+  --omega ../1983/ROMS/rainbios_omega.rom \
+  --sunrise ../1983/ROMS/Nextor-2.1.1.SunriseIDE.ROM \
+  --image NEW_EMPTY_DIRECTORY/mode6/filesystem.img \
+  --worktree . --output NEW_EMPTY_EVIDENCE_DIRECTORY
+PYTHONPATH=tests python3 -m unittest test_secondary_call test_package_stream
+```
+
+Repeat the 1983 command for mode 7. Real hardware, CPC Albireo and whole-release
+acceptance remain roadmap milestones 7–8; completing this resource/forms
+milestone does not declare v1.0 complete.

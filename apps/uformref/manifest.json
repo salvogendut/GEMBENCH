@@ -12,11 +12,13 @@
     "universal-loader",
     "runtime-geometry",
     "portable-drawing",
-    "portable-input"
+    "portable-input",
+    "portable-secondary-calls"
   ],
   "optional_capabilities": [],
   "service_id": 0,
   "lifecycle": ["windowed"],
-  "minimum_pages": 1,
-  "preferred_pages": 1
+  "minimum_pages": 2,
+  "preferred_pages": 2,
+  "secondary_code": {"required": true}
 }

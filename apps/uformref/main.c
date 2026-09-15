@@ -2,8 +2,10 @@
  * driven by the same embedded GBR1 bytes on every target. Mutable text, focus
  * and object state remain in the application's primary page. */
 #include "gbuniversal.h"
+#include "gbcompute.h"
 #include "gbr_object.h"
 #include "formref_gbr.h"
+#include "secondary_protocol.h"
 
 #define WIN_W 42u
 #define WIN_H 70u
@@ -21,6 +23,9 @@ static unsigned char saved_autosave = 1u;
 static unsigned char saved_layout;
 static unsigned char focus;
 static unsigned char resource_ready;
+static unsigned char secondary_status;
+static unsigned char secondary_calls;
+static unsigned char secondary_work[FORMREF_COMPUTE_SIZE];
 static gbr_resource_t form_resource = {
     formref_gbr, FORMREF_GBR_SIZE, FORMREF_STRING_COUNT,
     FORMREF_TREE_COUNT, FORMREF_OBJECT_COUNT, FORMREF_STRING_INDEX,
@@ -40,6 +45,26 @@ static void copy_name(char *destination, const char *source)
         index++;
     }
     destination[index] = 0;
+}
+
+static unsigned char compute_display(void)
+{
+    unsigned char index;
+    secondary_work[0] = FORMREF_COMPUTE_VERSION;
+    secondary_work[1] = (unsigned char)(
+        (saved_autosave ? FORMREF_FLAG_AUTOSAVE : 0u) |
+        (saved_layout ? FORMREF_FLAG_REFINED : 0u) |
+        (resource_ready ? FORMREF_FLAG_RESOURCE : 0u));
+    for (index = 0; index < 13u; index++)
+        secondary_work[FORMREF_COMPUTE_NAME + index] =
+            (unsigned char)saved_name[index];
+    secondary_work[FORMREF_COMPUTE_SIGNATURE] = 0;
+    secondary_status = gb_compute(secondary_work, FORMREF_COMPUTE_SIZE);
+    if (secondary_status != GB_PARAMS_OK ||
+        secondary_work[FORMREF_COMPUTE_SIGNATURE] != FORMREF_COMPUTE_OK)
+        return 0;
+    secondary_calls = secondary_work[FORMREF_COMPUTE_SERIAL];
+    return 1;
 }
 
 static void form_draw(void)
@@ -109,6 +134,7 @@ static const gb_form_modal_t form = {
 
 static void open_form(void)
 {
+    gb_rect_t rect;
     copy_name(draft_name, saved_name);
     if (!resource_ready ||
         gbr_runtime_init(&form_runtime, &form_resource, 0,
@@ -127,6 +153,14 @@ static void open_form(void)
     focus = FORMREF_NAME;
     if (!gbr_focus_set(&form_runtime, focus)) return;
     (void)gb_form_modal_run(&form);
+    /* The modal restores the exposed stack beneath it. Publish only this
+       window's content so the compositor owns cursor save-under and clipping. */
+    gb_window_rect(&rect);
+    gb_wm_damage((unsigned char)(rect.x + 1u),
+                 (unsigned char)(rect.y + TITLE_H),
+                 (unsigned char)(rect.w - 2u),
+                 (unsigned char)(rect.h - TITLE_H - 1u));
+    gb_restore_parent();
 }
 
 static void draw(void)
@@ -137,17 +171,24 @@ static void draw(void)
             (unsigned char)(rect.y + TITLE_H),
             (unsigned char)(rect.w - 2u),
             (unsigned char)(rect.h - TITLE_H - 1u), GB_UI_SURFACE);
+    if (!compute_display()) {
+        gb_textbw((unsigned char)(rect.x + 2u),
+                  (unsigned char)(rect.y + 21u), "Secondary error");
+        return;
+    }
     gb_textbw((unsigned char)(rect.x + 2u),
-              (unsigned char)(rect.y + 21u), saved_name);
+              (unsigned char)(rect.y + 21u),
+              (const char *)(secondary_work + FORMREF_COMPUTE_NAME));
     gb_textbw((unsigned char)(rect.x + 2u),
               (unsigned char)(rect.y + 32u),
-              saved_autosave ? "Autosave on" : "Autosave off");
+              (const char *)(secondary_work + FORMREF_COMPUTE_AUTOSAVE));
     gb_textbw((unsigned char)(rect.x + 2u),
               (unsigned char)(rect.y + 43u),
-              saved_layout ? "Refined" : "Classic");
+              (const char *)(secondary_work + FORMREF_COMPUTE_LAYOUT));
     gb_button((unsigned char)(rect.x + 2u),
               (unsigned char)(rect.y + 56u), 18u, 10u, "Open form",
-              resource_ready ? 0 : GB_WIDGET_DISABLED);
+              secondary_work[FORMREF_COMPUTE_BUTTON] ?
+                  GB_WIDGET_DISABLED : 0);
 }
 
 static void click(void)

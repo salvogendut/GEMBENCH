@@ -11,6 +11,7 @@ from cpc_runtime_configedit import replace_value
 from cpc_runtime_pixels import verify_pixels
 from cpc_production_lifetime import physical
 from cpc_fswrite_cases import space
+from embed_app_icon import parse_manifest
 from test_cpc_foundation_1984 import snapshot
 
 
@@ -105,7 +106,9 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
             if r[at:at+4]!=bytes(rect): raise AssertionError(name+': window geometry')
         if word(r,'core_pending_owner') or any(r[sym['launch_arg']:sym['launch_arg']+11]):
             raise AssertionError('pending launch identity/argument leaked')
-        if r[sym['core_page_free']]!=27-len(order): raise AssertionError('application page leak')
+        expected_pages=len(order)+(1 if formref and 2 in order else 0)
+        if r[sym['core_page_free']]!=27-expected_pages:
+            raise AssertionError('application/secondary page leak')
         contexts=[r[sym['core_fsctx_table']+i*144:sym['core_fsctx_table']+(i+1)*144] for i in range(4)]
         live=[c for c in contexts if c[0]]
         if len(live)!=len(fms): raise AssertionError('filesystem context leak')
@@ -193,8 +196,8 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         if r[at:at+4]!=bytes(rects[slot]): raise AssertionError('resize differs from pointer endpoint')
     checked('filemgr-root')
     if gbrdemo_case:
-        if manifest.get('profile') not in ('cpc-gbrdemo-private-v1','cpc-desktop-m4-v5'):
-            raise AssertionError('GBRDEMO requires its qualified private or v5 delivery profile')
+        if manifest.get('profile') not in ('cpc-gbrdemo-private-v1','cpc-desktop-m4-v5','cpc-desktop-m4-v6'):
+            raise AssertionError('GBRDEMO requires its qualified private or delivery profile')
         image_before=(artifacts/'RUNTIME.IMG').read_bytes()
         gnoi={v[1]:int(v[2],16) for line in
               (root/'build/universal-obj/ugbrdemo/app.noi').read_text().splitlines()
@@ -245,8 +248,9 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
                                 resource_sha256=manifest['sections']['gbrdemo']['resource_sha256'])
         return finish()
     if formref:
-        if manifest.get('profile')!='cpc-formref-private-v1':
-            raise AssertionError('FormRef requires its explicit private M4 profile')
+        delivery=manifest.get('profile')=='cpc-desktop-m4-v6'
+        if not delivery and manifest.get('profile')!='cpc-formref-private-v2':
+            raise AssertionError('FormRef requires its private or v6 delivery profile')
         image_before=(artifacts/'RUNTIME.IMG').read_bytes()
         fnoi={v[1]:int(v[2],16) for line in
               (root/'build/universal-obj/uformref/app.noi').read_text().splitlines()
@@ -269,16 +273,38 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         open_item(1,'GBENCH')
         fms[1]=dict(items=[('..',14)]+listing(manifest['files'],'/GBENCH'),path='/GBENCH')
         titles[1]=title('/GBENCH');checked('formref-directory')
-        open_item(1,'A.APP')
+        open_item(1,'FORMREF.APP' if delivery else 'A.APP')
         rects[2]=(20,42,42,70);order.append(2);focus=2;menu=b'\0'
         titles[2]='Form Reference';formrefs[2]=dict(name='GEOBENCH',autosave=True,layout=False)
         ram=checked('formref-open')
         entry=sym['wm_table']+50;base=physical(ram[entry])
         payload=(root/'build/universal/FORMREF.APP').read_bytes()
-        if ram[base:base+len(payload)]!=payload:
-            raise AssertionError('loaded FormRef differs from compile-once APP')
+        package=parse_manifest(payload);primary,secondary=package['segments']
+        primary_bytes=payload[:primary['stored_length']]
+        secondary_bytes=payload[secondary['offset']:
+                                secondary['offset']+secondary['stored_length']]
+        if ram[base:base+len(primary_bytes)]!=primary_bytes:
+            raise AssertionError('loaded FormRef primary differs from compile-once APP')
+        owner=ram[sym['core_win_owner']+2]
+        owner_generation=ram[sym['core_win_owner_gen']+2]
+        seal_at=sym['sec_table']+(owner-1)*8
+        seal=ram[seal_at:seal_at+8]
+        if not owner or seal[0]!=owner_generation or not seal[1]:
+            raise AssertionError('FormRef secondary owner seal differs')
+        page_index=seal[1]-1
+        secondary_base=physical(ram[sym['core_page_native']+page_index])
+        if (ram[sym['core_page_purpose']+page_index]!=7 or
+                ram[secondary_base:secondary_base+len(secondary_bytes)]!=secondary_bytes):
+            raise AssertionError('FormRef sealed computation page differs')
         if appfield(ram,'resource_ready')!=b'\1':
             raise AssertionError('embedded FormRef resource not published')
+        initial_calls=appfield(ram,'secondary_calls')[0]
+        work_record=appfield(ram,'secondary_work',40)
+        if (appfield(ram,'secondary_status')!=b'\0' or not initial_calls or
+                work_record[15]!=0xA5 or
+                work_record[17:29].rstrip(b'\0')!=b'Autosave on' or
+                work_record[30:39].rstrip(b'\0')!=b'Classic'):
+            raise AssertionError('FormRef initial copied computation differs')
 
         move(30,103);click()
         form_dialog=dict(kind='formref',focus=2,draft='GEOBENCH',autosave=True,layout=False)
@@ -310,6 +336,12 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
         if (appfield(ram,'saved_name',4)!=b'abc\0' or
             appfield(ram,'saved_autosave')!=b'\0' or appfield(ram,'saved_layout')!=b'\1'):
             raise AssertionError('FormRef committed state differs')
+        work_record=appfield(ram,'secondary_work',40)
+        if (appfield(ram,'secondary_status')!=b'\0' or
+                appfield(ram,'secondary_calls')[0]==initial_calls or
+                work_record[17:29].rstrip(b'\0')!=b'Autosave off' or
+                work_record[30:39].rstrip(b'\0')!=b'Refined'):
+            raise AssertionError('FormRef recomputed display record differs')
 
         move(30,103);click()
         form_dialog=dict(kind='formref',focus=2,draft='abc',autosave=False,layout=True)
@@ -324,12 +356,15 @@ def run_filemgr(root,manifest,work,sym,artifacts,send,wait,read,key,move,case=No
             raise AssertionError('FormRef Cancel changed saved state')
         drag(2,28,34);checked('formref-moved')
         key('ESCAPE');order.remove(2);del rects[2];del titles[2];formrefs.clear()
-        focus=1;menu=bytes((1,10))+b'View\0\0\0\0';checked('formref-close-cleanup')
+        focus=1;menu=bytes((1,10))+b'View\0\0\0\0';ram=checked('formref-close-cleanup')
+        if any(ram[seal_at:seal_at+8]):
+            raise AssertionError('FormRef secondary seal was not reclaimed')
         close_fm(1);checked('formref-clean-desktop')
         if (artifacts/'RUNTIME.IMG').read_bytes()!=image_before:
             raise AssertionError('FormRef workflow wrote its private M4 image')
         metrics['formref']=dict(app_sha256=manifest['sections']['formref']['app_sha256'],
-            resource_sha256=manifest['sections']['formref']['resource_sha256'])
+            resource_sha256=manifest['sections']['formref']['resource_sha256'],
+            secondary_sha256=manifest['sections']['formref']['secondary_sha256'])
         return finish()
     if scenario=='minute-cadence':
         from cpc_runtime_latency import check_latency,measure_pointer

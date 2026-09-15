@@ -57,7 +57,7 @@ def main() -> None:
         assert image_file(image, "HELLO.GBR", partitioned=partitioned) == resource
 
     manifest = validate(ROOT / "QA/CPC-Desktop", pristine=True)
-    assert manifest["profile"] == "cpc-desktop-m4-v5"
+    assert manifest["profile"] in ("cpc-desktop-m4-v5", "cpc-desktop-m4-v6")
     section = manifest["sections"]["gbrdemo"]
     assert section["app_sha256"] == APP_SHA256
     assert section["resource_sha256"] == RESOURCE_SHA256

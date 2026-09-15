@@ -283,6 +283,7 @@ if [ "$UNIFIED_NOTEPAD" = "1" ]; then
     python3 tools/build_msx_package_modules.py --out build/msx/package --handoff
     cp build/msx/package/GBAPV4.MOD build/msx/GBAPV4.RAW
     bash tools/build_unotepad.sh
+    bash tools/build_uformref.sh
 else
     rm -f build/msx/GBAPV4.RAW
     ( cd build/msx && "$RASM" ../../kernel/msx_gbap4.asm -s -o gbapv4 )
@@ -392,8 +393,13 @@ cp build/msx/NETSVC.RAW   QA/MSX/CARD/GBENCH/NETSVC.APP
 cp build/msx/TELNET.RAW   QA/MSX/CARD/GBENCH/TELNET.APP
 cp build/msx/BROWSER.RAW  QA/MSX/CARD/GBENCH/BROWSER.APP
 cp build/msx/BRSAVE.RAW   QA/MSX/CARD/GBENCH/BRSAVE.APP
-cp build/msx/FORMREF.RAW  QA/MSX/CARD/GBENCH/FORMREF.APP
-if [ "$GEMBENCH_M7_BANKED" = "1" ]; then
+if [ "$UNIFIED_NOTEPAD" = "1" ]; then
+    cp build/universal/FORMREF.APP QA/MSX/CARD/GBENCH/FORMREF.APP
+    cmp -s build/universal/FORMREF.APP QA/MSX/CARD/GBENCH/FORMREF.APP
+else
+    cp build/msx/FORMREF.RAW QA/MSX/CARD/GBENCH/FORMREF.APP
+fi
+if [ "$GEMBENCH_M7_BANKED" = "1" ] && [ "$UNIFIED_NOTEPAD" = "0" ]; then
     cp build/msx/FORMREF.GBR QA/MSX/CARD/GBENCH/FORMREF.GBR
 else
     rm -f QA/MSX/CARD/GBENCH/FORMREF.GBR

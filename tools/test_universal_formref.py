@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build-level gate for Sprint 3's primary-only universal FormRef."""
+"""Build-level gate for universal FormRef and its sealed computation leaf."""
 from __future__ import annotations
 
 import hashlib
@@ -36,17 +36,29 @@ def main() -> None:
     package = parse_manifest(first)
     assert (package["version"], package["profile"],
             package["application_id"], package["minimum_pages"],
-            len(package["segments"])) == (4, 3, "FORMREF", 1, 1)
+            len(package["segments"])) == (4, 3, "FORMREF", 2, 2)
+    primary, secondary = package["segments"]
+    assert (primary["type"], secondary["type"]) == (1, 2)
+    secondary_image = (ROOT / "build/universal/FORMREF.BIN").read_bytes()
+    assert first[secondary["offset"]:
+                 secondary["offset"] + secondary["stored_length"]] == \
+        secondary_image
+    audit = json.loads((ROOT / "build/universal/FORMREF.BIN.audit.json").read_text())
+    assert audit["profile"] == "gbs4-computation-v1"
+    assert audit["sha256"] == hashlib.sha256(secondary_image).hexdigest()
     spec = json.loads((ROOT / "apps/uformref/manifest.json").read_text())
     assert spec["platforms"] == ["cpc", "msx2", "pcw"]
-    assert "portable-secondary-calls" not in spec["required_capabilities"]
+    assert "portable-secondary-calls" in spec["required_capabilities"]
+    assert spec["secondary_code"] == {"required": True}
     source = (ROOT / "apps/uformref/main.c").read_text()
     assert "GB_MSX2" not in source and "PLATFORM_CPC" not in source
     assert "gbr_form_click" in source and "gbr_form_key" in source
     assert "GBR_KEY_BACKTAB" in source
     assert "gb_form_modal_run" in source
-    print(f"Universal FormRef primary: {len(first)} identical bytes; "
-          "frozen embedded GBR1 and complete form build gate PASS")
+    assert "gb_compute" in source
+    print(f"Universal FormRef: {len(first)} identical package bytes, "
+          f"{len(secondary_image)} sealed computation bytes; frozen embedded "
+          "GBR1 and complete build gate PASS")
 
 
 if __name__ == "__main__":

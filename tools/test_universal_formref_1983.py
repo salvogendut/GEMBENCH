@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 
+from embed_app_icon import parse_manifest
 from test_msx_stability_1983 import Driver, constants
 
 
@@ -78,9 +79,18 @@ class FormDriver(Driver):
         for index, raw in enumerate(order[:total]):
             if bytes(names[raw * 11:raw * 11 + 11]) != name:
                 continue
-            row, column = divmod(index, 3)
             _, x, y, w, h, *_ = self.entry(1)
-            self.expect(0 <= row < (h - 16) // 44,
+            index += bool(self.filemgr("_fm_path")[0])
+            item_row, column = divmod(index, 3)
+            visible_rows = (h - 16) // 44
+            top = self.filemgr("_top")[0]
+            while item_row - top >= visible_rows:
+                self.click(x + 2, y + h - 5)
+                new_top = self.filemgr("_top")[0]
+                self.expect(new_top > top, "File Manager scroll advances")
+                top = new_top
+            row = item_row - top
+            self.expect(0 <= row < visible_rows,
                         "FormRef alias visible in icon view")
             cell = (w - 5) // 3
             self.double_click(x + 4 + cell * (column * 2 + 1) // 2,
@@ -105,6 +115,12 @@ class FormDriver(Driver):
         self.frames(100)
 
     def exercise(self, args: argparse.Namespace, app: bytes) -> dict:
+        package = parse_manifest(app)
+        primary_segment, secondary_segment = package["segments"]
+        primary = app[:primary_segment["stored_length"]]
+        secondary = app[secondary_segment["offset"]:
+                        secondary_segment["offset"] +
+                        secondary_segment["stored_length"]]
         symbols = data_symbols(
             args.worktree / "build/universal-obj/uformref/main.sym",
             args.worktree / "build/universal-obj/uformref/app.noi")
@@ -118,6 +134,10 @@ class FormDriver(Driver):
         saved_name = symbols["_saved_name"]
         saved_autosave = symbols["_saved_autosave"]
         saved_layout = symbols["_saved_layout"]
+        secondary_status = symbols["_secondary_status"]
+        secondary_calls = symbols["_secondary_calls"]
+        secondary_work = symbols["_secondary_work"]
+        package_layout = constants(args.worktree / "kernel/msx_package_layout.inc")
 
         self.wait(lambda: self.read(0xCF00, 2) == [48, 6] and
                   self.value("WM_NWIN") == 1, "desktop boot", 6000)
@@ -130,18 +150,44 @@ class FormDriver(Driver):
         self.wait(lambda: self.value("WM_NWIN") == 2 and
                   self.value("WM_FOCUS") == 1, "File Manager launch")
         self.frames(100)
-        self.entry_named(b"A       APP")
+        if args.delivery:
+            self.entry_named(b"GBENCH     ")
+            self.wait(lambda: self.filemgr("_list_state") == [0],
+                      "system directory listing complete")
+            self.entry_named(b"FORMREF APP")
+        else:
+            self.entry_named(b"A       APP")
         self.wait(lambda: self.value("WM_NWIN") == 3 and
                   self.value("WM_FOCUS") == 2, "universal FormRef launch", 8000)
         self.frames(100)
         window = self.entry(2)
         self.expect(window[1:5] == [20, 42, 42, 70], "portable window geometry")
         loaded = b"".join(bytes(self.call(
-            f"ram {window[0] * 0x4000 + offset} {min(4096, len(app) - offset)}"))
-            for offset in range(0, len(app), 4096))
-        self.expect(loaded == app, "mapped package matches compile-once bytes")
+            f"ram {window[0] * 0x4000 + offset} "
+            f"{min(4096, len(primary) - offset)}"))
+            for offset in range(0, len(primary), 4096))
+        self.expect(loaded == primary,
+                    "mapped primary matches compile-once package bytes")
+        owner = self.read(glue["MSX_WIN_OWNER"] + 2)[0]
+        owner_generation = self.read(glue["MSX_WIN_OWNER_GEN"] + 2)[0]
+        seal_address = package_layout["MSX_SECONDARY_TABLE"] + (owner - 1) * 8
+        seal = self.read(seal_address, 8)
+        self.expect(owner != 0 and seal[0] == owner_generation and seal[1] != 0,
+                    "secondary seal belongs to FormRef generation")
+        page_index = seal[1] - 1
+        native = self.read(glue["MSX_PAGE_NATIVE"] + page_index)[0]
+        self.expect(self.read(glue["MSX_PAGE_PURPOSE"] + page_index) == [7] and
+                    bytes(self.call(f"ram {native * 0x4000} {len(secondary)}")) ==
+                    secondary, "sealed computation bytes and page purpose")
         self.expect(self.application(symbols["_resource_ready"]) == [1],
                     "embedded GBR resource published")
+        work = bytes(self.application(secondary_work, 40))
+        initial_calls = self.application(secondary_calls)[0]
+        self.expect(self.application(secondary_status) == [0] and
+                    initial_calls != 0 and work[15] == 0xA5 and
+                    work[17:29].rstrip(b"\0") == b"Autosave on" and
+                    work[30:39].rstrip(b"\0") == b"Classic",
+                    "copied computation result drives primary rendering")
 
         # Open the modal and edit the bound field through actual matrix keys.
         self.click(30, 103)
@@ -173,6 +219,18 @@ class FormDriver(Driver):
                   self.application(saved_autosave) == [0], "Save commits form")
         self.expect(bytes(self.application(saved_name, 4)) == b"abc\0",
                     "Save commits caller-owned text")
+        self.wait(lambda: self.application(secondary_calls)[0] != initial_calls,
+                  "primary consumes recomputed display after Save")
+        work = bytes(self.application(secondary_work, 40))
+        status_after_save = self.application(secondary_status)
+        calls_after_save = self.application(secondary_calls)[0]
+        self.expect(status_after_save == [0] and
+                    calls_after_save != initial_calls and
+                    work[17:29].rstrip(b"\0") == b"Autosave off" and
+                    work[30:39].rstrip(b"\0") == b"Refined",
+                    "secondary recomputes saved display record: " +
+                    repr((status_after_save, initial_calls, calls_after_save,
+                          work[17:29], work[30:39])))
 
         # Reopen and use pointer hit testing. Cancel must discard the changed
         # draft state and restore the complete compositor exactly once.
@@ -205,6 +263,8 @@ class FormDriver(Driver):
 
         self.close(2, 2)
         self.expect(self.busy() == baseline + 1, "FormRef page reclaimed")
+        self.expect(self.read(seal_address, 8) == [0] * 8,
+                    "FormRef secondary seal reclaimed")
         self.close(1, 1)
         self.expect(self.busy() == baseline and
                     self.read(glue["MSX_PAGE_STATE"], 32) == pages,
@@ -223,6 +283,7 @@ def main() -> int:
     for name in ("bridge", "omega", "sunrise", "image", "worktree", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--mode", type=int, choices=(6, 7), required=True)
+    parser.add_argument("--delivery", action="store_true")
     args = parser.parse_args()
     args.bios = args.subrom = None
     args.short_desk_stress = False
@@ -230,7 +291,8 @@ def main() -> int:
         parser.error("output exists; preserve earlier evidence")
     app = (args.worktree / "build/universal/FORMREF.APP").read_bytes()
     staged = subprocess.check_output([
-        "mtype", "-i", str(args.image) + "@@16384", "::/A.APP"])
+        "mtype", "-i", str(args.image) + "@@16384",
+        "::/GBENCH/FORMREF.APP" if args.delivery else "::/A.APP"])
     if staged != app:
         parser.error("test image and compile-once APP differ")
     source_hash = hashlib.sha256(args.image.read_bytes()).hexdigest()

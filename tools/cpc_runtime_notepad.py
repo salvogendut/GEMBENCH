@@ -27,7 +27,7 @@ def documents(case):
     return result
 
 def prepare(manifest,app,image,artifacts,case):
-    delivery=manifest['profile'] in ('cpc-desktop-m4-v4','cpc-desktop-m4-v5')
+    delivery=manifest['profile'] in ('cpc-desktop-m4-v4','cpc-desktop-m4-v5','cpc-desktop-m4-v6')
     if not delivery and manifest['profile']!='cpc-notepad-handoff-private-v1':
         raise ValueError('Notepad requires the explicit API-v3/text-input receiver')
     app=Path(app);data=app.read_bytes()

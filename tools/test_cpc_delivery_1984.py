@@ -14,7 +14,7 @@ from cpc_desktop_media import validate
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def cases(settings=False,notepad=False):
+def cases(settings=False,notepad=False,formref=False):
     result = [('desktop', []), ('lifecycle', ['--filemgr'])]
     result += [(name, ['--filemgr-scenario', name]) for name in
                ('workflow', 'services', 'contexts', 'stacking', 'minute-cadence', 'cadence')]
@@ -29,6 +29,8 @@ def cases(settings=False,notepad=False):
         result += [('notepad-'+name,['--notepad-case',name,'--notepad-app',
                    str(ROOT/'build/universal/NOTEPAD.APP')]) for name in
                    ('handoff','blank','escape','boundary','clipboard','write-denied','disk-full','config','basic')]
+    if formref:
+        result.append(('formref',['--formref']))
     return result
 
 
@@ -51,14 +53,15 @@ def run(emulator, jobs=1, skip_build=False):
         subprocess.run([sys.executable, str(ROOT/'tools/build_cpc.py')], cwd=ROOT, check=True)
     media = ROOT/'QA/CPC-Desktop'
     manifest = validate(media, pristine=True)
-    if manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5'):
+    if manifest['profile'] not in ('cpc-desktop-m4-v2','cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5','cpc-desktop-m4-v6'):
         raise ValueError('combined acceptance requires Desktop plus File Manager')
     artifact_root=ROOT/'build/cpc-delivery-runtime';artifact_root.mkdir(parents=True,exist_ok=True)
     artifacts = Path(tempfile.mkdtemp(prefix='geobench-cpc-delivery-',dir=artifact_root))
     print('Delivery acceptance logs: '+str(artifacts), flush=True)
     with ThreadPoolExecutor(max_workers=jobs) as pool:
         results = list(pool.map(lambda case: run_case(case, emulator, artifacts),
-                        cases('settings' in manifest['sections'],'notepad' in manifest['sections'])))
+                        cases('settings' in manifest['sections'],'notepad' in manifest['sections'],
+                              'formref' in manifest['sections'])))
     # Each child verifies the actual FAT payload before using a private image.
     # Verify the source manifest/staging/image remained pristine after ALL runs.
     if validate(media, pristine=True) != manifest:

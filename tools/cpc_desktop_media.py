@@ -6,6 +6,9 @@ from pathlib import Path
 from embed_app_icon import parse_manifest
 
 
+FORMREF_RESOURCE_SHA256 = "a5f473f4665e5f119bf809819e8e191d509f41bda3cd0111320e54f3750bdfc8"
+
+
 def check_destination(media, files, directories):
     """Never follow output symlinks or silently retain unrelated CARD contents.
 
@@ -28,14 +31,16 @@ def validate(media, *, pristine=False):
     """Verify the explicit delivered profile before running its acceptance test."""
     media = Path(media).resolve()
     manifest = json.loads((media/'manifest.json').read_text())
-    if manifest.get('profile') not in ('cpc-desktop-m4-v1', 'cpc-desktop-m4-v2', 'cpc-desktop-m4-v3', 'cpc-desktop-m4-v4', 'cpc-desktop-m4-v5') or manifest.get('storage') != 'm4':
+    if manifest.get('profile') not in ('cpc-desktop-m4-v1', 'cpc-desktop-m4-v2', 'cpc-desktop-m4-v3', 'cpc-desktop-m4-v4', 'cpc-desktop-m4-v5', 'cpc-desktop-m4-v6') or manifest.get('storage') != 'm4':
         raise ValueError('not a CPC Desktop M4 delivery manifest')
     files = manifest['files']
-    has_notepad=manifest['profile'] in ('cpc-desktop-m4-v4','cpc-desktop-m4-v5')
-    has_gbrdemo=manifest['profile']=='cpc-desktop-m4-v5'
+    has_notepad=manifest['profile'] in ('cpc-desktop-m4-v4','cpc-desktop-m4-v5','cpc-desktop-m4-v6')
+    has_gbrdemo=manifest['profile'] in ('cpc-desktop-m4-v5','cpc-desktop-m4-v6')
+    has_formref=manifest['profile']=='cpc-desktop-m4-v6'
     apps={'GBENCH/CLOCK.APP','GBENCH/CALC.APP'}
     if has_notepad:apps.add('GBENCH/NOTEPAD.APP')
     if has_gbrdemo:apps.add('GBENCH/GBRDEMO.APP')
+    if has_formref:apps.add('GBENCH/FORMREF.APP')
     if {name for name in files if name.endswith('.APP')} != apps:
         raise ValueError('unexpected Desktop application set')
     if manifest['profile'] == 'cpc-desktop-m4-v1':
@@ -46,7 +51,7 @@ def validate(media, *, pristine=False):
         if (not fm.get('staged') or not fm.get('private_integration') or
                 fm.get('source') != 'apps/filemgr/main.c' or 'GBENCH/FILEMGR.BIN' not in files):
             raise ValueError('build-matched native File Manager is not staged')
-    has_settings=manifest['profile'] in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5')
+    has_settings=manifest['profile'] in ('cpc-desktop-m4-v3','cpc-desktop-m4-v4','cpc-desktop-m4-v5','cpc-desktop-m4-v6')
     if has_settings:
         setting=manifest['sections'].get('settings',{})
         if (not setting.get('staged') or not setting.get('private_integration') or
@@ -76,7 +81,18 @@ def validate(media, *, pristine=False):
                 demo.get('resource_sha256')!=files.get('HELLO.GBR')):
             raise ValueError('universal GBRDEMO requires its matched external resource')
     elif 'gbrdemo' in manifest['sections'] or 'GBENCH/GBRDEMO.APP' in files or 'HELLO.GBR' in files:
-        raise ValueError('GBRDEMO requires the v5 delivery profile')
+        raise ValueError('GBRDEMO requires the v5 or later delivery profile')
+    if has_formref:
+        formref=manifest['sections'].get('formref',{})
+        if (not formref.get('staged') or not formref.get('universal') or
+                formref.get('source')!='apps/uformref' or
+                formref.get('embedded_resource_bytes')!=231 or
+                formref.get('secondary_bytes')!=329 or
+                formref.get('resource_sha256')!=FORMREF_RESOURCE_SHA256 or
+                formref.get('app_sha256')!=files.get('GBENCH/FORMREF.APP')):
+            raise ValueError('universal FormRef requires its embedded resource and sealed secondary')
+    elif 'formref' in manifest['sections'] or 'GBENCH/FORMREF.APP' in files:
+        raise ValueError('FormRef requires the v6 delivery profile')
     if manifest.get('directories') != ['GBENCH']:
         raise ValueError('diagnostic directories in Desktop delivery')
     if not manifest['sections']['bar'].get('staged') or manifest['sections']['bar']['source'] != 'apps/desktop/main.c':
@@ -102,6 +118,19 @@ def validate(media, *, pristine=False):
                 demo_package['application_id']!='GBRDEMO' or
                 demo_package['minimum_pages']!=1 or len(demo_package['segments'])!=1):
             raise ValueError('staged GBRDEMO is not the universal primary-only application')
+    if has_formref:
+        formref_data=(media/'CARD/GBENCH/FORMREF.APP').read_bytes()
+        formref_package=parse_manifest(formref_data)
+        if (formref_package['version']!=4 or formref_package['profile']!=3 or
+                formref_package['application_id']!='FORMREF' or
+                formref_package['minimum_pages']!=2 or len(formref_package['segments'])!=2 or
+                formref_package['segments'][1]['stored_length']!=formref['secondary_bytes']):
+            raise ValueError('staged FormRef is not the universal two-bank application')
+        secondary=formref_package['segments'][1]
+        secondary_data=formref_data[secondary['offset']:
+                                    secondary['offset']+secondary['stored_length']]
+        if hashlib.sha256(secondary_data).hexdigest()!=formref.get('secondary_sha256'):
+            raise ValueError('staged FormRef secondary does not match its delivery identity')
     contracts=[]
     if manifest['profile']!='cpc-desktop-m4-v1':contracts.append(('File Manager','FILEMGR.BIN',fm))
     if has_settings:contracts.append(('Settings','SETTINGS.BIN',setting))

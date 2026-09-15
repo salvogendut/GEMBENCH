@@ -322,7 +322,7 @@ geobench-v2-abiprobe:
 .PHONY: geobench-v1-m2-gbrdemo-check geobench-v1-m2-gbrdemo-cpc
 .PHONY: geobench-v1-m2-gbrdemo-msx-media geobench-v1-m2-gbrdemo-openmsx
 .PHONY: geobench-v1-m2-gbrdemo-delivery-check geobench-v1-m2-gbrdemo-delivery-cpc-1984 geobench-v1-m2-gbrdemo-delivery-openmsx
-.PHONY: geobench-v1-m2-formref-check geobench-v1-m2-formref-msx-media geobench-v1-m2-formref-openmsx geobench-v1-m2-formref-cpc
+.PHONY: geobench-v1-m2-formref-check geobench-v1-m2-formref-msx-media geobench-v1-m2-formref-openmsx geobench-v1-m2-formref-cpc geobench-v1-m2-formref-delivery-check geobench-v1-m2-formref-delivery-msx-media geobench-v1-m2-formref-delivery-cpc-1984
 geobench-v1-m2-gbrdemo-check:
 	$(PYTHON) tools/test_universal_gbrdemo.py
 
@@ -361,6 +361,16 @@ geobench-v1-m2-formref-cpc: geobench-v1-m2-formref-check
 	$(PYTHON) tools/build_cpc_runtime.py --formref
 	$(PYTHON) tools/test_cpc_runtime_1984.py --skip-build \
 		--private-media build/v1-m2/formref-cpc --formref
+
+geobench-v1-m2-formref-delivery-check: geobench-msx cpc
+	$(PYTHON) tools/test_formref_delivery.py
+
+geobench-v1-m2-formref-delivery-msx-media: geobench-v1-m2-formref-delivery-check
+	$(PYTHON) tools/prepare_formref_msx.py --delivery \
+		--output build/v1-m2/formref-msx-delivery
+
+geobench-v1-m2-formref-delivery-cpc-1984: geobench-v1-m2-formref-delivery-check
+	$(PYTHON) tools/test_cpc_runtime_1984.py --skip-build --desktop-delivery --formref
 
 geobench-v2-tier1:
 	UNIVERSAL_WINDOW_KIND=1 UNIVERSAL_ACCESSORY=1 UNIVERSAL_MENU=1 DATA_LOC=0x7600 \

@@ -98,7 +98,9 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     private_gbrdemo = gbrdemo and not delivery
     private_formref = formref and not delivery
     delivery_gbrdemo = delivery and unified_notepad
+    delivery_formref = delivery and unified_notepad
     include_gbrdemo = private_gbrdemo or delivery_gbrdemo
+    include_formref = private_formref or delivery_formref
     if private_gbrdemo:
         # Resource qualification is isolated from delivery, but deliberately
         # uses the complete API-v3 receiver rather than a diagnostic shortcut.
@@ -176,7 +178,7 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
         hello=work/'HELLO.GBR'
         subprocess.run(['python3','tools/gbrc.py','examples/hello-dialog.json',
                         '--output',str(hello)],cwd=ROOT,check=True)
-    if private_formref:
+    if include_formref:
         subprocess.run(['bash','tools/build_uformref.sh'],cwd=ROOT,check=True)
     media = ROOT / ('QA/CPC-Desktop' if delivery else 'QA/Diagnostics/CPC-'+variant)
     if package_stream and not delivery: media=ROOT/'build/notepad-84/cpc-receiver'
@@ -210,9 +212,10 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     if include_gbrdemo:
         files['GBENCH/GBRDEMO.APP']=(ROOT/'build/universal/GBRDEMO.APP').read_bytes()
         files['HELLO.GBR']=(work/'HELLO.GBR').read_bytes()
-    if private_formref:
+    if include_formref:
         formref_payload=(ROOT/'build/universal/FORMREF.APP').read_bytes()
         files['GBENCH/FORMREF.APP']=formref_payload
+    if private_formref:
         files['GBENCH/A.APP']=formref_payload
     if not delivery:
         files.update({"GBENCH/ABIPROBE.APP": app.read_bytes(),
@@ -328,16 +331,25 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     if private_gbrdemo:
         manifest.update(profile='cpc-gbrdemo-private-v1',storage='m4',
             status='private portable external-resource qualification; not a distribution')
-    if private_formref:
+    if include_formref:
+        from embed_app_icon import parse_manifest
+        formref_package=parse_manifest(files['GBENCH/FORMREF.APP'])
+        formref_secondary=formref_package['segments'][1]
+        formref_secondary_bytes=files['GBENCH/FORMREF.APP'][
+            formref_secondary['offset']:
+            formref_secondary['offset']+formref_secondary['stored_length']]
         sections['formref']=dict(source='apps/uformref',staged=True,universal=True,
             embedded_resource_bytes=(ROOT/'build/universal/FORMREF.GBR').stat().st_size,
             app_sha256=hashlib.sha256(files['GBENCH/FORMREF.APP']).hexdigest(),
-            resource_sha256=hashlib.sha256((ROOT/'build/universal/FORMREF.GBR').read_bytes()).hexdigest())
-        manifest.update(profile='cpc-formref-private-v1',storage='m4',
-            status='private portable embedded-form qualification; not a distribution')
+            resource_sha256=hashlib.sha256((ROOT/'build/universal/FORMREF.GBR').read_bytes()).hexdigest(),
+            secondary_bytes=len(formref_secondary_bytes),
+            secondary_sha256=hashlib.sha256(formref_secondary_bytes).hexdigest())
+    if private_formref:
+        manifest.update(profile='cpc-formref-private-v2',storage='m4',
+            status='private portable embedded-form and sealed-secondary qualification; not a distribution')
     if unified_notepad:
-        manifest.update(profile='cpc-desktop-m4-v5',
-            status='CPC M4 Desktop, native File Manager/Settings and universal Clock/Calculator/Notepad/GBRDEMO')
+        manifest.update(profile='cpc-desktop-m4-v6',
+            status='CPC M4 Desktop, native File Manager/Settings and universal Clock/Calculator/Notepad/GBRDEMO/FormRef')
         sections['notepad']=dict(source='apps/unotepad',staged=True,universal=True,
             filesystem_api=3,secondary_pages=1,document_capacity=4096,
             sha256=hashlib.sha256(files['GBENCH/NOTEPAD.APP']).hexdigest(),associations=['TXT','CFG'])
@@ -362,7 +374,7 @@ if __name__ == "__main__":
     parser.add_argument('--gbrdemo',action='store_true',
         help='private portable GBRDEMO and external-resource M4 profile')
     parser.add_argument('--formref',action='store_true',
-        help='private primary-only portable FormRef M4 profile')
+        help='private portable FormRef with sealed computation M4 profile')
     args=parser.parse_args()
     private=args.notepad_receiver or args.notepad_handoff or args.gbrdemo or args.formref
     build(settings=private,package_stream=private,

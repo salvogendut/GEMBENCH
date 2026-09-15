@@ -25,7 +25,7 @@ unsigned char filemgr_open_file(gb_fsctx_t context, const char *path,
                                const char *name11)
 {
     static const char names[][12]={"CLOCK   APP","CALC    APP","ABIPROBEAPP",
-                                    "GBRDEMO APP"
+                                    "GBRDEMO APP","FORMREF APP"
 #if FILEMGR_DOCUMENT_HANDOFF
         ,"NOTEPAD APP"
 #endif
