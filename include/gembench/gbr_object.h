@@ -28,10 +28,12 @@
 #define GBR_FORM_EXIT          0x08u
 
 /* Character values accepted by gbr_form_key(). The MSX BIOS supplies Tab,
- * Enter, and Escape directly. Callers may pass reverse=1 for Shift-Tab; the
- * cursor values also make radio traversal testable by input layers that expose
- * cursor keys separately from the desktop pointer. */
+ * Enter, and Escape directly. Portable form callers may translate Shift-Tab
+ * to GBR_KEY_BACKTAB and pass Tab with reverse=1; the cursor values also make
+ * radio traversal testable by input layers that expose cursor keys separately
+ * from the desktop pointer. */
 #define GBR_KEY_TAB              0x09u
+#define GBR_KEY_BACKTAB          0x0Bu
 #define GBR_KEY_ENTER            0x0Du
 #define GBR_KEY_ESCAPE           0x1Bu
 #define GBR_KEY_LEFT             0x1Cu

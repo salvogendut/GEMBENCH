@@ -29,6 +29,11 @@ unsigned char filemgr_open_file(gb_fsctx_t context, const char *path,
 #if FILEMGR_DOCUMENT_HANDOFF
         ,"NOTEPAD APP"
 #endif
+#ifdef FILEMGR_FORMREF
+        /* Short alias is staged only by the private FormRef qualification
+         * profile, where it remains visible without scrolling the listing. */
+        ,"A       APP"
+#endif
     };
     static const char directory[]="/GBENCH";
     unsigned char i,k,focus;

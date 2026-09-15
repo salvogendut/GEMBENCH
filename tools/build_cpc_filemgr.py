@@ -22,7 +22,7 @@ from check_app_layout import LOADED_AREAS, read_areas
 from gblib_subset import generate
 
 
-def compile_filemgr(work, runtime, sym, root=ROOT):
+def compile_filemgr(work, runtime, sym, root=ROOT, provider_defines=()):
     work=Path(work).resolve();runtime=Path(runtime).resolve()
     work.mkdir(parents=True, exist_ok=True)
     sdcc=shutil.which(os.environ.get('SDCC','sdcc'))
@@ -53,7 +53,7 @@ def compile_filemgr(work, runtime, sym, root=ROOT):
     for source,target,defs in (
         ('apps/filemgr/main.c','main.rel',
          [f'-DGB_FILEMGR_PROVIDER="{root/"apps/filemgr/platform/cpc.h"}"']),
-        ('kernel/kc/cpc_filemgr.c','provider.rel',[]),
+        ('kernel/kc/cpc_filemgr.c','provider.rel',list(provider_defines)),
         ('lib/gembench/gbr_menu.c','menu.rel',[]),
         ('lib/gembench/gbfsctx.c','fs.rel',[]),
         ('lib/gembench/gbshell.c','shell.rel',[]),

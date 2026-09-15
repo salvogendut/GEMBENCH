@@ -94,14 +94,19 @@ def assemble(work: Path, overrides=()):
     return sym
 
 
-def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False, package_stream=False, handoff=False, unified_notepad=False, gbrdemo=False):
+def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_pages=False, package_stream=False, handoff=False, unified_notepad=False, gbrdemo=False, formref=False):
     private_gbrdemo = gbrdemo and not delivery
+    private_formref = formref and not delivery
     delivery_gbrdemo = delivery and unified_notepad
     include_gbrdemo = private_gbrdemo or delivery_gbrdemo
     if private_gbrdemo:
         # Resource qualification is isolated from delivery, but deliberately
         # uses the complete API-v3 receiver rather than a diagnostic shortcut.
         settings=package_stream=handoff=True
+    if private_formref:
+        # FormRef has no filesystem handoff, but it still enters through the
+        # complete package receiver and native File Manager/Desktop profile.
+        settings=package_stream=True
     if unified_notepad:
         if not (desktop and settings and delivery):
             raise ValueError('Notepad delivery requires the full Desktop/File Manager/Settings profile')
@@ -129,7 +134,8 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     sym = assemble(work,overrides)
     if filemgr:
         from build_cpc_filemgr import compile_filemgr, bind_runtime
-        compile_filemgr(work/'filemgr',work,sym)
+        provider_defines=('-DFILEMGR_FORMREF=1',) if private_formref else ()
+        compile_filemgr(work/'filemgr',work,sym,provider_defines=provider_defines)
         bind_runtime(work,work/'filemgr',sym)
     if settings:
         from build_cpc_settings import compile_settings
@@ -170,10 +176,13 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
         hello=work/'HELLO.GBR'
         subprocess.run(['python3','tools/gbrc.py','examples/hello-dialog.json',
                         '--output',str(hello)],cwd=ROOT,check=True)
+    if private_formref:
+        subprocess.run(['bash','tools/build_uformref.sh'],cwd=ROOT,check=True)
     media = ROOT / ('QA/CPC-Desktop' if delivery else 'QA/Diagnostics/CPC-'+variant)
     if package_stream and not delivery: media=ROOT/'build/notepad-84/cpc-receiver'
     if handoff and not delivery: media=ROOT/'build/notepad-84/cpc-handoff'
     if private_gbrdemo: media=ROOT/'build/v1-m2/gbrdemo-cpc'
+    if private_formref: media=ROOT/'build/v1-m2/formref-cpc'
     card = media / "CARD"
     boot = bytearray(headed((work / "BOOT.RAW").read_bytes(), 0x8000))
     boot[1:12] = b"BOOT    BIN"
@@ -201,6 +210,10 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     if include_gbrdemo:
         files['GBENCH/GBRDEMO.APP']=(ROOT/'build/universal/GBRDEMO.APP').read_bytes()
         files['HELLO.GBR']=(work/'HELLO.GBR').read_bytes()
+    if private_formref:
+        formref_payload=(ROOT/'build/universal/FORMREF.APP').read_bytes()
+        files['GBENCH/FORMREF.APP']=formref_payload
+        files['GBENCH/A.APP']=formref_payload
     if not delivery:
         files.update({"GBENCH/ABIPROBE.APP": app.read_bytes(),
              "GBENCH/FSPROBE.APP": fsapp.read_bytes(),
@@ -315,6 +328,13 @@ def build(desktop=False, filemgr=False, *, delivery=False, settings=False, data_
     if private_gbrdemo:
         manifest.update(profile='cpc-gbrdemo-private-v1',storage='m4',
             status='private portable external-resource qualification; not a distribution')
+    if private_formref:
+        sections['formref']=dict(source='apps/uformref',staged=True,universal=True,
+            embedded_resource_bytes=(ROOT/'build/universal/FORMREF.GBR').stat().st_size,
+            app_sha256=hashlib.sha256(files['GBENCH/FORMREF.APP']).hexdigest(),
+            resource_sha256=hashlib.sha256((ROOT/'build/universal/FORMREF.GBR').read_bytes()).hexdigest())
+        manifest.update(profile='cpc-formref-private-v1',storage='m4',
+            status='private portable embedded-form qualification; not a distribution')
     if unified_notepad:
         manifest.update(profile='cpc-desktop-m4-v5',
             status='CPC M4 Desktop, native File Manager/Settings and universal Clock/Calculator/Notepad/GBRDEMO')
@@ -341,7 +361,10 @@ if __name__ == "__main__":
         help='private document/input binding; preserve the earlier receiver media')
     parser.add_argument('--gbrdemo',action='store_true',
         help='private portable GBRDEMO and external-resource M4 profile')
+    parser.add_argument('--formref',action='store_true',
+        help='private primary-only portable FormRef M4 profile')
     args=parser.parse_args()
-    private=args.notepad_receiver or args.notepad_handoff or args.gbrdemo
+    private=args.notepad_receiver or args.notepad_handoff or args.gbrdemo or args.formref
     build(settings=private,package_stream=private,
-          handoff=args.notepad_handoff or args.gbrdemo,gbrdemo=args.gbrdemo)
+          handoff=args.notepad_handoff or args.gbrdemo,gbrdemo=args.gbrdemo,
+          formref=args.formref)

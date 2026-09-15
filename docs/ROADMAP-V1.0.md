@@ -404,6 +404,26 @@ also pass on CPC/1984 and MSX/openMSX/1983. See the
 Sprint 3's compile-once FormRef is next; forms and secondary-code closure
 remain open.
 
+**FormRef checkpoint A, 2026-09-15:** a deterministic 15640-byte primary-only
+universal `FORMREF.APP` now embeds the exact 231-byte native resource and links
+the address-free portable form/modal profile. Its source/build audit and memory
+gate pass without target defines; the native 16026-byte reference and hashes
+remain unchanged. Normal media and the secondary-code contract are unchanged.
+Private MSX Screen 6/7 and CPC M4 form workflows are next, followed by the
+computation-only GBS4 secondary conversion. See the
+[Sprint 3 record](V1-M2-PORTABLE-RESOURCES.md#sprint-3-checkpoint-a--compile-once-primary-formref).
+
+**FormRef checkpoint B, 2026-09-15:** the byte-identical candidate now passes
+its complete private runtime workflow on MSX Screen 6/7 in 1983 and CPC M4 in
+1984, with independent Screen 6/7 confirmation in openMSX. Real target input covers field editing, Shift-Tab and forward traversal,
+checkbox/radio state, Save/Cancel and pointer activation; managed movement,
+exact CPC framebuffer comparison, source-media preservation and complete
+window/page/context reclamation also pass. Normal distributions still deliver
+the native FormRef; the universal candidate remains private. Sprint 4's sealed
+computation-only secondary conversion and delivery are the remaining
+milestone-2 work. See the
+[runtime record](V1-M2-PORTABLE-RESOURCES.md#sprint-3-checkpoint-b--private-cross-target-runtime-qualification).
+
 ### 3. Unified Settings and File Manager
 
 Remove target defines, private memory addresses and target-specific application

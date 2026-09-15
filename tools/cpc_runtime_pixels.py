@@ -37,7 +37,7 @@ def cursor_phases(sprite):
     return bytes(result)
 
 
-def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None, gbrs=None):
+def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles=None, popup=None, calculators=None, clocks=None, dialog=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None, gbrs=None, formrefs=None):
     def fill(image,x,y,w,h,pen):
         for yy in range(max(0,y),min(200,y+h)):
             for xx in range(max(0,x)*4,min(80,x+w)*4): put_pixel(image,xx,yy,pen)
@@ -95,13 +95,14 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
         filemgr=(filemanagers or {}).get(slot)
         setting=(settings or {}).get(slot)
         gbr=(gbrs or {}).get(slot)
+        formref=(formrefs or {}).get(slot)
         surface=chrome((x,y,w,h),31 if watch is not None or filemgr is not None else 11 if calculator is not None or setting is not None else 7,
                        (titles or {}).get(slot,'Universal ABI'),font,frame_pen,theme,title_ready)
         if filemgr is not None:
             from cpc_filemgr_pixels import draw
             fill(surface,x+2,y+16,2,3,0)  # remove the chrome fixture's diagnostic mark
             draw(surface,(x,y,w,h),filemgr,desktop,fill,text)
-        elif gbr is None:
+        elif gbr is None and formref is None:
             fill(surface,x+1,y+14,w-2,h-15,0 if watch is not None else 1)
         if setting is not None:
             def box(bx,by,bw,bh,pen):
@@ -158,6 +159,21 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
                 fill(surface,bx+24,by+64,20,24,1)
                 box(bx+24,by+64,20,24,3)
                 text(surface,bx+32,by+72+(1 if gbr.get('selected') else 0),'OK',2,1)
+        elif formref is not None:
+            def box(bx,by,bw,bh,pen):
+                for edge in ((bx,by,bw,1),(bx,by+bh-1,bw,1),
+                             (bx,by,1,bh),(bx+bw-1,by,1,bh)):
+                    fill(surface,*edge,pen)
+            def button(bx,by,bw,label,focused=False):
+                fill(surface,bx,by,bw,10,1);box(bx,by,bw,10,3 if focused else 2)
+                tw=len(label)+(len(label)+1)//2
+                tx=bx+((bw-tw)//2 if tw+2<bw else 1)
+                text(surface,tx,by+1,label,2,1)
+            fill(surface,x+1,y+14,w-2,h-15,1)
+            text(surface,x+2,y+21,formref['name'],2,1)
+            text(surface,x+2,y+32,'Autosave on' if formref['autosave'] else 'Autosave off',2,1)
+            text(surface,x+2,y+43,'Refined' if formref['layout'] else 'Classic',2,1)
+            button(x+2,y+56,18,'Open form')
         else:
             text(surface,x+4,y+22,'GEOBENCH-2 ABI',2,1)
             text(surface,x+4,y+38,'ONE APP / 3 Z80S',2,1)
@@ -188,6 +204,37 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
             text(result,13,74,'GEOBENCH (C) salvogendut 2026',2,1)
             text(result,13,86,dialog['build'],2,1)
             text(result,13,98,'RAM:',2,1);text(result,20,98,'512K',2,1)
+        elif dialog['kind']=='formref':
+            modal=chrome((18,48,46,94),7,'Form Reference',font,2,theme,title_ready)
+            fill(modal,19,62,44,79,0)
+            def mbox(x,y,w,h,pen):
+                for edge in ((x,y,w,1),(x,y+h-1,w,1),(x,y,1,h),(x+w-1,y,1,h)):
+                    fill(modal,*edge,pen)
+            def mbutton(x,y,w,label,obj):
+                fill(modal,x,y,w,10,1)
+                mbox(x,y,w,10,3 if dialog['focus']==obj or obj==6 else 2)
+                tw=len(label)+(len(label)+1)//2
+                tx=x+((w-tw)//2 if tw+2<w else 1)
+                text(modal,tx,y+1,label,2,1)
+            text(modal,21,71,'Name',2,1)
+            fill(modal,32,70,29,10,1);mbox(32,70,29,10,3 if dialog['focus']==2 else 2)
+            text(modal,33,71,dialog['draft'],2,1)
+            for obj,x,y,w,label,radio,checked in (
+                    (3,21,86,24,'Autosave',False,dialog['autosave']),
+                    (4,21,100,18,'Classic',True,not dialog['layout']),
+                    (5,40,100,21,'Refined',True,dialog['layout'])):
+                fill(modal,x,y,w,10,1)
+                mbox(x,y,4 if radio else 3,10,3 if dialog['focus']==obj else 2)
+                if radio:
+                    text(modal,x,y+1,'(o)' if checked else '( )',2,1)
+                    text(modal,x+5,y+1,label,2,1)
+                else:
+                    if checked:text(modal,x+1,y+1,'x',2,1)
+                    text(modal,x+4,y+1,label,2,1)
+            mbutton(21,118,8,'Save',6);mbutton(31,118,11,'Cancel',7)
+            for yy in range(48,142):
+                for xx in range(18,64):
+                    result[address(xx*4,yy)]=modal[address(xx*4,yy)]
         else: raise AssertionError('unknown expected native dialog')
     if popup is not None:
         native=isinstance(popup,dict)
@@ -218,14 +265,14 @@ def frame(rects, order, accents, pointer, font, clock=(0, 0), menu=b'\0', titles
     return bytes(result)
 
 
-def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None, gbrs=None):
+def verify_pixels(ram,sym,work,rects,order,accents,menu=b'\0',titles=None,popup=None,calculators=None,clocks=None,dialog=None, font=None, frame_pen=2, cursor=None, backdrop=None, icons=None, theme=DEFAULT_THEME, title_ready=True, desktop=None, filemanagers=None, settings=None, gbrs=None, formrefs=None):
     px=int.from_bytes(ram[sym['pointer_x']:sym['pointer_x']+2],'little')
     py=ram[sym['pointer_y']]
     if ram[sym['menu_def']:sym['menu_def']+len(menu)]!=menu:
         raise AssertionError('focused menu snapshot differs')
     expected=frame(rects,order,accents,(px,py),font if font is not None else (work/'DEFAULT.FNT').read_bytes(),
                    tuple(ram[0x1240:0x1242]),menu,titles,popup,calculators,clocks,dialog,frame_pen,
-                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons,theme,title_ready,desktop,filemanagers,settings,gbrs)
+                   (work/'DEFAULT.SPR').read_bytes() if cursor is None else cursor,backdrop,icons,theme,title_ready,desktop,filemanagers,settings,gbrs,formrefs)
     actual=ram[0xC000:0x10000]
     if actual!=expected:
         at=next(i for i,(a,b) in enumerate(zip(actual,expected)) if a!=b)

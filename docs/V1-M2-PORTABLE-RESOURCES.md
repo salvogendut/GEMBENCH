@@ -256,3 +256,99 @@ make geobench-v1-m2-gbrdemo-delivery-openmsx
 
 Sprint 2 is complete. Sprint 3's compile-once FormRef implementation is the
 next ordered milestone work.
+
+## Sprint 3 checkpoint A — compile-once primary FormRef
+
+The first FormRef build gate now produces a deterministic primary-only
+universal candidate while leaving both normal distributions unchanged:
+
+- `apps/uformref` contains no target define or backend branch. It embeds the
+  exact compiler-generated 231-byte `FORMREF.GBR`, keeps text/focus/object
+  state in its primary page, and drives the complete field, checkbox, radio,
+  Save/Cancel, pointer and forward/reverse keyboard workflow through the shared
+  GBR form engine. The APP accepts the portable back-tab code; translating an
+  actual Shift-Tab chord on both targets remains part of runtime acceptance.
+- The universal builder now has explicit form and embedded-resource profiles.
+  The embedded profile links only the already-validated GBR accessor rather
+  than paying for an external-file parser that this application cannot use.
+- The self-polling universal modal helper contains no target address. It owns
+  its synchronous loop locally and restores the compositor once on exit;
+  native applications retain their existing low-RAM modal implementation.
+- The candidate is **15640 bytes**, SHA-256
+  `00658270a1ea5456e2c68f31f092ea25f5038123575a83ad857a40f571885ccf`.
+  Code ends at `0x7D18`, eight bytes below DATA at `0x7D20`; application state
+  ends at `0x7DB8`, leaving 328 bytes before the guarded `0x7F00` task limit.
+- The native reference still rebuilds to exactly 16026 bytes with SHA-256
+  `c6650c86348b97db50102d839b3d8b5f08a16bd6fb41b045b9a2c02b9d838e46`;
+  its 231-byte GBR and 227-byte GBS3 hashes also remain frozen. `make formref`
+  now delegates to that complete reference recipe instead of its stale,
+  over-budget partial link.
+
+Reproduce this checkpoint with:
+
+```sh
+make geobench-v1-m2-formref-check
+make formref
+bash tests/run_gbr_reader_tests.sh
+```
+
+This checkpoint proves source/resource identity, portability auditing, layout
+and deterministic packaging. It does not stage the candidate or claim runtime
+acceptance. Next, exercise it on private MSX Screen 6/7 and CPC M4 media before
+the Sprint 4 GBS4 secondary conversion.
+
+## Sprint 3 checkpoint B — private cross-target runtime qualification
+
+The same 15640-byte primary-only `FORMREF.APP` now passes the complete private
+form workflow on MSX Screen 6, MSX Screen 7 and CPC M4. Normal distributions
+continue to deliver native FormRef; the universal candidate is not staged.
+
+- The MSX input adapter translates a real Shift-Tab matrix chord to the
+  portable `GBR_KEY_BACKTAB` value. The CPC keyboard table supplies the same
+  value for shifted Tab; neither application code nor the resource contains a
+  target branch.
+- The private MSX preparation copies the normal hard-disk image, changes only
+  its Screen mode/configuration and stages the exact APP as a short root alias.
+  The 1983 driver opens it through Desktop and File Manager and uses real
+  keyboard-matrix and joystick input. Screen 6 and 7 each pass 33 assertions:
+  exact mapped APP bytes, embedded-resource publication, field editing,
+  forward/reverse focus traversal, checkbox/radio semantics, Save/Cancel,
+  pointer hit testing, managed movement and exact page/window cleanup. The
+  runs complete in 4485 and 4555 frames respectively and leave both source
+  images byte-identical.
+- Independent openMSX runs on both private Screen modes confirm the real
+  Desktop/File Manager launch, embedded-resource state, forward keyboard
+  traversal, modal cancellation and FormRef window teardown. Their source
+  images also remain byte-identical. Reverse traversal remains covered by the
+  deterministic 1983 matrix chord and CPC keyboard table/runtime workflow.
+- The private CPC profile stages the same APP on a disposable M4 image. Its
+  native File Manager receives a profile-only allowlist entry for the short
+  visible alias; the normal-media qualified-application policy does not
+  change. The 1984 driver passes 21 lifecycle/framebuffer checkpoints through
+  the same interactions, then returns to one Desktop window, zero filesystem
+  contexts and the original free-page count. Maximum observed stack use is
+  231 main, four IRQ and zero temporary bytes.
+- Every checkpoint verifies the canonical 231-byte resource with SHA-256
+  `a5f473f4665e5f119bf809819e8e191d509f41bda3cd0111320e54f3750bdfc8`
+  and the byte-identical APP with SHA-256
+  `00658270a1ea5456e2c68f31f092ea25f5038123575a83ad857a40f571885ccf`.
+
+Reproduce the target gates with:
+
+```sh
+make geobench-v1-m2-formref-msx-media
+bash tools/test_universal_formref_openmsx.sh
+bash tools/build_msx_stability_1983.sh build/v1-m2/formref-msx/1983-bridge
+python3 tools/test_universal_formref_1983.py --mode 6 \
+  --bridge build/v1-m2/formref-msx/1983-bridge \
+  --omega ../1983/ROMS/rainbios_omega.rom \
+  --sunrise ../1983/ROMS/Nextor-2.1.1.SunriseIDE.ROM \
+  --image build/v1-m2/formref-msx/mode6/filesystem.img \
+  --worktree . --output NEW_EMPTY_EVIDENCE_DIRECTORY
+make geobench-v1-m2-formref-cpc
+```
+
+Repeat the 1983 command with `--mode 7` and the mode-7 image. This closes the
+primary FormRef vertical slice. Sprint 4 remains responsible for converting
+the frozen native secondary behavior to the sealed, computation-only GBS4
+contract and for normal delivery; this checkpoint does not claim either.
